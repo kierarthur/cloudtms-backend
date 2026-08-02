@@ -396,6 +396,10 @@ declare
   v_id uuid;
   v_class jsonb;
   v_transition jsonb;
+  v_preview jsonb;
+  v_group jsonb;
+  v_transition_item jsonb;
+  v_expected_pair_fingerprint text;
   v_correction_id text;
 begin
   if v_action not in ('AUTHORISE', 'UNAUTHORISE') then
@@ -439,17 +443,36 @@ begin
       continue;
     end if;
 
-    v_transition := public.timesheet_correction_pair_transition_v1(
-      v_id, v_action, p_actor_user_id, null::uuid, null::text, true, p_max_members
-    );
-    if coalesce((v_transition ->> 'valid')::boolean, false) is not true
-       or coalesce((v_transition ->> 'action_ready')::boolean, false) is not true then
+    v_preview:=public.timesheet_correction_pair_lifecycle_preview_v1(
+      jsonb_build_array(v_item),v_action,p_actor_user_id,p_max_members);
+    v_group:=v_preview#>'{groups,0}';
+    v_transition:=public.timesheet_correction_pair_transition_v1(
+      v_id,v_action,p_actor_user_id,null::uuid,v_group->>'chain_fingerprint',true,p_max_members);
+    v_expected_pair_fingerprint:=nullif(btrim(coalesce(
+      v_item->>'expected_pair_fingerprint',v_item->>'pair_fingerprint','')),'');
+    if v_expected_pair_fingerprint is not null
+       and v_expected_pair_fingerprint is distinct from v_group->>'pair_fingerprint' then
+      raise exception 'CORRECTION_UNIT_LIFECYCLE_PREVIEW_STALE'
+        using errcode='40001',detail=v_group::text;
+    end if;
+    if coalesce((v_group->>'valid')::boolean,false) is not true
+       or coalesce((v_group->>'action_ready')::boolean,false) is not true then
       raise exception 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED'
-        using errcode = 'P0001', detail = v_transition::text;
+        using errcode = 'P0001', detail = v_group::text;
     end if;
 
     v_seen_correction_ids := array_append(v_seen_correction_ids, v_correction_id);
-    v_result := v_result || coalesce(v_transition -> 'transition_items', '[]'::jsonb);
+    for v_transition_item in
+      select value from jsonb_array_elements(coalesce(v_transition->'transition_items','[]'::jsonb))
+    loop
+      v_result:=v_result||jsonb_build_array(v_transition_item||jsonb_build_object(
+        'lifecycle_group_id','correction:'||v_correction_id,
+        'lifecycle_group_size',coalesce((v_transition->>'expected_member_count')::integer,2),
+        'pair_fingerprint',v_group->>'pair_fingerprint',
+        'selected_timesheet_id',v_id,
+        'repairing_legacy_mixed_state',coalesce((v_group->>'repairing_legacy_mixed_state')::boolean,false)
+      ));
+    end loop;
   end loop;
 
   if jsonb_array_length(v_result) > p_max_members then

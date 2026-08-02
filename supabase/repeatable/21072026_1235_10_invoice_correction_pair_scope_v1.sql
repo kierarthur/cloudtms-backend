@@ -33,6 +33,13 @@ declare
   v_current_stream text;
   v_target_stream text;
   v_line_policy_mismatch_count integer:=0;
+  v_reversal_line_count integer:=0;
+  v_replacement_line_count integer:=0;
+  v_reversal_invoice_ids uuid[]:=array[]::uuid[];
+  v_replacement_invoice_ids uuid[]:=array[]::uuid[];
+  v_placement_state text:='MALFORMED_PAIR';
+  v_placement_compatible boolean:=false;
+  v_placement_invoices jsonb:='[]'::jsonb;
   v_compatibility_mode text;
   v_operation public.import_apply_operations%rowtype;
   v_operation_unit jsonb;
@@ -331,7 +338,68 @@ begin
 
   select count(distinct il.timesheet_id),count(distinct il.invoice_id)
   into v_line_member_count,v_line_invoice_count
-  from public.invoice_lines il where il.timesheet_id=any(v_ids);
+  from public.invoice_lines il
+  join public.invoices i on i.id=il.invoice_id
+  where il.timesheet_id=any(v_ids)
+    and upper(coalesce(i.type::text,''))<>'CREDIT_NOTE';
+
+  select
+    count(il.invoice_id) filter(where ts.correction_kind='CHANGED_HOURS_REVERSAL')::integer,
+    count(il.invoice_id) filter(where ts.correction_kind='CHANGED_HOURS_REPLACEMENT')::integer,
+    coalesce(array_agg(il.invoice_id order by il.invoice_id)
+      filter(where ts.correction_kind='CHANGED_HOURS_REVERSAL'),array[]::uuid[]),
+    coalesce(array_agg(il.invoice_id order by il.invoice_id)
+      filter(where ts.correction_kind='CHANGED_HOURS_REPLACEMENT'),array[]::uuid[])
+  into v_reversal_line_count,v_replacement_line_count,
+       v_reversal_invoice_ids,v_replacement_invoice_ids
+  from public.timesheets ts
+  left join public.invoice_lines il on il.timesheet_id=ts.timesheet_id
+    and exists(select 1 from public.invoices active_invoice where active_invoice.id=il.invoice_id
+      and upper(coalesce(active_invoice.type::text,''))<>'CREDIT_NOTE')
+  where ts.timesheet_id=any(v_ids);
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'invoice_id',i.id,'status',i.status,'issued_at_utc',i.issued_at_utc,
+    'client_id',i.client_id,
+    'invoice_stream',case when lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}','false'))='true'
+      then 'SELF_BILL' else 'NORMAL' end,
+    'currency',upper(coalesce(nullif(i.header_snapshot_json->>'currency',''),nullif(i.header_snapshot_json#>>'{meta,currency}',''),'GBP')),
+    'invoice_week',coalesce(i.header_snapshot_json#>>'{meta,invoice_week_start}',
+      i.header_snapshot_json->>'week_ending_date',i.header_snapshot_json#>>'{meta,week_ending_date}'))
+    order by i.id),'[]'::jsonb)
+  into v_placement_invoices
+  from public.invoices i
+  where i.id=any(v_reversal_invoice_ids||v_replacement_invoice_ids);
+
+  if v_expected_count<>2 then
+    v_placement_state:='MALFORMED_PAIR';
+  elsif v_reversal_line_count>1 or v_replacement_line_count>1 then
+    v_placement_state:='DUPLICATE_PLACEMENT';
+  elsif v_reversal_line_count=0 and v_replacement_line_count=0 then
+    v_placement_state:='UNPLACED';
+    v_placement_compatible:=true;
+  elsif (v_reversal_line_count=1 and v_replacement_line_count=0)
+     or (v_reversal_line_count=0 and v_replacement_line_count=1) then
+    v_placement_state:='INCOMPLETE_MOVE';
+    v_placement_compatible:=true;
+  elsif v_reversal_invoice_ids[1]=v_replacement_invoice_ids[1] then
+    v_placement_state:='COMPLETE_SAME_INVOICE';
+    v_placement_compatible:=true;
+  else
+    select count(distinct i.client_id)=1
+       and count(distinct case when lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}','false'))='true'
+         then 'SELF_BILL' else 'NORMAL' end)=1
+       and count(distinct upper(coalesce(nullif(i.header_snapshot_json->>'currency',''),
+         nullif(i.header_snapshot_json#>>'{meta,currency}',''),'GBP')))=1
+       and count(distinct coalesce(i.header_snapshot_json#>>'{meta,invoice_week_start}',i.header_snapshot_json->>'week_ending_date',
+         i.header_snapshot_json#>>'{meta,week_ending_date}',(select min(ts.week_ending_date)::text
+           from public.timesheets ts where ts.timesheet_id=any(v_ids))))=1
+    into v_placement_compatible
+    from public.invoices i
+    where i.id=any(v_reversal_invoice_ids||v_replacement_invoice_ids);
+    v_placement_state:=case when v_placement_compatible then 'COMPLETE_SPLIT_INVOICES'
+      else 'INCOMPATIBLE_PLACEMENT' end;
+  end if;
 
   select count(*)::integer into v_line_policy_mismatch_count
   from public.invoice_lines il
@@ -367,8 +435,12 @@ begin
       'expected_stream',v_expected_stream
     ));
   end if;
-  if v_line_member_count not in (0,v_expected_count) or (v_line_member_count=v_expected_count and v_line_invoice_count<>1) then
-    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_UNIT_SPLIT'));
+  if v_placement_state='DUPLICATE_PLACEMENT' then
+    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_PAIR_DUPLICATE_PLACEMENT'));
+  elsif v_placement_state='INCOMPATIBLE_PLACEMENT' then
+    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_PAIR_INCOMPATIBLE_PLACEMENT'));
+  elsif v_placement_state='MALFORMED_PAIR' then
+    v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_PAIR_MALFORMED'));
   end if;
   if v_line_policy_mismatch_count<>0 then
     v_errors:=v_errors||jsonb_build_array(jsonb_build_object(
@@ -378,6 +450,29 @@ begin
   end if;
   if p_target_invoice_id is not null and v_target.client_id is distinct from (select tf.client_id from public.timesheets_financials tf where tf.timesheet_id=v_ids[1] and tf.is_current=true) then
     v_errors:=v_errors||jsonb_build_array(jsonb_build_object('code','INVOICE_CORRECTION_TARGET_CLIENT_MISMATCH'));
+  end if;
+  if p_target_invoice_id is not null and v_placement_state='INCOMPLETE_MOVE'
+     and exists (
+       select 1
+       from public.invoices placed
+       where placed.id=any(v_reversal_invoice_ids||v_replacement_invoice_ids)
+         and placed.id<>p_target_invoice_id
+         and (
+           placed.client_id is distinct from v_target.client_id
+           or (case when lower(coalesce(placed.header_snapshot_json#>>'{meta,self_bill}','false'))='true'
+                 then 'SELF_BILL' else 'NORMAL' end) is distinct from v_target_stream
+           or upper(coalesce(nullif(placed.header_snapshot_json->>'currency',''),
+                nullif(placed.header_snapshot_json#>>'{meta,currency}',''),'GBP'))
+              is distinct from upper(coalesce(nullif(v_target.header_snapshot_json->>'currency',''),
+                nullif(v_target.header_snapshot_json#>>'{meta,currency}',''),'GBP'))
+           or coalesce(placed.header_snapshot_json#>>'{meta,invoice_week_start}',placed.header_snapshot_json->>'week_ending_date',
+                placed.header_snapshot_json#>>'{meta,week_ending_date}',(select min(ts.week_ending_date)::text from public.timesheets ts where ts.timesheet_id=any(v_ids)))
+              is distinct from coalesce(v_target.header_snapshot_json#>>'{meta,invoice_week_start}',v_target.header_snapshot_json->>'week_ending_date',
+                v_target.header_snapshot_json#>>'{meta,week_ending_date}',(select min(ts.week_ending_date)::text from public.timesheets ts where ts.timesheet_id=any(v_ids)))
+         )
+     ) then
+    v_errors:=v_errors||jsonb_build_array(jsonb_build_object(
+      'code','INVOICE_CORRECTION_TARGET_INCOMPATIBLE_WITH_PARTNER'));
   end if;
 
   return jsonb_build_object(
@@ -390,6 +485,15 @@ begin
     'invoice_stream',v_expected_stream,
     'pair_rows',v_rows,'ready_count',v_ready_count,'existing_line_member_count',v_line_member_count,
     'existing_line_invoice_count',v_line_invoice_count,
+    'placement_state',v_placement_state,
+    'placement_complete',v_placement_state in ('COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES'),
+    'placement_compatible',v_placement_compatible,
+    'placement_invoices',v_placement_invoices,
+    'reversal_invoice_ids',to_jsonb(v_reversal_invoice_ids),
+    'replacement_invoice_ids',to_jsonb(v_replacement_invoice_ids),
+    'missing_member_kind',case
+      when v_placement_state='INCOMPLETE_MOVE' and v_reversal_line_count=0 then 'CHANGED_HOURS_REVERSAL'
+      when v_placement_state='INCOMPLETE_MOVE' and v_replacement_line_count=0 then 'CHANGED_HOURS_REPLACEMENT' end,
     'line_policy_mismatch_count',v_line_policy_mismatch_count,'errors',v_errors,
     'compatibility_mode',v_compatibility_mode);
 end;

@@ -3260,9 +3260,11 @@ begin
   loop
     v_scope := public.invoice_correction_pair_scope_v1(v_id,p_invoice_id,p_actor_user_id,p_lock_rows,100);
     if coalesce((v_scope->>'valid')::boolean,false) is not true
-       or coalesce((v_scope->>'existing_line_member_count')::integer,0)
-          <> coalesce((v_scope->>'expected_member_count')::integer,0)
-       or coalesce((v_scope->>'existing_line_invoice_count')::integer,0)<>1 then
+       or (case when upper(coalesce(p_context,''))='INVOICE_APPLY_EDITS_RESULT'
+          then coalesce(v_scope->>'placement_state','MALFORMED_PAIR') not in (
+            'COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES','INCOMPLETE_MOVE','UNPLACED')
+          else coalesce(v_scope->>'placement_state','MALFORMED_PAIR') not in (
+            'COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES') end) then
       raise exception 'INVOICE_CORRECTION_LINES_NOT_UNIT_SAFE' using errcode='P0001',detail=v_scope::text;
     end if;
     v_scopes:=v_scopes||jsonb_build_array(v_scope);

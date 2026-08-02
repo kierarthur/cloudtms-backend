@@ -881,6 +881,10 @@ declare
   v_operation_ids uuid[]:=array[]::uuid[];
   v_effective_invoice_ids uuid[]:=array[]::uuid[];
   v_effective_line_ids uuid[]:=array[]::uuid[];
+  v_issued_invoice_ids uuid[]:=array[]::uuid[];
+  v_issued_line_ids uuid[]:=array[]::uuid[];
+  v_pending_invoice_ids uuid[]:=array[]::uuid[];
+  v_pending_line_ids uuid[]:=array[]::uuid[];
   v_credit_line_ids uuid[]:=array[]::uuid[];
   v_line_count integer:=0;
   v_audit_count integer:=0;
@@ -899,6 +903,8 @@ declare
   v_member_role_map jsonb:='[]'::jsonb;
   v_member_role_conflict boolean:=false;
   v_effective_component_count integer:=0;
+  v_issued_component_count integer:=0;
+  v_pending_component_count integer:=0;
   v_b_day numeric:=0;
   v_b_night numeric:=0;
   v_b_sat numeric:=0;
@@ -907,6 +913,22 @@ declare
   v_b_pay numeric:=0;
   v_b_charge numeric:=0;
   v_b_margin numeric:=0;
+  v_issued_day numeric:=0;
+  v_issued_night numeric:=0;
+  v_issued_sat numeric:=0;
+  v_issued_sun numeric:=0;
+  v_issued_bh numeric:=0;
+  v_issued_pay numeric:=0;
+  v_issued_charge numeric:=0;
+  v_issued_margin numeric:=0;
+  v_pending_day numeric:=0;
+  v_pending_night numeric:=0;
+  v_pending_sat numeric:=0;
+  v_pending_sun numeric:=0;
+  v_pending_bh numeric:=0;
+  v_pending_pay numeric:=0;
+  v_pending_charge numeric:=0;
+  v_pending_margin numeric:=0;
   v_component_day numeric:=0;
   v_component_night numeric:=0;
   v_component_sat numeric:=0;
@@ -987,6 +1009,7 @@ declare
   v_component_timesheet_id uuid;
   v_component_correction_id text;
   v_component_correction_kind text;
+  v_component_economic_state text;
   v_scope_unprovable boolean:=false;
   v_credit_ambiguous boolean:=false;
   v_stream_conflict boolean:=false;
@@ -1581,10 +1604,20 @@ begin
 
     v_effective_invoice_ids:=array[]::uuid[];
     v_effective_line_ids:=array[]::uuid[];
+    v_issued_invoice_ids:=array[]::uuid[];
+    v_issued_line_ids:=array[]::uuid[];
+    v_pending_invoice_ids:=array[]::uuid[];
+    v_pending_line_ids:=array[]::uuid[];
     v_credit_line_ids:=array[]::uuid[];
     v_effective_component_count:=0;
+    v_issued_component_count:=0;
+    v_pending_component_count:=0;
     v_b_day:=0; v_b_night:=0; v_b_sat:=0; v_b_sun:=0; v_b_bh:=0;
     v_b_pay:=0; v_b_charge:=0; v_b_margin:=0;
+    v_issued_day:=0; v_issued_night:=0; v_issued_sat:=0; v_issued_sun:=0; v_issued_bh:=0;
+    v_issued_pay:=0; v_issued_charge:=0; v_issued_margin:=0;
+    v_pending_day:=0; v_pending_night:=0; v_pending_sat:=0; v_pending_sun:=0; v_pending_bh:=0;
+    v_pending_pay:=0; v_pending_charge:=0; v_pending_margin:=0;
     v_b_schedule:='[]'::jsonb; v_candidate_schedule:='[]'::jsonb; v_candidate_hours:='{}'::jsonb;
     v_schedule_candidates:='[]'::jsonb; v_candidate_policy_fingerprint:=null; v_b_policy_fingerprint:=null;
     v_terminal_generation_id:=null; v_terminal_positive_timesheet_id:=null; v_terminal_positive_member_count:=0;
@@ -1810,9 +1843,8 @@ begin
       where member->>'timesheet_id'=v_component_timesheet_id::text
       limit 1;
 
-      if v_line.invoice_status='DRAFT' or v_line.issued_at_utc is null
-         or v_line.active_document_operation_id is not null or v_line.active_issue_operation_id is not null
-         or upper(coalesce(v_line.issue_state,'')) not in ('','IDLE','COMPLETE','COMPLETED','ISSUED') then
+      if v_line.active_document_operation_id is not null or v_line.active_issue_operation_id is not null
+         or upper(coalesce(v_line.issue_state,'')) not in ('','IDLE','NOT_STARTED','COMPLETE','COMPLETED','ISSUED') then
         v_active_invoice_activity:=true;
       end if;
       if v_line.invoice_type='CREDIT_NOTE'
@@ -1853,15 +1885,9 @@ begin
         continue;
       end if;
 
-      if v_line.invoice_status='DRAFT' or v_line.issued_at_utc is null
-         or v_line.active_document_operation_id is not null or v_line.active_issue_operation_id is not null
-         or upper(coalesce(v_line.issue_state,'')) not in ('','IDLE','COMPLETE','COMPLETED','ISSUED') then
-        v_line_evidence:=v_line_evidence||jsonb_build_array(jsonb_build_object(
-          'invoice_id',v_line.invoice_id,'invoice_line_id',v_line.id,'invoice_type',v_line.invoice_type,
-          'economic_state','PENDING','timesheet_id',v_component_timesheet_id,
-          'correction_id',v_component_correction_id,'correction_kind',v_component_correction_kind));
-        continue;
-      end if;
+      v_component_economic_state:=case
+        when v_line.invoice_status='DRAFT' or v_line.issued_at_utc is null then 'PENDING'
+        else 'EFFECTIVE' end;
 
       if v_line.invoice_type='CREDIT_NOTE' then
         -- Hours are the negative of the exact original frozen component.  A
@@ -1903,10 +1929,25 @@ begin
       v_effective_component_count:=v_effective_component_count+1;
       v_effective_invoice_ids:=array_append(v_effective_invoice_ids,v_line.invoice_id);
       v_effective_line_ids:=array_append(v_effective_line_ids,v_line.id);
+      if v_component_economic_state='PENDING' then
+        v_pending_day:=v_pending_day+v_component_day; v_pending_night:=v_pending_night+v_component_night;
+        v_pending_sat:=v_pending_sat+v_component_sat; v_pending_sun:=v_pending_sun+v_component_sun; v_pending_bh:=v_pending_bh+v_component_bh;
+        v_pending_pay:=v_pending_pay+v_component_pay; v_pending_charge:=v_pending_charge+v_component_charge; v_pending_margin:=v_pending_margin+v_component_margin;
+        v_pending_component_count:=v_pending_component_count+1;
+        v_pending_invoice_ids:=array_append(v_pending_invoice_ids,v_line.invoice_id);
+        v_pending_line_ids:=array_append(v_pending_line_ids,v_line.id);
+      else
+        v_issued_day:=v_issued_day+v_component_day; v_issued_night:=v_issued_night+v_component_night;
+        v_issued_sat:=v_issued_sat+v_component_sat; v_issued_sun:=v_issued_sun+v_component_sun; v_issued_bh:=v_issued_bh+v_component_bh;
+        v_issued_pay:=v_issued_pay+v_component_pay; v_issued_charge:=v_issued_charge+v_component_charge; v_issued_margin:=v_issued_margin+v_component_margin;
+        v_issued_component_count:=v_issued_component_count+1;
+        v_issued_invoice_ids:=array_append(v_issued_invoice_ids,v_line.invoice_id);
+        v_issued_line_ids:=array_append(v_issued_line_ids,v_line.id);
+      end if;
       if v_line.invoice_type='CREDIT_NOTE' then v_credit_line_ids:=array_append(v_credit_line_ids,v_line.id); end if;
       v_line_evidence:=v_line_evidence||jsonb_build_array(jsonb_build_object(
         'invoice_id',v_line.invoice_id,'invoice_line_id',v_line.id,'invoice_type',v_line.invoice_type,
-        'economic_state','EFFECTIVE','timesheet_id',v_component_timesheet_id,
+        'economic_state',v_component_economic_state,'timesheet_id',v_component_timesheet_id,
         'correction_id',v_component_correction_id,'correction_kind',v_component_correction_kind,
         'hours',jsonb_build_object('hours_day',v_component_day,'hours_night',v_component_night,'hours_sat',v_component_sat,'hours_sun',v_component_sun,'hours_bh',v_component_bh),
         'pay_ex_vat',v_component_pay,'charge_ex_vat',v_component_charge,'margin_ex_vat',v_component_margin));
@@ -1947,6 +1988,10 @@ begin
 
     select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_effective_invoice_ids from unnest(v_effective_invoice_ids) x;
     select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_effective_line_ids from unnest(v_effective_line_ids) x;
+    select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_issued_invoice_ids from unnest(v_issued_invoice_ids) x;
+    select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_issued_line_ids from unnest(v_issued_line_ids) x;
+    select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_pending_invoice_ids from unnest(v_pending_invoice_ids) x;
+    select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_pending_line_ids from unnest(v_pending_line_ids) x;
     select coalesce(array_agg(distinct x order by x),array[]::uuid[]) into v_credit_line_ids from unnest(v_credit_line_ids) x;
     v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v1',v_source_identity,v_line_evidence::text,v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin),'UTF8'),'sha256'),'hex');
 
@@ -1990,7 +2035,7 @@ begin
             and not exists(select 1 from public.timesheets t where t.timesheet_id=(member->>'timesheet_id')::uuid)),array[]::uuid[]) operation_missing_ids,
         exists(select 1 from jsonb_array_elements(v_line_evidence) component
           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
-            and component->>'economic_state'='EFFECTIVE') has_effective_history,
+            and component->>'economic_state' in ('EFFECTIVE','PENDING')) has_effective_history,
         exists(select 1 from jsonb_array_elements(v_line_evidence) component
           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
             and component->>'economic_state'='PENDING')
@@ -2021,23 +2066,23 @@ begin
         coalesce((select sum(coalesce((component#>>'{hours,hours_day}')::numeric,0))
           from jsonb_array_elements(v_line_evidence) component
           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
-            and component->>'economic_state'='EFFECTIVE'),0) net_day,
+            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_day,
         coalesce((select sum(coalesce((component#>>'{hours,hours_night}')::numeric,0))
           from jsonb_array_elements(v_line_evidence) component
           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
-            and component->>'economic_state'='EFFECTIVE'),0) net_night,
+            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_night,
         coalesce((select sum(coalesce((component#>>'{hours,hours_sat}')::numeric,0))
           from jsonb_array_elements(v_line_evidence) component
           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
-            and component->>'economic_state'='EFFECTIVE'),0) net_sat,
+            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_sat,
         coalesce((select sum(coalesce((component#>>'{hours,hours_sun}')::numeric,0))
           from jsonb_array_elements(v_line_evidence) component
           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
-            and component->>'economic_state'='EFFECTIVE'),0) net_sun,
+            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_sun,
         coalesce((select sum(coalesce((component#>>'{hours,hours_bh}')::numeric,0))
           from jsonb_array_elements(v_line_evidence) component
           where component->>'correction_id'=r.correction_id and component->>'correction_kind'=r.role
-            and component->>'economic_state'='EFFECTIVE'),0) net_bh
+            and component->>'economic_state' in ('EFFECTIVE','PENDING')),0) net_bh
       from roles r
     ), generation_state as (
       select correction_id,max(evidence_at) evidence_at,
@@ -2114,7 +2159,10 @@ begin
       v_role_active_invoice_activity,v_role_scope_unprovable;
 
     v_partial_invoice_state:=v_role_partial_invoice_state;
-    v_active_invoice_activity:=v_active_invoice_activity or v_role_active_invoice_activity or v_operation_in_progress;
+    -- Stable DRAFT lines are planned economics, not active invoice work.  Only
+    -- a real document/issue operation or an import operation still in progress
+    -- blocks review.  One-sided placement is reported separately below.
+    v_active_invoice_activity:=v_active_invoice_activity or v_operation_in_progress;
     v_scope_unprovable:=v_scope_unprovable or v_role_scope_unprovable
       or v_operation_evidence_conflict or v_member_role_conflict;
 
@@ -2376,6 +2424,9 @@ begin
     v_effective_fingerprint:=encode(digest(convert_to(concat_ws('|','effective-invoice-v4',v_source_identity,
       v_line_evidence::text,v_ignored_nonhours_line_ids::text,v_role_evidence_fingerprint,
       v_b_day,v_b_night,v_b_sat,v_b_sun,v_b_bh,v_b_pay,v_b_charge,v_b_margin,
+      v_issued_line_ids::text,v_pending_line_ids::text,
+      v_issued_day,v_issued_night,v_issued_sat,v_issued_sun,v_issued_bh,v_issued_pay,v_issued_charge,v_issued_margin,
+      v_pending_day,v_pending_night,v_pending_sat,v_pending_sun,v_pending_bh,v_pending_pay,v_pending_charge,v_pending_margin,
       v_b_standard_schedule_authority_fingerprint),'UTF8'),'sha256'),'hex');
 
     if v_mutable_correction_id is not null then
@@ -2472,7 +2523,7 @@ begin
     end;
 
     v_blocking_code:=case
-      when v_partial_invoice_state then 'IMPORT_REVIEW_CORRECTION_GENERATION_PARTIALLY_INVOICED'
+      when v_partial_invoice_state then 'IMPORT_REVIEW_CORRECTION_PAIR_PLACEMENT_INCOMPLETE'
       when v_active_invoice_activity then 'IMPORT_REVIEW_INVOICE_ACTIVITY_IN_PROGRESS'
       when v_credit_ambiguous then 'IMPORT_REVIEW_EFFECTIVE_CREDIT_AMBIGUOUS'
       when v_scope_unprovable or v_stream_conflict then 'IMPORT_REVIEW_INVOICE_COMPONENT_SCOPE_UNPROVABLE'
@@ -2508,6 +2559,10 @@ begin
       'effective_invoice_ids',to_jsonb(v_effective_invoice_ids),'effective_invoice_line_ids',to_jsonb(v_effective_line_ids),
       'effective_credit_line_ids',to_jsonb(v_credit_line_ids),'effective_invoice_component_count',v_effective_component_count,
       'effective_hours_component_count',v_effective_component_count,
+      'issued_invoice_ids',to_jsonb(v_issued_invoice_ids),'issued_invoice_line_ids',to_jsonb(v_issued_line_ids),
+      'issued_invoice_component_count',v_issued_component_count,
+      'pending_invoice_ids',to_jsonb(v_pending_invoice_ids),'pending_invoice_line_ids',to_jsonb(v_pending_line_ids),
+      'pending_invoice_component_count',v_pending_component_count,
       'ignored_nonhours_invoice_line_ids',to_jsonb(v_ignored_nonhours_line_ids)
     ) || jsonb_build_object(
       'generation_role_evidence',v_generation_role_evidence,
@@ -2521,12 +2576,18 @@ begin
       'role_evidence_fingerprint',v_role_evidence_fingerprint,
       'effective_invoice_fingerprint',v_effective_fingerprint,
       'B_hours',jsonb_build_object('hours_day',v_b_day,'hours_night',v_b_night,'hours_sat',v_b_sat,'hours_sun',v_b_sun,'hours_bh',v_b_bh,'total_hours',v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh),
+      'B_issued_hours',jsonb_build_object('hours_day',v_issued_day,'hours_night',v_issued_night,'hours_sat',v_issued_sat,'hours_sun',v_issued_sun,'hours_bh',v_issued_bh,'total_hours',v_issued_day+v_issued_night+v_issued_sat+v_issued_sun+v_issued_bh),
+      'P_pending_hours',jsonb_build_object('hours_day',v_pending_day,'hours_night',v_pending_night,'hours_sat',v_pending_sat,'hours_sun',v_pending_sun,'hours_bh',v_pending_bh,'total_hours',v_pending_day+v_pending_night+v_pending_sat+v_pending_sun+v_pending_bh),
+      'planned_invoice_hours',jsonb_build_object('hours_day',v_b_day,'hours_night',v_b_night,'hours_sat',v_b_sat,'hours_sun',v_b_sun,'hours_bh',v_b_bh,'total_hours',v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh),
       'effective_hours_net_is_zero',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)=0,
       'effective_money_net_is_zero',v_b_money_zero,
       'effective_position_net_is_zero',v_effective_zero,
       'effective_hours_net_is_positive',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)>0,
       'effective_hours_net_is_negative',(v_b_day+v_b_night+v_b_sat+v_b_sun+v_b_bh)<0,
       'B_financials',jsonb_build_object('pay_ex_vat',v_b_pay,'charge_ex_vat',v_b_charge,'margin_ex_vat',v_b_margin),
+      'B_issued_financials',jsonb_build_object('pay_ex_vat',v_issued_pay,'charge_ex_vat',v_issued_charge,'margin_ex_vat',v_issued_margin),
+      'P_pending_financials',jsonb_build_object('pay_ex_vat',v_pending_pay,'charge_ex_vat',v_pending_charge,'margin_ex_vat',v_pending_margin),
+      'planned_invoice_financials',jsonb_build_object('pay_ex_vat',v_b_pay,'charge_ex_vat',v_b_charge,'margin_ex_vat',v_b_margin),
       'B_standard_schedule_json',v_b_schedule,'B_policy_fingerprint',v_b_policy_fingerprint,'B_standard_representable',v_b_standard_representable,
       'B_standard_schedule_authority',v_b_standard_schedule_authority,
       'B_standard_schedule_authority_timesheet_id',v_b_standard_schedule_authority_timesheet_id,
@@ -3851,6 +3912,33 @@ begin
         ) else '{}'::jsonb end
   from evidence e
   where e.action_id=c.action_id;
+
+  -- An invoice-linked validation shift owns this blocker.  Do not also expose
+  -- the aggregate query-email action as a second visual copy of the same
+  -- shift.  Preserve any delivery history on the owning shift before removing
+  -- only that redundant email row; genuine query emails remain untouched.
+  update pg_temp.import_review_catalog_v1 owner_row
+  set summary_json=owner_row.summary_json||jsonb_strip_nulls(jsonb_build_object(
+        'delivery_history_status',email_row.summary_json->>'delivery_history_status',
+        'sent_count',nullif(email_row.summary_json->>'sent_count','')::integer,
+        'previously_queried',coalesce(nullif(email_row.summary_json->>'sent_count','')::integer,0)>0
+      ))
+  from pg_temp.import_review_catalog_v1 email_row
+  where owner_row.timesheet_id=email_row.timesheet_id
+    and owner_row.action_id<>email_row.action_id
+    and owner_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
+    and owner_row.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED'
+    and email_row.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+    and email_row.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED';
+
+  delete from pg_temp.import_review_catalog_v1 email_row
+  using pg_temp.import_review_catalog_v1 owner_row
+  where email_row.timesheet_id=owner_row.timesheet_id
+    and email_row.action_id<>owner_row.action_id
+    and email_row.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
+    and email_row.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED'
+    and owner_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
+    and owner_row.summary_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED';
 
   -- Daily validation is atomic per Daily timesheet.  An email, document hold
   -- or invoice blocker for that record prevents only that record from entering

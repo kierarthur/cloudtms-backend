@@ -71409,6 +71409,44 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
   }
 
   const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  try {
+    const pairFlow = await runCorrectionPairLifecycleIfApplicable(
+      env, 'UNAUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
+    );
+    if (pairFlow?.is_pair) {
+      if (pairFlow.preview_only) return withJson(200, { ok: true, pair_lifecycle: pairFlow.preview });
+      if (pairFlow.confirmation_required) return withJson(409, {
+        ok: false, error: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
+        error_code: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
+        message: 'This is a linked correction pair. Both timesheets will be unauthorised together.',
+        pair_lifecycle: pairFlow.preview
+      });
+      if (pairFlow.blocked || pairFlow.mutation?.ok === false || pairFlow.mutation?.all_success === false) {
+        return withJson(409, {
+          ok: false, error: pairFlow.mutation?.error_code || 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+          error_code: pairFlow.mutation?.error_code || 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+          message: 'The linked correction pair could not be unauthorised safely. Refresh and try again.',
+          pair_lifecycle: pairFlow.preview, mutation: pairFlow.mutation || null, refresh_required: true
+        });
+      }
+      const results = Array.isArray(pairFlow.mutation?.results) ? pairFlow.mutation.results : [];
+      return withJson(200, {
+        ok: true, success: true, unauthorised: true, authorised: false,
+        operation: 'correction_pair_unauthorise', pair_lifecycle: pairFlow.preview,
+        mutation: pairFlow.mutation,
+        affected_rows: results.flatMap((row) => Array.isArray(row?.affected_rows) ? row.affected_rows : []),
+        affected_timesheet_ids: pairFlow.mutation?.affected_timesheet_ids || [],
+        refresh_required: true
+      });
+    }
+  } catch (error) {
+    return withJson(409, {
+      ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+      error_code: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+      message: 'The linked correction pair could not be checked safely. Refresh and try again.',
+      refresh_required: true
+    });
+  }
   lifecycleSignatureLog('guard_resolved', {
     requested_timesheet_id: requestedTimesheetId || null,
     expected_timesheet_id: expectedTimesheetId || null,
@@ -80471,7 +80509,10 @@ async function handleTimesheetsSummary(env, req) {
     }
 
     const rowRes = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: rowFilters });
-    const outRows = normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'));
+    const outRows = await enrichCorrectionPairPlacementIssues(
+      env,
+      normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'))
+    );
 
     let totals = null;
     let totalCount = outRows.length;
@@ -80505,6 +80546,62 @@ async function handleTimesheetsSummary(env, req) {
     }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
+  }
+}
+
+async function enrichCorrectionPairPlacementIssues(env, rows) {
+  const sourceRows = Array.isArray(rows) ? rows : [];
+  const ids = Array.from(new Set(sourceRows.map((row) => String(row?.timesheet_id || row?.id || '').trim()).filter(Boolean))).slice(0, 200);
+  if (!ids.length) return sourceRows;
+  try {
+    const encodedIds = ids.map((id) => encodeURIComponent(id)).join(',');
+    const selectedRes = await sbFetch(env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${encodedIds})&adjustment_origin=eq.IMPORT_CORRECTION&correction_id=not.is.null&select=timesheet_id,correction_id,correction_kind,is_current,archived_at_utc`
+    );
+    const selectedCorrectionRows = Array.isArray(selectedRes?.rows) ? selectedRes.rows : [];
+    const correctionIds = Array.from(new Set(selectedCorrectionRows.map((row) => String(row?.correction_id || '').trim()).filter(Boolean)));
+    if (!correctionIds.length) return sourceRows;
+    const encodedCorrections = correctionIds.map((id) => encodeURIComponent(id)).join(',');
+    const membersRes = await sbFetch(env,
+      `${env.SUPABASE_URL}/rest/v1/timesheets?correction_id=in.(${encodedCorrections})&adjustment_origin=eq.IMPORT_CORRECTION&is_current=eq.true&archived_at_utc=is.null&select=timesheet_id,correction_id,correction_kind`
+    );
+    const members = Array.isArray(membersRes?.rows) ? membersRes.rows : [];
+    const memberIds = Array.from(new Set(members.map((row) => String(row?.timesheet_id || '').trim()).filter(Boolean)));
+    if (!memberIds.length) return sourceRows;
+    const encodedMembers = memberIds.map((id) => encodeURIComponent(id)).join(',');
+    const linesRes = await sbFetch(env,
+      `${env.SUPABASE_URL}/rest/v1/invoice_lines?timesheet_id=in.(${encodedMembers})&select=timesheet_id,invoice_id`
+    );
+    const invoiceLines = Array.isArray(linesRes?.rows) ? linesRes.rows : [];
+    const invoiceIds = Array.from(new Set(invoiceLines.map((row) => String(row?.invoice_id || '').trim()).filter(Boolean)));
+    const nonCreditInvoices = new Set();
+    if (invoiceIds.length) {
+      const invoiceRes = await sbFetch(env,
+        `${env.SUPABASE_URL}/rest/v1/invoices?id=in.(${invoiceIds.map((id) => encodeURIComponent(id)).join(',')})&select=id,type`
+      );
+      for (const invoice of (Array.isArray(invoiceRes?.rows) ? invoiceRes.rows : [])) {
+        if (String(invoice?.type || '').trim().toUpperCase() !== 'CREDIT_NOTE') nonCreditInvoices.add(String(invoice.id));
+      }
+    }
+    const placed = new Set(invoiceLines.filter((line) => nonCreditInvoices.has(String(line.invoice_id))).map((line) => String(line.timesheet_id)));
+    const issueIds = new Set();
+    for (const correctionId of correctionIds) {
+      const pair = members.filter((row) => String(row.correction_id) === correctionId && ['CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'].includes(String(row.correction_kind || '').toUpperCase()));
+      if (pair.length !== 2 || new Set(pair.map((row) => String(row.correction_kind).toUpperCase())).size !== 2) continue;
+      const placedMembers = pair.filter((row) => placed.has(String(row.timesheet_id)));
+      if (placedMembers.length !== 1) continue;
+      const missing = pair.find((row) => !placed.has(String(row.timesheet_id)));
+      if (missing) issueIds.add(String(missing.timesheet_id));
+    }
+    return sourceRows.map((row) => {
+      const id = String(row?.timesheet_id || row?.id || '');
+      if (!issueIds.has(id)) return row;
+      const existing = Array.isArray(row.issue_codes) ? row.issue_codes.slice() : [];
+      if (!existing.includes('Paired needs invoicing')) existing.push('Paired needs invoicing');
+      return { ...row, issue_codes: existing, correction_pair_placement_incomplete: true };
+    });
+  } catch {
+    return sourceRows;
   }
 }
 
@@ -87528,6 +87625,43 @@ async function validateBulkAuthoriseRequiredExpenseEvidence(env, timesheetId) {
   };
 }
 
+async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, expectedTimesheetId, expectedRowSignature, body, user) {
+  const item = {
+    timesheet_id: timesheetId,
+    expected_timesheet_id: expectedTimesheetId || timesheetId,
+    expected_row_signature: expectedRowSignature || null,
+    expected_pair_fingerprint: body?.expected_pair_fingerprint || body?.pair_fingerprint || null,
+    row_key: `timesheet:${timesheetId}`
+  };
+  const preview = await sbRpc(env, 'timesheet_correction_pair_lifecycle_preview_v1', {
+    p_items: [item],
+    p_action: action,
+    p_actor_user_id: user?.id || null,
+    p_max_members: 100
+  });
+  const pairCount = Number(preview?.correction_pair_count || 0);
+  if (!pairCount) return null;
+  const group = Array.isArray(preview?.groups) ? preview.groups[0] : null;
+  if (body?.preview_only === true || body?.previewOnly === true) {
+    return { is_pair: true, preview_only: true, preview, group };
+  }
+  if (body?.confirm_pair_lifecycle !== true && body?.confirmPairLifecycle !== true) {
+    return { is_pair: true, confirmation_required: true, preview, group };
+  }
+  if (!preview?.valid || !group?.action_ready) {
+    return { is_pair: true, blocked: true, preview, group };
+  }
+  const rpcName = action === 'AUTHORISE'
+    ? 'timesheet_authorise_bulk_atomic'
+    : 'timesheet_unauthorise_bulk_atomic';
+  const mutation = await sbRpc(env, rpcName, {
+    p_items: [item],
+    p_actor_user_id: user?.id || null,
+    p_now_utc: nowIso()
+  }, { timeoutMs: 20000 });
+  return { is_pair: true, preview, group, mutation };
+}
+
 async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, item, actorUser) {
   const timesheetId = lifecycleBulkReadFirst(item, ['timesheet_id', 'current_timesheet_id', 'requested_timesheet_id']);
   const expectedTimesheetId = lifecycleBulkReadFirst(item, ['expected_timesheet_id', 'current_timesheet_id', 'timesheet_id']) || timesheetId;
@@ -87990,6 +88124,59 @@ async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, ac
   if (!selected.length) return withCORS(env, req, lifecycleBulkJson(400, { ok: false, error: 'NO_TIMESHEET_ITEMS_SELECTED' }));
   if (items.length > maxItems) {
     return withCORS(env, req, lifecycleBulkJson(413, { ok: false, error: 'TOO_MANY_TIMESHEET_ITEMS_SELECTED', max_items: maxItems }));
+  }
+
+  let pairPreview = null;
+  try {
+    pairPreview = await sbRpc(env, 'timesheet_correction_pair_lifecycle_preview_v1', {
+      p_items: selected,
+      p_action: action,
+      p_actor_user_id: user?.id || null,
+      p_max_members: 100
+    });
+  } catch (error) {
+    return withCORS(env, req, lifecycleBulkJson(409, {
+      ok: false, error: 'CORRECTION_PAIR_LIFECYCLE_PREVIEW_FAILED',
+      error_code: 'CORRECTION_PAIR_LIFECYCLE_PREVIEW_FAILED',
+      message: 'The selected timesheet lifecycle could not be checked safely. Refresh and try again.'
+    }));
+  }
+  if (Number(pairPreview?.correction_pair_count || 0) > 0) {
+    if (selected.length > 100) {
+      return withCORS(env, req, lifecycleBulkJson(413, {
+        ok: false, error: 'CORRECTION_PAIR_LIFECYCLE_SELECTION_TOO_LARGE', max_items: 100
+      }));
+    }
+    if (body?.confirm_pair_lifecycle !== true && body?.confirmPairLifecycle !== true) {
+      return withCORS(env, req, lifecycleBulkJson(409, {
+        ok: false, error: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
+        error_code: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
+        message: action === 'AUTHORISE'
+          ? 'Your selection includes linked correction pairs. Both timesheets in each pair will be authorised together.'
+          : 'Your selection includes linked correction pairs. Both timesheets in each pair will be unauthorised together.',
+        pair_lifecycle: pairPreview
+      }));
+    }
+    if (!pairPreview?.valid) {
+      return withCORS(env, req, lifecycleBulkJson(409, {
+        ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+        error_code: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+        message: 'One or more linked correction pairs cannot be changed safely.',
+        pair_lifecycle: pairPreview
+      }));
+    }
+    const rpcName = action === 'AUTHORISE'
+      ? 'timesheet_authorise_bulk_atomic'
+      : 'timesheet_unauthorise_bulk_atomic';
+    const mutation = await sbRpc(env, rpcName, {
+      p_items: selected,
+      p_actor_user_id: user?.id || null,
+      p_now_utc: nowIso()
+    }, { timeoutMs: 20000 });
+    return withCORS(env, req, lifecycleBulkJson(
+      mutation?.all_success === false ? 207 : 200,
+      { ...(mutation || {}), pair_lifecycle: pairPreview, atomic_pair_lifecycle: true }
+    ));
   }
 
   if (selected.length === 1) {
@@ -160514,6 +160701,44 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   }
 
   const currentTimesheetId = firstString(guard.resolved?.current_timesheet_id, expectedTimesheetId);
+  try {
+    const pairFlow = await runCorrectionPairLifecycleIfApplicable(
+      env, 'AUTHORISE', currentTimesheetId, expectedTimesheetId, expectedRowSignature, body, user
+    );
+    if (pairFlow?.is_pair) {
+      if (pairFlow.preview_only) return withJson(200, { ok: true, pair_lifecycle: pairFlow.preview });
+      if (pairFlow.confirmation_required) return withJson(409, {
+        ok: false, error: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
+        error_code: 'CORRECTION_PAIR_CONFIRMATION_REQUIRED',
+        message: 'This is a linked correction pair. Both timesheets will be authorised together.',
+        pair_lifecycle: pairFlow.preview
+      });
+      if (pairFlow.blocked || pairFlow.mutation?.ok === false || pairFlow.mutation?.all_success === false) {
+        return withJson(409, {
+          ok: false, error: pairFlow.mutation?.error_code || 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+          error_code: pairFlow.mutation?.error_code || 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+          message: 'The linked correction pair could not be authorised safely. Refresh and try again.',
+          pair_lifecycle: pairFlow.preview, mutation: pairFlow.mutation || null, refresh_required: true
+        });
+      }
+      const results = Array.isArray(pairFlow.mutation?.results) ? pairFlow.mutation.results : [];
+      return withJson(200, {
+        ok: true, success: true, authorised: true,
+        operation: 'correction_pair_authorise', pair_lifecycle: pairFlow.preview,
+        mutation: pairFlow.mutation,
+        affected_rows: results.flatMap((row) => Array.isArray(row?.affected_rows) ? row.affected_rows : []),
+        affected_timesheet_ids: pairFlow.mutation?.affected_timesheet_ids || [],
+        refresh_required: true
+      });
+    }
+  } catch (error) {
+    return withJson(409, {
+      ok: false, error: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+      error_code: 'CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED',
+      message: 'The linked correction pair could not be checked safely. Refresh and try again.',
+      refresh_required: true
+    });
+  }
   lifecycleSignatureLog('guard_resolved', {
     requested_timesheet_id: requestedTimesheetId || null,
     expected_timesheet_id: expectedTimesheetId || null,

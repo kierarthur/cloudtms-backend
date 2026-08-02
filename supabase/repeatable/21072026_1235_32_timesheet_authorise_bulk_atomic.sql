@@ -244,6 +244,23 @@ BEGIN
     END AS new_processing_status
   FROM pg_temp.timesheet_authorise_bulk_state AS state_rows;
 
+  -- A linked correction pair is one lifecycle unit.  An already-authorised
+  -- sibling in a repairable legacy mixed state is idempotent, while any real
+  -- blocker is propagated to both members before either member is mutated.
+  UPDATE pg_temp.timesheet_authorise_bulk_work work_rows
+     SET failure_code=NULL
+   WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
+     AND work_rows.failure_code='ALREADY_AUTHORISED';
+
+  UPDATE pg_temp.timesheet_authorise_bulk_work work_rows
+     SET failure_code='CORRECTION_UNIT_LIFECYCLE_TRANSITION_BLOCKED'
+   WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM pg_temp.timesheet_authorise_bulk_work blocked
+       WHERE blocked.item_json->>'lifecycle_group_id'=work_rows.item_json->>'lifecycle_group_id'
+         AND blocked.failure_code IS NOT NULL
+     );
+
   CREATE TEMP TABLE timesheet_authorise_bulk_updated_ts ON COMMIT DROP AS
   WITH updated_rows AS (
     UPDATE public.timesheets AS ts_upd
@@ -286,6 +303,24 @@ BEGIN
   )
   SELECT updated_rows.* FROM updated_rows;
 
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp.timesheet_authorise_bulk_work work_rows
+    JOIN public.timesheets current_pair
+      ON current_pair.timesheet_id=work_rows.current_timesheet_id
+    JOIN public.timesheets_financials current_tf
+      ON current_tf.timesheet_id=current_pair.timesheet_id AND current_tf.is_current=true
+    WHERE NULLIF(work_rows.item_json->>'lifecycle_group_id','') IS NOT NULL
+      AND work_rows.failure_code IS NULL
+    GROUP BY work_rows.item_json->>'lifecycle_group_id',
+             (work_rows.item_json->>'lifecycle_group_size')::integer
+    HAVING count(*)<>(work_rows.item_json->>'lifecycle_group_size')::integer
+       OR count(*) FILTER (WHERE current_pair.authorised_at_server IS NOT NULL
+                            AND current_tf.authorised_at_utc IS NOT NULL)<>count(*)
+  ) THEN
+    RAISE EXCEPTION 'CORRECTION_PAIR_LIFECYCLE_POSTCONDITION_FAILED' USING ERRCODE='P0001';
+  END IF;
+
   PERFORM public._audit_insert(
     'timesheet_batch',
     'bulk_authorise:' || v_now::text,
@@ -317,6 +352,8 @@ BEGIN
       'processing_status_before', work_rows.tsfin_processing_status::text,
       'processing_status_after', CASE WHEN updated_tf.processing_status IS NULL THEN NULL ELSE updated_tf.processing_status::text END,
       'contract_week_id', work_rows.contract_week_id,
+      'lifecycle_group_id', NULLIF(work_rows.item_json ->> 'lifecycle_group_id', ''),
+      'pair_fingerprint', NULLIF(work_rows.item_json ->> 'pair_fingerprint', ''),
       'affected_rows', CASE WHEN work_rows.failure_code IS NULL AND updated_tf.timesheet_id IS NOT NULL THEN jsonb_build_array(jsonb_build_object('timesheet_id', work_rows.current_timesheet_id, 'contract_week_id', work_rows.contract_week_id, 'booking_id', work_rows.current_booking_id, 'row_key', 'timesheet:' || work_rows.current_timesheet_id::text)) ELSE '[]'::jsonb END
     ) AS result_json
   FROM pg_temp.timesheet_authorise_bulk_work AS work_rows

@@ -217,8 +217,9 @@ test('deleted operation-proven members can scope exact HOURS_WEEKLY lines', () =
 });
 
 test('one canonical economic ledger drives B and correction role state', () => {
-  assert.match(helper, /'economic_state','EFFECTIVE'/);
-  assert.match(helper, /'economic_state','PENDING'/);
+  assert.match(helper, /v_component_economic_state:=case[\s\S]*then 'PENDING'[\s\S]*else 'EFFECTIVE' end/);
+  assert.match(helper, /'economic_state',v_component_economic_state/);
+  assert.match(helper, /component->>'economic_state' in \('EFFECTIVE','PENDING'\)/);
   assert.match(helper, /from jsonb_array_elements\(v_line_evidence\) component/);
   const roleSection = helper.slice(
     helper.indexOf('with correction_seed as'),

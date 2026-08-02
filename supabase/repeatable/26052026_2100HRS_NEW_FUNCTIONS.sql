@@ -207592,7 +207592,21 @@ BEGIN
 
   IF v_already_archived_count > 0
      AND v_already_archived_count <> array_length(v_timesheet_ids, 1) THEN
-    RAISE EXCEPTION USING MESSAGE = 'ARCHIVE_UNIT_PARTIAL_STATE';
+    RAISE EXCEPTION USING MESSAGE = CASE
+      WHEN COALESCE((v_recheck->>'correction_pair')::boolean,false)
+        THEN 'CORRECTION_PAIR_PARTIAL_ARCHIVE'
+      ELSE 'ARCHIVE_UNIT_PARTIAL_STATE' END;
+  END IF;
+
+  IF v_action='UNARCHIVE' AND EXISTS (
+    SELECT 1 FROM jsonb_array_elements(COALESCE(v_recheck->'blockers','[]'::jsonb)) blocker(value)
+    WHERE blocker.value->>'code'='CORRECTION_PAIR_HAS_LATER_GENERATION'
+  ) THEN
+    RETURN jsonb_build_object(
+      'ok',false,'action','UNARCHIVE','decision','BLOCKED',
+      'error_code','CORRECTION_PAIR_UNARCHIVE_SUPERSEDED',
+      'timesheet_ids',to_jsonb(v_timesheet_ids),
+      'contract_week_ids',to_jsonb(v_contract_week_ids));
   END IF;
 
   -- Idempotent already-completed outcomes above deliberately precede the
@@ -207611,7 +207625,10 @@ BEGIN
     );
   END IF;
 
-  v_primary_contract_week_id := v_contract_week_ids[1];
+  SELECT cw.id INTO v_primary_contract_week_id
+  FROM public.contract_weeks cw
+  WHERE cw.timesheet_id=v_current_timesheet_id
+  ORDER BY cw.id LIMIT 1;
   v_signature_payload := public.timesheet_lifecycle_guard_signature_v1(
     v_current_timesheet_id,
     v_primary_contract_week_id,
@@ -208244,6 +208261,13 @@ DECLARE
   v_decision text := 'BLOCKED';
   v_signature_payload jsonb := '{}'::jsonb;
   v_current_signature text := NULL;
+  v_class jsonb := '{}'::jsonb;
+  v_chain jsonb := '{}'::jsonb;
+  v_unit jsonb := '{}'::jsonb;
+  v_is_correction_pair boolean := false;
+  v_pair_fingerprint text := NULL;
+  v_pair_members jsonb := '[]'::jsonb;
+  v_pair_net_hours numeric := 0;
 BEGIN
   IF p_timesheet_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ID_REQUIRED';
@@ -208325,16 +208349,64 @@ BEGIN
     );
   END IF;
 
-  -- The installed standard-delete path removes the authoritative current row only.
-  -- Weekly parent/manual paths resolve their own larger units in their existing previews.
-  v_timesheet_ids := ARRAY[v_current.timesheet_id]::uuid[];
+  -- Import-authoritative changed-hours members are one exact two-row removal
+  -- unit.  Resolve the requested correction generation, never the wider Weekly
+  -- parent chain or a neighbouring generation.
+  v_class:=public._ctms_import_correction_classify_v1(v_current.timesheet_id);
+  IF COALESCE((v_class->>'is_import_authoritative_correction')::boolean,false) THEN
+    v_chain:=public.timesheet_correction_chain_scope_v1(v_current.timesheet_id,false,32,100);
+    v_unit:=v_chain->'requested_correction_unit';
+    IF COALESCE((v_chain->>'valid')::boolean,false) IS TRUE
+       AND COALESCE((v_unit->>'valid')::boolean,false) IS TRUE
+       AND v_unit->>'correction_shape'='REVERSAL_REPLACEMENT'
+       AND COALESCE((v_unit->>'expected_member_count')::integer,0)=2 THEN
+      SELECT COALESCE(array_agg(value::uuid ORDER BY value::uuid),ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM jsonb_array_elements_text(v_unit->'member_ids') member(value);
+      v_is_correction_pair:=cardinality(v_timesheet_ids)=2;
+      v_pair_fingerprint:=public._import_review_hash_v1(concat_ws('|',
+        'correction-pair-removal-v1',v_chain->>'chain_fingerprint',v_unit->>'correction_id',
+        array_to_string(v_timesheet_ids,',')));
+    ELSE
+      -- Archived pairs are intentionally excluded from some active-chain
+      -- projections.  Their exact durable correction identity remains enough
+      -- to support an atomic Unarchive preview, but never a guessed role.
+      SELECT COALESCE(array_agg(t.timesheet_id ORDER BY t.timesheet_id),ARRAY[]::uuid[])
+      INTO v_timesheet_ids
+      FROM public.timesheets t
+      WHERE t.correction_id=v_current.correction_id AND t.is_current
+        AND t.correction_kind IN ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT');
+      IF cardinality(v_timesheet_ids)=2
+         AND (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_timesheet_ids)
+                AND t.correction_kind='CHANGED_HOURS_REVERSAL')=1
+         AND (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_timesheet_ids)
+                AND t.correction_kind='CHANGED_HOURS_REPLACEMENT')=1 THEN
+        v_is_correction_pair:=true;
+        v_unit:=jsonb_build_object('valid',true,'correction_id',v_current.correction_id,
+          'correction_shape','REVERSAL_REPLACEMENT','expected_member_count',2,
+          'member_ids',to_jsonb(v_timesheet_ids));
+        v_pair_fingerprint:=public._import_review_hash_v1(concat_ws('|',
+          'correction-pair-removal-v1',v_current.correction_id,array_to_string(v_timesheet_ids,',')));
+      ELSE
+        v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object(
+          'code','CORRECTION_PAIR_MALFORMED','detail',v_chain));
+      END IF;
+    END IF;
+  END IF;
+  IF NOT v_is_correction_pair THEN
+    -- Ordinary and non-authoritative paths keep the installed single-row unit.
+    v_timesheet_ids:=ARRAY[v_current.timesheet_id]::uuid[];
+  END IF;
 
   SELECT COALESCE(array_agg(DISTINCT cw.id ORDER BY cw.id), ARRAY[]::uuid[])
     INTO v_contract_week_ids
   FROM public.contract_weeks AS cw
-  WHERE cw.timesheet_id = v_current.timesheet_id;
+  WHERE cw.timesheet_id = ANY(v_timesheet_ids);
 
-  v_primary_contract_week_id := v_contract_week_ids[1];
+  SELECT cw.id INTO v_primary_contract_week_id
+  FROM public.contract_weeks cw
+  WHERE cw.timesheet_id=v_current.timesheet_id
+  ORDER BY cw.id LIMIT 1;
 
   SELECT COALESCE(array_agg(DISTINCT nhsp_shift.id ORDER BY nhsp_shift.id), ARRAY[]::uuid[])
     INTO v_nhsp_shift_ids
@@ -208410,7 +208482,7 @@ BEGIN
     ));
   END IF;
 
-  IF v_current.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum THEN
+  IF NOT v_is_correction_pair AND v_current.sheet_scope = 'WEEKLY'::public.timesheet_scope_enum THEN
     IF COALESCE(v_current.is_adjustment, false)
        OR EXISTS (
          SELECT 1
@@ -208428,13 +208500,51 @@ BEGIN
     END IF;
   END IF;
 
-  IF UPPER(COALESCE(v_current.adjustment_origin, '')) IN ('IMPORT_CORRECTION', 'IMPORT_CANCELLATION')
+  IF NOT v_is_correction_pair AND (UPPER(COALESCE(v_current.adjustment_origin, '')) IN ('IMPORT_CORRECTION', 'IMPORT_CANCELLATION')
      OR NULLIF(BTRIM(COALESCE(v_current.correction_kind, '')), '') IS NOT NULL
-     OR v_current.correction_id IS NOT NULL THEN
+     OR v_current.correction_id IS NOT NULL) THEN
     v_blockers := v_blockers || jsonb_build_array(jsonb_build_object(
       'code', 'IMPORT_DERIVED_CHILD',
       'message', 'Import-derived children must be handled through the parent-chain removal path.'
     ));
+  END IF;
+
+  IF v_is_correction_pair THEN
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'timesheet_id',t.timesheet_id,'correction_kind',t.correction_kind,
+      'signed_hours',COALESCE(tf.hours_day,0)+COALESCE(tf.hours_night,0)+COALESCE(tf.hours_sat,0)+COALESCE(tf.hours_sun,0)+COALESCE(tf.hours_bh,0),
+      'authorised',t.authorised_at_server IS NOT NULL OR tf.authorised_at_utc IS NOT NULL,
+      'invoice_linked',EXISTS(SELECT 1 FROM public.invoice_lines il WHERE il.timesheet_id=t.timesheet_id),
+      'paid',tf.paid_at_utc IS NOT NULL,'archived',t.archived_at_utc IS NOT NULL)
+      ORDER BY CASE t.correction_kind WHEN 'CHANGED_HOURS_REVERSAL' THEN 1 ELSE 2 END),'[]'::jsonb),
+      COALESCE(sum(COALESCE(tf.hours_day,0)+COALESCE(tf.hours_night,0)+COALESCE(tf.hours_sat,0)+COALESCE(tf.hours_sun,0)+COALESCE(tf.hours_bh,0)),0)
+    INTO v_pair_members,v_pair_net_hours
+    FROM public.timesheets t
+    LEFT JOIN public.timesheets_financials tf ON tf.timesheet_id=t.timesheet_id AND tf.is_current=true
+    WHERE t.timesheet_id=ANY(v_timesheet_ids);
+
+    IF (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_timesheet_ids)
+          AND t.archived_at_utc IS NOT NULL)=1 THEN
+      v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','CORRECTION_PAIR_PARTIAL_ARCHIVE'));
+    END IF;
+    IF EXISTS(SELECT 1 FROM public.timesheets t LEFT JOIN public.timesheets_financials tf
+        ON tf.timesheet_id=t.timesheet_id AND tf.is_current=true
+      WHERE t.timesheet_id=ANY(v_timesheet_ids)
+        AND (t.authorised_at_server IS NOT NULL OR tf.authorised_at_utc IS NOT NULL)) THEN
+      v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','CORRECTION_PAIR_MUST_BE_UNAUTHORISED'));
+    END IF;
+    IF EXISTS(
+      SELECT 1 FROM public.timesheets later
+      WHERE later.is_current AND later.archived_at_utc IS NULL
+        AND later.adjustment_origin='IMPORT_CORRECTION'
+        AND later.parent_timesheet_id=(
+          SELECT replacement.timesheet_id FROM public.timesheets replacement
+          WHERE replacement.timesheet_id=ANY(v_timesheet_ids)
+            AND replacement.correction_kind='CHANGED_HOURS_REPLACEMENT' LIMIT 1)
+        AND later.timesheet_id<>ALL(v_timesheet_ids)
+    ) THEN
+      v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','CORRECTION_PAIR_HAS_LATER_GENERATION'));
+    END IF;
   END IF;
 
   v_history := public.timesheet_removal_financial_history_v1(
@@ -208471,7 +208581,19 @@ BEGIN
     'blocked_reasons', v_blockers,
     'retention_reasons', COALESCE(v_history -> 'retention_reasons', '[]'::jsonb),
     'advance', COALESCE(v_history -> 'advance', '{}'::jsonb),
-    'current_row_signature', v_current_signature
+    'current_row_signature', v_current_signature,
+    'correction_pair',v_is_correction_pair,
+    'source_system',CASE WHEN v_is_correction_pair THEN CASE
+      WHEN upper(coalesce(
+        v_current.candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',
+        v_current.adjustment_origin,'')) like 'NHSP%' THEN 'NHSP'
+      ELSE 'HEALTHROSTER' END END,
+    'correction_id',CASE WHEN v_is_correction_pair THEN v_unit->>'correction_id' END,
+    'pair_timesheet_ids',CASE WHEN v_is_correction_pair THEN to_jsonb(v_timesheet_ids) ELSE '[]'::jsonb END,
+    'pair_fingerprint',v_pair_fingerprint,
+    'members',CASE WHEN v_is_correction_pair THEN v_pair_members ELSE '[]'::jsonb END,
+    'pair_net_position',CASE WHEN v_is_correction_pair THEN jsonb_build_object('hours',v_pair_net_hours) ELSE NULL END,
+    'resulting_financial_position',CASE WHEN v_is_correction_pair THEN jsonb_build_object('pair_removed_hours',v_pair_net_hours) ELSE NULL END
   );
 END;
 $function$;
@@ -209373,6 +209495,10 @@ DECLARE
   v_locked_by_invoice_id uuid := NULL;
   v_invoice_segments_locked integer := 0;
   v_contract_week_id uuid := NULL;
+  v_pair_ids uuid[] := ARRAY[]::uuid[];
+  v_pair_members jsonb := '[]'::jsonb;
+  v_pair_state text := NULL;
+  v_pair_fingerprint text := NULL;
 BEGIN
   IF p_timesheet_id IS NULL THEN
     RAISE EXCEPTION USING MESSAGE = 'TIMESHEET_ID_REQUIRED';
@@ -209385,6 +209511,38 @@ BEGIN
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object('ok', false, 'error_code', 'TARGET_NOT_FOUND');
+  END IF;
+
+  IF UPPER(COALESCE(v_current.adjustment_origin,''))='IMPORT_CORRECTION'
+     AND v_current.correction_kind IN ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+     AND v_current.correction_id IS NOT NULL THEN
+    SELECT COALESCE(array_agg(t.timesheet_id ORDER BY t.timesheet_id),ARRAY[]::uuid[]),
+      COALESCE(jsonb_agg(jsonb_build_object(
+        'timesheet_id',t.timesheet_id,'correction_kind',t.correction_kind,
+        'is_archived',t.archived_at_utc IS NOT NULL,
+        'archived_at_utc',t.archived_at_utc,
+        'authorised',t.authorised_at_server IS NOT NULL,
+        'invoice_linked',EXISTS(SELECT 1 FROM public.invoice_lines il WHERE il.timesheet_id=t.timesheet_id))
+        ORDER BY CASE t.correction_kind WHEN 'CHANGED_HOURS_REVERSAL' THEN 1 ELSE 2 END),'[]'::jsonb)
+    INTO v_pair_ids,v_pair_members
+    FROM public.timesheets t
+    WHERE t.correction_id=v_current.correction_id AND t.is_current
+      AND t.correction_kind IN ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT');
+    IF cardinality(v_pair_ids)=2
+       AND (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_pair_ids)
+            AND t.correction_kind='CHANGED_HOURS_REVERSAL')=1
+       AND (SELECT count(*) FROM public.timesheets t WHERE t.timesheet_id=ANY(v_pair_ids)
+            AND t.correction_kind='CHANGED_HOURS_REPLACEMENT')=1 THEN
+      SELECT CASE count(*) FILTER(WHERE archived_at_utc IS NOT NULL)
+        WHEN 0 THEN 'PAIR_ACTIVE' WHEN 2 THEN 'PAIR_ARCHIVED'
+        ELSE 'PAIR_PARTIALLY_ARCHIVED_BLOCKED' END
+      INTO v_pair_state FROM public.timesheets WHERE timesheet_id=ANY(v_pair_ids);
+      v_pair_fingerprint:=public._import_review_hash_v1(concat_ws('|',
+        'correction-pair-archive-state-v1',v_current.correction_id,
+        array_to_string(v_pair_ids,','),v_pair_members::text));
+    ELSE
+      v_pair_state:='PAIR_MALFORMED_BLOCKED';
+    END IF;
   END IF;
 
   SELECT t.*
@@ -209483,6 +209641,12 @@ BEGIN
     'paid_at_utc', v_paid_at_utc,
     'locked_by_invoice_id', v_locked_by_invoice_id,
     'invoice_segments_locked', v_invoice_segments_locked,
+    'correction_pair',v_pair_state IS NOT NULL,
+    'correction_id',CASE WHEN v_pair_state IS NOT NULL THEN v_current.correction_id END,
+    'pair_state',v_pair_state,
+    'pair_timesheet_ids',to_jsonb(v_pair_ids),
+    'pair_members',v_pair_members,
+    'pair_fingerprint',v_pair_fingerprint,
     'backend_row_signature', v_signature,
     'row_signature', v_signature
   );

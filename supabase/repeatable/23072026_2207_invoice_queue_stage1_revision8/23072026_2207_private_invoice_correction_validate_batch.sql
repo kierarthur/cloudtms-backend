@@ -622,6 +622,7 @@ final as materialized (
       ti.header_snapshot_json#>>'{meta,self_bill}','false'))
       in('true','t','1','yes') then 'SELF_BILL' else 'NORMAL' end
       target_invoice_stream,
+    coalesce(pair_scope.scope_json,'{}'::jsonb) pair_scope_json,
     (
       not r.import_declared
       or(
@@ -649,6 +650,11 @@ final as materialized (
    and ls.scope_key=r.scope_key
    and ls.timesheet_id=r.timesheet_id
   left join public.invoices ti on ti.id=r.invoice_id
+  left join lateral (
+    select public.invoice_correction_pair_scope_v1(
+      r.timesheet_id,null::uuid,null::uuid,false,100) scope_json
+    where r.import_declared
+  ) pair_scope on true
 ),
 member_results as materialized (
   select f.*,s.request_key,s.external_scope_key,s.validation_purpose,
@@ -812,11 +818,22 @@ member_results as materialized (
         then 'INVOICE_CORRECTION_SOURCE_LOCK_CONFLICT' end,
       case when f.segment_lock_conflict_count>0
         then 'INVOICE_CORRECTION_SEGMENT_LOCK_CONFLICT' end,
+      case when f.pair_scope_json->>'placement_state'='INCOMPLETE_MOVE'
+        then 'INVOICE_CORRECTION_PAIR_PLACEMENT_INCOMPLETE' end,
       case when cardinality(f.conflicting_ids)>0
+        and not (
+          coalesce((f.pair_scope_json->>'valid')::boolean,false)
+          and f.pair_scope_json->>'placement_state' in ('COMPLETE_SPLIT_INVOICES','INCOMPLETE_MOVE')
+        )
         then 'INVOICE_CORRECTION_UNIT_SPLIT_ACROSS_INVOICES' end,
-      case when cardinality(f.missing_ids)>0
+      case when (cardinality(f.missing_ids)>0
+        and not (
+          coalesce((f.pair_scope_json->>'valid')::boolean,false)
+          and f.pair_scope_json->>'placement_state' in ('COMPLETE_SPLIT_INVOICES','INCOMPLETE_MOVE')
+        ))
         or(f.import_declared
-          and coalesce(f.expected_member_count,0)>f.member_count)
+          and coalesce(f.expected_member_count,0)>f.member_count
+          and f.pair_scope_json->>'placement_state'<>'INCOMPLETE_MOVE')
         then 'INVOICE_CORRECTION_MEMBER_MISSING' end,
       case when f.vat_mismatch_count>0
         then 'INVOICE_CORRECTION_VAT_POLICY_MISMATCH' end,

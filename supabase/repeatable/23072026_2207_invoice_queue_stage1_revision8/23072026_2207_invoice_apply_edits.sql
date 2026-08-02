@@ -253,6 +253,10 @@ v_ref_seg_cur_ref text;
   v_hdr_meta_segment_count int := 0;
 
   v_manifest jsonb;
+  v_correction_placement_only boolean:=false;
+  v_correction_placement_ts_id uuid:=null;
+  v_correction_placement_scope jsonb:='{}'::jsonb;
+  v_correction_placement_states jsonb:='[]'::jsonb;
   v_service boolean:=coalesce(auth.role(),'')='service_role';
   v_actor_role text;
 begin
@@ -273,7 +277,31 @@ begin
   perform public._ctms_assert_invoice_mutable_draft_v1(
     p_invoice_id,'INVOICE_APPLY_EDITS',true
   );
+  v_correction_placement_only:=
+    jsonb_typeof(coalesce(p_payload,'{}'::jsonb))='object'
+    and not exists(select 1 from jsonb_object_keys(coalesce(p_payload,'{}'::jsonb)) payload_key
+      where payload_key not in ('remove_invoice_line_ids','add_timesheet_ids'))
+    and coalesce(jsonb_array_length(case when jsonb_typeof(p_payload->'remove_invoice_line_ids')='array'
+      then p_payload->'remove_invoice_line_ids' else '[]'::jsonb end),0)
+      +coalesce(jsonb_array_length(case when jsonb_typeof(p_payload->'add_timesheet_ids')='array'
+      then p_payload->'add_timesheet_ids' else '[]'::jsonb end),0)=1
+    and (
+      (case when coalesce(p_payload#>>'{remove_invoice_line_ids,0}','')
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then exists(
+          select 1 from public.invoice_lines placement_line
+          where placement_line.id=(p_payload#>>'{remove_invoice_line_ids,0}')::uuid
+            and placement_line.invoice_id=p_invoice_id
+            and coalesce((public._ctms_import_correction_classify_v1(placement_line.timesheet_id)
+              ->>'is_import_authoritative_correction')::boolean,false)) else false end)
+      or
+      (case when coalesce(p_payload#>>'{add_timesheet_ids,0}','')
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+        coalesce((public._ctms_import_correction_classify_v1(
+          (p_payload#>>'{add_timesheet_ids,0}')::uuid)->>'is_import_authoritative_correction')::boolean,false)
+        else false end)
+    );
   if public._ctms_invoice_payload_has_financial_edit_v1(p_payload)
+     and not v_correction_placement_only
      and exists (
        select 1 from public.invoice_lines il
        where il.invoice_id=p_invoice_id and il.timesheet_id is not null
@@ -412,6 +440,47 @@ end if;
     from jsonb_array_elements_text(coalesce(p_payload->'add_timesheet_ids','[]'::jsonb)) x
     where nullif(btrim(coalesce(x,'')),'') is not null;
   end if;
+
+  IF v_correction_placement_only THEN
+    IF COALESCE(cardinality(v_remove_ids),0)=1 THEN
+      SELECT il.timesheet_id INTO v_correction_placement_ts_id
+      FROM public.invoice_lines il
+      WHERE il.id=v_remove_ids[1] AND il.invoice_id=p_invoice_id
+      FOR UPDATE;
+      IF v_correction_placement_ts_id IS NULL
+         OR COALESCE((public._ctms_import_correction_classify_v1(v_correction_placement_ts_id)
+             ->>'is_import_authoritative_correction')::boolean,false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'IMPORT_CORRECTION_PLACEMENT_ONLY_TARGET_INVALID' USING ERRCODE='P0001';
+      END IF;
+      v_correction_placement_scope:=public.invoice_correction_pair_scope_v1(
+        v_correction_placement_ts_id,null::uuid,p_actor_user_id,true,100);
+      IF COALESCE((v_correction_placement_scope->>'valid')::boolean,false) IS NOT TRUE
+         OR v_correction_placement_scope->>'placement_state' NOT IN (
+           'COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES') THEN
+        RAISE EXCEPTION 'INVOICE_CORRECTION_PAIR_PLACEMENT_MOVE_NOT_STARTABLE'
+          USING ERRCODE='P0001',DETAIL=v_correction_placement_scope::text;
+      END IF;
+    ELSIF COALESCE(cardinality(v_add_ts_ids),0)=1 THEN
+      v_correction_placement_ts_id:=v_add_ts_ids[1];
+      IF COALESCE((public._ctms_import_correction_classify_v1(v_correction_placement_ts_id)
+             ->>'is_import_authoritative_correction')::boolean,false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'IMPORT_CORRECTION_PLACEMENT_ONLY_TARGET_INVALID' USING ERRCODE='P0001';
+      END IF;
+      v_correction_placement_scope:=public.invoice_correction_pair_scope_v1(
+        v_correction_placement_ts_id,p_invoice_id,p_actor_user_id,true,100);
+      IF COALESCE((v_correction_placement_scope->>'valid')::boolean,false) IS NOT TRUE
+         OR v_correction_placement_scope->>'placement_state'<>'INCOMPLETE_MOVE'
+         OR v_correction_placement_scope->>'missing_member_kind' IS DISTINCT FROM
+              (SELECT t.correction_kind FROM public.timesheets t
+               WHERE t.timesheet_id=v_correction_placement_ts_id)
+         OR COALESCE((v_correction_placement_scope->>'target_appendable')::boolean,false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'INVOICE_CORRECTION_PAIR_PLACEMENT_TARGET_INVALID'
+          USING ERRCODE='P0001',DETAIL=v_correction_placement_scope::text;
+      END IF;
+    ELSE
+      RAISE EXCEPTION 'IMPORT_CORRECTION_PLACEMENT_ONLY_PAYLOAD_INVALID' USING ERRCODE='22023';
+    END IF;
+  END IF;
 
 
 -- Parse segment move payloads (tsfin_id + segment_id)
@@ -3275,6 +3344,25 @@ end if;
   perform public._ctms_assert_invoice_correction_lines_v1(
     p_invoice_id,p_actor_user_id,false,'INVOICE_APPLY_EDITS_RESULT'
   );
+
+  IF v_correction_placement_ts_id IS NOT NULL THEN
+    v_correction_placement_scope:=public.invoice_correction_pair_scope_v1(
+      v_correction_placement_ts_id,null::uuid,p_actor_user_id,false,100);
+    IF COALESCE((v_correction_placement_scope->>'valid')::boolean,false) IS NOT TRUE
+       OR v_correction_placement_scope->>'placement_state' NOT IN (
+         'COMPLETE_SAME_INVOICE','COMPLETE_SPLIT_INVOICES','INCOMPLETE_MOVE','UNPLACED') THEN
+      RAISE EXCEPTION 'INVOICE_CORRECTION_PAIR_PLACEMENT_RESULT_INVALID'
+        USING ERRCODE='P0001',DETAIL=v_correction_placement_scope::text;
+    END IF;
+    v_correction_placement_states:=jsonb_build_array(jsonb_build_object(
+      'correction_id',v_correction_placement_scope->>'correction_id',
+      'pair_timesheet_ids',v_correction_placement_scope->'pair_timesheet_ids',
+      'placement_state',v_correction_placement_scope->>'placement_state',
+      'missing_member_kind',v_correction_placement_scope->>'missing_member_kind',
+      'placement_invoices',v_correction_placement_scope->'placement_invoices'));
+    v_manifest:=v_manifest||jsonb_build_object(
+      'correction_pair_placement_states',v_correction_placement_states);
+  END IF;
 
   return v_manifest;
 
