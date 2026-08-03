@@ -3367,6 +3367,28 @@ begin
   ), issues as (
     select m.*,public._import_review_hash_v1(concat_ws('|','HEALTHROSTER_DAILY',m.reason_code,m.timesheet_id,m.hr_request_id,
       lower(coalesce(m.staff_norm,'')),m.date_local,m.start_time_local,m.end_time_local,m.hours_worked,m.worked_minutes)) issue_fingerprint,
+      jsonb_build_array(jsonb_strip_nulls(jsonb_build_object(
+        'comparison_key','hr-row:'||m.id::text,
+        'work_date',m.date_local,
+        'match_status',m.reason_code,
+        'timesheet_start',to_char(m.worked_start_iso at time zone 'Europe/London','HH24:MI'),
+        'timesheet_end',to_char(m.worked_end_iso at time zone 'Europe/London','HH24:MI'),
+        'timesheet_break_mins',m.break_minutes,
+        'healthroster_start',to_char(m.start_time_local,'HH24:MI'),
+        'healthroster_end',to_char(m.end_time_local,'HH24:MI'),
+        'healthroster_break_mins',case
+          when coalesce((m.payload_json->>'break_evidence_supplied')::boolean,false)
+            then nullif(m.payload_json->>'break_mins','')::integer end,
+        'healthroster_unit',coalesce(nullif(m.payload_json->>'Unit',''),nullif(m.payload_json->>'unit',''),
+          nullif(m.unit_raw,''),nullif(m.unit_hint,'')),
+        'healthroster_hospital',coalesce(nullif(m.payload_json->>'hospital_or_trust',''),
+          nullif(m.payload_json->>'trust','')),
+        'healthroster_request_grade',coalesce(nullif(m.payload_json->>'Request Grade',''),
+          nullif(m.payload_json->>'Request_Grade',''),nullif(m.payload_json->>'grade_raw',''),
+          nullif(m.assignment_grade_norm,'')),
+        'ref_before',m.reference_number,
+        'ref_after',m.hr_request_id
+      ))) email_comparisons,
       lower(btrim(case when coalesce(m.contract_id is not null and
         (select c.send_ts_queries_to_different_email from public.contracts c where c.id=m.contract_id),false)
         then (select c.ts_queries_alt_email_address from public.contracts c where c.id=m.contract_id)
@@ -3378,7 +3400,7 @@ begin
       case when e.id is null then 'EMAIL_ISSUE' else 'EMAIL_REMINDER' end,i.issue_fingerprint)),
     case when e.id is null then 'EMAIL_ISSUE' else 'EMAIL_REMINDER' end,'EMAIL',
     'issue:'||i.issue_fingerprint,i.issue_fingerprint,i.id,i.timesheet_id,null::uuid,i.client_id,i.candidate_id,i.contract_id,e.id,
-    public._import_review_hash_v1(concat_ws('|','issue-evidence-v1',i.issue_fingerprint,i.protection::text,
+    public._import_review_hash_v1(concat_ws('|','issue-evidence-v2',i.issue_fingerprint,i.email_comparisons::text,i.protection::text,
       coalesce(e.delivery_history_status,'NEW'),coalesce(e.sent_count,0),
       case when coalesce(i.contract_id is not null and (select c.send_ts_queries_to_different_email from public.contracts c where c.id=i.contract_id),false)
         then (select concat_ws('|',c.updated_at,c.ts_queries_alt_email_address) from public.contracts c where c.id=i.contract_id)
@@ -3397,6 +3419,7 @@ begin
         else (select public._import_review_hash_v1(concat_ws('|','query-route-v1','CLIENT_DEFAULT:'||c.id::text,
           lower(btrim(coalesce(c.ts_queries_email,''))),c.rev,c.updated_at)) from public.clients c where c.id=i.client_id) end,
       'delivery_history_status',coalesce(e.delivery_history_status,'NEW'),'sent_count',coalesce(e.sent_count,0),
+      'comparisons',i.email_comparisons,
       'default_excluded_reason',case when e.id is not null then 'PREVIOUS_OR_LEGACY_HISTORY_REQUIRES_EXPLICIT_REMINDER'
         when length(coalesce(i.route_email,'')) not between 3 and 320 or position('@' in coalesce(i.route_email,''))<=1 then 'QUERY_RECIPIENT_EMAIL_MISSING_OR_INVALID'
         when coalesce((i.protection->>'active_pay_draft')::boolean,false) then 'BLOCKED_ACTIVE_PAY_DRAFT' end,
@@ -3535,8 +3558,17 @@ begin
         then v_weekly_preview->'rows' else '[]'::jsonb end) r(value)
     ), email_filtered as (
       select p.*,
-        coalesce((select jsonb_agg(cx.value order by cx.value->>'work_date',cx.value->>'comparison_key')
+        coalesce((select jsonb_agg(cx.value||jsonb_strip_nulls(jsonb_build_object(
+            'healthroster_unit',coalesce(nullif(hr.payload_json->>'Unit',''),nullif(hr.payload_json->>'unit',''),
+              nullif(hr.unit_raw,''),nullif(hr.unit_hint,''),nullif(cx.value->>'location_after','')),
+            'healthroster_hospital',coalesce(nullif(hr.payload_json->>'hospital_or_trust',''),
+              nullif(hr.payload_json->>'trust','')),
+            'healthroster_request_grade',coalesce(nullif(hr.payload_json->>'Request Grade',''),
+              nullif(hr.payload_json->>'Request_Grade',''),nullif(hr.payload_json->>'grade_raw',''),
+              nullif(hr.assignment_grade_norm,''))
+          )) order by cx.value->>'work_date',cx.value->>'comparison_key')
           from jsonb_array_elements(coalesce(p.row_json->'comparisons','[]'::jsonb)) cx(value)
+          left join public.hr_rows hr on hr.id=nullif(cx.value->>'hr_row_id','')::uuid
           where (
             coalesce(cx.value->>'match_status','MATCH') not in ('MATCH','HR_ONLY')
             or coalesce((cx.value->>'ref_changed')::boolean,false)
@@ -4048,7 +4080,13 @@ begin
     import_id,hr_row_id,resolved_timesheet_id,resolution_method,status,evidence_fingerprint,
     preview_generation,state_version,selected_by_user_id
   )
-  select p_import_id,n.hr_row_id,n.timesheet_id,'AUTO_MATCHED','CURRENT',n.evidence_fingerprint,
+  select p_import_id,n.hr_row_id,n.timesheet_id,'AUTO_MATCHED','CURRENT',
+    public._import_review_hash_v1(concat_ws('|','daily-resolution-evidence-v1',
+      n.source_identity,n.hr_row_id,n.timesheet_id,n.candidate_id,n.client_id,n.contract_id,
+      coalesce((n.summary_json->'imported_evidence')::text,''),
+      coalesce((n.summary_json->'current_evidence')::text,''),
+      coalesce((n.summary_json->'mapping_evidence')::text,''),
+      coalesce(n.summary_json->>'authority_fingerprint',''))),
     v_generation,v_state.state_version,p_actor_user_id
   from pg_temp.review_next_actions n
   where n.action_kind='NO_ACTION' and n.hr_row_id is not null and n.timesheet_id is not null
@@ -4060,7 +4098,8 @@ begin
     stale_at_utc=null,stale_reason_code=null,updated_at_utc=now()
   where public.import_review_daily_timesheet_resolutions.status<>'APPLIED'
     and (public.import_review_daily_timesheet_resolutions.resolved_timesheet_id is distinct from excluded.resolved_timesheet_id
-      or public.import_review_daily_timesheet_resolutions.status<>'CURRENT');
+      or public.import_review_daily_timesheet_resolutions.status<>'CURRENT'
+      or public.import_review_daily_timesheet_resolutions.evidence_fingerprint is distinct from excluded.evidence_fingerprint);
   get diagnostics v_auto=row_count;
   if v_auto>0 then
     truncate pg_temp.review_next_actions;
@@ -4108,7 +4147,13 @@ begin
     stale_reason_code='EVIDENCE_CHANGED',updated_at_utc=now()
   where r.import_id=p_import_id and r.status='CURRENT' and not exists (
     select 1 from pg_temp.review_next_actions n
-    where n.hr_row_id=r.hr_row_id and n.evidence_fingerprint=r.evidence_fingerprint);
+    where n.hr_row_id=r.hr_row_id
+      and public._import_review_hash_v1(concat_ws('|','daily-resolution-evidence-v1',
+        n.source_identity,n.hr_row_id,n.timesheet_id,n.candidate_id,n.client_id,n.contract_id,
+        coalesce((n.summary_json->'imported_evidence')::text,''),
+        coalesce((n.summary_json->'current_evidence')::text,''),
+        coalesce((n.summary_json->'mapping_evidence')::text,''),
+        coalesce(n.summary_json->>'authority_fingerprint','')))=r.evidence_fingerprint);
 
   -- A Weekly candidate-did-not-work exception remains current only while the
   -- same server-proved HR row/timesheet evidence is still represented by the

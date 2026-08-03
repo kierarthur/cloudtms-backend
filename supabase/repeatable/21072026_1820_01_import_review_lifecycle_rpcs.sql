@@ -664,6 +664,12 @@ begin perform public._import_review_assert_actor_v1(p_actor_user_id);
   truncate pg_temp.review_apply_fresh_actions;
   insert into pg_temp.review_apply_fresh_actions
     select * from public._import_review_action_catalog_core_v1(p_import_id,v_s.preview_generation,500);
+  -- Partial reviews fingerprint only work that is still open.  Refresh uses the
+  -- same rule before persisting preview_fingerprint, so final re-attestation
+  -- must not re-introduce outcomes that this import already committed.
+  delete from pg_temp.review_apply_fresh_actions n
+  using public.import_review_action_outcomes o
+  where o.import_id=p_import_id and o.action_id=n.action_id;
   select public._import_review_hash_v1(coalesce(string_agg(action_id||':'||evidence_fingerprint,'|' order by action_id),''))
   into v_fresh_fingerprint from pg_temp.review_apply_fresh_actions;
   if v_fresh_fingerprint is distinct from v_s.preview_fingerprint then

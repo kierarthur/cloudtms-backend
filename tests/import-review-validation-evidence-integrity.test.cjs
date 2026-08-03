@@ -48,6 +48,39 @@ test('query emails re-attest and attach the exact current document', () => {
   assert.match(email, /when nullif\(cx\.value->>'ref_before',''\) is not null[\s\S]*cx\.value->>'ref_before'=cx\.value->>'ref_after'/);
 });
 
+test('Daily query actions freeze complete email-table evidence', () => {
+  assert.match(core, /'comparison_key','hr-row:'\|\|m\.id::text/);
+  assert.match(core, /'timesheet_start',to_char\(m\.worked_start_iso at time zone 'Europe\/London','HH24:MI'\)/);
+  assert.match(core, /'healthroster_start',to_char\(m\.start_time_local,'HH24:MI'\)/);
+  assert.match(core, /'ref_before',m\.reference_number/);
+  assert.match(core, /'ref_after',m\.hr_request_id/);
+  assert.match(core, /'healthroster_unit',coalesce\(nullif\(m\.payload_json->>'Unit',''\)/);
+  assert.match(core, /'healthroster_request_grade',coalesce\(nullif\(m\.payload_json->>'Request Grade',''\)/);
+  assert.match(core, /'comparisons',i\.email_comparisons/);
+  assert.match(core, /'issue-evidence-v2',i\.issue_fingerprint,i\.email_comparisons::text/);
+});
+
+test('Weekly query actions freeze source unit and request grade into email evidence', () => {
+  assert.match(core, /cx\.value\|\|jsonb_strip_nulls\(jsonb_build_object\(/);
+  assert.match(core, /left join public\.hr_rows hr on hr\.id=nullif\(cx\.value->>'hr_row_id',''\)::uuid/);
+  assert.match(core, /'healthroster_unit',coalesce\(nullif\(hr\.payload_json->>'Unit',''\)/);
+  assert.match(core, /'healthroster_request_grade',coalesce\(nullif\(hr\.payload_json->>'Request Grade',''\)/);
+});
+
+test('query email renderer includes source unit and request grade when available', () => {
+  assert.match(email, />Unit \/ ward<\/th>/);
+  assert.match(email, />Request grade<\/th>/);
+  assert.match(email, /public\._import_review_html_escape_v1\(l\.source_location\)/);
+  assert.match(email, /public\._import_review_html_escape_v1\(l\.request_grade\)/);
+  assert.match(email, /cx\.value->>'healthroster_unit'/);
+  assert.match(email, /cx\.value->>'healthroster_request_grade'/);
+});
+
+test('partial-apply re-attestation excludes already completed outcomes before fingerprinting', () => {
+  assert.match(lifecycle, /delete from pg_temp\.review_apply_fresh_actions n\s+using public\.import_review_action_outcomes o/);
+  assert.match(lifecycle, /where o\.import_id=p_import_id and o\.action_id=n\.action_id;\s+select public\._import_review_hash_v1/);
+});
+
 test('document generation is asynchronous and idempotently nudged', () => {
   assert.match(lifecycle, /import_review_attachment_preparation_targets_v1/);
   assert.match(lifecycle, /VIEW_TIMESHEET_DOCUMENT/);

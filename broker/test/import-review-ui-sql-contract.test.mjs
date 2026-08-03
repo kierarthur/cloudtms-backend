@@ -715,7 +715,10 @@ test('query email enqueue consolidates one outbox message per normalised recipie
   assert.match(body, /group by lower\(route->>'recipient_email'\)/);
   assert.match(body, /RECIPIENT_EMAIL:/);
   assert.match(body, /business_route_count/);
-  assert.match(body, /Items are grouped by client and contract/);
+  assert.match(
+    body,
+    /Please can you kindly make amendments on HealthRoster for the below shifts\. The relevant timesheets have been attached to this email\./
+  );
   assert.match(body, /TIMESHEET_QUERY_EMAIL/);
   assert.doesNotMatch(body, /group by route->>'recipient_scope',route->>'recipient_scope_key'/);
   assert.match(body, /p_max_actions integer default 5000/);

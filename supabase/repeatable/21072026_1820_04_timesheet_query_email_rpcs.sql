@@ -164,6 +164,8 @@ begin
             case when nullif(q.summary_json->>'hours_worked','') is not null then (q.summary_json->>'hours_worked')||' hours' end) timesheet_detail,
           concat_ws(' ',nullif(cx.value->>'healthroster_start','')||case when nullif(cx.value->>'healthroster_end','') is null then '' else '–'||(cx.value->>'healthroster_end') end,
             case when nullif(cx.value->>'healthroster_break_mins','') is not null then 'break '||(cx.value->>'healthroster_break_mins')||' min' end) import_detail,
+          concat_ws(' · ',nullif(cx.value->>'healthroster_hospital',''),nullif(cx.value->>'healthroster_unit','')) source_location,
+          nullif(cx.value->>'healthroster_request_grade','') request_grade,
           case
             when nullif(cx.value->>'ref_before','') is not null
               and cx.value->>'ref_before'=cx.value->>'ref_after' then cx.value->>'ref_before'
@@ -189,13 +191,16 @@ begin
         select l.*,'<tr><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(l.candidate_name)||'</td><td style="padding:8px;border:1px solid #dbe2ea;white-space:nowrap">'||
           public._import_review_html_escape_v1(case when l.work_date~'^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then to_char(l.work_date::date,'FMDD Mon YYYY') else l.work_date end)||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||
           public._import_review_html_escape_v1(replace(initcap(lower(l.issue_code)),'_',' '))||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||
-          public._import_review_html_escape_v1(l.timesheet_detail)||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(l.import_detail)||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||
+          public._import_review_html_escape_v1(l.timesheet_detail)||'</td><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(l.import_detail)||
+          '</td><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(l.source_location)||
+          '</td><td style="padding:8px;border:1px solid #dbe2ea">'||public._import_review_html_escape_v1(l.request_grade)||
+          '</td><td style="padding:8px;border:1px solid #dbe2ea">'||
           public._import_review_html_escape_v1(l.reference_detail)||'</td></tr>' row_html
         from lines l
       ), contract_tables as (
         select client_name,contract_sort,contract_label,
           '<h4 style="margin:18px 0 8px;color:#334155;font-size:14px">'||public._import_review_html_escape_v1(contract_label)||'</h4>'||
-          '<table role="table" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px"><thead><tr style="background:#eef2f7;color:#1e293b"><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Worker</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Date</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Issue</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Timesheet</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">HealthRoster</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Reference</th></tr></thead><tbody>'||
+          '<table role="table" cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px"><thead><tr style="background:#eef2f7;color:#1e293b"><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Worker</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Date</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Issue</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Timesheet</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">HealthRoster</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Unit / ward</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Request grade</th><th style="padding:8px;border:1px solid #dbe2ea;text-align:left">Reference</th></tr></thead><tbody>'||
           string_agg(row_html,'' order by sort_key)||'</tbody></table>' contract_html
         from rendered_rows group by client_name,contract_sort,contract_label
       ), client_sections as (
@@ -216,7 +221,11 @@ begin
           coalesce(nullif(cx.value->>'work_date',''),nullif(q.summary_json->>'work_date','')) work_date,
           coalesce(nullif(cx.value->>'match_status',''),nullif(q.summary_json->>'reason_code','')) issue_code,
           concat_ws(' ',cx.value->>'timesheet_start',cx.value->>'timesheet_end',cx.value->>'healthroster_start',cx.value->>'healthroster_end',
-            q.summary_json->>'start_time',q.summary_json->>'end_time',q.summary_json->>'hours_worked') detail
+            q.summary_json->>'start_time',q.summary_json->>'end_time',q.summary_json->>'hours_worked',
+            case when nullif(cx.value->>'healthroster_hospital','') is not null or nullif(cx.value->>'healthroster_unit','') is not null
+              then 'Unit / ward: '||concat_ws(' · ',nullif(cx.value->>'healthroster_hospital',''),nullif(cx.value->>'healthroster_unit','')) end,
+            case when nullif(cx.value->>'healthroster_request_grade','') is not null
+              then 'Request grade: '||(cx.value->>'healthroster_request_grade') end) detail
         from pg_temp.query_email_issues q
         left join public.clients cl on cl.id=q.client_id
         left join public.contracts ct on ct.id=q.contract_id

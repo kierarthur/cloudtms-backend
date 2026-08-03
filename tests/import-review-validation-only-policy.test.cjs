@@ -49,6 +49,15 @@ test('catalog exposes the resolution only for a proved omitted Weekly shift', ()
   assert.match(core, /import_review_weekly_validation_resolutions[\s\S]*EVIDENCE_CHANGED/);
 });
 
+test('Daily automatic associations refresh their evidence before stale-resolution retirement', () => {
+  assert.match(core, /daily-resolution-evidence-v1/);
+  assert.match(core, /summary_json->'imported_evidence'/);
+  assert.match(core, /summary_json->'current_evidence'/);
+  assert.match(core, /import_review_daily_timesheet_resolutions\.evidence_fingerprint is distinct from excluded\.evidence_fingerprint/);
+  assert.match(core, /if v_auto>0 then[\s\S]*_import_review_action_catalog_core_v1/);
+  assert.match(core, /update public\.import_review_daily_timesheet_resolutions r set status='STALE'[\s\S]*daily-resolution-evidence-v1[\s\S]*=r\.evidence_fingerprint/);
+});
+
 test('UI contract hides mismatch support rows from Passed checks', () => {
   assert.doesNotMatch(ui, /create or replace function public\.import_review_contract_version_get_v1/i);
   assert.match(ui, /when 'NO_ACTION' then a\.action_category='NO_ACTION' and/);
