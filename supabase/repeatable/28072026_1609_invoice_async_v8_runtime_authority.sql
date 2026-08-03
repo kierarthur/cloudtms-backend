@@ -1,5 +1,8 @@
 \set ON_ERROR_STOP on
 
+-- Reinstall the canonical Batch Generate/Issue candidate authorities together
+-- so PAGE-family requests use the single materialised classification pass.
+
 begin;
 
 \ir 27072026_1042_invoice_async_v8/27072026_1042_08_private_invoice_batch_selection_rules_v2.sql
