@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const uiSql = readFileSync(new URL('../../supabase/repeatable/22072026_0052_import_review_ui_contract_v1.sql', import.meta.url), 'utf8');
 const emailSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql', import.meta.url), 'utf8');
 const lifecycleSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql', import.meta.url), 'utf8');
+const canonicalContractSql = readFileSync(new URL('../../supabase/repeatable/25072026_1615_banking_pay_canonical_correction_carrier.sql', import.meta.url), 'utf8');
 const coreSql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_00_import_review_internal_core.sql', import.meta.url), 'utf8');
 const dailySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_03_import_review_daily_resolution_and_previews.sql', import.meta.url), 'utf8');
 const weeklyApplySql = readFileSync(new URL('../../supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql', import.meta.url), 'utf8');
@@ -38,12 +39,15 @@ function functionBody(source, name) {
 }
 
 test('the fail-closed database contract exposes the bounded review UI and recipient grouping versions', () => {
-  const body = functionBody(uiSql, 'import_review_contract_version_get_v1');
-  assert.match(body, /incremental_apply_version','IMPORT_REVIEW_INCREMENTAL_APPLY_V1/);
-  assert.match(body, /review_ui_contract_version','IMPORT_REVIEW_UI_V6/);
-  assert.match(body, /email_grouping_version','TIMESHEET_QUERY_RECIPIENT_EMAIL_V1/);
-  assert.match(body, /legacy_contracts_supported',false/);
-  assert.match(lifecycleSql, /review_ui_contract_version','IMPORT_REVIEW_UI_V6/);
+  const body = functionBody(canonicalContractSql, 'import_review_contract_version_get_v1');
+  assert.match(body, /incremental_apply_version'\s*,\s*'IMPORT_REVIEW_INCREMENTAL_APPLY_V1/);
+  assert.match(body, /review_ui_contract_version'\s*,\s*'IMPORT_REVIEW_UI_V6/);
+  assert.match(body, /email_grouping_version'\s*,\s*'TIMESHEET_QUERY_RECIPIENT_EMAIL_V1/);
+  assert.match(body, /canonical_correction_carrier_version'\s*,\s*v_canonical_contract_version/);
+  assert.match(body, /targeted_family_materialisation_version'\s*,\s*v_targeted_family_materialisation_version/);
+  assert.match(body, /legacy_contracts_supported'\s*,\s*false/);
+  assert.doesNotMatch(uiSql, /create or replace function public\.import_review_contract_version_get_v1\(/i);
+  assert.doesNotMatch(lifecycleSql, /create or replace function public\.import_review_contract_version_get_v1\(/i);
 });
 
 test('staged scope discovery is actor-bound, source-owned and bounded', () => {

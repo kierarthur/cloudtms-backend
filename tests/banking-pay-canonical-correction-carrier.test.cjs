@@ -29,12 +29,29 @@ const migration = read(
 const carrier = read(
   'supabase/repeatable/25072026_1615_banking_pay_canonical_correction_carrier.sql'
 );
+const importLifecycle = read(
+  'supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql'
+);
 const runtimeGuards = read(
   'supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql'
 );
 const residual = read(
   'supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql'
 );
+
+test('Import Review contract has one canonical repeatable owner', () => {
+  const definitions = listFiles('supabase/repeatable')
+    .filter((file) => file.toLowerCase().endsWith('.sql'))
+    .flatMap((file) => {
+      const sql = fs.readFileSync(file, 'utf8');
+      return sql.match(/create or replace function public\.import_review_contract_version_get_v1\s*\(/ig) ?? [];
+    });
+
+  assert.equal(definitions.length, 1);
+  assert.match(carrier, /canonical_correction_carrier_version'\s*,\s*v_canonical_contract_version/);
+  assert.match(carrier, /targeted_family_materialisation_version'\s*,\s*v_targeted_family_materialisation_version/);
+  assert.doesNotMatch(importLifecycle, /create or replace function public\.import_review_contract_version_get_v1\s*\(/i);
+});
 const applyResolution = read(
   'supabase/repeatable/21072026_1235_41_pay_workbench_session_apply_case_resolution.sql'
 );

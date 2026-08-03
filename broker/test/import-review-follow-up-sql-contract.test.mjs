@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const lifecycle = readFileSync(new URL('../../supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql', import.meta.url), 'utf8');
+const canonicalContract = readFileSync(new URL('../../supabase/repeatable/25072026_1615_banking_pay_canonical_correction_carrier.sql', import.meta.url), 'utf8');
 const retirements = readFileSync(new URL('../../supabase/repeatable/21072026_1820_99_import_review_hard_cutover_retirements.sql', import.meta.url), 'utf8');
 const tsfinSummary = readFileSync(new URL('../../supabase/repeatable/04022026_nhsp_hr_code.sql', import.meta.url), 'utf8');
 const tsfinSettlement = readFileSync(new URL('../../supabase/repeatable/23072026_0011_import_review_tsfin_settlement_v1.sql', import.meta.url), 'utf8');
@@ -19,10 +20,13 @@ function functionBody(source, name) {
 }
 
 test('database contract exposes the component-aware follow-up capability', () => {
-  const body = functionBody(lifecycle, 'import_review_contract_version_get_v1');
-  assert.match(body, /follow_up_component_version','IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1/);
-  assert.match(body, /tsfin_follow_up_settlement_version','IMPORT_REVIEW_TSFIN_SETTLEMENT_V1/);
-  assert.match(body, /legacy_contracts_supported',false/);
+  const body = functionBody(canonicalContract, 'import_review_contract_version_get_v1');
+  assert.match(body, /follow_up_component_version'\s*,\s*'IMPORT_REVIEW_FOLLOW_UP_COMPONENT_V1/);
+  assert.match(body, /tsfin_follow_up_settlement_version'\s*,\s*'IMPORT_REVIEW_TSFIN_SETTLEMENT_V1/);
+  assert.match(body, /canonical_correction_carrier_version'\s*,\s*v_canonical_contract_version/);
+  assert.match(body, /targeted_family_materialisation_version'\s*,\s*v_targeted_family_materialisation_version/);
+  assert.match(body, /legacy_contracts_supported'\s*,\s*false/);
+  assert.doesNotMatch(lifecycle, /create or replace function public\.import_review_contract_version_get_v1\(/i);
 });
 
 test('component update is request-hash bound and stores independent EMAIL and TSFIN state', () => {

@@ -221,7 +221,7 @@ begin
       select 1
       where v_mode in ('PAGE','EXPAND_SELECTION','EXPLICIT_KEYS')
     ) gate
-    cross join lateral private._invoice_batch_generate_candidate_keys_v2(
+    cross join lateral private._invoice_batch_generate_candidate_key_rows_v2(
       v_query,
       coalesce(p_now_utc,now())
     ) key_row
@@ -568,6 +568,25 @@ begin
            else 'READY' end row_status
     from all_rows_raw r
   ),
+  classification_source as materialized (
+    -- PAGE-family requests reuse the exact candidate payload that the keyset
+    -- helper already classified. FACETS/SUMMARY do not invoke the keyset
+    -- helper, so they retain one direct full-scope classification pass.
+    select key_row.selection_key,key_row.candidate_json
+    from candidate_keys key_row
+    where key_row.page_ordinal<=v_page_size
+    union all
+    select candidate.selection_key,candidate.candidate_json
+    from (
+      select 1
+      where v_mode in ('FACETS','SUMMARY')
+    ) gate
+    cross join lateral private._invoice_batch_generate_classification_v2(
+      true,
+      null,
+      coalesce(p_now_utc,statement_timestamp())
+    ) candidate
+  ),
   authoritative_rows as materialized (
     select
       candidate.candidate_json->>'selection_key' selection_key,
@@ -661,11 +680,7 @@ begin
         false
       ) selectable,
       candidate.candidate_json->>'row_status' row_status
-    from private._invoice_batch_generate_classification_v2(
-      true,
-      null,
-      coalesce(p_now_utc,statement_timestamp())
-    ) candidate
+    from classification_source candidate
     where candidate.candidate_json->>'row_kind'='CREATE_INVOICE'
       and (
         v_mode in ('FACETS','SUMMARY')

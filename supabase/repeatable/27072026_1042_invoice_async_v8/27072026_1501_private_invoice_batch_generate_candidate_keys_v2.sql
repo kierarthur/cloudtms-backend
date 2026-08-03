@@ -1,4 +1,4 @@
-create or replace function private._invoice_batch_generate_candidate_keys_v2(
+create or replace function private._invoice_batch_generate_candidate_key_rows_v2(
   p_query jsonb,
   p_now_utc timestamptz default now()
 ) returns table(
@@ -23,7 +23,8 @@ create or replace function private._invoice_batch_generate_candidate_keys_v2(
   sort_text_key text,
   sort_numeric_key numeric,
   page_ordinal bigint,
-  full_scope_count bigint
+  full_scope_count bigint,
+  candidate_json jsonb
 )
 language sql
 stable
@@ -119,6 +120,7 @@ params as materialized (
 ),
 classified as materialized (
   select
+    candidate.candidate_json,
     candidate.candidate_json->>'selection_key' selection_key,
     candidate.candidate_json->>'scope_key' scope_key,
     candidate.candidate_json->>'row_kind' row_kind,
@@ -586,7 +588,8 @@ select
   ordered.sort_text_key,
   ordered.sort_numeric_key,
   ordered.page_ordinal,
-  scope_count.full_scope_count
+  scope_count.full_scope_count,
+  ordered.candidate_json
 from ordered
 cross join params
 cross join scope_count
@@ -596,6 +599,78 @@ where ordered.page_ordinal<=case
   else params.page_size+1
 end
 order by ordered.page_ordinal;
+$function$;
+
+alter function private._invoice_batch_generate_candidate_key_rows_v2(
+  jsonb,timestamptz
+) owner to postgres;
+revoke all on function private._invoice_batch_generate_candidate_key_rows_v2(
+  jsonb,timestamptz
+) from public,anon,authenticated;
+grant execute on function private._invoice_batch_generate_candidate_key_rows_v2(
+  jsonb,timestamptz
+) to service_role;
+
+create or replace function private._invoice_batch_generate_candidate_keys_v2(
+  p_query jsonb,
+  p_now_utc timestamptz default now()
+) returns table(
+  selection_key text,
+  scope_key text,
+  row_kind text,
+  invoice_id uuid,
+  source_revision text,
+  client_id uuid,
+  client_name text,
+  candidate_ids jsonb,
+  candidate_display text,
+  week_ending_date date,
+  currency text,
+  invoice_stream text,
+  total_ex_vat numeric,
+  total_inc_vat numeric,
+  row_status_seed text,
+  blocker_codes_seed jsonb,
+  is_early boolean,
+  sort_date_key date,
+  sort_text_key text,
+  sort_numeric_key numeric,
+  page_ordinal bigint,
+  full_scope_count bigint
+)
+language sql
+stable
+security definer
+set search_path to 'public','private','extensions','pg_temp'
+as $function$
+select
+  candidate.selection_key,
+  candidate.scope_key,
+  candidate.row_kind,
+  candidate.invoice_id,
+  candidate.source_revision,
+  candidate.client_id,
+  candidate.client_name,
+  candidate.candidate_ids,
+  candidate.candidate_display,
+  candidate.week_ending_date,
+  candidate.currency,
+  candidate.invoice_stream,
+  candidate.total_ex_vat,
+  candidate.total_inc_vat,
+  candidate.row_status_seed,
+  candidate.blocker_codes_seed,
+  candidate.is_early,
+  candidate.sort_date_key,
+  candidate.sort_text_key,
+  candidate.sort_numeric_key,
+  candidate.page_ordinal,
+  candidate.full_scope_count
+from private._invoice_batch_generate_candidate_key_rows_v2(
+  p_query,
+  p_now_utc
+) candidate
+order by candidate.page_ordinal
 $function$;
 
 alter function private._invoice_batch_generate_candidate_keys_v2(

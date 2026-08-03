@@ -254,6 +254,9 @@ ON FUNCTION public.pay_workbench_contract_version_get_v1()
 TO service_role;
 
 
+-- Sole canonical definition of the Import Review database contract manifest.
+-- It must attest both Import Review and the correction-carrier facilities that
+-- consume import-created corrections in Banking Pay.
 CREATE OR REPLACE FUNCTION public.import_review_contract_version_get_v1()
 RETURNS jsonb
 LANGUAGE plpgsql

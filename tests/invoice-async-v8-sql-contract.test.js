@@ -209,7 +209,7 @@ test('Batch Generate creates invoice records only while Batch Issue accepts docu
   assert.match(generateRows, /jsonb_array_elements[\s\S]*blocker_detail,sources[\s\S]*SOURCE_ALREADY_INVOICED[\s\S]*SEGMENT_ALREADY_LOCKED[\s\S]*SOURCE_ALREADY_LOCKED/i);
   assert.match(
     generateRows,
-    /authoritative_rows[\s\S]*_invoice_batch_generate_classification_v2[\s\S]*row_kind'='CREATE_INVOICE'[\s\S]*candidate_keys[\s\S]*page_ordinal<=v_page_size[\s\S]*primary_blocker_code[\s\S]*SOURCE_ALREADY_INVOICED[\s\S]*SEGMENT_ALREADY_LOCKED[\s\S]*SOURCE_ALREADY_LOCKED[\s\S]*action_blocker_codes/i
+    /classification_source[\s\S]*candidate_keys key_row[\s\S]*key_row\.page_ordinal<=v_page_size[\s\S]*authoritative_rows[\s\S]*from classification_source candidate[\s\S]*row_kind'='CREATE_INVOICE'[\s\S]*primary_blocker_code[\s\S]*SOURCE_ALREADY_INVOICED[\s\S]*SEGMENT_ALREADY_LOCKED[\s\S]*SOURCE_ALREADY_LOCKED[\s\S]*action_blocker_codes/i
   );
   assert.match(
     generationAdvance,
@@ -882,18 +882,14 @@ test('candidate PAGE selects bounded keys before expensive hydration', () => {
     issueSources,
     /_invoice_issue_validate_batch\s*\(/,
   );
-  assert.match(
-    generateRows,
-    /_invoice_batch_generate_candidate_keys_v2\s*\(/,
-  );
+  assert.match(generateRows, /_invoice_batch_generate_candidate_key_rows_v2\s*\(/);
+  assert.doesNotMatch(generateRows, /_invoice_batch_generate_candidate_keys_v2\s*\(/);
   assert.match(
     generateRows,
     /page_ordinal<=v_page_size/,
   );
-  assert.match(
-    issueRows,
-    /_invoice_batch_issue_candidate_keys_v2\s*\(/,
-  );
+  assert.match(issueRows, /_invoice_batch_issue_candidate_key_rows_v2\s*\(/);
+  assert.doesNotMatch(issueRows, /_invoice_batch_issue_candidate_keys_v2\s*\(/);
   assert.match(
     issueRows,
     /_invoice_batch_issue_source_rows_for_ids_v2\s*\(/,
@@ -983,6 +979,50 @@ test('candidate PAGE selects bounded keys before expensive hydration', () => {
     /p_invoice_ids is null[\s\S]*invoice\.id=any\(p_invoice_ids\)/,
   );
   assert.match(issueSources, /_invoice_batch_issue_classification_v2\s*\(/);
+});
+
+test('Batch Generate and Batch Issue classify PAGE-family requests exactly once', () => {
+  const generateKeys = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1501_private_invoice_batch_generate_candidate_keys_v2.sql',
+  );
+  const issueKeys = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1501_private_invoice_batch_issue_candidate_keys_v2.sql',
+  );
+  const generateRows = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_09_private_invoice_batch_generate_candidate_rows_v2.sql',
+  );
+  const issueRows = read(
+    'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1042_10_private_invoice_batch_issue_candidate_rows_v2.sql',
+  );
+
+  assert.equal(
+    generateKeys.match(/_invoice_batch_generate_classification_v2\s*\(/g)?.length,
+    1,
+  );
+  assert.equal(
+    issueKeys.match(/_invoice_batch_issue_classification_v2\s*\(/g)?.length,
+    1,
+  );
+  assert.match(
+    generateKeys,
+    /create or replace function private\._invoice_batch_generate_candidate_keys_v2[\s\S]*from private\._invoice_batch_generate_candidate_key_rows_v2\s*\(/i,
+  );
+  assert.match(
+    issueKeys,
+    /create or replace function private\._invoice_batch_issue_candidate_keys_v2[\s\S]*from private\._invoice_batch_issue_candidate_key_rows_v2\s*\(/i,
+  );
+  assert.match(
+    generateRows,
+    /classification_source as materialized[\s\S]*from candidate_keys key_row[\s\S]*union all[\s\S]*where v_mode in \('FACETS','SUMMARY'\)[\s\S]*_invoice_batch_generate_classification_v2\s*\(/i,
+  );
+  assert.match(
+    issueRows,
+    /classification_source as materialized[\s\S]*from candidate_keys key_row[\s\S]*union all[\s\S]*where v_mode in \('FACETS','SUMMARY'\)[\s\S]*_invoice_batch_issue_classification_v2\s*\(/i,
+  );
+  assert.match(generateRows, /authoritative_rows as materialized[\s\S]*from classification_source candidate/i);
+  assert.match(issueRows, /authoritative_rows as materialized[\s\S]*from classification_source candidate/i);
+  assert.doesNotMatch(generateRows, /_invoice_batch_generate_candidate_keys_v2\s*\(/);
+  assert.doesNotMatch(issueRows, /_invoice_batch_issue_candidate_keys_v2\s*\(/);
 });
 
 test('V8 rollup exposes the complete manifest and commercial contract', () => {
