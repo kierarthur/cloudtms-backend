@@ -262,6 +262,7 @@ begin
       end,
       case
         when coalesce(precheck.require_reference_to_invoice,false)
+         and coalesce(financial.total_hours,0)>0
          and coalesce(reference.reference_ready,false) is not true
           then coalesce(reference.blocker_code,'MISSING_REFERENCE')
       end,

@@ -455,11 +455,14 @@ evidence_checks as materialized (
 ),
 reference_checks as materialized (
   select r.invoice_id,
-    count(*) filter(where ref.is_required
+    count(*) filter(where
+      coalesce(precheck.reference_number_required_to_issue_invoice,false)
       and nullif(btrim(ref.current_reference),'') is null)
       missing_required_reference
   from invoice_scope r
   left join references_batch ref on ref.invoice_id=r.invoice_id
+  left join public.v_ts_invoice_precheck precheck
+    on precheck.timesheet_id=ref.timesheet_id
   group by r.invoice_id
 ),
 correction_checks as materialized (

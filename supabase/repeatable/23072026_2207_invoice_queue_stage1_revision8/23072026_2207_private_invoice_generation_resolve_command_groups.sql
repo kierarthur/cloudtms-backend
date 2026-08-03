@@ -114,7 +114,8 @@ base_sources as materialized (
     tf.id tsfin_id,tf.timesheet_version tsfin_timesheet_version,
     tf.updated_at tsfin_updated_at,tf.is_current tsfin_is_current,tf.is_stale,
     tf.processing_status::text processing_status,tf.locked_by_invoice_id,
-    tf.client_id,tf.candidate_id,tf.basis::text basis,tf.invoice_breakdown_json,
+    tf.client_id,tf.candidate_id,tf.basis::text basis,tf.total_hours,
+    tf.invoice_breakdown_json,
     tf.additional_units_json,
     coalesce(
       ts.candidate_hint_text->'correction_financials_policy_envelope',
@@ -437,12 +438,22 @@ reference_results as materialized (
 ),
 source_rows as materialized (
   select b.*,
-    coalesce(b.source_blocker,r.blocker_code) canonical_blocker,
+    case
+      when b.source_blocker is not null then b.source_blocker
+      when r.blocker_code='INVOICE_REFERENCE_REQUIRED'
+       and not (
+         coalesce(precheck.require_reference_to_invoice,false)
+         and coalesce(b.total_hours,0)>0
+       ) then null
+      else r.blocker_code
+    end canonical_blocker,
     r.reference_hash,r.current_revision canonical_row_revision,
     r.detail_json reference_detail
   from source_rows_scoped b
   left join reference_results r
     on r.source_member_key=b.source_member_key
+  left join public.v_ts_invoice_precheck precheck
+    on precheck.timesheet_id=b.timesheet_id
 ),
 grouped as materialized (
   select s.command_no,s.command_type,
