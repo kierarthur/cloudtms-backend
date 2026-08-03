@@ -27,7 +27,7 @@ Independently verify the committed code, installed TEST definitions and the evid
 - The HTML table has separate `Unit / ward` and `Request grade` columns for both Daily and Weekly HealthRoster evidence.
 - A successful Daily validation writes the chosen HealthRoster request ID to the active Daily timesheet's `reference_number` during validation Apply, subject to the existing paid/invoice-lock protections. It is not inserted by invoicing.
 - Weekly validation writes matched HealthRoster references to the relevant shift evidence during successful validation Apply.
-- Changing the timesheet reference is included in the existing timesheet-document invalidation trigger. An electronic document must therefore be regenerated with the validated reference before subsequent attachment/use.
+- Changing the timesheet reference is included in the existing timesheet-document invalidation trigger. This marks the previous electronic PDF stale. The reference appears on the PDF at its next asynchronous render; a consumer that requires the document (including later invoice preparation) must queue/await that render before using it.
 - Sending a mismatch/query email does not itself validate the timesheet and does not add a new reference.
 - Partial reviews fingerprint only actions that remain open; already committed outcomes are not reintroduced during final Apply re-attestation.
 - No business-policy decision was changed during the final implementation/testing cycle.
@@ -178,4 +178,4 @@ This was diagnosed only; no invoice function was changed.
 
 ## Reference-number lifecycle answer
 
-The validated reference is stored during successful validation Apply. It is not inserted by invoicing. For an electronic timesheet, the existing document invalidation trigger treats `reference_number` as document-bearing truth, so the current electronic PDF is made stale and regenerated asynchronously. Invoice generation then consumes the already reference-bearing current timesheet/document; it is not the step that establishes the reference.
+The validated reference is stored in database truth during successful validation Apply. It is not inserted by invoicing. For an electronic timesheet, the existing document invalidation trigger treats `reference_number` as document-bearing truth and marks the old PDF stale. The reference is printed when the electronic PDF is next rendered asynchronously. If no earlier consumer needs that PDF, invoice preparation may be the event that queues and awaits the fresh render; it still consumes the reference already stored by validation and is not the step that establishes it.
