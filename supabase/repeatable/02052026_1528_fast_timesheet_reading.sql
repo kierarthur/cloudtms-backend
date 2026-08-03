@@ -10482,12 +10482,29 @@ BEGIN
   evidence_agg AS MATERIALIZED (
     SELECT
       te0.timesheet_id,
-      COUNT(te0.id)::integer AS evidence_count,
-      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'TIMESHEET'), FALSE) AS has_timesheet_evidence,
-      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'MILEAGE'), FALSE) AS has_mileage_evidence,
-      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'TRAVEL'), FALSE) AS has_travel_evidence,
-      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'ACCOMMODATION'), FALSE) AS has_accommodation_evidence,
-      COALESCE(BOOL_OR(UPPER(COALESCE(te0.kind, '')) = 'OTHER'), FALSE) AS has_other_evidence
+      COUNT(te0.id) FILTER (
+        WHERE NULLIF(BTRIM(COALESCE(te0.storage_key, '')), '') IS NOT NULL
+      )::integer AS evidence_count,
+      COALESCE(BOOL_OR(
+        UPPER(COALESCE(te0.kind, '')) = 'TIMESHEET'
+        AND NULLIF(BTRIM(COALESCE(te0.storage_key, '')), '') IS NOT NULL
+      ), FALSE) AS has_timesheet_evidence,
+      COALESCE(BOOL_OR(
+        UPPER(COALESCE(te0.kind, '')) = 'MILEAGE'
+        AND NULLIF(BTRIM(COALESCE(te0.storage_key, '')), '') IS NOT NULL
+      ), FALSE) AS has_mileage_evidence,
+      COALESCE(BOOL_OR(
+        UPPER(COALESCE(te0.kind, '')) = 'TRAVEL'
+        AND NULLIF(BTRIM(COALESCE(te0.storage_key, '')), '') IS NOT NULL
+      ), FALSE) AS has_travel_evidence,
+      COALESCE(BOOL_OR(
+        UPPER(COALESCE(te0.kind, '')) = 'ACCOMMODATION'
+        AND NULLIF(BTRIM(COALESCE(te0.storage_key, '')), '') IS NOT NULL
+      ), FALSE) AS has_accommodation_evidence,
+      COALESCE(BOOL_OR(
+        UPPER(COALESCE(te0.kind, '')) = 'OTHER'
+        AND NULLIF(BTRIM(COALESCE(te0.storage_key, '')), '') IS NOT NULL
+      ), FALSE) AS has_other_evidence
     FROM public.timesheet_evidence AS te0
     WHERE te0.timesheet_id IS NOT NULL
       AND EXISTS (

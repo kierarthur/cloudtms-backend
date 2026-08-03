@@ -80509,10 +80509,7 @@ async function handleTimesheetsSummary(env, req) {
     }
 
     const rowRes = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: rowFilters });
-    const outRows = await enrichCorrectionPairPlacementIssues(
-      env,
-      normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'))
-    );
+    const outRows = normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'));
 
     let totals = null;
     let totalCount = outRows.length;
@@ -80546,62 +80543,6 @@ async function handleTimesheetsSummary(env, req) {
     }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
-  }
-}
-
-async function enrichCorrectionPairPlacementIssues(env, rows) {
-  const sourceRows = Array.isArray(rows) ? rows : [];
-  const ids = Array.from(new Set(sourceRows.map((row) => String(row?.timesheet_id || row?.id || '').trim()).filter(Boolean))).slice(0, 200);
-  if (!ids.length) return sourceRows;
-  try {
-    const encodedIds = ids.map((id) => encodeURIComponent(id)).join(',');
-    const selectedRes = await sbFetch(env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=in.(${encodedIds})&adjustment_origin=eq.IMPORT_CORRECTION&correction_id=not.is.null&select=timesheet_id,correction_id,correction_kind,is_current,archived_at_utc`
-    );
-    const selectedCorrectionRows = Array.isArray(selectedRes?.rows) ? selectedRes.rows : [];
-    const correctionIds = Array.from(new Set(selectedCorrectionRows.map((row) => String(row?.correction_id || '').trim()).filter(Boolean)));
-    if (!correctionIds.length) return sourceRows;
-    const encodedCorrections = correctionIds.map((id) => encodeURIComponent(id)).join(',');
-    const membersRes = await sbFetch(env,
-      `${env.SUPABASE_URL}/rest/v1/timesheets?correction_id=in.(${encodedCorrections})&adjustment_origin=eq.IMPORT_CORRECTION&is_current=eq.true&archived_at_utc=is.null&select=timesheet_id,correction_id,correction_kind`
-    );
-    const members = Array.isArray(membersRes?.rows) ? membersRes.rows : [];
-    const memberIds = Array.from(new Set(members.map((row) => String(row?.timesheet_id || '').trim()).filter(Boolean)));
-    if (!memberIds.length) return sourceRows;
-    const encodedMembers = memberIds.map((id) => encodeURIComponent(id)).join(',');
-    const linesRes = await sbFetch(env,
-      `${env.SUPABASE_URL}/rest/v1/invoice_lines?timesheet_id=in.(${encodedMembers})&select=timesheet_id,invoice_id`
-    );
-    const invoiceLines = Array.isArray(linesRes?.rows) ? linesRes.rows : [];
-    const invoiceIds = Array.from(new Set(invoiceLines.map((row) => String(row?.invoice_id || '').trim()).filter(Boolean)));
-    const nonCreditInvoices = new Set();
-    if (invoiceIds.length) {
-      const invoiceRes = await sbFetch(env,
-        `${env.SUPABASE_URL}/rest/v1/invoices?id=in.(${invoiceIds.map((id) => encodeURIComponent(id)).join(',')})&select=id,type`
-      );
-      for (const invoice of (Array.isArray(invoiceRes?.rows) ? invoiceRes.rows : [])) {
-        if (String(invoice?.type || '').trim().toUpperCase() !== 'CREDIT_NOTE') nonCreditInvoices.add(String(invoice.id));
-      }
-    }
-    const placed = new Set(invoiceLines.filter((line) => nonCreditInvoices.has(String(line.invoice_id))).map((line) => String(line.timesheet_id)));
-    const issueIds = new Set();
-    for (const correctionId of correctionIds) {
-      const pair = members.filter((row) => String(row.correction_id) === correctionId && ['CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT'].includes(String(row.correction_kind || '').toUpperCase()));
-      if (pair.length !== 2 || new Set(pair.map((row) => String(row.correction_kind).toUpperCase())).size !== 2) continue;
-      const placedMembers = pair.filter((row) => placed.has(String(row.timesheet_id)));
-      if (placedMembers.length !== 1) continue;
-      const missing = pair.find((row) => !placed.has(String(row.timesheet_id)));
-      if (missing) issueIds.add(String(missing.timesheet_id));
-    }
-    return sourceRows.map((row) => {
-      const id = String(row?.timesheet_id || row?.id || '');
-      if (!issueIds.has(id)) return row;
-      const existing = Array.isArray(row.issue_codes) ? row.issue_codes.slice() : [];
-      if (!existing.includes('Paired needs invoicing')) existing.push('Paired needs invoicing');
-      return { ...row, issue_codes: existing, correction_pair_placement_incomplete: true };
-    });
-  } catch {
-    return sourceRows;
   }
 }
 

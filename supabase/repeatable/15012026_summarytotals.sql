@@ -283,8 +283,6 @@ BEGIN
     - 'weekEndingTo'
     - 'route_type'
     - 'routeType'
-    - 'issues_filter'
-    - 'issuesFilter'
     - 'status_code'
     - 'statusCode'
     - 'summary_stage'
@@ -350,6 +348,9 @@ BEGIN
 
   v_issues_filter := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'issues_filter', v_filters->>'issuesFilter', '')), ''));
   IF v_issues_filter = 'ALL' THEN v_issues_filter := NULL; END IF;
+  -- The row source is the single issue-classification authority. It receives
+  -- the original issues filter above, so totals must not reclassify it here.
+  v_issues_filter := NULL;
 
   v_route_type := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'route_type', v_filters->>'routeType', '')), ''));
   IF v_route_type = 'ALL' THEN v_route_type := NULL; END IF;
@@ -680,8 +681,6 @@ BEGIN
     - 'weekEndingTo'
     - 'route_type'
     - 'routeType'
-    - 'issues_filter'
-    - 'issuesFilter'
     - 'status_code'
     - 'statusCode'
     - 'summary_stage'
@@ -747,6 +746,9 @@ BEGIN
 
   v_issues_filter := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'issues_filter', v_filters->>'issuesFilter', '')), ''));
   IF v_issues_filter = 'ALL' THEN v_issues_filter := NULL; END IF;
+  -- The row source is the single issue-classification authority. It receives
+  -- the original issues filter above, so totals must not reclassify it.
+  v_issues_filter := NULL;
 
   v_route_type := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'route_type', v_filters->>'routeType', '')), ''));
   IF v_route_type = 'ALL' THEN v_route_type := NULL; END IF;
@@ -2293,8 +2295,6 @@ BEGIN
     - 'weekEndingTo'
     - 'route_type'
     - 'routeType'
-    - 'issues_filter'
-    - 'issuesFilter'
     - 'status_code'
     - 'statusCode'
     - 'summary_stage'
@@ -2360,6 +2360,9 @@ BEGIN
 
   v_issues_filter := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'issues_filter', v_filters->>'issuesFilter', '')), ''));
   IF v_issues_filter = 'ALL' THEN v_issues_filter := NULL; END IF;
+  -- The row source is the single issue-classification authority. It receives
+  -- the original issues filter above, so membership must not reclassify it.
+  v_issues_filter := NULL;
 
   v_route_type := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'route_type', v_filters->>'routeType', '')), ''));
   IF v_route_type = 'ALL' THEN v_route_type := NULL; END IF;

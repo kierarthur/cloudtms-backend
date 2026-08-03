@@ -14,6 +14,7 @@ const review = read('supabase/repeatable/21072026_1820_00_import_review_internal
 const invoiceEdit = read('supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_apply_edits.sql');
 const invoiceValidation = read('supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql');
 const lifecycle = read('supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
+const summary = read('supabase/repeatable/19012026_extras.sql');
 const worker = read('broker/src/index.js');
 
 test('one selected correction member expands to one exact two-member lifecycle group', () => {
@@ -77,9 +78,11 @@ test('the validation catalogue removes only the redundant invoiced email row', (
 });
 
 test('timesheet summary marks only the unplaced correction member', () => {
-  assert.match(worker, /enrichCorrectionPairPlacementIssues/i);
-  assert.match(worker, /placedMembers\.length !== 1/i);
-  assert.match(worker, /Paired needs invoicing/i);
+  assert.match(summary, /correction_pair_issue_timesheets AS MATERIALIZED/i);
+  assert.match(summary, /pair_shape\.placed_member_count = 1/i);
+  assert.match(summary, /WHERE placed_member\.timesheet_id IS NULL/i);
+  assert.match(summary, /Paired needs invoicing/i);
+  assert.doesNotMatch(worker, /enrichCorrectionPairPlacementIssues/i);
 });
 
 test('the targeted implementation does not introduce Banking Pay or Daily mutation into pair SQL', () => {

@@ -6874,6 +6874,7 @@ BEGIN
   v_qr_status := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'qr_status', v_filters->>'qrStatus', '')), ''));
   v_status_code := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'status_code', v_filters->>'statusCode', '')), ''));
   v_issues_filter := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'issues_filter', v_filters->>'issuesFilter', '')), ''));
+  IF v_issues_filter = 'all' THEN v_issues_filter := NULL; END IF;
 
   IF LOWER(COALESCE(v_filters->>'candidate_paid', v_filters->>'candidatePaid', '')) IN ('true','t','yes','y','1') THEN
     v_candidate_paid := TRUE;
@@ -6961,7 +6962,89 @@ BEGIN
       source_row.*
     FROM public.bulk_timesheet_workbench_row_source_v1(v_source_filters) AS source_row
   ),
-  enriched AS MATERIALIZED (
+  source_correction_ids AS MATERIALIZED (
+    SELECT DISTINCT timesheet_row.correction_id
+    FROM source_rows
+    JOIN public.timesheets AS timesheet_row
+      ON timesheet_row.timesheet_id = source_rows.timesheet_id
+     AND timesheet_row.is_current = TRUE
+     AND timesheet_row.archived_at_utc IS NULL
+     AND UPPER(COALESCE(timesheet_row.adjustment_origin, '')) = 'IMPORT_CORRECTION'
+     AND timesheet_row.correction_id IS NOT NULL
+  ),
+  correction_pair_members AS MATERIALIZED (
+    SELECT
+      timesheet_row.timesheet_id,
+      timesheet_row.correction_id,
+      UPPER(COALESCE(timesheet_row.correction_kind, '')) AS correction_kind
+    FROM public.timesheets AS timesheet_row
+    JOIN source_correction_ids
+      ON source_correction_ids.correction_id = timesheet_row.correction_id
+    WHERE timesheet_row.is_current = TRUE
+      AND timesheet_row.archived_at_utc IS NULL
+      AND UPPER(COALESCE(timesheet_row.adjustment_origin, '')) = 'IMPORT_CORRECTION'
+      AND UPPER(COALESCE(timesheet_row.correction_kind, '')) IN (
+        'CHANGED_HOURS_REVERSAL',
+        'CHANGED_HOURS_REPLACEMENT'
+      )
+  ),
+  correction_pair_placed_members AS MATERIALIZED (
+    SELECT DISTINCT invoice_line.timesheet_id
+    FROM public.invoice_lines AS invoice_line
+    JOIN public.invoices AS invoice_row
+      ON invoice_row.id = invoice_line.invoice_id
+     AND UPPER(COALESCE(invoice_row.type::text, '')) <> 'CREDIT_NOTE'
+    WHERE EXISTS (
+      SELECT 1
+      FROM correction_pair_members AS pair_member
+      WHERE pair_member.timesheet_id = invoice_line.timesheet_id
+    )
+  ),
+  correction_pair_shapes AS MATERIALIZED (
+    SELECT
+      pair_member.correction_id,
+      COUNT(*)::integer AS member_count,
+      COUNT(*) FILTER (
+        WHERE pair_member.correction_kind = 'CHANGED_HOURS_REVERSAL'
+      )::integer AS reversal_count,
+      COUNT(*) FILTER (
+        WHERE pair_member.correction_kind = 'CHANGED_HOURS_REPLACEMENT'
+      )::integer AS replacement_count,
+      COUNT(*) FILTER (
+        WHERE placed_member.timesheet_id IS NOT NULL
+      )::integer AS placed_member_count
+    FROM correction_pair_members AS pair_member
+    LEFT JOIN correction_pair_placed_members AS placed_member
+      ON placed_member.timesheet_id = pair_member.timesheet_id
+    GROUP BY pair_member.correction_id
+  ),
+  correction_pair_issue_timesheets AS MATERIALIZED (
+    SELECT pair_member.timesheet_id
+    FROM correction_pair_members AS pair_member
+    JOIN correction_pair_shapes AS pair_shape
+      ON pair_shape.correction_id = pair_member.correction_id
+     AND pair_shape.member_count = 2
+     AND pair_shape.reversal_count = 1
+     AND pair_shape.replacement_count = 1
+     AND pair_shape.placed_member_count = 1
+    LEFT JOIN correction_pair_placed_members AS placed_member
+      ON placed_member.timesheet_id = pair_member.timesheet_id
+    WHERE placed_member.timesheet_id IS NULL
+  ),
+  client_reference_settings AS MATERIALIZED (
+    SELECT
+      client_setting.client_id,
+      COALESCE(BOOL_OR(client_setting.reference_number_required_to_issue_invoice), FALSE)
+        AS issue_reference_required
+    FROM public.client_settings AS client_setting
+    WHERE EXISTS (
+      SELECT 1
+      FROM source_rows
+      WHERE source_rows.client_id = client_setting.client_id
+    )
+    GROUP BY client_setting.client_id
+  ),
+  enriched_base AS MATERIALIZED (
     SELECT
       source_rows.timesheet_id,
       source_rows.contract_week_id,
@@ -7123,29 +7206,125 @@ BEGIN
           WHERE issue_values.issue_code NOT IN (
             '__PAY_BADGE_ADV__',
             '__PAY_BADGE_OVERPAID__',
-            '__PAY_BADGE_PROCESSING__'
+            '__PAY_BADGE_PROCESSING__',
+            'Authorisation'
           )
           ORDER BY issue_values.issue_ordinality
         ),
         ARRAY[]::text[]
-      ) AS business_issue_codes,
+      ) AS base_business_issue_codes,
+      COALESCE(
+        ARRAY(
+          SELECT payment_badges.badge_code
+          FROM UNNEST(COALESCE(summary_pay_cache.summary_badge_codes, ARRAY[]::text[]))
+            WITH ORDINALITY AS payment_badges(badge_code, badge_ordinality)
+          WHERE payment_badges.badge_code IN (
+            '__PAY_BADGE_ADV__',
+            '__PAY_BADGE_PROCESSING__'
+          )
+          ORDER BY payment_badges.badge_ordinality
+        ),
+        ARRAY[]::text[]
+      ) AS base_payment_badge_codes,
       (
-        COALESCE(
-          ARRAY(
-            SELECT issue_values.issue_code
-            FROM UNNEST(COALESCE(source_rows.issue_codes, ARRAY[]::text[]))
-              WITH ORDINALITY AS issue_values(issue_code, issue_ordinality)
-            WHERE issue_values.issue_code NOT IN (
-              '__PAY_BADGE_ADV__',
-              '__PAY_BADGE_OVERPAID__',
-              '__PAY_BADGE_PROCESSING__'
-            )
-            ORDER BY issue_values.issue_ordinality
-          ),
-          ARRAY[]::text[]
+        COALESCE(summary_pay_cache.paid_to_date_ex_vat, 0::numeric) > 0.01
+        AND (
+          COALESCE(summary_pay_cache.paid_to_date_ex_vat, 0::numeric)
+          + COALESCE(summary_pay_cache.net_delta_ex_vat, 0::numeric)
+        ) > 0.01
+        AND COALESCE(summary_pay_cache.net_delta_ex_vat, 0::numeric) < -0.01
+      ) AS genuine_overpaid,
+      (correction_pair_issue_timesheets.timesheet_id IS NOT NULL) AS correction_pair_placement_incomplete,
+      CASE
+        WHEN source_rows.timesheet_id IS NULL
+          OR COALESCE(source_rows.total_hours, 0::numeric) <= 0::numeric
+          OR NOT (
+            COALESCE(source_rows.require_reference_to_pay, FALSE)
+            OR COALESCE(source_rows.require_reference_to_invoice, FALSE)
+            OR COALESCE(source_rows.client_ts_reference_required, FALSE)
+            OR COALESCE(source_rows.client_pay_reference_required, FALSE)
+            OR COALESCE(source_rows.client_invoice_reference_required, FALSE)
+            OR COALESCE(client_reference_settings.issue_reference_required, FALSE)
+          ) THEN FALSE
+        WHEN source_rows.sheet_scope = 'DAILY'::public.timesheet_scope_enum THEN
+          NULLIF(BTRIM(COALESCE(timesheet_row.reference_number, '')), '') IS NULL
+        WHEN financial_row.invoice_breakdown_json IS NOT NULL
+          AND jsonb_typeof(financial_row.invoice_breakdown_json) = 'object'
+          AND UPPER(COALESCE(financial_row.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+          AND jsonb_typeof(financial_row.invoice_breakdown_json->'segments') = 'array' THEN
+          EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(financial_row.invoice_breakdown_json->'segments') AS segment_rows(segment_json)
+            WHERE NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'invoice_locked_invoice_id', '')), '') IS NULL
+              AND (
+                COALESCE(NULLIF(segment_rows.segment_json->>'hours_day', '')::numeric, 0::numeric)
+                + COALESCE(NULLIF(segment_rows.segment_json->>'hours_night', '')::numeric, 0::numeric)
+                + COALESCE(NULLIF(segment_rows.segment_json->>'hours_sat', '')::numeric, 0::numeric)
+                + COALESCE(NULLIF(segment_rows.segment_json->>'hours_sun', '')::numeric, 0::numeric)
+                + COALESCE(NULLIF(segment_rows.segment_json->>'hours_bh', '')::numeric, 0::numeric)
+              ) > 0::numeric
+              AND NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'ref_num', '')), '') IS NULL
+          )
+        WHEN source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum THEN
+          timesheet_row.actual_schedule_json IS NULL
+          OR jsonb_typeof(timesheet_row.actual_schedule_json) <> 'array'
+          OR jsonb_array_length(timesheet_row.actual_schedule_json) = 0
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(timesheet_row.actual_schedule_json) AS schedule_rows(schedule_json)
+            WHERE NULLIF(BTRIM(COALESCE(schedule_rows.schedule_json->>'start', '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(schedule_rows.schedule_json->>'end', '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(schedule_rows.schedule_json->>'ref_num', '')), '') IS NULL
+          )
+        ELSE NOT (
+          NULLIF(BTRIM(COALESCE(timesheet_row.reference_number, '')), '') IS NOT NULL
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_each_text(
+              CASE
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'object'
+                  THEN timesheet_row.day_references_json
+                ELSE '{}'::jsonb
+              END
+            ) AS day_reference(reference_key, reference_value)
+            WHERE LEFT(COALESCE(day_reference.reference_key, ''), 2) <> '__'
+              AND NULLIF(BTRIM(COALESCE(day_reference.reference_value, '')), '') IS NOT NULL
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'array'
+                  THEN timesheet_row.day_references_json
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'object'
+                  AND jsonb_typeof(timesheet_row.day_references_json->'__freeform_refs') = 'array'
+                  THEN timesheet_row.day_references_json->'__freeform_refs'
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'object'
+                  AND jsonb_typeof(timesheet_row.day_references_json->'__freeform') = 'array'
+                  THEN timesheet_row.day_references_json->'__freeform'
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'object'
+                  AND jsonb_typeof(timesheet_row.day_references_json->'__freeform_lines') = 'array'
+                  THEN timesheet_row.day_references_json->'__freeform_lines'
+                ELSE '[]'::jsonb
+              END
+            ) AS freeform_reference(reference_json)
+            WHERE NULLIF(BTRIM(COALESCE(
+              CASE
+                WHEN jsonb_typeof(freeform_reference.reference_json) = 'string'
+                  THEN freeform_reference.reference_json #>> '{}'
+                WHEN jsonb_typeof(freeform_reference.reference_json) = 'object'
+                  THEN COALESCE(
+                    freeform_reference.reference_json->>'reference',
+                    freeform_reference.reference_json->>'ref_num',
+                    freeform_reference.reference_json->>'value'
+                  )
+                ELSE NULL::text
+              END,
+              ''
+            )), '') IS NOT NULL
+          )
         )
-        || COALESCE(summary_pay_cache.summary_badge_codes, ARRAY[]::text[])
-      ) AS issue_codes,
+      END AS reference_missing,
       source_rows.validation_status::text AS validation_status,
 
       CASE
@@ -7209,15 +7388,23 @@ BEGIN
     LEFT JOIN public.timesheets_financials AS financial_row
       ON financial_row.timesheet_id = source_rows.timesheet_id
      AND financial_row.is_current = TRUE
+    LEFT JOIN correction_pair_issue_timesheets
+      ON correction_pair_issue_timesheets.timesheet_id = source_rows.timesheet_id
+    LEFT JOIN client_reference_settings
+      ON client_reference_settings.client_id = source_rows.client_id
     LEFT JOIN LATERAL (
       SELECT
-        COUNT(timesheet_evidence_row.id)::integer AS attached_evidence_count,
+        COUNT(timesheet_evidence_row.id) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(timesheet_evidence_row.storage_key, '')), '') IS NOT NULL
+        )::integer AS attached_evidence_count,
         (ARRAY_AGG(
           timesheet_evidence_row.storage_key
           ORDER BY
             (UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'TIMESHEET') DESC,
             timesheet_evidence_row.created_at DESC,
             timesheet_evidence_row.id DESC
+        ) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(timesheet_evidence_row.storage_key, '')), '') IS NOT NULL
         ))[1] AS primary_storage_key,
         (ARRAY_AGG(
           COALESCE(NULLIF(timesheet_evidence_row.display_name, ''), timesheet_evidence_row.kind, 'Evidence')
@@ -7225,10 +7412,44 @@ BEGIN
             (UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'TIMESHEET') DESC,
             timesheet_evidence_row.created_at DESC,
             timesheet_evidence_row.id DESC
+        ) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(timesheet_evidence_row.storage_key, '')), '') IS NOT NULL
         ))[1] AS primary_display_name
       FROM public.timesheet_evidence AS timesheet_evidence_row
       WHERE timesheet_evidence_row.timesheet_id = source_rows.timesheet_id
     ) AS evidence_summary ON TRUE
+  ),
+  enriched AS MATERIALIZED (
+    SELECT
+      enriched_base.*,
+      (
+        enriched_base.base_business_issue_codes
+        || CASE
+             WHEN enriched_base.reference_missing THEN ARRAY['Refs missing'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN enriched_base.correction_pair_placement_incomplete THEN ARRAY['Paired needs invoicing'::text]
+             ELSE ARRAY[]::text[]
+           END
+      ) AS business_issue_codes,
+      (
+        enriched_base.base_business_issue_codes
+        || CASE
+             WHEN enriched_base.reference_missing THEN ARRAY['Refs missing'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN enriched_base.correction_pair_placement_incomplete THEN ARRAY['Paired needs invoicing'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || enriched_base.base_payment_badge_codes
+        || CASE
+             WHEN enriched_base.genuine_overpaid THEN ARRAY['__PAY_BADGE_OVERPAID__'::text]
+             ELSE ARRAY[]::text[]
+           END
+      ) AS issue_codes
+    FROM enriched_base
   ),
   filtered AS MATERIALIZED (
     SELECT enriched_row.*
@@ -7412,110 +7633,76 @@ BEGIN
       AND (
         v_issues_filter IS NULL
         OR (
-          v_issues_filter IN ('all', 'any')
-          AND (enriched_row.needs_attention OR COALESCE(ARRAY_LENGTH(enriched_row.business_issue_codes, 1), 0) > 0)
+          v_issues_filter = 'any'
+          AND (
+            COALESCE(ARRAY_LENGTH(enriched_row.business_issue_codes, 1), 0) > 0
+            OR enriched_row.genuine_overpaid
+          )
         )
         OR (
           v_issues_filter IN ('none', 'clear')
-          AND (NOT enriched_row.needs_attention AND COALESCE(ARRAY_LENGTH(enriched_row.business_issue_codes, 1), 0) = 0)
+          AND COALESCE(ARRAY_LENGTH(enriched_row.business_issue_codes, 1), 0) = 0
+          AND NOT enriched_row.genuine_overpaid
+        )
+        OR (
+          v_issues_filter IN ('no_match_id', 'identity_missing')
+          AND (enriched_row.candidate_id IS NULL OR enriched_row.client_id IS NULL)
         )
         OR (
           v_issues_filter IN ('rate', 'rates', 'rate_missing')
-          AND (
-            enriched_row.has_rate_issue
-            OR EXISTS (
-              SELECT 1
-              FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
-              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('RATE', 'RATE MISSING')
-            )
-          )
+          AND 'Rate' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
         OR (
           v_issues_filter IN ('pay', 'pay_channel', 'pay-channel', 'pay_chan_miss', 'pay_channel_missing')
-          AND (
-            enriched_row.has_pay_channel_issue
-            OR EXISTS (
-              SELECT 1
-              FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
-              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('PAY CHANNEL', 'PAY CHANNEL MISSING')
-            )
-          )
+          AND 'Pay channel' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
         OR (
-          v_issues_filter IN ('hr', 'hr_issue', 'hr-issue', 'awaiting_hr_validation', 'awaiting_hr_validation_required')
-          AND (
-            COALESCE(ARRAY_LENGTH(enriched_row.hr_crosscheck_issues, 1), 0) > 0
-            OR UPPER(COALESCE(enriched_row.tools_stage, '')) = 'AWAITING_HR_VALIDATION'
-            OR EXISTS (
-              SELECT 1
-              FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
-              WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HR VALIDATION', 'AWAITING HR VALIDATION')
-            )
-            OR (
-              enriched_row.hr_crosscheck_status IS NOT NULL
-              AND UPPER(enriched_row.hr_crosscheck_status) NOT IN ('OK', 'MATCHED', 'MATCH', 'VALID', 'PASSED', 'CLEAR')
-            )
-          )
+          v_issues_filter = 'on_hold'
+          AND 'On hold' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
         OR (
           v_issues_filter IN ('hr_hours_mismatch', 'hours_mismatch_hr')
-          AND EXISTS (
-            SELECT 1
-            FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
-            WHERE UPPER(COALESCE(issue_value.issue_code, '')) IN ('HOURS MISMATCH HR', 'HOURS MISMATCH (HEALTHROSTER)')
-          )
+          AND 'Hours mismatch HR' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
         OR (
           v_issues_filter = 'hr_hours_missing'
-          AND EXISTS (
-            SELECT 1
-            FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
-            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'HR HOURS MISSING'
-          )
+          AND 'HR hours missing' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
         OR (
           v_issues_filter = 'duplicate_contracts'
-          AND EXISTS (
-            SELECT 1
-            FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
-            WHERE UPPER(COALESCE(issue_value.issue_code, '')) = 'DUPLICATE CONTRACTS'
-          )
+          AND 'Duplicate contracts' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
         OR (
-          v_issues_filter IN ('timesheet_evidence', 'expenses_evidence', 'mileage_evidence', 'reference_missing', 'validation', 'authorisation', 'on_hold', 'refs_pdf_invalid')
-          AND EXISTS (
-            SELECT 1
-            FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
-            WHERE
-              (v_issues_filter = 'timesheet_evidence' AND UPPER(COALESCE(issue_value.issue_code, '')) = 'TIMESHEET EVIDENCE MISSING')
-              OR (v_issues_filter = 'expenses_evidence' AND UPPER(COALESCE(issue_value.issue_code, '')) = 'EXPENSES EVIDENCE MISSING')
-              OR (v_issues_filter = 'mileage_evidence' AND UPPER(COALESCE(issue_value.issue_code, '')) = 'MILEAGE EVIDENCE MISSING')
-              OR (v_issues_filter = 'reference_missing' AND UPPER(COALESCE(issue_value.issue_code, '')) IN ('REFERENCE', 'REFERENCE MISSING'))
-              OR (v_issues_filter = 'validation' AND UPPER(COALESCE(issue_value.issue_code, '')) = 'VALIDATION')
-              OR (v_issues_filter = 'authorisation' AND UPPER(COALESCE(issue_value.issue_code, '')) IN ('AUTHORISATION', 'AWAITING AUTHORISATION'))
-              OR (v_issues_filter = 'on_hold' AND UPPER(COALESCE(issue_value.issue_code, '')) = 'ON HOLD')
-              OR (v_issues_filter = 'refs_pdf_invalid' AND UPPER(COALESCE(issue_value.issue_code, '')) = 'REFS - TIMESHEET PDF INVALID')
-          )
+          v_issues_filter = 'expenses_evidence'
+          AND 'Expenses evidence' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
         OR (
-          v_issues_filter = 'qr_not_issued'
-          AND enriched_row.timesheet_id IS NOT NULL
-          AND UPPER(COALESCE(enriched_row.qr_status, '')) = 'PENDING'
-          AND COALESCE(enriched_row.qr_token, '') = ''
-          AND enriched_row.qr_generated_at IS NULL
+          v_issues_filter = 'mileage_evidence'
+          AND 'Mileage evidence' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('refs_missing', 'reference_missing')
+          AND 'Refs missing' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('awaiting_validation', 'awaiting_hr_validation')
+          AND 'Awaiting validation' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('validation_failed', 'validation')
+          AND 'Validation failed' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
         OR (
           v_issues_filter IN ('qr_awaiting_signature', 'qr_issued_awaiting_signature')
-          AND enriched_row.timesheet_id IS NOT NULL
-          AND UPPER(COALESCE(enriched_row.qr_status, '')) = 'PENDING'
-          AND COALESCE(enriched_row.qr_token, '') <> ''
-          AND enriched_row.qr_generated_at IS NOT NULL
-          AND enriched_row.qr_scanned_at IS NULL
+          AND 'Awaiting signed QR timesheet' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
         )
-        OR EXISTS (
-          SELECT 1
-          FROM UNNEST(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[])) AS issue_value(issue_code)
-          WHERE LOWER(issue_value.issue_code) = v_issues_filter
+        OR (
+          v_issues_filter = 'paired_needs_invoicing'
+          AND enriched_row.correction_pair_placement_incomplete
+        )
+        OR (
+          v_issues_filter = 'overpaid'
+          AND enriched_row.genuine_overpaid
         )
       )
   )
@@ -7705,4 +7892,3 @@ BEGIN
   RETURN TO_CHAR(v_local_ts, 'FMDD FMMonth YYYY "at" HH24:MI "hrs"') || ' (UK time)';
 END;
 $function$;
-
