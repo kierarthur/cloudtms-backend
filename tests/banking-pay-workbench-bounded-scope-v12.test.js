@@ -209,9 +209,10 @@ test('candidate-wide reconciliation stages privately and publication switches CU
   assert.doesNotMatch(dispatcher, /^\s*(?:COMMIT|ROLLBACK)\s*;/im);
 });
 
-test('all 16 uncovered financial operations use one statement-level transition adapter', () => {
-  assert.equal((triggers.match(/FOR EACH STATEMENT/gi) || []).length, 16);
-  assert.equal((triggers.match(/EXECUTE FUNCTION private\.pay_workbench_financial_scope_dirty_transition_v1\(\)/gi) || []).length, 16);
+test('all 18 invalidation backstops and nine independent finance observers use one statement adapter', () => {
+  assert.equal((triggers.match(/FOR EACH STATEMENT/gi) || []).length, 27);
+  assert.equal((triggers.match(/EXECUTE FUNCTION private\.pay_workbench_financial_scope_dirty_transition_v1\(\)/gi) || []).length, 27);
+  assert.equal((triggers.match(/trg_bpay_wb_observe_(?:advances|components|events)_(?:insert|update|delete)/gi) || []).length, 18);
   for (const parent of ['pay_batch_candidates', 'pay_batches', 'pay_bank_transfers']) {
     assert.match(triggers, new RegExp(`ON public\\.${parent}[\\s\\S]{0,180}OLD TABLE AS old_rows`, 'i'));
   }
@@ -228,8 +229,11 @@ test('retained finance dirty triggers declare exact effects before finance DML',
   for (const source of [markCandidateDirty, markFinanceDirty]) {
     assert.match(source, /TG_WHEN<>'BEFORE'/i);
     assert.match(source, /INSERT INTO pg_temp\._bpay_wb_expected_effects/i);
-    assert.match(source, /md5\(v_old_row::text\)/i);
-    assert.match(source, /md5\(v_new_row::text\)/i);
+    assert.match(source, /v_internal_before_digest/i);
+    assert.match(source, /v_internal_after_digest/i);
+    assert.match(source, /ARRAY\['created_at','created_at_utc','updated_at','updated_at_utc'/i);
+    assert.match(source, /SET[\s\S]{0,160}proposed=true/i);
+    assert.doesNotMatch(source, /SET[\s\S]{0,120}observed=true/i);
     assert.match(source, /PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH/i);
   }
 });

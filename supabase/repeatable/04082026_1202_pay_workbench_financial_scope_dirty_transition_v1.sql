@@ -33,7 +33,72 @@ BEGIN
 
   v_reason:=upper(TG_TABLE_NAME)||'_'||upper(TG_OP);
 
-  IF TG_TABLE_NAME='pay_batch_items' THEN
+  IF TG_TABLE_NAME='pay_advances' THEN
+    IF TG_OP IN ('UPDATE','DELETE') THEN
+      INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
+      SELECT TG_TABLE_NAME,TG_OP,r.id,r.candidate_id,r.linked_timesheet_id,
+        md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text),NULL,v_reason FROM old_rows r ON CONFLICT DO NOTHING;
+    END IF;
+    IF TG_OP IN ('INSERT','UPDATE') THEN
+      INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
+      SELECT TG_TABLE_NAME,TG_OP,r.id,r.candidate_id,r.linked_timesheet_id,
+        NULL,CASE WHEN TG_OP='INSERT' THEN md5((to_jsonb(r)-ARRAY['id','finance_case_id',
+          'finance_component_id','created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text)
+        ELSE md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text) END,v_reason FROM new_rows r
+      ON CONFLICT(relation_name,operation,source_id,candidate_id,timesheet_id) DO UPDATE
+      SET after_digest=EXCLUDED.after_digest;
+    END IF;
+
+  ELSIF TG_TABLE_NAME='pay_finance_case_components' THEN
+    IF TG_OP IN ('UPDATE','DELETE') THEN
+      INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
+      SELECT TG_TABLE_NAME,TG_OP,r.id,r.candidate_id,r.linked_timesheet_id,
+        md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text),NULL,v_reason FROM old_rows r ON CONFLICT DO NOTHING;
+    END IF;
+    IF TG_OP IN ('INSERT','UPDATE') THEN
+      INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
+      SELECT TG_TABLE_NAME,TG_OP,r.id,r.candidate_id,r.linked_timesheet_id,
+        NULL,CASE WHEN TG_OP='INSERT' THEN md5((to_jsonb(r)-ARRAY['id','finance_case_id',
+          'finance_component_id','created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text)
+        ELSE md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text) END,v_reason FROM new_rows r
+      ON CONFLICT(relation_name,operation,source_id,candidate_id,timesheet_id) DO UPDATE
+      SET after_digest=EXCLUDED.after_digest;
+    END IF;
+
+  ELSIF TG_TABLE_NAME='pay_finance_case_events' THEN
+    IF TG_OP IN ('UPDATE','DELETE') THEN
+      INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
+      SELECT TG_TABLE_NAME,TG_OP,r.id,COALESCE(component.candidate_id,finance_case.candidate_id),
+        COALESCE(component.linked_timesheet_id,finance_case.linked_timesheet_id),
+        md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text),NULL,v_reason FROM old_rows r
+      LEFT JOIN public.pay_finance_case_components component ON component.id=r.finance_component_id
+      LEFT JOIN public.pay_advances finance_case ON finance_case.id=r.finance_case_id
+      WHERE COALESCE(component.candidate_id,finance_case.candidate_id) IS NOT NULL ON CONFLICT DO NOTHING;
+    END IF;
+    IF TG_OP IN ('INSERT','UPDATE') THEN
+      INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
+      SELECT TG_TABLE_NAME,TG_OP,r.id,COALESCE(component.candidate_id,finance_case.candidate_id),
+        COALESCE(component.linked_timesheet_id,finance_case.linked_timesheet_id),
+        NULL,CASE WHEN TG_OP='INSERT' THEN md5((to_jsonb(r)-ARRAY['id','finance_case_id',
+          'finance_component_id','created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text)
+        ELSE md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text) END,v_reason FROM new_rows r
+      LEFT JOIN public.pay_finance_case_components component ON component.id=r.finance_component_id
+      LEFT JOIN public.pay_advances finance_case ON finance_case.id=r.finance_case_id
+      WHERE COALESCE(component.candidate_id,finance_case.candidate_id) IS NOT NULL
+      ON CONFLICT(relation_name,operation,source_id,candidate_id,timesheet_id) DO UPDATE
+      SET after_digest=EXCLUDED.after_digest;
+    END IF;
+
+  ELSIF TG_TABLE_NAME='pay_batch_items' THEN
     IF TG_OP IN ('UPDATE','DELETE') THEN
       INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
       SELECT TG_TABLE_NAME,TG_OP,r.id,
@@ -352,7 +417,7 @@ BEGIN
             WHERE attribute.attrelid=v_expected AND attribute.attnum>0 AND NOT attribute.attisdropped)
           =ARRAY['build_token','candidate_id','timesheet_id','relation_name','operation','source_id',
             'finance_case_id','finance_component_id','economic_key_type','economic_key_value',
-            'expected_before_digest','expected_after_digest','observed'] THEN
+            'proposed','expected_before_digest','expected_after_digest','observed'] THEN
       EXECUTE $sql$
         SELECT EXISTS(
           SELECT 1
@@ -365,6 +430,8 @@ BEGIN
            AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
            AND expected.expected_before_digest IS NOT DISTINCT FROM impact.before_digest
            AND expected.expected_after_digest IS NOT DISTINCT FROM impact.after_digest
+           AND expected.proposed IS TRUE
+           AND expected.observed IS NOT TRUE
           GROUP BY impact.relation_name,impact.operation,impact.source_id,impact.candidate_id,impact.timesheet_id
           HAVING count(*)<>1
         )
@@ -382,6 +449,8 @@ BEGIN
           AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
           AND expected.expected_before_digest IS NOT DISTINCT FROM impact.before_digest
           AND expected.expected_after_digest IS NOT DISTINCT FROM impact.after_digest
+          AND expected.proposed IS TRUE
+          AND expected.observed IS NOT TRUE
       $sql$;
       EXECUTE $sql$
         DELETE FROM pg_temp._bpay_wb_transition_impacts_v1 impact
@@ -392,8 +461,14 @@ BEGIN
           AND expected.candidate_id=impact.candidate_id
           AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
           AND expected.expected_before_digest IS NOT DISTINCT FROM impact.before_digest
+          AND expected.proposed IS TRUE
+          AND expected.observed IS TRUE
           AND expected.expected_after_digest IS NOT DISTINCT FROM impact.after_digest
       $sql$;
+      IF EXISTS(SELECT 1 FROM pg_temp._bpay_wb_transition_impacts_v1) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH'
+          USING ERRCODE='23514';
+      END IF;
     END IF;
   END IF;
 

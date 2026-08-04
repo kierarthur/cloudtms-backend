@@ -39,6 +39,8 @@ DECLARE
   v_page_number integer:=GREATEST(COALESCE((v_cursor->>'page_number')::integer,1),1);
   v_page_count integer:=0;
   v_page_digest text;
+  v_cumulative_fact_count integer:=GREATEST(COALESCE((v_cursor->>'cumulative_fact_count')::integer,0),0);
+  v_next_cumulative_fact_count integer:=0;
   v_cumulative_digest text:=COALESCE(NULLIF(v_cursor->>'cumulative_digest',''),md5('BPAY_FACT_STREAM_V1'));
   v_has_more boolean:=false;
   v_is_final boolean:=false;
@@ -46,17 +48,23 @@ DECLARE
   v_cursor_start_hash text;
   v_cursor_end_hash text;
   v_existing_page private.banking_pay_workbench_economic_build_fact_pages%ROWTYPE;
+  v_previous_page private.banking_pay_workbench_economic_build_fact_pages%ROWTYPE;
+  v_replay_cursor jsonb;
   v_unit_ids uuid[]:=ARRAY[]::uuid[];
   v_family_ordinal integer;
   v_unit_families text[]:=ARRAY[
-    'FROZEN_SETTLED_COMPONENT','LIVE_ENTITLEMENT_INPUT','ENTITLEMENT_COMPONENT',
-    'PAY_STATE_FALLBACK','PAYEE_BASELINE_INPUT','CANONICAL_INPUT'
+    'LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK',
+    'ENTITLEMENT_COMPONENT','PAYEE_BASELINE_INPUT','CANONICAL_INPUT'
   ];
   v_global_families text[]:=ARRAY[
     'RESERVATION_COMPONENT','FINANCE_CASE_IDENTITY','FINANCE_COMPONENT_IDENTITY',
     'PROTECTION_EVIDENCE','ALLOCATION_INPUT'
   ];
   v_scope_inserted integer:=0;
+  v_derived_fact_count integer:=0;
+  v_derived_settled_count integer:=0;
+  v_derived_fallback_count integer:=0;
+  v_live_page_ids uuid[]:=ARRAY[]::uuid[];
   v_vector jsonb;
   v_envelope_version integer;
   v_envelope jsonb;
@@ -64,6 +72,9 @@ DECLARE
   v_vector_item record;
   v_scale_blocked boolean:=false;
   v_sync_result jsonb;
+  v_effect_plan jsonb:='[]'::jsonb;
+  v_effect_plan_digest text:=md5('');
+  v_effect_plan_count integer:=0;
   v_publish_now boolean:=false;
   v_published_count integer:=0;
   v_published_digest text;
@@ -173,6 +184,15 @@ BEGIN
       WHERE build_id=v_build_id AND dependency_unit_key=v_unit_key;
     END IF;
     IF v_family_ordinal IS NULL THEN RAISE EXCEPTION 'PAY_WORKBENCH_BUILD_CURSOR_INVALID' USING ERRCODE='22023'; END IF;
+    v_cursor:=jsonb_build_object('cursor_kind','WORKSPACE_FACT','cursor_version',1,
+      'build_id',v_build_id,'candidate_id',p_candidate_id,
+      'captured_candidate_generation',v_build.captured_candidate_generation,
+      'captured_source_change_seq',v_build.source_change_seq,
+      'dependency_unit_key',v_unit_key,'fact_family',v_fact_family,
+      'page_number',v_page_number,'last_source_key',v_last_source_key,
+      'previous_page_digest',NULLIF(v_cursor->>'previous_page_digest',''),
+      'cumulative_fact_count',v_cumulative_fact_count,
+      'cumulative_digest',v_cumulative_digest,'terminal',false);
 
     CREATE TEMP TABLE IF NOT EXISTS pg_temp._bpay_wb_fact_page_v1(
       source_key text PRIMARY KEY,natural_key text NOT NULL,timesheet_id uuid NULL,
@@ -190,13 +210,17 @@ BEGIN
     IF v_fact_family='FROZEN_SETTLED_COMPONENT' THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
       SELECT key_row.source_key,md5(key_row.source_key),key_row.timesheet_id,ARRAY[key_row.timesheet_id],
-        '_pay_active_settled_components',key_row.timesheet_id,key_row.key_type,key_row.key_value,
+        'economic_build_facts',key_row.timesheet_id,key_row.key_type,key_row.key_value,
         key_row.amount_ex_vat,key_row.amount_inc_vat,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
         jsonb_build_object('key_type',key_row.key_type,'key_value',key_row.key_value),
         md5(jsonb_build_object('timesheet_id',key_row.timesheet_id,'key_type',key_row.key_type,
           'key_value',key_row.key_value,'amount_ex_vat',key_row.amount_ex_vat,'amount_inc_vat',key_row.amount_inc_vat)::text)
-      FROM (SELECT settled.*,settled.timesheet_id::text||':'||settled.key_type||':'||settled.key_value source_key
-        FROM public._pay_active_settled_components(v_unit_ids) settled) key_row
+      FROM (SELECT fact.timesheet_id,fact.economic_key_type key_type,fact.economic_key_value key_value,
+          fact.amount_ex_vat,fact.amount_inc_vat,
+          fact.timesheet_id::text||':'||fact.economic_key_type||':'||fact.economic_key_value source_key
+        FROM private.banking_pay_workbench_economic_build_facts fact
+        WHERE fact.build_id=v_build_id AND fact.fact_family='FROZEN_SETTLED_COMPONENT'
+          AND fact.dependency_unit_key=v_unit_key) key_row
       WHERE (v_last_source_key IS NULL OR key_row.source_key>v_last_source_key)
       ORDER BY key_row.source_key LIMIT v_fact_limit+1;
     ELSIF v_fact_family='LIVE_ENTITLEMENT_INPUT' THEN
@@ -212,28 +236,35 @@ BEGIN
     ELSIF v_fact_family IN ('ENTITLEMENT_COMPONENT','PAYEE_BASELINE_INPUT','CANONICAL_INPUT') THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
       SELECT key_row.source_key,md5(v_fact_family||':'||key_row.source_key),key_row.timesheet_id,ARRAY[key_row.timesheet_id],
-        'pay_current_timesheet_entitlement_components_from_build_v1',key_row.timesheet_id,
+        'economic_build_facts',key_row.timesheet_id,
         key_row.key_type,key_row.key_value,
         CASE WHEN v_fact_family='CANONICAL_INPUT' THEN key_row.truth_ex_vat ELSE NULL END,NULL,
         key_row.truth_ex_vat,key_row.truth_inc_vat,key_row.baseline_ex_vat,key_row.baseline_inc_vat,
-        NULL,NULL,NULL,NULL,jsonb_build_object('fact_role',v_fact_family),
+        NULL,NULL,NULL,NULL,jsonb_build_object('fact_role',v_fact_family,
+          'source_fact_family','ENTITLEMENT_COMPONENT'),
         md5(jsonb_build_object('timesheet_id',key_row.timesheet_id,'key_type',key_row.key_type,
           'key_value',key_row.key_value,'truth_ex_vat',key_row.truth_ex_vat,
           'baseline_ex_vat',key_row.baseline_ex_vat,'truth_inc_vat',key_row.truth_inc_vat,
           'baseline_inc_vat',key_row.baseline_inc_vat)::text)
-      FROM (SELECT entitlement.*,entitlement.timesheet_id::text||':'||entitlement.key_type||':'||entitlement.key_value source_key
-        FROM private.pay_current_timesheet_entitlement_components_from_build_v1(v_build_id,v_unit_key) entitlement) key_row
+      FROM (SELECT fact.timesheet_id,fact.economic_key_type key_type,fact.economic_key_value key_value,
+          fact.truth_ex_vat,fact.baseline_ex_vat,fact.truth_inc_vat,fact.baseline_inc_vat,
+          fact.timesheet_id::text||':'||fact.economic_key_type||':'||fact.economic_key_value source_key
+        FROM private.banking_pay_workbench_economic_build_facts fact
+        WHERE fact.build_id=v_build_id AND fact.fact_family='ENTITLEMENT_COMPONENT'
+          AND fact.dependency_unit_key=v_unit_key) key_row
       WHERE (v_last_source_key IS NULL OR key_row.source_key>v_last_source_key)
       ORDER BY key_row.source_key LIMIT v_fact_limit+1;
     ELSIF v_fact_family='PAY_STATE_FALLBACK' THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
-      SELECT state.timesheet_id::text,md5('PAY_STATE:'||state.timesheet_id::text),state.timesheet_id,
-        ARRAY[state.timesheet_id],'timesheet_pay_state',state.timesheet_id,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
-        NULL,NULL,NULL,NULL,to_jsonb(state),md5(to_jsonb(state)::text)
-      FROM public.timesheet_pay_state state
-      WHERE state.timesheet_id=ANY(v_unit_ids)
-        AND (v_last_source_key IS NULL OR state.timesheet_id::text>v_last_source_key)
-      ORDER BY state.timesheet_id LIMIT v_fact_limit+1;
+      SELECT fact.timesheet_id::text||':'||fact.natural_key,fact.natural_key,fact.timesheet_id,
+        fact.subject_timesheet_ids,'economic_build_facts',fact.source_id,fact.economic_key_type,
+        fact.economic_key_value,fact.amount_ex_vat,fact.amount_inc_vat,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+        fact.source_payload_json,fact.financial_digest
+      FROM private.banking_pay_workbench_economic_build_facts fact
+      WHERE fact.build_id=v_build_id AND fact.fact_family='PAY_STATE_FALLBACK'
+        AND fact.dependency_unit_key=v_unit_key
+        AND (v_last_source_key IS NULL OR fact.timesheet_id::text||':'||fact.natural_key>v_last_source_key)
+      ORDER BY fact.timesheet_id,fact.natural_key LIMIT v_fact_limit+1;
     ELSIF v_fact_family='RESERVATION_COMPONENT' THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
       SELECT reservation.id::text,md5('RESERVATION:'||reservation.id::text),
@@ -249,6 +280,9 @@ BEGIN
       LEFT JOIN public.pay_finance_case_components component ON component.id=reservation.finance_component_id
       LEFT JOIN public.pay_batch_candidates batch_candidate ON batch_candidate.id=reservation.pay_batch_candidate_id
       WHERE COALESCE(batch_candidate.candidate_id,component.candidate_id)=p_candidate_id
+        AND upper(btrim(COALESCE(reservation.status,''))) IN ('RESERVED','COMMITTED')
+        AND reservation.released_at_utc IS NULL
+        AND (item.id IS NULL OR COALESCE(item.is_voided,false) IS NOT TRUE)
         AND COALESCE(item.timesheet_id,component.linked_timesheet_id) IN (
           SELECT timesheet_id FROM private.banking_pay_workbench_economic_build_scope WHERE build_id=v_build_id)
         AND COALESCE(reservation.frozen_component_key_type,component.component_key_type) IN
@@ -263,7 +297,11 @@ BEGIN
         'pay_advances',finance_case.id,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,finance_case.id,NULL,NULL,
         to_jsonb(finance_case),md5(to_jsonb(finance_case)::text)
       FROM public.pay_advances finance_case WHERE finance_case.candidate_id=p_candidate_id
-        AND finance_case.cleared_at_utc IS NULL AND finance_case.written_off_at_utc IS NULL
+        AND ((finance_case.cleared_at_utc IS NULL AND finance_case.written_off_at_utc IS NULL)
+          OR finance_case.linked_timesheet_id IN (
+            SELECT timesheet_id FROM private.banking_pay_workbench_economic_build_scope
+            WHERE build_id=v_build_id
+          ))
         AND (v_last_source_key IS NULL OR finance_case.id::text>v_last_source_key)
       ORDER BY finance_case.id LIMIT v_fact_limit+1;
     ELSIF v_fact_family='FINANCE_COMPONENT_IDENTITY' THEN
@@ -287,9 +325,23 @@ BEGIN
         'pay_finance_case_events',event.id,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
         event.finance_case_id,event.finance_component_id,event.reservation_id,to_jsonb(event),md5(to_jsonb(event)::text)
       FROM public.pay_finance_case_events event
-      JOIN public.pay_advances finance_case ON finance_case.id=event.finance_case_id
+      JOIN private.banking_pay_workbench_economic_build_facts case_fact
+        ON case_fact.build_id=v_build_id AND case_fact.fact_family='FINANCE_CASE_IDENTITY'
+       AND case_fact.finance_case_id=event.finance_case_id
       LEFT JOIN public.pay_finance_case_components component ON component.id=event.finance_component_id
-      WHERE finance_case.candidate_id=p_candidate_id AND (v_last_source_key IS NULL OR event.id::text>v_last_source_key)
+      WHERE case_fact.candidate_id=p_candidate_id
+        AND (
+          upper(btrim(COALESCE(event.event_type,''))) LIKE '%WRITE%OFF%'
+          OR upper(btrim(COALESCE(event.event_type,''))) IN (
+            'MANUAL_ECONOMIC_OVERRIDE','MANUAL_WRITE_OFF','CASE_MANUAL_ECONOMIC_OVERRIDE',
+            'COMPONENT_MANUAL_ECONOMIC_OVERRIDE','CASE_CLEARED','CLEARED'
+          )
+          OR upper(btrim(COALESCE(event.reason,''))) IN (
+            'MANUAL_ECONOMIC_OVERRIDE','WRITE_OFF','COMPONENT_MANUAL_ECONOMIC_OVERRIDE',
+            'RAIL_SETTLEMENT','PREVIEW_FINANCE_SYNC'
+          )
+        )
+        AND (v_last_source_key IS NULL OR event.id::text>v_last_source_key)
       ORDER BY event.id LIMIT v_fact_limit+1;
     ELSIF v_fact_family='ALLOCATION_INPUT' THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
@@ -316,6 +368,73 @@ BEGIN
     INTO v_page_count,v_page_digest,v_last_page_key
     FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page_rows;
 
+    v_cursor_start_hash:=md5(v_cursor::text);
+    v_next_cumulative_fact_count:=v_cumulative_fact_count+v_page_count;
+    v_cumulative_digest:=md5(v_cumulative_digest||v_page_digest);
+    v_is_final:=NOT v_has_more;
+    v_next:=jsonb_build_object('cursor_kind','WORKSPACE_FACT','cursor_version',1,
+      'build_id',v_build_id,'candidate_id',p_candidate_id,
+      'captured_candidate_generation',v_build.captured_candidate_generation,
+      'captured_source_change_seq',v_build.source_change_seq,
+      'dependency_unit_key',v_unit_key,'fact_family',v_fact_family,
+      'page_number',v_page_number+1,'last_source_key',CASE WHEN v_has_more THEN v_last_page_key ELSE NULL END,
+      'previous_page_digest',v_page_digest,'cumulative_fact_count',v_next_cumulative_fact_count,
+      'cumulative_digest',v_cumulative_digest,
+      'terminal',v_is_final);
+    v_cursor_end_hash:=md5(v_next::text);
+
+    IF v_page_number=1 THEN
+      IF v_cumulative_fact_count<>0 OR v_cursor->>'previous_page_digest' IS NOT NULL
+         OR v_cursor->>'cumulative_digest' IS DISTINCT FROM md5('BPAY_FACT_STREAM_V1')
+         OR EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_fact_pages
+           WHERE build_id=v_build_id AND dependency_unit_key=v_unit_key
+             AND fact_family=v_fact_family LIMIT 1) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_CHAIN_INCOMPLETE' USING ERRCODE='23514';
+      END IF;
+    ELSE
+      SELECT * INTO v_previous_page
+      FROM private.banking_pay_workbench_economic_build_fact_pages
+      WHERE build_id=v_build_id AND dependency_unit_key=v_unit_key
+        AND fact_family=v_fact_family AND page_number=v_page_number-1;
+      IF v_previous_page.id IS NULL OR v_previous_page.status<>'COMPLETED'
+         OR v_previous_page.is_family_final
+         OR v_previous_page.cursor_end_hash<>v_cursor_start_hash
+         OR v_previous_page.cursor_end_json IS DISTINCT FROM v_cursor
+         OR v_previous_page.cumulative_fact_count<>v_cumulative_fact_count
+         OR v_previous_page.cumulative_digest<>COALESCE(v_cursor->>'cumulative_digest','')
+         OR v_previous_page.page_digest<>COALESCE(v_cursor->>'previous_page_digest','') THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_CHAIN_INCOMPLETE' USING ERRCODE='23514';
+      END IF;
+    END IF;
+
+    SELECT * INTO v_existing_page FROM private.banking_pay_workbench_economic_build_fact_pages
+    WHERE build_id=v_build_id AND dependency_unit_key=v_unit_key
+      AND fact_family=v_fact_family AND page_number=v_page_number;
+    IF FOUND THEN
+      IF v_existing_page.attempt_id IS DISTINCT FROM v_attempt_id
+         OR v_existing_page.status<>'COMPLETED'
+         OR v_existing_page.cursor_start_json IS DISTINCT FROM v_cursor
+         OR v_existing_page.cursor_start_hash<>v_cursor_start_hash
+         OR v_existing_page.cursor_end_json IS DISTINCT FROM v_next
+         OR v_existing_page.cursor_end_hash<>v_cursor_end_hash
+         OR v_existing_page.expected_source_count IS NOT NULL
+         OR v_existing_page.actual_fact_count<>v_page_count
+         OR v_existing_page.cumulative_fact_count<>v_next_cumulative_fact_count
+         OR v_existing_page.page_digest<>v_page_digest
+         OR v_existing_page.cumulative_digest<>v_cumulative_digest
+         OR v_existing_page.is_family_final IS DISTINCT FROM v_is_final THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_REPLAY_CONFLICT' USING ERRCODE='23514';
+      END IF;
+      SELECT fact_cursor_json INTO v_replay_cursor
+      FROM private.banking_pay_workbench_economic_builds WHERE id=v_build_id;
+      RETURN jsonb_build_object('ok',true,'build_id',v_build_id,
+        'private_stage',v_build.private_stage,'stage_status','PAGE_REPLAYED',
+        'has_more',true,'continuation_enqueued',false,
+        'next_cursor_json',COALESCE(v_replay_cursor,v_next),'next_action',v_build.private_stage,
+        'page_fact_count',v_page_count,'cumulative_fact_count',v_next_cumulative_fact_count,
+        'page_digest',v_page_digest,'cumulative_digest',v_cumulative_digest);
+    END IF;
+
     IF EXISTS(
       SELECT 1 FROM pg_temp._bpay_wb_fact_page_v1 page_row
       JOIN private.banking_pay_workbench_economic_build_facts existing
@@ -324,7 +443,8 @@ BEGIN
       WHERE existing.financial_digest<>page_row.financial_digest LIMIT 1
     ) THEN RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_REPLAY_CONFLICT' USING ERRCODE='23514'; END IF;
 
-    INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    IF v_fact_family NOT IN ('ENTITLEMENT_COMPONENT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK') THEN
+      INSERT INTO private.banking_pay_workbench_economic_build_facts(
       build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
       dependency_unit_key,source_relation,source_id,economic_key_type,economic_key_value,
       amount_ex_vat,amount_inc_vat,truth_ex_vat,truth_inc_vat,baseline_ex_vat,baseline_inc_vat,
@@ -337,41 +457,153 @@ BEGIN
       page.truth_ex_vat,page.truth_inc_vat,page.baseline_ex_vat,page.baseline_inc_vat,
       page.reserved_source_amount,page.finance_case_id,page.finance_component_id,page.reservation_id,
       page.source_payload_json,page.financial_digest
-    FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page
-    ON CONFLICT(build_id,fact_family,natural_key) DO NOTHING;
-    GET DIAGNOSTICS v_scope_inserted=ROW_COUNT;
-
-    v_cursor_start_hash:=md5(v_cursor::text);
-    v_cumulative_digest:=md5(v_cumulative_digest||v_page_digest);
-    v_is_final:=NOT v_has_more;
-    v_next:=jsonb_build_object('cursor_kind','WORKSPACE_FACT','cursor_version',1,
-      'build_id',v_build_id,'candidate_id',p_candidate_id,
-      'captured_candidate_generation',v_build.captured_candidate_generation,
-      'captured_source_change_seq',v_build.source_change_seq,
-      'dependency_unit_key',v_unit_key,'fact_family',v_fact_family,
-      'page_number',v_page_number+1,'last_source_key',CASE WHEN v_has_more THEN v_last_page_key ELSE NULL END,
-      'previous_page_digest',v_page_digest,'cumulative_digest',v_cumulative_digest,
-      'terminal',v_is_final);
-    v_cursor_end_hash:=md5(v_next::text);
-
-    SELECT * INTO v_existing_page FROM private.banking_pay_workbench_economic_build_fact_pages
-    WHERE build_id=v_build_id AND dependency_unit_key=v_unit_key
-      AND fact_family=v_fact_family AND page_number=v_page_number;
-    IF FOUND THEN
-      IF v_existing_page.cursor_start_hash<>v_cursor_start_hash OR v_existing_page.cursor_end_hash<>v_cursor_end_hash
-         OR v_existing_page.page_digest<>v_page_digest OR v_existing_page.actual_fact_count<>v_page_count THEN
-        RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_REPLAY_CONFLICT' USING ERRCODE='23514';
+    FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page;
+      GET DIAGNOSTICS v_scope_inserted=ROW_COUNT;
+      IF v_scope_inserted<>v_page_count THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_COUNT_MISMATCH' USING ERRCODE='23514';
       END IF;
     ELSE
-      INSERT INTO private.banking_pay_workbench_economic_build_fact_pages(
-        build_id,attempt_id,dependency_unit_key,fact_family,page_number,
-        cursor_start_json,cursor_start_hash,cursor_end_json,cursor_end_hash,
-        actual_fact_count,cumulative_fact_count,page_digest,cumulative_digest,is_family_final
-      ) VALUES(v_build_id,v_attempt_id,v_unit_key,v_fact_family,v_page_number,
-        v_cursor,v_cursor_start_hash,v_next,v_cursor_end_hash,v_page_count,
-        COALESCE((v_cursor->>'cumulative_fact_count')::integer,0)+v_page_count,
-        v_page_digest,v_cumulative_digest,v_is_final);
+      v_scope_inserted:=0;
     END IF;
+
+    -- Expensive live entitlement normalisation is performed once for the
+    -- bounded physical LIVE_ENTITLEMENT_INPUT page.  Its typed result is
+    -- persisted immediately; subsequent ENTITLEMENT/PAYEE/CANONICAL pages
+    -- read these immutable rows and never recompute a whole dependency unit.
+    IF v_fact_family='LIVE_ENTITLEMENT_INPUT' AND v_page_count>0 THEN
+      SELECT array_agg(page.timesheet_id ORDER BY page.source_key)
+      INTO v_live_page_ids
+      FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page
+      WHERE page.timesheet_id IS NOT NULL;
+      CREATE TEMP TABLE IF NOT EXISTS pg_temp._bpay_wb_derived_entitlement_v1(
+        natural_key text PRIMARY KEY,timesheet_id uuid NOT NULL,key_type text NOT NULL,
+        key_value text NOT NULL,truth_ex_vat numeric NOT NULL,baseline_ex_vat numeric NOT NULL,
+        truth_inc_vat numeric NOT NULL,baseline_inc_vat numeric NOT NULL,financial_digest text NOT NULL
+      ) ON COMMIT DROP;
+      TRUNCATE pg_temp._bpay_wb_derived_entitlement_v1;
+      INSERT INTO pg_temp._bpay_wb_derived_entitlement_v1
+      SELECT md5('ENTITLEMENT_COMPONENT:'||component.timesheet_id::text||':'||component.key_type||':'||component.key_value),
+        component.timesheet_id,component.key_type,component.key_value,component.truth_ex_vat,
+        component.baseline_ex_vat,component.truth_inc_vat,component.baseline_inc_vat,
+        md5(jsonb_build_object('timesheet_id',component.timesheet_id,'key_type',component.key_type,
+          'key_value',component.key_value,'truth_ex_vat',component.truth_ex_vat,
+          'baseline_ex_vat',component.baseline_ex_vat,'truth_inc_vat',component.truth_inc_vat,
+          'baseline_inc_vat',component.baseline_inc_vat)::text)
+      FROM public._pay_current_timesheet_entitlement_components(COALESCE(v_live_page_ids,ARRAY[]::uuid[])) component;
+      IF EXISTS(SELECT 1 FROM pg_temp._bpay_wb_derived_entitlement_v1 derived
+        JOIN private.banking_pay_workbench_economic_build_facts existing
+          ON existing.build_id=v_build_id AND existing.fact_family='ENTITLEMENT_COMPONENT'
+         AND existing.natural_key=derived.natural_key
+        WHERE existing.financial_digest<>derived.financial_digest LIMIT 1) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_REPLAY_CONFLICT' USING ERRCODE='23514';
+      END IF;
+      INSERT INTO private.banking_pay_workbench_economic_build_facts(build_id,fact_family,natural_key,
+        candidate_id,timesheet_id,subject_timesheet_ids,dependency_unit_key,source_relation,source_id,
+        economic_key_type,economic_key_value,truth_ex_vat,truth_inc_vat,baseline_ex_vat,baseline_inc_vat,
+        source_payload_json,financial_digest)
+      SELECT v_build_id,'ENTITLEMENT_COMPONENT',derived.natural_key,p_candidate_id,derived.timesheet_id,
+        ARRAY[derived.timesheet_id],v_unit_key,'LIVE_ENTITLEMENT_INPUT',derived.timesheet_id,
+        derived.key_type,derived.key_value,derived.truth_ex_vat,derived.truth_inc_vat,
+        derived.baseline_ex_vat,derived.baseline_inc_vat,jsonb_build_object('derived_from','LIVE_ENTITLEMENT_INPUT'),
+        derived.financial_digest FROM pg_temp._bpay_wb_derived_entitlement_v1 derived
+      ON CONFLICT(build_id,fact_family,natural_key) DO NOTHING;
+      GET DIAGNOSTICS v_derived_fact_count=ROW_COUNT;
+
+      CREATE TEMP TABLE IF NOT EXISTS pg_temp._bpay_wb_derived_settled_v1(
+        natural_key text PRIMARY KEY,timesheet_id uuid NOT NULL,key_type text NOT NULL,
+        key_value text NOT NULL,amount_ex_vat numeric NOT NULL,amount_inc_vat numeric NOT NULL,
+        financial_digest text NOT NULL
+      ) ON COMMIT DROP;
+      TRUNCATE pg_temp._bpay_wb_derived_settled_v1;
+      INSERT INTO pg_temp._bpay_wb_derived_settled_v1
+      SELECT md5('FROZEN_SETTLED_COMPONENT:'||settled.timesheet_id::text||':'||settled.key_type||':'||settled.key_value),
+        settled.timesheet_id,settled.key_type,settled.key_value,settled.amount_ex_vat,settled.amount_inc_vat,
+        md5(jsonb_build_object('timesheet_id',settled.timesheet_id,'key_type',settled.key_type,
+          'key_value',settled.key_value,'amount_ex_vat',settled.amount_ex_vat,
+          'amount_inc_vat',settled.amount_inc_vat)::text)
+      FROM public._pay_active_settled_components(COALESCE(v_live_page_ids,ARRAY[]::uuid[])) settled;
+      IF EXISTS(SELECT 1 FROM pg_temp._bpay_wb_derived_settled_v1 derived
+        JOIN private.banking_pay_workbench_economic_build_facts existing
+          ON existing.build_id=v_build_id AND existing.fact_family='FROZEN_SETTLED_COMPONENT'
+         AND existing.natural_key=derived.natural_key
+        WHERE existing.financial_digest<>derived.financial_digest LIMIT 1) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_REPLAY_CONFLICT' USING ERRCODE='23514';
+      END IF;
+      INSERT INTO private.banking_pay_workbench_economic_build_facts(build_id,fact_family,natural_key,
+        candidate_id,timesheet_id,subject_timesheet_ids,dependency_unit_key,source_relation,source_id,
+        economic_key_type,economic_key_value,amount_ex_vat,amount_inc_vat,source_payload_json,financial_digest)
+      SELECT v_build_id,'FROZEN_SETTLED_COMPONENT',derived.natural_key,p_candidate_id,derived.timesheet_id,
+        ARRAY[derived.timesheet_id],v_unit_key,'LIVE_ENTITLEMENT_INPUT',derived.timesheet_id,
+        derived.key_type,derived.key_value,derived.amount_ex_vat,derived.amount_inc_vat,
+        jsonb_build_object('derived_from','LIVE_ENTITLEMENT_INPUT'),derived.financial_digest
+      FROM pg_temp._bpay_wb_derived_settled_v1 derived
+      ON CONFLICT(build_id,fact_family,natural_key) DO NOTHING;
+      GET DIAGNOSTICS v_derived_settled_count=ROW_COUNT;
+
+      CREATE TEMP TABLE IF NOT EXISTS pg_temp._bpay_wb_derived_fallback_v1(
+        natural_key text PRIMARY KEY,timesheet_id uuid NOT NULL,key_type text NOT NULL,
+        key_value text NOT NULL,amount_ex_vat numeric NOT NULL,amount_inc_vat numeric NOT NULL,
+        payload_json jsonb NOT NULL,financial_digest text NOT NULL
+      ) ON COMMIT DROP;
+      TRUNCATE pg_temp._bpay_wb_derived_fallback_v1;
+      INSERT INTO pg_temp._bpay_wb_derived_fallback_v1
+      WITH occurrence AS (
+        SELECT state.timesheet_id,state.last_settled_signature,component.ordinality::bigint source_ordinal,
+          component.key_type raw_key_type,component.key_value raw_key_value,
+          component.amount_ex_vat,component.amount_inc_vat
+        FROM public.timesheet_pay_state state
+        JOIN LATERAL public._pay_timesheet_components(state.last_settled_snapshot_json)
+          WITH ORDINALITY AS component(key_type,key_value,amount_ex_vat,amount_inc_vat,ordinality) ON true
+        WHERE state.timesheet_id=ANY(COALESCE(v_live_page_ids,ARRAY[]::uuid[]))
+          AND state.last_settled_snapshot_json<>'{}'::jsonb
+          AND NOT EXISTS(SELECT 1 FROM pg_temp._bpay_wb_derived_settled_v1 active
+            WHERE active.timesheet_id=state.timesheet_id)
+      ), resolved AS (
+        SELECT occurrence.*,key.key_type,key.key_value
+        FROM occurrence JOIN LATERAL public._pay_policy_x_resolve_pre_draft_economic_key(
+          p_timesheet_id=>occurrence.timesheet_id,
+          p_live_source_json=>jsonb_build_object('timesheet_id',occurrence.timesheet_id::text,
+            'component_key_type',occurrence.raw_key_type,'component_key_value',occurrence.raw_key_value,
+            'work_date',CASE WHEN occurrence.raw_key_type='TS_DAY' THEN occurrence.raw_key_value ELSE NULL END),
+          p_item_type=>CASE WHEN occurrence.raw_key_type IN ('TS_DAY','TS_TOTAL') THEN 'SEGMENT_DELTA'
+            WHEN occurrence.raw_key_type='ADJUSTMENT_CODE' THEN 'ADJUSTMENT_DELTA'
+            WHEN occurrence.raw_key_type='EXPENSE_CODE' AND upper(occurrence.raw_key_value)='MILEAGE' THEN 'MILEAGE_DELTA'
+            WHEN occurrence.raw_key_type IN ('ADDITIONAL_CODE','EXPENSE_CODE') THEN 'EXPENSE_DELTA' ELSE NULL END,
+          p_key_type_hint=>occurrence.raw_key_type,p_key_value_hint=>occurrence.raw_key_value,
+          p_work_date=>CASE WHEN occurrence.raw_key_type='TS_DAY' AND occurrence.raw_key_value~'^\d{4}-\d{2}-\d{2}$'
+            THEN occurrence.raw_key_value::date ELSE NULL END) key
+          ON key.key_resolution_failure_reason IS NULL
+      )
+      SELECT md5('PAY_STATE_FALLBACK:'||resolved.timesheet_id::text||':'||resolved.source_ordinal::text||':'||
+          resolved.key_type||':'||resolved.key_value),resolved.timesheet_id,resolved.key_type,resolved.key_value,
+        resolved.amount_ex_vat,resolved.amount_inc_vat,
+        jsonb_build_object('last_settled_signature',resolved.last_settled_signature,
+          'source_ordinal',resolved.source_ordinal,'raw_key_type',resolved.raw_key_type,
+          'raw_key_value',resolved.raw_key_value),
+        md5(jsonb_build_object('timesheet_id',resolved.timesheet_id,'source_ordinal',resolved.source_ordinal,
+          'key_type',resolved.key_type,'key_value',resolved.key_value,
+          'amount_ex_vat',resolved.amount_ex_vat,'amount_inc_vat',resolved.amount_inc_vat)::text)
+      FROM resolved;
+      INSERT INTO private.banking_pay_workbench_economic_build_facts(build_id,fact_family,natural_key,
+        candidate_id,timesheet_id,subject_timesheet_ids,dependency_unit_key,source_relation,source_id,
+        economic_key_type,economic_key_value,amount_ex_vat,amount_inc_vat,source_payload_json,financial_digest)
+      SELECT v_build_id,'PAY_STATE_FALLBACK',derived.natural_key,p_candidate_id,derived.timesheet_id,
+        ARRAY[derived.timesheet_id],v_unit_key,'timesheet_pay_state',derived.timesheet_id,
+        derived.key_type,derived.key_value,derived.amount_ex_vat,derived.amount_inc_vat,
+        derived.payload_json,derived.financial_digest FROM pg_temp._bpay_wb_derived_fallback_v1 derived
+      ON CONFLICT(build_id,fact_family,natural_key) DO NOTHING;
+      GET DIAGNOSTICS v_derived_fallback_count=ROW_COUNT;
+    ELSE
+      v_derived_fact_count:=0;v_derived_settled_count:=0;v_derived_fallback_count:=0;
+    END IF;
+
+    INSERT INTO private.banking_pay_workbench_economic_build_fact_pages(
+      build_id,attempt_id,dependency_unit_key,fact_family,page_number,
+      cursor_start_json,cursor_start_hash,cursor_end_json,cursor_end_hash,
+      actual_fact_count,cumulative_fact_count,page_digest,cumulative_digest,is_family_final
+    ) VALUES(v_build_id,v_attempt_id,v_unit_key,v_fact_family,v_page_number,
+      v_cursor,v_cursor_start_hash,v_next,v_cursor_end_hash,v_page_count,
+      v_next_cumulative_fact_count,v_page_digest,v_cumulative_digest,v_is_final);
 
     IF v_unit_key<>'GLOBAL' THEN
       UPDATE private.banking_pay_workbench_economic_build_scope scope_row
@@ -386,6 +618,35 @@ BEGIN
       WHERE scope_row.build_id=v_build_id AND scope_row.timesheet_id=page_count.timesheet_id;
     END IF;
 
+    UPDATE private.banking_pay_workbench_economic_builds build_row
+    SET fact_count=build_row.fact_count+v_scope_inserted+v_derived_fact_count+v_derived_settled_count+v_derived_fallback_count,
+        complexity_vector_json=COALESCE(build_row.complexity_vector_json,'{}'::jsonb)
+          ||jsonb_build_object(
+            'settled_source_row_count',COALESCE((build_row.complexity_vector_json->>'settled_source_row_count')::bigint,0)+page_stats.settled_count,
+            'settled_component_count',COALESCE((build_row.complexity_vector_json->>'settled_component_count')::bigint,0)+page_stats.settled_count,
+            'entitlement_component_count',COALESCE((build_row.complexity_vector_json->>'entitlement_component_count')::bigint,0)+page_stats.entitlement_count,
+            'reservation_component_count',COALESCE((build_row.complexity_vector_json->>'reservation_component_count')::bigint,0)+page_stats.reservation_count,
+            'finance_case_count',COALESCE((build_row.complexity_vector_json->>'finance_case_count')::bigint,0)+page_stats.case_count,
+            'finance_component_count',COALESCE((build_row.complexity_vector_json->>'finance_component_count')::bigint,0)+page_stats.component_count,
+            'protection_evidence_count',COALESCE((build_row.complexity_vector_json->>'protection_evidence_count')::bigint,0)+page_stats.protection_count,
+            'expected_case_insert_count',COALESCE((build_row.complexity_vector_json->>'expected_case_insert_count')::bigint,0)+page_stats.negative_count,
+            'expected_component_insert_count',COALESCE((build_row.complexity_vector_json->>'expected_component_insert_count')::bigint,0)+page_stats.negative_count,
+            'canonical_source_row_count',COALESCE((build_row.complexity_vector_json->>'canonical_source_row_count')::bigint,0)+page_stats.canonical_count,
+            'staging_bytes',COALESCE((build_row.complexity_vector_json->>'staging_bytes')::bigint,0)+page_stats.staging_bytes),
+        updated_at_utc=clock_timestamp()
+    FROM (SELECT
+      count(*) FILTER(WHERE v_fact_family='FROZEN_SETTLED_COMPONENT')::bigint settled_count,
+      count(*) FILTER(WHERE v_fact_family='ENTITLEMENT_COMPONENT')::bigint entitlement_count,
+      count(*) FILTER(WHERE v_fact_family='RESERVATION_COMPONENT')::bigint reservation_count,
+      count(*) FILTER(WHERE v_fact_family='FINANCE_CASE_IDENTITY')::bigint case_count,
+      count(*) FILTER(WHERE v_fact_family='FINANCE_COMPONENT_IDENTITY')::bigint component_count,
+      count(*) FILTER(WHERE v_fact_family='PROTECTION_EVIDENCE')::bigint protection_count,
+      count(*) FILTER(WHERE v_fact_family='ENTITLEMENT_COMPONENT' AND truth_ex_vat<baseline_ex_vat)::bigint negative_count,
+      count(*) FILTER(WHERE v_fact_family='CANONICAL_INPUT')::bigint canonical_count,
+      COALESCE(sum(pg_column_size(source_payload_json)) FILTER(WHERE v_fact_family='CANONICAL_INPUT'),0)::bigint staging_bytes
+      FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) accepted) page_stats
+    WHERE build_row.id=v_build_id;
+
     IF v_is_final THEN
       IF v_unit_key<>'GLOBAL' THEN
         UPDATE private.banking_pay_workbench_economic_build_scope
@@ -395,7 +656,8 @@ BEGIN
       END IF;
       IF v_unit_key<>'GLOBAL' AND v_family_ordinal<cardinality(v_unit_families) THEN
         v_next:=v_next||jsonb_build_object('fact_family',v_unit_families[v_family_ordinal+1],
-          'page_number',1,'last_source_key',NULL,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V1'));
+          'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
+          'cumulative_fact_count',0,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V1'));
       ELSIF v_unit_key<>'GLOBAL' THEN
         SELECT dependency_unit_key INTO v_unit_key
         FROM private.banking_pay_workbench_economic_build_scope
@@ -404,31 +666,25 @@ BEGIN
         IF v_unit_key IS NULL THEN v_unit_key:='GLOBAL';v_fact_family:=v_global_families[1];
         ELSE v_fact_family:=v_unit_families[1]; END IF;
         v_next:=v_next||jsonb_build_object('dependency_unit_key',v_unit_key,'fact_family',v_fact_family,
-          'page_number',1,'last_source_key',NULL,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V1'));
+          'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
+          'cumulative_fact_count',0,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V1'));
       ELSIF v_family_ordinal<cardinality(v_global_families) THEN
         v_next:=v_next||jsonb_build_object('fact_family',v_global_families[v_family_ordinal+1],
-          'page_number',1,'last_source_key',NULL,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V1'));
+          'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
+          'cumulative_fact_count',0,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V1'));
       ELSE
-        SELECT jsonb_build_object(
-          'relevant_timesheet_count',v_build.scope_count,
-          'dependency_node_count',v_build.dependency_node_count,
-          'dependency_edge_count',v_build.dependency_edge_count,
-          'settled_source_row_count',count(*) FILTER(WHERE fact_family='FROZEN_SETTLED_COMPONENT'),
-          'settled_component_count',count(*) FILTER(WHERE fact_family='FROZEN_SETTLED_COMPONENT'),
-          'entitlement_component_count',count(*) FILTER(WHERE fact_family='ENTITLEMENT_COMPONENT'),
-          'reservation_component_count',count(*) FILTER(WHERE fact_family='RESERVATION_COMPONENT'),
-          'finance_case_count',count(*) FILTER(WHERE fact_family='FINANCE_CASE_IDENTITY'),
-          'finance_component_count',count(*) FILTER(WHERE fact_family='FINANCE_COMPONENT_IDENTITY'),
-          'protection_evidence_count',count(*) FILTER(WHERE fact_family='PROTECTION_EVIDENCE'),
-          'expected_case_insert_count',count(*) FILTER(WHERE fact_family='ENTITLEMENT_COMPONENT' AND truth_ex_vat<baseline_ex_vat),
-          'expected_case_update_count',count(*) FILTER(WHERE fact_family='FINANCE_CASE_IDENTITY'),
+        IF EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_scope
+          WHERE build_id=v_build_id AND NOT required_fact_families<@completed_fact_families LIMIT 1) THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_CHAIN_INCOMPLETE' USING ERRCODE='23514';
+        END IF;
+        SELECT COALESCE(complexity_vector_json,'{}'::jsonb)||jsonb_build_object(
+          'relevant_timesheet_count',scope_count,'dependency_node_count',dependency_node_count,
+          'dependency_edge_count',dependency_edge_count,
+          'expected_case_update_count',COALESCE((complexity_vector_json->>'finance_case_count')::bigint,0),
           'expected_case_clear_count',0,
-          'expected_component_insert_count',count(*) FILTER(WHERE fact_family='ENTITLEMENT_COMPONENT' AND truth_ex_vat<baseline_ex_vat),
-          'expected_component_update_count',count(*) FILTER(WHERE fact_family='FINANCE_COMPONENT_IDENTITY'),
-          'expected_component_close_count',0,
-          'canonical_source_row_count',count(*) FILTER(WHERE fact_family='CANONICAL_INPUT'),
-          'staging_bytes',COALESCE(sum(pg_column_size(source_payload_json)) FILTER(WHERE fact_family='CANONICAL_INPUT'),0)
-        ) INTO v_vector FROM private.banking_pay_workbench_economic_build_facts WHERE build_id=v_build_id;
+          'expected_component_update_count',COALESCE((complexity_vector_json->>'finance_component_count')::bigint,0),
+          'expected_component_close_count',0)
+        INTO v_vector FROM private.banking_pay_workbench_economic_builds WHERE id=v_build_id;
         SELECT banking_pay_workbench_reconciliation_envelope_version,
                banking_pay_workbench_reconciliation_envelope_json,
                banking_pay_workbench_reconciliation_envelope_evidence_json
@@ -469,7 +725,7 @@ BEGIN
     END IF;
     IF (SELECT private_stage FROM private.banking_pay_workbench_economic_builds WHERE id=v_build_id)='WORKSPACE_FACT' THEN
       UPDATE private.banking_pay_workbench_economic_builds SET fact_cursor_json=v_next,
-        fact_count=fact_count+v_scope_inserted,updated_at_utc=clock_timestamp() WHERE id=v_build_id;
+        updated_at_utc=clock_timestamp() WHERE id=v_build_id;
     END IF;
     RETURN jsonb_build_object('ok',true,'build_id',v_build_id,'private_stage',
       (SELECT private_stage FROM private.banking_pay_workbench_economic_builds WHERE id=v_build_id),
@@ -486,6 +742,96 @@ BEGIN
     SELECT upper(NULLIF(btrim(to_jsonb(candidate_row)->>'pay_method'),'')) INTO v_candidate_pay_method
     FROM public.candidates candidate_row WHERE candidate_row.id=p_candidate_id;
     v_actor_user_id:=COALESCE(NULLIF(v_payload->>'actor_user_id','')::uuid,v_session.actor_user_id);
+    IF COALESCE((v_build.attestation_json->>'effect_plan_sealed')::boolean,false) IS NOT TRUE THEN
+      BEGIN
+        PERFORM set_config('cloudtms.pay_workbench_effect_capture_mode','capture',true);
+        v_sync_result:=public.pay_sync_overpayments_from_preview(
+          v_session.pay_date,v_session.week_ending_cutoff,v_actor_user_id,v_candidate_pay_method,
+          ARRAY[p_candidate_id],COALESCE(v_payload->'mismatch_choices','{}'::jsonb),
+          NULLIF(v_payload->>'client_filter_single','')::uuid,NULL,NULL
+        );
+        v_effect_plan:=COALESCE(v_sync_result->'captured_effects','[]'::jsonb);
+        IF jsonb_typeof(v_effect_plan)<>'array' THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_CAPTURE_INVALID' USING ERRCODE='23514';
+        END IF;
+        RAISE EXCEPTION 'PAY_WORKBENCH_EFFECT_PLAN_CAPTURE_ROLLBACK' USING ERRCODE='PZ001';
+      EXCEPTION WHEN SQLSTATE 'PZ001' THEN
+        NULL;
+      END;
+      -- Generated row identities and audit timestamps are not economic authority.
+      -- INSERT effects are normalised, deterministically ordered, and assigned a
+      -- build-owned plan identity before the durable plan is sealed.
+      SELECT COALESCE(jsonb_agg(normalised.effect ORDER BY normalised.effect::text),'[]'::jsonb)
+      INTO v_effect_plan
+      FROM (
+        SELECT CASE WHEN effect.value->>'operation'='INSERT'
+          THEN effect.value||jsonb_build_object('source_id',NULL,'finance_case_id',NULL,
+            'finance_component_id',NULL)
+          ELSE effect.value END AS effect
+        FROM jsonb_array_elements(COALESCE(v_effect_plan,'[]'::jsonb)) effect(value)
+      ) normalised;
+      SELECT COALESCE(jsonb_agg(CASE WHEN effect.value->>'operation'='INSERT'
+          THEN effect.value||jsonb_build_object(
+            'source_id',(md5(v_build_id::text||':EXPECTED_FINANCE_EFFECT:'||effect.ordinality::text))::uuid)
+          ELSE effect.value END ORDER BY effect.ordinality),'[]'::jsonb)
+      INTO v_effect_plan
+      FROM jsonb_array_elements(COALESCE(v_effect_plan,'[]'::jsonb))
+        WITH ORDINALITY effect(value,ordinality);
+      v_effect_plan_count:=jsonb_array_length(COALESCE(v_effect_plan,'[]'::jsonb));
+      v_effect_plan_digest:=md5(COALESCE(v_effect_plan::text,'[]'));
+      DELETE FROM private.banking_pay_workbench_economic_build_facts
+      WHERE build_id=v_build_id AND fact_family='EXPECTED_FINANCE_EFFECT';
+      INSERT INTO private.banking_pay_workbench_economic_build_facts(build_id,fact_family,natural_key,
+        candidate_id,timesheet_id,subject_timesheet_ids,dependency_unit_key,source_relation,source_id,
+        finance_case_id,finance_component_id,economic_key_type,economic_key_value,
+        source_payload_json,financial_digest,source_ordinal)
+      SELECT v_build_id,'EXPECTED_FINANCE_EFFECT',md5('EXPECTED_FINANCE_EFFECT:'||effect.ordinality::text||':'||effect.value::text),
+        (effect.value->>'candidate_id')::uuid,NULLIF(effect.value->>'timesheet_id','')::uuid,
+        CASE WHEN NULLIF(effect.value->>'timesheet_id','') IS NULL THEN ARRAY[]::uuid[]
+          ELSE ARRAY[(effect.value->>'timesheet_id')::uuid] END,'GLOBAL',effect.value->>'relation_name',
+        (effect.value->>'source_id')::uuid,
+        CASE WHEN effect.value->>'operation'='INSERT' THEN NULL ELSE NULLIF(effect.value->>'finance_case_id','')::uuid END,
+        CASE WHEN effect.value->>'operation'='INSERT' THEN NULL ELSE NULLIF(effect.value->>'finance_component_id','')::uuid END,
+        NULLIF(effect.value->>'economic_key_type',''),
+        NULLIF(effect.value->>'economic_key_value',''),jsonb_build_object(
+          'operation',effect.value->>'operation',
+          'expected_before_digest',effect.value->>'expected_before_digest',
+          'expected_after_digest',effect.value->>'expected_after_digest'),md5(effect.value::text),effect.ordinality
+      FROM jsonb_array_elements(COALESCE(v_effect_plan,'[]'::jsonb)) WITH ORDINALITY effect(value,ordinality);
+      UPDATE private.banking_pay_workbench_economic_builds SET status='READY_FOR_RECONCILIATION',
+        attestation_json=COALESCE(attestation_json,'{}'::jsonb)||jsonb_build_object(
+          'effect_plan_sealed',true,'effect_plan_count',v_effect_plan_count,
+          'effect_plan_digest',v_effect_plan_digest,'effect_plan_created_at_utc',clock_timestamp()),
+        updated_at_utc=clock_timestamp() WHERE id=v_build_id AND status='RECONCILING';
+      v_next:=jsonb_build_object('cursor_kind','RECONCILE_EXECUTE','cursor_version',1,
+        'build_id',v_build_id,'candidate_id',p_candidate_id,'reconcile_phase','EXECUTE',
+        'captured_candidate_generation',v_build.captured_candidate_generation,
+        'captured_source_change_seq',v_build.source_change_seq,'effect_plan_digest',v_effect_plan_digest);
+      RETURN jsonb_build_object('ok',true,'build_id',v_build_id,'private_stage','RECONCILE_EXECUTE',
+        'stage_status','EFFECT_PLAN_READY','has_more',true,'continuation_enqueued',false,
+        'next_cursor_json',v_next,'next_action','RECONCILE_EXECUTE',
+        'effect_plan_count',v_effect_plan_count,'effect_plan_digest',v_effect_plan_digest);
+    END IF;
+    SELECT count(*)::integer,md5(COALESCE(jsonb_agg(jsonb_build_object(
+      'candidate_id',fact.candidate_id,'timesheet_id',fact.timesheet_id,
+      'relation_name',fact.source_relation,'operation',fact.source_payload_json->>'operation',
+      'source_id',fact.source_id,'finance_case_id',fact.finance_case_id,
+      'finance_component_id',fact.finance_component_id,
+      'economic_key_type',fact.economic_key_type,'economic_key_value',fact.economic_key_value,
+      'expected_before_digest',NULLIF(fact.source_payload_json->>'expected_before_digest',''),
+      'expected_after_digest',NULLIF(fact.source_payload_json->>'expected_after_digest','')
+      ) ORDER BY fact.source_ordinal),'[]'::jsonb)::text)
+    INTO v_effect_plan_count,v_effect_plan_digest
+    FROM private.banking_pay_workbench_economic_build_facts fact
+    WHERE fact.build_id=v_build_id AND fact.fact_family='EXPECTED_FINANCE_EFFECT';
+    IF v_effect_plan_count IS DISTINCT FROM
+         COALESCE((v_build.attestation_json->>'effect_plan_count')::integer,0)
+       OR v_effect_plan_digest IS DISTINCT FROM v_build.attestation_json->>'effect_plan_digest'
+       OR NULLIF(v_cursor->>'effect_plan_digest','') IS DISTINCT FROM
+          v_build.attestation_json->>'effect_plan_digest' THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_PLAN_MISMATCH'
+        USING ERRCODE='23514';
+    END IF;
     v_sync_result:=public.pay_sync_overpayments_from_preview(
       v_session.pay_date,v_session.week_ending_cutoff,v_actor_user_id,v_candidate_pay_method,
       ARRAY[p_candidate_id],COALESCE(v_payload->'mismatch_choices','{}'::jsonb),
@@ -575,43 +921,74 @@ BEGIN
 
   IF v_stage='BUILD_CLEANUP' THEN
     v_cleanup_kind:=COALESCE(NULLIF(v_cursor->>'cleanup_kind',''),'CANONICAL_STAGE');
+    IF v_build.status<>'CLEANING' OR v_build.cleanup_not_before_utc IS NULL
+       OR clock_timestamp()<v_build.cleanup_not_before_utc
+       OR v_registry.current_build_id IS NOT DISTINCT FROM v_build_id
+       OR EXISTS(SELECT 1 FROM public.banking_pay_workbench_jobs cleanup_job
+         WHERE cleanup_job.economic_build_id=v_build_id
+           AND cleanup_job.id<>(SELECT job_id FROM private.banking_pay_workbench_stage_attempts WHERE id=v_attempt_id)
+           AND cleanup_job.status IN ('QUEUED','RUNNING') LIMIT 1)
+       OR EXISTS(SELECT 1 FROM private.banking_pay_workbench_stage_attempts cleanup_attempt
+         WHERE cleanup_attempt.build_id=v_build_id AND cleanup_attempt.id<>v_attempt_id
+           AND cleanup_attempt.attempt_status='STARTED' LIMIT 1) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_CLEANUP_BUILD_PROTECTED' USING ERRCODE='55006';
+    END IF;
     IF v_cleanup_kind='CANONICAL_STAGE' THEN
       WITH doomed AS (SELECT ctid FROM private.banking_pay_workbench_canonical_stage_lines
         WHERE build_id=v_build_id ORDER BY source_ordinal LIMIT LEAST(v_limit,500))
       DELETE FROM private.banking_pay_workbench_canonical_stage_lines row USING doomed WHERE row.ctid=doomed.ctid;
       GET DIAGNOSTICS v_cleanup_count=ROW_COUNT;
-      IF v_cleanup_count<v_limit THEN v_cleanup_kind:='FACT_PAGES'; END IF;
+      IF v_cleanup_count<LEAST(v_limit,500) THEN v_cleanup_kind:='FACT_PAGES'; END IF;
     ELSIF v_cleanup_kind='FACT_PAGES' THEN
       WITH doomed AS (SELECT ctid FROM private.banking_pay_workbench_economic_build_fact_pages
         WHERE build_id=v_build_id ORDER BY id LIMIT LEAST(v_limit,500))
       DELETE FROM private.banking_pay_workbench_economic_build_fact_pages row USING doomed WHERE row.ctid=doomed.ctid;
       GET DIAGNOSTICS v_cleanup_count=ROW_COUNT;
-      IF v_cleanup_count<v_limit THEN v_cleanup_kind:='FACTS'; END IF;
+      IF v_cleanup_count<LEAST(v_limit,500) THEN v_cleanup_kind:='FACTS'; END IF;
     ELSIF v_cleanup_kind='FACTS' THEN
       WITH doomed AS (SELECT ctid FROM private.banking_pay_workbench_economic_build_facts
         WHERE build_id=v_build_id ORDER BY fact_family,natural_key LIMIT LEAST(v_limit,500))
       DELETE FROM private.banking_pay_workbench_economic_build_facts row USING doomed WHERE row.ctid=doomed.ctid;
       GET DIAGNOSTICS v_cleanup_count=ROW_COUNT;
-      IF v_cleanup_count<v_limit THEN v_cleanup_kind:='SCOPE'; END IF;
+      IF v_cleanup_count<LEAST(v_limit,500) THEN v_cleanup_kind:='SCOPE'; END IF;
     ELSIF v_cleanup_kind='SCOPE' THEN
       WITH doomed AS (SELECT ctid FROM private.banking_pay_workbench_economic_build_scope
         WHERE build_id=v_build_id ORDER BY timesheet_id LIMIT LEAST(v_limit,500))
       DELETE FROM private.banking_pay_workbench_economic_build_scope row USING doomed WHERE row.ctid=doomed.ctid;
       GET DIAGNOSTICS v_cleanup_count=ROW_COUNT;
-      IF v_cleanup_count<v_limit THEN v_cleanup_kind:='ATTEMPTS'; END IF;
-    ELSE
+      IF v_cleanup_count<LEAST(v_limit,500) THEN v_cleanup_kind:='ATTEMPTS'; END IF;
+    ELSIF v_cleanup_kind='ATTEMPTS' THEN
       WITH doomed AS (SELECT ctid FROM private.banking_pay_workbench_stage_attempts
         WHERE build_id=v_build_id AND id<>v_attempt_id ORDER BY id LIMIT LEAST(v_limit,500))
       DELETE FROM private.banking_pay_workbench_stage_attempts row USING doomed WHERE row.ctid=doomed.ctid;
       GET DIAGNOSTICS v_cleanup_count=ROW_COUNT;
+      IF v_cleanup_count<LEAST(v_limit,500) THEN v_cleanup_kind:='HEADER_FINALISE'; END IF;
+    ELSIF v_cleanup_kind='HEADER_FINALISE' THEN
+      IF EXISTS(SELECT 1 FROM private.banking_pay_workbench_canonical_stage_lines WHERE build_id=v_build_id LIMIT 1)
+         OR EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_fact_pages WHERE build_id=v_build_id LIMIT 1)
+         OR EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_facts WHERE build_id=v_build_id LIMIT 1)
+         OR EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_scope WHERE build_id=v_build_id LIMIT 1)
+         OR EXISTS(SELECT 1 FROM private.banking_pay_workbench_stage_attempts
+           WHERE build_id=v_build_id AND id<>v_attempt_id LIMIT 1) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_CLEANUP_CHILDREN_REMAIN' USING ERRCODE='23514';
+      END IF;
+      v_cleanup_kind:='COMPLETE';
+      v_cleanup_count:=0;
+    ELSIF v_cleanup_kind<>'COMPLETE' THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_BUILD_CURSOR_INVALID' USING ERRCODE='22023';
     END IF;
     v_next:=jsonb_build_object('cursor_kind','BUILD_CLEANUP','cursor_version',1,
-      'build_id',v_build_id,'cleanup_kind',v_cleanup_kind,'deleted_count',v_cleanup_count);
+      'build_id',v_build_id,'candidate_id',p_candidate_id,'cleanup_kind',v_cleanup_kind,
+      'deleted_count',v_cleanup_count,'terminal',v_cleanup_kind='COMPLETE');
     UPDATE private.banking_pay_workbench_economic_builds SET cleanup_cursor_json=v_next,
+      status=CASE WHEN v_cleanup_kind='COMPLETE' THEN 'COMPLETE' ELSE status END,
+      private_stage=CASE WHEN v_cleanup_kind='COMPLETE' THEN 'COMPLETE' ELSE private_stage END,
       updated_at_utc=clock_timestamp() WHERE id=v_build_id;
     RETURN jsonb_build_object('ok',true,'build_id',v_build_id,'private_stage','BUILD_CLEANUP',
-      'stage_status','CLEANING','has_more',true,'continuation_enqueued',false,
-      'next_cursor_json',v_next,'next_action','BUILD_CLEANUP','deleted_count',v_cleanup_count);
+      'stage_status',CASE WHEN v_cleanup_kind='COMPLETE' THEN 'COMPLETE' ELSE 'CLEANING' END,
+      'has_more',v_cleanup_kind<>'COMPLETE','continuation_enqueued',false,
+      'next_cursor_json',v_next,'next_action',CASE WHEN v_cleanup_kind='COMPLETE' THEN 'COMPLETE' ELSE 'BUILD_CLEANUP' END,
+      'deleted_count',v_cleanup_count);
   END IF;
 
   IF v_stage='BOOTSTRAP_DISCOVERY' THEN
@@ -761,16 +1138,16 @@ BEGIN
         WHERE scope_row.build_id=v_build_id
           AND scope_row.dependency_unit_key=v_bootstrap_unit_key
           AND scope_row.stable_ordinal>v_bootstrap_last_ordinal
-        ORDER BY scope_row.stable_ordinal LIMIT 251;
-        SELECT count(*)>250 INTO v_bootstrap_has_more FROM pg_temp._bpay_wb_bootstrap_page_v1;
+        ORDER BY scope_row.stable_ordinal LIMIT 26;
+        SELECT count(*)>25 INTO v_bootstrap_has_more FROM pg_temp._bpay_wb_bootstrap_page_v1;
         SELECT count(*)::integer,COALESCE(max(source_key)::bigint,v_bootstrap_last_ordinal)
         INTO v_bootstrap_page_count,v_bootstrap_last_ordinal
         FROM (SELECT source_key FROM pg_temp._bpay_wb_bootstrap_page_v1
-          ORDER BY source_key LIMIT 250) page;
+          ORDER BY source_key LIMIT 25) page;
         SELECT EXISTS(
           SELECT 1
           FROM (SELECT timesheet_id FROM pg_temp._bpay_wb_bootstrap_page_v1
-            ORDER BY source_key LIMIT 250) page
+            ORDER BY source_key LIMIT 25) page
           WHERE EXISTS(SELECT 1 FROM public.timesheets_financials financial
               WHERE financial.timesheet_id=page.timesheet_id
                 AND financial.candidate_id=p_candidate_id AND financial.is_current
@@ -808,6 +1185,29 @@ BEGIN
                 ON component.id=reservation.finance_component_id
               WHERE COALESCE(item.timesheet_id,component.linked_timesheet_id)=page.timesheet_id
                 AND reservation.status NOT IN ('RELEASED','SETTLED'))
+            OR EXISTS(
+              SELECT 1
+              FROM public._pay_current_timesheet_entitlement_components(ARRAY[page.timesheet_id]::uuid[]) component
+              WHERE ROUND(COALESCE(component.truth_ex_vat,0),2)
+                    IS DISTINCT FROM ROUND(COALESCE(component.baseline_ex_vat,0),2)
+                 OR ROUND(COALESCE(component.truth_inc_vat,0),2)
+                    IS DISTINCT FROM ROUND(COALESCE(component.baseline_inc_vat,0),2)
+            )
+            OR (
+              NOT EXISTS(
+                SELECT 1 FROM public._pay_current_timesheet_entitlement_components(
+                  ARRAY[page.timesheet_id]::uuid[])
+              )
+              AND (
+                EXISTS(SELECT 1 FROM public.timesheets_financials financial
+                  WHERE financial.timesheet_id=page.timesheet_id
+                    AND financial.candidate_id=p_candidate_id AND financial.is_current
+                    AND ABS(COALESCE(financial.total_pay_ex_vat,0))>0.005)
+                OR EXISTS(SELECT 1 FROM public.timesheet_pay_state state
+                  WHERE state.timesheet_id=page.timesheet_id
+                    AND COALESCE(state.last_settled_snapshot_json,'{}'::jsonb)<>'{}'::jsonb)
+              )
+            )
           LIMIT 1
         ) INTO v_bootstrap_page_relevant;
         v_bootstrap_unit_relevant:=v_bootstrap_unit_relevant OR v_bootstrap_page_relevant;
@@ -840,12 +1240,12 @@ BEGIN
         WHERE scope_row.build_id=v_build_id
           AND scope_row.dependency_unit_key=v_bootstrap_unit_key
           AND scope_row.stable_ordinal>v_bootstrap_last_ordinal
-        ORDER BY scope_row.stable_ordinal LIMIT 251;
-        SELECT count(*)>250 INTO v_bootstrap_has_more FROM pg_temp._bpay_wb_bootstrap_page_v1;
+        ORDER BY scope_row.stable_ordinal LIMIT 26;
+        SELECT count(*)>25 INTO v_bootstrap_has_more FROM pg_temp._bpay_wb_bootstrap_page_v1;
         SELECT count(*)::integer,COALESCE(max(source_key)::bigint,v_bootstrap_last_ordinal)
         INTO v_bootstrap_page_count,v_bootstrap_last_ordinal
         FROM (SELECT source_key FROM pg_temp._bpay_wb_bootstrap_page_v1
-          ORDER BY source_key LIMIT 250) page;
+          ORDER BY source_key LIMIT 25) page;
         UPDATE private.banking_pay_workbench_timesheet_scope_state state_row SET
           economic_state=CASE WHEN v_bootstrap_unit_relevant THEN 'DIRTY' ELSE 'CLOSED' END,
           evaluated_generation=CASE WHEN v_bootstrap_unit_relevant
@@ -863,7 +1263,7 @@ BEGIN
           updated_at_utc=clock_timestamp()
         FROM private.banking_pay_workbench_economic_build_scope scope_row
         JOIN (SELECT timesheet_id FROM pg_temp._bpay_wb_bootstrap_page_v1
-          ORDER BY source_key LIMIT 250) page ON page.timesheet_id=scope_row.timesheet_id
+          ORDER BY source_key LIMIT 25) page ON page.timesheet_id=scope_row.timesheet_id
         WHERE scope_row.build_id=v_build_id
           AND state_row.timesheet_id=scope_row.timesheet_id
           AND state_row.dirty_generation<=v_build.captured_candidate_generation;

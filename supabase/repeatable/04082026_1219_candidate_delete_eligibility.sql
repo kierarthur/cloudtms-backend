@@ -68,7 +68,7 @@ BEGIN
   WHERE attempt.candidate_id=p_candidate_id AND attempt.attempt_status='STARTED';
   SELECT count(*)::integer INTO v_active_workbench_jobs
   FROM public.banking_pay_workbench_jobs job
-  WHERE job.candidate_id=p_candidate_id AND job.status IN ('QUEUED','RUNNING');
+  WHERE job.candidate_id=p_candidate_id AND job.status NOT IN ('SUCCEEDED','FAILED','DEAD');
 
   IF v_contracts > 0 OR v_contract_weeks > 0 OR v_timesheets > 0 OR v_invoice_lines > 0 OR v_pay_batches > 0
      OR v_active_builds>0 OR v_current_scale_blocks>0 OR v_started_attempts>0 OR v_active_workbench_jobs>0 THEN

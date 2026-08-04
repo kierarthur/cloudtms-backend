@@ -41,6 +41,9 @@ DECLARE
   v_bootstrap_id uuid;
   v_is_bootstrap boolean:=false;
   v_recovery record;
+  v_claim record;
+  v_recovered_count integer:=0;
+  v_scan_limit integer:=50;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -72,7 +75,7 @@ BEGIN
     WHERE attempt.attempt_status='STARTED'
       AND clock_timestamp()>=attempt.lease_expires_at_utc+interval '15 seconds'
       AND job.status='RUNNING' AND job.economic_build_id=attempt.build_id
-    ORDER BY attempt.lease_expires_at_utc,attempt.id LIMIT 5
+    ORDER BY attempt.lease_expires_at_utc,attempt.id LIMIT v_scan_limit
   LOOP
     IF pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
       public._pay_workbench_candidate_serial_key(v_recovery.candidate_id),24062027)) THEN
@@ -87,6 +90,7 @@ BEGIN
       WHERE id=v_recovery.attempt_id AND attempt_status='STARTED'
         AND clock_timestamp()>=lease_expires_at_utc+interval '15 seconds';
       IF FOUND THEN
+        v_recovered_count:=v_recovered_count+1;
         IF v_recovery.attempt_count<v_recovery.max_attempts THEN
           UPDATE public.banking_pay_workbench_jobs SET status='QUEUED',started_at_utc=NULL,
             run_at_utc=clock_timestamp()+make_interval(secs=>LEAST(300,
@@ -102,6 +106,7 @@ BEGIN
               'code','DELIVERED_ATTEMPT_EXHAUSTED'),updated_at_utc=clock_timestamp()
           WHERE id=v_recovery.build_id AND status NOT IN ('COMPLETE','OBSOLETE');
         END IF;
+        IF v_recovered_count>=5 THEN EXIT; END IF;
       END IF;
     END IF;
   END LOOP;
@@ -110,92 +115,69 @@ BEGIN
   -- predicates.  The advisory lock is attempted only after the bounded final
   -- eligibility set, then the exact queue row is locked and rechecked.  RPC 1
   -- does not transition the job to RUNNING until its concrete build exists.
-  WITH claim_source AS MATERIALIZED (
-    SELECT job.id,job.priority,job.run_at_utc,job.created_at_utc,job.payload_json,
-      public._pay_workbench_candidate_serial_candidate_id(
-        job.candidate_id,job.payload_json) AS serial_candidate_id,
-      public._pay_workbench_candidate_serial_key(
-        public._pay_workbench_candidate_serial_candidate_id(
-          job.candidate_id,job.payload_json)) AS serial_key,
-      (
-        lower(btrim(COALESCE(job.payload_json->>'continuation','false')))
-          IN ('true','t','1','yes','y','on')
-        OR upper(btrim(COALESCE(job.payload_json->>'run_mode','')))
-          IN ('BOUNDED_CONTINUATION','CONTINUATION','STAGE_CONTINUATION')
-        OR NULLIF(btrim(COALESCE(job.payload_json->>'source_job_id',
-          job.payload_json->>'continuation_source_job_id',
-          job.payload_json->>'bounded_continuation_source_job_id','')),'') IS NOT NULL
-      ) AS is_chain_continuation
-    FROM public.banking_pay_workbench_jobs job
-    WHERE job.status='QUEUED'
-      AND job.job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'
-      AND job.run_at_utc<=v_now
-      AND COALESCE(job.attempt_count,0)<COALESCE(job.max_attempts,8)
-      AND job.candidate_id IS NOT NULL AND job.session_id IS NOT NULL
-      AND (p_session_id IS NULL OR job.session_id=p_session_id)
-      AND (p_candidate_id IS NULL OR job.candidate_id=p_candidate_id)
-      AND NOT EXISTS (
-        SELECT 1 FROM private.banking_pay_workbench_stage_attempts active_attempt
-        WHERE active_attempt.job_id=job.id AND active_attempt.attempt_status='STARTED'
-      )
-      AND (
-        (job.economic_build_id IS NULL AND (
-          (job.private_stage='BUILD_INITIALISE'
-            AND job.private_cursor_kind='BUILD_INITIALISE')
-          OR (job.private_stage IS NULL AND job.private_cursor_kind IS NULL
-            AND job.private_stage_version IS NULL)
-        ))
-        OR (job.economic_build_id IS NOT NULL
-          AND job.private_stage IS NOT NULL
-          AND job.private_stage<>'BUILD_INITIALISE'
-          AND job.private_cursor_kind IS NOT NULL
-          AND job.private_stage_version IS NOT NULL)
-      )
-    ORDER BY is_chain_continuation DESC,job.priority,job.run_at_utc,
-      job.created_at_utc,job.id
-    LIMIT 5
-  ), ranked AS MATERIALIZED (
-    SELECT claim_source.*,
-      row_number() OVER (
+  FOR v_claim IN
+    WITH claim_source AS MATERIALIZED (
+      SELECT job.id,job.priority,job.run_at_utc,job.created_at_utc,job.payload_json,
+        public._pay_workbench_candidate_serial_candidate_id(job.candidate_id,job.payload_json) AS serial_candidate_id,
+        public._pay_workbench_candidate_serial_key(
+          public._pay_workbench_candidate_serial_candidate_id(job.candidate_id,job.payload_json)) AS serial_key,
+        (lower(btrim(COALESCE(job.payload_json->>'continuation','false'))) IN ('true','t','1','yes','y','on')
+          OR upper(btrim(COALESCE(job.payload_json->>'run_mode',''))) IN
+            ('BOUNDED_CONTINUATION','CONTINUATION','STAGE_CONTINUATION')
+          OR NULLIF(btrim(COALESCE(job.payload_json->>'source_job_id',
+            job.payload_json->>'continuation_source_job_id',
+            job.payload_json->>'bounded_continuation_source_job_id','')),'') IS NOT NULL) AS is_chain_continuation
+      FROM public.banking_pay_workbench_jobs job
+      WHERE job.status='QUEUED'
+        AND job.job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'
+        AND job.run_at_utc<=v_now
+        AND COALESCE(job.attempt_count,0)<COALESCE(job.max_attempts,8)
+        AND job.candidate_id IS NOT NULL AND job.session_id IS NOT NULL
+        AND (p_session_id IS NULL OR job.session_id=p_session_id)
+        AND (p_candidate_id IS NULL OR job.candidate_id=p_candidate_id)
+        AND NOT EXISTS(SELECT 1 FROM private.banking_pay_workbench_stage_attempts active_attempt
+          WHERE active_attempt.job_id=job.id AND active_attempt.attempt_status='STARTED')
+        AND ((job.economic_build_id IS NULL AND ((job.private_stage='BUILD_INITIALISE'
+            AND job.private_cursor_kind='BUILD_INITIALISE') OR (job.private_stage IS NULL
+            AND job.private_cursor_kind IS NULL AND job.private_stage_version IS NULL)))
+          OR (job.economic_build_id IS NOT NULL AND job.private_stage IS NOT NULL
+            AND job.private_stage<>'BUILD_INITIALISE' AND job.private_cursor_kind IS NOT NULL
+            AND job.private_stage_version IS NOT NULL))
+      ORDER BY is_chain_continuation DESC,job.priority,job.run_at_utc,job.created_at_utc,job.id
+      LIMIT v_scan_limit
+    ), ranked AS MATERIALIZED (
+      SELECT claim_source.*,row_number() OVER (
         PARTITION BY COALESCE(claim_source.serial_key,claim_source.id::text)
         ORDER BY CASE WHEN claim_source.is_chain_continuation THEN 0 ELSE 1 END,
-          claim_source.priority,claim_source.run_at_utc,
-          claim_source.created_at_utc,claim_source.id
-      ) AS serial_rank
-    FROM claim_source
-  ), eligible AS MATERIALIZED (
+          claim_source.priority,claim_source.run_at_utc,claim_source.created_at_utc,claim_source.id) AS serial_rank
+      FROM claim_source
+    )
     SELECT ranked.*
     FROM ranked
-    CROSS JOIN LATERAL (
-      SELECT public._pay_workbench_candidate_serial_active_state(
-        ranked.id,ranked.serial_candidate_id,'WORKBENCH_CANDIDATE_SOURCE_BUILD',
-        ranked.payload_json,v_now) AS state_json
-    ) serial_state
+    CROSS JOIN LATERAL (SELECT public._pay_workbench_candidate_serial_active_state(
+      ranked.id,ranked.serial_candidate_id,'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+      ranked.payload_json,v_now) AS state_json) serial_state
     WHERE ranked.serial_rank=1
       AND lower(btrim(COALESCE(serial_state.state_json->>'blocked','false')))
         NOT IN ('true','t','1','yes','y','on')
-    ORDER BY ranked.priority,ranked.run_at_utc,ranked.created_at_utc,ranked.id
-    LIMIT 1
-  ), candidate_locked AS MATERIALIZED (
-    SELECT eligible.*,
-      pg_catalog.pg_try_advisory_xact_lock(
-        pg_catalog.hashtextextended(eligible.serial_key,24062027)) AS lock_granted
-    FROM eligible
-  ), selected AS MATERIALIZED (
-    SELECT id FROM candidate_locked WHERE lock_granted
-  )
-  SELECT claimed_job.* INTO v_job
-  FROM public.banking_pay_workbench_jobs claimed_job
-  JOIN selected ON selected.id=claimed_job.id
-  WHERE claimed_job.status='QUEUED'
-    AND claimed_job.run_at_utc<=v_now
-    AND COALESCE(claimed_job.attempt_count,0)<COALESCE(claimed_job.max_attempts,8)
-  ORDER BY claimed_job.priority,claimed_job.run_at_utc,
-    claimed_job.created_at_utc,claimed_job.id
-  LIMIT 1
-  FOR UPDATE OF claimed_job SKIP LOCKED;
+    ORDER BY CASE WHEN ranked.is_chain_continuation THEN 0 ELSE 1 END,
+      ranked.priority,ranked.run_at_utc,ranked.created_at_utc,ranked.id
+  LOOP
+    CONTINUE WHEN NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
+      COALESCE(v_claim.serial_key,v_claim.id::text),24062027));
+    v_job:=NULL;
+    SELECT claimed_job.* INTO v_job
+    FROM public.banking_pay_workbench_jobs claimed_job
+    WHERE claimed_job.id=v_claim.id AND claimed_job.status='QUEUED'
+      AND claimed_job.run_at_utc<=v_now
+      AND COALESCE(claimed_job.attempt_count,0)<COALESCE(claimed_job.max_attempts,8)
+      AND NOT EXISTS(SELECT 1 FROM private.banking_pay_workbench_stage_attempts active_attempt
+        WHERE active_attempt.job_id=claimed_job.id AND active_attempt.attempt_status='STARTED')
+    FOR UPDATE OF claimed_job SKIP LOCKED;
+    EXIT WHEN v_job.id IS NOT NULL;
+  END LOOP;
 
-  IF NOT FOUND THEN
+  IF v_job.id IS NULL THEN
     RETURN jsonb_build_object('ok',true,'claimed',false);
   END IF;
 

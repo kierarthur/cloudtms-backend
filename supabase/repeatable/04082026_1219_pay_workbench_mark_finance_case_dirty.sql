@@ -37,8 +37,12 @@ DECLARE
   v_internal_timesheet_id uuid := NULL::uuid;
   v_internal_finance_case_id uuid := NULL::uuid;
   v_internal_finance_component_id uuid := NULL::uuid;
+  v_internal_before_digest text := NULL::text;
+  v_internal_after_digest text := NULL::text;
+  v_expected_match_count integer := 0;
   v_internal_economic_key_type text := NULL::text;
   v_internal_economic_key_value text := NULL::text;
+  v_effect_capture_mode boolean := lower(COALESCE(current_setting('cloudtms.pay_workbench_effect_capture_mode',true),''))='capture';
 BEGIN
   PERFORM public._temp_diag_log('TEMP_TRIGGER_DIRTY_STAGE', 'TEMP_BANKING_PAY_DIRTY', NULL::text, jsonb_build_object('function_name', 'pay_workbench_mark_finance_case_dirty', 'stage', 'entry', 'trigger_table', v_trigger_table, 'trigger_op', TG_OP, 'queue_class', 'DIRTY_TRIGGER_PRIORITY'));
 
@@ -88,6 +92,17 @@ BEGIN
         NULLIF(btrim(v_old_row->>'component_key_type'),''));
       v_internal_economic_key_value:=COALESCE(NULLIF(btrim(v_new_row->>'component_key_value'),''),
         NULLIF(btrim(v_old_row->>'component_key_value'),''));
+      v_internal_before_digest:=CASE WHEN TG_OP='INSERT' THEN NULL ELSE md5((
+        v_old_row-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text) END;
+      v_internal_after_digest:=CASE
+        WHEN TG_OP='DELETE' THEN NULL
+        WHEN TG_OP='INSERT' THEN md5((v_new_row-ARRAY['id','finance_case_id',
+          'finance_component_id','created_at','created_at_utc','updated_at',
+          'updated_at_utc','event_at_utc']::text[])::text)
+        ELSE md5((v_new_row-ARRAY['created_at','created_at_utc','updated_at',
+          'updated_at_utc','event_at_utc']::text[])::text)
+      END;
 
       IF COALESCE(NULLIF(v_new_row->>'candidate_id','')::uuid,
            NULLIF(v_old_row->>'candidate_id','')::uuid,
@@ -117,17 +132,56 @@ BEGIN
            )) THEN
         RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH' USING ERRCODE='23514';
       END IF;
-      INSERT INTO pg_temp._bpay_wb_expected_effects(
-        build_token,candidate_id,timesheet_id,relation_name,operation,source_id,
-        finance_case_id,finance_component_id,economic_key_type,economic_key_value,
-        expected_before_digest,expected_after_digest,observed
-      ) VALUES(
-        v_internal_build_token,v_internal_candidate_id,v_internal_timesheet_id,v_trigger_table,TG_OP,
-        v_internal_source_id,v_internal_finance_case_id,v_internal_finance_component_id,
-        v_internal_economic_key_type,v_internal_economic_key_value,
-        CASE WHEN TG_OP='INSERT' THEN NULL ELSE md5(v_old_row::text) END,
-        CASE WHEN TG_OP='DELETE' THEN NULL ELSE md5(v_new_row::text) END,true
-      );
+      IF v_effect_capture_mode THEN
+        INSERT INTO pg_temp._bpay_wb_expected_effects(
+          build_token,candidate_id,timesheet_id,relation_name,operation,source_id,
+          finance_case_id,finance_component_id,economic_key_type,economic_key_value,
+          expected_before_digest,expected_after_digest,proposed,observed
+        ) VALUES(
+          v_internal_build_token,v_internal_candidate_id,v_internal_timesheet_id,v_trigger_table,TG_OP,
+          v_internal_source_id,v_internal_finance_case_id,v_internal_finance_component_id,
+          v_internal_economic_key_type,v_internal_economic_key_value,
+          v_internal_before_digest,v_internal_after_digest,true,false
+        );
+      ELSIF TG_OP='INSERT' THEN
+        UPDATE pg_temp._bpay_wb_expected_effects expected
+        SET source_id=v_internal_source_id,finance_case_id=v_internal_finance_case_id,
+            finance_component_id=v_internal_finance_component_id,proposed=true
+        WHERE expected.ctid=(SELECT candidate.ctid
+          FROM pg_temp._bpay_wb_expected_effects candidate
+          WHERE candidate.build_token=v_internal_build_token
+            AND candidate.candidate_id=v_internal_candidate_id
+            AND candidate.timesheet_id IS NOT DISTINCT FROM v_internal_timesheet_id
+            AND candidate.relation_name=v_trigger_table AND candidate.operation=TG_OP
+            AND candidate.proposed IS NOT TRUE AND candidate.observed IS NOT TRUE
+            AND candidate.economic_key_type IS NOT DISTINCT FROM v_internal_economic_key_type
+            AND candidate.economic_key_value IS NOT DISTINCT FROM v_internal_economic_key_value
+            AND candidate.expected_before_digest IS NULL
+            AND candidate.expected_after_digest IS NOT DISTINCT FROM v_internal_after_digest
+          ORDER BY candidate.source_id LIMIT 1);
+        GET DIAGNOSTICS v_expected_match_count=ROW_COUNT;
+        IF v_expected_match_count<>1 THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH' USING ERRCODE='23514';
+        END IF;
+      ELSE
+        UPDATE pg_temp._bpay_wb_expected_effects expected SET proposed=true
+        WHERE expected.build_token=v_internal_build_token
+          AND expected.candidate_id=v_internal_candidate_id
+          AND expected.timesheet_id IS NOT DISTINCT FROM v_internal_timesheet_id
+          AND expected.relation_name=v_trigger_table AND expected.operation=TG_OP
+          AND expected.source_id=v_internal_source_id
+          AND expected.finance_case_id IS NOT DISTINCT FROM v_internal_finance_case_id
+          AND expected.finance_component_id IS NOT DISTINCT FROM v_internal_finance_component_id
+          AND expected.economic_key_type IS NOT DISTINCT FROM v_internal_economic_key_type
+          AND expected.economic_key_value IS NOT DISTINCT FROM v_internal_economic_key_value
+          AND expected.proposed IS NOT TRUE AND expected.observed IS NOT TRUE
+          AND expected.expected_before_digest IS NOT DISTINCT FROM v_internal_before_digest
+          AND expected.expected_after_digest IS NOT DISTINCT FROM v_internal_after_digest;
+        GET DIAGNOSTICS v_expected_match_count=ROW_COUNT;
+        IF v_expected_match_count<>1 THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH' USING ERRCODE='23514';
+        END IF;
+      END IF;
       IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
     END IF;
   END IF;

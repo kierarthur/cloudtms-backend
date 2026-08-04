@@ -117,6 +117,8 @@ declare
   v_authoritative_session_valid boolean := false;
   v_observed_effect_count integer := 0;
   v_observed_effect_digest text := md5('');
+  v_effect_capture_mode boolean := lower(COALESCE(current_setting('cloudtms.pay_workbench_effect_capture_mode',true),''))='capture';
+  v_captured_effects jsonb := '[]'::jsonb;
 begin
   SELECT * INTO v_bounded_registry
   FROM private.banking_pay_workbench_candidate_scope_registry
@@ -190,7 +192,7 @@ begin
            ORDER BY fact_family,natural_key),''))
   INTO v_bounded_fact_count,v_bounded_pre_sync_digest
   FROM private.banking_pay_workbench_economic_build_facts
-  WHERE build_id=p_build_id AND fact_family<>'DEPENDENCY_EDGE';
+  WHERE build_id=p_build_id AND fact_family NOT IN ('DEPENDENCY_EDGE','EXPECTED_FINANCE_EFFECT');
 
   IF to_regclass('pg_temp._bpay_wb_expected_effects') IS NOT NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_CONFLICT' USING ERRCODE='23514';
@@ -206,6 +208,7 @@ begin
     finance_component_id uuid NULL,
     economic_key_type text NULL,
     economic_key_value text NULL,
+    proposed boolean NOT NULL DEFAULT false,
     expected_before_digest text NULL,
     expected_after_digest text NULL,
     observed boolean NOT NULL DEFAULT false,
@@ -214,6 +217,23 @@ begin
       expected_before_digest,expected_after_digest
     )
   ) ON COMMIT DROP;
+
+  IF NOT v_effect_capture_mode THEN
+    INSERT INTO pg_temp._bpay_wb_expected_effects(build_token,candidate_id,timesheet_id,
+      relation_name,operation,source_id,finance_case_id,finance_component_id,
+      economic_key_type,economic_key_value,expected_before_digest,expected_after_digest,proposed,observed)
+    SELECT v_bounded_build.build_token,fact.candidate_id,fact.timesheet_id,fact.source_relation,
+      fact.source_payload_json->>'operation',fact.source_id,fact.finance_case_id,
+      fact.finance_component_id,fact.economic_key_type,fact.economic_key_value,
+      NULLIF(fact.source_payload_json->>'expected_before_digest',''),
+      NULLIF(fact.source_payload_json->>'expected_after_digest',''),false,false
+    FROM private.banking_pay_workbench_economic_build_facts fact
+    WHERE fact.build_id=p_build_id AND fact.fact_family='EXPECTED_FINANCE_EFFECT';
+    IF COALESCE((v_bounded_build.attestation_json->>'effect_plan_sealed')::boolean,false) IS NOT TRUE
+       OR NULLIF(v_bounded_build.attestation_json->>'effect_plan_digest','') IS NULL THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_PLAN_REQUIRED' USING ERRCODE='23514';
+    END IF;
+  END IF;
 
   p_candidate_ids:=ARRAY[v_bounded_build.candidate_id];
   p_force_include_timesheet_ids:=v_bounded_scope_ids;
@@ -224,6 +244,8 @@ begin
   PERFORM set_config('cloudtms.pay_workbench_overpayment_sync_token',v_bounded_build.build_token::text,true);
   p_mismatch_choices:=(CASE WHEN jsonb_typeof(COALESCE(p_mismatch_choices,'{}'::jsonb))='object'
     THEN COALESCE(p_mismatch_choices,'{}'::jsonb) ELSE '{}'::jsonb END)
+    - 'overpayment_sync_negative_component_digest'
+    - 'overpayment_sync_settled_baseline_digest'
     ||jsonb_build_object(
       'overpayment_sync_authoritative_timesheet_scope',true,
       'overpayment_sync_authority_token',v_bounded_build.build_token::text,
@@ -571,8 +593,6 @@ begin
        OR v_session_version_text IS NULL
        OR v_session_version_text !~ '^[0-9]{1,18}$'
        OR NULLIF(BTRIM(COALESCE(p_mismatch_choices->>'overpayment_sync_scope_digest', '')), '') IS NULL
-       OR NULLIF(BTRIM(COALESCE(p_mismatch_choices->>'overpayment_sync_negative_component_digest', '')), '') IS NULL
-       OR NULLIF(BTRIM(COALESCE(p_mismatch_choices->>'overpayment_sync_settled_baseline_digest', '')), '') IS NULL
        OR UPPER(BTRIM(COALESCE(p_mismatch_choices->>'policy_x_authority_scope', ''))) <> 'PRE_DRAFT_LIVE_TRUTH' THEN
       RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_AUTHORITATIVE_SCOPE_METADATA_INVALID'
         USING ERRCODE = 'P0001',
@@ -878,8 +898,8 @@ begin
         BTRIM(entitlement_component.key_value) AS key_value,
         ROUND(COALESCE(entitlement_component.truth_ex_vat, 0), 2)::numeric(12,2) AS truth_ex_vat,
         ROUND(COALESCE(entitlement_component.baseline_ex_vat, 0), 2)::numeric(12,2) AS baseline_ex_vat
-      FROM public._pay_current_timesheet_entitlement_components(
-        COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[])
+      FROM private.pay_current_timesheet_entitlement_components_from_build_v1(
+        p_build_id,NULL::text
       ) AS entitlement_component
       WHERE NULLIF(BTRIM(COALESCE(entitlement_component.key_type, '')), '') IS NOT NULL
         AND NULLIF(BTRIM(COALESCE(entitlement_component.key_value, '')), '') IS NOT NULL
@@ -889,9 +909,13 @@ begin
         UPPER(BTRIM(reserved_component.key_type)) AS key_type,
         BTRIM(reserved_component.key_value) AS key_value,
         ROUND(COALESCE(reserved_component.amount_ex_vat, 0), 2)::numeric(12,2) AS reserved_ex_vat
-      FROM public._pay_reserved_components(
-        COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[]),
-        NULL::uuid
+      FROM (
+        SELECT fact.timesheet_id,fact.economic_key_type AS key_type,
+          fact.economic_key_value AS key_value,
+          SUM(COALESCE(fact.reserved_source_amount,0)) AS amount_ex_vat
+        FROM private.banking_pay_workbench_economic_build_facts fact
+        WHERE fact.build_id=p_build_id AND fact.fact_family='RESERVATION_COMPONENT'
+        GROUP BY fact.timesheet_id,fact.economic_key_type,fact.economic_key_value
       ) AS reserved_component
       WHERE NULLIF(BTRIM(COALESCE(reserved_component.key_type, '')), '') IS NOT NULL
         AND NULLIF(BTRIM(COALESCE(reserved_component.key_value, '')), '') IS NOT NULL
@@ -963,8 +987,12 @@ begin
             'amount_inc_vat', ROUND(COALESCE(active_settled_component.amount_inc_vat, 0), 2)
           ) ORDER BY active_settled_component.key_type, active_settled_component.key_value
         )::text, '[]')) AS active_settled_signature
-      FROM public._pay_active_settled_components(
-        ARRAY[raw_component.timesheet_id]::uuid[]
+      FROM (
+        SELECT fact.economic_key_type AS key_type,fact.economic_key_value AS key_value,
+          fact.amount_ex_vat,fact.amount_inc_vat
+        FROM private.banking_pay_workbench_economic_build_facts fact
+        WHERE fact.build_id=p_build_id AND fact.timesheet_id=raw_component.timesheet_id
+          AND fact.fact_family IN ('FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK')
       ) AS active_settled_component
     ) AS active_settled_basis ON true
     WHERE raw_component.outstanding_ex_vat < 0;
@@ -1003,18 +1031,22 @@ begin
       ) ORDER BY settled_component.timesheet_id, settled_component.key_type, settled_component.key_value
     )::text, '[]'))
     INTO v_authoritative_settled_baseline_digest
-    FROM public._pay_active_settled_components(
-      COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[])
+    FROM (
+      SELECT fact.timesheet_id,fact.economic_key_type AS key_type,
+        fact.economic_key_value AS key_value,fact.amount_ex_vat,fact.amount_inc_vat
+      FROM private.banking_pay_workbench_economic_build_facts fact
+      WHERE fact.build_id=p_build_id
+        AND fact.fact_family IN ('FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK')
     ) AS settled_component;
 
-    v_expected_negative_component_digest := NULLIF(BTRIM(COALESCE(
-      p_mismatch_choices->>'overpayment_sync_negative_component_digest',
-      ''
-    )), '');
-    v_expected_settled_baseline_digest := NULLIF(BTRIM(COALESCE(
-      p_mismatch_choices->>'overpayment_sync_settled_baseline_digest',
-      ''
-    )), '');
+    -- These two attestations are private build authority.  They are derived
+    -- only after immutable fact materialisation; caller/job values were
+    -- stripped above and can never assert them.
+    v_expected_negative_component_digest := v_authoritative_negative_component_digest;
+    v_expected_settled_baseline_digest := v_authoritative_settled_baseline_digest;
+    p_mismatch_choices:=p_mismatch_choices||jsonb_build_object(
+      'overpayment_sync_negative_component_digest',v_expected_negative_component_digest,
+      'overpayment_sync_settled_baseline_digest',v_expected_settled_baseline_digest);
 
     IF v_authoritative_negative_component_digest IS DISTINCT FROM v_expected_negative_component_digest
        OR v_authoritative_settled_baseline_digest IS DISTINCT FROM v_expected_settled_baseline_digest THEN
@@ -1834,12 +1866,8 @@ begin
     SELECT
       entitlement_component.timesheet_id,
       ROUND(COALESCE(SUM(COALESCE(entitlement_component.truth_ex_vat, 0)), 0), 2)::numeric(12,2) AS corrected_amount_ex
-    FROM public._pay_current_timesheet_entitlement_components(
-      CASE
-        WHEN COALESCE(v_authoritative_timesheet_scope, false)
-          THEN COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[])
-        ELSE ARRAY[]::uuid[]
-      END
+    FROM private.pay_current_timesheet_entitlement_components_from_build_v1(
+      p_build_id,NULL::text
     ) AS entitlement_component
     GROUP BY entitlement_component.timesheet_id
   ),
@@ -1927,7 +1955,13 @@ begin
           )
           ORDER BY active_settled_rows.key_type, active_settled_rows.key_value
         )::text, '[]')) AS active_settled_signature
-      FROM public._pay_active_settled_components(ARRAY[distinct_timesheet_rows.timesheet_id]::uuid[]) AS active_settled_rows
+      FROM (
+        SELECT fact.economic_key_type AS key_type,fact.economic_key_value AS key_value,
+          fact.amount_ex_vat,fact.amount_inc_vat
+        FROM private.banking_pay_workbench_economic_build_facts fact
+        WHERE fact.build_id=p_build_id AND fact.timesheet_id=distinct_timesheet_rows.timesheet_id
+          AND fact.fact_family IN ('FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK')
+      ) AS active_settled_rows
     ) AS active_components
       ON true
   ),
@@ -3743,7 +3777,24 @@ begin
     'cases_cleared', v_cases_cleared
   );
 
-  IF EXISTS(SELECT 1 FROM pg_temp._bpay_wb_expected_effects WHERE observed IS NOT TRUE)
+  IF v_effect_capture_mode THEN
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'candidate_id',candidate_id,'timesheet_id',timesheet_id,'relation_name',relation_name,
+      'operation',operation,'source_id',source_id,'finance_case_id',finance_case_id,
+      'finance_component_id',finance_component_id,'economic_key_type',economic_key_type,
+      'economic_key_value',economic_key_value,'expected_before_digest',expected_before_digest,
+      'expected_after_digest',expected_after_digest)
+      ORDER BY relation_name,operation,source_id),'[]'::jsonb)
+    INTO v_captured_effects FROM pg_temp._bpay_wb_expected_effects;
+    IF EXISTS(SELECT 1 FROM pg_temp._bpay_wb_expected_effects WHERE proposed IS NOT TRUE OR observed IS NOT TRUE) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_CAPTURE_INCOMPLETE' USING ERRCODE='23514';
+    END IF;
+    RETURN jsonb_build_object('ok',true,'public_result_json',jsonb_build_object(
+      'ok',true,'effect_plan_capture',true,'captured_effects',v_captured_effects),
+      'internal_result_json',jsonb_build_object('captured_effect_count',jsonb_array_length(v_captured_effects)));
+  END IF;
+
+  IF EXISTS(SELECT 1 FROM pg_temp._bpay_wb_expected_effects WHERE proposed IS NOT TRUE OR observed IS NOT TRUE)
      OR EXISTS(SELECT 1 FROM pg_temp._bpay_wb_expected_effects
        WHERE build_token IS DISTINCT FROM v_bounded_build.build_token
           OR candidate_id IS DISTINCT FROM v_bounded_build.candidate_id
@@ -3762,6 +3813,28 @@ begin
     ORDER BY relation_name,operation,source_id),''))
   INTO v_observed_effect_count,v_observed_effect_digest
   FROM pg_temp._bpay_wb_expected_effects;
+
+  -- Final freshness fence: preview helpers retained for presentation metadata
+  -- cannot publish if any build-bound economic input changed during this RPC.
+  IF EXISTS(
+      SELECT 1
+      FROM private.banking_pay_workbench_candidate_scope_registry registry
+      WHERE registry.candidate_id=v_bounded_build.candidate_id
+        AND (registry.current_build_id IS DISTINCT FROM p_build_id
+          OR registry.dirty_generation IS DISTINCT FROM v_bounded_build.captured_candidate_generation
+          OR registry.current_source_change_seq IS DISTINCT FROM v_bounded_build.source_change_seq)
+    ) OR EXISTS(
+      SELECT 1
+      FROM private.banking_pay_workbench_economic_build_scope scope_row
+      LEFT JOIN LATERAL private.pay_workbench_timesheet_input_fingerprint_v1(
+        p_build_id,v_bounded_build.candidate_id,ARRAY[scope_row.timesheet_id]
+      ) current_fingerprint ON true
+      WHERE scope_row.build_id=p_build_id
+        AND current_fingerprint.input_fingerprint IS DISTINCT FROM scope_row.captured_input_fingerprint
+      LIMIT 1
+    ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_ATTEMPT_STALE' USING ERRCODE='40001';
+  END IF;
 
   v_bounded_canonical_result:=public.pay_preview_candidate_build_canonical_lines(
     v_preview_context_json,v_bounded_build.candidate_id);
@@ -3823,6 +3896,10 @@ begin
         'version',1,'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH',
         'build_id',p_build_id,'attempt_id',p_attempt_id,'scope_count',v_bounded_scope_count,
         'fact_count',v_bounded_fact_count,'canonical_count',v_bounded_canonical_count,
+        'effect_plan_sealed',true,
+        'effect_plan_count',COALESCE((v_bounded_build.attestation_json->>'effect_plan_count')::integer,0),
+        'effect_plan_digest',v_bounded_build.attestation_json->>'effect_plan_digest',
+        'effect_plan_created_at_utc',v_bounded_build.attestation_json->'effect_plan_created_at_utc',
         'observed_finance_effect_count',v_observed_effect_count,
         'observed_finance_effect_digest',v_observed_effect_digest,
         'pre_sync_digest',v_bounded_pre_sync_digest,'post_sync_digest',v_bounded_post_sync_digest,

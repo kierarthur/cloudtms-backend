@@ -181,33 +181,60 @@ BEGIN
       ORDER BY 1 LIMIT v_limit+1;
     ELSIF v_family IN (8,9) THEN
       INSERT INTO pg_temp._bpay_wb_closure_edge_page_v2
-      SELECT (CASE WHEN v_family=8 THEN 'CASE:' ELSE 'COMPONENT:' END)||component_row.id::text,
-             component_row.linked_timesheet_id,
-             CASE WHEN v_family=8 THEN 'FINANCE_CASE_LINK' ELSE 'FINANCE_COMPONENT_LINK' END,
-             component_row.id
-      FROM public.pay_finance_case_components AS frontier_component
-      JOIN public.pay_finance_case_components AS component_row
-        ON component_row.finance_case_id=frontier_component.finance_case_id
-      WHERE frontier_component.linked_timesheet_id=v_frontier
-        AND component_row.linked_timesheet_id IS NOT NULL
-        AND component_row.linked_timesheet_id<>v_frontier
-        AND (v_last_key IS NULL OR (CASE WHEN v_family=8 THEN 'CASE:' ELSE 'COMPONENT:' END)||component_row.id::text>v_last_key)
-      ORDER BY 1 LIMIT v_limit+1;
+      WITH frontier_cases AS (
+        SELECT DISTINCT frontier_component.finance_case_id
+        FROM public.pay_finance_case_components AS frontier_component
+        WHERE frontier_component.linked_timesheet_id=v_frontier
+          AND frontier_component.finance_case_id IS NOT NULL
+      ), authoritative_edges AS (
+        SELECT DISTINCT
+          (CASE WHEN v_family=8 THEN 'CASE:' ELSE 'COMPONENT:' END)||component_row.id::text AS source_key,
+          component_row.linked_timesheet_id AS target_timesheet_id,
+          CASE WHEN v_family=8 THEN 'FINANCE_CASE_LINK' ELSE 'FINANCE_COMPONENT_LINK' END AS edge_kind,
+          component_row.id AS edge_source_id
+        FROM frontier_cases
+        JOIN public.pay_finance_case_components AS component_row
+          ON component_row.finance_case_id=frontier_cases.finance_case_id
+        WHERE component_row.linked_timesheet_id IS NOT NULL
+          AND component_row.linked_timesheet_id<>v_frontier
+      )
+      SELECT source_key,target_timesheet_id,edge_kind,edge_source_id
+      FROM authoritative_edges
+      WHERE v_last_key IS NULL OR source_key>v_last_key
+      ORDER BY source_key LIMIT v_limit+1;
     ELSIF v_family=10 THEN
       INSERT INTO pg_temp._bpay_wb_closure_edge_page_v2
-      SELECT 'RESERVATION:'||reservation_row.id::text||':'||linked_component.linked_timesheet_id::text,
-             linked_component.linked_timesheet_id,'RESERVATION_LINK',reservation_row.id
-      FROM public.pay_finance_case_components AS frontier_component
-      JOIN public.pay_advance_reservations AS reservation_row
-        ON reservation_row.finance_case_id=frontier_component.finance_case_id
-        OR reservation_row.finance_component_id=frontier_component.id
-      JOIN public.pay_finance_case_components AS linked_component
-        ON linked_component.id=reservation_row.finance_component_id
-      WHERE frontier_component.linked_timesheet_id=v_frontier
-        AND linked_component.linked_timesheet_id IS NOT NULL
-        AND linked_component.linked_timesheet_id<>v_frontier
-        AND (v_last_key IS NULL OR 'RESERVATION:'||reservation_row.id::text||':'||linked_component.linked_timesheet_id::text>v_last_key)
-      ORDER BY 1 LIMIT v_limit+1;
+      WITH frontier_components AS (
+        SELECT DISTINCT frontier_component.id,frontier_component.finance_case_id
+        FROM public.pay_finance_case_components AS frontier_component
+        WHERE frontier_component.linked_timesheet_id=v_frontier
+      ), authoritative_reservation_ids AS (
+        SELECT reservation_row.id
+        FROM public.pay_advance_reservations AS reservation_row
+        JOIN (SELECT DISTINCT finance_case_id FROM frontier_components WHERE finance_case_id IS NOT NULL) AS frontier_cases
+          ON frontier_cases.finance_case_id=reservation_row.finance_case_id
+        UNION
+        SELECT reservation_row.id
+        FROM public.pay_advance_reservations AS reservation_row
+        JOIN frontier_components ON frontier_components.id=reservation_row.finance_component_id
+      ), authoritative_edges AS (
+        SELECT DISTINCT
+          'RESERVATION:'||reservation_row.id::text||':'||linked_component.linked_timesheet_id::text AS source_key,
+          linked_component.linked_timesheet_id AS target_timesheet_id,
+          'RESERVATION_LINK'::text AS edge_kind,
+          reservation_row.id AS edge_source_id
+        FROM authoritative_reservation_ids
+        JOIN public.pay_advance_reservations AS reservation_row
+          ON reservation_row.id=authoritative_reservation_ids.id
+        JOIN public.pay_finance_case_components AS linked_component
+          ON linked_component.id=reservation_row.finance_component_id
+        WHERE linked_component.linked_timesheet_id IS NOT NULL
+          AND linked_component.linked_timesheet_id<>v_frontier
+      )
+      SELECT source_key,target_timesheet_id,edge_kind,edge_source_id
+      FROM authoritative_edges
+      WHERE v_last_key IS NULL OR source_key>v_last_key
+      ORDER BY source_key LIMIT v_limit+1;
     END IF;
 
     FOR v_row IN SELECT * FROM pg_temp._bpay_wb_closure_edge_page_v2 ORDER BY source_key
@@ -516,7 +543,9 @@ BEGIN
         'cursor_kind','WORKSPACE_FACT','cursor_version',1,
         'build_id',p_build_id,'candidate_id',v_candidate_id,
         'dependency_unit_key',NULL,'fact_family','FROZEN_SETTLED_COMPONENT',
-        'page_number',1,'last_source_key',NULL
+        'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
+        'cumulative_fact_count',0,
+        'cumulative_digest',md5('BPAY_FACT_STREAM_V1')
       )
     END;
     UPDATE private.banking_pay_workbench_economic_builds SET

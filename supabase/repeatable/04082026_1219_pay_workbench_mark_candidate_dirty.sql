@@ -98,6 +98,11 @@ DECLARE
   v_internal_candidate_id uuid := NULL::uuid;
   v_internal_source_id uuid := NULL::uuid;
   v_internal_timesheet_id uuid := NULL::uuid;
+  v_internal_before_digest text := NULL::text;
+  v_internal_after_digest text := NULL::text;
+  v_expected_match_count integer := 0;
+  v_delete_owner_candidate_id uuid := NULL::uuid;
+  v_effect_capture_mode boolean := lower(COALESCE(current_setting('cloudtms.pay_workbench_effect_capture_mode',true),''))='capture';
 BEGIN
   PERFORM public._temp_diag_log(
     'TEMP_TRIGGER_DIRTY_STAGE',
@@ -121,9 +126,38 @@ BEGIN
     v_old_row := to_jsonb(OLD);
   END IF;
 
+
+  IF TG_OP='DELETE' AND pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1') IS NOT NULL THEN
+    IF v_trigger_table='candidates' AND NULLIF(v_old_row->>'id','')~*v_uuid_re THEN
+      v_delete_owner_candidate_id:=(v_old_row->>'id')::uuid;
+    ELSIF NULLIF(v_old_row->>'candidate_id','')~*v_uuid_re THEN
+      v_delete_owner_candidate_id:=(v_old_row->>'candidate_id')::uuid;
+    ELSIF NULLIF(COALESCE(v_old_row->>'timesheet_id',v_old_row->>'linked_timesheet_id'),'')~*v_uuid_re THEN
+      SELECT COALESCE(financial.candidate_id,contract_row.candidate_id)
+      INTO v_delete_owner_candidate_id
+      FROM (SELECT COALESCE(NULLIF(v_old_row->>'timesheet_id','')::uuid,
+             NULLIF(v_old_row->>'linked_timesheet_id','')::uuid) AS timesheet_id) owner_key
+      LEFT JOIN public.timesheets_financials financial
+        ON financial.timesheet_id=owner_key.timesheet_id AND financial.is_current
+      LEFT JOIN public.timesheets timesheet_row ON timesheet_row.timesheet_id=owner_key.timesheet_id
+      LEFT JOIN public.contracts contract_row ON contract_row.id=timesheet_row.contract_id
+      LIMIT 1;
+    ELSIF NULLIF(v_old_row->>'contract_id','')~*v_uuid_re THEN
+      SELECT contract_row.candidate_id INTO v_delete_owner_candidate_id
+      FROM public.contracts contract_row WHERE contract_row.id=(v_old_row->>'contract_id')::uuid;
+    ELSIF NULLIF(v_old_row->>'finance_case_id','')~*v_uuid_re THEN
+      SELECT finance_case.candidate_id INTO v_delete_owner_candidate_id
+      FROM public.pay_advances finance_case WHERE finance_case.id=(v_old_row->>'finance_case_id')::uuid;
+    ELSIF NULLIF(v_old_row->>'finance_component_id','')~*v_uuid_re THEN
+      SELECT component.candidate_id INTO v_delete_owner_candidate_id
+      FROM public.pay_finance_case_components component
+      WHERE component.id=(v_old_row->>'finance_component_id')::uuid;
+    END IF;
+  END IF;
+
   IF TG_OP='DELETE'
      AND pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1') IS NOT NULL
-     AND NULLIF(v_old_row->>'id','') ~* v_uuid_re
+     AND v_delete_owner_candidate_id IS NOT NULL
      AND EXISTS(
        SELECT 1 FROM pg_catalog.pg_class relation
        WHERE relation.oid=pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1')
@@ -140,7 +174,7 @@ BEGIN
          'suppress:boolean']
      AND EXISTS(
        SELECT 1 FROM pg_temp._bpay_candidate_delete_context_v1 context
-       WHERE context.candidate_id=(v_old_row->>'id')::uuid AND context.suppress
+        WHERE context.candidate_id=v_delete_owner_candidate_id AND context.suppress
          AND context.candidate_lock_key=pg_catalog.hashtextextended(
            public._pay_workbench_candidate_serial_key(context.candidate_id),24062027)
          AND context.backend_pid=pg_catalog.pg_backend_pid()
@@ -177,6 +211,17 @@ BEGIN
         NULLIF(v_old_row->>'id','')::uuid);
       v_internal_timesheet_id:=COALESCE(NULLIF(v_new_row->>'linked_timesheet_id','')::uuid,
         NULLIF(v_old_row->>'linked_timesheet_id','')::uuid);
+      v_internal_before_digest:=CASE WHEN TG_OP='INSERT' THEN NULL ELSE md5((
+        v_old_row-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
+          'event_at_utc']::text[])::text) END;
+      v_internal_after_digest:=CASE
+        WHEN TG_OP='DELETE' THEN NULL
+        WHEN TG_OP='INSERT' THEN md5((v_new_row-ARRAY['id','finance_case_id',
+          'finance_component_id','created_at','created_at_utc','updated_at',
+          'updated_at_utc','event_at_utc']::text[])::text)
+        ELSE md5((v_new_row-ARRAY['created_at','created_at_utc','updated_at',
+          'updated_at_utc','event_at_utc']::text[])::text)
+      END;
       IF v_internal_source_id IS NULL
          OR COALESCE(NULLIF(v_new_row->>'candidate_id','')::uuid,
               NULLIF(v_old_row->>'candidate_id','')::uuid)
@@ -189,16 +234,48 @@ BEGIN
          )) THEN
         RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH' USING ERRCODE='23514';
       END IF;
-      INSERT INTO pg_temp._bpay_wb_expected_effects(
-        build_token,candidate_id,timesheet_id,relation_name,operation,source_id,
-        finance_case_id,finance_component_id,economic_key_type,economic_key_value,
-        expected_before_digest,expected_after_digest,observed
-      ) VALUES(
-        v_internal_build_token,v_internal_candidate_id,v_internal_timesheet_id,
-        v_trigger_table,TG_OP,v_internal_source_id,v_internal_source_id,NULL,NULL,NULL,
-        CASE WHEN TG_OP='INSERT' THEN NULL ELSE md5(v_old_row::text) END,
-        CASE WHEN TG_OP='DELETE' THEN NULL ELSE md5(v_new_row::text) END,true
-      );
+      IF v_effect_capture_mode THEN
+        INSERT INTO pg_temp._bpay_wb_expected_effects(
+          build_token,candidate_id,timesheet_id,relation_name,operation,source_id,
+          finance_case_id,finance_component_id,economic_key_type,economic_key_value,
+          expected_before_digest,expected_after_digest,proposed,observed
+        ) VALUES(
+          v_internal_build_token,v_internal_candidate_id,v_internal_timesheet_id,
+          v_trigger_table,TG_OP,v_internal_source_id,v_internal_source_id,NULL,NULL,NULL,
+          v_internal_before_digest,v_internal_after_digest,true,false
+        );
+      ELSIF TG_OP='INSERT' THEN
+        UPDATE pg_temp._bpay_wb_expected_effects expected
+        SET source_id=v_internal_source_id,finance_case_id=v_internal_source_id,proposed=true
+        WHERE expected.ctid=(SELECT candidate.ctid
+          FROM pg_temp._bpay_wb_expected_effects candidate
+          WHERE candidate.build_token=v_internal_build_token
+            AND candidate.candidate_id=v_internal_candidate_id
+            AND candidate.timesheet_id IS NOT DISTINCT FROM v_internal_timesheet_id
+            AND candidate.relation_name=v_trigger_table AND candidate.operation=TG_OP
+            AND candidate.proposed IS NOT TRUE AND candidate.observed IS NOT TRUE
+            AND candidate.expected_before_digest IS NULL
+            AND candidate.expected_after_digest IS NOT DISTINCT FROM v_internal_after_digest
+          ORDER BY candidate.source_id LIMIT 1);
+        GET DIAGNOSTICS v_expected_match_count=ROW_COUNT;
+        IF v_expected_match_count<>1 THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH' USING ERRCODE='23514';
+        END IF;
+      ELSE
+        UPDATE pg_temp._bpay_wb_expected_effects expected SET proposed=true
+        WHERE expected.build_token=v_internal_build_token
+          AND expected.candidate_id=v_internal_candidate_id
+          AND expected.timesheet_id IS NOT DISTINCT FROM v_internal_timesheet_id
+          AND expected.relation_name=v_trigger_table AND expected.operation=TG_OP
+          AND expected.source_id=v_internal_source_id
+          AND expected.proposed IS NOT TRUE AND expected.observed IS NOT TRUE
+          AND expected.expected_before_digest IS NOT DISTINCT FROM v_internal_before_digest
+          AND expected.expected_after_digest IS NOT DISTINCT FROM v_internal_after_digest;
+        GET DIAGNOSTICS v_expected_match_count=ROW_COUNT;
+        IF v_expected_match_count<>1 THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH' USING ERRCODE='23514';
+        END IF;
+      END IF;
       IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
     END IF;
   END IF;

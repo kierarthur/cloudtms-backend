@@ -8,6 +8,29 @@ CREATE OR REPLACE FUNCTION private.pay_current_timesheet_entitlement_components_
  STABLE SECURITY INVOKER
  SET search_path TO ''
 AS $function$
+SELECT fact.timesheet_id,
+  fact.economic_key_type AS key_type,
+  fact.economic_key_value AS key_value,
+  round(sum(coalesce(fact.truth_ex_vat,0)),2) AS truth_ex_vat,
+  round(sum(coalesce(fact.baseline_ex_vat,0)),2) AS baseline_ex_vat,
+  round(sum(coalesce(fact.truth_inc_vat,0)),2) AS truth_inc_vat,
+  round(sum(coalesce(fact.baseline_inc_vat,0)),2) AS baseline_inc_vat
+FROM private.banking_pay_workbench_economic_build_facts AS fact
+JOIN private.banking_pay_workbench_economic_builds AS build ON build.id=fact.build_id
+WHERE fact.build_id=p_build_id
+  AND fact.fact_family='ENTITLEMENT_COMPONENT'
+  AND fact.timesheet_id IS NOT NULL
+  AND fact.economic_key_type IS NOT NULL
+  AND fact.economic_key_value IS NOT NULL
+  AND (p_dependency_unit_key IS NULL OR fact.dependency_unit_key=p_dependency_unit_key)
+  AND build.dependency_closure_sealed_at_utc IS NOT NULL
+  AND build.dependency_edge_stream_complete
+  AND build.edge_tag_stream_complete
+GROUP BY fact.timesheet_id,fact.economic_key_type,fact.economic_key_value
+ORDER BY fact.timesheet_id,fact.economic_key_type,fact.economic_key_value;
+
+/* Retained installed formula reference; fact collection invokes the installed
+   live helper before sealing. Authoritative reconciliation never executes it.
 with
 inp as (
   select coalesce(array_agg(scope_row.timesheet_id order by scope_row.stable_ordinal),array[]::uuid[]) as ts_ids
@@ -555,10 +578,7 @@ where all_keys.timesheet_id is not null
   and all_keys.key_value is not null
   and btrim(all_keys.key_value) <> ''
   and not (all_keys.key_type = 'TS_DAY' and all_keys.key_value !~ '^\d{4}-\d{2}-\d{2}$')
-order by
-  all_keys.timesheet_id,
-  all_keys.key_type,
-  all_keys.key_value;
+*/
 $function$
 ;
 

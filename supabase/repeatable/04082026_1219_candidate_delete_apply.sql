@@ -83,7 +83,7 @@ BEGIN
         'candidate_delete_operation_id',v_delete_operation_id,
         'detached_private_stage',private_stage,
         'detached_private_cursor_kind',private_cursor_kind)
-  WHERE candidate_id=p_candidate_id AND status IN ('SUCCEEDED','FAILED');
+  WHERE candidate_id=p_candidate_id AND status IN ('SUCCEEDED','FAILED','DEAD');
 
   -- Non-blocking dependents (verified tables)
   DELETE FROM public.candidate_job_titles cjt WHERE cjt.candidate_id = p_candidate_id;

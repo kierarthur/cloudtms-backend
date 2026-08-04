@@ -702,12 +702,18 @@ BEGIN
     v_private_cursor_kind:=upper(NULLIF(v_cursor_json->>'cursor_kind',''));
     v_private_stage_version:=COALESCE((v_cursor_json->>'cursor_version')::integer,1);
     v_private_cursor_start_hash:=md5(v_cursor_json::text);
-    IF v_economic_build_id IS NULL OR v_cursor_json IS NULL
+    IF v_economic_build_id IS NULL OR v_cursor_json IS NULL OR v_private_cursor_kind IS NULL
        OR v_private_stage NOT IN ('PREPARE_SCOPE','DEPENDENCY_CLOSURE','WORKSPACE_FACT',
          'RECONCILE_EXECUTE','SOURCE_PUBLISH','BOOTSTRAP_DISCOVERY','BUILD_CLEANUP')
-       OR v_private_cursor_kind IS DISTINCT FROM (CASE v_private_stage
-         WHEN 'PREPARE_SCOPE' THEN 'SCOPE_SELECT'
-         ELSE v_private_stage END)
+       OR NOT (CASE v_private_stage
+         WHEN 'PREPARE_SCOPE' THEN v_private_cursor_kind IN ('SCOPE_SELECT','SEED_SCOPE_SEAL')
+         WHEN 'DEPENDENCY_CLOSURE' THEN v_private_cursor_kind IN ('DEPENDENCY_CLOSURE','DEPENDENCY_SCOPE_SEAL')
+         WHEN 'WORKSPACE_FACT' THEN v_private_cursor_kind='WORKSPACE_FACT'
+         WHEN 'RECONCILE_EXECUTE' THEN v_private_cursor_kind='RECONCILE_EXECUTE'
+         WHEN 'SOURCE_PUBLISH' THEN v_private_cursor_kind='SOURCE_PUBLISH'
+         WHEN 'BOOTSTRAP_DISCOVERY' THEN v_private_cursor_kind='BOOTSTRAP_DISCOVERY'
+         WHEN 'BUILD_CLEANUP' THEN v_private_cursor_kind='BUILD_CLEANUP'
+         ELSE false END)
        OR NULLIF(v_cursor_json->>'build_id','')::uuid IS DISTINCT FROM v_economic_build_id
        OR NULLIF(v_cursor_json->>'candidate_id','')::uuid IS DISTINCT FROM p_candidate_id
        OR v_private_stage_version<1 THEN
