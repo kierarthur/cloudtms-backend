@@ -61,19 +61,18 @@ test('post-cancel complex candidates receive one full live rebuild with no targe
   assert.doesNotMatch(refreshRepeatableSql, /selection_state\s*=\s*'READY'/);
 });
 
-test('Worker cancellation route uses only the completing and cancel-safe RPCs', () => {
+test('Worker cancellation route starts the bounded asynchronous correction and never calls compatibility or Workbench RPCs', () => {
   const handler = sliceBetween(
     workerSource,
-    'async function handleBankingPayBatchCancel',
-    'function buildBankingPayOperationPublicPayload'
+    'async function handleBankingPayBatchCancelV1',
+    'async function handleBankingPayPaymentStatusResolveV1'
   );
 
-  assert.match(handler, /sbRpc\(env, 'pay_payment_cancel_not_sent_and_recalculate_complete_v1'/);
-  assert.match(handler, /sbRpc\(env, 'pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1'/);
-  assert.doesNotMatch(handler, /sbRpc\(env, 'pay_payment_cancel_not_sent_and_recalculate',/);
-  assert.doesNotMatch(handler, /sbRpc\(env, 'pay_workbench_patch_preview_after_batch_mutation',/);
-  assert.match(handler, /patch_existing_session_only: true/);
-  assert.match(handler, /source_session_discarded: false/);
+  assert.match(handler, /sbRpc\(env, 'pay_batch_cancel'/);
+  assert.match(handler, /enqueueBankingPayCancellationResult/);
+  assert.match(handler, /return bankingPayCancellationResponse\(env, req, 202/);
+  assert.doesNotMatch(handler, /pay_payment_cancel_not_sent_and_recalculate/);
+  assert.doesNotMatch(handler, /pay_workbench_/);
 });
 
 test('Policy X remains frozen during cancel and switches to live truth only after cancel', () => {

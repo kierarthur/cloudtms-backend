@@ -64624,7 +64624,7 @@ RETURNS TABLE (
 LANGUAGE plpgsql
 SECURITY DEFINER
 VOLATILE
-SET search_path TO 'public', 'pg_temp'
+SET search_path TO 'pg_catalog', 'private', 'extensions', 'pg_temp'
 AS $function$
 DECLARE
     v_now timestamptz := now();
@@ -64649,7 +64649,7 @@ BEGIN
     ) AS supplied_operation_type;
 
     IF COALESCE(array_length(v_operation_types, 1), 0) = 0 AND v_allow_backend_runner_owned IS TRUE THEN
-      v_operation_types := ARRAY['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE']::text[];
+      v_operation_types := ARRAY['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION']::text[];
     END IF;
 
     WITH claimable AS (
@@ -64688,6 +64688,20 @@ BEGIN
           OR (
             upper(BTRIM(COALESCE(operation_row.status, ''))) = 'WAITING'
             AND upper(BTRIM(COALESCE(operation_row.runner_state, ''))) = 'RUNNABLE'
+          )
+          OR (
+            upper(BTRIM(COALESCE(operation_row.status, ''))) = 'WAITING'
+            AND upper(BTRIM(COALESCE(operation_row.runner_state, ''))) = 'WAITING_CHILD'
+            AND p_operation_id IS NOT NULL
+            AND v_allow_backend_runner_owned IS TRUE
+            AND COALESCE(operation_row.progress_json->>'child_operation_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            AND EXISTS (
+              SELECT 1
+              FROM public.banking_pay_operations AS child_operation
+              WHERE child_operation.id = (operation_row.progress_json->>'child_operation_id')::uuid
+                AND child_operation.root_operation_id = operation_row.id
+                AND upper(BTRIM(COALESCE(child_operation.status, ''))) IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED')
+            )
           )
           OR (
             upper(BTRIM(COALESCE(operation_row.status, ''))) = 'WAITING_PROVIDER'
@@ -64870,6 +64884,8 @@ BEGIN
           WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'RUNNING'
            AND upper(BTRIM(COALESCE(v_visible.runner_state, ''))) NOT IN ('RUNNABLE', 'RUNNING', 'IDLE') THEN 'RUNNING_NOT_RUNNABLE'
           WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING'
+           AND upper(BTRIM(COALESCE(v_visible.runner_state, ''))) = 'WAITING_CHILD' THEN 'WAITING_CHILD_NOT_TERMINAL'
+          WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING'
            AND upper(BTRIM(COALESCE(v_visible.runner_state, ''))) <> 'RUNNABLE' THEN 'WAITING_NOT_RUNNABLE'
           WHEN upper(BTRIM(COALESCE(v_visible.status, ''))) = 'WAITING_PROVIDER'
            AND v_allow_backend_runner_owned IS NOT TRUE THEN 'WAITING_PROVIDER_BACKEND_RUNNER_REQUIRED'
@@ -64974,6 +64990,13 @@ BEGIN
       NULL::timestamptz;
 END;
 $function$;
+
+ALTER FUNCTION public.banking_pay_operation_claim_next(uuid,uuid,text,integer,boolean,text[]) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.banking_pay_operation_claim_next(uuid,uuid,text,integer,boolean,text[]) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.banking_pay_operation_claim_next(uuid,uuid,text,integer,boolean,text[]) FROM anon;
+REVOKE ALL ON FUNCTION public.banking_pay_operation_claim_next(uuid,uuid,text,integer,boolean,text[]) FROM authenticated;
+REVOKE ALL ON FUNCTION public.banking_pay_operation_claim_next(uuid,uuid,text,integer,boolean,text[]) FROM service_role;
+GRANT EXECUTE ON FUNCTION public.banking_pay_operation_claim_next(uuid,uuid,text,integer,boolean,text[]) TO service_role;
 
 
 
@@ -172396,7 +172419,7 @@ CREATE OR REPLACE FUNCTION public.banking_pay_operation_release_lease(p_operatio
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'public'
+ SET search_path TO 'pg_catalog', 'private', 'extensions', 'pg_temp'
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -172605,6 +172628,36 @@ BEGIN
     v_next_run_after_utc := NULL::timestamptz;
     v_next_requires_user_action := true;
     v_next_resume_reason := COALESCE(NULLIF(BTRIM(COALESCE(p_resume_reason, '')), ''), 'AWAITING_PAYMENT_AUTHORISATION');
+  ELSIF v_release_state IN ('WAITING_CHILD', 'WAIT_CHILD') THEN
+    IF COALESCE(p_progress_patch_json->>'child_operation_id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'BANKING_PAY_OPERATION_CHILD_ID_REQUIRED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'BANKING_PAY_OPERATION_CHILD_ID_REQUIRED',
+                'operation_id', p_operation_id::text
+              )::text;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_operations AS child_operation
+      WHERE child_operation.id = (p_progress_patch_json->>'child_operation_id')::uuid
+        AND child_operation.root_operation_id = p_operation_id
+    ) THEN
+      RAISE EXCEPTION 'BANKING_PAY_OPERATION_CHILD_MISMATCH'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'BANKING_PAY_OPERATION_CHILD_MISMATCH',
+                'operation_id', p_operation_id::text,
+                'child_operation_id', p_progress_patch_json->>'child_operation_id'
+              )::text;
+    END IF;
+
+    v_next_status := 'WAITING';
+    v_next_runner_state := 'WAITING_CHILD';
+    v_next_run_after_utc := NULL::timestamptz;
+    v_next_requires_user_action := false;
+    v_next_resume_reason := COALESCE(NULLIF(BTRIM(COALESCE(p_resume_reason, '')), ''), 'AWAITING_CHILD_OPERATION');
   ELSIF v_release_state IN ('WAITING_PROVIDER', 'WAIT_PROVIDER') THEN
     v_next_status := 'WAITING_PROVIDER';
     v_next_runner_state := 'WAITING_PROVIDER';
@@ -172792,6 +172845,13 @@ BEGIN
   );
 END;
 $function$;
+
+ALTER FUNCTION public.banking_pay_operation_release_lease(uuid,text,text,integer,jsonb,jsonb,jsonb,text,uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.banking_pay_operation_release_lease(uuid,text,text,integer,jsonb,jsonb,jsonb,text,uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.banking_pay_operation_release_lease(uuid,text,text,integer,jsonb,jsonb,jsonb,text,uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.banking_pay_operation_release_lease(uuid,text,text,integer,jsonb,jsonb,jsonb,text,uuid) FROM authenticated;
+REVOKE ALL ON FUNCTION public.banking_pay_operation_release_lease(uuid,text,text,integer,jsonb,jsonb,jsonb,text,uuid) FROM service_role;
+GRANT EXECUTE ON FUNCTION public.banking_pay_operation_release_lease(uuid,text,text,integer,jsonb,jsonb,jsonb,text,uuid) TO service_role;
 
 
 CREATE OR REPLACE FUNCTION public.pay_batch_timesheet_summary_lightweight_v1(p_filters jsonb DEFAULT '{}'::jsonb)

@@ -23866,12 +23866,12 @@ async function handleBankingPayBatchRetryBlockedFunds(env, req, user, payBatchId
     const operationId = trimText(payload.operation_id || payload.operationId || payload.id || nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id || nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id);
     return uuidRe.test(operationId) ? operationId : null;
   };
-  const scheduleRetryBlockedFundsDrainBestEffort = (operationPayload) => {
+  const scheduleRetryBlockedFundsDrainBestEffort = async (operationPayload) => {
     try {
       if (typeof scheduleBankingPayOperationDrain !== 'function') return null;
       const operationId = resolveRetryOperationIdForImmediateDrain(operationPayload);
       if (!operationId) return null;
-      return scheduleBankingPayOperationDrain(env, ctx, {
+      return await scheduleBankingPayOperationDrain(env, ctx, {
         operationId,
         operationType: 'PAYMENT_RETRY_BLOCKED_FUNDS',
         payBatchId: id,
@@ -30835,12 +30835,12 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     const idValue = trimStr(payload.operation_id || payload.operationId || payload.id || nestedOperation.operation_id || nestedOperation.operationId || nestedOperation.id || nestedRawOperation.operation_id || nestedRawOperation.operationId || nestedRawOperation.id);
     return uuidRe.test(idValue) ? idValue : null;
   };
-  const scheduleDraftCreateDrainBestEffort = (operationPayload) => {
+  const scheduleDraftCreateDrainBestEffort = async (operationPayload) => {
     try {
       if (typeof scheduleBankingPayOperationDrain !== 'function') return null;
       const operationId = resolveOperationIdForImmediateDrain(operationPayload);
       if (!operationId) return null;
-      return scheduleBankingPayOperationDrain(env, ctx, {
+      return await scheduleBankingPayOperationDrain(env, ctx, {
         operationId,
         operationType: 'DRAFT_CREATE',
         actorUserId,
@@ -34469,6 +34469,7 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
   };
   const phaseResolution = resolveCurrentPhase(operation.phase, progressJson);
   const currentPhase = phaseResolution.phase;
+  const continuationEnabled = readBankingPayContinuationFlag(env) === true && (options.continuationEnabled === true || options.continuation_enabled === true);
   const lockOwner = trimStr(options.lockOwner || options.leaseOwner || operation.lease_owner || operation.locked_by || operation.lock_owner);
   const payChannelScope = upper(inputJson.pay_channel_scope || inputJson.payChannelScope || 'ALL') || 'ALL';
   const scheduleKind = upper(inputJson.schedule_kind || inputJson.scheduleKind || (inputJson.scheduled_at_utc ? 'SCHEDULED' : 'IMMEDIATE')) || 'IMMEDIATE';
@@ -38879,7 +38880,47 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
           );
         }
       }
-      const settlementAdvance = await advanceSettlementChildUntilWaitingOrTerminal(settlementOperationId, 3);
+      let queuedContinuationChildRow = null;
+      if (continuationEnabled) {
+        const queuedChildRow = await fetchOperationRowById(settlementOperationId);
+        queuedContinuationChildRow = queuedChildRow;
+        const queuedChildStatus = upper(queuedChildRow.status || queuedChildRow.operation_status);
+        if (!['COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED'].includes(queuedChildStatus)) {
+          return moreWork('WAIT_LOCAL_SETTLEMENT', {
+            status_text: 'Local settlement is continuing in the background.',
+            settlement_operation_id: settlementOperationId,
+            active_child_operation_id: settlementOperationId,
+            active_child_operation_type: 'PAYMENT_SETTLEMENT',
+            continuation_waiting_for_child: true,
+            runner_state: 'WAITING_CHILD',
+            child_operation_id: settlementOperationId,
+            child_operation_type: 'PAYMENT_SETTLEMENT',
+            child_phase: queuedChildRow.phase || null,
+            root_operation_id: operationId,
+            continuation: {
+              required: true,
+              operation_id: settlementOperationId,
+              operation_type: 'PAYMENT_SETTLEMENT',
+              pay_batch_id: payBatchId,
+              root_operation_id: operationId,
+              successor_relation: 'CHILD',
+              phase: queuedChildRow.phase || null,
+              run_after_utc: queuedChildRow.run_after_utc || null,
+              reason: 'PAYMENT_SETTLEMENT_CHILD_READY',
+              requires_user_action: false,
+              terminal: false
+            }
+          }, 0, 'PAYMENT_SETTLEMENT_CHILD_QUEUED');
+        }
+      }
+      const settlementAdvance = continuationEnabled
+        ? {
+            ...safeObject(queuedContinuationChildRow?.progress_json),
+            ...safeObject(queuedContinuationChildRow?.result_json),
+            ...safeObject(queuedContinuationChildRow),
+            terminal: ['COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED'].includes(upper(queuedContinuationChildRow?.status || queuedContinuationChildRow?.operation_status))
+          }
+        : await advanceSettlementChildUntilWaitingOrTerminal(settlementOperationId, 3);
       const settlementStatus = upper(settlementAdvance.status || settlementAdvance.operation_status);
       const settlementPhase = upper(settlementAdvance.phase || settlementAdvance.operation_phase);
       if (settlementAdvance.terminal === true && settlementStatus === 'COMPLETE') {
@@ -39836,7 +39877,7 @@ async function advanceBankingPayRunnableOperations(env, opts = {}) {
   const operationTypes = Array.isArray(opts.operationTypes)
     ? opts.operationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean)
     : (Array.isArray(opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : []);
-  const backendRunnerOperationTypes = operationTypes.length ? Array.from(new Set(operationTypes)) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE'];
+  const backendRunnerOperationTypes = operationTypes.length ? Array.from(new Set(operationTypes)) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION'];
   const draftCreateMaxPhaseUnits = clampInteger(opts.draftCreateMaxPhaseUnits != null ? opts.draftCreateMaxPhaseUnits : (opts.draft_create_max_phase_units != null ? opts.draft_create_max_phase_units : 20), 20, 1, 50);
   const draftCreateMaxChunksPerLease = clampInteger(opts.draftCreateMaxChunksPerLease != null ? opts.draftCreateMaxChunksPerLease : (opts.draft_create_max_chunks_per_lease != null ? opts.draft_create_max_chunks_per_lease : opts.draftCreateMaxChunksPerCall != null ? opts.draftCreateMaxChunksPerCall : opts.draft_create_max_chunks_per_call != null ? opts.draft_create_max_chunks_per_call : 10), 10, 1, 50);
   const safeDraftCreateRequestBudgetMs = Math.max(1000, Math.min(25000, (lockSeconds * 1000) - 5000, maxRuntimeMs - 500));
@@ -40014,6 +40055,23 @@ async function handleBankingPayOperationResume(env, req, user, operationId) {
       })));
     }
 
+    if (readBankingPayContinuationFlag(env) === true) {
+      const enqueue = await enqueueBankingPayOperationContinuations(env, [{
+        required: true,
+        operation_id: id,
+        operation_type: currentPayload.operation_type || currentRow.operation_type,
+        pay_batch_id: currentPayload.pay_batch_id || currentRow.pay_batch_id || null,
+        root_operation_id: currentPayload.root_operation_id || currentRow.root_operation_id || null,
+        successor_relation: 'SELF',
+        phase: currentPayload.phase || currentRow.phase || null,
+        run_after_utc: null,
+        reason: 'USER_RESUME_NUDGE',
+        requires_user_action: false,
+        terminal: false
+      }], { source: 'handleBankingPayOperationResume' });
+      return withCORS(env, req, ok(Object.assign({}, currentPayload, { resumed: true, advanced: false, nudge_only: true, continuation_enqueued: enqueue.enqueued_count === 1 })));
+    }
+
     const result = await claimAndAdvanceOneBankingPayOperation(env, {
       operationId: id,
       actorUserId: user.id,
@@ -40043,6 +40101,254 @@ async function handleBankingPayOperationResume(env, req, user, operationId) {
       : { ok: false, error: String(e && e.message || e || 'Operation could not be resumed') };
     return withCORS(env, req, new Response(JSON.stringify(friendly), { status: Number(friendly.http_status || friendly.status || 500) || 500, headers: JSON_HEADERS }));
   }
+}
+
+function readBankingPayContinuationFlag(env) {
+  const raw = String(env && env.BANKING_PAY_CONTINUATION_ENABLED != null ? env.BANKING_PAY_CONTINUATION_ENABLED : '').trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(raw)) return true;
+  if (['false', '0', 'no', 'off'].includes(raw)) return false;
+  return null;
+}
+
+function stableBankingPayContinuationJson(value) {
+  const seen = new WeakSet();
+  const normalise = (input) => {
+    if (input === null || input === undefined) return null;
+    if (typeof input !== 'object') return input;
+    if (seen.has(input)) return '[Circular]';
+    seen.add(input);
+    try {
+      if (Array.isArray(input)) return input.map(normalise);
+      const out = {};
+      for (const key of Object.keys(input).sort()) out[key] = normalise(input[key]);
+      return out;
+    } finally {
+      seen.delete(input);
+    }
+  };
+  return JSON.stringify(normalise(value));
+}
+
+async function sha256BankingPayContinuationValue(value) {
+  const bytes = new TextEncoder().encode(stableBankingPayContinuationJson(value));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256BankingPayRawText(value) {
+  const bytes = new TextEncoder().encode(String(value == null ? '' : value));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function buildBankingPayContinuationProgressValue(operationType, value) {
+  const row = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  const progress = row.progress_json && typeof row.progress_json === 'object' && !Array.isArray(row.progress_json)
+    ? row.progress_json
+    : (row.progress && typeof row.progress === 'object' && !Array.isArray(row.progress) ? row.progress : {});
+  const result = row.result_json && typeof row.result_json === 'object' && !Array.isArray(row.result_json)
+    ? row.result_json
+    : (row.result && typeof row.result === 'object' && !Array.isArray(row.result) ? row.result : {});
+  const first = (...values) => values.find((entry) => entry !== undefined && entry !== null && entry !== '') ?? null;
+  const pick = (...keys) => {
+    const out = {};
+    for (const key of keys) out[key] = first(row[key], progress[key], result[key]);
+    return out;
+  };
+  const type = String(operationType || row.operation_type || '').trim().toUpperCase();
+  const universal = {
+    operation_type: type,
+    status: first(row.status, progress.status),
+    phase: first(row.phase, progress.phase, progress.next_phase, progress.next_required_phase),
+    runner_state: first(row.runner_state, progress.runner_state),
+    requires_user_action: first(row.requires_user_action, progress.requires_user_action, false),
+    run_after_utc: first(row.run_after_utc, progress.run_after_utc),
+    total_units: first(row.total_units, progress.total_units),
+    completed_units: first(row.completed_units, progress.completed_units),
+    failed_units: first(row.failed_units, progress.failed_units),
+    current_chunk_index: first(row.current_chunk_index, progress.current_chunk_index),
+    chunk_count: first(row.chunk_count, progress.chunk_count)
+  };
+  const typeSpecific = type === 'DRAFT_CREATE'
+    ? pick('scope_cursor', 'scope_hash', 'chunk_cursor', 'chunk_result_hash', 'created_pay_batch_count', 'post_create_refresh_cursor', 'post_create_refresh_count')
+    : (type === 'PAYMENT_EXECUTE' || type === 'PAYMENT_RETRY_BLOCKED_FUNDS')
+      ? pick('freshness_scope_hash', 'freshness_result_hash', 'checked_count', 'prepared_item_count', 'prepared_scope_hash', 'provider_submit_state', 'provider_request_id', 'provider_transaction_id', 'settlement_operation_id', 'remittance_operation_id', 'child_operation_id', 'child_status', 'continuation_waiting_for_child')
+      : type === 'PAYMENT_CORRECTION'
+        ? pick('request_status', 'page_sequence_no', 'page_hash', 'selection_hash', 'selected_candidate_count', 'materialised_work_count', 'terminal_work_count', 'finalise_sequence_no', 'final_result_hash', 'refresh_sequence_no', 'workbench_refresh_status')
+        : type === 'PAYMENT_SETTLEMENT'
+          ? pick('settlement_scope_terminal_count', 'settlement_amount', 'settlement_result_hash', 'settlement_status', 'root_handoff_state')
+          : type === 'REMITTANCE_QUEUE'
+            ? pick('remittance_scope_cursor', 'queued_count', 'sent_count', 'failed_count', 'outbox_result_hash', 'root_handoff_state')
+            : {};
+  return { universal, type_specific: typeSpecific };
+}
+
+async function buildBankingPayContinuationProgressWitness(operationType, value) {
+  return sha256BankingPayContinuationValue(buildBankingPayContinuationProgressValue(operationType, value));
+}
+
+function buildBankingPayContinuationMessage(descriptor, sourceOverride) {
+  const source = descriptor && typeof descriptor === 'object' && !Array.isArray(descriptor) ? descriptor : {};
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const operationId = String(source.operation_id || source.operationId || '').trim().toLowerCase();
+  const operationType = String(source.operation_type || source.operationType || '').trim().toUpperCase();
+  const relation = String(source.successor_relation || source.successorRelation || 'SELF').trim().toUpperCase();
+  const allowedTypes = new Set(['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION']);
+  const allowedRelations = new Set(['SELF', 'CHILD', 'ROOT', 'NONE']);
+  if (!uuidRe.test(operationId)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_OPERATION_ID_INVALID'), { code: 'BANKING_PAY_CONTINUATION_OPERATION_ID_INVALID' });
+  if (!allowedTypes.has(operationType)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_OPERATION_TYPE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_OPERATION_TYPE_INVALID' });
+  if (!allowedRelations.has(relation)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_RELATION_INVALID'), { code: 'BANKING_PAY_CONTINUATION_RELATION_INVALID' });
+  const optionalUuid = (value) => {
+    const text = String(value || '').trim().toLowerCase();
+    return text && uuidRe.test(text) ? text : null;
+  };
+  const runAfterText = String(source.run_after_utc || source.runAfterUtc || '').trim();
+  const runAfterMs = runAfterText ? Date.parse(runAfterText) : NaN;
+  const message = {
+    version: 1,
+    operation_id: operationId,
+    operation_type: operationType,
+    pay_batch_id: optionalUuid(source.pay_batch_id || source.payBatchId),
+    root_operation_id: optionalUuid(source.root_operation_id || source.rootOperationId),
+    successor_relation: relation,
+    phase: String(source.phase || '').trim().toUpperCase().slice(0, 80) || null,
+    run_after_utc: Number.isFinite(runAfterMs) ? new Date(runAfterMs).toISOString() : null,
+    source: String(sourceOverride || source.source || 'BANKING_PAY_CONTINUATION').trim().slice(0, 120),
+    enqueued_at_utc: new Date().toISOString()
+  };
+  const encoded = new TextEncoder().encode(JSON.stringify(message));
+  if (encoded.byteLength > 2048) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_MESSAGE_TOO_LARGE'), { code: 'BANKING_PAY_CONTINUATION_MESSAGE_TOO_LARGE' });
+  return message;
+}
+
+async function enqueueBankingPayOperationContinuations(env, descriptors, options = {}) {
+  const flag = readBankingPayContinuationFlag(env);
+  if (flag !== true) {
+    if (flag === false) return { ok: true, enabled: false, enqueued_count: 0, skipped: true, reason: 'BANKING_PAY_CONTINUATION_DISABLED' };
+    throw Object.assign(new Error('BANKING_PAY_CONTINUATION_FLAG_INVALID'), { code: 'BANKING_PAY_CONTINUATION_FLAG_INVALID' });
+  }
+  if (!env || !env.BANKING_PAY_CONTINUATION_QUEUE || typeof env.BANKING_PAY_CONTINUATION_QUEUE.send !== 'function') {
+    throw Object.assign(new Error('BANKING_PAY_CONTINUATION_QUEUE_BINDING_MISSING'), { code: 'BANKING_PAY_CONTINUATION_QUEUE_BINDING_MISSING' });
+  }
+  const sourceRows = Array.isArray(descriptors) ? descriptors : [descriptors];
+  if (sourceRows.length > 50) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_BATCH_LIMIT_EXCEEDED'), { code: 'BANKING_PAY_CONTINUATION_BATCH_LIMIT_EXCEEDED' });
+  const messages = [];
+  const seen = new Set();
+  for (const descriptor of sourceRows) {
+    if (!descriptor || descriptor.required === false || String(descriptor.successor_relation || '').toUpperCase() === 'NONE') continue;
+    const message = buildBankingPayContinuationMessage(descriptor, options.source);
+    const dedupeKey = `${message.operation_id}:${message.successor_relation}`;
+    if (seen.has(dedupeKey)) continue;
+    seen.add(dedupeKey);
+    const targetMs = message.run_after_utc ? Date.parse(message.run_after_utc) : NaN;
+    const delaySeconds = Number.isFinite(targetMs) ? Math.max(0, Math.min(86400, Math.ceil((targetMs - Date.now()) / 1000))) : 0;
+    messages.push({ body: message, delaySeconds });
+  }
+  if (!messages.length) return { ok: true, enabled: true, enqueued_count: 0, skipped: true, reason: 'NO_CONTINUATION_REQUIRED' };
+  if (messages.length === 1) {
+    await env.BANKING_PAY_CONTINUATION_QUEUE.send(messages[0].body, messages[0].delaySeconds > 0 ? { delaySeconds: messages[0].delaySeconds } : undefined);
+  } else {
+    await env.BANKING_PAY_CONTINUATION_QUEUE.sendBatch(messages);
+  }
+  return { ok: true, enabled: true, enqueued_count: messages.length, operation_ids: messages.map((entry) => entry.body.operation_id) };
+}
+
+async function readBankingPayContinuationOperation(env, operationId) {
+  const id = String(operationId || '').trim();
+  const res = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${encodeURIComponent(id)}&select=id,operation_type,status,phase,actor_user_id,pay_batch_id,root_operation_id,input_json,config_json,progress_json,result_json,error_json,total_units,completed_units,failed_units,current_chunk_index,chunk_count,run_after_utc,lease_owner,lease_expires_at_utc,requires_user_action,runner_state,resume_reason,attempt_count,max_attempts&limit=1`, false);
+  return res && Array.isArray(res.rows) && res.rows[0] ? res.rows[0] : null;
+}
+
+function deriveBankingPayContinuationDescriptor(operationRow, workerResult = null) {
+  const row = operationRow && typeof operationRow === 'object' && !Array.isArray(operationRow) ? operationRow : {};
+  const result = workerResult && typeof workerResult === 'object' && !Array.isArray(workerResult) ? workerResult : {};
+  const operation = result.operation && typeof result.operation === 'object' && !Array.isArray(result.operation) ? result.operation : {};
+  const progress = row.progress_json && typeof row.progress_json === 'object' && !Array.isArray(row.progress_json) ? row.progress_json : {};
+  const explicit = result.continuation && typeof result.continuation === 'object' && !Array.isArray(result.continuation)
+    ? result.continuation
+    : (operation.continuation && typeof operation.continuation === 'object' && !Array.isArray(operation.continuation) ? operation.continuation : null);
+  if (explicit) return Object.assign({ required: explicit.required !== false }, explicit);
+  const operationId = String(row.id || row.operation_id || operation.operation_id || result.operation_id || '').trim();
+  const operationType = String(row.operation_type || operation.operation_type || '').trim().toUpperCase();
+  const status = String(row.status || operation.status || '').trim().toUpperCase();
+  const runnerState = String(row.runner_state || operation.runner_state || progress.runner_state || '').trim().toUpperCase();
+  const terminal = ['COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED'].includes(status) || operation.terminal === true;
+  const rootOperationId = String(row.root_operation_id || operation.root_operation_id || progress.root_operation_id || '').trim();
+  if (terminal && ['PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE'].includes(operationType) && rootOperationId) {
+    return { required: true, operation_id: rootOperationId, operation_type: 'PAYMENT_EXECUTE', pay_batch_id: row.pay_batch_id || operation.pay_batch_id || null, root_operation_id: rootOperationId, successor_relation: 'ROOT', phase: null, run_after_utc: null, reason: `${operationType}_TERMINAL_ROOT_WAKE`, requires_user_action: false, terminal: false };
+  }
+  if (terminal || row.requires_user_action === true || ['WAITING_USER', 'WAITING_USER_REVIEW', 'WAITING_AUTHORISATION'].includes(runnerState)) {
+    return { required: false, operation_id: operationId, operation_type: operationType, successor_relation: 'NONE', terminal: true };
+  }
+  if (progress.continuation_waiting_for_child === true && progress.child_operation_id) {
+    return { required: true, operation_id: progress.child_operation_id, operation_type: progress.child_operation_type || 'PAYMENT_SETTLEMENT', pay_batch_id: row.pay_batch_id || null, root_operation_id: operationId, successor_relation: 'CHILD', phase: progress.child_phase || null, run_after_utc: null, reason: 'CHILD_OPERATION_READY', requires_user_action: false, terminal: false };
+  }
+  if (status === 'WAITING_PROVIDER' && !row.run_after_utc) return { required: false, operation_id: operationId, operation_type: operationType, successor_relation: 'NONE', terminal: false, reason: 'EVENT_ONLY_PROVIDER_WAIT' };
+  return { required: true, operation_id: operationId, operation_type: operationType, pay_batch_id: row.pay_batch_id || null, root_operation_id: rootOperationId || null, successor_relation: 'SELF', phase: row.phase || operation.phase || null, run_after_utc: row.run_after_utc || operation.run_after_utc || null, reason: 'MORE_WORK', requires_user_action: false, terminal: false };
+}
+
+async function processBankingPayContinuationMessage(env, message, options = {}) {
+  const parsed = buildBankingPayContinuationMessage(message && message.body !== undefined ? message.body : message, 'QUEUE_DELIVERY');
+  const actorUserId = String(env && (env.PAY_ACTOR_USER_ID || env.INVOICE_ACTOR_USER_ID || env.TSFIN_ACTOR_USER_ID) || '').trim();
+  if (!actorUserId) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_ACTOR_MISSING'), { code: 'BANKING_PAY_CONTINUATION_ACTOR_MISSING' });
+  const attempts = Number(message && message.attempts) || 1;
+  const lockOwner = `banking-pay-continuation:${parsed.operation_id}:${attempts}`;
+  const workerResult = await claimAndAdvanceOneBankingPayOperation(env, {
+    operationId: parsed.operation_id,
+    operationTypes: [parsed.operation_type],
+    actorUserId,
+    allowBackendRunnerOwned: true,
+    lockOwner,
+    lockSeconds: 60,
+    source: 'processBankingPayContinuationMessage',
+    continuationEnabled: true,
+    draftCreateMaxPhaseUnits: 1,
+    draftCreateMaxChunksPerCall: 1
+  });
+  const current = await readBankingPayContinuationOperation(env, parsed.operation_id);
+  if (!current) return { ok: true, terminal: true, successor: null, worker_result: workerResult };
+  const successor = deriveBankingPayContinuationDescriptor(current, workerResult);
+  return { ok: workerResult && workerResult.ok !== false, operation: current, worker_result: workerResult, successor };
+}
+
+async function handleBankingPayContinuationQueue(batch, env) {
+  const messages = batch && Array.isArray(batch.messages) ? batch.messages : [];
+  const flag = readBankingPayContinuationFlag(env);
+  for (const message of messages) {
+    try {
+      buildBankingPayContinuationMessage(message.body, 'QUEUE_DELIVERY_VALIDATION');
+      if (flag === false) {
+        message.ack();
+        continue;
+      }
+      if (flag !== true) {
+        message.retry({ delaySeconds: 5 });
+        continue;
+      }
+      const processed = await processBankingPayContinuationMessage(env, message);
+      if (processed.successor && processed.successor.required !== false) {
+        await enqueueBankingPayOperationContinuations(env, [processed.successor], { source: 'QUEUE_SUCCESSOR' });
+      }
+      message.ack();
+    } catch (error) {
+      console.warn('[banking-pay-continuation] delivery failed', { code: String(error && (error.code || error.message) || 'CONTINUATION_DELIVERY_FAILED').slice(0, 160), attempts: Number(message && message.attempts) || null });
+      message.retry({ delaySeconds: 5 });
+    }
+  }
+}
+
+async function recoverStrandedBankingPayContinuations(env, options = {}) {
+  const retryEnvelopeSeconds = (10 * 5) + 1 + 15;
+  const staleFloor = Math.max(90, retryEnvelopeSeconds);
+  const payload = await sbRpc(env, 'banking_pay_operation_continuation_recovery_due_v1', {
+    p_limit: Math.max(1, Math.min(25, Number(options.limit) || 25)),
+    p_stale_after_seconds: staleFloor,
+    p_operation_types: ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION']
+  }, { routeClass: 'OPERATION_GET', purpose: 'BANKING_PAY_CONTINUATION_RECOVERY_DUE', timeoutMs: 8000 });
+  const value = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+  const rows = value && Array.isArray(value.continuations) ? value.continuations : [];
+  const enqueue = await enqueueBankingPayOperationContinuations(env, rows.slice(0, 25), { source: 'STRANDED_RECOVERY' });
+  return { ok: true, stale_floor_seconds: staleFloor, recovered_count: rows.length, enqueue };
 }
 
 async function bankingPayOperationsCronTick(env, opts = {}) {
@@ -40084,7 +40390,7 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
 
   const backendRunnerOperationTypes = Array.isArray(opts.operationTypes)
     ? opts.operationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean)
-    : (Array.isArray(opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE']);
+    : (Array.isArray(opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION']);
 
   const summary = {
     ok: true,
@@ -40093,7 +40399,7 @@ async function bankingPayOperationsCronTick(env, opts = {}) {
     browser_session_required: false,
     backend_runner_owned_scope: true,
     operation_scope: 'BANKING_PAY_BACKEND_RUNNER_OWNED',
-    operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE'])),
+    operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION'])),
     result: null,
     errors: []
   };
@@ -40392,7 +40698,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     const inputObject = asPlainObject(claimObject.input_json || claimObject.inputJson || claimObject.input);
     const operationTypeForActor = firstText(claimObject.operation_type || claimObject.operationType).toUpperCase();
     const operationActorUserId = firstText(claimObject.actor_user_id, claimObject.actorUserId, inputObject.actor_user_id, inputObject.actorUserId);
-    const operationActorBusinessTypes = new Set(['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE']);
+    const operationActorBusinessTypes = new Set(['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION']);
     const businessActorUserId = operationActorBusinessTypes.has(operationTypeForActor)
       ? firstText(operationActorUserId, sourceOptions.businessActorUserId, sourceOptions.business_actor_user_id, runnerActorUserId)
       : firstText(sourceOptions.businessActorUserId, sourceOptions.business_actor_user_id, operationActorUserId, runnerActorUserId);
@@ -40414,7 +40720,9 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       'run_after_delay_seconds', 'runAfterDelaySeconds', 'release_state', 'releaseState',
       'operation_release_state', 'operationReleaseState', 'retryable_remittance_error', 'remittance_retry',
       'retryable_error', 'retry_schedule_seconds', 'retry_index', 'retry_waits_elapsed',
-      'next_retry_after_seconds', 'transient_error_code', 'error_code', 'error_status', 'error_message'
+      'next_retry_after_seconds', 'transient_error_code', 'error_code', 'error_status', 'error_message',
+      'continuation_waiting_for_child', 'child_operation_id', 'child_operation_type', 'child_phase',
+      'root_operation_id', 'root_handoff_state'
     ];
     for (const key of copyKeys) {
       if (source[key] !== undefined && source[key] !== null && source[key] !== '') out[key] = source[key];
@@ -40891,7 +41199,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     ? opts.operationTypes
     : (Array.isArray(opts.operation_types) ? opts.operation_types : []);
   const operationTypes = suppliedOperationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean);
-  const backendRunnerOperationTypes = operationTypes.length ? Array.from(new Set(operationTypes)) : (allowBackendRunnerOwned ? ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE'] : []);
+  const backendRunnerOperationTypes = operationTypes.length ? Array.from(new Set(operationTypes)) : (allowBackendRunnerOwned ? ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION'] : []);
 
   const claimArgs = {
     p_operation_id: operationId || null,
@@ -40964,6 +41272,10 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     backendRunner: true,
     businessActorUserId: opts.businessActorUserId || opts.business_actor_user_id || null
   });
+  const continuationMode = opts.continuationEnabled === true || opts.continuation_enabled === true;
+  const preContinuationWitness = continuationMode
+    ? await buildBankingPayContinuationProgressWitness(operationType, claim)
+    : null;
   const safeDraftBudgetMs = Math.max(1000, Math.min(25000, (lockSeconds * 1000) - 5000));
   const draftCreateMaxPhaseUnits = operationType === 'DRAFT_CREATE'
     ? clampInteger(opts.draftCreateMaxPhaseUnits != null ? opts.draftCreateMaxPhaseUnits : (opts.draft_create_max_phase_units != null ? opts.draft_create_max_phase_units : 20), 20, 1, 50)
@@ -41015,6 +41327,8 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       request_budget: draftCreateRequestBudgetMs,
       requestBudgetMs: draftCreateRequestBudgetMs,
       request_budget_ms: draftCreateRequestBudgetMs,
+      continuationEnabled: continuationMode,
+      continuation_enabled: continuationMode,
       backendOwned: operationType === 'DRAFT_CREATE' ? true : undefined,
       backend_owned: operationType === 'DRAFT_CREATE' ? true : undefined
     });
@@ -41049,6 +41363,20 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
 
   const publicAdvanced = publicPayload(advancedPayload || claim);
   const advancedRaw = asPlainObject(advancedPayload);
+  const advancedProgressForChildWait = asPlainObject(publicAdvanced.progress || publicAdvanced.progress_json || advancedRaw.progress || advancedRaw.progress_json);
+  const advancedChildOperationId = firstText(
+    publicAdvanced.child_operation_id,
+    advancedRaw.child_operation_id,
+    advancedProgressForChildWait.child_operation_id
+  );
+  if (
+    continuationMode
+    && !advanceError
+    && upperText(publicAdvanced.runner_state || advancedRaw.runner_state || advancedProgressForChildWait.runner_state) === 'WAITING_CHILD'
+    && isUuid(advancedChildOperationId)
+  ) {
+    releaseState = 'WAITING_CHILD';
+  }
   const innerRecoveryPersistFailed = ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType)
     && !advanceError
     && (
@@ -41236,6 +41564,32 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     }
   }
   const retryReleaseStates = new Set(['WAITING_RETRY', 'RETRYABLE_ERROR', 'RETRYABLE_FAILURE', 'RETRY', 'TRANSIENT_ERROR']);
+  const postContinuationWitness = continuationMode
+    ? await buildBankingPayContinuationProgressWitness(operationType, Object.assign({}, claim, publicAdvanced, {
+      progress_json: Object.assign({}, claimProgressJson, asPlainObject(publicAdvanced.progress))
+    }))
+    : null;
+  const previousContinuationWitness = firstText(claimProgressJson.continuation_progress_witness);
+  const previousNoProgressCount = Number.isFinite(Number(claimProgressJson.continuation_no_progress_count))
+    ? Math.max(0, Math.trunc(Number(claimProgressJson.continuation_no_progress_count)))
+    : 0;
+  const advancedRunAfterMs = parseTimeMs(publicAdvanced.run_after_utc || publicAdvanced.runAfterUtc || asPlainObject(publicAdvanced.progress).run_after_utc);
+  const legitimateFutureWait = advancedRunAfterMs !== null && advancedRunAfterMs > Date.now();
+  const immediateMoreWork = releaseState === 'MORE_WORK' && legitimateFutureWait !== true;
+  const witnessChanged = continuationMode && postContinuationWitness
+    ? (!previousContinuationWitness || previousContinuationWitness !== postContinuationWitness || preContinuationWitness !== postContinuationWitness)
+    : false;
+  const continuationNoProgressCount = continuationMode
+    ? (witnessChanged ? 0 : (immediateMoreWork ? previousNoProgressCount + 1 : previousNoProgressCount))
+    : previousNoProgressCount;
+  if (continuationMode && immediateMoreWork && continuationNoProgressCount >= 5) {
+    releaseState = 'REVIEW_REQUIRED';
+    publicAdvanced.status = 'REVIEW_REQUIRED';
+    publicAdvanced.runner_state = 'WAITING_USER_REVIEW';
+    publicAdvanced.requires_user_action = true;
+    publicAdvanced.review_required = true;
+    publicAdvanced.resume_reason = 'CONTINUATION_NO_SEMANTIC_PROGRESS';
+  }
   const progressPatch = compactProgressPatch(publicAdvanced, {
     source,
     lock_owner: lockOwner,
@@ -41253,6 +41607,20 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     operation_actor_user_id: actorContext.operationActorUserId || null,
     business_actor_user_id: actorContext.businessActorUserId || null
   });
+  if (continuationMode) {
+    progressPatch.continuation_progress_witness = postContinuationWitness;
+    progressPatch.continuation_no_progress_count = continuationNoProgressCount;
+    progressPatch.continuation_last_no_progress_code = continuationNoProgressCount > 0 ? 'NO_SEMANTIC_PROGRESS' : null;
+    if (witnessChanged) progressPatch.continuation_witness_changed_at_utc = new Date().toISOString();
+    if (releaseState === 'REVIEW_REQUIRED' && continuationNoProgressCount >= 5) {
+      progressPatch.status = 'REVIEW_REQUIRED';
+      progressPatch.runner_state = 'WAITING_USER_REVIEW';
+      progressPatch.requires_user_action = true;
+      progressPatch.review_required = true;
+      progressPatch.resume_reason = 'CONTINUATION_NO_SEMANTIC_PROGRESS';
+      progressPatch.last_message = 'Automatic continuation stopped after five deliveries without durable semantic progress.';
+    }
+  }
   if (retryReleaseStates.has(releaseState)) {
     const rawRetryStatus = upperText(progressPatch.status || publicAdvanced.status || advancedPayload?.status || progressPatch.release_state || releaseState);
     if (rawRetryStatus && rawRetryStatus !== 'RUNNING') progressPatch.retry_status = progressPatch.retry_status || rawRetryStatus;
@@ -41435,6 +41803,10 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
 
   if (advanceError && opts.throwOnAdvanceError === true && preProviderReleaseRetryable !== true) throw advanceError;
 
+  const currentAfterRelease = continuationMode ? await readBankingPayContinuationOperation(env, claimedOperationId) : null;
+  const continuation = continuationMode && currentAfterRelease
+    ? deriveBankingPayContinuationDescriptor(currentAfterRelease, { operation: publicAdvanced })
+    : null;
   return {
     ok: advanceError && preProviderReleaseRetryable !== true ? false : true,
     claimed: true,
@@ -41452,7 +41824,8 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     durable_recovery_state: retryableRecoveryPersistence,
     release_failure_classification: preProviderReleaseRetryable === true ? 'RETRYABLE_ORCHESTRATION' : (releaseFailureDiagnostic ? releaseFailureDiagnostic.classification || null : null),
     last_rpc_failure: releaseFailureDiagnostic,
-    provider_evidence_state: providerEvidenceState
+    provider_evidence_state: providerEvidenceState,
+    continuation
   };
 }
 
@@ -41750,14 +42123,20 @@ async function handleBankingPayCancelNotSentAndRecalculate(env, req, user, payBa
   };
 
   try {
-    const rpcResult = unwrapRpcPayload(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate', {
+    const rpcResult = unwrapRpcPayload(await sbRpc(env, 'pay_payment_correction_request_start', {
       p_pay_batch_id: id,
-      p_selection_json: selectionJson,
+      p_selection_json: {
+        ...selectionJson,
+        command: 'PREPARE',
+        requested_action: 'PRE_BANK_CANCEL',
+        idempotency_key: idempotencyKey
+      },
       p_actor_user_id: String(user.id),
       p_reason: reason,
-      p_idempotency_key: idempotencyKey,
-      p_confirmation_json: confirmationJson
-    }), 'pay_payment_cancel_not_sent_and_recalculate');
+      p_source_bank_event_id: null,
+      p_auto_requested: false,
+      p_accepted_resolution_json: confirmationJson
+    }), 'pay_payment_correction_request_start');
 
     const liveSignal = await readLiveSignal(body);
     const alertSummary = await readGroupedAlertSummary();
@@ -42189,14 +42568,22 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
   );
 
   try {
-    const rpcResult = unwrapRpcPayload(await sbRpc(env, 'pay_payment_confirm_no_money_and_unwind', {
-      p_pay_batch_id: id,
-      p_selection_json: selectionJson,
+    const rpcResult = unwrapRpcPayload(await sbRpc(env, 'pay_bank_event_ingest', {
+      p_event_json: {
+        ...confirmationJson,
+        pay_batch_id: id,
+        event_source: 'MANUAL_EVIDENCE',
+        resolution: 'CONFIRMED_NOT_PAID',
+        suppress_auto_unwind: true,
+        selection_json: selectionJson,
+        idempotency_key: idempotencyKey
+      },
       p_actor_user_id: String(user.id),
-      p_confirmation_json: confirmationJson,
-      p_reason: reason,
-      p_idempotency_key: idempotencyKey
-    }), 'pay_payment_confirm_no_money_and_unwind');
+      p_ingest_options_json: {
+        suppress_auto_unwind: true,
+        reason
+      }
+    }), 'pay_bank_event_ingest');
 
     const workbenchRefreshNudge = maybeNudgeNoMoneyWorkbenchRefresh(rpcResult);
     const liveSignal = await readLiveSignal(body);
@@ -43108,7 +43495,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
     try {
       const operationId = resolveOperationIdForImmediateDrain(operationPayload);
       if (operationId && typeof scheduleBankingPayOperationDrain === 'function') {
-        scheduleBankingPayOperationDrain(env, ctx, {
+        await scheduleBankingPayOperationDrain(env, ctx, {
           operationId,
           operationType: retryBlockedFunds ? 'PAYMENT_RETRY_BLOCKED_FUNDS' : 'PAYMENT_EXECUTE',
           payBatchId: id,
@@ -43784,7 +44171,7 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
     if (typeof scheduleBankingPayOperationDrain === 'function') {
       const operationId = resolveOperationIdForImmediateDrain(operationPayload);
       if (operationId) {
-        drainScheduleResult = scheduleBankingPayOperationDrain(env, ctx, {
+        drainScheduleResult = await scheduleBankingPayOperationDrain(env, ctx, {
           operationId,
           operationType: 'PAYMENT_SETTLEMENT',
           payBatchId: payBatchIdText,
@@ -46086,7 +46473,7 @@ async function handleBankingPayBatchSchedule(env, req, user, payBatchId, ctx) {
         || ''
       ).trim();
       if (operationId && typeof scheduleBankingPayOperationDrain === 'function') {
-        scheduleBankingPayOperationDrain(env, ctx, {
+        await scheduleBankingPayOperationDrain(env, ctx, {
           operationId,
           operationType: 'PAYMENT_EXECUTE',
           payBatchId: id,
@@ -47331,7 +47718,7 @@ async function handleBankingPayAuthTokenAction(env, req, user, ctx) {
           if (typeof scheduleBankingPayOperationDrain === 'function') {
             const operationId = resolveOperationId(operationPayload);
             if (operationId) {
-              operationDrainScheduleResult = scheduleBankingPayOperationDrain(env, ctx, {
+              operationDrainScheduleResult = await scheduleBankingPayOperationDrain(env, ctx, {
                 operationId,
                 operationType: 'PAYMENT_EXECUTE',
                 payBatchId,
@@ -47757,7 +48144,7 @@ async function handleBankingPayBatchAuthAction(env, req, user, payBatchId, ctx) 
           if (typeof scheduleBankingPayOperationDrain === 'function') {
             const operationId = resolveOperationId(operationPayload);
             if (operationId) {
-              operationDrainScheduleResult = scheduleBankingPayOperationDrain(env, ctx, {
+              operationDrainScheduleResult = await scheduleBankingPayOperationDrain(env, ctx, {
                 operationId,
                 operationType: 'PAYMENT_EXECUTE',
                 payBatchId: id,
@@ -48304,6 +48691,440 @@ function sanitizePaymentIssueDisplayMessage(value, fallback) {
   if (code.includes('REASON') || lower.includes('missing reason') || lower.includes('reason is required')) return 'Reason is required.';
   if (/(correction|unwind|reverse|reversal|settled reversal|no-money|movement classification|work item|frozen artifact|economic artifact|pre-bank|post-draft)/i.test(lower)) return safeFallback;
   return raw || safeFallback;
+}
+
+function unwrapBankingPayCancellationRpc(value, key = '') {
+  let payload = value;
+  if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+  if (payload && typeof payload === 'object' && key && Object.prototype.hasOwnProperty.call(payload, key)) payload = payload[key];
+  if (Array.isArray(payload) && payload.length === 1) payload = payload[0];
+  return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+}
+
+function bankingPayCancellationResponse(env, req, status, payload) {
+  return withCORS(env, req, new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+  }));
+}
+
+function bankingPayCancellationError(env, req, error, fallbackCode = 'PAYMENT_CORRECTION_FAILED') {
+  const raw = error && typeof error === 'object' ? error : {};
+  const code = String(raw.code || raw.error_code || raw.json?.code || raw.json?.error_code || fallbackCode).trim().toUpperCase();
+  const message = sanitizePaymentIssueDisplayMessage(error, 'CloudTMS could not complete this payment action.');
+  const conflict = /(STALE|BLOCK|CONFLICT|ALREADY|STATE|PAID|SETTLED|EXPIRED|MISMATCH)/.test(code);
+  const denied = /(PERMISSION|UNAUTHORI|ACTOR)/.test(code);
+  return bankingPayCancellationResponse(env, req, denied ? 403 : (conflict ? 409 : 400), { ok: false, code, error_code: code, message, error: message });
+}
+
+async function requireBankingPayCancellationActor(env, req, user) {
+  const actorUserId = String(user?.id || '').trim();
+  if (!/^[0-9a-f-]{36}$/i.test(actorUserId)) return { ok: false, response: bankingPayCancellationResponse(env, req, 401, { ok: false, code: 'UNAUTHORIZED', message: 'Unauthorized' }) };
+  try {
+    const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(actorUserId)}&select=id,is_active,role,payment_authoriser,payment_golden_key&limit=1`, false);
+    const row = Array.isArray(rows) ? rows[0] : null;
+    if (!row || row.is_active !== true) return { ok: false, response: bankingPayCancellationResponse(env, req, 401, { ok: false, code: 'UNAUTHORIZED', message: 'Unauthorized' }) };
+    return { ok: true, actorUserId, actor: row };
+  } catch (error) {
+    return { ok: false, response: bankingPayCancellationError(env, req, error, 'PAYMENT_PERMISSION_CHECK_FAILED') };
+  }
+}
+
+async function readBankingPayCorrectionRequestForWorker(env, correctionRequestId) {
+  const select = [
+    'id','pay_batch_id','status','correction_kind','requested_by_user_id','requested_at_utc','reason',
+    'selection_json','selection_hash','plan_json','plan_hash','source_bank_event_id','auto_requested',
+    'reauth_proof_hash','reauth_expires_at_utc','reauth_consumed_at_utc'
+  ].join(',');
+  const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_payment_correction_requests?id=eq.${encodeURIComponent(correctionRequestId)}&select=${encodeURIComponent(select)}&limit=1`, false);
+  return Array.isArray(rows) ? rows[0] || null : null;
+}
+
+function bankingPayBase64UrlEncode(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function bankingPayBase64UrlDecode(value) {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const binary = atob(normalized + '='.repeat((4 - (normalized.length % 4)) % 4));
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
+async function bankingPayCorrectionSessionHash(req, user) {
+  const sessionAuthority = String(user?.session_id || user?.sessionId || req.headers.get('Authorization') || '').trim();
+  const tenantAuthority = String(user?.tenant_id || user?.tenantId || user?.organisation_id || user?.organization_id || '').trim();
+  if (!sessionAuthority) throw Object.assign(new Error('Authenticated session authority is unavailable.'), { code: 'REAUTH_SESSION_REQUIRED' });
+  const material = `v1\u0000${sessionAuthority}\u0000${String(user?.id || '').toLowerCase()}\u0000${tenantAuthority.toLowerCase()}`;
+  return sha256BankingPayRawText(material);
+}
+
+async function bankingPayCorrectionHmacKey(env) {
+  const secret = String(env?.BANKING_PAY_CORRECTION_REAUTH_HMAC_KEY_V1 || '');
+  if (new TextEncoder().encode(secret).byteLength < 32) throw Object.assign(new Error('Correction reauthentication key is unavailable.'), { code: 'REAUTH_KEY_UNAVAILABLE' });
+  return crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+
+async function signBankingPayCorrectionProof(env, payload) {
+  const payloadBytes = new TextEncoder().encode(stableBankingPayContinuationJson(payload));
+  const encodedPayload = bankingPayBase64UrlEncode(payloadBytes);
+  const signature = new Uint8Array(await crypto.subtle.sign('HMAC', await bankingPayCorrectionHmacKey(env), payloadBytes));
+  return `${encodedPayload}.${bankingPayBase64UrlEncode(signature)}`;
+}
+
+async function verifyBankingPayCorrectionProof(env, token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 2) return null;
+  try {
+    const payloadBytes = bankingPayBase64UrlDecode(parts[0]);
+    const signature = bankingPayBase64UrlDecode(parts[1]);
+    const valid = await crypto.subtle.verify('HMAC', await bankingPayCorrectionHmacKey(env), signature, payloadBytes);
+    if (!valid) return null;
+    const payload = JSON.parse(new TextDecoder().decode(payloadBytes));
+    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+async function enqueueBankingPayCancellationResult(env, result, source) {
+  const operationId = String(result?.operation_id || result?.operationId || '').trim();
+  if (!/^[0-9a-f-]{36}$/i.test(operationId)) return { ok: true, required: false, enqueued_count: 0 };
+  const descriptor = {
+    operation_id: operationId,
+    operation_type: 'PAYMENT_CORRECTION',
+    pay_batch_id: result?.pay_batch_id || result?.payBatchId || null,
+    root_operation_id: result?.root_operation_id || result?.rootOperationId || null,
+    successor_relation: 'SELF',
+    phase: result?.phase || null,
+    run_after_utc: result?.run_after_utc || result?.runAfterUtc || null,
+    source
+  };
+  return enqueueBankingPayOperationContinuations(env, [descriptor], { source });
+}
+
+async function enqueueBankingPayEventResultContinuations(env, result, source) {
+  if (readBankingPayContinuationFlag(env) !== true) return { ok: true, required: false, enqueued_count: 0 };
+  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const operationIds = new Set();
+  const seen = new WeakSet();
+  const visit = (value, key = '', depth = 0) => {
+    if (depth > 6 || value == null || operationIds.size >= 10) return;
+    if (typeof value === 'string') {
+      if ((key === 'operation_id' || key.endsWith('_operation_id')) && uuidRe.test(value.trim())) operationIds.add(value.trim().toLowerCase());
+      return;
+    }
+    if (Array.isArray(value)) {
+      if (key === 'operation_ids' || key.endsWith('_operation_ids')) {
+        for (const item of value) if (typeof item === 'string' && uuidRe.test(item.trim()) && operationIds.size < 10) operationIds.add(item.trim().toLowerCase());
+      } else {
+        for (const item of value) visit(item, key, depth + 1);
+      }
+      return;
+    }
+    if (typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    for (const [childKey, child] of Object.entries(value)) visit(child, String(childKey || '').toLowerCase(), depth + 1);
+  };
+  visit(result);
+  const descriptors = [];
+  for (const operationId of operationIds) {
+    const row = await readBankingPayContinuationOperation(env, operationId);
+    if (!row) continue;
+    const descriptor = deriveBankingPayContinuationDescriptor(row);
+    if (descriptor && descriptor.required !== false) descriptors.push(descriptor);
+  }
+  return enqueueBankingPayOperationContinuations(env, descriptors, { source });
+}
+
+function normalizeBankingPayCorrectionSelection(body, requestedAction) {
+  const source = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
+  const supplied = source.selection_json || source.selectionJson || source.selection || {};
+  const selection = supplied && typeof supplied === 'object' && !Array.isArray(supplied) ? { ...supplied } : {};
+  const tokens = source.explicit_candidate_tokens || source.explicitCandidateTokens || source.pay_batch_candidate_ids || source.payBatchCandidateIds || selection.explicit_candidate_tokens || selection.explicitCandidateTokens;
+  const mode = String(source.mode || selection.mode || (Array.isArray(tokens) ? 'EXPLICIT' : 'ALL_MATCHING')).trim().toUpperCase();
+  return {
+    ...selection,
+    command: 'PREPARE',
+    contract_version: 1,
+    mode,
+    requested_action: String(requestedAction || source.requested_action || source.requestedAction || selection.requested_action || '').trim().toUpperCase(),
+    snapshot_token: source.snapshot_token || source.snapshotToken || selection.snapshot_token || null,
+    filter_json: source.filter_json || source.filterJson || selection.filter_json || {},
+    sort_key: source.sort_key || source.sortKey || selection.sort_key || 'STATUS',
+    sort_direction: source.sort_direction || source.sortDirection || selection.sort_direction || 'ASC',
+    explicit_candidate_tokens: Array.isArray(tokens) ? tokens : [],
+    exclusions: Array.isArray(source.exclusions || selection.exclusions) ? (source.exclusions || selection.exclusions) : [],
+    idempotency_key: String(source.idempotency_key || source.idempotencyKey || selection.idempotency_key || '').trim() || undefined
+  };
+}
+
+async function handleBankingPayPaymentStatusPageV1(env, req, user, payBatchId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  const url = new URL(req.url);
+  let filter = {};
+  let cursor = null;
+  try {
+    if (url.searchParams.get('filter')) filter = JSON.parse(url.searchParams.get('filter'));
+    if (url.searchParams.get('cursor')) cursor = JSON.parse(url.searchParams.get('cursor'));
+  } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'CURSOR_OR_FILTER_INVALID', message: 'The payment-status page request is invalid.' }); }
+  try {
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_batch_payment_status_page_v1', {
+      p_pay_batch_id: payBatchId,
+      p_actor_user_id: actor.actorUserId,
+      p_filter_json: filter,
+      p_sort_key: url.searchParams.get('sort_key') || 'STATUS',
+      p_sort_direction: url.searchParams.get('sort_direction') || 'ASC',
+      p_limit: Number(url.searchParams.get('limit') || 25),
+      p_cursor_json: cursor
+    }), 'pay_batch_payment_status_page_v1');
+    return bankingPayCancellationResponse(env, req, 200, result);
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_STATUS_PAGE_FAILED'); }
+}
+
+async function handleBankingPayCorrectionPlanV1(env, req, user, payBatchId, forcedAction = null) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  let body;
+  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  const requestedAction = String(forcedAction || body?.requested_action || body?.requestedAction || '').trim().toUpperCase();
+  if (!['DRAFT_CANCEL','PRE_BANK_CANCEL','PRE_PROVIDER_CANCEL_AND_RECALCULATE','NO_MONEY_RELEASE','NO_MONEY_UNWIND'].includes(requestedAction)) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'REQUESTED_ACTION_INVALID', message: 'Select a supported cancellation or failed-payment release action.' });
+  }
+  const selection = normalizeBankingPayCorrectionSelection(body, requestedAction === 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' ? 'PRE_BANK_CANCEL' : requestedAction);
+  try {
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_request_start', {
+      p_pay_batch_id: payBatchId,
+      p_selection_json: selection,
+      p_reason: String(body?.reason || body?.note || '').trim() || null,
+      p_actor_user_id: actor.actorUserId,
+      p_source_bank_event_id: body?.source_bank_event_id || null,
+      p_auto_requested: false,
+      p_accepted_resolution_json: body?.accepted_resolution_json || null
+    }), 'pay_payment_correction_request_start');
+    const continuation = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'PAYMENT_CORRECTION_PLAN');
+    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation });
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_PLAN_FAILED'); }
+}
+
+async function handleBankingPayCorrectionStatusV1(env, req, user, correctionRequestId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  try {
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_status_get_v1', {
+      p_correction_request_id: correctionRequestId,
+      p_actor_user_id: actor.actorUserId
+    }), 'pay_payment_correction_status_get_v1');
+    return bankingPayCancellationResponse(env, req, 200, { ...result, continuation: { required: false } });
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_STATUS_FAILED'); }
+}
+
+async function handleBankingPayCorrectionReauthV1(env, req, user, correctionRequestId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  let body;
+  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  const ceremony = await verifyPaymentReversalReauth(env, user, body?.reauth_token || body?.reauthToken);
+  if (!ceremony.ok) return ceremony.response;
+  try {
+    const requestRow = await readBankingPayCorrectionRequestForWorker(env, correctionRequestId);
+    if (!requestRow || requestRow.status !== 'PLANNED' || String(requestRow.requested_by_user_id || '') !== actor.actorUserId) {
+      return bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'REQUEST_NOT_READY_FOR_REAUTH', message: 'The cancellation selection is not ready for reauthentication.' });
+    }
+    const issuedAt = Math.floor(Date.now() / 1000);
+    const requestedAt = Math.floor(new Date(requestRow.requested_at_utc).getTime() / 1000);
+    const expiresAt = Math.min(issuedAt + 600, requestedAt + 86400);
+    const nonceBytes = new Uint8Array(32);
+    crypto.getRandomValues(nonceBytes);
+    const plan = requestRow.plan_json || {};
+    const payload = {
+      actor_user_id: actor.actorUserId.toLowerCase(),
+      correction_request_id: String(requestRow.id).toLowerCase(),
+      evidence_hash: plan.evidence_hash ?? null,
+      expires_at_epoch_seconds: expiresAt,
+      issued_at_epoch_seconds: issuedAt,
+      nonce: bankingPayBase64UrlEncode(nonceBytes),
+      outcome_hash: plan.outcome_hash ?? null,
+      pay_batch_id: String(requestRow.pay_batch_id).toLowerCase(),
+      plan_hash: requestRow.plan_hash,
+      reason_hash: plan.reason_hash ?? null,
+      requested_action: plan.requested_action,
+      selected_active_item_count: Number(plan.selected_active_item_count || 0),
+      selected_amount_pence: Number(plan.selected_amount_pence || 0),
+      selected_candidate_count: Number(plan.selected_candidate_count || 0),
+      selection_hash: requestRow.selection_hash,
+      session_hash: await bankingPayCorrectionSessionHash(req, user),
+      version: 1
+    };
+    const proofToken = await signBankingPayCorrectionProof(env, payload);
+    const proofHash = await sha256BankingPayRawText(proofToken);
+    const issuedIso = new Date(issuedAt * 1000).toISOString();
+    const expiresIso = new Date(expiresAt * 1000).toISOString();
+    const bound = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_reauth_bind_v1', {
+      p_correction_request_id: correctionRequestId,
+      p_actor_user_id: actor.actorUserId,
+      p_session_hash: payload.session_hash,
+      p_proof_hash: proofHash,
+      p_issued_at_utc: issuedIso,
+      p_expires_at_utc: expiresIso
+    }), 'pay_payment_correction_reauth_bind_v1');
+    return bankingPayCancellationResponse(env, req, 200, {
+      ok: true,
+      correction_request_id: correctionRequestId,
+      reauth_proof_token: proofToken,
+      expires_at_utc: expiresIso,
+      bound: bound.ok !== false
+    });
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_REAUTH_FAILED'); }
+}
+
+async function handleBankingPayCorrectionStartPreparedV1(env, req, user, payBatchId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  let body;
+  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  const correctionRequestId = String(body?.correction_request_id || body?.correctionRequestId || '').trim();
+  const token = String(body?.reauth_proof_token || body?.reauthProofToken || '').trim();
+  try {
+    const payload = await verifyBankingPayCorrectionProof(env, token);
+    const requestRow = await readBankingPayCorrectionRequestForWorker(env, correctionRequestId);
+    const now = Math.floor(Date.now() / 1000);
+    const plan = requestRow?.plan_json && typeof requestRow.plan_json === 'object' && !Array.isArray(requestRow.plan_json) ? requestRow.plan_json : {};
+    const boundExpiry = requestRow?.reauth_expires_at_utc ? Math.floor(new Date(requestRow.reauth_expires_at_utc).getTime() / 1000) : NaN;
+    const sameNullable = (left, right) => (left == null ? null : left) === (right == null ? null : right);
+    if (!payload || !requestRow || payload.version !== 1
+      || payload.correction_request_id !== correctionRequestId.toLowerCase()
+      || payload.pay_batch_id !== String(payBatchId).toLowerCase()
+      || payload.actor_user_id !== actor.actorUserId.toLowerCase()
+      || payload.session_hash !== await bankingPayCorrectionSessionHash(req, user)
+      || payload.selection_hash !== requestRow.selection_hash
+      || payload.plan_hash !== requestRow.plan_hash
+      || payload.requested_action !== plan.requested_action
+      || Number(payload.selected_candidate_count) !== Number(plan.selected_candidate_count || 0)
+      || Number(payload.selected_active_item_count) !== Number(plan.selected_active_item_count || 0)
+      || Number(payload.selected_amount_pence) !== Number(plan.selected_amount_pence || 0)
+      || !sameNullable(payload.reason_hash, plan.reason_hash)
+      || !sameNullable(payload.evidence_hash, plan.evidence_hash)
+      || !sameNullable(payload.outcome_hash, plan.outcome_hash)
+      || !Number.isFinite(Number(payload.issued_at_epoch_seconds))
+      || !Number.isFinite(Number(payload.expires_at_epoch_seconds))
+      || Number(payload.issued_at_epoch_seconds) > now + 30
+      || Number(payload.issued_at_epoch_seconds) > Number(payload.expires_at_epoch_seconds)
+      || !Number.isFinite(boundExpiry)
+      || Number(payload.expires_at_epoch_seconds) !== boundExpiry
+      || now > Number(payload.expires_at_epoch_seconds)) {
+      return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'REAUTH_PROOF_INVALID', message: 'Please verify your identity again.' });
+    }
+    const proofHash = await sha256BankingPayRawText(token);
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_request_start', {
+      p_pay_batch_id: payBatchId,
+      p_selection_json: {
+        command: 'START_PREPARED',
+        correction_request_id: correctionRequestId,
+        proof_hash: proofHash,
+        selection_hash: requestRow.selection_hash,
+        plan_hash: requestRow.plan_hash
+      },
+      p_reason: requestRow.reason,
+      p_actor_user_id: actor.actorUserId,
+      p_source_bank_event_id: requestRow.source_bank_event_id,
+      p_auto_requested: false,
+      p_accepted_resolution_json: null
+    }), 'pay_payment_correction_request_start');
+    const continuation = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'PAYMENT_CORRECTION_START_PREPARED');
+    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation });
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_START_FAILED'); }
+}
+
+async function handleBankingPayCorrectionAuthActionV1(env, req, user, correctionRequestId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  let body;
+  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  const action = String(body?.action || '').trim().toUpperCase();
+  if (!['AUTHORISE','USE_GOLDEN_KEY','REJECT','CANCEL'].includes(action)) return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'ACTION_INVALID', message: 'Choose a supported approval action.' });
+  if (['AUTHORISE','USE_GOLDEN_KEY'].includes(action)) {
+    const ceremony = await verifyPaymentReversalReauth(env, user, body?.reauth_token || body?.reauthToken);
+    if (!ceremony.ok) return ceremony.response;
+  }
+  try {
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_authorise', {
+      p_correction_request_id: correctionRequestId,
+      p_actor_user_id: actor.actorUserId,
+      p_action: action,
+      p_note: body?.note == null ? null : String(body.note).trim()
+    }), 'pay_payment_correction_authorise');
+    const continuation = await enqueueBankingPayCancellationResult(env, result, 'PAYMENT_CORRECTION_AUTH_ACTION');
+    return bankingPayCancellationResponse(env, req, 200, { ...result, continuation });
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED'); }
+}
+
+async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  let body;
+  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  try {
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_batch_cancel', {
+      p_pay_batch_id: payBatchId,
+      p_actor_user_id: actor.actorUserId,
+      p_reason: String(body?.reason || 'DRAFT_PAYMENT_CANCELLED_BY_USER').trim(),
+      p_correction_request_id: body?.correction_request_id || null,
+      p_work_item_id: null
+    }), 'pay_batch_cancel');
+    const continuation = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'DRAFT_PAYMENT_CANCELLATION_PLAN');
+    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation });
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'DRAFT_CANCELLATION_FAILED'); }
+}
+
+async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId, reviewOnly = false) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  let body;
+  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  const legacyResolutionAction = String(body?.action || body?.resolution_action || body?.resolutionAction || '').trim().toUpperCase();
+  const resolution = reviewOnly ? null : String(
+    body?.resolution
+    || (legacyResolutionAction.includes('NO_PAYMENT') || legacyResolutionAction.includes('NOT_PAID') ? 'CONFIRMED_NOT_PAID' : '')
+    || (legacyResolutionAction.includes('PAYMENT_WAS_MADE') || legacyResolutionAction.includes('CONFIRMED_PAID') ? 'CONFIRMED_PAID' : '')
+  ).trim().toUpperCase();
+  if (!reviewOnly && !['CONFIRMED_NOT_PAID','CONFIRMED_PAID','UNKNOWN'].includes(resolution)) return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'RESOLUTION_INVALID', message: 'Select a supported payment-status resolution.' });
+  const eventJson = {
+    ...(body?.event_json && typeof body.event_json === 'object' ? body.event_json : {}),
+    pay_batch_id: payBatchId,
+    pay_bank_transfer_id: body?.pay_bank_transfer_id || body?.payBankTransferId || null,
+    candidate_id: body?.candidate_id || body?.candidateId || null,
+    event_source: 'MANUAL_EVIDENCE',
+    resolution: reviewOnly ? (body?.resolution || null) : resolution,
+    review_status: reviewOnly ? 'ACKNOWLEDGED' : undefined,
+    suppress_auto_unwind: !reviewOnly && resolution === 'CONFIRMED_NOT_PAID'
+  };
+  try {
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_bank_event_ingest', {
+      p_event_json: eventJson,
+      p_actor_user_id: actor.actorUserId,
+      p_ingest_options_json: { suppress_auto_unwind: eventJson.suppress_auto_unwind === true, review_status: eventJson.review_status || null }
+    }), 'pay_bank_event_ingest');
+    const continuation = await enqueueBankingPayEventResultContinuations(env, result, reviewOnly ? 'PAID_AFTER_RELEASE_REVIEW_EVENT_WAKE' : 'PAYMENT_STATUS_EVENT_WAKE');
+    return bankingPayCancellationResponse(env, req, 200, { ...result, continuation });
+  } catch (error) { return bankingPayCancellationError(env, req, error, reviewOnly ? 'PAID_AFTER_RELEASE_REVIEW_FAILED' : 'PAYMENT_STATUS_RESOLUTION_FAILED'); }
+}
+
+async function handleBankingPayCorrectionIntegrityV1(env, req, user, correctionRequestId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user);
+  if (!actor.ok) return actor.response;
+  let body = {};
+  try { body = await parseJSONBody(req); } catch {}
+  try {
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_integrity_check_v1', {
+      p_correction_request_id: correctionRequestId,
+      p_operation_id: body?.operation_id || null,
+      p_max_candidates: Math.min(10000, Math.max(1, Number(body?.max_candidates || 10000)))
+    }), 'pay_payment_correction_integrity_check_v1');
+    return bankingPayCancellationResponse(env, req, 200, result);
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_INTEGRITY_CHECK_FAILED'); }
 }
 
 async function handleBankingPayCorrectionPlan(env, req, user, payBatchId) {
@@ -53012,32 +53833,38 @@ async function handleBankingPayProviderSubmitReviewResolution(env, req, user, pa
       return withCORS(env, req, badRequest('provider_reference or notes is required'));
     }
 
-    const unwindResult = unwrapRpc(await sbRpc(env, 'pay_payment_confirm_no_money_and_unwind', {
-      p_pay_batch_id: id,
-      p_selection_json: selectionJson,
-      p_actor_user_id: String(user.id),
-      p_confirmation_json: {
-        source: 'MANUAL_CONFIRMATION',
-        provider_checked: true,
-        checked_provider_or_bank: true,
-        provider_checked_scope: providerChecked || null,
-        no_payment_made: true,
-        confirmed_no_payment_made: true,
-        terminal_no_money_confirmed: true,
-        will_not_later_be_paid: true,
-        payment_will_not_later_be_paid: true,
-        checked_at_utc: checkedAtDate.toISOString(),
-        provider_reference: providerReference || null,
-        audit_note: notes || null,
-        notes: notes || null,
-        resolution_scope: resolutionScope,
-        pay_bank_transfer_ids: selectedTransferCollection.ids,
-        pay_batch_item_ids: selectedItemCollection.ids,
-        operation_id: operationId
+    const unwindResult = unwrapRpc(await sbRpc(env, 'pay_bank_event_ingest', {
+      p_event_json: {
+        pay_batch_id: id,
+        event_source: 'MANUAL_EVIDENCE',
+        resolution: 'CONFIRMED_NOT_PAID',
+        suppress_auto_unwind: true,
+        selection_json: selectionJson,
+        idempotency_key: String(body.idempotency_key || body.idempotencyKey || '').trim() || null,
+        manual_evidence: {
+          provider_checked: true,
+          checked_provider_or_bank: true,
+          provider_checked_scope: providerChecked || null,
+          no_payment_made: true,
+          confirmed_no_payment_made: true,
+          terminal_no_money_confirmed: true,
+          will_not_later_be_paid: true,
+          payment_will_not_later_be_paid: true,
+          checked_at_utc: checkedAtDate.toISOString(),
+          provider_reference: providerReference || null,
+          audit_note: notes || null,
+          resolution_scope: resolutionScope,
+          pay_bank_transfer_ids: selectedTransferCollection.ids,
+          pay_batch_item_ids: selectedItemCollection.ids,
+          operation_id: operationId
+        }
       },
-      p_reason: notes || providerReference || 'Manual no-payment confirmation',
-      p_idempotency_key: String(body.idempotency_key || body.idempotencyKey || '').trim() || null
-    }), 'pay_payment_confirm_no_money_and_unwind');
+      p_actor_user_id: String(user.id),
+      p_ingest_options_json: {
+        suppress_auto_unwind: true,
+        reason: notes || providerReference || 'Manual no-payment confirmation'
+      }
+    }), 'pay_bank_event_ingest');
 
     const diagnostic = await loadDiagnostic();
     const batch = await loadBatch();
@@ -58146,6 +58973,23 @@ async function handleBankingPayOperationAdvance(env, req, user, operationId) {
       return withCORS(env, req, ok(requiredActionPayload(currentRow, currentPayload.run_after_due === false ? 'RUN_AFTER_NOT_DUE' : 'NOT_RUNNABLE')));
     }
 
+    if (readBankingPayContinuationFlag(env) === true) {
+      const enqueue = await enqueueBankingPayOperationContinuations(env, [{
+        required: true,
+        operation_id: id,
+        operation_type: currentPayload.operation_type || currentRow.operation_type,
+        pay_batch_id: currentPayload.pay_batch_id || currentRow.pay_batch_id || null,
+        root_operation_id: currentPayload.root_operation_id || currentRow.root_operation_id || null,
+        successor_relation: 'SELF',
+        phase: currentPayload.phase || currentRow.phase || null,
+        run_after_utc: null,
+        reason: 'USER_ADVANCE_NUDGE',
+        requires_user_action: false,
+        terminal: false
+      }], { source: 'handleBankingPayOperationAdvance' });
+      return withCORS(env, req, ok(Object.assign({}, currentPayload, { claimed: false, advanced: false, nudge_only: true, continuation_enqueued: enqueue.enqueued_count === 1 })));
+    }
+
     const result = await claimAndAdvanceOneBankingPayOperation(env, {
       operationId: id,
       actorUserId: user.id,
@@ -58189,6 +59033,58 @@ async function handleBankingPayOperationAdvance(env, req, user, operationId) {
 
 
 
+async function advancePaymentCorrectionOperation(env, operationRow, user, options = {}) {
+  const row = operationRow && typeof operationRow === 'object' && !Array.isArray(operationRow) ? operationRow : {};
+  const input = row.input_json && typeof row.input_json === 'object' && !Array.isArray(row.input_json) ? row.input_json : {};
+  const progress = row.progress_json && typeof row.progress_json === 'object' && !Array.isArray(row.progress_json) ? row.progress_json : {};
+  const correctionRequestId = String(input.correction_request_id || input.correctionRequestId || progress.correction_request_id || '').trim();
+  const operationId = String(row.operation_id || row.id || '').trim();
+  const actorUserId = String(user && (user.business_actor_user_id || user.id) || row.actor_user_id || '').trim();
+  const workerId = String(options.lockOwner || options.lock_owner || '').trim();
+  if (!correctionRequestId) throw Object.assign(new Error('PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'), { code: 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED' });
+  if (!operationId) throw Object.assign(new Error('PAYMENT_CORRECTION_OPERATION_ID_REQUIRED'), { code: 'PAYMENT_CORRECTION_OPERATION_ID_REQUIRED' });
+  if (!workerId) throw Object.assign(new Error('PAYMENT_CORRECTION_LEASE_OWNER_REQUIRED'), { code: 'PAYMENT_CORRECTION_LEASE_OWNER_REQUIRED' });
+  const raw = await sbRpc(env, 'pay_payment_correction_process_chunk', {
+    p_correction_request_id: correctionRequestId,
+    p_limit: 50,
+    p_worker_id: workerId,
+    p_actor_user_id: actorUserId || null
+  }, { routeClass: 'OPERATION_WORKER_ADVANCE', purpose: 'PAYMENT_CORRECTION_BOUNDED_PHASE', timeoutMs: 8000 });
+  let result = raw;
+  if (Array.isArray(result) && result.length === 1) result = result[0];
+  if (result && typeof result === 'object' && result.pay_payment_correction_process_chunk) result = result.pay_payment_correction_process_chunk;
+  result = result && typeof result === 'object' && !Array.isArray(result) ? result : {};
+  const status = String(result.operation_status || result.status || 'RUNNING').trim().toUpperCase();
+  const phase = String(result.phase || result.operation_phase || row.phase || '').trim().toUpperCase();
+  const terminal = ['COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED'].includes(status) || phase === 'COMPLETE';
+  const waitingUser = ['AWAITING_REAUTHENTICATION', 'AWAITING_AUTHORISATION'].includes(phase) || result.requires_user_action === true;
+  return Object.assign({}, result, {
+    ok: result.ok !== false,
+    operation_id: operationId,
+    operation_type: 'PAYMENT_CORRECTION',
+    pay_batch_id: result.pay_batch_id || row.pay_batch_id || null,
+    correction_request_id: correctionRequestId,
+    status: waitingUser ? 'WAITING_AUTHORISATION' : (terminal ? status : 'RUNNING'),
+    phase,
+    runner_state: waitingUser ? 'WAITING_USER' : (terminal ? (status === 'REVIEW_REQUIRED' ? 'WAITING_USER_REVIEW' : 'IDLE') : 'RUNNABLE'),
+    requires_user_action: waitingUser || status === 'REVIEW_REQUIRED',
+    terminal,
+    continuation: {
+      required: !terminal && !waitingUser,
+      operation_id: operationId,
+      operation_type: 'PAYMENT_CORRECTION',
+      pay_batch_id: result.pay_batch_id || row.pay_batch_id || null,
+      root_operation_id: row.root_operation_id || null,
+      successor_relation: !terminal && !waitingUser ? 'SELF' : 'NONE',
+      phase,
+      run_after_utc: result.run_after_utc || null,
+      reason: !terminal && !waitingUser ? 'PAYMENT_CORRECTION_MORE_WORK' : (waitingUser ? 'PAYMENT_CORRECTION_USER_WAIT' : 'PAYMENT_CORRECTION_TERMINAL'),
+      requires_user_action: waitingUser || status === 'REVIEW_REQUIRED',
+      terminal
+    }
+  });
+}
+
 async function advanceBankingPayOperation(env, operationRow, user, options = {}) {
   const row = (operationRow && typeof operationRow === 'object' && !Array.isArray(operationRow)) ? operationRow : {};
   const operationId = String(row.operation_id || row.id || '').trim();
@@ -58231,6 +59127,7 @@ async function advanceBankingPayOperation(env, operationRow, user, options = {})
   if (operationType === 'PAYMENT_RETRY_BLOCKED_FUNDS') return releaseNonTerminalLock(await advanceBankingPayExecuteOperation(env, row, user, { ...options, retryBlockedFunds: true }));
   if (operationType === 'PAYMENT_SETTLEMENT') return releaseNonTerminalLock(await advanceBankingPaySettlementOperation(env, row, user, options));
   if (operationType === 'REMITTANCE_QUEUE') return releaseNonTerminalLock(await advanceBankingPayRemittanceOperation(env, row, user, options));
+  if (operationType === 'PAYMENT_CORRECTION') return advancePaymentCorrectionOperation(env, row, user, options);
 
   if (operationType === 'PREVIEW_REFRESH') {
     const saved = await sbRpc(env, 'banking_pay_operation_save_progress', {
@@ -58861,6 +59758,7 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
   const lockOwner = trimText(options.lockOwner || `settlement:${operationId}`);
   const lockSeconds = Number.isFinite(Number(configJson.lock_seconds)) ? Math.max(5, Math.min(3600, Math.trunc(Number(configJson.lock_seconds)))) : 60;
   const phase = upperText(operation.phase || 'VALIDATE_BATCH') || 'VALIDATE_BATCH';
+  const continuationEnabled = readBankingPayContinuationFlag(env) === true && (options.continuationEnabled === true || options.continuation_enabled === true);
   const settlementMode = normaliseSettlementMode(inputJson.settlement_mode || inputJson.execution_mode || 'CSV_SETTLEMENT') || 'CSV_SETTLEMENT';
 
   if (!operationId) throw new Error('advanceBankingPaySettlementOperation: operation_id is required');
@@ -60850,6 +61748,58 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
         });
       }
 
+      if (continuationEnabled) {
+        const childRow = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_get', {
+          p_operation_id: gate.childOperationId,
+          p_actor_user_id: actorUserId,
+          p_mode: 'PROGRESS_LIGHT'
+        }), 'banking_pay_operation_get');
+        const childStatus = String(childRow.status || '').trim().toUpperCase();
+        const childTerminal = ['COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED'].includes(childStatus);
+        if (childTerminal && childStatus === 'COMPLETE') {
+          return save('RUNNING', 'COMPLETE', {
+            status_text: 'Settlement remittance operation completed.',
+            child_operation_id: gate.childOperationId,
+            child_operation_type: 'REMITTANCE_QUEUE',
+            continuation_waiting_for_child: false,
+            runner_state: 'RUNNABLE',
+            remittance_operation: childRow,
+            remittance_timing_gate: gate.raw || null
+          });
+        }
+        if (childTerminal) {
+          return finish('FAILED', null, {
+            code: 'REMITTANCE_OPERATION_REVIEW_REQUIRED',
+            message: 'Payment remittance operation needs review.',
+            phase,
+            child_operation_id: gate.childOperationId,
+            remittance_operation: childRow,
+            remittance_timing_gate: gate.raw || null
+          });
+        }
+        return save('RUNNING', 'QUEUE_REMITTANCES', {
+          status_text: 'Confirmed-payment remittances are continuing in the background.',
+          child_operation_id: gate.childOperationId,
+          child_operation_type: 'REMITTANCE_QUEUE',
+          continuation_waiting_for_child: true,
+          runner_state: 'WAITING_CHILD',
+          root_operation_id: operationId,
+          remittance_timing_gate: gate.raw || null,
+          continuation: {
+            required: true,
+            operation_id: gate.childOperationId,
+            operation_type: 'REMITTANCE_QUEUE',
+            pay_batch_id: payBatchId,
+            root_operation_id: operationId,
+            successor_relation: 'CHILD',
+            phase: null,
+            run_after_utc: null,
+            reason: 'REMITTANCE_CHILD_READY',
+            requires_user_action: false,
+            terminal: false
+          }
+        });
+      }
       const remittanceAdvance = await advanceChildOperationUntilWaitingOrTerminal(gate.childOperationId, 'settlement-remittance-child', { maxSteps: 8 });
       const remittanceStatus = String(remittanceAdvance.status || '').trim().toUpperCase();
       if (remittanceAdvance.terminal === true && remittanceStatus === 'COMPLETE') {
@@ -80546,7 +81496,7 @@ async function handleTimesheetsSummary(env, req) {
   }
 }
 
-function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
+async function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
   const startedAt = Date.now();
   const trimText = (value) => String(value == null ? '' : value).trim();
   const upperText = (value) => trimText(value).toUpperCase();
@@ -80572,7 +81522,7 @@ function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
     name: error && error.name ? String(error.name).slice(0, 120) : null
   });
 
-  const supportedOperationTypes = new Set(['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE']);
+  const supportedOperationTypes = new Set(['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION']);
   const requestedOperationType = upperText(options.operationType || options.operation_type);
   const operationType = supportedOperationTypes.has(requestedOperationType) ? requestedOperationType : '';
   const operationId = isUuid(options.operationId || options.operation_id || options.id) ? trimText(options.operationId || options.operation_id || options.id) : '';
@@ -80599,6 +81549,30 @@ function scheduleBankingPayOperationDrain(env, ctx, options = {}) {
     lock_seconds: lockSeconds,
     scheduled_at_utc: new Date().toISOString()
   };
+
+  const continuationFlag = readBankingPayContinuationFlag(env);
+  if (continuationFlag === true) {
+    if (!operationId || !operationType) {
+      return Object.assign({}, scheduledSummary, { ok: false, scheduled: false, mode: 'queue', error: { code: 'BANKING_PAY_CONTINUATION_DESCRIPTOR_REQUIRED', message: 'An exact operation id and type are required.' } });
+    }
+    const enqueue = await enqueueBankingPayOperationContinuations(env, [{
+      required: true,
+      operation_id: operationId,
+      operation_type: operationType,
+      pay_batch_id: payBatchId || null,
+      root_operation_id: rootOperationId || null,
+      successor_relation: 'SELF',
+      phase: options.phase || null,
+      run_after_utc: options.runAfterUtc || options.run_after_utc || null,
+      reason: source,
+      requires_user_action: false,
+      terminal: false
+    }], { source });
+    return Object.assign({}, scheduledSummary, { ok: enqueue.ok !== false, scheduled: enqueue.enqueued_count === 1, mode: 'queue', enqueue });
+  }
+  if (continuationFlag === null) {
+    return Object.assign({}, scheduledSummary, { ok: false, scheduled: false, mode: 'invalid_flag', error: { code: 'BANKING_PAY_CONTINUATION_FLAG_INVALID', message: 'Continuation feature state is missing or invalid.' } });
+  }
 
   const runDrain = async () => {
     const runStartedAt = Date.now();
@@ -86175,17 +87149,20 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
         }));
       }
 
-      result = unwrapRpc(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr', {
+      result = unwrapRpc(await sbRpc(env, 'pay_payment_correction_request_start', {
         p_pay_batch_id: id,
-        p_selection_json: cancellationSelectionJson,
+        p_selection_json: {
+          ...cancellationSelectionJson,
+          command: 'PREPARE',
+          requested_action: 'PRE_BANK_CANCEL',
+          idempotency_key: replacementIdempotencyKey
+        },
         p_actor_user_id: actorUserId,
         p_reason: reason,
-        p_idempotency_key: idempotencyKey,
-        p_confirmation_json: cancellationConfirmationJson,
-        p_source_workbench_session_id: workbenchContext.session_id,
-        p_expected_source_session_version: workbenchContext.session_version,
-        p_replacement_idempotency_key: replacementIdempotencyKey
-      }), 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr');
+        p_source_bank_event_id: null,
+        p_auto_requested: false,
+        p_accepted_resolution_json: cancellationConfirmationJson
+      }), 'pay_payment_correction_request_start');
 
       if (result.payable_state_changed === true) {
         const workbenchRefresh = safeObject(result.workbench_refresh);
@@ -86232,14 +87209,19 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
       if (!reauth.ok) return withCORS(env, req, reauth.response);
       const noMoneyConfirmationJson = buildNoMoneyConfirmationJson();
       const noMoneyReason = noMoneyManualEvidenceReason(noMoneyConfirmationJson) || null;
-      result = unwrapRpc(await sbRpc(env, 'pay_payment_confirm_no_money_and_unwind', {
-        p_pay_batch_id: id,
-        p_selection_json: { ...selectionJson, requested_action: 'NO_MONEY_UNWIND_AND_RECALCULATE' },
+      result = unwrapRpc(await sbRpc(env, 'pay_bank_event_ingest', {
+        p_event_json: {
+          ...noMoneyConfirmationJson,
+          pay_batch_id: id,
+          event_source: 'MANUAL_EVIDENCE',
+          resolution: 'CONFIRMED_NOT_PAID',
+          suppress_auto_unwind: true,
+          selection_json: { ...selectionJson, requested_action: 'NO_MONEY_UNWIND_AND_RECALCULATE' },
+          idempotency_key: idempotencyKey
+        },
         p_actor_user_id: actorUserId,
-        p_confirmation_json: noMoneyConfirmationJson,
-        p_reason: noMoneyReason,
-        p_idempotency_key: idempotencyKey
-      }), 'pay_payment_confirm_no_money_and_unwind');
+        p_ingest_options_json: { suppress_auto_unwind: true, reason: noMoneyReason }
+      }), 'pay_bank_event_ingest');
       workbenchRefreshNudge = maybeNudgeNoMoneyWorkbenchRefresh(result, route);
     } else if (action === 'CHECK_PROVIDER_STATUS') {
       route = 'CHECK_PROVIDER_STATUS';
@@ -176726,14 +177708,13 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
       }));
     }
 
-    const result = unwrapRpc(await sbRpc(env, 'pay_payment_cancel_not_sent_and_recalculate_complete_v1', {
+    const result = unwrapRpc(await sbRpc(env, 'pay_batch_cancel', {
       p_pay_batch_id: id,
-      p_selection_json: selectionJson,
       p_actor_user_id: actorUserId,
       p_reason: reason,
-      p_idempotency_key: idempotencyKey,
-      p_confirmation_json: confirmationJson
-    }), 'pay_payment_cancel_not_sent_and_recalculate_complete_v1');
+      p_correction_request_id: null,
+      p_work_item_id: null
+    }), 'pay_batch_cancel');
 
     const cancellationScope = readChangedCancellationScope(result);
 
@@ -179171,7 +180152,7 @@ async function bankingCronTick(env, opts = {}) {
 
   const backendRunnerOperationTypes = Array.isArray(opts && opts.operationTypes)
     ? opts.operationTypes.map((value) => firstText(value).toUpperCase()).filter(Boolean)
-    : (Array.isArray(opts && opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE']);
+    : (Array.isArray(opts && opts.operation_types) ? opts.operation_types.map((value) => firstText(value).toUpperCase()).filter(Boolean) : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION']);
 
   const summary = {
     ok: true,
@@ -179179,7 +180160,7 @@ async function bankingCronTick(env, opts = {}) {
     browser_session_required: false,
     backend_runner_owned_scope: true,
     operation_scope: 'BANKING_PAY_BACKEND_RUNNER_OWNED',
-    operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE'])),
+    operation_types: Array.from(new Set(backendRunnerOperationTypes.length ? backendRunnerOperationTypes : ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION'])),
     operation_limit: clampInteger(opts && (opts.operationLimit != null ? opts.operationLimit : (opts.activeOperationLimit != null ? opts.activeOperationLimit : opts.claimLimit)), 10, 1, 25),
     completion_notice_catchup_limit: clampInteger(opts && (opts.completionNoticeLimit != null ? opts.completionNoticeLimit : opts.completion_notice_limit), 5, 1, 10),
     advanced_count: 0,
@@ -179192,6 +180173,57 @@ async function bankingCronTick(env, opts = {}) {
     warnings: [],
     errors: []
   };
+
+  const continuationFlag = readBankingPayContinuationFlag(env);
+  if (continuationFlag === true) {
+    try {
+      const expiryRaw = await sbRpc(env, 'pay_payment_correction_expire_due_v1', { p_limit: 50 }, { routeClass: 'OPERATION_WORKER_ADVANCE', purpose: 'PAYMENT_CORRECTION_EXPIRY', timeoutMs: 8000 });
+      const dueRaw = await sbRpc(env, 'pay_batches_claim_due_scheduled', { p_limit: summary.operation_limit, p_now_utc: null }, { routeClass: 'OPERATION_WORKER_ADVANCE', purpose: 'BANKING_PAY_DUE_SCHEDULE_DISCOVERY', timeoutMs: 8000 });
+      const duePayload = Array.isArray(dueRaw) && dueRaw.length === 1 ? dueRaw[0] : dueRaw;
+      const dueRows = duePayload && Array.isArray(duePayload.operations) ? duePayload.operations : [];
+      const dueDescriptors = dueRows.map((row) => ({
+        required: true,
+        operation_id: row.operation_id || row.id,
+        operation_type: row.operation_type || 'PAYMENT_EXECUTE',
+        pay_batch_id: row.pay_batch_id || null,
+        root_operation_id: row.root_operation_id || null,
+        successor_relation: 'SELF',
+        phase: row.phase || null,
+        run_after_utc: null,
+        reason: 'DUE_SCHEDULE_DISCOVERY',
+        requires_user_action: false,
+        terminal: false
+      }));
+      const dueEnqueue = await enqueueBankingPayOperationContinuations(env, dueDescriptors, { source: 'DUE_SCHEDULE_DISCOVERY' });
+      const recovery = await recoverStrandedBankingPayContinuations(env, { limit: 25 });
+      summary.operation_runner_result = { mode: 'queue_continuation', expiry: expiryRaw, due: duePayload, due_enqueue: dueEnqueue, recovery };
+      summary.claimed_count = dueRows.length;
+      summary.advanced_count = 0;
+      summary.no_runnable_count = dueRows.length ? 0 : 1;
+    } catch (error) {
+      summary.ok = false;
+      summary.errors.push({ code: 'BANKING_PAY_CONTINUATION_CRON_FAILED', error: String(error && (error.code || error.message) || error || 'unknown') });
+    }
+    if (typeof queueDuePayBatchCompletionNotices === 'function') {
+      try {
+        summary.completion_notice_catchup_result = await queueDuePayBatchCompletionNotices(env, {
+          actorUserId,
+          nowUtc: nowUtc.toISOString(),
+          limit: summary.completion_notice_catchup_limit,
+          source: 'bankingCronTick.queueContinuation'
+        });
+      } catch (error) {
+        summary.ok = false;
+        summary.errors.push({ code: 'PAY_BATCH_COMPLETION_NOTICE_CATCHUP_EXCEPTION', error: String(error && error.message || error || 'unknown') });
+      }
+    }
+    return summary;
+  }
+  if (continuationFlag === null) {
+    summary.ok = false;
+    summary.errors.push({ code: 'BANKING_PAY_CONTINUATION_FLAG_INVALID' });
+    return summary;
+  }
 
   try {
     const result = await advanceBankingPayRunnableOperations(env, {
@@ -183243,7 +184275,7 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
     return fail('SETTLEMENT_NUDGE_ACTOR_USER_ID_REQUIRED', 'Settlement nudge was skipped because no backend actor user id is configured or supplied.', { pay_batch_id: payBatchId });
   }
 
-  const scheduleOperationDrain = (operationId, operationType, rootOperationId = null) => {
+  const scheduleOperationDrain = async (operationId, operationType, rootOperationId = null) => {
     const resolvedOperationId = trimText(operationId);
     const resolvedOperationType = upperText(operationType);
     const resolvedRootOperationId = firstUuid(rootOperationId) || null;
@@ -183269,7 +184301,7 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
       };
     }
     try {
-      return scheduleBankingPayOperationDrain(env, ctx, {
+      return await scheduleBankingPayOperationDrain(env, ctx, {
         operationId: resolvedOperationId,
         operationType: resolvedOperationType,
         payBatchId,
@@ -183317,6 +184349,29 @@ async function nudgeBankingPaySettlementFromTerminalBankOutcome(env, input = {},
         reason: 'WAITING_PROVIDER_OPERATION_INVALID',
         operation_id: operationId || null,
         operation_type: operationType || null
+      };
+    }
+    if (readBankingPayContinuationFlag(env) === true) {
+      const enqueue = await enqueueBankingPayOperationContinuations(env, [{
+        required: true,
+        operation_id: operationId,
+        operation_type: operationType,
+        pay_batch_id: payBatchId || operation.pay_batch_id || null,
+        root_operation_id: operation.root_operation_id || operation.rootOperationId || null,
+        successor_relation: 'SELF',
+        phase: operation.phase || null,
+        run_after_utc: null,
+        reason: 'DURABLE_PROVIDER_EVENT_WAKE',
+        requires_user_action: false,
+        terminal: false
+      }], { source: 'nudgeBankingPaySettlementFromTerminalBankOutcome.eventWake' });
+      return {
+        ok: enqueue.enqueued_count === 1,
+        claimed: false,
+        advanced: false,
+        continuation_enqueued: enqueue.enqueued_count === 1,
+        operation_id: operationId,
+        operation_type: operationType
       };
     }
     if (typeof claimAndAdvanceOneBankingPayOperation !== 'function') {
@@ -190114,14 +191169,14 @@ if (p.startsWith('/api/banking/')) {
   const m = cancelMatch || recalcMatch;
 
   if (m && req.method === 'POST') {
-    return handleBankingPayBatchCancel(env, req, user, m.id, ctx);
+    return handleBankingPayBatchCancelV1(env, req, user, m.id);
   }
 }
 
 {
   const m = matchPath(p, '/api/banking/pay/batch/:id/confirm-no-money-unwind');
   if (m && req.method === 'POST') {
-    return handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, m.id);
+    return handleBankingPayPaymentStatusResolveV1(env, req, user, m.id, false);
   }
 }
 
@@ -190191,7 +191246,7 @@ if (req.method === 'PUT' && p === '/api/banking/alerts/preferences') {
 {
   const m = matchPath(p, '/api/banking/pay/batch/:id/provider-submit-review-resolution');
   if (m && req.method === 'POST') {
-    return handleBankingPayProviderSubmitReviewResolution(env, req, user, m.id, ctx);
+    return handleBankingPayPaymentStatusResolveV1(env, req, user, m.id, false);
   }
 }
 
@@ -190619,7 +191674,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
   {
     const m = matchPath(p, '/api/banking/pay/batch/:id/cancel');
     if (m && req.method === 'POST') {
-      return handleBankingPayBatchCancel(env, req, user, m.id, ctx);
+      return handleBankingPayBatchCancelV1(env, req, user, m.id);
     }
   }
 
@@ -190652,37 +191707,90 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
   }
 
   {
+  const m = matchPath(p, '/api/banking/pay/batch/:id/payment-status');
+  if (m && req.method === 'GET') {
+    return handleBankingPayPaymentStatusPageV1(env, req, user, m.id);
+  }
+}
+
+{
   const m = matchPath(p, '/api/banking/pay/batch/:id/correction/plan');
   if (m && req.method === 'POST') {
-    return handleBankingPayCorrectionPlan(env, req, user, m.id);
+    return handleBankingPayCorrectionPlanV1(env, req, user, m.id);
   }
 }
 
 {
   const m = matchPath(p, '/api/banking/pay/batch/:id/correction/start');
   if (m && req.method === 'POST') {
-    return handleBankingPayCorrectionStart(env, req, user, m.id, ctx);
+    return handleBankingPayCorrectionStartPreparedV1(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/payment-status/resolve');
+  if (m && req.method === 'POST') {
+    return handleBankingPayPaymentStatusResolveV1(env, req, user, m.id, false);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/payment-status/release-failed');
+  if (m && req.method === 'POST') {
+    return handleBankingPayCorrectionPlanV1(env, req, user, m.id, 'NO_MONEY_RELEASE');
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/batch/:id/payment-status/paid-after-release/review');
+  if (m && req.method === 'POST') {
+    return handleBankingPayPaymentStatusResolveV1(env, req, user, m.id, true);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/correction/:id/reauth');
+  if (m && req.method === 'POST') {
+    return handleBankingPayCorrectionReauthV1(env, req, user, m.id);
   }
 }
 
 {
   const m = matchPath(p, '/api/banking/pay/correction/:id/auth-action');
   if (m && req.method === 'POST') {
-    return handleBankingPayCorrectionAuthAction(env, req, user, m.id);
+    return handleBankingPayCorrectionAuthActionV1(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/correction/:id/cancel');
+  if (m && req.method === 'POST') {
+    return handleBankingPayCorrectionAuthActionV1(env, req, user, m.id);
   }
 }
 
 {
   const m = matchPath(p, '/api/banking/pay/correction/:id/process');
   if (m && req.method === 'POST') {
-    return handleBankingPayCorrectionProcess(env, req, user, m.id);
+    return bankingPayCancellationResponse(env, req, 410, {
+      ok: false,
+      code: 'PAYMENT_CORRECTION_PROCESS_ROUTE_RETIRED',
+      message: 'Payment cancellation progresses automatically. Use the read-only status route.'
+    });
   }
 }
 
 {
   const m = matchPath(p, '/api/banking/pay/correction/:id/status');
   if (m && req.method === 'GET') {
-    return handleBankingPayCorrectionStatus(env, req, user, m.id);
+    return handleBankingPayCorrectionStatusV1(env, req, user, m.id);
+  }
+}
+
+{
+  const m = matchPath(p, '/api/banking/pay/correction/:id/integrity-check');
+  if (m && req.method === 'POST') {
+    return handleBankingPayCorrectionIntegrityV1(env, req, user, m.id);
   }
 }
 
@@ -192301,6 +193409,11 @@ if (req.method === 'POST' && p === '/api/users') {
     }
 
   },
+
+  async queue(batch, env, ctx) {
+    await handleBankingPayContinuationQueue(batch, env, ctx);
+  },
+
   /// Cron handler for TSFIN queue processing + Auto-invoice + Email outbox drain
 // Cron handler for TSFIN queue processing + Auto-invoice + TS PDF + INVOICE PDF + Email outbox drain
 /// Cron handler for TSFIN queue processing + Auto-invoice + Email outbox drain
