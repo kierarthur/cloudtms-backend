@@ -17,6 +17,7 @@ DECLARE
   v_work_item public.pay_payment_correction_work_items%rowtype;
   v_request public.pay_payment_correction_requests%rowtype;
   v_batch public.pay_batches%rowtype;
+  v_operation public.banking_pay_operations%rowtype;
   v_membership public.pay_payment_correction_request_candidates%rowtype;
   v_mutation_guard jsonb := '{}'::jsonb;
   v_now timestamptz := now();
@@ -131,46 +132,6 @@ BEGIN
       USING ERRCODE = 'P0001', DETAIL = v_mutation_guard::text;
   END IF;
 
-  SELECT public.pay_payment_correction_work_items.*
-  INTO v_work_item
-  FROM public.pay_payment_correction_work_items
-  WHERE public.pay_payment_correction_work_items.id = p_work_item_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_ITEM_NOT_FOUND'
-      USING ERRCODE = 'P0001',
-            DETAIL = jsonb_build_object(
-              'code', 'PAYMENT_CORRECTION_WORK_ITEM_NOT_FOUND',
-              'work_item_id', p_work_item_id
-            )::text;
-  END IF;
-
-  IF v_work_item.work_kind <> 'PRE_BANK_CANCEL' THEN
-    v_blocker := jsonb_build_object(
-      'code', 'WORK_ITEM_KIND_NOT_PRE_BANK_CANCEL',
-      'message', 'This work item is not a pre-bank cancellation work item.',
-      'work_kind', v_work_item.work_kind
-    );
-
-    UPDATE public.pay_payment_correction_work_items AS blocked_work_kind
-    SET
-      status = 'BLOCKED',
-      locked_at_utc = NULL,
-      locked_by = NULL,
-      processed_at_utc = v_now,
-      last_error = v_blocker->>'message',
-      result_json = COALESCE(blocked_work_kind.result_json, '{}'::jsonb) || jsonb_build_object(
-        'ok', false,
-        'status', 'BLOCKED',
-        'blocker', v_blocker,
-        'processed_at_utc', v_now
-      )
-    WHERE blocked_work_kind.id = p_work_item_id;
-
-    RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
-  END IF;
-
   SELECT public.pay_payment_correction_requests.*
   INTO v_request
   FROM public.pay_payment_correction_requests
@@ -203,6 +164,59 @@ BEGIN
               'work_item_id', p_work_item_id,
               'pay_batch_id', v_work_item.pay_batch_id
             )::text;
+  END IF;
+
+  SELECT operation_row.*
+  INTO v_operation
+  FROM public.banking_pay_operations AS operation_row
+  WHERE operation_row.operation_type = 'PAYMENT_CORRECTION'
+    AND operation_row.input_json->>'correction_request_id' = v_request.id::text
+  ORDER BY operation_row.created_at_utc
+  LIMIT 1
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_operation.pay_batch_id IS DISTINCT FROM v_batch.id THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_OPERATION_NOT_FOUND_FOR_WORK_ITEM'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+        'code', 'OPERATION_MISMATCH', 'work_item_id', p_work_item_id
+      )::text;
+  END IF;
+
+  SELECT public.pay_payment_correction_work_items.*
+  INTO v_work_item
+  FROM public.pay_payment_correction_work_items
+  WHERE public.pay_payment_correction_work_items.id = p_work_item_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_ITEM_NOT_FOUND'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+        'code', 'PAYMENT_CORRECTION_WORK_ITEM_NOT_FOUND', 'work_item_id', p_work_item_id
+      )::text;
+  END IF;
+
+  IF v_work_item.correction_request_id IS DISTINCT FROM v_request.id
+     OR v_work_item.pay_batch_id IS DISTINCT FROM v_batch.id THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_ITEM_SCOPE_CHANGED'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'SELECTION_STALE')::text;
+  END IF;
+
+  IF v_work_item.work_kind <> 'PRE_BANK_CANCEL' THEN
+    v_blocker := jsonb_build_object(
+      'code', 'WORK_ITEM_KIND_NOT_PRE_BANK_CANCEL',
+      'message', 'This work item is not a pre-bank cancellation work item.',
+      'work_kind', v_work_item.work_kind
+    );
+
+    UPDATE public.pay_payment_correction_work_items AS blocked_work_kind
+    SET status = 'BLOCKED', locked_at_utc = NULL, locked_by = NULL,
+        processed_at_utc = v_now, last_error = v_blocker->>'message',
+        result_json = COALESCE(blocked_work_kind.result_json, '{}'::jsonb)
+          || jsonb_build_object('ok', false, 'status', 'BLOCKED',
+                                'blocker', v_blocker, 'processed_at_utc', v_now)
+    WHERE blocked_work_kind.id = p_work_item_id;
+
+    RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
   END IF;
 
   DROP TABLE IF EXISTS pg_temp._tmp_pre_bank_cancel_selected;
@@ -558,12 +572,6 @@ END IF;
 
 
   PERFORM 1
-  FROM public.pay_batch_items AS locked_batch_items
-  JOIN pg_temp._tmp_pre_bank_cancel_selected AS lock_selected_items
-    ON lock_selected_items.pay_batch_item_id = locked_batch_items.id
-  FOR UPDATE OF locked_batch_items;
-
-  PERFORM 1
   FROM public.pay_batch_candidates AS locked_batch_candidates
   WHERE locked_batch_candidates.id IN (
     SELECT DISTINCT lock_selected_candidates.pay_batch_candidate_id
@@ -571,6 +579,13 @@ END IF;
     WHERE lock_selected_candidates.pay_batch_candidate_id IS NOT NULL
   )
   FOR UPDATE OF locked_batch_candidates;
+
+  PERFORM 1
+  FROM public.pay_batch_items AS locked_batch_items
+  JOIN pg_temp._tmp_pre_bank_cancel_selected AS lock_selected_items
+    ON lock_selected_items.pay_batch_item_id = locked_batch_items.id
+  ORDER BY locked_batch_items.id
+  FOR UPDATE OF locked_batch_items;
 
   PERFORM 1
   FROM public.pay_bank_transfers AS locked_bank_transfers

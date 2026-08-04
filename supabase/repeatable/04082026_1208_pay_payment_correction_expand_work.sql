@@ -16,7 +16,10 @@ AS $function$
 DECLARE
   v_now timestamptz := pg_catalog.clock_timestamp();
   v_request public.pay_payment_correction_requests%rowtype;
+  v_batch public.pay_batches%rowtype;
   v_operation public.banking_pay_operations%rowtype;
+  v_batch_id uuid;
+  v_guard jsonb;
   v_last_ordinal bigint := 0;
   v_next_ordinal bigint := 0;
   v_page_count integer := 0;
@@ -30,6 +33,46 @@ BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
       USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_NOT_FOUND')::text;
+  END IF;
+
+  -- Resolve identifiers without taking row locks, then use the canonical
+  -- mutation order: guard -> request -> batch -> operation.
+  SELECT request_row.pay_batch_id
+  INTO v_batch_id
+  FROM public.pay_payment_correction_requests AS request_row
+  WHERE request_row.id = p_correction_request_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_NOT_FOUND'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_NOT_FOUND')::text;
+  END IF;
+
+  v_guard := private.pay_payment_mutation_guard_v1(
+    v_batch_id,
+    p_correction_request_id,
+    'CORRECTION_APPLY'
+  );
+
+  SELECT request_row.*
+  INTO v_request
+  FROM public.pay_payment_correction_requests AS request_row
+  WHERE request_row.id = p_correction_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_request.status NOT IN ('AUTHORISED', 'EXPANDED') THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_NOT_AUTHORISED'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_STATE_INVALID')::text;
+  END IF;
+
+  SELECT batch_row.*
+  INTO v_batch
+  FROM public.pay_batches AS batch_row
+  WHERE batch_row.id = v_request.pay_batch_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_EXPAND_BATCH_NOT_FOUND'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'PAY_BATCH_NOT_FOUND')::text;
   END IF;
 
   SELECT operation_row.*
@@ -46,15 +89,9 @@ BEGIN
       USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'OPERATION_MISMATCH')::text;
   END IF;
 
-  SELECT request_row.*
-  INTO v_request
-  FROM public.pay_payment_correction_requests AS request_row
-  WHERE request_row.id = p_correction_request_id
-  FOR UPDATE;
-
-  IF NOT FOUND OR v_request.status NOT IN ('AUTHORISED', 'EXPANDED') THEN
-    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_NOT_AUTHORISED'
-      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_STATE_INVALID')::text;
+  IF v_operation.pay_batch_id IS DISTINCT FROM v_request.pay_batch_id THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_EXPAND_OPERATION_BATCH_MISMATCH'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'OPERATION_MISMATCH')::text;
   END IF;
 
   IF p_actor_user_id IS NOT NULL

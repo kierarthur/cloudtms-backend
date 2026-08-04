@@ -63,18 +63,20 @@ test('planning and both candidate helpers bind and revalidate the complete 512-r
 });
 
 test('finalisation and checker reconcile Overview with candidate net-bank amounts', () => {
-  assert.match(processChunk, /sum\(active_candidate\.net_bank_amount\)/i);
+  assert.match(processChunk, /sum\(pg_catalog\.round\(COALESCE\(fact_row\.net_bank_amount, 0\) \* 100\)::bigint\)/i);
+  assert.match(processChunk, /result_json->>'active_net_amount_pence'/i);
   assert.match(processChunk, /total_bank_out = v_active_net_bank_amount/);
   assert.match(processChunk, /'active_frozen_source_item_amount_pence'/);
   assert.match(processChunk, /'active_paye_schedule_amount_pence'/);
   assert.match(processChunk, /'active_transfer_amount_pence'/);
-  assert.match(checker, /sum\(active_candidate\.net_bank_amount\)/i);
+  assert.match(checker, /result_json->>'active_net_amount_pence'/i);
   assert.doesNotMatch(checker, /sum\(active_item\.amount_inc_vat\)[\s\S]{0,200}v_expected_active_total/i);
 });
 
 test('unselected and blocked financial scope has mandatory pre/post proof', () => {
   assert.match(selection, /'unselected_scope_hash_before', v_unselected_scope_hash_before/);
-  assert.match(processChunk, /v_unselected_scope_hash_after := private\.pay_payment_correction_sha256_v1/);
+  assert.match(processChunk, /result_json->>'unselected_chain_hash'/);
+  assert.match(processChunk, /v_page_unselected_chain_hash/);
   assert.match(processChunk, /v_blocked_scope_mismatch_count > 0/);
   assert.match(processChunk, /PAYMENT_CORRECTION_SCOPE_INTEGRITY_CONFLICT/);
   assert.match(checker, /v_unselected_before_hash IS NULL OR v_unselected_after_hash IS NULL/);

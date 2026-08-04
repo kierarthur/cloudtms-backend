@@ -74,6 +74,22 @@ DECLARE
     v_candidate_selection_json jsonb := '{}'::jsonb;
     v_candidate_selected_scope_json jsonb := '{}'::jsonb;
     v_unselected_scope_hash_before text;
+    v_page_sequence_no integer := 1;
+    v_prior_page_hash text;
+    v_first_scanned_candidate_id uuid;
+    v_scanned_candidate_count integer := 0;
+    v_selected_chain_hash text;
+    v_unselected_chain_hash text;
+    v_explicit_id_chain_hash text;
+    v_candidate_audit_hash text;
+    v_existing_chunk public.banking_pay_operation_chunks%ROWTYPE;
+    v_requested_explicit_count integer := 0;
+    v_requested_explicit_hash text;
+    v_actual_explicit_count integer := 0;
+    v_actual_explicit_hash text;
+    v_explicit_missing_count integer := 0;
+    v_explicit_extra_count integer := 0;
+    v_page_chain_mismatch_count integer := 0;
 BEGIN
     IF p_correction_request_id IS NULL OR p_operation_id IS NULL THEN
         RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_IDENTIFIERS_REQUIRED'
@@ -95,35 +111,18 @@ BEGIN
     IF p_cursor_json IS NOT NULL
        AND (
            pg_catalog.jsonb_typeof(p_cursor_json) <> 'object'
-           OR (
-               p_cursor_json ->> 'last_pay_batch_candidate_id' IS NOT NULL
-               AND p_cursor_json ->> 'last_pay_batch_candidate_id'
-                   !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-           )
+           OR p_cursor_json->>'page_sequence_no' !~ '^[0-9]+$'
+           OR CASE WHEN p_cursor_json->>'page_sequence_no' ~ '^[0-9]+$'
+                   THEN (p_cursor_json->>'page_sequence_no')::integer < 2 ELSE true END
+           OR p_cursor_json ->> 'last_scanned_candidate_id'
+                !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           OR p_cursor_json ->> 'prior_page_hash' !~ '^[0-9a-f]{64}$'
+           OR p_cursor_json ->> 'scope_fence' !~ '^[0-9a-f]{64}$'
        ) THEN
         RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_CURSOR_INVALID'
             USING ERRCODE = 'P0001',
                   DETAIL = pg_catalog.jsonb_build_object(
                       'code', 'DESCRIPTOR_INVALID'
-                  )::text;
-    END IF;
-
-    SELECT operation_row.*
-    INTO v_operation
-    FROM public.banking_pay_operations AS operation_row
-    WHERE operation_row.id = p_operation_id
-    FOR UPDATE;
-
-    IF NOT FOUND
-       OR v_operation.operation_type IS DISTINCT FROM 'PAYMENT_CORRECTION'
-       OR v_operation.phase IS DISTINCT FROM 'PREPARE_SELECTION'
-       OR v_operation.input_json ->> 'correction_request_id'
-            IS DISTINCT FROM p_correction_request_id::text THEN
-        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_OPERATION_MISMATCH'
-            USING ERRCODE = 'P0001',
-                  DETAIL = pg_catalog.jsonb_build_object(
-                      'code', 'OPERATION_MISMATCH',
-                      'operation_id', p_operation_id
                   )::text;
     END IF;
 
@@ -136,57 +135,19 @@ BEGIN
                   )::text;
     END IF;
 
-    IF COALESCE(v_operation.lease_owner, v_operation.locked_by) IS NULL
-       OR COALESCE(v_operation.lease_owner, v_operation.locked_by)
-            IS DISTINCT FROM p_worker_id THEN
-        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_LEASE_MISMATCH'
-            USING ERRCODE = 'P0001',
-                  DETAIL = pg_catalog.jsonb_build_object(
-                      'code', 'LEASE_MISMATCH',
-                      'operation_id', p_operation_id
-                  )::text;
-    END IF;
-
-    IF COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc)
-          IS NULL THEN
-        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_LEASE_REQUIRED'
-            USING ERRCODE = 'P0001',
-                  DETAIL = pg_catalog.jsonb_build_object(
-                      'code', 'LEASE_REQUIRED',
-                      'operation_id', p_operation_id
-                  )::text;
-    END IF;
-
-    IF COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc)
-          <= pg_catalog.clock_timestamp() THEN
-        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_LEASE_EXPIRED'
-            USING ERRCODE = 'P0001',
-                  DETAIL = pg_catalog.jsonb_build_object(
-                      'code', 'LEASE_MISMATCH',
-                      'operation_id', p_operation_id
-                  )::text;
-    END IF;
-
+    -- Non-gating planning order: request -> batch -> operation.
     SELECT request_row.*
     INTO v_request
     FROM public.pay_payment_correction_requests AS request_row
     WHERE request_row.id = p_correction_request_id
     FOR UPDATE;
 
-    IF NOT FOUND OR v_request.status IS DISTINCT FROM 'PLANNING' THEN
+    IF NOT FOUND OR v_request.status NOT IN ('PLANNING', 'PLANNED') THEN
         RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_NOT_PLANNING'
             USING ERRCODE = 'P0001',
                   DETAIL = pg_catalog.jsonb_build_object(
                       'code', 'REQUEST_NOT_PLANNING',
                       'correction_request_id', p_correction_request_id
-                  )::text;
-    END IF;
-
-    IF v_request.pay_batch_id IS DISTINCT FROM v_operation.pay_batch_id THEN
-        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_OPERATION_BATCH_MISMATCH'
-            USING ERRCODE = 'P0001',
-                  DETAIL = pg_catalog.jsonb_build_object(
-                      'code', 'OPERATION_MISMATCH'
                   )::text;
     END IF;
 
@@ -212,6 +173,72 @@ BEGIN
                   DETAIL = pg_catalog.jsonb_build_object(
                       'code', 'SELECTION_STALE'
                   )::text;
+    END IF;
+
+    SELECT operation_row.*
+    INTO v_operation
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id = p_operation_id
+    FOR UPDATE;
+
+    IF NOT FOUND
+       OR v_operation.operation_type IS DISTINCT FROM 'PAYMENT_CORRECTION'
+       OR (v_request.status = 'PLANNING' AND v_operation.phase IS DISTINCT FROM 'PREPARE_SELECTION')
+       OR (v_request.status = 'PLANNED' AND v_operation.phase IS DISTINCT FROM 'AWAITING_REAUTHENTICATION')
+       OR v_operation.input_json ->> 'correction_request_id'
+            IS DISTINCT FROM p_correction_request_id::text
+       OR v_operation.pay_batch_id IS DISTINCT FROM v_request.pay_batch_id THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_OPERATION_MISMATCH'
+            USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+                'code', 'OPERATION_MISMATCH', 'operation_id', p_operation_id
+            )::text;
+    END IF;
+
+    -- A committed final page may have moved the request and operation forward
+    -- before the Worker received the response.  Return that exact durable page
+    -- without requiring a now-released lease; a different cursor still fails.
+    IF v_request.status = 'PLANNED' THEN
+        v_page_sequence_no := COALESCE((p_cursor_json->>'page_sequence_no')::integer, 1);
+        v_prior_page_hash := COALESCE(
+          p_cursor_json->>'prior_page_hash',
+          private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+            'version', 1, 'correction_request_id', v_request.id, 'chain', 'PREPARE_SELECTION'
+          ))
+        );
+        SELECT chunk_row.* INTO v_existing_chunk
+        FROM public.banking_pay_operation_chunks AS chunk_row
+        WHERE chunk_row.operation_id = v_operation.id
+          AND chunk_row.phase = 'PREPARE_SELECTION'
+          AND chunk_row.chunk_type = 'CANDIDATE_SCOPE'
+          AND chunk_row.sequence_no = v_page_sequence_no
+          AND chunk_row.status = 'COMPLETE';
+        IF NOT FOUND
+           OR v_existing_chunk.payload_json->>'cursor_hash'
+                IS DISTINCT FROM private.pay_payment_correction_sha256_v1(COALESCE(p_cursor_json, '{}'::jsonb))
+           OR v_existing_chunk.result_json->>'prior_page_hash' IS DISTINCT FROM v_prior_page_hash
+           OR COALESCE((v_existing_chunk.result_json->>'complete')::boolean, false) IS NOT TRUE THEN
+          RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_PAGE_DIGEST_MISMATCH'
+            USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+              'code', 'PAGE_DIGEST_MISMATCH', 'page_sequence_no', v_page_sequence_no
+            )::text;
+        END IF;
+        RETURN v_existing_chunk.result_json || pg_catalog.jsonb_build_object(
+          'ok', true, 'correction_request_id', v_request.id,
+          'operation_id', v_operation.id, 'phase', 'AWAITING_REAUTHENTICATION',
+          'selection_hash', v_request.selection_hash, 'complete', true,
+          'replayed', true, 'code', 'SELECTION_READY'
+        );
+    END IF;
+
+    IF COALESCE(v_operation.lease_owner, v_operation.locked_by) IS NULL
+       OR COALESCE(v_operation.lease_owner, v_operation.locked_by) IS DISTINCT FROM p_worker_id
+       OR COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc) IS NULL
+       OR COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc)
+            <= pg_catalog.clock_timestamp() THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_LEASE_MISMATCH'
+            USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+                'code', 'LEASE_MISMATCH', 'operation_id', p_operation_id
+            )::text;
     END IF;
 
     SELECT settings_row.*
@@ -284,14 +311,14 @@ BEGIN
                   )::text;
     END IF;
 
+    -- Constant-size scope fence.  Exact candidate/item identity is frozen by
+    -- bounded pages and never materialised here as a whole-batch JSON value.
     v_active_batch_scope_hash := private.pay_payment_correction_sha256_v1(
         pg_catalog.jsonb_build_object(
-            'version', 1,
+            'version', 2,
             'pay_batch_id', v_batch.id,
             'batch_status', v_batch.status,
-            'total_bank_out_pence', pg_catalog.round(
-                COALESCE(v_batch.total_bank_out, 0) * 100
-            )::bigint,
+            'total_bank_out_pence', pg_catalog.round(COALESCE(v_batch.total_bank_out, 0) * 100)::bigint,
             'source_scope_change_generation', v_batch.source_scope_change_generation,
             'execution_commit_state', v_batch.execution_commit_state,
             'execution_commit_ref', v_batch.execution_commit_ref,
@@ -306,8 +333,7 @@ BEGIN
             'scheduled_at_utc', v_batch.scheduled_at_utc,
             'active_authorisation', (
                 SELECT pg_catalog.jsonb_build_object(
-                    'auth_request_id', auth_row.id,
-                    'state', auth_row.state,
+                    'auth_request_id', auth_row.id, 'state', auth_row.state,
                     'required_quantity', auth_row.required_quantity,
                     'schedule_kind', auth_row.schedule_kind,
                     'scheduled_at_utc', auth_row.scheduled_at_utc,
@@ -316,115 +342,20 @@ BEGIN
                 FROM public.pay_batch_auth_requests AS auth_row
                 WHERE auth_row.pay_batch_id = v_batch.id
                   AND auth_row.state IN ('AWAITING', 'PENDING_AUTHORISATION', 'AUTHORISED')
-                ORDER BY auth_row.created_at_utc DESC, auth_row.id DESC
-                LIMIT 1
+                ORDER BY auth_row.created_at_utc DESC, auth_row.id DESC LIMIT 1
             ),
-            'active_candidate_items', (
-                SELECT COALESCE(
-                    pg_catalog.jsonb_agg(
-                        pg_catalog.jsonb_build_object(
-                            'pay_batch_candidate_id', candidate_scope.id,
-                            'candidate_id', candidate_scope.candidate_id,
-                            'settlement_status', candidate_scope.settlement_status,
-                            'net_bank_amount_pence', pg_catalog.round(
-                                COALESCE(candidate_scope.net_bank_amount, 0) * 100
-                            )::bigint,
-                            'pay_batch_item_id', item_scope.id,
-                            'item_type', item_scope.item_type,
-                            'amount_ex_vat_pence', pg_catalog.round(
-                                COALESCE(item_scope.amount_ex_vat, 0) * 100
-                            )::bigint,
-                            'amount_vat_pence', pg_catalog.round(
-                                COALESCE(item_scope.amount_vat, 0) * 100
-                            )::bigint,
-                            'amount_inc_vat_pence', pg_catalog.round(
-                                COALESCE(item_scope.amount_inc_vat, 0) * 100
-                            )::bigint,
-                            'frozen_component_key_type', item_scope.frozen_component_key_type,
-                            'frozen_component_key_value', item_scope.frozen_component_key_value,
-                            'frozen_component_classification', item_scope.frozen_component_classification,
-                            'frozen_source_basis_json', item_scope.frozen_source_basis_json,
-                            'operation_source_key', item_scope.operation_source_key,
-                            'reservation_id', item_scope.reservation_id,
-                            'finance_component_id', item_scope.finance_component_id,
-                            'pay_bank_transfer_id', item_scope.pay_bank_transfer_id
-                        )
-                        ORDER BY candidate_scope.id, item_scope.id
-                    ),
-                    '[]'::jsonb
+            'change_signal', (
+                SELECT pg_catalog.jsonb_build_object(
+                    'version', COALESCE(signal_row.version, 0),
+                    'payment_status_version', COALESCE(signal_row.payment_status_version, 0),
+                    'correction_progress_version', COALESCE(signal_row.correction_progress_version, 0),
+                    'overview_version', COALESCE(signal_row.overview_version, 0),
+                    'last_changed_at_utc', signal_row.last_changed_at_utc
                 )
-                FROM public.pay_batch_candidates AS candidate_scope
-                JOIN public.pay_batch_items AS item_scope
-                  ON item_scope.pay_batch_candidate_id = candidate_scope.id
-                 AND COALESCE(item_scope.is_voided, false) IS NOT TRUE
-                WHERE candidate_scope.pay_batch_id = v_batch.id
+                FROM public.banking_pay_batch_change_signals AS signal_row
+                WHERE signal_row.pay_batch_id = v_batch.id
             ),
-            'provider_scope', (
-                SELECT COALESCE(
-                    pg_catalog.jsonb_agg(
-                        pg_catalog.jsonb_build_object(
-                            'pay_bank_transfer_id', transfer_scope.id,
-                            'status', transfer_scope.status,
-                            'rail_state', transfer_scope.rail_state,
-                            'request_id', transfer_scope.request_id,
-                            'rail_tx_id', transfer_scope.rail_tx_id,
-                            'transfer_group_key', transfer_scope.transfer_group_key,
-                            'amount_pence', pg_catalog.round(
-                                COALESCE(transfer_scope.amount, 0) * 100
-                            )::bigint
-                        )
-                        ORDER BY transfer_scope.id
-                    ),
-                    '[]'::jsonb
-                )
-                FROM public.pay_bank_transfers AS transfer_scope
-                WHERE transfer_scope.pay_batch_id = v_batch.id
-            ),
-            'provider_events', (
-                SELECT COALESCE(
-                    pg_catalog.jsonb_agg(
-                        pg_catalog.jsonb_build_object(
-                            'bank_event_id', event_scope.id,
-                            'pay_bank_transfer_id', event_scope.pay_bank_transfer_id,
-                            'normalised_state', event_scope.normalised_state,
-                            'movement_classification', event_scope.movement_classification,
-                            'correction_disposition', event_scope.correction_disposition,
-                            'mapping_status', event_scope.mapping_status,
-                            'event_time_utc', event_scope.event_time_utc,
-                            'provider_request_id', event_scope.provider_request_id,
-                            'provider_transaction_id', event_scope.provider_transaction_id
-                        )
-                        ORDER BY event_scope.id
-                    ),
-                    '[]'::jsonb
-                )
-                FROM public.pay_bank_transfer_events AS event_scope
-                WHERE event_scope.pay_batch_id = v_batch.id
-            ),
-            'candidate_count', (
-                SELECT pg_catalog.count(*)
-                FROM public.pay_batch_candidates AS candidate_count_row
-                WHERE candidate_count_row.pay_batch_id = v_batch.id
-            ),
-            'active_item_count', (
-                SELECT pg_catalog.count(*)
-                FROM public.pay_batch_items AS item_count_row
-                JOIN public.pay_batch_candidates AS item_candidate
-                  ON item_candidate.id = item_count_row.pay_batch_candidate_id
-                WHERE item_candidate.pay_batch_id = v_batch.id
-                  AND COALESCE(item_count_row.is_voided, false) IS NOT TRUE
-            ),
-            'latest_request_update', (
-                SELECT pg_catalog.max(request_row.updated_at_utc)
-                FROM public.pay_payment_correction_requests AS request_row
-                WHERE request_row.pay_batch_id = v_batch.id
-                  AND request_row.status NOT IN ('PLANNING', 'PLANNED')
-            ),
-            'latest_provider_event', (
-                SELECT pg_catalog.max(event_row.received_at_utc)
-                FROM public.pay_bank_transfer_events AS event_row
-                WHERE event_row.pay_batch_id = v_batch.id
-            )
+            'scope_version_authority', 'banking_pay_batch_change_signals'
         )
     );
 
@@ -506,88 +437,105 @@ BEGIN
         );
     END IF;
 
-    v_cursor_candidate_id := NULLIF(
-        p_cursor_json ->> 'last_pay_batch_candidate_id',
-        ''
-    )::uuid;
+    v_page_sequence_no := COALESCE((p_cursor_json->>'page_sequence_no')::integer, 1);
+    v_cursor_candidate_id := NULLIF(p_cursor_json->>'last_scanned_candidate_id', '')::uuid;
+    v_prior_page_hash := COALESCE(
+        p_cursor_json->>'prior_page_hash',
+        private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+            'version', 1, 'correction_request_id', v_request.id, 'chain', 'PREPARE_SELECTION'
+        ))
+    );
 
-    IF v_mode = 'ALL_MATCHING' THEN
-        SELECT COALESCE(
-                   pg_catalog.jsonb_agg(scan_row.id::text ORDER BY scan_row.id),
-                   '[]'::jsonb
-               ),
-               pg_catalog.max(scan_row.id),
-               pg_catalog.count(*)::integer
-        INTO v_scan_candidate_tokens,
-             v_scan_last_candidate_id,
-             v_scan_candidate_count
-        FROM (
-            SELECT candidate_row.id
-            FROM public.pay_batch_candidates AS candidate_row
-            WHERE candidate_row.pay_batch_id = v_batch.id
-              AND (v_cursor_candidate_id IS NULL OR candidate_row.id > v_cursor_candidate_id)
-            ORDER BY candidate_row.id
-            LIMIT p_limit
-        ) AS scan_row;
-
-        v_status_filter := v_filter || pg_catalog.jsonb_build_object(
-            'action', CASE
-                WHEN v_requested_action = 'DRAFT_CANCEL' THEN 'DRAFT_CANCEL'
-                WHEN v_requested_action IN ('PRE_BANK_CANCEL', 'CANCEL_PAYMENT') THEN 'CANCEL_PAYMENT'
-                WHEN v_requested_action IN ('NO_MONEY_RELEASE', 'NO_MONEY_UNWIND') THEN 'RELEASE_FAILED_PAYMENT'
-                ELSE v_requested_action
-            END,
-            'actionable_only', true,
-            'excluded_candidate_tokens', COALESCE(
-                v_selection #> '{selection,exclusions}',
-                v_selection -> 'exclusions',
-                '[]'::jsonb
-            ),
-            'included_candidate_tokens', v_scan_candidate_tokens
-        );
-        v_status_read_limit := CASE
-            WHEN p_limit <= 25 THEN 25
-            WHEN p_limit <= 50 THEN 50
-            WHEN p_limit <= 75 THEN 75
-            ELSE 100
-        END;
-        v_status_snapshot_token := private.pay_payment_correction_sha256_v1(
-            pg_catalog.jsonb_build_object(
-                'version', 1,
-                'active_batch_scope_hash', v_active_batch_scope_hash,
-                'filter', v_status_filter,
-                'sort_key', 'CANDIDATE',
-                'sort_direction', 'ASC'
-            )
-        );
-
-        v_status_page := public.pay_batch_payment_status_page_v1(
-            v_batch.id,
-            v_actor_user_id,
-            v_status_filter,
-            'CANDIDATE',
-            'ASC',
-            v_status_read_limit,
-            NULL::jsonb
-        );
-
-        IF COALESCE((v_status_page ->> 'ok')::boolean, false) IS NOT TRUE
-           OR v_status_page ->> 'active_batch_scope_hash' IS DISTINCT FROM v_active_batch_scope_hash THEN
-            RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_SNAPSHOT_STALE'
-                USING ERRCODE = 'P0001',
-                      DETAIL = pg_catalog.jsonb_build_object(
-                          'code', COALESCE(v_status_page ->> 'code', 'SELECTION_STALE')
-                      )::text;
-        END IF;
+    IF p_cursor_json IS NOT NULL
+       AND p_cursor_json->>'scope_fence' IS DISTINCT FROM v_active_batch_scope_hash THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_SNAPSHOT_STALE'
+          USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'SELECTION_STALE')::text;
     END IF;
 
-    SELECT COALESCE(
-        pg_catalog.max(member_row.selection_ordinal),
-        0
-    )
-    INTO v_start_ordinal
-    FROM public.pay_payment_correction_request_candidates AS member_row
-    WHERE member_row.correction_request_id = v_request.id;
+    SELECT chunk_row.* INTO v_existing_chunk
+    FROM public.banking_pay_operation_chunks AS chunk_row
+    WHERE chunk_row.operation_id = v_operation.id
+      AND chunk_row.phase = 'PREPARE_SELECTION'
+      AND chunk_row.chunk_type = 'CANDIDATE_SCOPE'
+      AND chunk_row.sequence_no = v_page_sequence_no;
+
+    IF FOUND THEN
+        IF v_existing_chunk.payload_json->>'cursor_hash'
+             IS DISTINCT FROM private.pay_payment_correction_sha256_v1(COALESCE(p_cursor_json, '{}'::jsonb))
+           OR v_existing_chunk.payload_json->>'scope_fence' IS DISTINCT FROM v_active_batch_scope_hash
+           OR v_existing_chunk.result_json->>'prior_page_hash' IS DISTINCT FROM v_prior_page_hash THEN
+            RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_PAGE_DIGEST_MISMATCH'
+              USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+                'code', 'PAGE_DIGEST_MISMATCH', 'page_sequence_no', v_page_sequence_no
+              )::text;
+        END IF;
+        RETURN v_existing_chunk.result_json || pg_catalog.jsonb_build_object(
+          'ok', true, 'correction_request_id', v_request.id, 'operation_id', v_operation.id,
+          'replayed', true, 'code', CASE WHEN COALESCE((v_existing_chunk.result_json->>'complete')::boolean, false)
+            THEN 'SELECTION_READY' ELSE 'SELECTION_PAGE_PREPARED' END
+        );
+    END IF;
+
+    IF v_page_sequence_no > 1 AND NOT EXISTS (
+        SELECT 1 FROM public.banking_pay_operation_chunks AS prior_chunk
+        WHERE prior_chunk.operation_id = v_operation.id
+          AND prior_chunk.phase = 'PREPARE_SELECTION'
+          AND prior_chunk.chunk_type = 'CANDIDATE_SCOPE'
+          AND prior_chunk.sequence_no = v_page_sequence_no - 1
+          AND prior_chunk.status = 'COMPLETE'
+          AND prior_chunk.result_json->>'page_hash' = v_prior_page_hash
+          AND prior_chunk.result_json->>'last_scanned_candidate_id' = v_cursor_candidate_id::text
+    ) THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_PAGE_DIGEST_MISMATCH'
+          USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+            'code', 'PAGE_DIGEST_MISMATCH', 'page_sequence_no', v_page_sequence_no
+          )::text;
+    END IF;
+
+    SELECT COALESCE(pg_catalog.sum((prior_chunk.result_json->>'page_candidate_count')::integer), 0)::bigint,
+           COALESCE((pg_catalog.array_agg(prior_chunk.result_json->>'selected_chain_hash'
+                    ORDER BY prior_chunk.sequence_no DESC))[1],
+                    private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+                      'version', 1, 'correction_request_id', v_request.id, 'chain', 'SELECTED'
+                    ))),
+           COALESCE((pg_catalog.array_agg(prior_chunk.result_json->>'unselected_chain_hash'
+                    ORDER BY prior_chunk.sequence_no DESC))[1],
+                    private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+                      'version', 1, 'correction_request_id', v_request.id, 'chain', 'UNSELECTED'
+                    ))),
+           COALESCE((pg_catalog.array_agg(prior_chunk.result_json->>'explicit_id_chain_hash'
+                    ORDER BY prior_chunk.sequence_no DESC))[1],
+                    private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+                      'version', 1, 'pay_batch_id', v_batch.id, 'chain', 'EXPLICIT_IDS'
+                    )))
+    INTO v_start_ordinal, v_selected_chain_hash, v_unselected_chain_hash,
+         v_explicit_id_chain_hash
+    FROM public.banking_pay_operation_chunks AS prior_chunk
+    WHERE prior_chunk.operation_id = v_operation.id
+      AND prior_chunk.phase = 'PREPARE_SELECTION'
+      AND prior_chunk.chunk_type = 'CANDIDATE_SCOPE'
+      AND prior_chunk.status = 'COMPLETE'
+      AND prior_chunk.sequence_no < v_page_sequence_no;
+
+    SELECT COALESCE(pg_catalog.jsonb_agg(scan_row.id::text ORDER BY scan_row.id), '[]'::jsonb),
+           pg_catalog.min(scan_row.id), pg_catalog.max(scan_row.id), pg_catalog.count(*)::integer
+    INTO v_scan_candidate_tokens, v_first_scanned_candidate_id,
+         v_scan_last_candidate_id, v_scan_candidate_count
+    FROM (
+        SELECT candidate_row.id
+        FROM public.pay_batch_candidates AS candidate_row
+        WHERE candidate_row.pay_batch_id = v_batch.id
+          AND (v_cursor_candidate_id IS NULL OR candidate_row.id > v_cursor_candidate_id)
+          AND (v_mode = 'ALL_MATCHING' OR candidate_row.id::text IN (
+            SELECT explicit_token.value
+            FROM pg_catalog.jsonb_array_elements_text(
+              COALESCE(v_selection->'canonical_explicit_candidate_tokens', '[]'::jsonb)
+            ) AS explicit_token(value)
+          ))
+        ORDER BY candidate_row.id
+        LIMIT p_limit
+    ) AS scan_row;
+    v_scanned_candidate_count := v_scan_candidate_count;
 
     FOR v_candidate IN
         SELECT candidate_row.id AS pay_batch_candidate_id,
@@ -597,37 +545,13 @@ BEGIN
                candidate_row.settlement_status
         FROM public.pay_batch_candidates AS candidate_row
         WHERE candidate_row.pay_batch_id = v_batch.id
-          AND (v_cursor_candidate_id IS NULL OR candidate_row.id > v_cursor_candidate_id)
-          AND (
-              (
-                  v_mode = 'EXPLICIT'
-                  AND EXISTS (
-                      SELECT 1
-                      FROM pg_catalog.jsonb_array_elements_text(
-                          COALESCE(
-                              v_selection #> '{selection,explicit_candidate_tokens}',
-                              v_selection -> 'explicit_candidate_tokens',
-                              v_selection -> 'pay_batch_candidate_ids',
-                              '[]'::jsonb
-                          )
-                      ) AS explicit_token(token_value)
-                      WHERE explicit_token.token_value = candidate_row.id::text
-                  )
-              )
-              OR (
-                  v_mode = 'ALL_MATCHING'
-                  AND EXISTS (
-                      SELECT 1
-                      FROM pg_catalog.jsonb_array_elements(
-                          COALESCE(v_status_page -> 'rows', '[]'::jsonb)
-                      ) AS status_row(value)
-                      WHERE status_row.value ->> 'candidate_token' = candidate_row.id::text
-                  )
-              )
+          AND candidate_row.id::text IN (
+            SELECT scan_token.value
+            FROM pg_catalog.jsonb_array_elements_text(v_scan_candidate_tokens) AS scan_token(value)
           )
         ORDER BY candidate_row.id
-        LIMIT p_limit
     LOOP
+        v_last_candidate_id := v_candidate.pay_batch_candidate_id;
         SELECT
             pg_catalog.array_agg(item_row.id ORDER BY item_row.id),
             pg_catalog.count(*)::integer,
@@ -656,13 +580,29 @@ BEGIN
             2
         )::numeric(14,2);
 
-        IF v_item_count < 1 THEN
+        IF v_item_count < 1 AND v_mode = 'EXPLICIT' THEN
             RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_EMPTY_CANDIDATE'
                 USING ERRCODE = 'P0001',
                       DETAIL = pg_catalog.jsonb_build_object(
                           'code', 'SELECTION_STALE',
                           'pay_batch_candidate_id', v_candidate.pay_batch_candidate_id
                       )::text;
+        END IF;
+
+        IF v_item_count < 1 THEN
+            v_candidate_audit_hash := private.pay_payment_correction_sha256_v1(
+              pg_catalog.jsonb_build_object(
+                'version', 1, 'pay_batch_candidate_id', v_candidate.pay_batch_candidate_id,
+                'candidate_id', v_candidate.candidate_id,
+                'net_bank_amount_pence', pg_catalog.round(COALESCE(v_candidate.net_bank_amount, 0) * 100)::bigint,
+                'settlement_status', v_candidate.settlement_status, 'pay_batch_item_ids', '[]'::jsonb
+              )
+            );
+            v_unselected_chain_hash := private.pay_payment_correction_sha256_v1(
+              pg_catalog.jsonb_build_object('prior', v_unselected_chain_hash,
+                                             'candidate_hash', v_candidate_audit_hash)
+            );
+            CONTINUE;
         END IF;
 
         v_candidate_selection_json := pg_catalog.jsonb_build_object(
@@ -859,7 +799,7 @@ BEGIN
             ELSE false
         END;
 
-        IF v_action_allowed IS NOT TRUE THEN
+        IF v_action_allowed IS NOT TRUE AND v_mode = 'EXPLICIT' THEN
             RAISE EXCEPTION 'PAYMENT_CORRECTION_ACTION_NOT_COMMON'
                 USING ERRCODE = 'P0001',
                       DETAIL = pg_catalog.jsonb_build_object(
@@ -909,6 +849,101 @@ BEGIN
                 'eligibility_code', v_eligibility_code
             )
         );
+
+        -- Boundary-independent audit chain.  Each candidate contributes one
+        -- digest, so replay/finalisation may use different bounded page sizes
+        -- without reconstructing a whole-request JSON value.
+        v_candidate_audit_hash := private.pay_payment_correction_sha256_v1(
+          pg_catalog.jsonb_build_object(
+            'version', 1,
+            'pay_batch_candidate_id', v_candidate.pay_batch_candidate_id,
+            'candidate_id', v_candidate.candidate_id,
+            'net_bank_amount_pence', pg_catalog.round(COALESCE(v_candidate.net_bank_amount, 0) * 100)::bigint,
+            'settlement_status', v_candidate.settlement_status,
+            'item_state', COALESCE((
+              SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_array(
+                item_row.id, item_row.item_type, COALESCE(item_row.is_voided, false),
+                pg_catalog.round(COALESCE(item_row.amount_ex_vat, 0) * 100)::bigint,
+                pg_catalog.round(COALESCE(item_row.amount_vat, 0) * 100)::bigint,
+                pg_catalog.round(COALESCE(item_row.amount_inc_vat, 0) * 100)::bigint,
+                item_row.reservation_id, item_row.finance_component_id,
+                item_row.pay_bank_transfer_id, item_row.operation_source_key
+              ) ORDER BY item_row.id)
+              FROM public.pay_batch_items AS item_row
+              WHERE item_row.pay_batch_candidate_id = v_candidate.pay_batch_candidate_id
+            ), '[]'::jsonb),
+            'reservation_state', COALESCE((
+              SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_array(
+                reservation_row.id, reservation_row.pay_batch_item_id,
+                reservation_row.status, reservation_row.committed_at_utc,
+                reservation_row.settled_at_utc, reservation_row.released_at_utc
+              ) ORDER BY reservation_row.id)
+              FROM public.pay_advance_reservations AS reservation_row
+              WHERE reservation_row.pay_batch_item_id = ANY(v_item_ids)
+            ), '[]'::jsonb),
+            'transfer_state', COALESCE((
+              SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_array(
+                transfer_row.id, transfer_row.status, transfer_row.rail_state,
+                transfer_row.request_id, transfer_row.rail_tx_id,
+                transfer_row.transfer_group_key
+              ) ORDER BY transfer_row.id)
+              FROM public.pay_bank_transfers AS transfer_row
+              WHERE transfer_row.id IN (
+                SELECT item_row.pay_bank_transfer_id
+                FROM public.pay_batch_items AS item_row
+                WHERE item_row.id = ANY(v_item_ids)
+                  AND item_row.pay_bank_transfer_id IS NOT NULL
+              )
+            ), '[]'::jsonb)
+          )
+        );
+
+        IF v_mode = 'ALL_MATCHING' AND (
+             v_action_allowed IS NOT TRUE
+             OR EXISTS (
+               SELECT 1 FROM pg_catalog.jsonb_array_elements_text(
+                 COALESCE(v_selection#>'{selection,exclusions}', v_selection->'exclusions', '[]'::jsonb)
+               ) AS excluded_token(value)
+               WHERE excluded_token.value = v_candidate.pay_batch_candidate_id::text
+             )
+             OR (
+               NULLIF(pg_catalog.btrim(v_filter->>'search'), '') IS NOT NULL
+               AND pg_catalog.lower(v_candidate.candidate_display_name)
+                   NOT LIKE '%' || pg_catalog.lower(pg_catalog.btrim(v_filter->>'search')) || '%'
+             )
+             OR (
+               NULLIF(pg_catalog.upper(pg_catalog.btrim(v_filter->>'pay_channel')), '') = 'PAYE'
+               AND NOT EXISTS (
+                 SELECT 1 FROM public.pay_batch_items AS channel_item
+                 WHERE channel_item.id = ANY(v_item_ids)
+                   AND pg_catalog.upper(COALESCE(channel_item.pay_channel, '')) = 'PAYE'
+               )
+             )
+             OR (
+               NULLIF(pg_catalog.upper(pg_catalog.btrim(v_filter->>'status')), '') IS NOT NULL
+               AND pg_catalog.upper(pg_catalog.btrim(v_filter->>'status'))
+                   NOT IN (v_eligibility_code, 'ACTIVE', 'NOT_PAID')
+             )
+           ) THEN
+            v_unselected_chain_hash := private.pay_payment_correction_sha256_v1(
+              pg_catalog.jsonb_build_object('prior', v_unselected_chain_hash,
+                                             'candidate_hash', v_candidate_audit_hash)
+            );
+            CONTINUE;
+        END IF;
+
+        v_selected_chain_hash := private.pay_payment_correction_sha256_v1(
+          pg_catalog.jsonb_build_object('prior', v_selected_chain_hash,
+                                         'candidate_hash', v_candidate_scope_hash)
+        );
+        IF v_mode = 'EXPLICIT' THEN
+          v_explicit_id_chain_hash := private.pay_payment_correction_sha256_v1(
+            pg_catalog.jsonb_build_object(
+              'prior', v_explicit_id_chain_hash,
+              'pay_batch_candidate_id', v_candidate.pay_batch_candidate_id::text
+            )
+          );
+        END IF;
 
         INSERT INTO public.pay_payment_correction_request_candidates (
             correction_request_id,
@@ -976,15 +1011,23 @@ BEGIN
         v_last_candidate_id := COALESCE(
             v_scan_last_candidate_id,
             v_cursor_candidate_id
-        );
-    END IF;
+            );
+        END IF;
 
     v_page_hash := private.pay_payment_correction_sha256_v1(
         pg_catalog.jsonb_build_object(
             'version', 1,
             'correction_request_id', v_request.id,
             'operation_id', v_operation.id,
-            'cursor', p_cursor_json,
+            'page_sequence_no', v_page_sequence_no,
+            'prior_page_hash', v_prior_page_hash,
+            'scope_fence', v_active_batch_scope_hash,
+            'first_scanned_candidate_id', v_first_scanned_candidate_id,
+            'last_scanned_candidate_id', v_scan_last_candidate_id,
+            'scanned_candidate_count', v_scanned_candidate_count,
+            'selected_chain_hash', v_selected_chain_hash,
+            'unselected_chain_hash', v_unselected_chain_hash,
+            'explicit_id_chain_hash', v_explicit_id_chain_hash,
             'page_members', (
                 SELECT pg_catalog.jsonb_agg(
                     pg_catalog.jsonb_build_array(
@@ -1005,13 +1048,7 @@ BEGIN
             )
         )
     );
-
-    SELECT COALESCE(pg_catalog.max(chunk_row.sequence_no), 0) + 1
-    INTO v_sequence_no
-    FROM public.banking_pay_operation_chunks AS chunk_row
-    WHERE chunk_row.operation_id = v_operation.id
-      AND chunk_row.phase = 'PREPARE_SELECTION'
-      AND chunk_row.chunk_type = 'CANDIDATE_SCOPE';
+    v_sequence_no := v_page_sequence_no;
 
     INSERT INTO public.banking_pay_operation_chunks (
         operation_id,
@@ -1038,19 +1075,26 @@ BEGIN
         'COMPLETE',
         pg_catalog.jsonb_build_object(
             'cursor_json', p_cursor_json,
+            'cursor_hash', private.pay_payment_correction_sha256_v1(COALESCE(p_cursor_json, '{}'::jsonb)),
+            'scope_fence', v_active_batch_scope_hash,
+            'prior_page_hash', v_prior_page_hash,
             'limit', p_limit
         ),
         pg_catalog.jsonb_build_object(
+            'page_sequence_no', v_page_sequence_no,
+            'prior_page_hash', v_prior_page_hash,
+            'first_scanned_candidate_id', v_first_scanned_candidate_id,
+            'last_scanned_candidate_id', v_scan_last_candidate_id,
             'page_candidate_count', v_page_candidate_count,
-            'scanned_candidate_count', CASE
-                WHEN v_mode = 'ALL_MATCHING' THEN v_scan_candidate_count
-                ELSE v_page_candidate_count
-            END,
+            'scanned_candidate_count', v_scanned_candidate_count,
             'page_active_item_count', v_page_active_item_count,
             'page_source_row_count', v_page_source_row_count,
             'page_amount_pence', v_page_amount_pence,
+            'selected_chain_hash', v_selected_chain_hash,
+            'unselected_chain_hash', v_unselected_chain_hash,
+            'explicit_id_chain_hash', v_explicit_id_chain_hash,
             'page_hash', v_page_hash,
-            'last_pay_batch_candidate_id', v_last_candidate_id
+            'last_pay_batch_candidate_id', v_scan_last_candidate_id
         ),
         NULL,
         v_page_candidate_count,
@@ -1061,21 +1105,14 @@ BEGIN
         pg_catalog.clock_timestamp(),
         pg_catalog.clock_timestamp()
     )
-    ON CONFLICT (operation_id, phase, chunk_type, sequence_no)
-    DO UPDATE SET
-        status = EXCLUDED.status,
-        result_json = CASE
-            WHEN public.banking_pay_operation_chunks.result_json ->> 'page_hash'
-                 = EXCLUDED.result_json ->> 'page_hash'
-                THEN public.banking_pay_operation_chunks.result_json
-            ELSE EXCLUDED.result_json
-        END,
-        completed_count = EXCLUDED.completed_count,
-        failed_count = EXCLUDED.failed_count,
-        completed_at_utc = COALESCE(
-            public.banking_pay_operation_chunks.completed_at_utc,
-            EXCLUDED.completed_at_utc
-        );
+    ON CONFLICT (operation_id, phase, chunk_type, sequence_no) DO NOTHING;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_PAGE_DIGEST_MISMATCH'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'PAGE_DIGEST_MISMATCH', 'page_sequence_no', v_page_sequence_no
+        )::text;
+    END IF;
 
     IF v_mode = 'ALL_MATCHING' THEN
         SELECT EXISTS (
@@ -1090,71 +1127,56 @@ BEGIN
         INTO v_has_more;
     ELSE
       SELECT EXISTS (
-        SELECT 1
-        FROM public.pay_batch_candidates AS remaining_candidate
+        SELECT 1 FROM public.pay_batch_candidates AS remaining_candidate
         WHERE remaining_candidate.pay_batch_id = v_batch.id
-          AND (v_last_candidate_id IS NULL OR remaining_candidate.id > v_last_candidate_id)
-          AND (
-              (
-                  v_mode = 'EXPLICIT'
-                  AND EXISTS (
-                      SELECT 1
-                      FROM pg_catalog.jsonb_array_elements_text(
-                          COALESCE(
-                              v_selection #> '{selection,explicit_candidate_tokens}',
-                              v_selection -> 'explicit_candidate_tokens',
-                              v_selection -> 'pay_batch_candidate_ids',
-                              '[]'::jsonb
-                          )
-                      ) AS explicit_token(token_value)
-                      WHERE explicit_token.token_value = remaining_candidate.id::text
-                  )
-              )
-              OR (
-                  v_mode = 'ALL_MATCHING'
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM pg_catalog.jsonb_array_elements_text(
-                          COALESCE(
-                              v_selection #> '{selection,exclusions}',
-                              v_selection -> 'exclusions',
-                              '[]'::jsonb
-                          )
-                      ) AS excluded_token(token_value)
-                      WHERE excluded_token.token_value = remaining_candidate.id::text
-                  )
-                  AND (
-                      NULLIF(pg_catalog.btrim(v_filter ->> 'search'), '') IS NULL
-                      OR remaining_candidate.candidate_display_name
-                           ILIKE '%' || pg_catalog.btrim(v_filter ->> 'search') || '%'
-                  )
-              )
+          AND (v_scan_last_candidate_id IS NULL OR remaining_candidate.id > v_scan_last_candidate_id)
+          AND remaining_candidate.id::text IN (
+            SELECT explicit_token.value
+            FROM pg_catalog.jsonb_array_elements_text(
+              COALESCE(v_selection->'canonical_explicit_candidate_tokens', '[]'::jsonb)
+            ) AS explicit_token(value)
           )
-      )
-      INTO v_has_more;
+      ) INTO v_has_more;
     END IF;
 
     v_complete := NOT v_has_more;
     v_next_cursor_json := CASE
-        WHEN v_complete OR v_last_candidate_id IS NULL THEN NULL
+        WHEN v_complete OR v_scan_last_candidate_id IS NULL THEN NULL
         ELSE pg_catalog.jsonb_build_object(
-            'last_pay_batch_candidate_id', v_last_candidate_id,
-            'active_batch_scope_hash', v_active_batch_scope_hash
+            'page_sequence_no', v_page_sequence_no + 1,
+            'last_scanned_candidate_id', v_scan_last_candidate_id,
+            'prior_page_hash', v_page_hash,
+            'scope_fence', v_active_batch_scope_hash
         )
     END;
 
+    UPDATE public.banking_pay_operation_chunks AS completed_page
+    SET result_json = completed_page.result_json || pg_catalog.jsonb_build_object(
+          'next_cursor_json', v_next_cursor_json,
+          'complete', v_complete
+        )
+    WHERE completed_page.operation_id = v_operation.id
+      AND completed_page.phase = 'PREPARE_SELECTION'
+      AND completed_page.chunk_type = 'CANDIDATE_SCOPE'
+      AND completed_page.sequence_no = v_page_sequence_no;
+
+    -- Totals are reduced from at most 200 durable page summaries.  The final
+    -- page does not scan or aggregate the complete membership identity set.
     SELECT
-        pg_catalog.count(*)::integer,
-        COALESCE(pg_catalog.sum(member_row.active_item_count), 0)::integer,
-        COALESCE(pg_catalog.sum(member_row.source_row_count), 0)::integer,
-        COALESCE(pg_catalog.sum(member_row.active_amount), 0)::numeric(14,2)
+        COALESCE(pg_catalog.sum((page_chunk.result_json->>'page_candidate_count')::integer), 0)::integer,
+        COALESCE(pg_catalog.sum((page_chunk.result_json->>'page_active_item_count')::integer), 0)::integer,
+        COALESCE(pg_catalog.sum((page_chunk.result_json->>'page_source_row_count')::integer), 0)::integer,
+        (COALESCE(pg_catalog.sum((page_chunk.result_json->>'page_amount_pence')::bigint), 0)::numeric / 100)::numeric(14,2)
     INTO
         v_total_candidate_count,
         v_total_active_item_count,
         v_total_source_row_count,
         v_total_amount
-    FROM public.pay_payment_correction_request_candidates AS member_row
-    WHERE member_row.correction_request_id = v_request.id;
+    FROM public.banking_pay_operation_chunks AS page_chunk
+    WHERE page_chunk.operation_id = v_operation.id
+      AND page_chunk.phase = 'PREPARE_SELECTION'
+      AND page_chunk.chunk_type = 'CANDIDATE_SCOPE'
+      AND page_chunk.status = 'COMPLETE';
 
     IF v_total_candidate_count > v_max_candidates
        OR v_total_active_item_count > v_max_active_items THEN
@@ -1176,131 +1198,141 @@ BEGIN
                       )::text;
         END IF;
 
-        -- Freeze an independent proof of every unselected candidate's frozen
-        -- payment, reservation and transfer state. This is stored in plan_json,
-        -- so no schema addition is required and later finalisation can prove
-        -- that the request changed only its immutable membership.
-        v_unselected_scope_hash_before := private.pay_payment_correction_sha256_v1(
-            pg_catalog.jsonb_build_object(
-                'version', 1,
-                'pay_batch_id', v_batch.id,
-                'unselected_candidates', COALESCE((
-                    SELECT pg_catalog.jsonb_agg(
-                        pg_catalog.jsonb_build_object(
-                            'pay_batch_candidate_id', candidate_scope.id,
-                            'candidate_id', candidate_scope.candidate_id,
-                            'net_bank_amount_pence', pg_catalog.round(
-                                COALESCE(candidate_scope.net_bank_amount, 0) * 100
-                            )::bigint,
-                            'settlement_status', candidate_scope.settlement_status,
-                            'items', COALESCE((
-                                SELECT pg_catalog.jsonb_agg(
-                                    pg_catalog.jsonb_build_object(
-                                        'id', item_scope.id,
-                                        'item_type', item_scope.item_type,
-                                        'is_voided', COALESCE(item_scope.is_voided, false),
-                                        'amount_ex_vat_pence', pg_catalog.round(COALESCE(item_scope.amount_ex_vat, 0) * 100)::bigint,
-                                        'amount_vat_pence', pg_catalog.round(COALESCE(item_scope.amount_vat, 0) * 100)::bigint,
-                                        'amount_inc_vat_pence', pg_catalog.round(COALESCE(item_scope.amount_inc_vat, 0) * 100)::bigint,
-                                        'reservation_id', item_scope.reservation_id,
-                                        'finance_component_id', item_scope.finance_component_id,
-                                        'pay_bank_transfer_id', item_scope.pay_bank_transfer_id,
-                                        'operation_source_key', item_scope.operation_source_key
-                                    ) ORDER BY item_scope.id
-                                )
-                                FROM public.pay_batch_items AS item_scope
-                                WHERE item_scope.pay_batch_candidate_id = candidate_scope.id
-                            ), '[]'::jsonb),
-                            'reservations', COALESCE((
-                                SELECT pg_catalog.jsonb_agg(
-                                    pg_catalog.jsonb_build_object(
-                                        'id', reservation_scope.id,
-                                        'pay_batch_item_id', reservation_scope.pay_batch_item_id,
-                                        'status', reservation_scope.status,
-                                        'reserved_amount_pence', pg_catalog.round(COALESCE(reservation_scope.reserved_amount, 0) * 100)::bigint,
-                                        'committed_at_utc', reservation_scope.committed_at_utc,
-                                        'settled_at_utc', reservation_scope.settled_at_utc,
-                                        'released_at_utc', reservation_scope.released_at_utc
-                                    ) ORDER BY reservation_scope.id
-                                )
-                                FROM public.pay_advance_reservations AS reservation_scope
-                                JOIN public.pay_batch_items AS reservation_item
-                                  ON reservation_item.id = reservation_scope.pay_batch_item_id
-                                WHERE reservation_item.pay_batch_candidate_id = candidate_scope.id
-                            ), '[]'::jsonb),
-                            'transfers', COALESCE((
-                                SELECT pg_catalog.jsonb_agg(
-                                    pg_catalog.jsonb_build_object(
-                                        'id', transfer_scope.id,
-                                        'status', transfer_scope.status,
-                                        'rail_state', transfer_scope.rail_state,
-                                        'request_id', transfer_scope.request_id,
-                                        'rail_tx_id', transfer_scope.rail_tx_id,
-                                        'transfer_group_key', transfer_scope.transfer_group_key,
-                                        'amount_pence', pg_catalog.round(COALESCE(transfer_scope.amount, 0) * 100)::bigint
-                                    ) ORDER BY transfer_scope.id
-                                )
-                                FROM public.pay_bank_transfers AS transfer_scope
-                                WHERE transfer_scope.id IN (
-                                    SELECT item_scope.pay_bank_transfer_id
-                                    FROM public.pay_batch_items AS item_scope
-                                    WHERE item_scope.pay_batch_candidate_id = candidate_scope.id
-                                      AND item_scope.pay_bank_transfer_id IS NOT NULL
-                                )
-                            ), '[]'::jsonb)
-                        ) ORDER BY candidate_scope.id
-                    )
-                    FROM public.pay_batch_candidates AS candidate_scope
-                    WHERE candidate_scope.pay_batch_id = v_batch.id
-                      AND NOT EXISTS (
-                          SELECT 1
-                          FROM public.pay_payment_correction_request_candidates AS selected_scope
-                          WHERE selected_scope.correction_request_id = v_request.id
-                            AND selected_scope.pay_batch_candidate_id = candidate_scope.id
-                      )
-                ), '[]'::jsonb)
-            )
-        );
+        -- The final reducer reads only the bounded page summaries.  It proves a
+        -- contiguous page/hash chain and never rebuilds all item identities.
+        WITH ordered_prepare_pages AS (
+          SELECT chunk_row.sequence_no,
+                 chunk_row.result_json,
+                 pg_catalog.row_number() OVER (ORDER BY chunk_row.sequence_no)::integer
+                   AS expected_sequence_no,
+                 pg_catalog.lag(chunk_row.result_json->>'page_hash')
+                   OVER (ORDER BY chunk_row.sequence_no) AS previous_page_hash
+          FROM public.banking_pay_operation_chunks AS chunk_row
+          WHERE chunk_row.operation_id = v_operation.id
+            AND chunk_row.phase = 'PREPARE_SELECTION'
+            AND chunk_row.chunk_type = 'CANDIDATE_SCOPE'
+            AND chunk_row.status = 'COMPLETE'
+        )
+        SELECT pg_catalog.count(*) FILTER (
+                 WHERE ordered_prepare_pages.sequence_no
+                         <> ordered_prepare_pages.expected_sequence_no
+                    OR (ordered_prepare_pages.sequence_no > 1
+                        AND ordered_prepare_pages.result_json->>'prior_page_hash'
+                          IS DISTINCT FROM ordered_prepare_pages.previous_page_hash)
+               )::integer
+        INTO v_page_chain_mismatch_count
+        FROM ordered_prepare_pages;
+
+        IF v_page_sequence_no > 200 OR v_page_chain_mismatch_count <> 0 OR (
+          SELECT pg_catalog.count(*) FROM public.banking_pay_operation_chunks AS chunk_row
+          WHERE chunk_row.operation_id = v_operation.id
+            AND chunk_row.phase = 'PREPARE_SELECTION'
+            AND chunk_row.chunk_type = 'CANDIDATE_SCOPE'
+            AND chunk_row.status = 'COMPLETE'
+        ) <> v_page_sequence_no THEN
+          RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_PAGE_DIGEST_MISMATCH'
+            USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+              'code', 'PAGE_DIGEST_MISMATCH', 'page_sequence_no', v_page_sequence_no
+            )::text;
+        END IF;
+
+        v_unselected_scope_hash_before := v_unselected_chain_hash;
+
+        IF v_mode = 'EXPLICIT' THEN
+          v_requested_explicit_count := COALESCE((v_selection->>'requested_explicit_count')::integer, 0);
+          v_requested_explicit_hash := v_selection->>'requested_explicit_hash';
+          SELECT pg_catalog.count(*)::integer
+          INTO v_actual_explicit_count
+          FROM public.pay_payment_correction_request_candidates AS member_row
+          WHERE member_row.correction_request_id = v_request.id;
+          v_actual_explicit_hash := v_explicit_id_chain_hash;
+
+          SELECT pg_catalog.count(*)::integer INTO v_explicit_missing_count
+          FROM (
+            SELECT explicit_token.value::uuid AS id
+            FROM pg_catalog.jsonb_array_elements_text(
+              COALESCE(v_selection->'canonical_explicit_candidate_tokens', '[]'::jsonb)
+            ) AS explicit_token(value)
+            EXCEPT
+            SELECT member_row.pay_batch_candidate_id
+            FROM public.pay_payment_correction_request_candidates AS member_row
+            WHERE member_row.correction_request_id = v_request.id
+          ) AS missing_member;
+
+          SELECT pg_catalog.count(*)::integer INTO v_explicit_extra_count
+          FROM (
+            SELECT member_row.pay_batch_candidate_id
+            FROM public.pay_payment_correction_request_candidates AS member_row
+            WHERE member_row.correction_request_id = v_request.id
+            EXCEPT
+            SELECT explicit_token.value::uuid
+            FROM pg_catalog.jsonb_array_elements_text(
+              COALESCE(v_selection->'canonical_explicit_candidate_tokens', '[]'::jsonb)
+            ) AS explicit_token(value)
+          ) AS extra_member;
+
+          IF v_requested_explicit_count <> v_actual_explicit_count
+             OR v_requested_explicit_hash IS DISTINCT FROM v_actual_explicit_hash
+             OR v_explicit_missing_count <> 0 OR v_explicit_extra_count <> 0 THEN
+            UPDATE public.pay_payment_correction_requests AS invalid_request
+            SET status = 'CANCELLED', cancelled_at_utc = pg_catalog.clock_timestamp(),
+                plan_json = COALESCE(invalid_request.plan_json, '{}'::jsonb)
+                  || pg_catalog.jsonb_build_object(
+                    'stale_code', 'EXPLICIT_SELECTION_MISMATCH',
+                    'requested_explicit_count', v_requested_explicit_count,
+                    'materialised_explicit_count', v_actual_explicit_count
+                  ),
+                updated_at_utc = pg_catalog.clock_timestamp()
+            WHERE invalid_request.id = v_request.id;
+            UPDATE public.banking_pay_operations AS invalid_operation
+            SET status = 'CANCELLED', phase = 'COMPLETE', runner_state = 'CANCELLED',
+                requires_user_action = false, run_after_utc = NULL,
+                result_json = COALESCE(invalid_operation.result_json, '{}'::jsonb)
+                  || pg_catalog.jsonb_build_object('code', 'EXPLICIT_SELECTION_MISMATCH'),
+                completed_at_utc = pg_catalog.clock_timestamp(),
+                lease_owner = NULL, lease_expires_at_utc = NULL,
+                locked_by = NULL, lock_expires_at_utc = NULL,
+                updated_at_utc = pg_catalog.clock_timestamp()
+            WHERE invalid_operation.id = v_operation.id;
+            RETURN pg_catalog.jsonb_build_object(
+              'ok', false, 'correction_request_id', v_request.id,
+              'operation_id', v_operation.id, 'phase', 'COMPLETE',
+              'complete', true, 'stale', true, 'code', 'EXPLICIT_SELECTION_MISMATCH',
+              'message', 'The exact requested payments could not be frozen. Refresh and select them again.'
+            );
+          END IF;
+        END IF;
 
         v_selection_hash := private.pay_payment_correction_sha256_v1(
             pg_catalog.jsonb_build_object(
-                'version', 1,
-                'pay_batch_id', v_batch.id,
+                'version', 2, 'pay_batch_id', v_batch.id,
                 'requested_action', v_requested_action,
                 'active_batch_scope_hash', v_active_batch_scope_hash,
                 'selected_candidate_count', v_total_candidate_count,
                 'selected_active_item_count', v_total_active_item_count,
                 'selected_source_row_count', v_total_source_row_count,
                 'selected_amount_pence', pg_catalog.round(v_total_amount * 100)::bigint,
-                'members', (
-                    SELECT pg_catalog.jsonb_agg(
-                        pg_catalog.jsonb_build_array(
-                            member_row.selection_ordinal,
-                            member_row.pay_batch_candidate_id,
-                            member_row.candidate_scope_hash,
-                            member_row.active_item_count,
-                            member_row.source_row_count,
-                            pg_catalog.round(member_row.active_amount * 100)::bigint,
-                            member_row.shared_instruction_scope_hash,
-                            member_row.eligibility_code_at_plan
-                        )
-                        ORDER BY member_row.selection_ordinal
-                    )
-                    FROM public.pay_payment_correction_request_candidates AS member_row
-                    WHERE member_row.correction_request_id = v_request.id
-                )
+                'selected_chain_hash', v_selected_chain_hash,
+                'unselected_chain_hash', v_unselected_chain_hash,
+                'prepare_page_count', v_page_sequence_no
             )
         );
 
         v_plan_json := pg_catalog.jsonb_build_object(
-            'contract_version', 1,
+            'contract_version', 2,
             'active_batch_scope_hash', v_active_batch_scope_hash,
+            'scope_fence_hash', v_active_batch_scope_hash,
             'requested_action', v_requested_action,
             'selected_candidate_count', v_total_candidate_count,
             'selected_active_item_count', v_total_active_item_count,
             'selected_source_row_count', v_total_source_row_count,
             'selected_amount_pence', pg_catalog.round(v_total_amount * 100)::bigint,
             'selection_hash', v_selection_hash,
+            'selected_chain_hash', v_selected_chain_hash,
+            'unselected_chain_hash', v_unselected_chain_hash,
+            'prepare_page_count', v_page_sequence_no,
+            'requested_explicit_count', v_requested_explicit_count,
+            'requested_explicit_hash', v_requested_explicit_hash,
             'unselected_scope_hash_before', v_unselected_scope_hash_before,
             'selection_ready_at_utc', pg_catalog.clock_timestamp()
         );
@@ -1319,7 +1351,9 @@ BEGIN
             phase = 'AWAITING_REAUTHENTICATION',
             progress_json = COALESCE(ready_operation.progress_json, '{}'::jsonb)
                 || pg_catalog.jsonb_build_object(
-                    'last_pay_batch_candidate_id', v_last_candidate_id,
+                    'last_scanned_candidate_id', v_scan_last_candidate_id,
+                    'selection_cursor_json', NULL,
+                    'last_prepare_page_hash', v_page_hash,
                     'selected_candidate_count', v_total_candidate_count,
                     'selected_active_item_count', v_total_active_item_count,
                     'selected_source_row_count', v_total_source_row_count,
@@ -1345,7 +1379,9 @@ BEGIN
         UPDATE public.banking_pay_operations AS paging_operation
         SET progress_json = COALESCE(paging_operation.progress_json, '{}'::jsonb)
                 || pg_catalog.jsonb_build_object(
-                    'last_pay_batch_candidate_id', v_last_candidate_id,
+                    'last_scanned_candidate_id', v_scan_last_candidate_id,
+                    'selection_cursor_json', v_next_cursor_json,
+                    'last_prepare_page_hash', v_page_hash,
                     'prepared_candidate_count', v_total_candidate_count,
                     'prepared_active_item_count', v_total_active_item_count,
                     'prepared_source_row_count', v_total_source_row_count,

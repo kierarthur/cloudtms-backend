@@ -25,7 +25,6 @@ DECLARE
     v_sort_direction text := pg_catalog.upper(pg_catalog.btrim(coalesce(p_sort_direction, '')));
     v_snapshot_token text;
     v_active_batch_scope_hash text;
-    v_diagnostic jsonb;
     v_rows jsonb := '[]'::jsonb;
     v_row_count integer := 0;
     v_total_matching_count integer := 0;
@@ -141,32 +140,23 @@ BEGIN
         );
     END IF;
 
-    BEGIN
-        v_diagnostic := public.pay_payment_cancelability_diagnostic(
-            p_pay_batch_id,
-            '{}'::jsonb,
-            p_actor_user_id,
-            'CURRENT_PAYMENT_STATUS'
+    IF p_actor_user_id IS NOT NULL AND NOT EXISTS (
+        SELECT 1
+        FROM public.tms_users AS actor_user
+        WHERE actor_user.id = p_actor_user_id
+          AND coalesce(actor_user.is_active, false)
+    ) THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'ok', false,
+            'pay_batch_id', p_pay_batch_id,
+            'code', 'PERMISSION_DENIED',
+            'message', 'You do not have permission to view this payment status.'
         );
-    EXCEPTION
-        WHEN SQLSTATE 'P0001' THEN
-            IF SQLERRM IN (
-                'PAY_PAYMENT_CANCELABILITY_DIAGNOSTIC_ACTOR_NOT_ALLOWED',
-                'PAY_PAYMENT_CANCELABILITY_DIAGNOSTIC_ACTOR_REQUIRED'
-            ) THEN
-                RETURN pg_catalog.jsonb_build_object(
-                    'ok', false,
-                    'pay_batch_id', p_pay_batch_id,
-                    'code', 'PERMISSION_DENIED',
-                    'message', 'You do not have permission to view this payment status.'
-                );
-            END IF;
-            RAISE;
-    END;
+    END IF;
 
     v_active_batch_scope_hash := private.pay_payment_correction_sha256_v1(
         pg_catalog.jsonb_build_object(
-            'version', 1,
+            'version', 2,
             'pay_batch_id', p_pay_batch_id,
             'batch_status', v_batch.status,
             'total_bank_out_pence', pg_catalog.round(coalesce(v_batch.total_bank_out, 0) * 100)::bigint,
@@ -197,112 +187,18 @@ BEGIN
                 ORDER BY auth_row.created_at_utc DESC, auth_row.id DESC
                 LIMIT 1
             ),
-            'active_candidate_items', (
-                SELECT coalesce(
-                    pg_catalog.jsonb_agg(
-                        pg_catalog.jsonb_build_object(
-                            'pay_batch_candidate_id', candidate_scope.id,
-                            'candidate_id', candidate_scope.candidate_id,
-                            'settlement_status', candidate_scope.settlement_status,
-                            'net_bank_amount_pence', pg_catalog.round(
-                                coalesce(candidate_scope.net_bank_amount, 0) * 100
-                            )::bigint,
-                            'pay_batch_item_id', item_scope.id,
-                            'item_type', item_scope.item_type,
-                            'amount_ex_vat_pence', pg_catalog.round(
-                                coalesce(item_scope.amount_ex_vat, 0) * 100
-                            )::bigint,
-                            'amount_vat_pence', pg_catalog.round(
-                                coalesce(item_scope.amount_vat, 0) * 100
-                            )::bigint,
-                            'amount_inc_vat_pence', pg_catalog.round(
-                                coalesce(item_scope.amount_inc_vat, 0) * 100
-                            )::bigint,
-                            'frozen_component_key_type', item_scope.frozen_component_key_type,
-                            'frozen_component_key_value', item_scope.frozen_component_key_value,
-                            'frozen_component_classification', item_scope.frozen_component_classification,
-                            'frozen_source_basis_json', item_scope.frozen_source_basis_json,
-                            'operation_source_key', item_scope.operation_source_key,
-                            'reservation_id', item_scope.reservation_id,
-                            'finance_component_id', item_scope.finance_component_id,
-                            'pay_bank_transfer_id', item_scope.pay_bank_transfer_id
-                        )
-                        ORDER BY candidate_scope.id, item_scope.id
-                    ),
-                    '[]'::jsonb
+            'change_signal', (
+                SELECT pg_catalog.jsonb_build_object(
+                    'version', coalesce(signal_row.version, 0),
+                    'payment_status_version', coalesce(signal_row.payment_status_version, 0),
+                    'correction_progress_version', coalesce(signal_row.correction_progress_version, 0),
+                    'overview_version', coalesce(signal_row.overview_version, 0),
+                    'last_changed_at_utc', signal_row.last_changed_at_utc
                 )
-                FROM public.pay_batch_candidates AS candidate_scope
-                JOIN public.pay_batch_items AS item_scope
-                  ON item_scope.pay_batch_candidate_id = candidate_scope.id
-                 AND coalesce(item_scope.is_voided, false) IS NOT TRUE
-                WHERE candidate_scope.pay_batch_id = p_pay_batch_id
+                FROM public.banking_pay_batch_change_signals AS signal_row
+                WHERE signal_row.pay_batch_id = p_pay_batch_id
             ),
-            'provider_scope', (
-                SELECT coalesce(
-                    pg_catalog.jsonb_agg(
-                        pg_catalog.jsonb_build_object(
-                            'pay_bank_transfer_id', transfer_scope.id,
-                            'status', transfer_scope.status,
-                            'rail_state', transfer_scope.rail_state,
-                            'request_id', transfer_scope.request_id,
-                            'rail_tx_id', transfer_scope.rail_tx_id,
-                            'transfer_group_key', transfer_scope.transfer_group_key,
-                            'amount_pence', pg_catalog.round(
-                                coalesce(transfer_scope.amount, 0) * 100
-                            )::bigint
-                        )
-                        ORDER BY transfer_scope.id
-                    ),
-                    '[]'::jsonb
-                )
-                FROM public.pay_bank_transfers AS transfer_scope
-                WHERE transfer_scope.pay_batch_id = p_pay_batch_id
-            ),
-            'provider_events', (
-                SELECT coalesce(
-                    pg_catalog.jsonb_agg(
-                        pg_catalog.jsonb_build_object(
-                            'bank_event_id', event_scope.id,
-                            'pay_bank_transfer_id', event_scope.pay_bank_transfer_id,
-                            'normalised_state', event_scope.normalised_state,
-                            'movement_classification', event_scope.movement_classification,
-                            'correction_disposition', event_scope.correction_disposition,
-                            'mapping_status', event_scope.mapping_status,
-                            'event_time_utc', event_scope.event_time_utc,
-                            'provider_request_id', event_scope.provider_request_id,
-                            'provider_transaction_id', event_scope.provider_transaction_id
-                        )
-                        ORDER BY event_scope.id
-                    ),
-                    '[]'::jsonb
-                )
-                FROM public.pay_bank_transfer_events AS event_scope
-                WHERE event_scope.pay_batch_id = p_pay_batch_id
-            ),
-            'candidate_count', (
-                SELECT pg_catalog.count(*)
-                FROM public.pay_batch_candidates AS candidate_count_row
-                WHERE candidate_count_row.pay_batch_id = p_pay_batch_id
-            ),
-            'active_item_count', (
-                SELECT pg_catalog.count(*)
-                FROM public.pay_batch_items AS item_count_row
-                JOIN public.pay_batch_candidates AS item_candidate
-                  ON item_candidate.id = item_count_row.pay_batch_candidate_id
-                WHERE item_candidate.pay_batch_id = p_pay_batch_id
-                  AND coalesce(item_count_row.is_voided, false) IS NOT TRUE
-            ),
-            'latest_request_update', (
-                SELECT pg_catalog.max(request_row.updated_at_utc)
-                FROM public.pay_payment_correction_requests AS request_row
-                WHERE request_row.pay_batch_id = p_pay_batch_id
-                  AND request_row.status NOT IN ('PLANNING', 'PLANNED')
-            ),
-            'latest_provider_event', (
-                SELECT pg_catalog.max(event_row.received_at_utc)
-                FROM public.pay_bank_transfer_events AS event_row
-                WHERE event_row.pay_batch_id = p_pay_batch_id
-            )
+            'scope_version_authority', 'banking_pay_batch_change_signals'
         )
     );
 
@@ -328,7 +224,211 @@ BEGIN
         );
     END IF;
 
-    WITH item_rollup AS (
+    WITH candidate_status_index AS MATERIALIZED (
+        -- This is the key-selection index only.  It uses bounded indexed EXISTS
+        -- probes and scalar latest-row lookups; all item/work/correction/provider
+        -- rollups and JSON construction occur only after page_keys (<=100).
+        SELECT candidate_row.id AS pay_batch_candidate_id,
+               candidate_row.candidate_id,
+               candidate_row.candidate_display_name,
+               candidate_row.net_bank_amount,
+               candidate_row.settlement_status,
+               CASE WHEN EXISTS (
+                 SELECT 1 FROM public.pay_batch_items AS active_item
+                 WHERE active_item.pay_batch_candidate_id = candidate_row.id
+                   AND COALESCE(active_item.is_voided, false) IS NOT TRUE
+               ) THEN 1 ELSE 0 END::integer AS active_item_count,
+               EXISTS (
+                 SELECT 1 FROM public.pay_batch_items AS paye_item
+                 WHERE paye_item.pay_batch_candidate_id = candidate_row.id
+                   AND COALESCE(paye_item.is_voided, false) IS NOT TRUE
+                   AND paye_item.pay_channel = 'PAYE'
+               ) AS has_paye_item,
+               EXISTS (
+                 SELECT 1 FROM public.pay_batch_items AS non_paye_item
+                 WHERE non_paye_item.pay_batch_candidate_id = candidate_row.id
+                   AND COALESCE(non_paye_item.is_voided, false) IS NOT TRUE
+                   AND non_paye_item.pay_channel <> 'PAYE'
+               ) AS has_non_paye_item,
+               (NOT EXISTS (
+                  SELECT 1 FROM public.pay_batch_items AS active_item
+                  WHERE active_item.pay_batch_candidate_id = candidate_row.id
+                    AND COALESCE(active_item.is_voided, false) IS NOT TRUE
+                ) OR EXISTS (
+                  SELECT 1 FROM public.pay_payment_correction_items AS removed_item
+                  WHERE removed_item.pay_batch_id = p_pay_batch_id
+                    AND removed_item.pay_batch_candidate_id = candidate_row.id
+                    AND removed_item.status = 'APPLIED'
+                    AND removed_item.correction_item_kind IN ('PRE_BANK_CANCEL','NO_MONEY_UNWIND')
+                )) AS removed,
+               EXISTS (
+                 SELECT 1 FROM public.pay_payment_correction_items AS released_item
+                 WHERE released_item.pay_batch_id = p_pay_batch_id
+                   AND released_item.pay_batch_candidate_id = candidate_row.id
+                   AND released_item.status = 'APPLIED'
+                   AND released_item.correction_item_kind = 'NO_MONEY_UNWIND'
+               ) AS released,
+               (candidate_row.settlement_status IN ('SETTLED','PAID') OR EXISTS (
+                 SELECT 1
+                 FROM public.pay_batch_items AS event_item
+                 JOIN public.pay_bank_transfer_events AS paid_event
+                   ON paid_event.pay_bank_transfer_id = event_item.pay_bank_transfer_id
+                 WHERE event_item.pay_batch_candidate_id = candidate_row.id
+                   AND paid_event.pay_batch_id = p_pay_batch_id
+                   AND paid_event.normalised_state IN ('COMPLETED','PAID','SETTLED')
+               )) AS paid_or_settled,
+               (EXISTS (
+                 SELECT 1
+                 FROM public.pay_batch_items AS event_item
+                 JOIN public.pay_bank_transfer_events AS no_money_event
+                   ON no_money_event.pay_bank_transfer_id = event_item.pay_bank_transfer_id
+                 WHERE event_item.pay_batch_candidate_id = candidate_row.id
+                   AND no_money_event.pay_batch_id = p_pay_batch_id
+                   AND no_money_event.normalised_state IN ('FAILED','REJECTED','CANCELLED','CONFIRMED_NOT_PAID')
+               ) OR EXISTS (
+                 SELECT 1
+                 FROM public.pay_batch_items AS transfer_item
+                 JOIN public.pay_bank_transfers AS failed_transfer
+                   ON failed_transfer.id = transfer_item.pay_bank_transfer_id
+                 WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
+                   AND (failed_transfer.status IN ('FAILED','CANCELLED')
+                     OR failed_transfer.rail_state IN ('FAILED','CANCELLED'))
+               )) AS terminal_no_money,
+               (EXISTS (
+                 SELECT 1
+                 FROM public.pay_batch_items AS event_item
+                 JOIN public.pay_bank_transfer_events AS ambiguous_event
+                   ON ambiguous_event.pay_bank_transfer_id = event_item.pay_bank_transfer_id
+                 WHERE event_item.pay_batch_candidate_id = candidate_row.id
+                   AND ambiguous_event.pay_batch_id = p_pay_batch_id
+                   AND (ambiguous_event.normalised_state IN ('UNKNOWN','PENDING','SUBMITTED','PROCESSING')
+                     OR ambiguous_event.movement_classification = 'AMBIGUOUS_REVIEW_REQUIRED')
+               ) OR EXISTS (
+                 SELECT 1
+                 FROM public.pay_batch_items AS transfer_item
+                 JOIN public.pay_bank_transfers AS pending_transfer
+                   ON pending_transfer.id = transfer_item.pay_bank_transfer_id
+                 WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
+                   AND (pending_transfer.status IN ('SUBMITTED','PROCESSING','PENDING')
+                     OR pending_transfer.rail_state IN ('SUBMITTED','PROCESSING','PENDING'))
+               )) AS ambiguous,
+               (
+                 SELECT work_row.status
+                 FROM public.pay_payment_correction_work_items AS work_row
+                 WHERE work_row.pay_batch_id = p_pay_batch_id
+                   AND work_row.pay_batch_candidate_id = candidate_row.id
+                 ORDER BY work_row.created_at_utc DESC, work_row.id DESC LIMIT 1
+               ) AS latest_work_status,
+               COALESCE((
+                 SELECT member_row.active_amount
+                 FROM public.pay_payment_correction_request_candidates AS member_row
+                 JOIN public.pay_payment_correction_requests AS request_row
+                   ON request_row.id = member_row.correction_request_id
+                 WHERE request_row.pay_batch_id = p_pay_batch_id
+                   AND member_row.pay_batch_candidate_id = candidate_row.id
+                 ORDER BY CASE WHEN request_row.status IN ('APPLIED','APPLIED_WITH_BLOCKERS') THEN 0 ELSE 1 END,
+                          request_row.updated_at_utc DESC, request_row.id DESC LIMIT 1
+               ), candidate_row.net_bank_amount, 0)::numeric(14,2) AS reviewed_payment_amount
+        FROM public.pay_batch_candidates AS candidate_row
+        WHERE candidate_row.pay_batch_id = p_pay_batch_id
+    ), candidate_classified_index AS MATERIALIZED (
+        SELECT candidate_status_index.*,
+               CASE
+                 WHEN removed AND released THEN 'RELEASED'
+                 WHEN removed THEN 'CANCELLED'
+                 WHEN paid_or_settled THEN 'SETTLED'
+                 WHEN latest_work_status = 'BLOCKED' THEN 'BLOCKED'
+                 WHEN latest_work_status IN ('FAILED_FINAL','FAILED_RETRYABLE') THEN 'FAILED'
+                 WHEN terminal_no_money THEN 'NOT_PAID'
+                 WHEN ambiguous THEN 'AMBIGUOUS'
+                 ELSE 'ACTIVE'
+               END AS payment_display_state,
+               CASE
+                 WHEN removed OR paid_or_settled THEN ARRAY[]::text[]
+                 WHEN v_batch.status = 'DRAFT' THEN ARRAY['DRAFT_CANCEL']::text[]
+                 WHEN terminal_no_money THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
+                 WHEN ambiguous THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
+                 ELSE ARRAY['CANCEL_PAYMENT']::text[]
+               END AS available_actions,
+               pg_catalog.round(reviewed_payment_amount * 100)::bigint AS original_payment_amount_pence,
+               CASE WHEN removed THEN 70 WHEN paid_or_settled THEN 60
+                    WHEN latest_work_status = 'BLOCKED' THEN 50
+                    WHEN terminal_no_money THEN 40 WHEN ambiguous THEN 30 ELSE 10 END AS status_rank
+        FROM candidate_status_index
+    ), candidate_filtered_index AS MATERIALIZED (
+        SELECT classified_index.*
+        FROM candidate_classified_index AS classified_index
+        WHERE (NULLIF(pg_catalog.btrim(v_filter->>'search'), '') IS NULL
+               OR pg_catalog.lower(classified_index.candidate_display_name)
+                  LIKE '%' || pg_catalog.lower(pg_catalog.btrim(v_filter->>'search')) || '%')
+          AND (NULLIF(pg_catalog.upper(pg_catalog.btrim(v_filter->>'status')), '') IS NULL
+               OR classified_index.payment_display_state = pg_catalog.upper(pg_catalog.btrim(v_filter->>'status')))
+          AND (NULLIF(pg_catalog.upper(pg_catalog.btrim(v_filter->>'action')), '') IS NULL
+               OR pg_catalog.upper(pg_catalog.btrim(v_filter->>'action')) = ANY(classified_index.available_actions))
+          AND (COALESCE((v_filter->>'actionable_only')::boolean, false) IS NOT TRUE
+               OR pg_catalog.cardinality(classified_index.available_actions) > 0)
+          AND (NULLIF(pg_catalog.upper(pg_catalog.btrim(v_filter->>'pay_channel')), '') IS NULL
+               OR (pg_catalog.upper(pg_catalog.btrim(v_filter->>'pay_channel')) = 'PAYE'
+                   AND classified_index.has_paye_item))
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_catalog.jsonb_array_elements_text(
+              COALESCE(v_filter->'excluded_candidate_tokens', '[]'::jsonb)
+            ) AS excluded_token(value)
+            WHERE excluded_token.value = classified_index.pay_batch_candidate_id::text
+          )
+          AND (NOT (v_filter ? 'included_candidate_tokens') OR EXISTS (
+            SELECT 1 FROM pg_catalog.jsonb_array_elements_text(
+              v_filter->'included_candidate_tokens'
+            ) AS included_token(value)
+            WHERE included_token.value = classified_index.pay_batch_candidate_id::text
+          ))
+    ), candidate_after_cursor AS MATERIALIZED (
+        SELECT filtered_index.*
+        FROM candidate_filtered_index AS filtered_index
+        WHERE p_cursor_json IS NULL OR
+          (v_sort_key = 'STATUS' AND (
+            (v_sort_direction = 'ASC' AND (filtered_index.status_rank,
+              pg_catalog.lower(filtered_index.candidate_display_name), filtered_index.pay_batch_candidate_id) >
+              ((p_cursor_json->>'last_status_rank')::integer,
+               p_cursor_json->>'last_candidate_name',
+               (p_cursor_json->>'last_pay_batch_candidate_id')::uuid))
+            OR (v_sort_direction = 'DESC' AND (filtered_index.status_rank,
+              pg_catalog.lower(filtered_index.candidate_display_name), filtered_index.pay_batch_candidate_id) <
+              ((p_cursor_json->>'last_status_rank')::integer,
+               p_cursor_json->>'last_candidate_name',
+               (p_cursor_json->>'last_pay_batch_candidate_id')::uuid))))
+          OR (p_cursor_json IS NOT NULL AND v_sort_key = 'CANDIDATE' AND (
+            (v_sort_direction = 'ASC' AND (pg_catalog.lower(filtered_index.candidate_display_name),
+              filtered_index.pay_batch_candidate_id) >
+              (p_cursor_json->>'last_candidate_name', (p_cursor_json->>'last_pay_batch_candidate_id')::uuid))
+            OR (v_sort_direction = 'DESC' AND (pg_catalog.lower(filtered_index.candidate_display_name),
+              filtered_index.pay_batch_candidate_id) <
+              (p_cursor_json->>'last_candidate_name', (p_cursor_json->>'last_pay_batch_candidate_id')::uuid))))
+          OR (p_cursor_json IS NOT NULL AND v_sort_key = 'AMOUNT' AND (
+            (v_sort_direction = 'ASC' AND (filtered_index.original_payment_amount_pence,
+              filtered_index.pay_batch_candidate_id) >
+              ((p_cursor_json->>'last_amount_pence')::bigint,
+               (p_cursor_json->>'last_pay_batch_candidate_id')::uuid))
+            OR (v_sort_direction = 'DESC' AND (filtered_index.original_payment_amount_pence,
+              filtered_index.pay_batch_candidate_id) <
+              ((p_cursor_json->>'last_amount_pence')::bigint,
+               (p_cursor_json->>'last_pay_batch_candidate_id')::uuid))))
+    ), page_keys AS MATERIALIZED (
+        SELECT candidate_after_cursor.pay_batch_candidate_id
+        FROM candidate_after_cursor
+        ORDER BY
+          CASE WHEN v_sort_key = 'STATUS' AND v_sort_direction = 'ASC' THEN status_rank END ASC,
+          CASE WHEN v_sort_key = 'STATUS' AND v_sort_direction = 'DESC' THEN status_rank END DESC,
+          CASE WHEN v_sort_key IN ('STATUS','CANDIDATE') AND v_sort_direction = 'ASC'
+            THEN pg_catalog.lower(candidate_display_name) END ASC,
+          CASE WHEN v_sort_key IN ('STATUS','CANDIDATE') AND v_sort_direction = 'DESC'
+            THEN pg_catalog.lower(candidate_display_name) END DESC,
+          CASE WHEN v_sort_key = 'AMOUNT' AND v_sort_direction = 'ASC' THEN original_payment_amount_pence END ASC,
+          CASE WHEN v_sort_key = 'AMOUNT' AND v_sort_direction = 'DESC' THEN original_payment_amount_pence END DESC,
+          CASE WHEN v_sort_direction = 'ASC' THEN pay_batch_candidate_id END ASC,
+          CASE WHEN v_sort_direction = 'DESC' THEN pay_batch_candidate_id END DESC
+        LIMIT p_limit + 1
+    ), item_rollup AS (
         SELECT item_candidate.id AS pay_batch_candidate_id,
                pg_catalog.count(*)::integer AS original_item_count,
                pg_catalog.count(*) FILTER (
@@ -339,6 +439,7 @@ BEGIN
                pg_catalog.array_agg(DISTINCT batch_item.pay_bank_transfer_id)
                    FILTER (WHERE batch_item.pay_bank_transfer_id IS NOT NULL) AS transfer_ids
         FROM public.pay_batch_candidates AS item_candidate
+        JOIN page_keys ON page_keys.pay_batch_candidate_id = item_candidate.id
         JOIN public.pay_batch_items AS batch_item
           ON batch_item.pay_batch_candidate_id = item_candidate.id
         WHERE item_candidate.pay_batch_id = p_pay_batch_id
@@ -362,6 +463,7 @@ BEGIN
                ) AS has_applied_cancel,
                pg_catalog.max(correction_item.applied_at_utc) AS removed_at_utc
         FROM public.pay_payment_correction_items AS correction_item
+        JOIN page_keys ON page_keys.pay_batch_candidate_id = correction_item.pay_batch_candidate_id
         WHERE correction_item.pay_batch_id = p_pay_batch_id
         GROUP BY correction_item.pay_batch_candidate_id
     ), work_rollup AS (
@@ -374,6 +476,7 @@ BEGIN
                (pg_catalog.array_agg(request_row.status ORDER BY work_item.created_at_utc DESC, work_item.id DESC))[1]
                    AS latest_request_status
         FROM public.pay_payment_correction_work_items AS work_item
+        JOIN page_keys ON page_keys.pay_batch_candidate_id = work_item.pay_batch_candidate_id
         LEFT JOIN public.pay_payment_correction_requests AS request_row
           ON request_row.id = work_item.correction_request_id
         WHERE work_item.pay_batch_id = p_pay_batch_id
@@ -384,6 +487,7 @@ BEGIN
                member_row.active_amount AS reviewed_payment_amount,
                request_row.status AS membership_request_status
         FROM public.pay_payment_correction_request_candidates AS member_row
+        JOIN page_keys ON page_keys.pay_batch_candidate_id = member_row.pay_batch_candidate_id
         JOIN public.pay_payment_correction_requests AS request_row
           ON request_row.id = member_row.correction_request_id
         WHERE request_row.pay_batch_id = p_pay_batch_id
@@ -420,6 +524,7 @@ BEGIN
                ) AS has_ambiguous_evidence,
                pg_catalog.max(transfer_event.event_time_utc) AS latest_event_time_utc
         FROM public.pay_batch_candidates AS item_candidate
+        JOIN page_keys ON page_keys.pay_batch_candidate_id = item_candidate.id
         JOIN public.pay_batch_items AS provider_item
           ON provider_item.pay_batch_candidate_id = item_candidate.id
         LEFT JOIN public.pay_bank_transfer_events AS transfer_event
@@ -440,6 +545,7 @@ BEGIN
                    FILTER (WHERE bank_transfer.transfer_group_key IS NOT NULL)::integer
                    AS shared_instruction_count
         FROM public.pay_batch_candidates AS item_candidate
+        JOIN page_keys ON page_keys.pay_batch_candidate_id = item_candidate.id
         JOIN public.pay_batch_items AS transfer_item
           ON transfer_item.pay_batch_candidate_id = item_candidate.id
         LEFT JOIN public.pay_bank_transfers AS bank_transfer
@@ -493,6 +599,7 @@ BEGIN
                provider_rollup.latest_event_time_utc,
                coalesce(transfer_rollup.shared_instruction_count, 0) AS shared_instruction_count
         FROM public.pay_batch_candidates AS candidate_row
+        JOIN page_keys ON page_keys.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN item_rollup ON item_rollup.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN correction_rollup ON correction_rollup.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN work_rollup ON work_rollup.pay_batch_candidate_id = candidate_row.id
@@ -737,40 +844,46 @@ BEGIN
         pg_catalog.count(*)::integer,
         (
             SELECT pg_catalog.count(*)::integer
-            FROM filtered
+            FROM candidate_filtered_index
         ),
         (
             SELECT pg_catalog.count(*)::integer
-            FROM filtered
-            WHERE pg_catalog.cardinality(filtered.available_actions) > 0
+            FROM candidate_filtered_index
+            WHERE pg_catalog.cardinality(candidate_filtered_index.available_actions) > 0
         ),
         (
-            SELECT coalesce(pg_catalog.sum(filtered.original_payment_amount_pence), 0)::bigint
-            FROM filtered
-            WHERE pg_catalog.cardinality(filtered.available_actions) > 0
-        ),
-        (
-            SELECT pg_catalog.count(*)::integer
-            FROM classified
-            WHERE NOT classified.removed
-        ),
-        (
-            SELECT coalesce(pg_catalog.sum(classified.active_payment_amount_pence), 0)::bigint
-            FROM classified
-        ),
-        (
-            SELECT coalesce(pg_catalog.sum(classified.original_payment_amount_pence), 0)::bigint
-            FROM classified
+            SELECT coalesce(pg_catalog.sum(candidate_filtered_index.original_payment_amount_pence), 0)::bigint
+            FROM candidate_filtered_index
+            WHERE pg_catalog.cardinality(candidate_filtered_index.available_actions) > 0
         ),
         (
             SELECT pg_catalog.count(*)::integer
-            FROM classified
-            WHERE classified.has_paye_item AND NOT classified.removed
+            FROM candidate_classified_index
+            WHERE NOT candidate_classified_index.removed
         ),
         (
-            SELECT coalesce(pg_catalog.sum(classified.active_payment_amount_pence), 0)::bigint
-            FROM classified
-            WHERE classified.has_paye_item AND NOT classified.removed
+            SELECT coalesce(pg_catalog.sum(
+                CASE WHEN candidate_classified_index.removed
+                     THEN 0::bigint
+                     ELSE candidate_classified_index.original_payment_amount_pence END
+            ), 0)::bigint
+            FROM candidate_classified_index
+        ),
+        (
+            SELECT coalesce(pg_catalog.sum(candidate_classified_index.original_payment_amount_pence), 0)::bigint
+            FROM candidate_classified_index
+        ),
+        (
+            SELECT pg_catalog.count(*)::integer
+            FROM candidate_classified_index
+            WHERE candidate_classified_index.has_paye_item
+              AND NOT candidate_classified_index.removed
+        ),
+        (
+            SELECT coalesce(pg_catalog.sum(candidate_classified_index.original_payment_amount_pence), 0)::bigint
+            FROM candidate_classified_index
+            WHERE candidate_classified_index.has_paye_item
+              AND NOT candidate_classified_index.removed
         ),
         (
             SELECT pg_catalog.to_jsonb(last_page_row)
