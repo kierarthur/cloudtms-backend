@@ -24,6 +24,15 @@ DECLARE
     v_available_actions text[] := ARRAY[]::text[];
     v_user_title text;
     v_user_message text;
+    v_request_expired boolean := false;
+    v_workbench_session_id uuid;
+    v_refresh_group_total integer := 0;
+    v_refresh_group_complete integer := 0;
+    v_refresh_candidate_count integer := 0;
+    v_refresh_failed_count integer := 0;
+    v_refresh_pending_count integer := 0;
+    v_refresh_ready_count integer := 0;
+    v_workbench_status text := 'NOT_STAGED';
 BEGIN
     SELECT request_row.*
     INTO v_request
@@ -75,6 +84,14 @@ BEGIN
     FROM public.pay_batches AS batch_row
     WHERE batch_row.id = v_request.pay_batch_id;
 
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_actions AS expiry_action
+        WHERE expiry_action.correction_request_id = p_correction_request_id
+          AND expiry_action.action = 'CANCEL'
+          AND expiry_action.metadata_json ->> 'audit_code' = 'UNAPPROVED_REQUEST_EXPIRED'
+    ) INTO v_request_expired;
+
     SELECT pg_catalog.jsonb_build_object(
         'total', pg_catalog.count(*)::integer,
         'pending', pg_catalog.count(*) FILTER (WHERE work_item.status = 'PENDING')::integer,
@@ -90,27 +107,87 @@ BEGIN
     WHERE work_item.correction_request_id = p_correction_request_id;
 
     IF v_operation.id IS NOT NULL THEN
-        SELECT pg_catalog.jsonb_build_object(
-            'status', CASE
-                WHEN pg_catalog.count(*) = 0 THEN 'NOT_STAGED'
-                WHEN pg_catalog.count(*) FILTER (WHERE chunk_row.status = 'COMPLETE') = pg_catalog.count(*) THEN 'CURRENT'
-                WHEN pg_catalog.count(*) FILTER (WHERE chunk_row.status IN ('FAILED', 'CANCELLED')) > 0 THEN 'FAILED'
-                ELSE 'PENDING'
-            END,
-            'group_total', pg_catalog.count(*)::integer,
-            'group_complete', pg_catalog.count(*) FILTER (WHERE chunk_row.status = 'COMPLETE')::integer
-        )
-        INTO v_workbench_refresh
+        SELECT pg_catalog.count(*)::integer,
+               pg_catalog.count(*) FILTER (WHERE chunk_row.status = 'COMPLETE')::integer
+        INTO v_refresh_group_total, v_refresh_group_complete
         FROM public.banking_pay_operation_chunks AS chunk_row
         WHERE chunk_row.operation_id = v_operation.id
-          AND chunk_row.phase = 'REFRESH_WORKBENCH';
-    ELSE
-        v_workbench_refresh := pg_catalog.jsonb_build_object(
-            'status', 'NOT_STAGED',
-            'group_total', 0,
-            'group_complete', 0
+          AND chunk_row.phase = 'REFRESH_WORKBENCH'
+          AND chunk_row.chunk_type = 'CANDIDATE_SCOPE';
+
+        v_workbench_session_id := COALESCE(
+            v_operation.workbench_session_id,
+            (SELECT batch_row.source_workbench_session_id FROM public.pay_batches AS batch_row WHERE batch_row.id = v_request.pay_batch_id)
         );
+
+        WITH refresh_candidates AS (
+            SELECT DISTINCT (candidate_token.value #>> '{}')::uuid AS candidate_id
+            FROM public.banking_pay_operation_chunks AS refresh_chunk
+            CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+                COALESCE(refresh_chunk.payload_json->'candidate_ids', '[]'::jsonb)
+            ) AS candidate_token(value)
+            WHERE refresh_chunk.operation_id = v_operation.id
+              AND refresh_chunk.phase = 'REFRESH_WORKBENCH'
+              AND refresh_chunk.chunk_type = 'CANDIDATE_SCOPE'
+              AND (candidate_token.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ), candidate_freshness AS (
+            SELECT refresh_candidate.candidate_id,
+                   pg_catalog.upper(COALESCE(candidate_state.status, 'MISSING')) AS candidate_state,
+                   candidate_state.pending_job_id,
+                   COALESCE(candidate_state.source_change_seq, 0) AS source_change_seq,
+                   pg_catalog.upper(COALESCE(latest_job.status, 'NONE')) AS job_status,
+                   COALESCE(latest_job.scope_change_generation, 0) AS job_generation
+            FROM refresh_candidates AS refresh_candidate
+            LEFT JOIN public.banking_pay_workbench_session_candidate_state AS candidate_state
+              ON candidate_state.session_id = v_workbench_session_id
+             AND candidate_state.candidate_id = refresh_candidate.candidate_id
+            LEFT JOIN LATERAL (
+                SELECT job_row.status, job_row.scope_change_generation
+                FROM public.banking_pay_workbench_jobs AS job_row
+                WHERE job_row.session_id = v_workbench_session_id
+                  AND job_row.candidate_id = refresh_candidate.candidate_id
+                ORDER BY job_row.updated_at_utc DESC, job_row.id DESC
+                LIMIT 1
+            ) AS latest_job ON true
+        )
+        SELECT pg_catalog.count(*)::integer,
+               pg_catalog.count(*) FILTER (WHERE candidate_freshness.candidate_state = 'FAILED' OR candidate_freshness.job_status IN ('FAILED', 'DEAD'))::integer,
+               pg_catalog.count(*) FILTER (WHERE candidate_freshness.candidate_state = 'READY' AND candidate_freshness.pending_job_id IS NULL AND candidate_freshness.job_status IN ('NONE', 'SUCCEEDED') AND candidate_freshness.source_change_seq >= candidate_freshness.job_generation)::integer,
+               pg_catalog.count(*) FILTER (WHERE NOT (candidate_freshness.candidate_state = 'FAILED' OR candidate_freshness.job_status IN ('FAILED', 'DEAD')) AND NOT (candidate_freshness.candidate_state = 'READY' AND candidate_freshness.pending_job_id IS NULL AND candidate_freshness.job_status IN ('NONE', 'SUCCEEDED') AND candidate_freshness.source_change_seq >= candidate_freshness.job_generation))::integer
+        INTO v_refresh_candidate_count, v_refresh_failed_count, v_refresh_ready_count, v_refresh_pending_count
+        FROM candidate_freshness;
+
+        v_workbench_status := CASE
+            WHEN v_refresh_group_total = 0 THEN 'NOT_STAGED'
+            WHEN EXISTS (
+                SELECT 1 FROM public.banking_pay_operation_chunks AS failed_chunk
+                WHERE failed_chunk.operation_id = v_operation.id
+                  AND failed_chunk.phase = 'REFRESH_WORKBENCH'
+                  AND failed_chunk.status IN ('FAILED', 'FAILED_FINAL', 'CANCELLED')
+            ) OR v_refresh_failed_count > 0 THEN 'FAILED'
+            WHEN v_refresh_group_complete < v_refresh_group_total THEN 'STAGED'
+            WHEN v_refresh_candidate_count = 0
+              OR NOT EXISTS (
+                  SELECT 1 FROM public.banking_pay_operation_chunks AS required_chunk
+                  WHERE required_chunk.operation_id = v_operation.id
+                    AND required_chunk.phase = 'REFRESH_WORKBENCH'
+                    AND COALESCE(required_chunk.result_json->>'status', '') NOT LIKE 'NOT_REQUIRED%'
+              ) THEN 'CURRENT'
+            WHEN v_refresh_ready_count = v_refresh_candidate_count THEN 'CURRENT'
+            WHEN v_refresh_pending_count > 0 THEN 'PENDING'
+            ELSE 'STAGED'
+        END;
     END IF;
+
+    v_workbench_refresh := pg_catalog.jsonb_build_object(
+        'status', v_workbench_status,
+        'group_total', v_refresh_group_total,
+        'group_complete', v_refresh_group_complete,
+        'candidate_total', v_refresh_candidate_count,
+        'candidate_ready', v_refresh_ready_count,
+        'candidate_pending', v_refresh_pending_count,
+        'candidate_failed', v_refresh_failed_count
+    );
 
     v_progress := pg_catalog.jsonb_strip_nulls(
         pg_catalog.jsonb_build_object(
@@ -118,7 +195,7 @@ BEGIN
             'completed_units', v_operation.completed_units,
             'failed_units', v_operation.failed_units,
             'phase_message', v_operation_envelope ->> 'status_text',
-            'requires_user_action', pg_catalog.coalesce(v_operation.requires_user_action, false)
+            'requires_user_action', COALESCE(v_operation.requires_user_action, false)
         )
     );
 
@@ -175,7 +252,7 @@ BEGIN
         WHEN 'CANCELLED' THEN
             v_user_title := 'Cancellation request ended';
             v_user_message := CASE
-                WHEN v_request.requested_at_utc <= pg_catalog.clock_timestamp() - interval '24 hours'
+                WHEN v_request_expired
                     THEN 'This request expired. Refresh Current Payment Status and start again.'
                 ELSE 'No further cancellation work will be performed.'
             END;
@@ -192,9 +269,9 @@ BEGIN
         'request_status', v_request.status,
         'operation_status', v_operation.status,
         'phase', v_operation.phase,
-        'progress', pg_catalog.coalesce(v_progress, '{}'::jsonb),
-        'candidate_counts', pg_catalog.coalesce(v_candidate_counts, '{}'::jsonb),
-        'workbench_refresh', pg_catalog.coalesce(v_workbench_refresh, '{}'::jsonb),
+        'progress', COALESCE(v_progress, '{}'::jsonb),
+        'candidate_counts', COALESCE(v_candidate_counts, '{}'::jsonb),
+        'workbench_refresh', COALESCE(v_workbench_refresh, '{}'::jsonb),
         'available_actions', v_available_actions,
         'user_title', v_user_title,
         'user_message', v_user_message,

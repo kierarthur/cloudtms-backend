@@ -80,6 +80,10 @@ DECLARE
   v_current_expected_outside_original_count integer := 0;
   v_applied_sibling_count integer := 0;
   v_membership_item_mismatch_count integer := 0;
+  v_current_active_item_count integer := 0;
+  v_current_source_row_count integer := 0;
+  v_capacity_selected_scope_json jsonb := '{}'::jsonb;
+  v_current_candidate_scope_hash text;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -603,6 +607,185 @@ END IF;
     WHERE lock_selected_cases.finance_case_id IS NOT NULL
   )
   FOR UPDATE OF locked_pay_advances;
+
+  -- Rebuild and lock the complete candidate-owned financial/source scope after
+  -- acquiring the mutation guard and before the first financial write. The
+  -- planning count is an immutable promise, not execution-time authority.
+  v_capacity_selected_scope_json := jsonb_build_object(
+    'scope_type', 'CANDIDATES',
+    'work_unit', 'CANDIDATE',
+    'pay_batch_ids', jsonb_build_array(v_work_item.pay_batch_id),
+    'pay_batch_candidate_ids', jsonb_build_array(v_work_item.pay_batch_candidate_id),
+    'candidate_ids', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (SELECT DISTINCT selected_scope.candidate_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.candidate_id IS NOT NULL) AS scope_value
+    ), '[]'::jsonb),
+    'pay_batch_item_ids', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (SELECT DISTINCT selected_scope.pay_batch_item_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope) AS scope_value
+    ), '[]'::jsonb),
+    'umbrella_ids', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (SELECT DISTINCT selected_scope.umbrella_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.umbrella_id IS NOT NULL) AS scope_value
+    ), '[]'::jsonb),
+    'finance_case_ids', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (SELECT DISTINCT selected_scope.finance_case_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.finance_case_id IS NOT NULL) AS scope_value
+    ), '[]'::jsonb),
+    'finance_component_ids', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (SELECT DISTINCT selected_scope.finance_component_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.finance_component_id IS NOT NULL) AS scope_value
+    ), '[]'::jsonb),
+    'reservation_ids', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (SELECT DISTINCT selected_scope.reservation_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.reservation_id IS NOT NULL) AS scope_value
+    ), '[]'::jsonb),
+    'pay_bank_transfer_ids', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (
+        SELECT DISTINCT selected_scope.pay_bank_transfer_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.pay_bank_transfer_id IS NOT NULL
+        UNION SELECT DISTINCT selected_scope.payout_transfer_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.payout_transfer_id IS NOT NULL
+      ) AS scope_value
+    ), '[]'::jsonb),
+    'payout_transfer_ids', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (
+        SELECT DISTINCT selected_scope.payout_transfer_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.payout_transfer_id IS NOT NULL
+        UNION SELECT DISTINCT selected_scope.pay_bank_transfer_id::text AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.pay_bank_transfer_id IS NOT NULL
+      ) AS scope_value
+    ), '[]'::jsonb),
+    'transfer_group_keys', COALESCE((
+      SELECT jsonb_agg(scope_value.value_text ORDER BY scope_value.value_text)
+      FROM (SELECT DISTINCT selected_scope.transfer_group_key AS value_text FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE NULLIF(btrim(COALESCE(selected_scope.transfer_group_key, '')), '') IS NOT NULL) AS scope_value
+    ), '[]'::jsonb)
+  );
+
+  DROP TABLE IF EXISTS pg_temp._tmp_pre_bank_capacity_mail_scope;
+  CREATE TEMP TABLE _tmp_pre_bank_capacity_mail_scope ON COMMIT DROP AS
+  SELECT mail_row.id AS mail_outbox_id
+  FROM public.mail_outbox AS mail_row
+  CROSS JOIN LATERAL (
+    SELECT public._pay_payment_correction_mail_scope_match(
+      mail_row.id, v_work_item.pay_batch_id, v_work_item.selection_json,
+      v_capacity_selected_scope_json, false
+    ) AS match_result
+  ) AS mail_match
+  WHERE upper(btrim(COALESCE(mail_row.status::text, ''))) = 'QUEUED'
+    AND lower(concat_ws('|', mail_row.type, mail_row.email_type, mail_row.context_kind, mail_row.reference, COALESCE(mail_row.payment_scope_json::text, '{}'))) LIKE ANY (ARRAY['%remittance%', '%payout%', '%pay_batch%', '%finance_payout%'])
+    AND COALESCE(NULLIF(mail_match.match_result->>'matched', '')::boolean, false);
+
+  PERFORM 1
+  FROM public.mail_outbox AS locked_mail
+  JOIN pg_temp._tmp_pre_bank_capacity_mail_scope AS capacity_mail
+    ON capacity_mail.mail_outbox_id = locked_mail.id
+  FOR UPDATE OF locked_mail;
+
+  PERFORM 1
+  FROM public.pay_batch_items AS locked_instruction_items
+  LEFT JOIN public.pay_bank_transfers AS instruction_transfer
+    ON instruction_transfer.id = locked_instruction_items.pay_bank_transfer_id
+  WHERE locked_instruction_items.id IN (SELECT selected_scope.pay_batch_item_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope)
+     OR locked_instruction_items.pay_bank_transfer_id IN (
+          SELECT selected_scope.pay_bank_transfer_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.pay_bank_transfer_id IS NOT NULL
+          UNION SELECT selected_scope.payout_transfer_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.payout_transfer_id IS NOT NULL
+     )
+     OR instruction_transfer.transfer_group_key IN (
+          SELECT selected_scope.transfer_group_key FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE NULLIF(btrim(COALESCE(selected_scope.transfer_group_key, '')), '') IS NOT NULL
+     )
+  FOR SHARE OF locked_instruction_items;
+
+  PERFORM 1 FROM public.pay_batch_item_breakdowns AS locked_source WHERE locked_source.pay_batch_item_id IN (SELECT selected_scope.pay_batch_item_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope) FOR SHARE OF locked_source;
+  PERFORM 1 FROM public.pay_batch_timesheet_snapshots AS locked_source WHERE locked_source.pay_batch_id = v_work_item.pay_batch_id AND locked_source.candidate_id = v_work_item.candidate_id FOR SHARE OF locked_source;
+  PERFORM 1 FROM public.timesheet_pay_state_history AS locked_source WHERE locked_source.pay_batch_id = v_work_item.pay_batch_id AND locked_source.timesheet_id IN (SELECT selected_scope.timesheet_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.timesheet_id IS NOT NULL) FOR SHARE OF locked_source;
+  PERFORM 1 FROM public.pay_manual_adjustment_carry_forwards AS locked_source WHERE locked_source.source_pay_batch_item_id IN (SELECT selected_scope.pay_batch_item_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope) OR locked_source.target_pay_batch_item_id IN (SELECT selected_scope.pay_batch_item_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope) FOR UPDATE OF locked_source;
+  PERFORM 1 FROM public.pay_bank_transfer_events AS locked_source WHERE locked_source.pay_batch_id = v_work_item.pay_batch_id AND (locked_source.pay_bank_transfer_id IN (SELECT selected_scope.pay_bank_transfer_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.pay_bank_transfer_id IS NOT NULL UNION SELECT selected_scope.payout_transfer_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.payout_transfer_id IS NOT NULL) OR locked_source.candidate_id = v_work_item.candidate_id) FOR SHARE OF locked_source;
+  PERFORM 1 FROM public.banking_pay_operation_transfer_scope AS locked_source WHERE locked_source.pay_batch_id = v_work_item.pay_batch_id AND (locked_source.pay_bank_transfer_id IN (SELECT selected_scope.pay_bank_transfer_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.pay_bank_transfer_id IS NOT NULL UNION SELECT selected_scope.payout_transfer_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE selected_scope.payout_transfer_id IS NOT NULL) OR locked_source.transfer_group_key IN (SELECT selected_scope.transfer_group_key FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope WHERE NULLIF(btrim(COALESCE(selected_scope.transfer_group_key, '')), '') IS NOT NULL)) FOR SHARE OF locked_source;
+  PERFORM 1 FROM public.banking_pay_operation_transfer_scope_items AS locked_source WHERE locked_source.pay_batch_item_id IN (SELECT selected_scope.pay_batch_item_id FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope) FOR SHARE OF locked_source;
+  PERFORM 1 FROM public.pay_batch_paye_net_inputs AS locked_source WHERE locked_source.pay_batch_candidate_id = v_work_item.pay_batch_candidate_id FOR SHARE OF locked_source;
+
+  -- Obtain the two independent authorities without multiplying source rows by
+  -- item rows.
+  SELECT count(*)::integer INTO v_current_active_item_count
+  FROM public.pay_batch_items AS current_item
+  WHERE current_item.id = ANY(v_membership.pay_batch_item_ids)
+    AND COALESCE(current_item.is_voided, false) IS NOT TRUE;
+  WITH selected_items AS (SELECT selected_scope.* FROM pg_temp._tmp_pre_bank_cancel_selected AS selected_scope),
+  transfer_ids AS (SELECT selected_item.pay_bank_transfer_id AS id FROM selected_items AS selected_item WHERE selected_item.pay_bank_transfer_id IS NOT NULL UNION SELECT selected_item.payout_transfer_id FROM selected_items AS selected_item WHERE selected_item.payout_transfer_id IS NOT NULL),
+  transfer_groups AS (SELECT DISTINCT selected_item.transfer_group_key FROM selected_items AS selected_item WHERE NULLIF(btrim(COALESCE(selected_item.transfer_group_key, '')), '') IS NOT NULL),
+  financial_scope_items AS (SELECT DISTINCT item_scope.id FROM public.pay_batch_items AS item_scope LEFT JOIN public.pay_bank_transfers AS item_transfer ON item_transfer.id = item_scope.pay_bank_transfer_id WHERE item_scope.id IN (SELECT selected_item.pay_batch_item_id FROM selected_items AS selected_item) OR item_scope.pay_bank_transfer_id IN (SELECT transfer_id.id FROM transfer_ids AS transfer_id) OR item_transfer.transfer_group_key IN (SELECT transfer_group.transfer_group_key FROM transfer_groups AS transfer_group)),
+  source_counts AS (
+    SELECT 1::bigint AS row_count UNION ALL SELECT count(*) FROM financial_scope_items
+    UNION ALL SELECT count(*) FROM public.pay_batch_item_breakdowns AS source_row WHERE source_row.pay_batch_item_id IN (SELECT scope_item.id FROM financial_scope_items AS scope_item)
+    UNION ALL SELECT count(*) FROM public.pay_batch_timesheet_snapshots AS source_row WHERE source_row.pay_batch_id = v_work_item.pay_batch_id AND source_row.candidate_id = v_work_item.candidate_id
+    UNION ALL SELECT count(*) FROM public.timesheet_pay_state_history AS source_row WHERE source_row.pay_batch_id = v_work_item.pay_batch_id AND source_row.timesheet_id IN (SELECT selected_item.timesheet_id FROM selected_items AS selected_item WHERE selected_item.timesheet_id IS NOT NULL)
+    UNION ALL SELECT count(*) FROM public.pay_advance_reservations AS source_row WHERE source_row.pay_batch_item_id IN (SELECT scope_item.id FROM financial_scope_items AS scope_item)
+    UNION ALL SELECT count(*) FROM public.pay_finance_case_components AS source_row WHERE source_row.id IN (SELECT selected_item.finance_component_id FROM selected_items AS selected_item WHERE selected_item.finance_component_id IS NOT NULL)
+    UNION ALL SELECT count(*) FROM public.pay_manual_adjustment_carry_forwards AS source_row WHERE source_row.source_pay_batch_item_id IN (SELECT scope_item.id FROM financial_scope_items AS scope_item) OR source_row.target_pay_batch_item_id IN (SELECT scope_item.id FROM financial_scope_items AS scope_item)
+    UNION ALL SELECT count(*) FROM public.pay_advances AS source_row WHERE source_row.id IN (SELECT selected_item.finance_case_id FROM selected_items AS selected_item WHERE selected_item.finance_case_id IS NOT NULL)
+    UNION ALL SELECT count(*) FROM public.pay_bank_transfers AS source_row WHERE source_row.id IN (SELECT transfer_id.id FROM transfer_ids AS transfer_id) OR source_row.transfer_group_key IN (SELECT transfer_group.transfer_group_key FROM transfer_groups AS transfer_group)
+    UNION ALL SELECT count(*) FROM public.pay_bank_transfer_events AS source_row WHERE source_row.pay_batch_id = v_work_item.pay_batch_id AND (source_row.pay_bank_transfer_id IN (SELECT transfer_id.id FROM transfer_ids AS transfer_id) OR source_row.candidate_id = v_work_item.candidate_id)
+    UNION ALL SELECT count(*) FROM public.banking_pay_operation_transfer_scope AS source_row WHERE source_row.pay_batch_id = v_work_item.pay_batch_id AND (source_row.pay_bank_transfer_id IN (SELECT transfer_id.id FROM transfer_ids AS transfer_id) OR source_row.transfer_group_key IN (SELECT transfer_group.transfer_group_key FROM transfer_groups AS transfer_group))
+    UNION ALL SELECT count(*) FROM public.banking_pay_operation_transfer_scope_items AS source_row WHERE source_row.pay_batch_item_id IN (SELECT scope_item.id FROM financial_scope_items AS scope_item)
+    UNION ALL SELECT count(*) FROM public.pay_batch_paye_net_inputs AS source_row WHERE source_row.pay_batch_candidate_id = v_work_item.pay_batch_candidate_id
+    UNION ALL SELECT count(*) FROM pg_temp._tmp_pre_bank_capacity_mail_scope
+  ) SELECT COALESCE(sum(source_count.row_count), 0)::integer INTO v_current_source_row_count FROM source_counts AS source_count;
+
+  SELECT private.pay_payment_correction_sha256_v1(
+    jsonb_build_object(
+      'version', 1,
+      'pay_batch_candidate_id', v_work_item.pay_batch_candidate_id,
+      'candidate_id', v_work_item.candidate_id,
+      'requested_action', COALESCE(v_request.plan_json->>'requested_action', v_request.selection_json->>'requested_action'),
+      'pay_batch_item_ids', to_jsonb(v_membership.pay_batch_item_ids),
+      'item_count', v_current_active_item_count,
+      'source_row_count', v_current_source_row_count,
+      'active_amount_pence', round(COALESCE(candidate_scope.net_bank_amount, 0) * 100)::bigint,
+      'item_contract', (
+        SELECT jsonb_agg(jsonb_build_object(
+          'id', item_scope.id, 'item_type', item_scope.item_type,
+          'amount_ex_vat_pence', round(COALESCE(item_scope.amount_ex_vat, 0) * 100)::bigint,
+          'amount_vat_pence', round(COALESCE(item_scope.amount_vat, 0) * 100)::bigint,
+          'amount_inc_vat_pence', round(COALESCE(item_scope.amount_inc_vat, 0) * 100)::bigint,
+          'reservation_id', item_scope.reservation_id,
+          'finance_component_id', item_scope.finance_component_id,
+          'pay_bank_transfer_id', item_scope.pay_bank_transfer_id,
+          'operation_source_key', item_scope.operation_source_key,
+          'frozen_component_snapshot_json', item_scope.frozen_component_snapshot_json,
+          'frozen_source_basis_json', item_scope.frozen_source_basis_json
+        ) ORDER BY item_scope.id)
+        FROM public.pay_batch_items AS item_scope
+        WHERE item_scope.id = ANY(v_membership.pay_batch_item_ids)
+          AND COALESCE(item_scope.is_voided, false) IS NOT TRUE
+      ),
+      'shared_instruction_scope_hash', v_membership.shared_instruction_scope_hash,
+      'eligibility_code', v_membership.eligibility_code_at_plan
+    )
+  ) INTO v_current_candidate_scope_hash
+  FROM public.pay_batch_candidates AS candidate_scope
+  WHERE candidate_scope.id = v_work_item.pay_batch_candidate_id;
+
+  IF v_current_active_item_count <> v_membership.active_item_count
+     OR v_current_active_item_count > 128
+     OR v_current_source_row_count <> v_membership.source_row_count
+     OR v_current_source_row_count > 512
+     OR v_current_candidate_scope_hash IS DISTINCT FROM v_membership.candidate_scope_hash THEN
+    v_blocker := jsonb_build_object(
+      'code', CASE WHEN v_current_active_item_count > 128 OR v_current_source_row_count > 512 THEN 'CANDIDATE_SCOPE_TOO_LARGE' ELSE 'SOURCE_SCOPE_CHANGED' END,
+      'message', 'The payment source scope changed after review. Refresh and start again.',
+      'expected_item_count', v_membership.active_item_count,
+      'actual_item_count', v_current_active_item_count,
+      'expected_source_row_count', v_membership.source_row_count,
+      'actual_source_row_count', v_current_source_row_count,
+      'candidate_scope_hash_matches', v_current_candidate_scope_hash = v_membership.candidate_scope_hash
+    );
+    UPDATE public.pay_payment_correction_work_items AS capacity_blocked_work
+    SET status = 'BLOCKED', locked_at_utc = NULL, locked_by = NULL,
+        processed_at_utc = v_now, last_error = v_blocker->>'message',
+        result_json = COALESCE(capacity_blocked_work.result_json, '{}'::jsonb)
+          || jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker, 'processed_at_utc', v_now)
+    WHERE capacity_blocked_work.id = p_work_item_id;
+    RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+  END IF;
 
   v_resolved_scope_json := public._pay_resolve_payment_scope_for_cancel_rewind(
     v_work_item.pay_batch_id,

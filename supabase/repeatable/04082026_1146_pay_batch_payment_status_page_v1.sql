@@ -20,9 +20,9 @@ SET statement_timeout TO '5000ms'
 AS $function$
 DECLARE
     v_batch public.pay_batches%ROWTYPE;
-    v_filter jsonb := pg_catalog.coalesce(p_filter_json, '{}'::jsonb);
-    v_sort_key text := pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(p_sort_key, '')));
-    v_sort_direction text := pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(p_sort_direction, '')));
+    v_filter jsonb := coalesce(p_filter_json, '{}'::jsonb);
+    v_sort_key text := pg_catalog.upper(pg_catalog.btrim(coalesce(p_sort_key, '')));
+    v_sort_direction text := pg_catalog.upper(pg_catalog.btrim(coalesce(p_sort_direction, '')));
     v_snapshot_token text;
     v_active_batch_scope_hash text;
     v_diagnostic jsonb;
@@ -169,7 +169,7 @@ BEGIN
             'version', 1,
             'pay_batch_id', p_pay_batch_id,
             'batch_status', v_batch.status,
-            'total_bank_out_pence', pg_catalog.round(pg_catalog.coalesce(v_batch.total_bank_out, 0) * 100)::bigint,
+            'total_bank_out_pence', pg_catalog.round(coalesce(v_batch.total_bank_out, 0) * 100)::bigint,
             'source_scope_change_generation', v_batch.source_scope_change_generation,
             'execution_commit_state', v_batch.execution_commit_state,
             'execution_commit_ref', v_batch.execution_commit_ref,
@@ -198,25 +198,25 @@ BEGIN
                 LIMIT 1
             ),
             'active_candidate_items', (
-                SELECT pg_catalog.coalesce(
+                SELECT coalesce(
                     pg_catalog.jsonb_agg(
                         pg_catalog.jsonb_build_object(
                             'pay_batch_candidate_id', candidate_scope.id,
                             'candidate_id', candidate_scope.candidate_id,
                             'settlement_status', candidate_scope.settlement_status,
                             'net_bank_amount_pence', pg_catalog.round(
-                                pg_catalog.coalesce(candidate_scope.net_bank_amount, 0) * 100
+                                coalesce(candidate_scope.net_bank_amount, 0) * 100
                             )::bigint,
                             'pay_batch_item_id', item_scope.id,
                             'item_type', item_scope.item_type,
                             'amount_ex_vat_pence', pg_catalog.round(
-                                pg_catalog.coalesce(item_scope.amount_ex_vat, 0) * 100
+                                coalesce(item_scope.amount_ex_vat, 0) * 100
                             )::bigint,
                             'amount_vat_pence', pg_catalog.round(
-                                pg_catalog.coalesce(item_scope.amount_vat, 0) * 100
+                                coalesce(item_scope.amount_vat, 0) * 100
                             )::bigint,
                             'amount_inc_vat_pence', pg_catalog.round(
-                                pg_catalog.coalesce(item_scope.amount_inc_vat, 0) * 100
+                                coalesce(item_scope.amount_inc_vat, 0) * 100
                             )::bigint,
                             'frozen_component_key_type', item_scope.frozen_component_key_type,
                             'frozen_component_key_value', item_scope.frozen_component_key_value,
@@ -234,11 +234,11 @@ BEGIN
                 FROM public.pay_batch_candidates AS candidate_scope
                 JOIN public.pay_batch_items AS item_scope
                   ON item_scope.pay_batch_candidate_id = candidate_scope.id
-                 AND pg_catalog.coalesce(item_scope.is_voided, false) IS NOT TRUE
+                 AND coalesce(item_scope.is_voided, false) IS NOT TRUE
                 WHERE candidate_scope.pay_batch_id = p_pay_batch_id
             ),
             'provider_scope', (
-                SELECT pg_catalog.coalesce(
+                SELECT coalesce(
                     pg_catalog.jsonb_agg(
                         pg_catalog.jsonb_build_object(
                             'pay_bank_transfer_id', transfer_scope.id,
@@ -248,7 +248,7 @@ BEGIN
                             'rail_tx_id', transfer_scope.rail_tx_id,
                             'transfer_group_key', transfer_scope.transfer_group_key,
                             'amount_pence', pg_catalog.round(
-                                pg_catalog.coalesce(transfer_scope.amount, 0) * 100
+                                coalesce(transfer_scope.amount, 0) * 100
                             )::bigint
                         )
                         ORDER BY transfer_scope.id
@@ -259,7 +259,7 @@ BEGIN
                 WHERE transfer_scope.pay_batch_id = p_pay_batch_id
             ),
             'provider_events', (
-                SELECT pg_catalog.coalesce(
+                SELECT coalesce(
                     pg_catalog.jsonb_agg(
                         pg_catalog.jsonb_build_object(
                             'bank_event_id', event_scope.id,
@@ -290,7 +290,7 @@ BEGIN
                 JOIN public.pay_batch_candidates AS item_candidate
                   ON item_candidate.id = item_count_row.pay_batch_candidate_id
                 WHERE item_candidate.pay_batch_id = p_pay_batch_id
-                  AND pg_catalog.coalesce(item_count_row.is_voided, false) IS NOT TRUE
+                  AND coalesce(item_count_row.is_voided, false) IS NOT TRUE
             ),
             'latest_request_update', (
                 SELECT pg_catalog.max(request_row.updated_at_utc)
@@ -332,7 +332,7 @@ BEGIN
         SELECT item_candidate.id AS pay_batch_candidate_id,
                pg_catalog.count(*)::integer AS original_item_count,
                pg_catalog.count(*) FILTER (
-                   WHERE pg_catalog.coalesce(batch_item.is_voided, false) IS NOT TRUE
+                   WHERE coalesce(batch_item.is_voided, false) IS NOT TRUE
                )::integer AS active_item_count,
                pg_catalog.bool_or(batch_item.pay_channel = 'PAYE') AS has_paye_item,
                pg_catalog.bool_or(batch_item.pay_channel <> 'PAYE') AS has_non_paye_item,
@@ -452,10 +452,10 @@ BEGIN
                candidate_row.candidate_display_name,
                candidate_row.net_bank_amount,
                pg_catalog.round(
-                   pg_catalog.coalesce(
+                   coalesce(
                        CASE
-                           WHEN pg_catalog.coalesce(correction_rollup.has_applied_removal, false)
-                             OR pg_catalog.coalesce(item_rollup.active_item_count, 0) = 0
+                           WHEN coalesce(correction_rollup.has_applied_removal, false)
+                             OR coalesce(item_rollup.active_item_count, 0) = 0
                            THEN membership_history.reviewed_payment_amount
                            ELSE NULL::numeric
                        END,
@@ -464,34 +464,34 @@ BEGIN
                    ) * 100
                )::bigint
                    AS original_payment_amount_pence,
-               pg_catalog.coalesce(item_rollup.active_item_count, 0) AS active_item_count,
-               pg_catalog.coalesce(item_rollup.has_paye_item, false) AS has_paye_item,
-               pg_catalog.coalesce(item_rollup.has_non_paye_item, false) AS has_non_paye_item,
+               coalesce(item_rollup.active_item_count, 0) AS active_item_count,
+               coalesce(item_rollup.has_paye_item, false) AS has_paye_item,
+               coalesce(item_rollup.has_non_paye_item, false) AS has_non_paye_item,
                CASE
-                   WHEN pg_catalog.coalesce(item_rollup.has_paye_item, false)
-                    AND pg_catalog.coalesce(item_rollup.has_non_paye_item, false) THEN 'MIXED'
-                   WHEN pg_catalog.coalesce(item_rollup.has_paye_item, false) THEN 'PAYE'
+                   WHEN coalesce(item_rollup.has_paye_item, false)
+                    AND coalesce(item_rollup.has_non_paye_item, false) THEN 'MIXED'
+                   WHEN coalesce(item_rollup.has_paye_item, false) THEN 'PAYE'
                    ELSE 'UMBRELLA'
                END AS pay_channel,
-               pg_catalog.coalesce(correction_rollup.has_applied_removal, false)
-                   OR pg_catalog.coalesce(item_rollup.active_item_count, 0) = 0 AS removed,
-               pg_catalog.coalesce(correction_rollup.has_applied_release, false) AS released,
-               pg_catalog.coalesce(correction_rollup.has_applied_cancel, false) AS cancelled,
-               pg_catalog.coalesce(provider_rollup.has_paid_evidence, false)
+               coalesce(correction_rollup.has_applied_removal, false)
+                   OR coalesce(item_rollup.active_item_count, 0) = 0 AS removed,
+               coalesce(correction_rollup.has_applied_release, false) AS released,
+               coalesce(correction_rollup.has_applied_cancel, false) AS cancelled,
+               coalesce(provider_rollup.has_paid_evidence, false)
                    OR candidate_row.settlement_status IN ('SETTLED', 'PAID') AS paid_or_settled,
-               pg_catalog.coalesce(provider_rollup.has_terminal_no_money, false)
-                   OR pg_catalog.coalesce(transfer_rollup.transfer_failed, false) AS terminal_no_money,
-               pg_catalog.coalesce(provider_rollup.has_ambiguous_evidence, false)
-                   OR pg_catalog.coalesce(transfer_rollup.transfer_pending, false) AS ambiguous,
+               coalesce(provider_rollup.has_terminal_no_money, false)
+                   OR coalesce(transfer_rollup.transfer_failed, false) AS terminal_no_money,
+               coalesce(provider_rollup.has_ambiguous_evidence, false)
+                   OR coalesce(transfer_rollup.transfer_pending, false) AS ambiguous,
                work_rollup.latest_work_status,
-               pg_catalog.coalesce(work_rollup.attempt_count, 0) AS attempt_count,
+               coalesce(work_rollup.attempt_count, 0) AS attempt_count,
                work_rollup.last_error,
-               pg_catalog.coalesce(
+               coalesce(
                    work_rollup.latest_request_status,
                    membership_history.membership_request_status
                ) AS latest_request_status,
                provider_rollup.latest_event_time_utc,
-               pg_catalog.coalesce(transfer_rollup.shared_instruction_count, 0) AS shared_instruction_count
+               coalesce(transfer_rollup.shared_instruction_count, 0) AS shared_instruction_count
         FROM public.pay_batch_candidates AS candidate_row
         LEFT JOIN item_rollup ON item_rollup.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN correction_rollup ON correction_rollup.pay_batch_candidate_id = candidate_row.id
@@ -549,7 +549,7 @@ BEGIN
                 OR pg_catalog.upper(pg_catalog.btrim(v_filter ->> 'action')) = ANY(classified.available_actions)
               )
           AND (
-                pg_catalog.coalesce((v_filter ->> 'actionable_only')::boolean, false) IS NOT TRUE
+                coalesce((v_filter ->> 'actionable_only')::boolean, false) IS NOT TRUE
                 OR pg_catalog.cardinality(classified.available_actions) > 0
               )
           AND (
@@ -562,7 +562,7 @@ BEGIN
           AND NOT EXISTS (
                 SELECT 1
                 FROM pg_catalog.jsonb_array_elements_text(
-                    pg_catalog.coalesce(v_filter -> 'excluded_candidate_tokens', '[]'::jsonb)
+                    coalesce(v_filter -> 'excluded_candidate_tokens', '[]'::jsonb)
                 ) AS excluded_token(token_value)
                 WHERE excluded_token.token_value = classified.pay_batch_candidate_id::text
               )
@@ -667,7 +667,7 @@ BEGIN
         LIMIT p_limit
     )
     SELECT
-        pg_catalog.coalesce(
+        coalesce(
             pg_catalog.jsonb_agg(
                 pg_catalog.jsonb_build_object(
                     'row_key', page_rows.pay_batch_candidate_id::text,
@@ -745,7 +745,7 @@ BEGIN
             WHERE pg_catalog.cardinality(filtered.available_actions) > 0
         ),
         (
-            SELECT pg_catalog.coalesce(pg_catalog.sum(filtered.original_payment_amount_pence), 0)::bigint
+            SELECT coalesce(pg_catalog.sum(filtered.original_payment_amount_pence), 0)::bigint
             FROM filtered
             WHERE pg_catalog.cardinality(filtered.available_actions) > 0
         ),
@@ -755,11 +755,11 @@ BEGIN
             WHERE NOT classified.removed
         ),
         (
-            SELECT pg_catalog.coalesce(pg_catalog.sum(classified.active_payment_amount_pence), 0)::bigint
+            SELECT coalesce(pg_catalog.sum(classified.active_payment_amount_pence), 0)::bigint
             FROM classified
         ),
         (
-            SELECT pg_catalog.coalesce(pg_catalog.sum(classified.original_payment_amount_pence), 0)::bigint
+            SELECT coalesce(pg_catalog.sum(classified.original_payment_amount_pence), 0)::bigint
             FROM classified
         ),
         (
@@ -768,7 +768,7 @@ BEGIN
             WHERE classified.has_paye_item AND NOT classified.removed
         ),
         (
-            SELECT pg_catalog.coalesce(pg_catalog.sum(classified.active_payment_amount_pence), 0)::bigint
+            SELECT coalesce(pg_catalog.sum(classified.active_payment_amount_pence), 0)::bigint
             FROM classified
             WHERE classified.has_paye_item AND NOT classified.removed
         ),

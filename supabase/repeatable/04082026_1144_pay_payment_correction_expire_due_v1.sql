@@ -52,9 +52,7 @@ BEGIN
                request_row.status,
                request_row.requested_by_user_id,
                request_row.requested_at_utc,
-               request_row.authorised_at_utc,
-               request_row.source_bank_event_id,
-               request_row.accepted_resolution_json
+               request_row.authorised_at_utc
         FROM public.pay_payment_correction_requests AS request_row
         WHERE request_row.status IN (
                   'PLANNING',
@@ -63,33 +61,34 @@ BEGIN
                   'AWAITING_AUTHORISATION'
               )
           AND request_row.requested_at_utc <= v_now - interval '24 hours'
+          AND request_row.authorised_at_utc IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM public.pay_payment_correction_work_items AS work_item
+              WHERE work_item.correction_request_id = request_row.id
+                AND work_item.status = 'APPLIED'
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM public.pay_payment_correction_items AS correction_item
+              WHERE correction_item.correction_request_id = request_row.id
+                AND correction_item.status = 'APPLIED'
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM public.pay_payment_correction_actions AS effect_action
+              WHERE effect_action.correction_request_id = request_row.id
+                AND (
+                    pg_catalog.lower(COALESCE(effect_action.metadata_json->>'provider_outcome_changed', 'false')) IN ('true', 't', '1', 'yes', 'y', 'on')
+                    OR pg_catalog.lower(COALESCE(effect_action.metadata_json->>'settlement_outcome_changed', 'false')) IN ('true', 't', '1', 'yes', 'y', 'on')
+                    OR effect_action.metadata_json->>'effect_code' IN (
+                        'PROVIDER_OUTCOME_CHANGED_BY_REQUEST',
+                        'SETTLEMENT_OUTCOME_CHANGED_BY_REQUEST'
+                    )
+                )
+          )
         ORDER BY request_row.requested_at_utc, request_row.id
         FOR UPDATE SKIP LOCKED
         LIMIT p_limit
     LOOP
         v_claimed_count := v_claimed_count + 1;
-
-        IF v_request.authorised_at_utc IS NOT NULL
-           OR v_request.source_bank_event_id IS NOT NULL
-           OR (
-               v_request.accepted_resolution_json IS NOT NULL
-               AND v_request.accepted_resolution_json <> '{}'::jsonb
-           )
-           OR EXISTS (
-               SELECT 1
-               FROM public.pay_payment_correction_work_items AS work_item
-               WHERE work_item.correction_request_id = v_request.id
-                 AND work_item.status = 'APPLIED'
-           )
-           OR EXISTS (
-               SELECT 1
-               FROM public.pay_payment_correction_items AS correction_item
-               WHERE correction_item.correction_request_id = v_request.id
-                 AND correction_item.status = 'APPLIED'
-           ) THEN
-            v_skipped_count := v_skipped_count + 1;
-            CONTINUE;
-        END IF;
 
         UPDATE public.pay_payment_correction_requests AS request_to_expire
         SET status = 'CANCELLED',
@@ -104,6 +103,29 @@ BEGIN
               'PLANNED',
               'REQUESTED',
               'AWAITING_AUTHORISATION'
+          )
+          AND request_to_expire.authorised_at_utc IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM public.pay_payment_correction_work_items AS work_item
+              WHERE work_item.correction_request_id = request_to_expire.id
+                AND work_item.status = 'APPLIED'
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM public.pay_payment_correction_items AS correction_item
+              WHERE correction_item.correction_request_id = request_to_expire.id
+                AND correction_item.status = 'APPLIED'
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM public.pay_payment_correction_actions AS effect_action
+              WHERE effect_action.correction_request_id = request_to_expire.id
+                AND (
+                    pg_catalog.lower(COALESCE(effect_action.metadata_json->>'provider_outcome_changed', 'false')) IN ('true', 't', '1', 'yes', 'y', 'on')
+                    OR pg_catalog.lower(COALESCE(effect_action.metadata_json->>'settlement_outcome_changed', 'false')) IN ('true', 't', '1', 'yes', 'y', 'on')
+                    OR effect_action.metadata_json->>'effect_code' IN (
+                        'PROVIDER_OUTCOME_CHANGED_BY_REQUEST',
+                        'SETTLEMENT_OUTCOME_CHANGED_BY_REQUEST'
+                    )
+                )
           );
 
         IF NOT FOUND THEN
@@ -149,14 +171,14 @@ BEGIN
         UPDATE public.banking_pay_operations AS operation_to_cancel
         SET status = 'CANCELLED',
             phase = 'COMPLETE',
-            result_json = pg_catalog.coalesce(operation_to_cancel.result_json, '{}'::jsonb)
+            result_json = COALESCE(operation_to_cancel.result_json, '{}'::jsonb)
                 || pg_catalog.jsonb_build_object(
                     'code', 'UNAPPROVED_REQUEST_EXPIRED',
                     'correction_request_id', v_request.id,
                     'expired_at_utc', v_now,
                     'membership_retained', true
                 ),
-            completed_at_utc = pg_catalog.coalesce(operation_to_cancel.completed_at_utc, v_now),
+            completed_at_utc = COALESCE(operation_to_cancel.completed_at_utc, v_now),
             requires_user_action = false,
             locked_by = NULL,
             lock_expires_at_utc = NULL,

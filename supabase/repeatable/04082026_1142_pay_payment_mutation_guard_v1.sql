@@ -16,7 +16,7 @@ SET statement_timeout TO '6000ms'
 SET lock_timeout TO '1000ms'
 AS $function$
 DECLARE
-    v_mode text := pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(p_mode, '')));
+    v_mode text := pg_catalog.upper(pg_catalog.btrim(coalesce(p_mode, '')));
     v_active_gate_request_id uuid;
     v_integrity_conflict_exists boolean := false;
     v_operation_continuity_exists boolean := false;

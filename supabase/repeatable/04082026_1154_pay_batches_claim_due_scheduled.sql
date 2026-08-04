@@ -38,13 +38,15 @@ BEGIN
   END IF;
   v_limit := p_limit;
 
-  IF p_now_utc IS NOT NULL AND current_user <> 'postgres' THEN
+  -- current_user is always the definer inside this SECURITY DEFINER function.
+  -- Only a genuine direct postgres session may use deterministic test time.
+  IF p_now_utc IS NOT NULL AND session_user <> 'postgres' THEN
     RAISE EXCEPTION 'PAY_BATCHES_DUE_CALLER_TIME_OVERRIDE_NOT_ALLOWED'
       USING ERRCODE = '42501', DETAIL = pg_catalog.jsonb_build_object(
         'code', 'CALLER_TIME_OVERRIDE_NOT_ALLOWED'
       )::text;
   END IF;
-  v_cutoff := pg_catalog.coalesce(p_now_utc, v_now);
+  v_cutoff := COALESCE(p_now_utc, v_now);
 
   FOR v_batch_record IN
     SELECT
@@ -65,34 +67,34 @@ BEGIN
       true
     ) AS submission_evidence(evidence_json)
     WHERE batch_row.status = 'SCHEDULED'
-      AND pg_catalog.coalesce(
+      AND COALESCE(
         batch_row.execution_commit_state,
         'NOT_SUBMITTED'
       ) = 'NOT_SUBMITTED'
       AND batch_row.scheduled_at_utc IS NOT NULL
       AND batch_row.scheduled_at_utc <= v_cutoff
       AND batch_row.cancelled_at_utc IS NULL
-      AND pg_catalog.coalesce(
+      AND COALESCE(
         (submission_evidence.evidence_json
           ->> 'has_external_provider_submission')::boolean,
         false
       ) IS NOT TRUE
-      AND pg_catalog.coalesce(
+      AND COALESCE(
         (submission_evidence.evidence_json
           ->> 'has_pending_provider_outcome')::boolean,
         false
       ) IS NOT TRUE
-      AND pg_catalog.coalesce(
+      AND COALESCE(
         (submission_evidence.evidence_json
           ->> 'has_unknown_provider_outcome')::boolean,
         false
       ) IS NOT TRUE
-      AND pg_catalog.coalesce(
+      AND COALESCE(
         (submission_evidence.evidence_json
           ->> 'has_terminal_no_money')::boolean,
         false
       ) IS NOT TRUE
-      AND pg_catalog.coalesce(
+      AND COALESCE(
         (submission_evidence.evidence_json
           ->> 'has_final_paid_or_settled')::boolean,
         false
@@ -103,7 +105,7 @@ BEGIN
         JOIN public.pay_batch_items AS item_row
           ON item_row.pay_batch_candidate_id = candidate_row.id
         WHERE candidate_row.pay_batch_id = batch_row.id
-          AND pg_catalog.coalesce(item_row.is_voided, false) IS NOT TRUE
+          AND COALESCE(item_row.is_voided, false) IS NOT TRUE
           AND item_row.item_type <> 'DEBT_CREATED'
       )
       AND EXISTS (
@@ -121,14 +123,14 @@ BEGIN
       'NEW_PAYMENT_ACTION'
     );
 
-    IF pg_catalog.coalesce((v_guard->>'blocked')::boolean, true) THEN
+    IF COALESCE((v_guard->>'blocked')::boolean, true) THEN
       v_skipped_count := v_skipped_count + 1;
       v_operations_json := v_operations_json || pg_catalog.jsonb_build_array(
         pg_catalog.jsonb_build_object(
           'pay_batch_id', v_batch_record.id,
           'operation_id', NULL,
           'operation_created', false,
-          'code', pg_catalog.coalesce(
+          'code', COALESCE(
             v_guard->>'code',
             'PAYMENT_CHANGE_IN_PROGRESS'
           )
@@ -143,7 +145,7 @@ BEGIN
       AND locked_batch.status = 'SCHEDULED'
       AND locked_batch.scheduled_at_utc IS NOT NULL
       AND locked_batch.scheduled_at_utc <= v_cutoff
-      AND pg_catalog.coalesce(
+      AND COALESCE(
         locked_batch.execution_commit_state,
         'NOT_SUBMITTED'
       ) = 'NOT_SUBMITTED'
@@ -196,7 +198,7 @@ BEGIN
       CONTINUE;
     END IF;
 
-    v_actor_user_id := pg_catalog.coalesce(
+    v_actor_user_id := COALESCE(
       v_batch_record.scheduled_by_user_id,
       v_batch_record.created_by_user_id
     );
@@ -215,12 +217,12 @@ BEGIN
         'pay_batch_id', v_batch_record.id,
         'scheduled_at_utc', v_batch_record.scheduled_at_utc,
         'schedule_kind', v_batch_record.schedule_kind,
-        'execution_mode', pg_catalog.coalesce(
+        'execution_mode', COALESCE(
           v_batch_record.execution_intent_json->>'execution_mode',
           v_batch_record.execution_intent_json->>'mode',
           'STANDARD_BANK'
         ),
-        'payment_date', pg_catalog.coalesce(
+        'payment_date', COALESCE(
           v_batch_record.authoritative_payment_date,
           v_batch_record.pay_date
         ),
@@ -251,12 +253,12 @@ BEGIN
 
     UPDATE public.pay_batches AS batch_update
     SET status = 'EXECUTING',
-        executing_started_at_utc = pg_catalog.coalesce(
+        executing_started_at_utc = COALESCE(
           batch_update.executing_started_at_utc,
           v_now
         ),
         execution_intent_json = pg_catalog.jsonb_strip_nulls(
-          pg_catalog.coalesce(
+          COALESCE(
             batch_update.execution_intent_json,
             '{}'::jsonb
           ) || pg_catalog.jsonb_build_object(
@@ -266,7 +268,7 @@ BEGIN
         )
     WHERE batch_update.id = v_batch_record.id
       AND batch_update.status = 'SCHEDULED'
-      AND pg_catalog.coalesce(
+      AND COALESCE(
         batch_update.execution_commit_state,
         'NOT_SUBMITTED'
       ) = 'NOT_SUBMITTED';

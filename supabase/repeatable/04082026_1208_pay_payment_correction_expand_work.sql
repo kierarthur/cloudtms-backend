@@ -59,23 +59,23 @@ BEGIN
 
   IF p_actor_user_id IS NOT NULL
      AND p_actor_user_id IS DISTINCT FROM v_request.requested_by_user_id
-     AND pg_catalog.coalesce(v_request.auto_requested, false) IS NOT TRUE THEN
+     AND coalesce(v_request.auto_requested, false) IS NOT TRUE THEN
     IF NOT EXISTS (
       SELECT 1 FROM public.tms_users AS actor_row
-      WHERE actor_row.id = p_actor_user_id AND pg_catalog.coalesce(actor_row.is_active, false)
+      WHERE actor_row.id = p_actor_user_id AND coalesce(actor_row.is_active, false)
     ) THEN
       RAISE EXCEPTION 'PAYMENT_CORRECTION_EXPAND_ACTOR_NOT_ALLOWED'
         USING ERRCODE = '42501', DETAIL = pg_catalog.jsonb_build_object('code', 'PERMISSION_DENIED')::text;
     END IF;
   END IF;
 
-  v_last_ordinal := pg_catalog.coalesce(
+  v_last_ordinal := coalesce(
     NULLIF(v_operation.progress_json->>'last_expanded_selection_ordinal', '')::bigint,
     0
   );
   v_work_kind := CASE WHEN v_request.correction_kind = 'NO_MONEY_UNWIND'
                       THEN 'NO_MONEY_UNWIND' ELSE 'PRE_BANK_CANCEL' END;
-  v_requested_action := pg_catalog.coalesce(
+  v_requested_action := coalesce(
     v_request.plan_json->>'requested_action', v_request.selection_json->>'requested_action'
   );
 
@@ -147,14 +147,14 @@ BEGIN
   )
   SELECT pg_catalog.count(*)::integer INTO v_page_count FROM inserted;
 
-  SELECT pg_catalog.coalesce(pg_catalog.max(member_row.selection_ordinal), v_last_ordinal)
+  SELECT coalesce(pg_catalog.max(member_row.selection_ordinal), v_last_ordinal)
   INTO v_next_ordinal
   FROM public.pay_payment_correction_request_candidates AS member_row
   WHERE member_row.correction_request_id = p_correction_request_id
     AND member_row.selection_ordinal > v_last_ordinal
     AND member_row.selection_ordinal <= v_last_ordinal + 100;
 
-  v_next_ordinal := pg_catalog.greatest(v_next_ordinal, v_last_ordinal);
+  v_next_ordinal := greatest(v_next_ordinal, v_last_ordinal);
   v_complete := NOT EXISTS (
     SELECT 1
     FROM public.pay_payment_correction_request_candidates AS remaining_member
@@ -163,7 +163,7 @@ BEGIN
   );
 
   UPDATE public.banking_pay_operations AS progress_operation
-  SET progress_json = pg_catalog.coalesce(progress_operation.progress_json, '{}'::jsonb)
+  SET progress_json = coalesce(progress_operation.progress_json, '{}'::jsonb)
         || pg_catalog.jsonb_build_object(
           'last_expanded_selection_ordinal', v_next_ordinal,
           'expanded_page_count', v_page_count
@@ -219,7 +219,7 @@ BEGIN
     UPDATE public.banking_pay_operations AS expanded_operation
     SET phase = 'PROCESS_CHUNKS', status = 'RUNNING', runner_state = 'RUNNABLE',
         run_after_utc = v_now, requires_user_action = false,
-        progress_json = pg_catalog.coalesce(expanded_operation.progress_json, '{}'::jsonb)
+        progress_json = coalesce(expanded_operation.progress_json, '{}'::jsonb)
           || pg_catalog.jsonb_build_object('materialised_work_count', v_work_count),
         updated_at_utc = v_now
     WHERE expanded_operation.id = v_operation.id;
@@ -240,7 +240,7 @@ BEGIN
     'ok', true, 'correction_request_id', p_correction_request_id,
     'operation_id', v_operation.id, 'page_work_count', v_page_count,
     'inserted_count', v_page_count,
-    'existing_count', pg_catalog.greatest(
+    'existing_count', greatest(
       (v_next_ordinal - v_last_ordinal)::integer - v_page_count,
       0
     ),

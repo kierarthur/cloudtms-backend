@@ -2542,11 +2542,11 @@ BEGIN
             SELECT 1
             FROM public.pay_batch_items AS active_item
             WHERE active_item.pay_batch_candidate_id = active_candidate.id
-              AND pg_catalog.coalesce(active_item.is_voided, false) IS NOT TRUE
+              AND coalesce(active_item.is_voided, false) IS NOT TRUE
           )
       ),
       'active_amount', (
-        SELECT pg_catalog.coalesce(
+        SELECT coalesce(
           pg_catalog.sum(active_candidate.net_bank_amount),
           0::numeric
         )::numeric(14,2)
@@ -2556,7 +2556,7 @@ BEGIN
             SELECT 1
             FROM public.pay_batch_items AS active_item
             WHERE active_item.pay_batch_candidate_id = active_candidate.id
-              AND pg_catalog.coalesce(active_item.is_voided, false) IS NOT TRUE
+              AND coalesce(active_item.is_voided, false) IS NOT TRUE
           )
       ),
       'active_scope_hash', v_current_active_scope_hash,
@@ -2719,11 +2719,11 @@ BEGIN
           SELECT 1
           FROM public.pay_batch_items AS active_item
           WHERE active_item.pay_batch_candidate_id = active_candidate.id
-            AND pg_catalog.coalesce(active_item.is_voided, false) IS NOT TRUE
+            AND coalesce(active_item.is_voided, false) IS NOT TRUE
         )
     ),
     'active_amount', (
-      SELECT pg_catalog.coalesce(
+      SELECT coalesce(
         pg_catalog.sum(active_candidate.net_bank_amount),
         0::numeric
       )::numeric(14,2)
@@ -2733,7 +2733,7 @@ BEGIN
           SELECT 1
           FROM public.pay_batch_items AS active_item
           WHERE active_item.pay_batch_candidate_id = active_candidate.id
-            AND pg_catalog.coalesce(active_item.is_voided, false) IS NOT TRUE
+            AND coalesce(active_item.is_voided, false) IS NOT TRUE
         )
     ),
     'active_scope_hash', v_current_active_scope_hash,

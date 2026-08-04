@@ -19,7 +19,7 @@ AS $function$
 DECLARE
   v_now timestamptz := pg_catalog.clock_timestamp();
   v_action text := pg_catalog.upper(
-    pg_catalog.btrim(pg_catalog.coalesce(p_action, ''))
+    pg_catalog.btrim(coalesce(p_action, ''))
   );
   v_pay_batch_id uuid;
   v_request public.pay_payment_correction_requests%ROWTYPE;
@@ -77,10 +77,10 @@ BEGIN
     p_correction_request_id,
     'CORRECTION_APPLY'
   );
-  IF pg_catalog.coalesce((v_guard->>'blocked')::boolean, true) THEN
+  IF coalesce((v_guard->>'blocked')::boolean, true) THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_GATE_OWNER_MISMATCH'
       USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
-        'code', pg_catalog.coalesce(
+        'code', coalesce(
           v_guard->>'code',
           'PAYMENT_CORRECTION_GATE_OWNER_MISMATCH'
         ),
@@ -186,7 +186,7 @@ BEGIN
   FROM public.tms_users AS actor_row
   WHERE actor_row.id = p_actor_user_id;
 
-  IF NOT FOUND OR pg_catalog.coalesce(v_actor.is_active, false) IS NOT TRUE THEN
+  IF NOT FOUND OR coalesce(v_actor.is_active, false) IS NOT TRUE THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_AUTHORISER_NOT_ACTIVE'
       USING ERRCODE = '42501', DETAIL = pg_catalog.jsonb_build_object(
         'code', 'PERMISSION_DENIED'
@@ -194,7 +194,7 @@ BEGIN
   END IF;
 
   IF v_action = 'AUTHORISE'
-     AND pg_catalog.coalesce(v_actor.payment_authoriser, false) IS NOT TRUE THEN
+     AND coalesce(v_actor.payment_authoriser, false) IS NOT TRUE THEN
     RAISE EXCEPTION 'ACTOR_IS_NOT_PAYMENT_AUTHORISER'
       USING ERRCODE = '42501', DETAIL = pg_catalog.jsonb_build_object(
         'code', 'PERMISSION_DENIED'
@@ -202,7 +202,7 @@ BEGIN
   END IF;
 
   IF v_action = 'USE_GOLDEN_KEY'
-     AND pg_catalog.coalesce(v_actor.payment_golden_key, false) IS NOT TRUE THEN
+     AND coalesce(v_actor.payment_golden_key, false) IS NOT TRUE THEN
     RAISE EXCEPTION 'ACTOR_DOES_NOT_HAVE_PAYMENT_GOLDEN_KEY'
       USING ERRCODE = '42501', DETAIL = pg_catalog.jsonb_build_object(
         'code', 'PERMISSION_DENIED'
@@ -267,13 +267,13 @@ BEGIN
         END,
         cancelled_at_utc = CASE
           WHEN v_action = 'CANCEL' THEN
-            pg_catalog.coalesce(terminal_request.cancelled_at_utc, v_now)
+            coalesce(terminal_request.cancelled_at_utc, v_now)
           ELSE terminal_request.cancelled_at_utc
         END,
         reauth_proof_hash = NULL,
         reauth_expires_at_utc = NULL,
         reauth_consumed_at_utc =
-          pg_catalog.coalesce(terminal_request.reauth_consumed_at_utc, v_now),
+          coalesce(terminal_request.reauth_consumed_at_utc, v_now),
         updated_at_utc = v_now
     WHERE terminal_request.id = v_request.id
     RETURNING terminal_request.* INTO v_request;
@@ -283,7 +283,7 @@ BEGIN
         phase = 'COMPLETE',
         runner_state = 'CANCELLED',
         requires_user_action = false,
-        result_json = pg_catalog.coalesce(
+        result_json = coalesce(
           terminal_operation.result_json,
           '{}'::jsonb
         ) || pg_catalog.jsonb_build_object(
@@ -298,7 +298,7 @@ BEGIN
         locked_by = NULL,
         lock_expires_at_utc = NULL,
         run_after_utc = NULL,
-        completed_at_utc = pg_catalog.coalesce(
+        completed_at_utc = coalesce(
           terminal_operation.completed_at_utc,
           v_now
         ),
@@ -323,7 +323,7 @@ BEGIN
       p_actor_user_id,
       v_action,
       v_now,
-      NULLIF(pg_catalog.btrim(pg_catalog.coalesce(p_note, '')), ''),
+      NULLIF(pg_catalog.btrim(coalesce(p_note, '')), ''),
       v_before_request,
       pg_catalog.to_jsonb(v_request),
       pg_catalog.jsonb_build_object(
@@ -369,7 +369,7 @@ BEGIN
       'version', 1,
       'pay_batch_id', v_batch.id,
       'batch_status', v_batch.status,
-      'total_bank_out_pence', pg_catalog.round(pg_catalog.coalesce(v_batch.total_bank_out, 0) * 100)::bigint,
+      'total_bank_out_pence', pg_catalog.round(coalesce(v_batch.total_bank_out, 0) * 100)::bigint,
       'source_scope_change_generation', v_batch.source_scope_change_generation,
       'execution_commit_state', v_batch.execution_commit_state,
       'execution_commit_ref', v_batch.execution_commit_ref,
@@ -398,25 +398,25 @@ BEGIN
         LIMIT 1
       ),
       'active_candidate_items', (
-        SELECT pg_catalog.coalesce(
+        SELECT coalesce(
           pg_catalog.jsonb_agg(
             pg_catalog.jsonb_build_object(
               'pay_batch_candidate_id', candidate_scope.id,
               'candidate_id', candidate_scope.candidate_id,
               'settlement_status', candidate_scope.settlement_status,
               'net_bank_amount_pence', pg_catalog.round(
-                pg_catalog.coalesce(candidate_scope.net_bank_amount, 0) * 100
+                coalesce(candidate_scope.net_bank_amount, 0) * 100
               )::bigint,
               'pay_batch_item_id', item_scope.id,
               'item_type', item_scope.item_type,
               'amount_ex_vat_pence', pg_catalog.round(
-                pg_catalog.coalesce(item_scope.amount_ex_vat, 0) * 100
+                coalesce(item_scope.amount_ex_vat, 0) * 100
               )::bigint,
               'amount_vat_pence', pg_catalog.round(
-                pg_catalog.coalesce(item_scope.amount_vat, 0) * 100
+                coalesce(item_scope.amount_vat, 0) * 100
               )::bigint,
               'amount_inc_vat_pence', pg_catalog.round(
-                pg_catalog.coalesce(item_scope.amount_inc_vat, 0) * 100
+                coalesce(item_scope.amount_inc_vat, 0) * 100
               )::bigint,
               'frozen_component_key_type', item_scope.frozen_component_key_type,
               'frozen_component_key_value', item_scope.frozen_component_key_value,
@@ -434,11 +434,11 @@ BEGIN
         FROM public.pay_batch_candidates AS candidate_scope
         JOIN public.pay_batch_items AS item_scope
           ON item_scope.pay_batch_candidate_id = candidate_scope.id
-         AND pg_catalog.coalesce(item_scope.is_voided, false) IS NOT TRUE
+         AND coalesce(item_scope.is_voided, false) IS NOT TRUE
         WHERE candidate_scope.pay_batch_id = v_batch.id
       ),
       'provider_scope', (
-        SELECT pg_catalog.coalesce(
+        SELECT coalesce(
           pg_catalog.jsonb_agg(
             pg_catalog.jsonb_build_object(
               'pay_bank_transfer_id', transfer_scope.id,
@@ -448,7 +448,7 @@ BEGIN
               'rail_tx_id', transfer_scope.rail_tx_id,
               'transfer_group_key', transfer_scope.transfer_group_key,
               'amount_pence', pg_catalog.round(
-                pg_catalog.coalesce(transfer_scope.amount, 0) * 100
+                coalesce(transfer_scope.amount, 0) * 100
               )::bigint
             )
             ORDER BY transfer_scope.id
@@ -459,7 +459,7 @@ BEGIN
         WHERE transfer_scope.pay_batch_id = v_batch.id
       ),
       'provider_events', (
-        SELECT pg_catalog.coalesce(
+        SELECT coalesce(
           pg_catalog.jsonb_agg(
             pg_catalog.jsonb_build_object(
               'bank_event_id', event_scope.id,
@@ -490,7 +490,7 @@ BEGIN
         JOIN public.pay_batch_candidates AS candidate_row
           ON candidate_row.id = item_row.pay_batch_candidate_id
         WHERE candidate_row.pay_batch_id = v_batch.id
-          AND pg_catalog.coalesce(item_row.is_voided, false) IS NOT TRUE
+          AND coalesce(item_row.is_voided, false) IS NOT TRUE
       ),
       'latest_request_update', (
         SELECT pg_catalog.max(other_request.updated_at_utc)
@@ -518,8 +518,8 @@ BEGIN
 
   SELECT
     pg_catalog.count(*)::integer,
-    pg_catalog.coalesce(pg_catalog.sum(member_row.active_item_count), 0)::integer,
-    pg_catalog.coalesce(
+    coalesce(pg_catalog.sum(member_row.active_item_count), 0)::integer,
+    coalesce(
       pg_catalog.sum(
         pg_catalog.round(member_row.active_amount * 100)::bigint
       ),
@@ -555,7 +555,7 @@ BEGIN
          ON item_row.id = ANY(member_row.pay_batch_item_ids)
         AND item_row.pay_batch_candidate_id =
             member_row.pay_batch_candidate_id
-        AND pg_catalog.coalesce(item_row.is_voided, false) IS NOT TRUE
+        AND coalesce(item_row.is_voided, false) IS NOT TRUE
        WHERE member_row.correction_request_id = v_request.id
        GROUP BY member_row.pay_batch_candidate_id,
                 member_row.active_item_count
@@ -568,7 +568,7 @@ BEGIN
       )::text;
   END IF;
 
-  v_requested_action := pg_catalog.coalesce(
+  v_requested_action := coalesce(
     v_request.plan_json->>'requested_action',
     v_request.selection_json->>'requested_action',
     v_request.selection_json->>'action'
@@ -620,15 +620,15 @@ BEGIN
     p_actor_user_id,
     v_action,
     v_now,
-    NULLIF(pg_catalog.btrim(pg_catalog.coalesce(p_note, '')), ''),
+    NULLIF(pg_catalog.btrim(coalesce(p_note, '')), ''),
     v_before_request,
     NULL,
     pg_catalog.jsonb_build_object(
       'approved_count_before',
-        pg_catalog.coalesce(v_request.approved_count, 0),
+        coalesce(v_request.approved_count, 0),
       'required_quantity',
-        pg_catalog.greatest(
-          pg_catalog.coalesce(v_request.required_quantity, 1),
+        greatest(
+          coalesce(v_request.required_quantity, 1),
           1
         )
     )
@@ -636,23 +636,23 @@ BEGIN
 
   v_new_approved_count := CASE
     WHEN v_action = 'USE_GOLDEN_KEY' THEN
-      pg_catalog.greatest(
-        pg_catalog.coalesce(v_request.required_quantity, 1),
+      greatest(
+        coalesce(v_request.required_quantity, 1),
         1
       )
     ELSE
-      pg_catalog.least(
-        pg_catalog.coalesce(v_request.approved_count, 0) + 1,
-        pg_catalog.greatest(
-          pg_catalog.coalesce(v_request.required_quantity, 1),
+      least(
+        coalesce(v_request.approved_count, 0) + 1,
+        greatest(
+          coalesce(v_request.required_quantity, 1),
           1
         )
       )
   END;
 
   IF v_new_approved_count <
-       pg_catalog.greatest(
-         pg_catalog.coalesce(v_request.required_quantity, 1),
+       greatest(
+         coalesce(v_request.required_quantity, 1),
          1
        ) THEN
     UPDATE public.pay_payment_correction_requests AS awaiting_request
@@ -687,7 +687,7 @@ BEGIN
   END IF;
 
   SELECT
-    pg_catalog.coalesce(
+    coalesce(
       pg_catalog.jsonb_agg(auth_request.id ORDER BY auth_request.created_at_utc),
       '[]'::jsonb
     )
@@ -701,7 +701,7 @@ BEGIN
 
   UPDATE public.pay_batch_auth_requests AS old_auth
   SET state = 'CANCELLED',
-      finalised_at_utc = pg_catalog.coalesce(
+      finalised_at_utc = coalesce(
         old_auth.finalised_at_utc,
         v_now
       ),
@@ -710,7 +710,7 @@ BEGIN
     AND old_auth.state IN ('AWAITING', 'AUTHORISED');
 
   UPDATE public.pay_batch_auth_tokens AS old_token
-  SET used_at_utc = pg_catalog.coalesce(old_token.used_at_utc, v_now)
+  SET used_at_utc = coalesce(old_token.used_at_utc, v_now)
   WHERE old_token.auth_request_id IN (
     SELECT auth_request.id
     FROM public.pay_batch_auth_requests AS auth_request
@@ -730,7 +730,7 @@ BEGIN
       scheduled_by_user_id = NULL,
       funding_account_ref = NULL,
       funds_warning_hours_json = NULL,
-      execution_intent_json = pg_catalog.coalesce(
+      execution_intent_json = coalesce(
         correction_batch.execution_intent_json,
         '{}'::jsonb
       ) || pg_catalog.jsonb_build_object(
@@ -750,11 +750,11 @@ BEGIN
         ELSE authorised_request.golden_key_user_id
       END,
       status = 'AUTHORISED',
-      authorised_at_utc = pg_catalog.coalesce(
+      authorised_at_utc = coalesce(
         authorised_request.authorised_at_utc,
         v_now
       ),
-      plan_json = pg_catalog.coalesce(
+      plan_json = coalesce(
         authorised_request.plan_json,
         '{}'::jsonb
       ) || pg_catalog.jsonb_build_object(
@@ -778,7 +778,7 @@ BEGIN
       lease_expires_at_utc = NULL,
       locked_by = NULL,
       lock_expires_at_utc = NULL,
-      progress_json = pg_catalog.coalesce(
+      progress_json = coalesce(
         correction_operation.progress_json,
         '{}'::jsonb
       ) || pg_catalog.jsonb_build_object(
@@ -791,7 +791,7 @@ BEGIN
 
   UPDATE public.pay_payment_correction_actions AS final_action
   SET after_json = pg_catalog.to_jsonb(v_request),
-      metadata_json = pg_catalog.coalesce(
+      metadata_json = coalesce(
         final_action.metadata_json,
         '{}'::jsonb
       ) || pg_catalog.jsonb_build_object(

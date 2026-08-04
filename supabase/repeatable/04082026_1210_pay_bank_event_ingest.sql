@@ -201,16 +201,16 @@ BEGIN
     v_ingest_options_json := p_ingest_options_json;
   END IF;
 
-  v_suppress_auto_unwind := pg_catalog.lower(pg_catalog.btrim(pg_catalog.coalesce(
+  v_suppress_auto_unwind := pg_catalog.lower(pg_catalog.btrim(COALESCE(
     v_event_json->>'suppress_auto_unwind',
     v_ingest_options_json->>'suppress_auto_unwind',
     'false'
   ))) IN ('true','t','1','yes','y','on');
-  v_manual_confirmed_not_paid := pg_catalog.upper(pg_catalog.coalesce(
+  v_manual_confirmed_not_paid := pg_catalog.upper(COALESCE(
     v_event_json->>'resolution', v_event_json->>'normalised_state', ''
   )) = 'CONFIRMED_NOT_PAID'
-    AND pg_catalog.upper(pg_catalog.coalesce(v_event_json->>'event_source', '')) = 'MANUAL_EVIDENCE';
-  v_review_acknowledgement := pg_catalog.upper(pg_catalog.coalesce(
+    AND pg_catalog.upper(COALESCE(v_event_json->>'event_source', '')) = 'MANUAL_EVIDENCE';
+  v_review_acknowledgement := pg_catalog.upper(COALESCE(
     v_event_json->>'review_status', v_ingest_options_json->>'review_status', ''
   )) = 'ACKNOWLEDGED';
 
@@ -427,7 +427,7 @@ BEGIN
          SELECT 1
          FROM public.tms_users AS manual_actor
          WHERE manual_actor.id = p_actor_user_id
-           AND pg_catalog.coalesce(manual_actor.is_active, false) IS TRUE
+           AND COALESCE(manual_actor.is_active, false) IS TRUE
        )
      ) THEN
     RAISE EXCEPTION 'BANK_EVENT_MANUAL_ACTOR_REQUIRED'
@@ -1006,8 +1006,8 @@ BEGIN
     'AUTHORITATIVE_EVENT'
   );
 
-  IF pg_catalog.coalesce((v_mutation_guard->>'ok')::boolean, false) IS NOT TRUE THEN
-    RAISE EXCEPTION '%', pg_catalog.coalesce(v_mutation_guard->>'code', 'PAYMENT_MUTATION_LOCK_TIMEOUT')
+  IF COALESCE((v_mutation_guard->>'ok')::boolean, false) IS NOT TRUE THEN
+    RAISE EXCEPTION '%', COALESCE(v_mutation_guard->>'code', 'PAYMENT_MUTATION_LOCK_TIMEOUT')
       USING ERRCODE = 'P0001', DETAIL = v_mutation_guard::text;
   END IF;
 
@@ -1650,7 +1650,7 @@ BEGIN
   INTO v_paid_after_release;
 
   IF v_normalised_state = 'COMPLETED' AND COALESCE(v_has_strong_transfer_mapping, false) THEN
-    SELECT pg_catalog.coalesce(
+    SELECT COALESCE(
              p_actor_user_id,
              (
                SELECT operation_row.actor_user_id
@@ -1681,14 +1681,14 @@ BEGIN
         'transfer_id', v_pay_bank_transfer_id,
         'status', 'COMPLETED',
         'normalised_state', 'COMPLETED',
-        'rail_tx_id', pg_catalog.coalesce(v_provider_transaction_id, v_provider_reference, v_transfer.rail_tx_id),
-        'rail_state', pg_catalog.coalesce(v_provider_state, v_transfer.rail_state, 'COMPLETED'),
+        'rail_tx_id', COALESCE(v_provider_transaction_id, v_provider_reference, v_transfer.rail_tx_id),
+        'rail_state', COALESCE(v_provider_state, v_transfer.rail_state, 'COMPLETED'),
         'provider_event_id', v_provider_event_id,
         'provider_transaction_id', v_provider_transaction_id,
         'provider_request_id', v_provider_request_id,
         'provider_reference', v_provider_reference,
         'event_source', v_event_source,
-        'event_time_utc', pg_catalog.coalesce(v_event_time_utc, v_now),
+        'event_time_utc', COALESCE(v_event_time_utc, v_now),
         'rail_meta_json', jsonb_build_object(
           'bank_event_id', v_event_id,
           'provider_event_id', v_provider_event_id,
@@ -2333,7 +2333,7 @@ BEGIN
     )
     UPDATE public.pay_batches AS replacement_batch
     SET status = CASE
-          WHEN replacement_batch.status IN ('AUTHORISED','SCHEDULED','EXECUTING') THEN 'AWAITING_AUTHORISATION'
+          WHEN replacement_batch.status IN ('AUTHORISED_FOR_PAYMENT','SCHEDULED','EXECUTING') THEN 'AWAITING_AUTHORISATION'
           ELSE replacement_batch.status
         END,
         schedule_kind = NULL, scheduled_at_utc = NULL, scheduled_by_user_id = NULL,

@@ -111,7 +111,7 @@ test('the correction runner owns one bounded phase and the only Workbench calls'
   const allSql = stageOneRepeatables.map(readRepeatable).join('\n');
   assert.doesNotMatch(processSql, /^\s*WHILE\b/im);
   assert.match(processSql, /FOR UPDATE SKIP LOCKED/);
-  assert.match(processSql, /v_claim_limit\s*:=\s*pg_catalog\.least\(p_limit,\s*25\)/i);
+  assert.match(processSql, /v_claim_limit\s*:=\s*least\(p_limit,\s*25\)/i);
   assert.match(processSql, /LIMIT 100/);
   assert.equal(
     (allSql.match(/pay_workbench_(?:patch_preview_after_batch_mutation_cancel_safe_v1|enqueue_candidate_refresh_many)\s*\(/g) || []).length,
