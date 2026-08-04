@@ -36,8 +36,8 @@ const correctionEntryPointSources = [
   ]],
   ['21072026_1235_05_timesheet_correction_chain_scope_v1.sql', ['timesheet_correction_chain_scope_v1']],
   ['21072026_1235_09_pay_correction_chain_residual_v1.sql', ['pay_correction_chain_residual_v1']],
-  ['21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql', ['pay_workbench_candidate_source_build_chunk']],
-  ['21072026_1235_40_pay_sync_overpayments_from_preview.sql', ['pay_sync_overpayments_from_preview']],
+  ['04082026_1213_pay_workbench_candidate_source_build_chunk.sql', ['pay_workbench_candidate_source_build_chunk']],
+  ['04082026_1210_pay_sync_overpayments_from_preview.sql', ['pay_sync_overpayments_from_preview']],
   ['21072026_1235_38_tsfin_write_snapshots_and_complete.sql', ['tsfin_write_snapshots_and_complete']],
   ['21072026_1235_41_pay_workbench_session_apply_case_resolution.sql', [
     'pay_workbench_session_apply_case_resolution'
@@ -119,7 +119,7 @@ test('correction-chain entry point definitions retain the checker guard when dep
       for (const definition of definitions) {
         assert.match(
           definition[0],
-          /SET\s+plpgsql_check\.mode\s+TO\s+'disabled'/i,
+          /SET\s+"?plpgsql_check\.mode"?\s+(?:TO|=)\s+'disabled'/i,
           `${functionName} keeps its guard when ${fileName} is installed without the later ALTER repeatable`
         );
       }

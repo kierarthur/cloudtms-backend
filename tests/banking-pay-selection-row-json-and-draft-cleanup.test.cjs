@@ -12,7 +12,7 @@ const canonicalSql = fs.readFileSync(
   'utf8'
 );
 const overpaymentSyncSql = fs.readFileSync(
-  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_40_pay_sync_overpayments_from_preview.sql'),
+  path.resolve(__dirname, './fixtures/banking-pay-installed-baselines/21072026_1235_40_pay_sync_overpayments_from_preview.sql'),
   'utf8'
 );
 

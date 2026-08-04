@@ -7,7 +7,9 @@ const read = relativePath => readFileSync(new URL(relativePath, repoRoot), 'utf8
 
 const migrationPath = 'supabase/migrations/04082026_1134_banking_pay_bounded_scope_v12.sql';
 const migration = read(migrationPath);
-const closure = read('supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql');
+const closure = read(
+  'supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql'
+).replace(/\r\n/g, '\n');
 const selector = read('supabase/repeatable/04082026_1144_pay_workbench_candidate_bounded_scope_v1.sql');
 const dispatcher = read('supabase/repeatable/04082026_1213_pay_workbench_candidate_source_build_chunk.sql');
 const syncCore = read('supabase/repeatable/04082026_1210_pay_sync_overpayments_from_workbench_workspace_v1.sql');

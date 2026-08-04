@@ -12,7 +12,7 @@ const repeatableSql = fs.readFileSync(
   'utf8'
 );
 const sourceBuildSql = fs.readFileSync(
-  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql'),
+  path.resolve(__dirname, './fixtures/banking-pay-installed-baselines/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql'),
   'utf8'
 );
 const sourceBuildRuntimeFloorMigrationSql = fs.readFileSync(

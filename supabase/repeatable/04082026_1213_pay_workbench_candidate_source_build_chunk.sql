@@ -14,6 +14,7 @@ VOLATILE
 PARALLEL UNSAFE
 SECURITY DEFINER
 SET search_path = ''
+SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_cursor jsonb:=COALESCE(p_cursor_json,'{}'::jsonb);

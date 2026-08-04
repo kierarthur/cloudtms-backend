@@ -18,6 +18,7 @@ VOLATILE
 PARALLEL UNSAFE
 SECURITY DEFINER
 SET search_path = ''
+SET plpgsql_check.mode TO 'disabled'
 AS $function$
 DECLARE
   v_context regclass:=pg_catalog.to_regclass('pg_temp._bpay_wb_sync_context_v1');

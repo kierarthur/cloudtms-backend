@@ -6,11 +6,15 @@ const test = require('node:test');
 const sqlPath = path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
 const sql = fs.readFileSync(sqlPath, 'utf8');
 const sourceBuildSql = fs.readFileSync(
-  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql'),
+  path.resolve(__dirname, './fixtures/banking-pay-installed-baselines/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql'),
+  'utf8'
+);
+const boundedSourceBuildSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/04082026_1213_pay_workbench_candidate_source_build_chunk.sql'),
   'utf8'
 );
 const overpaymentSyncSql = fs.readFileSync(
-  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_40_pay_sync_overpayments_from_preview.sql'),
+  path.resolve(__dirname, './fixtures/banking-pay-installed-baselines/21072026_1235_40_pay_sync_overpayments_from_preview.sql'),
   'utf8'
 );
 const sessionCaseResolutionSql = fs.readFileSync(
@@ -389,7 +393,7 @@ test('only the current overpayment-sync function body remains in repeatable sour
       definitions.push(entry.name);
     }
   }
-  assert.deepEqual(definitions, ['21072026_1235_40_pay_sync_overpayments_from_preview.sql']);
+  assert.deepEqual(definitions, ['04082026_1210_pay_sync_overpayments_from_preview.sql']);
 });
 
 test('source build attests pending pay-method resolution but draft gate remains fail-closed', () => {
@@ -519,49 +523,35 @@ test('source-build continuation attests correction-chain residual fingerprints w
   );
 });
 
-test('source-build continuation reuses only an exact durable first-page reconciliation attestation', () => {
+test('bounded source-build continuation accepts only exact build, generation, cursor and attempt authority', () => {
   const body = functionBody(
     'pay_workbench_candidate_source_build_chunk',
     null,
-    sourceBuildSql
+    boundedSourceBuildSql
   );
-  const continuationStart = body.indexOf('IF COALESCE(v_first_source_page, true) IS NOT TRUE THEN');
-  const firstPageStart = body.indexOf('WITH seed_timesheet_ids AS (', continuationStart);
-
-  assert.ok(continuationStart >= 0, 'the continuation branch must be explicit');
-  assert.ok(firstPageStart > continuationStart, 'the first-page reconciliation branch must follow the continuation guard');
-
-  const continuationBlock = body.slice(continuationStart, firstPageStart);
-  assert.match(continuationBlock, /source_build_run_id[\s\S]*source_snapshot_run_id[\s\S]*session_signature/);
-  assert.match(continuationBlock, /source_change_seq[\s\S]*pay_channel_scope[\s\S]*refresh_scope_kind/);
-  assert.match(continuationBlock, /policy_x_authority_scope[\s\S]*PRE_DRAFT_LIVE_TRUTH/);
-  assert.match(continuationBlock, /PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_STALE/);
-  assert.match(continuationBlock, /PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CONTINUATION_ATTESTATION_SCOPE_INVALID/);
-  assert.match(continuationBlock, /SOURCE_BUILD_CONTINUATION_DURABLE_ATTESTATION_REUSED/);
-  assert.match(continuationBlock, /old_marker_accepted_as_authority', true/);
-  assert.doesNotMatch(continuationBlock, /pay_sync_overpayments_from_preview\s*\(/);
-
-  const firstPageBlock = body.slice(firstPageStart);
-  assert.match(firstPageBlock, /pay_sync_overpayments_from_preview\s*\(/);
-  assert.match(firstPageBlock, /'sync_marker_reused', false/);
+  assert.match(body, /v_build_id uuid:=NULLIF\(v_payload->>'economic_build_id',''\)::uuid/);
+  assert.match(body, /v_attempt_id uuid:=NULLIF\(v_payload->>'attempt_id',''\)::uuid/);
+  assert.match(body, /v_attempt_nonce uuid:=NULLIF\(v_payload->>'attempt_nonce',''\)::uuid/);
+  assert.match(body, /v_registry\.dirty_generation IS DISTINCT FROM v_build\.captured_candidate_generation/);
+  assert.match(body, /v_registry\.current_source_change_seq IS DISTINCT FROM v_build\.source_change_seq/);
+  assert.match(body, /attempt\.attempt_nonce=v_attempt_nonce[\s\S]*attempt\.attempt_status='STARTED'/);
+  assert.match(body, /v_cursor_start_hash:=md5\(v_cursor::text\)/);
+  assert.match(body, /PAY_WORKBENCH_FACT_PAGE_REPLAY_CONFLICT/);
+  assert.doesNotMatch(body, /old_marker_accepted_as_authority|SOURCE_BUILD_CONTINUATION_DURABLE_ATTESTATION_REUSED/);
 });
 
-test('candidate source-build chunk remains service-role-only after repeatable deployment', () => {
+test('candidate source-build stage dispatcher is owner-only behind the service-role attempt RPCs', () => {
   assert.match(
-    sourceBuildSql,
-    /REVOKE ALL ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid, uuid, jsonb, jsonb, integer\) FROM PUBLIC;/i
+    boundedSourceBuildSql,
+    /REVOKE ALL ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid,uuid,jsonb,jsonb,integer\) FROM PUBLIC,anon,authenticated,service_role;/i
   );
   assert.match(
-    sourceBuildSql,
-    /REVOKE ALL ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid, uuid, jsonb, jsonb, integer\) FROM anon;/i
+    boundedSourceBuildSql,
+    /GRANT EXECUTE ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid,uuid,jsonb,jsonb,integer\) TO postgres;/i
   );
-  assert.match(
-    sourceBuildSql,
-    /REVOKE ALL ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid, uuid, jsonb, jsonb, integer\) FROM authenticated;/i
-  );
-  assert.match(
-    sourceBuildSql,
-    /GRANT EXECUTE ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\(uuid, uuid, jsonb, jsonb, integer\) TO service_role;/i
+  assert.doesNotMatch(
+    boundedSourceBuildSql,
+    /GRANT EXECUTE ON FUNCTION public\.pay_workbench_candidate_source_build_chunk\([^;]+\) TO service_role;/i
   );
 });
 
@@ -1619,11 +1609,11 @@ test('canonical correction carriers preserve server-owned suggested-rate evidenc
   assert.match(body, /v_suggested_component jsonb/);
   assert.match(
     body,
-    /source_component\.value->'suggested_resolution_payload_json'[\s\S]*source_component\.value->'suggested_resolution_result_json'/
+    /source_component\.value\s*->'suggested_resolution_payload_json'[\s\S]*source_component\.value\s*->'suggested_resolution_result_json'/
   );
   assert.match(body, /CORRECTION_CHAIN_SUGGESTED_RESOLUTION_REQUIRED/);
   assert.match(body, /'is_actionable_resolution_row',v_component_needs_resolution/);
-  assert.match(body, /'has_suggested_resolution',v_component_needs_resolution/);
+  assert.match(body, /'has_suggested_resolution',v_has_suggested_resolution/);
   assert.match(
     body,
     /'suggested_resolution_payload_json',case[\s\S]*v_suggested_component[\s\S]*'suggested_resolution_result_json',case/

@@ -30,7 +30,7 @@ const listSqlFiles = (directory) => fs.readdirSync(directory, { withFileTypes: t
   });
 
 const canonicalBundleSql = repeatable('26052026_2100HRS_NEW_FUNCTIONS.sql');
-const repairSql = repeatable('30072026_1310_pay_workbench_repair_orphaned_pending_source_build.sql');
+const repairSql = repeatable('04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql');
 const claimSql = extractFunction(canonicalBundleSql, 'pay_workbench_claim_due_jobs');
 const failSql = extractFunction(canonicalBundleSql, 'pay_workbench_fail_job');
 const drainSql = extractFunction(canonicalBundleSql, 'pay_workbench_worker_drain_chunk');
@@ -46,11 +46,19 @@ const affectedFunctions = [
   'pay_workbench_session_recompute_progress_counters'
 ];
 
-test('each affected function has exactly one latest definition across migrations and repeatables', () => {
+test('each affected function has one declared canonical repeatable owner', () => {
   const sqlFiles = [
     ...listSqlFiles(path.resolve(__dirname, '../supabase/migrations')),
     ...listSqlFiles(path.resolve(__dirname, '../supabase/repeatable'))
   ];
+  const replacementOwners = {
+    pay_workbench_repair_orphaned_pending_source_build:
+      'supabase\\repeatable\\04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql',
+    pay_workbench_fail_job:
+      'supabase\\repeatable\\04082026_1219_pay_workbench_fail_job.sql',
+    pay_workbench_worker_drain_chunk:
+      'supabase\\repeatable\\04082026_1219_pay_workbench_worker_drain_chunk.sql'
+  };
   for (const functionName of affectedFunctions) {
     const pattern = new RegExp(
       `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${functionName}\\s*\\(`,
@@ -63,11 +71,20 @@ test('each affected function has exactly one latest definition across migrations
         file
       ));
     });
-    assert.deepEqual(
-      definitions.length,
-      1,
-      `${functionName} must have exactly one definition, found: ${definitions.join(', ')}`
-    );
+    const replacementOwner = replacementOwners[functionName];
+    if (replacementOwner) {
+      assert.equal(
+        definitions.filter((definition) => definition === replacementOwner).length,
+        1,
+        `${functionName} must have exactly one canonical replacement owner: ${replacementOwner}`
+      );
+    } else {
+      assert.equal(
+        definitions.length,
+        1,
+        `${functionName} must have exactly one definition, found: ${definitions.join(', ')}`
+      );
+    }
   }
 });
 

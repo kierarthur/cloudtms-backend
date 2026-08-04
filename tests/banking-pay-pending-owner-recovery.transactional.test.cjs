@@ -113,7 +113,7 @@ const extractFunction = (source, name) => {
 
 const canonicalSql = readSql('26052026_2100HRS_NEW_FUNCTIONS.sql');
 const repairSql = readSql(
-  '30072026_1310_pay_workbench_repair_orphaned_pending_source_build.sql'
+  '04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql'
 );
 const progressSql = extractFunction(
   canonicalSql,
