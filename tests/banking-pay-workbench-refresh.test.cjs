@@ -23,6 +23,18 @@ const scopeDiscoveryWatermarkMigrationSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/migrations/29072026_1209_banking_pay_scope_discovery_watermark.sql'),
   'utf8'
 );
+const boundedScopeDispatcherSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/04082026_1213_pay_workbench_candidate_source_build_chunk.sql'),
+  'utf8'
+);
+const boundedScopeClaimSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/04082026_1141_pay_workbench_source_build_attempt_claim_start_v1.sql'),
+  'utf8'
+);
+const boundedScopeDrainSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/04082026_1219_pay_workbench_worker_drain_chunk.sql'),
+  'utf8'
+);
 
 function functionBody(name, nextName) {
   const start = workerSource.indexOf(`async function ${name}`);
@@ -326,5 +338,27 @@ test('source-build settled history is evaluated once per complete scope, not onc
   assert.doesNotMatch(
     sourceBuildBody,
     /_pay_active_settled_components\(\s*ARRAY\[post_negative\.timesheet_id\]/
+  );
+});
+
+test('bounded source-build runtime removes the 100-member authority and pages active facts', () => {
+  const body = sqlFunctionBody(
+    boundedScopeDispatcherSql,
+    'pay_workbench_candidate_source_build_chunk'
+  );
+  assert.match(body, /v_fact_limit integer:=LEAST\(GREATEST\(COALESCE\(p_limit,25\),1\),25\)/i);
+  assert.match(body, /WORKSPACE_FACT/);
+  assert.match(body, /banking_pay_workbench_economic_build_fact_pages/);
+  assert.doesNotMatch(body, /p_max_members|LIMIT\s+100\b/i);
+});
+
+test('database source-build delivery is split into claim/start and exact nonce execution', () => {
+  assert.match(boundedScopeClaimSql, /pay_workbench_source_build_attempt_claim_start_v1/);
+  assert.match(boundedScopeClaimSql, /INSERT INTO private\.banking_pay_workbench_stage_attempts/i);
+  assert.match(boundedScopeClaimSql, /'attempt_nonce',v_attempt_nonce/i);
+  assert.match(boundedScopeDrainSql, /PAY_WORKBENCH_MATERIAL_SOURCE_REQUIRES_TWO_CALL_PROTOCOL/);
+  assert.doesNotMatch(
+    boundedScopeDrainSql,
+    /v_job\.job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'[\s\S]{0,1200}pay_workbench_candidate_source_build_chunk\s*\(/i
   );
 });
