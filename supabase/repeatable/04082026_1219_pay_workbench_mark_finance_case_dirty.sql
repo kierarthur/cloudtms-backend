@@ -35,6 +35,7 @@ DECLARE
   v_internal_candidate_id uuid := NULL::uuid;
   v_internal_source_id uuid := NULL::uuid;
   v_internal_timesheet_id uuid := NULL::uuid;
+  v_internal_logical_source_id uuid := NULL::uuid;
   v_internal_finance_case_id uuid := NULL::uuid;
   v_internal_finance_component_id uuid := NULL::uuid;
   v_internal_before_digest text := NULL::text;
@@ -92,17 +93,12 @@ BEGIN
         NULLIF(btrim(v_old_row->>'component_key_type'),''));
       v_internal_economic_key_value:=COALESCE(NULLIF(btrim(v_new_row->>'component_key_value'),''),
         NULLIF(btrim(v_old_row->>'component_key_value'),''));
-      v_internal_before_digest:=CASE WHEN TG_OP='INSERT' THEN NULL ELSE md5((
-        v_old_row-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text) END;
-      v_internal_after_digest:=CASE
-        WHEN TG_OP='DELETE' THEN NULL
-        WHEN TG_OP='INSERT' THEN md5((v_new_row-ARRAY['id','finance_case_id',
-          'finance_component_id','created_at','created_at_utc','updated_at',
-          'updated_at_utc','event_at_utc']::text[])::text)
-        ELSE md5((v_new_row-ARRAY['created_at','created_at_utc','updated_at',
-          'updated_at_utc','event_at_utc']::text[])::text)
-      END;
+      v_internal_before_digest:=CASE WHEN TG_OP='INSERT' THEN NULL ELSE md5(
+        private.pay_workbench_finance_effect_normalise_row_v1(
+          v_trigger_table,TG_OP,v_old_row,v_old_row)::text) END;
+      v_internal_after_digest:=CASE WHEN TG_OP='DELETE' THEN NULL ELSE md5(
+        private.pay_workbench_finance_effect_normalise_row_v1(
+          v_trigger_table,TG_OP,v_new_row,v_old_row)::text) END;
 
       IF COALESCE(NULLIF(v_new_row->>'candidate_id','')::uuid,
            NULLIF(v_old_row->>'candidate_id','')::uuid,
@@ -145,8 +141,7 @@ BEGIN
         );
       ELSIF TG_OP='INSERT' THEN
         UPDATE pg_temp._bpay_wb_expected_effects expected
-        SET source_id=v_internal_source_id,finance_case_id=v_internal_finance_case_id,
-            finance_component_id=v_internal_finance_component_id,proposed=true
+        SET actual_source_id=v_internal_source_id,proposed=true
         WHERE expected.ctid=(SELECT candidate.ctid
           FROM pg_temp._bpay_wb_expected_effects candidate
           WHERE candidate.build_token=v_internal_build_token
@@ -158,11 +153,32 @@ BEGIN
             AND candidate.economic_key_value IS NOT DISTINCT FROM v_internal_economic_key_value
             AND candidate.expected_before_digest IS NULL
             AND candidate.expected_after_digest IS NOT DISTINCT FROM v_internal_after_digest
-          ORDER BY candidate.source_id LIMIT 1);
+            AND (v_trigger_table<>'pay_finance_case_components' OR
+              COALESCE((SELECT identity_map.actual_source_id
+                FROM pg_temp._bpay_wb_effect_identity_map_v1 identity_map
+                WHERE identity_map.relation_name='pay_advances'
+                  AND identity_map.logical_source_id=candidate.finance_case_id),
+                candidate.finance_case_id) IS NOT DISTINCT FROM v_internal_finance_case_id)
+            AND (v_trigger_table<>'pay_finance_case_events' OR (
+              COALESCE((SELECT identity_map.actual_source_id
+                FROM pg_temp._bpay_wb_effect_identity_map_v1 identity_map
+                WHERE identity_map.relation_name='pay_advances'
+                  AND identity_map.logical_source_id=candidate.finance_case_id),
+                candidate.finance_case_id) IS NOT DISTINCT FROM v_internal_finance_case_id
+              AND COALESCE((SELECT identity_map.actual_source_id
+                FROM pg_temp._bpay_wb_effect_identity_map_v1 identity_map
+                WHERE identity_map.relation_name='pay_finance_case_components'
+                  AND identity_map.logical_source_id=candidate.finance_component_id),
+                candidate.finance_component_id) IS NOT DISTINCT FROM v_internal_finance_component_id))
+          ORDER BY candidate.source_id LIMIT 1)
+        RETURNING expected.source_id INTO v_internal_logical_source_id;
         GET DIAGNOSTICS v_expected_match_count=ROW_COUNT;
-        IF v_expected_match_count<>1 THEN
+        IF v_expected_match_count<>1 OR v_internal_logical_source_id IS NULL THEN
           RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH' USING ERRCODE='23514';
         END IF;
+        INSERT INTO pg_temp._bpay_wb_effect_identity_map_v1(
+          relation_name,logical_source_id,actual_source_id)
+        VALUES(v_trigger_table,v_internal_logical_source_id,v_internal_source_id);
       ELSE
         UPDATE pg_temp._bpay_wb_expected_effects expected SET proposed=true
         WHERE expected.build_token=v_internal_build_token

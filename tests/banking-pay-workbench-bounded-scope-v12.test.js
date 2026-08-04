@@ -27,6 +27,9 @@ const newFunctionFiles = [
   '04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql',
   '04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql',
   '04082026_1210_pay_sync_overpayments_from_workbench_workspace_v1.sql',
+  '04082026_2313_pay_workbench_unit_projection_v1.sql',
+  '04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql',
+  '04082026_2315_pay_workbench_finance_effect_normalise_row_v1.sql',
 ];
 
 const changedFunctionFiles = [
@@ -167,7 +170,7 @@ test('fact collection and legacy bootstrap page independently of total candidate
   assert.match(dispatcher, /LIMIT 250/g);
   assert.match(dispatcher, /FROM public\.timesheets timesheet_row\s+JOIN public\.contracts contract_row/i);
   assert.match(dispatcher, /v_bootstrap_next_stream:='SCOPE_CLOSURE'/i);
-  assert.match(closure, /bootstrap_stream','CLASSIFY_UNITS'/i);
+  assert.match(closure, /private_stage='WORKSPACE_FACT'/i);
   assert.match(dispatcher, /classification_phase','EVIDENCE'/i);
   assert.match(dispatcher, /classification_phase','APPLY'/i);
   assert.match(dispatcher, /bootstrap_stream','RESET_FACTS'/i);
@@ -218,7 +221,7 @@ test('all 18 invalidation backstops and nine independent finance observers use o
   }
 });
 
-test('retained finance dirty triggers declare exact effects before finance DML', () => {
+test('retained finance dirty triggers validate a sealed effect plan before finance DML', () => {
   for (const name of [
     'trg_pay_workbench_mark_candidate_dirty__pay_advances',
     'trg_pay_workbench_mark_finance_case_dirty__pay_finance_case_com',
@@ -228,12 +231,12 @@ test('retained finance dirty triggers declare exact effects before finance DML',
   }
   for (const source of [markCandidateDirty, markFinanceDirty]) {
     assert.match(source, /TG_WHEN<>'BEFORE'/i);
-    assert.match(source, /INSERT INTO pg_temp\._bpay_wb_expected_effects/i);
+    assert.match(source, /IF v_effect_capture_mode THEN[\s\S]{0,120}INSERT INTO pg_temp\._bpay_wb_expected_effects/i);
+    assert.match(source, /private\.pay_workbench_finance_effect_normalise_row_v1/i);
     assert.match(source, /v_internal_before_digest/i);
     assert.match(source, /v_internal_after_digest/i);
-    assert.match(source, /ARRAY\['created_at','created_at_utc','updated_at','updated_at_utc'/i);
-    assert.match(source, /SET[\s\S]{0,160}proposed=true/i);
-    assert.doesNotMatch(source, /SET[\s\S]{0,120}observed=true/i);
+    assert.match(source, /expected\.proposed IS NOT TRUE/i);
+    assert.match(source, /SET proposed=true/i);
     assert.match(source, /PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH/i);
   }
 });

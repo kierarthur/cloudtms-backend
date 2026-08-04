@@ -5,6 +5,9 @@ import test from 'node:test';
 const repoRoot = new URL('..', import.meta.url);
 const read = path => readFileSync(new URL(path, repoRoot), 'utf8').replace(/\r\n/g, '\n');
 const dispatcher = read('supabase/repeatable/04082026_1213_pay_workbench_candidate_source_build_chunk.sql');
+const projection = read('supabase/repeatable/04082026_2313_pay_workbench_unit_projection_v1.sql');
+const occurrence = read('supabase/repeatable/04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql');
+const effectNormaliser = read('supabase/repeatable/04082026_2315_pay_workbench_finance_effect_normalise_row_v1.sql');
 const continuation = read('supabase/repeatable/04082026_1219_pay_workbench_enqueue_stage_continuation.sql');
 const closure = read('supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql');
 const entitlement = read('supabase/repeatable/04082026_1147_pay_current_timesheet_entitlement_components_from_build_v1.sql');
@@ -16,6 +19,7 @@ const claim = read('supabase/repeatable/04082026_1141_pay_workbench_source_build
 const deleteEligibility = read('supabase/repeatable/04082026_1219_candidate_delete_eligibility.sql');
 const deleteApply = read('supabase/repeatable/04082026_1219_candidate_delete_apply.sql');
 const markCandidate = read('supabase/repeatable/04082026_1219_pay_workbench_mark_candidate_dirty.sql');
+const markFinance = read('supabase/repeatable/04082026_1219_pay_workbench_mark_finance_case_dirty.sql');
 const correctionMigration = read('supabase/migrations/04082026_2042_banking_pay_bounded_scope_corrections.sql');
 
 test('D1 sealing cursors are valid only for their owning stage', () => {
@@ -32,8 +36,14 @@ test('D2 fact pages carry and verify a cumulative replay-safe chain', () => {
   assert.ok(replayReturn >= 0 && counterMutation > replayReturn);
 });
 test('D3 physical live-input pages precede durable derived-family paging', () => {
-  assert.match(dispatcher, /v_unit_families text\[\]:=ARRAY\[\s*'LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK'/);
-  assert.match(dispatcher, /ELSIF v_fact_family='LIVE_ENTITLEMENT_INPUT'[\s\S]*LIMIT v_fact_limit\+1/);
+  assert.match(dispatcher, /private\.pay_workbench_unit_projection_v1\(v_build_id,v_unit_key\)/);
+  assert.match(dispatcher, /private\.pay_workbench_unit_economic_occurrence_page_v1\(/);
+  assert.match(projection, /canonical\.canonical_timesheet_id AS projected_timesheet_id/);
+  assert.match(occurrence, /paged_raw_rows AS MATERIALIZED/);
+  assert.match(occurrence, /standard_items_page AS MATERIALIZED/);
+  assert.match(occurrence, /paged_occurrence AS MATERIALIZED/);
+  assert.doesNotMatch(dispatcher, /_pay_current_timesheet_entitlement_components\s*\(/);
+  assert.doesNotMatch(dispatcher, /_pay_active_settled_components\s*\(/);
 });
 test('D4 finance closure deduplicates frontier authority', () => {
   assert.match(closure, /SELECT DISTINCT frontier_component\.finance_case_id/);
@@ -58,11 +68,14 @@ test('D7 pay-batch update and delete have statement backstops', () => {
   assert.match(transition, /TG_TABLE_NAME='pay_batch_items'[\s\S]*frozen_component_snapshot_json[\s\S]*FROM old_rows[\s\S]*FROM new_rows/);
 });
 test('D8 fallback snapshots become typed facts with active precedence', () => {
-  assert.match(dispatcher, /_pay_timesheet_components\([\s\S]*WITH ORDINALITY/);
+  assert.match(occurrence, /_pay_timesheet_components\([\s\S]*WITH ORDINALITY/);
+  assert.match(occurrence, /resolution_failure/);
+  assert.match(dispatcher, /PAY_WORKBENCH_ECONOMIC_KEY_RESOLUTION_INCOMPLETE/);
   assert.match(dispatcher, /fact_family='FROZEN_SETTLED_COMPONENT'[\s\S]*NOT EXISTS/);
 });
 test('D9 bootstrap CLOSED requires zero-difference proof', () => {
-  assert.match(dispatcher, /_pay_current_timesheet_entitlement_components\(ARRAY\[page\.timesheet_id\]::uuid\[\]\)/);
+  assert.match(dispatcher, /private\.pay_current_timesheet_entitlement_components_from_build_v1\(\s*v_build_id,v_bootstrap_unit_key\)/);
+  assert.doesNotMatch(dispatcher, /_pay_current_timesheet_entitlement_components\(ARRAY\[page\.timesheet_id\]/);
   assert.match(dispatcher, /v_bootstrap_unit_relevant:=v_bootstrap_unit_relevant OR v_bootstrap_page_relevant/);
   assert.match(dispatcher, /economic_state=CASE WHEN v_bootstrap_unit_relevant THEN 'DIRTY' ELSE 'CLOSED' END/);
 });
@@ -70,11 +83,15 @@ test('D10 global facts are active and scoped', () => {
   assert.match(dispatcher, /COALESCE\(reservation\.status,''\)\)\) IN \('RESERVED','COMMITTED'\)/);
   assert.match(dispatcher, /reservation\.released_at_utc IS NULL/);
   assert.match(dispatcher, /JOIN private\.banking_pay_workbench_economic_build_facts case_fact[\s\S]*case_fact\.fact_family='FINANCE_CASE_IDENTITY'/);
+  assert.doesNotMatch(dispatcher, /event\.reason,''\)\)\)='PREVIEW_FINANCE_SYNC'/);
 });
-test('D11 claim and recovery use bounded overfetch', () => {
+test('D11 claim and recovery use bounded progressive deferral', () => {
   assert.match(claim, /v_scan_limit integer:=50/);
   assert.match(claim, /LIMIT v_scan_limit/);
-  assert.match(claim, /CONTINUE WHEN NOT pg_catalog\.pg_try_advisory_xact_lock/);
+  assert.match(claim, /claim_scan_deferral_count/);
+  assert.match(claim, /recovery_scan_deferral_count/);
+  assert.match(claim, /LEAST\(300,5\*power\(2/);
+  assert.match(claim, /-'claim_scan_deferred_reason'-'claim_scan_deferral_count'/);
 });
 test('D12 cleanup has a finite terminal state', () => {
   for (const phase of ['CANONICAL_STAGE', 'FACT_PAGES', 'FACTS', 'SCOPE', 'ATTEMPTS', 'HEADER_FINALISE', 'COMPLETE']) assert.match(dispatcher, new RegExp(`'${phase}'`));
@@ -91,9 +108,18 @@ test('D14 cascade suppression resolves child-row ownership', () => {
 });
 test('D15 expected effects are sealed then independently observed', () => {
   assert.match(correctionMigration, /'EXPECTED_FINANCE_EFFECT'/);
+  assert.match(effectNormaliser, /GENERATED_NON_NULL/);
+  assert.match(effectNormaliser, /PAY_WORKBENCH_EXPECTED_EFFECT_LIFECYCLE_TIMESTAMP_MISMATCH/);
+  assert.match(markCandidate, /private\.pay_workbench_finance_effect_normalise_row_v1/);
+  assert.match(markFinance, /private\.pay_workbench_finance_effect_normalise_row_v1/);
+  assert.match(transition, /private\.pay_workbench_finance_effect_normalise_row_v1/);
   assert.match(dispatcher, /set_config\('cloudtms\.pay_workbench_effect_capture_mode','capture',true\)/);
   assert.match(dispatcher, /effect_plan_digest/);
+  assert.match(dispatcher, /logical_source_id/);
+  assert.match(dispatcher, /identified\.raw_effect->>'relation_name'='pay_advances'[\s\S]{0,80}THEN identified\.logical_source_id/);
   assert.match(syncCore, /fact\.fact_family='EXPECTED_FINANCE_EFFECT'/);
+  assert.match(syncCore, /_bpay_wb_effect_identity_map/);
+  assert.match(syncCore, /actual_source_id/);
   assert.match(syncCore, /proposed IS NOT TRUE OR observed IS NOT TRUE/);
   assert.match(transition, /expected\.proposed IS TRUE[\s\S]*expected\.observed IS NOT TRUE/);
   assert.equal((triggers.match(/CREATE TRIGGER trg_bpay_wb_observe_/g) || []).length, 9);

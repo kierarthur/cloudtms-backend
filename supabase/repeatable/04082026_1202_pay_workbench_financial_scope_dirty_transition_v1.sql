@@ -37,17 +37,16 @@ BEGIN
     IF TG_OP IN ('UPDATE','DELETE') THEN
       INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
       SELECT TG_TABLE_NAME,TG_OP,r.id,r.candidate_id,r.linked_timesheet_id,
-        md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text),NULL,v_reason FROM old_rows r ON CONFLICT DO NOTHING;
+        md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),to_jsonb(r))::text),NULL,v_reason FROM old_rows r ON CONFLICT DO NOTHING;
     END IF;
     IF TG_OP IN ('INSERT','UPDATE') THEN
       INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
       SELECT TG_TABLE_NAME,TG_OP,r.id,r.candidate_id,r.linked_timesheet_id,
-        NULL,CASE WHEN TG_OP='INSERT' THEN md5((to_jsonb(r)-ARRAY['id','finance_case_id',
-          'finance_component_id','created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text)
-        ELSE md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text) END,v_reason FROM new_rows r
+        NULL,CASE WHEN TG_OP='INSERT' THEN md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),'{}'::jsonb)::text)
+        ELSE md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),to_jsonb(r))::text) END,v_reason FROM new_rows r
       ON CONFLICT(relation_name,operation,source_id,candidate_id,timesheet_id) DO UPDATE
       SET after_digest=EXCLUDED.after_digest;
     END IF;
@@ -56,17 +55,16 @@ BEGIN
     IF TG_OP IN ('UPDATE','DELETE') THEN
       INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
       SELECT TG_TABLE_NAME,TG_OP,r.id,r.candidate_id,r.linked_timesheet_id,
-        md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text),NULL,v_reason FROM old_rows r ON CONFLICT DO NOTHING;
+        md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),to_jsonb(r))::text),NULL,v_reason FROM old_rows r ON CONFLICT DO NOTHING;
     END IF;
     IF TG_OP IN ('INSERT','UPDATE') THEN
       INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
       SELECT TG_TABLE_NAME,TG_OP,r.id,r.candidate_id,r.linked_timesheet_id,
-        NULL,CASE WHEN TG_OP='INSERT' THEN md5((to_jsonb(r)-ARRAY['id','finance_case_id',
-          'finance_component_id','created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text)
-        ELSE md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text) END,v_reason FROM new_rows r
+        NULL,CASE WHEN TG_OP='INSERT' THEN md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),'{}'::jsonb)::text)
+        ELSE md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),to_jsonb(r))::text) END,v_reason FROM new_rows r
       ON CONFLICT(relation_name,operation,source_id,candidate_id,timesheet_id) DO UPDATE
       SET after_digest=EXCLUDED.after_digest;
     END IF;
@@ -76,8 +74,8 @@ BEGIN
       INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
       SELECT TG_TABLE_NAME,TG_OP,r.id,COALESCE(component.candidate_id,finance_case.candidate_id),
         COALESCE(component.linked_timesheet_id,finance_case.linked_timesheet_id),
-        md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text),NULL,v_reason FROM old_rows r
+        md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),to_jsonb(r))::text),NULL,v_reason FROM old_rows r
       LEFT JOIN public.pay_finance_case_components component ON component.id=r.finance_component_id
       LEFT JOIN public.pay_advances finance_case ON finance_case.id=r.finance_case_id
       WHERE COALESCE(component.candidate_id,finance_case.candidate_id) IS NOT NULL ON CONFLICT DO NOTHING;
@@ -86,11 +84,10 @@ BEGIN
       INSERT INTO pg_temp._bpay_wb_transition_impacts_v1
       SELECT TG_TABLE_NAME,TG_OP,r.id,COALESCE(component.candidate_id,finance_case.candidate_id),
         COALESCE(component.linked_timesheet_id,finance_case.linked_timesheet_id),
-        NULL,CASE WHEN TG_OP='INSERT' THEN md5((to_jsonb(r)-ARRAY['id','finance_case_id',
-          'finance_component_id','created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text)
-        ELSE md5((to_jsonb(r)-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text) END,v_reason FROM new_rows r
+        NULL,CASE WHEN TG_OP='INSERT' THEN md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),'{}'::jsonb)::text)
+        ELSE md5(private.pay_workbench_finance_effect_normalise_row_v1(
+          TG_TABLE_NAME,TG_OP,to_jsonb(r),to_jsonb(r))::text) END,v_reason FROM new_rows r
       LEFT JOIN public.pay_finance_case_components component ON component.id=r.finance_component_id
       LEFT JOIN public.pay_advances finance_case ON finance_case.id=r.finance_case_id
       WHERE COALESCE(component.candidate_id,finance_case.candidate_id) IS NOT NULL
@@ -416,7 +413,7 @@ BEGIN
             FROM pg_catalog.pg_attribute attribute
             WHERE attribute.attrelid=v_expected AND attribute.attnum>0 AND NOT attribute.attisdropped)
           =ARRAY['build_token','candidate_id','timesheet_id','relation_name','operation','source_id',
-            'finance_case_id','finance_component_id','economic_key_type','economic_key_value',
+            'actual_source_id','finance_case_id','finance_component_id','economic_key_type','economic_key_value',
             'proposed','expected_before_digest','expected_after_digest','observed'] THEN
       EXECUTE $sql$
         SELECT EXISTS(
@@ -425,7 +422,7 @@ BEGIN
           JOIN pg_temp._bpay_wb_expected_effects expected
             ON expected.relation_name=impact.relation_name
            AND expected.operation=impact.operation
-           AND expected.source_id=impact.source_id
+           AND COALESCE(expected.actual_source_id,expected.source_id)=impact.source_id
            AND expected.candidate_id=impact.candidate_id
            AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
            AND expected.expected_before_digest IS NOT DISTINCT FROM impact.before_digest
@@ -444,7 +441,7 @@ BEGIN
         FROM pg_temp._bpay_wb_transition_impacts_v1 impact
         WHERE expected.relation_name=impact.relation_name
           AND expected.operation=impact.operation
-          AND expected.source_id=impact.source_id
+          AND COALESCE(expected.actual_source_id,expected.source_id)=impact.source_id
           AND expected.candidate_id=impact.candidate_id
           AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
           AND expected.expected_before_digest IS NOT DISTINCT FROM impact.before_digest
@@ -457,7 +454,7 @@ BEGIN
         USING pg_temp._bpay_wb_expected_effects expected
         WHERE expected.relation_name=impact.relation_name
           AND expected.operation=impact.operation
-          AND expected.source_id=impact.source_id
+          AND COALESCE(expected.actual_source_id,expected.source_id)=impact.source_id
           AND expected.candidate_id=impact.candidate_id
           AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
           AND expected.expected_before_digest IS NOT DISTINCT FROM impact.before_digest

@@ -75,6 +75,9 @@ BEGIN
     WHERE attempt.attempt_status='STARTED'
       AND clock_timestamp()>=attempt.lease_expires_at_utc+interval '15 seconds'
       AND job.status='RUNNING' AND job.economic_build_id=attempt.build_id
+      AND (COALESCE(job.payload_json->>'recovery_scan_deferred_epoch','') !~ '^\d+(\.\d+)?$'
+        OR (job.payload_json->>'recovery_scan_deferred_epoch')::numeric
+          <=extract(epoch FROM clock_timestamp()))
     ORDER BY attempt.lease_expires_at_utc,attempt.id LIMIT v_scan_limit
   LOOP
     IF pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
@@ -108,6 +111,20 @@ BEGIN
         END IF;
         IF v_recovered_count>=5 THEN EXIT; END IF;
       END IF;
+    ELSE
+      UPDATE public.banking_pay_workbench_jobs blocked_job
+      SET payload_json=COALESCE(blocked_job.payload_json,'{}'::jsonb)||jsonb_build_object(
+          'recovery_scan_deferred_epoch',extract(epoch FROM clock_timestamp()+make_interval(secs=>
+            LEAST(300,5*power(2,LEAST(CASE
+              WHEN COALESCE(blocked_job.payload_json->>'recovery_scan_deferral_count','') ~ '^\d+$'
+                THEN (blocked_job.payload_json->>'recovery_scan_deferral_count')::integer
+              ELSE 0 END,6))::integer))),
+          'recovery_scan_deferral_count',LEAST(7,CASE
+            WHEN COALESCE(blocked_job.payload_json->>'recovery_scan_deferral_count','') ~ '^\d+$'
+              THEN (blocked_job.payload_json->>'recovery_scan_deferral_count')::integer+1
+            ELSE 1 END)),
+        updated_at_utc=clock_timestamp()
+      WHERE blocked_job.id=v_recovery.job_id AND blocked_job.status='RUNNING';
     END IF;
   END LOOP;
 
@@ -152,19 +169,54 @@ BEGIN
           claim_source.priority,claim_source.run_at_utc,claim_source.created_at_utc,claim_source.id) AS serial_rank
       FROM claim_source
     )
-    SELECT ranked.*
+    SELECT ranked.*,
+      lower(btrim(COALESCE(serial_state.state_json->>'blocked','false')))
+        IN ('true','t','1','yes','y','on') AS serial_blocked
     FROM ranked
     CROSS JOIN LATERAL (SELECT public._pay_workbench_candidate_serial_active_state(
       ranked.id,ranked.serial_candidate_id,'WORKBENCH_CANDIDATE_SOURCE_BUILD',
       ranked.payload_json,v_now) AS state_json) serial_state
     WHERE ranked.serial_rank=1
-      AND lower(btrim(COALESCE(serial_state.state_json->>'blocked','false')))
-        NOT IN ('true','t','1','yes','y','on')
     ORDER BY CASE WHEN ranked.is_chain_continuation THEN 0 ELSE 1 END,
       ranked.priority,ranked.run_at_utc,ranked.created_at_utc,ranked.id
   LOOP
-    CONTINUE WHEN NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
-      COALESCE(v_claim.serial_key,v_claim.id::text),24062027));
+    IF v_claim.serial_blocked THEN
+      UPDATE public.banking_pay_workbench_jobs blocked_job
+      SET run_at_utc=GREATEST(blocked_job.run_at_utc,clock_timestamp()+make_interval(secs=>
+          LEAST(300,5*power(2,LEAST(CASE
+            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
+              THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer
+            ELSE 0 END,6))::integer))),
+        payload_json=COALESCE(blocked_job.payload_json,'{}'::jsonb)||jsonb_build_object(
+          'claim_scan_deferred_reason','CANDIDATE_SERIAL_BLOCKED',
+          'claim_scan_deferral_count',LEAST(7,CASE
+            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
+              THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer+1
+            ELSE 1 END)),
+        updated_at_utc=clock_timestamp()
+      WHERE blocked_job.id=v_claim.id AND blocked_job.status='QUEUED'
+        AND blocked_job.run_at_utc<=v_now;
+      CONTINUE;
+    END IF;
+    IF NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
+      COALESCE(v_claim.serial_key,v_claim.id::text),24062027)) THEN
+      UPDATE public.banking_pay_workbench_jobs blocked_job
+      SET run_at_utc=GREATEST(blocked_job.run_at_utc,clock_timestamp()+make_interval(secs=>
+          LEAST(300,5*power(2,LEAST(CASE
+            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
+              THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer
+            ELSE 0 END,6))::integer))),
+        payload_json=COALESCE(blocked_job.payload_json,'{}'::jsonb)||jsonb_build_object(
+          'claim_scan_deferred_reason','CANDIDATE_ADVISORY_LOCK_BUSY',
+          'claim_scan_deferral_count',LEAST(7,CASE
+            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
+              THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer+1
+            ELSE 1 END)),
+        updated_at_utc=clock_timestamp()
+      WHERE blocked_job.id=v_claim.id AND blocked_job.status='QUEUED'
+        AND blocked_job.run_at_utc<=v_now;
+      CONTINUE;
+    END IF;
     v_job:=NULL;
     SELECT claimed_job.* INTO v_job
     FROM public.banking_pay_workbench_jobs claimed_job
@@ -336,7 +388,9 @@ BEGIN
       last_error_json=NULL,economic_build_id=v_build_id,private_stage=v_stage,
       private_cursor_kind=v_cursor_kind,private_cursor_json=v_cursor_json,
       private_stage_version=1,
-      payload_json=jsonb_strip_nulls(COALESCE(claimed_job.payload_json,'{}'::jsonb)
+      payload_json=jsonb_strip_nulls((COALESCE(claimed_job.payload_json,'{}'::jsonb)
+          -'claim_scan_deferred_reason'-'claim_scan_deferral_count'
+          -'recovery_scan_deferred_epoch'-'recovery_scan_deferral_count')
         ||jsonb_build_object(
           'claimed_at_utc',clock_timestamp()::text,
           'candidate_serial_key',public._pay_workbench_candidate_serial_key(v_job.candidate_id),

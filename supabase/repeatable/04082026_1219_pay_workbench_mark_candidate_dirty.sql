@@ -1,11 +1,4 @@
--- Banking Pay bounded-scope Version 1.2.4
--- Exact installed TEST baseline; intentionally replaced in place by exact identity.
--- Policy X: pre-draft freshness/orchestration only; frozen post-draft authority is unchanged.
-
--- -----------------------------------------------------------------------------
--- public.pay_workbench_mark_candidate_dirty()
--- Installed pg_get_functiondef MD5: 7981311b446b3ad849eeadc0f9ad9593
--- -----------------------------------------------------------------------------
+-- Banking Pay bounded-scope V1.2.5: installed TEST authority plus deterministic finance-effect attestation.
 CREATE OR REPLACE FUNCTION public.pay_workbench_mark_candidate_dirty()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -98,6 +91,7 @@ DECLARE
   v_internal_candidate_id uuid := NULL::uuid;
   v_internal_source_id uuid := NULL::uuid;
   v_internal_timesheet_id uuid := NULL::uuid;
+  v_internal_logical_source_id uuid := NULL::uuid;
   v_internal_before_digest text := NULL::text;
   v_internal_after_digest text := NULL::text;
   v_expected_match_count integer := 0;
@@ -211,17 +205,12 @@ BEGIN
         NULLIF(v_old_row->>'id','')::uuid);
       v_internal_timesheet_id:=COALESCE(NULLIF(v_new_row->>'linked_timesheet_id','')::uuid,
         NULLIF(v_old_row->>'linked_timesheet_id','')::uuid);
-      v_internal_before_digest:=CASE WHEN TG_OP='INSERT' THEN NULL ELSE md5((
-        v_old_row-ARRAY['created_at','created_at_utc','updated_at','updated_at_utc',
-          'event_at_utc']::text[])::text) END;
-      v_internal_after_digest:=CASE
-        WHEN TG_OP='DELETE' THEN NULL
-        WHEN TG_OP='INSERT' THEN md5((v_new_row-ARRAY['id','finance_case_id',
-          'finance_component_id','created_at','created_at_utc','updated_at',
-          'updated_at_utc','event_at_utc']::text[])::text)
-        ELSE md5((v_new_row-ARRAY['created_at','created_at_utc','updated_at',
-          'updated_at_utc','event_at_utc']::text[])::text)
-      END;
+      v_internal_before_digest:=CASE WHEN TG_OP='INSERT' THEN NULL ELSE md5(
+        private.pay_workbench_finance_effect_normalise_row_v1(
+          v_trigger_table,TG_OP,v_old_row,v_old_row)::text) END;
+      v_internal_after_digest:=CASE WHEN TG_OP='DELETE' THEN NULL ELSE md5(
+        private.pay_workbench_finance_effect_normalise_row_v1(
+          v_trigger_table,TG_OP,v_new_row,v_old_row)::text) END;
       IF v_internal_source_id IS NULL
          OR COALESCE(NULLIF(v_new_row->>'candidate_id','')::uuid,
               NULLIF(v_old_row->>'candidate_id','')::uuid)
@@ -246,7 +235,7 @@ BEGIN
         );
       ELSIF TG_OP='INSERT' THEN
         UPDATE pg_temp._bpay_wb_expected_effects expected
-        SET source_id=v_internal_source_id,finance_case_id=v_internal_source_id,proposed=true
+        SET actual_source_id=v_internal_source_id,proposed=true
         WHERE expected.ctid=(SELECT candidate.ctid
           FROM pg_temp._bpay_wb_expected_effects candidate
           WHERE candidate.build_token=v_internal_build_token
@@ -256,11 +245,15 @@ BEGIN
             AND candidate.proposed IS NOT TRUE AND candidate.observed IS NOT TRUE
             AND candidate.expected_before_digest IS NULL
             AND candidate.expected_after_digest IS NOT DISTINCT FROM v_internal_after_digest
-          ORDER BY candidate.source_id LIMIT 1);
+          ORDER BY candidate.source_id LIMIT 1)
+        RETURNING expected.source_id INTO v_internal_logical_source_id;
         GET DIAGNOSTICS v_expected_match_count=ROW_COUNT;
-        IF v_expected_match_count<>1 THEN
+        IF v_expected_match_count<>1 OR v_internal_logical_source_id IS NULL THEN
           RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH' USING ERRCODE='23514';
         END IF;
+        INSERT INTO pg_temp._bpay_wb_effect_identity_map_v1(
+          relation_name,logical_source_id,actual_source_id)
+        VALUES(v_trigger_table,v_internal_logical_source_id,v_internal_source_id);
       ELSE
         UPDATE pg_temp._bpay_wb_expected_effects expected SET proposed=true
         WHERE expected.build_token=v_internal_build_token

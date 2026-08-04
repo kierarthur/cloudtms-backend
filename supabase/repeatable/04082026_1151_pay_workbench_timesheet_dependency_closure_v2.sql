@@ -526,58 +526,35 @@ BEGIN
          WHERE build_id=p_build_id AND closure_status<>'SEALED' LIMIT 1) THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_DEPENDENCY_SEAL_INCOMPLETE' USING ERRCODE='23514';
     END IF;
-    v_next:=CASE
-      WHEN v_registry.initialisation_status IN ('DISCOVERING','CLASSIFYING')
-       AND v_registry.bootstrap_id IS NOT NULL
-      THEN jsonb_build_object(
-        'cursor_kind','BOOTSTRAP_DISCOVERY','cursor_version',1,
-        'bootstrap_id',v_registry.bootstrap_id,
-        'bootstrap_stream','CLASSIFY_UNITS','classification_phase','EVIDENCE',
-        'last_dependency_unit_key',NULL,'dependency_unit_key',NULL,
-        'last_stable_ordinal',0,'unit_financially_relevant',false,
-        'build_id',p_build_id,'candidate_id',v_candidate_id,
-        'captured_candidate_generation',v_build.captured_candidate_generation,
-        'captured_source_change_seq',v_build.source_change_seq
-      )
-      ELSE jsonb_build_object(
-        'cursor_kind','WORKSPACE_FACT','cursor_version',1,
-        'build_id',p_build_id,'candidate_id',v_candidate_id,
-        'dependency_unit_key',NULL,'fact_family','FROZEN_SETTLED_COMPONENT',
-        'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
-        'cumulative_fact_count',0,
-        'cumulative_digest',md5('BPAY_FACT_STREAM_V1')
-      )
-    END;
+    v_next:=jsonb_build_object(
+      'cursor_kind','WORKSPACE_FACT','cursor_version',1,
+      'build_id',p_build_id,'candidate_id',v_candidate_id,
+      'dependency_unit_key',NULL,'fact_family','LIVE_ENTITLEMENT_INPUT',
+      'input_phase','PROJECTION','input_projection_id',NULL,
+      'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
+      'cumulative_fact_count',0,
+      'cumulative_digest',md5('BPAY_FACT_STREAM_V1')
+    );
     UPDATE private.banking_pay_workbench_economic_builds SET
       row_seal_count=v_row_seal_count,last_stable_ordinal=v_last_ordinal,
       scope_digest=v_scope_digest,sealed_fingerprint_digest=v_fingerprint_digest,
       dependency_digest=md5(COALESCE(dependency_edge_stream_digest,'')||COALESCE(edge_tag_digest,'')),
       unit_digest=v_all_unit_digest,unit_count=v_completed_units,
       dependency_closure_sealed_at_utc=clock_timestamp(),
-      private_stage=CASE
-        WHEN v_registry.initialisation_status IN ('DISCOVERING','CLASSIFYING')
-         AND v_registry.bootstrap_id IS NOT NULL THEN 'BOOTSTRAP_DISCOVERY'
-        ELSE 'WORKSPACE_FACT' END,
+      private_stage='WORKSPACE_FACT',
       closure_cursor_json=jsonb_build_object('cursor_kind','DEPENDENCY_SCOPE_SEAL','cursor_version',1,
         'seal_phase','COMPLETE','terminal',true,'build_id',p_build_id,'candidate_id',v_candidate_id,
         'tagged_edge_count',tagged_edge_count,'row_seal_count',v_row_seal_count,
         'completed_unit_count',v_completed_units,'rolling_all_unit_digest',v_all_unit_digest,
         'last_stable_ordinal',v_last_ordinal,'rolling_scope_digest',v_scope_digest,
         'rolling_fingerprint_digest',v_fingerprint_digest,'rolling_edge_tag_digest',edge_tag_digest),
-      fact_cursor_json=CASE
-        WHEN v_registry.initialisation_status IN ('DISCOVERING','CLASSIFYING')
-         AND v_registry.bootstrap_id IS NOT NULL THEN '{}'::jsonb
-        ELSE v_next END,
-      scope_cursor_json=CASE
-        WHEN v_registry.initialisation_status IN ('DISCOVERING','CLASSIFYING')
-         AND v_registry.bootstrap_id IS NOT NULL THEN v_next
-        ELSE scope_cursor_json END,
+      fact_cursor_json=v_next,
       updated_at_utc=clock_timestamp()
     WHERE id=p_build_id;
     IF v_registry.initialisation_status IN ('DISCOVERING','CLASSIFYING')
        AND v_registry.bootstrap_id IS NOT NULL THEN
       UPDATE private.banking_pay_workbench_candidate_scope_registry
-      SET initialisation_status='CLASSIFYING',bootstrap_stream='CLASSIFY_UNITS',
+      SET initialisation_status='CLASSIFYING',bootstrap_stream='WORKSPACE_FACT',
           bootstrap_cursor_json=v_next,updated_at_utc=clock_timestamp()
       WHERE candidate_id=v_candidate_id AND current_build_id=p_build_id;
     END IF;
