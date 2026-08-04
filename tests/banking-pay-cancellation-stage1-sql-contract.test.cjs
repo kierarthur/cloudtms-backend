@@ -68,7 +68,7 @@ test('Stage 1 has the exact 8 new, 15 amended, and 4 retired SQL files', () => {
 
 test('schema migration stays inside the locked additive boundary', () => {
   const sql = fs.readFileSync(migrationPath, 'utf8');
-  assert.match(sql, /CREATE TABLE public\.pay_payment_correction_request_candidates/);
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.pay_payment_correction_request_candidates/);
   assert.match(sql, /ENABLE ROW LEVEL SECURITY/);
   assert.match(sql, /FORCE ROW LEVEL SECURITY/);
   assert.doesNotMatch(sql, /CREATE POLICY/i);
@@ -90,6 +90,41 @@ test('schema migration stays inside the locked additive boundary', () => {
     assert.match(row, /,\s*1,\s*(?:25|100),\s*7500,\s*60,\s*false\)$/);
   }
   assert.doesNotMatch(sql, /CREATE\s+(?:OR\s+REPLACE\s+)?TRIGGER/i);
+});
+
+test('schema migration safely converges when TEST objects predate the GitHub ledger', () => {
+  const sql = fs.readFileSync(migrationPath, 'utf8');
+  assert.match(sql, /CREATE TABLE IF NOT EXISTS public\.pay_payment_correction_request_candidates/);
+  assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_pay_payment_correction_request_candidates_instruction/);
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS ux_pay_payment_correction_requests_active_batch_v2/);
+  assert.match(sql, /CREATE INDEX IF NOT EXISTS idx_pay_payment_correction_requests_due_v2/);
+  assert.match(sql, /CREATE UNIQUE INDEX IF NOT EXISTS ux_banking_pay_operations_correction_request/);
+  for (const column of [
+    'reauth_proof_hash',
+    'reauth_expires_at_utc',
+    'reauth_consumed_at_utc',
+    'banking_pay_candidate_cancellation_enabled',
+    'banking_pay_correction_max_candidates',
+    'banking_pay_correction_max_active_items',
+    'banking_pay_correction_max_active_items_per_candidate',
+    'banking_pay_correction_max_source_rows_per_candidate',
+  ]) {
+    assert.match(sql, new RegExp(`ADD COLUMN IF NOT EXISTS ${column}\\b`));
+  }
+  for (const constraint of [
+    'pay_payment_correction_requests_reauth_hash_chk',
+    'pay_payment_correction_requests_reauth_consumed_chk',
+    'pay_payment_correction_requests_status_chk',
+    'banking_pay_operations_operation_type_chk',
+    'banking_pay_operation_config_operation_type_chk',
+    'settings_defaults_bpay_cancel_max_candidates_chk',
+    'settings_defaults_bpay_cancel_max_items_chk',
+    'settings_defaults_bpay_cancel_candidate_items_chk',
+    'settings_defaults_bpay_cancel_candidate_rows_chk',
+  ]) {
+    assert.match(sql, new RegExp(`DROP CONSTRAINT IF EXISTS ${constraint}\\b`));
+  }
+  assert.match(sql, /ON CONFLICT \(operation_type, phase, chunk_type\)[\s\S]*enabled = false;/);
 });
 
 test('compatibility bodies are owner-only and absent from the new normal call graph', () => {

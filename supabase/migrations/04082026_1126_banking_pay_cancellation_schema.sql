@@ -7,7 +7,7 @@ BEGIN;
 SET LOCAL lock_timeout = '1s';
 SET LOCAL statement_timeout = '120s';
 
-CREATE TABLE public.pay_payment_correction_request_candidates (
+CREATE TABLE IF NOT EXISTS public.pay_payment_correction_request_candidates (
     correction_request_id uuid NOT NULL,
     selection_ordinal bigint NOT NULL,
     pay_batch_candidate_id uuid NOT NULL,
@@ -55,7 +55,7 @@ ALTER TABLE public.pay_payment_correction_request_candidates OWNER TO postgres;
 ALTER TABLE public.pay_payment_correction_request_candidates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pay_payment_correction_request_candidates FORCE ROW LEVEL SECURITY;
 
-CREATE INDEX idx_pay_payment_correction_request_candidates_instruction
+CREATE INDEX IF NOT EXISTS idx_pay_payment_correction_request_candidates_instruction
     ON public.pay_payment_correction_request_candidates (
         correction_request_id,
         shared_instruction_scope_hash,
@@ -69,9 +69,13 @@ REVOKE ALL ON TABLE public.pay_payment_correction_request_candidates FROM authen
 REVOKE ALL ON TABLE public.pay_payment_correction_request_candidates FROM service_role;
 
 ALTER TABLE public.pay_payment_correction_requests
-    ADD COLUMN reauth_proof_hash text NULL,
-    ADD COLUMN reauth_expires_at_utc timestamptz NULL,
-    ADD COLUMN reauth_consumed_at_utc timestamptz NULL;
+    ADD COLUMN IF NOT EXISTS reauth_proof_hash text NULL,
+    ADD COLUMN IF NOT EXISTS reauth_expires_at_utc timestamptz NULL,
+    ADD COLUMN IF NOT EXISTS reauth_consumed_at_utc timestamptz NULL;
+
+ALTER TABLE public.pay_payment_correction_requests
+    DROP CONSTRAINT IF EXISTS pay_payment_correction_requests_reauth_hash_chk,
+    DROP CONSTRAINT IF EXISTS pay_payment_correction_requests_reauth_consumed_chk;
 
 ALTER TABLE public.pay_payment_correction_requests
     ADD CONSTRAINT pay_payment_correction_requests_reauth_hash_chk
@@ -86,7 +90,7 @@ ALTER TABLE public.pay_payment_correction_requests
         );
 
 ALTER TABLE public.pay_payment_correction_requests
-    DROP CONSTRAINT pay_payment_correction_requests_status_chk;
+    DROP CONSTRAINT IF EXISTS pay_payment_correction_requests_status_chk;
 
 ALTER TABLE public.pay_payment_correction_requests
     ADD CONSTRAINT pay_payment_correction_requests_status_chk
@@ -108,7 +112,7 @@ ALTER TABLE public.pay_payment_correction_requests
         )
     );
 
-CREATE UNIQUE INDEX ux_pay_payment_correction_requests_active_batch_v2
+CREATE UNIQUE INDEX IF NOT EXISTS ux_pay_payment_correction_requests_active_batch_v2
     ON public.pay_payment_correction_requests(pay_batch_id)
     WHERE status IN (
         'REQUESTED',
@@ -118,7 +122,7 @@ CREATE UNIQUE INDEX ux_pay_payment_correction_requests_active_batch_v2
         'PROCESSING'
     );
 
-CREATE INDEX idx_pay_payment_correction_requests_due_v2
+CREATE INDEX IF NOT EXISTS idx_pay_payment_correction_requests_due_v2
     ON public.pay_payment_correction_requests(status, requested_at_utc, id)
     WHERE status IN (
         'PLANNING',
@@ -128,7 +132,7 @@ CREATE INDEX idx_pay_payment_correction_requests_due_v2
     );
 
 ALTER TABLE public.banking_pay_operations
-    DROP CONSTRAINT banking_pay_operations_operation_type_chk;
+    DROP CONSTRAINT IF EXISTS banking_pay_operations_operation_type_chk;
 
 ALTER TABLE public.banking_pay_operations
     ADD CONSTRAINT banking_pay_operations_operation_type_chk
@@ -144,13 +148,13 @@ ALTER TABLE public.banking_pay_operations
         )
     );
 
-CREATE UNIQUE INDEX ux_banking_pay_operations_correction_request
+CREATE UNIQUE INDEX IF NOT EXISTS ux_banking_pay_operations_correction_request
     ON public.banking_pay_operations ((input_json ->> 'correction_request_id'))
     WHERE operation_type = 'PAYMENT_CORRECTION'
       AND input_json ? 'correction_request_id';
 
 ALTER TABLE public.banking_pay_operation_config
-    DROP CONSTRAINT banking_pay_operation_config_operation_type_chk;
+    DROP CONSTRAINT IF EXISTS banking_pay_operation_config_operation_type_chk;
 
 ALTER TABLE public.banking_pay_operation_config
     ADD CONSTRAINT banking_pay_operation_config_operation_type_chk
@@ -194,11 +198,17 @@ DO UPDATE SET
     enabled = false;
 
 ALTER TABLE public.settings_defaults
-    ADD COLUMN banking_pay_candidate_cancellation_enabled boolean NOT NULL DEFAULT false,
-    ADD COLUMN banking_pay_correction_max_candidates integer NOT NULL DEFAULT 10000,
-    ADD COLUMN banking_pay_correction_max_active_items integer NOT NULL DEFAULT 250000,
-    ADD COLUMN banking_pay_correction_max_active_items_per_candidate integer NOT NULL DEFAULT 128,
-    ADD COLUMN banking_pay_correction_max_source_rows_per_candidate integer NOT NULL DEFAULT 512;
+    ADD COLUMN IF NOT EXISTS banking_pay_candidate_cancellation_enabled boolean NOT NULL DEFAULT false,
+    ADD COLUMN IF NOT EXISTS banking_pay_correction_max_candidates integer NOT NULL DEFAULT 10000,
+    ADD COLUMN IF NOT EXISTS banking_pay_correction_max_active_items integer NOT NULL DEFAULT 250000,
+    ADD COLUMN IF NOT EXISTS banking_pay_correction_max_active_items_per_candidate integer NOT NULL DEFAULT 128,
+    ADD COLUMN IF NOT EXISTS banking_pay_correction_max_source_rows_per_candidate integer NOT NULL DEFAULT 512;
+
+ALTER TABLE public.settings_defaults
+    DROP CONSTRAINT IF EXISTS settings_defaults_bpay_cancel_max_candidates_chk,
+    DROP CONSTRAINT IF EXISTS settings_defaults_bpay_cancel_max_items_chk,
+    DROP CONSTRAINT IF EXISTS settings_defaults_bpay_cancel_candidate_items_chk,
+    DROP CONSTRAINT IF EXISTS settings_defaults_bpay_cancel_candidate_rows_chk;
 
 ALTER TABLE public.settings_defaults
     ADD CONSTRAINT settings_defaults_bpay_cancel_max_candidates_chk
