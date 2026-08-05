@@ -34,14 +34,34 @@ function loadLaneAttempt() {
     Object,
     Array,
     Set,
+    WeakSet,
+    RegExp,
     JSON,
     Error
   };
   vm.runInNewContext(
-    `${functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt')}\nthis.runAttempt = runBankingPayWorkbenchSourceBuildLaneAttempt;`,
+    `${functionBody('sanitizeBankingPayWorkbenchSourceBuildDiagnostic')}\n${functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt')}\nthis.runAttempt = runBankingPayWorkbenchSourceBuildLaneAttempt;`,
     context
   );
   return context.runAttempt;
+}
+
+function loadDiagnosticSanitizer() {
+  const context = { String, Number, Math, Object, Array, WeakSet, RegExp, Error, JSON };
+  vm.runInNewContext(
+    `${functionBody('sanitizeBankingPayWorkbenchSourceBuildDiagnostic')}\nthis.sanitize = sanitizeBankingPayWorkbenchSourceBuildDiagnostic;`,
+    context
+  );
+  return context.sanitize;
+}
+
+function loadParallelismNormalizer() {
+  const context = { String, Number };
+  vm.runInNewContext(
+    `${functionBody('normalizeBankingPayWorkbenchSourceBuildParallelism')}\nthis.normalize = normalizeBankingPayWorkbenchSourceBuildParallelism;`,
+    context
+  );
+  return context.normalize;
 }
 
 const ids = {
@@ -49,7 +69,7 @@ const ids = {
   build: '22222222-2222-4222-8222-222222222222',
   candidate: '33333333-3333-4333-8333-333333333333',
   attempt: '44444444-4444-4444-8444-444444444444',
-  nonce: '55555555-5555-4555-8555-555555555555'
+  nonce: 'aBcDeF12-3456-4aBc-8dEf-1234567890aB'
 };
 
 function claim(overrides = {}) {
@@ -190,19 +210,43 @@ test('runtime loss after RPC 1 leaves the durable attempt for recovery and skips
   assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.nonce));
 });
 
-test('execute transport loss is not retried and any nonce in an error is redacted', async () => {
+test('execute transport loss is not retried and mixed-case nonce diagnostics are recursively redacted', async () => {
   let calls = 0;
   const result = await loadLaneAttempt()({}, baseOptions(async () => {
     calls += 1;
     if (calls === 1) return claim();
-    throw new Error(`timeout for ${ids.nonce}`);
+    const error = new Error(`timeout for ${ids.nonce.toUpperCase()}`);
+    error.name = `RPC_${ids.nonce.toLowerCase()}`;
+    error.code = `ERR_${ids.nonce.toUpperCase()}`;
+    error.detail = { attempt_nonce: ids.nonce, nested: [`retry ${ids.nonce.toLowerCase()}`] };
+    throw error;
   }));
   assert.equal(calls, 2);
   assert.equal(result.execute_called, true);
   assert.equal(result.transport_ok, false);
   assert.equal(result.result_code, 'SOURCE_BUILD_ATTEMPT_EXECUTE_UNCERTAIN');
+  assert.equal(result.error_code, 'SOURCE_BUILD_ATTEMPT_EXECUTE_UNCERTAIN');
+  assert.equal(result.error.code, 'SOURCE_BUILD_ATTEMPT_EXECUTE_UNCERTAIN');
   assert.match(result.error_message, /\[redacted\]/);
-  assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.nonce));
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.nonce, 'i'));
+});
+
+test('central source-build diagnostic scrubber redacts nonce keys, nested values and mixed case before truncation', () => {
+  const sanitize = loadDiagnosticSanitizer();
+  const upperNonce = ids.nonce.toUpperCase();
+  const result = sanitize({
+    message: `${'x'.repeat(700)} nonce=${upperNonce}`,
+    code: `ERR_${upperNonce}`,
+    name: `NAME_${ids.nonce.toLowerCase()}`,
+    detail: {
+      attempt_nonce: upperNonce,
+      nested: [{ reason: `failed for ${ids.nonce}` }]
+    }
+  }, { secrets: [ids.nonce], maxTextLength: 500 });
+  const serialized = JSON.stringify(result);
+  assert.doesNotMatch(serialized, new RegExp(ids.nonce, 'i'));
+  assert.match(serialized, /\[redacted\]/);
+  assert.ok(result.message.length <= 511);
 });
 
 test('database-owned stage failure is a valid terminal response and is not retried', async () => {
@@ -237,11 +281,61 @@ test('source-build burst uses the two-call helper while preserving parallel sett
   assert.match(drain, /queue-scan watermark can advance beyond a blocked prefix/);
   assert.match(drain, /SOURCE_BUILD_LANE:\$\{laneIndex \|\| 0\}/);
   assert.doesNotMatch(drain, /SOURCE_BUILD_LANE:\$\{startedAtMs\}/);
+  assert.match(sourceBurst, /const recoveryProbeOnly = sourceDuePreflight\.ok === true && dueQueuedCount <= 0/);
+  assert.match(sourceBurst, /recoveryProbeOnly && sourceBuildRecoveryProbeCount > 0/);
+  assert.match(sourceBurst, /const laneCount = recoveryProbeOnly\s*\? 1/);
+  assert.match(sourceBurst, /recovery_capable_rpc1_required: true/);
+  assert.match(drain, /source_build_recovery_probe_count: sourceBuildRecoveryProbeCount/);
+  assert.match(sourceBurst, /sanitizeBankingPayWorkbenchSourceBuildDiagnostic\(settledLane\.reason/);
+  assert.match(sourceBurst, /redactUuidTokens: true/);
+});
+
+test('source-build parallelism defaults fail closed to one while explicit zero and configured values remain supported', () => {
+  const settings = functionBody('loadSettingsDefaults');
+  const cron = functionBody('bankingPayWorkbenchCronTick');
+  const drain = functionBody('drainBankingPayWorkbenchJobs');
+  const normalize = loadParallelismNormalizer();
+  for (const malformed of [undefined, null, '', ' ', false, true, -1, 33, 1.5, 'nope', {}, []]) assert.equal(normalize(malformed), 1);
+  assert.equal(normalize(0), 0);
+  assert.equal(normalize('0'), 0);
+  assert.equal(normalize(1), 1);
+  assert.equal(normalize(4), 4);
+  assert.equal(normalize('32'), 32);
+  assert.match(settings, /source_build_parallelism: normalizeBankingPayWorkbenchSourceBuildParallelism\(_firstConfiguredValue\(row\.banking_pay_workbench_cron_source_build_parallelism/);
+  assert.match(settings, /source_build_parallelism: normalizeBankingPayWorkbenchSourceBuildParallelism\(_firstConfiguredValue\(row\.banking_pay_workbench_nudge_source_build_parallelism/);
+  assert.doesNotMatch(settings, /source_build_parallelism:\s*[24],/);
+  assert.match(cron, /const sourceBuildParallelism = normalizeBankingPayWorkbenchSourceBuildParallelism\(firstConfiguredValue/);
+  assert.match(drain, /const sourceBuildParallelism = normalizeBankingPayWorkbenchSourceBuildParallelism\(/);
+  assert.match(cron, /sourceBuildParallelism: 0/);
+  assert.match(cron, /source_build_parallelism: 0/);
+  assert.match(drain, /sourceBuildParallelism > 0/);
+  assert.match(drain, /Math\.min\(sourceBuildParallelism, jobsLeft, rowBoundedJobLimit\)/);
+  assert.doesNotMatch(worker, /source_build_parallelism:\s*[24],/);
+  assert.doesNotMatch(worker, /budgetProfile === 'NUDGE' \? 4 : 2/);
+});
+
+test('cron and nudge preserve database-owned stable worker and lane identities across every outer phase', () => {
+  const cron = functionBody('bankingPayWorkbenchCronTick');
+  const nudge = functionBody('nudgeBankingPayWorkbenchDrain');
+  const drain = functionBody('drainBankingPayWorkbenchJobs');
+  assert.match(cron, /BANKING_PAY_WORKBENCH:CRON:GLOBAL/);
+  assert.match(cron, /BANKING_PAY_WORKBENCH:NUDGE:GLOBAL/);
+  assert.match(cron, /BANKING_PAY_WORKBENCH:NUDGE:SESSION:\$\{sessionId\}/);
+  assert.match(cron, /workerId: stableWorkerId/);
+  assert.match(nudge, /const stableNudgeWorkerId/);
+  assert.match(nudge, /workerId: stableNudgeWorkerId/);
+  assert.match(nudge, /passthroughOptions\.workerId = stableNudgeWorkerId/);
+  assert.match(nudge, /origin:.*AUTO_CONTINUATION/);
+  assert.match(nudge, /origin:.*FINAL_CHECK/);
+  assert.match(nudge, /lockContentionRetryOptions\.origin = .*LOCK_CONTENTION_RETRY/);
+  assert.match(nudge, /origin: 'BANKING_PAY_WORKBENCH_SESSION_NUDGE_GLOBAL_TAIL'[\s\S]*?workerId: 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL'/);
+  assert.doesNotMatch(drain, /BANKING_PAY_WORKBENCH:\$\{budgetProfile \|\| 'DEFAULT'\}:\$\{origin\}/);
+  assert.match(drain, /SOURCE_BUILD_LANE:\$\{laneIndex \|\| 0\}/);
 });
 
 test('runtime version advertises the bounded-scope Stage 2 source marker', () => {
   const version = functionBody('handleVersion');
   assert.match(version, /banking_pay_bounded_scope_stage2/);
-  assert.match(version, /V1\.2\.11_TWO_CALL_WORKER_20260805/);
+  assert.match(version, /V1\.2\.13_STAGE2_AUDIT_CLOSURE_20260805/);
   assert.match(version, /7165360304f8ef12b3790078e450ed1d4b128c55/);
 });

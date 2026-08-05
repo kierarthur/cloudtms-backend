@@ -1107,6 +1107,13 @@ function _asPosInt(v, def) {
   return Number.isFinite(n) && n > 0 ? n : def;
 }
 
+function normalizeBankingPayWorkbenchSourceBuildParallelism(value) {
+  if (typeof value !== 'number' && typeof value !== 'string') return 1;
+  if (typeof value === 'string' && value.trim() === '') return 1;
+  const number = Number(value);
+  return Number.isFinite(number) && Number.isInteger(number) && number >= 0 && number <= 32 ? number : 1;
+}
+
 async function loadSettingsDefaults(env) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -1499,7 +1506,7 @@ async function loadSettingsDefaults(env) {
         max_jobs: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_max_jobs, bpwCronCfg.max_jobs, bpwCronCfg.maxJobs), 110, 1, 150),
         max_rows: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_max_rows, bpwCronCfg.max_rows, bpwCronCfg.maxRows), 750, 1, 5000),
         max_runtime_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_max_runtime_ms, bpwCronCfg.max_runtime_ms, bpwCronCfg.maxRuntimeMs), 15000, 1000, 30000),
-        source_build_parallelism: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_source_build_parallelism, bpwCronCfg.source_build_parallelism, bpwCronCfg.sourceBuildParallelism), 2, 0, 32),
+        source_build_parallelism: normalizeBankingPayWorkbenchSourceBuildParallelism(_firstConfiguredValue(row.banking_pay_workbench_cron_source_build_parallelism, bpwCronCfg.source_build_parallelism, bpwCronCfg.sourceBuildParallelism)),
         source_build_parallel_bursts: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_source_build_parallel_bursts, bpwCronCfg.source_build_parallel_bursts, bpwCronCfg.sourceBuildParallelBursts), 4, 0, 100),
         source_build_runtime_floor_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_source_build_runtime_floor_ms, bpwCronCfg.source_build_runtime_floor_ms, bpwCronCfg.sourceBuildRuntimeFloorMs), 15000, 0, 300000),
         source_build_lane_claim_limit: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_cron_source_build_lane_claim_limit, bpwCronCfg.source_build_lane_claim_limit, bpwCronCfg.sourceBuildLaneClaimLimit), 1, 1, 10),
@@ -1520,7 +1527,7 @@ async function loadSettingsDefaults(env) {
         max_jobs: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_jobs, bpwNudgeCfg.max_jobs, bpwNudgeCfg.maxJobs), 110, 1, 150),
         max_rows: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_rows, bpwNudgeCfg.max_rows, bpwNudgeCfg.maxRows), 750, 1, 5000),
         max_runtime_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_max_runtime_ms, bpwNudgeCfg.max_runtime_ms, bpwNudgeCfg.maxRuntimeMs), 15000, 1000, 30000),
-        source_build_parallelism: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_source_build_parallelism, bpwNudgeCfg.source_build_parallelism, bpwNudgeCfg.sourceBuildParallelism), 4, 0, 32),
+        source_build_parallelism: normalizeBankingPayWorkbenchSourceBuildParallelism(_firstConfiguredValue(row.banking_pay_workbench_nudge_source_build_parallelism, bpwNudgeCfg.source_build_parallelism, bpwNudgeCfg.sourceBuildParallelism)),
         source_build_parallel_bursts: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_source_build_parallel_bursts, bpwNudgeCfg.source_build_parallel_bursts, bpwNudgeCfg.sourceBuildParallelBursts), 12, 0, 100),
         source_build_runtime_floor_ms: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_source_build_runtime_floor_ms, bpwNudgeCfg.source_build_runtime_floor_ms, bpwNudgeCfg.sourceBuildRuntimeFloorMs), 60000, 0, 300000),
         source_build_lane_claim_limit: _asBoundedInt(_firstConfiguredValue(row.banking_pay_workbench_nudge_source_build_lane_claim_limit, bpwNudgeCfg.source_build_lane_claim_limit, bpwNudgeCfg.sourceBuildLaneClaimLimit), 1, 1, 10),
@@ -1866,7 +1873,7 @@ async function loadSettingsDefaults(env) {
             max_jobs: 110,
             max_rows: 750,
             max_runtime_ms: 15000,
-            source_build_parallelism: 2,
+            source_build_parallelism: 1,
             source_build_parallel_bursts: 4,
             source_build_runtime_floor_ms: 15000,
             source_build_lane_claim_limit: 1,
@@ -1886,7 +1893,7 @@ async function loadSettingsDefaults(env) {
             max_jobs: 110,
             max_rows: 750,
             max_runtime_ms: 15000,
-            source_build_parallelism: 4,
+            source_build_parallelism: 1,
             source_build_parallel_bursts: 12,
             source_build_runtime_floor_ms: 60000,
             source_build_lane_claim_limit: 1,
@@ -1999,7 +2006,7 @@ async function loadSettingsDefaults(env) {
             max_jobs: 110,
             max_rows: 750,
             max_runtime_ms: 15000,
-            source_build_parallelism: 2,
+            source_build_parallelism: 1,
             source_build_parallel_bursts: 4,
             source_build_runtime_floor_ms: 15000,
             source_build_lane_claim_limit: 1,
@@ -2019,7 +2026,7 @@ async function loadSettingsDefaults(env) {
             max_jobs: 110,
             max_rows: 750,
             max_runtime_ms: 15000,
-            source_build_parallelism: 4,
+            source_build_parallelism: 1,
             source_build_parallel_bursts: 12,
             source_build_runtime_floor_ms: 60000,
             source_build_lane_claim_limit: 1,
@@ -2133,7 +2140,7 @@ async function loadSettingsDefaults(env) {
           max_jobs: 110,
           max_rows: 750,
           max_runtime_ms: 15000,
-          source_build_parallelism: 2,
+          source_build_parallelism: 1,
           source_build_parallel_bursts: 4,
           source_build_runtime_floor_ms: 15000,
           source_build_lane_claim_limit: 1
@@ -2145,7 +2152,7 @@ async function loadSettingsDefaults(env) {
           max_jobs: 110,
           max_rows: 750,
           max_runtime_ms: 15000,
-          source_build_parallelism: 4,
+          source_build_parallelism: 1,
           source_build_parallel_bursts: 12,
           source_build_runtime_floor_ms: 60000,
           source_build_lane_claim_limit: 1
@@ -16360,12 +16367,12 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   ), 3000, 500, 30000);
   stageLimits.clone_rebase = effectiveCloneRebaseUnitsPerJob;
   stageLimits.cloneRebase = effectiveCloneRebaseUnitsPerJob;
-  const sourceBuildParallelism = clampInt(firstConfiguredValue(
+  const sourceBuildParallelism = normalizeBankingPayWorkbenchSourceBuildParallelism(firstConfiguredValue(
     source.sourceBuildParallelism,
     source.source_build_parallelism,
     profileSettings.source_build_parallelism,
     profileSettings.sourceBuildParallelism
-  ), budgetProfile === 'NUDGE' ? 4 : 2, 0, 32);
+  ));
   const sourceBuildParallelBursts = clampInt(firstConfiguredValue(
     source.sourceBuildParallelBursts,
     source.source_build_parallel_bursts,
@@ -16464,6 +16471,14 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   const sessionId = uuidRe.test(requestedSessionId) ? requestedSessionId : null;
   const candidateId = uuidRe.test(requestedCandidateId) ? requestedCandidateId : null;
   const actorUserId = uuidRe.test(requestedActorUserId) ? requestedActorUserId : null;
+  const configuredWorkerId = trimStr(source.workerId || source.worker_id || '');
+  const stableWorkerId = (configuredWorkerId || (
+    budgetProfile === 'CRON'
+      ? 'BANKING_PAY_WORKBENCH:CRON:GLOBAL'
+      : (sessionId
+          ? `BANKING_PAY_WORKBENCH:NUDGE:SESSION:${sessionId}`
+          : 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL')
+  )).slice(0, 200);
 
   const baseResult = {
     worker: 'bankingPayWorkbenchCronTick',
@@ -16869,7 +16884,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
       candidateId,
       actorUserId,
       nowUtc: hasOwn(source, 'nowUtc') ? source.nowUtc : (hasOwn(source, 'now_utc') ? source.now_utc : undefined),
-      workerId: hasOwn(source, 'workerId') ? source.workerId : (hasOwn(source, 'worker_id') ? source.worker_id : undefined),
+      workerId: stableWorkerId,
       leaseSeconds: hasOwn(source, 'leaseSeconds') ? source.leaseSeconds : (hasOwn(source, 'lease_seconds') ? source.lease_seconds : configuredDbWorkerLeaseSeconds)
     };
 
@@ -17303,6 +17318,10 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     : 0;
   const sessionScopedNudge = !!requestedSessionIdValue;
   const origin = sessionScopedNudge ? 'BANKING_PAY_WORKBENCH_SESSION_NUDGE' : 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE';
+  const configuredWorkerId = trimStr(source.workerId || source.worker_id || '');
+  const stableNudgeWorkerId = (configuredWorkerId || (sessionScopedNudge
+    ? `BANKING_PAY_WORKBENCH:NUDGE:SESSION:${requestedSessionIdValue}`
+    : 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL')).slice(0, 200);
   const singleFlightKey = sessionScopedNudge
     ? `BANKING_PAY_WORKBENCH_SESSION_DRAIN:${requestedSessionIdValue}`
     : 'BANKING_PAY_WORKBENCH_GLOBAL_DRAIN';
@@ -17637,6 +17656,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     origin,
     budgetProfile,
     profile: budgetProfile,
+    workerId: stableNudgeWorkerId,
     sessionId: requestedSessionIdValue || undefined,
     candidateId: requestedCandidateIdValue || undefined,
     actorUserId: requestedActorUserIdValue || undefined
@@ -17685,6 +17705,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   ]) {
     if (Object.prototype.hasOwnProperty.call(source, key)) passthroughOptions[key] = source[key];
   }
+  passthroughOptions.workerId = stableNudgeWorkerId;
+  delete passthroughOptions.worker_id;
 
   const copyCachedDrainSetting = (camelName, snakeName) => {
     if (Object.prototype.hasOwnProperty.call(passthroughOptions, camelName)
@@ -18264,6 +18286,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
             origin: 'BANKING_PAY_WORKBENCH_SESSION_NUDGE_GLOBAL_TAIL',
             budgetProfile: 'NUDGE',
             profile: 'NUDGE',
+            workerId: 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL',
             sessionId: undefined,
             session_id: undefined,
             candidateId: undefined,
@@ -19475,7 +19498,13 @@ async function bankingPayWorkbenchPayDateRolloverTick(env, options = {}) {
 function logBankingPayWorkbenchDiag(env, eventName, payload = {}, options = {}) {
   try {
     if (typeof bankingPayWorkbenchLogsEnabled === 'function' && bankingPayWorkbenchLogsEnabled(env) !== true) return;
-    const sourcePayload = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const rawSourcePayload = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
+    const scrubbedSourcePayload = typeof sanitizeBankingPayWorkbenchSourceBuildDiagnostic === 'function'
+      ? sanitizeBankingPayWorkbenchSourceBuildDiagnostic(rawSourcePayload, { maxTextLength: 500 })
+      : rawSourcePayload;
+    const sourcePayload = (scrubbedSourcePayload && typeof scrubbedSourcePayload === 'object' && !Array.isArray(scrubbedSourcePayload))
+      ? scrubbedSourcePayload
+      : {};
     const opts = (options && typeof options === 'object' && !Array.isArray(options)) ? options : {};
     const truthy = (value) => {
       if (value === true || value === 1) return true;
@@ -19524,6 +19553,10 @@ function logBankingPayWorkbenchDiag(env, eventName, payload = {}, options = {}) 
         const out = {};
         for (const [key, child] of Object.entries(value)) {
           if (!keepKey(key)) continue;
+          if (/(^|_)nonce($|_)/.test(normalizeKey(key))) {
+            out[key] = '[redacted]';
+            continue;
+          }
           out[key] = sanitize(child, depth + 1);
         }
         return out;
@@ -158610,8 +158643,8 @@ function handleVersion() {
       implementation_commit: "4bc7fd2d"
     },
     banking_pay_bounded_scope_stage2: {
-      revision: "1.2.11",
-      source_marker: "V1.2.11_TWO_CALL_WORKER_20260805",
+      revision: "1.2.13",
+      source_marker: "V1.2.13_STAGE2_AUDIT_CLOSURE_20260805",
       stage1_baseline_commit: "7165360304f8ef12b3790078e450ed1d4b128c55"
     },
     built_at: new Date().toISOString()
@@ -181477,6 +181510,54 @@ async function queueDuePayBatchCompletionNotices(env, opts = {}) {
 
 
 
+function sanitizeBankingPayWorkbenchSourceBuildDiagnostic(value, options = {}) {
+  const source = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  const secrets = (Array.isArray(source.secrets) ? source.secrets : [source.secret])
+    .map((entry) => String(entry == null ? '' : entry).trim())
+    .filter(Boolean);
+  const redactUuidTokens = source.redactUuidTokens === true;
+  const maxDepth = Number.isFinite(Number(source.maxDepth)) ? Math.max(1, Math.min(8, Math.trunc(Number(source.maxDepth)))) : 5;
+  const maxEntries = Number.isFinite(Number(source.maxEntries)) ? Math.max(1, Math.min(100, Math.trunc(Number(source.maxEntries)))) : 30;
+  const maxTextLength = Number.isFinite(Number(source.maxTextLength)) ? Math.max(32, Math.min(2000, Math.trunc(Number(source.maxTextLength)))) : 500;
+  const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const uuidTokenRe = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
+  const redactText = (input) => {
+    let text = String(input == null ? '' : input);
+    for (const secret of secrets) text = text.replace(new RegExp(escapeRegExp(secret), 'gi'), '[redacted]');
+    text = text.replace(/((?:attempt[\s_-]*)?nonce\s*(?:=|:|is)?\s*)[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, '$1[redacted]');
+    if (redactUuidTokens) text = text.replace(uuidTokenRe, '[redacted-uuid]');
+    return text.length > maxTextLength ? `${text.slice(0, maxTextLength)}[truncated]` : text;
+  };
+  const seen = new WeakSet();
+  const visit = (entry, depth, keyName = '') => {
+    if (/nonce/i.test(String(keyName || ''))) return '[redacted]';
+    if (entry === undefined) return undefined;
+    if (entry === null || typeof entry === 'boolean' || typeof entry === 'number') return entry;
+    if (typeof entry === 'string' || typeof entry === 'bigint' || typeof entry === 'symbol' || typeof entry === 'function') return redactText(entry);
+    if (depth >= maxDepth) return '[truncated]';
+    if (typeof entry !== 'object') return redactText(entry);
+    if (seen.has(entry)) return '[circular]';
+    seen.add(entry);
+    if (Array.isArray(entry)) return entry.slice(0, maxEntries).map((item) => visit(item, depth + 1));
+    const sourceEntries = entry instanceof Error
+      ? Object.entries({
+          name: entry.name,
+          code: entry.code,
+          message: entry.message,
+          detail: entry.detail,
+          details: entry.details,
+          hint: entry.hint,
+          cause: entry.cause,
+          errors: entry.errors
+        })
+      : Object.entries(entry);
+    const result = {};
+    for (const [key, child] of sourceEntries.slice(0, maxEntries)) result[key] = visit(child, depth + 1, key);
+    return result;
+  };
+  return visit(value, 0);
+}
+
 async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   const source = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   const trim = (value) => String(value == null ? '' : value).trim();
@@ -181505,10 +181586,12 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
     if (Array.isArray(payload) && payload.length === 1 && isObject(payload[0])) payload = payload[0];
     return isObject(payload) ? payload : null;
   };
-  const safeText = (value, secret = '') => {
-    let text = trim(value).slice(0, 500);
-    if (secret) text = text.split(secret).join('[redacted]');
-    return text;
+  const safeDiagnostic = (value, secrets = []) => sanitizeBankingPayWorkbenchSourceBuildDiagnostic(value, { secrets, maxTextLength: 500 });
+  const safeText = (value, secrets = []) => {
+    const safe = safeDiagnostic(value, Array.isArray(secrets) ? secrets : [secrets]);
+    if (typeof safe === 'string') return trim(safe).slice(0, 500);
+    if (safe && typeof safe === 'object') return trim(safe.message || safe.detail || safe.code || JSON.stringify(safe)).slice(0, 500);
+    return '';
   };
   const remainingRuntime = typeof source.remainingRuntimeMs === 'function'
     ? () => Math.max(0, Number(source.remainingRuntimeMs()) || 0)
@@ -181585,6 +181668,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       bankingPay: true
     }), 'pay_workbench_source_build_attempt_claim_start_v1');
   } catch (error) {
+    const safeError = safeDiagnostic(error);
     return {
       ...base,
       ok: false,
@@ -181594,8 +181678,8 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       execute_called: false,
       phase: 'CLAIM',
       result_code: 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN',
-      error_code: upper(error?.code || error?.name || 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN'),
-      error_message: safeText(error?.message || error || 'source-build claim failed'),
+      error_code: 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN',
+      error_message: safeText(safeError?.message || safeError || 'source-build claim failed'),
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
     };
   }
@@ -181706,6 +181790,8 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       bankingPay: true
     }), 'pay_workbench_source_build_attempt_execute_v1');
   } catch (error) {
+    const safeError = safeDiagnostic(error, [attemptNonce]);
+    const safeErrorMessage = safeText(safeError?.message || safeError || 'source-build execute failed', [attemptNonce]);
     return {
       ...base,
       ...safeIdentity,
@@ -181716,8 +181802,12 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       execute_called: true,
       phase: 'EXECUTE',
       result_code: 'SOURCE_BUILD_ATTEMPT_EXECUTE_UNCERTAIN',
-      error_code: upper(error?.code || error?.name || 'SOURCE_BUILD_ATTEMPT_EXECUTE_UNCERTAIN'),
-      error_message: safeText(error?.message || error || 'source-build execute failed', attemptNonce),
+      error_code: 'SOURCE_BUILD_ATTEMPT_EXECUTE_UNCERTAIN',
+      error_message: safeErrorMessage,
+      error: {
+        code: 'SOURCE_BUILD_ATTEMPT_EXECUTE_UNCERTAIN',
+        message: safeErrorMessage
+      },
       more_due: true,
       execute_elapsed_ms: Math.max(0, Date.now() - executeStartedAtMs),
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
@@ -182159,7 +182249,11 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const workerId = trimStr(
     sourceOptions.workerId ||
     sourceOptions.worker_id ||
-    `BANKING_PAY_WORKBENCH:${budgetProfile || 'DEFAULT'}:${origin}`
+    (budgetProfile === 'CRON'
+      ? 'BANKING_PAY_WORKBENCH:CRON:GLOBAL'
+      : (uuidRe.test(sessionFilterId)
+          ? `BANKING_PAY_WORKBENCH:NUDGE:SESSION:${sessionFilterId}`
+          : 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL'))
   ).slice(0, 200) || 'BANKING_PAY_WORKBENCH_DB_WORKER';
   const configuredDbWorkerLeaseSeconds = firstConfiguredValue(
     sourceOptions.dbWorkerLeaseSeconds,
@@ -182329,11 +182423,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const settingsDefaultsVersion = trimStr(sourceOptions.settingsDefaultsVersion || sourceOptions.settings_defaults_version || workbenchSettings.settings_defaults_version || workbenchSettings.settingsDefaultsVersion || settingsDefaultsUpdatedAt || '') || null;
   const settingsHash = trimStr(sourceOptions.settingsHash || sourceOptions.settings_hash || workbenchSettings.settings_hash || workbenchSettings.settingsHash || '') || null;
 
-  const sourceBuildParallelism = numberInRange(
-    firstConfiguredValue(sourceOptions.sourceBuildParallelism, sourceOptions.source_build_parallelism, profileSettings.source_build_parallelism, profileSettings.sourceBuildParallelism),
-    budgetProfile === 'NUDGE' ? 4 : 2,
-    0,
-    32
+  const sourceBuildParallelism = normalizeBankingPayWorkbenchSourceBuildParallelism(
+    firstConfiguredValue(sourceOptions.sourceBuildParallelism, sourceOptions.source_build_parallelism, profileSettings.source_build_parallelism, profileSettings.sourceBuildParallelism)
   );
   const sourceBuildParallelBursts = numberInRange(
     firstConfiguredValue(sourceOptions.sourceBuildParallelBursts, sourceOptions.source_build_parallel_bursts, profileSettings.source_build_parallel_bursts, profileSettings.sourceBuildParallelBursts),
@@ -182665,6 +182756,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   const passSummaries = [];
   const sourceBuildParallelBurstSummaries = [];
   let sourceBuildDuePreflightCount = 0;
+  let sourceBuildRecoveryProbeCount = 0;
   let sourceBuildLaneSkippedNoDueWorkCount = 0;
   let sourceBuildLaneSkippedNormalWorkCount = 0;
   let normalDueRetryScheduledCount = 0;
@@ -183388,7 +183480,9 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       }
       const sourceDuePreflight = await fetchDueQueuedJobCount(sourceBuildDueJobTypes, 'SOURCE_BUILD_PARALLEL');
       sourceBuildDuePreflightCount += 1;
-      if (sourceDuePreflight.ok === true && Math.max(0, Number(sourceDuePreflight.due_queued_count) || 0) <= 0) {
+      const dueQueuedCount = Math.max(0, Number(sourceDuePreflight.due_queued_count) || 0);
+      const recoveryProbeOnly = sourceDuePreflight.ok === true && dueQueuedCount <= 0;
+      if (recoveryProbeOnly && sourceBuildRecoveryProbeCount > 0) {
         sourceBuildLaneSkippedNoDueWorkCount += 1;
         sourceBuildMoreDue = false;
         anyMoreDue = false;
@@ -183406,6 +183500,17 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         });
         break;
       }
+      if (recoveryProbeOnly) {
+        sourceBuildRecoveryProbeCount += 1;
+        logDrainDiag('WORKBENCH_SOURCE_BUILD_RECOVERY_PROBE_START', {
+          burst_number: sourceBuildParallelBurstCount + 1,
+          route: 'SOURCE_BUILD_PARALLEL',
+          due_queued_count: 0,
+          recovery_capable_rpc1_required: true,
+          additional_lanes_suppressed: true,
+          remaining_runtime_ms: remainingRuntimeMs()
+        });
+      }
       if (sourceDuePreflight.ok !== true) {
         logDrainDiag('WORKBENCH_SOURCE_BUILD_DUE_PREFLIGHT_FAILED', {
           route: 'SOURCE_BUILD_PARALLEL',
@@ -183420,7 +183525,12 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       // A lane owns exactly one durable attempt. Parallelism controls how many
       // independent attempts may run; it never increases per-lane claim count.
       const laneLimit = 1;
-      const laneCount = Math.max(1, Math.min(sourceBuildParallelism, jobsLeft, rowBoundedJobLimit));
+      // A zero queued-row preflight cannot prove that no expired RUNNING attempt
+      // needs recovery. RPC 1 owns that recovery, so one recovery-capable lane is
+      // mandatory; the preflight count sizes only additional queued-work lanes.
+      const laneCount = recoveryProbeOnly
+        ? 1
+        : Math.max(1, Math.min(sourceBuildParallelism, jobsLeft, rowBoundedJobLimit));
       const burstNumber = sourceBuildParallelBurstCount + 1;
 
       logRpcBudgetDecision({
@@ -183439,6 +183549,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         burst_number: burstNumber,
         source_build_parallelism: sourceBuildParallelism,
         lane_count: laneCount,
+        recovery_probe_only: recoveryProbeOnly,
         source_build_lane_claim_limit: laneLimit,
         source_build_parallel_bursts: sourceBuildParallelBursts,
         source_build_runtime_floor_ms: sourceBuildRuntimeFloorMs,
@@ -183474,14 +183585,25 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       let burstRpcCalls = 0;
 
       for (const settledLane of settled) {
+        const rejectedDiagnostic = settledLane.status === 'rejected'
+          ? sanitizeBankingPayWorkbenchSourceBuildDiagnostic(settledLane.reason, {
+              redactUuidTokens: true,
+              maxTextLength: 500
+            })
+          : null;
+        const rejectedMessage = rejectedDiagnostic && typeof rejectedDiagnostic === 'object'
+          ? String(rejectedDiagnostic.message || rejectedDiagnostic.detail || 'source-build lane rejected')
+          : String(rejectedDiagnostic || 'source-build lane rejected');
         const lane = settledLane.status === 'fulfilled'
-          ? settledLane.value
+          ? sanitizeBankingPayWorkbenchSourceBuildDiagnostic(settledLane.value, { maxTextLength: 500 })
           : {
               ok: false,
               error: {
                 code: 'WORKBENCH_SOURCE_BUILD_PARALLEL_LANE_REJECTED',
-                message: String(settledLane.reason?.message || settledLane.reason || 'source-build lane rejected')
+                message: rejectedMessage
               },
+              error_code: 'WORKBENCH_SOURCE_BUILD_PARALLEL_LANE_REJECTED',
+              error_message: rejectedMessage,
               transport_ok: false,
               elapsed_ms: 0,
               route: 'SOURCE_BUILD_PARALLEL',
@@ -183503,9 +183625,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
           burstMoreDue = burstMoreDue || recorded.more_due;
           burstMadeProgress = burstMadeProgress || recorded.made_progress;
           burstLockContention = burstLockContention || recorded.lock_contention;
-          const laneError = lane.error || {
-            code: lane.error_code || lane.result_code || 'WORKBENCH_SOURCE_BUILD_TWO_CALL_LANE_FAILED',
-            message: lane.error_message || 'source-build two-call lane failed'
+          const laneErrorSource = isPlainObject(lane.error) ? lane.error : {};
+          const laneError = {
+            code: upperTrim(laneErrorSource.code || lane.error_code || lane.result_code || 'WORKBENCH_SOURCE_BUILD_TWO_CALL_LANE_FAILED'),
+            message: trimStr(laneErrorSource.message || lane.error_message || 'source-build two-call lane failed').slice(0, 500)
           };
           transportError = laneError;
           errors.push(laneError);
@@ -183545,7 +183668,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       }
 
       burstMoreDue = burstMoreDue
-        || Math.max(0, Number(sourceDuePreflight.due_queued_count) || 0) > burstClaimed;
+        || dueQueuedCount > burstClaimed;
 
       const burstSummary = {
         burst_number: burstNumber,
@@ -183560,6 +183683,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
         lock_contention_detected: burstLockContention,
         source_build_only_assertion_passed: burstAssertionPassed && !sourceBuildOnlyAssertionFailed,
         source_build_two_call: true,
+        recovery_probe_only: recoveryProbeOnly,
         rpc_call_count: burstRpcCalls,
         errors: burstErrors,
         elapsed_ms: null
@@ -183896,6 +184020,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_attempt_post_claim_budget_skip_count: sourceBuildAttemptPostClaimBudgetSkipCount,
     source_build_attempt_contract_failure_count: sourceBuildAttemptContractFailureCount,
     source_build_due_preflight_count: sourceBuildDuePreflightCount,
+    source_build_recovery_probe_count: sourceBuildRecoveryProbeCount,
     source_build_lane_skipped_no_due_work_count: sourceBuildLaneSkippedNoDueWorkCount,
     source_build_lane_skipped_normal_work_count: sourceBuildLaneSkippedNormalWorkCount,
     normal_due_retry_scheduled_count: normalDueRetryScheduledCount,
