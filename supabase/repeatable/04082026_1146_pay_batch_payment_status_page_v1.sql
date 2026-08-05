@@ -225,7 +225,95 @@ BEGIN
         );
     END IF;
 
-    WITH candidate_status_index AS MATERIALIZED (
+    WITH batch_provider_operation_facts AS MATERIALIZED (
+        SELECT
+            EXISTS (
+                SELECT 1
+                FROM public.banking_pay_operations AS provider_operation
+                WHERE provider_operation.pay_batch_id = p_pay_batch_id
+                  AND provider_operation.operation_type IN (
+                      'PAYMENT_EXECUTE',
+                      'PAYMENT_RETRY_BLOCKED_FUNDS'
+                  )
+                  AND provider_operation.status IN (
+                      'QUEUED',
+                      'RUNNING',
+                      'PROCESSING',
+                      'CLAIMED',
+                      'IN_PROGRESS'
+                  )
+            ) AS provider_submission_in_progress,
+            EXISTS (
+                SELECT 1
+                FROM (
+                    SELECT operation_payload.payload_json
+                    FROM public.banking_pay_operations AS operation_row
+                    CROSS JOIN LATERAL (
+                        VALUES
+                            (coalesce(operation_row.progress_json, '{}'::jsonb)),
+                            (coalesce(operation_row.result_json, '{}'::jsonb)),
+                            (coalesce(operation_row.error_json, '{}'::jsonb))
+                    ) AS operation_payload(payload_json)
+                    WHERE operation_row.pay_batch_id = p_pay_batch_id
+                      AND pg_catalog.upper(coalesce(operation_row.operation_type, '')) LIKE '%PAY%'
+
+                    UNION ALL
+
+                    SELECT chunk_payload.payload_json
+                    FROM public.banking_pay_operation_chunks AS chunk_row
+                    JOIN public.banking_pay_operations AS operation_row
+                      ON operation_row.id = chunk_row.operation_id
+                    CROSS JOIN LATERAL (
+                        VALUES
+                            (coalesce(chunk_row.payload_json, '{}'::jsonb)),
+                            (coalesce(chunk_row.result_json, '{}'::jsonb)),
+                            (coalesce(chunk_row.error_json, '{}'::jsonb))
+                    ) AS chunk_payload(payload_json)
+                    WHERE operation_row.pay_batch_id = p_pay_batch_id
+                ) AS provider_payload
+                WHERE pg_catalog.lower(nullif(pg_catalog.btrim(coalesce(
+                          provider_payload.payload_json ->> 'provider_outcome_unknown', ''
+                      )), '')) IN ('true', 't', 'yes', 'y', '1')
+                   OR pg_catalog.lower(nullif(pg_catalog.btrim(coalesce(
+                          provider_payload.payload_json ->> 'request_sent_no_response', ''
+                      )), '')) IN ('true', 't', 'yes', 'y', '1')
+                   OR pg_catalog.upper(nullif(pg_catalog.btrim(coalesce(
+                          provider_payload.payload_json ->> 'code', ''
+                      )), '')) IN (
+                          'REQUEST_SENT_NO_RESPONSE',
+                          'PROVIDER_OUTCOME_UNKNOWN',
+                          'SUBMISSION_UNKNOWN'
+                      )
+                   OR pg_catalog.upper(nullif(pg_catalog.btrim(coalesce(
+                          provider_payload.payload_json ->> 'error_code', ''
+                      )), '')) IN (
+                          'REQUEST_SENT_NO_RESPONSE',
+                          'PROVIDER_OUTCOME_UNKNOWN',
+                          'SUBMISSION_UNKNOWN'
+                      )
+                   OR pg_catalog.upper(nullif(pg_catalog.btrim(coalesce(
+                          provider_payload.payload_json #>> '{error,code}', ''
+                      )), '')) IN (
+                          'REQUEST_SENT_NO_RESPONSE',
+                          'PROVIDER_OUTCOME_UNKNOWN',
+                          'SUBMISSION_UNKNOWN'
+                      )
+                   OR pg_catalog.upper(nullif(pg_catalog.btrim(coalesce(
+                          provider_payload.payload_json #>> '{provider_submit_diagnostic,code}', ''
+                      )), '')) IN (
+                          'REQUEST_SENT_NO_RESPONSE',
+                          'PROVIDER_OUTCOME_UNKNOWN',
+                          'SUBMISSION_UNKNOWN'
+                      )
+                   OR pg_catalog.upper(nullif(pg_catalog.btrim(coalesce(
+                          provider_payload.payload_json #>> '{providerSubmitDiagnostic,code}', ''
+                      )), '')) IN (
+                          'REQUEST_SENT_NO_RESPONSE',
+                          'PROVIDER_OUTCOME_UNKNOWN',
+                          'SUBMISSION_UNKNOWN'
+                      )
+            ) AS provider_outcome_unknown
+    ), candidate_status_index AS MATERIALIZED (
         -- This is the key-selection index only.  It uses bounded indexed EXISTS
         -- probes and scalar latest-row lookups; all item/work/correction/provider
         -- rollups and JSON construction occur only after page_keys (<=100).
@@ -274,45 +362,285 @@ BEGIN
                  FROM public.pay_batch_items AS event_item
                  JOIN public.pay_bank_transfer_events AS paid_event
                    ON paid_event.pay_bank_transfer_id = event_item.pay_bank_transfer_id
+                 CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                   paid_event.normalised_state,
+                   paid_event.provider_state,
+                   coalesce(paid_event.raw_payload, '{}'::jsonb),
+                   pg_catalog.jsonb_build_object(
+                     'provider_key', paid_event.provider_key,
+                     'provider_event_type', paid_event.provider_event_type,
+                     'provider_event_transport', paid_event.provider_event_transport,
+                     'provider_event_key', paid_event.provider_event_key
+                   )
+                 ) AS paid_movement
                  WHERE event_item.pay_batch_candidate_id = candidate_row.id
                    AND paid_event.pay_batch_id = p_pay_batch_id
-                   AND paid_event.normalised_state IN ('COMPLETED','PAID','SETTLED')
+                   AND paid_movement.is_final_money_moved
+               ) OR EXISTS (
+                 SELECT 1
+                 FROM public.pay_batch_items AS transfer_item
+                 JOIN public.pay_bank_transfers AS paid_transfer
+                   ON paid_transfer.id = transfer_item.pay_bank_transfer_id
+                 CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                   paid_transfer.status,
+                   paid_transfer.rail_state,
+                   coalesce(paid_transfer.rail_meta_json, '{}'::jsonb),
+                   pg_catalog.jsonb_build_object(
+                     'provider_key', paid_transfer.rail_provider,
+                     'rail_env', paid_transfer.rail_env,
+                     'request_id', paid_transfer.request_id,
+                     'rail_tx_id', paid_transfer.rail_tx_id
+                   )
+                 ) AS paid_transfer_movement
+                 WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
+                   AND paid_transfer_movement.is_final_money_moved
                )) AS paid_or_settled,
                (EXISTS (
                  SELECT 1
                  FROM public.pay_batch_items AS event_item
                  JOIN public.pay_bank_transfer_events AS no_money_event
                    ON no_money_event.pay_bank_transfer_id = event_item.pay_bank_transfer_id
+                 CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                   no_money_event.normalised_state,
+                   no_money_event.provider_state,
+                   coalesce(no_money_event.raw_payload, '{}'::jsonb),
+                   pg_catalog.jsonb_build_object(
+                     'provider_key', no_money_event.provider_key,
+                     'provider_event_type', no_money_event.provider_event_type,
+                     'provider_event_transport', no_money_event.provider_event_transport,
+                     'provider_event_key', no_money_event.provider_event_key
+                   )
+                 ) AS no_money_movement
                  WHERE event_item.pay_batch_candidate_id = candidate_row.id
                    AND no_money_event.pay_batch_id = p_pay_batch_id
-                   AND no_money_event.normalised_state IN ('FAILED','REJECTED','CANCELLED','CONFIRMED_NOT_PAID')
+                   AND no_money_movement.is_terminal_no_money
                ) OR EXISTS (
                  SELECT 1
                  FROM public.pay_batch_items AS transfer_item
                  JOIN public.pay_bank_transfers AS failed_transfer
                    ON failed_transfer.id = transfer_item.pay_bank_transfer_id
+                 CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                   failed_transfer.status,
+                   failed_transfer.rail_state,
+                   coalesce(failed_transfer.rail_meta_json, '{}'::jsonb),
+                   pg_catalog.jsonb_build_object(
+                     'provider_key', failed_transfer.rail_provider,
+                     'rail_env', failed_transfer.rail_env,
+                     'request_id', failed_transfer.request_id,
+                     'rail_tx_id', failed_transfer.rail_tx_id
+                   )
+                 ) AS failed_transfer_movement
                  WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
-                   AND (failed_transfer.status IN ('FAILED','CANCELLED')
-                     OR failed_transfer.rail_state IN ('FAILED','CANCELLED'))
+                   AND failed_transfer_movement.is_terminal_no_money
                )) AS terminal_no_money,
                (EXISTS (
                  SELECT 1
                  FROM public.pay_batch_items AS event_item
                  JOIN public.pay_bank_transfer_events AS ambiguous_event
                    ON ambiguous_event.pay_bank_transfer_id = event_item.pay_bank_transfer_id
+                 CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                   ambiguous_event.normalised_state,
+                   ambiguous_event.provider_state,
+                   coalesce(ambiguous_event.raw_payload, '{}'::jsonb),
+                   pg_catalog.jsonb_build_object(
+                     'provider_key', ambiguous_event.provider_key,
+                     'provider_event_type', ambiguous_event.provider_event_type,
+                     'provider_event_transport', ambiguous_event.provider_event_transport,
+                     'provider_event_key', ambiguous_event.provider_event_key
+                   )
+                 ) AS ambiguous_movement
                  WHERE event_item.pay_batch_candidate_id = candidate_row.id
                    AND ambiguous_event.pay_batch_id = p_pay_batch_id
-                   AND (ambiguous_event.normalised_state IN ('UNKNOWN','PENDING','SUBMITTED','PROCESSING')
-                     OR ambiguous_event.movement_classification = 'AMBIGUOUS_REVIEW_REQUIRED')
+                   AND (
+                     ambiguous_movement.cash_state = 'UNKNOWN'
+                     OR ambiguous_movement.is_pending_non_final
+                     OR ambiguous_event.mapping_status IN ('UNMATCHED', 'AMBIGUOUS', 'REVIEW_REQUIRED')
+                     OR ambiguous_event.movement_classification = 'AMBIGUOUS_REVIEW_REQUIRED'
+                     OR ambiguous_event.provider_failure_reason_group IN ('WEBHOOK_UNMATCHED', 'PROVIDER_UNKNOWN')
+                   )
                ) OR EXISTS (
                  SELECT 1
                  FROM public.pay_batch_items AS transfer_item
                  JOIN public.pay_bank_transfers AS pending_transfer
                    ON pending_transfer.id = transfer_item.pay_bank_transfer_id
+                 CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                   pending_transfer.status,
+                   pending_transfer.rail_state,
+                   coalesce(pending_transfer.rail_meta_json, '{}'::jsonb),
+                   pg_catalog.jsonb_build_object(
+                     'provider_key', pending_transfer.rail_provider,
+                     'rail_env', pending_transfer.rail_env,
+                     'request_id', pending_transfer.request_id,
+                     'rail_tx_id', pending_transfer.rail_tx_id
+                   )
+                 ) AS pending_transfer_movement
                  WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
-                   AND (pending_transfer.status IN ('SUBMITTED','PROCESSING','PENDING')
-                     OR pending_transfer.rail_state IN ('SUBMITTED','PROCESSING','PENDING'))
+                   AND (
+                     pending_transfer_movement.cash_state = 'UNKNOWN'
+                     OR pending_transfer_movement.is_pending_non_final
+                   )
                )) AS ambiguous,
+               EXISTS (
+                 SELECT 1
+                 FROM public.pay_batch_items AS manual_item
+                 JOIN public.pay_batch_candidates AS manual_candidate
+                   ON manual_candidate.id = manual_item.pay_batch_candidate_id
+                 LEFT JOIN public.pay_bank_transfers AS manual_transfer
+                   ON manual_transfer.id = manual_item.pay_bank_transfer_id
+                 LEFT JOIN public.candidates AS manual_candidate_record
+                   ON manual_candidate_record.id = manual_candidate.candidate_id
+                 WHERE manual_candidate.pay_batch_id = p_pay_batch_id
+                   AND manual_item.pay_batch_candidate_id = candidate_row.id
+                   AND (
+                     pg_catalog.upper(coalesce(manual_item.item_type, '')) LIKE '%MANUAL%'
+                     OR pg_catalog.upper(coalesce(manual_item.item_type, '')) LIKE '%ADJUSTMENT%'
+                     OR pg_catalog.upper(coalesce(manual_item.item_type, '')) LIKE '%DEBT%'
+                     OR pg_catalog.upper(coalesce(manual_item.item_type, '')) LIKE '%CREDIT%'
+                     OR pg_catalog.upper(coalesce(manual_item.item_type, '')) IN (
+                       'ADJUSTMENT_DELTA', 'MANUAL_CREDIT_ADJUSTMENT_PAYMENT',
+                       'MANUAL_CREDIT_PAYOUT', 'MANUAL_DEBT_RECOVERY',
+                       'FINANCE_ADJUSTMENT'
+                     )
+                     OR pg_catalog.upper(coalesce(manual_item.source_ref, '')) LIKE 'MANUAL%'
+                     OR pg_catalog.upper(coalesce(manual_item.operation_source_key, '')) LIKE 'MANUAL%'
+                   )
+                   AND NOT EXISTS (
+                     SELECT 1
+                     FROM public.pay_manual_adjustment_carry_forwards AS existing_target
+                     WHERE existing_target.target_pay_batch_item_id = manual_item.id
+                   )
+                   AND pg_catalog.upper(coalesce(manual_item.source_ref, '')) NOT LIKE 'CARRY_FORWARD:%'
+                   AND pg_catalog.upper(coalesce(manual_item.operation_source_key, '')) NOT LIKE 'CARRY_FORWARD:%'
+                   AND manual_item.finance_case_id IS NULL
+                   AND manual_item.finance_component_id IS NULL
+                   AND manual_item.reservation_id IS NULL
+                   AND manual_item.timesheet_id IS NULL
+                   AND pg_catalog.upper(coalesce(manual_item.operation_source_key, '')) NOT LIKE ALL (
+                     ARRAY['TIMESHEET:%', 'TS:%', 'SEG:%', 'ADJ:%', 'EXPENSE:%',
+                           'MILEAGE:%', 'ADDITIONAL%', 'FINANCE:%', 'FINANCE_CASE:%',
+                           'RESERVATION:%', 'ADVANCE:%']
+                   )
+                   AND pg_catalog.upper(coalesce(manual_item.source_ref, '')) NOT LIKE ALL (
+                     ARRAY['TS:%', 'SEG:%', 'ADJ:%', 'EXPENSE:%', 'MILEAGE:%', 'ADDITIONAL%']
+                   )
+                   AND NOT (
+                     manual_item.amount_inc_vat IS NOT NULL
+                     AND pg_catalog.round(manual_item.amount_inc_vat, 2) <> 0
+                     AND manual_item.amount_ex_vat IS NOT NULL
+                     AND manual_item.amount_vat IS NOT NULL
+                     AND nullif(pg_catalog.btrim(coalesce(manual_item.description, '')), '') IS NOT NULL
+                     AND manual_candidate.candidate_id IS NOT NULL
+                     AND pg_catalog.upper(pg_catalog.btrim(coalesce(manual_item.pay_channel, ''))) IN ('PAYE', 'UMBRELLA')
+                     AND (
+                       pg_catalog.upper(pg_catalog.btrim(coalesce(manual_item.pay_channel, ''))) = 'PAYE'
+                       OR coalesce(
+                         manual_item.umbrella_id,
+                         manual_transfer.umbrella_id,
+                         manual_candidate_record.umbrella_id,
+                         CASE
+                           WHEN pg_catalog.upper(coalesce(manual_transfer.payee_entity_kind, '')) IN ('UMBRELLA', 'UMBRELLA_COMPANY')
+                           THEN manual_transfer.payee_entity_id
+                           ELSE NULL::uuid
+                         END
+                       ) IS NOT NULL
+                     )
+                   )
+               ) AS manual_carry_forward_blocked,
+               EXISTS (
+                 SELECT 1
+                 FROM public.pay_manual_adjustment_carry_forwards AS carry_forward
+                 LEFT JOIN public.pay_batch_items AS target_item
+                   ON target_item.id = carry_forward.target_pay_batch_item_id
+                 LEFT JOIN public.pay_batch_candidates AS target_candidate
+                   ON target_candidate.id = target_item.pay_batch_candidate_id
+                 LEFT JOIN public.pay_batch_items AS source_item
+                   ON source_item.id = carry_forward.source_pay_batch_item_id
+                 LEFT JOIN public.pay_batch_candidates AS source_candidate
+                   ON source_candidate.id = source_item.pay_batch_candidate_id
+                 LEFT JOIN public.pay_bank_transfers AS source_transfer
+                   ON source_transfer.id = source_item.pay_bank_transfer_id
+                 LEFT JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                   source_transfer.status,
+                   source_transfer.rail_state,
+                   coalesce(source_transfer.rail_meta_json, '{}'::jsonb),
+                   coalesce(source_transfer.rail_meta_json, '{}'::jsonb)
+                 ) AS source_movement ON source_item.pay_bank_transfer_id IS NOT NULL
+                 WHERE (
+                   carry_forward.candidate_id = candidate_row.candidate_id
+                   OR target_item.pay_batch_candidate_id = candidate_row.id
+                   OR source_item.pay_batch_candidate_id = candidate_row.id
+                 )
+                   AND (
+                     carry_forward.status IN ('CANCELLED', 'SUPERSEDED', 'NEEDS_REVIEW')
+                     OR (
+                       carry_forward.status = 'CONSUMED_IN_BATCH'
+                       AND carry_forward.target_pay_batch_id IS DISTINCT FROM p_pay_batch_id
+                     )
+                     OR (
+                       carry_forward.status = 'RESERVED_IN_DRAFT'
+                       AND carry_forward.target_pay_batch_id IS NOT NULL
+                       AND carry_forward.target_pay_batch_id IS DISTINCT FROM p_pay_batch_id
+                     )
+                     OR (
+                       carry_forward.status = 'RESERVED_IN_DRAFT'
+                       AND carry_forward.target_pay_batch_id = p_pay_batch_id
+                       AND target_item.id IS NULL
+                     )
+                     OR (
+                       carry_forward.status = 'RESERVED_IN_DRAFT'
+                       AND carry_forward.target_pay_batch_id = p_pay_batch_id
+                       AND coalesce(target_item.is_voided, false)
+                     )
+                     OR (
+                       carry_forward.status = 'RESERVED_IN_DRAFT'
+                       AND carry_forward.target_pay_batch_id = p_pay_batch_id
+                       AND (
+                         pg_catalog.round(coalesce(carry_forward.amount_ex_vat, 0), 2)
+                           <> pg_catalog.round(coalesce(target_item.amount_ex_vat, 0), 2)
+                         OR pg_catalog.round(coalesce(carry_forward.amount_vat, 0), 2)
+                           <> pg_catalog.round(coalesce(target_item.amount_vat, 0), 2)
+                         OR pg_catalog.round(coalesce(carry_forward.amount_inc_vat, 0), 2)
+                           <> pg_catalog.round(coalesce(target_item.amount_inc_vat, 0), 2)
+                       )
+                     )
+                     OR (
+                       source_item.id IS NOT NULL
+                       AND (
+                         pg_catalog.round(coalesce(carry_forward.amount_ex_vat, 0), 2)
+                           <> pg_catalog.round(coalesce(source_item.amount_ex_vat, 0), 2)
+                         OR pg_catalog.round(coalesce(carry_forward.amount_vat, 0), 2)
+                           <> pg_catalog.round(coalesce(source_item.amount_vat, 0), 2)
+                         OR pg_catalog.round(coalesce(carry_forward.amount_inc_vat, 0), 2)
+                           <> pg_catalog.round(coalesce(source_item.amount_inc_vat, 0), 2)
+                       )
+                     )
+                     OR pg_catalog.upper(coalesce(source_candidate.settlement_status, '')) = 'SETTLED'
+                     OR source_candidate.settled_at_utc IS NOT NULL
+                     OR coalesce(source_movement.is_final_money_moved, false)
+                     OR (
+                       carry_forward.status = 'PENDING_CARRY_FORWARD'
+                       AND carry_forward.candidate_id = candidate_row.candidate_id
+                       AND NOT EXISTS (
+                         SELECT 1
+                         FROM public.pay_batch_items AS represented_item
+                         JOIN public.pay_batch_candidates AS represented_candidate
+                           ON represented_candidate.id = represented_item.pay_batch_candidate_id
+                         WHERE represented_candidate.pay_batch_id = p_pay_batch_id
+                           AND represented_candidate.candidate_id = carry_forward.candidate_id
+                           AND pg_catalog.upper(pg_catalog.btrim(coalesce(represented_item.pay_channel, '')))
+                             = pg_catalog.upper(pg_catalog.btrim(coalesce(carry_forward.pay_channel, '')))
+                           AND coalesce(represented_item.is_voided, false) IS NOT TRUE
+                           AND (
+                             represented_item.id = carry_forward.target_pay_batch_item_id
+                             OR pg_catalog.lower(coalesce(represented_item.operation_source_key, ''))
+                               = 'carry_forward:' || carry_forward.id::text
+                             OR pg_catalog.lower(coalesce(represented_item.source_ref, ''))
+                               = 'carry_forward:' || carry_forward.id::text
+                           )
+                       )
+                     )
+                   )
+               ) AS carry_forward_freshness_blocked,
                (
                  SELECT work_row.status
                  FROM public.pay_payment_correction_work_items AS work_row
@@ -332,30 +660,52 @@ BEGIN
                ), candidate_row.net_bank_amount, 0)::numeric(14,2) AS reviewed_payment_amount
         FROM public.pay_batch_candidates AS candidate_row
         WHERE candidate_row.pay_batch_id = p_pay_batch_id
-    ), candidate_classified_index AS MATERIALIZED (
+    ), candidate_release_eligibility_index AS MATERIALIZED (
         SELECT candidate_status_index.*,
+               (
+                 candidate_status_index.terminal_no_money
+                 AND candidate_status_index.paid_or_settled IS NOT TRUE
+                 AND candidate_status_index.ambiguous IS NOT TRUE
+                 AND candidate_status_index.latest_work_status IS DISTINCT FROM 'BLOCKED'
+                 AND candidate_status_index.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
+                 AND candidate_status_index.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
+                 AND candidate_status_index.manual_carry_forward_blocked IS NOT TRUE
+                 AND candidate_status_index.carry_forward_freshness_blocked IS NOT TRUE
+                 AND provider_facts.provider_submission_in_progress IS NOT TRUE
+                 AND provider_facts.provider_outcome_unknown IS NOT TRUE
+               ) AS release_failed_payment_eligible
+        FROM candidate_status_index
+        CROSS JOIN batch_provider_operation_facts AS provider_facts
+    ), candidate_classified_index AS MATERIALIZED (
+        SELECT candidate_release_eligibility_index.*,
                CASE
                  WHEN removed AND released THEN 'RELEASED'
                  WHEN removed THEN 'CANCELLED'
                  WHEN paid_or_settled THEN 'SETTLED'
                  WHEN latest_work_status = 'BLOCKED' THEN 'BLOCKED'
                  WHEN latest_work_status IN ('FAILED_FINAL','FAILED_RETRYABLE') THEN 'FAILED'
-                 WHEN terminal_no_money THEN 'NOT_PAID'
+                 WHEN release_failed_payment_eligible THEN 'NOT_PAID'
                  WHEN ambiguous THEN 'AMBIGUOUS'
+                 WHEN terminal_no_money THEN 'BLOCKED'
                  ELSE 'ACTIVE'
                END AS payment_display_state,
                CASE
                  WHEN removed OR paid_or_settled THEN ARRAY[]::text[]
+                 WHEN latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
                  WHEN v_batch.status = 'DRAFT' THEN ARRAY['DRAFT_CANCEL']::text[]
-                 WHEN terminal_no_money THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
+                 WHEN release_failed_payment_eligible THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
                  WHEN ambiguous THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
+                 WHEN terminal_no_money THEN ARRAY[]::text[]
                  ELSE ARRAY['CANCEL_PAYMENT']::text[]
                END AS available_actions,
                pg_catalog.round(reviewed_payment_amount * 100)::bigint AS original_payment_amount_pence,
                CASE WHEN removed THEN 70 WHEN paid_or_settled THEN 60
                     WHEN latest_work_status = 'BLOCKED' THEN 50
-                    WHEN terminal_no_money THEN 40 WHEN ambiguous THEN 30 ELSE 10 END AS status_rank
-        FROM candidate_status_index
+                    WHEN release_failed_payment_eligible THEN 40
+                    WHEN ambiguous THEN 30
+                    WHEN terminal_no_money THEN 50
+                    ELSE 10 END AS status_rank
+        FROM candidate_release_eligibility_index
     ), candidate_filtered_index AS MATERIALIZED (
         SELECT classified_index.*
         FROM candidate_classified_index AS classified_index
@@ -584,13 +934,11 @@ BEGIN
                    OR coalesce(item_rollup.active_item_count, 0) = 0 AS removed,
                coalesce(correction_rollup.has_applied_release, false) AS released,
                coalesce(correction_rollup.has_applied_cancel, false) AS cancelled,
-               coalesce(provider_rollup.has_paid_evidence, false)
-                   OR candidate_row.settlement_status IN ('SETTLED', 'PAID') AS paid_or_settled,
-               coalesce(provider_rollup.has_terminal_no_money, false)
-                   OR coalesce(transfer_rollup.transfer_failed, false) AS terminal_no_money,
-               coalesce(provider_rollup.has_ambiguous_evidence, false)
-                   OR coalesce(transfer_rollup.transfer_pending, false) AS ambiguous,
-               work_rollup.latest_work_status,
+               status_index.paid_or_settled,
+               status_index.terminal_no_money,
+               status_index.ambiguous,
+               status_index.release_failed_payment_eligible,
+               status_index.latest_work_status,
                coalesce(work_rollup.attempt_count, 0) AS attempt_count,
                work_rollup.last_error,
                coalesce(
@@ -599,8 +947,10 @@ BEGIN
                ) AS latest_request_status,
                provider_rollup.latest_event_time_utc,
                coalesce(transfer_rollup.shared_instruction_count, 0) AS shared_instruction_count
-        FROM public.pay_batch_candidates AS candidate_row
-        JOIN page_keys ON page_keys.pay_batch_candidate_id = candidate_row.id
+         FROM public.pay_batch_candidates AS candidate_row
+         JOIN page_keys ON page_keys.pay_batch_candidate_id = candidate_row.id
+         JOIN candidate_classified_index AS status_index
+           ON status_index.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN item_rollup ON item_rollup.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN correction_rollup ON correction_rollup.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN work_rollup ON work_rollup.pay_batch_candidate_id = candidate_row.id
@@ -616,16 +966,19 @@ BEGIN
                    WHEN base.paid_or_settled THEN 'SETTLED'
                    WHEN base.latest_work_status = 'BLOCKED' THEN 'BLOCKED'
                    WHEN base.latest_work_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE') THEN 'FAILED'
-                   WHEN base.terminal_no_money THEN 'NOT_PAID'
-                   WHEN base.ambiguous THEN 'AMBIGUOUS'
-                   ELSE 'ACTIVE'
-               END AS payment_display_state,
-                CASE
-                    WHEN base.removed OR base.paid_or_settled THEN ARRAY[]::text[]
-                    WHEN v_batch.status = 'DRAFT' THEN ARRAY['DRAFT_CANCEL']::text[]
-                    WHEN base.terminal_no_money THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
-                   WHEN base.ambiguous THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
-                   ELSE ARRAY['CANCEL_PAYMENT']::text[]
+                    WHEN base.release_failed_payment_eligible THEN 'NOT_PAID'
+                    WHEN base.ambiguous THEN 'AMBIGUOUS'
+                    WHEN base.terminal_no_money THEN 'BLOCKED'
+                    ELSE 'ACTIVE'
+                END AS payment_display_state,
+                 CASE
+                     WHEN base.removed OR base.paid_or_settled THEN ARRAY[]::text[]
+                     WHEN base.latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
+                     WHEN v_batch.status = 'DRAFT' THEN ARRAY['DRAFT_CANCEL']::text[]
+                     WHEN base.release_failed_payment_eligible THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
+                    WHEN base.ambiguous THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
+                    WHEN base.terminal_no_money THEN ARRAY[]::text[]
+                    ELSE ARRAY['CANCEL_PAYMENT']::text[]
                END AS available_actions,
                CASE
                    WHEN base.removed OR base.paid_or_settled THEN 0::bigint
@@ -635,9 +988,10 @@ BEGIN
                     WHEN base.removed THEN 70
                    WHEN base.paid_or_settled THEN 60
                    WHEN base.latest_work_status = 'BLOCKED' THEN 50
-                   WHEN base.terminal_no_money THEN 40
-                   WHEN base.ambiguous THEN 30
-                   ELSE 10
+                    WHEN base.release_failed_payment_eligible THEN 40
+                    WHEN base.ambiguous THEN 30
+                    WHEN base.terminal_no_money THEN 50
+                    ELSE 10
                END AS status_rank
         FROM base
     ), filtered AS (
@@ -789,7 +1143,7 @@ BEGIN
                     'is_cancelled', page_rows.removed AND NOT page_rows.released,
                     'is_paid', page_rows.paid_or_settled,
                     'is_settled', page_rows.paid_or_settled,
-                    'is_not_paid', page_rows.terminal_no_money AND NOT page_rows.removed,
+                    'is_not_paid', page_rows.release_failed_payment_eligible AND NOT page_rows.removed,
                     'is_released', page_rows.removed AND page_rows.released,
                     'eligible_action_codes', page_rows.available_actions,
                     'plain_blocker', CASE
@@ -797,6 +1151,8 @@ BEGIN
                         WHEN page_rows.payment_display_state = 'AMBIGUOUS' THEN 'The bank payment status must be resolved before continuing.'
                         WHEN page_rows.latest_work_status = 'BLOCKED' THEN 'This payment could not be changed because its status or source ownership changed.'
                         WHEN page_rows.latest_work_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE') THEN 'CloudTMS could not complete this payment change.'
+                        WHEN page_rows.terminal_no_money AND page_rows.release_failed_payment_eligible IS NOT TRUE
+                            THEN 'This failed payment cannot be released until its complete payment scope and evidence are safe.'
                         ELSE NULL::text
                     END,
                     'correction_request_status', page_rows.latest_request_status,
@@ -819,6 +1175,7 @@ BEGIN
                     'candidate_id', page_rows.candidate_id,
                     'candidate_display_name', page_rows.candidate_display_name,
                     'payment_display_state', page_rows.payment_display_state,
+                    'release_failed_payment_eligible', page_rows.release_failed_payment_eligible,
                     'available_actions', page_rows.available_actions,
                     'original_payment_amount_pence', page_rows.original_payment_amount_pence,
                     'active_payment_amount_pence', page_rows.active_payment_amount_pence,

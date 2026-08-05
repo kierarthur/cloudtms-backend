@@ -807,6 +807,9 @@ BEGIN
                     (v_diagnostic ->> 'can_no_money_unwind')::boolean,
                     false
                 )
+                AND v_candidate.latest_work_status IS DISTINCT FROM 'BLOCKED'
+                AND v_candidate.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
+                AND v_candidate.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
             ELSE false
         END;
 
