@@ -1,4 +1,5 @@
--- Banking Pay bounded-scope V1.2.4: durable transaction-one claim/start RPC.
+-- Banking Pay bounded-scope V1.2.7: durable transaction-one claim/start RPC
+-- with finite-progress bounded fairness across blocked queue prefixes.
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_source_build_attempt_claim_start_v1(
   p_worker_id text,
@@ -69,7 +70,10 @@ BEGIN
   -- Small indexed lease-recovery page.  No financial source relation is read.
   FOR v_recovery IN
     SELECT attempt.id attempt_id,attempt.job_id,attempt.build_id,attempt.candidate_id,
-           job.attempt_count,job.max_attempts
+           job.attempt_count,job.max_attempts,
+           CASE WHEN COALESCE(job.payload_json->>'recovery_scan_generation','') ~ '^\d+$'
+             THEN LEAST((job.payload_json->>'recovery_scan_generation')::bigint,2147483647)
+             ELSE 0 END AS scan_generation
     FROM private.banking_pay_workbench_stage_attempts attempt
     JOIN public.banking_pay_workbench_jobs job ON job.id=attempt.job_id
     WHERE attempt.attempt_status='STARTED'
@@ -78,7 +82,7 @@ BEGIN
       AND (COALESCE(job.payload_json->>'recovery_scan_deferred_epoch','') !~ '^\d+(\.\d+)?$'
         OR (job.payload_json->>'recovery_scan_deferred_epoch')::numeric
           <=extract(epoch FROM clock_timestamp()))
-    ORDER BY attempt.lease_expires_at_utc,attempt.id LIMIT v_scan_limit
+    ORDER BY scan_generation,attempt.lease_expires_at_utc,attempt.id LIMIT v_scan_limit
   LOOP
     IF pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
       public._pay_workbench_candidate_serial_key(v_recovery.candidate_id),24062027)) THEN
@@ -98,10 +102,14 @@ BEGIN
           UPDATE public.banking_pay_workbench_jobs SET status='QUEUED',started_at_utc=NULL,
             run_at_utc=clock_timestamp()+make_interval(secs=>LEAST(300,
               GREATEST(1,power(2,LEAST(v_recovery.attempt_count,8))::integer))),
+            payload_json=COALESCE(payload_json,'{}'::jsonb)
+              -'recovery_scan_deferred_epoch'-'recovery_scan_deferral_count'-'recovery_scan_generation',
             last_error_json=jsonb_build_object('code','DELIVERED_ATTEMPT_EXPIRED'),
             updated_at_utc=clock_timestamp() WHERE id=v_recovery.job_id AND status='RUNNING';
         ELSE
           UPDATE public.banking_pay_workbench_jobs SET status='FAILED',failed_at_utc=clock_timestamp(),
+            payload_json=COALESCE(payload_json,'{}'::jsonb)
+              -'recovery_scan_deferred_epoch'-'recovery_scan_deferral_count'-'recovery_scan_generation',
             last_error_json=jsonb_build_object('code','DELIVERED_ATTEMPT_EXHAUSTED'),
             updated_at_utc=clock_timestamp() WHERE id=v_recovery.job_id AND status='RUNNING';
           UPDATE private.banking_pay_workbench_economic_builds SET status='FAILED',
@@ -122,6 +130,10 @@ BEGIN
           'recovery_scan_deferral_count',LEAST(7,CASE
             WHEN COALESCE(blocked_job.payload_json->>'recovery_scan_deferral_count','') ~ '^\d+$'
               THEN (blocked_job.payload_json->>'recovery_scan_deferral_count')::integer+1
+            ELSE 1 END),
+          'recovery_scan_generation',LEAST(2147483647,CASE
+            WHEN COALESCE(blocked_job.payload_json->>'recovery_scan_generation','') ~ '^\d+$'
+              THEN (blocked_job.payload_json->>'recovery_scan_generation')::bigint+1
             ELSE 1 END)),
         updated_at_utc=clock_timestamp()
       WHERE blocked_job.id=v_recovery.job_id AND blocked_job.status='RUNNING';
@@ -135,6 +147,9 @@ BEGIN
   FOR v_claim IN
     WITH claim_source AS MATERIALIZED (
       SELECT job.id,job.priority,job.run_at_utc,job.created_at_utc,job.payload_json,
+        CASE WHEN COALESCE(job.payload_json->>'claim_scan_generation','') ~ '^\d+$'
+          THEN LEAST((job.payload_json->>'claim_scan_generation')::bigint,2147483647)
+          ELSE 0 END AS scan_generation,
         public._pay_workbench_candidate_serial_candidate_id(job.candidate_id,job.payload_json) AS serial_candidate_id,
         public._pay_workbench_candidate_serial_key(
           public._pay_workbench_candidate_serial_candidate_id(job.candidate_id,job.payload_json)) AS serial_key,
@@ -160,12 +175,13 @@ BEGIN
           OR (job.economic_build_id IS NOT NULL AND job.private_stage IS NOT NULL
             AND job.private_stage<>'BUILD_INITIALISE' AND job.private_cursor_kind IS NOT NULL
             AND job.private_stage_version IS NOT NULL))
-      ORDER BY is_chain_continuation DESC,job.priority,job.run_at_utc,job.created_at_utc,job.id
+      ORDER BY scan_generation,is_chain_continuation DESC,job.priority,job.run_at_utc,job.created_at_utc,job.id
       LIMIT v_scan_limit
     ), ranked AS MATERIALIZED (
       SELECT claim_source.*,row_number() OVER (
         PARTITION BY COALESCE(claim_source.serial_key,claim_source.id::text)
-        ORDER BY CASE WHEN claim_source.is_chain_continuation THEN 0 ELSE 1 END,
+        ORDER BY claim_source.scan_generation,
+          CASE WHEN claim_source.is_chain_continuation THEN 0 ELSE 1 END,
           claim_source.priority,claim_source.run_at_utc,claim_source.created_at_utc,claim_source.id) AS serial_rank
       FROM claim_source
     )
@@ -177,7 +193,7 @@ BEGIN
       ranked.id,ranked.serial_candidate_id,'WORKBENCH_CANDIDATE_SOURCE_BUILD',
       ranked.payload_json,v_now) AS state_json) serial_state
     WHERE ranked.serial_rank=1
-    ORDER BY CASE WHEN ranked.is_chain_continuation THEN 0 ELSE 1 END,
+    ORDER BY ranked.scan_generation,CASE WHEN ranked.is_chain_continuation THEN 0 ELSE 1 END,
       ranked.priority,ranked.run_at_utc,ranked.created_at_utc,ranked.id
   LOOP
     IF v_claim.serial_blocked THEN
@@ -192,6 +208,10 @@ BEGIN
           'claim_scan_deferral_count',LEAST(7,CASE
             WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
               THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer+1
+            ELSE 1 END),
+          'claim_scan_generation',LEAST(2147483647,CASE
+            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_generation','') ~ '^\d+$'
+              THEN (blocked_job.payload_json->>'claim_scan_generation')::bigint+1
             ELSE 1 END)),
         updated_at_utc=clock_timestamp()
       WHERE blocked_job.id=v_claim.id AND blocked_job.status='QUEUED'
@@ -211,6 +231,10 @@ BEGIN
           'claim_scan_deferral_count',LEAST(7,CASE
             WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
               THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer+1
+            ELSE 1 END),
+          'claim_scan_generation',LEAST(2147483647,CASE
+            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_generation','') ~ '^\d+$'
+              THEN (blocked_job.payload_json->>'claim_scan_generation')::bigint+1
             ELSE 1 END)),
         updated_at_utc=clock_timestamp()
       WHERE blocked_job.id=v_claim.id AND blocked_job.status='QUEUED'
@@ -389,8 +413,8 @@ BEGIN
       private_cursor_kind=v_cursor_kind,private_cursor_json=v_cursor_json,
       private_stage_version=1,
       payload_json=jsonb_strip_nulls((COALESCE(claimed_job.payload_json,'{}'::jsonb)
-          -'claim_scan_deferred_reason'-'claim_scan_deferral_count'
-          -'recovery_scan_deferred_epoch'-'recovery_scan_deferral_count')
+          -'claim_scan_deferred_reason'-'claim_scan_deferral_count'-'claim_scan_generation'
+          -'recovery_scan_deferred_epoch'-'recovery_scan_deferral_count'-'recovery_scan_generation')
         ||jsonb_build_object(
           'claimed_at_utc',clock_timestamp()::text,
           'candidate_serial_key',public._pay_workbench_candidate_serial_key(v_job.candidate_id),

@@ -1,5 +1,6 @@
--- Banking Pay bounded-scope V1.2.4: exact installed finance-sync body,
--- fenced to one complete, sealed, service-owned Workbench build and attempt.
+-- Banking Pay bounded-scope V1.2.7: exact installed finance-sync body,
+-- fenced to one complete, sealed, service-owned Workbench build and attempt,
+-- including multi-line canonical/component equality.
 
 CREATE OR REPLACE FUNCTION private.pay_sync_overpayments_from_workbench_workspace_v1(
   p_build_id uuid,
@@ -3810,6 +3811,17 @@ begin
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_AUTHORITY_MISMATCH' USING ERRCODE='23514';
   END IF;
   IF EXISTS(
+    SELECT 1
+    FROM pg_temp.canonical_preview_lines line
+    WHERE line.candidate_id=v_bounded_build.candidate_id
+    GROUP BY COALESCE(NULLIF(BTRIM(line.line_json->>'preview_row_id'),''),
+      NULLIF(BTRIM(line.line_json->>'line_id'),''),NULLIF(BTRIM(line.line_json->>'case_key'),''),
+      md5(line.line_json::text))
+    HAVING count(*)>1
+  ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_LINE_IDENTITY_CONFLICT' USING ERRCODE='23514';
+  END IF;
+  IF EXISTS(
     WITH expected AS (
       SELECT scope_row.timesheet_id,
         ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS expected_ex_vat,
@@ -3832,18 +3844,17 @@ begin
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       GROUP BY 1
     )
-    SELECT 1 FROM expected FULL OUTER JOIN actual USING(timesheet_id)
+    SELECT 1 FROM expected FULL OUTER JOIN actual_rows USING(timesheet_id)
     WHERE expected.timesheet_id IS NULL
-       OR (actual.timesheet_id IS NULL AND expected.expected_component_count>0)
-       OR COALESCE(actual.actual_line_count,0)>1
-       OR ABS(COALESCE(expected.expected_ex_vat,0)-COALESCE(actual.actual_ex_vat,0))>0.01
+       OR (actual_rows.timesheet_id IS NULL AND expected.expected_component_count>0)
+       OR ABS(COALESCE(expected.expected_ex_vat,0)-COALESCE(actual_rows.actual_ex_vat,0))>0.01
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_AMOUNT_MISMATCH' USING ERRCODE='23514';
   END IF;
   IF EXISTS(
     WITH expected AS (
-      SELECT scope_row.timesheet_id,
-        COALESCE(jsonb_agg(jsonb_build_object(
+      SELECT scope_row.timesheet_id,component.key_type,component.key_value,
+        jsonb_build_object(
           'component_key_type',component.key_type,'component_key_value',component.key_value,
           'component_amount_ex_vat',component.outstanding_ex_vat,
           'authoritative_truth_ex_vat',component.truth_ex_vat,
@@ -3855,15 +3866,12 @@ begin
           'source_basis_json',jsonb_build_object('build_id',p_build_id::text,
             'linked_timesheet_id',component.timesheet_id::text,
             'component_key_type',component.key_type,'component_key_value',component.key_value,
-            'authority','SEALED_ECONOMIC_BUILD_FACTS'))
-          ORDER BY component.key_type,component.key_value)
-          FILTER (WHERE component.timesheet_id IS NOT NULL),'[]'::jsonb) AS components_json
+            'authority','SEALED_ECONOMIC_BUILD_FACTS')) AS component_json
       FROM private.banking_pay_workbench_economic_build_scope scope_row
-      LEFT JOIN pg_temp.tmp_sync_authoritative_components component
+      JOIN pg_temp.tmp_sync_authoritative_components component
         ON component.timesheet_id=scope_row.timesheet_id
       WHERE scope_row.build_id=p_build_id
-      GROUP BY scope_row.timesheet_id
-    ), actual AS (
+    ), actual_lines AS (
       SELECT COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid AS timesheet_id,
         CASE WHEN jsonb_typeof(line.line_json->'case_components')='array'
@@ -3874,15 +3882,27 @@ begin
         AND COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id','')
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), actual_occurrence AS (
+      SELECT actual_line.timesheet_id,
+        UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')) AS key_type,
+        NULLIF(BTRIM(component.value->>'component_key_value'),'') AS key_value,
+        component.value AS component_json
+      FROM actual_lines actual_line
+      CROSS JOIN LATERAL jsonb_array_elements(actual_line.components_json) component(value)
+    ), conflicting_actual AS (
+      SELECT timesheet_id,key_type,key_value
+      FROM actual_occurrence
+      GROUP BY timesheet_id,key_type,key_value
+      HAVING key_type IS NULL OR key_value IS NULL OR count(DISTINCT component_json)>1
     ), actual AS (
-      SELECT actual_row.timesheet_id,COUNT(*) AS actual_line_count,
-        MIN(actual_row.components_json::text)::jsonb AS components_json
-      FROM actual_rows actual_row GROUP BY actual_row.timesheet_id
+      SELECT DISTINCT timesheet_id,key_type,key_value,component_json
+      FROM actual_occurrence
     )
-    SELECT 1 FROM expected FULL OUTER JOIN actual USING(timesheet_id)
-    WHERE (expected.timesheet_id IS NULL OR actual.timesheet_id IS NULL)
-       OR actual.actual_line_count<>1
-       OR md5(actual.components_json::text) IS DISTINCT FROM md5(expected.components_json::text)
+    SELECT 1 FROM conflicting_actual
+    UNION ALL
+    SELECT 1 FROM expected FULL OUTER JOIN actual USING(timesheet_id,key_type,key_value)
+    WHERE expected.timesheet_id IS NULL OR actual.timesheet_id IS NULL
+       OR actual.component_json IS DISTINCT FROM expected.component_json
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_COMPONENT_MISMATCH' USING ERRCODE='23514';
   END IF;

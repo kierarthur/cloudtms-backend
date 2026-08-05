@@ -31,6 +31,8 @@ test('D2 fact pages carry and verify a cumulative replay-safe chain', () => {
   assert.match(dispatcher, /v_previous_page\.cursor_end_hash<>v_cursor_start_hash/);
   assert.match(dispatcher, /v_existing_page\.attempt_id IS DISTINCT FROM v_attempt_id/);
   assert.match(dispatcher, /v_existing_page\.cumulative_fact_count<>v_next_cumulative_fact_count/);
+  assert.match(dispatcher, /expected_source_count IS DISTINCT FROM v_expected_source_count/);
+  assert.match(dispatcher, /'source_exhausted',v_is_final/);
   const replayReturn = dispatcher.indexOf("'stage_status','PAGE_REPLAYED'");
   const counterMutation = dispatcher.indexOf('fact_row_count=scope_row.fact_row_count+');
   assert.ok(replayReturn >= 0 && counterMutation > replayReturn);
@@ -44,7 +46,11 @@ test('D3 physical live-input pages precede durable derived-family paging', () =>
   assert.match(occurrence, /generate_series\([\s\S]*v_limit-1/);
   assert.match(occurrence, /UPPER\(COALESCE\(canonical\.sheet_scope::text,''\)\)='DAILY'/);
   assert.match(occurrence, /standard_items_page AS MATERIALIZED/);
+  assert.match(occurrence, /standard_items_page[\s\S]*LIMIT v_limit\+1/);
+  assert.match(occurrence, /fallback_states AS MATERIALIZED[\s\S]*LIMIT v_limit\+1/);
   assert.match(occurrence, /paged_occurrence AS MATERIALIZED/);
+  assert.match(occurrence, /WHERE reservation_row\.pay_batch_item_id=item\.id/);
+  assert.match(occurrence, /pg_column_size\(COALESCE\(canonical\.additional_units_json[\s\S]*<=65536[\s\S]*jsonb_each/);
   assert.doesNotMatch(dispatcher, /_pay_current_timesheet_entitlement_components\s*\(/);
   assert.doesNotMatch(dispatcher, /_pay_active_settled_components\s*\(/);
 });
@@ -66,7 +72,10 @@ test('D6 reconciliation consumes sealed facts and fences live metadata', () => {
   assert.doesNotMatch(activeSync, /from public\.pay_batch_items/i);
   assert.doesNotMatch(activeSync, /from public\.pay_advance_reservations/i);
   assert.match(syncCore, /fact\.fact_family in \('FROZEN_SETTLED_COMPONENT','RESERVATION_COMPONENT'\)/);
-  assert.match(syncCore, /FULL OUTER JOIN actual USING\(timesheet_id\)/);
+  assert.match(syncCore, /FULL OUTER JOIN actual_rows USING\(timesheet_id\)/);
+  assert.match(syncCore, /actual_occurrence AS[\s\S]*SELECT DISTINCT timesheet_id,key_type,key_value,component_json/);
+  assert.match(syncCore, /PAY_WORKBENCH_CANONICAL_LINE_IDENTITY_CONFLICT/);
+  assert.doesNotMatch(syncCore, /actual_line_count,0\)>1/);
   assert.ok((syncCore.match(/private\.pay_workbench_timesheet_input_fingerprint_v1/g) || []).length >= 2);
 });
 test('D7 pay-batch update and delete have statement backstops', () => {
@@ -75,13 +84,24 @@ test('D7 pay-batch update and delete have statement backstops', () => {
   assert.match(transition, /TG_TABLE_NAME='pay_batch_items'[\s\S]*frozen_component_snapshot_json[\s\S]*FROM old_rows[\s\S]*FROM new_rows/);
 });
 test('D8 fallback snapshots become typed facts with active precedence', () => {
-  assert.match(occurrence, /_pay_timesheet_components\([\s\S]*WITH ORDINALITY/);
+  assert.doesNotMatch(occurrence, /_pay_timesheet_components\(/);
+  assert.match(occurrence, /segment_occurrence AS/);
+  assert.match(occurrence, /additional_occurrence AS/);
+  assert.match(occurrence, /expense_occurrence AS/);
+  assert.match(occurrence, /adjustment_occurrence AS/);
+  assert.match(occurrence, /evidence_occurrence AS/);
   assert.match(occurrence, /resolution_failure/);
   assert.match(dispatcher, /PAY_WORKBENCH_ECONOMIC_KEY_RESOLUTION_INCOMPLETE/);
   assert.match(dispatcher, /fact_family='FROZEN_SETTLED_COMPONENT'[\s\S]*NOT EXISTS/);
   assert.match(occurrence, /FALLBACK_SEGMENT_NOT_OBJECT/);
   assert.match(occurrence, /FALLBACK_ADJUSTMENT_AMOUNT_INVALID/);
   assert.match(occurrence, /FALLBACK_SNAPSHOT_EXCEEDS_ENVELOPE/);
+  assert.match(occurrence, /FROZEN_FINANCE_OWNER_CONFLICT/);
+  assert.match(occurrence, /FROZEN_FINANCE_CANDIDATE_CONFLICT/);
+  assert.match(dispatcher, /RESERVATION_OWNER_CONFLICT/);
+  assert.match(dispatcher, /RESERVATION_CANDIDATE_CONFLICT/);
+  assert.match(dispatcher, /RESERVATION_TS_DAY_INVALID/);
+  assert.match(occurrence, /pg_input_is_valid/);
 });
 test('D9 bootstrap CLOSED requires zero-difference proof', () => {
   assert.match(dispatcher, /private\.pay_current_timesheet_entitlement_components_from_build_v1\(\s*v_build_id,v_bootstrap_unit_key\)/);
@@ -90,6 +110,8 @@ test('D9 bootstrap CLOSED requires zero-difference proof', () => {
   assert.match(dispatcher, /economic_state=CASE WHEN v_bootstrap_unit_relevant THEN 'DIRTY' ELSE 'CLOSED' END/);
   assert.match(dispatcher, /raw_current_occurrence_count/);
   assert.match(dispatcher, /resolved_baseline_occurrence_count/);
+  assert.match(dispatcher, /banking_pay_workbench_economic_build_fact_pages page/);
+  assert.match(dispatcher, /page\.expected_source_count=\(page\.cursor_end_json->>'raw_physical_source_count'\)::integer/);
   assert.match(dispatcher, /PAY_WORKBENCH_BOOTSTRAP_CLOSED_AUTHORITY_UNPROVED/);
 });
 test('D10 global facts are active and scoped', () => {
@@ -105,8 +127,47 @@ test('D11 claim and recovery use bounded progressive deferral', () => {
   assert.match(claim, /LIMIT v_scan_limit/);
   assert.match(claim, /claim_scan_deferral_count/);
   assert.match(claim, /recovery_scan_deferral_count/);
+  assert.match(claim, /claim_scan_generation/);
+  assert.match(claim, /recovery_scan_generation/);
+  assert.match(claim, /ORDER BY scan_generation,is_chain_continuation DESC/);
+  assert.match(claim, /ORDER BY scan_generation,attempt\.lease_expires_at_utc/);
   assert.match(claim, /LEAST\(300,5\*power\(2/);
-  assert.match(claim, /-'claim_scan_deferred_reason'-'claim_scan_deferral_count'/);
+  assert.match(claim, /-'claim_scan_deferred_reason'-'claim_scan_deferral_count'-'claim_scan_generation'/);
+});
+
+test('V1.2.7 parent-child page boundaries retain every physical occurrence', () => {
+  for (const occurrenceCount of [24, 25, 26, 49, 50, 51, 75, 76, 100, 101]) {
+    const sourceKeys = Array.from({ length: occurrenceCount }, (_, index) =>
+      `20:projected:item-${String(Math.floor(index / 3)).padStart(4, '0')}:${String((index % 3) + 1).padStart(8, '0')}`);
+    const accepted = [];
+    let cursor = null;
+    while (true) {
+      const lookahead = sourceKeys.filter(key => cursor === null || key > cursor).slice(0, 26);
+      accepted.push(...lookahead.slice(0, 25));
+      if (lookahead.length <= 25) break;
+      cursor = lookahead[24];
+    }
+    assert.deepEqual(accepted, sourceKeys, `physical occurrence loss at count ${occurrenceCount}`);
+  }
+});
+
+test('V1.2.7 durable scan generations reach an eligible row beyond blocked prefixes', () => {
+  for (const blockedCount of [50, 100]) {
+    const jobs = Array.from({ length: blockedCount + 1 }, (_, index) => ({
+      id: index + 1,
+      blocked: index < blockedCount,
+      generation: 0,
+    }));
+    let claimed = null;
+    for (let call = 0; call < 5 && claimed === null; call += 1) {
+      const page = [...jobs].sort((a, b) => a.generation - b.generation || a.id - b.id).slice(0, 50);
+      for (const job of page) {
+        if (job.blocked) job.generation += 1;
+        else { claimed = job.id; break; }
+      }
+    }
+    assert.equal(claimed, blockedCount + 1);
+  }
 });
 test('D12 cleanup has a finite terminal state', () => {
   for (const phase of ['CANONICAL_STAGE', 'FACT_PAGES', 'FACTS', 'SCOPE', 'ATTEMPTS', 'HEADER_FINALISE', 'COMPLETE']) assert.match(dispatcher, new RegExp(`'${phase}'`));
