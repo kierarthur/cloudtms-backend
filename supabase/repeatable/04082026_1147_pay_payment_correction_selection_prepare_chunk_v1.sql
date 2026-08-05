@@ -58,6 +58,7 @@ DECLARE
     v_candidate_scope_hash text;
     v_shared_instruction_scope_hash text;
     v_eligibility_code text;
+    v_effective_display_state text;
     v_action_allowed boolean;
     v_max_candidates integer;
     v_max_active_items integer;
@@ -542,7 +543,15 @@ BEGIN
                candidate_row.candidate_id,
                candidate_row.candidate_display_name,
                candidate_row.net_bank_amount,
-               candidate_row.settlement_status
+               candidate_row.settlement_status,
+               (
+                 SELECT work_row.status
+                 FROM public.pay_payment_correction_work_items AS work_row
+                 WHERE work_row.pay_batch_id = v_batch.id
+                   AND work_row.pay_batch_candidate_id = candidate_row.id
+                 ORDER BY work_row.created_at_utc DESC, work_row.id DESC
+                 LIMIT 1
+               ) AS latest_work_status
         FROM public.pay_batch_candidates AS candidate_row
         WHERE candidate_row.pay_batch_id = v_batch.id
           AND candidate_row.id::text IN (
@@ -766,6 +775,8 @@ BEGIN
         v_diagnostic := public.pay_payment_cancelability_diagnostic(
             v_batch.id,
             pg_catalog.jsonb_build_object(
+                'scope_type',
+                'CANDIDATES',
                 'pay_batch_candidate_ids',
                 pg_catalog.jsonb_build_array(v_candidate.pay_batch_candidate_id),
                 'requested_action',
@@ -797,6 +808,18 @@ BEGIN
                     false
                 )
             ELSE false
+        END;
+
+        -- Current Payment Status and immutable preparation must interpret the
+        -- reviewed status filter identically.  Provider/settlement states that
+        -- are not actionable have already made v_action_allowed false.  For the
+        -- remaining page-local candidate, preserve the Current Payment Status
+        -- precedence for prior correction outcomes before no-money eligibility.
+        v_effective_display_state := CASE
+            WHEN v_candidate.latest_work_status = 'BLOCKED' THEN 'BLOCKED'
+            WHEN v_candidate.latest_work_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE') THEN 'FAILED'
+            WHEN COALESCE((v_diagnostic ->> 'can_release_after_terminal_no_money')::boolean, false) THEN 'NOT_PAID'
+            ELSE 'ACTIVE'
         END;
 
         IF v_action_allowed IS NOT TRUE AND v_mode = 'EXPLICIT' THEN
@@ -919,11 +942,11 @@ BEGIN
                    AND pg_catalog.upper(COALESCE(channel_item.pay_channel, '')) = 'PAYE'
                )
              )
-             OR (
-               NULLIF(pg_catalog.upper(pg_catalog.btrim(v_filter->>'status')), '') IS NOT NULL
-               AND pg_catalog.upper(pg_catalog.btrim(v_filter->>'status'))
-                   NOT IN (v_eligibility_code, 'ACTIVE', 'NOT_PAID')
-             )
+              OR (
+                NULLIF(pg_catalog.upper(pg_catalog.btrim(v_filter->>'status')), '') IS NOT NULL
+                AND pg_catalog.upper(pg_catalog.btrim(v_filter->>'status'))
+                    IS DISTINCT FROM v_effective_display_state
+              )
            ) THEN
             v_unselected_chain_hash := private.pay_payment_correction_sha256_v1(
               pg_catalog.jsonb_build_object('prior', v_unselected_chain_hash,

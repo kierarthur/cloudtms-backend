@@ -49324,51 +49324,197 @@ async function enqueueBankingPayEventResultContinuations(env, result, source) {
 }
 
 function normalizeBankingPayCorrectionSelection(body, requestedAction) {
-  const source = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
-  const supplied = source.selection_json || source.selectionJson || source.selection || {};
-  if (!isBankingPayCorrectionPlainObject(supplied)) {
-    throw Object.assign(new Error('The payment selection is invalid.'), { code: 'PAYMENT_CORRECTION_SELECTION_INVALID' });
+  const fail = (message, code = 'PAYMENT_CORRECTION_SELECTION_INVALID') => {
+    throw Object.assign(new Error(message), { code });
+  };
+  const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+  const canonicalEqual = (left, right) => stableBankingPayContinuationJson(left) === stableBankingPayContinuationJson(right);
+  const canonicalText = (value, fieldName, options = {}) => {
+    if (typeof value !== 'string') fail(`${fieldName} is invalid.`);
+    const text = value.trim();
+    if (!text && options.required === true) fail(`${fieldName} is required.`);
+    return options.upper === true ? text.toUpperCase() : text;
+  };
+  const resolveAuthority = (authorities, fieldName, canonicalise, defaultValue) => {
+    let found = false;
+    let resolved;
+    for (const authority of authorities) {
+      if (!authority || authority.present !== true) continue;
+      const canonical = canonicalise(authority.value);
+      if (found && !canonicalEqual(resolved, canonical)) {
+        fail(`Conflicting ${fieldName} values were supplied.`, 'PAYMENT_CORRECTION_SELECTION_ALIAS_CONFLICT');
+      }
+      if (!found) resolved = canonical;
+      found = true;
+    }
+    return { present: found, value: found ? resolved : defaultValue };
+  };
+  const present = (object, key) => ({ present: hasOwn(object, key), value: object[key] });
+
+  if (!isBankingPayCorrectionPlainObject(body)) {
+    fail('The payment selection request must be a JSON object.');
   }
-  const selection = supplied;
-  const tokens = source.explicit_candidate_tokens || source.explicitCandidateTokens || source.pay_batch_candidate_ids || source.payBatchCandidateIds || selection.explicit_candidate_tokens || selection.explicitCandidateTokens;
-  const mode = String(source.mode || selection.mode || (Array.isArray(tokens) ? 'EXPLICIT' : 'ALL_MATCHING')).trim().toUpperCase();
+  const source = body;
+  const outerAllowed = new Set([
+    'selection_json', 'selectionJson', 'selection',
+    'command', 'context', 'contract_version',
+    'mode', 'requested_action', 'requestedAction',
+    'snapshot_token', 'snapshotToken',
+    'filter_json', 'filterJson',
+    'sort_key', 'sortKey', 'sort_direction', 'sortDirection',
+    'explicit_candidate_tokens', 'explicitCandidateTokens', 'pay_batch_candidate_ids', 'payBatchCandidateIds',
+    'exclusions', 'idempotency_key', 'idempotencyKey',
+    'reason', 'note',
+    'reauth_token', 'reauthToken', 'reauth_proof_token', 'reauthProofToken'
+  ]);
+  for (const key of Object.keys(source)) {
+    if (!outerAllowed.has(key)) fail('The payment selection contains an unsupported field.');
+  }
+
+  const suppliedSelection = resolveAuthority([
+    present(source, 'selection_json'),
+    present(source, 'selectionJson'),
+    present(source, 'selection')
+  ], 'selection', (value) => {
+    if (!isBankingPayCorrectionPlainObject(value)) fail('The payment selection is invalid.');
+    return value;
+  }, {});
+  const selection = suppliedSelection.value;
+  const nestedAllowed = new Set([
+    'command', 'context', 'contract_version',
+    'mode', 'requested_action', 'requestedAction',
+    'snapshot_token', 'snapshotToken',
+    'filter_json', 'filterJson',
+    'sort_key', 'sortKey', 'sort_direction', 'sortDirection',
+    'explicit_candidate_tokens', 'explicitCandidateTokens', 'pay_batch_candidate_ids', 'payBatchCandidateIds',
+    'exclusions', 'idempotency_key', 'idempotencyKey'
+  ]);
+  for (const key of Object.keys(selection)) {
+    if (!nestedAllowed.has(key)) fail('The nested payment selection contains an unsupported field.');
+  }
+
+  const commandAuthority = resolveAuthority([
+    present(source, 'command'), present(selection, 'command')
+  ], 'selection command', (value) => canonicalText(value, 'selection command', { upper: true }), 'PREPARE');
+  if (commandAuthority.value !== 'PREPARE') fail('The payment selection command is invalid.');
+  const contextAuthority = resolveAuthority([
+    present(source, 'context'), present(selection, 'context')
+  ], 'selection context', (value) => canonicalText(value, 'selection context', { upper: true }), 'CURRENT_PAYMENT_STATUS');
+  if (contextAuthority.value !== 'CURRENT_PAYMENT_STATUS') fail('The payment selection context is invalid.');
+  const contractAuthority = resolveAuthority([
+    present(source, 'contract_version'), present(selection, 'contract_version')
+  ], 'selection contract version', (value) => {
+    if (!Number.isSafeInteger(value) || value !== 1) fail('The payment selection contract version is invalid.');
+    return value;
+  }, 1);
+
+  const tokenAuthority = resolveAuthority([
+    present(source, 'explicit_candidate_tokens'),
+    present(source, 'explicitCandidateTokens'),
+    present(source, 'pay_batch_candidate_ids'),
+    present(source, 'payBatchCandidateIds'),
+    present(selection, 'explicit_candidate_tokens'),
+    present(selection, 'explicitCandidateTokens'),
+    present(selection, 'pay_batch_candidate_ids'),
+    present(selection, 'payBatchCandidateIds')
+  ], 'explicit candidate tokens', (value) => bankingPayCorrectionCanonicalUuidArray(value, 'explicit_candidate_tokens', 10000).sort(), []);
+  const modeAuthority = resolveAuthority([
+    present(source, 'mode'), present(selection, 'mode')
+  ], 'selection mode', (value) => canonicalText(value, 'selection mode', { upper: true }), tokenAuthority.present ? 'EXPLICIT' : 'ALL_MATCHING');
+  const mode = modeAuthority.value;
   if (!['EXPLICIT', 'ALL_MATCHING'].includes(mode)) {
-    throw Object.assign(new Error('The payment selection mode is invalid.'), { code: 'PAYMENT_CORRECTION_SELECTION_INVALID' });
+    fail('The payment selection mode is invalid.');
   }
-  const action = String(requestedAction || source.requested_action || source.requestedAction || selection.requested_action || '').trim().toUpperCase();
+  if (mode === 'ALL_MATCHING' && tokenAuthority.present) {
+    fail('All-matching payment selection cannot include explicit candidate tokens.', 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
+  }
+
+  const canonicalAction = (value) => {
+    const action = canonicalText(value, 'requested action', { upper: true });
+    return action === 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' ? 'PRE_BANK_CANCEL' : action;
+  };
+  const actionAuthority = resolveAuthority([
+    { present: requestedAction !== undefined && requestedAction !== null && String(requestedAction).trim() !== '', value: requestedAction },
+    present(source, 'requested_action'),
+    present(source, 'requestedAction'),
+    present(selection, 'requested_action'),
+    present(selection, 'requestedAction')
+  ], 'requested action', canonicalAction, '');
+  const action = actionAuthority.value;
   if (!['DRAFT_CANCEL', 'PRE_BANK_CANCEL', 'CANCEL_PAYMENT', 'NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'].includes(action)) {
-    throw Object.assign(new Error('The cancellation action is invalid.'), { code: 'REQUESTED_ACTION_INVALID' });
+    fail('The cancellation action is invalid.', 'REQUESTED_ACTION_INVALID');
   }
-  const snapshotToken = bankingPayCorrectionBoundedText(source.snapshot_token || source.snapshotToken || selection.snapshot_token, 512, 'snapshot_token', { required: true });
-  const rawFilterJson = source.filter_json || source.filterJson || selection.filter_json || {};
-  const sortKey = String(source.sort_key || source.sortKey || selection.sort_key || 'STATUS').trim().toUpperCase();
-  const sortDirection = String(source.sort_direction || source.sortDirection || selection.sort_direction || 'ASC').trim().toUpperCase();
+
+  const snapshotAuthority = resolveAuthority([
+    present(source, 'snapshot_token'), present(source, 'snapshotToken'),
+    present(selection, 'snapshot_token'), present(selection, 'snapshotToken')
+  ], 'snapshot token', (value) => {
+    if (typeof value !== 'string') fail('The payment selection snapshot token is invalid.');
+    return bankingPayCorrectionBoundedText(value, 512, 'snapshot_token', { required: true });
+  }, null);
+  if (!snapshotAuthority.present) fail('The payment selection snapshot token is required.');
+  const snapshotToken = snapshotAuthority.value;
+
+  const filterAuthority = resolveAuthority([
+    present(source, 'filter_json'), present(source, 'filterJson'),
+    present(selection, 'filter_json'), present(selection, 'filterJson')
+  ], 'payment-status filter', (value) => {
+    if (!isBankingPayCorrectionPlainObject(value)) {
+      throw Object.assign(new Error('The payment-status filter is invalid.'), { code: 'FILTER_INVALID' });
+    }
+    return validateBankingPayPaymentStatusFilter(value);
+  }, {});
+  const rawFilterJson = filterAuthority.value;
+
+  const sortKeyAuthority = resolveAuthority([
+    present(source, 'sort_key'), present(source, 'sortKey'),
+    present(selection, 'sort_key'), present(selection, 'sortKey')
+  ], 'selection sort key', (value) => canonicalText(value, 'selection sort key', { upper: true }), 'STATUS');
+  const sortDirectionAuthority = resolveAuthority([
+    present(source, 'sort_direction'), present(source, 'sortDirection'),
+    present(selection, 'sort_direction'), present(selection, 'sortDirection')
+  ], 'selection sort direction', (value) => canonicalText(value, 'selection sort direction', { upper: true }), 'ASC');
+  const sortKey = sortKeyAuthority.value;
+  const sortDirection = sortDirectionAuthority.value;
   if (!['STATUS', 'CANDIDATE', 'AMOUNT'].includes(sortKey) || !['ASC', 'DESC'].includes(sortDirection)) {
-    throw Object.assign(new Error('The payment selection sort is invalid.'), { code: 'SORT_INVALID' });
+    fail('The payment selection sort is invalid.', 'SORT_INVALID');
   }
   const explicitTokens = mode === 'EXPLICIT'
-    ? bankingPayCorrectionCanonicalUuidArray(tokens, 'explicit_candidate_tokens', 10000, { required: true })
+    ? bankingPayCorrectionCanonicalUuidArray(tokenAuthority.value, 'explicit_candidate_tokens', 10000, { required: true }).sort()
     : [];
-  if (mode === 'ALL_MATCHING' && Array.isArray(tokens) && tokens.length > 0) {
-    throw Object.assign(new Error('All-matching payment selection cannot include explicit candidate tokens.'), { code: 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT' });
+
+  const exclusionsAuthority = resolveAuthority([
+    present(source, 'exclusions'), present(selection, 'exclusions')
+  ], 'selection exclusions', (value) => bankingPayCorrectionCanonicalUuidArray(value, 'exclusions', 10000).sort(), []);
+  if (mode === 'EXPLICIT' && exclusionsAuthority.present) {
+    fail('Explicit payment selection cannot include exclusions.', 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
   }
-  const exclusionsSource = source.exclusions || selection.exclusions || [];
-  const topLevelExclusions = bankingPayCorrectionCanonicalUuidArray(exclusionsSource, 'exclusions', 10000);
+  const topLevelExclusions = exclusionsAuthority.value;
   const canonicalScope = canonicaliseBankingPayCorrectionSelectionFilter(rawFilterJson, mode, action, topLevelExclusions);
   const filterJson = canonicalScope.filter_json;
   const exclusions = canonicalScope.exclusions;
-  const idempotencyKey = bankingPayCorrectionBoundedText(source.idempotency_key || source.idempotencyKey || selection.idempotency_key, 200, 'idempotency_key', { required: true });
+
+  const idempotencyAuthority = resolveAuthority([
+    present(source, 'idempotency_key'), present(source, 'idempotencyKey'),
+    present(selection, 'idempotency_key'), present(selection, 'idempotencyKey')
+  ], 'idempotency key', (value) => {
+    if (typeof value !== 'string') fail('The payment selection idempotency key is invalid.');
+    return bankingPayCorrectionBoundedText(value, 200, 'idempotency_key', { required: true });
+  }, null);
+  if (!idempotencyAuthority.present) fail('The payment selection idempotency key is required.');
+  const idempotencyKey = idempotencyAuthority.value;
+
   return {
-    command: 'PREPARE',
-    context: 'CURRENT_PAYMENT_STATUS',
-    contract_version: 1,
+    command: commandAuthority.value,
+    context: contextAuthority.value,
+    contract_version: contractAuthority.value,
     mode,
     requested_action: action,
     snapshot_token: snapshotToken,
     filter_json: filterJson,
     sort_key: sortKey,
     sort_direction: sortDirection,
-    explicit_candidate_tokens: explicitTokens.sort(),
+    explicit_candidate_tokens: explicitTokens,
     exclusions,
     idempotency_key: idempotencyKey
   };

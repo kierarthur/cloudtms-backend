@@ -60,6 +60,17 @@ test('selection replay uses exact cursor sequence, prior digest and scope fence'
   assert.doesNotMatch(selection, /MAX\(existing_member\.selection_ordinal\)/i);
 });
 
+test('selection preparation uses exact candidate diagnostics and Current Payment Status precedence', () => {
+  assert.match(selection, /pay_payment_cancelability_diagnostic\([\s\S]*?'scope_type',[\s\S]*?'CANDIDATES'/);
+  assert.match(selection, /AS latest_work_status/);
+  assert.match(selection, /latest_work_status = 'BLOCKED'[\s\S]*?THEN 'BLOCKED'/);
+  assert.match(selection, /latest_work_status IN \('FAILED_FINAL', 'FAILED_RETRYABLE'\)[\s\S]*?THEN 'FAILED'/);
+  assert.match(selection, /can_release_after_terminal_no_money'[\s\S]*?THEN 'NOT_PAID'/);
+  assert.match(selection, /IS DISTINCT FROM v_effective_display_state/);
+  assert.doesNotMatch(selection, /NOT IN \(v_eligibility_code, 'ACTIVE', 'NOT_PAID'\)/);
+  assert.doesNotMatch(selection, /pay_batch_payment_status_page_v1\s*\(/);
+});
+
 test('automatic no-money start occurs only after exact lease validation', () => {
   const lease = processChunk.indexOf("COALESCE(v_operation.lease_owner, v_operation.locked_by) IS NULL");
   const autoStart = processChunk.indexOf('v_auto_start_result := public.pay_payment_correction_request_start');

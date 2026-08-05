@@ -71,7 +71,7 @@ test('planning is bounded and freezes exact selection without accepting a proof'
   assert.match(body, /maxBytes: 524288/);
   assert.match(body, /PAYMENT_CORRECTION_PROOF_NOT_ACCEPTED_AT_PLANNING/);
   assert.match(normalise, /10000/);
-  assert.match(normalise, /context: 'CURRENT_PAYMENT_STATUS'/);
+  assert.match(normalise, /CURRENT_PAYMENT_STATUS/);
   assert.match(normalise, /snapshot_token/);
   assert.match(normalise, /idempotency_key/);
   assert.equal((body.match(/sbRpc\(/g) || []).length, 1);
@@ -203,6 +203,85 @@ test('selection canonicalisation rejects conflicting membership semantics before
   const canonicalExplicit = context.normalizeSelection({ ...base, mode: 'EXPLICIT', explicit_candidate_tokens: [candidateB, candidateA] }, 'PRE_BANK_CANCEL');
   assert.deepEqual(Array.from(canonicalExplicit.explicit_candidate_tokens), [candidateA, candidateB]);
   assert.equal(JSON.stringify(canonicalExplicit.filter_json), '{}');
+});
+
+test('selection canonicalisation fails closed for falsy, unknown and conflicting authorities', () => {
+  const constantsStart = worker.indexOf('const BANKING_PAY_CORRECTION_UUID_RE');
+  const constantsEnd = worker.indexOf('\nasync function parseBankingPayCancellationJsonBody', constantsStart);
+  const source = [
+    functionBody('stableBankingPayContinuationJson'),
+    worker.slice(constantsStart, constantsEnd),
+    functionBody('bankingPayCorrectionCanonicalUuidArray'),
+    functionBody('validateBankingPayPaymentStatusFilter'),
+    functionBody('canonicaliseBankingPayCorrectionSelectionFilter'),
+    functionBody('normalizeBankingPayCorrectionSelection'),
+    'this.normalizeSelection = normalizeBankingPayCorrectionSelection;'
+  ].join('\n');
+  const context = { TextEncoder, Set, Object, Array, String, Number, Error, JSON };
+  vm.runInNewContext(source, context);
+  const candidateA = '11111111-1111-4111-8111-111111111111';
+  const base = { mode: 'ALL_MATCHING', snapshot_token: 'snapshot', idempotency_key: 'request-key' };
+
+  for (const filter_json of [null, false, 0, undefined]) {
+    assert.throws(() => context.normalizeSelection({ ...base, filter_json }, 'PRE_BANK_CANCEL'));
+  }
+  for (const selection_json of [null, false, 0, undefined]) {
+    assert.throws(() => context.normalizeSelection({ ...base, selection_json }, 'PRE_BANK_CANCEL'));
+  }
+  for (const exclusions of [null, false, 0, undefined]) {
+    assert.throws(() => context.normalizeSelection({ ...base, exclusions }, 'PRE_BANK_CANCEL'));
+  }
+
+  assert.throws(() => context.normalizeSelection({ ...base, unsupported: true }, 'PRE_BANK_CANCEL'));
+  assert.throws(() => context.normalizeSelection({ ...base, selection_json: { unsupported: true } }, 'PRE_BANK_CANCEL'));
+  assert.throws(() => context.normalizeSelection({ ...base, included_candidate_tokens: [candidateA] }, 'PRE_BANK_CANCEL'));
+  assert.throws(() => context.normalizeSelection({ ...base, filter_json: { search: 'A' }, selection_json: { filter_json: { search: 'B' } } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_ALIAS_CONFLICT');
+  assert.throws(() => context.normalizeSelection({ ...base, exclusions: [candidateA], selection_json: { exclusions: [] } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_ALIAS_CONFLICT');
+
+  const equalAliases = context.normalizeSelection({
+    ...base,
+    filter_json: { search: ' Example ' },
+    selection_json: { filterJson: { search: 'Example' } },
+    exclusions: [candidateA]
+  }, 'PRE_BANK_CANCEL');
+  assert.equal(equalAliases.filter_json.search, 'Example');
+  assert.deepEqual(Array.from(equalAliases.exclusions), [candidateA]);
+});
+
+test('invalid selection descriptors are rejected before the planning RPC', async () => {
+  let rpcCalls = 0;
+  const normalizerStart = worker.indexOf('const BANKING_PAY_CORRECTION_UUID_RE');
+  const normalizerEnd = worker.indexOf('\nasync function parseBankingPayCancellationJsonBody', normalizerStart);
+  const normalizerContext = { TextEncoder, Set, Object, Array, String, Number, Error, JSON };
+  vm.runInNewContext([
+    functionBody('stableBankingPayContinuationJson'),
+    worker.slice(normalizerStart, normalizerEnd),
+    functionBody('bankingPayCorrectionCanonicalUuidArray'),
+    functionBody('validateBankingPayPaymentStatusFilter'),
+    functionBody('canonicaliseBankingPayCorrectionSelectionFilter'),
+    functionBody('normalizeBankingPayCorrectionSelection'),
+    'this.normalizeSelection = normalizeBankingPayCorrectionSelection;'
+  ].join('\n'), normalizerContext);
+
+  const handlerContext = {
+    String,
+    requireBankingPayCancellationActor: async () => ({ ok: true, actorUserId: '11111111-1111-4111-8111-111111111111' }),
+    bankingPayCorrectionUuid: () => true,
+    parseBankingPayCancellationJsonBody: async () => ({
+      requested_action: 'PRE_BANK_CANCEL',
+      snapshot_token: 'snapshot',
+      idempotency_key: 'request-key',
+      filter_json: false
+    }),
+    normalizeBankingPayCorrectionSelection: normalizerContext.normalizeSelection,
+    bankingPayCorrectionBoundedText: () => 'reason',
+    bankingPayCorrectionBodyErrorResponse: (_env, _req, error) => ({ status: 400, code: error.code }),
+    sbRpc: async () => { rpcCalls += 1; return {}; }
+  };
+  vm.runInNewContext(`${functionBody('handleBankingPayCorrectionPlanV1')}\nthis.handle = handleBankingPayCorrectionPlanV1;`, handlerContext);
+  const result = await handlerContext.handle({}, {}, {}, '22222222-2222-4222-8222-222222222222');
+  assert.equal(result.status, 400);
+  assert.equal(rpcCalls, 0);
 });
 
 test('post-commit enqueue failure preserves accepted cancellation and event results', async () => {
