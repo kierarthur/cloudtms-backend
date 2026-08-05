@@ -171,7 +171,7 @@
       "schema": "public",
       "name": "pay_bank_event_ingest",
       "identity_arguments": "p_event_json jsonb, p_actor_user_id uuid, p_ingest_options_json jsonb",
-      "definition_sha256": "5e6f9909f06f65997b4e7d5f1c413a0041aeb91cab793e62ed29bba5497c509f",
+      "definition_sha256": "1ac10957b9fb80527f7c0f3386c912f4bcac0c5d1a3fc9adea355cb10c21bf98",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "8a2a0a56b3830822fe64d9042dbaba7eff50c2fc064017f347462488be41fb22",
+      "definition_sha256": "e84906486a6a68f42cafc8488021930bfcb3767868e8f730e329fe45f8f5cd7f",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -648,7 +648,7 @@
       "schema": "public",
       "name": "pay_payment_correction_process_chunk",
       "identity_arguments": "p_correction_request_id uuid, p_limit integer, p_worker_id text, p_actor_user_id uuid",
-      "definition_sha256": "b95e3a8bfb977145a439e0a77bcfb24088ddd555de9d4b49b046bd2f258f14d7",
+      "definition_sha256": "557c801beeb0109a3183aba902a3ea4012329fab27b55bf7e6f3232f91d83816",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -708,7 +708,7 @@
       "schema": "public",
       "name": "pay_payment_correction_request_start",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_reason text, p_actor_user_id uuid, p_source_bank_event_id uuid, p_auto_requested boolean, p_accepted_resolution_json jsonb",
-      "definition_sha256": "26c763ab437e39e55438b28245b8e9dd0c866fbe37f1dafed78bee32f2aa9aa3",
+      "definition_sha256": "245d86134dd9f5fea003bb74eb88e760e6305f85cae792ab5053403d0093887a",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
