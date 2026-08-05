@@ -1,6 +1,7 @@
--- Banking Pay bounded-scope Version 1.2.10.
+-- Banking Pay bounded-scope Version 1.2.11.
 -- Exact replacement of the installed canonical builder. Protected authority state
--- is complete before zero-net/indefinite-snooze public-line suppression.
+-- is complete before zero-net/indefinite-snooze public-line suppression, while
+-- public timesheet counts and totals derive from the emitted public rows.
 
 CREATE OR REPLACE FUNCTION public.pay_preview_candidate_build_canonical_lines(p_context_json jsonb, p_candidate_id uuid)
  RETURNS jsonb
@@ -2550,20 +2551,43 @@ begin
   ;
 
   create temporary table candidate_preview_timesheet_rollup on commit drop as
+        with emitted_public_timesheets as (
+          select
+            tcpl.candidate_id,
+            (tcpl.line_json->>'real_business_timesheet_id')::uuid as timesheet_id,
+            bool_or(
+              upper(coalesce(tcpl.line_json->>'presentation_section','')) = 'READY_TO_PAY'
+              and coalesce(nullif(tcpl.line_json->>'draftable','')::boolean, false) = true
+            ) as has_ready_public_line,
+            bool_or(
+              upper(coalesce(tcpl.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY'
+            ) as has_blocked_public_line,
+            round(
+              coalesce(sum(tcpl.amount_ex_vat) filter (
+                where upper(coalesce(tcpl.line_json->>'presentation_section','')) = 'READY_TO_PAY'
+                  and coalesce(nullif(tcpl.line_json->>'draftable','')::boolean, false) = true
+              ), 0),
+              2
+            ) as ready_public_amount_ex_vat
+          from timesheet_canonical_preview_lines tcpl
+          where upper(coalesce(tcpl.line_json->>'line_type','')) = 'TIMESHEET_PAYMENT'
+            and nullif(btrim(coalesce(tcpl.line_json->>'real_business_timesheet_id','')), '') is not null
+            and upper(coalesce(tcpl.line_json->>'presentation_section','')) in ('READY_TO_PAY','BLOCKED_FOR_PAY')
+          group by
+            tcpl.candidate_id,
+            (tcpl.line_json->>'real_business_timesheet_id')::uuid
+        )
         select
           ctpp.candidate_id,
           round(
-            coalesce(sum(case when ctpp.has_active_timesheet_snooze = false and ctpp.case_is_blocked = false and ctpp.has_ready_presentation = true and ctpp.is_ready_for_draft = true then ctpp.ready_section_amount_ex_vat else 0 end), 0),
+            coalesce(sum(ept.ready_public_amount_ex_vat), 0),
             2
           ) as ready_timesheet_total_ex_vat,
           count(*) filter (
-            where ctpp.has_blocked_presentation = true
+            where coalesce(ept.has_blocked_public_line, false) = true
           )::int as blocked_timesheet_preview_count,
           count(*) filter (
-            where ctpp.has_active_timesheet_snooze = false
-              and ctpp.case_is_blocked = false
-              and ctpp.has_ready_presentation = true
-              and ctpp.is_ready_for_draft = true
+            where coalesce(ept.has_ready_public_line, false) = true
           )::int as ready_timesheet_preview_count,
           coalesce(
             jsonb_agg(
@@ -2572,7 +2596,7 @@ begin
                 'week_ending_date', case when ctpp.week_ending_date is null then null else ctpp.week_ending_date::text end,
                 'client_id', case when ctpp.client_id is null then null else ctpp.client_id::text end,
                 'client_name', ctpp.client_name,
-                'payment_amount_ex_vat', ctpp.ready_section_amount_ex_vat,
+                'payment_amount_ex_vat', ept.ready_public_amount_ex_vat,
                 'payment_amount_inc_vat', ctpp.ready_section_amount_display,
                 'payment_amount', ctpp.ready_section_amount_display,
                 'source_pay_method', ctpp.source_pay_method,
@@ -2677,10 +2701,13 @@ begin
                 'is_partially_blocked', ctpp.is_partially_blocked
               )
               order by ctpp.week_ending_date, ctpp.client_name, ctpp.timesheet_id
-            ) filter (where ctpp.has_active_timesheet_snooze = false and ctpp.case_is_blocked = false and ctpp.has_ready_presentation = true and ctpp.is_ready_for_draft = true and round(coalesce(ctpp.ready_section_amount_ex_vat,0),2) <> 0),
+            ) filter (where coalesce(ept.has_ready_public_line, false) = true),
             '[]'::jsonb
           ) as ready_timesheets_itemisation
         from canonical_timesheet_presentation_state ctpp
+        left join emitted_public_timesheets ept
+          on ept.candidate_id = ctpp.candidate_id
+         and ept.timesheet_id = ctpp.timesheet_id
         left join timesheet_case_rollup_effective tcr
           on tcr.timesheet_id = ctpp.timesheet_id
          and tcr.candidate_id = ctpp.candidate_id

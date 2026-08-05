@@ -1,7 +1,8 @@
--- Banking Pay bounded-scope Version 1.2.10.
+-- Banking Pay bounded-scope Version 1.2.11.
 -- Resolve mutable and every independently supplied frozen assertion without
--- COALESCE precedence.  Empty/partial reservation documents cannot mask linked
--- batch-item authority.  Policy X remains frozen post-draft authority.
+-- COALESCE precedence, including aliases inside the same document.  Empty or
+-- partial reservation documents cannot mask linked batch-item authority.
+-- Policy X remains frozen post-draft authority.
 
 CREATE OR REPLACE FUNCTION private.pay_workbench_financial_source_authority_v3(
   p_expected_candidate_id uuid,
@@ -182,35 +183,39 @@ BEGIN
     SELECT entry.value->'document' AS body
     FROM jsonb_array_elements(v_basis_documents||v_snapshot_documents) entry(value)
   ), supplied_assertion AS (
-    SELECT NULLIF(UPPER(BTRIM(COALESCE(assertion.value->>'key_type',
-        assertion.value->>'component_key_type',''))),'') AS key_type,
-      NULLIF(BTRIM(COALESCE(assertion.value->>'key_value',
-        assertion.value->>'component_key_value','')),'') AS key_value
+    SELECT NULLIF(UPPER(BTRIM(COALESCE(value.key_type,''))),'') AS key_type,
+      NULLIF(BTRIM(COALESCE(value.key_value,'')),'') AS key_value
     FROM jsonb_array_elements(v_key_assertions) assertion(value)
+    CROSS JOIN LATERAL (VALUES
+      (assertion.value->>'component_key_type',
+       assertion.value->>'component_key_value'),
+      (assertion.value->>'key_type',assertion.value->>'key_value')
+    ) value(key_type,key_value)
     WHERE jsonb_typeof(assertion.value)='object'
   ), frozen_assertion AS (
     SELECT NULLIF(UPPER(BTRIM(COALESCE(value.key_type,''))),'') AS key_type,
       NULLIF(BTRIM(COALESCE(value.key_value,'')),'') AS key_value
     FROM document
     CROSS JOIN LATERAL (VALUES
-      (COALESCE(document.body->>'component_key_type',document.body->>'key_type'),
-       COALESCE(document.body->>'component_key_value',document.body->>'key_value')),
-      (COALESCE(document.body#>>'{economic_key,component_key_type}',
-          document.body#>>'{economic_key,key_type}'),
-       COALESCE(document.body#>>'{economic_key,component_key_value}',
-          document.body#>>'{economic_key,key_value}')),
-      (COALESCE(document.body#>>'{source_basis_json,component_key_type}',
-          document.body#>>'{source_basis_json,key_type}'),
-       COALESCE(document.body#>>'{source_basis_json,component_key_value}',
-          document.body#>>'{source_basis_json,key_value}')),
-      (COALESCE(document.body#>>'{source_basis_json,economic_key,component_key_type}',
-          document.body#>>'{source_basis_json,economic_key,key_type}'),
-       COALESCE(document.body#>>'{source_basis_json,economic_key,component_key_value}',
-          document.body#>>'{source_basis_json,economic_key,key_value}')),
-      (COALESCE(document.body#>>'{component,component_key_type}',
-          document.body#>>'{component,key_type}'),
-       COALESCE(document.body#>>'{component,component_key_value}',
-          document.body#>>'{component,key_value}'))
+      (document.body->>'component_key_type',
+       document.body->>'component_key_value'),
+      (document.body->>'key_type',document.body->>'key_value'),
+      (document.body#>>'{economic_key,component_key_type}',
+       document.body#>>'{economic_key,component_key_value}'),
+      (document.body#>>'{economic_key,key_type}',
+       document.body#>>'{economic_key,key_value}'),
+      (document.body#>>'{source_basis_json,component_key_type}',
+       document.body#>>'{source_basis_json,component_key_value}'),
+      (document.body#>>'{source_basis_json,key_type}',
+       document.body#>>'{source_basis_json,key_value}'),
+      (document.body#>>'{source_basis_json,economic_key,component_key_type}',
+       document.body#>>'{source_basis_json,economic_key,component_key_value}'),
+      (document.body#>>'{source_basis_json,economic_key,key_type}',
+       document.body#>>'{source_basis_json,economic_key,key_value}'),
+      (document.body#>>'{component,component_key_type}',
+       document.body#>>'{component,component_key_value}'),
+      (document.body#>>'{component,key_type}',
+       document.body#>>'{component,key_value}')
     ) value(key_type,key_value)
   ), all_assertion AS (
     SELECT * FROM supplied_assertion
