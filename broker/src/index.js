@@ -158607,8 +158607,8 @@ function handleVersion() {
   return new Response(JSON.stringify({
     version: "1.2.0",
     banking_pay_cancellation_stage2: {
-      revision: "5E",
-      implementation_commit: "3f143361"
+      revision: "5F",
+      implementation_commit: "ddb825db"
     },
     banking_pay_bounded_scope_stage2: {
       revision: "1.2.11",
