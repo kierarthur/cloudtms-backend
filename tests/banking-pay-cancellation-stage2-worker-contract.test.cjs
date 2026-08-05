@@ -166,3 +166,110 @@ test('public version route carries the deployed Stage 2 source marker', () => {
   assert.match(body, /revision:\s*"5C"/);
   assert.match(body, /implementation_commit:\s*"55fa9be6"/);
 });
+
+test('selection canonicalisation rejects conflicting membership semantics before planning', () => {
+  const constantsStart = worker.indexOf('const BANKING_PAY_CORRECTION_UUID_RE');
+  const constantsEnd = worker.indexOf('\nasync function parseBankingPayCancellationJsonBody', constantsStart);
+  const source = [
+    functionBody('stableBankingPayContinuationJson'),
+    worker.slice(constantsStart, constantsEnd),
+    functionBody('bankingPayCorrectionCanonicalUuidArray'),
+    functionBody('validateBankingPayPaymentStatusFilter'),
+    functionBody('canonicaliseBankingPayCorrectionSelectionFilter'),
+    functionBody('normalizeBankingPayCorrectionSelection'),
+    'this.normalizeSelection = normalizeBankingPayCorrectionSelection;'
+  ].join('\n');
+  const context = { TextEncoder, Set, Object, Array, String, Number, Error, JSON };
+  vm.runInNewContext(source, context);
+  const candidateA = '11111111-1111-4111-8111-111111111111';
+  const candidateB = '22222222-2222-4222-8222-222222222222';
+  const base = { snapshot_token: 'snapshot', idempotency_key: 'request-key' };
+
+  assert.throws(() => context.normalizeSelection({ ...base, mode: 'ALL_MATCHING', explicit_candidate_tokens: [candidateA] }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
+  assert.throws(() => context.normalizeSelection({ ...base, mode: 'ALL_MATCHING', filter_json: { included_candidate_tokens: [candidateA] } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
+  assert.throws(() => context.normalizeSelection({ ...base, mode: 'EXPLICIT', explicit_candidate_tokens: [candidateA], exclusions: [candidateB] }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
+  assert.throws(() => context.normalizeSelection({ ...base, mode: 'ALL_MATCHING', filter_json: { actionable_only: 'true' } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'FILTER_INVALID');
+  assert.throws(() => context.normalizeSelection({ ...base, mode: 'ALL_MATCHING', filter_json: { action: 'RELEASE_FAILED_PAYMENT', actionable_only: true } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_ACTION_FILTER_MISMATCH');
+
+  const canonicalAll = context.normalizeSelection({
+    ...base,
+    mode: 'ALL_MATCHING',
+    exclusions: [candidateB],
+    filter_json: { action: 'CANCEL_PAYMENT', actionable_only: true, search: '  Example  ', excluded_candidate_tokens: [candidateA] }
+  }, 'PRE_BANK_CANCEL');
+  assert.deepEqual(Array.from(canonicalAll.exclusions), [candidateA, candidateB]);
+  assert.equal(JSON.stringify(canonicalAll.filter_json), JSON.stringify({ action: 'CANCEL_PAYMENT', search: 'Example' }));
+
+  const canonicalExplicit = context.normalizeSelection({ ...base, mode: 'EXPLICIT', explicit_candidate_tokens: [candidateB, candidateA] }, 'PRE_BANK_CANCEL');
+  assert.deepEqual(Array.from(canonicalExplicit.explicit_candidate_tokens), [candidateA, candidateB]);
+  assert.equal(JSON.stringify(canonicalExplicit.filter_json), '{}');
+});
+
+test('post-commit enqueue failure preserves accepted cancellation and event results', async () => {
+  const context = {
+    readBankingPayContinuationFlag: () => true,
+    enqueueBankingPayOperationContinuations: async () => { throw Object.assign(new Error('queue unavailable'), { code: 'QUEUE_UNAVAILABLE' }); }
+  };
+  vm.runInNewContext(`${functionBody('enqueueBankingPayCancellationResult')}\n${functionBody('enqueueBankingPayEventResultContinuations')}\nthis.enqueueCancellation = enqueueBankingPayCancellationResult; this.enqueueEvents = enqueueBankingPayEventResultContinuations;`, context);
+  const descriptor = { required: true, terminal: false, requires_user_action: false, operation_id: '11111111-1111-4111-8111-111111111111' };
+  const cancellation = await context.enqueueCancellation({}, { ok: true, request_id: 'request', continuation: descriptor }, 'PAYMENT_CORRECTION_PLAN');
+  assert.equal(cancellation.ok, false);
+  assert.equal(cancellation.background_start_delayed, true);
+  assert.equal(cancellation.code, 'BANKING_PAY_CONTINUATION_ENQUEUE_DELAYED');
+  const event = await context.enqueueEvents({}, { ok: true, continuations: [descriptor] }, 'PAYMENT_STATUS_EVENT_WAKE');
+  assert.equal(event.ok, false);
+  assert.equal(event.background_start_delayed, true);
+  assert.equal(event.enqueued_count, 0);
+  for (const name of ['handleBankingPayCorrectionPlanV1', 'handleBankingPayCorrectionStartPreparedV1', 'handleBankingPayCorrectionAuthActionV1', 'handleBankingPayBatchCancelV1', 'handleBankingPayPaymentStatusResolveV1', 'handleBankingPayPaidAfterReleaseReviewV1']) {
+    assert.match(functionBody(name), /background_start_delayed/);
+  }
+});
+
+test('requester proof requires a trusted lower-case tenant UUID and binds it to access tokens', async () => {
+  const { webcrypto } = require('node:crypto');
+  const sessionContext = { crypto: webcrypto, TextEncoder, DataView, Uint8Array, Array, String, Number, Math, Object, Error, BANKING_PAY_CORRECTION_UUID_RE: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i };
+  vm.runInNewContext(`${functionBody('bankingPayCorrectionSessionHash')}\nthis.sessionHash = bankingPayCorrectionSessionHash;`, sessionContext);
+  const baseUser = { id: '11111111-1111-4111-8111-111111111111', session_id: 'session-id', session_issued_at_epoch_seconds: 123456 };
+  await assert.rejects(() => sessionContext.sessionHash(null, baseUser), (error) => error?.code === 'REAUTH_SESSION_TENANT_REQUIRED');
+  await assert.rejects(() => sessionContext.sessionHash(null, { ...baseUser, tenant_id: 'NOT-A-UUID' }), (error) => error?.code === 'REAUTH_SESSION_TENANT_REQUIRED');
+  const hashA = await sessionContext.sessionHash(null, { ...baseUser, tenant_id: '22222222-2222-4222-8222-222222222222' });
+  const hashB = await sessionContext.sessionHash(null, { ...baseUser, tenant_id: '33333333-3333-4333-8333-333333333333' });
+  assert.match(hashA, /^[0-9a-f]{64}$/);
+  assert.notEqual(hashA, hashB);
+
+  let signedPayload = null;
+  const tokenContext = {
+    String, Object, Error, Math,
+    accessTtl: () => 900,
+    sessionSecret: () => 'test-secret',
+    createToken: async (_secret, payload) => { signedPayload = payload; return 'signed-token'; }
+  };
+  vm.runInNewContext(`${functionBody('bankingPayCorrectionTenantAuthority')}\n${functionBody('mintAccessToken')}\nthis.mint = mintAccessToken;`, tokenContext);
+  await tokenContext.mint({ BANKING_PAY_CORRECTION_TENANT_ID_V1: '8467e881-9691-4181-a738-f9834922d747' }, { user_id: baseUser.id, email: 'test@example.invalid', role: 'admin', sv: 1, sid: 'session-id' });
+  assert.equal(signedPayload.tenant_id, '8467e881-9691-4181-a738-f9834922d747');
+  const requireUserBody = functionBody('requireUser');
+  assert.match(requireUserBody, /p\.tenant_id/);
+  assert.doesNotMatch(requireUserBody, /request.*tenant|body.*tenant/i);
+});
+
+test('no-progress fuse counts the first stalled delivery and trips exactly on five', () => {
+  const context = { Number, Math, String };
+  vm.runInNewContext(`${functionBody('calculateBankingPayContinuationNoProgress')}\nthis.calculate = calculateBankingPayContinuationNoProgress;`, context);
+  let count = 0;
+  for (let delivery = 1; delivery <= 5; delivery += 1) {
+    const result = context.calculate({ previous_count: count, pre_witness: 'same', post_witness: 'same', immediate_more_work: true, legitimate_future_wait: false });
+    count = result.count;
+    assert.equal(count, delivery);
+    assert.equal(result.current_delivery_no_progress, true);
+  }
+  assert.equal(count, 5);
+  assert.equal(context.calculate({ previous_count: 4, pre_witness: 'before', post_witness: 'after', immediate_more_work: true }).count, 0);
+  assert.equal(context.calculate({ previous_count: 3, pre_witness: 'before', post_witness: 'after', immediate_more_work: false, legitimate_future_wait: true }).count, 3);
+  assert.match(functionBody('claimAndAdvanceOneBankingPayOperation'), /continuationNoProgressCount >= 5/);
+});
+
+test('TEST configuration supplies one immutable tenant authority for correction proof binding', () => {
+  const wrangler = fs.readFileSync(path.resolve(__dirname, '../wrangler.toml'), 'utf8');
+  const matches = wrangler.match(/BANKING_PAY_CORRECTION_TENANT_ID_V1\s*=\s*"8467e881-9691-4181-a738-f9834922d747"/g) || [];
+  assert.equal(matches.length, 2);
+});

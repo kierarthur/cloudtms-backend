@@ -40198,6 +40198,26 @@ async function buildBankingPayContinuationProgressWitness(operationType, value) 
   return sha256BankingPayContinuationValue(buildBankingPayContinuationProgressValue(operationType, value));
 }
 
+function calculateBankingPayContinuationNoProgress(input = {}) {
+  const previousCount = Number.isFinite(Number(input.previous_count))
+    ? Math.max(0, Math.trunc(Number(input.previous_count)))
+    : 0;
+  const preWitness = String(input.pre_witness || '').trim();
+  const postWitness = String(input.post_witness || '').trim();
+  const legitimateFutureWait = input.legitimate_future_wait === true;
+  const immediateMoreWork = input.immediate_more_work === true && legitimateFutureWait !== true;
+  const semanticProgress = !!preWitness && !!postWitness && preWitness !== postWitness;
+  const currentDeliveryNoProgress = immediateMoreWork && !!preWitness && !!postWitness && preWitness === postWitness;
+  return {
+    count: legitimateFutureWait
+      ? previousCount
+      : (currentDeliveryNoProgress ? previousCount + 1 : (semanticProgress ? 0 : previousCount)),
+    semantic_progress: semanticProgress,
+    current_delivery_no_progress: currentDeliveryNoProgress,
+    witness_changed_from_durable: !!input.previous_witness && !!postWitness && input.previous_witness !== postWitness
+  };
+}
+
 function bankingPayContinuationSourcePolicy(sourceValue) {
   const source = String(sourceValue || '').trim();
   const allTypes = ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION'];
@@ -41355,6 +41375,9 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     businessActorUserId: opts.businessActorUserId || opts.business_actor_user_id || null
   });
   const continuationMode = opts.continuationEnabled === true || opts.continuation_enabled === true;
+  const preContinuationWitness = continuationMode
+    ? await buildBankingPayContinuationProgressWitness(operationType, claim)
+    : null;
   const safeDraftBudgetMs = Math.max(1000, Math.min(25000, (lockSeconds * 1000) - 5000));
   const draftCreateMaxPhaseUnits = operationType === 'DRAFT_CREATE'
     ? clampInteger(opts.draftCreateMaxPhaseUnits != null ? opts.draftCreateMaxPhaseUnits : (opts.draft_create_max_phase_units != null ? opts.draft_create_max_phase_units : 20), 20, 1, 50)
@@ -41662,12 +41685,18 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   );
   const legitimateFutureWait = advancedRunAfterMs !== null && advancedRunAfterMs > Date.now();
   const immediateMoreWork = releaseState === 'MORE_WORK' && legitimateFutureWait !== true;
-  const witnessChanged = continuationMode && postContinuationWitness
-    ? (!previousContinuationWitness || previousContinuationWitness !== postContinuationWitness)
-    : false;
-  const continuationNoProgressCount = continuationMode
-    ? (witnessChanged ? 0 : (immediateMoreWork ? previousNoProgressCount + 1 : previousNoProgressCount))
-    : previousNoProgressCount;
+  const noProgressResult = continuationMode
+    ? calculateBankingPayContinuationNoProgress({
+      previous_count: previousNoProgressCount,
+      previous_witness: previousContinuationWitness,
+      pre_witness: preContinuationWitness,
+      post_witness: postContinuationWitness,
+      immediate_more_work: immediateMoreWork,
+      legitimate_future_wait: legitimateFutureWait
+    })
+    : { count: previousNoProgressCount, semantic_progress: false, current_delivery_no_progress: false, witness_changed_from_durable: false };
+  const witnessChanged = noProgressResult.witness_changed_from_durable;
+  const continuationNoProgressCount = noProgressResult.count;
   if (continuationMode && immediateMoreWork && continuationNoProgressCount >= 5) {
     releaseState = 'REVIEW_REQUIRED';
     publicAdvanced.status = 'REVIEW_REQUIRED';
@@ -48933,16 +48962,95 @@ function validateBankingPayPaymentStatusFilter(value) {
   for (const key of Object.keys(value)) {
     if (!allowed.has(key)) throw Object.assign(new Error('The payment-status filter contains an unsupported field.'), { code: 'FILTER_INVALID' });
   }
-  const out = { ...value };
+  const out = {};
+  if (Object.prototype.hasOwnProperty.call(value, 'status')) {
+    if (typeof value.status !== 'string') throw Object.assign(new Error('The payment-status filter status is invalid.'), { code: 'FILTER_INVALID' });
+    const status = value.status.trim().toUpperCase();
+    if (status && !['ACTIVE', 'NOT_PAID', 'AMBIGUOUS', 'CANCELLED', 'RELEASED', 'SETTLED', 'BLOCKED', 'FAILED'].includes(status)) {
+      throw Object.assign(new Error('The payment-status filter status is invalid.'), { code: 'FILTER_INVALID' });
+    }
+    if (status) out.status = status;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'action')) {
+    if (typeof value.action !== 'string') throw Object.assign(new Error('The payment-status filter action is invalid.'), { code: 'FILTER_INVALID' });
+    const action = value.action.trim().toUpperCase();
+    if (action && !['DRAFT_CANCEL', 'CANCEL_PAYMENT', 'RELEASE_FAILED_PAYMENT', 'RESOLVE_PAYMENT_STATUS'].includes(action)) {
+      throw Object.assign(new Error('The payment-status filter action is invalid.'), { code: 'FILTER_INVALID' });
+    }
+    if (action) out.action = action;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'search')) {
+    if (typeof value.search !== 'string') throw Object.assign(new Error('The payment-status filter search is invalid.'), { code: 'FILTER_INVALID' });
+    const search = value.search.trim();
+    if (new TextEncoder().encode(search).byteLength > 200) throw Object.assign(new Error('The payment-status filter search is too long.'), { code: 'FILTER_INVALID' });
+    if (search) out.search = search;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'actionable_only')) {
+    if (typeof value.actionable_only !== 'boolean') throw Object.assign(new Error('The payment-status actionable filter is invalid.'), { code: 'FILTER_INVALID' });
+    out.actionable_only = value.actionable_only;
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'pay_channel')) {
+    if (typeof value.pay_channel !== 'string') throw Object.assign(new Error('The payment-status pay-channel filter is invalid.'), { code: 'FILTER_INVALID' });
+    const payChannel = value.pay_channel.trim().toUpperCase();
+    if (payChannel && payChannel !== 'PAYE') throw Object.assign(new Error('The payment-status pay-channel filter is invalid.'), { code: 'FILTER_INVALID' });
+    if (payChannel) out.pay_channel = payChannel;
+  }
   for (const key of ['excluded_candidate_tokens', 'included_candidate_tokens']) {
-    if (Object.prototype.hasOwnProperty.call(out, key)) {
-      out[key] = bankingPayCorrectionCanonicalUuidArray(out[key], key, 10000);
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      out[key] = bankingPayCorrectionCanonicalUuidArray(value[key], key, 10000).sort();
     }
   }
   if (new TextEncoder().encode(stableBankingPayContinuationJson(out)).byteLength > 65536) {
     throw Object.assign(new Error('The payment-status filter is too large.'), { code: 'FILTER_INVALID' });
   }
   return out;
+}
+
+function canonicaliseBankingPayCorrectionSelectionFilter(value, mode, requestedAction, topLevelExclusions) {
+  const filter = validateBankingPayPaymentStatusFilter(value);
+  const canonicalMode = String(mode || '').trim().toUpperCase();
+  const canonicalAction = String(requestedAction || '').trim().toUpperCase();
+  const suppliedTopLevelExclusions = Array.isArray(topLevelExclusions) ? topLevelExclusions : [];
+
+  if (canonicalMode === 'EXPLICIT') {
+    if (suppliedTopLevelExclusions.length > 0 || Object.prototype.hasOwnProperty.call(filter, 'included_candidate_tokens') || Object.prototype.hasOwnProperty.call(filter, 'excluded_candidate_tokens') || Object.keys(filter).length > 0) {
+      throw Object.assign(new Error('Explicit payment selection cannot include filter or exclusion membership rules.'), { code: 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT' });
+    }
+    return { filter_json: {}, exclusions: [] };
+  }
+
+  if (Object.prototype.hasOwnProperty.call(filter, 'included_candidate_tokens')) {
+    throw Object.assign(new Error('A finite included candidate set must use explicit selection mode.'), { code: 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT' });
+  }
+
+  const expectedStatusAction = canonicalAction === 'DRAFT_CANCEL'
+    ? 'DRAFT_CANCEL'
+    : (['NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'].includes(canonicalAction) ? 'RELEASE_FAILED_PAYMENT' : 'CANCEL_PAYMENT');
+  if (filter.action && filter.action !== expectedStatusAction) {
+    throw Object.assign(new Error('The payment-status action does not match the requested correction action.'), { code: 'PAYMENT_CORRECTION_ACTION_FILTER_MISMATCH' });
+  }
+  if (Object.prototype.hasOwnProperty.call(filter, 'actionable_only') && filter.actionable_only !== true) {
+    throw Object.assign(new Error('All-matching correction selection requires actionable payments only.'), { code: 'PAYMENT_CORRECTION_ACTIONABLE_FILTER_INVALID' });
+  }
+  if (filter.status && !['ACTIVE', 'NOT_PAID'].includes(filter.status)) {
+    throw Object.assign(new Error('The payment-status state cannot be used for cancellation selection.'), { code: 'PAYMENT_CORRECTION_STATUS_FILTER_INVALID' });
+  }
+  if (filter.status === 'NOT_PAID' && !['NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'].includes(canonicalAction)) {
+    throw Object.assign(new Error('The not-paid filter requires the failed-payment release action.'), { code: 'PAYMENT_CORRECTION_STATUS_FILTER_MISMATCH' });
+  }
+  if (filter.status === 'ACTIVE' && ['NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'].includes(canonicalAction)) {
+    throw Object.assign(new Error('The active-payment filter does not match the failed-payment release action.'), { code: 'PAYMENT_CORRECTION_STATUS_FILTER_MISMATCH' });
+  }
+
+  const mergedExclusions = bankingPayCorrectionCanonicalUuidArray(Array.from(new Set([
+    ...suppliedTopLevelExclusions,
+    ...(Array.isArray(filter.excluded_candidate_tokens) ? filter.excluded_candidate_tokens : [])
+  ])), 'exclusions', 10000).sort();
+  const canonicalFilter = { ...filter };
+  delete canonicalFilter.actionable_only;
+  delete canonicalFilter.included_candidate_tokens;
+  delete canonicalFilter.excluded_candidate_tokens;
+  return { filter_json: canonicalFilter, exclusions: mergedExclusions };
 }
 
 function canonicaliseBankingPayCorrectionProofPayload(fields) {
@@ -49046,6 +49154,9 @@ async function bankingPayCorrectionSessionHash(req, user) {
   const sessionIssuedAt = Number(user?.session_issued_at_epoch_seconds ?? user?.sessionIssuedAtEpochSeconds ?? user?.iat);
   if (!sessionAuthority) throw Object.assign(new Error('Authenticated session authority is unavailable.'), { code: 'REAUTH_SESSION_REQUIRED' });
   if (!Number.isFinite(sessionIssuedAt) || sessionIssuedAt <= 0) throw Object.assign(new Error('Authenticated session issue time is unavailable.'), { code: 'REAUTH_SESSION_REQUIRED' });
+  if (!BANKING_PAY_CORRECTION_UUID_RE.test(tenantAuthority) || tenantAuthority !== tenantAuthority.toLowerCase()) {
+    throw Object.assign(new Error('Authenticated tenant authority is unavailable.'), { code: 'REAUTH_SESSION_TENANT_REQUIRED' });
+  }
   const encoder = new TextEncoder();
   const frame = (value) => {
     const bytes = encoder.encode(String(value == null ? '' : value));
@@ -49177,7 +49288,18 @@ async function enqueueBankingPayCancellationResult(env, result, source) {
     return { ok: true, required: false, enqueued_count: 0 };
   }
   descriptor.source = source;
-  return enqueueBankingPayOperationContinuations(env, [descriptor], { source });
+  try {
+    return await enqueueBankingPayOperationContinuations(env, [descriptor], { source });
+  } catch {
+    return {
+      ok: false,
+      required: true,
+      enqueued_count: 0,
+      background_start_delayed: true,
+      code: 'BANKING_PAY_CONTINUATION_ENQUEUE_DELAYED',
+      message: 'Your request was accepted. CloudTMS will continue it automatically in the background.'
+    };
+  }
 }
 
 async function enqueueBankingPayEventResultContinuations(env, result, source) {
@@ -49186,7 +49308,19 @@ async function enqueueBankingPayEventResultContinuations(env, result, source) {
     .slice(0, 4)
     .filter((descriptor) => descriptor && typeof descriptor === 'object' && !Array.isArray(descriptor)
       && descriptor.required === true && descriptor.terminal !== true && descriptor.requires_user_action !== true);
-  return enqueueBankingPayOperationContinuations(env, descriptors, { source });
+  if (!descriptors.length) return { ok: true, required: false, enqueued_count: 0 };
+  try {
+    return await enqueueBankingPayOperationContinuations(env, descriptors, { source });
+  } catch {
+    return {
+      ok: false,
+      required: descriptors.length > 0,
+      enqueued_count: 0,
+      background_start_delayed: descriptors.length > 0,
+      code: 'BANKING_PAY_CONTINUATION_ENQUEUE_DELAYED',
+      message: 'The update was accepted. CloudTMS will continue any remaining work automatically in the background.'
+    };
+  }
 }
 
 function normalizeBankingPayCorrectionSelection(body, requestedAction) {
@@ -49206,7 +49340,7 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
     throw Object.assign(new Error('The cancellation action is invalid.'), { code: 'REQUESTED_ACTION_INVALID' });
   }
   const snapshotToken = bankingPayCorrectionBoundedText(source.snapshot_token || source.snapshotToken || selection.snapshot_token, 512, 'snapshot_token', { required: true });
-  const filterJson = validateBankingPayPaymentStatusFilter(source.filter_json || source.filterJson || selection.filter_json || {});
+  const rawFilterJson = source.filter_json || source.filterJson || selection.filter_json || {};
   const sortKey = String(source.sort_key || source.sortKey || selection.sort_key || 'STATUS').trim().toUpperCase();
   const sortDirection = String(source.sort_direction || source.sortDirection || selection.sort_direction || 'ASC').trim().toUpperCase();
   if (!['STATUS', 'CANDIDATE', 'AMOUNT'].includes(sortKey) || !['ASC', 'DESC'].includes(sortDirection)) {
@@ -49215,8 +49349,14 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
   const explicitTokens = mode === 'EXPLICIT'
     ? bankingPayCorrectionCanonicalUuidArray(tokens, 'explicit_candidate_tokens', 10000, { required: true })
     : [];
+  if (mode === 'ALL_MATCHING' && Array.isArray(tokens) && tokens.length > 0) {
+    throw Object.assign(new Error('All-matching payment selection cannot include explicit candidate tokens.'), { code: 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT' });
+  }
   const exclusionsSource = source.exclusions || selection.exclusions || [];
-  const exclusions = bankingPayCorrectionCanonicalUuidArray(exclusionsSource, 'exclusions', 10000);
+  const topLevelExclusions = bankingPayCorrectionCanonicalUuidArray(exclusionsSource, 'exclusions', 10000);
+  const canonicalScope = canonicaliseBankingPayCorrectionSelectionFilter(rawFilterJson, mode, action, topLevelExclusions);
+  const filterJson = canonicalScope.filter_json;
+  const exclusions = canonicalScope.exclusions;
   const idempotencyKey = bankingPayCorrectionBoundedText(source.idempotency_key || source.idempotencyKey || selection.idempotency_key, 200, 'idempotency_key', { required: true });
   return {
     command: 'PREPARE',
@@ -49228,7 +49368,7 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
     filter_json: filterJson,
     sort_key: sortKey,
     sort_direction: sortDirection,
-    explicit_candidate_tokens: explicitTokens,
+    explicit_candidate_tokens: explicitTokens.sort(),
     exclusions,
     idempotency_key: idempotencyKey
   };
@@ -49308,7 +49448,7 @@ async function handleBankingPayCorrectionPlanV1(env, req, user, payBatchId, forc
       p_accepted_resolution_json: null
     }), 'pay_payment_correction_request_start');
     const continuationEnqueue = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'PAYMENT_CORRECTION_PLAN');
-    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 202), { ...result, continuation_enqueue: continuationEnqueue });
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 202), { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_PLAN_FAILED'); }
 }
 
@@ -49436,7 +49576,7 @@ async function handleBankingPayCorrectionStartPreparedV1(env, req, user, payBatc
     }), 'pay_payment_correction_request_start');
     const continuationEnqueue = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'PAYMENT_CORRECTION_START_PREPARED');
     const successStatus = result.is_existing === true || String(result.code || '').toUpperCase() === 'REQUEST_ALREADY_STARTED' ? 200 : 202;
-    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, successStatus), { ...result, continuation_enqueue: continuationEnqueue });
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, successStatus), { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_START_FAILED'); }
 }
 
@@ -49482,7 +49622,7 @@ async function handleBankingPayCorrectionAuthActionV1(env, req, user, correction
     }), 'pay_payment_correction_authorise');
     const continuationEnqueue = await enqueueBankingPayCancellationResult(env, result, 'PAYMENT_CORRECTION_AUTH_ACTION');
     const successStatus = result?.continuation?.required === true ? 202 : 200;
-    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, successStatus), { ...result, continuation_enqueue: continuationEnqueue });
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, successStatus), { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED'); }
 }
 
@@ -49513,8 +49653,8 @@ async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
     }), 'pay_batch_cancel');
     const continuationEnqueue = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'DRAFT_PAYMENT_CANCELLATION_PLAN');
     const responseStatus = bankingPayCorrectionRpcHttpStatus(result, 202);
-    if (responseStatus !== 202) return bankingPayCancellationResponse(env, req, responseStatus, { ...result, continuation_enqueue: continuationEnqueue });
-    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation_enqueue: continuationEnqueue });
+    if (responseStatus !== 202) return bankingPayCancellationResponse(env, req, responseStatus, { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
+    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'DRAFT_CANCELLATION_FAILED'); }
 }
 
@@ -49602,7 +49742,7 @@ async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId
       });
     }
     const continuationEnqueue = await enqueueBankingPayEventResultContinuations(env, result, 'PAYMENT_STATUS_EVENT_WAKE');
-    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), { ...result, continuation_enqueue: continuationEnqueue });
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_STATUS_RESOLUTION_FAILED'); }
 }
 
@@ -49668,7 +49808,7 @@ async function handleBankingPayPaidAfterReleaseReviewV1(env, req, user, payBatch
       }
     }), 'pay_bank_event_ingest');
     const continuationEnqueue = await enqueueBankingPayEventResultContinuations(env, result, 'PAID_AFTER_RELEASE_REVIEW_EVENT_WAKE');
-    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), { ...result, continuation_enqueue: continuationEnqueue });
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAID_AFTER_RELEASE_REVIEW_FAILED'); }
 }
 
@@ -133694,9 +133834,23 @@ function refreshTtl(env){ return parseInt(env.REFRESH_TTL_SECONDS || '1209600', 
 function resetTtl(env){ return parseInt(env.PASSWORD_RESET_TTL_SECONDS || '3600', 10) || 3600; }   // 60m
 function sessionSecret(env){ return String(env.SESSION_TOKEN_SECRET); }
 
+function bankingPayCorrectionTenantAuthority(env, options = {}) {
+  const value = String(env?.BANKING_PAY_CORRECTION_TENANT_ID_V1 || '').trim().toLowerCase();
+  if (!value) {
+    if (options.required === true) throw Object.assign(new Error('Banking Pay tenant authority is unavailable.'), { code: 'REAUTH_SESSION_TENANT_REQUIRED' });
+    return null;
+  }
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value)) {
+    throw Object.assign(new Error('Banking Pay tenant authority is invalid.'), { code: 'REAUTH_SESSION_TENANT_INVALID' });
+  }
+  return value;
+}
+
 async function mintAccessToken(env, { user_id, email, role, sv, sid }) {
   const exp = Math.floor(Date.now()/1000) + accessTtl(env);
+  const tenantId = bankingPayCorrectionTenantAuthority(env);
   const payload = { typ:'access', sub:user_id, email, role, sv, sid, iat: Math.floor(Date.now()/1000), exp };
+  if (tenantId) payload.tenant_id = tenantId;
   const token = await createToken(sessionSecret(env), payload);
   return { token, exp };
 }
@@ -133725,6 +133879,14 @@ async function requireUser(env, req, allowedRoles = []) {
   if ((user.session_version|0) !== (p.sv|0)) return null;
 
   if (Array.isArray(allowedRoles) && allowedRoles.length && !allowedRoles.includes(user.role)) return null;
+  let tenantId = null;
+  try {
+    const configuredTenantId = bankingPayCorrectionTenantAuthority(env);
+    const tokenTenantId = String(p.tenant_id || '').trim().toLowerCase();
+    tenantId = configuredTenantId && tokenTenantId === configuredTenantId ? configuredTenantId : null;
+  } catch {
+    return null;
+  }
   return {
     id: user.id,
     email: user.email,
@@ -133732,6 +133894,7 @@ async function requireUser(env, req, allowedRoles = []) {
     sv: user.session_version|0,
     sid: p.sid,
     session_id: p.sid,
+    tenant_id: tenantId,
     session_issued_at_epoch_seconds: Number(p.iat)
   };
 }
