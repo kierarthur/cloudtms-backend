@@ -291,7 +291,7 @@ BEGIN
       'OPEN_FINANCE_COMPONENT','ACTIVE_RESERVATION','ACTIVE_OVERRIDE','UNPAID_ADJUSTMENT',
       'ACTIVE_SNOOZE','TARGETED_ID','FORCED_ID'])[v_family_ordinal];
     v_next_cursor:=jsonb_build_object(
-      'cursor_kind','PREPARE_SCOPE','cursor_version',1,'build_id',p_build_id,
+      'cursor_kind','SCOPE_SELECT','cursor_version',1,'build_id',p_build_id,
       'candidate_id',p_candidate_id,'seed_family',v_next_family,
       'seed_family_ordinal',v_family_ordinal,'last_source_key',v_last_key,
       'captured_candidate_generation',v_build.captured_candidate_generation,

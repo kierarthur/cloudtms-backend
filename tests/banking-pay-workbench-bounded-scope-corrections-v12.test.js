@@ -9,6 +9,7 @@ const projection = read('supabase/repeatable/04082026_2313_pay_workbench_unit_pr
 const occurrence = read('supabase/repeatable/04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql');
 const effectNormaliser = read('supabase/repeatable/04082026_2315_pay_workbench_finance_effect_normalise_row_v1.sql');
 const continuation = read('supabase/repeatable/04082026_1219_pay_workbench_enqueue_stage_continuation.sql');
+const scopeSelector = read('supabase/repeatable/04082026_1144_pay_workbench_candidate_bounded_scope_v1.sql');
 const closure = read('supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql');
 const entitlement = read('supabase/repeatable/04082026_1147_pay_current_timesheet_entitlement_components_from_build_v1.sql');
 const syncCore = read('supabase/repeatable/04082026_1210_pay_sync_overpayments_from_workbench_workspace_v1.sql');
@@ -31,6 +32,8 @@ const correctionMigration = read('supabase/migrations/04082026_2042_banking_pay_
 test('D1 sealing cursors are valid only for their owning stage', () => {
   assert.match(continuation, /WHEN 'PREPARE_SCOPE' THEN v_private_cursor_kind IN \('SCOPE_SELECT','SEED_SCOPE_SEAL'\)/);
   assert.match(continuation, /WHEN 'DEPENDENCY_CLOSURE' THEN v_private_cursor_kind IN \('DEPENDENCY_CLOSURE','DEPENDENCY_SCOPE_SEAL'\)/);
+  assert.match(scopeSelector, /v_next_cursor:=jsonb_build_object\(\s*'cursor_kind','SCOPE_SELECT'/);
+  assert.doesNotMatch(scopeSelector, /v_next_cursor:=jsonb_build_object\(\s*'cursor_kind','PREPARE_SCOPE'/);
 });
 test('D2 fact pages carry and verify a cumulative replay-safe chain', () => {
   assert.match(dispatcher, /v_next_cumulative_fact_count:=v_cumulative_fact_count\+v_page_count/);
