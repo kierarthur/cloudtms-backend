@@ -818,7 +818,7 @@ BEGIN
         v_effective_display_state := CASE
             WHEN v_candidate.latest_work_status = 'BLOCKED' THEN 'BLOCKED'
             WHEN v_candidate.latest_work_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE') THEN 'FAILED'
-            WHEN COALESCE((v_diagnostic ->> 'can_release_after_terminal_no_money')::boolean, false) THEN 'NOT_PAID'
+            WHEN COALESCE((v_diagnostic ->> 'can_no_money_unwind')::boolean, false) THEN 'NOT_PAID'
             ELSE 'ACTIVE'
         END;
 

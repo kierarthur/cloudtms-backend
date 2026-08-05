@@ -16,6 +16,7 @@ const preBank = read('04082026_1158_pay_pre_bank_cancel_apply_work_item.sql');
 const noMoney = read('04082026_1158_pay_no_money_unwind_apply_work_item.sql');
 const acl = read('04082026_2035_banking_pay_correction_helper_acl.sql');
 const eventIngest = read('04082026_1210_pay_bank_event_ingest.sql');
+const installedFunctions = read('26052026_2100HRS_NEW_FUNCTIONS.sql');
 
 test('planning start uses a constant-size version fence and creates no whole-scope JSON', () => {
   const fence = requestStart.slice(
@@ -65,10 +66,18 @@ test('selection preparation uses exact candidate diagnostics and Current Payment
   assert.match(selection, /AS latest_work_status/);
   assert.match(selection, /latest_work_status = 'BLOCKED'[\s\S]*?THEN 'BLOCKED'/);
   assert.match(selection, /latest_work_status IN \('FAILED_FINAL', 'FAILED_RETRYABLE'\)[\s\S]*?THEN 'FAILED'/);
-  assert.match(selection, /can_release_after_terminal_no_money'[\s\S]*?THEN 'NOT_PAID'/);
+  assert.match(selection, /can_no_money_unwind'[\s\S]*?THEN 'NOT_PAID'/);
+  assert.doesNotMatch(selection, /can_release_after_terminal_no_money/);
   assert.match(selection, /IS DISTINCT FROM v_effective_display_state/);
   assert.doesNotMatch(selection, /NOT IN \(v_eligibility_code, 'ACTIVE', 'NOT_PAID'\)/);
   assert.doesNotMatch(selection, /pay_batch_payment_status_page_v1\s*\(/);
+
+  const diagnosticStart = installedFunctions.indexOf('CREATE OR REPLACE FUNCTION public.pay_payment_cancelability_diagnostic');
+  const diagnosticEnd = installedFunctions.indexOf('\nCREATE OR REPLACE FUNCTION ', diagnosticStart + 10);
+  const diagnostic = installedFunctions.slice(diagnosticStart, diagnosticEnd > diagnosticStart ? diagnosticEnd : installedFunctions.length);
+  assert.ok(diagnosticStart >= 0, 'pay_payment_cancelability_diagnostic source missing');
+  assert.match(diagnostic, /'can_no_money_unwind'/);
+  assert.doesNotMatch(diagnostic, /'can_release_after_terminal_no_money'/);
 });
 
 test('automatic no-money start occurs only after exact lease validation', () => {

@@ -188,6 +188,8 @@ test('selection canonicalisation rejects conflicting membership semantics before
   assert.throws(() => context.normalizeSelection({ ...base, mode: 'ALL_MATCHING', explicit_candidate_tokens: [candidateA] }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
   assert.throws(() => context.normalizeSelection({ ...base, mode: 'ALL_MATCHING', filter_json: { included_candidate_tokens: [candidateA] } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
   assert.throws(() => context.normalizeSelection({ ...base, mode: 'EXPLICIT', explicit_candidate_tokens: [candidateA], exclusions: [candidateB] }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
+  assert.throws(() => context.normalizeSelection({ ...base, mode: 'EXPLICIT', explicit_candidate_tokens: [candidateA], filter_json: {} }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
+  assert.throws(() => context.normalizeSelection({ ...base, mode: 'EXPLICIT', explicit_candidate_tokens: [candidateA], selection_json: { filter_json: {} } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
   assert.throws(() => context.normalizeSelection({ ...base, mode: 'ALL_MATCHING', filter_json: { actionable_only: 'true' } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'FILTER_INVALID');
   assert.throws(() => context.normalizeSelection({ ...base, mode: 'ALL_MATCHING', filter_json: { action: 'RELEASE_FAILED_PAYMENT', actionable_only: true } }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_ACTION_FILTER_MISMATCH');
 
@@ -220,6 +222,7 @@ test('selection canonicalisation fails closed for falsy, unknown and conflicting
   const context = { TextEncoder, Set, Object, Array, String, Number, Error, JSON };
   vm.runInNewContext(source, context);
   const candidateA = '11111111-1111-4111-8111-111111111111';
+  const candidateB = '22222222-2222-4222-8222-222222222222';
   const base = { mode: 'ALL_MATCHING', snapshot_token: 'snapshot', idempotency_key: 'request-key' };
 
   for (const filter_json of [null, false, 0, undefined]) {
@@ -246,10 +249,42 @@ test('selection canonicalisation fails closed for falsy, unknown and conflicting
   }, 'PRE_BANK_CANCEL');
   assert.equal(equalAliases.filter_json.search, 'Example');
   assert.deepEqual(Array.from(equalAliases.exclusions), [candidateA]);
+
+  const equalSelectionContainers = context.normalizeSelection({
+    snapshot_token: 'snapshot',
+    idempotency_key: 'request-key',
+    selection_json: { mode: ' all_matching ', sort_key: 'status', sort_direction: 'asc' },
+    selection: { mode: 'ALL_MATCHING', sortKey: 'STATUS', sortDirection: 'ASC' }
+  }, 'PRE_BANK_CANCEL');
+  assert.equal(equalSelectionContainers.mode, 'ALL_MATCHING');
+  assert.equal(equalSelectionContainers.sort_key, 'STATUS');
+  assert.equal(equalSelectionContainers.sort_direction, 'ASC');
+
+  const equalExplicitContainers = context.normalizeSelection({
+    snapshot_token: 'snapshot',
+    idempotency_key: 'request-key',
+    selection_json: { mode: 'explicit', explicit_candidate_tokens: [candidateB, candidateA] },
+    selection: { mode: 'EXPLICIT', payBatchCandidateIds: [candidateA, candidateB] }
+  }, 'PRE_BANK_CANCEL');
+  assert.equal(equalExplicitContainers.mode, 'EXPLICIT');
+  assert.deepEqual(Array.from(equalExplicitContainers.explicit_candidate_tokens), [candidateA, candidateB]);
+
+  assert.throws(() => context.normalizeSelection({
+    snapshot_token: 'snapshot',
+    idempotency_key: 'request-key',
+    selection_json: { mode: 'ALL_MATCHING' },
+    selection: { mode: 'EXPLICIT', explicit_candidate_tokens: [candidateA] }
+  }, 'PRE_BANK_CANCEL'), (error) => error?.code === 'PAYMENT_CORRECTION_SELECTION_ALIAS_CONFLICT');
 });
 
 test('invalid selection descriptors are rejected before the planning RPC', async () => {
   let rpcCalls = 0;
+  let requestBody = {
+    requested_action: 'PRE_BANK_CANCEL',
+    snapshot_token: 'snapshot',
+    idempotency_key: 'request-key',
+    filter_json: false
+  };
   const normalizerStart = worker.indexOf('const BANKING_PAY_CORRECTION_UUID_RE');
   const normalizerEnd = worker.indexOf('\nasync function parseBankingPayCancellationJsonBody', normalizerStart);
   const normalizerContext = { TextEncoder, Set, Object, Array, String, Number, Error, JSON };
@@ -267,12 +302,7 @@ test('invalid selection descriptors are rejected before the planning RPC', async
     String,
     requireBankingPayCancellationActor: async () => ({ ok: true, actorUserId: '11111111-1111-4111-8111-111111111111' }),
     bankingPayCorrectionUuid: () => true,
-    parseBankingPayCancellationJsonBody: async () => ({
-      requested_action: 'PRE_BANK_CANCEL',
-      snapshot_token: 'snapshot',
-      idempotency_key: 'request-key',
-      filter_json: false
-    }),
+    parseBankingPayCancellationJsonBody: async () => requestBody,
     normalizeBankingPayCorrectionSelection: normalizerContext.normalizeSelection,
     bankingPayCorrectionBoundedText: () => 'reason',
     bankingPayCorrectionBodyErrorResponse: (_env, _req, error) => ({ status: 400, code: error.code }),
@@ -281,6 +311,19 @@ test('invalid selection descriptors are rejected before the planning RPC', async
   vm.runInNewContext(`${functionBody('handleBankingPayCorrectionPlanV1')}\nthis.handle = handleBankingPayCorrectionPlanV1;`, handlerContext);
   const result = await handlerContext.handle({}, {}, {}, '22222222-2222-4222-8222-222222222222');
   assert.equal(result.status, 400);
+  assert.equal(rpcCalls, 0);
+
+  requestBody = {
+    requested_action: 'PRE_BANK_CANCEL',
+    snapshot_token: 'snapshot',
+    idempotency_key: 'request-key',
+    mode: 'EXPLICIT',
+    explicit_candidate_tokens: ['33333333-3333-4333-8333-333333333333'],
+    filter_json: {}
+  };
+  const explicitFilterResult = await handlerContext.handle({}, {}, {}, '22222222-2222-4222-8222-222222222222');
+  assert.equal(explicitFilterResult.status, 400);
+  assert.equal(explicitFilterResult.code, 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
   assert.equal(rpcCalls, 0);
 });
 

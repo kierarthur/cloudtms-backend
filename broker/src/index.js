@@ -49371,15 +49371,6 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
     if (!outerAllowed.has(key)) fail('The payment selection contains an unsupported field.');
   }
 
-  const suppliedSelection = resolveAuthority([
-    present(source, 'selection_json'),
-    present(source, 'selectionJson'),
-    present(source, 'selection')
-  ], 'selection', (value) => {
-    if (!isBankingPayCorrectionPlainObject(value)) fail('The payment selection is invalid.');
-    return value;
-  }, {});
-  const selection = suppliedSelection.value;
   const nestedAllowed = new Set([
     'command', 'context', 'contract_version',
     'mode', 'requested_action', 'requestedAction',
@@ -49389,20 +49380,28 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
     'explicit_candidate_tokens', 'explicitCandidateTokens', 'pay_batch_candidate_ids', 'payBatchCandidateIds',
     'exclusions', 'idempotency_key', 'idempotencyKey'
   ]);
-  for (const key of Object.keys(selection)) {
-    if (!nestedAllowed.has(key)) fail('The nested payment selection contains an unsupported field.');
+  const selectionContainers = [];
+  for (const key of ['selection_json', 'selectionJson', 'selection']) {
+    if (!hasOwn(source, key)) continue;
+    const container = source[key];
+    if (!isBankingPayCorrectionPlainObject(container)) fail('The payment selection is invalid.');
+    for (const nestedKey of Object.keys(container)) {
+      if (!nestedAllowed.has(nestedKey)) fail('The nested payment selection contains an unsupported field.');
+    }
+    selectionContainers.push(container);
   }
+  const nestedAuthorities = (...keys) => selectionContainers.flatMap((container) => keys.map((key) => present(container, key)));
 
   const commandAuthority = resolveAuthority([
-    present(source, 'command'), present(selection, 'command')
+    present(source, 'command'), ...nestedAuthorities('command')
   ], 'selection command', (value) => canonicalText(value, 'selection command', { upper: true }), 'PREPARE');
   if (commandAuthority.value !== 'PREPARE') fail('The payment selection command is invalid.');
   const contextAuthority = resolveAuthority([
-    present(source, 'context'), present(selection, 'context')
+    present(source, 'context'), ...nestedAuthorities('context')
   ], 'selection context', (value) => canonicalText(value, 'selection context', { upper: true }), 'CURRENT_PAYMENT_STATUS');
   if (contextAuthority.value !== 'CURRENT_PAYMENT_STATUS') fail('The payment selection context is invalid.');
   const contractAuthority = resolveAuthority([
-    present(source, 'contract_version'), present(selection, 'contract_version')
+    present(source, 'contract_version'), ...nestedAuthorities('contract_version')
   ], 'selection contract version', (value) => {
     if (!Number.isSafeInteger(value) || value !== 1) fail('The payment selection contract version is invalid.');
     return value;
@@ -49413,13 +49412,10 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
     present(source, 'explicitCandidateTokens'),
     present(source, 'pay_batch_candidate_ids'),
     present(source, 'payBatchCandidateIds'),
-    present(selection, 'explicit_candidate_tokens'),
-    present(selection, 'explicitCandidateTokens'),
-    present(selection, 'pay_batch_candidate_ids'),
-    present(selection, 'payBatchCandidateIds')
+    ...nestedAuthorities('explicit_candidate_tokens', 'explicitCandidateTokens', 'pay_batch_candidate_ids', 'payBatchCandidateIds')
   ], 'explicit candidate tokens', (value) => bankingPayCorrectionCanonicalUuidArray(value, 'explicit_candidate_tokens', 10000).sort(), []);
   const modeAuthority = resolveAuthority([
-    present(source, 'mode'), present(selection, 'mode')
+    present(source, 'mode'), ...nestedAuthorities('mode')
   ], 'selection mode', (value) => canonicalText(value, 'selection mode', { upper: true }), tokenAuthority.present ? 'EXPLICIT' : 'ALL_MATCHING');
   const mode = modeAuthority.value;
   if (!['EXPLICIT', 'ALL_MATCHING'].includes(mode)) {
@@ -49437,8 +49433,7 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
     { present: requestedAction !== undefined && requestedAction !== null && String(requestedAction).trim() !== '', value: requestedAction },
     present(source, 'requested_action'),
     present(source, 'requestedAction'),
-    present(selection, 'requested_action'),
-    present(selection, 'requestedAction')
+    ...nestedAuthorities('requested_action', 'requestedAction')
   ], 'requested action', canonicalAction, '');
   const action = actionAuthority.value;
   if (!['DRAFT_CANCEL', 'PRE_BANK_CANCEL', 'CANCEL_PAYMENT', 'NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'].includes(action)) {
@@ -49447,7 +49442,7 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
 
   const snapshotAuthority = resolveAuthority([
     present(source, 'snapshot_token'), present(source, 'snapshotToken'),
-    present(selection, 'snapshot_token'), present(selection, 'snapshotToken')
+    ...nestedAuthorities('snapshot_token', 'snapshotToken')
   ], 'snapshot token', (value) => {
     if (typeof value !== 'string') fail('The payment selection snapshot token is invalid.');
     return bankingPayCorrectionBoundedText(value, 512, 'snapshot_token', { required: true });
@@ -49455,10 +49450,14 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
   if (!snapshotAuthority.present) fail('The payment selection snapshot token is required.');
   const snapshotToken = snapshotAuthority.value;
 
-  const filterAuthority = resolveAuthority([
+  const filterAuthorities = [
     present(source, 'filter_json'), present(source, 'filterJson'),
-    present(selection, 'filter_json'), present(selection, 'filterJson')
-  ], 'payment-status filter', (value) => {
+    ...nestedAuthorities('filter_json', 'filterJson')
+  ];
+  if (mode === 'EXPLICIT' && filterAuthorities.some((authority) => authority.present === true)) {
+    fail('Explicit payment selection cannot include filter authority.', 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
+  }
+  const filterAuthority = resolveAuthority(filterAuthorities, 'payment-status filter', (value) => {
     if (!isBankingPayCorrectionPlainObject(value)) {
       throw Object.assign(new Error('The payment-status filter is invalid.'), { code: 'FILTER_INVALID' });
     }
@@ -49468,11 +49467,11 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
 
   const sortKeyAuthority = resolveAuthority([
     present(source, 'sort_key'), present(source, 'sortKey'),
-    present(selection, 'sort_key'), present(selection, 'sortKey')
+    ...nestedAuthorities('sort_key', 'sortKey')
   ], 'selection sort key', (value) => canonicalText(value, 'selection sort key', { upper: true }), 'STATUS');
   const sortDirectionAuthority = resolveAuthority([
     present(source, 'sort_direction'), present(source, 'sortDirection'),
-    present(selection, 'sort_direction'), present(selection, 'sortDirection')
+    ...nestedAuthorities('sort_direction', 'sortDirection')
   ], 'selection sort direction', (value) => canonicalText(value, 'selection sort direction', { upper: true }), 'ASC');
   const sortKey = sortKeyAuthority.value;
   const sortDirection = sortDirectionAuthority.value;
@@ -49484,7 +49483,7 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
     : [];
 
   const exclusionsAuthority = resolveAuthority([
-    present(source, 'exclusions'), present(selection, 'exclusions')
+    present(source, 'exclusions'), ...nestedAuthorities('exclusions')
   ], 'selection exclusions', (value) => bankingPayCorrectionCanonicalUuidArray(value, 'exclusions', 10000).sort(), []);
   if (mode === 'EXPLICIT' && exclusionsAuthority.present) {
     fail('Explicit payment selection cannot include exclusions.', 'PAYMENT_CORRECTION_SELECTION_MODE_CONFLICT');
@@ -49496,7 +49495,7 @@ function normalizeBankingPayCorrectionSelection(body, requestedAction) {
 
   const idempotencyAuthority = resolveAuthority([
     present(source, 'idempotency_key'), present(source, 'idempotencyKey'),
-    present(selection, 'idempotency_key'), present(selection, 'idempotencyKey')
+    ...nestedAuthorities('idempotency_key', 'idempotencyKey')
   ], 'idempotency key', (value) => {
     if (typeof value !== 'string') fail('The payment selection idempotency key is invalid.');
     return bankingPayCorrectionBoundedText(value, 200, 'idempotency_key', { required: true });
