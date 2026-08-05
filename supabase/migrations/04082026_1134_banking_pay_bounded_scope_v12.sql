@@ -783,7 +783,7 @@ CREATE TABLE private.banking_pay_workbench_economic_build_fact_pages (
   -- DB-CONSTRAINT-066
   CONSTRAINT bpay_wb_economic_build_fact_pages_unit_chk CHECK (
     (fact_family IN (
-      'RESERVATION_COMPONENT','FINANCE_CASE_IDENTITY','FINANCE_COMPONENT_IDENTITY',
+      'FINANCE_ITEM_AUTHORITY','RESERVATION_COMPONENT','FINANCE_CASE_IDENTITY','FINANCE_COMPONENT_IDENTITY',
       'PROTECTION_EVIDENCE','ALLOCATION_INPUT'
     ) AND dependency_unit_key = 'GLOBAL')
     OR (fact_family IN (

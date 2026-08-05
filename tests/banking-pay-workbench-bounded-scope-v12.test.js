@@ -9,6 +9,9 @@ const migrationPath = 'supabase/migrations/04082026_1134_banking_pay_bounded_sco
 const migration = read(migrationPath);
 const v128MigrationPath = 'supabase/migrations/05082026_1227_banking_pay_bounded_scope_v128_operational_state.sql';
 const v128Migration = read(v128MigrationPath);
+const factPageAuthorityMigration = read(
+  'supabase/migrations/06082026_0056_banking_pay_finance_item_fact_page_constraint.sql'
+);
 const closure = read(
   'supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql'
 ).replace(/\r\n/g, '\n');
@@ -138,6 +141,26 @@ test('canonical staging identity is a PostgreSQL constraint with NULLS NOT DISTI
   );
   assert.match(migration, /DB-CONSTRAINT-079 \/ DB-INDEX-035:[^\n]*null-aware identity/i);
   assert.doesNotMatch(migration, /COALESCE\(timesheet_id[\s\S]*00000000-0000-0000-0000-000000000000/i);
+});
+
+test('global finance-item authority is admitted by both fact and page ledgers', () => {
+  assert.match(
+    migration,
+    /economic_build_fact_pages_unit_chk[\s\S]*'FINANCE_ITEM_AUTHORITY'[\s\S]*dependency_unit_key = 'GLOBAL'/i,
+  );
+  assert.match(
+    v128Migration,
+    /economic_build_facts_unit_chk[\s\S]*'FINANCE_ITEM_AUTHORITY'[\s\S]*dependency_unit_key = 'GLOBAL'/i,
+  );
+  assert.match(
+    v128Migration,
+    /economic_build_fact_pages_unit_chk[\s\S]*'FINANCE_ITEM_AUTHORITY'[\s\S]*dependency_unit_key = 'GLOBAL'/i,
+  );
+  assert.match(
+    factPageAuthorityMigration,
+    /DROP CONSTRAINT IF EXISTS bpay_wb_economic_build_fact_pages_unit_chk[\s\S]*ADD CONSTRAINT bpay_wb_economic_build_fact_pages_unit_chk[\s\S]*'FINANCE_ITEM_AUTHORITY'/i,
+  );
+  assert.doesNotMatch(factPageAuthorityMigration, /CREATE\s+(?:TABLE|INDEX|FUNCTION)/i);
 });
 
 test('private durable authority is not exposed to browser or service roles', () => {
