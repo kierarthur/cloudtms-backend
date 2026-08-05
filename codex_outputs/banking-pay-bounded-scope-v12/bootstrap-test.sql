@@ -67,7 +67,7 @@ INSERT INTO private.banking_pay_workbench_candidate_scope_registry(
   created_at_utc,updated_at_utc
 )
 SELECT target.candidate_id,'UNINITIALISED','LEGACY_BOOTSTRAP_PENDING',
-  clock_timestamp(),clock_timestamp(),clock_timestamp()
+  statement_timestamp(),statement_timestamp(),statement_timestamp()
 FROM pg_temp._bpay_wb_bootstrap_targets_v1 target
 ON CONFLICT(candidate_id) DO UPDATE
 SET initialisation_status='UNINITIALISED',bootstrap_id=NULL,
@@ -76,7 +76,7 @@ SET initialisation_status='UNINITIALISED',bootstrap_id=NULL,
     bootstrap_captured_generation=NULL,
     bootstrap_captured_source_change_seq=NULL,
     failure_json='{}'::jsonb,last_dirty_reason='LEGACY_BOOTSTRAP_PENDING',
-    updated_at_utc=clock_timestamp()
+    updated_at_utc=statement_timestamp()
 WHERE private.banking_pay_workbench_candidate_scope_registry.current_build_id IS NULL
   AND private.banking_pay_workbench_candidate_scope_registry.initialisation_status
         IN ('UNINITIALISED','FAILED');
