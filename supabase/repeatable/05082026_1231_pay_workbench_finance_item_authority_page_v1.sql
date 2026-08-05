@@ -1,7 +1,8 @@
--- Banking Pay bounded-scope Version 1.2.8.
--- Page candidate finance movement items before component/case/frozen resolution.
--- Heavy ownership, transfer, reservation and correction joins therefore apply
--- to at most p_limit + 1 physical item rows once per build, not once per unit.
+-- Banking Pay bounded-scope Version 1.2.9.
+-- Page the candidate's physical finance-movement items before any ownership,
+-- scope, frozen-JSON, component or key filtering.  Every selected item is then
+-- either authoritative in-scope evidence, explicit outside-scope evidence, or
+-- a typed blocking authority failure.
 
 CREATE OR REPLACE FUNCTION private.pay_workbench_finance_item_authority_page_v1(
   p_build_id uuid,
@@ -26,12 +27,14 @@ RETURNS TABLE(
   financial_digest text,
   resolution_failure text
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 PARALLEL UNSAFE
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
+BEGIN
+  RETURN QUERY
   WITH build AS (
     SELECT build_row.id,build_row.candidate_id
     FROM private.banking_pay_workbench_economic_builds build_row
@@ -40,31 +43,56 @@ AS $function$
     SELECT scope_row.timesheet_id
     FROM private.banking_pay_workbench_economic_build_scope scope_row
     WHERE scope_row.build_id=p_build_id
-  ), relevant_item_id AS MATERIALIZED (
-    SELECT item.id
-    FROM scope_timesheet scope_row
+  ), direct_owner_item AS MATERIALIZED (
+    SELECT item.pay_batch_candidate_id,item.id AS item_id
+    FROM build
+    JOIN scope_timesheet scope_row ON true
     JOIN public.pay_batch_items item ON item.timesheet_id=scope_row.timesheet_id
+    JOIN public.pay_batch_candidates batch_candidate
+      ON batch_candidate.id=item.pay_batch_candidate_id
+     AND batch_candidate.candidate_id=build.candidate_id
     WHERE item.item_type IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
       AND COALESCE(item.is_voided,false) IS FALSE
-    UNION
-    SELECT item.id
-    FROM scope_timesheet scope_row
+      AND (p_last_batch_candidate_id IS NULL OR
+        (item.pay_batch_candidate_id,item.id)>(p_last_batch_candidate_id,p_last_item_id))
+    ORDER BY item.pay_batch_candidate_id,item.id
+    LIMIT LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1
+  ), component_owner_item AS MATERIALIZED (
+    SELECT item.pay_batch_candidate_id,item.id AS item_id
+    FROM build
+    JOIN scope_timesheet scope_row ON true
     JOIN public.pay_finance_case_components component
       ON component.linked_timesheet_id=scope_row.timesheet_id
     JOIN public.pay_batch_items item ON item.finance_component_id=component.id
+    JOIN public.pay_batch_candidates batch_candidate
+      ON batch_candidate.id=item.pay_batch_candidate_id
+     AND batch_candidate.candidate_id=build.candidate_id
     WHERE item.item_type IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
       AND COALESCE(item.is_voided,false) IS FALSE
-    UNION
-    SELECT item.id
-    FROM scope_timesheet scope_row
+      AND (p_last_batch_candidate_id IS NULL OR
+        (item.pay_batch_candidate_id,item.id)>(p_last_batch_candidate_id,p_last_item_id))
+    ORDER BY item.pay_batch_candidate_id,item.id
+    LIMIT LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1
+  ), case_owner_item AS MATERIALIZED (
+    SELECT item.pay_batch_candidate_id,item.id AS item_id
+    FROM build
+    JOIN scope_timesheet scope_row ON true
     JOIN public.pay_advances finance_case
       ON finance_case.linked_timesheet_id=scope_row.timesheet_id
     JOIN public.pay_batch_items item ON item.finance_case_id=finance_case.id
+    JOIN public.pay_batch_candidates batch_candidate
+      ON batch_candidate.id=item.pay_batch_candidate_id
+     AND batch_candidate.candidate_id=build.candidate_id
     WHERE item.item_type IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
       AND COALESCE(item.is_voided,false) IS FALSE
-    UNION
-    SELECT item.id
-    FROM scope_timesheet scope_row
+      AND (p_last_batch_candidate_id IS NULL OR
+        (item.pay_batch_candidate_id,item.id)>(p_last_batch_candidate_id,p_last_item_id))
+    ORDER BY item.pay_batch_candidate_id,item.id
+    LIMIT LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1
+  ), frozen_owner_item AS MATERIALIZED (
+    SELECT item.pay_batch_candidate_id,item.id AS item_id
+    FROM build
+    JOIN scope_timesheet scope_row ON true
     JOIN public.pay_batch_items item ON (
       item.frozen_source_basis_json @> jsonb_build_object('linked_timesheet_id',scope_row.timesheet_id::text)
       OR item.frozen_source_basis_json @> jsonb_build_object('timesheet_id',scope_row.timesheet_id::text)
@@ -79,25 +107,84 @@ AS $function$
       OR item.frozen_component_snapshot_json @> jsonb_build_object('source_basis_json',
         jsonb_build_object('timesheet_id',scope_row.timesheet_id::text))
       OR item.frozen_component_snapshot_json @> jsonb_build_object('source_basis_json',
-        jsonb_build_object('carrier_timesheet_id',scope_row.timesheet_id::text))
-    )
+        jsonb_build_object('carrier_timesheet_id',scope_row.timesheet_id::text)))
+    JOIN public.pay_batch_candidates batch_candidate
+      ON batch_candidate.id=item.pay_batch_candidate_id
+     AND batch_candidate.candidate_id=build.candidate_id
     WHERE item.item_type IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
       AND COALESCE(item.is_voided,false) IS FALSE
-  ), item_page AS MATERIALIZED (
-    SELECT item.*,batch_candidate.candidate_id AS batch_candidate_candidate_id,
-      batch_candidate.settlement_status,batch_candidate.settled_at_utc
+      AND (p_last_batch_candidate_id IS NULL OR
+        (item.pay_batch_candidate_id,item.id)>(p_last_batch_candidate_id,p_last_item_id))
+    ORDER BY item.pay_batch_candidate_id,item.id
+    LIMIT LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1
+  ), candidate_settled_item AS MATERIALIZED (
+    SELECT item.pay_batch_candidate_id,item.id AS item_id
     FROM build
     JOIN public.pay_batch_candidates batch_candidate
       ON batch_candidate.candidate_id=build.candidate_id
-    JOIN relevant_item_id relevant ON true
-    JOIN public.pay_batch_items item
-      ON item.id=relevant.id AND item.pay_batch_candidate_id=batch_candidate.id
-     AND item.item_type IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
-     AND COALESCE(item.is_voided,false) IS FALSE
-    WHERE p_last_batch_candidate_id IS NULL
-       OR (batch_candidate.id,item.id)>(p_last_batch_candidate_id,p_last_item_id)
-    ORDER BY batch_candidate.id,item.id
+    JOIN public.pay_batch_items item ON item.pay_batch_candidate_id=batch_candidate.id
+    WHERE item.item_type IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
+      AND COALESCE(item.is_voided,false) IS FALSE
+      AND (UPPER(BTRIM(COALESCE(batch_candidate.settlement_status,'')))='SETTLED'
+        OR batch_candidate.settled_at_utc IS NOT NULL)
+      AND (p_last_batch_candidate_id IS NULL OR
+        (item.pay_batch_candidate_id,item.id)>(p_last_batch_candidate_id,p_last_item_id))
+    ORDER BY item.pay_batch_candidate_id,item.id
     LIMIT LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1
+  ), candidate_transfer_item AS MATERIALIZED (
+    SELECT item.pay_batch_candidate_id,item.id AS item_id
+    FROM build
+    JOIN public.pay_batch_candidates batch_candidate
+      ON batch_candidate.candidate_id=build.candidate_id
+    JOIN public.pay_batch_items item ON item.pay_batch_candidate_id=batch_candidate.id
+    JOIN public.pay_bank_transfers transfer ON transfer.id=item.pay_bank_transfer_id
+    WHERE item.item_type IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
+      AND COALESCE(item.is_voided,false) IS FALSE
+      AND (UPPER(BTRIM(COALESCE(transfer.status,'')))='COMPLETED'
+        OR transfer.completed_at_utc IS NOT NULL)
+      AND (p_last_batch_candidate_id IS NULL OR
+        (item.pay_batch_candidate_id,item.id)>(p_last_batch_candidate_id,p_last_item_id))
+    ORDER BY item.pay_batch_candidate_id,item.id
+    LIMIT LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1
+  ), candidate_reservation_item AS MATERIALIZED (
+    SELECT item.pay_batch_candidate_id,item.id AS item_id
+    FROM build
+    JOIN public.pay_batch_candidates batch_candidate
+      ON batch_candidate.candidate_id=build.candidate_id
+    JOIN public.pay_batch_items item ON item.pay_batch_candidate_id=batch_candidate.id
+    JOIN public.pay_advance_reservations reservation
+      ON reservation.pay_batch_item_id=item.id
+    WHERE item.item_type IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
+      AND COALESCE(item.is_voided,false) IS FALSE
+      AND (UPPER(BTRIM(COALESCE(reservation.status,'')))='SETTLED'
+        OR reservation.settled_at_utc IS NOT NULL)
+      AND (p_last_batch_candidate_id IS NULL OR
+        (item.pay_batch_candidate_id,item.id)>(p_last_batch_candidate_id,p_last_item_id))
+    ORDER BY item.pay_batch_candidate_id,item.id
+    LIMIT LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1
+  ), candidate_item_key AS MATERIALIZED (
+    SELECT * FROM direct_owner_item
+    UNION ALL SELECT * FROM component_owner_item
+    UNION ALL SELECT * FROM case_owner_item
+    UNION ALL SELECT * FROM frozen_owner_item
+    UNION ALL SELECT * FROM candidate_settled_item
+    UNION ALL SELECT * FROM candidate_transfer_item
+    UNION ALL SELECT * FROM candidate_reservation_item
+  ), item_key AS MATERIALIZED (
+    SELECT candidate_item_key.pay_batch_candidate_id,candidate_item_key.item_id
+    FROM candidate_item_key
+    GROUP BY candidate_item_key.pay_batch_candidate_id,candidate_item_key.item_id
+    ORDER BY candidate_item_key.pay_batch_candidate_id,candidate_item_key.item_id
+    LIMIT LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1
+  ), item_page AS MATERIALIZED (
+    SELECT item.*,batch_candidate.candidate_id AS batch_candidate_candidate_id,
+      batch_candidate.settlement_status,batch_candidate.settled_at_utc
+    FROM item_key
+    JOIN public.pay_batch_items item ON item.id=item_key.item_id
+      AND item.pay_batch_candidate_id=item_key.pay_batch_candidate_id
+    JOIN public.pay_batch_candidates batch_candidate
+      ON batch_candidate.id=item_key.pay_batch_candidate_id
+    ORDER BY item_key.pay_batch_candidate_id,item_key.item_id
   ), enriched AS (
     SELECT item_page.*,
       component.linked_timesheet_id AS component_timesheet_id,
@@ -133,9 +220,11 @@ AS $function$
   ), resolved AS (
     SELECT enriched.*,
       authority.owner_ids,authority.candidate_ids,authority.finance_case_ids,
+      authority.finance_component_ids,authority.component_key_pairs,
       authority.resolved_timesheet_id,authority.resolved_candidate_id,
-      authority.resolved_finance_case_id,authority.resolution_failure AS owner_failure,
-      authority.evidence_json,
+      authority.resolved_finance_case_id,authority.resolved_finance_component_id,
+      authority.resolved_component_key_type,authority.resolved_component_key_value,
+      authority.resolution_failure AS authority_failure,authority.evidence_json,
       ROUND(ABS(COALESCE(NULLIF(enriched.frozen_source_amount,0),
         NULLIF(enriched.settled_source_amount,0),NULLIF(enriched.amount_ex_vat,0),
         NULLIF(enriched.amount_inc_vat,0))),2) AS resolved_source_amount,
@@ -145,81 +234,116 @@ AS $function$
         OR enriched.completed_at_utc IS NOT NULL
         OR enriched.reservation_has_settled) AND NOT enriched.is_reversed AS settled_authority
     FROM enriched
-    CROSS JOIN LATERAL private.pay_workbench_financial_source_authority_v1(
+    CROSS JOIN LATERAL private.pay_workbench_financial_source_authority_v2(
       enriched.batch_candidate_candidate_id,
       ARRAY[enriched.timesheet_id,enriched.component_timesheet_id,enriched.case_timesheet_id],
       ARRAY[enriched.batch_candidate_candidate_id,enriched.component_candidate_id,
         enriched.case_candidate_id],
       ARRAY[enriched.finance_case_id,enriched.component_case_id],
-      enriched.frozen_source_basis_json,enriched.frozen_component_snapshot_json,'FINANCE') authority
+      ARRAY[enriched.finance_component_id],
+      jsonb_build_array(
+        jsonb_build_object('source','PAY_BATCH_ITEM_FROZEN_COLUMNS',
+          'key_type',enriched.frozen_component_key_type,
+          'key_value',enriched.frozen_component_key_value),
+        jsonb_build_object('source','FINANCE_COMPONENT',
+          'key_type',enriched.component_key_type,
+          'key_value',enriched.component_key_value)
+      ),
+      enriched.frozen_source_basis_json,enriched.frozen_component_snapshot_json,'FINANCE'
+    ) authority
   ), classified AS (
     SELECT resolved.*,
-      UPPER(BTRIM(COALESCE(resolved.frozen_component_key_type,
-        resolved.component_key_type,''))) AS resolved_key_type,
-      BTRIM(COALESCE(resolved.frozen_component_key_value,
-        resolved.component_key_value,'')) AS resolved_key_value,
+      EXISTS(SELECT 1
+        FROM private.banking_pay_workbench_economic_build_scope scope_row
+        WHERE scope_row.build_id=p_build_id
+          AND scope_row.timesheet_id=resolved.resolved_timesheet_id) AS owner_in_scope,
       CASE
-        WHEN NOT resolved.settled_authority THEN NULL::text
-        WHEN resolved.owner_failure IS NOT NULL THEN resolved.owner_failure
-        WHEN resolved.resolved_source_amount IS NULL OR resolved.resolved_source_amount<=0
+        WHEN resolved.settled_authority AND resolved.authority_failure IS NOT NULL
+          THEN resolved.authority_failure
+        WHEN resolved.settled_authority
+         AND (resolved.resolved_source_amount IS NULL OR resolved.resolved_source_amount<=0)
           THEN 'FROZEN_FINANCE_AMOUNT_INVALID'
-        WHEN UPPER(BTRIM(COALESCE(resolved.frozen_component_key_type,
-          resolved.component_key_type,''))) NOT IN
-          ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE',
-            'MANUAL_CARRY_FORWARD')
-          OR NULLIF(BTRIM(COALESCE(resolved.frozen_component_key_value,
-            resolved.component_key_value,'')),'') IS NULL
+        WHEN resolved.settled_authority
+         AND (resolved.resolved_component_key_type NOT IN
+            ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE',
+              'MANUAL_CARRY_FORWARD')
+          OR NULLIF(BTRIM(COALESCE(resolved.resolved_component_key_value,'')),'') IS NULL)
           THEN 'FROZEN_ECONOMIC_KEY_INVALID'
-        WHEN UPPER(BTRIM(COALESCE(resolved.frozen_component_key_type,
-          resolved.component_key_type,'')))='TS_DAY' AND NOT (
-            BTRIM(COALESCE(resolved.frozen_component_key_value,
-              resolved.component_key_value,'')) ~ '^\d{4}-\d{2}-\d{2}$'
-            AND pg_input_is_valid(BTRIM(COALESCE(resolved.frozen_component_key_value,
-              resolved.component_key_value,'')),'date')
-            AND CASE WHEN pg_input_is_valid(BTRIM(COALESCE(
-              resolved.frozen_component_key_value,resolved.component_key_value,'')),
-              'date')
-              THEN (BTRIM(COALESCE(resolved.frozen_component_key_value,
-                resolved.component_key_value,''))::date)::text=
-                BTRIM(COALESCE(resolved.frozen_component_key_value,
-                  resolved.component_key_value,'')) ELSE false END)
+        WHEN resolved.settled_authority AND resolved.resolved_component_key_type='TS_DAY'
+         AND NOT (
+           resolved.resolved_component_key_value ~ '^\d{4}-\d{2}-\d{2}$'
+           AND pg_input_is_valid(resolved.resolved_component_key_value,'date')
+           AND CASE WHEN pg_input_is_valid(resolved.resolved_component_key_value,'date')
+             THEN (resolved.resolved_component_key_value::date)::text=
+               resolved.resolved_component_key_value ELSE false END)
           THEN 'FROZEN_ECONOMIC_KEY_INVALID'
       END AS final_failure
     FROM resolved
+  ), projected AS (
+    SELECT classified.*,
+      classified.settled_authority AND classified.owner_in_scope
+        AND classified.final_failure IS NULL AS authoritative_in_scope,
+      md5(jsonb_build_object(
+        'pay_batch_candidate_id',classified.pay_batch_candidate_id,
+        'pay_batch_item_id',classified.id,'item_type',classified.item_type,
+        'amount_ex_vat',classified.amount_ex_vat,'amount_inc_vat',classified.amount_inc_vat,
+        'frozen_source_amount',classified.frozen_source_amount,
+        'settlement_status',classified.settlement_status,
+        'settled_at_utc',classified.settled_at_utc,
+        'transfer_status',classified.transfer_status,
+        'transfer_completed_at_utc',classified.completed_at_utc,
+        'reservation_has_settled',classified.reservation_has_settled,
+        'is_reversed',classified.is_reversed)::text) AS raw_physical_digest
+    FROM classified
   )
-  SELECT '05:'||classified.pay_batch_candidate_id::text||':'||classified.id::text,
-    classified.pay_batch_candidate_id,classified.id,classified.resolved_timesheet_id,
-    classified.resolved_candidate_id,classified.resolved_finance_case_id,
-    classified.finance_component_id,classified.resolved_key_type,
-    classified.resolved_key_value,
-    ROUND(CASE WHEN UPPER(BTRIM(classified.item_type))='OVERPAYMENT_RECOVERY'
-      THEN -1 ELSE 1 END*classified.resolved_source_amount,2),
-    ROUND(CASE WHEN UPPER(BTRIM(classified.item_type))='OVERPAYMENT_RECOVERY'
-      THEN -1 ELSE 1 END*COALESCE(NULLIF(ABS(classified.amount_inc_vat),0),
-        classified.resolved_source_amount),2),
-    classified.settled_authority,
+  SELECT '05:'||projected.pay_batch_candidate_id::text||':'||projected.id::text,
+    projected.pay_batch_candidate_id,projected.id,projected.resolved_timesheet_id,
+    projected.resolved_candidate_id,projected.resolved_finance_case_id,
+    projected.resolved_finance_component_id,projected.resolved_component_key_type,
+    projected.resolved_component_key_value,
+    ROUND(CASE WHEN UPPER(BTRIM(projected.item_type))='OVERPAYMENT_RECOVERY'
+      THEN -1 ELSE 1 END*projected.resolved_source_amount,2),
+    ROUND(CASE WHEN UPPER(BTRIM(projected.item_type))='OVERPAYMENT_RECOVERY'
+      THEN -1 ELSE 1 END*COALESCE(NULLIF(ABS(projected.amount_inc_vat),0),
+        projected.resolved_source_amount),2),
+    projected.authoritative_in_scope,
     jsonb_build_object(
-      'role','FINANCE_ITEM_AUTHORITY','pay_batch_item_id',classified.id,
-      'pay_batch_candidate_id',classified.pay_batch_candidate_id,
-      'item_type',UPPER(BTRIM(classified.item_type)),
-      'settled_authority',classified.settled_authority,
-      'owner_evidence',classified.evidence_json,
-      'finance_component_id',classified.finance_component_id,
-      'resolution_failure',classified.final_failure,
-      'frozen_source_basis_json',classified.frozen_source_basis_json,
-      'frozen_component_snapshot_json',classified.frozen_component_snapshot_json),
-    md5(jsonb_build_object('pay_batch_item_id',classified.id,
-      'pay_batch_candidate_id',classified.pay_batch_candidate_id,
-      'resolved_timesheet_id',classified.resolved_timesheet_id,
-      'resolved_candidate_id',classified.resolved_candidate_id,
-      'resolved_finance_case_id',classified.resolved_finance_case_id,
-      'finance_component_id',classified.finance_component_id,
-      'key_type',classified.resolved_key_type,'key_value',classified.resolved_key_value,
-      'amount_ex_vat',classified.resolved_source_amount,
-      'settled_authority',classified.settled_authority)::text),
-    classified.final_failure
-  FROM classified
-  ORDER BY classified.pay_batch_candidate_id,classified.id;
+      'role','FINANCE_ITEM_AUTHORITY','pay_batch_item_id',projected.id,
+      'pay_batch_candidate_id',projected.pay_batch_candidate_id,
+      'item_type',UPPER(BTRIM(projected.item_type)),
+      'settled_authority',projected.settled_authority,
+      'authoritative_in_scope',projected.authoritative_in_scope,
+      'owner_in_scope',projected.owner_in_scope,
+      'evidence_only',NOT projected.authoritative_in_scope,
+      'owner_evidence',projected.evidence_json,
+      'finance_component_id',projected.resolved_finance_component_id,
+      'source_timesheet_id',projected.resolved_timesheet_id,
+      'raw_physical_source_key','05:'||projected.pay_batch_candidate_id::text||':'||projected.id::text,
+      'raw_physical_digest',projected.raw_physical_digest,
+      'raw_physical_amount_ex_vat',ROUND(CASE
+        WHEN UPPER(BTRIM(projected.item_type))='OVERPAYMENT_RECOVERY' THEN -1 ELSE 1 END*
+        ABS(COALESCE(NULLIF(projected.frozen_source_amount,0),
+          NULLIF(projected.settled_source_amount,0),NULLIF(projected.amount_ex_vat,0),
+          NULLIF(projected.amount_inc_vat,0),0)),2),
+      'resolution_failure',projected.final_failure,
+      'frozen_source_basis_json',projected.frozen_source_basis_json,
+      'frozen_component_snapshot_json',projected.frozen_component_snapshot_json),
+    md5(jsonb_build_object('pay_batch_item_id',projected.id,
+      'pay_batch_candidate_id',projected.pay_batch_candidate_id,
+      'resolved_timesheet_id',projected.resolved_timesheet_id,
+      'resolved_candidate_id',projected.resolved_candidate_id,
+      'resolved_finance_case_id',projected.resolved_finance_case_id,
+      'resolved_finance_component_id',projected.resolved_finance_component_id,
+      'key_type',projected.resolved_component_key_type,
+      'key_value',projected.resolved_component_key_value,
+      'amount_ex_vat',projected.resolved_source_amount,
+      'settled_authority',projected.settled_authority,
+      'authoritative_in_scope',projected.authoritative_in_scope,
+      'raw_physical_digest',projected.raw_physical_digest)::text),
+    projected.final_failure
+  FROM projected
+  ORDER BY projected.pay_batch_candidate_id,projected.id;
+END;
 $function$;
 
 ALTER FUNCTION private.pay_workbench_finance_item_authority_page_v1(

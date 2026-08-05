@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope V1.2.8: bounded physical economic occurrences
+-- Banking Pay bounded-scope V1.2.9: bounded physical economic occurrences
 -- for one sealed dependency-unit projection. No page-local rotation expansion,
 -- grouped fallback multiplicity or unscoped reservation aggregation.
 
@@ -510,11 +510,14 @@ BEGIN
         NULL::text AS key_resolution_failure_reason,
         1::bigint AS occurrence_ordinal
       FROM private.banking_pay_workbench_economic_build_facts authority
+      JOIN projection_members member
+        ON member.family_timesheet_id=authority.timesheet_id
       WHERE authority.build_id=p_build_id
         AND authority.fact_family='FINANCE_ITEM_AUTHORITY'
         AND authority.dependency_unit_key='GLOBAL'
-        AND authority.timesheet_id=p_projected_timesheet_id
         AND COALESCE((authority.source_payload_json->>'settled_authority')::boolean,false)
+        AND COALESCE((authority.source_payload_json->>'authoritative_in_scope')::boolean,false)
+        AND COALESCE((authority.source_payload_json->>'evidence_only')::boolean,false) IS FALSE
     ), components AS (
       SELECT * FROM standard_components
       UNION ALL SELECT * FROM finance_components

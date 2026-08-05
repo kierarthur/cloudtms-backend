@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope V1.2.4: resumable, uncapped dependency closure
+-- Banking Pay bounded-scope V1.2.9: resumable, uncapped dependency closure
 -- and bounded six-phase final sealing.
 
 CREATE OR REPLACE FUNCTION private.pay_workbench_timesheet_dependency_closure_v2(
@@ -529,11 +529,18 @@ BEGIN
     v_next:=jsonb_build_object(
       'cursor_kind','WORKSPACE_FACT','cursor_version',2,
       'build_id',p_build_id,'candidate_id',v_candidate_id,
+      'captured_candidate_generation',v_build.captured_candidate_generation,
+      'captured_source_change_seq',v_build.source_change_seq,
       'dependency_unit_key','GLOBAL','fact_family','FINANCE_ITEM_AUTHORITY',
       'input_phase','PHYSICAL_SOURCE','input_projection_id',NULL,
       'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
       'cumulative_fact_count',0,
-      'cumulative_digest',md5('BPAY_FACT_STREAM_V2')
+      'cumulative_digest',md5('BPAY_FACT_STREAM_V2'),'terminal',false,
+      'raw_physical_source_count',0,'resolved_physical_source_count',0,
+      'failed_physical_source_count',0,'raw_physical_amount_ex_vat',0,
+      'resolved_physical_amount_ex_vat',0,'last_raw_physical_source_key',NULL,
+      'source_exhausted',false,'raw_terminal_source_key',NULL,
+      'raw_page_evidence_digest',NULL
     );
     UPDATE private.banking_pay_workbench_economic_builds SET
       row_seal_count=v_row_seal_count,last_stable_ordinal=v_last_ordinal,

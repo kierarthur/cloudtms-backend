@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope V1.2.8: exact installed finance-sync body,
+-- Banking Pay bounded-scope V1.2.9: exact installed finance-sync body,
 -- fenced to one complete, sealed, service-owned Workbench build and attempt,
 -- including multi-line canonical/component equality.
 
@@ -37,6 +37,7 @@ declare
   v_bounded_post_sync_digest text;
   v_bounded_canonical_digest text;
   v_bounded_economic_component_digest text;
+  v_bounded_presentation_allocation_digest text;
   v_bounded_canonical_count integer := 0;
   v_bounded_canonical_result jsonb := '{}'::jsonb;
   v_public_result_json jsonb := '{}'::jsonb;
@@ -3820,6 +3821,52 @@ begin
   IF to_regclass('pg_temp.canonical_preview_lines') IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_CANONICAL_LINES_MISSING' USING ERRCODE='23514';
   END IF;
+  IF to_regclass('pg_temp.canonical_timesheet_presentation_state') IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_PRESENTATION_STATE_MISSING' USING ERRCODE='23514';
+  END IF;
+  -- The renderer's protected state must cover the sealed scope exactly.  Its
+  -- ready + blocked + indefinitely-hidden allocation must also reconstruct the
+  -- complete private economic truth.  Case-resolution presentation is an
+  -- overlay and is intentionally not added to that economic total.
+  IF EXISTS(
+    WITH projection_target AS (
+      SELECT DISTINCT projection.timesheet_id
+      FROM private.banking_pay_workbench_economic_build_facts projection
+      WHERE projection.build_id=p_build_id
+        AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
+        AND projection.source_relation='UNIT_PROJECTION'
+        AND projection.timesheet_id IS NOT NULL
+    ), fact_truth AS (
+      SELECT target.timesheet_id,
+        ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS truth_ex_vat
+      FROM projection_target target
+      LEFT JOIN pg_temp.tmp_sync_authoritative_components component
+        ON component.timesheet_id=target.timesheet_id
+      GROUP BY target.timesheet_id
+    ), state_row AS (
+      SELECT state.timesheet_id,COUNT(*) AS state_count,
+        MIN(state.amount_ex_vat) AS amount_ex_vat,
+        MIN(state.ready_section_amount_ex_vat) AS ready_amount,
+        MIN(state.blocked_section_amount_ex_vat) AS blocked_amount,
+        MIN(state.hidden_indefinite_segment_amount_ex_vat) AS hidden_segment_amount,
+        MIN(state.hidden_expense_amount_ex_vat) AS hidden_expense_amount
+      FROM pg_temp.canonical_timesheet_presentation_state state
+      WHERE state.candidate_id=v_bounded_build.candidate_id
+      GROUP BY state.timesheet_id
+    )
+    SELECT 1
+    FROM fact_truth fact
+    FULL OUTER JOIN state_row state USING(timesheet_id)
+    WHERE fact.timesheet_id IS NULL OR state.timesheet_id IS NULL OR state.state_count<>1
+       OR ABS(COALESCE(state.amount_ex_vat,0)-COALESCE(fact.truth_ex_vat,0))>0.01
+       OR ABS(COALESCE(state.amount_ex_vat,0)-(
+         COALESCE(state.ready_amount,0)+COALESCE(state.blocked_amount,0)
+         +COALESCE(state.hidden_segment_amount,0)+COALESCE(state.hidden_expense_amount,0)))>0.01
+    LIMIT 1
+  ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_PRESENTATION_ALLOCATION_AUTHORITY_MISMATCH'
+      USING ERRCODE='23514';
+  END IF;
   IF EXISTS(
     SELECT 1 FROM pg_temp.canonical_preview_lines line
     WHERE line.candidate_id=v_bounded_build.candidate_id
@@ -3842,7 +3889,8 @@ begin
     SELECT 1
     FROM pg_temp.canonical_preview_lines line
     WHERE line.candidate_id=v_bounded_build.candidate_id
-    GROUP BY COALESCE(NULLIF(BTRIM(line.line_json->>'preview_row_id'),''),
+    GROUP BY COALESCE(NULLIF(BTRIM(line.line_json->>'presentation_line_id'),''),
+      NULLIF(BTRIM(line.line_json->>'preview_row_id'),''),
       NULLIF(BTRIM(line.line_json->>'line_id'),''),NULLIF(BTRIM(line.line_json->>'case_key'),''),
       md5(line.line_json::text))
     HAVING count(*)>1
@@ -3851,37 +3899,76 @@ begin
   END IF;
   IF EXISTS(
     WITH expected AS (
-      SELECT scope_row.timesheet_id,
-        ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS expected_ex_vat,
-        COUNT(component.timesheet_id) AS expected_component_count
-      FROM private.banking_pay_workbench_economic_build_scope scope_row
-      LEFT JOIN pg_temp.tmp_sync_authoritative_components component
-        ON component.timesheet_id=scope_row.timesheet_id
-      WHERE scope_row.build_id=p_build_id
-      GROUP BY scope_row.timesheet_id
-    ), actual_rows AS (
+      SELECT (allocation.value->>'timesheet_id')::uuid AS timesheet_id,
+        allocation.value->>'line_identity' AS line_identity,
+        allocation.value->>'parent_line_identity' AS parent_line_identity,
+        allocation.value->>'presentation_section' AS presentation_section,
+        allocation.value->>'pay_channel' AS pay_channel,
+        ROUND((allocation.value->>'amount_ex_vat')::numeric,2) AS amount_ex_vat,
+        (allocation.value->>'draftable')::boolean AS draftable,
+        (allocation.value->>'excluded_from_allocation')::boolean AS excluded_from_allocation,
+        ROUND((allocation.value->>'section_non_segment_amount_ex_vat')::numeric,2)
+          AS section_non_segment_amount_ex_vat,
+        allocation.value->'section_segment_rows' AS section_segment_rows,
+        (allocation.value->>'resolved_segment_rows_replace_source_total')::boolean
+          AS resolved_segment_rows_replace_source_total
+      FROM pg_temp.canonical_timesheet_presentation_state state
+      CROSS JOIN LATERAL jsonb_array_elements(
+        private.pay_workbench_presentation_allocation_expected_v1(to_jsonb(state))) allocation(value)
+      WHERE state.candidate_id=v_bounded_build.candidate_id
+    ), actual AS (
       SELECT COALESCE(line.line_json->>'real_business_timesheet_id',
-          line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid AS timesheet_id,
-        ROUND(COALESCE(SUM(line.amount_ex_vat),0),2) AS actual_ex_vat,
-        COUNT(*) AS actual_line_count
+          line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid
+          AS timesheet_id,
+        COALESCE(NULLIF(BTRIM(line.line_json->>'presentation_line_id'),''),
+          NULLIF(BTRIM(line.line_json->>'line_id'),'')) AS line_identity,
+        NULLIF(BTRIM(line.line_json->>'presentation_parent_line_id'),'') AS parent_line_identity,
+        UPPER(NULLIF(BTRIM(line.line_json->>'presentation_section'),'')) AS presentation_section,
+        UPPER(BTRIM(COALESCE(line.pay_channel::text,line.line_json->>'pay_channel',''))) AS pay_channel,
+        ROUND(COALESCE(line.amount_ex_vat,0),2) AS amount_ex_vat,
+        COALESCE((line.line_json->>'is_ready_for_draft')::boolean,false) AS draftable,
+        COALESCE((line.line_json->>'is_excluded_from_allocation')::boolean,false)
+          AS excluded_from_allocation,
+        ROUND(COALESCE((line.line_json->>'section_non_segment_amount_ex_vat')::numeric,0),2)
+          AS section_non_segment_amount_ex_vat,
+        CASE WHEN jsonb_typeof(line.line_json->'section_segment_rows')='array'
+          THEN line.line_json->'section_segment_rows' ELSE '[]'::jsonb END AS section_segment_rows,
+        COALESCE((line.line_json->>'resolved_segment_rows_replace_source_total')::boolean,false)
+          AS resolved_segment_rows_replace_source_total
       FROM pg_temp.canonical_preview_lines line
       WHERE line.candidate_id=v_bounded_build.candidate_id
         AND UPPER(COALESCE(line.line_json->>'line_type',''))='TIMESHEET_PAYMENT'
         AND COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id','')
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-      GROUP BY 1
     )
-    SELECT 1 FROM expected FULL OUTER JOIN actual_rows USING(timesheet_id)
-    WHERE expected.timesheet_id IS NULL
-       -- Missing presentation is legal for a sealed zero-net/hidden/blocked/
-       -- snoozed row.  Where the renderer did emit a financial line, its
-       -- protected amount must still equal the private economic authority.
-       OR (actual_rows.timesheet_id IS NOT NULL
-         AND ABS(COALESCE(expected.expected_ex_vat,0)-actual_rows.actual_ex_vat)>0.01)
+    SELECT 1
+    FROM expected
+    FULL OUTER JOIN actual USING(timesheet_id,line_identity)
+    WHERE expected.timesheet_id IS NULL OR actual.timesheet_id IS NULL
+       OR actual.parent_line_identity IS DISTINCT FROM expected.parent_line_identity
+       OR actual.presentation_section IS DISTINCT FROM expected.presentation_section
+       OR actual.pay_channel IS DISTINCT FROM expected.pay_channel
+       OR ABS(actual.amount_ex_vat-expected.amount_ex_vat)>0.01
+       OR actual.draftable IS DISTINCT FROM expected.draftable
+       OR actual.excluded_from_allocation IS DISTINCT FROM expected.excluded_from_allocation
+       OR ABS(actual.section_non_segment_amount_ex_vat-
+         expected.section_non_segment_amount_ex_vat)>0.01
+       OR actual.section_segment_rows IS DISTINCT FROM expected.section_segment_rows
+       OR actual.resolved_segment_rows_replace_source_total IS DISTINCT FROM
+         expected.resolved_segment_rows_replace_source_total
+    LIMIT 1
   ) THEN
-    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_AMOUNT_MISMATCH' USING ERRCODE='23514';
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_PRESENTATION_ALLOCATION_MISMATCH'
+      USING ERRCODE='23514';
   END IF;
+  SELECT md5(COALESCE(string_agg(allocation.value::text,'' ORDER BY
+    allocation.value->>'timesheet_id',allocation.value->>'line_identity'),''))
+  INTO v_bounded_presentation_allocation_digest
+  FROM pg_temp.canonical_timesheet_presentation_state state
+  CROSS JOIN LATERAL jsonb_array_elements(
+    private.pay_workbench_presentation_allocation_expected_v1(to_jsonb(state))) allocation(value)
+  WHERE state.candidate_id=v_bounded_build.candidate_id;
   IF EXISTS(
     WITH expected AS (
       SELECT scope_row.timesheet_id,component.key_type,component.key_value,
@@ -3905,7 +3992,8 @@ begin
     ), actual_lines AS (
       SELECT COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid AS timesheet_id,
-        COALESCE(NULLIF(BTRIM(line.line_json->>'preview_row_id'),''),
+        COALESCE(NULLIF(BTRIM(line.line_json->>'presentation_line_id'),''),
+          NULLIF(BTRIM(line.line_json->>'preview_row_id'),''),
           NULLIF(BTRIM(line.line_json->>'line_id'),''),NULLIF(BTRIM(line.line_json->>'case_key'),''),
           md5(line.line_json::text)) AS line_identity,
         CASE WHEN jsonb_typeof(line.line_json->'case_components')='array'
@@ -3916,8 +4004,12 @@ begin
         AND COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id','')
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-    ), rendered_timesheets AS (
-      SELECT DISTINCT timesheet_id FROM actual_lines
+    ), expected_presentation_timesheets AS (
+      SELECT DISTINCT (allocation.value->>'timesheet_id')::uuid AS timesheet_id
+      FROM pg_temp.canonical_timesheet_presentation_state state
+      CROSS JOIN LATERAL jsonb_array_elements(
+        private.pay_workbench_presentation_allocation_expected_v1(to_jsonb(state))) allocation(value)
+      WHERE state.candidate_id=v_bounded_build.candidate_id
     ), actual_occurrence AS (
       SELECT actual_line.timesheet_id,actual_line.line_identity,
         UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')) AS key_type,
@@ -3941,7 +4033,7 @@ begin
       FROM actual_occurrence
     ), expected_rendered AS (
       SELECT expected.* FROM expected
-      JOIN rendered_timesheets USING(timesheet_id)
+      JOIN expected_presentation_timesheets USING(timesheet_id)
     )
     SELECT 1 FROM conflicting_actual
     UNION ALL
@@ -4014,6 +4106,7 @@ begin
         'observed_finance_effect_count',v_observed_effect_count,
         'observed_finance_effect_digest',v_observed_effect_digest,
         'economic_component_digest',v_bounded_economic_component_digest,
+        'presentation_allocation_digest',v_bounded_presentation_allocation_digest,
         'pre_sync_digest',v_bounded_pre_sync_digest,'post_sync_digest',v_bounded_post_sync_digest,
         'canonical_digest',v_bounded_canonical_digest),
       reconciled_at_utc=clock_timestamp(),publication_cursor_json=jsonb_build_object(
@@ -4029,6 +4122,7 @@ begin
       'build_id',p_build_id,'attempt_id',p_attempt_id,'scope_timesheet_count',v_bounded_scope_count,
       'fact_count',v_bounded_fact_count,'canonical_stage_count',v_bounded_canonical_count,
       'economic_component_digest',v_bounded_economic_component_digest,
+      'presentation_allocation_digest',v_bounded_presentation_allocation_digest,
       'pre_sync_digest',v_bounded_pre_sync_digest,'post_sync_digest',v_bounded_post_sync_digest,
       'canonical_digest',v_bounded_canonical_digest),
     'build_id',p_build_id,'attempt_id',p_attempt_id,

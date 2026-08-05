@@ -19,6 +19,7 @@ const claim = read('supabase/repeatable/04082026_1141_pay_workbench_source_build
 const authority = read('supabase/repeatable/05082026_1229_pay_workbench_financial_source_authority_v1.sql');
 const componentCore = read('supabase/repeatable/05082026_1230_pay_workbench_canonical_component_core_v1.sql');
 const financePage = read('supabase/repeatable/05082026_1231_pay_workbench_finance_item_authority_page_v1.sql');
+const financePageBundle = read('supabase/repeatable/05082026_1414_pay_workbench_finance_item_authority_page_bundle_v1.sql');
 const occurrenceBundle = read('supabase/repeatable/05082026_1232_pay_workbench_unit_economic_occurrence_bundle_v1.sql');
 const v128Migration = read('supabase/migrations/05082026_1227_banking_pay_bounded_scope_v128_operational_state.sql');
 const deleteEligibility = read('supabase/repeatable/04082026_1219_candidate_delete_eligibility.sql');
@@ -82,7 +83,9 @@ test('D6 reconciliation consumes sealed facts and fences live metadata', () => {
   assert.doesNotMatch(activeSync, /from public\.pay_batch_items/i);
   assert.doesNotMatch(activeSync, /from public\.pay_advance_reservations/i);
   assert.match(syncCore, /fact\.fact_family in \('FROZEN_SETTLED_COMPONENT','RESERVATION_COMPONENT'\)/);
-  assert.match(syncCore, /FULL OUTER JOIN actual_rows USING\(timesheet_id\)/);
+  assert.match(syncCore, /FULL OUTER JOIN actual USING\(timesheet_id,line_identity\)/);
+  assert.match(syncCore, /projection_target AS/);
+  assert.match(syncCore, /PAY_WORKBENCH_CANONICAL_PRESENTATION_ALLOCATION_MISMATCH/);
   assert.match(syncCore, /private\.pay_workbench_canonical_component_core_v1/);
   assert.match(syncCore, /GROUP BY timesheet_id,line_identity,key_type,key_value/);
   assert.match(syncCore, /OR count\(\*\)>1/);
@@ -166,11 +169,21 @@ test('V1.2.8 physical additional identities are lossless and live dates fail clo
   assert.match(occurrence, /pg_input_is_valid\(segment\.value->>'date','date'\)/);
 });
 
-test('V1.2.8 finance movement discovery is scope-derived before its physical limit', () => {
+test('V1.2.9 finance movement discovery bounds every scope and safety branch before authority work', () => {
   assert.match(financePage, /scope_timesheet AS MATERIALIZED/);
-  assert.match(financePage, /relevant_item_id AS MATERIALIZED/);
+  assert.match(financePage, /direct_owner_item AS MATERIALIZED/);
+  assert.match(financePage, /component_owner_item AS MATERIALIZED/);
+  assert.match(financePage, /case_owner_item AS MATERIALIZED/);
+  assert.match(financePage, /frozen_owner_item AS MATERIALIZED/);
+  assert.match(financePage, /candidate_settled_item AS MATERIALIZED/);
+  assert.match(financePage, /candidate_transfer_item AS MATERIALIZED/);
+  assert.match(financePage, /candidate_reservation_item AS MATERIALIZED/);
+  assert.match(financePage, /candidate_item_key AS MATERIALIZED/);
   assert.match(financePage, /item_page AS MATERIALIZED/);
-  assert.ok(financePage.indexOf('relevant_item_id AS MATERIALIZED') < financePage.indexOf('LIMIT LEAST'));
+  assert.doesNotMatch(financePage, /relevant_item_id AS MATERIALIZED/);
+  assert.match(financePageBundle, /raw_page_count/);
+  assert.match(financePageBundle, /raw_source_exhausted/);
+  assert.match(financePageBundle, /evidence_digest/);
   assert.match(financePage, /frozen_source_basis_json @> jsonb_build_object/);
   assert.match(dispatcher, /'FINANCE_ITEM_AUTHORITY'/);
   assert.doesNotMatch(activeSync, /legacy_finance_components_v127 AS/);
