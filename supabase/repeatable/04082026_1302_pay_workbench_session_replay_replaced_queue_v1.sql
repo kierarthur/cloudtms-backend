@@ -10,7 +10,7 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_session_replay_replaced_queue_v1
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'public'
+ SET search_path = ''
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -347,4 +347,4 @@ END;
 $function$;
 ALTER FUNCTION public.pay_workbench_session_replay_replaced_queue_v1(uuid, uuid, text, jsonb) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_workbench_session_replay_replaced_queue_v1(uuid, uuid, text, jsonb) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.pay_workbench_session_replay_replaced_queue_v1(uuid, uuid, text, jsonb) TO PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_replay_replaced_queue_v1(uuid, uuid, text, jsonb) TO postgres, service_role;

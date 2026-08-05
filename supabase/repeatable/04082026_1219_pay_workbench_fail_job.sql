@@ -10,7 +10,7 @@ CREATE OR REPLACE FUNCTION public.pay_workbench_fail_job(p_job_id uuid, p_error_
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
- SET search_path TO 'public'
+ SET search_path = ''
 AS $function$
 DECLARE
   v_now timestamptz := now();
@@ -982,5 +982,4 @@ $function$;
 ALTER FUNCTION public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer) TO postgres;
-GRANT EXECUTE ON FUNCTION public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer) TO service_role;
