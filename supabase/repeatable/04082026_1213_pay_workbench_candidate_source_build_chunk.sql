@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope V1.2.9: one exact private source-build stage per
+-- Banking Pay bounded-scope V1.2.10: one exact private source-build stage per
 -- durable RPC-1 attempt, with sealed physical-source completeness. No ordinary
 -- candidate-lifetime seed or 100-row scope cap.
 
@@ -59,6 +59,7 @@ DECLARE
   v_next_raw_physical_amount_ex_vat numeric:=0;
   v_next_resolved_physical_amount_ex_vat numeric:=0;
   v_expected_source_count integer;
+  v_raw_source_has_more boolean:=false;
   v_has_more boolean:=false;
   v_is_final boolean:=false;
   v_last_page_key text;
@@ -483,7 +484,7 @@ BEGIN
           resolved.resolved_finance_component_id,resolved.resolved_component_key_type,
           resolved.resolved_component_key_value,resolved.resolution_failure,
           resolved.evidence_json,resolved.component_key_pairs
-        FROM private.pay_workbench_financial_source_authority_v2(
+        FROM private.pay_workbench_financial_source_authority_v3(
           p_candidate_id,
           ARRAY(SELECT DISTINCT owner_id FROM (VALUES
             (item.timesheet_id),(component.linked_timesheet_id),(finance_case.linked_timesheet_id)
@@ -509,8 +510,16 @@ BEGIN
             jsonb_build_object('source','FINANCE_COMPONENT',
               'key_type',component.component_key_type,
               'key_value',component.component_key_value)),
-          COALESCE(reservation.frozen_source_basis_json,item.frozen_source_basis_json,'{}'::jsonb),
-          COALESCE(reservation.frozen_component_snapshot_json,item.frozen_component_snapshot_json,'{}'::jsonb),
+          jsonb_build_array(
+            jsonb_build_object('source','RESERVATION',
+              'document',COALESCE(reservation.frozen_source_basis_json,'{}'::jsonb)),
+            jsonb_build_object('source','PAY_BATCH_ITEM',
+              'document',COALESCE(item.frozen_source_basis_json,'{}'::jsonb))),
+          jsonb_build_array(
+            jsonb_build_object('source','RESERVATION',
+              'document',COALESCE(reservation.frozen_component_snapshot_json,'{}'::jsonb)),
+            jsonb_build_object('source','PAY_BATCH_ITEM',
+              'document',COALESCE(item.frozen_component_snapshot_json,'{}'::jsonb))),
           'RESERVATION'
         ) resolved
       ) authority
@@ -673,11 +682,16 @@ BEGIN
         USING ERRCODE='23514',DETAIL=v_resolution_failure;
     END IF;
     IF v_fact_family='FINANCE_ITEM_AUTHORITY' THEN
-      v_has_more:=COALESCE((v_occurrence_bundle->>'raw_source_has_more')::boolean,false);
+      v_raw_source_has_more:=COALESCE(
+        (v_occurrence_bundle->>'raw_source_has_more')::boolean,false);
+      v_has_more:=v_raw_source_has_more;
     ELSIF v_fact_family IN ('LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK')
        AND v_input_phase<>'PROJECTION' THEN
-      v_has_more:=COALESCE((v_occurrence_bundle->>'raw_source_has_more')::boolean,false);
+      v_raw_source_has_more:=COALESCE(
+        (v_occurrence_bundle->>'raw_source_has_more')::boolean,false);
+      v_has_more:=v_raw_source_has_more;
     ELSE
+      v_raw_source_has_more:=false;
       SELECT count(*)>v_fact_limit INTO v_has_more FROM pg_temp._bpay_wb_fact_page_v1;
     END IF;
     SELECT count(*)::integer,
@@ -721,13 +735,21 @@ BEGIN
     IF v_fact_family='FINANCE_ITEM_AUTHORITY' OR (
          v_fact_family IN ('LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK')
          AND v_input_phase<>'PROJECTION') THEN
+      v_has_more:=private.pay_workbench_physical_source_continuation_v1(
+        v_raw_source_has_more,
+        COALESCE((v_occurrence_bundle->>'raw_source_exhausted')::boolean,false),
+        v_projection_family_transition);
+    END IF;
+
+    IF v_fact_family='FINANCE_ITEM_AUTHORITY' OR (
+         v_fact_family IN ('LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK')
+         AND v_input_phase<>'PROJECTION') THEN
       v_page_physical_source_count:=COALESCE((v_occurrence_bundle->>'raw_page_count')::bigint,0);
       v_page_resolved_source_count:=COALESCE((v_occurrence_bundle->>'resolved_page_count')::bigint,0);
       v_page_failed_source_count:=COALESCE((v_occurrence_bundle->>'failed_page_count')::bigint,0);
       v_page_physical_amount_ex_vat:=COALESCE((v_occurrence_bundle->>'raw_amount_ex_vat')::numeric,0);
       v_page_resolved_amount_ex_vat:=COALESCE((v_occurrence_bundle->>'resolved_amount_ex_vat')::numeric,0);
-      IF COALESCE((v_occurrence_bundle->>'raw_source_exhausted')::boolean,false)=v_has_more
-         OR (v_page_physical_source_count>0
+      IF (v_page_physical_source_count>0
            AND NULLIF(v_occurrence_bundle->>'last_raw_source_key','') IS NULL)
          OR NULLIF(v_occurrence_bundle->>'evidence_digest','') IS NULL THEN
         RAISE EXCEPTION 'PAY_WORKBENCH_PHYSICAL_SOURCE_EVIDENCE_INVALID'
@@ -968,25 +990,15 @@ BEGIN
         ELSE
           v_fact_family:=v_unit_families[1];
         END IF;
-        v_next:=v_next||jsonb_build_object('dependency_unit_key',v_unit_key,
-          'fact_family',v_fact_family,'page_number',1,'last_source_key',NULL,
-          'previous_page_digest',NULL,
-          'input_phase',CASE WHEN v_unit_key<>'GLOBAL' THEN 'PROJECTION' ELSE NULL END,
-          'input_projection_id',NULL,'cumulative_fact_count',0,'terminal',false,
-          'cumulative_digest',md5('BPAY_FACT_STREAM_V2'),
-          'raw_physical_source_count',0,'resolved_physical_source_count',0,
-          'failed_physical_source_count',0,'raw_physical_amount_ex_vat',0,
-          'resolved_physical_amount_ex_vat',0,'last_raw_physical_source_key',NULL,
-          'raw_terminal_source_key',NULL,'raw_page_evidence_digest',NULL,'source_exhausted',false);
+        v_next:=private.pay_workbench_fact_cursor_transition_v3(
+          v_next,v_unit_key,v_fact_family,
+          CASE WHEN v_unit_key<>'GLOBAL' THEN 'PROJECTION'
+            ELSE 'PHYSICAL_SOURCE' END,NULL);
       ELSIF v_unit_key<>'GLOBAL' AND v_family_ordinal<cardinality(v_unit_families) THEN
-        v_next:=v_next||jsonb_build_object('fact_family',v_unit_families[v_family_ordinal+1],
-          'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
-          'input_phase',CASE WHEN v_unit_families[v_family_ordinal+1]='LIVE_ENTITLEMENT_INPUT' THEN 'PROJECTION' ELSE 'COMPONENTS' END,'input_projection_id',NULL,
-          'cumulative_fact_count',0,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V2'),
-          'raw_physical_source_count',0,'resolved_physical_source_count',0,
-          'failed_physical_source_count',0,'raw_physical_amount_ex_vat',0,
-          'resolved_physical_amount_ex_vat',0,'last_raw_physical_source_key',NULL,
-          'raw_terminal_source_key',NULL,'raw_page_evidence_digest',NULL,'source_exhausted',false);
+        v_next:=private.pay_workbench_fact_cursor_transition_v3(
+          v_next,v_unit_key,v_unit_families[v_family_ordinal+1],
+          CASE WHEN v_unit_families[v_family_ordinal+1]='LIVE_ENTITLEMENT_INPUT'
+            THEN 'PROJECTION' ELSE 'COMPONENTS' END,NULL);
       ELSIF v_unit_key<>'GLOBAL' THEN
         SELECT dependency_unit_key INTO v_unit_key
         FROM private.banking_pay_workbench_economic_build_scope
@@ -994,22 +1006,14 @@ BEGIN
         ORDER BY stable_ordinal LIMIT 1;
         IF v_unit_key IS NULL THEN v_unit_key:='GLOBAL';v_fact_family:=v_global_families[2];
         ELSE v_fact_family:=v_unit_families[1]; END IF;
-        v_next:=v_next||jsonb_build_object('dependency_unit_key',v_unit_key,'fact_family',v_fact_family,
-          'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
-          'input_phase',CASE WHEN v_unit_key<>'GLOBAL' THEN 'PROJECTION' ELSE NULL END,'input_projection_id',NULL,
-          'cumulative_fact_count',0,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V2'),
-          'raw_physical_source_count',0,'resolved_physical_source_count',0,
-          'failed_physical_source_count',0,'raw_physical_amount_ex_vat',0,
-          'resolved_physical_amount_ex_vat',0,'last_raw_physical_source_key',NULL,
-          'raw_terminal_source_key',NULL,'raw_page_evidence_digest',NULL,'source_exhausted',false);
+        v_next:=private.pay_workbench_fact_cursor_transition_v3(
+          v_next,v_unit_key,v_fact_family,
+          CASE WHEN v_unit_key<>'GLOBAL' THEN 'PROJECTION'
+            ELSE 'PHYSICAL_SOURCE' END,NULL);
       ELSIF v_family_ordinal<cardinality(v_global_families) THEN
-        v_next:=v_next||jsonb_build_object('fact_family',v_global_families[v_family_ordinal+1],
-          'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
-          'cumulative_fact_count',0,'terminal',false,'cumulative_digest',md5('BPAY_FACT_STREAM_V2'),
-          'raw_physical_source_count',0,'resolved_physical_source_count',0,
-          'failed_physical_source_count',0,'raw_physical_amount_ex_vat',0,
-          'resolved_physical_amount_ex_vat',0,'last_raw_physical_source_key',NULL,
-          'raw_terminal_source_key',NULL,'raw_page_evidence_digest',NULL,'source_exhausted',false);
+        v_next:=private.pay_workbench_fact_cursor_transition_v3(
+          v_next,'GLOBAL',v_global_families[v_family_ordinal+1],
+          'PHYSICAL_SOURCE',NULL);
       ELSE
         IF EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_scope
           WHERE build_id=v_build_id AND NOT required_fact_families<@completed_fact_families LIMIT 1) THEN

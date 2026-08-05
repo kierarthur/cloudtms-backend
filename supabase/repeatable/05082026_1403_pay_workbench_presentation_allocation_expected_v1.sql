@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope Version 1.2.9.
+-- Banking Pay bounded-scope Version 1.2.10.
 -- Derive the protected public-timesheet presentation contract from one sealed
 -- canonical presentation-state row.  This is independent of the renderer's
 -- final line table and deliberately excludes presentation-only decoration.
@@ -19,6 +19,9 @@ DECLARE
   v_candidate_id text:=NULLIF(BTRIM(COALESCE(v_state->>'candidate_id','')),'');
   v_pay_channel text:=UPPER(NULLIF(BTRIM(COALESCE(v_state->>'candidate_pay_method','')),''));
   v_has_whole_snooze boolean:=COALESCE((v_state->>'has_active_timesheet_snooze')::boolean,false);
+  v_snooze_until_date text:=NULLIF(BTRIM(COALESCE(v_state->>'snooze_until_date','')),'');
+  v_whole_snooze_indefinite boolean:=false;
+  v_total_amount numeric:=ROUND(COALESCE((v_state->>'amount_ex_vat')::numeric,0),2);
   v_case_blocked boolean:=COALESCE((v_state->>'case_is_blocked')::boolean,false);
   v_has_ready boolean:=false;
   v_has_blocked boolean:=false;
@@ -49,6 +52,7 @@ BEGIN
 
   v_case_needs_resolution:=COALESCE(
     (v_state#>>'{case_resolution_summary_json,case_needs_resolution}')::boolean,false);
+  v_whole_snooze_indefinite:=v_has_whole_snooze AND v_snooze_until_date IS NULL;
   SELECT EXISTS(
     SELECT 1
     FROM jsonb_array_elements(CASE
@@ -57,13 +61,19 @@ BEGIN
     WHERE COALESCE((component.value->>'requires_resolution')::boolean,false)
       AND COALESCE((component.value->>'is_actionable_resolution_row')::boolean,false)
   ) INTO v_has_actionable_component;
-  v_has_ready:=v_ready_amount<>0 OR v_ready_segment_count>0;
+  -- A component-bearing zero-net target remains privately attested but does
+  -- not invent a public economic row.
+  v_has_ready:=v_total_amount<>0 AND (v_ready_amount<>0 OR v_ready_segment_count>0);
   v_non_resolution_block:=NOT v_has_whole_snooze AND NOT v_ready_for_draft
     AND NOT v_case_needs_resolution
     AND (NOT v_case_blocked OR v_has_payee_readiness_block)
     AND v_has_ready;
-  v_has_blocked:=v_has_whole_snooze OR v_blocked_segment_count>0
-    OR v_blocked_expense_count>0 OR v_non_resolution_block;
+  -- An indefinite whole-timesheet snooze is completely hidden.  A dated whole
+  -- snooze retains the existing BLOCKED_FOR_PAY presentation.
+  v_has_blocked:=v_total_amount<>0 AND (
+    (v_has_whole_snooze AND NOT v_whole_snooze_indefinite)
+    OR v_blocked_segment_count>0 OR v_blocked_expense_count>0
+    OR v_non_resolution_block);
   v_has_case:=NOT v_has_whole_snooze AND v_case_blocked AND v_case_needs_resolution
     AND (v_case_amount<>0 OR v_has_actionable_component)
     AND v_blocked_segment_count=0 AND NOT v_non_resolution_block;
