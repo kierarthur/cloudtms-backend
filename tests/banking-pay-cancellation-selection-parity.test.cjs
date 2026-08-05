@@ -18,10 +18,27 @@ const selectionPrepare = fs.readFileSync(path.join(
 ), 'utf8');
 
 function canonicalProviderState(fixture) {
-  if (fixture.paidOrSettled === true) return 'FINAL_PAID';
-  if (fixture.providerOutcomeUnknown === true) return 'PROVIDER_OUTCOME_UNKNOWN';
-  if (fixture.terminalNoMoney === true) return 'TERMINAL_NO_MONEY';
-  if (fixture.providerPendingNonFinal === true) return 'PENDING_NON_FINAL';
+  const paidOrSettled = fixture.paidOrSettled === true || fixture.unscopedFinalPaid === true;
+  const terminalNoMoney = fixture.terminalNoMoney === true || fixture.unscopedTerminalNoMoney === true;
+  const providerOutcomeUnknown = fixture.providerOutcomeUnknown === true
+    || fixture.unscopedProviderOutcomeUnknown === true;
+  const providerPendingNonFinal = fixture.providerPendingNonFinal === true
+    || fixture.unscopedPendingNonFinal === true;
+  const providerOutage = fixture.providerOutage === true || fixture.unscopedProviderOutage === true;
+  const providerRequestSent = fixture.providerRequestSent === true
+    || fixture.unscopedProviderRequestSent === true;
+  const providerExternalIdPresent = fixture.providerExternalIdPresent === true
+    || fixture.unscopedProviderExternalIdPresent === true;
+
+  if (paidOrSettled) return 'FINAL_PAID';
+  if (providerOutcomeUnknown) return 'PROVIDER_OUTCOME_UNKNOWN';
+  if ((providerPendingNonFinal || providerRequestSent || fixture.providerSubmissionInProgress === true)
+      && !terminalNoMoney && !paidOrSettled) return 'PENDING_NON_FINAL';
+  if (providerOutage
+      && !providerRequestSent
+      && !providerExternalIdPresent
+      && fixture.providerSubmissionInProgress !== true) return 'PROVIDER_OUTAGE_RETRY_LATER';
+  if (terminalNoMoney) return 'TERMINAL_NO_MONEY';
   return 'NO_TRANSFER_EVIDENCE';
 }
 
@@ -34,17 +51,23 @@ function eligibleForFailedRelease(fixture) {
 }
 
 function diagnosticCanNoMoneyUnwind(fixture) {
-  const providerPending = fixture.providerPendingNonFinal === true
-    && fixture.terminalNoMoney !== true
-    && fixture.paidOrSettled !== true;
-  return fixture.terminalNoMoney === true
-    && fixture.paidOrSettled !== true
-    && fixture.providerOutcomeUnknown !== true
-    && providerPending !== true
+  return canonicalProviderState(fixture) === 'TERMINAL_NO_MONEY'
     && fixture.providerSubmissionInProgress !== true
     && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus)
     && fixture.manualCarryForwardBlocked !== true
     && fixture.carryForwardFreshnessBlocked !== true;
+}
+
+function eligibleForOrdinaryCancellation(fixture) {
+  return canonicalProviderState(fixture) === 'NO_TRANSFER_EVIDENCE'
+    && fixture.providerSubmissionInProgress !== true
+    && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus)
+    && fixture.manualCarryForwardBlocked !== true
+    && fixture.carryForwardFreshnessBlocked !== true;
+}
+
+function diagnosticCanPreProviderCancel(fixture) {
+  return eligibleForOrdinaryCancellation(fixture);
 }
 
 test('Current Payment Status has one set-wise failed-release eligibility authority', () => {
@@ -52,6 +75,12 @@ test('Current Payment Status has one set-wise failed-release eligibility authori
   assert.match(statusPage, /AS canonical_provider_state/);
   assert.match(statusPage, /AS provider_outcome_unknown/);
   assert.match(statusPage, /AS provider_pending_non_final/);
+  assert.match(statusPage, /AS provider_outage/);
+  assert.match(statusPage, /AS provider_request_sent/);
+  assert.match(statusPage, /AS provider_external_id_present/);
+  assert.match(statusPage, /batch_unscoped_event_facts AS MATERIALIZED/);
+  assert.match(statusPage, /unscoped_event\.pay_bank_transfer_id IS NULL/);
+  assert.match(statusPage, /THEN 'PROVIDER_OUTAGE_RETRY_LATER'/);
   assert.match(statusPage, /candidate_release_eligibility_index AS MATERIALIZED/);
   assert.match(statusPage, /AS release_failed_payment_eligible/);
   assert.match(statusPage, /canonical_provider_state = 'TERMINAL_NO_MONEY'/);
@@ -66,6 +95,7 @@ test('Current Payment Status has one set-wise failed-release eligibility authori
   const classified = statusPage.slice(classifiedStart, classifiedEnd);
   assert.match(classified, /WHEN release_failed_payment_eligible THEN 'NOT_PAID'/);
   assert.match(classified, /WHEN release_failed_payment_eligible THEN ARRAY\['RELEASE_FAILED_PAYMENT'\]/);
+  assert.match(classified, /WHEN canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY\[\]::text\[\]/);
   assert.doesNotMatch(classified, /WHEN terminal_no_money THEN ARRAY\['RELEASE_FAILED_PAYMENT'\]/);
 });
 
@@ -151,6 +181,65 @@ test('terminal no-money outranks historical pending while unknown and paid remai
   }), 'FINAL_PAID');
 });
 
+test('unsent provider outage is retry-later and cannot become a cancellation or release action', () => {
+  const unsentOutage = {
+    paidOrSettled: false,
+    terminalNoMoney: false,
+    providerPendingNonFinal: false,
+    providerOutcomeUnknown: false,
+    providerOutage: true,
+    providerRequestSent: false,
+    providerExternalIdPresent: false,
+    providerSubmissionInProgress: false,
+    latestWorkStatus: null,
+    manualCarryForwardBlocked: false,
+    carryForwardFreshnessBlocked: false,
+  };
+
+  assert.equal(canonicalProviderState(unsentOutage), 'PROVIDER_OUTAGE_RETRY_LATER');
+  assert.equal(eligibleForOrdinaryCancellation(unsentOutage), false);
+  assert.equal(diagnosticCanPreProviderCancel(unsentOutage), false);
+  assert.equal(eligibleForFailedRelease({ ...unsentOutage, terminalNoMoney: true }), false);
+  assert.equal(diagnosticCanNoMoneyUnwind({ ...unsentOutage, terminalNoMoney: true }), false);
+
+  assert.equal(canonicalProviderState({
+    ...unsentOutage,
+    providerRequestSent: true,
+  }), 'PENDING_NON_FINAL');
+  assert.equal(canonicalProviderState({
+    ...unsentOutage,
+    terminalNoMoney: true,
+    providerRequestSent: true,
+  }), 'TERMINAL_NO_MONEY');
+});
+
+test('same-batch null-transfer events use the same provider precedence as linked events', () => {
+  const common = {
+    paidOrSettled: false,
+    terminalNoMoney: false,
+    providerPendingNonFinal: false,
+    providerOutcomeUnknown: false,
+    providerOutage: false,
+    providerRequestSent: false,
+    providerExternalIdPresent: false,
+    providerSubmissionInProgress: false,
+    latestWorkStatus: null,
+    manualCarryForwardBlocked: false,
+    carryForwardFreshnessBlocked: false,
+  };
+
+  assert.equal(canonicalProviderState({ ...common, unscopedFinalPaid: true }), 'FINAL_PAID');
+  assert.equal(canonicalProviderState({ ...common, unscopedProviderOutcomeUnknown: true }), 'PROVIDER_OUTCOME_UNKNOWN');
+  assert.equal(canonicalProviderState({ ...common, unscopedPendingNonFinal: true }), 'PENDING_NON_FINAL');
+  assert.equal(canonicalProviderState({ ...common, unscopedProviderOutage: true }), 'PROVIDER_OUTAGE_RETRY_LATER');
+  assert.equal(canonicalProviderState({ ...common, unscopedTerminalNoMoney: true }), 'TERMINAL_NO_MONEY');
+  assert.equal(canonicalProviderState({
+    ...common,
+    unscopedTerminalNoMoney: true,
+    unscopedPendingNonFinal: true,
+  }), 'TERMINAL_NO_MONEY');
+});
+
 test('reviewed and immutable failed-release sets are equal in both directions', () => {
   const common = {
     paidOrSettled: false,
@@ -167,6 +256,13 @@ test('reviewed and immutable failed-release sets are equal in both directions', 
     { id: 'terminal-plus-pending', ...common, terminalNoMoney: true, providerPendingNonFinal: true },
     { id: 'terminal-plus-unknown', ...common, terminalNoMoney: true, providerOutcomeUnknown: true },
     { id: 'terminal-plus-submission', ...common, terminalNoMoney: true, providerSubmissionInProgress: true },
+    { id: 'terminal-plus-unsent-outage', ...common, terminalNoMoney: true, providerOutage: true },
+    { id: 'outage-only', ...common, providerOutage: true },
+    { id: 'unscoped-terminal', ...common, unscopedTerminalNoMoney: true },
+    { id: 'unscoped-terminal-plus-pending', ...common, unscopedTerminalNoMoney: true, unscopedPendingNonFinal: true },
+    { id: 'unscoped-unknown', ...common, unscopedProviderOutcomeUnknown: true },
+    { id: 'unscoped-pending', ...common, unscopedPendingNonFinal: true },
+    { id: 'unscoped-outage', ...common, unscopedProviderOutage: true },
     { id: 'terminal-plus-paid', ...common, terminalNoMoney: true, paidOrSettled: true },
     { id: 'pending-only', ...common, providerPendingNonFinal: true },
     { id: 'unknown-only', ...common, providerOutcomeUnknown: true },
@@ -182,5 +278,44 @@ test('reviewed and immutable failed-release sets are equal in both directions', 
   const preparedIds = fixtures.filter(diagnosticCanNoMoneyUnwind).map(({ id }) => id).sort();
   assert.deepEqual(reviewedIds.filter((id) => !preparedIds.includes(id)), []);
   assert.deepEqual(preparedIds.filter((id) => !reviewedIds.includes(id)), []);
-  assert.deepEqual(reviewedIds, ['plain-terminal', 'terminal-plus-pending']);
+  assert.deepEqual(reviewedIds, [
+    'plain-terminal',
+    'terminal-plus-pending',
+    'unscoped-terminal',
+    'unscoped-terminal-plus-pending',
+  ]);
+});
+
+test('reviewed and immutable ordinary-cancellation sets are equal in both directions', () => {
+  const common = {
+    paidOrSettled: false,
+    terminalNoMoney: false,
+    providerPendingNonFinal: false,
+    providerOutcomeUnknown: false,
+    providerOutage: false,
+    providerRequestSent: false,
+    providerExternalIdPresent: false,
+    providerSubmissionInProgress: false,
+    latestWorkStatus: null,
+    manualCarryForwardBlocked: false,
+    carryForwardFreshnessBlocked: false,
+  };
+  const fixtures = [
+    { id: 'plain-local', ...common },
+    { id: 'outage-only', ...common, providerOutage: true },
+    { id: 'terminal', ...common, terminalNoMoney: true },
+    { id: 'pending', ...common, providerPendingNonFinal: true },
+    { id: 'unknown', ...common, providerOutcomeUnknown: true },
+    { id: 'paid', ...common, paidOrSettled: true },
+    { id: 'unscoped-outage', ...common, unscopedProviderOutage: true },
+    { id: 'unscoped-terminal', ...common, unscopedTerminalNoMoney: true },
+    { id: 'unscoped-pending', ...common, unscopedPendingNonFinal: true },
+    { id: 'unscoped-unknown', ...common, unscopedProviderOutcomeUnknown: true },
+  ];
+
+  const reviewedIds = fixtures.filter(eligibleForOrdinaryCancellation).map(({ id }) => id).sort();
+  const preparedIds = fixtures.filter(diagnosticCanPreProviderCancel).map(({ id }) => id).sort();
+  assert.deepEqual(reviewedIds.filter((id) => !preparedIds.includes(id)), []);
+  assert.deepEqual(preparedIds.filter((id) => !reviewedIds.includes(id)), []);
+  assert.deepEqual(reviewedIds, ['plain-local']);
 });
