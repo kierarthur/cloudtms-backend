@@ -433,10 +433,10 @@ BEGIN
                  WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
                    AND failed_transfer_movement.is_terminal_no_money
                )) AS terminal_no_money,
-               (EXISTS (
-                 SELECT 1
-                 FROM public.pay_batch_items AS event_item
-                 JOIN public.pay_bank_transfer_events AS ambiguous_event
+               EXISTS (
+                  SELECT 1
+                  FROM public.pay_batch_items AS event_item
+                  JOIN public.pay_bank_transfer_events AS ambiguous_event
                    ON ambiguous_event.pay_bank_transfer_id = event_item.pay_bank_transfer_id
                  CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
                    ambiguous_event.normalised_state,
@@ -449,37 +449,72 @@ BEGIN
                      'provider_event_key', ambiguous_event.provider_event_key
                    )
                  ) AS ambiguous_movement
-                 WHERE event_item.pay_batch_candidate_id = candidate_row.id
-                   AND ambiguous_event.pay_batch_id = p_pay_batch_id
-                   AND (
-                     ambiguous_movement.cash_state = 'UNKNOWN'
-                     OR ambiguous_movement.is_pending_non_final
-                     OR ambiguous_event.mapping_status IN ('UNMATCHED', 'AMBIGUOUS', 'REVIEW_REQUIRED')
-                     OR ambiguous_event.movement_classification = 'AMBIGUOUS_REVIEW_REQUIRED'
-                     OR ambiguous_event.provider_failure_reason_group IN ('WEBHOOK_UNMATCHED', 'PROVIDER_UNKNOWN')
-                   )
-               ) OR EXISTS (
-                 SELECT 1
-                 FROM public.pay_batch_items AS transfer_item
-                 JOIN public.pay_bank_transfers AS pending_transfer
-                   ON pending_transfer.id = transfer_item.pay_bank_transfer_id
-                 CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
-                   pending_transfer.status,
-                   pending_transfer.rail_state,
-                   coalesce(pending_transfer.rail_meta_json, '{}'::jsonb),
-                   pg_catalog.jsonb_build_object(
-                     'provider_key', pending_transfer.rail_provider,
-                     'rail_env', pending_transfer.rail_env,
-                     'request_id', pending_transfer.request_id,
-                     'rail_tx_id', pending_transfer.rail_tx_id
-                   )
-                 ) AS pending_transfer_movement
-                 WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
-                   AND (
-                     pending_transfer_movement.cash_state = 'UNKNOWN'
-                     OR pending_transfer_movement.is_pending_non_final
-                   )
-               )) AS ambiguous,
+                  WHERE event_item.pay_batch_candidate_id = candidate_row.id
+                    AND ambiguous_event.pay_batch_id = p_pay_batch_id
+                    AND (
+                      ambiguous_movement.cash_state = 'UNKNOWN'
+                      OR ambiguous_event.mapping_status IN ('UNMATCHED', 'AMBIGUOUS', 'REVIEW_REQUIRED')
+                      OR ambiguous_event.movement_classification = 'AMBIGUOUS_REVIEW_REQUIRED'
+                      OR ambiguous_event.provider_failure_reason_group IN ('WEBHOOK_UNMATCHED', 'PROVIDER_UNKNOWN')
+                    )
+                    AND pg_catalog.upper(coalesce(ambiguous_event.provider_failure_reason_group, '')) <> 'PROVIDER_OUTAGE'
+                ) OR EXISTS (
+                  SELECT 1
+                  FROM public.pay_batch_items AS transfer_item
+                  JOIN public.pay_bank_transfers AS unknown_transfer
+                    ON unknown_transfer.id = transfer_item.pay_bank_transfer_id
+                  CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                    unknown_transfer.status,
+                    unknown_transfer.rail_state,
+                    coalesce(unknown_transfer.rail_meta_json, '{}'::jsonb),
+                    pg_catalog.jsonb_build_object(
+                      'provider_key', unknown_transfer.rail_provider,
+                      'rail_env', unknown_transfer.rail_env,
+                      'request_id', unknown_transfer.request_id,
+                      'rail_tx_id', unknown_transfer.rail_tx_id
+                    )
+                  ) AS unknown_transfer_movement
+                  WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
+                    AND unknown_transfer_movement.cash_state = 'UNKNOWN'
+                ) AS provider_outcome_unknown,
+               (EXISTS (
+                  SELECT 1
+                  FROM public.pay_batch_items AS event_item
+                  JOIN public.pay_bank_transfer_events AS pending_event
+                    ON pending_event.pay_bank_transfer_id = event_item.pay_bank_transfer_id
+                  CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                    pending_event.normalised_state,
+                    pending_event.provider_state,
+                    coalesce(pending_event.raw_payload, '{}'::jsonb),
+                    pg_catalog.jsonb_build_object(
+                      'provider_key', pending_event.provider_key,
+                      'provider_event_type', pending_event.provider_event_type,
+                      'provider_event_transport', pending_event.provider_event_transport,
+                      'provider_event_key', pending_event.provider_event_key
+                    )
+                  ) AS pending_event_movement
+                  WHERE event_item.pay_batch_candidate_id = candidate_row.id
+                    AND pending_event.pay_batch_id = p_pay_batch_id
+                    AND pending_event_movement.is_pending_non_final
+                ) OR EXISTS (
+                  SELECT 1
+                  FROM public.pay_batch_items AS transfer_item
+                  JOIN public.pay_bank_transfers AS pending_transfer
+                    ON pending_transfer.id = transfer_item.pay_bank_transfer_id
+                  CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+                    pending_transfer.status,
+                    pending_transfer.rail_state,
+                    coalesce(pending_transfer.rail_meta_json, '{}'::jsonb),
+                    pg_catalog.jsonb_build_object(
+                      'provider_key', pending_transfer.rail_provider,
+                      'rail_env', pending_transfer.rail_env,
+                      'request_id', pending_transfer.request_id,
+                      'rail_tx_id', pending_transfer.rail_tx_id
+                    )
+                  ) AS pending_transfer_movement
+                  WHERE transfer_item.pay_batch_candidate_id = candidate_row.id
+                    AND pending_transfer_movement.is_pending_non_final
+                )) AS provider_pending_non_final,
                EXISTS (
                  SELECT 1
                  FROM public.pay_batch_items AS manual_item
@@ -660,21 +695,42 @@ BEGIN
                ), candidate_row.net_bank_amount, 0)::numeric(14,2) AS reviewed_payment_amount
         FROM public.pay_batch_candidates AS candidate_row
         WHERE candidate_row.pay_batch_id = p_pay_batch_id
-    ), candidate_release_eligibility_index AS MATERIALIZED (
+    ), candidate_provider_precedence_index AS MATERIALIZED (
         SELECT candidate_status_index.*,
+               CASE
+                 WHEN candidate_status_index.paid_or_settled THEN 'FINAL_PAID'
+                 WHEN candidate_status_index.provider_outcome_unknown
+                      OR provider_facts.provider_outcome_unknown THEN 'PROVIDER_OUTCOME_UNKNOWN'
+                 WHEN candidate_status_index.terminal_no_money THEN 'TERMINAL_NO_MONEY'
+                 WHEN candidate_status_index.provider_pending_non_final THEN 'PENDING_NON_FINAL'
+                 ELSE 'NO_TRANSFER_EVIDENCE'
+               END AS canonical_provider_state,
                (
-                 candidate_status_index.terminal_no_money
-                 AND candidate_status_index.paid_or_settled IS NOT TRUE
-                 AND candidate_status_index.ambiguous IS NOT TRUE
-                 AND candidate_status_index.latest_work_status IS DISTINCT FROM 'BLOCKED'
-                 AND candidate_status_index.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
-                 AND candidate_status_index.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
-                 AND candidate_status_index.manual_carry_forward_blocked IS NOT TRUE
-                 AND candidate_status_index.carry_forward_freshness_blocked IS NOT TRUE
-                 AND provider_facts.provider_submission_in_progress IS NOT TRUE
-                 AND provider_facts.provider_outcome_unknown IS NOT TRUE
-               ) AS release_failed_payment_eligible
+                 candidate_status_index.provider_outcome_unknown
+                 OR provider_facts.provider_outcome_unknown
+                 OR (
+                   candidate_status_index.provider_pending_non_final
+                   AND candidate_status_index.terminal_no_money IS NOT TRUE
+                   AND candidate_status_index.paid_or_settled IS NOT TRUE
+                 )
+               ) AS ambiguous
         FROM candidate_status_index
+        CROSS JOIN batch_provider_operation_facts AS provider_facts
+    ), candidate_release_eligibility_index AS MATERIALIZED (
+        SELECT candidate_provider_precedence_index.*,
+               (
+                  candidate_provider_precedence_index.canonical_provider_state = 'TERMINAL_NO_MONEY'
+                  AND candidate_provider_precedence_index.paid_or_settled IS NOT TRUE
+                  AND candidate_provider_precedence_index.ambiguous IS NOT TRUE
+                  AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'BLOCKED'
+                  AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
+                  AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
+                  AND candidate_provider_precedence_index.manual_carry_forward_blocked IS NOT TRUE
+                  AND candidate_provider_precedence_index.carry_forward_freshness_blocked IS NOT TRUE
+                  AND provider_facts.provider_submission_in_progress IS NOT TRUE
+                  AND provider_facts.provider_outcome_unknown IS NOT TRUE
+                ) AS release_failed_payment_eligible
+        FROM candidate_provider_precedence_index
         CROSS JOIN batch_provider_operation_facts AS provider_facts
     ), candidate_classified_index AS MATERIALIZED (
         SELECT candidate_release_eligibility_index.*,

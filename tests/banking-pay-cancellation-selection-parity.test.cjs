@@ -17,20 +17,44 @@ const selectionPrepare = fs.readFileSync(path.join(
   '04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql'
 ), 'utf8');
 
+function canonicalProviderState(fixture) {
+  if (fixture.paidOrSettled === true) return 'FINAL_PAID';
+  if (fixture.providerOutcomeUnknown === true) return 'PROVIDER_OUTCOME_UNKNOWN';
+  if (fixture.terminalNoMoney === true) return 'TERMINAL_NO_MONEY';
+  if (fixture.providerPendingNonFinal === true) return 'PENDING_NON_FINAL';
+  return 'NO_TRANSFER_EVIDENCE';
+}
+
 function eligibleForFailedRelease(fixture) {
+  return canonicalProviderState(fixture) === 'TERMINAL_NO_MONEY'
+    && fixture.providerSubmissionInProgress !== true
+    && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus)
+    && fixture.manualCarryForwardBlocked !== true
+    && fixture.carryForwardFreshnessBlocked !== true;
+}
+
+function diagnosticCanNoMoneyUnwind(fixture) {
+  const providerPending = fixture.providerPendingNonFinal === true
+    && fixture.terminalNoMoney !== true
+    && fixture.paidOrSettled !== true;
   return fixture.terminalNoMoney === true
     && fixture.paidOrSettled !== true
-    && fixture.providerAmbiguous !== true
-    && fixture.providerSubmissionInProgress !== true
     && fixture.providerOutcomeUnknown !== true
+    && providerPending !== true
+    && fixture.providerSubmissionInProgress !== true
     && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus)
     && fixture.manualCarryForwardBlocked !== true
     && fixture.carryForwardFreshnessBlocked !== true;
 }
 
 test('Current Payment Status has one set-wise failed-release eligibility authority', () => {
+  assert.match(statusPage, /candidate_provider_precedence_index AS MATERIALIZED/);
+  assert.match(statusPage, /AS canonical_provider_state/);
+  assert.match(statusPage, /AS provider_outcome_unknown/);
+  assert.match(statusPage, /AS provider_pending_non_final/);
   assert.match(statusPage, /candidate_release_eligibility_index AS MATERIALIZED/);
   assert.match(statusPage, /AS release_failed_payment_eligible/);
+  assert.match(statusPage, /canonical_provider_state = 'TERMINAL_NO_MONEY'/);
   assert.match(statusPage, /manual_carry_forward_blocked IS NOT TRUE/);
   assert.match(statusPage, /carry_forward_freshness_blocked IS NOT TRUE/);
   assert.match(statusPage, /provider_submission_in_progress IS NOT TRUE/);
@@ -68,7 +92,7 @@ test('failed-release safety matrix is closed for every reviewed blocker family',
   const safe = {
     terminalNoMoney: true,
     paidOrSettled: false,
-    providerAmbiguous: false,
+    providerPendingNonFinal: false,
     providerSubmissionInProgress: false,
     providerOutcomeUnknown: false,
     latestWorkStatus: null,
@@ -79,7 +103,6 @@ test('failed-release safety matrix is closed for every reviewed blocker family',
 
   for (const unsafe of [
     { paidOrSettled: true },
-    { providerAmbiguous: true },
     { providerSubmissionInProgress: true },
     { providerOutcomeUnknown: true },
     { latestWorkStatus: 'BLOCKED' },
@@ -91,4 +114,73 @@ test('failed-release safety matrix is closed for every reviewed blocker family',
   ]) {
     assert.equal(eligibleForFailedRelease({ ...safe, ...unsafe }), false, JSON.stringify(unsafe));
   }
+});
+
+test('terminal no-money outranks historical pending while unknown and paid remain blockers', () => {
+  const base = {
+    paidOrSettled: false,
+    terminalNoMoney: false,
+    providerPendingNonFinal: false,
+    providerOutcomeUnknown: false,
+    providerSubmissionInProgress: false,
+    latestWorkStatus: null,
+    manualCarryForwardBlocked: false,
+    carryForwardFreshnessBlocked: false,
+  };
+
+  assert.equal(canonicalProviderState({
+    ...base,
+    terminalNoMoney: true,
+    providerPendingNonFinal: true,
+  }), 'TERMINAL_NO_MONEY');
+  assert.equal(eligibleForFailedRelease({
+    ...base,
+    terminalNoMoney: true,
+    providerPendingNonFinal: true,
+  }), true);
+  assert.equal(canonicalProviderState({
+    ...base,
+    terminalNoMoney: true,
+    providerOutcomeUnknown: true,
+  }), 'PROVIDER_OUTCOME_UNKNOWN');
+  assert.equal(canonicalProviderState({
+    ...base,
+    paidOrSettled: true,
+    terminalNoMoney: true,
+    providerPendingNonFinal: true,
+  }), 'FINAL_PAID');
+});
+
+test('reviewed and immutable failed-release sets are equal in both directions', () => {
+  const common = {
+    paidOrSettled: false,
+    terminalNoMoney: false,
+    providerPendingNonFinal: false,
+    providerOutcomeUnknown: false,
+    providerSubmissionInProgress: false,
+    latestWorkStatus: null,
+    manualCarryForwardBlocked: false,
+    carryForwardFreshnessBlocked: false,
+  };
+  const fixtures = [
+    { id: 'plain-terminal', ...common, terminalNoMoney: true },
+    { id: 'terminal-plus-pending', ...common, terminalNoMoney: true, providerPendingNonFinal: true },
+    { id: 'terminal-plus-unknown', ...common, terminalNoMoney: true, providerOutcomeUnknown: true },
+    { id: 'terminal-plus-submission', ...common, terminalNoMoney: true, providerSubmissionInProgress: true },
+    { id: 'terminal-plus-paid', ...common, terminalNoMoney: true, paidOrSettled: true },
+    { id: 'pending-only', ...common, providerPendingNonFinal: true },
+    { id: 'unknown-only', ...common, providerOutcomeUnknown: true },
+    { id: 'blocked-work', ...common, terminalNoMoney: true, latestWorkStatus: 'BLOCKED' },
+    { id: 'failed-final-work', ...common, terminalNoMoney: true, latestWorkStatus: 'FAILED_FINAL' },
+    { id: 'failed-retryable-work', ...common, terminalNoMoney: true, latestWorkStatus: 'FAILED_RETRYABLE' },
+    { id: 'manual-blocker', ...common, terminalNoMoney: true, manualCarryForwardBlocked: true },
+    { id: 'freshness-blocker', ...common, terminalNoMoney: true, carryForwardFreshnessBlocked: true },
+    { id: 'active', ...common },
+  ];
+
+  const reviewedIds = fixtures.filter(eligibleForFailedRelease).map(({ id }) => id).sort();
+  const preparedIds = fixtures.filter(diagnosticCanNoMoneyUnwind).map(({ id }) => id).sort();
+  assert.deepEqual(reviewedIds.filter((id) => !preparedIds.includes(id)), []);
+  assert.deepEqual(preparedIds.filter((id) => !reviewedIds.includes(id)), []);
+  assert.deepEqual(reviewedIds, ['plain-terminal', 'terminal-plus-pending']);
 });
