@@ -158657,8 +158657,8 @@ function handleVersion() {
       implementation_commit: "4bc7fd2d"
     },
     banking_pay_bounded_scope_stage2: {
-      revision: "1.2.14",
-      source_marker: "V1.2.14_STAGE2_SECURITY_IDENTITY_CLOSURE_20260805",
+      revision: "1.2.15",
+      source_marker: "V1.2.15_STAGE2_CLAIM_UNCERTAINTY_CLOSURE_20260805",
       stage1_baseline_commit: "7165360304f8ef12b3790078e450ed1d4b128c55"
     },
     built_at: new Date().toISOString()
@@ -181600,6 +181600,12 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
     'BOOTSTRAP_DISCOVERY',
     'BUILD_CLEANUP'
   ]);
+  const allowedNoClaimResultCodes = new Set([
+    'NO_CLAIM',
+    'CANDIDATE_DELETED',
+    'SESSION_OBSOLETE',
+    'ATTEMPT_GENERATION_OBSOLETE'
+  ]);
   const boundedInteger = (value, fallback, min, max) => {
     const number = Number(value);
     return Number.isFinite(number)
@@ -181698,8 +181704,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       timeoutMs: claimReserveMs,
       bankingPay: true
     }), 'pay_workbench_source_build_attempt_claim_start_v1');
-  } catch (error) {
-    const safeError = safeDiagnostic(error);
+  } catch (_error) {
     return {
       ...base,
       ok: false,
@@ -181710,7 +181715,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       phase: 'CLAIM',
       result_code: 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN',
       error_code: 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN',
-      error_message: safeText(safeError?.message || safeError || 'source-build claim failed'),
+      error_message: 'The source-build claim outcome is uncertain; durable database recovery owns resolution.',
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
     };
   }
@@ -181730,6 +181735,10 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   }
 
   if (claim.claimed === false) {
+    const requestedNoClaimResultCode = upper(claim.result_code || 'NO_CLAIM');
+    const noClaimResultCode = allowedNoClaimResultCodes.has(requestedNoClaimResultCode)
+      ? requestedNoClaimResultCode
+      : 'NO_CLAIM';
     return {
       ...base,
       ok: true,
@@ -181738,7 +181747,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       processed: false,
       execute_called: false,
       phase: 'CLAIM',
-      result_code: upper(claim.result_code || 'NO_CLAIM'),
+      result_code: noClaimResultCode,
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
     };
   }

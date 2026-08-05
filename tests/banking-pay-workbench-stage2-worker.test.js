@@ -10,11 +10,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const worker = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 
 function functionBody(name) {
-  const markers = [`function ${name}`, `async function ${name}`];
-  const start = markers
-    .map((marker) => worker.indexOf(marker))
-    .filter((value) => value >= 0)
-    .sort((a, b) => a - b)[0];
+  const match = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`).exec(worker);
+  const start = match?.index;
   assert.ok(Number.isInteger(start) && start >= 0, `${name} missing`);
   const boundaries = [
     worker.indexOf('\nfunction ', start + 10),
@@ -41,6 +38,35 @@ function loadLaneAttempt() {
   };
   vm.runInNewContext(
     `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('sanitizeBankingPayWorkbenchSourceBuildDiagnostic')}\n${functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt')}\nthis.runAttempt = runBankingPayWorkbenchSourceBuildLaneAttempt;`,
+    context
+  );
+  return context.runAttempt;
+}
+
+function loadActualSbRpcLaneAttempt(fetchImpl) {
+  const context = {
+    Date,
+    Math,
+    Number,
+    String,
+    Boolean,
+    Object,
+    Array,
+    Set,
+    Map,
+    WeakSet,
+    RegExp,
+    JSON,
+    Error,
+    AbortController,
+    setTimeout,
+    clearTimeout,
+    encodeURIComponent,
+    fetch: fetchImpl,
+    sbHeaders: () => ({})
+  };
+  vm.runInNewContext(
+    `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('sanitizeBankingPayWorkbenchSourceBuildDiagnostic')}\n${functionBody('sbRpc')}\n${functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt')}\nthis.runAttempt = runBankingPayWorkbenchSourceBuildLaneAttempt;`,
     context
   );
   return context.runAttempt;
@@ -219,6 +245,69 @@ test('uncertain or malformed claim never invokes RPC 2', async () => {
     assert.equal(result.transport_ok, false);
     assert.match(result.result_code, /CLAIM_(UNCERTAIN|RESPONSE_INVALID)/);
   }
+});
+
+test('actual RPC 1 non-success bodies never enter claim-uncertain results, aggregation or logs', async () => {
+  const nonce = ids.nonce.toLowerCase();
+  const bodyVariants = [
+    JSON.stringify({ ok: true, claimed: true, attempt_nonce: nonce }),
+    JSON.stringify({ detail: { attempt_nonce: ids.nonce.toUpperCase(), message: `ERR_${nonce}_X` } }, null, 2),
+    JSON.stringify({ [`AttemptNonce_${nonce}`]: nonce, result_code: `CLAIM_${nonce}` })
+  ];
+
+  for (const body of bodyVariants) {
+    let fetchCalls = 0;
+    const runAttempt = loadActualSbRpcLaneAttempt(async () => {
+      fetchCalls += 1;
+      return {
+        ok: false,
+        status: 502,
+        text: async () => body
+      };
+    });
+    const result = await runAttempt({ SUPABASE_URL: 'https://test.invalid' }, baseOptions(undefined));
+
+    assert.equal(fetchCalls, 1);
+    assert.equal(result.claimed, false);
+    assert.equal(result.execute_called, false);
+    assert.equal(result.transport_ok, false);
+    assert.equal(result.result_code, 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN');
+    assert.equal(result.error_code, 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN');
+    assert.equal(
+      result.error_message,
+      'The source-build claim outcome is uncertain; durable database recovery owns resolution.'
+    );
+
+    const sanitize = loadDiagnosticSanitizer();
+    const fulfilledLane = sanitize(result, { maxTextLength: 500 });
+    const safeJob = { stage_result: fulfilledLane };
+    const passSummary = { result_code: fulfilledLane.result_code, error_message: fulfilledLane.error_message };
+    const { logDiagnostic, entries } = loadDiagnosticLogger();
+    logDiagnostic({ WORKBENCH_LOGS: true }, 'WORKBENCH_SOURCE_BUILD_TWO_CALL_LANE_RESULT', {
+      ...passSummary,
+      safe_job: safeJob
+    });
+    const completeOutput = JSON.stringify({ result, fulfilledLane, safeJob, passSummary, entries });
+    assert.doesNotMatch(completeOutput, new RegExp(nonce, 'i'));
+    assert.equal(completeOutput.includes(body), false);
+  }
+});
+
+test('no-claim result codes are restricted to the database-owned allowlist', async () => {
+  for (const resultCode of ['NO_CLAIM', 'CANDIDATE_DELETED', 'SESSION_OBSOLETE', 'ATTEMPT_GENERATION_OBSOLETE']) {
+    const result = await loadLaneAttempt()({}, baseOptions(async () => ({ ok: true, claimed: false, result_code: resultCode })));
+    assert.equal(result.result_code, resultCode);
+  }
+
+  const injectedCode = `NO_CLAIM_${ids.nonce}`;
+  const injected = await loadLaneAttempt()({}, baseOptions(async () => ({
+    ok: true,
+    claimed: false,
+    result_code: injectedCode,
+    [`AttemptNonce_${ids.nonce}`]: ids.nonce
+  })));
+  assert.equal(injected.result_code, 'NO_CLAIM');
+  assert.doesNotMatch(JSON.stringify(injected), new RegExp(ids.nonce, 'i'));
 });
 
 test('insufficient preflight budget performs no RPC', async () => {
@@ -515,6 +604,6 @@ test('cron and nudge preserve database-owned stable worker and lane identities a
 test('runtime version advertises the bounded-scope Stage 2 source marker', () => {
   const version = functionBody('handleVersion');
   assert.match(version, /banking_pay_bounded_scope_stage2/);
-  assert.match(version, /V1\.2\.14_STAGE2_SECURITY_IDENTITY_CLOSURE_20260805/);
+  assert.match(version, /V1\.2\.15_STAGE2_CLAIM_UNCERTAINTY_CLOSURE_20260805/);
   assert.match(version, /7165360304f8ef12b3790078e450ed1d4b128c55/);
 });
