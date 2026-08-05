@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_payment_correction_sha256_v1",
       "identity_arguments": "p_value jsonb",
-      "definition_sha256": "0d2434c7801a87106e3069b79ace1c0c5e1aa3a9962b13085dbbef1d7173fe3d",
+      "definition_sha256": "2c549003c209e5a1739854e9e76ff793c5632d290441c94383edb8e89e42834b",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -32,7 +32,7 @@
       "schema": "private",
       "name": "pay_payment_mutation_guard_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_correction_request_id uuid, p_mode text",
-      "definition_sha256": "beb2f3fb02a762a24e7d5f26e419bc807a4a181c656681fc4383d885e8d1d7e9",
+      "definition_sha256": "9c1945939b58d071cb5f3343983119363f2e8837c30817ae3652433fb1224dcc",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -56,7 +56,7 @@
       "schema": "public",
       "name": "banking_pay_operation_claim_next",
       "identity_arguments": "p_operation_id uuid, p_actor_user_id uuid, p_lock_owner text, p_lock_seconds integer, p_allow_backend_runner_owned boolean, p_operation_types text[]",
-      "definition_sha256": "5ffef46e70db82efdbbf3ae0c9bf0d83e6b6521d925223c1fb1cabf464c4401f",
+      "definition_sha256": "8dfbbb5599971d47e33a5ff50e28def4f1e38efd313689b3e9a1b77b5b293e13",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -84,7 +84,7 @@
       "schema": "public",
       "name": "banking_pay_operation_continuation_recovery_due_v1",
       "identity_arguments": "p_limit integer, p_stale_after_seconds integer, p_operation_types text[]",
-      "definition_sha256": "fe1ec576284220814a96cda761c30de6ace8da0ff3b98168df294763b7527478",
+      "definition_sha256": "9b167ab7f68dcb0fa02867959cd845d8847fad969c2893c263612affc363483a",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -113,7 +113,7 @@
       "schema": "public",
       "name": "banking_pay_operation_release_lease",
       "identity_arguments": "p_operation_id uuid, p_lease_owner text, p_release_state text, p_run_after_delay_seconds integer, p_progress_patch_json jsonb, p_result_patch_json jsonb, p_error_json jsonb, p_resume_reason text, p_actor_user_id uuid",
-      "definition_sha256": "5ab4ce1ca4007f93b4b26428dcbfcb392612fed96256fe14e2675f4969514051",
+      "definition_sha256": "1f107914b9232d7248fa2894d73b42694c9795d7cb781164a76d5f2c9d45170c",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -141,7 +141,7 @@
       "schema": "public",
       "name": "banking_pay_operation_start",
       "identity_arguments": "p_operation_type text, p_actor_user_id uuid, p_idempotency_key text, p_workbench_session_id uuid, p_pay_batch_id uuid, p_root_operation_id uuid, p_input_json jsonb, p_config_json jsonb",
-      "definition_sha256": "56346eb80431a2a729ef3465577cb9be864c2141d961dfd6a7666ba3252a83e9",
+      "definition_sha256": "22fa5b90898a7030cd1b899c37319e9dd7d6a7ee21e7cf8b2bfb0b1f1d8145a8",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -171,7 +171,7 @@
       "schema": "public",
       "name": "pay_bank_event_ingest",
       "identity_arguments": "p_event_json jsonb, p_actor_user_id uuid, p_ingest_options_json jsonb",
-      "definition_sha256": "826f69d72a057253686a9fbb90a643c7ffa1b0fc2fddfa88d575f1952ba03553",
+      "definition_sha256": "bbfd6e021d7c81ba44f0251c411535c579aab26793d09be62c159d53e520cfc7",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -201,7 +201,7 @@
       "schema": "public",
       "name": "pay_bank_transfers_claim_provider_submit_chunk",
       "identity_arguments": "p_operation_id uuid, p_pay_batch_id uuid, p_limit integer, p_lock_owner text, p_lock_seconds integer",
-      "definition_sha256": "67950c0b3e116ef0af78c451ed4da33082ef9079ea95d1fcc23d4d926e0d2dcf",
+      "definition_sha256": "64419bd47ef2ad466fc18bf7f2b0c5749795c61cb25bff2edd4d871d266410ff",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -231,7 +231,7 @@
       "schema": "public",
       "name": "pay_batch_auth_apply_action",
       "identity_arguments": "p_auth_request_id uuid, p_actor_user_id uuid, p_action text, p_note text",
-      "definition_sha256": "241eec1d1c222b2d528e54b7c265650f28d6a9a5fbb7e82f3af87e14735228d4",
+      "definition_sha256": "dd2b037b2b4ebe73b2f5dca93455061777cc087c3020e1abf29a249ba04d28d6",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -261,7 +261,7 @@
       "schema": "public",
       "name": "pay_batch_auth_start",
       "identity_arguments": "p_pay_batch_id uuid, p_schedule_kind text, p_scheduled_at_utc timestamp with time zone, p_funding_account_ref text, p_warning_hours_json jsonb, p_actor_user_id uuid, p_actor_intent text, p_execution_mode text, p_payment_date date, p_pay_channel_scope text, p_suppress_remittances boolean, p_suppress_remittances_confirmed boolean, p_csv_uploaded_confirmed boolean, p_csv_bank_confirm_ref text, p_external_settlement_comment text, p_operation_id uuid, p_idempotency_key text, p_freshness_result_hash text",
-      "definition_sha256": "832595b964a0e357dcc7ca5fe0ebe51172a5d56c3becb63705a37c317b326f92",
+      "definition_sha256": "bc227c7a151c7dd28473479db5f2e1e0236d3ef0d3439006d0efcb04eea16a41",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -291,7 +291,7 @@
       "schema": "public",
       "name": "pay_batch_cancel",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_reason text, p_correction_request_id uuid, p_work_item_id uuid",
-      "definition_sha256": "8b49c0c9fa3b56f15a61df844edfe5b26f2d26b5140c0dc5f5f18f5407bd2b11",
+      "definition_sha256": "a2f8a68c0837c135ba83b30efe341c8510955de7670c79ed23a51f2ddbb5cd5f",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "ead14e2494249c3596b5caf6be97867a9b8e49c1ce77a1b5248cae30887b6e25",
+      "definition_sha256": "c9f6369df04d03accf610707a7ec1a61ead825144a35081e4f8c725a9d9f6898",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -350,7 +350,7 @@
       "schema": "public",
       "name": "pay_batch_schedule",
       "identity_arguments": "p_pay_batch_id uuid, p_schedule_kind text, p_scheduled_at_utc timestamp with time zone, p_funding_account_ref text, p_warning_hours_json jsonb, p_actor_user_id uuid, p_operation_id uuid, p_freshness_result_hash text",
-      "definition_sha256": "0722317994d081b6b6107ea9fc05fb47a62390dc48665e4b776393a956fe4487",
+      "definition_sha256": "8fe070e0003f97d85ea11017aac7fc8638d47de4c1ae707fa83e83a913c5c07b",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -380,7 +380,7 @@
       "schema": "public",
       "name": "pay_batches_claim_due_scheduled",
       "identity_arguments": "p_limit integer, p_now_utc timestamp with time zone",
-      "definition_sha256": "bc03757d9b0bca202cc872dd464c6803ce4d435ce643004a14ade3c50203de3d",
+      "definition_sha256": "fe9af78d7bb6eade3f7727651624988d2eab1c2a0ace956f2dd15556ba6c5959",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -410,7 +410,7 @@
       "schema": "public",
       "name": "pay_no_money_unwind_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "574282cb22a85c8f25ced9725c93bf2b6b3aa02a1678c57b91933c69c6fc0ccf",
+      "definition_sha256": "63479ca769f13bb3785ca665a4b86f0d8429440316c909454d8646e4942aeeb2",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -529,7 +529,7 @@
       "schema": "public",
       "name": "pay_payment_correction_authorise",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid, p_action text, p_note text",
-      "definition_sha256": "62caa3ab8a649196b5c1414effca864d23f0f681734258a7d69984bdb07903dd",
+      "definition_sha256": "452f8286f3d13a99211fac1c389aac0c4eb59a9f9e3befbdcfbd3bba96eab903",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -559,7 +559,7 @@
       "schema": "public",
       "name": "pay_payment_correction_expand_work",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "701e2fca668878a77aaff10100c4daaa22baa432e88676e8652c694860143345",
+      "definition_sha256": "7ed5687ad9e16834eaf2dcb82efc457a047a472b41388ea9edfcc49765858542",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -589,7 +589,7 @@
       "schema": "public",
       "name": "pay_payment_correction_expire_due_v1",
       "identity_arguments": "p_limit integer",
-      "definition_sha256": "e42f305c30cfeb049716da790fbe5e73ea20b066779630f13443a92c33acc9f1",
+      "definition_sha256": "4d5b296fcad66875c476fe0f39ff3fdc02da0e4f0280c9b98f6289a0f15e5ba6",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -619,7 +619,7 @@
       "schema": "public",
       "name": "pay_payment_correction_integrity_check_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_max_candidates integer",
-      "definition_sha256": "3fa4a7fe99a1f0c6d2a15f91b0c17f60bc0f05606d7a1526c85b0f3963da217f",
+      "definition_sha256": "2ea5bac5c9ccbfb620d562c1c5c7e71d7cc30bcc02b183e78be1735dbff4918c",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -648,7 +648,7 @@
       "schema": "public",
       "name": "pay_payment_correction_process_chunk",
       "identity_arguments": "p_correction_request_id uuid, p_limit integer, p_worker_id text, p_actor_user_id uuid",
-      "definition_sha256": "66a58710a0c700e6e20e28f0e1a0144f1f372f3b140186040a8649d02557a2e4",
+      "definition_sha256": "b7f37761df3a6c94630011cbd5b503da7d1046a043d3458298911dc7ccdb3eae",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -678,7 +678,7 @@
       "schema": "public",
       "name": "pay_payment_correction_reauth_bind_v1",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid, p_session_hash text, p_proof_hash text, p_issued_at_utc timestamp with time zone, p_expires_at_utc timestamp with time zone",
-      "definition_sha256": "c04503776f1ee27c5e10e102b16717641e07a6947a268b324446428873cf53c3",
+      "definition_sha256": "afcc10d5178d415888f2a070a69eab28582a1ab1bba038504bacb5db86ce530e",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -708,7 +708,7 @@
       "schema": "public",
       "name": "pay_payment_correction_request_start",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_reason text, p_actor_user_id uuid, p_source_bank_event_id uuid, p_auto_requested boolean, p_accepted_resolution_json jsonb",
-      "definition_sha256": "de951ed20dd8fe0beaa6de488b02f4cf6d9f7c2b81609126848cb131ceac9d8f",
+      "definition_sha256": "0e36f22da208d8fc0ef7a2a329ad109d4c6ae46e5a1cd38544966e507c2eeae0",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -738,7 +738,7 @@
       "schema": "public",
       "name": "pay_payment_correction_selection_prepare_chunk_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_cursor_json jsonb, p_limit integer, p_worker_id text, p_actor_user_id uuid",
-      "definition_sha256": "b4055ba7965aa7ae7e61384a9f2ca4dc005c88adc93125712e77c501ffefb1c8",
+      "definition_sha256": "6af594d5ac374c0a96e5e0ce1106043578c9f2fc66faf514dfbde0df19cdd108",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -768,7 +768,7 @@
       "schema": "public",
       "name": "pay_payment_correction_status_get_v1",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "36cc4b2a4a54d27cc7d6bb0351c59d199dae180bcaeaa16b903fe3d3c2dc3da8",
+      "definition_sha256": "deab74782a60a2db3cd7224a87db0bd8bea98d8aee98ff2ff06772def87ebb41",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -797,7 +797,7 @@
       "schema": "public",
       "name": "pay_pre_bank_cancel_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "fe6461aa0edddc56ae737584f80eea788b94932f1a8438bafbb9a9f95342ac01",
+      "definition_sha256": "bacd9260b2bee638ba91fb0f90e234272bb250d7ad06905c80f5921749a37bda",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -827,7 +827,7 @@
       "schema": "public",
       "name": "pay_settle_rail",
       "identity_arguments": "p_pay_batch_id uuid, p_settlement_json jsonb, p_actor_user_id uuid, p_operation_id uuid, p_settlement_scope_ids jsonb",
-      "definition_sha256": "780ad5c919d903c403974cd8108340721d658ef25be93a17ba9727150e599c84",
+      "definition_sha256": "0e5c3e38a314945f67ca716c5e6897ca9ed9730d7bbfd8e39342e31bdf26a83f",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
