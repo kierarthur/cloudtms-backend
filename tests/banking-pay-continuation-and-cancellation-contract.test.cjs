@@ -135,8 +135,9 @@ test('all normal Worker call sites retire the four owner-only compatibility RPCs
 test('reauthenticated start rechecks every signed plan field and the database-bound expiry', () => {
   const body = functionBody('handleBankingPayCorrectionStartPreparedV1');
   for (const field of ['requested_action', 'selected_candidate_count', 'selected_active_item_count', 'selected_amount_pence', 'reason_hash', 'evidence_hash', 'outcome_hash']) {
-    assert.match(body, new RegExp(`payload\\.${field}`));
+    assert.match(body, new RegExp(`${field}:`));
   }
   assert.match(body, /reauth_expires_at_utc/);
   assert.match(body, /REAUTH_PROOF_INVALID/);
+  assert.match(body, /verifyPaymentReversalReauth\(env, user, user, token/);
 });

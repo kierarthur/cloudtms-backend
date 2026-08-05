@@ -48814,6 +48814,182 @@ function bankingPayCancellationError(env, req, error, fallbackCode = 'PAYMENT_CO
   return bankingPayCancellationResponse(env, req, denied ? 403 : (conflict ? 409 : 400), { ok: false, code, error_code: code, message, error: message });
 }
 
+const BANKING_PAY_CORRECTION_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const BANKING_PAY_CORRECTION_SHA256_RE = /^[0-9a-f]{64}$/;
+const BANKING_PAY_CORRECTION_PROOF_FIELDS = Object.freeze([
+  'version',
+  'correction_request_id',
+  'pay_batch_id',
+  'actor_user_id',
+  'session_hash',
+  'plan_hash',
+  'selection_hash',
+  'requested_action',
+  'selected_candidate_count',
+  'selected_active_item_count',
+  'selected_amount_pence',
+  'reason_hash',
+  'evidence_hash',
+  'outcome_hash',
+  'nonce',
+  'issued_at_epoch_seconds',
+  'expires_at_epoch_seconds'
+]);
+
+function isBankingPayCorrectionPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function bankingPayCorrectionUuid(value, fieldName) {
+  const text = String(value == null ? '' : value).trim();
+  if (!BANKING_PAY_CORRECTION_UUID_RE.test(text)) {
+    throw Object.assign(new Error(`${fieldName || 'UUID'} is invalid.`), { code: 'PAYMENT_CORRECTION_UUID_INVALID' });
+  }
+  return text;
+}
+
+function bankingPayCorrectionBoundedText(value, maxBytes, fieldName, options = {}) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text && options.required === true) {
+    throw Object.assign(new Error(`${fieldName || 'Value'} is required.`), { code: 'PAYMENT_CORRECTION_INPUT_REQUIRED' });
+  }
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw Object.assign(new Error(`${fieldName || 'Value'} is too large.`), { code: 'PAYMENT_CORRECTION_INPUT_TOO_LARGE' });
+  }
+  return text || null;
+}
+
+async function parseBankingPayCancellationJsonBody(request, options = {}) {
+  const maxBytes = Math.max(1, Math.trunc(Number(options.maxBytes || 65536)));
+  const contentLengthText = String(request?.headers?.get?.('content-length') || '').trim();
+  const contentLength = contentLengthText ? Number(contentLengthText) : null;
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    throw Object.assign(new Error('Request body is too large.'), { code: 'PAYMENT_CORRECTION_BODY_TOO_LARGE' });
+  }
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    throw Object.assign(new Error('Request body is too large.'), { code: 'PAYMENT_CORRECTION_BODY_TOO_LARGE' });
+  }
+  if (!text.trim()) {
+    if (options.allowEmpty === true) return {};
+    throw Object.assign(new Error('A JSON request body is required.'), { code: 'INVALID_JSON' });
+  }
+  let value;
+  try { value = JSON.parse(text); } catch {
+    throw Object.assign(new Error('Invalid JSON.'), { code: 'INVALID_JSON' });
+  }
+  if (!isBankingPayCorrectionPlainObject(value)) {
+    throw Object.assign(new Error('The request body must be a JSON object.'), { code: 'INVALID_JSON' });
+  }
+  return value;
+}
+
+function bankingPayCorrectionBodyErrorResponse(env, request, error) {
+  const code = String(error?.code || 'INVALID_JSON').trim().toUpperCase();
+  const status = code === 'PAYMENT_CORRECTION_BODY_TOO_LARGE' || code === 'PAYMENT_CORRECTION_INPUT_TOO_LARGE' ? 413 : 400;
+  return bankingPayCancellationResponse(env, request, status, {
+    ok: false,
+    code,
+    error_code: code,
+    message: String(error?.message || 'The request is invalid.')
+  });
+}
+
+function bankingPayCorrectionRpcHttpStatus(result, successStatus = 200) {
+  if (!result || result.ok !== false) return successStatus;
+  const code = String(result.code || result.error_code || '').trim().toUpperCase();
+  if (/(PERMISSION|FORBIDDEN|UNAUTHORISED|UNAUTHORIZED|ACTOR)/.test(code)) return 403;
+  if (/(NOT_FOUND|MISSING_BATCH|MISSING_REQUEST)/.test(code)) return 404;
+  if (/(CAPACITY|TOO_LARGE)/.test(code)) return 422;
+  if (/(STALE|CONFLICT|MISMATCH|ALREADY|BLOCK|PAID|SETTLED|EXPIRED|STATE)/.test(code)) return 409;
+  return 400;
+}
+
+function bankingPayCorrectionCanonicalUuidArray(value, fieldName, maxItems, options = {}) {
+  if (!Array.isArray(value)) {
+    throw Object.assign(new Error(`${fieldName} must be an array.`), { code: 'PAYMENT_CORRECTION_SELECTION_INVALID' });
+  }
+  if ((options.required === true && value.length === 0) || value.length > maxItems) {
+    throw Object.assign(new Error(`${fieldName} contains an invalid number of entries.`), { code: 'PAYMENT_CORRECTION_SELECTION_INVALID' });
+  }
+  const seen = new Set();
+  const output = [];
+  for (const raw of value) {
+    const id = bankingPayCorrectionUuid(raw, fieldName).toLowerCase();
+    if (seen.has(id)) {
+      throw Object.assign(new Error(`${fieldName} contains a duplicate entry.`), { code: 'PAYMENT_CORRECTION_SELECTION_DUPLICATE' });
+    }
+    seen.add(id);
+    output.push(id);
+  }
+  return output;
+}
+
+function validateBankingPayPaymentStatusFilter(value) {
+  if (!isBankingPayCorrectionPlainObject(value)) {
+    throw Object.assign(new Error('The payment-status filter is invalid.'), { code: 'FILTER_INVALID' });
+  }
+  const allowed = new Set(['status', 'action', 'search', 'actionable_only', 'pay_channel', 'excluded_candidate_tokens', 'included_candidate_tokens']);
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) throw Object.assign(new Error('The payment-status filter contains an unsupported field.'), { code: 'FILTER_INVALID' });
+  }
+  const out = { ...value };
+  for (const key of ['excluded_candidate_tokens', 'included_candidate_tokens']) {
+    if (Object.prototype.hasOwnProperty.call(out, key)) {
+      out[key] = bankingPayCorrectionCanonicalUuidArray(out[key], key, 10000);
+    }
+  }
+  if (new TextEncoder().encode(stableBankingPayContinuationJson(out)).byteLength > 65536) {
+    throw Object.assign(new Error('The payment-status filter is too large.'), { code: 'FILTER_INVALID' });
+  }
+  return out;
+}
+
+function canonicaliseBankingPayCorrectionProofPayload(fields) {
+  if (!isBankingPayCorrectionPlainObject(fields)) {
+    throw Object.assign(new Error('Correction proof payload is invalid.'), { code: 'REAUTH_PROOF_PAYLOAD_INVALID' });
+  }
+  const keys = Object.keys(fields).sort();
+  const expectedKeys = [...BANKING_PAY_CORRECTION_PROOF_FIELDS].sort();
+  if (keys.length !== expectedKeys.length || keys.some((key, index) => key !== expectedKeys[index])) {
+    throw Object.assign(new Error('Correction proof payload fields are invalid.'), { code: 'REAUTH_PROOF_PAYLOAD_FIELDS_INVALID' });
+  }
+  const payload = {};
+  for (const key of BANKING_PAY_CORRECTION_PROOF_FIELDS) payload[key] = fields[key];
+  if (payload.version !== 1) throw Object.assign(new Error('Correction proof version is invalid.'), { code: 'REAUTH_PROOF_VERSION_INVALID' });
+  for (const key of ['correction_request_id', 'pay_batch_id', 'actor_user_id']) {
+    if (!BANKING_PAY_CORRECTION_UUID_RE.test(String(payload[key] || '')) || payload[key] !== String(payload[key]).toLowerCase()) {
+      throw Object.assign(new Error(`Correction proof ${key} is invalid.`), { code: 'REAUTH_PROOF_UUID_INVALID' });
+    }
+  }
+  for (const key of ['session_hash', 'plan_hash', 'selection_hash']) {
+    if (!BANKING_PAY_CORRECTION_SHA256_RE.test(String(payload[key] || ''))) {
+      throw Object.assign(new Error(`Correction proof ${key} is invalid.`), { code: 'REAUTH_PROOF_HASH_INVALID' });
+    }
+  }
+  for (const key of ['reason_hash', 'evidence_hash', 'outcome_hash']) {
+    if (payload[key] !== null && !BANKING_PAY_CORRECTION_SHA256_RE.test(String(payload[key] || ''))) {
+      throw Object.assign(new Error(`Correction proof ${key} is invalid.`), { code: 'REAUTH_PROOF_HASH_INVALID' });
+    }
+  }
+  const action = String(payload.requested_action || '').trim().toUpperCase();
+  if (!['DRAFT_CANCEL', 'PRE_BANK_CANCEL', 'CANCEL_PAYMENT', 'NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'].includes(action) || action !== payload.requested_action) {
+    throw Object.assign(new Error('Correction proof action is invalid.'), { code: 'REAUTH_PROOF_ACTION_INVALID' });
+  }
+  for (const key of ['selected_candidate_count', 'selected_active_item_count', 'selected_amount_pence', 'issued_at_epoch_seconds', 'expires_at_epoch_seconds']) {
+    if (!Number.isSafeInteger(payload[key]) || payload[key] < 0) {
+      throw Object.assign(new Error(`Correction proof ${key} is invalid.`), { code: 'REAUTH_PROOF_NUMBER_INVALID' });
+    }
+  }
+  if (payload.expires_at_epoch_seconds <= payload.issued_at_epoch_seconds) {
+    throw Object.assign(new Error('Correction proof expiry is invalid.'), { code: 'REAUTH_PROOF_EXPIRY_INVALID' });
+  }
+  if (!/^[A-Za-z0-9_-]{43}$/.test(String(payload.nonce || ''))) {
+    throw Object.assign(new Error('Correction proof nonce is invalid.'), { code: 'REAUTH_PROOF_NONCE_INVALID' });
+  }
+  return stableBankingPayContinuationJson(payload);
+}
+
 async function requireBankingPayCancellationActor(env, req, user, options = {}) {
   const policy = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   const actorUserId = String(user?.id || '').trim();
@@ -48845,6 +49021,7 @@ async function readBankingPayCorrectionRequestForWorker(env, correctionRequestId
   const select = [
     'id','pay_batch_id','status','correction_kind','requested_by_user_id','requested_at_utc','reason',
     'selection_json','selection_hash','plan_json','plan_hash','source_bank_event_id','auto_requested',
+    'accepted_resolution_json','accepted_resolution_hash',
     'reauth_proof_hash','reauth_expires_at_utc','reauth_consumed_at_utc'
   ].join(',');
   const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_payment_correction_requests?id=eq.${encodeURIComponent(correctionRequestId)}&select=${encodeURIComponent(select)}&limit=1`, false);
@@ -48898,7 +49075,7 @@ async function bankingPayCorrectionHmacKey(env) {
 }
 
 async function signBankingPayCorrectionProof(env, payload) {
-  const payloadBytes = new TextEncoder().encode(stableBankingPayContinuationJson(payload));
+  const payloadBytes = new TextEncoder().encode(canonicaliseBankingPayCorrectionProofPayload(payload));
   const encodedPayload = bankingPayBase64UrlEncode(payloadBytes);
   const signature = new Uint8Array(await crypto.subtle.sign('HMAC', await bankingPayCorrectionHmacKey(env), payloadBytes));
   return `${encodedPayload}.${bankingPayBase64UrlEncode(signature)}`;
@@ -48913,10 +49090,82 @@ async function verifyBankingPayCorrectionProof(env, token) {
     const valid = await crypto.subtle.verify('HMAC', await bankingPayCorrectionHmacKey(env), signature, payloadBytes);
     if (!valid) return null;
     const payload = JSON.parse(new TextDecoder().decode(payloadBytes));
-    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : null;
+    const canonical = canonicaliseBankingPayCorrectionProofPayload(payload);
+    if (canonical !== new TextDecoder().decode(payloadBytes)) return null;
+    return payload;
   } catch {
     return null;
   }
+}
+
+async function createBankingPayCorrectionReauthProof(env, user, session, plannedStatus, reason, evidence, outcome) {
+  const requestRow = isBankingPayCorrectionPlainObject(plannedStatus) ? plannedStatus : {};
+  const plan = isBankingPayCorrectionPlainObject(requestRow.plan_json) ? requestRow.plan_json : {};
+  const actorUserId = bankingPayCorrectionUuid(user?.id, 'actor_user_id').toLowerCase();
+  const correctionRequestId = bankingPayCorrectionUuid(requestRow.id || requestRow.request_id || requestRow.correction_request_id, 'correction_request_id').toLowerCase();
+  const payBatchId = bankingPayCorrectionUuid(requestRow.pay_batch_id, 'pay_batch_id').toLowerCase();
+  if (String(requestRow.status || '').trim().toUpperCase() !== 'PLANNED' || String(requestRow.requested_by_user_id || '').toLowerCase() !== actorUserId) {
+    throw Object.assign(new Error('The cancellation selection is not ready for reauthentication.'), { code: 'REQUEST_NOT_READY_FOR_REAUTH' });
+  }
+  const suppliedReason = reason == null ? null : bankingPayCorrectionBoundedText(reason, 1000, 'reason');
+  const storedReason = requestRow.reason == null ? null : String(requestRow.reason).trim();
+  if ((suppliedReason || null) !== (storedReason || null)) {
+    throw Object.assign(new Error('The cancellation reason changed after planning.'), { code: 'REAUTH_REASON_MISMATCH' });
+  }
+  const suppliedEvidence = evidence == null ? null : String(evidence).trim().toLowerCase();
+  const storedEvidence = requestRow.source_bank_event_id == null ? null : String(requestRow.source_bank_event_id).trim().toLowerCase();
+  if ((suppliedEvidence || null) !== (storedEvidence || null)) {
+    throw Object.assign(new Error('The payment evidence changed after planning.'), { code: 'REAUTH_EVIDENCE_MISMATCH' });
+  }
+  if (outcome !== undefined && outcome !== null) {
+    const suppliedOutcome = stableBankingPayContinuationJson(outcome);
+    const storedOutcome = requestRow.accepted_resolution_json == null ? null : stableBankingPayContinuationJson(requestRow.accepted_resolution_json);
+    if (suppliedOutcome !== storedOutcome) {
+      throw Object.assign(new Error('The reviewed payment outcome changed after planning.'), { code: 'REAUTH_OUTCOME_MISMATCH' });
+    }
+  }
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const requestedAt = Math.floor(new Date(requestRow.requested_at_utc).getTime() / 1000);
+  if (!Number.isSafeInteger(requestedAt) || requestedAt <= 0) {
+    throw Object.assign(new Error('The cancellation request time is invalid.'), { code: 'REAUTH_REQUEST_TIME_INVALID' });
+  }
+  const expiresAt = Math.min(issuedAt + 600, requestedAt + 86400);
+  if (expiresAt <= issuedAt) {
+    throw Object.assign(new Error('The cancellation request has expired.'), { code: 'REAUTH_REQUEST_EXPIRED' });
+  }
+  const nonceBytes = new Uint8Array(32);
+  crypto.getRandomValues(nonceBytes);
+  const payload = {
+    version: 1,
+    correction_request_id: correctionRequestId,
+    pay_batch_id: payBatchId,
+    actor_user_id: actorUserId,
+    session_hash: await bankingPayCorrectionSessionHash(null, session || user),
+    plan_hash: String(requestRow.plan_hash || ''),
+    selection_hash: String(requestRow.selection_hash || ''),
+    requested_action: String(plan.requested_action || '').trim().toUpperCase(),
+    selected_candidate_count: Number(plan.selected_candidate_count || 0),
+    selected_active_item_count: Number(plan.selected_active_item_count || 0),
+    selected_amount_pence: Number(plan.selected_amount_pence || 0),
+    reason_hash: plan.reason_hash ?? null,
+    evidence_hash: plan.evidence_hash ?? null,
+    outcome_hash: plan.outcome_hash ?? null,
+    nonce: bankingPayBase64UrlEncode(nonceBytes),
+    issued_at_epoch_seconds: issuedAt,
+    expires_at_epoch_seconds: expiresAt
+  };
+  const token = await signBankingPayCorrectionProof(env, payload);
+  return {
+    token,
+    proof_hash: await sha256BankingPayRawText(token),
+    session_hash: payload.session_hash,
+    issued_at_epoch_seconds: issuedAt,
+    expires_at_epoch_seconds: expiresAt,
+    signed_issued_at_utc: new Date(issuedAt * 1000).toISOString(),
+    reauth_expires_at_utc: new Date(expiresAt * 1000).toISOString(),
+    correction_request_id: correctionRequestId,
+    verified_payload: payload
+  };
 }
 
 async function enqueueBankingPayCancellationResult(env, result, source) {
@@ -48943,46 +49192,82 @@ async function enqueueBankingPayEventResultContinuations(env, result, source) {
 function normalizeBankingPayCorrectionSelection(body, requestedAction) {
   const source = body && typeof body === 'object' && !Array.isArray(body) ? body : {};
   const supplied = source.selection_json || source.selectionJson || source.selection || {};
-  const selection = supplied && typeof supplied === 'object' && !Array.isArray(supplied) ? { ...supplied } : {};
+  if (!isBankingPayCorrectionPlainObject(supplied)) {
+    throw Object.assign(new Error('The payment selection is invalid.'), { code: 'PAYMENT_CORRECTION_SELECTION_INVALID' });
+  }
+  const selection = supplied;
   const tokens = source.explicit_candidate_tokens || source.explicitCandidateTokens || source.pay_batch_candidate_ids || source.payBatchCandidateIds || selection.explicit_candidate_tokens || selection.explicitCandidateTokens;
   const mode = String(source.mode || selection.mode || (Array.isArray(tokens) ? 'EXPLICIT' : 'ALL_MATCHING')).trim().toUpperCase();
+  if (!['EXPLICIT', 'ALL_MATCHING'].includes(mode)) {
+    throw Object.assign(new Error('The payment selection mode is invalid.'), { code: 'PAYMENT_CORRECTION_SELECTION_INVALID' });
+  }
+  const action = String(requestedAction || source.requested_action || source.requestedAction || selection.requested_action || '').trim().toUpperCase();
+  if (!['DRAFT_CANCEL', 'PRE_BANK_CANCEL', 'CANCEL_PAYMENT', 'NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'].includes(action)) {
+    throw Object.assign(new Error('The cancellation action is invalid.'), { code: 'REQUESTED_ACTION_INVALID' });
+  }
+  const snapshotToken = bankingPayCorrectionBoundedText(source.snapshot_token || source.snapshotToken || selection.snapshot_token, 512, 'snapshot_token', { required: true });
+  const filterJson = validateBankingPayPaymentStatusFilter(source.filter_json || source.filterJson || selection.filter_json || {});
+  const sortKey = String(source.sort_key || source.sortKey || selection.sort_key || 'STATUS').trim().toUpperCase();
+  const sortDirection = String(source.sort_direction || source.sortDirection || selection.sort_direction || 'ASC').trim().toUpperCase();
+  if (!['STATUS', 'CANDIDATE', 'AMOUNT'].includes(sortKey) || !['ASC', 'DESC'].includes(sortDirection)) {
+    throw Object.assign(new Error('The payment selection sort is invalid.'), { code: 'SORT_INVALID' });
+  }
+  const explicitTokens = mode === 'EXPLICIT'
+    ? bankingPayCorrectionCanonicalUuidArray(tokens, 'explicit_candidate_tokens', 10000, { required: true })
+    : [];
+  const exclusionsSource = source.exclusions || selection.exclusions || [];
+  const exclusions = bankingPayCorrectionCanonicalUuidArray(exclusionsSource, 'exclusions', 10000);
+  const idempotencyKey = bankingPayCorrectionBoundedText(source.idempotency_key || source.idempotencyKey || selection.idempotency_key, 200, 'idempotency_key', { required: true });
   return {
-    ...selection,
     command: 'PREPARE',
+    context: 'CURRENT_PAYMENT_STATUS',
     contract_version: 1,
     mode,
-    requested_action: String(requestedAction || source.requested_action || source.requestedAction || selection.requested_action || '').trim().toUpperCase(),
-    snapshot_token: source.snapshot_token || source.snapshotToken || selection.snapshot_token || null,
-    filter_json: source.filter_json || source.filterJson || selection.filter_json || {},
-    sort_key: source.sort_key || source.sortKey || selection.sort_key || 'STATUS',
-    sort_direction: source.sort_direction || source.sortDirection || selection.sort_direction || 'ASC',
-    explicit_candidate_tokens: Array.isArray(tokens) ? tokens : [],
-    exclusions: Array.isArray(source.exclusions || selection.exclusions) ? (source.exclusions || selection.exclusions) : [],
-    idempotency_key: String(source.idempotency_key || source.idempotencyKey || selection.idempotency_key || '').trim() || undefined
+    requested_action: action,
+    snapshot_token: snapshotToken,
+    filter_json: filterJson,
+    sort_key: sortKey,
+    sort_direction: sortDirection,
+    explicit_candidate_tokens: explicitTokens,
+    exclusions,
+    idempotency_key: idempotencyKey
   };
 }
 
 async function handleBankingPayPaymentStatusPageV1(env, req, user, payBatchId) {
   const actor = await requireBankingPayCancellationActor(env, req, user);
   if (!actor.ok) return actor.response;
+  try { bankingPayCorrectionUuid(payBatchId, 'pay_batch_id'); } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
   const url = new URL(req.url);
   let filter = {};
   let cursor = null;
   try {
-    if (url.searchParams.get('filter')) filter = JSON.parse(url.searchParams.get('filter'));
-    if (url.searchParams.get('cursor')) cursor = JSON.parse(url.searchParams.get('cursor'));
-  } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'CURSOR_OR_FILTER_INVALID', message: 'The payment-status page request is invalid.' }); }
+    const rawFilter = url.searchParams.get('filter') || url.searchParams.get('filter_json');
+    const rawCursor = url.searchParams.get('cursor') || url.searchParams.get('cursor_json');
+    if (rawFilter) filter = validateBankingPayPaymentStatusFilter(JSON.parse(rawFilter));
+    if (rawCursor) {
+      if (new TextEncoder().encode(rawCursor).byteLength > 4096) throw Object.assign(new Error('The payment-status cursor is too large.'), { code: 'CURSOR_INVALID' });
+      cursor = JSON.parse(rawCursor);
+      if (!isBankingPayCorrectionPlainObject(cursor)) throw Object.assign(new Error('The payment-status cursor is invalid.'), { code: 'CURSOR_INVALID' });
+    }
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  const sortKey = String(url.searchParams.get('sort_key') || url.searchParams.get('sortKey') || 'STATUS').trim().toUpperCase();
+  const sortDirection = String(url.searchParams.get('sort_direction') || url.searchParams.get('sortDirection') || 'ASC').trim().toUpperCase();
+  const limit = Number(url.searchParams.get('limit') || 25);
+  if (!['STATUS', 'CANDIDATE', 'AMOUNT'].includes(sortKey) || !['ASC', 'DESC'].includes(sortDirection) || ![25, 50, 75, 100].includes(limit)) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'PAYMENT_STATUS_PAGE_INPUT_INVALID', message: 'The payment-status page size or sort is invalid.' });
+  }
   try {
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_batch_payment_status_page_v1', {
       p_pay_batch_id: payBatchId,
       p_actor_user_id: actor.actorUserId,
       p_filter_json: filter,
-      p_sort_key: url.searchParams.get('sort_key') || 'STATUS',
-      p_sort_direction: url.searchParams.get('sort_direction') || 'ASC',
-      p_limit: Number(url.searchParams.get('limit') || 25),
+      p_sort_key: sortKey,
+      p_sort_direction: sortDirection,
+      p_limit: limit,
       p_cursor_json: cursor
     }), 'pay_batch_payment_status_page_v1');
-    return bankingPayCancellationResponse(env, req, 200, result);
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), result);
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_STATUS_PAGE_FAILED'); }
 }
 
@@ -48990,36 +49275,53 @@ async function handleBankingPayCorrectionPlanV1(env, req, user, payBatchId, forc
   const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
-  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  try {
+    bankingPayCorrectionUuid(payBatchId, 'pay_batch_id');
+    body = await parseBankingPayCancellationJsonBody(req, { maxBytes: 524288 });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  if (body.reauth_token != null || body.reauthToken != null || body.reauth_proof_token != null || body.reauthProofToken != null) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'PAYMENT_CORRECTION_PROOF_NOT_ACCEPTED_AT_PLANNING', message: 'Reauthentication is completed after the exact selection is ready.' });
+  }
   const requestedAction = String(forcedAction || body?.requested_action || body?.requestedAction || '').trim().toUpperCase();
   if (!['DRAFT_CANCEL','PRE_BANK_CANCEL','PRE_PROVIDER_CANCEL_AND_RECALCULATE','NO_MONEY_RELEASE','NO_MONEY_UNWIND'].includes(requestedAction)) {
     return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'REQUESTED_ACTION_INVALID', message: 'Select a supported cancellation or failed-payment release action.' });
   }
-  const selection = normalizeBankingPayCorrectionSelection(body, requestedAction === 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' ? 'PRE_BANK_CANCEL' : requestedAction);
+  const canonicalAction = requestedAction === 'PRE_PROVIDER_CANCEL_AND_RECALCULATE' ? 'PRE_BANK_CANCEL' : requestedAction;
+  let selection;
+  let reason;
+  try {
+    selection = normalizeBankingPayCorrectionSelection(body, canonicalAction);
+    reason = canonicalAction === 'DRAFT_CANCEL'
+      ? 'DRAFT_PAYMENT_CANCELLED_BY_USER'
+      : (['NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'].includes(canonicalAction)
+        ? 'FAILED_PAYMENT_RELEASE_CONFIRMED_NOT_PAID'
+        : bankingPayCorrectionBoundedText(body?.reason || body?.note, 1000, 'reason', { required: true }));
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
   try {
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_request_start', {
       p_pay_batch_id: payBatchId,
       p_selection_json: selection,
-      p_reason: String(body?.reason || body?.note || '').trim() || null,
+      p_reason: reason,
       p_actor_user_id: actor.actorUserId,
-      p_source_bank_event_id: body?.source_bank_event_id || null,
+      p_source_bank_event_id: null,
       p_auto_requested: false,
-      p_accepted_resolution_json: body?.accepted_resolution_json || null
+      p_accepted_resolution_json: null
     }), 'pay_payment_correction_request_start');
-    const continuation = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'PAYMENT_CORRECTION_PLAN');
-    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation });
+    const continuationEnqueue = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'PAYMENT_CORRECTION_PLAN');
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 202), { ...result, continuation_enqueue: continuationEnqueue });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_PLAN_FAILED'); }
 }
 
 async function handleBankingPayCorrectionStatusV1(env, req, user, correctionRequestId) {
   const actor = await requireBankingPayCancellationActor(env, req, user);
   if (!actor.ok) return actor.response;
+  try { bankingPayCorrectionUuid(correctionRequestId, 'correction_request_id'); } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
   try {
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_status_get_v1', {
       p_correction_request_id: correctionRequestId,
       p_actor_user_id: actor.actorUserId
     }), 'pay_payment_correction_status_get_v1');
-    return bankingPayCancellationResponse(env, req, 200, result);
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), result);
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_STATUS_FAILED'); }
 }
 
@@ -49027,57 +49329,44 @@ async function handleBankingPayCorrectionReauthV1(env, req, user, correctionRequ
   const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
-  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  try {
+    bankingPayCorrectionUuid(correctionRequestId, 'correction_request_id');
+    body = await parseBankingPayCancellationJsonBody(req, { maxBytes: 16384 });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
   const ceremony = await verifyPaymentReversalReauth(env, user, body?.reauth_token || body?.reauthToken);
-  if (!ceremony.ok) return ceremony.response;
+  if (!ceremony.ok) return bankingPayCancellationResponse(env, req, Number(ceremony.response?.status || 401), { ok: false, code: 'REAUTH_CEREMONY_INVALID', message: 'Please verify your identity again.' });
   try {
     const requestRow = await readBankingPayCorrectionRequestForWorker(env, correctionRequestId);
-    if (!requestRow || requestRow.status !== 'PLANNED' || String(requestRow.requested_by_user_id || '') !== actor.actorUserId) {
-      return bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'REQUEST_NOT_READY_FOR_REAUTH', message: 'The cancellation selection is not ready for reauthentication.' });
-    }
-    const issuedAt = Math.floor(Date.now() / 1000);
-    const requestedAt = Math.floor(new Date(requestRow.requested_at_utc).getTime() / 1000);
-    const expiresAt = Math.min(issuedAt + 600, requestedAt + 86400);
-    const nonceBytes = new Uint8Array(32);
-    crypto.getRandomValues(nonceBytes);
-    const plan = requestRow.plan_json || {};
-    const payload = {
-      actor_user_id: actor.actorUserId.toLowerCase(),
-      correction_request_id: String(requestRow.id).toLowerCase(),
-      evidence_hash: plan.evidence_hash ?? null,
-      expires_at_epoch_seconds: expiresAt,
-      issued_at_epoch_seconds: issuedAt,
-      nonce: bankingPayBase64UrlEncode(nonceBytes),
-      outcome_hash: plan.outcome_hash ?? null,
-      pay_batch_id: String(requestRow.pay_batch_id).toLowerCase(),
-      plan_hash: requestRow.plan_hash,
-      reason_hash: plan.reason_hash ?? null,
-      requested_action: plan.requested_action,
-      selected_active_item_count: Number(plan.selected_active_item_count || 0),
-      selected_amount_pence: Number(plan.selected_amount_pence || 0),
-      selected_candidate_count: Number(plan.selected_candidate_count || 0),
-      selection_hash: requestRow.selection_hash,
-      session_hash: await bankingPayCorrectionSessionHash(req, user),
-      version: 1
-    };
-    const proofToken = await signBankingPayCorrectionProof(env, payload);
-    const proofHash = await sha256BankingPayRawText(proofToken);
-    const issuedIso = new Date(issuedAt * 1000).toISOString();
-    const expiresIso = new Date(expiresAt * 1000).toISOString();
+    const proof = await createBankingPayCorrectionReauthProof(
+      env,
+      user,
+      user,
+      requestRow,
+      body?.reason ?? requestRow?.reason ?? null,
+      body?.evidence_reference ?? body?.source_bank_event_id ?? requestRow?.source_bank_event_id ?? null,
+      body?.common_outcome ?? body?.accepted_resolution_json ?? requestRow?.accepted_resolution_json ?? null
+    );
     const bound = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_reauth_bind_v1', {
       p_correction_request_id: correctionRequestId,
       p_actor_user_id: actor.actorUserId,
-      p_session_hash: payload.session_hash,
-      p_proof_hash: proofHash,
-      p_issued_at_utc: issuedIso,
-      p_expires_at_utc: expiresIso
+      p_session_hash: proof.session_hash,
+      p_proof_hash: proof.proof_hash,
+      p_issued_at_utc: proof.signed_issued_at_utc,
+      p_expires_at_utc: proof.reauth_expires_at_utc
     }), 'pay_payment_correction_reauth_bind_v1');
+    if (bound.ok === false) return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(bound, 200), bound);
     return bankingPayCancellationResponse(env, req, 200, {
       ok: true,
       correction_request_id: correctionRequestId,
-      reauth_proof_token: proofToken,
-      expires_at_utc: expiresIso,
-      bound: bound.ok !== false
+      token: proof.token,
+      reauth_proof_token: proof.token,
+      session_hash: proof.session_hash,
+      signed_issued_at_utc: proof.signed_issued_at_utc,
+      reauth_expires_at_utc: proof.reauth_expires_at_utc,
+      expires_at_utc: proof.reauth_expires_at_utc,
+      code: bound.code || 'REAUTH_PROOF_BOUND',
+      message: bound.message || 'Identity verification is ready for this cancellation request.',
+      bound: true
     });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_REAUTH_FAILED'); }
 }
@@ -49086,146 +49375,335 @@ async function handleBankingPayCorrectionStartPreparedV1(env, req, user, payBatc
   const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
-  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
-  const correctionRequestId = String(body?.correction_request_id || body?.correctionRequestId || '').trim();
-  const token = String(body?.reauth_proof_token || body?.reauthProofToken || '').trim();
   try {
-    const payload = await verifyBankingPayCorrectionProof(env, token);
+    bankingPayCorrectionUuid(payBatchId, 'pay_batch_id');
+    body = await parseBankingPayCancellationJsonBody(req, { maxBytes: 32768 });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  if (body.explicit_candidate_tokens != null || body.explicitCandidateTokens != null || body.pay_batch_candidate_ids != null || body.payBatchCandidateIds != null) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'START_PREPARED_CANDIDATE_SCOPE_PROHIBITED', message: 'Candidate selection cannot change after review.' });
+  }
+  let correctionRequestId;
+  try { correctionRequestId = bankingPayCorrectionUuid(body?.correction_request_id || body?.correctionRequestId, 'correction_request_id').toLowerCase(); }
+  catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  const token = String(body?.reauth_proof_token || body?.reauthProofToken || body?.reauth_token || body?.reauthToken || '').trim();
+  try {
     const requestRow = await readBankingPayCorrectionRequestForWorker(env, correctionRequestId);
-    const now = Math.floor(Date.now() / 1000);
     const plan = requestRow?.plan_json && typeof requestRow.plan_json === 'object' && !Array.isArray(requestRow.plan_json) ? requestRow.plan_json : {};
     const boundExpiry = requestRow?.reauth_expires_at_utc ? Math.floor(new Date(requestRow.reauth_expires_at_utc).getTime() / 1000) : NaN;
-    const sameNullable = (left, right) => (left == null ? null : left) === (right == null ? null : right);
-    if (!payload || !requestRow || payload.version !== 1
-      || payload.correction_request_id !== correctionRequestId.toLowerCase()
-      || payload.pay_batch_id !== String(payBatchId).toLowerCase()
-      || payload.actor_user_id !== actor.actorUserId.toLowerCase()
-      || payload.session_hash !== await bankingPayCorrectionSessionHash(req, user)
-      || payload.selection_hash !== requestRow.selection_hash
-      || payload.plan_hash !== requestRow.plan_hash
-      || payload.requested_action !== plan.requested_action
-      || Number(payload.selected_candidate_count) !== Number(plan.selected_candidate_count || 0)
-      || Number(payload.selected_active_item_count) !== Number(plan.selected_active_item_count || 0)
-      || Number(payload.selected_amount_pence) !== Number(plan.selected_amount_pence || 0)
-      || !sameNullable(payload.reason_hash, plan.reason_hash)
-      || !sameNullable(payload.evidence_hash, plan.evidence_hash)
-      || !sameNullable(payload.outcome_hash, plan.outcome_hash)
-      || !Number.isFinite(Number(payload.issued_at_epoch_seconds))
-      || !Number.isFinite(Number(payload.expires_at_epoch_seconds))
-      || Number(payload.issued_at_epoch_seconds) > now + 30
-      || Number(payload.issued_at_epoch_seconds) > Number(payload.expires_at_epoch_seconds)
-      || !Number.isFinite(boundExpiry)
-      || Number(payload.expires_at_epoch_seconds) !== boundExpiry
-      || now > Number(payload.expires_at_epoch_seconds)) {
+    if (!requestRow || String(requestRow.status || '').toUpperCase() !== 'PLANNED') {
+      return bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'REQUEST_NOT_READY_TO_START', message: 'The cancellation request is not ready to start.' });
+    }
+    if (String(requestRow.requested_by_user_id || '').toLowerCase() !== actor.actorUserId.toLowerCase()) {
+      return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'REQUEST_OWNER_REQUIRED', message: 'Only the cancellation requester may start this request.' });
+    }
+    const reason = body?.reason == null ? (requestRow.reason == null ? null : String(requestRow.reason).trim()) : bankingPayCorrectionBoundedText(body.reason, 1000, 'reason');
+    if ((reason || null) !== (requestRow.reason == null ? null : String(requestRow.reason).trim())) {
+      return bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'REAUTH_REASON_MISMATCH', message: 'The cancellation reason changed after review.' });
+    }
+    const proof = await verifyPaymentReversalReauth(env, user, user, token, {
+      version: 1,
+      correction_request_id: correctionRequestId,
+      pay_batch_id: String(payBatchId).toLowerCase(),
+      actor_user_id: actor.actorUserId.toLowerCase(),
+      plan_hash: requestRow.plan_hash,
+      selection_hash: requestRow.selection_hash,
+      requested_action: String(plan.requested_action || '').trim().toUpperCase(),
+      selected_candidate_count: Number(plan.selected_candidate_count || 0),
+      selected_active_item_count: Number(plan.selected_active_item_count || 0),
+      selected_amount_pence: Number(plan.selected_amount_pence || 0),
+      reason_hash: plan.reason_hash ?? null,
+      evidence_hash: plan.evidence_hash ?? null,
+      outcome_hash: plan.outcome_hash ?? null
+    });
+    if (!proof.ok || !Number.isFinite(boundExpiry) || proof.verified_payload.expires_at_epoch_seconds !== boundExpiry) {
       return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'REAUTH_PROOF_INVALID', message: 'Please verify your identity again.' });
     }
-    const proofHash = await sha256BankingPayRawText(token);
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_request_start', {
       p_pay_batch_id: payBatchId,
       p_selection_json: {
         command: 'START_PREPARED',
+        context: 'START_PREPARED',
         correction_request_id: correctionRequestId,
-        proof_hash: proofHash,
+        proof_hash: proof.proof_hash,
         selection_hash: requestRow.selection_hash,
         plan_hash: requestRow.plan_hash
       },
-      p_reason: requestRow.reason,
+      p_reason: reason,
       p_actor_user_id: actor.actorUserId,
       p_source_bank_event_id: requestRow.source_bank_event_id,
       p_auto_requested: false,
-      p_accepted_resolution_json: null
+      p_accepted_resolution_json: requestRow.accepted_resolution_json || null
     }), 'pay_payment_correction_request_start');
-    const continuation = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'PAYMENT_CORRECTION_START_PREPARED');
-    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation });
+    const continuationEnqueue = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'PAYMENT_CORRECTION_START_PREPARED');
+    const successStatus = result.is_existing === true || String(result.code || '').toUpperCase() === 'REQUEST_ALREADY_STARTED' ? 200 : 202;
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, successStatus), { ...result, continuation_enqueue: continuationEnqueue });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_START_FAILED'); }
 }
 
-async function handleBankingPayCorrectionAuthActionV1(env, req, user, correctionRequestId) {
-  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
+async function handleBankingPayCorrectionAuthActionV1(env, req, user, correctionRequestId, forcedAction = null) {
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true });
   if (!actor.ok) return actor.response;
   let body;
-  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
-  const action = String(body?.action || '').trim().toUpperCase();
-  if (!['AUTHORISE','USE_GOLDEN_KEY','REJECT','CANCEL'].includes(action)) return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'ACTION_INVALID', message: 'Choose a supported approval action.' });
-  if (['AUTHORISE','USE_GOLDEN_KEY'].includes(action)) {
-    const ceremony = await verifyPaymentReversalReauth(env, user, body?.reauth_token || body?.reauthToken);
-    if (!ceremony.ok) return ceremony.response;
-  }
   try {
+    bankingPayCorrectionUuid(correctionRequestId, 'correction_request_id');
+    body = await parseBankingPayCancellationJsonBody(req, { maxBytes: 16384, allowEmpty: forcedAction === 'CANCEL' });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  const submittedAction = String(body?.action || '').trim().toUpperCase();
+  if (forcedAction && submittedAction && submittedAction !== forcedAction) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'ACTION_ROUTE_MISMATCH', message: 'The requested action does not match this route.' });
+  }
+  const action = String(forcedAction || submittedAction).trim().toUpperCase();
+  if (!['AUTHORISE','USE_GOLDEN_KEY','REJECT','CANCEL'].includes(action)) return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'ACTION_INVALID', message: 'Choose a supported approval action.' });
+  if (body?.reauth_token != null || body?.reauthToken != null || body?.reauth_proof_token != null || body?.reauthProofToken != null) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'REQUESTER_PROOF_NOT_ACCEPTED_FOR_AUTHORISATION', message: 'Requester reauthentication proof is not accepted for maker/checker approval.' });
+  }
+  let note = null;
+  try { note = body?.note == null ? null : bankingPayCorrectionBoundedText(body.note, 1000, 'note'); }
+  catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  try {
+    const requestRow = await readBankingPayCorrectionRequestForWorker(env, correctionRequestId);
+    if (!requestRow) return bankingPayCancellationResponse(env, req, 404, { ok: false, code: 'REQUEST_NOT_FOUND', message: 'The cancellation request was not found.' });
+    const role = String(actor.actor?.role || '').trim().toLowerCase();
+    const isOwner = String(requestRow.requested_by_user_id || '').toLowerCase() === actor.actorUserId.toLowerCase();
+    if (action === 'AUTHORISE' && actor.actor?.payment_authoriser !== true) {
+      return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'PAYMENT_AUTHORISER_REQUIRED', message: 'Payment authoriser permission is required.' });
+    }
+    if (action === 'USE_GOLDEN_KEY' && actor.actor?.payment_golden_key !== true) {
+      return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'PAYMENT_GOLDEN_KEY_REQUIRED', message: 'Golden Key permission is required.' });
+    }
+    if (['REJECT', 'CANCEL'].includes(action) && role !== 'admin' && !isOwner) {
+      return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'REQUEST_OWNER_OR_ADMIN_REQUIRED', message: 'Only the request owner or a Banking Pay administrator may take this action.' });
+    }
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_authorise', {
       p_correction_request_id: correctionRequestId,
       p_actor_user_id: actor.actorUserId,
       p_action: action,
-      p_note: body?.note == null ? null : String(body.note).trim()
+      p_note: note
     }), 'pay_payment_correction_authorise');
-    const continuation = await enqueueBankingPayCancellationResult(env, result, 'PAYMENT_CORRECTION_AUTH_ACTION');
-    return bankingPayCancellationResponse(env, req, 200, { ...result, continuation });
+    const continuationEnqueue = await enqueueBankingPayCancellationResult(env, result, 'PAYMENT_CORRECTION_AUTH_ACTION');
+    const successStatus = result?.continuation?.required === true ? 202 : 200;
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, successStatus), { ...result, continuation_enqueue: continuationEnqueue });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_AUTH_ACTION_FAILED'); }
+}
+
+async function handleBankingPayCorrectionCancelV1(env, req, user, correctionRequestId) {
+  return handleBankingPayCorrectionAuthActionV1(env, req, user, correctionRequestId, 'CANCEL');
 }
 
 async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
   const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
-  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  try {
+    bankingPayCorrectionUuid(payBatchId, 'pay_batch_id');
+    body = await parseBankingPayCancellationJsonBody(req, { maxBytes: 32768 });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  if (body.reason != null || body.note != null || body.reauth_proof_token != null || body.reauthProofToken != null) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'DRAFT_CANCELLATION_INPUT_INVALID', message: 'Draft cancellation uses the server-owned audit reason and existing identity confirmation only.' });
+  }
+  const ceremony = await verifyPaymentReversalReauth(env, user, body?.reauth_token || body?.reauthToken);
+  if (!ceremony.ok) return bankingPayCancellationResponse(env, req, Number(ceremony.response?.status || 401), { ok: false, code: 'REAUTH_CEREMONY_INVALID', message: 'Please verify your identity again.' });
   try {
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_batch_cancel', {
       p_pay_batch_id: payBatchId,
       p_actor_user_id: actor.actorUserId,
       p_reason: 'DRAFT_PAYMENT_CANCELLED_BY_USER',
-      p_correction_request_id: body?.correction_request_id || null,
+      p_correction_request_id: null,
       p_work_item_id: null
     }), 'pay_batch_cancel');
-    const continuation = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'DRAFT_PAYMENT_CANCELLATION_PLAN');
-    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation });
+    const continuationEnqueue = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'DRAFT_PAYMENT_CANCELLATION_PLAN');
+    const responseStatus = bankingPayCorrectionRpcHttpStatus(result, 202);
+    if (responseStatus !== 202) return bankingPayCancellationResponse(env, req, responseStatus, { ...result, continuation_enqueue: continuationEnqueue });
+    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation_enqueue: continuationEnqueue });
   } catch (error) { return bankingPayCancellationError(env, req, error, 'DRAFT_CANCELLATION_FAILED'); }
 }
 
-async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId, reviewOnly = false) {
-  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: !reviewOnly, requirePaymentPermission: true });
+async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
-  try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
+  try {
+    bankingPayCorrectionUuid(payBatchId, 'pay_batch_id');
+    body = await parseBankingPayCancellationJsonBody(req, { maxBytes: 65536 });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
   const legacyResolutionAction = String(body?.action || body?.resolution_action || body?.resolutionAction || '').trim().toUpperCase();
-  const resolution = reviewOnly ? null : String(
-    body?.resolution
+  const resolution = String(
+    body?.common_outcome || body?.commonOutcome || body?.resolution
     || (legacyResolutionAction.includes('NO_PAYMENT') || legacyResolutionAction.includes('NOT_PAID') ? 'CONFIRMED_NOT_PAID' : '')
     || (legacyResolutionAction.includes('PAYMENT_WAS_MADE') || legacyResolutionAction.includes('CONFIRMED_PAID') ? 'CONFIRMED_PAID' : '')
   ).trim().toUpperCase();
-  if (!reviewOnly && !['CONFIRMED_NOT_PAID','CONFIRMED_PAID','UNKNOWN'].includes(resolution)) return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'RESOLUTION_INVALID', message: 'Select a supported payment-status resolution.' });
-  const eventJson = {
-    ...(body?.event_json && typeof body.event_json === 'object' ? body.event_json : {}),
-    pay_batch_id: payBatchId,
-    pay_bank_transfer_id: body?.pay_bank_transfer_id || body?.payBankTransferId || null,
-    candidate_id: body?.candidate_id || body?.candidateId || null,
-    event_source: 'MANUAL_EVIDENCE',
-    resolution: reviewOnly ? (body?.resolution || null) : resolution,
-    review_status: reviewOnly ? 'ACKNOWLEDGED' : undefined,
-    suppress_auto_unwind: !reviewOnly && resolution === 'CONFIRMED_NOT_PAID'
-  };
+  if (!['CONFIRMED_NOT_PAID','CONFIRMED_PAID'].includes(resolution)) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'RESOLUTION_INVALID', message: 'Select Confirmed paid or Confirmed not paid.' });
+  }
+  let operationId;
+  let instructionScopeIds;
+  let payBankTransferId;
+  let candidateId = null;
+  let snapshotToken;
+  let evidenceReference;
   try {
+    operationId = bankingPayCorrectionUuid(body?.operation_id || body?.operationId, 'operation_id').toLowerCase();
+    const scopeSource = body?.instruction_scope_ids || body?.instructionScopeIds || (body?.pay_bank_transfer_id || body?.payBankTransferId ? [body?.pay_bank_transfer_id || body?.payBankTransferId] : null);
+    instructionScopeIds = bankingPayCorrectionCanonicalUuidArray(scopeSource, 'instruction_scope_ids', 128, { required: true });
+    payBankTransferId = bankingPayCorrectionUuid(body?.pay_bank_transfer_id || body?.payBankTransferId || instructionScopeIds[0], 'pay_bank_transfer_id').toLowerCase();
+    if (!instructionScopeIds.includes(payBankTransferId)) throw Object.assign(new Error('The selected transfer is outside the reviewed instruction scope.'), { code: 'INSTRUCTION_SCOPE_INCOMPLETE' });
+    if (body?.candidate_id || body?.candidateId) candidateId = bankingPayCorrectionUuid(body?.candidate_id || body?.candidateId, 'candidate_id').toLowerCase();
+    snapshotToken = bankingPayCorrectionBoundedText(body?.snapshot_token || body?.snapshotToken, 512, 'snapshot_token', { required: true });
+    evidenceReference = bankingPayCorrectionBoundedText(body?.evidence_reference || body?.evidenceReference, 1000, 'evidence_reference', { required: true });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  const ceremonyToken = String(body?.reauth_token || body?.reauthToken || '').trim();
+  const ceremony = await verifyPaymentReversalReauth(env, user, ceremonyToken);
+  if (!ceremony.ok) return bankingPayCancellationResponse(env, req, Number(ceremony.response?.status || 401), { ok: false, code: 'REAUTH_CEREMONY_INVALID', message: 'Please verify your identity again.' });
+  try {
+    const instructionScopeHash = await sha256BankingPayContinuationValue(instructionScopeIds);
+    const evidenceReferenceHash = await sha256BankingPayRawText(evidenceReference);
+    const ceremonyHash = await sha256BankingPayRawText(ceremonyToken);
+    const reauthProofHash = await sha256BankingPayContinuationValue({
+      ceremony_hash: ceremonyHash,
+      instruction_scope_hash: instructionScopeHash,
+      operation_id: operationId,
+      outcome: resolution,
+      snapshot_token: snapshotToken
+    });
+    const eventJson = {
+      pay_batch_id: String(payBatchId).toLowerCase(),
+      pay_bank_transfer_id: payBankTransferId,
+      candidate_id: candidateId,
+      event_source: 'MANUAL_EVIDENCE',
+      provider_event_transport: 'MANUAL_EVIDENCE',
+      provider_state: resolution === 'CONFIRMED_PAID' ? 'COMPLETED' : 'FAILED',
+      normalised_state: resolution === 'CONFIRMED_PAID' ? 'COMPLETED' : 'FAILED',
+      resolution,
+      suppress_auto_unwind: true,
+      idempotency_key: `manual-resolution:${instructionScopeHash}:${resolution}:${evidenceReferenceHash}`,
+      mapping_hints_json: {
+        instruction_scope_hash: instructionScopeHash,
+        evidence_reference_hash: evidenceReferenceHash,
+        operation_id: operationId,
+        snapshot_token: snapshotToken
+      }
+    };
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_bank_event_ingest', {
       p_event_json: eventJson,
       p_actor_user_id: actor.actorUserId,
-      p_ingest_options_json: { suppress_auto_unwind: eventJson.suppress_auto_unwind === true, review_status: eventJson.review_status || null }
+      p_ingest_options_json: {
+        manual_ambiguity_resolution: true,
+        suppress_auto_unwind: true,
+        instruction_scope_hash: instructionScopeHash,
+        evidence_reference_hash: evidenceReferenceHash,
+        reauth_proof_hash: reauthProofHash
+      }
     }), 'pay_bank_event_ingest');
-    const continuation = await enqueueBankingPayEventResultContinuations(env, result, reviewOnly ? 'PAID_AFTER_RELEASE_REVIEW_EVENT_WAKE' : 'PAYMENT_STATUS_EVENT_WAKE');
-    return bankingPayCancellationResponse(env, req, 200, { ...result, continuation });
-  } catch (error) { return bankingPayCancellationError(env, req, error, reviewOnly ? 'PAID_AFTER_RELEASE_REVIEW_FAILED' : 'PAYMENT_STATUS_RESOLUTION_FAILED'); }
+    if (resolution === 'CONFIRMED_NOT_PAID' && (result.auto_release_request_prepared === true || result.release_request_started === true)) {
+      return bankingPayCancellationResponse(env, req, 409, {
+        ok: false,
+        code: 'MANUAL_RESOLUTION_AUTO_RELEASE_PROHIBITED',
+        message: 'Not-paid evidence was recorded, but CloudTMS refused an unexpected automatic release request.'
+      });
+    }
+    const continuationEnqueue = await enqueueBankingPayEventResultContinuations(env, result, 'PAYMENT_STATUS_EVENT_WAKE');
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), { ...result, continuation_enqueue: continuationEnqueue });
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_STATUS_RESOLUTION_FAILED'); }
+}
+
+async function handleBankingPayPaidAfterReleaseReviewV1(env, req, user, payBatchId) {
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requirePaymentPermission: true });
+  if (!actor.ok) return actor.response;
+  let body;
+  try {
+    bankingPayCorrectionUuid(payBatchId, 'pay_batch_id');
+    body = await parseBankingPayCancellationJsonBody(req, { maxBytes: 32768 });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  let correctionRequestId;
+  let providerEventId;
+  let evidenceReference;
+  try {
+    correctionRequestId = bankingPayCorrectionUuid(body?.correction_request_id || body?.correctionRequestId, 'correction_request_id').toLowerCase();
+    providerEventId = bankingPayCorrectionUuid(body?.provider_event_id || body?.providerEventId, 'provider_event_id').toLowerCase();
+    evidenceReference = bankingPayCorrectionBoundedText(body?.evidence_reference || body?.evidenceReference, 1000, 'evidence_reference', { required: true });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  const reviewAction = String(body?.review_action || body?.reviewAction || '').trim().toUpperCase();
+  const confirmation = body?.confirmation === true || body?.confirmation?.confirmed === true || body?.confirmation?.acknowledged === true;
+  if (reviewAction !== 'ACKNOWLEDGE_PAID_AND_KEEP_NONPAYABLE' || !confirmation) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'PAID_AFTER_RELEASE_REVIEW_CONFIRMATION_REQUIRED', message: 'Confirm that the paid evidence is acknowledged and the candidate remains nonpayable.' });
+  }
+  try {
+    const [eventResponse, requestRow] = await Promise.all([
+      sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_bank_transfer_events?id=eq.${encodeURIComponent(providerEventId)}&pay_batch_id=eq.${encodeURIComponent(payBatchId)}&select=id,pay_batch_id,pay_bank_transfer_id,candidate_id,provider_event_id,provider_key,rail_env,provider_state,normalised_state,idempotency_key,event_time_utc&limit=1`, false),
+      readBankingPayCorrectionRequestForWorker(env, correctionRequestId)
+    ]);
+    const eventRow = Array.isArray(eventResponse?.rows) ? eventResponse.rows[0] || null : null;
+    if (!eventRow || !requestRow || String(requestRow.pay_batch_id || '').toLowerCase() !== String(payBatchId).toLowerCase() || String(eventRow.normalised_state || '').toUpperCase() !== 'COMPLETED') {
+      return bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'PAID_AFTER_RELEASE_EVIDENCE_MISMATCH', message: 'The paid-after-release evidence no longer matches this cancellation request.' });
+    }
+    const evidenceReferenceHash = await sha256BankingPayRawText(evidenceReference);
+    const eventJson = {
+      pay_batch_id: String(payBatchId).toLowerCase(),
+      pay_bank_transfer_id: eventRow.pay_bank_transfer_id,
+      candidate_id: eventRow.candidate_id || null,
+      provider_event_id: eventRow.provider_event_id || null,
+      provider_key: eventRow.provider_key || null,
+      rail_env: eventRow.rail_env || null,
+      provider_state: eventRow.provider_state || 'COMPLETED',
+      normalised_state: 'COMPLETED',
+      event_source: 'MANUAL_EVIDENCE',
+      review_status: 'ACKNOWLEDGED',
+      idempotency_key: eventRow.idempotency_key,
+      event_time_utc: eventRow.event_time_utc || null,
+      mapping_hints_json: {
+        existing_bank_event_id: providerEventId,
+        correction_request_id: correctionRequestId,
+        evidence_reference_hash: evidenceReferenceHash,
+        review_action: reviewAction
+      }
+    };
+    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_bank_event_ingest', {
+      p_event_json: eventJson,
+      p_actor_user_id: actor.actorUserId,
+      p_ingest_options_json: {
+        paid_after_release_review: true,
+        review_status: 'ACKNOWLEDGED',
+        review_action: reviewAction,
+        evidence_reference_hash: evidenceReferenceHash
+      }
+    }), 'pay_bank_event_ingest');
+    const continuationEnqueue = await enqueueBankingPayEventResultContinuations(env, result, 'PAID_AFTER_RELEASE_REVIEW_EVENT_WAKE');
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), { ...result, continuation_enqueue: continuationEnqueue });
+  } catch (error) { return bankingPayCancellationError(env, req, error, 'PAID_AFTER_RELEASE_REVIEW_FAILED'); }
 }
 
 async function handleBankingPayCorrectionIntegrityV1(env, req, user, correctionRequestId) {
   const actor = await requireBankingPayCancellationActor(env, req, user, { requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
-  let body = {};
-  try { body = await parseJSONBody(req); } catch {}
+  let body;
+  try {
+    bankingPayCorrectionUuid(correctionRequestId, 'correction_request_id');
+    body = await parseBankingPayCancellationJsonBody(req, { maxBytes: 8192, allowEmpty: true });
+  } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  let projectHost = '';
+  try { projectHost = new URL(String(env?.SUPABASE_URL || '')).hostname.toLowerCase(); } catch {}
+  if (String(actor.actor?.role || '').trim().toLowerCase() !== 'admin' || projectHost !== 'yakevhtttcsljosbdpov.supabase.co') {
+    return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'INTEGRITY_CHECK_TEST_SUPPORT_ONLY', message: 'The cancellation integrity checker is restricted to TEST support administrators.' });
+  }
+  if (body.repair != null || body.repair_mode != null || body.apply_repairs != null) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INTEGRITY_CHECK_REPAIR_PROHIBITED', message: 'The cancellation integrity checker is read-only.' });
+  }
+  let operationId = null;
+  if (body?.operation_id) {
+    try { operationId = bankingPayCorrectionUuid(body.operation_id, 'operation_id').toLowerCase(); }
+    catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
+  }
+  const maxCandidates = body?.max_candidates == null ? 10000 : Number(body.max_candidates);
+  if (!Number.isInteger(maxCandidates) || maxCandidates < 1 || maxCandidates > 10000) {
+    return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INTEGRITY_CHECK_MAX_CANDIDATES_INVALID', message: 'max_candidates must be an integer from 1 to 10,000.' });
+  }
   try {
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_integrity_check_v1', {
       p_correction_request_id: correctionRequestId,
-      p_operation_id: body?.operation_id || null,
-      p_max_candidates: Math.min(10000, Math.max(1, Number(body?.max_candidates || 10000)))
+      p_operation_id: operationId,
+      p_max_candidates: maxCandidates
     }), 'pay_payment_correction_integrity_check_v1');
-    return bankingPayCancellationResponse(env, req, 200, result);
+    return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), result);
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_INTEGRITY_CHECK_FAILED'); }
 }
 
@@ -132425,8 +132903,42 @@ async function handleAuthReauthVerify(env, req) {
 }
 
 
-async function verifyPaymentReversalReauth(env, user, token) {
-  const reauthToken = String(token || '').trim();
+async function verifyPaymentReversalReauth(env, user, sessionOrToken, tokenOrExpected, expectedFields) {
+  if (arguments.length >= 5) {
+    const token = String(tokenOrExpected || '').trim();
+    if (!token || new TextEncoder().encode(token).byteLength > 4096) {
+      return { ok: false, code: 'REAUTH_PROOF_REQUIRED', error: 'Correction reauthentication proof is required.' };
+    }
+    const payload = await verifyBankingPayCorrectionProof(env, token);
+    if (!payload) return { ok: false, code: 'REAUTH_PROOF_INVALID', error: 'Correction reauthentication proof is invalid.' };
+    const expected = isBankingPayCorrectionPlainObject(expectedFields) ? expectedFields : {};
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.expires_at_epoch_seconds < now || payload.issued_at_epoch_seconds > now + 30) {
+      return { ok: false, code: 'REAUTH_PROOF_EXPIRED', error: 'Correction reauthentication proof has expired.' };
+    }
+    let currentSessionHash;
+    try { currentSessionHash = await bankingPayCorrectionSessionHash(null, sessionOrToken || user); } catch {
+      return { ok: false, code: 'REAUTH_SESSION_REQUIRED', error: 'Authenticated session authority is unavailable.' };
+    }
+    if (payload.actor_user_id !== String(user?.id || '').trim().toLowerCase() || payload.session_hash !== currentSessionHash) {
+      return { ok: false, code: 'REAUTH_PROOF_SESSION_MISMATCH', error: 'Correction reauthentication proof does not match this session.' };
+    }
+    for (const key of BANKING_PAY_CORRECTION_PROOF_FIELDS) {
+      if (!Object.prototype.hasOwnProperty.call(expected, key)) continue;
+      const left = payload[key] == null ? null : payload[key];
+      const right = expected[key] == null ? null : expected[key];
+      if (left !== right) {
+        return { ok: false, code: 'REAUTH_PROOF_BINDING_MISMATCH', error: `Correction reauthentication proof does not match ${key}.` };
+      }
+    }
+    return {
+      ok: true,
+      proof_hash: await sha256BankingPayRawText(token),
+      verified_payload: payload
+    };
+  }
+
+  const reauthToken = String(sessionOrToken || '').trim();
   if (!reauthToken) {
     return {
       ok: false,
@@ -191369,7 +191881,11 @@ if (p.startsWith('/api/banking/')) {
 {
   const m = matchPath(p, '/api/banking/pay/batch/:id/confirm-no-money-unwind');
   if (m && req.method === 'POST') {
-    return handleBankingPayPaymentStatusResolveV1(env, req, user, m.id, false);
+    return bankingPayCancellationResponse(env, req, 410, {
+      ok: false,
+      code: 'CONFIRM_NO_MONEY_UNWIND_ROUTE_RETIRED',
+      message: 'Record not-paid evidence through payment-status resolution, then start the separate failed-payment release action.'
+    });
   }
 }
 
@@ -191865,13 +192381,6 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
   }
 
   {
-    const m = matchPath(p, '/api/banking/pay/batch/:id/cancel');
-    if (m && req.method === 'POST') {
-      return handleBankingPayBatchCancelV1(env, req, user, m.id);
-    }
-  }
-
-  {
     const m = matchPath(p, '/api/banking/pay/batch/:id/export-csv');
     if (m && req.method === 'GET') {
       return handleBankingPayBatchExportCsv(env, req, user, m.id, ctx);
@@ -191923,7 +192432,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
 {
   const m = matchPath(p, '/api/banking/pay/batch/:id/payment-status/resolve');
   if (m && req.method === 'POST') {
-    return handleBankingPayPaymentStatusResolveV1(env, req, user, m.id, false);
+    return handleBankingPayPaymentStatusResolveV1(env, req, user, m.id);
   }
 }
 
@@ -191937,7 +192446,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
 {
   const m = matchPath(p, '/api/banking/pay/batch/:id/payment-status/paid-after-release/review');
   if (m && req.method === 'POST') {
-    return handleBankingPayPaymentStatusResolveV1(env, req, user, m.id, true);
+    return handleBankingPayPaidAfterReleaseReviewV1(env, req, user, m.id);
   }
 }
 
@@ -191958,7 +192467,7 @@ if (req.method === 'POST' && p === '/api/banking/pay/reconcile-external') {
 {
   const m = matchPath(p, '/api/banking/pay/correction/:id/cancel');
   if (m && req.method === 'POST') {
-    return handleBankingPayCorrectionAuthActionV1(env, req, user, m.id);
+    return handleBankingPayCorrectionCancelV1(env, req, user, m.id);
   }
 }
 
