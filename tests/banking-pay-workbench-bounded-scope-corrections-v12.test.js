@@ -36,10 +36,13 @@ test('D2 fact pages carry and verify a cumulative replay-safe chain', () => {
   assert.ok(replayReturn >= 0 && counterMutation > replayReturn);
 });
 test('D3 physical live-input pages precede durable derived-family paging', () => {
-  assert.match(dispatcher, /private\.pay_workbench_unit_projection_v1\(v_build_id,v_unit_key\)/);
+  assert.match(dispatcher, /WITH scope_page AS MATERIALIZED/);
+  assert.match(dispatcher, /LIMIT v_fact_limit\+1[\s\S]*LEFT JOIN LATERAL/);
   assert.match(dispatcher, /private\.pay_workbench_unit_economic_occurrence_page_v1\(/);
   assert.match(projection, /canonical\.canonical_timesheet_id AS projected_timesheet_id/);
   assert.match(occurrence, /paged_raw_rows AS MATERIALIZED/);
+  assert.match(occurrence, /generate_series\([\s\S]*v_limit-1/);
+  assert.match(occurrence, /UPPER\(COALESCE\(canonical\.sheet_scope::text,''\)\)='DAILY'/);
   assert.match(occurrence, /standard_items_page AS MATERIALIZED/);
   assert.match(occurrence, /paged_occurrence AS MATERIALIZED/);
   assert.doesNotMatch(dispatcher, /_pay_current_timesheet_entitlement_components\s*\(/);
@@ -60,6 +63,10 @@ test('D6 reconciliation consumes sealed facts and fences live metadata', () => {
   assert.doesNotMatch(activeSync, /_pay_current_timesheet_entitlement_components\s*\(/);
   assert.doesNotMatch(activeSync, /_pay_reserved_components\s*\(/);
   assert.doesNotMatch(activeSync, /_pay_active_settled_components\s*\(/);
+  assert.doesNotMatch(activeSync, /from public\.pay_batch_items/i);
+  assert.doesNotMatch(activeSync, /from public\.pay_advance_reservations/i);
+  assert.match(syncCore, /fact\.fact_family in \('FROZEN_SETTLED_COMPONENT','RESERVATION_COMPONENT'\)/);
+  assert.match(syncCore, /FULL OUTER JOIN actual USING\(timesheet_id\)/);
   assert.ok((syncCore.match(/private\.pay_workbench_timesheet_input_fingerprint_v1/g) || []).length >= 2);
 });
 test('D7 pay-batch update and delete have statement backstops', () => {
@@ -72,18 +79,26 @@ test('D8 fallback snapshots become typed facts with active precedence', () => {
   assert.match(occurrence, /resolution_failure/);
   assert.match(dispatcher, /PAY_WORKBENCH_ECONOMIC_KEY_RESOLUTION_INCOMPLETE/);
   assert.match(dispatcher, /fact_family='FROZEN_SETTLED_COMPONENT'[\s\S]*NOT EXISTS/);
+  assert.match(occurrence, /FALLBACK_SEGMENT_NOT_OBJECT/);
+  assert.match(occurrence, /FALLBACK_ADJUSTMENT_AMOUNT_INVALID/);
+  assert.match(occurrence, /FALLBACK_SNAPSHOT_EXCEEDS_ENVELOPE/);
 });
 test('D9 bootstrap CLOSED requires zero-difference proof', () => {
   assert.match(dispatcher, /private\.pay_current_timesheet_entitlement_components_from_build_v1\(\s*v_build_id,v_bootstrap_unit_key\)/);
   assert.doesNotMatch(dispatcher, /_pay_current_timesheet_entitlement_components\(ARRAY\[page\.timesheet_id\]/);
   assert.match(dispatcher, /v_bootstrap_unit_relevant:=v_bootstrap_unit_relevant OR v_bootstrap_page_relevant/);
   assert.match(dispatcher, /economic_state=CASE WHEN v_bootstrap_unit_relevant THEN 'DIRTY' ELSE 'CLOSED' END/);
+  assert.match(dispatcher, /raw_current_occurrence_count/);
+  assert.match(dispatcher, /resolved_baseline_occurrence_count/);
+  assert.match(dispatcher, /PAY_WORKBENCH_BOOTSTRAP_CLOSED_AUTHORITY_UNPROVED/);
 });
 test('D10 global facts are active and scoped', () => {
   assert.match(dispatcher, /COALESCE\(reservation\.status,''\)\)\) IN \('RESERVED','COMMITTED'\)/);
   assert.match(dispatcher, /reservation\.released_at_utc IS NULL/);
   assert.match(dispatcher, /JOIN private\.banking_pay_workbench_economic_build_facts case_fact[\s\S]*case_fact\.fact_family='FINANCE_CASE_IDENTITY'/);
-  assert.doesNotMatch(dispatcher, /event\.reason,''\)\)\)='PREVIEW_FINANCE_SYNC'/);
+  assert.match(dispatcher, /event\.id=\([\s\S]*SELECT event_latest\.id[\s\S]*LIMIT 1/);
+  assert.match(dispatcher, /ACTIVE_CORRECTION_CHAIN_BATCH_ITEM/);
+  assert.doesNotMatch(dispatcher, /upper\(btrim\(COALESCE\(event\.reason,''\)\)\) IN \([\s\S]{0,100}'PREVIEW_FINANCE_SYNC'/);
 });
 test('D11 claim and recovery use bounded progressive deferral', () => {
   assert.match(claim, /v_scan_limit integer:=50/);
@@ -113,6 +128,8 @@ test('D15 expected effects are sealed then independently observed', () => {
   assert.match(markCandidate, /private\.pay_workbench_finance_effect_normalise_row_v1/);
   assert.match(markFinance, /private\.pay_workbench_finance_effect_normalise_row_v1/);
   assert.match(transition, /private\.pay_workbench_finance_effect_normalise_row_v1/);
+  assert.match(transition, /FROM new_rows r JOIN old_rows old_row ON old_row\.id=r\.id/);
+  assert.match(markFinance, /v_trigger_table='pay_finance_case_events'[\s\S]*component\.linked_timesheet_id/);
   assert.match(dispatcher, /set_config\('cloudtms\.pay_workbench_effect_capture_mode','capture',true\)/);
   assert.match(dispatcher, /effect_plan_digest/);
   assert.match(dispatcher, /logical_source_id/);

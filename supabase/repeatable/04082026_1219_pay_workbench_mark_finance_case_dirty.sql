@@ -89,6 +89,19 @@ BEGIN
         NULLIF(v_new_row->>'finance_component_id','')::uuid,
         NULLIF(v_old_row->>'finance_component_id','')::uuid,
         CASE WHEN v_trigger_table='pay_finance_case_components' THEN v_internal_source_id END);
+      -- Finance-case event rows do not carry their owner timesheet. Resolve it
+      -- from the same stable parent identities used by the AFTER-statement
+      -- observer so capture and execution cannot disagree merely because one
+      -- side saw a nullable event payload.
+      IF v_trigger_table='pay_finance_case_events' THEN
+        SELECT COALESCE(component.linked_timesheet_id,finance_case.linked_timesheet_id)
+        INTO v_internal_timesheet_id
+        FROM (SELECT 1) anchor
+        LEFT JOIN public.pay_finance_case_components component
+          ON component.id=v_internal_finance_component_id
+        LEFT JOIN public.pay_advances finance_case
+          ON finance_case.id=COALESCE(v_internal_finance_case_id,component.finance_case_id);
+      END IF;
       v_internal_economic_key_type:=COALESCE(NULLIF(btrim(v_new_row->>'component_key_type'),''),
         NULLIF(btrim(v_old_row->>'component_key_type'),''));
       v_internal_economic_key_value:=COALESCE(NULLIF(btrim(v_new_row->>'component_key_value'),''),

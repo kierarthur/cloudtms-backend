@@ -103,6 +103,15 @@ DECLARE
   v_bootstrap_last_ordinal bigint:=0;
   v_bootstrap_unit_relevant boolean:=false;
   v_bootstrap_page_relevant boolean:=false;
+  v_bootstrap_raw_current_count bigint:=0;
+  v_bootstrap_resolved_current_count bigint:=0;
+  v_bootstrap_raw_baseline_count bigint:=0;
+  v_bootstrap_resolved_baseline_count bigint:=0;
+  v_bootstrap_page_raw_current_count bigint:=0;
+  v_bootstrap_page_resolved_current_count bigint:=0;
+  v_bootstrap_page_raw_baseline_count bigint:=0;
+  v_bootstrap_page_resolved_baseline_count bigint:=0;
+  v_bootstrap_evidence_complete boolean:=false;
   v_bootstrap_reset_count integer:=0;
   v_bootstrap_id uuid;
 BEGIN
@@ -254,17 +263,42 @@ BEGIN
           'projected_timesheet_id',projection.projected_timesheet_id,
           'stable_ordinal',projection.stable_ordinal)::text)
       FROM (
-        SELECT scope_row.stable_ordinal,projection.family_timesheet_id,
-          projection.scope_family_key,projection.canonical_timesheet_id,
-          projection.projected_timesheet_id,
-          '00:'||LPAD(scope_row.stable_ordinal::text,20,'0')||':'||projection.family_timesheet_id::text AS source_key
-        FROM private.pay_workbench_unit_projection_v1(v_build_id,v_unit_key) projection
-        JOIN private.banking_pay_workbench_economic_build_scope scope_row
-          ON scope_row.build_id=v_build_id AND scope_row.timesheet_id=projection.family_timesheet_id
-        WHERE v_last_source_key IS NULL OR
-          '00:'||LPAD(scope_row.stable_ordinal::text,20,'0')||':'||projection.family_timesheet_id::text>v_last_source_key
-        ORDER BY scope_row.stable_ordinal,projection.family_timesheet_id
-        LIMIT v_fact_limit+1
+        WITH scope_page AS MATERIALIZED (
+          SELECT scope_row.timesheet_id,scope_row.stable_ordinal
+          FROM private.banking_pay_workbench_economic_build_scope scope_row
+          WHERE scope_row.build_id=v_build_id
+            AND scope_row.dependency_unit_key=v_unit_key
+            AND (v_last_source_key IS NULL OR
+              '00:'||LPAD(scope_row.stable_ordinal::text,20,'0')||':'||scope_row.timesheet_id::text>v_last_source_key)
+          ORDER BY scope_row.stable_ordinal,scope_row.timesheet_id
+          LIMIT v_fact_limit+1
+        )
+        SELECT scope_page.stable_ordinal,scope_page.timesheet_id AS family_timesheet_id,
+          COALESCE(NULLIF(BTRIM(member.booking_id),''),scope_page.timesheet_id::text) AS scope_family_key,
+          canonical.timesheet_id AS canonical_timesheet_id,
+          canonical.timesheet_id AS projected_timesheet_id,
+          '00:'||LPAD(scope_page.stable_ordinal::text,20,'0')||':'||scope_page.timesheet_id::text AS source_key
+        FROM scope_page
+        JOIN public.timesheets member ON member.timesheet_id=scope_page.timesheet_id
+        LEFT JOIN LATERAL (
+          SELECT current_member.timesheet_id
+          FROM public.timesheets current_member
+          JOIN private.banking_pay_workbench_economic_build_scope current_scope
+            ON current_scope.build_id=v_build_id
+           AND current_scope.dependency_unit_key=v_unit_key
+           AND current_scope.timesheet_id=current_member.timesheet_id
+          WHERE current_member.is_current IS TRUE
+            AND current_member.revoked_at IS NULL
+            AND current_member.archived_at_utc IS NULL
+            AND (CASE WHEN NULLIF(BTRIM(member.booking_id),'') IS NULL
+                  THEN current_member.timesheet_id=member.timesheet_id
+                  ELSE current_member.booking_id=member.booking_id END)
+          ORDER BY current_member.version DESC NULLS LAST,
+            current_member.updated_at DESC NULLS LAST,current_member.created_at DESC NULLS LAST,
+            current_member.timesheet_id
+          LIMIT 1
+        ) canonical ON true
+        ORDER BY scope_page.stable_ordinal,scope_page.timesheet_id
       ) projection;
     ELSIF v_fact_family IN ('LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK') THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
@@ -274,7 +308,17 @@ BEGIN
         occurrence.amount_ex_vat,occurrence.amount_inc_vat,
         occurrence.truth_ex_vat,occurrence.truth_inc_vat,
         occurrence.baseline_ex_vat,occurrence.baseline_inc_vat,
-        NULL,NULL,NULL,NULL,occurrence.source_payload_json,occurrence.financial_digest
+        NULL,
+        CASE WHEN COALESCE(occurrence.source_payload_json->>'finance_case_id','')
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (occurrence.source_payload_json->>'finance_case_id')::uuid END,
+        CASE WHEN COALESCE(occurrence.source_payload_json->>'finance_component_id','')
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (occurrence.source_payload_json->>'finance_component_id')::uuid END,
+        CASE WHEN COALESCE(occurrence.source_payload_json->>'reservation_id','')
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (occurrence.source_payload_json->>'reservation_id')::uuid END,
+        occurrence.source_payload_json,occurrence.financial_digest
       FROM private.pay_workbench_unit_economic_occurrence_page_v1(
         v_build_id,v_unit_key,v_fact_family,v_input_projection_id,
         v_last_source_key,v_fact_limit
@@ -325,26 +369,35 @@ BEGIN
     ELSIF v_fact_family='RESERVATION_COMPONENT' THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
       SELECT reservation.id::text,md5('RESERVATION:'||reservation.id::text),
-        COALESCE(item.timesheet_id,component.linked_timesheet_id),
-        ARRAY[COALESCE(item.timesheet_id,component.linked_timesheet_id)],'pay_advance_reservations',reservation.id,
+        COALESCE(item.timesheet_id,component.linked_timesheet_id,finance_case.linked_timesheet_id),
+        CASE WHEN COALESCE(item.timesheet_id,component.linked_timesheet_id,finance_case.linked_timesheet_id) IS NULL
+          THEN ARRAY[]::uuid[] ELSE ARRAY[COALESCE(item.timesheet_id,component.linked_timesheet_id,
+            finance_case.linked_timesheet_id)] END,'pay_advance_reservations',reservation.id,
         COALESCE(reservation.frozen_component_key_type,component.component_key_type),
         COALESCE(reservation.frozen_component_key_value,component.component_key_value),
         NULL,NULL,NULL,NULL,NULL,NULL,COALESCE(reservation.reserved_source_amount,reservation.reserved_amount),
-        reservation.finance_case_id,reservation.finance_component_id,reservation.id,to_jsonb(reservation),
+        COALESCE(reservation.finance_case_id,component.finance_case_id),reservation.finance_component_id,
+        reservation.id,to_jsonb(reservation)||jsonb_build_object('resolution_failure',CASE
+          WHEN COALESCE(item.timesheet_id,component.linked_timesheet_id,finance_case.linked_timesheet_id) IS NULL
+            THEN 'RESERVATION_OWNER_UNRESOLVED'
+          WHEN COALESCE(reservation.frozen_component_key_type,component.component_key_type) NOT IN
+            ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE','MANUAL_CARRY_FORWARD')
+            OR NULLIF(btrim(COALESCE(reservation.frozen_component_key_value,component.component_key_value)), '') IS NULL
+            THEN 'RESERVATION_ECONOMIC_KEY_INVALID' END),
         md5(to_jsonb(reservation)::text)
       FROM public.pay_advance_reservations reservation
       LEFT JOIN public.pay_batch_items item ON item.id=reservation.pay_batch_item_id
       LEFT JOIN public.pay_finance_case_components component ON component.id=reservation.finance_component_id
+      LEFT JOIN public.pay_advances finance_case
+        ON finance_case.id=COALESCE(reservation.finance_case_id,component.finance_case_id)
       LEFT JOIN public.pay_batch_candidates batch_candidate ON batch_candidate.id=reservation.pay_batch_candidate_id
-      WHERE COALESCE(batch_candidate.candidate_id,component.candidate_id)=p_candidate_id
+      WHERE COALESCE(batch_candidate.candidate_id,component.candidate_id,finance_case.candidate_id)=p_candidate_id
         AND upper(btrim(COALESCE(reservation.status,''))) IN ('RESERVED','COMMITTED')
         AND reservation.released_at_utc IS NULL
         AND (item.id IS NULL OR COALESCE(item.is_voided,false) IS NOT TRUE)
-        AND COALESCE(item.timesheet_id,component.linked_timesheet_id) IN (
-          SELECT timesheet_id FROM private.banking_pay_workbench_economic_build_scope WHERE build_id=v_build_id)
-        AND COALESCE(reservation.frozen_component_key_type,component.component_key_type) IN
-          ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE','MANUAL_CARRY_FORWARD')
-        AND NULLIF(btrim(COALESCE(reservation.frozen_component_key_value,component.component_key_value)), '') IS NOT NULL
+        AND (COALESCE(item.timesheet_id,component.linked_timesheet_id,finance_case.linked_timesheet_id) IS NULL
+          OR COALESCE(item.timesheet_id,component.linked_timesheet_id,finance_case.linked_timesheet_id) IN (
+            SELECT timesheet_id FROM private.banking_pay_workbench_economic_build_scope WHERE build_id=v_build_id))
         AND (v_last_source_key IS NULL OR reservation.id::text>v_last_source_key)
       ORDER BY reservation.id LIMIT v_fact_limit+1;
     ELSIF v_fact_family='FINANCE_CASE_IDENTITY' THEN
@@ -377,7 +430,7 @@ BEGIN
       ORDER BY component.id LIMIT v_fact_limit+1;
     ELSIF v_fact_family='PROTECTION_EVIDENCE' THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
-      SELECT event.id::text,md5('EVENT:'||event.id::text),component.linked_timesheet_id,
+      SELECT 'EVENT:'||event.id::text,md5('EVENT:'||event.id::text),component.linked_timesheet_id,
         CASE WHEN component.linked_timesheet_id IS NULL THEN ARRAY[]::uuid[] ELSE ARRAY[component.linked_timesheet_id] END,
         'pay_finance_case_events',event.id,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
         event.finance_case_id,event.finance_component_id,event.reservation_id,to_jsonb(event),md5(to_jsonb(event)::text)
@@ -391,15 +444,82 @@ BEGIN
           upper(btrim(COALESCE(event.event_type,''))) LIKE '%WRITE%OFF%'
           OR upper(btrim(COALESCE(event.event_type,''))) IN (
             'MANUAL_ECONOMIC_OVERRIDE','MANUAL_WRITE_OFF','CASE_MANUAL_ECONOMIC_OVERRIDE',
-            'COMPONENT_MANUAL_ECONOMIC_OVERRIDE','CASE_CLEARED','CLEARED'
+            'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
           )
           OR upper(btrim(COALESCE(event.reason,''))) IN (
-            'MANUAL_ECONOMIC_OVERRIDE','WRITE_OFF','COMPONENT_MANUAL_ECONOMIC_OVERRIDE',
-            'RAIL_SETTLEMENT'
+            'MANUAL_ECONOMIC_OVERRIDE','WRITE_OFF','COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
+          )
+          OR (
+            upper(btrim(COALESCE(event.event_type,'')))='CASE_CLEARED'
+            AND lower(btrim(COALESCE(event.reason,'')))='rail_settlement'
+          )
+          OR (
+            upper(btrim(COALESCE(event.event_type,'')))='CLEARED'
+            AND upper(btrim(COALESCE(event.reason,'')))='PREVIEW_FINANCE_SYNC'
           )
         )
-        AND (v_last_source_key IS NULL OR event.id::text>v_last_source_key)
+        AND event.id=(
+          SELECT event_latest.id
+          FROM public.pay_finance_case_events event_latest
+          WHERE event_latest.finance_case_id=event.finance_case_id
+            AND (
+              upper(btrim(COALESCE(event_latest.event_type,''))) LIKE '%WRITE%OFF%'
+              OR upper(btrim(COALESCE(event_latest.event_type,''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE','MANUAL_WRITE_OFF','CASE_MANUAL_ECONOMIC_OVERRIDE',
+                'COMPONENT_MANUAL_ECONOMIC_OVERRIDE')
+              OR upper(btrim(COALESCE(event_latest.reason,''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE','WRITE_OFF','COMPONENT_MANUAL_ECONOMIC_OVERRIDE')
+              OR (upper(btrim(COALESCE(event_latest.event_type,'')))='CASE_CLEARED'
+                AND lower(btrim(COALESCE(event_latest.reason,'')))='rail_settlement')
+              OR (upper(btrim(COALESCE(event_latest.event_type,'')))='CLEARED'
+                AND upper(btrim(COALESCE(event_latest.reason,'')))='PREVIEW_FINANCE_SYNC')
+            )
+            AND (CASE WHEN (
+              upper(btrim(COALESCE(event_latest.event_type,''))) LIKE '%WRITE%OFF%'
+              OR upper(btrim(COALESCE(event_latest.event_type,''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE','MANUAL_WRITE_OFF','CASE_MANUAL_ECONOMIC_OVERRIDE',
+                'COMPONENT_MANUAL_ECONOMIC_OVERRIDE')
+              OR upper(btrim(COALESCE(event_latest.reason,''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE','WRITE_OFF','COMPONENT_MANUAL_ECONOMIC_OVERRIDE'))
+              THEN 'MANUAL' ELSE 'AUTOMATIC_CLEAR' END)
+              =(CASE WHEN (
+                upper(btrim(COALESCE(event.event_type,''))) LIKE '%WRITE%OFF%'
+                OR upper(btrim(COALESCE(event.event_type,''))) IN (
+                  'MANUAL_ECONOMIC_OVERRIDE','MANUAL_WRITE_OFF','CASE_MANUAL_ECONOMIC_OVERRIDE',
+                  'COMPONENT_MANUAL_ECONOMIC_OVERRIDE')
+                OR upper(btrim(COALESCE(event.reason,''))) IN (
+                  'MANUAL_ECONOMIC_OVERRIDE','WRITE_OFF','COMPONENT_MANUAL_ECONOMIC_OVERRIDE'))
+                THEN 'MANUAL' ELSE 'AUTOMATIC_CLEAR' END)
+          ORDER BY event_latest.event_at_utc DESC NULLS LAST,event_latest.id DESC
+          LIMIT 1
+        )
+        AND (v_last_source_key IS NULL OR 'EVENT:'||event.id::text>v_last_source_key)
       ORDER BY event.id LIMIT v_fact_limit+1;
+      INSERT INTO pg_temp._bpay_wb_fact_page_v1
+      SELECT 'BATCH_ITEM:'||item.id::text,md5('BATCH_ITEM_PROTECTION:'||item.id::text),
+        item.timesheet_id,CASE WHEN item.timesheet_id IS NULL THEN ARRAY[]::uuid[]
+          ELSE ARRAY[item.timesheet_id] END,'pay_batch_items',item.id,
+        NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,item.finance_case_id,
+        item.finance_component_id,item.reservation_id,
+        to_jsonb(item)||jsonb_build_object('protection_kind','ACTIVE_CORRECTION_CHAIN_BATCH_ITEM'),
+        md5(to_jsonb(item)::text)
+      FROM public.pay_batch_items item
+      JOIN public.pay_batch_candidates batch_candidate ON batch_candidate.id=item.pay_batch_candidate_id
+      JOIN public.pay_batches batch_row ON batch_row.id=batch_candidate.pay_batch_id
+      WHERE batch_candidate.candidate_id=p_candidate_id
+        AND COALESCE(item.is_voided,false) IS NOT TRUE
+        AND batch_row.cancelled_at_utc IS NULL
+        AND upper(btrim(COALESCE(batch_row.status,''))) IN (
+          'DRAFT','DRAFT_CREATED','READY','WAITING_BANK_CONFIRM','PARTIAL','FAILED',
+          'BLOCKED_FUNDS','SCHEDULED','EXECUTING','AWAITING_AUTHORISATION','AUTHORISED_FOR_PAYMENT')
+        AND COALESCE(item.frozen_component_snapshot_json->>'correction_root_id',
+          item.frozen_resolution_payload_json->>'correction_root_id','') IN (
+            SELECT scope_row.root_timesheet_id::text
+            FROM private.banking_pay_workbench_economic_build_scope scope_row
+            WHERE scope_row.build_id=v_build_id AND scope_row.root_timesheet_id IS NOT NULL)
+        AND (v_last_source_key IS NULL OR 'BATCH_ITEM:'||item.id::text>v_last_source_key)
+      ORDER BY item.id LIMIT v_fact_limit+1
+      ON CONFLICT(source_key) DO NOTHING;
     ELSIF v_fact_family='ALLOCATION_INPUT' THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
       SELECT fact.fact_family||':'||fact.natural_key,md5('ALLOCATION:'||fact.fact_family||':'||fact.natural_key),
@@ -1155,6 +1275,10 @@ BEGIN
       v_bootstrap_last_unit_key:=NULLIF(v_cursor->>'last_dependency_unit_key','');
       v_bootstrap_last_ordinal:=GREATEST(COALESCE((v_cursor->>'last_stable_ordinal')::bigint,0),0);
       v_bootstrap_unit_relevant:=COALESCE((v_cursor->>'unit_financially_relevant')::boolean,false);
+      v_bootstrap_raw_current_count:=GREATEST(COALESCE((v_cursor->>'raw_current_occurrence_count')::bigint,0),0);
+      v_bootstrap_resolved_current_count:=GREATEST(COALESCE((v_cursor->>'resolved_current_occurrence_count')::bigint,0),0);
+      v_bootstrap_raw_baseline_count:=GREATEST(COALESCE((v_cursor->>'raw_baseline_occurrence_count')::bigint,0),0);
+      v_bootstrap_resolved_baseline_count:=GREATEST(COALESCE((v_cursor->>'resolved_baseline_occurrence_count')::bigint,0),0);
 
       IF v_bootstrap_classification_phase='EVIDENCE' THEN
         IF v_bootstrap_unit_key IS NULL THEN
@@ -1271,13 +1395,46 @@ BEGIN
             )
           LIMIT 1
         ) INTO v_bootstrap_page_relevant;
+        SELECT
+          COUNT(*) FILTER(WHERE fact.fact_family='LIVE_ENTITLEMENT_INPUT'
+            AND fact.source_relation<>'UNIT_PROJECTION'),
+          COUNT(*) FILTER(WHERE fact.fact_family='LIVE_ENTITLEMENT_INPUT'
+            AND fact.source_relation<>'UNIT_PROJECTION'
+            AND fact.economic_key_type IS NOT NULL AND fact.economic_key_value IS NOT NULL
+            AND fact.truth_ex_vat IS NOT NULL),
+          COUNT(*) FILTER(WHERE fact.fact_family IN ('FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK')),
+          COUNT(*) FILTER(WHERE fact.fact_family IN ('FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK')
+            AND fact.economic_key_type IS NOT NULL AND fact.economic_key_value IS NOT NULL
+            AND fact.amount_ex_vat IS NOT NULL)
+        INTO v_bootstrap_page_raw_current_count,v_bootstrap_page_resolved_current_count,
+          v_bootstrap_page_raw_baseline_count,v_bootstrap_page_resolved_baseline_count
+        FROM private.banking_pay_workbench_economic_build_facts fact
+        JOIN (SELECT timesheet_id FROM pg_temp._bpay_wb_bootstrap_page_v1
+          ORDER BY source_key LIMIT 25) page ON page.timesheet_id=fact.timesheet_id
+        WHERE fact.build_id=v_build_id AND fact.dependency_unit_key=v_bootstrap_unit_key;
+        v_bootstrap_raw_current_count:=v_bootstrap_raw_current_count+
+          COALESCE(v_bootstrap_page_raw_current_count,0);
+        v_bootstrap_resolved_current_count:=v_bootstrap_resolved_current_count+
+          COALESCE(v_bootstrap_page_resolved_current_count,0);
+        v_bootstrap_raw_baseline_count:=v_bootstrap_raw_baseline_count+
+          COALESCE(v_bootstrap_page_raw_baseline_count,0);
+        v_bootstrap_resolved_baseline_count:=v_bootstrap_resolved_baseline_count+
+          COALESCE(v_bootstrap_page_resolved_baseline_count,0);
         v_bootstrap_unit_relevant:=v_bootstrap_unit_relevant OR v_bootstrap_page_relevant;
+        v_bootstrap_evidence_complete:=
+          v_bootstrap_raw_current_count=v_bootstrap_resolved_current_count
+          AND v_bootstrap_raw_baseline_count=v_bootstrap_resolved_baseline_count;
         IF v_bootstrap_has_more THEN
           v_next:=jsonb_build_object('cursor_kind','BOOTSTRAP_DISCOVERY','cursor_version',1,
             'bootstrap_id',v_bootstrap_id,'bootstrap_stream','CLASSIFY_UNITS',
             'classification_phase','EVIDENCE','last_dependency_unit_key',v_bootstrap_last_unit_key,
             'dependency_unit_key',v_bootstrap_unit_key,'last_stable_ordinal',v_bootstrap_last_ordinal,
-            'unit_financially_relevant',v_bootstrap_unit_relevant,'build_id',v_build_id,
+            'unit_financially_relevant',v_bootstrap_unit_relevant,
+            'raw_current_occurrence_count',v_bootstrap_raw_current_count,
+            'resolved_current_occurrence_count',v_bootstrap_resolved_current_count,
+            'raw_baseline_occurrence_count',v_bootstrap_raw_baseline_count,
+            'resolved_baseline_occurrence_count',v_bootstrap_resolved_baseline_count,
+            'evidence_complete',v_bootstrap_evidence_complete,'build_id',v_build_id,
             'candidate_id',p_candidate_id,
             'captured_candidate_generation',v_build.captured_candidate_generation,
             'captured_source_change_seq',v_build.source_change_seq);
@@ -1286,7 +1443,12 @@ BEGIN
             'bootstrap_id',v_bootstrap_id,'bootstrap_stream','CLASSIFY_UNITS',
             'classification_phase','APPLY','last_dependency_unit_key',v_bootstrap_last_unit_key,
             'dependency_unit_key',v_bootstrap_unit_key,'last_stable_ordinal',0,
-            'unit_financially_relevant',v_bootstrap_unit_relevant,'build_id',v_build_id,
+            'unit_financially_relevant',v_bootstrap_unit_relevant,
+            'raw_current_occurrence_count',v_bootstrap_raw_current_count,
+            'resolved_current_occurrence_count',v_bootstrap_resolved_current_count,
+            'raw_baseline_occurrence_count',v_bootstrap_raw_baseline_count,
+            'resolved_baseline_occurrence_count',v_bootstrap_resolved_baseline_count,
+            'evidence_complete',v_bootstrap_evidence_complete,'build_id',v_build_id,
             'candidate_id',p_candidate_id,
             'captured_candidate_generation',v_build.captured_candidate_generation,
             'captured_source_change_seq',v_build.source_change_seq);
@@ -1294,6 +1456,23 @@ BEGIN
       ELSIF v_bootstrap_classification_phase='APPLY' THEN
         IF v_bootstrap_unit_key IS NULL THEN
           RAISE EXCEPTION 'PAY_WORKBENCH_BOOTSTRAP_CURSOR_INVALID' USING ERRCODE='22023';
+        END IF;
+        v_bootstrap_evidence_complete:=COALESCE((v_cursor->>'evidence_complete')::boolean,false)
+          AND v_bootstrap_raw_current_count=v_bootstrap_resolved_current_count
+          AND v_bootstrap_raw_baseline_count=v_bootstrap_resolved_baseline_count
+          AND NOT EXISTS(
+            SELECT 1 FROM private.banking_pay_workbench_economic_build_scope scope_row
+            WHERE scope_row.build_id=v_build_id
+              AND scope_row.dependency_unit_key=v_bootstrap_unit_key
+              AND (scope_row.closure_status<>'SEALED'
+                OR NOT scope_row.required_fact_families <@ scope_row.completed_fact_families))
+          AND NOT EXISTS(
+            SELECT 1 FROM private.banking_pay_workbench_economic_build_facts fact
+            WHERE fact.build_id=v_build_id AND fact.dependency_unit_key=v_bootstrap_unit_key
+              AND NULLIF(BTRIM(fact.source_payload_json->>'resolution_failure'),'') IS NOT NULL);
+        IF NOT v_bootstrap_evidence_complete THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_BOOTSTRAP_CLOSED_AUTHORITY_UNPROVED'
+            USING ERRCODE='23514';
         END IF;
         INSERT INTO pg_temp._bpay_wb_bootstrap_page_v1(source_key,timesheet_id)
         SELECT lpad(scope_row.stable_ordinal::text,20,'0'),scope_row.timesheet_id
@@ -1333,7 +1512,12 @@ BEGIN
             'bootstrap_id',v_bootstrap_id,'bootstrap_stream','CLASSIFY_UNITS',
             'classification_phase','APPLY','last_dependency_unit_key',v_bootstrap_last_unit_key,
             'dependency_unit_key',v_bootstrap_unit_key,'last_stable_ordinal',v_bootstrap_last_ordinal,
-            'unit_financially_relevant',v_bootstrap_unit_relevant,'build_id',v_build_id,
+            'unit_financially_relevant',v_bootstrap_unit_relevant,
+            'raw_current_occurrence_count',v_bootstrap_raw_current_count,
+            'resolved_current_occurrence_count',v_bootstrap_resolved_current_count,
+            'raw_baseline_occurrence_count',v_bootstrap_raw_baseline_count,
+            'resolved_baseline_occurrence_count',v_bootstrap_resolved_baseline_count,
+            'evidence_complete',v_bootstrap_evidence_complete,'build_id',v_build_id,
             'candidate_id',p_candidate_id,
             'captured_candidate_generation',v_build.captured_candidate_generation,
             'captured_source_change_seq',v_build.source_change_seq);

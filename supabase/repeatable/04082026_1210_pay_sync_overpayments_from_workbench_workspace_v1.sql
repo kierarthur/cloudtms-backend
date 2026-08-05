@@ -340,24 +340,17 @@ begin
             and coalesce((r->>'reservation_overrun_count')::integer,0) > 0
             and exists (
               select 1
-              from public.pay_batch_items active_batch_item
-              join public.pay_batch_candidates active_batch_candidate
-                on active_batch_candidate.id = active_batch_item.pay_batch_candidate_id
-              join public.pay_batches active_batch
-                on active_batch.id = active_batch_candidate.pay_batch_id
-              where active_batch_candidate.candidate_id = v_correction_candidate
-                and coalesce(active_batch_item.is_voided, false) is not true
-                and active_batch.cancelled_at_utc is null
-                and upper(btrim(coalesce(active_batch.status, ''))) in (
-                  'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM',
-                  'PARTIAL', 'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
-                  'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
-                )
+              from private.banking_pay_workbench_economic_build_facts active_batch_item
+              where active_batch_item.build_id=p_build_id
+                and active_batch_item.fact_family='PROTECTION_EVIDENCE'
+                and active_batch_item.source_relation='pay_batch_items'
+                and active_batch_item.candidate_id=v_correction_candidate
+                and active_batch_item.source_payload_json->>'protection_kind'
+                  ='ACTIVE_CORRECTION_CHAIN_BATCH_ITEM'
                 and coalesce(
-                  active_batch_item.frozen_component_snapshot_json->>'correction_root_id',
-                  active_batch_item.frozen_resolution_payload_json->>'correction_root_id',
-                  ''
-                ) = coalesce(r->>'root_timesheet_id','')
+                  active_batch_item.source_payload_json #>> '{frozen_component_snapshot_json,correction_root_id}',
+                  active_batch_item.source_payload_json #>> '{frozen_resolution_payload_json,correction_root_id}',
+                  '')=coalesce(r->>'root_timesheet_id','')
             )
           )
           and (
@@ -2027,7 +2020,19 @@ begin
     select v_authoritative_candidate_id as candidate_id,fact.timesheet_id,
       upper(btrim(coalesce(fact.economic_key_type,''))) as component_key_type,
       nullif(btrim(coalesce(fact.economic_key_value,'')),'') as component_key_value,
-      'BUILD_FACT_AUTHORITY'::text as item_type,
+      case
+        when fact.fact_family='FROZEN_SETTLED_COMPONENT' then upper(btrim(coalesce(
+          fact.source_payload_json #>> '{pay_batch_item,item_type}',
+          fact.source_payload_json->>'item_type','')))
+        when fact.fact_family='RESERVATION_COMPONENT' then case upper(coalesce((
+          select case_fact.source_payload_json->>'case_type'
+          from private.banking_pay_workbench_economic_build_facts case_fact
+          where case_fact.build_id=fact.build_id
+            and case_fact.fact_family='FINANCE_CASE_IDENTITY'
+            and case_fact.finance_case_id=fact.finance_case_id
+          limit 1),'OVERPAYMENT'))
+          when 'UNDERPAYMENT' then 'UNDERPAYMENT_PAYMENT' else 'OVERPAYMENT_RECOVERY' end
+        else NULL end as item_type,
       round(abs(coalesce(fact.amount_ex_vat,fact.reserved_source_amount,0)),2)::numeric(12,2) as movement_amount_ex,
       (fact.fact_family='FROZEN_SETTLED_COMPONENT') as is_settled_movement,
       (fact.fact_family='RESERVATION_COMPONENT') as is_active_reservation
@@ -2636,17 +2641,19 @@ begin
       pa.cleared_at_utc as old_cleared_at_utc,
       exists (
         select 1
-        from public.pay_finance_case_events sync_safety_events
-        where sync_safety_events.finance_case_id = pa.id
+        from private.banking_pay_workbench_economic_build_facts sync_safety_events
+        where sync_safety_events.build_id=p_build_id
+          and sync_safety_events.fact_family='PROTECTION_EVIDENCE'
+          and sync_safety_events.finance_case_id = pa.id
           and (
-            upper(btrim(coalesce(sync_safety_events.event_type, ''))) like '%WRITE%OFF%'
-            or upper(btrim(coalesce(sync_safety_events.event_type, ''))) in (
+            upper(btrim(coalesce(sync_safety_events.source_payload_json->>'event_type', ''))) like '%WRITE%OFF%'
+            or upper(btrim(coalesce(sync_safety_events.source_payload_json->>'event_type', ''))) in (
               'MANUAL_ECONOMIC_OVERRIDE',
               'MANUAL_WRITE_OFF',
               'CASE_MANUAL_ECONOMIC_OVERRIDE',
               'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
             )
-            or upper(btrim(coalesce(sync_safety_events.reason, ''))) in (
+            or upper(btrim(coalesce(sync_safety_events.source_payload_json->>'reason', ''))) in (
               'MANUAL_ECONOMIC_OVERRIDE',
               'WRITE_OFF',
               'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
@@ -2655,78 +2662,38 @@ begin
       ) as old_has_manual_or_restructure_event,
       exists (
         select 1
-        from public.pay_finance_case_events automatic_clear_event
-        where automatic_clear_event.finance_case_id = pa.id
+        from private.banking_pay_workbench_economic_build_facts automatic_clear_event
+        where automatic_clear_event.build_id=p_build_id
+          and automatic_clear_event.fact_family='PROTECTION_EVIDENCE'
+          and automatic_clear_event.finance_case_id = pa.id
           and (
             (
-              upper(btrim(coalesce(automatic_clear_event.event_type, ''))) = 'CASE_CLEARED'
-              and lower(btrim(coalesce(automatic_clear_event.reason, ''))) = 'rail_settlement'
+              upper(btrim(coalesce(automatic_clear_event.source_payload_json->>'event_type', ''))) = 'CASE_CLEARED'
+              and lower(btrim(coalesce(automatic_clear_event.source_payload_json->>'reason', ''))) = 'rail_settlement'
             )
             or (
-              upper(btrim(coalesce(automatic_clear_event.event_type, ''))) = 'CLEARED'
-              and upper(btrim(coalesce(automatic_clear_event.reason, ''))) = 'PREVIEW_FINANCE_SYNC'
+              upper(btrim(coalesce(automatic_clear_event.source_payload_json->>'event_type', ''))) = 'CLEARED'
+              and upper(btrim(coalesce(automatic_clear_event.source_payload_json->>'reason', ''))) = 'PREVIEW_FINANCE_SYNC'
             )
           )
       ) as old_has_automatic_reconcilable_clear,
       round(coalesce((
-        select sum(abs(coalesce(
-          settled_reservation.reserved_source_amount,
-          public._pay_batch_item_source_reservation_amount_ex_vat(settled_item.id),
-          settled_item.frozen_source_amount,
-          settled_item.amount_ex_vat,
-          settled_item.amount_inc_vat,
-          settled_reservation.reserved_amount,
-          0
-        )))
-        from public.pay_batch_items as settled_item
-        join public.pay_batch_candidates as settled_candidate
-          on settled_candidate.id = settled_item.pay_batch_candidate_id
-        join public.pay_batches as settled_batch
-          on settled_batch.id = settled_candidate.pay_batch_id
-        left join public.pay_bank_transfers as settled_transfer
-          on settled_transfer.id = settled_item.pay_bank_transfer_id
-        left join public.pay_advance_reservations as settled_reservation
-          on settled_reservation.pay_batch_item_id = settled_item.id
-        where coalesce(settled_item.is_voided, false) is not true
-          and coalesce(
-            settled_reservation.finance_case_id,
-            settled_item.finance_case_id,
-            case
-              when upper(btrim(split_part(coalesce(settled_item.source_ref, ''), ':', 1))) = 'ADVANCE'
-               and nullif(btrim(split_part(coalesce(settled_item.source_ref, ''), ':', 2)), '')
-                   ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-              then nullif(btrim(split_part(coalesce(settled_item.source_ref, ''), ':', 2)), '')::uuid
-              else null::uuid
-            end
-          ) = pa.id
+        select sum(abs(coalesce(settled_fact.amount_ex_vat,0)))
+        from private.banking_pay_workbench_economic_build_facts settled_fact
+        where settled_fact.build_id=p_build_id
+          and settled_fact.fact_family='FROZEN_SETTLED_COMPONENT'
+          and settled_fact.finance_case_id=pa.id
           and (
             (
               v_target_case_row.desired_case_type = 'OVERPAYMENT'::public.pay_finance_case_type_enum
-              and upper(btrim(coalesce(settled_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+              and upper(btrim(coalesce(settled_fact.source_payload_json #>> '{pay_batch_item,item_type}',
+                settled_fact.source_payload_json->>'item_type',''))) = 'OVERPAYMENT_RECOVERY'
             )
             or (
               v_target_case_row.desired_case_type = 'UNDERPAYMENT'::public.pay_finance_case_type_enum
-              and upper(btrim(coalesce(settled_item.item_type, ''))) = 'UNDERPAYMENT_PAYMENT'
+              and upper(btrim(coalesce(settled_fact.source_payload_json #>> '{pay_batch_item,item_type}',
+                settled_fact.source_payload_json->>'item_type',''))) = 'UNDERPAYMENT_PAYMENT'
             )
-          )
-          and not exists (
-            select 1
-            from public.pay_payment_correction_items as settled_correction
-            where settled_correction.pay_batch_item_id = settled_item.id
-              and settled_correction.status = 'APPLIED'
-              and settled_correction.correction_item_kind in (
-                'PRE_BANK_CANCEL',
-                'NO_MONEY_UNWIND',
-                'SETTLED_REVERSAL'
-              )
-          )
-          and (
-            upper(btrim(coalesce(settled_candidate.settlement_status, ''))) = 'SETTLED'
-            or settled_candidate.settled_at_utc is not null
-            or upper(btrim(coalesce(settled_transfer.status, ''))) = 'COMPLETED'
-            or settled_transfer.completed_at_utc is not null
-            or upper(btrim(coalesce(settled_reservation.status, ''))) = 'SETTLED'
-            or settled_reservation.settled_at_utc is not null
           )
       ), 0), 2)::numeric(12,2) as old_active_recovered_amount
     into v_existing_case_row
@@ -2751,21 +2718,12 @@ begin
 
     IF v_existing_case_row.finance_case_id IS NOT NULL THEN
       SELECT ROUND(COALESCE(SUM(ABS(COALESCE(
-        advance_reservation.reserved_source_amount,
-        advance_reservation.reserved_amount,
-        batch_item.frozen_source_amount,
-        batch_item.amount_ex_vat,
-        batch_item.amount_inc_vat,
-        0
-      ))), 0), 2)::numeric(12,2)
+        reservation_fact.reserved_source_amount,reservation_fact.amount_ex_vat,0))),0),2)::numeric(12,2)
       INTO v_existing_active_reserved_amount
-      FROM public.pay_advance_reservations AS advance_reservation
-      LEFT JOIN public.pay_batch_items AS batch_item
-        ON batch_item.id = advance_reservation.pay_batch_item_id
-      WHERE advance_reservation.finance_case_id = v_existing_case_row.finance_case_id
-        AND UPPER(BTRIM(COALESCE(advance_reservation.status, ''))) IN ('RESERVED', 'COMMITTED')
-        AND advance_reservation.released_at_utc IS NULL
-        AND (batch_item.id IS NULL OR COALESCE(batch_item.is_voided, false) IS NOT TRUE);
+      FROM private.banking_pay_workbench_economic_build_facts reservation_fact
+      WHERE reservation_fact.build_id=p_build_id
+        AND reservation_fact.fact_family='RESERVATION_COMPONENT'
+        AND reservation_fact.finance_case_id=v_existing_case_row.finance_case_id;
     END IF;
 
     if v_existing_case_row.finance_case_id is not null
@@ -3293,17 +3251,19 @@ begin
       and pa.cleared_at_utc is null
       and not exists (
         select 1
-        from public.pay_finance_case_events sync_clear_safety_events
-        where sync_clear_safety_events.finance_case_id = pa.id
+        from private.banking_pay_workbench_economic_build_facts sync_clear_safety_events
+        where sync_clear_safety_events.build_id=p_build_id
+          and sync_clear_safety_events.fact_family='PROTECTION_EVIDENCE'
+          and sync_clear_safety_events.finance_case_id = pa.id
           and (
-            upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) like '%WRITE%OFF%'
-            or upper(btrim(coalesce(sync_clear_safety_events.event_type, ''))) in (
+            upper(btrim(coalesce(sync_clear_safety_events.source_payload_json->>'event_type', ''))) like '%WRITE%OFF%'
+            or upper(btrim(coalesce(sync_clear_safety_events.source_payload_json->>'event_type', ''))) in (
               'MANUAL_ECONOMIC_OVERRIDE',
               'MANUAL_WRITE_OFF',
               'CASE_MANUAL_ECONOMIC_OVERRIDE',
               'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
             )
-            or upper(btrim(coalesce(sync_clear_safety_events.reason, ''))) in (
+            or upper(btrim(coalesce(sync_clear_safety_events.source_payload_json->>'reason', ''))) in (
               'MANUAL_ECONOMIC_OVERRIDE',
               'WRITE_OFF',
               'COMPONENT_MANUAL_ECONOMIC_OVERRIDE'
@@ -3311,15 +3271,13 @@ begin
           )
       )
   loop
-    SELECT ROUND(COALESCE(SUM(ABS(COALESCE(advance_reservation.reserved_source_amount, advance_reservation.reserved_amount, batch_item.frozen_source_amount, batch_item.amount_ex_vat, batch_item.amount_inc_vat, 0))), 0), 2)::numeric(12,2)
+    SELECT ROUND(COALESCE(SUM(ABS(COALESCE(
+      reservation_fact.reserved_source_amount,reservation_fact.amount_ex_vat,0))),0),2)::numeric(12,2)
     INTO v_existing_active_reserved_amount
-    FROM public.pay_advance_reservations AS advance_reservation
-    LEFT JOIN public.pay_batch_items AS batch_item
-      ON batch_item.id = advance_reservation.pay_batch_item_id
-    WHERE advance_reservation.finance_case_id = v_open_case_candidate.finance_case_id
-      AND UPPER(BTRIM(COALESCE(advance_reservation.status, ''))) IN ('RESERVED', 'COMMITTED')
-      AND advance_reservation.released_at_utc IS NULL
-      AND (batch_item.id IS NULL OR COALESCE(batch_item.is_voided, false) IS NOT TRUE);
+    FROM private.banking_pay_workbench_economic_build_facts reservation_fact
+    WHERE reservation_fact.build_id=p_build_id
+      AND reservation_fact.fact_family='RESERVATION_COMPONENT'
+      AND reservation_fact.finance_case_id=v_open_case_candidate.finance_case_id;
 
     IF COALESCE(v_existing_active_reserved_amount, 0) > 0 THEN
       IF NOT EXISTS (
@@ -3854,16 +3812,18 @@ begin
   IF EXISTS(
     WITH expected AS (
       SELECT scope_row.timesheet_id,
-        ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS expected_ex_vat
+        ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS expected_ex_vat,
+        COUNT(component.timesheet_id) AS expected_component_count
       FROM private.banking_pay_workbench_economic_build_scope scope_row
       LEFT JOIN pg_temp.tmp_sync_authoritative_components component
         ON component.timesheet_id=scope_row.timesheet_id
       WHERE scope_row.build_id=p_build_id
       GROUP BY scope_row.timesheet_id
-    ), actual AS (
+    ), actual_rows AS (
       SELECT COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid AS timesheet_id,
-        ROUND(COALESCE(SUM(line.amount_ex_vat),0),2) AS actual_ex_vat
+        ROUND(COALESCE(SUM(line.amount_ex_vat),0),2) AS actual_ex_vat,
+        COUNT(*) AS actual_line_count
       FROM pg_temp.canonical_preview_lines line
       WHERE line.candidate_id=v_bounded_build.candidate_id
         AND UPPER(COALESCE(line.line_json->>'line_type',''))='TIMESHEET_PAYMENT'
@@ -3873,13 +3833,16 @@ begin
       GROUP BY 1
     )
     SELECT 1 FROM expected FULL OUTER JOIN actual USING(timesheet_id)
-    WHERE ABS(COALESCE(expected.expected_ex_vat,0)-COALESCE(actual.actual_ex_vat,0))>0.01
+    WHERE expected.timesheet_id IS NULL
+       OR (actual.timesheet_id IS NULL AND expected.expected_component_count>0)
+       OR COALESCE(actual.actual_line_count,0)>1
+       OR ABS(COALESCE(expected.expected_ex_vat,0)-COALESCE(actual.actual_ex_vat,0))>0.01
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_AMOUNT_MISMATCH' USING ERRCODE='23514';
   END IF;
   IF EXISTS(
     WITH expected AS (
-      SELECT component.timesheet_id,
+      SELECT scope_row.timesheet_id,
         COALESCE(jsonb_agg(jsonb_build_object(
           'component_key_type',component.key_type,'component_key_value',component.key_value,
           'component_amount_ex_vat',component.outstanding_ex_vat,
@@ -3893,9 +3856,13 @@ begin
             'linked_timesheet_id',component.timesheet_id::text,
             'component_key_type',component.key_type,'component_key_value',component.key_value,
             'authority','SEALED_ECONOMIC_BUILD_FACTS'))
-          ORDER BY component.key_type,component.key_value),'[]'::jsonb) AS components_json
-      FROM pg_temp.tmp_sync_authoritative_components component
-      GROUP BY component.timesheet_id
+          ORDER BY component.key_type,component.key_value)
+          FILTER (WHERE component.timesheet_id IS NOT NULL),'[]'::jsonb) AS components_json
+      FROM private.banking_pay_workbench_economic_build_scope scope_row
+      LEFT JOIN pg_temp.tmp_sync_authoritative_components component
+        ON component.timesheet_id=scope_row.timesheet_id
+      WHERE scope_row.build_id=p_build_id
+      GROUP BY scope_row.timesheet_id
     ), actual AS (
       SELECT COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid AS timesheet_id,
@@ -3907,9 +3874,15 @@ begin
         AND COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id','')
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), actual AS (
+      SELECT actual_row.timesheet_id,COUNT(*) AS actual_line_count,
+        MIN(actual_row.components_json::text)::jsonb AS components_json
+      FROM actual_rows actual_row GROUP BY actual_row.timesheet_id
     )
-    SELECT 1 FROM actual JOIN expected USING(timesheet_id)
-    WHERE md5(actual.components_json::text) IS DISTINCT FROM md5(expected.components_json::text)
+    SELECT 1 FROM expected FULL OUTER JOIN actual USING(timesheet_id)
+    WHERE (expected.timesheet_id IS NULL OR actual.timesheet_id IS NULL)
+       OR actual.actual_line_count<>1
+       OR md5(actual.components_json::text) IS DISTINCT FROM md5(expected.components_json::text)
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_COMPONENT_MISMATCH' USING ERRCODE='23514';
   END IF;

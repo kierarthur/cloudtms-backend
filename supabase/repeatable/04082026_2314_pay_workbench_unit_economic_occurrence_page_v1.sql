@@ -94,36 +94,63 @@ BEGIN
           THEN 'TS_DAY' ELSE 'TS_TOTAL' END AS raw_key_type,
         CASE WHEN NULLIF(BTRIM(COALESCE(segment.value->>'date','')),'') ~ '^\d{4}-\d{2}-\d{2}$'
           THEN BTRIM(segment.value->>'date') ELSE 'TOTAL' END AS raw_key_value,
-        ROUND(CASE WHEN COALESCE(NULLIF(segment.value->>'exclude_from_pay','')::boolean,false)
+        ROUND(CASE WHEN lower(COALESCE(NULLIF(segment.value->>'exclude_from_pay',''),'false'))='true'
           THEN 0::numeric
           WHEN COALESCE(segment.value->>'pay_amount','') ~ '^-?\d+(\.\d+)?$'
           THEN (segment.value->>'pay_amount')::numeric ELSE 0::numeric END,2) AS amount_ex_vat,
         jsonb_build_object('role','LIVE_COMPONENT','source_kind','SEGMENT',
           'projected_timesheet_id',p_projected_timesheet_id,'segment',segment.value,
-          'source_ordinal',segment.ordinality) AS payload
+          'source_ordinal',segment.ordinality) AS payload,
+        CASE
+          WHEN jsonb_typeof(canonical.invoice_breakdown_json)='object'
+            AND UPPER(COALESCE(canonical.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+            AND jsonb_typeof(canonical.invoice_breakdown_json->'segments') IS DISTINCT FROM 'array'
+            THEN 'SEGMENT_INPUT_NOT_ARRAY'
+          WHEN jsonb_typeof(segment.value)<>'object' THEN 'SEGMENT_NOT_OBJECT'
+          WHEN NULLIF(BTRIM(COALESCE(segment.value->>'segment_id','')),'') IS NULL
+            THEN 'SEGMENT_ID_MISSING'
+          WHEN NULLIF(segment.value->>'exclude_from_pay','') IS NOT NULL
+            AND lower(segment.value->>'exclude_from_pay') NOT IN ('true','false')
+            THEN 'SEGMENT_EXCLUDE_INVALID'
+          WHEN lower(COALESCE(NULLIF(segment.value->>'exclude_from_pay',''),'false'))='false'
+            AND COALESCE(segment.value->>'pay_amount','') !~ '^-?\d+(\.\d+)?$'
+            THEN 'SEGMENT_AMOUNT_INVALID'
+          WHEN NULLIF(BTRIM(COALESCE(segment.value->>'date','')),'') IS NOT NULL
+            AND segment.value->>'date' !~ '^\d{4}-\d{2}-\d{2}$'
+            THEN 'SEGMENT_DATE_INVALID'
+        END AS raw_failure
       FROM canonical
       CROSS JOIN LATERAL (
-        SELECT source_segment.value,source_segment.ordinality
-        FROM jsonb_array_elements(
-          CASE WHEN jsonb_typeof(canonical.invoice_breakdown_json)='object'
-             AND UPPER(COALESCE(canonical.invoice_breakdown_json->>'mode',''))='SEGMENTS'
-             AND jsonb_typeof(canonical.invoice_breakdown_json->'segments')='array'
-            THEN canonical.invoice_breakdown_json->'segments' ELSE '[]'::jsonb END
-        ) WITH ORDINALITY source_segment(value,ordinality)
-        WHERE source_segment.value IS NOT NULL AND jsonb_typeof(source_segment.value)='object'
-          AND NULLIF(BTRIM(COALESCE(source_segment.value->>'segment_id','')),'') IS NOT NULL
+        SELECT canonical.invoice_breakdown_json->'segments'->bounded_index.zero_index AS value,
+          bounded_index.zero_index+1 AS ordinality
+        FROM LATERAL generate_series(
+          CASE WHEN p_last_source_key LIKE '10:'||p_projected_timesheet_id::text||':SEGMENT:%'
+            THEN COALESCE(NULLIF(regexp_replace(p_last_source_key,
+              '^.*:SEGMENT:0*','','g'),'')::integer,0) ELSE 0 END,
+          LEAST(jsonb_array_length(CASE WHEN jsonb_typeof(canonical.invoice_breakdown_json)='object'
+              AND jsonb_typeof(canonical.invoice_breakdown_json->'segments')='array'
+            THEN canonical.invoice_breakdown_json->'segments' ELSE '[]'::jsonb END)-1,
+            CASE WHEN p_last_source_key LIKE '10:'||p_projected_timesheet_id::text||':SEGMENT:%'
+              THEN COALESCE(NULLIF(regexp_replace(p_last_source_key,
+                '^.*:SEGMENT:0*','','g'),'')::integer,0) ELSE 0 END + v_limit-1)
+        ) bounded_index(zero_index)
+        WHERE jsonb_typeof(canonical.invoice_breakdown_json)='object'
+          AND UPPER(COALESCE(canonical.invoice_breakdown_json->>'mode',''))='SEGMENTS'
+          AND jsonb_typeof(canonical.invoice_breakdown_json->'segments')='array'
         UNION ALL
         SELECT jsonb_build_object(
             'segment_id','ts:'||canonical.timesheet_id::text,
             'pay_amount',ROUND(COALESCE(canonical.total_pay_ex_vat,0),2),
             'exclude_from_pay',false,
             'date',CASE
-              WHEN COALESCE(canonical.tf_worked_start_iso,canonical.worked_start_iso) IS NOT NULL
+              WHEN UPPER(COALESCE(canonical.sheet_scope::text,''))='DAILY'
+               AND COALESCE(canonical.tf_worked_start_iso,canonical.worked_start_iso) IS NOT NULL
                 THEN ((COALESCE(canonical.tf_worked_start_iso,canonical.worked_start_iso)
                   AT TIME ZONE 'Europe/London')::date)::text
-              ELSE COALESCE(
+              WHEN UPPER(COALESCE(canonical.sheet_scope::text,''))='DAILY' THEN COALESCE(
                 NULLIF(BTRIM(COALESCE(canonical.tf_actual_schedule_json->>'date','')),''),
-                NULLIF(BTRIM(COALESCE(canonical.actual_schedule_json->>'date','')),'')) END),
+                NULLIF(BTRIM(COALESCE(canonical.actual_schedule_json->>'date','')),''))
+              ELSE NULL END),
           1::bigint
         WHERE NOT (jsonb_typeof(canonical.invoice_breakdown_json)='object'
           AND UPPER(COALESCE(canonical.invoice_breakdown_json->>'mode',''))='SEGMENTS'
@@ -148,11 +175,44 @@ BEGIN
               THEN (additional.value->>'rate')::numeric END,0),0),2) AS amount_ex_vat,
         jsonb_build_object('role','LIVE_COMPONENT','source_kind','ADDITIONAL',
           'projected_timesheet_id',p_projected_timesheet_id,'additional_code',UPPER(BTRIM(additional.key)),
-          'source_value',additional.value) AS payload
+          'source_value',additional.value) AS payload,
+        CASE
+          WHEN pg_column_size(COALESCE(canonical.additional_units_json,'{}'::jsonb))>65536
+            THEN 'ADDITIONAL_INPUT_EXCEEDS_ENVELOPE'
+          WHEN jsonb_typeof(COALESCE(canonical.additional_units_json,'{}'::jsonb))<>'object'
+            THEN 'ADDITIONAL_INPUT_NOT_OBJECT'
+          WHEN NULLIF(BTRIM(additional.key),'') IS NULL THEN 'ADDITIONAL_CODE_MISSING'
+          WHEN jsonb_typeof(additional.value)<>'object' THEN 'ADDITIONAL_VALUE_NOT_OBJECT'
+          WHEN NULLIF(COALESCE(additional.value->>'pay_ex_vat',additional.value->>'amount_ex_vat',''),'') IS NOT NULL
+            AND COALESCE(additional.value->>'pay_ex_vat',additional.value->>'amount_ex_vat','') !~ '^-?\d+(\.\d+)?$'
+            THEN 'ADDITIONAL_AMOUNT_INVALID'
+          WHEN EXISTS(SELECT 1 FROM unnest(ARRAY['unit_count','units_week','pay_rate','rate']) field_name
+            WHERE NULLIF(additional.value->>field_name,'') IS NOT NULL
+              AND additional.value->>field_name !~ '^-?\d+(\.\d+)?$')
+            THEN 'ADDITIONAL_RATE_INPUT_INVALID'
+        END AS raw_failure
       FROM canonical
-      CROSS JOIN LATERAL jsonb_each(COALESCE(canonical.additional_units_json,'{}'::jsonb)) additional
-      WHERE NULLIF(BTRIM(additional.key),'') IS NOT NULL
-        AND jsonb_typeof(additional.value)='object'
+      CROSS JOIN LATERAL (
+        SELECT entry.key,entry.value
+        FROM jsonb_each(CASE WHEN jsonb_typeof(COALESCE(canonical.additional_units_json,'{}'::jsonb))='object'
+          THEN COALESCE(canonical.additional_units_json,'{}'::jsonb) ELSE '{}'::jsonb END) entry
+        WHERE p_last_source_key IS NULL OR
+          '10:'||p_projected_timesheet_id::text||':ADDITIONAL:'||UPPER(BTRIM(entry.key))>p_last_source_key
+        ORDER BY UPPER(BTRIM(entry.key)) LIMIT v_limit
+      ) additional
+    ), additional_container_failure AS (
+      SELECT '10:'||p_projected_timesheet_id::text||':ADDITIONAL:!INVALID' AS source_key,
+        'timesheets_financials'::text AS source_relation,canonical.financial_id AS source_id,
+        NULL::text AS raw_key_type,NULL::text AS raw_key_value,0::numeric AS amount_ex_vat,
+        jsonb_build_object('role','LIVE_COMPONENT','source_kind','ADDITIONAL_CONTAINER',
+          'projected_timesheet_id',p_projected_timesheet_id) AS payload,
+        CASE WHEN pg_column_size(COALESCE(canonical.additional_units_json,'{}'::jsonb))>65536
+          THEN 'ADDITIONAL_INPUT_EXCEEDS_ENVELOPE' ELSE 'ADDITIONAL_INPUT_NOT_OBJECT' END AS raw_failure
+      FROM canonical
+      WHERE (jsonb_typeof(COALESCE(canonical.additional_units_json,'{}'::jsonb))<>'object'
+          OR pg_column_size(COALESCE(canonical.additional_units_json,'{}'::jsonb))>65536)
+        AND (p_last_source_key IS NULL OR
+          '10:'||p_projected_timesheet_id::text||':ADDITIONAL:!INVALID'>p_last_source_key)
     ), expense_source AS (
       SELECT canonical.*,
         COALESCE(canonical.travel_pay_ex_vat,0)::numeric AS travel_ex,
@@ -166,7 +226,8 @@ BEGIN
         'timesheets_financials'::text AS source_relation,expense_source.financial_id AS source_id,
         'EXPENSE_CODE'::text AS raw_key_type,expense.key_value,ROUND(expense.amount_ex_vat,2) AS amount_ex_vat,
         jsonb_build_object('role','LIVE_COMPONENT','source_kind','EXPENSE',
-          'projected_timesheet_id',p_projected_timesheet_id,'expense_code',expense.key_value) AS payload
+          'projected_timesheet_id',p_projected_timesheet_id,'expense_code',expense.key_value) AS payload,
+        NULL::text AS raw_failure
       FROM expense_source
       CROSS JOIN LATERAL (VALUES
         ('TRAVEL'::text,expense_source.travel_ex),
@@ -185,14 +246,20 @@ BEGIN
         ROUND(COALESCE(adjustment.delta_pay_ex_vat,0),2) AS amount_ex_vat,
         jsonb_build_object('role','LIVE_COMPONENT','source_kind','ADJUSTMENT',
           'projected_timesheet_id',p_projected_timesheet_id,'family_timesheet_id',adjustment.timesheet_id,
-          'adjustment_id',adjustment.id) AS payload
+          'adjustment_id',adjustment.id) AS payload,
+        NULL::text AS raw_failure
       FROM projection_members member
       JOIN public.ts_pay_adjustments adjustment ON adjustment.timesheet_id=member.family_timesheet_id
       WHERE adjustment.as_advance IS FALSE AND adjustment.id IS NOT NULL
         AND ROUND(COALESCE(adjustment.delta_pay_ex_vat,0),2)<>0
+        AND (p_last_source_key IS NULL OR
+          '10:'||p_projected_timesheet_id::text||':ADJUSTMENT:'||adjustment.id::text>p_last_source_key)
+      ORDER BY adjustment.id LIMIT v_limit
     ), raw_rows AS (
       SELECT * FROM segment_rows
-      UNION ALL SELECT * FROM additional_rows WHERE amount_ex_vat<>0
+      UNION ALL SELECT additional.* FROM additional_rows additional
+        WHERE additional.amount_ex_vat<>0 OR additional.raw_failure IS NOT NULL
+      UNION ALL SELECT * FROM additional_container_failure
       UNION ALL SELECT * FROM expense_rows
       UNION ALL SELECT * FROM adjustment_rows
     ), paged_raw_rows AS MATERIALIZED (
@@ -216,7 +283,7 @@ BEGIN
             CASE WHEN raw.raw_key_value='MILEAGE' THEN 'MILEAGE_DELTA' ELSE 'EXPENSE_DELTA' END END,
         p_key_type_hint=>raw.raw_key_type,p_key_value_hint=>raw.raw_key_value,
         p_work_date=>NULL::date
-      ) resolved_key ON true
+      ) resolved_key ON raw.raw_failure IS NULL
     )
     SELECT resolved.source_key,md5('LIVE:'||resolved.source_key),p_projected_timesheet_id,
       ARRAY[p_projected_timesheet_id],resolved.source_relation,resolved.source_id,
@@ -224,11 +291,11 @@ BEGIN
       resolved.amount_ex_vat,resolved.amount_ex_vat,NULL::numeric,NULL::numeric,
       resolved.payload||jsonb_build_object('raw_key_type',resolved.raw_key_type,
         'raw_key_value',resolved.raw_key_value,'key_resolution_source',resolved.key_resolution_source,
-        'resolution_failure',resolved.key_resolution_failure_reason),
+        'resolution_failure',COALESCE(resolved.raw_failure,resolved.key_resolution_failure_reason)),
       md5(jsonb_build_object('source_key',resolved.source_key,'timesheet_id',p_projected_timesheet_id,
         'key_type',resolved.key_type,'key_value',resolved.key_value,
         'truth_ex_vat',resolved.amount_ex_vat,'truth_inc_vat',resolved.amount_ex_vat)::text),
-      COALESCE(resolved.key_resolution_failure_reason,
+      COALESCE(resolved.raw_failure,resolved.key_resolution_failure_reason,
         CASE WHEN resolved.key_type IS NULL OR resolved.key_value IS NULL THEN 'ECONOMIC_KEY_MISSING' END)
     FROM resolved
     WHERE p_last_source_key IS NULL OR resolved.source_key>p_last_source_key
@@ -291,7 +358,13 @@ BEGIN
       FROM public.pay_advance_reservations reservation
       WHERE reservation.pay_batch_item_id IS NOT NULL GROUP BY reservation.pay_batch_item_id
     ), finance_components AS (
-      SELECT item.id AS pay_batch_item_id,item.timesheet_id AS source_timesheet_id,to_jsonb(item) AS payload,
+      SELECT item.id AS pay_batch_item_id,owner_timesheet.timesheet_id AS source_timesheet_id,
+        to_jsonb(item)||jsonb_build_object(
+          'resolved_owner_timesheet_id',owner_timesheet.timesheet_id,
+          'finance_case_id',COALESCE(item.finance_case_id,component.finance_case_id),
+          'finance_component_id',item.finance_component_id,
+          'resolution_failure',CASE WHEN owner_timesheet.timesheet_id IS NULL
+            THEN 'FROZEN_FINANCE_OWNER_UNRESOLVED' END) AS payload,
         UPPER(BTRIM(item.item_type)) AS item_type,UPPER(BTRIM(item.frozen_component_key_type)) AS key_type,
         BTRIM(item.frozen_component_key_value) AS key_value,
         ROUND(CASE WHEN UPPER(BTRIM(item.item_type))='OVERPAYMENT_RECOVERY' THEN -1 ELSE 1 END
@@ -306,15 +379,47 @@ BEGIN
             AND item.frozen_component_key_value !~ '^\d{4}-\d{2}-\d{2}$')
           THEN 'FROZEN_ECONOMIC_KEY_INVALID' END AS key_resolution_failure_reason,
         1::bigint AS occurrence_ordinal
-      FROM projection_members member
-      JOIN public.pay_batch_items item ON item.timesheet_id=member.family_timesheet_id
-      JOIN public.pay_batch_candidates candidate ON candidate.id=item.pay_batch_candidate_id
+      FROM private.banking_pay_workbench_economic_builds build_row
+      JOIN public.pay_batch_candidates candidate ON candidate.candidate_id=build_row.candidate_id
+      JOIN public.pay_batch_items item ON item.pay_batch_candidate_id=candidate.id
+      LEFT JOIN public.pay_finance_case_components component ON component.id=item.finance_component_id
+      LEFT JOIN public.pay_advances finance_case
+        ON finance_case.id=COALESCE(item.finance_case_id,component.finance_case_id)
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(item.timesheet_id,component.linked_timesheet_id,finance_case.linked_timesheet_id,
+          CASE WHEN COALESCE(item.frozen_source_basis_json->>'timesheet_id','')
+            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (item.frozen_source_basis_json->>'timesheet_id')::uuid END) AS timesheet_id
+      ) owner_timesheet ON true
+      LEFT JOIN projection_members member ON member.family_timesheet_id=owner_timesheet.timesheet_id
       LEFT JOIN public.pay_bank_transfers transfer ON transfer.id=item.pay_bank_transfer_id
       LEFT JOIN finance_reservation reservation ON reservation.pay_batch_item_id=item.id
       CROSS JOIN LATERAL (SELECT ROUND(ABS(COALESCE(NULLIF(item.frozen_source_amount,0),
         NULLIF(reservation.settled_source_amount,0),NULLIF(item.amount_ex_vat,0),
         NULLIF(item.amount_inc_vat,0))),2) AS amount_ex_vat) source_amount
-      WHERE COALESCE(item.is_voided,false) IS FALSE
+      WHERE build_row.id=p_build_id
+        AND (item.timesheet_id IN (SELECT member_scope.family_timesheet_id FROM projection_members member_scope)
+          OR item.finance_component_id IN (SELECT scoped_component.id
+            FROM public.pay_finance_case_components scoped_component
+            JOIN projection_members member_scope
+              ON member_scope.family_timesheet_id=scoped_component.linked_timesheet_id)
+          OR item.finance_case_id IN (SELECT scoped_case.id
+            FROM public.pay_advances scoped_case
+            JOIN projection_members member_scope
+              ON member_scope.family_timesheet_id=scoped_case.linked_timesheet_id)
+          OR item.timesheet_id IS NULL)
+        AND (member.family_timesheet_id IS NOT NULL OR (
+          owner_timesheet.timesheet_id IS NULL
+          AND p_dependency_unit_key=(SELECT MIN(scope_row.dependency_unit_key)
+            FROM private.banking_pay_workbench_economic_build_scope scope_row
+            WHERE scope_row.build_id=p_build_id)
+          AND p_projected_timesheet_id=(SELECT MIN(projection.timesheet_id)
+            FROM private.banking_pay_workbench_economic_build_facts projection
+            WHERE projection.build_id=p_build_id AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
+              AND projection.source_relation='UNIT_PROJECTION'
+              AND projection.dependency_unit_key=p_dependency_unit_key)
+        ))
+        AND COALESCE(item.is_voided,false) IS FALSE
         AND UPPER(BTRIM(COALESCE(item.item_type,''))) IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT')
         AND source_amount.amount_ex_vat>0
         AND (UPPER(BTRIM(COALESCE(candidate.settlement_status,'')))='SETTLED'
@@ -343,12 +448,14 @@ BEGIN
       jsonb_build_object('role','FROZEN_SETTLED_COMPONENT','projected_timesheet_id',p_projected_timesheet_id,
         'source_timesheet_id',keyed.source_timesheet_id,'item_type',keyed.item_type,
         'key_resolution_source',keyed.key_resolution_source,'pay_batch_item',keyed.payload,
-        'resolution_failure',COALESCE(keyed.key_resolution_failure_reason,
+        'finance_case_id',keyed.payload->>'finance_case_id',
+        'finance_component_id',keyed.payload->>'finance_component_id',
+        'resolution_failure',COALESCE(keyed.payload->>'resolution_failure',keyed.key_resolution_failure_reason,
           CASE WHEN keyed.key_type IS NULL OR keyed.key_value IS NULL THEN 'ECONOMIC_COMPONENT_MISSING' END)),
       md5(jsonb_build_object('source_key',keyed.source_key,'timesheet_id',p_projected_timesheet_id,
         'key_type',UPPER(BTRIM(keyed.key_type)),'key_value',BTRIM(keyed.key_value),
         'amount_ex_vat',keyed.source_amount_ex_vat,'amount_inc_vat',keyed.source_amount_inc_vat)::text),
-      COALESCE(keyed.key_resolution_failure_reason,
+      COALESCE(keyed.payload->>'resolution_failure',keyed.key_resolution_failure_reason,
         CASE WHEN keyed.key_type IS NULL OR keyed.key_value IS NULL THEN 'ECONOMIC_COMPONENT_MISSING' END)
     FROM keyed
     WHERE p_last_source_key IS NULL OR keyed.source_key>p_last_source_key
@@ -366,6 +473,127 @@ BEGIN
       AND projection.source_relation='UNIT_PROJECTION'
       AND projection.timesheet_id=p_projected_timesheet_id
       AND projection.source_id IS NOT NULL
+  ), fallback_states AS MATERIALIZED (
+    SELECT state.timesheet_id,state.last_settled_signature,
+      COALESCE(state.last_settled_snapshot_json,'{}'::jsonb) AS snapshot
+    FROM projection_members member
+    JOIN public.timesheet_pay_state state ON state.timesheet_id=member.family_timesheet_id
+    WHERE state.last_settled_snapshot_json<>'{}'::jsonb
+      AND NOT EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_facts active
+        WHERE active.build_id=p_build_id AND active.fact_family='FROZEN_SETTLED_COMPONENT'
+          AND active.dependency_unit_key=p_dependency_unit_key
+          AND active.timesheet_id=p_projected_timesheet_id)
+      AND (p_last_source_key IS NULL OR
+        '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':~'>p_last_source_key)
+    ORDER BY state.timesheet_id
+    LIMIT v_limit
+  ), validation_failure AS (
+    SELECT state.timesheet_id AS source_timesheet_id,state.last_settled_signature,
+      0::bigint AS source_ordinal,
+      '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':!CONTAINER' AS source_key,
+      NULL::text AS raw_key_type,NULL::text AS raw_key_value,
+      NULL::numeric AS amount_ex_vat,NULL::numeric AS amount_inc_vat,
+      CASE WHEN jsonb_typeof(state.snapshot)<>'object' THEN 'FALLBACK_SNAPSHOT_NOT_OBJECT'
+        WHEN pg_column_size(state.snapshot)>65536 THEN 'FALLBACK_SNAPSHOT_EXCEEDS_ENVELOPE'
+        WHEN state.snapshot ? 'segments' AND jsonb_typeof(state.snapshot->'segments')<>'array'
+          THEN 'FALLBACK_SEGMENTS_NOT_ARRAY'
+        WHEN state.snapshot ? 'additional_units_json'
+          AND jsonb_typeof(state.snapshot->'additional_units_json')<>'object'
+          THEN 'FALLBACK_ADDITIONAL_NOT_OBJECT'
+        WHEN state.snapshot ? 'adjustments' AND jsonb_typeof(state.snapshot->'adjustments')<>'array'
+          THEN 'FALLBACK_ADJUSTMENTS_NOT_ARRAY' END AS raw_failure
+    FROM fallback_states state
+    WHERE jsonb_typeof(state.snapshot)<>'object' OR pg_column_size(state.snapshot)>65536
+      OR (state.snapshot ? 'segments' AND jsonb_typeof(state.snapshot->'segments')<>'array')
+      OR (state.snapshot ? 'additional_units_json'
+        AND jsonb_typeof(state.snapshot->'additional_units_json')<>'object')
+      OR (state.snapshot ? 'adjustments' AND jsonb_typeof(state.snapshot->'adjustments')<>'array')
+    UNION ALL
+    SELECT state.timesheet_id,state.last_settled_signature,segment.ordinality,
+      '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':!SEGMENT:'||
+        LPAD(segment.ordinality::text,12,'0'),NULL,NULL,NULL,NULL,
+      CASE WHEN jsonb_typeof(segment.value)<>'object' THEN 'FALLBACK_SEGMENT_NOT_OBJECT'
+        WHEN NULLIF(BTRIM(COALESCE(segment.value->>'segment_id','')),'') IS NULL
+          THEN 'FALLBACK_SEGMENT_ID_MISSING'
+        WHEN NULLIF(segment.value->>'exclude_from_pay','') IS NOT NULL
+          AND lower(segment.value->>'exclude_from_pay') NOT IN ('true','false')
+          THEN 'FALLBACK_SEGMENT_EXCLUDE_INVALID'
+        WHEN lower(COALESCE(NULLIF(segment.value->>'exclude_from_pay',''),'false'))='false'
+          AND COALESCE(segment.value->>'pay_amount','') !~ '^-?\d+(\.\d+)?$'
+          THEN 'FALLBACK_SEGMENT_AMOUNT_INVALID'
+        WHEN NULLIF(BTRIM(COALESCE(segment.value->>'date','')),'') IS NOT NULL
+          AND segment.value->>'date' !~ '^\d{4}-\d{2}-\d{2}$'
+          THEN 'FALLBACK_SEGMENT_DATE_INVALID' END
+    FROM fallback_states state
+    CROSS JOIN LATERAL jsonb_array_elements(CASE
+      WHEN jsonb_typeof(state.snapshot->'segments')='array' AND pg_column_size(state.snapshot)<=65536
+        THEN state.snapshot->'segments' ELSE '[]'::jsonb END)
+      WITH ORDINALITY segment(value,ordinality)
+    WHERE jsonb_typeof(segment.value)<>'object'
+      OR NULLIF(BTRIM(COALESCE(segment.value->>'segment_id','')),'') IS NULL
+      OR (NULLIF(segment.value->>'exclude_from_pay','') IS NOT NULL
+        AND lower(segment.value->>'exclude_from_pay') NOT IN ('true','false'))
+      OR (lower(COALESCE(NULLIF(segment.value->>'exclude_from_pay',''),'false'))='false'
+        AND COALESCE(segment.value->>'pay_amount','') !~ '^-?\d+(\.\d+)?$')
+      OR (NULLIF(BTRIM(COALESCE(segment.value->>'date','')),'') IS NOT NULL
+        AND segment.value->>'date' !~ '^\d{4}-\d{2}-\d{2}$')
+    UNION ALL
+    SELECT state.timesheet_id,state.last_settled_signature,0,
+      '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':!ADDITIONAL:'||
+        UPPER(BTRIM(entry.key)),NULL,NULL,NULL,NULL,
+      CASE WHEN jsonb_typeof(entry.value)<>'object' THEN 'FALLBACK_ADDITIONAL_VALUE_NOT_OBJECT'
+        WHEN NULLIF(COALESCE(entry.value->>'pay_ex_vat',entry.value->>'amount_ex_vat',''),'') IS NOT NULL
+          AND COALESCE(entry.value->>'pay_ex_vat',entry.value->>'amount_ex_vat','') !~ '^-?\d+(\.\d+)?$'
+          THEN 'FALLBACK_ADDITIONAL_AMOUNT_INVALID'
+        WHEN EXISTS(SELECT 1 FROM unnest(ARRAY['unit_count','units_week','pay_rate','rate']) field_name
+          WHERE NULLIF(entry.value->>field_name,'') IS NOT NULL
+            AND entry.value->>field_name !~ '^-?\d+(\.\d+)?$')
+          THEN 'FALLBACK_ADDITIONAL_RATE_INPUT_INVALID' END
+    FROM fallback_states state
+    CROSS JOIN LATERAL jsonb_each(CASE
+      WHEN jsonb_typeof(state.snapshot->'additional_units_json')='object'
+       AND pg_column_size(state.snapshot)<=65536
+        THEN state.snapshot->'additional_units_json' ELSE '{}'::jsonb END) entry
+    WHERE jsonb_typeof(entry.value)<>'object'
+      OR (NULLIF(COALESCE(entry.value->>'pay_ex_vat',entry.value->>'amount_ex_vat',''),'') IS NOT NULL
+        AND COALESCE(entry.value->>'pay_ex_vat',entry.value->>'amount_ex_vat','') !~ '^-?\d+(\.\d+)?$')
+      OR EXISTS(SELECT 1 FROM unnest(ARRAY['unit_count','units_week','pay_rate','rate']) field_name
+        WHERE NULLIF(entry.value->>field_name,'') IS NOT NULL
+          AND entry.value->>field_name !~ '^-?\d+(\.\d+)?$')
+    UNION ALL
+    SELECT state.timesheet_id,state.last_settled_signature,0,
+      '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':!NUMERIC',
+      NULL,NULL,NULL,NULL,'FALLBACK_NUMERIC_INPUT_INVALID'
+    FROM fallback_states state
+    WHERE (NULLIF(state.snapshot->>'additional_pay_ex_vat','') IS NOT NULL
+        AND state.snapshot->>'additional_pay_ex_vat' !~ '^-?\d+(\.\d+)?$')
+      OR EXISTS(
+        SELECT 1 FROM (VALUES
+          (state.snapshot #>> '{expenses,travel_pay_ex_vat}'),
+          (state.snapshot #>> '{expenses,accommodation_pay_ex_vat}'),
+          (state.snapshot #>> '{expenses,other_pay_ex_vat}'),
+          (state.snapshot #>> '{expenses,mileage_pay_ex_vat}'),
+          (state.snapshot #>> '{expenses,expenses_pay_ex_vat}')
+        ) numeric_value(value)
+        WHERE NULLIF(numeric_value.value,'') IS NOT NULL
+          AND numeric_value.value !~ '^-?\d+(\.\d+)?$')
+    UNION ALL
+    SELECT state.timesheet_id,state.last_settled_signature,adjustment.ordinality,
+      '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':!ADJUSTMENT:'||
+        LPAD(adjustment.ordinality::text,12,'0'),NULL,NULL,NULL,NULL,
+      CASE WHEN jsonb_typeof(adjustment.value)<>'object' THEN 'FALLBACK_ADJUSTMENT_NOT_OBJECT'
+        WHEN NULLIF(BTRIM(COALESCE(adjustment.value->>'id','')),'') IS NULL
+          THEN 'FALLBACK_ADJUSTMENT_ID_MISSING'
+        WHEN COALESCE(adjustment.value->>'delta_pay_ex_vat','') !~ '^-?\d+(\.\d+)?$'
+          THEN 'FALLBACK_ADJUSTMENT_AMOUNT_INVALID' END
+    FROM fallback_states state
+    CROSS JOIN LATERAL jsonb_array_elements(CASE
+      WHEN jsonb_typeof(state.snapshot->'adjustments')='array' AND pg_column_size(state.snapshot)<=65536
+        THEN state.snapshot->'adjustments' ELSE '[]'::jsonb END)
+      WITH ORDINALITY adjustment(value,ordinality)
+    WHERE jsonb_typeof(adjustment.value)<>'object'
+      OR NULLIF(BTRIM(COALESCE(adjustment.value->>'id','')),'') IS NULL
+      OR COALESCE(adjustment.value->>'delta_pay_ex_vat','') !~ '^-?\d+(\.\d+)?$'
   ), raw_occurrence AS (
     SELECT state.timesheet_id AS source_timesheet_id,state.last_settled_signature,
       component.ordinality::bigint AS source_ordinal,
@@ -373,16 +601,16 @@ BEGIN
         LPAD(component.ordinality::text,12,'0') AS source_key,
       UPPER(NULLIF(BTRIM(COALESCE(component.key_type,'')),'')) AS raw_key_type,
       NULLIF(BTRIM(COALESCE(component.key_value,'')),'') AS raw_key_value,
-      component.amount_ex_vat,component.amount_inc_vat
-    FROM projection_members member
-    JOIN public.timesheet_pay_state state ON state.timesheet_id=member.family_timesheet_id
-    JOIN LATERAL public._pay_timesheet_components(COALESCE(state.last_settled_snapshot_json,'{}'::jsonb))
+      component.amount_ex_vat,component.amount_inc_vat,NULL::text AS raw_failure
+    FROM fallback_states state
+    JOIN LATERAL public._pay_timesheet_components(state.snapshot)
       WITH ORDINALITY component(key_type,key_value,amount_ex_vat,amount_inc_vat,ordinality) ON true
-    WHERE state.last_settled_snapshot_json<>'{}'::jsonb
-      AND NOT EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_facts active
-        WHERE active.build_id=p_build_id AND active.fact_family='FROZEN_SETTLED_COMPONENT'
-          AND active.dependency_unit_key=p_dependency_unit_key
-          AND active.timesheet_id=p_projected_timesheet_id)
+    WHERE pg_column_size(state.snapshot)<=65536 AND jsonb_typeof(state.snapshot)='object'
+    UNION ALL
+    SELECT failure.source_timesheet_id,failure.last_settled_signature,failure.source_ordinal,
+      failure.source_key,failure.raw_key_type,failure.raw_key_value,
+      failure.amount_ex_vat,failure.amount_inc_vat,failure.raw_failure
+    FROM validation_failure failure
   ), paged_occurrence AS MATERIALIZED (
     SELECT occurrence.* FROM raw_occurrence occurrence
     WHERE p_last_source_key IS NULL OR occurrence.source_key>p_last_source_key
@@ -403,7 +631,7 @@ BEGIN
         WHEN occurrence.raw_key_type IN ('ADDITIONAL_CODE','EXPENSE_CODE') THEN 'EXPENSE_DELTA' END,
       p_key_type_hint=>occurrence.raw_key_type,p_key_value_hint=>occurrence.raw_key_value,
       p_work_date=>NULL::date
-    ) resolved_key ON true
+    ) resolved_key ON occurrence.raw_failure IS NULL
   )
   SELECT resolved.source_key,md5('FALLBACK:'||resolved.source_key),p_projected_timesheet_id,
     ARRAY[p_projected_timesheet_id],'timesheet_pay_state'::text,resolved.source_timesheet_id,
@@ -413,11 +641,11 @@ BEGIN
       'source_timesheet_id',resolved.source_timesheet_id,'source_ordinal',resolved.source_ordinal,
       'last_settled_signature',resolved.last_settled_signature,'raw_key_type',resolved.raw_key_type,
       'raw_key_value',resolved.raw_key_value,'key_resolution_source',resolved.key_resolution_source,
-      'resolution_failure',resolved.key_resolution_failure_reason),
+      'resolution_failure',COALESCE(resolved.raw_failure,resolved.key_resolution_failure_reason)),
     md5(jsonb_build_object('source_key',resolved.source_key,'timesheet_id',p_projected_timesheet_id,
       'key_type',resolved.key_type,'key_value',resolved.key_value,
       'amount_ex_vat',resolved.amount_ex_vat,'amount_inc_vat',resolved.amount_inc_vat)::text),
-    COALESCE(resolved.key_resolution_failure_reason,
+    COALESCE(resolved.raw_failure,resolved.key_resolution_failure_reason,
       CASE WHEN resolved.key_type IS NULL OR resolved.key_value IS NULL THEN 'ECONOMIC_KEY_MISSING' END)
   FROM resolved
   WHERE p_last_source_key IS NULL OR resolved.source_key>p_last_source_key
