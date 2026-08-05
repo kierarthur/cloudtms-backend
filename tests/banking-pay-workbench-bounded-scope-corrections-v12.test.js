@@ -16,6 +16,11 @@ const activeSync = syncCore.replace(/\/\*[\s\S]*?\*\//g, '');
 const transition = read('supabase/repeatable/04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql');
 const triggers = read('supabase/repeatable/04082026_1234_banking_pay_bounded_scope_triggers_v12.sql');
 const claim = read('supabase/repeatable/04082026_1141_pay_workbench_source_build_attempt_claim_start_v1.sql');
+const authority = read('supabase/repeatable/05082026_1229_pay_workbench_financial_source_authority_v1.sql');
+const componentCore = read('supabase/repeatable/05082026_1230_pay_workbench_canonical_component_core_v1.sql');
+const financePage = read('supabase/repeatable/05082026_1231_pay_workbench_finance_item_authority_page_v1.sql');
+const occurrenceBundle = read('supabase/repeatable/05082026_1232_pay_workbench_unit_economic_occurrence_bundle_v1.sql');
+const v128Migration = read('supabase/migrations/05082026_1227_banking_pay_bounded_scope_v128_operational_state.sql');
 const deleteEligibility = read('supabase/repeatable/04082026_1219_candidate_delete_eligibility.sql');
 const deleteApply = read('supabase/repeatable/04082026_1219_candidate_delete_apply.sql');
 const markCandidate = read('supabase/repeatable/04082026_1219_pay_workbench_mark_candidate_dirty.sql');
@@ -40,7 +45,7 @@ test('D2 fact pages carry and verify a cumulative replay-safe chain', () => {
 test('D3 physical live-input pages precede durable derived-family paging', () => {
   assert.match(dispatcher, /WITH scope_page AS MATERIALIZED/);
   assert.match(dispatcher, /LIMIT v_fact_limit\+1[\s\S]*LEFT JOIN LATERAL/);
-  assert.match(dispatcher, /private\.pay_workbench_unit_economic_occurrence_page_v1\(/);
+  assert.match(dispatcher, /private\.pay_workbench_unit_economic_occurrence_bundle_v1\(/);
   assert.match(projection, /canonical\.canonical_timesheet_id AS projected_timesheet_id/);
   assert.match(occurrence, /paged_raw_rows AS MATERIALIZED/);
   assert.match(occurrence, /generate_series\([\s\S]*v_limit-1/);
@@ -53,6 +58,11 @@ test('D3 physical live-input pages precede durable derived-family paging', () =>
   assert.match(occurrence, /pg_column_size\(COALESCE\(canonical\.additional_units_json[\s\S]*<=65536[\s\S]*jsonb_each/);
   assert.doesNotMatch(dispatcher, /_pay_current_timesheet_entitlement_components\s*\(/);
   assert.doesNotMatch(dispatcher, /_pay_active_settled_components\s*\(/);
+  assert.match(occurrenceBundle, /raw_page_count/);
+  assert.match(occurrenceBundle, /resolved_page_count/);
+  assert.match(occurrenceBundle, /failed_page_count/);
+  assert.match(occurrenceBundle, /raw_source_exhausted/);
+  assert.match(dispatcher, /raw_page_evidence_digest/);
 });
 test('D4 finance closure deduplicates frontier authority', () => {
   assert.match(closure, /SELECT DISTINCT frontier_component\.finance_case_id/);
@@ -73,7 +83,12 @@ test('D6 reconciliation consumes sealed facts and fences live metadata', () => {
   assert.doesNotMatch(activeSync, /from public\.pay_advance_reservations/i);
   assert.match(syncCore, /fact\.fact_family in \('FROZEN_SETTLED_COMPONENT','RESERVATION_COMPONENT'\)/);
   assert.match(syncCore, /FULL OUTER JOIN actual_rows USING\(timesheet_id\)/);
-  assert.match(syncCore, /actual_occurrence AS[\s\S]*SELECT DISTINCT timesheet_id,key_type,key_value,component_json/);
+  assert.match(syncCore, /private\.pay_workbench_canonical_component_core_v1/);
+  assert.match(syncCore, /GROUP BY timesheet_id,line_identity,key_type,key_value/);
+  assert.match(syncCore, /OR count\(\*\)>1/);
+  assert.match(syncCore, /SELECT DISTINCT timesheet_id,key_type,key_value,component_core/);
+  assert.match(syncCore, /economic_component_digest/);
+  assert.match(componentCore, /source_basis_identity/);
   assert.match(syncCore, /PAY_WORKBENCH_CANONICAL_LINE_IDENTITY_CONFLICT/);
   assert.doesNotMatch(syncCore, /actual_line_count,0\)>1/);
   assert.ok((syncCore.match(/private\.pay_workbench_timesheet_input_fingerprint_v1/g) || []).length >= 2);
@@ -96,10 +111,12 @@ test('D8 fallback snapshots become typed facts with active precedence', () => {
   assert.match(occurrence, /FALLBACK_SEGMENT_NOT_OBJECT/);
   assert.match(occurrence, /FALLBACK_ADJUSTMENT_AMOUNT_INVALID/);
   assert.match(occurrence, /FALLBACK_SNAPSHOT_EXCEEDS_ENVELOPE/);
-  assert.match(occurrence, /FROZEN_FINANCE_OWNER_CONFLICT/);
-  assert.match(occurrence, /FROZEN_FINANCE_CANDIDATE_CONFLICT/);
-  assert.match(dispatcher, /RESERVATION_OWNER_CONFLICT/);
-  assert.match(dispatcher, /RESERVATION_CANDIDATE_CONFLICT/);
+  assert.match(authority, /pg_input_is_valid\(value_text,'uuid'\)/);
+  assert.match(authority, /_OWNER_CONFLICT/);
+  assert.match(authority, /_CANDIDATE_CONFLICT/);
+  assert.match(authority, /_FINANCE_CASE_CONFLICT/);
+  assert.match(dispatcher, /reservation\.frozen_source_basis_json/);
+  assert.match(dispatcher, /reservation\.frozen_component_snapshot_json/);
   assert.match(dispatcher, /RESERVATION_TS_DAY_INVALID/);
   assert.match(occurrence, /pg_input_is_valid/);
 });
@@ -122,17 +139,41 @@ test('D10 global facts are active and scoped', () => {
   assert.match(dispatcher, /ACTIVE_CORRECTION_CHAIN_BATCH_ITEM/);
   assert.doesNotMatch(dispatcher, /upper\(btrim\(COALESCE\(event\.reason,''\)\)\) IN \([\s\S]{0,100}'PREVIEW_FINANCE_SYNC'/);
 });
-test('D11 claim and recovery use bounded progressive deferral', () => {
+test('D11 claim and recovery use durable keyset progress before exact row locks', () => {
   assert.match(claim, /v_scan_limit integer:=50/);
   assert.match(claim, /LIMIT v_scan_limit/);
   assert.match(claim, /claim_scan_deferral_count/);
   assert.match(claim, /recovery_scan_deferral_count/);
   assert.match(claim, /claim_scan_generation/);
   assert.match(claim, /recovery_scan_generation/);
-  assert.match(claim, /ORDER BY scan_generation,is_chain_continuation DESC/);
+  assert.match(claim, /banking_pay_workbench_queue_scan_state/);
+  assert.match(claim, /cursor_object_id=v_claim\.id/);
+  assert.ok(claim.indexOf('cursor_object_id=v_claim.id') < claim.indexOf('FOR UPDATE OF claimed_job SKIP LOCKED'));
+  assert.match(claim, /ORDER BY scan_generation,chain_rank/);
   assert.match(claim, /ORDER BY scan_generation,attempt\.lease_expires_at_utc/);
+  assert.match(claim, /WHERE id=v_recovery\.job_id FOR UPDATE SKIP LOCKED/);
+  assert.match(claim, /WHERE id=v_recovery\.attempt_id FOR UPDATE SKIP LOCKED/);
+  assert.match(v128Migration, /PRIMARY KEY \(lane_identity,scan_kind,scan_scope_key\)/);
   assert.match(claim, /LEAST\(300,5\*power\(2/);
   assert.match(claim, /-'claim_scan_deferred_reason'-'claim_scan_deferral_count'-'claim_scan_generation'/);
+});
+
+test('V1.2.8 physical additional identities are lossless and live dates fail closed', () => {
+  assert.match(occurrence, /octet_length\(additional\.key\)/);
+  assert.match(occurrence, /encode\(convert_to\(additional\.key,'UTF8'\),'hex'\)/);
+  assert.match(occurrence, /FALLBACK_ADDITIONAL_CODE_MISSING/);
+  assert.match(occurrence, /SEGMENT_DATE_INVALID/);
+  assert.match(occurrence, /pg_input_is_valid\(segment\.value->>'date','date'\)/);
+});
+
+test('V1.2.8 finance movement discovery is scope-derived before its physical limit', () => {
+  assert.match(financePage, /scope_timesheet AS MATERIALIZED/);
+  assert.match(financePage, /relevant_item_id AS MATERIALIZED/);
+  assert.match(financePage, /item_page AS MATERIALIZED/);
+  assert.ok(financePage.indexOf('relevant_item_id AS MATERIALIZED') < financePage.indexOf('LIMIT LEAST'));
+  assert.match(financePage, /frozen_source_basis_json @> jsonb_build_object/);
+  assert.match(dispatcher, /'FINANCE_ITEM_AUTHORITY'/);
+  assert.doesNotMatch(activeSync, /legacy_finance_components_v127 AS/);
 });
 
 test('V1.2.7 parent-child page boundaries retain every physical occurrence', () => {

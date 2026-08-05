@@ -7,6 +7,8 @@ const read = relativePath => readFileSync(new URL(relativePath, repoRoot), 'utf8
 
 const migrationPath = 'supabase/migrations/04082026_1134_banking_pay_bounded_scope_v12.sql';
 const migration = read(migrationPath);
+const v128MigrationPath = 'supabase/migrations/05082026_1227_banking_pay_bounded_scope_v128_operational_state.sql';
+const v128Migration = read(v128MigrationPath);
 const closure = read(
   'supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql'
 ).replace(/\r\n/g, '\n');
@@ -30,6 +32,10 @@ const newFunctionFiles = [
   '04082026_2313_pay_workbench_unit_projection_v1.sql',
   '04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql',
   '04082026_2315_pay_workbench_finance_effect_normalise_row_v1.sql',
+  '05082026_1229_pay_workbench_financial_source_authority_v1.sql',
+  '05082026_1230_pay_workbench_canonical_component_core_v1.sql',
+  '05082026_1231_pay_workbench_finance_item_authority_page_v1.sql',
+  '05082026_1232_pay_workbench_unit_economic_occurrence_bundle_v1.sql',
 ];
 
 const changedFunctionFiles = [
@@ -63,10 +69,13 @@ function stableIds(source, kind) {
     .map(match => Number(match[1]));
 }
 
-test('V1.2.4 SQL artifacts use timestamped repository placement and one identity per function', () => {
+test('V1.2.8 SQL artifacts use timestamped repository placement and one identity per function', () => {
   const migrationNames = readdirSync(new URL('supabase/migrations/', repoRoot))
     .filter(name => name.includes('banking_pay_bounded_scope_v12'));
-  assert.deepEqual(migrationNames, ['04082026_1134_banking_pay_bounded_scope_v12.sql']);
+  assert.deepEqual(migrationNames, [
+    '04082026_1134_banking_pay_bounded_scope_v12.sql',
+    '05082026_1227_banking_pay_bounded_scope_v128_operational_state.sql',
+  ]);
 
   const repeatableNames = new Set(readdirSync(new URL('supabase/repeatable/', repoRoot)));
   for (const name of [...newFunctionFiles, ...changedFunctionFiles, ...sourceJobCompatibilityFiles, '04082026_1234_banking_pay_bounded_scope_triggers_v12.sql']) {
@@ -80,7 +89,7 @@ test('V1.2.4 SQL artifacts use timestamped repository placement and one identity
   }
 });
 
-test('schema surface is exactly eight private tables, 88 constraints and 47 indexes', () => {
+test('schema surface is exactly nine private tables, 92 constraints and 55 indexes', () => {
   const tableNames = [...migration.matchAll(/CREATE TABLE private\.([a-z0-9_]+)/gi)].map(match => match[1]);
   assert.deepEqual(tableNames, [
     'banking_pay_workbench_candidate_scope_registry',
@@ -92,6 +101,11 @@ test('schema surface is exactly eight private tables, 88 constraints and 47 inde
     'banking_pay_workbench_economic_build_fact_pages',
     'banking_pay_workbench_canonical_stage_lines',
   ]);
+  assert.deepEqual(
+    [...v128Migration.matchAll(/CREATE TABLE IF NOT EXISTS private\.([a-z0-9_]+)/gi)]
+      .map(match => match[1]),
+    ['banking_pay_workbench_queue_scan_state'],
+  );
 
   const constraintIds = stableIds(migration, 'CONSTRAINT');
   const expectedConstraints = Array.from({ length: 89 }, (_, index) => index + 1).filter(id => id !== 22);
@@ -102,6 +116,10 @@ test('schema surface is exactly eight private tables, 88 constraints and 47 inde
   const uniqueConstraintIndexes = (migration.match(/\bUNIQUE(?:\s+NULLS\s+NOT\s+DISTINCT)?\s*\(/gi) || []).length;
   assert.equal(explicitIndexes + primaryIndexes + uniqueConstraintIndexes, 47);
   assert.equal((migration.match(/^\s*CONSTRAINT\s+/gim) || []).length + (migration.match(/ADD CONSTRAINT/gi) || []).length, 88);
+  const v128ExplicitIndexes = (v128Migration.match(/^CREATE\s+(?:UNIQUE\s+)?INDEX\s+/gim) || []).length;
+  const v128PrimaryIndexes = (v128Migration.match(/\bPRIMARY KEY\s*\(/gi) || []).length;
+  assert.equal(v128ExplicitIndexes + v128PrimaryIndexes, 8);
+  assert.equal((v128Migration.match(/^\s*CONSTRAINT\s+/gim) || []).length, 4);
   assert.match(migration, /DB-INDEX-002 through 007/i);
   assert.match(migration, /DB-INDEX-038 through 044/i);
   assert.match(migration, /DB-INDEX-052 through 054/i);
@@ -132,6 +150,8 @@ test('private durable authority is not exposed to browser or service roles', () 
       new RegExp(`REVOKE ALL ON TABLE private\\.banking_pay_workbench_${table} FROM PUBLIC, anon, authenticated, service_role`, 'i'),
     );
   }
+  assert.match(v128Migration,
+    /REVOKE ALL ON TABLE private\.banking_pay_workbench_queue_scan_state\s+FROM PUBLIC,anon,authenticated,service_role/i);
   assert.doesNotMatch(migration, /GRANT\s+(?:SELECT|INSERT|UPDATE|DELETE|ALL)[\s\S]*TO\s+(?:anon|authenticated|service_role)/i);
 });
 

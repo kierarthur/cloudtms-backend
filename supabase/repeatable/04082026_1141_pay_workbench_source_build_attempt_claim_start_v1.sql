@@ -1,5 +1,7 @@
--- Banking Pay bounded-scope V1.2.7: durable transaction-one claim/start RPC
--- with finite-progress bounded fairness across blocked queue prefixes.
+-- Banking Pay bounded-scope V1.2.8: durable transaction-one claim/start RPC.
+-- Each lane owns durable CLAIM and RECOVERY keyset cursors.  The cursor is
+-- advanced before advisory/exact-row locking, so an indefinitely locked prefix
+-- cannot make a later eligible job invisible across calls.
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_source_build_attempt_claim_start_v1(
   p_worker_id text,
@@ -43,6 +45,18 @@ DECLARE
   v_is_bootstrap boolean:=false;
   v_recovery record;
   v_claim record;
+  v_recovery_cursor_generation bigint;
+  v_recovery_cursor_due_at timestamptz;
+  v_recovery_cursor_object_id uuid;
+  v_claim_cursor_generation bigint;
+  v_claim_cursor_chain_rank smallint;
+  v_claim_cursor_priority integer;
+  v_claim_cursor_due_at timestamptz;
+  v_claim_cursor_created_at timestamptz;
+  v_claim_cursor_object_id uuid;
+  v_scan_scope_key text;
+  v_recovery_examined integer:=0;
+  v_claim_examined integer:=0;
   v_recovered_count integer:=0;
   v_scan_limit integer:=50;
 BEGIN
@@ -67,9 +81,24 @@ BEGIN
     LEAST(GREATEST(COALESCE(p_lease_seconds,v_configured_lease),5),120)
   );
 
+  v_scan_scope_key:=COALESCE(p_session_id::text,'*')||':'||
+    COALESCE(p_candidate_id::text,'*');
+
+  INSERT INTO private.banking_pay_workbench_queue_scan_state(
+    lane_identity,scan_kind,scan_scope_key)
+  VALUES(v_lane_identity,'RECOVERY',v_scan_scope_key)
+  ON CONFLICT(lane_identity,scan_kind,scan_scope_key) DO NOTHING;
+  SELECT cursor_generation,cursor_due_at,cursor_object_id
+  INTO v_recovery_cursor_generation,v_recovery_cursor_due_at,v_recovery_cursor_object_id
+  FROM private.banking_pay_workbench_queue_scan_state
+  WHERE lane_identity=v_lane_identity AND scan_kind='RECOVERY'
+    AND scan_scope_key=v_scan_scope_key
+  FOR UPDATE;
+
   -- Small indexed lease-recovery page.  No financial source relation is read.
   FOR v_recovery IN
     SELECT attempt.id attempt_id,attempt.job_id,attempt.build_id,attempt.candidate_id,
+           attempt.lease_expires_at_utc,
            job.attempt_count,job.max_attempts,
            CASE WHEN COALESCE(job.payload_json->>'recovery_scan_generation','') ~ '^\d+$'
              THEN LEAST((job.payload_json->>'recovery_scan_generation')::bigint,2147483647)
@@ -79,18 +108,43 @@ BEGIN
     WHERE attempt.attempt_status='STARTED'
       AND clock_timestamp()>=attempt.lease_expires_at_utc+interval '15 seconds'
       AND job.status='RUNNING' AND job.economic_build_id=attempt.build_id
+      AND (p_session_id IS NULL OR job.session_id=p_session_id)
+      AND (p_candidate_id IS NULL OR job.candidate_id=p_candidate_id)
       AND (COALESCE(job.payload_json->>'recovery_scan_deferred_epoch','') !~ '^\d+(\.\d+)?$'
         OR (job.payload_json->>'recovery_scan_deferred_epoch')::numeric
           <=extract(epoch FROM clock_timestamp()))
+      AND (v_recovery_cursor_object_id IS NULL OR
+        ROW(
+          CASE WHEN COALESCE(job.payload_json->>'recovery_scan_generation','') ~ '^\d+$'
+            THEN LEAST((job.payload_json->>'recovery_scan_generation')::bigint,2147483647)
+            ELSE 0 END,
+          attempt.lease_expires_at_utc,attempt.id
+        ) > ROW(v_recovery_cursor_generation,
+          v_recovery_cursor_due_at,v_recovery_cursor_object_id))
     ORDER BY scan_generation,attempt.lease_expires_at_utc,attempt.id LIMIT v_scan_limit
   LOOP
+    v_recovery_examined:=v_recovery_examined+1;
+    UPDATE private.banking_pay_workbench_queue_scan_state
+    SET cursor_generation=v_recovery.scan_generation,cursor_chain_rank=NULL,
+      cursor_priority=NULL,cursor_due_at=v_recovery.lease_expires_at_utc,
+      cursor_created_at=NULL,cursor_object_id=v_recovery.attempt_id,
+      updated_at_utc=clock_timestamp()
+    WHERE lane_identity=v_lane_identity AND scan_kind='RECOVERY'
+      AND scan_scope_key=v_scan_scope_key;
     IF pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
       public._pay_workbench_candidate_serial_key(v_recovery.candidate_id),24062027)) THEN
       PERFORM 1 FROM private.banking_pay_workbench_candidate_scope_registry
-      WHERE candidate_id=v_recovery.candidate_id FOR UPDATE;
+      WHERE candidate_id=v_recovery.candidate_id FOR UPDATE SKIP LOCKED;
+      IF NOT FOUND THEN CONTINUE; END IF;
       PERFORM 1 FROM private.banking_pay_workbench_economic_builds
-      WHERE id=v_recovery.build_id FOR UPDATE;
-      PERFORM 1 FROM public.banking_pay_workbench_jobs WHERE id=v_recovery.job_id FOR UPDATE;
+      WHERE id=v_recovery.build_id FOR UPDATE SKIP LOCKED;
+      IF NOT FOUND THEN CONTINUE; END IF;
+      PERFORM 1 FROM public.banking_pay_workbench_jobs
+      WHERE id=v_recovery.job_id FOR UPDATE SKIP LOCKED;
+      IF NOT FOUND THEN CONTINUE; END IF;
+      PERFORM 1 FROM private.banking_pay_workbench_stage_attempts
+      WHERE id=v_recovery.attempt_id FOR UPDATE SKIP LOCKED;
+      IF NOT FOUND THEN CONTINUE; END IF;
       UPDATE private.banking_pay_workbench_stage_attempts SET attempt_status='EXPIRED',
         expired_at_utc=clock_timestamp(),result_code='LEASE_EXPIRED_AFTER_CANCELLATION_GRACE',
         error_class='DELIVERED_ATTEMPT_EXPIRED',updated_at_utc=clock_timestamp()
@@ -140,6 +194,28 @@ BEGIN
     END IF;
   END LOOP;
 
+  IF v_recovery_examined=0 AND v_recovery_cursor_object_id IS NOT NULL THEN
+    UPDATE private.banking_pay_workbench_queue_scan_state
+    SET cursor_generation=NULL,cursor_chain_rank=NULL,cursor_priority=NULL,
+      cursor_due_at=NULL,cursor_created_at=NULL,cursor_object_id=NULL,
+      sweep_generation=sweep_generation+1,updated_at_utc=clock_timestamp()
+    WHERE lane_identity=v_lane_identity AND scan_kind='RECOVERY'
+      AND scan_scope_key=v_scan_scope_key;
+  END IF;
+
+  INSERT INTO private.banking_pay_workbench_queue_scan_state(
+    lane_identity,scan_kind,scan_scope_key)
+  VALUES(v_lane_identity,'CLAIM',v_scan_scope_key)
+  ON CONFLICT(lane_identity,scan_kind,scan_scope_key) DO NOTHING;
+  SELECT cursor_generation,cursor_chain_rank,cursor_priority,cursor_due_at,
+    cursor_created_at,cursor_object_id
+  INTO v_claim_cursor_generation,v_claim_cursor_chain_rank,v_claim_cursor_priority,
+    v_claim_cursor_due_at,v_claim_cursor_created_at,v_claim_cursor_object_id
+  FROM private.banking_pay_workbench_queue_scan_state
+  WHERE lane_identity=v_lane_identity AND scan_kind='CLAIM'
+    AND scan_scope_key=v_scan_scope_key
+  FOR UPDATE;
+
   -- Source-only form of the installed claim ordering and candidate-serial
   -- predicates.  The advisory lock is attempted only after the bounded final
   -- eligibility set, then the exact queue row is locked and rechecked.  RPC 1
@@ -153,12 +229,13 @@ BEGIN
         public._pay_workbench_candidate_serial_candidate_id(job.candidate_id,job.payload_json) AS serial_candidate_id,
         public._pay_workbench_candidate_serial_key(
           public._pay_workbench_candidate_serial_candidate_id(job.candidate_id,job.payload_json)) AS serial_key,
-        (lower(btrim(COALESCE(job.payload_json->>'continuation','false'))) IN ('true','t','1','yes','y','on')
+        CASE WHEN (lower(btrim(COALESCE(job.payload_json->>'continuation','false'))) IN ('true','t','1','yes','y','on')
           OR upper(btrim(COALESCE(job.payload_json->>'run_mode',''))) IN
             ('BOUNDED_CONTINUATION','CONTINUATION','STAGE_CONTINUATION')
           OR NULLIF(btrim(COALESCE(job.payload_json->>'source_job_id',
             job.payload_json->>'continuation_source_job_id',
-            job.payload_json->>'bounded_continuation_source_job_id','')),'') IS NOT NULL) AS is_chain_continuation
+            job.payload_json->>'bounded_continuation_source_job_id','')),'') IS NOT NULL)
+          THEN 0 ELSE 1 END AS chain_rank
       FROM public.banking_pay_workbench_jobs job
       WHERE job.status='QUEUED'
         AND job.job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'
@@ -175,13 +252,28 @@ BEGIN
           OR (job.economic_build_id IS NOT NULL AND job.private_stage IS NOT NULL
             AND job.private_stage<>'BUILD_INITIALISE' AND job.private_cursor_kind IS NOT NULL
             AND job.private_stage_version IS NOT NULL))
-      ORDER BY scan_generation,is_chain_continuation DESC,job.priority,job.run_at_utc,job.created_at_utc,job.id
+        AND (v_claim_cursor_object_id IS NULL OR ROW(
+          CASE WHEN COALESCE(job.payload_json->>'claim_scan_generation','') ~ '^\d+$'
+            THEN LEAST((job.payload_json->>'claim_scan_generation')::bigint,2147483647)
+            ELSE 0 END,
+          CASE WHEN (lower(btrim(COALESCE(job.payload_json->>'continuation','false'))) IN ('true','t','1','yes','y','on')
+            OR upper(btrim(COALESCE(job.payload_json->>'run_mode',''))) IN
+              ('BOUNDED_CONTINUATION','CONTINUATION','STAGE_CONTINUATION')
+            OR NULLIF(btrim(COALESCE(job.payload_json->>'source_job_id',
+              job.payload_json->>'continuation_source_job_id',
+              job.payload_json->>'bounded_continuation_source_job_id','')),'') IS NOT NULL)
+            THEN 0 ELSE 1 END,
+          job.priority,job.run_at_utc,job.created_at_utc,job.id
+        ) > ROW(v_claim_cursor_generation,v_claim_cursor_chain_rank,
+          v_claim_cursor_priority,v_claim_cursor_due_at,
+          v_claim_cursor_created_at,v_claim_cursor_object_id))
+      ORDER BY scan_generation,chain_rank,job.priority,job.run_at_utc,job.created_at_utc,job.id
       LIMIT v_scan_limit
     ), ranked AS MATERIALIZED (
       SELECT claim_source.*,row_number() OVER (
         PARTITION BY COALESCE(claim_source.serial_key,claim_source.id::text)
         ORDER BY claim_source.scan_generation,
-          CASE WHEN claim_source.is_chain_continuation THEN 0 ELSE 1 END,
+          claim_source.chain_rank,
           claim_source.priority,claim_source.run_at_utc,claim_source.created_at_utc,claim_source.id) AS serial_rank
       FROM claim_source
     )
@@ -193,9 +285,17 @@ BEGIN
       ranked.id,ranked.serial_candidate_id,'WORKBENCH_CANDIDATE_SOURCE_BUILD',
       ranked.payload_json,v_now) AS state_json) serial_state
     WHERE ranked.serial_rank=1
-    ORDER BY ranked.scan_generation,CASE WHEN ranked.is_chain_continuation THEN 0 ELSE 1 END,
+    ORDER BY ranked.scan_generation,ranked.chain_rank,
       ranked.priority,ranked.run_at_utc,ranked.created_at_utc,ranked.id
   LOOP
+    v_claim_examined:=v_claim_examined+1;
+    UPDATE private.banking_pay_workbench_queue_scan_state
+    SET cursor_generation=v_claim.scan_generation,cursor_chain_rank=v_claim.chain_rank,
+      cursor_priority=v_claim.priority,cursor_due_at=v_claim.run_at_utc,
+      cursor_created_at=v_claim.created_at_utc,cursor_object_id=v_claim.id,
+      updated_at_utc=clock_timestamp()
+    WHERE lane_identity=v_lane_identity AND scan_kind='CLAIM'
+      AND scan_scope_key=v_scan_scope_key;
     IF v_claim.serial_blocked THEN
       UPDATE public.banking_pay_workbench_jobs blocked_job
       SET run_at_utc=GREATEST(blocked_job.run_at_utc,clock_timestamp()+make_interval(secs=>
@@ -252,6 +352,15 @@ BEGIN
     FOR UPDATE OF claimed_job SKIP LOCKED;
     EXIT WHEN v_job.id IS NOT NULL;
   END LOOP;
+
+  IF v_claim_examined=0 AND v_claim_cursor_object_id IS NOT NULL THEN
+    UPDATE private.banking_pay_workbench_queue_scan_state
+    SET cursor_generation=NULL,cursor_chain_rank=NULL,cursor_priority=NULL,
+      cursor_due_at=NULL,cursor_created_at=NULL,cursor_object_id=NULL,
+      sweep_generation=sweep_generation+1,updated_at_utc=clock_timestamp()
+    WHERE lane_identity=v_lane_identity AND scan_kind='CLAIM'
+      AND scan_scope_key=v_scan_scope_key;
+  END IF;
 
   IF v_job.id IS NULL THEN
     RETURN jsonb_build_object('ok',true,'claimed',false);

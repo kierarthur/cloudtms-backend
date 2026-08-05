@@ -527,13 +527,13 @@ BEGIN
       RAISE EXCEPTION 'PAY_WORKBENCH_DEPENDENCY_SEAL_INCOMPLETE' USING ERRCODE='23514';
     END IF;
     v_next:=jsonb_build_object(
-      'cursor_kind','WORKSPACE_FACT','cursor_version',1,
+      'cursor_kind','WORKSPACE_FACT','cursor_version',2,
       'build_id',p_build_id,'candidate_id',v_candidate_id,
-      'dependency_unit_key',NULL,'fact_family','LIVE_ENTITLEMENT_INPUT',
-      'input_phase','PROJECTION','input_projection_id',NULL,
+      'dependency_unit_key','GLOBAL','fact_family','FINANCE_ITEM_AUTHORITY',
+      'input_phase','PHYSICAL_SOURCE','input_projection_id',NULL,
       'page_number',1,'last_source_key',NULL,'previous_page_digest',NULL,
       'cumulative_fact_count',0,
-      'cumulative_digest',md5('BPAY_FACT_STREAM_V1')
+      'cumulative_digest',md5('BPAY_FACT_STREAM_V2')
     );
     UPDATE private.banking_pay_workbench_economic_builds SET
       row_seal_count=v_row_seal_count,last_stable_ordinal=v_last_ordinal,

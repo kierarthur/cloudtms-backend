@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope V1.2.7: exact installed finance-sync body,
+-- Banking Pay bounded-scope V1.2.8: exact installed finance-sync body,
 -- fenced to one complete, sealed, service-owned Workbench build and attempt,
 -- including multi-line canonical/component equality.
 
@@ -36,6 +36,7 @@ declare
   v_bounded_pre_sync_digest text;
   v_bounded_post_sync_digest text;
   v_bounded_canonical_digest text;
+  v_bounded_economic_component_digest text;
   v_bounded_canonical_count integer := 0;
   v_bounded_canonical_result jsonb := '{}'::jsonb;
   v_public_result_json jsonb := '{}'::jsonb;
@@ -3787,6 +3788,33 @@ begin
     AND NOT EXISTS(SELECT 1 FROM pg_temp.tmp_sync_authoritative_components component
       WHERE component.timesheet_id=preview_row.timesheet_id);
 
+  -- Economic completeness is private build authority.  It is deliberately
+  -- attested before presentation rendering so a zero-net, hidden, blocked or
+  -- snoozed line is not required to invent a public row merely to prove that
+  -- its physical components were preserved.
+  SELECT md5(COALESCE(string_agg(
+    component.timesheet_id::text||':'||component.key_type||':'||component.key_value||':'||
+    private.pay_workbench_canonical_component_core_v1(jsonb_build_object(
+      'component_key_type',component.key_type,
+      'component_key_value',component.key_value,
+      'component_amount_ex_vat',component.outstanding_ex_vat,
+      'authoritative_truth_ex_vat',component.truth_ex_vat,
+      'authoritative_baseline_ex_vat',component.baseline_ex_vat,
+      'authoritative_reserved_ex_vat',component.reserved_ex_vat,
+      'authoritative_outstanding_ex_vat',component.outstanding_ex_vat,
+      'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
+      'source_pay_method',v_scope,
+      'source_family_key','timesheet:'||component.timesheet_id::text,
+      'source_basis_json',jsonb_build_object(
+        'build_id',p_build_id::text,
+        'linked_timesheet_id',component.timesheet_id::text,
+        'component_key_type',component.key_type,
+        'component_key_value',component.key_value,
+        'authority','SEALED_ECONOMIC_BUILD_FACTS'))
+      )::text,'' ORDER BY component.timesheet_id,component.key_type,component.key_value),''))
+  INTO v_bounded_economic_component_digest
+  FROM pg_temp.tmp_sync_authoritative_components component;
+
   v_bounded_canonical_result:=public.pay_preview_candidate_build_canonical_lines(
     v_preview_context_json,v_bounded_build.candidate_id);
   IF to_regclass('pg_temp.canonical_preview_lines') IS NULL THEN
@@ -3846,15 +3874,18 @@ begin
     )
     SELECT 1 FROM expected FULL OUTER JOIN actual_rows USING(timesheet_id)
     WHERE expected.timesheet_id IS NULL
-       OR (actual_rows.timesheet_id IS NULL AND expected.expected_component_count>0)
-       OR ABS(COALESCE(expected.expected_ex_vat,0)-COALESCE(actual_rows.actual_ex_vat,0))>0.01
+       -- Missing presentation is legal for a sealed zero-net/hidden/blocked/
+       -- snoozed row.  Where the renderer did emit a financial line, its
+       -- protected amount must still equal the private economic authority.
+       OR (actual_rows.timesheet_id IS NOT NULL
+         AND ABS(COALESCE(expected.expected_ex_vat,0)-actual_rows.actual_ex_vat)>0.01)
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_AMOUNT_MISMATCH' USING ERRCODE='23514';
   END IF;
   IF EXISTS(
     WITH expected AS (
       SELECT scope_row.timesheet_id,component.key_type,component.key_value,
-        jsonb_build_object(
+        private.pay_workbench_canonical_component_core_v1(jsonb_build_object(
           'component_key_type',component.key_type,'component_key_value',component.key_value,
           'component_amount_ex_vat',component.outstanding_ex_vat,
           'authoritative_truth_ex_vat',component.truth_ex_vat,
@@ -3866,7 +3897,7 @@ begin
           'source_basis_json',jsonb_build_object('build_id',p_build_id::text,
             'linked_timesheet_id',component.timesheet_id::text,
             'component_key_type',component.key_type,'component_key_value',component.key_value,
-            'authority','SEALED_ECONOMIC_BUILD_FACTS')) AS component_json
+            'authority','SEALED_ECONOMIC_BUILD_FACTS'))) AS component_core
       FROM private.banking_pay_workbench_economic_build_scope scope_row
       JOIN pg_temp.tmp_sync_authoritative_components component
         ON component.timesheet_id=scope_row.timesheet_id
@@ -3874,6 +3905,9 @@ begin
     ), actual_lines AS (
       SELECT COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid AS timesheet_id,
+        COALESCE(NULLIF(BTRIM(line.line_json->>'preview_row_id'),''),
+          NULLIF(BTRIM(line.line_json->>'line_id'),''),NULLIF(BTRIM(line.line_json->>'case_key'),''),
+          md5(line.line_json::text)) AS line_identity,
         CASE WHEN jsonb_typeof(line.line_json->'case_components')='array'
           THEN line.line_json->'case_components' ELSE '[]'::jsonb END AS components_json
       FROM pg_temp.canonical_preview_lines line
@@ -3882,27 +3916,39 @@ begin
         AND COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id','')
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    ), rendered_timesheets AS (
+      SELECT DISTINCT timesheet_id FROM actual_lines
     ), actual_occurrence AS (
-      SELECT actual_line.timesheet_id,
+      SELECT actual_line.timesheet_id,actual_line.line_identity,
         UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')) AS key_type,
         NULLIF(BTRIM(component.value->>'component_key_value'),'') AS key_value,
-        component.value AS component_json
+        private.pay_workbench_canonical_component_core_v1(component.value) AS component_core
       FROM actual_lines actual_line
       CROSS JOIN LATERAL jsonb_array_elements(actual_line.components_json) component(value)
     ), conflicting_actual AS (
-      SELECT timesheet_id,key_type,key_value
+      SELECT timesheet_id,line_identity,key_type,key_value
       FROM actual_occurrence
-      GROUP BY timesheet_id,key_type,key_value
-      HAVING key_type IS NULL OR key_value IS NULL OR count(DISTINCT component_json)>1
+      GROUP BY timesheet_id,line_identity,key_type,key_value
+      HAVING key_type IS NULL OR key_value IS NULL
+        OR bool_or(component_core IS NULL)
+        OR count(*)>1
+        OR count(DISTINCT component_core)>1
     ), actual AS (
-      SELECT DISTINCT timesheet_id,key_type,key_value,component_json
+      -- Presentation splitting may repeat one identical economic component on
+      -- several stable lines.  Collapse only after per-line duplicate and
+      -- conflict checks have succeeded.
+      SELECT DISTINCT timesheet_id,key_type,key_value,component_core
       FROM actual_occurrence
+    ), expected_rendered AS (
+      SELECT expected.* FROM expected
+      JOIN rendered_timesheets USING(timesheet_id)
     )
     SELECT 1 FROM conflicting_actual
     UNION ALL
-    SELECT 1 FROM expected FULL OUTER JOIN actual USING(timesheet_id,key_type,key_value)
+    SELECT 1 FROM expected_rendered expected
+      FULL OUTER JOIN actual USING(timesheet_id,key_type,key_value)
     WHERE expected.timesheet_id IS NULL OR actual.timesheet_id IS NULL
-       OR actual.component_json IS DISTINCT FROM expected.component_json
+       OR actual.component_core IS DISTINCT FROM expected.component_core
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_COMPONENT_MISMATCH' USING ERRCODE='23514';
   END IF;
@@ -3967,6 +4013,7 @@ begin
         'effect_plan_created_at_utc',v_bounded_build.attestation_json->'effect_plan_created_at_utc',
         'observed_finance_effect_count',v_observed_effect_count,
         'observed_finance_effect_digest',v_observed_effect_digest,
+        'economic_component_digest',v_bounded_economic_component_digest,
         'pre_sync_digest',v_bounded_pre_sync_digest,'post_sync_digest',v_bounded_post_sync_digest,
         'canonical_digest',v_bounded_canonical_digest),
       reconciled_at_utc=clock_timestamp(),publication_cursor_json=jsonb_build_object(
@@ -3981,6 +4028,7 @@ begin
     'internal_result_json',jsonb_build_object(
       'build_id',p_build_id,'attempt_id',p_attempt_id,'scope_timesheet_count',v_bounded_scope_count,
       'fact_count',v_bounded_fact_count,'canonical_stage_count',v_bounded_canonical_count,
+      'economic_component_digest',v_bounded_economic_component_digest,
       'pre_sync_digest',v_bounded_pre_sync_digest,'post_sync_digest',v_bounded_post_sync_digest,
       'canonical_digest',v_bounded_canonical_digest),
     'build_id',p_build_id,'attempt_id',p_attempt_id,

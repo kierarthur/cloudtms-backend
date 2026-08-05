@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope V1.2.7: bounded physical economic occurrences
+-- Banking Pay bounded-scope V1.2.8: bounded physical economic occurrences
 -- for one sealed dependency-unit projection. No page-local rotation expansion,
 -- grouped fallback multiplicity or unscoped reservation aggregation.
 
@@ -117,7 +117,12 @@ BEGIN
             AND COALESCE(segment.value->>'pay_amount','') !~ '^-?\d+(\.\d+)?$'
             THEN 'SEGMENT_AMOUNT_INVALID'
           WHEN NULLIF(BTRIM(COALESCE(segment.value->>'date','')),'') IS NOT NULL
-            AND segment.value->>'date' !~ '^\d{4}-\d{2}-\d{2}$'
+            AND NOT (
+              segment.value->>'date' ~ '^\d{4}-\d{2}-\d{2}$'
+              AND pg_input_is_valid(segment.value->>'date','date')
+              AND CASE WHEN pg_input_is_valid(segment.value->>'date','date')
+                THEN ((segment.value->>'date')::date)::text=segment.value->>'date'
+                ELSE false END)
             THEN 'SEGMENT_DATE_INVALID'
         END AS raw_failure
       FROM canonical
@@ -158,7 +163,9 @@ BEGIN
           AND jsonb_typeof(canonical.invoice_breakdown_json->'segments')='array')
       ) segment
     ), additional_rows AS (
-      SELECT '10:'||p_projected_timesheet_id::text||':ADDITIONAL:'||UPPER(BTRIM(additional.key)) AS source_key,
+      SELECT '10:'||p_projected_timesheet_id::text||':ADDITIONAL:'||
+          LPAD(octet_length(additional.key)::text,10,'0')||':'||
+          encode(convert_to(additional.key,'UTF8'),'hex') AS source_key,
         'timesheets_financials'::text AS source_relation,canonical.financial_id AS source_id,
         'ADDITIONAL_CODE'::text AS raw_key_type,UPPER(BTRIM(additional.key)) AS raw_key_value,
         ROUND(COALESCE(
@@ -175,7 +182,8 @@ BEGIN
             CASE WHEN COALESCE(additional.value->>'rate','') ~ '^-?\d+(\.\d+)?$'
               THEN (additional.value->>'rate')::numeric END,0),0),2) AS amount_ex_vat,
         jsonb_build_object('role','LIVE_COMPONENT','source_kind','ADDITIONAL',
-          'projected_timesheet_id',p_projected_timesheet_id,'additional_code',UPPER(BTRIM(additional.key)),
+           'projected_timesheet_id',p_projected_timesheet_id,'raw_additional_code',additional.key,
+           'additional_code',UPPER(BTRIM(additional.key)),
           'source_value',additional.value) AS payload,
         CASE
           WHEN pg_column_size(COALESCE(canonical.additional_units_json,'{}'::jsonb))>65536
@@ -202,8 +210,10 @@ BEGIN
           ELSE '{}'::jsonb
         END) entry
         WHERE p_last_source_key IS NULL OR
-          '10:'||p_projected_timesheet_id::text||':ADDITIONAL:'||UPPER(BTRIM(entry.key))>p_last_source_key
-        ORDER BY UPPER(BTRIM(entry.key)) LIMIT v_limit
+          '10:'||p_projected_timesheet_id::text||':ADDITIONAL:'||
+            LPAD(octet_length(entry.key)::text,10,'0')||':'||
+            encode(convert_to(entry.key,'UTF8'),'hex')>p_last_source_key
+        ORDER BY octet_length(entry.key),encode(convert_to(entry.key,'UTF8'),'hex') LIMIT v_limit
       ) additional
     ), additional_container_failure AS (
       SELECT '10:'||p_projected_timesheet_id::text||':ADDITIONAL:!INVALID' AS source_key,
@@ -359,7 +369,13 @@ BEGIN
       FROM standard_items_page item
       LEFT JOIN LATERAL public._pay_batch_item_economic_components(
         p_pay_batch_id=>NULL::uuid,p_pay_batch_item_ids=>ARRAY[item.id]) economic ON true
-    ), finance_components AS (
+    ), /* Version 1.2.8 deliberately retires the candidate-global finance-item
+          discovery branch below. Finance movement authority is captured once,
+          physically paged, in the GLOBAL FINANCE_ITEM_AUTHORITY stream before
+          unit derivation. Keeping the superseded text inside this comment for
+          one repeatable revision makes the financial formula provenance
+          inspectable without leaving it in the executable query plan.
+       legacy_finance_components_v127 AS (
       SELECT item.id AS pay_batch_item_id,owner_resolution.timesheet_id AS source_timesheet_id,
         to_jsonb(item)||jsonb_build_object(
           'resolved_owner_timesheet_id',owner_resolution.timesheet_id,
@@ -391,8 +407,8 @@ BEGIN
           OR NULLIF(BTRIM(COALESCE(item.frozen_component_key_value,'')),'') IS NULL
           OR (UPPER(BTRIM(item.frozen_component_key_type))='TS_DAY' AND NOT (
             item.frozen_component_key_value ~ '^\d{4}-\d{2}-\d{2}$'
-            AND pg_input_is_valid(item.frozen_component_key_value,'date'::regtype)
-            AND CASE WHEN pg_input_is_valid(item.frozen_component_key_value,'date'::regtype)
+            AND pg_input_is_valid(item.frozen_component_key_value,'date')
+            AND CASE WHEN pg_input_is_valid(item.frozen_component_key_value,'date')
               THEN (item.frozen_component_key_value::date)::text=item.frozen_component_key_value
               ELSE false END))
           THEN 'FROZEN_ECONOMIC_KEY_INVALID' END AS key_resolution_failure_reason,
@@ -481,6 +497,24 @@ BEGIN
           '20:'||p_projected_timesheet_id::text||':'||item.id::text||':99999999'>p_last_source_key)
       ORDER BY item.id
       LIMIT v_limit+1
+    ) */ finance_components AS (
+      SELECT authority.source_id AS pay_batch_item_id,
+        authority.timesheet_id AS source_timesheet_id,
+        authority.source_payload_json AS payload,
+        UPPER(BTRIM(authority.source_payload_json->>'item_type')) AS item_type,
+        authority.economic_key_type AS key_type,
+        authority.economic_key_value AS key_value,
+        authority.amount_ex_vat AS source_amount_ex_vat,
+        authority.amount_inc_vat AS source_amount_inc_vat,
+        'FINANCE_ITEM_AUTHORITY'::text AS key_resolution_source,
+        NULL::text AS key_resolution_failure_reason,
+        1::bigint AS occurrence_ordinal
+      FROM private.banking_pay_workbench_economic_build_facts authority
+      WHERE authority.build_id=p_build_id
+        AND authority.fact_family='FINANCE_ITEM_AUTHORITY'
+        AND authority.dependency_unit_key='GLOBAL'
+        AND authority.timesheet_id=p_projected_timesheet_id
+        AND COALESCE((authority.source_payload_json->>'settled_authority')::boolean,false)
     ), components AS (
       SELECT * FROM standard_components
       UNION ALL SELECT * FROM finance_components
@@ -573,8 +607,8 @@ BEGIN
           THEN 'FALLBACK_SEGMENT_AMOUNT_INVALID'
         WHEN NULLIF(BTRIM(COALESCE(segment.value->>'date','')),'') IS NOT NULL
           AND NOT (segment.value->>'date' ~ '^\d{4}-\d{2}-\d{2}$'
-            AND pg_input_is_valid(segment.value->>'date','date'::regtype)
-            AND CASE WHEN pg_input_is_valid(segment.value->>'date','date'::regtype)
+            AND pg_input_is_valid(segment.value->>'date','date')
+            AND CASE WHEN pg_input_is_valid(segment.value->>'date','date')
               THEN ((segment.value->>'date')::date)::text=segment.value->>'date' ELSE false END)
           THEN 'FALLBACK_SEGMENT_DATE_INVALID' END
     FROM fallback_states state
@@ -590,14 +624,16 @@ BEGIN
         AND COALESCE(segment.value->>'pay_amount','') !~ '^-?\d+(\.\d+)?$')
       OR (NULLIF(BTRIM(COALESCE(segment.value->>'date','')),'') IS NOT NULL
         AND NOT (segment.value->>'date' ~ '^\d{4}-\d{2}-\d{2}$'
-          AND pg_input_is_valid(segment.value->>'date','date'::regtype)
-          AND CASE WHEN pg_input_is_valid(segment.value->>'date','date'::regtype)
+          AND pg_input_is_valid(segment.value->>'date','date')
+          AND CASE WHEN pg_input_is_valid(segment.value->>'date','date')
             THEN ((segment.value->>'date')::date)::text=segment.value->>'date' ELSE false END))
     UNION ALL
     SELECT state.timesheet_id,state.last_settled_signature,0,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':20:ADDITIONAL:'||
-        UPPER(BTRIM(entry.key)),NULL,NULL,NULL,NULL,
-      CASE WHEN jsonb_typeof(entry.value)<>'object' THEN 'FALLBACK_ADDITIONAL_VALUE_NOT_OBJECT'
+        LPAD(octet_length(entry.key)::text,10,'0')||':'||
+        encode(convert_to(entry.key,'UTF8'),'hex'),NULL,NULL,NULL,NULL,
+      CASE WHEN NULLIF(BTRIM(entry.key),'') IS NULL THEN 'FALLBACK_ADDITIONAL_CODE_MISSING'
+        WHEN jsonb_typeof(entry.value)<>'object' THEN 'FALLBACK_ADDITIONAL_VALUE_NOT_OBJECT'
         WHEN NULLIF(COALESCE(entry.value->>'pay_ex_vat',entry.value->>'amount_ex_vat',''),'') IS NOT NULL
           AND COALESCE(entry.value->>'pay_ex_vat',entry.value->>'amount_ex_vat','') !~ '^-?\d+(\.\d+)?$'
           THEN 'FALLBACK_ADDITIONAL_AMOUNT_INVALID'
@@ -610,7 +646,8 @@ BEGIN
       WHEN jsonb_typeof(state.snapshot->'additional_units_json')='object'
        AND pg_column_size(state.snapshot)<=65536
         THEN state.snapshot->'additional_units_json' ELSE '{}'::jsonb END) entry
-    WHERE jsonb_typeof(entry.value)<>'object'
+    WHERE NULLIF(BTRIM(entry.key),'') IS NULL
+      OR jsonb_typeof(entry.value)<>'object'
       OR (NULLIF(COALESCE(entry.value->>'pay_ex_vat',entry.value->>'amount_ex_vat',''),'') IS NOT NULL
         AND COALESCE(entry.value->>'pay_ex_vat',entry.value->>'amount_ex_vat','') !~ '^-?\d+(\.\d+)?$')
       OR EXISTS(SELECT 1 FROM unnest(ARRAY['unit_count','units_week','pay_rate','rate']) field_name
@@ -676,13 +713,14 @@ BEGIN
         OR COALESCE(segment.value->>'pay_amount','') ~ '^-?\d+(\.\d+)?$')
       AND (NULLIF(BTRIM(COALESCE(segment.value->>'date','')),'') IS NULL OR (
         segment.value->>'date' ~ '^\d{4}-\d{2}-\d{2}$'
-        AND pg_input_is_valid(segment.value->>'date','date'::regtype)
-        AND CASE WHEN pg_input_is_valid(segment.value->>'date','date'::regtype)
+        AND pg_input_is_valid(segment.value->>'date','date')
+        AND CASE WHEN pg_input_is_valid(segment.value->>'date','date')
           THEN ((segment.value->>'date')::date)::text=segment.value->>'date' ELSE false END))
   ), additional_occurrence AS (
     SELECT state.timesheet_id,state.last_settled_signature,0::bigint,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':20:ADDITIONAL:'||
-        UPPER(BTRIM(entry.key)),
+        LPAD(octet_length(entry.key)::text,10,'0')||':'||
+        encode(convert_to(entry.key,'UTF8'),'hex'),
       'ADDITIONAL_CODE'::text,UPPER(BTRIM(entry.key)),amount.amount_ex_vat,amount.amount_ex_vat,
       NULL::text,false,'ADDITIONAL'::text
     FROM fallback_states state
