@@ -514,7 +514,20 @@ begin
     'suppress_remittances', lower(btrim(coalesce(v_execution_intent_json->>'suppress_remittances','false'))) in ('true','1','yes','y','on'),
     'schedule_result', v_schedule_result,
     'worker_communications', v_worker_communications,
-    'remittance_queue_stage_result', v_remittance_queue_stage_result
+    'remittance_queue_stage_result', v_remittance_queue_stage_result,
+    'continuation', jsonb_build_object(
+      'required', v_became_authorised AND v_payment_operation_id IS NOT NULL,
+      'operation_id', v_payment_operation_id,
+      'operation_type', 'PAYMENT_EXECUTE',
+      'pay_batch_id', v_req.pay_batch_id,
+      'root_operation_id', NULL,
+      'phase', CASE WHEN v_became_authorised THEN 'VALIDATE_BATCH' ELSE NULL END,
+      'run_after_utc', CASE WHEN v_became_authorised THEN clock_timestamp() ELSE NULL END,
+      'reason', CASE WHEN v_became_authorised THEN 'PAYMENT_AUTHORISED' ELSE 'AWAITING_AUTHORISATION' END,
+      'successor_relation', CASE WHEN v_became_authorised THEN 'SELF' ELSE 'NONE' END,
+      'requires_user_action', NOT v_became_authorised,
+      'terminal', false
+    )
   );
 exception
   when others then

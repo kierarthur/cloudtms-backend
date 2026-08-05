@@ -21,6 +21,7 @@ DECLARE
   v_result jsonb := '{}'::jsonb;
   v_active_candidate_count integer := 0;
   v_active_item_count integer := 0;
+  v_enabled boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'PAY_BATCH_CANCEL_PAY_BATCH_ID_REQUIRED'
@@ -35,6 +36,17 @@ BEGIN
   IF p_work_item_id IS NOT NULL THEN
     RAISE EXCEPTION 'PAY_BATCH_CANCEL_LEGACY_WORK_ITEM_CALL_RETIRED'
       USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'PAY_BATCH_CANCEL_LEGACY_WORK_ITEM_CALL_RETIRED')::text;
+  END IF;
+
+  SELECT COALESCE(settings_row.banking_pay_candidate_cancellation_enabled, false)
+  INTO v_enabled
+  FROM public.settings_defaults AS settings_row
+  ORDER BY settings_row.id
+  LIMIT 1;
+
+  IF v_enabled IS NOT TRUE THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_FEATURE_DISABLED'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object('code', 'PAYMENT_CORRECTION_FEATURE_DISABLED')::text;
   END IF;
 
   SELECT batch_row.*
@@ -94,6 +106,7 @@ BEGIN
     'request_status', COALESCE(v_result->>'request_status', 'PLANNING'),
     'operation_status', COALESCE(v_result->>'operation_status', 'RUNNING'),
     'phase', COALESCE(v_result->>'phase', 'PREPARE_SELECTION'),
+    'continuation', v_result->'continuation',
     'status_url', '/api/banking/pay/correction/' || COALESCE(v_result->>'correction_request_id', '') || '/status',
     'display_message', 'Draft cancellation is being prepared.'
   );

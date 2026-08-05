@@ -41706,6 +41706,14 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       ? 'RUNNING'
       : (publicAdvanced.status || claim.status || null));
   const saveProgressPhase = preProviderReleaseRetryable ? (releaseRetryPhase || normaliseReleaseRetryPhase(releaseFailureDiagnostic)) : (publicAdvanced.phase || claim.phase || null);
+  // The semantic-progress fuse is lease-owner state. Persist it only through
+  // banking_pay_operation_release_lease, which validates the exact lease owner.
+  // The generic progress save intentionally cannot update these fields.
+  const saveProgressPatch = { ...progressPatch };
+  delete saveProgressPatch.continuation_progress_witness;
+  delete saveProgressPatch.continuation_no_progress_count;
+  delete saveProgressPatch.continuation_last_no_progress_code;
+  delete saveProgressPatch.continuation_witness_changed_at_utc;
 
   try {
     savePayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_save_progress', {
@@ -41717,7 +41725,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       p_failed_units: Number.isFinite(Number(publicAdvanced.failed_units)) ? Math.max(0, Math.trunc(Number(publicAdvanced.failed_units))) : null,
       p_current_chunk_index: Number.isFinite(Number(publicAdvanced.current_chunk_index)) ? Math.max(0, Math.trunc(Number(publicAdvanced.current_chunk_index))) : null,
       p_chunk_count: Number.isFinite(Number(publicAdvanced.chunk_count)) ? Math.max(0, Math.trunc(Number(publicAdvanced.chunk_count))) : null,
-      p_progress_json: progressPatch,
+      p_progress_json: saveProgressPatch,
       p_extend_lock_seconds: Math.min(lockSeconds, 60)
     }, {
       routeClass: 'OPERATION_PROGRESS_SAVE',
@@ -48717,13 +48725,27 @@ function bankingPayCancellationError(env, req, error, fallbackCode = 'PAYMENT_CO
   return bankingPayCancellationResponse(env, req, denied ? 403 : (conflict ? 409 : 400), { ok: false, code, error_code: code, message, error: message });
 }
 
-async function requireBankingPayCancellationActor(env, req, user) {
+async function requireBankingPayCancellationActor(env, req, user, options = {}) {
+  const policy = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
   const actorUserId = String(user?.id || '').trim();
   if (!/^[0-9a-f-]{36}$/i.test(actorUserId)) return { ok: false, response: bankingPayCancellationResponse(env, req, 401, { ok: false, code: 'UNAUTHORIZED', message: 'Unauthorized' }) };
   try {
     const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/tms_users?id=eq.${encodeURIComponent(actorUserId)}&select=id,is_active,role,payment_authoriser,payment_golden_key&limit=1`, false);
     const row = Array.isArray(rows) ? rows[0] : null;
     if (!row || row.is_active !== true) return { ok: false, response: bankingPayCancellationResponse(env, req, 401, { ok: false, code: 'UNAUTHORIZED', message: 'Unauthorized' }) };
+    if (policy.requirePaymentPermission === true) {
+      const role = String(row.role || '').trim().toLowerCase();
+      if (role !== 'admin' && row.payment_authoriser !== true && row.payment_golden_key !== true) {
+        return { ok: false, response: bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'PAYMENT_PERMISSION_REQUIRED', message: 'Payment permission is required.' }) };
+      }
+    }
+    if (policy.requireFeature === true) {
+      const { rows: settingRows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/settings_defaults?select=banking_pay_candidate_cancellation_enabled&limit=1`, false);
+      const settings = Array.isArray(settingRows) ? settingRows[0] : null;
+      if (!settings || settings.banking_pay_candidate_cancellation_enabled !== true) {
+        return { ok: false, response: bankingPayCancellationResponse(env, req, 409, { ok: false, code: 'PAYMENT_CORRECTION_FEATURE_DISABLED', message: 'Payment cancellation is not enabled.' }) };
+      }
+    }
     return { ok: true, actorUserId, actor: row };
   } catch (error) {
     return { ok: false, response: bankingPayCancellationError(env, req, error, 'PAYMENT_PERMISSION_CHECK_FAILED') };
@@ -48753,11 +48775,31 @@ function bankingPayBase64UrlDecode(value) {
 }
 
 async function bankingPayCorrectionSessionHash(req, user) {
-  const sessionAuthority = String(user?.session_id || user?.sessionId || req.headers.get('Authorization') || '').trim();
+  const sessionAuthority = String(user?.session_id || user?.sessionId || user?.sid || '').trim();
   const tenantAuthority = String(user?.tenant_id || user?.tenantId || user?.organisation_id || user?.organization_id || '').trim();
+  const sessionIssuedAt = Number(user?.session_issued_at_epoch_seconds ?? user?.sessionIssuedAtEpochSeconds ?? user?.iat);
   if (!sessionAuthority) throw Object.assign(new Error('Authenticated session authority is unavailable.'), { code: 'REAUTH_SESSION_REQUIRED' });
-  const material = `v1\u0000${sessionAuthority}\u0000${String(user?.id || '').toLowerCase()}\u0000${tenantAuthority.toLowerCase()}`;
-  return sha256BankingPayRawText(material);
+  if (!Number.isFinite(sessionIssuedAt) || sessionIssuedAt <= 0) throw Object.assign(new Error('Authenticated session issue time is unavailable.'), { code: 'REAUTH_SESSION_REQUIRED' });
+  const encoder = new TextEncoder();
+  const frame = (value) => {
+    const bytes = encoder.encode(String(value == null ? '' : value));
+    const framed = new Uint8Array(4 + bytes.byteLength);
+    new DataView(framed.buffer).setUint32(0, bytes.byteLength, false);
+    framed.set(bytes, 4);
+    return framed;
+  };
+  const parts = [
+    encoder.encode('cloudtms-session-v1'),
+    frame(sessionAuthority),
+    frame(String(user?.id || '').toLowerCase()),
+    frame(tenantAuthority.toLowerCase()),
+    frame(String(Math.trunc(sessionIssuedAt)))
+  ];
+  const material = new Uint8Array(parts.reduce((total, part) => total + part.byteLength, 0));
+  let offset = 0;
+  for (const part of parts) { material.set(part, offset); offset += part.byteLength; }
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', material));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 async function bankingPayCorrectionHmacKey(env) {
@@ -48789,52 +48831,23 @@ async function verifyBankingPayCorrectionProof(env, token) {
 }
 
 async function enqueueBankingPayCancellationResult(env, result, source) {
-  const operationId = String(result?.operation_id || result?.operationId || '').trim();
-  if (!/^[0-9a-f-]{36}$/i.test(operationId)) return { ok: true, required: false, enqueued_count: 0 };
-  const descriptor = {
-    operation_id: operationId,
-    operation_type: 'PAYMENT_CORRECTION',
-    pay_batch_id: result?.pay_batch_id || result?.payBatchId || null,
-    root_operation_id: result?.root_operation_id || result?.rootOperationId || null,
-    successor_relation: 'SELF',
-    phase: result?.phase || null,
-    run_after_utc: result?.run_after_utc || result?.runAfterUtc || null,
-    source
-  };
+  const descriptor = result?.continuation && typeof result.continuation === 'object' && !Array.isArray(result.continuation)
+    ? { ...result.continuation }
+    : null;
+  const operationId = String(descriptor?.operation_id || '').trim();
+  if (!descriptor || descriptor.required !== true || descriptor.terminal === true || descriptor.requires_user_action === true || !/^[0-9a-f-]{36}$/i.test(operationId)) {
+    return { ok: true, required: false, enqueued_count: 0 };
+  }
+  descriptor.source = source;
   return enqueueBankingPayOperationContinuations(env, [descriptor], { source });
 }
 
 async function enqueueBankingPayEventResultContinuations(env, result, source) {
   if (readBankingPayContinuationFlag(env) !== true) return { ok: true, required: false, enqueued_count: 0 };
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  const operationIds = new Set();
-  const seen = new WeakSet();
-  const visit = (value, key = '', depth = 0) => {
-    if (depth > 6 || value == null || operationIds.size >= 10) return;
-    if (typeof value === 'string') {
-      if ((key === 'operation_id' || key.endsWith('_operation_id')) && uuidRe.test(value.trim())) operationIds.add(value.trim().toLowerCase());
-      return;
-    }
-    if (Array.isArray(value)) {
-      if (key === 'operation_ids' || key.endsWith('_operation_ids')) {
-        for (const item of value) if (typeof item === 'string' && uuidRe.test(item.trim()) && operationIds.size < 10) operationIds.add(item.trim().toLowerCase());
-      } else {
-        for (const item of value) visit(item, key, depth + 1);
-      }
-      return;
-    }
-    if (typeof value !== 'object' || seen.has(value)) return;
-    seen.add(value);
-    for (const [childKey, child] of Object.entries(value)) visit(child, String(childKey || '').toLowerCase(), depth + 1);
-  };
-  visit(result);
-  const descriptors = [];
-  for (const operationId of operationIds) {
-    const row = await readBankingPayContinuationOperation(env, operationId);
-    if (!row) continue;
-    const descriptor = deriveBankingPayContinuationDescriptor(row);
-    if (descriptor && descriptor.required !== false) descriptors.push(descriptor);
-  }
+  const descriptors = (Array.isArray(result?.continuations) ? result.continuations : [])
+    .slice(0, 4)
+    .filter((descriptor) => descriptor && typeof descriptor === 'object' && !Array.isArray(descriptor)
+      && descriptor.required === true && descriptor.terminal !== true && descriptor.requires_user_action !== true);
   return enqueueBankingPayOperationContinuations(env, descriptors, { source });
 }
 
@@ -48885,7 +48898,7 @@ async function handleBankingPayPaymentStatusPageV1(env, req, user, payBatchId) {
 }
 
 async function handleBankingPayCorrectionPlanV1(env, req, user, payBatchId, forcedAction = null) {
-  const actor = await requireBankingPayCancellationActor(env, req, user);
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
   try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
@@ -48917,12 +48930,12 @@ async function handleBankingPayCorrectionStatusV1(env, req, user, correctionRequ
       p_correction_request_id: correctionRequestId,
       p_actor_user_id: actor.actorUserId
     }), 'pay_payment_correction_status_get_v1');
-    return bankingPayCancellationResponse(env, req, 200, { ...result, continuation: { required: false } });
+    return bankingPayCancellationResponse(env, req, 200, result);
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_STATUS_FAILED'); }
 }
 
 async function handleBankingPayCorrectionReauthV1(env, req, user, correctionRequestId) {
-  const actor = await requireBankingPayCancellationActor(env, req, user);
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
   try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
@@ -48981,7 +48994,7 @@ async function handleBankingPayCorrectionReauthV1(env, req, user, correctionRequ
 }
 
 async function handleBankingPayCorrectionStartPreparedV1(env, req, user, payBatchId) {
-  const actor = await requireBankingPayCancellationActor(env, req, user);
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
   try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
@@ -49039,7 +49052,7 @@ async function handleBankingPayCorrectionStartPreparedV1(env, req, user, payBatc
 }
 
 async function handleBankingPayCorrectionAuthActionV1(env, req, user, correctionRequestId) {
-  const actor = await requireBankingPayCancellationActor(env, req, user);
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
   try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
@@ -49062,7 +49075,7 @@ async function handleBankingPayCorrectionAuthActionV1(env, req, user, correction
 }
 
 async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
-  const actor = await requireBankingPayCancellationActor(env, req, user);
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
   try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
@@ -49070,7 +49083,7 @@ async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_batch_cancel', {
       p_pay_batch_id: payBatchId,
       p_actor_user_id: actor.actorUserId,
-      p_reason: String(body?.reason || 'DRAFT_PAYMENT_CANCELLED_BY_USER').trim(),
+      p_reason: 'DRAFT_PAYMENT_CANCELLED_BY_USER',
       p_correction_request_id: body?.correction_request_id || null,
       p_work_item_id: null
     }), 'pay_batch_cancel');
@@ -49080,7 +49093,7 @@ async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
 }
 
 async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId, reviewOnly = false) {
-  const actor = await requireBankingPayCancellationActor(env, req, user);
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: !reviewOnly, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body;
   try { body = await parseJSONBody(req); } catch { return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'INVALID_JSON', message: 'Invalid JSON.' }); }
@@ -49113,7 +49126,7 @@ async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId
 }
 
 async function handleBankingPayCorrectionIntegrityV1(env, req, user, correctionRequestId) {
-  const actor = await requireBankingPayCancellationActor(env, req, user);
+  const actor = await requireBankingPayCancellationActor(env, req, user, { requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
   let body = {};
   try { body = await parseJSONBody(req); } catch {}
@@ -133018,7 +133031,15 @@ async function requireUser(env, req, allowedRoles = []) {
   if ((user.session_version|0) !== (p.sv|0)) return null;
 
   if (Array.isArray(allowedRoles) && allowedRoles.length && !allowedRoles.includes(user.role)) return null;
-  return { id: user.id, email: user.email, role: user.role, sv: user.session_version|0, sid: p.sid };
+  return {
+    id: user.id,
+    email: user.email,
+    role: user.role,
+    sv: user.session_version|0,
+    sid: p.sid,
+    session_id: p.sid,
+    session_issued_at_epoch_seconds: Number(p.iat)
+  };
 }
 
 // KV session helpers (store sid → { user_id, sv, exp })
@@ -180181,19 +180202,9 @@ async function bankingCronTick(env, opts = {}) {
       const dueRaw = await sbRpc(env, 'pay_batches_claim_due_scheduled', { p_limit: summary.operation_limit, p_now_utc: null }, { routeClass: 'OPERATION_WORKER_ADVANCE', purpose: 'BANKING_PAY_DUE_SCHEDULE_DISCOVERY', timeoutMs: 8000 });
       const duePayload = Array.isArray(dueRaw) && dueRaw.length === 1 ? dueRaw[0] : dueRaw;
       const dueRows = duePayload && Array.isArray(duePayload.operations) ? duePayload.operations : [];
-      const dueDescriptors = dueRows.map((row) => ({
-        required: true,
-        operation_id: row.operation_id || row.id,
-        operation_type: row.operation_type || 'PAYMENT_EXECUTE',
-        pay_batch_id: row.pay_batch_id || null,
-        root_operation_id: row.root_operation_id || null,
-        successor_relation: 'SELF',
-        phase: row.phase || null,
-        run_after_utc: null,
-        reason: 'DUE_SCHEDULE_DISCOVERY',
-        requires_user_action: false,
-        terminal: false
-      }));
+      const dueDescriptors = duePayload && Array.isArray(duePayload.continuations)
+        ? duePayload.continuations.slice(0, 50)
+        : [];
       const dueEnqueue = await enqueueBankingPayOperationContinuations(env, dueDescriptors, { source: 'DUE_SCHEDULE_DISCOVERY' });
       const recovery = await recoverStrandedBankingPayContinuations(env, { limit: 25 });
       summary.operation_runner_result = { mode: 'queue_continuation', expiry: expiryRaw, due: duePayload, due_enqueue: dueEnqueue, recovery };

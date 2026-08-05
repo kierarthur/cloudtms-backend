@@ -548,6 +548,7 @@ BEGIN
       'existing_release_operation_woken', false,
       'paid_after_release', false,
       'requires_user_action', true,
+      'continuations', '[]'::jsonb,
       'display_status', 'Provider evidence rejected',
       'display_message', CASE
         WHEN v_provider_signature_valid IS FALSE OR COALESCE(v_receipt_signature_valid, false) IS NOT TRUE THEN 'Webhook event was not ingested because its signature or receipt could not be validated.'
@@ -597,6 +598,7 @@ BEGIN
       'existing_release_operation_woken', false,
       'paid_after_release', false,
       'requires_user_action', true,
+      'continuations', '[]'::jsonb,
       'display_status', 'Provider evidence rejected',
       'display_message', 'Failed-webhook replay evidence was not ingested because its signed receipt provenance was invalid.',
       'ignored', true,
@@ -962,6 +964,7 @@ BEGIN
       'existing_release_operation_woken', false,
       'paid_after_release', false,
       'requires_user_action', true,
+      'continuations', '[]'::jsonb,
       'display_status', 'Provider evidence needs review',
       'display_message', 'The provider evidence was retained but could not be matched to a payment.',
       'ignored', true,
@@ -1446,6 +1449,7 @@ BEGIN
       'existing_release_operation_woken', false,
       'paid_after_release', v_paid_after_release,
       'requires_user_action', v_paid_after_release OR v_mapping_status <> 'MATCHED',
+      'continuations', '[]'::jsonb,
       'display_status', CASE WHEN v_paid_after_release THEN 'Paid — evidence received after release' ELSE 'Payment status already recorded' END,
       'display_message', CASE
         WHEN v_paid_after_release THEN 'The bank confirmed this payment after CloudTMS released its payment reservation. CloudTMS has blocked any further payment action and retained both histories for Finance review.'
@@ -1838,6 +1842,7 @@ BEGIN
       'existing_release_operation_woken', false,
       'paid_after_release', v_paid_after_release,
       'requires_user_action', v_paid_after_release,
+      'continuations', '[]'::jsonb,
       'display_status', CASE WHEN v_paid_after_release THEN 'Paid — evidence received after release' ELSE 'Paid' END,
       'display_message', CASE
         WHEN v_paid_after_release THEN 'The bank confirmed this payment after CloudTMS released its payment reservation. CloudTMS has blocked any further payment action and retained both histories for Finance review.'
@@ -1984,6 +1989,7 @@ BEGIN
         'existing_release_operation_woken', false,
         'paid_after_release', false,
         'requires_user_action', false,
+        'continuations', '[]'::jsonb,
         'display_status', 'Payment status updated',
         'display_message', 'The latest provider payment status was recorded.',
         'inserted', v_inserted_event,
@@ -2652,7 +2658,42 @@ BEGIN
       'link_target', 'CURRENT_PAYMENT_STATUS'
     ),
     'policy_x_checked', true
-  ) || v_settlement_intent_json;
+  ) || v_settlement_intent_json || jsonb_build_object(
+    'continuations', (
+      SELECT COALESCE(
+        jsonb_agg(
+          jsonb_build_object(
+            'required', true,
+            'operation_id', continuation_item.value->>'operation_id',
+            'operation_type', continuation_item.value->>'operation_type',
+            'pay_batch_id', continuation_item.value->>'pay_batch_id',
+            'root_operation_id', continuation_item.value->>'root_operation_id',
+            'phase', continuation_item.value->>'phase',
+            'run_after_utc', continuation_item.value->>'run_after_utc',
+            'reason', continuation_item.value->>'reason',
+            'successor_relation', continuation_item.value->>'successor_relation',
+            'requires_user_action', false,
+            'terminal', false
+          )
+          ORDER BY continuation_item.ordinality
+        ),
+        '[]'::jsonb
+      )
+      FROM (
+        SELECT raw_item.value, raw_item.ordinality
+        FROM jsonb_array_elements(jsonb_build_array(
+          v_request_start_result->'continuation',
+          v_settlement_apply_result->'continuation'
+        )) WITH ORDINALITY AS raw_item(value, ordinality)
+        WHERE jsonb_typeof(raw_item.value) = 'object'
+          AND COALESCE((raw_item.value->>'required')::boolean, false)
+          AND COALESCE((raw_item.value->>'terminal')::boolean, false) IS NOT TRUE
+          AND COALESCE((raw_item.value->>'requires_user_action')::boolean, false) IS NOT TRUE
+        ORDER BY raw_item.ordinality
+        LIMIT 4
+      ) AS continuation_item
+    )
+  );
 
 EXCEPTION
   WHEN OTHERS THEN

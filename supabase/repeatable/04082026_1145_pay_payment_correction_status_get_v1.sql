@@ -33,6 +33,11 @@ DECLARE
     v_refresh_pending_count integer := 0;
     v_refresh_ready_count integer := 0;
     v_workbench_status text := 'NOT_STAGED';
+    v_progress_stage text := 'PLANNING';
+    v_poll_after_ms integer := 1000;
+    v_financial_complete boolean := false;
+    v_terminal boolean := false;
+    v_blockers jsonb := '[]'::jsonb;
 BEGIN
     SELECT request_row.*
     INTO v_request
@@ -105,6 +110,35 @@ BEGIN
     INTO v_candidate_counts
     FROM public.pay_payment_correction_work_items AS work_item
     WHERE work_item.correction_request_id = p_correction_request_id;
+
+    SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+            pg_catalog.jsonb_build_object('code', blocker_summary.code, 'count', blocker_summary.blocker_count)
+            ORDER BY blocker_summary.blocker_count DESC, blocker_summary.code
+        ),
+        '[]'::jsonb
+    )
+    INTO v_blockers
+    FROM (
+        SELECT blocker_source.code, pg_catalog.count(*)::integer AS blocker_count
+        FROM (
+            SELECT COALESCE(
+                NULLIF(work_item.result_json->>'result_code', ''),
+                NULLIF(work_item.result_json->>'code', ''),
+                CASE
+                    WHEN work_item.status = 'BLOCKED' THEN 'PAYMENT_CORRECTION_BLOCKED'
+                    WHEN work_item.status = 'FAILED_FINAL' THEN 'PAYMENT_CORRECTION_FAILED_FINAL'
+                    ELSE 'PAYMENT_CORRECTION_REVIEW_REQUIRED'
+                END
+            ) AS code
+            FROM public.pay_payment_correction_work_items AS work_item
+            WHERE work_item.correction_request_id = p_correction_request_id
+              AND work_item.status IN ('BLOCKED', 'FAILED_FINAL')
+        ) AS blocker_source
+        GROUP BY blocker_source.code
+        ORDER BY pg_catalog.count(*) DESC, blocker_source.code
+        LIMIT 20
+    ) AS blocker_summary;
 
     IF v_operation.id IS NOT NULL THEN
         SELECT pg_catalog.count(*)::integer,
@@ -261,6 +295,40 @@ BEGIN
             v_user_message := 'Review the current payment status.';
     END CASE;
 
+    v_financial_complete := v_request.status IN (
+        'APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED', 'FAILED', 'REJECTED', 'CANCELLED'
+    );
+
+    v_progress_stage := CASE
+        WHEN v_request.status = 'PLANNING' THEN 'PLANNING'
+        WHEN v_request.status = 'PLANNED' THEN 'REVIEW'
+        WHEN v_request.status = 'REQUESTED' THEN 'AUTHORISATION'
+        WHEN v_request.status = 'AWAITING_AUTHORISATION' THEN 'AUTHORISATION'
+        WHEN v_request.status = 'AUTHORISED' THEN 'EXPANDING'
+        WHEN v_request.status = 'EXPANDED' THEN 'PROCESSING'
+        WHEN v_request.status = 'PROCESSING' AND v_operation.phase = 'FINALISE' THEN 'FINALISING'
+        WHEN v_request.status = 'PROCESSING' AND v_operation.phase = 'REFRESH_WORKBENCH' THEN 'REFRESHING_AVAILABILITY'
+        WHEN v_request.status = 'PROCESSING' THEN 'PROCESSING'
+        WHEN v_request.status = 'APPLIED' AND v_workbench_status <> 'CURRENT' THEN 'REFRESHING_AVAILABILITY'
+        WHEN v_request.status = 'APPLIED' THEN 'COMPLETE'
+        WHEN v_request.status = 'APPLIED_WITH_BLOCKERS' THEN 'COMPLETE_WITH_BLOCKERS'
+        WHEN v_request.status = 'BLOCKED' THEN 'BLOCKED'
+        WHEN v_request.status = 'FAILED' THEN 'FAILED'
+        WHEN v_request.status = 'REJECTED' THEN 'REJECTED'
+        WHEN v_request.status = 'CANCELLED' THEN 'CANCELLED'
+        ELSE 'PROCESSING'
+    END;
+
+    v_terminal := v_financial_complete
+      AND (v_operation.id IS NULL OR v_operation.status IN ('COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED'))
+      AND v_workbench_status IN ('CURRENT', 'FAILED', 'NOT_STAGED');
+
+    v_poll_after_ms := CASE
+        WHEN v_terminal THEN NULL
+        WHEN v_progress_stage IN ('REVIEW', 'AUTHORISATION', 'REFRESHING_AVAILABILITY') THEN 5000
+        ELSE 1000
+    END;
+
     RETURN pg_catalog.jsonb_build_object(
         'ok', true,
         'correction_request_id', v_request.id,
@@ -269,12 +337,30 @@ BEGIN
         'request_status', v_request.status,
         'operation_status', v_operation.status,
         'phase', v_operation.phase,
+        'progress_stage', v_progress_stage,
+        'poll_after_ms', v_poll_after_ms,
+        'financial_complete', v_financial_complete,
+        'terminal', v_terminal,
         'progress', COALESCE(v_progress, '{}'::jsonb),
         'candidate_counts', COALESCE(v_candidate_counts, '{}'::jsonb),
+        'blockers', COALESCE(v_blockers, '[]'::jsonb),
         'workbench_refresh', COALESCE(v_workbench_refresh, '{}'::jsonb),
         'available_actions', v_available_actions,
         'user_title', v_user_title,
         'user_message', v_user_message,
+        'continuation', pg_catalog.jsonb_build_object(
+            'required', false,
+            'operation_id', v_operation.id,
+            'operation_type', 'PAYMENT_CORRECTION',
+            'pay_batch_id', v_request.pay_batch_id,
+            'root_operation_id', v_operation.root_operation_id,
+            'phase', v_operation.phase,
+            'run_after_utc', v_operation.run_after_utc,
+            'reason', 'STATUS_READ_ONLY',
+            'successor_relation', 'NONE',
+            'requires_user_action', COALESCE(v_operation.requires_user_action, false),
+            'terminal', v_terminal
+        ),
         'code', 'PAYMENT_CORRECTION_STATUS_OK'
     );
 END

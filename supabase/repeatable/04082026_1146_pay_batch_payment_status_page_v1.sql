@@ -38,6 +38,7 @@ DECLARE
     v_next_cursor_json jsonb := NULL;
     v_previous_cursor_json jsonb := NULL;
     v_last_row jsonb;
+    v_latest_correction_request jsonb := NULL;
 BEGIN
     IF p_pay_batch_id IS NULL THEN
         RETURN pg_catalog.jsonb_build_object(
@@ -923,6 +924,26 @@ BEGIN
         ELSE p_cursor_json -> 'previous_cursor_json'
     END;
 
+    SELECT pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+        'id', request_row.id,
+        'status', request_row.status,
+        'requested_at_utc', request_row.requested_at_utc,
+        'updated_at_utc', request_row.updated_at_utc,
+        'operation_id', (
+            SELECT operation_row.id
+            FROM public.banking_pay_operations AS operation_row
+            WHERE operation_row.operation_type = 'PAYMENT_CORRECTION'
+              AND operation_row.input_json->>'correction_request_id' = request_row.id::text
+            ORDER BY operation_row.created_at_utc DESC, operation_row.id DESC
+            LIMIT 1
+        )
+    ))
+    INTO v_latest_correction_request
+    FROM public.pay_payment_correction_requests AS request_row
+    WHERE request_row.pay_batch_id = p_pay_batch_id
+    ORDER BY request_row.created_at_utc DESC, request_row.id DESC
+    LIMIT 1;
+
     RETURN pg_catalog.jsonb_build_object(
         'ok', true,
         'pay_batch_id', p_pay_batch_id,
@@ -940,6 +961,8 @@ BEGIN
         'original_overview_amount_pence', v_original_overview_amount_pence,
         'active_paye_schedule_line_count', v_active_paye_schedule_line_count,
         'active_paye_schedule_amount_pence', v_active_paye_schedule_amount_pence,
+        'latest_correction_request', v_latest_correction_request,
+        'latest_correction_request_id', v_latest_correction_request->>'id',
         'rows', v_rows,
         'next_cursor_json', v_next_cursor_json,
         'previous_cursor_json', v_previous_cursor_json,
@@ -948,7 +971,20 @@ BEGIN
             ELSE 'Showing ' || v_row_count::text || ' of ' || v_total_matching_count::text
         END,
         'code', 'PAYMENT_STATUS_PAGE_OK',
-        'message', NULL
+        'message', NULL,
+        'continuation', pg_catalog.jsonb_build_object(
+            'required', false,
+            'operation_id', NULL,
+            'operation_type', NULL,
+            'pay_batch_id', p_pay_batch_id,
+            'root_operation_id', NULL,
+            'phase', NULL,
+            'run_after_utc', NULL,
+            'reason', 'STATUS_READ_ONLY',
+            'successor_relation', 'NONE',
+            'requires_user_action', false,
+            'terminal', true
+        )
     );
 END
 $function$;

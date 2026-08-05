@@ -152,6 +152,13 @@ BEGIN
       ),
       'gate_active', false,
       'display_message', 'This cancellation request is already complete.',
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', false, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', v_operation.phase, 'run_after_utc', v_operation.run_after_utc,
+        'reason', 'REQUEST_ALREADY_TERMINAL', 'successor_relation', 'NONE',
+        'requires_user_action', false, 'terminal', true
+      ),
       'code', 'REQUEST_ALREADY_TERMINAL'
     );
   END IF;
@@ -357,6 +364,12 @@ BEGIN
       END,
       'authorised', false,
       'queued', false,
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', false, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', 'COMPLETE', 'run_after_utc', NULL, 'reason', 'REQUEST_ENDED_BY_USER',
+        'successor_relation', 'NONE', 'requires_user_action', false, 'terminal', true
+      ),
       'code', CASE
         WHEN v_action = 'REJECT' THEN 'REQUEST_REJECTED'
         ELSE 'REQUEST_CANCELLED'
@@ -682,6 +695,13 @@ BEGIN
       'display_message', 'Authorisation recorded. Further approval is required.',
       'authorised', false,
       'queued', false,
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', false, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', v_operation.phase, 'run_after_utc', v_operation.run_after_utc,
+        'reason', 'AWAITING_AUTHORISATION', 'successor_relation', 'NONE',
+        'requires_user_action', true, 'terminal', false
+      ),
       'code', 'AUTHORISATION_RECORDED'
     );
   END IF;
@@ -847,6 +867,12 @@ BEGIN
     'authorised', true,
     'queued', true,
     'phase', 'EXPAND_WORK',
+    'continuation', pg_catalog.jsonb_build_object(
+      'required', true, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+      'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+      'phase', 'EXPAND_WORK', 'run_after_utc', v_now, 'reason', 'CORRECTION_AUTHORISED',
+      'successor_relation', 'SELF', 'requires_user_action', false, 'terminal', false
+    ),
     'code', 'CORRECTION_AUTHORISED'
   );
 END;

@@ -1569,7 +1569,20 @@ begin
     ),
     'remittance_message_kind', v_comm_message_kind,
     'worker_communications', v_worker_communications,
-    'remittance_queue_stage_result', coalesce(v_comm_result, '{}'::jsonb)
+    'remittance_queue_stage_result', coalesce(v_comm_result, '{}'::jsonb),
+    'continuation', jsonb_build_object(
+      'required', v_kind = 'IMMEDIATE' AND p_operation_id IS NOT NULL,
+      'operation_id', p_operation_id,
+      'operation_type', 'PAYMENT_EXECUTE',
+      'pay_batch_id', p_pay_batch_id,
+      'root_operation_id', NULL,
+      'phase', CASE WHEN v_kind = 'IMMEDIATE' THEN 'VALIDATE_BATCH' ELSE NULL END,
+      'run_after_utc', CASE WHEN v_kind = 'IMMEDIATE' THEN clock_timestamp() ELSE v_sched_at END,
+      'reason', CASE WHEN v_kind = 'IMMEDIATE' THEN 'PAYMENT_DUE_NOW' ELSE 'PAYMENT_SCHEDULED_FOR_DISCOVERY' END,
+      'successor_relation', CASE WHEN v_kind = 'IMMEDIATE' THEN 'SELF' ELSE 'NONE' END,
+      'requires_user_action', false,
+      'terminal', false
+    )
   );
 end;
 $$;

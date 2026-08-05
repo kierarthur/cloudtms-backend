@@ -306,6 +306,25 @@ BEGIN
     'skipped_count', v_skipped_count,
     'operations', v_operations_json,
     'claimed', v_operations_json,
+    'continuations', (
+      SELECT COALESCE(pg_catalog.jsonb_agg(
+        pg_catalog.jsonb_build_object(
+          'required', true,
+          'operation_id', operation_item.value->>'operation_id',
+          'operation_type', 'PAYMENT_EXECUTE',
+          'pay_batch_id', operation_item.value->>'pay_batch_id',
+          'root_operation_id', NULL,
+          'phase', 'VALIDATE_BATCH',
+          'run_after_utc', v_now,
+          'reason', 'DUE_SCHEDULE_DISCOVERED',
+          'successor_relation', 'SELF',
+          'requires_user_action', false,
+          'terminal', false
+        ) ORDER BY operation_item.ordinality
+      ), '[]'::jsonb)
+      FROM pg_catalog.jsonb_array_elements(v_operations_json) WITH ORDINALITY AS operation_item(value, ordinality)
+      WHERE COALESCE(operation_item.value->>'operation_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    ),
     'code', CASE
       WHEN v_claimed_count = 0 THEN 'NO_DUE_BATCH'
       ELSE 'DUE_OPERATION_STARTED'

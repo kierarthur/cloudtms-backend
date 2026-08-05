@@ -7,7 +7,10 @@ const root = path.resolve(__dirname, '..');
 const worker = fs.readFileSync(path.join(root, 'broker', 'src', 'index.js'), 'utf8');
 const wrangler = fs.readFileSync(path.join(root, 'wrangler.toml'), 'utf8');
 const recoverySql = fs.readFileSync(path.join(root, 'supabase', 'repeatable', '04082026_2314_banking_pay_operation_continuation_recovery_due_v1.sql'), 'utf8');
-const genericOperationSql = fs.readFileSync(path.join(root, 'supabase', 'repeatable', '26052026_2100HRS_NEW_FUNCTIONS.sql'), 'utf8');
+const genericOperationSql = [
+  '05082026_0914_banking_pay_operation_claim_next.sql',
+  '05082026_0915_banking_pay_operation_release_lease.sql'
+].map((name) => fs.readFileSync(path.join(root, 'supabase', 'repeatable', name), 'utf8')).join('\n');
 
 function functionBody(name) {
   const start = worker.indexOf(`function ${name}`);

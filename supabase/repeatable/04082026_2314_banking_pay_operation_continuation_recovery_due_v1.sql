@@ -64,33 +64,30 @@ eligible AS (
     ) AS last_meaningful_activity_utc
   FROM public.banking_pay_operations AS operation_row
   CROSS JOIN validated AS validation
-  JOIN LATERAL (
-    SELECT config_row.enabled, config_row.lock_seconds, config_row.max_advance_ms
+  LEFT JOIN LATERAL (
+    SELECT config_row.lock_seconds, config_row.max_advance_ms
     FROM public.banking_pay_operation_config AS config_row
     WHERE upper(btrim(config_row.operation_type)) = upper(btrim(operation_row.operation_type))
       AND upper(btrim(config_row.phase)) IN (upper(btrim(operation_row.phase)), 'ALL')
     ORDER BY CASE WHEN upper(btrim(config_row.phase)) = upper(btrim(operation_row.phase)) THEN 0 ELSE 1 END,
              config_row.id
     LIMIT 1
-  ) AS operation_config ON operation_config.enabled IS TRUE
+  ) AS operation_config ON true
   WHERE COALESCE(array_length(validation.operation_types, 1), 0) > 0
     AND upper(btrim(operation_row.operation_type)) = ANY(validation.operation_types)
-    AND upper(btrim(operation_row.status)) IN ('QUEUED', 'RUNNING', 'WAITING', 'WAITING_PROVIDER')
-    AND upper(btrim(COALESCE(operation_row.runner_state, 'IDLE'))) IN ('RUNNABLE', 'RUNNING', 'IDLE', 'WAITING_PROVIDER', 'WAITING_CHILD')
-    AND COALESCE(operation_row.requires_user_action, false) IS FALSE
-    AND COALESCE(operation_row.attempt_count, 0) < COALESCE(operation_row.max_attempts, 10)
-    AND COALESCE(NULLIF(operation_row.progress_json->>'continuation_no_progress_count', '')::integer, 0) < 5
-    AND (operation_row.lease_owner IS NULL OR operation_row.lease_expires_at_utc IS NULL OR operation_row.lease_expires_at_utc <= validation.checked_at_utc)
-    AND (operation_row.locked_by IS NULL OR operation_row.lock_expires_at_utc IS NULL OR operation_row.lock_expires_at_utc <= validation.checked_at_utc)
-    AND (operation_row.run_after_utc IS NULL OR operation_row.run_after_utc <= validation.checked_at_utc)
-    AND NOT (
-      upper(btrim(operation_row.status)) = 'WAITING_PROVIDER'
-      AND operation_row.run_after_utc IS NULL
-    )
     AND (
-      upper(btrim(COALESCE(operation_row.runner_state, ''))) <> 'WAITING_CHILD'
+      (
+        upper(btrim(COALESCE(operation_row.status, ''))) = 'RUNNING'
+        AND upper(btrim(COALESCE(operation_row.runner_state, ''))) IN ('RUNNABLE', 'RUNNING', 'IDLE')
+      )
       OR (
-        COALESCE(operation_row.progress_json->>'child_operation_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+        upper(btrim(COALESCE(operation_row.status, ''))) = 'WAITING'
+        AND upper(btrim(COALESCE(operation_row.runner_state, ''))) = 'RUNNABLE'
+      )
+      OR (
+        upper(btrim(COALESCE(operation_row.status, ''))) = 'WAITING'
+        AND upper(btrim(COALESCE(operation_row.runner_state, ''))) = 'WAITING_CHILD'
+        AND COALESCE(operation_row.progress_json->>'child_operation_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
         AND EXISTS (
           SELECT 1
           FROM public.banking_pay_operations AS child_operation
@@ -99,9 +96,37 @@ eligible AS (
             AND upper(btrim(COALESCE(child_operation.status, ''))) IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED')
         )
       )
+      OR (
+        upper(btrim(COALESCE(operation_row.status, ''))) = 'WAITING_PROVIDER'
+        AND upper(btrim(COALESCE(operation_row.runner_state, ''))) IN ('WAITING_PROVIDER', 'RUNNABLE')
+        AND (
+          (
+            upper(btrim(COALESCE(operation_row.operation_type, ''))) = 'PAYMENT_EXECUTE'
+            AND (
+              upper(btrim(COALESCE(operation_row.phase, ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+              OR upper(btrim(COALESCE(operation_row.progress_json->>'phase', operation_row.progress_json->>'operation_phase', operation_row.progress_json->>'operationPhase', operation_row.progress_json->>'next_phase', operation_row.progress_json->>'nextPhase', ''))) IN ('APPLY_RAIL_UPDATES', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT', 'PROVIDER_WAITING', 'WAITING_PROVIDER_CONFIRMATION', 'POLL_PROVIDER', 'PROVIDER_POLL', 'APPLY_PROVIDER_UPDATES', 'CHECK_PROVIDER_OUTCOME')
+              OR upper(btrim(COALESCE(operation_row.resume_reason, operation_row.progress_json->>'resume_reason', operation_row.progress_json->>'resumeReason', ''))) IN ('AWAITING_PROVIDER_OUTCOME', 'WAITING_PROVIDER', 'WAIT_PROVIDER', 'PROVIDER_WAIT')
+            )
+          )
+          OR (
+            upper(btrim(COALESCE(operation_row.operation_type, ''))) = 'PAYMENT_SETTLEMENT'
+            AND (
+              upper(btrim(COALESCE(operation_row.phase, ''))) = 'APPLY_SETTLEMENT_CHUNKS'
+              OR upper(btrim(COALESCE(operation_row.progress_json->>'phase', operation_row.progress_json->>'operation_phase', operation_row.progress_json->>'operationPhase', operation_row.progress_json->>'next_phase', operation_row.progress_json->>'nextPhase', ''))) = 'APPLY_SETTLEMENT_CHUNKS'
+            )
+          )
+        )
+      )
     )
-    AND upper(btrim(COALESCE(operation_row.runner_state, ''))) NOT IN ('WAITING_USER', 'WAITING_USER_REVIEW', 'WAITING_AUTHORISATION', 'WAITING_AUTHORIZATION')
-    AND upper(btrim(COALESCE(operation_row.resume_reason, ''))) NOT IN ('REVIEW_REQUIRED', 'AWAITING_AUTHORISATION', 'WAITING_AUTHORISATION', 'WAITING_USER')
+    AND COALESCE(operation_row.requires_user_action, false) IS FALSE
+    AND COALESCE(operation_row.attempt_count, 0) < COALESCE(operation_row.max_attempts, 10)
+    AND COALESCE(NULLIF(operation_row.progress_json->>'continuation_no_progress_count', '')::integer, 0) < 5
+    AND (operation_row.lease_owner IS NULL OR operation_row.lease_expires_at_utc IS NULL OR operation_row.lease_expires_at_utc <= validation.checked_at_utc)
+    AND (operation_row.run_after_utc IS NULL OR operation_row.run_after_utc <= validation.checked_at_utc)
+    AND NOT (
+      upper(btrim(operation_row.status)) = 'WAITING_PROVIDER'
+      AND operation_row.run_after_utc IS NULL
+    )
 ),
 due AS (
   SELECT eligible.*

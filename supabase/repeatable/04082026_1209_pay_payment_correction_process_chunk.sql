@@ -267,7 +267,17 @@ BEGIN
       'requires_user_action', COALESCE((v_phase_result->>'complete')::boolean, false),
       'processing_continues', NOT COALESCE((v_phase_result->>'complete')::boolean, false),
       'changed_scope_json', '{}'::jsonb,
-      'live_signal_updates', '{}'::jsonb
+      'live_signal_updates', '{}'::jsonb,
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', NOT COALESCE((v_phase_result->>'complete')::boolean, false),
+        'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', CASE WHEN COALESCE((v_phase_result->>'complete')::boolean, false) THEN 'AWAITING_REAUTHENTICATION' ELSE 'PREPARE_SELECTION' END,
+        'run_after_utc', CASE WHEN COALESCE((v_phase_result->>'complete')::boolean, false) THEN NULL ELSE v_now END,
+        'reason', CASE WHEN COALESCE((v_phase_result->>'complete')::boolean, false) THEN 'SELECTION_READY_FOR_REVIEW' ELSE 'SELECTION_PAGE_COMPLETE' END,
+        'successor_relation', CASE WHEN COALESCE((v_phase_result->>'complete')::boolean, false) THEN 'NONE' ELSE 'SELF' END,
+        'requires_user_action', COALESCE((v_phase_result->>'complete')::boolean, false), 'terminal', false
+      )
     );
   END IF;
 
@@ -307,7 +317,14 @@ BEGIN
       'requires_user_action', false,
       'processing_continues', true,
       'changed_scope_json', '{}'::jsonb,
-      'live_signal_updates', '{}'::jsonb
+      'live_signal_updates', '{}'::jsonb,
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', true, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', COALESCE(v_phase_result->>'phase', CASE WHEN COALESCE((v_phase_result->>'complete')::boolean, false) THEN 'PROCESS_CHUNKS' ELSE 'EXPAND_WORK' END),
+        'run_after_utc', v_now, 'reason', 'PAYMENT_CORRECTION_EXPAND_MORE_WORK',
+        'successor_relation', 'SELF', 'requires_user_action', false, 'terminal', false
+      )
     );
   END IF;
 
@@ -478,6 +495,13 @@ BEGIN
       'live_signal_updates', pg_catalog.jsonb_build_object(
         'overview_updated', v_applied_count > 0,
         'payment_status_updated', v_applied_count > 0
+      ),
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', true, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', CASE WHEN v_nonterminal_count = 0 THEN 'FINALISE' ELSE 'PROCESS_CHUNKS' END,
+        'run_after_utc', v_now, 'reason', 'PAYMENT_CORRECTION_MORE_WORK',
+        'successor_relation', 'SELF', 'requires_user_action', false, 'terminal', false
       ),
       'code', 'PAYMENT_CORRECTION_PROCESS_PAGE_COMPLETE'
     );
@@ -803,6 +827,12 @@ BEGIN
         'processing_continues', true,
         'changed_scope_json', '{}'::jsonb,
         'live_signal_updates', '{}'::jsonb,
+        'continuation', pg_catalog.jsonb_build_object(
+          'required', true, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+          'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+          'phase', 'FINALISE', 'run_after_utc', v_now, 'reason', 'PAYMENT_CORRECTION_FINALISE_MORE_WORK',
+          'successor_relation', 'SELF', 'requires_user_action', false, 'terminal', false
+        ),
         'code', 'PAYMENT_CORRECTION_FINALISE_SUMMARY_COMPLETE'
       );
     END IF;
@@ -907,7 +937,7 @@ BEGIN
 
       UPDATE public.banking_pay_operations AS integrity_operation
       SET phase = 'REFRESH_WORKBENCH', status = 'RUNNING', runner_state = 'RUNNABLE',
-          requires_user_action = true, run_after_utc = v_now,
+          requires_user_action = false, run_after_utc = v_now,
           result_json = COALESCE(integrity_operation.result_json, '{}'::jsonb) || v_final_result,
           error_json = pg_catalog.jsonb_build_object('code', 'PAYMENT_CORRECTION_SCOPE_INTEGRITY_CONFLICT'),
           progress_json = COALESCE(integrity_operation.progress_json, '{}'::jsonb)
@@ -932,6 +962,13 @@ BEGIN
         'request_status', 'FAILED', 'result', v_final_result,
         'complete', false, 'requires_user_action', true,
         'processing_continues', true,
+        'continuation', pg_catalog.jsonb_build_object(
+          'required', true, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+          'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+          'phase', 'REFRESH_WORKBENCH', 'run_after_utc', v_now,
+          'reason', 'PAYMENT_CORRECTION_INTEGRITY_REFRESH', 'successor_relation', 'SELF',
+          'requires_user_action', false, 'terminal', false
+        ),
         'code', 'PAYMENT_CORRECTION_SCOPE_INTEGRITY_CONFLICT'
       );
     END IF;
@@ -1052,6 +1089,13 @@ BEGIN
         'payment_status_updated', true,
         'paye_schedule_updated',
           pg_catalog.upper(COALESCE(v_batch.batch_kind_fixed, '')) = 'PAYE'
+      ),
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', true, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', 'REFRESH_WORKBENCH', 'run_after_utc', v_now,
+        'reason', 'PAYMENT_CORRECTION_FINANCIAL_FINALISED', 'successor_relation', 'SELF',
+        'requires_user_action', false, 'terminal', false
       ),
       'code', 'PAYMENT_CORRECTION_FINALISED'
     );
@@ -1203,6 +1247,17 @@ BEGIN
       'live_signal_updates', pg_catalog.jsonb_build_object(
         'workbench_refresh', v_refresh_result
       ),
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', v_refresh_has_more, 'operation_id', v_operation.id,
+        'operation_type', 'PAYMENT_CORRECTION', 'pay_batch_id', v_request.pay_batch_id,
+        'root_operation_id', v_operation.root_operation_id,
+        'phase', CASE WHEN v_refresh_has_more THEN 'REFRESH_WORKBENCH' ELSE 'COMPLETE' END,
+        'run_after_utc', CASE WHEN v_refresh_has_more THEN v_now ELSE NULL END,
+        'reason', CASE WHEN v_refresh_has_more THEN 'PAYMENT_CORRECTION_REFRESH_MORE_WORK' ELSE 'PAYMENT_CORRECTION_COMPLETE' END,
+        'successor_relation', CASE WHEN v_refresh_has_more THEN 'SELF' ELSE 'NONE' END,
+        'requires_user_action', CASE WHEN v_refresh_has_more THEN false ELSE COALESCE(v_operation.requires_user_action, false) END,
+        'terminal', NOT v_refresh_has_more
+      ),
       'code', CASE WHEN v_refresh_has_more THEN 'PAYMENT_CORRECTION_WORKBENCH_PAGE_STAGED' ELSE 'PAYMENT_CORRECTION_COMPLETE' END
     );
   END IF;
@@ -1231,6 +1286,13 @@ BEGIN
       'live_signal_updates', pg_catalog.jsonb_build_object(
         'workbench_refresh_staging_complete', true,
         'workbench_freshness_must_be_read_from_jobs_and_candidate_state', true
+      ),
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', false, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', 'COMPLETE', 'run_after_utc', NULL, 'reason', 'PAYMENT_CORRECTION_COMPLETE',
+        'successor_relation', 'NONE', 'requires_user_action', COALESCE(v_operation.requires_user_action, false),
+        'terminal', true
       ),
       'code', 'PAYMENT_CORRECTION_ALREADY_COMPLETE'
     );

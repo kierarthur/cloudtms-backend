@@ -397,6 +397,14 @@ BEGIN
         'requires_authorisation', v_request.status IN ('REQUESTED','AWAITING_AUTHORISATION'),
         'display_status', CASE WHEN v_request.status = 'PLANNING' THEN 'Preparing payment selection' ELSE 'Cancellation request already exists' END,
         'display_message', 'CloudTMS returned the existing request for this exact idempotency contract.',
+        'continuation', pg_catalog.jsonb_build_object(
+          'required', v_request.status = 'PLANNING', 'operation_id', v_operation_id,
+          'operation_type', 'PAYMENT_CORRECTION', 'pay_batch_id', v_request.pay_batch_id,
+          'root_operation_id', NULL, 'phase', (SELECT operation_row.phase FROM public.banking_pay_operations AS operation_row WHERE operation_row.id = v_operation_id),
+          'run_after_utc', (SELECT operation_row.run_after_utc FROM public.banking_pay_operations AS operation_row WHERE operation_row.id = v_operation_id),
+          'reason', 'PAYMENT_CORRECTION_PREPARE', 'successor_relation', CASE WHEN v_request.status = 'PLANNING' THEN 'SELF' ELSE 'NONE' END,
+          'requires_user_action', v_request.status <> 'PLANNING', 'terminal', v_request.status IN ('APPLIED','APPLIED_WITH_BLOCKERS','BLOCKED','FAILED','REJECTED','CANCELLED')
+        ),
         'code', 'PAYMENT_CORRECTION_REQUEST_EXISTING'
       );
     END IF;
@@ -466,6 +474,12 @@ BEGIN
       'requires_reauthentication', false, 'requires_authorisation', false,
       'display_status', 'Preparing payment selection',
       'display_message', 'CloudTMS is preparing the exact payment selection for review.',
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', true, 'operation_id', v_operation_id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', p_pay_batch_id, 'root_operation_id', NULL, 'phase', 'PREPARE_SELECTION',
+        'run_after_utc', v_now, 'reason', 'PAYMENT_CORRECTION_PREPARE', 'successor_relation', 'SELF',
+        'requires_user_action', false, 'terminal', false
+      ),
       'code', 'PAYMENT_CORRECTION_PLANNING_STARTED'
     );
   END IF;
@@ -513,6 +527,16 @@ BEGIN
       'requires_authorisation', v_request.status IN ('REQUESTED','AWAITING_AUTHORISATION'),
       'display_status', 'Cancellation request already started',
       'display_message', 'CloudTMS returned the already-committed cancellation request.',
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', v_request.status IN ('AUTHORISED','EXPANDED','PROCESSING'),
+        'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', v_operation.phase, 'run_after_utc', v_operation.run_after_utc,
+        'reason', 'PAYMENT_CORRECTION_ALREADY_STARTED',
+        'successor_relation', CASE WHEN v_request.status IN ('AUTHORISED','EXPANDED','PROCESSING') THEN 'SELF' ELSE 'NONE' END,
+        'requires_user_action', v_request.status IN ('REQUESTED','AWAITING_AUTHORISATION'),
+        'terminal', v_request.status IN ('APPLIED','APPLIED_WITH_BLOCKERS','BLOCKED','FAILED','REJECTED','CANCELLED')
+      ),
       'code', 'REQUEST_ALREADY_STARTED'
     );
   END IF;
@@ -706,6 +730,12 @@ BEGIN
       'requires_reauthentication', false, 'requires_authorisation', false,
       'display_status', 'Payment status changed',
       'display_message', 'Payment status changed. Refresh and select the payments again.',
+      'continuation', pg_catalog.jsonb_build_object(
+        'required', false, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+        'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+        'phase', 'COMPLETE', 'run_after_utc', NULL, 'reason', 'SELECTION_SCOPE_CHANGED',
+        'successor_relation', 'NONE', 'requires_user_action', true, 'terminal', true
+      ),
       'code', 'SELECTION_SCOPE_CHANGED',
       'message', 'Payment status changed. Refresh and select the payments again.'
     );
@@ -845,6 +875,16 @@ BEGIN
     'requires_authorisation', v_request.status IN ('REQUESTED','AWAITING_AUTHORISATION'),
     'display_status', CASE WHEN v_command = 'START_AUTO' THEN 'Failed payment release authorised' ELSE 'Cancellation requested' END,
     'display_message', CASE WHEN v_command = 'START_AUTO' THEN 'CloudTMS is processing the provider-confirmed failed-payment release.' ELSE 'The cancellation request is awaiting the configured financial approval.' END,
+    'continuation', pg_catalog.jsonb_build_object(
+      'required', v_request.status IN ('AUTHORISED','EXPANDED','PROCESSING'),
+      'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
+      'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
+      'phase', v_operation.phase, 'run_after_utc', v_operation.run_after_utc,
+      'reason', CASE WHEN v_command = 'START_AUTO' THEN 'AUTO_NO_MONEY_START' ELSE 'PAYMENT_CORRECTION_START' END,
+      'successor_relation', CASE WHEN v_request.status IN ('AUTHORISED','EXPANDED','PROCESSING') THEN 'SELF' ELSE 'NONE' END,
+      'requires_user_action', v_request.status IN ('REQUESTED','AWAITING_AUTHORISATION'),
+      'terminal', false
+    ),
     'code', CASE WHEN v_command = 'START_AUTO' THEN 'AUTO_REQUEST_STARTED' ELSE 'PAYMENT_CORRECTION_REQUESTED' END
   );
 END;

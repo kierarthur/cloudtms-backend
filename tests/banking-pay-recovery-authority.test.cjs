@@ -49,6 +49,18 @@ const transferScopeSeedSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/20072026_1215_align_transfer_scope_with_bank_projection.sql'),
   'utf8'
 );
+const settleRailSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/04082026_1211_pay_settle_rail.sql'),
+  'utf8'
+);
+const preBankCancelSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/04082026_1158_pay_pre_bank_cancel_apply_work_item.sql'),
+  'utf8'
+);
+const noMoneyUnwindSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/04082026_1158_pay_no_money_unwind_apply_work_item.sql'),
+  'utf8'
+);
 const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 
 function functionBody(name, nextName, source = sql) {
@@ -2064,7 +2076,7 @@ test('the sole public freshness wrapper delegates recovery comparisons to the ow
 });
 
 test('rail settlement rolls resolved recoveries up on frozen source authority', () => {
-  const body = functionBody('pay_settle_rail', 'pay_manual_payment_retry');
+  const body = functionBody('pay_settle_rail', null, settleRailSql);
 
   assert.match(
     body,
@@ -2173,8 +2185,8 @@ test('explicit correction residual remaining is not consumed twice during financ
 });
 
 test('cancelling or unwinding an unsettled draft does not add its reservation to component outstanding', () => {
-  const preBankCancel = functionBody('pay_pre_bank_cancel_apply_work_item', 'pay_no_money_unwind_apply_work_item');
-  const noMoneyUnwind = functionBody('pay_no_money_unwind_apply_work_item', '_pay_payment_correction_validate_accepted_finance_resolution');
+  const preBankCancel = functionBody('pay_pre_bank_cancel_apply_work_item', null, preBankCancelSql);
+  const noMoneyUnwind = functionBody('pay_no_money_unwind_apply_work_item', null, noMoneyUnwindSql);
 
   for (const body of [preBankCancel, noMoneyUnwind]) {
     assert.match(

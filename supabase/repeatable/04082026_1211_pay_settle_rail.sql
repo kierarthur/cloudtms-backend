@@ -7416,6 +7416,20 @@ begin
       'no_bank_transfer_event_count', case when v_no_bank_payment_execution_validated then coalesce(v_no_bank_transfer_event_count, 0) else null::integer end,
       'no_bank_provider_attempt_count', case when v_no_bank_payment_execution_validated then coalesce(v_no_bank_provider_attempt_count, 0) else null::integer end
     )
+  ) || jsonb_build_object(
+    'continuation', jsonb_build_object(
+      'required', v_execution_operation_id IS NOT NULL,
+      'operation_id', v_execution_operation_id,
+      'operation_type', 'PAYMENT_EXECUTE',
+      'pay_batch_id', p_pay_batch_id,
+      'root_operation_id', v_execution_operation_id,
+      'phase', 'WAITING_CHILD',
+      'run_after_utc', clock_timestamp(),
+      'reason', 'SETTLEMENT_STATE_APPLIED',
+      'successor_relation', CASE WHEN v_execution_operation_id IS NULL THEN 'NONE' ELSE 'ROOT' END,
+      'requires_user_action', false,
+      'terminal', false
+    )
   );
 end;
 $function$;

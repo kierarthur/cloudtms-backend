@@ -6,6 +6,8 @@ on:
     paths:
       - "supabase/migrations/**"
       - "supabase/repeatable/**"
+      - "supabase/verification/**"
+      - "tests/banking-pay-revision5-final-authority.test.cjs"
       - ".github/workflows/supabase-migrate.yml"
   workflow_dispatch: {}
 
@@ -32,6 +34,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
+
+      - name: Verify Banking Pay function source authority
+        run: node --test tests/banking-pay-revision5-final-authority.test.cjs
 
       - name: Apply repeatables first, then migrations (UK date order)
         shell: bash
@@ -245,20 +250,26 @@ jobs:
             echo "BASELINE complete for unchanged repeatables."
           fi
 
+          REAPPLY_AFTER_EARLIER_CHANGE=false
           for f in "${REP_FILES_SORTED[@]}"; do
             base="$(basename "$f")"
             content_hash="$(repeatable_hash "$f")"
             installed_hash="${REPEATABLE_LEDGER_HASHES[$base]:-}"
 
-            if [[ "$installed_hash" == "$content_hash" ]]; then
+            if [[ "$installed_hash" == "$content_hash" && "$REAPPLY_AFTER_EARLIER_CHANGE" != "true" ]]; then
               echo "SKIP unchanged repeatable: $base"
               continue
             fi
 
-            echo "APPLY new/changed repeatable: $base"
+            if [[ "$installed_hash" == "$content_hash" ]]; then
+              echo "REAPPLY unchanged later repeatable after earlier authority change: $base"
+            else
+              echo "APPLY new/changed repeatable: $base"
+            fi
             apply_file "$f"
             record_repeatable_hash "$base" "$content_hash"
             REPEATABLE_LEDGER_HASHES["${base}"]="${content_hash}"
+            REAPPLY_AFTER_EARLIER_CHANGE=true
           done
 
           if [[ "${REPEATABLE_BOOTSTRAP_COMPLETE}" != "v1" ]]; then
@@ -279,5 +290,7 @@ jobs:
               MIGRATION_LEDGER_NAMES["${base}"]="1"
             fi
           done
+
+          node supabase/verification/verify_banking_pay_revision5_catalog.mjs
 
           echo "Done."
