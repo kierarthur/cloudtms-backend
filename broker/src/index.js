@@ -158295,7 +158295,14 @@ async function handleReady(env) {
   return new Response(JSON.stringify(diagnostics), { status: diagnostics.ready ? 200 : 503, headers: { ...JSON_HEADERS, 'cache-control': 'no-store' } });
 }
 function handleVersion() {
-  return new Response(JSON.stringify({ version: "1.2.0", built_at: new Date().toISOString() }), { status: 200, headers: JSON_HEADERS });
+  return new Response(JSON.stringify({
+    version: "1.2.0",
+    banking_pay_cancellation_stage2: {
+      revision: "5C",
+      implementation_commit: "55fa9be6"
+    },
+    built_at: new Date().toISOString()
+  }), { status: 200, headers: JSON_HEADERS });
 }
 
 /*

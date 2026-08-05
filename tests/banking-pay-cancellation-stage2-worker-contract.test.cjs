@@ -159,3 +159,10 @@ test('cancellation producers preserve the typed SQL descriptor and report enqueu
   assert.match(eventWake, /slice\(0, 4\)/);
   assert.doesNotMatch(eventWake, /Object\.values|recursive/i);
 });
+
+test('public version route carries the deployed Stage 2 source marker', () => {
+  const body = functionBody('handleVersion');
+  assert.match(body, /banking_pay_cancellation_stage2/);
+  assert.match(body, /revision:\s*"5C"/);
+  assert.match(body, /implementation_commit:\s*"55fa9be6"/);
+});
