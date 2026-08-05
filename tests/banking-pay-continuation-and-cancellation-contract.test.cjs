@@ -30,6 +30,8 @@ test('one queue message makes one generic claim-and-advance call and never precl
 
 test('queue continuation is explicit, bounded and awaits a successor before acknowledgement', () => {
   const queueBody = functionBody('handleBankingPayContinuationQueue');
+  assert.match(queueBody, /messages\.length !== 1/);
+  assert.match(queueBody, /BANKING_PAY_CONTINUATION_BATCH_SIZE_INVALID/);
   assert.match(queueBody, /flag === false/);
   assert.match(queueBody, /message\.ack\(\)/);
   assert.match(queueBody, /message\.retry\(/);
@@ -55,11 +57,35 @@ test('parent execute and settlement operations hand children to the queue', () =
 });
 
 test('semantic progress excludes lease timestamps and uses the five-strike fuse', () => {
-  const witness = functionBody('buildBankingPayContinuationProgressWitness');
-  assert.doesNotMatch(witness, /lease_owner|lease_expires|locked_by|updated_at/);
+  const value = functionBody('buildBankingPayContinuationProgressValue');
+  assert.doesNotMatch(value, /universal[\s\S]{0,500}runner_state:/);
+  assert.doesNotMatch(value, /universal[\s\S]{0,500}run_after_utc:/);
+  assert.doesNotMatch(value, /lease_owner|lease_expires|locked_by|updated_at/);
   assert.match(worker, /continuation_no_progress_count/);
   assert.match(worker, />= 5/);
   assert.match(worker, /WAITING_USER_REVIEW/);
+});
+
+test('generic continuation boundary rejects unsafe and unknown descriptors before sending', () => {
+  const mapper = functionBody('buildBankingPayContinuationMessage');
+  const enqueue = functionBody('enqueueBankingPayOperationContinuations');
+  assert.match(worker, /function bankingPayContinuationSourcePolicy/);
+  assert.match(mapper, /BANKING_PAY_CONTINUATION_SOURCE_INVALID/);
+  assert.match(mapper, /BANKING_PAY_CONTINUATION_EMBEDDED_SOURCE_INVALID/);
+  assert.match(mapper, /BANKING_PAY_CONTINUATION_SOURCE_SCOPE_INVALID/);
+  assert.match(mapper, /BANKING_PAY_CONTINUATION_TERMINAL_REQUIRED_INVALID/);
+  assert.match(mapper, /BANKING_PAY_CONTINUATION_USER_WAIT_REQUIRED_INVALID/);
+  assert.match(mapper, /BANKING_PAY_CONTINUATION_NONE_REQUIRED_INVALID/);
+  assert.match(mapper, /BANKING_PAY_CONTINUATION_WAIT_PHASE_INVALID/);
+  assert.ok(enqueue.indexOf('buildBankingPayContinuationMessage') < enqueue.indexOf('await env.BANKING_PAY_CONTINUATION_QUEUE.send'));
+});
+
+test('payment correction dispatcher preserves the exact SQL retry descriptor', () => {
+  const body = functionBody('advancePaymentCorrectionOperation');
+  assert.match(body, /result\.continuation/);
+  assert.match(body, /PAYMENT_CORRECTION_SQL_CONTINUATION_INVALID/);
+  assert.match(body, /sqlContinuationSource\.run_after_utc/);
+  assert.match(body, /reason: String\(sqlContinuationSource\.reason/);
 });
 
 test('recovery RPC is read-only, bounded and calculates the effective stale threshold', () => {

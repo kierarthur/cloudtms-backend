@@ -83,6 +83,11 @@ DECLARE
   v_page_unselected_chain_hash text;
   v_page_summary_hash text;
   v_actionable_cancelled_provider_scope_count integer := 0;
+  v_source_event public.pay_bank_transfer_events%rowtype;
+  v_auto_classification_result jsonb := '{}'::jsonb;
+  v_auto_unwind_enabled boolean := false;
+  v_existing_money_moved boolean := false;
+  v_contention_retry_at timestamptz;
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
@@ -196,16 +201,120 @@ BEGIN
      AND COALESCE(v_request.auto_requested, false) THEN
     -- Revalidate the exact automatic authority while the canonical locks and
     -- lease are held.  request_start re-enters the same transaction/locks.
+    SELECT coalesce(settings_row.banking_pay_auto_unwind_terminal_no_money, false)
+    INTO v_auto_unwind_enabled
+    FROM public.settings_defaults AS settings_row
+    ORDER BY settings_row.id
+    LIMIT 1;
+
+    SELECT event_row.*
+    INTO v_source_event
+    FROM public.pay_bank_transfer_events AS event_row
+    WHERE event_row.id = v_request.source_bank_event_id
+      AND event_row.pay_batch_id = v_batch.id;
+
+    v_auto_classification_result := public._pay_payment_movement_classify(
+      v_batch.id,
+      v_request.selection_json
+    );
+
+    v_existing_money_moved := false;
+    IF v_source_event.pay_bank_transfer_id IS NOT NULL THEN
+      SELECT coalesce(movement_state.is_final_money_moved, false)
+      INTO v_existing_money_moved
+      FROM public.pay_bank_transfers AS transfer_row
+      CROSS JOIN LATERAL public._pay_rail_state_money_movement_classify(
+        transfer_row.status,
+        transfer_row.rail_state,
+        coalesce(transfer_row.rail_meta_json, '{}'::jsonb),
+        coalesce(transfer_row.rail_meta_json, '{}'::jsonb)
+      ) AS movement_state
+      WHERE transfer_row.id = v_source_event.pay_bank_transfer_id
+      LIMIT 1;
+
+      v_existing_money_moved := coalesce(v_existing_money_moved, false) OR EXISTS (
+        SELECT 1
+        FROM public.pay_bank_transfer_events AS paid_event
+        WHERE paid_event.pay_bank_transfer_id = v_source_event.pay_bank_transfer_id
+          AND paid_event.id IS DISTINCT FROM v_source_event.id
+          AND paid_event.normalised_state IN ('COMPLETED', 'PAID', 'SETTLED')
+      );
+    END IF;
+
     IF v_request.source_bank_event_id IS NULL
-       OR NOT EXISTS (
-         SELECT 1
-         FROM public.pay_bank_transfer_events AS auto_event
-         WHERE auto_event.id = v_request.source_bank_event_id
-           AND auto_event.pay_batch_id = v_batch.id
-           AND auto_event.normalised_state IN ('FAILED', 'REJECTED', 'CANCELLED', 'CONFIRMED_NOT_PAID')
+       OR v_request.selection_json->>'requested_action' IS DISTINCT FROM 'NO_MONEY_UNWIND'
+       OR coalesce(v_auto_unwind_enabled, false) IS NOT TRUE
+       OR v_source_event.id IS NULL
+       OR v_source_event.pay_bank_transfer_id IS NULL
+       OR v_source_event.event_source NOT IN ('PROVIDER_WEBHOOK', 'PROVIDER_POLL', 'PROVIDER_RESPONSE')
+       OR v_source_event.provider_event_transport NOT IN ('PROVIDER_WEBHOOK', 'FAILED_WEBHOOK_REPLAY', 'PROVIDER_POLL', 'PROVIDER_RESPONSE')
+       OR v_source_event.mapping_status IS DISTINCT FROM 'MATCHED'
+       OR v_source_event.mapping_method NOT IN (
+         'TRANSFER_ID', 'PROVIDER_EVENT_ID', 'PROVIDER_TRANSACTION_ID', 'REQUEST_ID',
+         'PROVIDER_REFERENCE', 'RAIL_TX_ID', 'MATCHED_PROVIDER_EVENT', 'MANUAL_TRANSFER_SELECTION'
+       )
+       OR v_source_event.normalised_state NOT IN ('FAILED', 'REJECTED', 'CANCELLED')
+       OR v_source_event.correction_disposition IS DISTINCT FROM 'AUTO_PROCESSING'
+       OR coalesce((v_auto_classification_result->>'safe_to_auto_apply')::boolean, false) IS NOT TRUE
+       OR (
+         v_auto_classification_result->>'classification' NOT IN ('PROVIDER_CANCELLED_NO_MONEY', 'PROVIDER_FAILED_NO_MONEY')
+         AND v_auto_classification_result->>'recommended_action' IS DISTINCT FROM 'NO_MONEY_UNWIND_AND_RECALCULATE'
+       )
+       OR coalesce(v_existing_money_moved, false)
+       OR pg_catalog.jsonb_typeof(v_request.accepted_resolution_json) IS DISTINCT FROM 'object'
+       OR v_request.accepted_resolution_json->>'contract_version' IS DISTINCT FROM '2'
+       OR v_request.accepted_resolution_json->>'requested_action' IS DISTINCT FROM 'NO_MONEY_UNWIND'
+       OR v_request.accepted_resolution_json->>'source_bank_event_id' IS DISTINCT FROM v_source_event.id::text
+       OR v_request.accepted_resolution_json->>'source' IS DISTINCT FROM v_source_event.provider_event_transport
+       OR v_request.accepted_resolution_json->>'event_source' IS DISTINCT FROM v_source_event.event_source
+       OR v_request.accepted_resolution_json->>'provider_key' IS DISTINCT FROM v_source_event.provider_key
+       OR v_request.accepted_resolution_json->>'provider_event_id' IS DISTINCT FROM v_source_event.provider_event_id
+       OR v_request.accepted_resolution_json->>'provider_event_key' IS DISTINCT FROM v_source_event.provider_event_key
+       OR v_request.accepted_resolution_json->>'provider_webhook_receipt_id'
+            IS DISTINCT FROM (CASE WHEN v_source_event.provider_webhook_receipt_id IS NULL THEN NULL ELSE v_source_event.provider_webhook_receipt_id::text END)
+       OR v_request.accepted_resolution_json->>'provider_transaction_id' IS DISTINCT FROM v_source_event.provider_transaction_id
+       OR v_request.accepted_resolution_json->>'provider_request_id' IS DISTINCT FROM v_source_event.provider_request_id
+       OR v_request.accepted_resolution_json->>'mapping_status' IS DISTINCT FROM v_source_event.mapping_status
+       OR v_request.accepted_resolution_json->>'mapping_method' IS DISTINCT FROM v_source_event.mapping_method
+       OR v_request.accepted_resolution_json->>'normalised_state' IS DISTINCT FROM v_source_event.normalised_state
+       OR v_request.accepted_resolution_json->>'classification' IS DISTINCT FROM v_auto_classification_result->>'classification'
+       OR v_request.accepted_resolution_json->>'recommended_action' IS DISTINCT FROM v_auto_classification_result->>'recommended_action'
+       OR coalesce((v_request.accepted_resolution_json->>'safe_to_auto_apply')::boolean, false) IS NOT TRUE
+       OR v_request.accepted_resolution_json->>'correction_disposition' IS DISTINCT FROM 'AUTO_PROCESSING'
+       OR coalesce((v_request.accepted_resolution_json->>'terminal_no_money_evidence')::boolean, false) IS NOT TRUE
+       OR coalesce((v_request.accepted_resolution_json->>'signature_valid')::boolean, false)
+            IS DISTINCT FROM coalesce(v_source_event.provider_signature_valid, (
+              SELECT receipt_row.signature_valid
+              FROM public.bank_provider_webhook_receipts AS receipt_row
+              WHERE receipt_row.id = v_source_event.provider_webhook_receipt_id
+            ), false)
+       OR (
+         v_source_event.provider_event_transport IN ('PROVIDER_WEBHOOK', 'FAILED_WEBHOOK_REPLAY')
+         AND (
+           v_source_event.provider_webhook_receipt_id IS NULL
+           OR coalesce(v_source_event.provider_signature_valid, (
+             SELECT receipt_row.signature_valid
+             FROM public.bank_provider_webhook_receipts AS receipt_row
+             WHERE receipt_row.id = v_source_event.provider_webhook_receipt_id
+           ), false) IS NOT TRUE
+           OR NOT EXISTS (
+             SELECT 1
+             FROM public.bank_provider_webhook_receipts AS receipt_row
+             WHERE receipt_row.id = v_source_event.provider_webhook_receipt_id
+               AND receipt_row.signature_valid IS TRUE
+               AND receipt_row.provider_key IS NOT DISTINCT FROM v_source_event.provider_key
+               AND receipt_row.rail_env IS NOT DISTINCT FROM v_source_event.rail_env
+               AND pg_catalog.upper(coalesce(receipt_row.status, '')) IN (
+                 'VERIFIED', 'NORMALISED', 'NORMALIZED', 'INGESTED', 'FAILED_RETRYABLE', 'UNMATCHED_REVIEW_REQUIRED'
+               )
+           )
+         )
        ) THEN
       RAISE EXCEPTION 'PAYMENT_CORRECTION_AUTO_START_EVIDENCE_STALE'
-        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'SELECTION_STALE')::text;
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'PAYMENT_CORRECTION_AUTO_EVIDENCE_INVALID',
+          'source_bank_event_id', v_request.source_bank_event_id
+        )::text;
     END IF;
 
     v_auto_start_result := public.pay_payment_correction_request_start(
@@ -424,9 +533,23 @@ BEGIN
     FROM public.pay_payment_correction_work_items AS work_row
     WHERE work_row.correction_request_id = p_correction_request_id;
 
+    v_contention_retry_at := v_now;
+    IF v_claimed_count = 0 AND v_nonterminal_count > 0 THEN
+      v_contention_retry_at := v_now + interval '5 seconds';
+      SELECT GREATEST(
+               v_contention_retry_at,
+               coalesce(pg_catalog.min(active_work.locked_at_utc + interval '120 seconds'), v_contention_retry_at)
+             )
+      INTO v_contention_retry_at
+      FROM public.pay_payment_correction_work_items AS active_work
+      WHERE active_work.correction_request_id = p_correction_request_id
+        AND active_work.status = 'PROCESSING'
+        AND active_work.locked_at_utc IS NOT NULL;
+    END IF;
+
     UPDATE public.banking_pay_operations AS processing_operation
     SET phase = CASE WHEN v_nonterminal_count = 0 THEN 'FINALISE' ELSE 'PROCESS_CHUNKS' END,
-        status = 'RUNNING', runner_state = 'RUNNABLE', run_after_utc = v_now,
+        status = 'RUNNING', runner_state = 'RUNNABLE', run_after_utc = v_contention_retry_at,
         completed_units = v_applied_count + v_blocked_count + v_failed_count,
         failed_units = v_blocked_count + v_failed_count,
         progress_json = COALESCE(processing_operation.progress_json, '{}'::jsonb)
@@ -500,7 +623,12 @@ BEGIN
         'required', true, 'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
         'pay_batch_id', v_request.pay_batch_id, 'root_operation_id', v_operation.root_operation_id,
         'phase', CASE WHEN v_nonterminal_count = 0 THEN 'FINALISE' ELSE 'PROCESS_CHUNKS' END,
-        'run_after_utc', v_now, 'reason', 'PAYMENT_CORRECTION_MORE_WORK',
+        'run_after_utc', v_contention_retry_at,
+        'reason', CASE
+          WHEN v_claimed_count = 0 AND v_nonterminal_count > 0
+            THEN 'PAYMENT_CORRECTION_PROCESS_CONTENTION_RETRY'
+          ELSE 'PAYMENT_CORRECTION_MORE_WORK'
+        END,
         'successor_relation', 'SELF', 'requires_user_action', false, 'terminal', false
       ),
       'code', 'PAYMENT_CORRECTION_PROCESS_PAGE_COMPLETE'

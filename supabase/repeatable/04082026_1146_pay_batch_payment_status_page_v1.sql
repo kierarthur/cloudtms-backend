@@ -926,9 +926,26 @@ BEGIN
 
     SELECT pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
         'id', request_row.id,
+        'correction_request_id', request_row.id,
         'status', request_row.status,
+        'request_status', request_row.status,
         'requested_at_utc', request_row.requested_at_utc,
         'updated_at_utc', request_row.updated_at_utc,
+        'is_active', request_row.status IN (
+            'PLANNING', 'PLANNED', 'REQUESTED', 'AWAITING_AUTHORISATION',
+            'AUTHORISED', 'EXPANDED', 'PROCESSING'
+        ),
+        'is_terminal', request_row.status IN (
+            'APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED', 'FAILED',
+            'REJECTED', 'CANCELLED'
+        ),
+        'user_title', CASE
+            WHEN request_row.status IN (
+                'PLANNING', 'PLANNED', 'REQUESTED', 'AWAITING_AUTHORISATION',
+                'AUTHORISED', 'EXPANDED', 'PROCESSING'
+            ) THEN 'Payment cancellation in progress'
+            ELSE 'Latest payment cancellation'
+        END,
         'operation_id', (
             SELECT operation_row.id
             FROM public.banking_pay_operations AS operation_row
@@ -941,7 +958,16 @@ BEGIN
     INTO v_latest_correction_request
     FROM public.pay_payment_correction_requests AS request_row
     WHERE request_row.pay_batch_id = p_pay_batch_id
-    ORDER BY request_row.created_at_utc DESC, request_row.id DESC
+    ORDER BY
+        CASE
+            WHEN request_row.status IN (
+                'PLANNING', 'PLANNED', 'REQUESTED', 'AWAITING_AUTHORISATION',
+                'AUTHORISED', 'EXPANDED', 'PROCESSING'
+            ) THEN 0
+            ELSE 1
+        END,
+        request_row.updated_at_utc DESC,
+        request_row.id DESC
     LIMIT 1;
 
     RETURN pg_catalog.jsonb_build_object(

@@ -3,6 +3,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
+const normalizeSql = (value) => String(value).replace(/\r\n/g, '\n');
+const readSql = (file) => normalizeSql(fs.readFileSync(file, 'utf8'));
+
 const sqlPath = path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
 const sql = fs.readFileSync(sqlPath, 'utf8');
 const sourceBuildSql = fs.readFileSync(
@@ -25,9 +28,8 @@ const correctionRuntimeSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/21072026_1235_00b_import_correction_runtime_guards.sql'),
   'utf8'
 );
-const correctionResidualSql = fs.readFileSync(
-  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql'),
-  'utf8'
+const correctionResidualSql = readSql(
+  path.resolve(__dirname, '../supabase/repeatable/21072026_1235_09_pay_correction_chain_residual_v1.sql')
 );
 const correctionPlpgsqlGuardSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/23072026_1217_disable_plpgsql_check_for_correction_chain_banking.sql'),
@@ -80,6 +82,12 @@ function lastFunctionBody(name, source = sql) {
   const end = source.indexOf('CREATE OR REPLACE FUNCTION public.', start + functionMarker.length);
   return source.slice(start, end > start ? end : source.length);
 }
+
+test('zero-raw residual SQL assertions are portable across LF and CRLF checkouts', () => {
+  const lfFixture = normalizeSql(correctionResidualSql);
+  const crlfFixture = lfFixture.replace(/\n/g, '\r\n');
+  assert.equal(normalizeSql(crlfFixture), lfFixture);
+});
 
 test('finance recovery allocation uses central outstanding-component authority', () => {
   const body = functionBody('pay_preview_candidate_build_finance_case_baseline', 'pay_preview_candidate_build_finance_case_rows');

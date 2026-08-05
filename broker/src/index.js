@@ -40156,13 +40156,24 @@ function buildBankingPayContinuationProgressValue(operationType, value) {
     return out;
   };
   const type = String(operationType || row.operation_type || '').trim().toUpperCase();
+  const status = String(first(row.status, progress.status, result.status) || '').trim().toUpperCase();
+  const runnerState = String(first(row.runner_state, progress.runner_state, result.runner_state) || '').trim().toUpperCase();
+  const phase = String(first(row.phase, progress.phase, progress.next_phase, progress.next_required_phase, result.phase) || '').trim().toUpperCase();
+  const requiresUserAction = first(row.requires_user_action, progress.requires_user_action, result.requires_user_action) === true;
+  const runAfterText = String(first(row.run_after_utc, progress.run_after_utc, result.run_after_utc) || '').trim();
+  const runAfterMs = runAfterText ? Date.parse(runAfterText) : NaN;
+  const terminalStatuses = new Set(['COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED']);
+  const waitClass = terminalStatuses.has(status) || phase === 'COMPLETE'
+    ? `TERMINAL:${status || phase || 'COMPLETE'}`
+    : (requiresUserAction || ['WAITING_USER', 'WAITING_USER_REVIEW', 'WAITING_AUTHORISATION'].includes(runnerState) || status === 'WAITING_AUTHORISATION'
+      ? 'WAITING_USER'
+      : (runnerState === 'WAITING_PROVIDER' || status === 'WAITING_PROVIDER'
+        ? (Number.isFinite(runAfterMs) ? 'WAITING_PROVIDER_POLL' : 'WAITING_PROVIDER_EVENT')
+        : (Number.isFinite(runAfterMs) && runAfterMs > Date.now() ? 'WAITING_SCHEDULED' : 'RUNNABLE')));
   const universal = {
     operation_type: type,
-    status: first(row.status, progress.status),
-    phase: first(row.phase, progress.phase, progress.next_phase, progress.next_required_phase),
-    runner_state: first(row.runner_state, progress.runner_state),
-    requires_user_action: first(row.requires_user_action, progress.requires_user_action, false),
-    run_after_utc: first(row.run_after_utc, progress.run_after_utc),
+    phase,
+    wait_class: waitClass,
     total_units: first(row.total_units, progress.total_units),
     completed_units: first(row.completed_units, progress.completed_units),
     failed_units: first(row.failed_units, progress.failed_units),
@@ -40187,23 +40198,84 @@ async function buildBankingPayContinuationProgressWitness(operationType, value) 
   return sha256BankingPayContinuationValue(buildBankingPayContinuationProgressValue(operationType, value));
 }
 
+function bankingPayContinuationSourcePolicy(sourceValue) {
+  const source = String(sourceValue || '').trim();
+  const allTypes = ['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION'];
+  const policies = {
+    QUEUE_DELIVERY: { types: allTypes, relations: ['SELF', 'CHILD', 'ROOT'] },
+    QUEUE_DELIVERY_VALIDATION: { types: allTypes, relations: ['SELF', 'CHILD', 'ROOT'] },
+    QUEUE_SUCCESSOR: { types: allTypes, relations: ['SELF', 'CHILD', 'ROOT'] },
+    STRANDED_RECOVERY: { types: allTypes, relations: ['SELF'] },
+    DUE_SCHEDULE_DISCOVERY: { types: ['PAYMENT_EXECUTE'], relations: ['SELF'] },
+    handleBankingPayOperationResume: { types: allTypes, relations: ['SELF'] },
+    handleBankingPayOperationAdvance: { types: allTypes, relations: ['SELF'] },
+    handleBankingPayBatchRetryBlockedFunds: { types: ['PAYMENT_RETRY_BLOCKED_FUNDS'], relations: ['SELF'] },
+    handleBankingPayCreateDraft: { types: ['DRAFT_CREATE'], relations: ['SELF'] },
+    handleBankingPayBatchExecutePayment: { types: ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'], relations: ['SELF'] },
+    handleBankingPayBatchSchedule: { types: ['PAYMENT_EXECUTE'], relations: ['SELF'] },
+    handleBankingPayBatchManualConfirm: { types: ['PAYMENT_SETTLEMENT'], relations: ['SELF'] },
+    handleBankingPayAuthTokenAction: { types: ['PAYMENT_SETTLEMENT'], relations: ['SELF'] },
+    handleBankingPayBatchAuthAction: { types: ['PAYMENT_SETTLEMENT'], relations: ['SELF'] },
+    'handleBankingPayAuthTokenAction.wait_for_schedule': { types: ['PAYMENT_EXECUTE'], relations: ['SELF'] },
+    'handleBankingPayAuthTokenAction.submit_provider_transfers': { types: ['PAYMENT_EXECUTE'], relations: ['SELF'] },
+    'handleBankingPayAuthTokenAction.settlement': { types: ['PAYMENT_EXECUTE'], relations: ['SELF'] },
+    'handleBankingPayBatchAuthAction.wait_for_schedule': { types: ['PAYMENT_EXECUTE'], relations: ['SELF'] },
+    'handleBankingPayBatchAuthAction.submit_provider_transfers': { types: ['PAYMENT_EXECUTE'], relations: ['SELF'] },
+    'handleBankingPayBatchAuthAction.settlement': { types: ['PAYMENT_EXECUTE'], relations: ['SELF'] },
+    nudgeBankingPaySettlementFromTerminalBankOutcome: { types: ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT'], relations: ['SELF'] },
+    'nudgeBankingPaySettlementFromTerminalBankOutcome.eventWake': { types: ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT'], relations: ['SELF'] },
+    PAYMENT_CORRECTION_PLAN: { types: ['PAYMENT_CORRECTION'], relations: ['SELF'] },
+    PAYMENT_CORRECTION_START_PREPARED: { types: ['PAYMENT_CORRECTION'], relations: ['SELF'] },
+    PAYMENT_CORRECTION_AUTH_ACTION: { types: ['PAYMENT_CORRECTION'], relations: ['SELF'] },
+    DRAFT_PAYMENT_CANCELLATION_PLAN: { types: ['PAYMENT_CORRECTION'], relations: ['SELF'] },
+    PAID_AFTER_RELEASE_REVIEW_EVENT_WAKE: { types: ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'PAYMENT_CORRECTION'], relations: ['SELF', 'ROOT'] },
+    PAYMENT_STATUS_EVENT_WAKE: { types: ['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'PAYMENT_CORRECTION'], relations: ['SELF', 'ROOT'] }
+  };
+  return Object.prototype.hasOwnProperty.call(policies, source) ? policies[source] : null;
+}
+
 function buildBankingPayContinuationMessage(descriptor, sourceOverride) {
   const source = descriptor && typeof descriptor === 'object' && !Array.isArray(descriptor) ? descriptor : {};
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const operationId = String(source.operation_id || source.operationId || '').trim().toLowerCase();
   const operationType = String(source.operation_type || source.operationType || '').trim().toUpperCase();
   const relation = String(source.successor_relation || source.successorRelation || 'SELF').trim().toUpperCase();
+  const sourceName = String(sourceOverride || source.source || '').trim();
+  const embeddedSourceName = String(source.source || '').trim();
   const allowedTypes = new Set(['DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS', 'PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE', 'PAYMENT_CORRECTION']);
   const allowedRelations = new Set(['SELF', 'CHILD', 'ROOT', 'NONE']);
   if (!uuidRe.test(operationId)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_OPERATION_ID_INVALID'), { code: 'BANKING_PAY_CONTINUATION_OPERATION_ID_INVALID' });
   if (!allowedTypes.has(operationType)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_OPERATION_TYPE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_OPERATION_TYPE_INVALID' });
   if (!allowedRelations.has(relation)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_RELATION_INVALID'), { code: 'BANKING_PAY_CONTINUATION_RELATION_INVALID' });
+  const sourcePolicy = bankingPayContinuationSourcePolicy(sourceName);
+  if (!sourcePolicy) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_SOURCE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_SOURCE_INVALID' });
+  if (embeddedSourceName && !bankingPayContinuationSourcePolicy(embeddedSourceName)) {
+    throw Object.assign(new Error('BANKING_PAY_CONTINUATION_EMBEDDED_SOURCE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_EMBEDDED_SOURCE_INVALID' });
+  }
+  if (!sourcePolicy.types.includes(operationType) || !sourcePolicy.relations.includes(relation)) {
+    throw Object.assign(new Error('BANKING_PAY_CONTINUATION_SOURCE_SCOPE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_SOURCE_SCOPE_INVALID' });
+  }
+  if (source.required === true && source.terminal === true) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_TERMINAL_REQUIRED_INVALID'), { code: 'BANKING_PAY_CONTINUATION_TERMINAL_REQUIRED_INVALID' });
+  if (source.required === true && source.requires_user_action === true) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_USER_WAIT_REQUIRED_INVALID'), { code: 'BANKING_PAY_CONTINUATION_USER_WAIT_REQUIRED_INVALID' });
+  if (source.required === true && relation === 'NONE') throw Object.assign(new Error('BANKING_PAY_CONTINUATION_NONE_REQUIRED_INVALID'), { code: 'BANKING_PAY_CONTINUATION_NONE_REQUIRED_INVALID' });
   const optionalUuid = (value) => {
     const text = String(value || '').trim().toLowerCase();
-    return text && uuidRe.test(text) ? text : null;
+    if (!text) return null;
+    if (!uuidRe.test(text)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_OPTIONAL_UUID_INVALID'), { code: 'BANKING_PAY_CONTINUATION_OPTIONAL_UUID_INVALID' });
+    return text;
   };
   const runAfterText = String(source.run_after_utc || source.runAfterUtc || '').trim();
   const runAfterMs = runAfterText ? Date.parse(runAfterText) : NaN;
+  if (runAfterText && !Number.isFinite(runAfterMs)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_RUN_AFTER_INVALID'), { code: 'BANKING_PAY_CONTINUATION_RUN_AFTER_INVALID' });
+  if (Number.isFinite(runAfterMs) && relation !== 'SELF') throw Object.assign(new Error('BANKING_PAY_CONTINUATION_DELAY_RELATION_INVALID'), { code: 'BANKING_PAY_CONTINUATION_DELAY_RELATION_INVALID' });
+  const phase = String(source.phase || '').trim().toUpperCase().slice(0, 80) || null;
+  if (phase && !/^[A-Z][A-Z0-9_]{0,79}$/.test(phase)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_PHASE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_PHASE_INVALID' });
+  if (source.required === true && phase && /^(AWAITING_|WAITING_(USER|AUTHORISATION|REVIEW))/.test(phase)) {
+    throw Object.assign(new Error('BANKING_PAY_CONTINUATION_WAIT_PHASE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_WAIT_PHASE_INVALID' });
+  }
+  if (relation === 'CHILD' && !['PAYMENT_SETTLEMENT', 'REMITTANCE_QUEUE'].includes(operationType)) {
+    throw Object.assign(new Error('BANKING_PAY_CONTINUATION_CHILD_TYPE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_CHILD_TYPE_INVALID' });
+  }
   const message = {
     version: 1,
     operation_id: operationId,
@@ -40211,9 +40283,9 @@ function buildBankingPayContinuationMessage(descriptor, sourceOverride) {
     pay_batch_id: optionalUuid(source.pay_batch_id || source.payBatchId),
     root_operation_id: optionalUuid(source.root_operation_id || source.rootOperationId),
     successor_relation: relation,
-    phase: String(source.phase || '').trim().toUpperCase().slice(0, 80) || null,
+    phase,
     run_after_utc: Number.isFinite(runAfterMs) ? new Date(runAfterMs).toISOString() : null,
-    source: String(sourceOverride || source.source || 'BANKING_PAY_CONTINUATION').trim().slice(0, 120),
+    source: sourceName,
     enqueued_at_utc: new Date().toISOString()
   };
   const encoded = new TextEncoder().encode(JSON.stringify(message));
@@ -40236,6 +40308,8 @@ async function enqueueBankingPayOperationContinuations(env, descriptors, options
   const seen = new Set();
   for (const descriptor of sourceRows) {
     if (!descriptor || descriptor.required === false || String(descriptor.successor_relation || '').toUpperCase() === 'NONE') continue;
+    if (descriptor.terminal === true) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_TERMINAL_REQUIRED_INVALID'), { code: 'BANKING_PAY_CONTINUATION_TERMINAL_REQUIRED_INVALID' });
+    if (descriptor.requires_user_action === true) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_USER_WAIT_REQUIRED_INVALID'), { code: 'BANKING_PAY_CONTINUATION_USER_WAIT_REQUIRED_INVALID' });
     const message = buildBankingPayContinuationMessage(descriptor, options.source);
     const dedupeKey = `${message.operation_id}:${message.successor_relation}`;
     if (seen.has(dedupeKey)) continue;
@@ -40314,26 +40388,30 @@ async function processBankingPayContinuationMessage(env, message, options = {}) 
 async function handleBankingPayContinuationQueue(batch, env) {
   const messages = batch && Array.isArray(batch.messages) ? batch.messages : [];
   const flag = readBankingPayContinuationFlag(env);
-  for (const message of messages) {
-    try {
-      buildBankingPayContinuationMessage(message.body, 'QUEUE_DELIVERY_VALIDATION');
-      if (flag === false) {
-        message.ack();
-        continue;
-      }
-      if (flag !== true) {
-        message.retry({ delaySeconds: 5 });
-        continue;
-      }
-      const processed = await processBankingPayContinuationMessage(env, message);
-      if (processed.successor && processed.successor.required !== false) {
-        await enqueueBankingPayOperationContinuations(env, [processed.successor], { source: 'QUEUE_SUCCESSOR' });
-      }
+  if (messages.length !== 1) {
+    console.error('[banking-pay-continuation] queue batch-size contract drift', { code: 'BANKING_PAY_CONTINUATION_BATCH_SIZE_INVALID', message_count: Math.min(messages.length, 100) });
+    for (const message of messages.slice(0, 100)) message.retry({ delaySeconds: 5 });
+    return;
+  }
+  const message = messages[0];
+  try {
+    buildBankingPayContinuationMessage(message.body, 'QUEUE_DELIVERY_VALIDATION');
+    if (flag === false) {
       message.ack();
-    } catch (error) {
-      console.warn('[banking-pay-continuation] delivery failed', { code: String(error && (error.code || error.message) || 'CONTINUATION_DELIVERY_FAILED').slice(0, 160), attempts: Number(message && message.attempts) || null });
-      message.retry({ delaySeconds: 5 });
+      return;
     }
+    if (flag !== true) {
+      message.retry({ delaySeconds: 5 });
+      return;
+    }
+    const processed = await processBankingPayContinuationMessage(env, message);
+    if (processed.successor && processed.successor.required !== false) {
+      await enqueueBankingPayOperationContinuations(env, [processed.successor], { source: 'QUEUE_SUCCESSOR' });
+    }
+    message.ack();
+  } catch (error) {
+    console.warn('[banking-pay-continuation] delivery failed', { code: String(error && (error.code || error.message) || 'CONTINUATION_DELIVERY_FAILED').slice(0, 160), attempts: Number(message && message.attempts) || null });
+    message.retry({ delaySeconds: 5 });
   }
 }
 
@@ -41273,9 +41351,6 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     businessActorUserId: opts.businessActorUserId || opts.business_actor_user_id || null
   });
   const continuationMode = opts.continuationEnabled === true || opts.continuation_enabled === true;
-  const preContinuationWitness = continuationMode
-    ? await buildBankingPayContinuationProgressWitness(operationType, claim)
-    : null;
   const safeDraftBudgetMs = Math.max(1000, Math.min(25000, (lockSeconds * 1000) - 5000));
   const draftCreateMaxPhaseUnits = operationType === 'DRAFT_CREATE'
     ? clampInteger(opts.draftCreateMaxPhaseUnits != null ? opts.draftCreateMaxPhaseUnits : (opts.draft_create_max_phase_units != null ? opts.draft_create_max_phase_units : 20), 20, 1, 50)
@@ -41577,7 +41652,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const legitimateFutureWait = advancedRunAfterMs !== null && advancedRunAfterMs > Date.now();
   const immediateMoreWork = releaseState === 'MORE_WORK' && legitimateFutureWait !== true;
   const witnessChanged = continuationMode && postContinuationWitness
-    ? (!previousContinuationWitness || previousContinuationWitness !== postContinuationWitness || preContinuationWitness !== postContinuationWitness)
+    ? (!previousContinuationWitness || previousContinuationWitness !== postContinuationWitness)
     : false;
   const continuationNoProgressCount = continuationMode
     ? (witnessChanged ? 0 : (immediateMoreWork ? previousNoProgressCount + 1 : previousNoProgressCount))
@@ -59071,6 +59146,52 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
   const phase = String(result.phase || result.operation_phase || row.phase || '').trim().toUpperCase();
   const terminal = ['COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED'].includes(status) || phase === 'COMPLETE';
   const waitingUser = ['AWAITING_REAUTHENTICATION', 'AWAITING_AUTHORISATION'].includes(phase) || result.requires_user_action === true;
+  const sqlContinuationSource = result.continuation && typeof result.continuation === 'object' && !Array.isArray(result.continuation)
+    ? { ...result.continuation }
+    : null;
+  let continuation = null;
+  if (sqlContinuationSource) {
+    const sqlOperationId = String(sqlContinuationSource.operation_id || '').trim().toLowerCase();
+    const sqlOperationType = String(sqlContinuationSource.operation_type || '').trim().toUpperCase();
+    const sqlRelation = String(sqlContinuationSource.successor_relation || '').trim().toUpperCase();
+    const sqlRunAfterText = String(sqlContinuationSource.run_after_utc || '').trim();
+    const sqlRunAfterMs = sqlRunAfterText ? Date.parse(sqlRunAfterText) : NaN;
+    if (sqlOperationId !== operationId.toLowerCase()
+      || sqlOperationType !== 'PAYMENT_CORRECTION'
+      || !['SELF', 'NONE'].includes(sqlRelation)
+      || (sqlRunAfterText && !Number.isFinite(sqlRunAfterMs))
+      || (sqlContinuationSource.required === true && (sqlContinuationSource.terminal === true || sqlContinuationSource.requires_user_action === true || sqlRelation === 'NONE'))) {
+      throw Object.assign(new Error('PAYMENT_CORRECTION_SQL_CONTINUATION_INVALID'), { code: 'PAYMENT_CORRECTION_SQL_CONTINUATION_INVALID' });
+    }
+    continuation = {
+      ...sqlContinuationSource,
+      operation_id: operationId,
+      operation_type: 'PAYMENT_CORRECTION',
+      pay_batch_id: sqlContinuationSource.pay_batch_id || result.pay_batch_id || row.pay_batch_id || null,
+      root_operation_id: sqlContinuationSource.root_operation_id || row.root_operation_id || null,
+      successor_relation: sqlRelation,
+      phase: String(sqlContinuationSource.phase || phase || '').trim().toUpperCase() || null,
+      run_after_utc: Number.isFinite(sqlRunAfterMs) ? new Date(sqlRunAfterMs).toISOString() : null,
+      reason: String(sqlContinuationSource.reason || '').trim().slice(0, 160) || null,
+      required: sqlContinuationSource.required === true,
+      requires_user_action: sqlContinuationSource.requires_user_action === true,
+      terminal: sqlContinuationSource.terminal === true
+    };
+  } else {
+    continuation = {
+      required: !terminal && !waitingUser,
+      operation_id: operationId,
+      operation_type: 'PAYMENT_CORRECTION',
+      pay_batch_id: result.pay_batch_id || row.pay_batch_id || null,
+      root_operation_id: row.root_operation_id || null,
+      successor_relation: !terminal && !waitingUser ? 'SELF' : 'NONE',
+      phase,
+      run_after_utc: null,
+      reason: !terminal && !waitingUser ? 'PAYMENT_CORRECTION_MORE_WORK' : (waitingUser ? 'PAYMENT_CORRECTION_USER_WAIT' : 'PAYMENT_CORRECTION_TERMINAL'),
+      requires_user_action: waitingUser || status === 'REVIEW_REQUIRED',
+      terminal
+    };
+  }
   return Object.assign({}, result, {
     ok: result.ok !== false,
     operation_id: operationId,
@@ -59082,19 +59203,7 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
     runner_state: waitingUser ? 'WAITING_USER' : (terminal ? (status === 'REVIEW_REQUIRED' ? 'WAITING_USER_REVIEW' : 'IDLE') : 'RUNNABLE'),
     requires_user_action: waitingUser || status === 'REVIEW_REQUIRED',
     terminal,
-    continuation: {
-      required: !terminal && !waitingUser,
-      operation_id: operationId,
-      operation_type: 'PAYMENT_CORRECTION',
-      pay_batch_id: result.pay_batch_id || row.pay_batch_id || null,
-      root_operation_id: row.root_operation_id || null,
-      successor_relation: !terminal && !waitingUser ? 'SELF' : 'NONE',
-      phase,
-      run_after_utc: result.run_after_utc || null,
-      reason: !terminal && !waitingUser ? 'PAYMENT_CORRECTION_MORE_WORK' : (waitingUser ? 'PAYMENT_CORRECTION_USER_WAIT' : 'PAYMENT_CORRECTION_TERMINAL'),
-      requires_user_action: waitingUser || status === 'REVIEW_REQUIRED',
-      terminal
-    }
+    continuation
   });
 }
 

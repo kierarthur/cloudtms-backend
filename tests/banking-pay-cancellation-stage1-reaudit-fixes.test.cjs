@@ -15,6 +15,7 @@ const expand = read('04082026_1208_pay_payment_correction_expand_work.sql');
 const preBank = read('04082026_1158_pay_pre_bank_cancel_apply_work_item.sql');
 const noMoney = read('04082026_1158_pay_no_money_unwind_apply_work_item.sql');
 const acl = read('04082026_2035_banking_pay_correction_helper_acl.sql');
+const eventIngest = read('04082026_1210_pay_bank_event_ingest.sql');
 
 test('planning start uses a constant-size version fence and creates no whole-scope JSON', () => {
   const fence = requestStart.slice(
@@ -65,6 +66,43 @@ test('automatic no-money start occurs only after exact lease validation', () => 
   assert.ok(lease > 0 && autoStart > lease);
   assert.match(processChunk, /p_worker_id IS NULL OR pg_catalog\.btrim\(p_worker_id\) = ''/);
   assert.match(processChunk, /AUTO_START_EVIDENCE_STALE/);
+});
+
+test('automatic no-money authority is identical at producer, request and phase boundaries', () => {
+  for (const source of [requestStart, processChunk]) {
+    assert.match(source, /banking_pay_auto_unwind_terminal_no_money/);
+    assert.match(source, /event_source NOT IN \('PROVIDER_WEBHOOK', 'PROVIDER_POLL', 'PROVIDER_RESPONSE'\)/);
+    assert.match(source, /mapping_status IS DISTINCT FROM 'MATCHED'/);
+    assert.match(source, /correction_disposition IS DISTINCT FROM 'AUTO_PROCESSING'/);
+    assert.match(source, /safe_to_auto_apply/);
+    assert.match(source, /terminal_no_money_evidence/);
+    assert.match(source, /source_bank_event_id/);
+    assert.match(source, /normalised_state NOT IN \('FAILED', 'REJECTED', 'CANCELLED'\)/);
+    assert.doesNotMatch(source.slice(source.indexOf('v_auto_classification_result :='), source.indexOf("RAISE EXCEPTION 'PAYMENT_CORRECTION_AUTO", source.indexOf('v_auto_classification_result :='))), /CONFIRMED_NOT_PAID/);
+  }
+  for (const key of [
+    'contract_version', 'requested_action', 'event_source', 'provider_event_key',
+    'mapping_status', 'mapping_method', 'classification', 'safe_to_auto_apply',
+    'correction_disposition', 'terminal_no_money_evidence', 'source_bank_event_id'
+  ]) assert.match(eventIngest, new RegExp(`'${key}'`));
+});
+
+test('zero-claim contention yields a typed future database continuation', () => {
+  assert.match(processChunk, /v_claimed_count = 0 AND v_nonterminal_count > 0/);
+  assert.match(processChunk, /v_now \+ interval '5 seconds'/);
+  assert.match(processChunk, /locked_at_utc \+ interval '120 seconds'/);
+  assert.match(processChunk, /PAYMENT_CORRECTION_PROCESS_CONTENTION_RETRY/);
+  assert.match(processChunk, /'run_after_utc', v_contention_retry_at/);
+});
+
+test('latest correction progress prefers an active request over terminal history', () => {
+  const latestInto = statusPage.indexOf('INTO v_latest_correction_request');
+  const latest = statusPage.slice(statusPage.lastIndexOf('SELECT pg_catalog.jsonb_strip_nulls', latestInto), statusPage.indexOf('LIMIT 1;', latestInto) + 8);
+  assert.match(latest, /WHEN request_row\.status IN[\s\S]*'PLANNING'[\s\S]*THEN 0/);
+  assert.match(latest, /request_row\.updated_at_utc DESC/);
+  for (const field of ['correction_request_id', 'request_status', 'is_active', 'is_terminal', 'user_title', 'operation_id']) {
+    assert.match(latest, new RegExp(`'${field}'`));
+  }
 });
 
 test('all correction mutation functions follow guard request batch operation ordering', () => {

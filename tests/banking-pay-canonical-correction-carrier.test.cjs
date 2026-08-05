@@ -6,6 +6,10 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), 'utf8');
+const normalizeSql = (value) => String(value).replace(/\r\n/g, '\n');
+const readSql = (relativePath) => normalizeSql(
+  fs.readFileSync(path.join(root, relativePath), 'utf8')
+);
 const listFiles = (relativeDirectory) => {
   const pending = [path.join(root, relativeDirectory)];
   const files = [];
@@ -72,9 +76,15 @@ const selectionCarryMigration = read(
 const selectionCarryRuntime = read(
   'supabase/repeatable/25072026_2153_banking_pay_selection_carry_runtime.sql'
 );
-const finalFreshnessWrapper = read(
+const finalFreshnessWrapper = readSql(
   'supabase/repeatable/26072026_1519_pay_batch_validate_freshness_correction_chain_wrapper.sql'
 );
+
+test('post-draft freshness SQL assertions are portable across LF and CRLF checkouts', () => {
+  const lfFixture = normalizeSql(finalFreshnessWrapper);
+  const crlfFixture = lfFixture.replace(/\n/g, '\r\n');
+  assert.equal(normalizeSql(crlfFixture), lfFixture);
+});
 
 test('durable carry registrations have bounded states, immutable authorities and RLS', () => {
   assert.match(
