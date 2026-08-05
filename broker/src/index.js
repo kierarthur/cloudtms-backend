@@ -40249,11 +40249,15 @@ function buildBankingPayContinuationMessage(descriptor, sourceOverride) {
   if (!allowedRelations.has(relation)) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_RELATION_INVALID'), { code: 'BANKING_PAY_CONTINUATION_RELATION_INVALID' });
   const sourcePolicy = bankingPayContinuationSourcePolicy(sourceName);
   if (!sourcePolicy) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_SOURCE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_SOURCE_INVALID' });
-  if (embeddedSourceName && !bankingPayContinuationSourcePolicy(embeddedSourceName)) {
+  const embeddedSourcePolicy = embeddedSourceName ? bankingPayContinuationSourcePolicy(embeddedSourceName) : null;
+  if (embeddedSourceName && !embeddedSourcePolicy) {
     throw Object.assign(new Error('BANKING_PAY_CONTINUATION_EMBEDDED_SOURCE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_EMBEDDED_SOURCE_INVALID' });
   }
   if (!sourcePolicy.types.includes(operationType) || !sourcePolicy.relations.includes(relation)) {
     throw Object.assign(new Error('BANKING_PAY_CONTINUATION_SOURCE_SCOPE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_SOURCE_SCOPE_INVALID' });
+  }
+  if (embeddedSourcePolicy && (!embeddedSourcePolicy.types.includes(operationType) || !embeddedSourcePolicy.relations.includes(relation))) {
+    throw Object.assign(new Error('BANKING_PAY_CONTINUATION_EMBEDDED_SOURCE_SCOPE_INVALID'), { code: 'BANKING_PAY_CONTINUATION_EMBEDDED_SOURCE_SCOPE_INVALID' });
   }
   if (source.required === true && source.terminal === true) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_TERMINAL_REQUIRED_INVALID'), { code: 'BANKING_PAY_CONTINUATION_TERMINAL_REQUIRED_INVALID' });
   if (source.required === true && source.requires_user_action === true) throw Object.assign(new Error('BANKING_PAY_CONTINUATION_USER_WAIT_REQUIRED_INVALID'), { code: 'BANKING_PAY_CONTINUATION_USER_WAIT_REQUIRED_INVALID' });
@@ -41648,7 +41652,14 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const previousNoProgressCount = Number.isFinite(Number(claimProgressJson.continuation_no_progress_count))
     ? Math.max(0, Math.trunc(Number(claimProgressJson.continuation_no_progress_count)))
     : 0;
-  const advancedRunAfterMs = parseTimeMs(publicAdvanced.run_after_utc || publicAdvanced.runAfterUtc || asPlainObject(publicAdvanced.progress).run_after_utc);
+  const advancedContinuation = asPlainObject(publicAdvanced.continuation);
+  const advancedRunAfterMs = parseTimeMs(
+    publicAdvanced.run_after_utc
+    || publicAdvanced.runAfterUtc
+    || asPlainObject(publicAdvanced.progress).run_after_utc
+    || advancedContinuation.run_after_utc
+    || advancedContinuation.runAfterUtc
+  );
   const legitimateFutureWait = advancedRunAfterMs !== null && advancedRunAfterMs > Date.now();
   const immediateMoreWork = releaseState === 'MORE_WORK' && legitimateFutureWait !== true;
   const witnessChanged = continuationMode && postContinuationWitness
@@ -41695,6 +41706,9 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       progressPatch.resume_reason = 'CONTINUATION_NO_SEMANTIC_PROGRESS';
       progressPatch.last_message = 'Automatic continuation stopped after five deliveries without durable semantic progress.';
     }
+  }
+  if (legitimateFutureWait) {
+    progressPatch.run_after_utc = new Date(advancedRunAfterMs).toISOString();
   }
   if (retryReleaseStates.has(releaseState)) {
     const rawRetryStatus = upperText(progressPatch.status || publicAdvanced.status || advancedPayload?.status || progressPatch.release_state || releaseState);
@@ -41823,7 +41837,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   const delaySeconds = retryReleaseStates.has(releaseState)
     ? clampInteger(requestedDelaySeconds, 0, 0, 3600)
     : (releaseState === 'MORE_WORK'
-      ? clampInteger(requestedDelaySeconds, 0, 0, 60)
+      ? clampInteger(requestedDelaySeconds, 0, 0, legitimateFutureWait ? 3600 : 60)
       : (releaseState === 'WAITING_PROVIDER' ? 60 : 0));
   try {
     releasePayload = unwrapRpcPayload(await sbRpc(env, 'banking_pay_operation_release_lease', {
@@ -58539,6 +58553,13 @@ async function getBankingPayOperationConfig(env, operationType, options = {}) {
       { key: 'queue_remittance_chunks', operation_type: 'REMITTANCE_QUEUE', phase: 'QUEUE_REMITTANCE_CHUNKS', chunk_type: 'REMITTANCE', chunk_env: 'BANKING_PAY_REMITTANCE_CHUNK_SIZE' },
       { key: 'queue_payout_notice_chunks', operation_type: 'REMITTANCE_QUEUE', phase: 'QUEUE_PAYOUT_NOTICE_CHUNKS', chunk_type: 'PAYOUT_NOTICE', chunk_env: 'BANKING_PAY_REMITTANCE_CHUNK_SIZE' }
     ],
+    PAYMENT_CORRECTION: [
+      { key: 'correction_prepare_selection', operation_type: 'PAYMENT_CORRECTION', phase: 'PREPARE_SELECTION', chunk_type: 'CANDIDATE_SCOPE' },
+      { key: 'correction_expand_work', operation_type: 'PAYMENT_CORRECTION', phase: 'EXPAND_WORK', chunk_type: 'CANDIDATE_SCOPE' },
+      { key: 'correction_process_chunks', operation_type: 'PAYMENT_CORRECTION', phase: 'PROCESS_CHUNKS', chunk_type: 'CANDIDATE_SCOPE' },
+      { key: 'correction_finalise', operation_type: 'PAYMENT_CORRECTION', phase: 'FINALISE', chunk_type: 'CANDIDATE_SCOPE' },
+      { key: 'correction_refresh_workbench', operation_type: 'PAYMENT_CORRECTION', phase: 'REFRESH_WORKBENCH', chunk_type: 'CANDIDATE_SCOPE' }
+    ],
     DRAFT_CREATE: [
       { key: 'drain_tsfin', operation_type: 'DRAFT_CREATE', phase: 'DRAIN_TSFIN', chunk_type: 'TSFIN', chunk_env: 'BANKING_PAY_TSFIN_CHUNK_SIZE' },
       { key: 'ensure_payee_readiness', operation_type: 'DRAFT_CREATE', phase: 'ENSURE_PAYEE_READINESS', chunk_type: 'PAYEE_READINESS', chunk_env: 'BANKING_PAY_PAYEE_READINESS_CHUNK_SIZE' },
@@ -58557,8 +58578,12 @@ async function getBankingPayOperationConfig(env, operationType, options = {}) {
     ]
   };
 
-  const plan = requestedPlans || planByOperationType[baseOperationType] || [];
+  const requestedPhase = String(options.phase || options.operation_phase || options.operationPhase || '').trim().toUpperCase();
+  const requireExactEnabled = options.requireExactEnabled === true || options.require_exact_enabled === true;
+  const operationPlan = planByOperationType[baseOperationType] || [];
+  const plan = requestedPlans || (requestedPhase ? operationPlan.filter((entry) => entry.phase === requestedPhase) : operationPlan);
   if (!plan.length) throw new Error(`getBankingPayOperationConfig: unsupported operation type ${baseOperationType}`);
+  if (requestedPhase && plan.length !== 1) throw Object.assign(new Error('BANKING_PAY_OPERATION_PHASE_CONFIG_AMBIGUOUS'), { code: 'BANKING_PAY_OPERATION_PHASE_CONFIG_AMBIGUOUS' });
 
   const globalLockOverride = envInt('BANKING_PAY_OPERATION_LOCK_SECONDS');
   const globalAdvanceOverride = envInt('BANKING_PAY_OPERATION_ADVANCE_MAX_MS');
@@ -58574,13 +58599,43 @@ async function getBankingPayOperationConfig(env, operationType, options = {}) {
     const chunkType = String(phasePlan.chunk_type || '').trim().toUpperCase();
     if (!key || !operationTypeForConfig || !phase || !chunkType) continue;
 
-    const rpcRes = await sbRpc(env, 'banking_pay_operation_config_get', {
-      p_operation_type: operationTypeForConfig,
-      p_phase: phase,
-      p_chunk_type: chunkType
-    });
-    const cfgRaw = unwrapRpcPayload(rpcRes, 'banking_pay_operation_config_get');
-    const cfg = Array.isArray(cfgRaw) ? (cfgRaw[0] || {}) : ((cfgRaw && typeof cfgRaw === 'object') ? cfgRaw : {});
+    let cfg = {};
+    if (requireExactEnabled) {
+      const query = new URLSearchParams();
+      query.set('operation_type', `eq.${operationTypeForConfig}`);
+      query.set('phase', `eq.${phase}`);
+      query.set('chunk_type', `eq.${chunkType}`);
+      query.set('select', 'operation_type,phase,chunk_type,default_chunk_size,min_chunk_size,max_chunk_size,max_advance_ms,lock_seconds,enabled');
+      query.set('limit', '2');
+      const configResponse = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_config?${query.toString()}`, false);
+      const configRows = configResponse && Array.isArray(configResponse.rows) ? configResponse.rows : [];
+      if (configRows.length !== 1) {
+        throw Object.assign(new Error('BANKING_PAY_OPERATION_PHASE_CONFIG_MISSING'), { code: 'BANKING_PAY_OPERATION_PHASE_CONFIG_MISSING' });
+      }
+      cfg = configRows[0] && typeof configRows[0] === 'object' && !Array.isArray(configRows[0]) ? configRows[0] : {};
+      if (String(cfg.operation_type || '').trim().toUpperCase() !== operationTypeForConfig
+        || String(cfg.phase || '').trim().toUpperCase() !== phase
+        || String(cfg.chunk_type || '').trim().toUpperCase() !== chunkType) {
+        throw Object.assign(new Error('BANKING_PAY_OPERATION_PHASE_CONFIG_MISMATCH'), { code: 'BANKING_PAY_OPERATION_PHASE_CONFIG_MISMATCH' });
+      }
+      if (cfg.enabled !== true) {
+        throw Object.assign(new Error('BANKING_PAY_OPERATION_PHASE_CONFIG_DISABLED'), { code: 'BANKING_PAY_OPERATION_PHASE_CONFIG_DISABLED' });
+      }
+      const exactValues = [cfg.default_chunk_size, cfg.min_chunk_size, cfg.max_chunk_size, cfg.max_advance_ms, cfg.lock_seconds].map(Number);
+      if (exactValues.some((value) => !Number.isInteger(value) || value <= 0)
+        || Number(cfg.min_chunk_size) > Number(cfg.default_chunk_size)
+        || Number(cfg.default_chunk_size) > Number(cfg.max_chunk_size)) {
+        throw Object.assign(new Error('BANKING_PAY_OPERATION_PHASE_CONFIG_INVALID'), { code: 'BANKING_PAY_OPERATION_PHASE_CONFIG_INVALID' });
+      }
+    } else {
+      const rpcRes = await sbRpc(env, 'banking_pay_operation_config_get', {
+        p_operation_type: operationTypeForConfig,
+        p_phase: phase,
+        p_chunk_type: chunkType
+      });
+      const cfgRaw = unwrapRpcPayload(rpcRes, 'banking_pay_operation_config_get');
+      cfg = Array.isArray(cfgRaw) ? (cfgRaw[0] || {}) : ((cfgRaw && typeof cfgRaw === 'object') ? cfgRaw : {});
+    }
 
     const minChunkSize = toPositiveInteger(cfg.min_chunk_size, 1);
     const maxChunkSize = toPositiveInteger(cfg.max_chunk_size, Math.max(minChunkSize, 500));
@@ -59129,15 +59184,33 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
   const operationId = String(row.operation_id || row.id || '').trim();
   const actorUserId = String(user && (user.business_actor_user_id || user.id) || row.actor_user_id || '').trim();
   const workerId = String(options.lockOwner || options.lock_owner || '').trim();
+  const currentPhase = String(row.phase || progress.phase || '').trim().toUpperCase();
   if (!correctionRequestId) throw Object.assign(new Error('PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'), { code: 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED' });
   if (!operationId) throw Object.assign(new Error('PAYMENT_CORRECTION_OPERATION_ID_REQUIRED'), { code: 'PAYMENT_CORRECTION_OPERATION_ID_REQUIRED' });
   if (!workerId) throw Object.assign(new Error('PAYMENT_CORRECTION_LEASE_OWNER_REQUIRED'), { code: 'PAYMENT_CORRECTION_LEASE_OWNER_REQUIRED' });
+  const correctionConfig = await getBankingPayOperationConfig(env, 'PAYMENT_CORRECTION', {
+    phase: currentPhase,
+    requireExactEnabled: true
+  });
+  const correctionPhaseConfigs = Object.values(correctionConfig.chunks || {});
+  if (correctionPhaseConfigs.length !== 1) {
+    throw Object.assign(new Error('PAYMENT_CORRECTION_PHASE_CONFIG_INVALID'), { code: 'PAYMENT_CORRECTION_PHASE_CONFIG_INVALID' });
+  }
+  const correctionPhaseConfig = correctionPhaseConfigs[0];
+  const correctionPhaseLimit = Number(correctionPhaseConfig && correctionPhaseConfig.chunk_size);
+  if (!Number.isInteger(correctionPhaseLimit) || correctionPhaseLimit <= 0) {
+    throw Object.assign(new Error('PAYMENT_CORRECTION_PHASE_LIMIT_INVALID'), { code: 'PAYMENT_CORRECTION_PHASE_LIMIT_INVALID' });
+  }
   const raw = await sbRpc(env, 'pay_payment_correction_process_chunk', {
     p_correction_request_id: correctionRequestId,
-    p_limit: 50,
+    p_limit: correctionPhaseLimit,
     p_worker_id: workerId,
     p_actor_user_id: actorUserId || null
-  }, { routeClass: 'OPERATION_WORKER_ADVANCE', purpose: 'PAYMENT_CORRECTION_BOUNDED_PHASE', timeoutMs: 8000 });
+  }, {
+    routeClass: 'OPERATION_WORKER_ADVANCE',
+    purpose: 'PAYMENT_CORRECTION_BOUNDED_PHASE',
+    timeoutMs: Math.max(1000, Math.min(120000, Number(correctionPhaseConfig.max_advance_ms) + 500))
+  });
   let result = raw;
   if (Array.isArray(result) && result.length === 1) result = result[0];
   if (result && typeof result === 'object' && result.pay_payment_correction_process_chunk) result = result.pay_payment_correction_process_chunk;
