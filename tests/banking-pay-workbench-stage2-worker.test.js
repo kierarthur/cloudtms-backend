@@ -40,7 +40,7 @@ function loadLaneAttempt() {
     Error
   };
   vm.runInNewContext(
-    `${functionBody('sanitizeBankingPayWorkbenchSourceBuildDiagnostic')}\n${functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt')}\nthis.runAttempt = runBankingPayWorkbenchSourceBuildLaneAttempt;`,
+    `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('sanitizeBankingPayWorkbenchSourceBuildDiagnostic')}\n${functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt')}\nthis.runAttempt = runBankingPayWorkbenchSourceBuildLaneAttempt;`,
     context
   );
   return context.runAttempt;
@@ -64,10 +64,47 @@ function loadParallelismNormalizer() {
   return context.normalize;
 }
 
+function loadUuidIdentityHelpers() {
+  const context = { String, RegExp };
+  vm.runInNewContext(
+    `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('bankingPayWorkbenchStableWorkerId')}\n${functionBody('bankingPayWorkbenchNudgeSingleFlightKey')}\nthis.helpers = { canonicalBankingPayWorkbenchUuid, bankingPayWorkbenchStableWorkerId, bankingPayWorkbenchNudgeSingleFlightKey };`,
+    context
+  );
+  return context.helpers;
+}
+
+function loadDiagnosticLogger() {
+  const entries = [];
+  const context = {
+    String,
+    Number,
+    Math,
+    Object,
+    Array,
+    Set,
+    WeakSet,
+    RegExp,
+    Error,
+    JSON,
+    Date,
+    bankingPayWorkbenchLogsEnabled: () => true,
+    console: {
+      info: (value) => entries.push(String(value)),
+      warn: (value) => entries.push(String(value))
+    }
+  };
+  vm.runInNewContext(
+    `${functionBody('sanitizeBankingPayWorkbenchSourceBuildDiagnostic')}\n${functionBody('logBankingPayWorkbenchDiag')}\nthis.logDiagnostic = logBankingPayWorkbenchDiag;`,
+    context
+  );
+  return { logDiagnostic: context.logDiagnostic, entries };
+}
+
 const ids = {
   job: '11111111-1111-4111-8111-111111111111',
   build: '22222222-2222-4222-8222-222222222222',
-  candidate: '33333333-3333-4333-8333-333333333333',
+  candidate: '33333333-3333-4333-833a-333333333333',
+  session: 'abcdef98-7654-4abc-8def-1234567890ab',
   attempt: '44444444-4444-4444-8444-444444444444',
   nonce: 'aBcDeF12-3456-4aBc-8dEf-1234567890aB'
 };
@@ -145,7 +182,7 @@ test('one valid claim delivers exactly one exact execute and returns no nonce', 
     p_build_id: ids.build,
     p_private_stage: 'WORKSPACE_FACT',
     p_attempt_id: ids.attempt,
-    p_attempt_nonce: ids.nonce,
+    p_attempt_nonce: ids.nonce.toLowerCase(),
     p_worker_id: 'worker:test',
     p_lane_identity: 'lane:test'
   });
@@ -249,6 +286,137 @@ test('central source-build diagnostic scrubber redacts nonce keys, nested values
   assert.ok(result.message.length <= 511);
 });
 
+test('complete successful post-claim result is nonce-safe before aggregation and logging', async () => {
+  let calls = 0;
+  const upperNonce = ids.nonce.toUpperCase();
+  const result = await loadLaneAttempt()({}, baseOptions(async () => {
+    calls += 1;
+    if (calls === 1) return claim();
+    return execution({
+      stage_status: `DONE_${upperNonce}_X`,
+      result_code: `CODE_${upperNonce}_X`,
+      next_cursor_json: {
+        cursor_kind: `K_${upperNonce}_X`,
+        dependency_unit_key: `U_${upperNonce}_X`,
+        fact_family: `F_${upperNonce}_X`,
+        page_number: 2
+      }
+    });
+  }));
+
+  assert.equal(calls, 2);
+  const serialized = JSON.stringify(result);
+  assert.doesNotMatch(serialized, new RegExp(ids.nonce, 'i'));
+  for (const field of ['stage_status', 'result_code', 'cursor_kind', 'dependency_unit_key', 'fact_family']) {
+    assert.match(String(result[field]), /\[redacted\]/i);
+  }
+
+  const { logDiagnostic, entries } = loadDiagnosticLogger();
+  logDiagnostic({ WORKBENCH_LOGS: true }, 'WORKBENCH_SOURCE_BUILD_TWO_CALL_LANE_RESULT', {
+    stage_result: result,
+    stage_status: result.stage_status,
+    result_code: result.result_code,
+    cursor_kind: result.cursor_kind,
+    dependency_unit_key: result.dependency_unit_key,
+    fact_family: result.fact_family
+  });
+  assert.equal(entries.length, 1);
+  assert.doesNotMatch(entries[0], new RegExp(ids.nonce, 'i'));
+});
+
+test('diagnostic scrubber redacts object keys, custom Error fields and underscore-adjacent UUID rejection text', () => {
+  const sanitize = loadDiagnosticSanitizer();
+  const lowerNonce = ids.nonce.toLowerCase();
+  const keyed = sanitize({
+    [`AttemptNonce_${ids.nonce}`]: 'value',
+    [`field_${ids.nonce}`]: { reason: `nested ${ids.nonce}` }
+  }, { secrets: [ids.nonce], maxTextLength: 500 });
+  const keyedSerialized = JSON.stringify(keyed);
+  assert.doesNotMatch(keyedSerialized, new RegExp(ids.nonce, 'i'));
+  assert.ok(Object.keys(keyed).some((key) => key.startsWith('redacted_nonce_field')));
+  assert.ok(Object.keys(keyed).some((key) => key.startsWith('redacted_field')));
+
+  const rejected = sanitize(`ERR_${lowerNonce}_X`, { redactUuidTokens: true, maxTextLength: 500 });
+  assert.equal(rejected, 'ERR_[redacted-uuid]_X');
+  assert.doesNotMatch(rejected, new RegExp(lowerNonce, 'i'));
+
+  const error = new Error(`message ${ids.nonce}`);
+  error.name = `NAME_${ids.nonce.toUpperCase()}`;
+  error.code = `CODE_${ids.nonce}`;
+  error.cause = { technical_message: `cause ${ids.nonce}` };
+  error.detail = { reason: `detail ${ids.nonce}` };
+  error.custom = [{ response: `custom ${ids.nonce}` }];
+  error[`AttemptNonce_${ids.nonce}`] = ids.nonce;
+  const errorSerialized = JSON.stringify(sanitize(error, { secrets: [ids.nonce] }));
+  assert.doesNotMatch(errorSerialized, new RegExp(ids.nonce, 'i'));
+});
+
+test('UUID canonicalization makes session worker, lane and single-flight identities case invariant', () => {
+  const helpers = loadUuidIdentityHelpers();
+  const lower = ids.session.toLowerCase();
+  const upper = ids.session.toUpperCase();
+  assert.equal(helpers.canonicalBankingPayWorkbenchUuid(upper), lower);
+  assert.equal(helpers.canonicalBankingPayWorkbenchUuid(` ${upper} `), lower);
+  assert.equal(helpers.canonicalBankingPayWorkbenchUuid('not-a-uuid'), null);
+  assert.equal(
+    helpers.bankingPayWorkbenchStableWorkerId('NUDGE', upper),
+    helpers.bankingPayWorkbenchStableWorkerId('NUDGE', lower)
+  );
+  assert.equal(
+    helpers.bankingPayWorkbenchStableWorkerId('NUDGE', upper),
+    `BANKING_PAY_WORKBENCH:NUDGE:SESSION:${lower}`
+  );
+  assert.equal(
+    helpers.bankingPayWorkbenchNudgeSingleFlightKey(upper),
+    helpers.bankingPayWorkbenchNudgeSingleFlightKey(lower)
+  );
+  assert.equal(
+    helpers.bankingPayWorkbenchNudgeSingleFlightKey(upper),
+    `BANKING_PAY_WORKBENCH_SESSION_DRAIN:${lower}`
+  );
+  assert.equal(helpers.bankingPayWorkbenchStableWorkerId('CRON', upper), 'BANKING_PAY_WORKBENCH:CRON:GLOBAL');
+  assert.equal(helpers.bankingPayWorkbenchStableWorkerId('NUDGE', upper, 'Custom:Case:Worker'), 'Custom:Case:Worker');
+  assert.notEqual(
+    helpers.bankingPayWorkbenchStableWorkerId('NUDGE', ids.session),
+    helpers.bankingPayWorkbenchStableWorkerId('NUDGE', '99999999-9999-4999-8999-999999999999')
+  );
+});
+
+test('uppercase candidate and session filters accept canonical PostgreSQL claim identity exactly once', async () => {
+  const calls = [];
+  const result = await loadLaneAttempt()({}, {
+    ...baseOptions(async (_env, fn, args) => {
+      calls.push({ fn, args });
+      return calls.length === 1
+        ? claim()
+        : execution({ job_id: ids.job.toUpperCase(), build_id: ids.build.toUpperCase() });
+    }),
+    sessionId: ids.session.toUpperCase(),
+    candidateId: ids.candidate.toUpperCase()
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].args.p_session_id, ids.session.toLowerCase());
+  assert.equal(calls[0].args.p_candidate_id, ids.candidate.toLowerCase());
+  assert.equal(calls[1].args.p_job_id, ids.job.toLowerCase());
+  assert.equal(calls[1].args.p_build_id, ids.build.toLowerCase());
+  assert.equal(calls[1].args.p_attempt_nonce, ids.nonce.toLowerCase());
+  assert.equal(result.ok, true);
+  assert.equal(result.execute_called, true);
+
+  let mismatchCalls = 0;
+  const mismatch = await loadLaneAttempt()({}, {
+    ...baseOptions(async () => {
+      mismatchCalls += 1;
+      return claim();
+    }),
+    candidateId: '99999999-9999-4999-8999-999999999999'
+  });
+  assert.equal(mismatchCalls, 1);
+  assert.equal(mismatch.result_code, 'SOURCE_BUILD_ATTEMPT_CLAIM_RESPONSE_INVALID');
+  assert.equal(mismatch.execute_called, false);
+});
+
 test('database-owned stage failure is a valid terminal response and is not retried', async () => {
   let calls = 0;
   const result = await loadLaneAttempt()({}, baseOptions(async () => {
@@ -318,10 +486,14 @@ test('cron and nudge preserve database-owned stable worker and lane identities a
   const cron = functionBody('bankingPayWorkbenchCronTick');
   const nudge = functionBody('nudgeBankingPayWorkbenchDrain');
   const drain = functionBody('drainBankingPayWorkbenchJobs');
-  assert.match(cron, /BANKING_PAY_WORKBENCH:CRON:GLOBAL/);
-  assert.match(cron, /BANKING_PAY_WORKBENCH:NUDGE:GLOBAL/);
-  assert.match(cron, /BANKING_PAY_WORKBENCH:NUDGE:SESSION:\$\{sessionId\}/);
+  const lane = functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt');
+  assert.match(cron, /canonicalBankingPayWorkbenchUuid\(requestedSessionId\)/);
+  assert.match(cron, /canonicalBankingPayWorkbenchUuid\(requestedCandidateId\)/);
+  assert.match(cron, /bankingPayWorkbenchStableWorkerId\(budgetProfile, sessionId, configuredWorkerId\)/);
   assert.match(cron, /workerId: stableWorkerId/);
+  assert.match(nudge, /canonicalBankingPayWorkbenchUuid\(requestedSessionId\)/);
+  assert.match(nudge, /canonicalBankingPayWorkbenchUuid\(requestedCandidateId\)/);
+  assert.match(nudge, /bankingPayWorkbenchNudgeSingleFlightKey\(requestedSessionIdValue\)/);
   assert.match(nudge, /const stableNudgeWorkerId/);
   assert.match(nudge, /workerId: stableNudgeWorkerId/);
   assert.match(nudge, /passthroughOptions\.workerId = stableNudgeWorkerId/);
@@ -329,13 +501,20 @@ test('cron and nudge preserve database-owned stable worker and lane identities a
   assert.match(nudge, /origin:.*FINAL_CHECK/);
   assert.match(nudge, /lockContentionRetryOptions\.origin = .*LOCK_CONTENTION_RETRY/);
   assert.match(nudge, /origin: 'BANKING_PAY_WORKBENCH_SESSION_NUDGE_GLOBAL_TAIL'[\s\S]*?workerId: 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL'/);
+  assert.match(drain, /const sessionFilterId = canonicalBankingPayWorkbenchUuid/);
+  assert.match(drain, /const candidateFilterId = canonicalBankingPayWorkbenchUuid/);
+  assert.match(drain, /bankingPayWorkbenchStableWorkerId\(/);
   assert.doesNotMatch(drain, /BANKING_PAY_WORKBENCH:\$\{budgetProfile \|\| 'DEFAULT'\}:\$\{origin\}/);
   assert.match(drain, /SOURCE_BUILD_LANE:\$\{laneIndex \|\| 0\}/);
+  assert.match(lane, /const sessionId = canonicalBankingPayWorkbenchUuid/);
+  assert.match(lane, /const candidateId = canonicalBankingPayWorkbenchUuid/);
+  assert.match(lane, /canonicalBankingPayWorkbenchUuid\(claim\.candidate_id\)/);
+  assert.match(lane, /canonicalBankingPayWorkbenchUuid\(execution\.job_id\) === jobId/);
 });
 
 test('runtime version advertises the bounded-scope Stage 2 source marker', () => {
   const version = functionBody('handleVersion');
   assert.match(version, /banking_pay_bounded_scope_stage2/);
-  assert.match(version, /V1\.2\.13_STAGE2_AUDIT_CLOSURE_20260805/);
+  assert.match(version, /V1\.2\.14_STAGE2_SECURITY_IDENTITY_CLOSURE_20260805/);
   assert.match(version, /7165360304f8ef12b3790078e450ed1d4b128c55/);
 });

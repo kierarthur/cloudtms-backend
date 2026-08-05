@@ -1114,6 +1114,32 @@ function normalizeBankingPayWorkbenchSourceBuildParallelism(value) {
   return Number.isFinite(number) && Number.isInteger(number) && number >= 0 && number <= 32 ? number : 1;
 }
 
+function canonicalBankingPayWorkbenchUuid(value) {
+  const text = String(value == null ? '' : value).trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+    ? text.toLowerCase()
+    : null;
+}
+
+function bankingPayWorkbenchStableWorkerId(budgetProfile, sessionId, configuredWorkerId = '') {
+  const configured = String(configuredWorkerId == null ? '' : configuredWorkerId).trim();
+  if (configured) return configured.slice(0, 200);
+  if (String(budgetProfile == null ? '' : budgetProfile).trim().toUpperCase() === 'CRON') {
+    return 'BANKING_PAY_WORKBENCH:CRON:GLOBAL';
+  }
+  const canonicalSessionId = canonicalBankingPayWorkbenchUuid(sessionId);
+  return canonicalSessionId
+    ? `BANKING_PAY_WORKBENCH:NUDGE:SESSION:${canonicalSessionId}`
+    : 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL';
+}
+
+function bankingPayWorkbenchNudgeSingleFlightKey(sessionId) {
+  const canonicalSessionId = canonicalBankingPayWorkbenchUuid(sessionId);
+  return canonicalSessionId
+    ? `BANKING_PAY_WORKBENCH_SESSION_DRAIN:${canonicalSessionId}`
+    : 'BANKING_PAY_WORKBENCH_GLOBAL_DRAIN';
+}
+
 async function loadSettingsDefaults(env) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -15973,7 +15999,6 @@ function bankingPayWorkbenchLogsEnabled(env) {
 async function bankingPayWorkbenchCronTick(env, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const clampInt = (value, fallback, min, max) => {
     const n = Number(value);
     if (!Number.isFinite(n)) return fallback;
@@ -16468,17 +16493,11 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   const requestedSessionId = trimStr(source.sessionId || source.session_id || '');
   const requestedCandidateId = trimStr(source.candidateId || source.candidate_id || '');
   const requestedActorUserId = trimStr(source.actorUserId || source.actor_user_id || '');
-  const sessionId = uuidRe.test(requestedSessionId) ? requestedSessionId : null;
-  const candidateId = uuidRe.test(requestedCandidateId) ? requestedCandidateId : null;
-  const actorUserId = uuidRe.test(requestedActorUserId) ? requestedActorUserId : null;
+  const sessionId = canonicalBankingPayWorkbenchUuid(requestedSessionId);
+  const candidateId = canonicalBankingPayWorkbenchUuid(requestedCandidateId);
+  const actorUserId = canonicalBankingPayWorkbenchUuid(requestedActorUserId);
   const configuredWorkerId = trimStr(source.workerId || source.worker_id || '');
-  const stableWorkerId = (configuredWorkerId || (
-    budgetProfile === 'CRON'
-      ? 'BANKING_PAY_WORKBENCH:CRON:GLOBAL'
-      : (sessionId
-          ? `BANKING_PAY_WORKBENCH:NUDGE:SESSION:${sessionId}`
-          : 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL')
-  )).slice(0, 200);
+  const stableWorkerId = bankingPayWorkbenchStableWorkerId(budgetProfile, sessionId, configuredWorkerId);
 
   const baseResult = {
     worker: 'bankingPayWorkbenchCronTick',
@@ -17016,7 +17035,6 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const trimStr = (value) => String(value == null ? '' : value).trim();
   const upperTrim = (value) => trimStr(value).toUpperCase();
   const isPlainObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const numberFrom = (sourceObject, keys, fallback = 0) => {
     const sourceValue = isPlainObject(sourceObject) ? sourceObject : {};
     for (const key of keys) {
@@ -17296,9 +17314,9 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const requestedSessionId = trimStr(source.sessionId || source.session_id || '');
   const requestedCandidateId = trimStr(source.candidateId || source.candidate_id || '');
   const requestedActorUserId = trimStr(source.actorUserId || source.actor_user_id || '');
-  const requestedSessionIdValue = uuidRe.test(requestedSessionId) ? requestedSessionId : null;
-  const requestedCandidateIdValue = uuidRe.test(requestedCandidateId) ? requestedCandidateId : null;
-  const requestedActorUserIdValue = uuidRe.test(requestedActorUserId) ? requestedActorUserId : null;
+  const requestedSessionIdValue = canonicalBankingPayWorkbenchUuid(requestedSessionId);
+  const requestedCandidateIdValue = canonicalBankingPayWorkbenchUuid(requestedCandidateId);
+  const requestedActorUserIdValue = canonicalBankingPayWorkbenchUuid(requestedActorUserId);
   const requestedProfile = upperTrim(source.budgetProfile || source.budget_profile || source.profile || '') || null;
   const budgetProfile = 'NUDGE';
   const requestedOrigin = trimStr(source.origin) || 'BANKING_PAY_WORKBENCH_NUDGE';
@@ -17319,12 +17337,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const sessionScopedNudge = !!requestedSessionIdValue;
   const origin = sessionScopedNudge ? 'BANKING_PAY_WORKBENCH_SESSION_NUDGE' : 'BANKING_PAY_WORKBENCH_GLOBAL_NUDGE';
   const configuredWorkerId = trimStr(source.workerId || source.worker_id || '');
-  const stableNudgeWorkerId = (configuredWorkerId || (sessionScopedNudge
-    ? `BANKING_PAY_WORKBENCH:NUDGE:SESSION:${requestedSessionIdValue}`
-    : 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL')).slice(0, 200);
-  const singleFlightKey = sessionScopedNudge
-    ? `BANKING_PAY_WORKBENCH_SESSION_DRAIN:${requestedSessionIdValue}`
-    : 'BANKING_PAY_WORKBENCH_GLOBAL_DRAIN';
+  const stableNudgeWorkerId = bankingPayWorkbenchStableWorkerId('NUDGE', requestedSessionIdValue, configuredWorkerId);
+  const singleFlightKey = bankingPayWorkbenchNudgeSingleFlightKey(requestedSessionIdValue);
 
   const commonMetadata = {
     origin,
@@ -158643,8 +158657,8 @@ function handleVersion() {
       implementation_commit: "4bc7fd2d"
     },
     banking_pay_bounded_scope_stage2: {
-      revision: "1.2.13",
-      source_marker: "V1.2.13_STAGE2_AUDIT_CLOSURE_20260805",
+      revision: "1.2.14",
+      source_marker: "V1.2.14_STAGE2_SECURITY_IDENTITY_CLOSURE_20260805",
       stage1_baseline_commit: "7165360304f8ef12b3790078e450ed1d4b128c55"
     },
     built_at: new Date().toISOString()
@@ -181520,7 +181534,7 @@ function sanitizeBankingPayWorkbenchSourceBuildDiagnostic(value, options = {}) {
   const maxEntries = Number.isFinite(Number(source.maxEntries)) ? Math.max(1, Math.min(100, Math.trunc(Number(source.maxEntries)))) : 30;
   const maxTextLength = Number.isFinite(Number(source.maxTextLength)) ? Math.max(32, Math.min(2000, Math.trunc(Number(source.maxTextLength)))) : 500;
   const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const uuidTokenRe = /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
+  const uuidTokenRe = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi;
   const redactText = (input) => {
     let text = String(input == null ? '' : input);
     for (const secret of secrets) text = text.replace(new RegExp(escapeRegExp(secret), 'gi'), '[redacted]');
@@ -181541,6 +181555,7 @@ function sanitizeBankingPayWorkbenchSourceBuildDiagnostic(value, options = {}) {
     if (Array.isArray(entry)) return entry.slice(0, maxEntries).map((item) => visit(item, depth + 1));
     const sourceEntries = entry instanceof Error
       ? Object.entries({
+          ...Object.fromEntries(Object.entries(entry)),
           name: entry.name,
           code: entry.code,
           message: entry.message,
@@ -181552,7 +181567,20 @@ function sanitizeBankingPayWorkbenchSourceBuildDiagnostic(value, options = {}) {
         })
       : Object.entries(entry);
     const result = {};
-    for (const [key, child] of sourceEntries.slice(0, maxEntries)) result[key] = visit(child, depth + 1, key);
+    const sanitizedKeyCounts = new Map();
+    for (const [key, child] of sourceEntries.slice(0, maxEntries)) {
+      const rawKey = String(key == null ? '' : key);
+      const nonceKey = /nonce/i.test(rawKey);
+      const redactedKey = redactText(rawKey);
+      const keyWasRedacted = nonceKey || redactedKey !== rawKey;
+      const baseKey = nonceKey
+        ? 'redacted_nonce_field'
+        : (keyWasRedacted ? 'redacted_field' : (redactedKey || 'redacted_field'));
+      const priorCount = sanitizedKeyCounts.get(baseKey) || 0;
+      sanitizedKeyCounts.set(baseKey, priorCount + 1);
+      const safeKey = priorCount === 0 ? baseKey : `${baseKey}_${priorCount + 1}`;
+      result[safeKey] = nonceKey ? '[redacted]' : visit(child, depth + 1, safeKey);
+    }
     return result;
   };
   return visit(value, 0);
@@ -181563,7 +181591,6 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   const trim = (value) => String(value == null ? '' : value).trim();
   const upper = (value) => trim(value).toUpperCase();
   const isObject = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
-  const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   const allowedStages = new Set([
     'PREPARE_SCOPE',
     'DEPENDENCY_CLOSURE',
@@ -181586,7 +181613,11 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
     if (Array.isArray(payload) && payload.length === 1 && isObject(payload[0])) payload = payload[0];
     return isObject(payload) ? payload : null;
   };
-  const safeDiagnostic = (value, secrets = []) => sanitizeBankingPayWorkbenchSourceBuildDiagnostic(value, { secrets, maxTextLength: 500 });
+  const safeDiagnostic = (value, secrets = [], diagnosticOptions = {}) => sanitizeBankingPayWorkbenchSourceBuildDiagnostic(value, {
+    ...(diagnosticOptions && typeof diagnosticOptions === 'object' && !Array.isArray(diagnosticOptions) ? diagnosticOptions : {}),
+    secrets,
+    maxTextLength: 500
+  });
   const safeText = (value, secrets = []) => {
     const safe = safeDiagnostic(value, Array.isArray(secrets) ? secrets : [secrets]);
     if (typeof safe === 'string') return trim(safe).slice(0, 500);
@@ -181599,8 +181630,8 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   const rpcCall = typeof source.rpcCall === 'function' ? source.rpcCall : sbRpc;
   const workerId = trim(source.workerId || source.worker_id).slice(0, 200);
   const laneIdentity = trim(source.laneIdentity || source.lane_identity).slice(0, 200);
-  const sessionId = uuidRe.test(trim(source.sessionId || source.session_id)) ? trim(source.sessionId || source.session_id) : null;
-  const candidateId = uuidRe.test(trim(source.candidateId || source.candidate_id)) ? trim(source.candidateId || source.candidate_id) : null;
+  const sessionId = canonicalBankingPayWorkbenchUuid(source.sessionId || source.session_id);
+  const candidateId = canonicalBankingPayWorkbenchUuid(source.candidateId || source.candidate_id);
   const nowUtc = trim(source.nowUtc || source.now_utc) || null;
   const leaseSeconds = boundedInteger(source.leaseSeconds ?? source.lease_seconds, 25, 25, 3600);
   const claimReserveMs = boundedInteger(source.claimReserveMs ?? source.claim_reserve_ms, 1000, 1000, 1000);
@@ -181712,19 +181743,20 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
     };
   }
 
-  const jobId = trim(claim.job_id);
-  const buildId = trim(claim.build_id);
-  const claimedCandidateId = trim(claim.candidate_id);
-  const attemptId = trim(claim.attempt_id);
-  const attemptNonce = trim(claim.attempt_nonce);
+  const jobId = canonicalBankingPayWorkbenchUuid(claim.job_id);
+  const buildId = canonicalBankingPayWorkbenchUuid(claim.build_id);
+  const claimedCandidateId = canonicalBankingPayWorkbenchUuid(claim.candidate_id);
+  const attemptId = canonicalBankingPayWorkbenchUuid(claim.attempt_id);
+  const attemptNonce = canonicalBankingPayWorkbenchUuid(claim.attempt_nonce);
   const privateStage = upper(claim.private_stage);
   const attemptNumber = Number(claim.attempt_number);
   const leaseExpiresAtUtc = trim(claim.lease_expires_at_utc);
-  const claimIdentityValid = uuidRe.test(jobId)
-    && uuidRe.test(buildId)
-    && uuidRe.test(claimedCandidateId)
-    && uuidRe.test(attemptId)
-    && uuidRe.test(attemptNonce)
+  const sanitizeClaimedResult = (result) => safeDiagnostic(result, [attemptNonce], { maxEntries: 100, maxDepth: 8 });
+  const claimIdentityValid = !!jobId
+    && !!buildId
+    && !!claimedCandidateId
+    && !!attemptId
+    && !!attemptNonce
     && allowedStages.has(privateStage)
     && Number.isInteger(attemptNumber)
     && attemptNumber > 0
@@ -181732,7 +181764,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
     && Number.isFinite(new Date(leaseExpiresAtUtc).getTime())
     && (!candidateId || candidateId === claimedCandidateId);
   if (!claimIdentityValid) {
-    return {
+    return sanitizeClaimedResult({
       ...base,
       ok: false,
       transport_ok: false,
@@ -181742,7 +181774,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       phase: 'CLAIM_RESPONSE',
       result_code: 'SOURCE_BUILD_ATTEMPT_CLAIM_RESPONSE_INVALID',
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
-    };
+    });
   }
 
   const safeIdentity = {
@@ -181756,7 +181788,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   };
   const availableAfterClaimMs = remainingRuntime();
   if (availableAfterClaimMs < minimumAfterClaimMs) {
-    return {
+    return sanitizeClaimedResult({
       ...base,
       ...safeIdentity,
       ok: true,
@@ -181769,7 +181801,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       more_due: true,
       remaining_runtime_ms: availableAfterClaimMs,
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
-    };
+    });
   }
 
   let execution;
@@ -181792,7 +181824,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   } catch (error) {
     const safeError = safeDiagnostic(error, [attemptNonce]);
     const safeErrorMessage = safeText(safeError?.message || safeError || 'source-build execute failed', [attemptNonce]);
-    return {
+    return sanitizeClaimedResult({
       ...base,
       ...safeIdentity,
       ok: false,
@@ -181811,17 +181843,17 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       more_due: true,
       execute_elapsed_ms: Math.max(0, Date.now() - executeStartedAtMs),
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
-    };
+    });
   }
 
   const executionValid = !!execution
     && typeof execution.ok === 'boolean'
     && typeof execution.processed === 'boolean'
-    && trim(execution.job_id) === jobId
-    && trim(execution.build_id) === buildId
+    && canonicalBankingPayWorkbenchUuid(execution.job_id) === jobId
+    && canonicalBankingPayWorkbenchUuid(execution.build_id) === buildId
     && upper(execution.private_stage) === privateStage;
   if (!executionValid) {
-    return {
+    return sanitizeClaimedResult({
       ...base,
       ...safeIdentity,
       ok: false,
@@ -181834,15 +181866,15 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       more_due: true,
       execute_elapsed_ms: Math.max(0, Date.now() - executeStartedAtMs),
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
-    };
+    });
   }
 
   const nextCursor = isObject(execution.next_cursor_json) ? execution.next_cursor_json : {};
   const cursorKind = upper(nextCursor.cursor_kind || nextCursor.kind || '');
-  const dependencyUnitKey = safeText(nextCursor.dependency_unit_key || '');
+  const dependencyUnitKey = safeText(nextCursor.dependency_unit_key || '', [attemptNonce]);
   const factFamily = upper(nextCursor.fact_family || '');
   const pageNumber = Number(nextCursor.page_number);
-  return {
+  return sanitizeClaimedResult({
     ...base,
     ...safeIdentity,
     ok: execution.ok === true,
@@ -181866,7 +181898,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
     observed_effect_count: boundedInteger(execution.observed_effect_count, 0, 0, Number.MAX_SAFE_INTEGER),
     execute_elapsed_ms: Math.max(0, Date.now() - executeStartedAtMs),
     elapsed_ms: Math.max(0, Date.now() - startedAtMs)
-  };
+  });
 }
 
 
@@ -182240,21 +182272,17 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     5000
   );
   const origin = trimStr(sourceOptions.origin) || 'WORKBENCH_JOB_DRAIN';
-  const actorUserId = trimStr(sourceOptions.actorUserId || sourceOptions.actor_user_id);
-  const sessionFilterId = trimStr(sourceOptions.sessionId || sourceOptions.session_id);
-  const candidateFilterId = trimStr(sourceOptions.candidateId || sourceOptions.candidate_id);
+  const actorUserId = canonicalBankingPayWorkbenchUuid(sourceOptions.actorUserId || sourceOptions.actor_user_id);
+  const sessionFilterId = canonicalBankingPayWorkbenchUuid(sourceOptions.sessionId || sourceOptions.session_id);
+  const candidateFilterId = canonicalBankingPayWorkbenchUuid(sourceOptions.candidateId || sourceOptions.candidate_id);
   const allowedJobTypes = normalizeAllowedJobTypes(sourceOptions.allowedJobTypes ?? sourceOptions.allowed_job_types);
   const allowedJobTypeSet = new Set(allowedJobTypes || supportedJobTypes);
   const explicitNowUtc = normalizeExplicitNowUtc(sourceOptions.nowUtc || sourceOptions.now_utc);
-  const workerId = trimStr(
-    sourceOptions.workerId ||
-    sourceOptions.worker_id ||
-    (budgetProfile === 'CRON'
-      ? 'BANKING_PAY_WORKBENCH:CRON:GLOBAL'
-      : (uuidRe.test(sessionFilterId)
-          ? `BANKING_PAY_WORKBENCH:NUDGE:SESSION:${sessionFilterId}`
-          : 'BANKING_PAY_WORKBENCH:NUDGE:GLOBAL'))
-  ).slice(0, 200) || 'BANKING_PAY_WORKBENCH_DB_WORKER';
+  const workerId = bankingPayWorkbenchStableWorkerId(
+    budgetProfile,
+    sessionFilterId,
+    sourceOptions.workerId || sourceOptions.worker_id || ''
+  ) || 'BANKING_PAY_WORKBENCH_DB_WORKER';
   const configuredDbWorkerLeaseSeconds = firstConfiguredValue(
     sourceOptions.dbWorkerLeaseSeconds,
     sourceOptions.db_worker_lease_seconds,
@@ -183216,7 +183244,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
   };
 
   const recordSourceBuildTwoCall = (laneLike, context = {}) => {
-    const lane = isPlainObject(laneLike) ? laneLike : {};
+    const scrubbedLane = sanitizeBankingPayWorkbenchSourceBuildDiagnostic(laneLike, { maxTextLength: 500 });
+    const lane = isPlainObject(scrubbedLane) ? scrubbedLane : {};
     const passClaimed = lane.claimed === true ? 1 : 0;
     const passProcessed = lane.processed === true ? 1 : 0;
     const passFailed = lane.transport_ok === true && lane.execute_called === true && passProcessed > 0 && lane.ok !== true ? 1 : 0;
