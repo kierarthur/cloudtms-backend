@@ -23,6 +23,9 @@ DECLARE
   v_lane_identity text := NULLIF(btrim(COALESCE(p_lane_identity,'')),'');
   v_candidate_id uuid;
   v_lock_key bigint;
+  v_candidate_lock_acquired boolean:=false;
+  v_candidate_lock_wait_started_at timestamptz;
+  v_candidate_lock_wait_limit interval:=interval '750 milliseconds';
   v_registry private.banking_pay_workbench_candidate_scope_registry%ROWTYPE;
   v_build private.banking_pay_workbench_economic_builds%ROWTYPE;
   v_job public.banking_pay_workbench_jobs%ROWTYPE;
@@ -59,10 +62,18 @@ BEGIN
   v_lock_key := hashtextextended(
     public._pay_workbench_candidate_serial_key(v_candidate_id),24062027
   );
-  IF NOT pg_try_advisory_xact_lock(v_lock_key) THEN
+  v_candidate_lock_wait_started_at:=clock_timestamp();
+  LOOP
+    v_candidate_lock_acquired:=pg_catalog.pg_try_advisory_xact_lock(v_lock_key);
+    EXIT WHEN v_candidate_lock_acquired;
+    EXIT WHEN clock_timestamp()>=v_candidate_lock_wait_started_at+v_candidate_lock_wait_limit;
+    PERFORM pg_catalog.pg_sleep(0.01);
+  END LOOP;
+  IF NOT v_candidate_lock_acquired THEN
     RETURN jsonb_build_object(
       'ok',true,'processed',false,'job_id',p_job_id,'build_id',p_build_id,
       'private_stage',v_stage,'result_code','CANDIDATE_LOCK_BUSY',
+      'candidate_lock_wait_ms',GREATEST(0,round(extract(epoch FROM clock_timestamp()-v_candidate_lock_wait_started_at)*1000)::integer),
       'elapsed_ms',GREATEST(0,round(extract(epoch FROM clock_timestamp()-v_started_at)*1000)::integer)
     );
   END IF;

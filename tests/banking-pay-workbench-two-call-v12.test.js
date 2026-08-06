@@ -92,6 +92,15 @@ test('RPC 2 uses fixed lock order and a final 500ms lease/generation fence', () 
   assert.match(execute, /PAY_WORKBENCH_ATTEMPT_FINAL_FENCE_FAILED/i);
 });
 
+test('RPC 2 absorbs transient candidate contention inside a bounded execute window', () => {
+  assert.match(execute, /v_candidate_lock_wait_limit\s+interval:=interval '750 milliseconds'/i);
+  assert.match(
+    execute,
+    /LOOP[\s\S]*pg_catalog\.pg_try_advisory_xact_lock\(v_lock_key\)[\s\S]*pg_catalog\.pg_sleep\(0\.01\)[\s\S]*END LOOP;/i,
+  );
+  assert.match(execute, /IF NOT v_candidate_lock_acquired THEN[\s\S]*'result_code','CANDIDATE_LOCK_BUSY'/i);
+});
+
 test('caught stage failure rolls back the inner work and leaves durable failure handling to the outer transaction', () => {
   assert.match(execute, /EXCEPTION WHEN OTHERS THEN/i);
   assert.match(execute, /inner stage subtransaction has rolled back/i);
