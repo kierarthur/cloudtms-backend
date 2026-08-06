@@ -34,6 +34,14 @@ test('RPC 1 is service-role-only metadata claim/start with a concrete durable at
   assert.match(claim, /recovery_scan_deferral_count/i);
   assert.match(claim, /pg_try_advisory_xact_lock[\s\S]*FOR UPDATE OF claimed_job SKIP LOCKED/i);
   assert.match(claim, /UPDATE public\.banking_pay_workbench_jobs claimed_job[\s\S]*SET status='RUNNING'[\s\S]*economic_build_id=v_build_id/i);
+  assert.match(
+    claim,
+    /INSERT INTO private\.banking_pay_workbench_candidate_scope_registry\(\s*candidate_id,last_dirtied_at_utc,created_at_utc,updated_at_utc\s*\)\s*VALUES\(v_job\.candidate_id,v_database_now,v_database_now,v_database_now\)/i,
+  );
+  assert.doesNotMatch(
+    claim,
+    /INSERT INTO private\.banking_pay_workbench_candidate_scope_registry\(candidate_id\)\s*VALUES\(v_job\.candidate_id\)/i,
+  );
   assert.doesNotMatch(claim, /public\.pay_workbench_claim_due_jobs\(/i);
   assert.doesNotMatch(claim, /timesheets_financials|pay_finance_case_components|pay_batch_items|pay_sync_overpayments/i);
 });

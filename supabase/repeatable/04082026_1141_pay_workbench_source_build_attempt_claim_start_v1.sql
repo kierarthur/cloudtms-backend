@@ -339,8 +339,10 @@ BEGIN
     RETURN jsonb_build_object('ok',true,'claimed',false,'result_code','CANDIDATE_DELETED');
   END IF;
 
-  INSERT INTO private.banking_pay_workbench_candidate_scope_registry(candidate_id)
-  VALUES(v_job.candidate_id)
+  INSERT INTO private.banking_pay_workbench_candidate_scope_registry(
+    candidate_id,last_dirtied_at_utc,created_at_utc,updated_at_utc
+  )
+  VALUES(v_job.candidate_id,v_database_now,v_database_now,v_database_now)
   ON CONFLICT(candidate_id) DO NOTHING;
 
   SELECT * INTO v_registry
