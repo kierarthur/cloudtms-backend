@@ -720,7 +720,7 @@ BEGIN
         AND CASE WHEN pg_input_is_valid(segment.value->>'date','date')
           THEN ((segment.value->>'date')::date)::text=segment.value->>'date' ELSE false END))
   ), additional_occurrence AS (
-    SELECT state.timesheet_id,state.last_settled_signature,0::bigint,
+    SELECT state.timesheet_id AS source_timesheet_id,state.last_settled_signature,0::bigint,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':20:ADDITIONAL:'||
         LPAD(octet_length(entry.key)::text,10,'0')||':'||
         encode(convert_to(entry.key,'UTF8'),'hex'),
@@ -753,7 +753,7 @@ BEGIN
           AND entry.value->>field_name !~ '^-?\d+(\.\d+)?$')
       AND amount.amount_ex_vat<>0
   ), additional_total_occurrence AS (
-    SELECT state.timesheet_id,state.last_settled_signature,0::bigint,
+    SELECT state.timesheet_id AS source_timesheet_id,state.last_settled_signature,0::bigint,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':25:ADDITIONAL_TOTAL',
       'ADDITIONAL_CODE'::text,'TOTAL'::text,
       ROUND((state.snapshot->>'additional_pay_ex_vat')::numeric,2) AS amount_ex_vat,
@@ -766,7 +766,7 @@ BEGIN
         FROM additional_occurrence existing
         WHERE existing.source_timesheet_id=state.timesheet_id),0)=0
   ), expense_occurrence AS (
-    SELECT state.timesheet_id,state.last_settled_signature,0::bigint,
+    SELECT state.timesheet_id AS source_timesheet_id,state.last_settled_signature,0::bigint,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':30:EXPENSE:'||expense.key_value,
       'EXPENSE_CODE'::text,expense.key_value,
       expense.amount_ex_vat AS amount_ex_vat,expense.amount_ex_vat AS amount_inc_vat,
@@ -792,7 +792,8 @@ BEGIN
     ) expense(key_value,amount_ex_vat)
     WHERE expense.amount_ex_vat<>0
   ), adjustment_occurrence AS (
-    SELECT state.timesheet_id,state.last_settled_signature,adjustment.ordinality::bigint,
+    SELECT state.timesheet_id AS source_timesheet_id,state.last_settled_signature,
+      adjustment.ordinality::bigint,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':40:ADJUSTMENT:'||
         LPAD(adjustment.ordinality::text,12,'0'),
       'ADJUSTMENT_CODE'::text,BTRIM(adjustment.value->>'id'),
@@ -815,7 +816,7 @@ BEGIN
     UNION ALL SELECT * FROM expense_occurrence
     UNION ALL SELECT * FROM adjustment_occurrence
   ), evidence_occurrence AS (
-    SELECT state.timesheet_id,state.last_settled_signature,0::bigint,
+    SELECT state.timesheet_id AS source_timesheet_id,state.last_settled_signature,0::bigint,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':99:STATE_EVIDENCE',
       'TS_TOTAL'::text,'TOTAL'::text,0::numeric,0::numeric,NULL::text,true,'STATE_EVIDENCE'::text
     FROM fallback_states state

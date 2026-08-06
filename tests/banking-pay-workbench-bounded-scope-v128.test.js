@@ -61,6 +61,10 @@ test('V1.2.8 fallback occurrence CTEs name ex-VAT and inc-VAT columns independen
     occurrence,
     /expense\.amount_ex_vat AS amount_ex_vat,expense\.amount_ex_vat AS amount_inc_vat/i,
   );
+  assert.equal(
+    (occurrence.match(/state\.timesheet_id AS source_timesheet_id/g) || []).length >= 6,
+    true,
+  );
   assert.match(occurrence, /SUM\(existing\.amount_ex_vat\)/i);
   assert.doesNotMatch(occurrence, /#variable_conflict use_column/i);
 });
