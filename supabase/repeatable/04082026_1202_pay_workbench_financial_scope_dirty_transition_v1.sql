@@ -431,7 +431,7 @@ BEGIN
        AND EXISTS(SELECT 1 FROM pg_catalog.pg_class relation
          WHERE relation.oid=v_expected AND relation.relpersistence='t'
            AND relation.relnamespace=pg_catalog.pg_my_temp_schema())
-       AND (SELECT array_agg(attribute.attname ORDER BY attribute.attnum)
+       AND (SELECT array_agg(attribute.attname::text ORDER BY attribute.attnum)
             FROM pg_catalog.pg_attribute attribute
             WHERE attribute.attrelid=v_expected AND attribute.attnum>0 AND NOT attribute.attisdropped)
           =ARRAY['build_token','candidate_id','timesheet_id','relation_name','operation','source_id',

@@ -284,6 +284,17 @@ test('all 18 invalidation backstops and nine independent finance observers use o
   }
 });
 
+test('finance-effect observer compares temporary relation attributes using one text-array type', () => {
+  assert.match(
+    read('supabase/repeatable/04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql'),
+    /array_agg\(attribute\.attname::text ORDER BY attribute\.attnum\)[\s\S]*?=ARRAY\['build_token'/i,
+  );
+  assert.doesNotMatch(
+    read('supabase/repeatable/04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql'),
+    /array_agg\(attribute\.attname ORDER BY attribute\.attnum\)/i,
+  );
+});
+
 test('retained finance dirty triggers validate a sealed effect plan before finance DML', () => {
   for (const name of [
     'trg_pay_workbench_mark_candidate_dirty__pay_advances',
