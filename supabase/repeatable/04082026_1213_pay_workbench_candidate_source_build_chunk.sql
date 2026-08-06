@@ -1582,12 +1582,12 @@ BEGIN
         END IF;
         IF v_bootstrap_unit_key IS NULL THEN
           v_next:=jsonb_build_object('cursor_kind','BOOTSTRAP_DISCOVERY','cursor_version',1,
-            'bootstrap_id',v_bootstrap_id,'bootstrap_stream','RESET_FACTS',
+            'bootstrap_id',v_bootstrap_id,'bootstrap_stream','RESET_FACT_PAGES',
             'last_source_key',NULL,'build_id',v_build_id,'candidate_id',p_candidate_id,
             'captured_candidate_generation',v_build.captured_candidate_generation,
             'captured_source_change_seq',v_build.source_change_seq);
           UPDATE private.banking_pay_workbench_candidate_scope_registry
-          SET bootstrap_stream='RESET_FACTS',bootstrap_cursor_json=v_next,
+          SET bootstrap_stream='RESET_FACT_PAGES',bootstrap_cursor_json=v_next,
               updated_at_utc=clock_timestamp()
           WHERE candidate_id=p_candidate_id AND current_build_id=v_build_id;
           -- The sealed seed cursor remains immutable. Bootstrap continuation is
@@ -1597,7 +1597,7 @@ BEGIN
           RETURN jsonb_build_object('ok',true,'build_id',v_build_id,
             'private_stage','BOOTSTRAP_DISCOVERY','stage_status','CLASSIFYING',
             'has_more',true,'continuation_enqueued',false,'next_cursor_json',v_next,
-            'next_action','BOOTSTRAP_DISCOVERY','classification_phase','RESET_FACTS');
+            'next_action','BOOTSTRAP_DISCOVERY','classification_phase','RESET_FACT_PAGES');
         END IF;
 
         INSERT INTO pg_temp._bpay_wb_bootstrap_page_v1(source_key,timesheet_id)
@@ -1856,12 +1856,38 @@ BEGIN
         'has_more',true,'continuation_enqueued',false,'next_cursor_json',v_next,
         'next_action','BOOTSTRAP_DISCOVERY','classification_phase',
         v_next->>'classification_phase','page_source_count',v_bootstrap_page_count);
+    ELSIF v_bootstrap_stream='RESET_FACT_PAGES' THEN
+      WITH doomed AS (
+        SELECT page.ctid
+        FROM private.banking_pay_workbench_economic_build_fact_pages page
+        WHERE page.build_id=v_build_id
+        ORDER BY page.dependency_unit_key,page.fact_family,page.page_number
+        LIMIT 250
+      ) DELETE FROM private.banking_pay_workbench_economic_build_fact_pages page
+        USING doomed WHERE page.ctid=doomed.ctid;
+      GET DIAGNOSTICS v_bootstrap_reset_count=ROW_COUNT;
+      v_next:=jsonb_build_object('cursor_kind','BOOTSTRAP_DISCOVERY','cursor_version',1,
+        'bootstrap_id',v_bootstrap_id,'bootstrap_stream',
+        CASE WHEN v_bootstrap_reset_count<250 THEN 'RESET_FACTS' ELSE 'RESET_FACT_PAGES' END,
+        'build_id',v_build_id,'candidate_id',p_candidate_id,
+        'captured_candidate_generation',v_build.captured_candidate_generation,
+        'captured_source_change_seq',v_build.source_change_seq);
+      UPDATE private.banking_pay_workbench_candidate_scope_registry
+      SET bootstrap_stream=v_next->>'bootstrap_stream',bootstrap_cursor_json=v_next,
+          updated_at_utc=clock_timestamp()
+      WHERE candidate_id=p_candidate_id AND current_build_id=v_build_id;
+      UPDATE private.banking_pay_workbench_economic_builds
+      SET updated_at_utc=clock_timestamp() WHERE id=v_build_id;
+      RETURN jsonb_build_object('ok',true,'build_id',v_build_id,
+        'private_stage','BOOTSTRAP_DISCOVERY','stage_status','CLASSIFYING',
+        'has_more',true,'continuation_enqueued',false,'next_cursor_json',v_next,
+        'next_action','BOOTSTRAP_DISCOVERY','deleted_count',v_bootstrap_reset_count);
     ELSIF v_bootstrap_stream='RESET_FACTS' THEN
       WITH doomed AS (
         SELECT fact.ctid
         FROM private.banking_pay_workbench_economic_build_facts fact
-        WHERE fact.build_id=v_build_id AND fact.fact_family='DEPENDENCY_EDGE'
-        ORDER BY fact.natural_key LIMIT 250
+        WHERE fact.build_id=v_build_id
+        ORDER BY fact.fact_family,fact.natural_key LIMIT 250
       ) DELETE FROM private.banking_pay_workbench_economic_build_facts fact
         USING doomed WHERE fact.ctid=doomed.ctid;
       GET DIAGNOSTICS v_bootstrap_reset_count=ROW_COUNT;

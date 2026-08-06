@@ -216,7 +216,15 @@ test('fact collection and legacy bootstrap page independently of total candidate
   assert.match(closure, /private_stage='WORKSPACE_FACT'/i);
   assert.match(dispatcher, /classification_phase','EVIDENCE'/i);
   assert.match(dispatcher, /classification_phase','APPLY'/i);
-  assert.match(dispatcher, /bootstrap_stream','RESET_FACTS'/i);
+  assert.match(dispatcher, /bootstrap_stream','RESET_FACT_PAGES'/i);
+  assert.match(dispatcher, /v_bootstrap_stream='RESET_FACT_PAGES'[\s\S]*?FROM private\.banking_pay_workbench_economic_build_fact_pages[\s\S]*?LIMIT 250[\s\S]*?'RESET_FACTS'/i);
+  const resetFactsStart = dispatcher.indexOf("ELSIF v_bootstrap_stream='RESET_FACTS' THEN");
+  const resetScopeStart = dispatcher.indexOf("ELSIF v_bootstrap_stream='RESET_SCOPE' THEN", resetFactsStart);
+  assert.ok(resetFactsStart >= 0 && resetScopeStart > resetFactsStart);
+  const resetFacts = dispatcher.slice(resetFactsStart, resetScopeStart);
+  assert.match(resetFacts, /FROM private\.banking_pay_workbench_economic_build_facts[\s\S]*?WHERE fact\.build_id=v_build_id[\s\S]*?LIMIT 250/i);
+  assert.doesNotMatch(resetFacts, /fact\.fact_family='DEPENDENCY_EDGE'/i);
+  assert.match(resetFacts, /THEN 'RESET_SCOPE' ELSE 'RESET_FACTS'/i);
   assert.match(dispatcher, /v_bootstrap_stream='RESET_SCOPE'|THEN 'RESET_SCOPE'/i);
   assert.doesNotMatch(dispatcher, /SELECT count\(\*\)[^;]*economic_state='DIRTY'/is);
   assert.doesNotMatch(dispatcher, /p_max_members|LIMIT\s+100\b/i);
