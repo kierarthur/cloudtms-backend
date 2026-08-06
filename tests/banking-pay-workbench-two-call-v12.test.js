@@ -13,6 +13,7 @@ const fail = read('supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql'
 const recovery = read('supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql');
 const oldDrain = read('supabase/repeatable/04082026_1219_pay_workbench_worker_drain_chunk.sql');
 const sourceBuild = read('supabase/repeatable/04082026_1213_pay_workbench_candidate_source_build_chunk.sql');
+const reconciliationEnvelope = read('supabase/migrations/06082026_0407_banking_pay_reconciliation_envelope_v2.sql');
 
 test('RPC 1 is service-role-only metadata claim/start with a concrete durable attempt', () => {
   assert.match(claim, /CREATE OR REPLACE FUNCTION public\.pay_workbench_source_build_attempt_claim_start_v1\(/i);
@@ -78,6 +79,43 @@ test('post-seal bootstrap progress preserves the immutable terminal seed cursor'
     sourceBuild,
     /private_stage='PREPARE_SCOPE',scope_cursor_json=v_next[\s\S]*seed_scope_digest=NULL[\s\S]*seed_scope_sealed_at_utc=NULL/i,
   );
+});
+
+test('reconciliation scale authority is fail-closed and the calibration envelope is complete', () => {
+  assert.match(
+    sourceBuild,
+    /jsonb_typeof\(v_envelope_evidence\)<>'object' OR v_envelope_evidence='\{\}'::jsonb/i,
+  );
+  assert.match(sourceBuild, /ENVELOPE_OR_EVIDENCE_MISSING_OR_MALFORMED/i);
+  assert.match(sourceBuild, /'evidence_status','UNVALIDATED_CONFIGURATION'/i);
+  assert.match(sourceBuild, /'reconciliation_scale_block',jsonb_build_object/i);
+
+  for (const key of [
+    'relevant_timesheet_count',
+    'dependency_node_count',
+    'dependency_edge_count',
+    'settled_source_row_count',
+    'settled_component_count',
+    'entitlement_component_count',
+    'reservation_component_count',
+    'finance_case_count',
+    'finance_component_count',
+    'protection_evidence_count',
+    'expected_case_insert_count',
+    'expected_case_update_count',
+    'expected_case_clear_count',
+    'expected_component_insert_count',
+    'expected_component_update_count',
+    'expected_component_close_count',
+    'canonical_source_row_count',
+    'staging_bytes',
+  ]) {
+    assert.match(reconciliationEnvelope, new RegExp(`'${key}',\\d+`, 'i'));
+  }
+  assert.match(reconciliationEnvelope, /CONTROLLED_TEST_CALIBRATION/i);
+  assert.match(reconciliationEnvelope, /candidate_discovery_truncated',false/i);
+  assert.match(reconciliationEnvelope, /policy_x','UNCHANGED'/i);
+  assert.match(reconciliationEnvelope, /BANKING_PAY_RECONCILIATION_ENVELOPE_BASELINE_CONFLICT/i);
 });
 
 test('RPC 1 attempt start, creation, update and lease use one ordered timestamp authority', () => {

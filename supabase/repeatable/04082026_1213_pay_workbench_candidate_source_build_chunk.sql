@@ -100,6 +100,7 @@ DECLARE
   v_envelope_evidence jsonb;
   v_vector_item record;
   v_scale_blocked boolean:=false;
+  v_scale_block_reason text;
   v_sync_result jsonb;
   v_effect_plan jsonb:='[]'::jsonb;
   v_effect_plan_digest text:=md5('');
@@ -1148,13 +1149,28 @@ BEGIN
                banking_pay_workbench_reconciliation_envelope_evidence_json
         INTO v_envelope_version,v_envelope,v_envelope_evidence
         FROM public.settings_defaults WHERE id=1;
-        IF v_envelope_version IS NULL OR jsonb_typeof(v_envelope)<>'object' OR v_envelope='{}'::jsonb THEN
+        IF v_envelope_version IS NULL OR jsonb_typeof(v_envelope)<>'object' OR v_envelope='{}'::jsonb
+           OR jsonb_typeof(v_envelope_evidence)<>'object' OR v_envelope_evidence='{}'::jsonb THEN
           v_scale_blocked:=true;
+          v_scale_block_reason:='ENVELOPE_OR_EVIDENCE_MISSING_OR_MALFORMED';
+          -- A malformed or absent configuration is itself immutable scale-block
+          -- evidence.  Preserve a truthful non-empty snapshot so the durable
+          -- BLOCKED row satisfies its lifecycle constraint without inventing a
+          -- financial limit or allowing reconciliation to continue.
+          v_envelope_version:=COALESCE(v_envelope_version,1);
+          v_envelope:=jsonb_build_object(
+            '_authority_state','ENVELOPE_OR_EVIDENCE_MISSING_OR_MALFORMED'
+          );
+          v_envelope_evidence:=jsonb_build_object(
+            'evidence_status','UNVALIDATED_CONFIGURATION'
+          );
         ELSE
           FOR v_vector_item IN SELECT key,value FROM jsonb_each_text(v_vector) LOOP
             IF COALESCE(v_envelope->>v_vector_item.key,'') !~ '^[0-9]+$'
                OR v_vector_item.value::numeric>(v_envelope->>v_vector_item.key)::numeric THEN
-              v_scale_blocked:=true; EXIT;
+              v_scale_blocked:=true;
+              v_scale_block_reason:='VECTOR_OUTSIDE_MEASURED_ENVELOPE';
+              EXIT;
             END IF;
           END LOOP;
         END IF;
@@ -1163,6 +1179,12 @@ BEGIN
             status='BLOCKED_UNVALIDATED_RECONCILIATION_SCALE',complexity_vector_json=v_vector,
             envelope_version=v_envelope_version,envelope_snapshot_json=COALESCE(v_envelope,'{}'::jsonb),
             envelope_evidence_json=COALESCE(v_envelope_evidence,'{}'::jsonb),
+            attestation_json=attestation_json||jsonb_build_object(
+              'reconciliation_scale_block',jsonb_build_object(
+                'reason',COALESCE(v_scale_block_reason,'UNVALIDATED_RECONCILIATION_SCALE'),
+                'envelope_version',v_envelope_version
+              )
+            ),
             fact_cursor_json=v_next||jsonb_build_object('terminal',true),updated_at_utc=clock_timestamp()
           WHERE id=v_build_id;
           RETURN jsonb_build_object('ok',true,'build_id',v_build_id,'private_stage','WORKSPACE_FACT',
