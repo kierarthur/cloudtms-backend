@@ -658,6 +658,25 @@ test('terminal reconciliation calibration remains statement- and lease-bounded',
   assert.match(migration, /Policy X:/);
 });
 
+test('accepted four-lane 32-burst profile remains inside the proved transaction envelope', () => {
+  const migration = fs.readFileSync(
+    path.resolve(__dirname, '../supabase/migrations/06082026_0754_banking_pay_workbench_four_lane_32_burst.sql'),
+    'utf8'
+  );
+  assert.match(migration, /cron_source_build_parallelism\s*=\s*4/);
+  assert.match(migration, /nudge_source_build_parallelism\s*=\s*4/);
+  assert.match(migration, /cron_source_build_parallel_bursts\s*=\s*32/);
+  assert.match(migration, /nudge_source_build_parallel_bursts\s*=\s*32/);
+  assert.match(migration, /cron_source_build_runtime_floor_ms\s*=\s*45000/);
+  assert.match(migration, /nudge_source_build_runtime_floor_ms\s*=\s*45000/);
+  assert.match(migration, /db_worker_max_runtime_ms\s*=\s*22000/);
+  assert.match(migration, /db_statement_timeout_ms\s*=\s*24000/);
+  assert.match(migration, /db_worker_lease_seconds\s*=\s*25/);
+  assert.match(migration, /rpc_safety_buffer_ms\s*=\s*1000/);
+  assert.match(migration, /FOUR_LANE_PROFILE_BASELINE_CONFLICT/);
+  assert.match(migration, /Policy X authority/);
+});
+
 test('runtime version advertises the bounded-scope Stage 2 source marker', () => {
   const version = functionBody('handleVersion');
   assert.match(version, /banking_pay_bounded_scope_stage2/);
