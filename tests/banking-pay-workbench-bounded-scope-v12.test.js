@@ -12,6 +12,9 @@ const v128Migration = read(v128MigrationPath);
 const factPageAuthorityMigration = read(
   'supabase/migrations/06082026_0056_banking_pay_finance_item_fact_page_constraint.sql'
 );
+const expectedEffectAuthorityMigration = read(
+  'supabase/migrations/06082026_0518_banking_pay_expected_effect_fact_authority.sql'
+);
 const closure = read(
   'supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql'
 ).replace(/\r\n/g, '\n');
@@ -161,6 +164,25 @@ test('global finance-item authority is admitted by both fact and page ledgers', 
     /DROP CONSTRAINT IF EXISTS bpay_wb_economic_build_fact_pages_unit_chk[\s\S]*ADD CONSTRAINT bpay_wb_economic_build_fact_pages_unit_chk[\s\S]*'FINANCE_ITEM_AUTHORITY'/i,
   );
   assert.doesNotMatch(factPageAuthorityMigration, /CREATE\s+(?:TABLE|INDEX|FUNCTION)/i);
+});
+
+test('latest fact constraints retain both finance-item and sealed expected-effect authority', () => {
+  assert.match(
+    expectedEffectAuthorityMigration,
+    /economic_build_facts_family_chk[\s\S]*?'FINANCE_ITEM_AUTHORITY'[\s\S]*?'EXPECTED_FINANCE_EFFECT'/i,
+  );
+  assert.match(
+    expectedEffectAuthorityMigration,
+    /economic_build_facts_unit_chk[\s\S]*?'FINANCE_ITEM_AUTHORITY'[\s\S]*?'EXPECTED_FINANCE_EFFECT'[\s\S]*?dependency_unit_key = 'GLOBAL'/i,
+  );
+  assert.match(
+    expectedEffectAuthorityMigration,
+    /fact_family <> 'EXPECTED_FINANCE_EFFECT'[\s\S]*?source_id IS NOT NULL[\s\S]*?expected_before_digest[\s\S]*?expected_after_digest/i,
+  );
+  assert.doesNotMatch(
+    expectedEffectAuthorityMigration,
+    /CREATE\s+(?:TABLE|INDEX|FUNCTION)/i,
+  );
 });
 
 test('private durable authority is not exposed to browser or service roles', () => {
