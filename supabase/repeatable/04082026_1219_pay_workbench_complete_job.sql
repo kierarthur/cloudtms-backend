@@ -105,6 +105,10 @@ DECLARE
   v_source_empty_cleanup_line_work_count integer := 0;
   v_source_empty_cleanup_preview_row_count integer := 0;
   v_source_empty_targeted_timesheet_count integer := 0;
+  v_bounded_terminal_refresh_scope_kind text := NULL::text;
+  v_bounded_terminal_targeted_timesheet_count integer := 0;
+  v_bounded_terminal_line_work_retired_count integer := 0;
+  v_bounded_terminal_scope_finalised_count integer := 0;
   v_continuation_scope_counter_deferred boolean := false;
   v_continuation_scope_counter_deferred_reason text := NULL::text;
   v_finalisation_deferred boolean := false;
@@ -1846,6 +1850,88 @@ BEGIN
         -- CURRENT set. The common terminal path below owns public scope and
         -- progress reconciliation; it must not enter the legacy line-work
         -- pipeline or carry private build identity into a legacy job.
+        v_bounded_terminal_refresh_scope_kind := UPPER(BTRIM(COALESCE(
+          NULLIF(v_result_json->>'refresh_scope_kind', ''),
+          NULLIF(v_job_row.payload_json->>'refresh_scope_kind', ''),
+          NULLIF(v_job_row.payload_json#>>'{source_build,refresh_scope_kind}', ''),
+          'CANDIDATE_FULL_LIVE'
+        )));
+
+        DROP TABLE IF EXISTS pg_temp._bpay_complete_job_bounded_terminal_timesheets;
+        CREATE TEMP TABLE _bpay_complete_job_bounded_terminal_timesheets ON COMMIT DROP AS
+        WITH raw_timesheet_ids(timesheet_id_text) AS (
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result_json->'targeted_timesheet_ids') = 'array' THEN v_result_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END)
+          UNION
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_result_json->'linked_timesheet_ids') = 'array' THEN v_result_json->'linked_timesheet_ids' ELSE '[]'::jsonb END)
+          UNION
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_job_row.payload_json->'targeted_timesheet_ids') = 'array' THEN v_job_row.payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END)
+          UNION
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_job_row.payload_json->'linked_timesheet_ids') = 'array' THEN v_job_row.payload_json->'linked_timesheet_ids' ELSE '[]'::jsonb END)
+          UNION
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_job_row.payload_json#>'{source_build,targeted_timesheet_ids}') = 'array' THEN v_job_row.payload_json#>'{source_build,targeted_timesheet_ids}' ELSE '[]'::jsonb END)
+          UNION
+          SELECT jsonb_array_elements_text(CASE WHEN jsonb_typeof(v_job_row.payload_json#>'{source_build,linked_timesheet_ids}') = 'array' THEN v_job_row.payload_json#>'{source_build,linked_timesheet_ids}' ELSE '[]'::jsonb END)
+          UNION
+          SELECT current_source.timesheet_id::text
+          FROM public.banking_pay_workbench_candidate_source_lines AS current_source
+          WHERE current_source.session_id = v_job_row.session_id
+            AND current_source.candidate_id = v_job_row.candidate_id
+            AND current_source.session_version = COALESCE(v_result_session_version, v_session_row.version)
+            AND current_source.source_build_run_id = v_source_build_run_id_text::uuid
+            AND current_source.source_change_seq = v_source_change_seq
+            AND current_source.status = 'CURRENT'
+            AND current_source.timesheet_id IS NOT NULL
+        )
+        SELECT DISTINCT LOWER(BTRIM(timesheet_id_text))::uuid AS timesheet_id
+        FROM raw_timesheet_ids
+        WHERE NULLIF(BTRIM(timesheet_id_text), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+
+        SELECT COUNT(*)::integer
+        INTO v_bounded_terminal_targeted_timesheet_count
+        FROM pg_temp._bpay_complete_job_bounded_terminal_timesheets;
+
+        IF v_bounded_terminal_refresh_scope_kind = 'TARGETED_TIMESHEETS'
+           AND COALESCE(v_bounded_terminal_targeted_timesheet_count, 0) = 0 THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_BOUNDED_TERMINAL_TARGET_SCOPE_REQUIRED'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'PAY_WORKBENCH_BOUNDED_TERMINAL_TARGET_SCOPE_REQUIRED',
+                    'session_id', v_job_row.session_id::text,
+                    'candidate_id', v_job_row.candidate_id::text,
+                    'job_id', p_job_id::text,
+                    'source_build_run_id', v_source_build_run_id_text,
+                    'source_change_seq', v_source_change_seq
+                  )::text;
+        END IF;
+
+        UPDATE public.banking_pay_workbench_candidate_line_work AS bounded_legacy_line_work
+        SET status = 'SKIPPED',
+            work_payload_json = jsonb_strip_nulls(
+              COALESCE(bounded_legacy_line_work.work_payload_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'bounded_source_publish_superseded', true,
+                'bounded_source_publish_job_id', p_job_id::text,
+                'bounded_source_publish_build_id', v_job_row.economic_build_id::text,
+                'bounded_source_publish_at_utc', v_now::text,
+                'bounded_source_publish_reason', 'CANONICAL_SOURCE_ALREADY_PUBLISHED'
+              )
+            ),
+            error_json = NULL::jsonb,
+            updated_at_utc = v_now
+        WHERE bounded_legacy_line_work.session_id = v_job_row.session_id
+          AND bounded_legacy_line_work.candidate_id = v_job_row.candidate_id
+          AND UPPER(BTRIM(COALESCE(bounded_legacy_line_work.status, ''))) IN (
+            'PENDING', 'PROCESSING', 'RUNNING', 'QUEUED', 'DIRTY', 'READY'
+          )
+          AND (
+            v_bounded_terminal_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+            OR bounded_legacy_line_work.timesheet_id IN (
+              SELECT bounded_timesheets.timesheet_id
+              FROM pg_temp._bpay_complete_job_bounded_terminal_timesheets AS bounded_timesheets
+            )
+          );
+        GET DIAGNOSTICS v_bounded_terminal_line_work_retired_count = ROW_COUNT;
+
         v_next_recommended_action := 'READ_PREVIEW_PAGE';
       ELSIF (
         (
@@ -2341,6 +2427,55 @@ BEGIN
         v_source_reconciliation_applied := v_source_reconciliation_deferred IS NOT TRUE
           AND LOWER(BTRIM(COALESCE(v_source_reconciliation_json->>'ok', 'true')))
             NOT IN ('false', 'f', '0', 'no', 'n', 'off');
+
+        IF v_source_reconciliation_applied
+           AND v_job_row.economic_build_id IS NOT NULL
+           AND UPPER(BTRIM(COALESCE(v_result_json->>'private_stage', ''))) = 'COMPLETE'
+           AND UPPER(BTRIM(COALESCE(v_result_json->>'stage_status', ''))) = 'COMPLETE'
+           AND v_current_source_row_count_authoritative
+           AND COALESCE(v_current_source_row_count, 0) > 0
+           AND COALESCE(NULLIF(v_source_reconciliation_json->>'scope_rows_repaired', '')::integer, 0) > 0 THEN
+          -- The bounded path publishes its canonical CURRENT set itself. Once
+          -- that source is reconciled, no legacy line-work stage remains to
+          -- move SOURCE_READY to a public terminal scope state.
+          UPDATE public.banking_pay_workbench_session_scope AS bounded_terminal_scope
+          SET status = 'MATERIALISED',
+              seeded = true,
+              dirty = false,
+              pending_job_id = NULL::uuid,
+              error_json = NULL::jsonb,
+              updated_at_utc = v_now
+          WHERE bounded_terminal_scope.session_id = v_job_row.session_id
+            AND bounded_terminal_scope.candidate_id = v_job_row.candidate_id
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.banking_pay_workbench_jobs AS newer_active_source_job
+              WHERE newer_active_source_job.session_id = v_job_row.session_id
+                AND newer_active_source_job.candidate_id = v_job_row.candidate_id
+                AND newer_active_source_job.id <> p_job_id
+                AND UPPER(BTRIM(COALESCE(newer_active_source_job.status, ''))) IN ('QUEUED', 'RUNNING')
+                AND UPPER(BTRIM(COALESCE(newer_active_source_job.job_type, ''))) IN (
+                  'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+                  'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+                  'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
+                  'CANDIDATE_SOURCE_BUILD',
+                  'CANDIDATE_SOURCE_BUILD_CHUNK',
+                  'SOURCE_BUILD',
+                  'SOURCE_BUILD_PAGE'
+                )
+            )
+            AND EXISTS (
+              SELECT 1
+              FROM public.banking_pay_workbench_candidate_source_lines AS bounded_current_source
+              WHERE bounded_current_source.session_id = v_job_row.session_id
+                AND bounded_current_source.candidate_id = v_job_row.candidate_id
+                AND bounded_current_source.session_version = COALESCE(v_result_session_version, v_session_row.version)
+                AND bounded_current_source.source_build_run_id = v_source_build_run_id_text::uuid
+                AND bounded_current_source.source_change_seq = v_source_change_seq
+                AND bounded_current_source.status = 'CURRENT'
+            );
+          GET DIAGNOSTICS v_bounded_terminal_scope_finalised_count = ROW_COUNT;
+        END IF;
       EXCEPTION
         WHEN lock_not_available THEN
           v_source_reconciliation_applied := false;
@@ -2804,6 +2939,9 @@ BEGIN
     'source_empty_cleanup_line_work_count', COALESCE(v_source_empty_cleanup_line_work_count, 0),
     'source_empty_cleanup_preview_row_count', COALESCE(v_source_empty_cleanup_preview_row_count, 0),
     'source_empty_cleanup_targeted_timesheet_count', COALESCE(v_source_empty_targeted_timesheet_count, 0),
+    'bounded_terminal_targeted_timesheet_count', COALESCE(v_bounded_terminal_targeted_timesheet_count, 0),
+    'bounded_terminal_line_work_retired_count', COALESCE(v_bounded_terminal_line_work_retired_count, 0),
+    'bounded_terminal_scope_finalised_count', COALESCE(v_bounded_terminal_scope_finalised_count, 0),
     'continuation_scope_counter_deferred', COALESCE(v_continuation_scope_counter_deferred, false),
     'continuation_scope_counter_deferred_reason', v_continuation_scope_counter_deferred_reason,
     'finalisation_deferred', COALESCE(v_finalisation_deferred, false),
@@ -2916,6 +3054,9 @@ BEGIN
     'source_empty_cleanup_line_work_count', COALESCE(v_source_empty_cleanup_line_work_count, 0),
     'source_empty_cleanup_preview_row_count', COALESCE(v_source_empty_cleanup_preview_row_count, 0),
     'source_empty_cleanup_targeted_timesheet_count', COALESCE(v_source_empty_targeted_timesheet_count, 0),
+    'bounded_terminal_targeted_timesheet_count', COALESCE(v_bounded_terminal_targeted_timesheet_count, 0),
+    'bounded_terminal_line_work_retired_count', COALESCE(v_bounded_terminal_line_work_retired_count, 0),
+    'bounded_terminal_scope_finalised_count', COALESCE(v_bounded_terminal_scope_finalised_count, 0),
     'continuation_scope_counter_deferred', COALESCE(v_continuation_scope_counter_deferred, false),
     'continuation_scope_counter_deferred_reason', v_continuation_scope_counter_deferred_reason,
     'finalisation_deferred', COALESCE(v_finalisation_deferred, false),

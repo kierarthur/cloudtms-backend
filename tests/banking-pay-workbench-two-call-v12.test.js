@@ -253,10 +253,23 @@ test('terminal material completion reaches public successful-source reconciliati
       < commonSourceContinuation.indexOf("p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'"),
     'terminal bounded-source completion must bypass legacy line-work enqueue',
   );
+  assert.match(
+    commonSourceContinuation,
+    /CREATE TEMP TABLE _bpay_complete_job_bounded_terminal_timesheets[\s\S]*UPDATE public\.banking_pay_workbench_candidate_line_work AS bounded_legacy_line_work[\s\S]*SET status = 'SKIPPED'[\s\S]*bounded_source_publish_reason'[\s\S]*'CANONICAL_SOURCE_ALREADY_PUBLISHED'/i,
+  );
 
   const reconciliationCall = complete.indexOf(
     'public.pay_workbench_reconcile_successful_source_build(',
     sourceCountParsingStart,
+  );
+  const reconciliationTail = complete.slice(reconciliationCall);
+  assert.match(
+    reconciliationTail,
+    /v_source_reconciliation_applied[\s\S]*v_job_row\.economic_build_id IS NOT NULL[\s\S]*scope_rows_repaired[\s\S]*UPDATE public\.banking_pay_workbench_session_scope AS bounded_terminal_scope[\s\S]*SET status = 'MATERIALISED'[\s\S]*seeded = true[\s\S]*dirty = false[\s\S]*pending_job_id = NULL::uuid/i,
+  );
+  assert.match(
+    reconciliationTail,
+    /NOT EXISTS[\s\S]*newer_active_source_job[\s\S]*EXISTS[\s\S]*bounded_current_source[\s\S]*source_build_run_id = v_source_build_run_id_text::uuid[\s\S]*source_change_seq = v_source_change_seq/i,
   );
   const terminalJobUpdate = complete.indexOf(
     'UPDATE public.banking_pay_workbench_jobs AS update_job',
