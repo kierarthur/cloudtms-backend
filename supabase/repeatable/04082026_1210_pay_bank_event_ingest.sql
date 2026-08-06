@@ -161,6 +161,34 @@ DECLARE
   v_manual_confirmed_not_paid boolean := false;
   v_paid_after_release boolean := false;
   v_review_acknowledgement boolean := false;
+  v_manual_scope_mode boolean := false;
+  v_manual_scope_pay_batch_candidate_id uuid := NULL::uuid;
+  v_manual_scope_pay_batch_candidate_id_text text := NULL::text;
+  v_manual_scope_transfer_ids uuid[] := ARRAY[]::uuid[];
+  v_manual_scope_diagnostic_transfer_ids uuid[] := ARRAY[]::uuid[];
+  v_manual_scope_member_json jsonb := NULL::jsonb;
+  v_manual_scope_member_text text := NULL::text;
+  v_manual_scope_diagnostic jsonb := '{}'::jsonb;
+  v_manual_scope_result jsonb := '{}'::jsonb;
+  v_manual_scope_first_result jsonb := NULL::jsonb;
+  v_manual_scope_event_ids jsonb := '[]'::jsonb;
+  v_manual_scope_raw_continuations jsonb := '[]'::jsonb;
+  v_manual_scope_continuations jsonb := '[]'::jsonb;
+  v_manual_scope_idempotency_base text := NULL::text;
+  v_manual_scope_hash text := NULL::text;
+  v_manual_scope_expected_hash text := NULL::text;
+  v_manual_scope_count integer := 0;
+  v_manual_scope_distinct_count integer := 0;
+  v_manual_scope_locked_count integer := 0;
+  v_manual_scope_member_index integer := 0;
+  v_manual_scope_all_idempotent boolean := true;
+  v_manual_scope_any_inserted boolean := false;
+  v_manual_scope_all_mapped boolean := true;
+  v_manual_scope_requires_user_action boolean := false;
+  v_manual_scope_paid_after_release boolean := false;
+  v_manual_scope_release_eligible boolean := false;
+  v_manual_scope_auto_release_started boolean := false;
+  v_manual_scope_candidate public.pay_batch_candidates%rowtype;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -200,6 +228,11 @@ BEGIN
   ELSE
     v_ingest_options_json := p_ingest_options_json;
   END IF;
+
+  v_manual_scope_mode := pg_catalog.lower(pg_catalog.btrim(COALESCE(
+    v_ingest_options_json->>'manual_ambiguity_resolution',
+    'false'
+  ))) IN ('true','t','1','yes','y','on');
 
   v_suppress_auto_unwind := pg_catalog.lower(pg_catalog.btrim(COALESCE(
     v_event_json->>'suppress_auto_unwind',
@@ -435,6 +468,443 @@ BEGIN
         'code', 'PERMISSION_DENIED',
         'message', 'An active user is required to record manual payment evidence.'
       )::text;
+  END IF;
+
+  -- Manual ambiguity resolution is one bounded database command for the
+  -- complete reviewed instruction scope.  Every member is validated before
+  -- the first event is written.  Recursive member calls stay in this same
+  -- PostgreSQL transaction, so any member failure rolls the entire scope back.
+  IF v_manual_scope_mode THEN
+    IF v_event_source IS DISTINCT FROM 'MANUAL_EVIDENCE'
+       OR COALESCE(v_suppress_auto_unwind, false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_SCOPE_INVALID'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_SCOPE_INVALID',
+          'message', 'Manual payment-status resolution must be evidence-only and cannot start an automatic release.'
+        )::text;
+    END IF;
+
+    IF pg_catalog.upper(COALESCE(v_event_json->>'resolution', ''))
+         NOT IN ('CONFIRMED_PAID', 'CONFIRMED_NOT_PAID') THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_OUTCOME_INVALID'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_OUTCOME_INVALID'
+        )::text;
+    END IF;
+
+    IF v_pay_batch_id IS NULL OR v_candidate_id IS NULL THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_SCOPE_AUTHORITY_REQUIRED'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_SCOPE_AUTHORITY_REQUIRED'
+        )::text;
+    END IF;
+
+    IF v_pay_bank_transfer_id_text IS NOT NULL
+       OR COALESCE(jsonb_typeof(v_event_json->'pay_bank_transfer_ids'), 'null') <> 'array' THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_INVALID'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_INVALID',
+          'message', 'The complete transfer scope must be supplied as one bounded array.'
+        )::text;
+    END IF;
+
+    v_manual_scope_count := pg_catalog.jsonb_array_length(v_event_json->'pay_bank_transfer_ids');
+    IF v_manual_scope_count < 1 OR v_manual_scope_count > 128 THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_LIMIT'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_LIMIT',
+          'minimum', 1,
+          'maximum', 128,
+          'actual', v_manual_scope_count
+        )::text;
+    END IF;
+
+    FOR v_manual_scope_member_json IN
+      SELECT scope_member.value
+      FROM pg_catalog.jsonb_array_elements(v_event_json->'pay_bank_transfer_ids')
+        WITH ORDINALITY AS scope_member(value, ordinality)
+      ORDER BY scope_member.ordinality
+    LOOP
+      IF pg_catalog.jsonb_typeof(v_manual_scope_member_json) <> 'string' THEN
+        RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_INVALID'
+          USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+            'code', 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_INVALID'
+          )::text;
+      END IF;
+      v_manual_scope_member_text := pg_catalog.btrim(v_manual_scope_member_json #>> '{}');
+      IF v_manual_scope_member_text !~ v_uuid_regex
+         OR pg_catalog.lower(v_manual_scope_member_text) IS DISTINCT FROM (v_manual_scope_member_text::uuid)::text THEN
+        RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_INVALID'
+          USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+            'code', 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_INVALID'
+          )::text;
+      END IF;
+      v_manual_scope_transfer_ids := pg_catalog.array_append(
+        v_manual_scope_transfer_ids,
+        v_manual_scope_member_text::uuid
+      );
+    END LOOP;
+
+    SELECT COALESCE(pg_catalog.array_agg(DISTINCT scope_id ORDER BY scope_id), ARRAY[]::uuid[]),
+           pg_catalog.count(DISTINCT scope_id)::integer
+    INTO v_manual_scope_transfer_ids, v_manual_scope_distinct_count
+    FROM pg_catalog.unnest(v_manual_scope_transfer_ids) AS supplied_scope(scope_id);
+
+    IF v_manual_scope_distinct_count IS DISTINCT FROM v_manual_scope_count THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_DUPLICATE'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_DUPLICATE'
+        )::text;
+    END IF;
+
+    v_manual_scope_pay_batch_candidate_id_text := NULLIF(pg_catalog.btrim(COALESCE(
+      v_event_json->>'pay_batch_candidate_id', ''
+    )), '');
+    IF v_manual_scope_pay_batch_candidate_id_text IS NULL
+       OR v_manual_scope_pay_batch_candidate_id_text !~ v_uuid_regex
+       OR pg_catalog.lower(v_manual_scope_pay_batch_candidate_id_text)
+            IS DISTINCT FROM (v_manual_scope_pay_batch_candidate_id_text::uuid)::text THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_BATCH_CANDIDATE_INVALID'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_BATCH_CANDIDATE_INVALID'
+        )::text;
+    END IF;
+    v_manual_scope_pay_batch_candidate_id := v_manual_scope_pay_batch_candidate_id_text::uuid;
+
+    v_manual_scope_idempotency_base := NULLIF(pg_catalog.btrim(COALESCE(
+      v_event_json->>'idempotency_key', ''
+    )), '');
+    IF v_manual_scope_idempotency_base IS NULL
+       OR pg_catalog.octet_length(v_manual_scope_idempotency_base) > 1000 THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_IDEMPOTENCY_REQUIRED'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_IDEMPOTENCY_REQUIRED'
+        )::text;
+    END IF;
+
+    SELECT pg_catalog.encode(
+             extensions.digest(
+               pg_catalog.convert_to(
+                 '["' || pg_catalog.array_to_string(
+                   ARRAY(
+                     SELECT scope_id::text
+                     FROM pg_catalog.unnest(v_manual_scope_transfer_ids) AS sorted_scope(scope_id)
+                     ORDER BY scope_id
+                   ),
+                   '","'
+                 ) || '"]',
+                 'UTF8'
+               ),
+               'sha256'
+             ),
+             'hex'
+           )
+    INTO v_manual_scope_hash;
+    v_manual_scope_expected_hash := pg_catalog.lower(NULLIF(pg_catalog.btrim(COALESCE(
+      v_ingest_options_json->>'instruction_scope_hash',
+      v_mapping_hints_json->>'instruction_scope_hash',
+      ''
+    )), ''));
+    IF v_manual_scope_expected_hash IS NULL
+       OR v_manual_scope_expected_hash !~ '^[0-9a-f]{64}$'
+       OR v_manual_scope_expected_hash IS DISTINCT FROM v_manual_scope_hash THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_SCOPE_HASH_MISMATCH'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_SCOPE_HASH_MISMATCH'
+        )::text;
+    END IF;
+
+    -- Hold the same mode-aware batch guard for the full member set.
+    v_mutation_guard := private.pay_payment_mutation_guard_v1(
+      v_pay_batch_id,
+      NULL::uuid,
+      'AUTHORITATIVE_EVENT'
+    );
+    IF COALESCE((v_mutation_guard->>'ok')::boolean, false) IS NOT TRUE THEN
+      RAISE EXCEPTION '%', COALESCE(v_mutation_guard->>'code', 'PAYMENT_MUTATION_LOCK_TIMEOUT')
+        USING ERRCODE = 'P0001', DETAIL = v_mutation_guard::text;
+    END IF;
+
+    SELECT batch_row.*
+    INTO v_batch
+    FROM public.pay_batches AS batch_row
+    WHERE batch_row.id = v_pay_batch_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'BANK_EVENT_PAY_BATCH_NOT_FOUND'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'BANK_EVENT_PAY_BATCH_NOT_FOUND'
+        )::text;
+    END IF;
+
+    SELECT candidate_row.*
+    INTO v_manual_scope_candidate
+    FROM public.pay_batch_candidates AS candidate_row
+    WHERE candidate_row.id = v_manual_scope_pay_batch_candidate_id
+      AND candidate_row.pay_batch_id = v_pay_batch_id
+      AND candidate_row.candidate_id = v_candidate_id
+    FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_CANDIDATE_DOMAIN_MISMATCH'
+        USING ERRCODE = '23503', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_CANDIDATE_DOMAIN_MISMATCH'
+        )::text;
+    END IF;
+
+    v_manual_scope_diagnostic := public.pay_payment_cancelability_diagnostic(
+      p_pay_batch_id => v_pay_batch_id,
+      p_selection_json => pg_catalog.jsonb_build_object(
+        'scope_type', 'CANDIDATES',
+        'pay_batch_candidate_ids', pg_catalog.jsonb_build_array(v_manual_scope_pay_batch_candidate_id),
+        'requested_action', 'RESOLVE_PAYMENT_STATUS'
+      ),
+      p_actor_user_id => p_actor_user_id,
+      p_diagnostic_context => 'CURRENT_PAYMENT_STATUS'
+    );
+    IF COALESCE((v_manual_scope_diagnostic->>'ok')::boolean, false) IS NOT TRUE
+       OR COALESCE((v_manual_scope_diagnostic->>'requires_bank_check')::boolean, false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_RESOLUTION_NO_LONGER_REQUIRED'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_RESOLUTION_NO_LONGER_REQUIRED'
+        )::text;
+    END IF;
+
+    SELECT COALESCE(pg_catalog.array_agg(DISTINCT parsed_scope.scope_id ORDER BY parsed_scope.scope_id), ARRAY[]::uuid[])
+    INTO v_manual_scope_diagnostic_transfer_ids
+    FROM (
+      SELECT raw_scope.scope_text::uuid AS scope_id
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE
+          WHEN pg_catalog.jsonb_typeof(v_manual_scope_diagnostic #> '{resolved_full_payment_scope_json,pay_bank_transfer_ids}') = 'array'
+            THEN v_manual_scope_diagnostic #> '{resolved_full_payment_scope_json,pay_bank_transfer_ids}'
+          ELSE '[]'::jsonb
+        END
+      ) AS raw_scope(scope_text)
+      WHERE raw_scope.scope_text ~ v_uuid_regex
+    ) AS parsed_scope;
+    IF v_manual_scope_diagnostic_transfer_ids IS DISTINCT FROM v_manual_scope_transfer_ids THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_SCOPE_CHANGED'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_SCOPE_CHANGED'
+        )::text;
+    END IF;
+
+    v_manual_scope_locked_count := 0;
+    FOR v_transfer IN
+      SELECT transfer_row.*
+      FROM public.pay_bank_transfers AS transfer_row
+      WHERE transfer_row.id = ANY(v_manual_scope_transfer_ids)
+        AND transfer_row.pay_batch_id = v_pay_batch_id
+      ORDER BY transfer_row.id
+      FOR UPDATE
+    LOOP
+      v_manual_scope_locked_count := v_manual_scope_locked_count + 1;
+    END LOOP;
+    IF v_manual_scope_locked_count IS DISTINCT FROM v_manual_scope_count THEN
+      RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_CHANGED'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_PAYMENT_STATUS_TRANSFER_SCOPE_CHANGED'
+        )::text;
+    END IF;
+
+    v_manual_scope_member_index := 0;
+    FOREACH v_pay_bank_transfer_id IN ARRAY v_manual_scope_transfer_ids
+    LOOP
+      v_manual_scope_member_index := v_manual_scope_member_index + 1;
+      v_manual_scope_result := public.pay_bank_event_ingest(
+        p_event_json => (
+          ((v_event_json - 'pay_bank_transfer_ids') - 'pay_batch_candidate_id') - 'pay_bank_transfer_id'
+        ) || pg_catalog.jsonb_build_object(
+          'pay_bank_transfer_id', v_pay_bank_transfer_id,
+          'candidate_id', v_candidate_id,
+          'idempotency_key', v_manual_scope_idempotency_base || ':' || v_pay_bank_transfer_id::text,
+          'mapping_hints_json', v_mapping_hints_json || pg_catalog.jsonb_build_object(
+            'instruction_scope_hash', v_manual_scope_hash,
+            'instruction_scope_index', v_manual_scope_member_index,
+            'instruction_scope_count', v_manual_scope_count,
+            'scope_idempotency_key', v_manual_scope_idempotency_base
+          )
+        ),
+        p_actor_user_id => p_actor_user_id,
+        p_ingest_options_json => (v_ingest_options_json - 'manual_ambiguity_resolution')
+          || pg_catalog.jsonb_build_object(
+            'manual_ambiguity_resolution', false,
+            'touch_signal', false,
+            'signal_mode', 'DEFERRED'
+          )
+      );
+
+      IF COALESCE((v_manual_scope_result->>'ok')::boolean, false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'MANUAL_PAYMENT_STATUS_SCOPE_MEMBER_FAILED'
+          USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+            'code', 'MANUAL_PAYMENT_STATUS_SCOPE_MEMBER_FAILED',
+            'scope_index', v_manual_scope_member_index
+          )::text;
+      END IF;
+
+      IF v_manual_scope_first_result IS NULL THEN
+        v_manual_scope_first_result := v_manual_scope_result;
+      END IF;
+      IF COALESCE(v_manual_scope_result->>'event_id', '') ~ v_uuid_regex THEN
+        v_manual_scope_event_ids := v_manual_scope_event_ids
+          || pg_catalog.jsonb_build_array(v_manual_scope_result->>'event_id');
+      END IF;
+      v_manual_scope_raw_continuations := v_manual_scope_raw_continuations
+        || CASE
+             WHEN pg_catalog.jsonb_typeof(v_manual_scope_result->'continuations') = 'array'
+               THEN v_manual_scope_result->'continuations'
+             ELSE '[]'::jsonb
+           END
+        || CASE
+             WHEN pg_catalog.jsonb_typeof(v_manual_scope_result->'continuation') = 'object'
+               THEN pg_catalog.jsonb_build_array(v_manual_scope_result->'continuation')
+             ELSE '[]'::jsonb
+           END;
+      v_manual_scope_all_idempotent := v_manual_scope_all_idempotent
+        AND COALESCE((v_manual_scope_result->>'idempotent')::boolean, false);
+      v_manual_scope_any_inserted := v_manual_scope_any_inserted
+        OR COALESCE((v_manual_scope_result->>'inserted')::boolean, false);
+      v_manual_scope_all_mapped := v_manual_scope_all_mapped
+        AND COALESCE((v_manual_scope_result->>'mapped')::boolean, false);
+      v_manual_scope_requires_user_action := v_manual_scope_requires_user_action
+        OR COALESCE((v_manual_scope_result->>'requires_user_action')::boolean, false);
+      v_manual_scope_paid_after_release := v_manual_scope_paid_after_release
+        OR COALESCE((v_manual_scope_result->>'paid_after_release')::boolean, false);
+      v_manual_scope_release_eligible := v_manual_scope_release_eligible
+        OR COALESCE((v_manual_scope_result->>'release_eligible')::boolean, false);
+      v_manual_scope_auto_release_started := v_manual_scope_auto_release_started
+        OR COALESCE((v_manual_scope_result->>'auto_release_request_prepared')::boolean, false)
+        OR COALESCE((v_manual_scope_result->>'release_request_started')::boolean, false);
+    END LOOP;
+
+    IF pg_catalog.upper(COALESCE(v_event_json->>'resolution', '')) = 'CONFIRMED_NOT_PAID'
+       AND v_manual_scope_auto_release_started THEN
+      RAISE EXCEPTION 'MANUAL_RESOLUTION_AUTO_RELEASE_PROHIBITED'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'MANUAL_RESOLUTION_AUTO_RELEASE_PROHIBITED'
+        )::text;
+    END IF;
+
+    SELECT COALESCE(pg_catalog.jsonb_agg(deduped.continuation ORDER BY deduped.operation_id), '[]'::jsonb)
+    INTO v_manual_scope_continuations
+    FROM (
+      SELECT grouped.operation_id, grouped.continuation
+      FROM (
+        SELECT raw_continuation.value->>'operation_id' AS operation_id,
+               pg_catalog.min(raw_continuation.value::text)::jsonb AS continuation
+        FROM pg_catalog.jsonb_array_elements(v_manual_scope_raw_continuations) AS raw_continuation(value)
+        WHERE pg_catalog.jsonb_typeof(raw_continuation.value) = 'object'
+          AND COALESCE((raw_continuation.value->>'required')::boolean, false)
+          AND COALESCE((raw_continuation.value->>'terminal')::boolean, false) IS NOT TRUE
+          AND COALESCE((raw_continuation.value->>'requires_user_action')::boolean, false) IS NOT TRUE
+          AND COALESCE(raw_continuation.value->>'operation_id', '') ~ v_uuid_regex
+        GROUP BY raw_continuation.value->>'operation_id'
+      ) AS grouped
+      ORDER BY grouped.operation_id
+      LIMIT 4
+    ) AS deduped;
+
+    v_signal_recommendation_json := pg_catalog.jsonb_build_object(
+      'pay_batch_id', v_pay_batch_id::text,
+      'changed_pay_batch_candidate_ids', pg_catalog.jsonb_build_array(v_manual_scope_pay_batch_candidate_id::text),
+      'changed_pay_bank_transfer_ids', pg_catalog.to_jsonb(v_manual_scope_transfer_ids),
+      'change_scope_json', pg_catalog.jsonb_build_object(
+        'bank_event_ids', v_manual_scope_event_ids,
+        'pay_bank_transfer_ids', pg_catalog.to_jsonb(v_manual_scope_transfer_ids),
+        'candidate_id', v_candidate_id::text,
+        'pay_batch_candidate_id', v_manual_scope_pay_batch_candidate_id::text,
+        'instruction_scope_hash', v_manual_scope_hash,
+        'resolution', pg_catalog.upper(v_event_json->>'resolution')
+      )
+    );
+    IF v_manual_scope_all_idempotent THEN
+      v_live_signal_result := pg_catalog.jsonb_build_object(
+        'ok', true,
+        'changed', false,
+        'duplicate_scope', true,
+        'reason', 'The complete manual payment-status scope was already recorded.',
+        'signal_recommendation_json', v_signal_recommendation_json
+      );
+    ELSIF v_should_touch_signal THEN
+      v_live_signal_result := public.banking_pay_batch_signal_touch(
+        v_pay_batch_id,
+        'MANUAL_PAYMENT_STATUS_SCOPE_RECORDED',
+        'pay_bank_event_ingest',
+        v_signal_recommendation_json->'change_scope_json',
+        true,
+        false,
+        pg_catalog.upper(COALESCE(v_event_json->>'resolution', '')) = 'CONFIRMED_NOT_PAID',
+        true
+      );
+    ELSE
+      v_live_signal_result := pg_catalog.jsonb_build_object(
+        'ok', true,
+        'changed', false,
+        'deferred', true,
+        'signal_recommendation_json', v_signal_recommendation_json
+      );
+    END IF;
+
+    PERFORM public._imp_debug_audit(
+      p_actor_user_id,
+      'PAYMENT_BANK_EVENT_INGEST_MANUAL_SCOPE_RESULT',
+      pg_catalog.jsonb_build_object(
+        'pay_batch_id', v_pay_batch_id,
+        'pay_batch_candidate_id', v_manual_scope_pay_batch_candidate_id,
+        'candidate_id', v_candidate_id,
+        'instruction_scope_hash', v_manual_scope_hash,
+        'scope_count', v_manual_scope_count,
+        'event_count', pg_catalog.jsonb_array_length(v_manual_scope_event_ids),
+        'all_idempotent', v_manual_scope_all_idempotent
+      ),
+      'pay_payment_correction',
+      v_manual_scope_pay_batch_candidate_id::text,
+      NULL::jsonb,
+      NULL::text,
+      NULL::text,
+      NULL::text
+    );
+
+    RETURN COALESCE(v_manual_scope_first_result, '{}'::jsonb)
+      || pg_catalog.jsonb_build_object(
+        'ok', true,
+        'event_id', NULLIF(v_manual_scope_event_ids->>0, '')::uuid,
+        'event_ids', v_manual_scope_event_ids,
+        'event_count', pg_catalog.jsonb_array_length(v_manual_scope_event_ids),
+        'pay_batch_id', v_pay_batch_id,
+        'pay_batch_candidate_id', v_manual_scope_pay_batch_candidate_id,
+        'candidate_id', v_candidate_id,
+        'pay_bank_transfer_ids', pg_catalog.to_jsonb(v_manual_scope_transfer_ids),
+        'instruction_scope_hash', v_manual_scope_hash,
+        'scope_atomic', true,
+        'idempotent', v_manual_scope_all_idempotent,
+        'inserted', v_manual_scope_any_inserted,
+        'mapped', v_manual_scope_all_mapped,
+        'mapping_status', CASE WHEN v_manual_scope_all_mapped THEN 'MATCHED' ELSE 'UNMATCHED' END,
+        'mapping_method', 'MANUAL_TRANSFER_SELECTION',
+        'manual_resolution_recorded', true,
+        'release_eligible', pg_catalog.upper(COALESCE(v_event_json->>'resolution', '')) = 'CONFIRMED_NOT_PAID'
+          AND v_manual_scope_release_eligible,
+        'auto_release_request_prepared', v_manual_scope_auto_release_started,
+        'paid_after_release', v_manual_scope_paid_after_release,
+        'requires_user_action', v_manual_scope_requires_user_action,
+        'display_status', CASE
+          WHEN v_manual_scope_paid_after_release THEN 'Paid — evidence received after release'
+          WHEN pg_catalog.upper(COALESCE(v_event_json->>'resolution', '')) = 'CONFIRMED_NOT_PAID'
+            THEN 'Not paid — ready to release'
+          ELSE 'Payment confirmed paid'
+        END,
+        'display_message', CASE
+          WHEN v_manual_scope_paid_after_release THEN 'The bank confirmed this payment after CloudTMS released its payment reservation. CloudTMS retained both histories for Finance review.'
+          WHEN pg_catalog.upper(COALESCE(v_event_json->>'resolution', '')) = 'CONFIRMED_NOT_PAID'
+            THEN 'The complete payment scope is confirmed not paid and can now be released as a separate authorised action.'
+          ELSE 'The complete payment scope was recorded as paid.'
+        END,
+        'live_signal', v_live_signal_result,
+        'signal_recommendation_json', v_signal_recommendation_json,
+        'continuations', v_manual_scope_continuations,
+        'policy_x_checked', true
+      );
   END IF;
 
   IF v_provider_webhook_receipt_id IS NOT NULL THEN

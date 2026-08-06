@@ -1365,6 +1365,7 @@ BEGIN
                 status_index.paid_or_settled,
                 status_index.terminal_no_money,
                 status_index.ambiguous,
+                status_index.has_resolution_context,
                 status_index.canonical_provider_state,
                 status_index.complete_candidate_instruction_scope,
                 status_index.release_failed_payment_eligible,

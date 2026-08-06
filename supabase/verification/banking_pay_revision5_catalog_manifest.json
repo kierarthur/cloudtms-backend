@@ -171,7 +171,7 @@
       "schema": "public",
       "name": "pay_bank_event_ingest",
       "identity_arguments": "p_event_json jsonb, p_actor_user_id uuid, p_ingest_options_json jsonb",
-      "definition_sha256": "1ac10957b9fb80527f7c0f3386c912f4bcac0c5d1a3fc9adea355cb10c21bf98",
+      "definition_sha256": "323a3171e74129a459f0467e546f51fe738895c600b1168bee3b8e6ecb1b5225",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "b6cc0cf96536463c98fb08958e96345cb351bf7e5539561a87f89260ec2f50e5",
+      "definition_sha256": "43e3e84f8bb5cdac95a4959458a94129fed097925e6c5430a258a7027b9bbcf0",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
