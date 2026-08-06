@@ -701,7 +701,7 @@ BEGIN
     FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page_rows;
 
     IF NOT v_has_more AND v_fact_family='LIVE_ENTITLEMENT_INPUT' AND v_input_phase='PROJECTION' THEN
-      SELECT MIN(projected_timesheet_id) INTO v_next_projection_id
+      SELECT projection_ids.projected_timesheet_id INTO v_next_projection_id
       FROM (
         SELECT fact.timesheet_id AS projected_timesheet_id
         FROM private.banking_pay_workbench_economic_build_facts fact
@@ -711,7 +711,9 @@ BEGIN
         SELECT page.timesheet_id
         FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page
         WHERE page.source_relation='UNIT_PROJECTION'
-      ) projection_ids;
+      ) projection_ids
+      ORDER BY projection_ids.projected_timesheet_id
+      LIMIT 1;
       IF v_next_projection_id IS NULL THEN
         RAISE EXCEPTION 'PAY_WORKBENCH_UNIT_PROJECTION_INCOMPLETE' USING ERRCODE='23514';
       END IF;
@@ -719,13 +721,15 @@ BEGIN
       v_has_more:=true;
     ELSIF NOT v_has_more
       AND v_fact_family IN ('LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK') THEN
-      SELECT MIN(projection.timesheet_id) INTO v_next_projection_id
+      SELECT projection.timesheet_id INTO v_next_projection_id
       FROM private.banking_pay_workbench_economic_build_facts projection
       WHERE projection.build_id=v_build_id
         AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
         AND projection.dependency_unit_key=v_unit_key
         AND projection.source_relation='UNIT_PROJECTION'
-        AND projection.timesheet_id>v_input_projection_id;
+        AND projection.timesheet_id>v_input_projection_id
+      ORDER BY projection.timesheet_id
+      LIMIT 1;
       IF v_next_projection_id IS NOT NULL THEN
         v_projection_family_transition:=true;
         v_has_more:=true;

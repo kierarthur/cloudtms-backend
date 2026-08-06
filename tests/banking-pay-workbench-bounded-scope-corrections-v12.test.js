@@ -67,6 +67,9 @@ test('D3 physical live-input pages precede durable derived-family paging', () =>
   assert.match(occurrenceBundle, /failed_page_count/);
   assert.match(occurrenceBundle, /raw_source_exhausted/);
   assert.match(dispatcher, /raw_page_evidence_digest/);
+  assert.doesNotMatch(dispatcher, /\bMIN\s*\(\s*(?:projected_timesheet_id|projection\.timesheet_id)\s*\)/i);
+  assert.match(dispatcher, /SELECT projection_ids\.projected_timesheet_id INTO v_next_projection_id[\s\S]*ORDER BY projection_ids\.projected_timesheet_id[\s\S]*LIMIT 1/);
+  assert.match(dispatcher, /SELECT projection\.timesheet_id INTO v_next_projection_id[\s\S]*projection\.timesheet_id>v_input_projection_id[\s\S]*ORDER BY projection\.timesheet_id[\s\S]*LIMIT 1/);
 });
 test('D4 finance closure deduplicates frontier authority', () => {
   assert.match(closure, /SELECT DISTINCT frontier_component\.finance_case_id/);
