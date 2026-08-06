@@ -240,6 +240,20 @@ test('terminal material completion reaches public successful-source reconciliati
     /v_current_source_row_count_authoritative :=[\s\S]*v_stage_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'[\s\S]*v_result_json->>'private_stage'[\s\S]*v_result_json->>'stage_status'[\s\S]*v_result_json->>'published_count'/i,
   );
 
+  const commonSourceContinuation = complete.slice(
+    complete.indexOf("ELSIF v_stage_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'", sourceCountParsingStart),
+    complete.indexOf("ELSIF v_stage_job_type = 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'", sourceCountParsingStart),
+  );
+  assert.match(
+    commonSourceContinuation,
+    /ELSIF v_is_material_source[\s\S]*v_current_source_row_count_authoritative[\s\S]*v_current_source_row_count, 0\) > 0 THEN[\s\S]*v_next_recommended_action := 'READ_PREVIEW_PAGE'/i,
+  );
+  assert.ok(
+    commonSourceContinuation.indexOf('ELSIF v_is_material_source')
+      < commonSourceContinuation.indexOf("p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'"),
+    'terminal bounded-source completion must bypass legacy line-work enqueue',
+  );
+
   const reconciliationCall = complete.indexOf(
     'public.pay_workbench_reconcile_successful_source_build(',
     sourceCountParsingStart,

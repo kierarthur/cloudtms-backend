@@ -1837,6 +1837,14 @@ BEGIN
         );
         v_continuation_jobs := v_continuation_jobs || jsonb_build_array(v_continuation_result);
         v_next_recommended_action := 'BUILD_SOURCE_CHUNK';
+      ELSIF v_is_material_source
+            AND v_current_source_row_count_authoritative
+            AND COALESCE(v_current_source_row_count, 0) > 0 THEN
+        -- Bounded SOURCE_PUBLISH has already produced the complete canonical
+        -- CURRENT set. The common terminal path below owns public scope and
+        -- progress reconciliation; it must not enter the legacy line-work
+        -- pipeline or carry private build identity into a legacy job.
+        v_next_recommended_action := 'READ_PREVIEW_PAGE';
       ELSIF (
         (
           v_current_source_row_count_authoritative
