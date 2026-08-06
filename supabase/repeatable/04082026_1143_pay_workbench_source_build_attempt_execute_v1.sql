@@ -205,8 +205,28 @@ BEGIN
          AND final_attempt.attempt_status='STARTED'
          AND final_registry.dirty_generation=final_attempt.captured_candidate_generation
          AND final_registry.current_source_change_seq=final_attempt.captured_source_change_seq
-         AND final_registry.current_build_id=p_build_id
          AND final_build.source_job_id=p_job_id
+         AND (
+           -- Most material stages keep the build current until complete_job
+           -- advances the durable continuation.  A small reconciliation can
+           -- also publish atomically in this same RPC 2 transaction.  In that
+           -- terminal path SOURCE_PUBLISH deliberately clears current_build_id
+           -- only after the registry and build have both reached their complete
+           -- generation-fenced states.  Accept that exact terminal authority;
+           -- do not mistake successful publication for a stale build.
+           final_registry.current_build_id=p_build_id
+           OR (
+             COALESCE(v_stage_result->>'private_stage','')='COMPLETE'
+             AND COALESCE(v_stage_result->>'stage_status','')='COMPLETE'
+             AND COALESCE((v_stage_result->>'has_more')::boolean,false)=false
+             AND final_registry.current_build_id IS NULL
+             AND final_registry.initialisation_status='READY'
+             AND final_registry.evaluated_generation=final_attempt.captured_candidate_generation
+             AND final_build.status='COMPLETE'
+             AND final_build.private_stage='COMPLETE'
+             AND final_build.completed_at_utc IS NOT NULL
+           )
+         )
      ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_ATTEMPT_FINAL_FENCE_FAILED'
       USING ERRCODE='40001',DETAIL=jsonb_build_object(

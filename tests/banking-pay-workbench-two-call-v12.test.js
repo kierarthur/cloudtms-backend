@@ -161,6 +161,24 @@ test('RPC 2 uses fixed lock order and a final 500ms lease/generation fence', () 
   assert.match(execute, /PAY_WORKBENCH_ATTEMPT_FINAL_FENCE_FAILED/i);
 });
 
+test('RPC 2 final fence accepts only the exact atomically published terminal authority', () => {
+  assert.match(
+    execute,
+    /final_registry\.current_build_id=p_build_id\s+OR\s+\([\s\S]*?v_stage_result->>'private_stage',''\)='COMPLETE'[\s\S]*?v_stage_result->>'stage_status',''\)='COMPLETE'/i,
+  );
+  assert.match(execute, /v_stage_result->>'has_more'\)::boolean,false\)=false/i);
+  assert.match(execute, /final_registry\.current_build_id IS NULL/i);
+  assert.match(execute, /final_registry\.initialisation_status='READY'/i);
+  assert.match(
+    execute,
+    /final_registry\.evaluated_generation=final_attempt\.captured_candidate_generation/i,
+  );
+  assert.match(execute, /final_build\.status='COMPLETE'/i);
+  assert.match(execute, /final_build\.private_stage='COMPLETE'/i);
+  assert.match(execute, /final_build\.completed_at_utc IS NOT NULL/i);
+  assert.match(execute, /final_build\.source_job_id=p_job_id/i);
+});
+
 test('RPC 2 absorbs transient candidate contention inside a bounded execute window', () => {
   assert.match(execute, /v_candidate_lock_wait_limit\s+interval:=interval '750 milliseconds'/i);
   assert.match(
