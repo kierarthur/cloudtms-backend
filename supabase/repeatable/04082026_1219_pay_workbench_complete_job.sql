@@ -107,6 +107,7 @@ DECLARE
   v_source_empty_targeted_timesheet_count integer := 0;
   v_bounded_terminal_refresh_scope_kind text := NULL::text;
   v_bounded_terminal_targeted_timesheet_count integer := 0;
+  v_bounded_terminal_source_rows_retired_count integer := 0;
   v_bounded_terminal_line_work_retired_count integer := 0;
   v_bounded_terminal_scope_finalised_count integer := 0;
   v_continuation_scope_counter_deferred boolean := false;
@@ -1881,6 +1882,10 @@ BEGIN
             AND current_source.source_change_seq = v_source_change_seq
             AND current_source.status = 'CURRENT'
             AND current_source.timesheet_id IS NOT NULL
+          UNION
+          SELECT bounded_scope.timesheet_id::text
+          FROM private.banking_pay_workbench_economic_build_scope AS bounded_scope
+          WHERE bounded_scope.build_id = v_job_row.economic_build_id
         )
         SELECT DISTINCT LOWER(BTRIM(timesheet_id_text))::uuid AS timesheet_id
         FROM raw_timesheet_ids
@@ -1903,6 +1908,42 @@ BEGIN
                     'source_change_seq', v_source_change_seq
                   )::text;
         END IF;
+
+        UPDATE public.banking_pay_workbench_candidate_source_lines AS bounded_previous_source
+        SET status = 'SUPERSEDED',
+            source_row_json = jsonb_strip_nulls(
+              COALESCE(bounded_previous_source.source_row_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'bounded_source_publish_superseded', true,
+                'bounded_source_publish_job_id', p_job_id::text,
+                'bounded_source_publish_build_id', v_job_row.economic_build_id::text,
+                'bounded_source_publish_run_id', v_source_build_run_id_text,
+                'bounded_source_publish_change_seq', v_source_change_seq,
+                'bounded_source_publish_at_utc', v_now::text,
+                'bounded_source_publish_reason', 'NEWER_CANONICAL_SOURCE_ALREADY_PUBLISHED'
+              )
+            ),
+            updated_at_utc = v_now
+        WHERE bounded_previous_source.session_id = v_job_row.session_id
+          AND bounded_previous_source.candidate_id = v_job_row.candidate_id
+          AND bounded_previous_source.session_version = COALESCE(v_result_session_version, v_session_row.version)
+          AND UPPER(BTRIM(COALESCE(bounded_previous_source.status, ''))) IN (
+            'CURRENT', 'DIRTY', 'ERROR', 'PENDING', 'READY'
+          )
+          AND bounded_previous_source.source_change_seq <= v_source_change_seq
+          AND NOT (
+            bounded_previous_source.status = 'CURRENT'
+            AND bounded_previous_source.source_build_run_id = v_source_build_run_id_text::uuid
+            AND bounded_previous_source.source_change_seq = v_source_change_seq
+          )
+          AND (
+            v_bounded_terminal_refresh_scope_kind <> 'TARGETED_TIMESHEETS'
+            OR bounded_previous_source.timesheet_id IN (
+              SELECT bounded_timesheets.timesheet_id
+              FROM pg_temp._bpay_complete_job_bounded_terminal_timesheets AS bounded_timesheets
+            )
+          );
+        GET DIAGNOSTICS v_bounded_terminal_source_rows_retired_count = ROW_COUNT;
 
         UPDATE public.banking_pay_workbench_candidate_line_work AS bounded_legacy_line_work
         SET status = 'SKIPPED',
@@ -2940,6 +2981,7 @@ BEGIN
     'source_empty_cleanup_preview_row_count', COALESCE(v_source_empty_cleanup_preview_row_count, 0),
     'source_empty_cleanup_targeted_timesheet_count', COALESCE(v_source_empty_targeted_timesheet_count, 0),
     'bounded_terminal_targeted_timesheet_count', COALESCE(v_bounded_terminal_targeted_timesheet_count, 0),
+    'bounded_terminal_source_rows_retired_count', COALESCE(v_bounded_terminal_source_rows_retired_count, 0),
     'bounded_terminal_line_work_retired_count', COALESCE(v_bounded_terminal_line_work_retired_count, 0),
     'bounded_terminal_scope_finalised_count', COALESCE(v_bounded_terminal_scope_finalised_count, 0),
     'continuation_scope_counter_deferred', COALESCE(v_continuation_scope_counter_deferred, false),
@@ -3055,6 +3097,7 @@ BEGIN
     'source_empty_cleanup_preview_row_count', COALESCE(v_source_empty_cleanup_preview_row_count, 0),
     'source_empty_cleanup_targeted_timesheet_count', COALESCE(v_source_empty_targeted_timesheet_count, 0),
     'bounded_terminal_targeted_timesheet_count', COALESCE(v_bounded_terminal_targeted_timesheet_count, 0),
+    'bounded_terminal_source_rows_retired_count', COALESCE(v_bounded_terminal_source_rows_retired_count, 0),
     'bounded_terminal_line_work_retired_count', COALESCE(v_bounded_terminal_line_work_retired_count, 0),
     'bounded_terminal_scope_finalised_count', COALESCE(v_bounded_terminal_scope_finalised_count, 0),
     'continuation_scope_counter_deferred', COALESCE(v_continuation_scope_counter_deferred, false),

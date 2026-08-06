@@ -257,6 +257,10 @@ test('terminal material completion reaches public successful-source reconciliati
     commonSourceContinuation,
     /CREATE TEMP TABLE _bpay_complete_job_bounded_terminal_timesheets[\s\S]*UPDATE public\.banking_pay_workbench_candidate_line_work AS bounded_legacy_line_work[\s\S]*SET status = 'SKIPPED'[\s\S]*bounded_source_publish_reason'[\s\S]*'CANONICAL_SOURCE_ALREADY_PUBLISHED'/i,
   );
+  assert.match(
+    commonSourceContinuation,
+    /private\.banking_pay_workbench_economic_build_scope AS bounded_scope[\s\S]*UPDATE public\.banking_pay_workbench_candidate_source_lines AS bounded_previous_source[\s\S]*SET status = 'SUPERSEDED'[\s\S]*source_change_seq <= v_source_change_seq[\s\S]*source_build_run_id = v_source_build_run_id_text::uuid[\s\S]*_bpay_complete_job_bounded_terminal_timesheets/i,
+  );
 
   const reconciliationCall = complete.indexOf(
     'public.pay_workbench_reconcile_successful_source_build(',
