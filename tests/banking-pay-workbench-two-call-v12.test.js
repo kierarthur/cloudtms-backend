@@ -246,10 +246,10 @@ test('terminal material completion reaches public successful-source reconciliati
   );
   assert.match(
     commonSourceContinuation,
-    /ELSIF v_is_material_source[\s\S]*v_current_source_row_count_authoritative[\s\S]*v_current_source_row_count, 0\) > 0 THEN[\s\S]*v_next_recommended_action := 'READ_PREVIEW_PAGE'/i,
+    /ELSIF v_job_row\.economic_build_id IS NOT NULL[\s\S]*v_result_json->>'private_stage'[\s\S]*= 'COMPLETE'[\s\S]*v_result_json->>'stage_status'[\s\S]*= 'COMPLETE'[\s\S]*v_current_source_row_count_authoritative[\s\S]*v_current_source_row_count, 0\) > 0 THEN[\s\S]*v_next_recommended_action := 'READ_PREVIEW_PAGE'/i,
   );
   assert.ok(
-    commonSourceContinuation.indexOf('ELSIF v_is_material_source')
+    commonSourceContinuation.indexOf('ELSIF v_job_row.economic_build_id IS NOT NULL')
       < commonSourceContinuation.indexOf("p_job_type => 'WORKBENCH_CANDIDATE_LINE_WORK_SEED'"),
     'terminal bounded-source completion must bypass legacy line-work enqueue',
   );
