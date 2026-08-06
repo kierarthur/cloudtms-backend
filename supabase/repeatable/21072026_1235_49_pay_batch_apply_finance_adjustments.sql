@@ -3421,8 +3421,37 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
       batch_item.id as pay_batch_item_id,
       batch_candidate.candidate_id,
       batch.source_workbench_session_id,
+      batch_item.source_ref,
+      batch_item.pay_channel,
+      batch_item.amount_ex_vat,
+      coalesce(operation_line.match_count,0) as operation_line_match_count,
+      coalesce(operation_line.canonical_line_json,'{}'::jsonb)
+        as operation_canonical_line_json,
+      coalesce(
+        operation_line.canonical_line_json->'correction_chain_component',
+        '{}'::jsonb
+      ) as operation_correction_component_json,
+      (
+        coalesce(operation_line.match_count,0)=1
+        and jsonb_typeof(
+          operation_line.canonical_line_json
+            ->'correction_chain_component'->'resolution_required'
+        )='boolean'
+        and operation_line.canonical_line_json
+              ->'correction_chain_component'->'resolution_required'
+            ='false'::jsonb
+        and jsonb_typeof(
+          operation_line.canonical_line_json->'case_needs_resolution'
+        )='boolean'
+        and operation_line.canonical_line_json->'case_needs_resolution'
+            ='false'::jsonb
+      ) as automatic_correction,
       coalesce(
         nullif(batch_item.frozen_component_snapshot_json
+          ->>'canonical_correction_key',''),
+        nullif(operation_line.canonical_line_json
+          ->'correction_chain_component'->>'canonical_correction_key',''),
+        nullif(operation_line.canonical_line_json
           ->>'canonical_correction_key',''),
         nullif(batch_item.frozen_resolution_payload_json
           ->>'canonical_correction_key',''),
@@ -3431,6 +3460,10 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
       ) as canonical_correction_key,
       coalesce(
         nullif(batch_item.frozen_component_snapshot_json
+          ->>'resolution_economic_fingerprint',''),
+        nullif(operation_line.canonical_line_json
+          ->'correction_chain_component'->>'resolution_economic_fingerprint',''),
+        nullif(operation_line.canonical_line_json
           ->>'resolution_economic_fingerprint',''),
         nullif(batch_item.frozen_resolution_payload_json
           ->>'resolution_economic_fingerprint','')
@@ -3444,6 +3477,26 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
       on batch_candidate.id=batch_item.pay_batch_candidate_id
     join public.pay_batches batch
       on batch.id=batch_candidate.pay_batch_id
+    left join public.banking_pay_operation_candidate_scope operation_scope
+      on operation_scope.operation_id=p_operation_id
+     and operation_scope.pay_batch_id=batch.id
+     and operation_scope.candidate_id=batch_candidate.candidate_id
+     and upper(btrim(operation_scope.pay_channel))=
+         upper(btrim(batch_item.pay_channel))
+    left join lateral (
+      select count(*)::integer as match_count,
+             (jsonb_agg(canonical_line.value
+               order by canonical_line.ordinality)->0)
+               as canonical_line_json
+      from jsonb_array_elements(coalesce(
+        operation_scope.selected_canonical_preview_lines_json,
+        '[]'::jsonb
+      )) with ordinality as canonical_line(value,ordinality)
+      where coalesce(
+        nullif(canonical_line.value->>'row_key',''),
+        nullif(canonical_line.value->>'source_ref','')
+      )=batch_item.source_ref
+    ) operation_line on true
     where batch.id=v_batch_id
       and (
         coalesce(batch_item.frozen_source_basis_json
@@ -3495,24 +3548,50 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
                registration.id desc
       limit 1
     ) carry_row on true
-  ), frozen as (
+  ), prepared as (
     select authoritative_resolution.*,
+      case when authoritative_resolution.automatic_correction then
+        (
+          coalesce(
+            authoritative_resolution.frozen_resolution_result_json,
+            '{}'::jsonb
+          )-'resolution_result_fingerprint'
+        ) || jsonb_build_object(
+          'resolution_authority','AUTOMATIC_CORRECTION_CHAIN',
+          'resolution_required',false,
+          'resolution_complete',true,
+          'canonical_correction_key',
+            authoritative_resolution.canonical_correction_key,
+          'resolution_identity_key',
+            authoritative_resolution.canonical_correction_key,
+          'resolution_identity_version','CORRECTION_CHAIN_V1',
+          'resolution_economic_fingerprint',
+            authoritative_resolution.resolution_economic_fingerprint,
+          'target_pay_method',
+            upper(btrim(authoritative_resolution.pay_channel)),
+          'target_amount_ex_vat',
+            round(authoritative_resolution.amount_ex_vat,2)
+        )
+      else
+        coalesce(
+          authoritative_resolution.frozen_resolution_result_json,
+          '{}'::jsonb
+        )-'resolution_result_fingerprint'
+      end as resolution_result_base_json
+    from authoritative_resolution
+  ), frozen as (
+    select prepared.*,
       encode(
         extensions.digest(
           convert_to(
-            (
-              coalesce(
-                authoritative_resolution.frozen_resolution_result_json,
-                '{}'::jsonb
-              )-'resolution_result_fingerprint'
-            )::text,
+            prepared.resolution_result_base_json::text,
             'UTF8'
           ),
           'sha256'
         ),
         'hex'
       ) as resolution_result_fingerprint
-    from authoritative_resolution
+    from prepared
   )
   update public.pay_batch_items batch_item
   set frozen_component_snapshot_json=
@@ -3522,6 +3601,10 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
           'correction_identity_version','CORRECTION_CHAIN_V1',
           'correction_root_id',coalesce(
             batch_item.frozen_component_snapshot_json
+              ->>'correction_root_id',
+            frozen.operation_correction_component_json
+              ->>'correction_root_id',
+            frozen.operation_canonical_line_json
               ->>'correction_root_id',
             frozen.current_resolution_payload_json
               ->>'correction_root_id'
@@ -3533,12 +3616,20 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
           'ordered_member_timesheet_ids',coalesce(
             batch_item.frozen_component_snapshot_json
               ->'ordered_member_timesheet_ids',
+            frozen.operation_correction_component_json
+              ->'ordered_member_timesheet_ids',
+            frozen.operation_canonical_line_json
+              ->'ordered_member_timesheet_ids',
             frozen.current_resolution_payload_json
               ->'ordered_member_timesheet_ids',
             '[]'::jsonb
           ),
           'component_lineage_fingerprint',coalesce(
             batch_item.frozen_component_snapshot_json
+              ->>'component_lineage_fingerprint',
+            frozen.operation_correction_component_json
+              ->>'component_lineage_fingerprint',
+            frozen.operation_canonical_line_json
               ->>'component_lineage_fingerprint',
             frozen.current_resolution_payload_json
               ->>'component_lineage_fingerprint'
@@ -3547,7 +3638,9 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
             batch_item.frozen_component_snapshot_json
               ->>'carrier_source_line_id',
             batch_item.frozen_component_snapshot_json
-              ->>'source_line_id'
+              ->>'source_line_id',
+            frozen.operation_canonical_line_json
+              ->>'line_id'
           ),
           'resolution_economic_fingerprint',
             frozen.resolution_economic_fingerprint
@@ -3560,6 +3653,10 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
               ->>'source_family_key',
             batch_item.frozen_component_snapshot_json
               ->>'source_family_key',
+            frozen.operation_correction_component_json
+              ->>'source_family_key',
+            frozen.operation_canonical_line_json
+              ->>'source_family_key',
             frozen.current_resolution_payload_json
               ->>'source_family_key'
           ),
@@ -3568,6 +3665,12 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
               ->>'source_basis_fingerprint',
             batch_item.frozen_component_snapshot_json
               ->>'source_basis_fingerprint',
+            frozen.operation_correction_component_json
+              ->>'source_basis_fingerprint',
+            frozen.operation_canonical_line_json
+              ->>'source_basis_fingerprint',
+            frozen.operation_canonical_line_json
+              #>>'{source_basis_json,source_basis_fingerprint}',
             frozen.current_source_basis_fingerprint
           ),
           'correction_chain_fingerprint',coalesce(
@@ -3588,6 +3691,10 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
             coalesce(
               batch_item.frozen_source_basis_json
                 ->>'correction_financials_policy_envelope_fingerprint',
+              frozen.operation_correction_component_json
+                ->>'correction_financials_policy_envelope_fingerprint',
+              frozen.operation_canonical_line_json
+                ->>'correction_financials_policy_envelope_fingerprint',
               frozen.current_resolution_payload_json
                 ->>'correction_financials_policy_envelope_fingerprint'
             ),
@@ -3606,7 +3713,11 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
               ->>'source_build_run_id',
             frozen.current_resolution_payload_json
               ->>'source_build_run_id'
-          )
+          ),
+          'operation_source_ref',case
+            when frozen.automatic_correction then frozen.source_ref
+            else batch_item.frozen_source_basis_json->>'operation_source_ref'
+          end
         ),
       frozen_resolution_payload_json=
         coalesce(batch_item.frozen_resolution_payload_json,'{}'::jsonb)
@@ -3632,9 +3743,20 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
             frozen.resolution_origin_pay_date,
           'resolution_origin_source_basis_fingerprint',
             frozen.resolution_origin_source_basis_fingerprint
-        ),
+        )
+        || case when frozen.automatic_correction then
+          jsonb_build_object(
+            'resolution_authority','AUTOMATIC_CORRECTION_CHAIN',
+            'resolution_required',false,
+            'resolution_complete',true,
+            'target_resolution_id',null,
+            'operation_line_match_count',
+              frozen.operation_line_match_count,
+            'operation_source_ref',frozen.source_ref
+          )
+        else '{}'::jsonb end,
       frozen_resolution_result_json=
-        coalesce(batch_item.frozen_resolution_result_json,'{}'::jsonb)
+        frozen.resolution_result_base_json
         ||jsonb_build_object(
           'resolution_result_fingerprint',
             frozen.resolution_result_fingerprint
@@ -3657,7 +3779,13 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
         ->>'resolution_economic_fingerprint',
     'resolution_economic_fingerprint',
       batch_item.frozen_resolution_payload_json
-        ->>'resolution_economic_fingerprint'
+        ->>'resolution_economic_fingerprint',
+    'resolution_authority',
+      batch_item.frozen_resolution_payload_json
+        ->>'resolution_authority',
+    'resolution_required',
+      batch_item.frozen_resolution_payload_json
+        ->>'resolution_required'
   )) order by batch_item.id),'[]'::jsonb)
   into v_canonical_provenance_mismatch_details
   from public.pay_batch_items batch_item
@@ -3683,8 +3811,6 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
         ->>'resolution_identity_key','') is null
       or nullif(batch_item.frozen_resolution_payload_json
         ->>'resolution_economic_fingerprint','') is null
-      or nullif(batch_item.frozen_resolution_payload_json
-        ->>'target_resolution_id','') is null
       or nullif(batch_item.frozen_resolution_result_json
         ->>'resolution_result_fingerprint','') is null
       or batch_item.frozen_component_snapshot_json
@@ -3697,6 +3823,54 @@ v_stage := 'STAGE_16C0_FREEZE_CANONICAL_CORRECTION_PROVENANCE';
         is distinct from
           batch_item.frozen_resolution_payload_json
             ->>'resolution_economic_fingerprint'
+      or (
+        coalesce(batch_item.frozen_resolution_payload_json
+          ->>'resolution_authority','')='AUTOMATIC_CORRECTION_CHAIN'
+        and (
+          batch_item.frozen_resolution_payload_json
+            ->>'resolution_required' is distinct from 'false'
+          or batch_item.frozen_resolution_payload_json
+            ->>'resolution_complete' is distinct from 'true'
+          or nullif(batch_item.frozen_resolution_payload_json
+            ->>'target_resolution_id','') is not null
+          or batch_item.frozen_resolution_payload_json
+            ->>'operation_line_match_count' is distinct from '1'
+          or batch_item.frozen_resolution_payload_json
+            ->>'operation_source_ref' is distinct from batch_item.source_ref
+          or batch_item.frozen_resolution_result_json
+            ->>'resolution_authority'
+              is distinct from 'AUTOMATIC_CORRECTION_CHAIN'
+          or batch_item.frozen_resolution_result_json
+            ->>'resolution_required' is distinct from 'false'
+          or batch_item.frozen_resolution_result_json
+            ->>'resolution_complete' is distinct from 'true'
+          or batch_item.frozen_resolution_result_json
+            ->>'canonical_correction_key'
+              is distinct from batch_item.frozen_resolution_payload_json
+                ->>'resolution_identity_key'
+          or batch_item.frozen_resolution_result_json
+            ->>'resolution_economic_fingerprint'
+              is distinct from batch_item.frozen_resolution_payload_json
+                ->>'resolution_economic_fingerprint'
+          or nullif(batch_item.frozen_component_snapshot_json
+            ->>'correction_root_id','') is null
+          or case
+            when jsonb_typeof(batch_item.frozen_component_snapshot_json
+              ->'ordered_member_timesheet_ids')='array'
+            then jsonb_array_length(batch_item.frozen_component_snapshot_json
+              ->'ordered_member_timesheet_ids')
+            else 0
+          end=0
+          or coalesce(batch_item.frozen_source_basis_json
+            ->>'source_family_key','') not like 'correction-chain:%'
+        )
+      )
+      or (
+        coalesce(batch_item.frozen_resolution_payload_json
+          ->>'resolution_authority','')<>'AUTOMATIC_CORRECTION_CHAIN'
+        and nullif(batch_item.frozen_resolution_payload_json
+          ->>'target_resolution_id','') is null
+      )
     );
 
   if jsonb_array_length(v_canonical_provenance_mismatch_details)>0 then

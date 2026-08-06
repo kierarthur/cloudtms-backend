@@ -467,6 +467,23 @@ test('draft freeze adds provenance only to the four existing frozen JSON authori
     freeze,
     /'source_build_run_id',coalesce\([\s\S]*batch_item\.frozen_resolution_payload_json[\s\S]*->>'source_build_run_id'[\s\S]*frozen\.current_resolution_payload_json/
   );
+  assert.match(
+    freeze,
+    /banking_pay_operation_candidate_scope[\s\S]*selected_canonical_preview_lines_json/
+  );
+  assert.match(
+    freeze,
+    /operation_line\.match_count,0\)=1[\s\S]*correction_chain_component'->'resolution_required'[\s\S]*='false'::jsonb[\s\S]*case_needs_resolution'[\s\S]*='false'::jsonb/
+  );
+  assert.match(freeze, /'resolution_authority','AUTOMATIC_CORRECTION_CHAIN'/);
+  assert.match(
+    freeze,
+    /resolution_authority','AUTOMATIC_CORRECTION_CHAIN'[\s\S]*'target_resolution_id',null[\s\S]*'operation_line_match_count'/
+  );
+  assert.match(
+    freeze,
+    /resolution_authority',''\)<>'AUTOMATIC_CORRECTION_CHAIN'[\s\S]*target_resolution_id',''\) is null/
+  );
 });
 
 test('the approved finance-adjustment freeze has one repeatable definition', () => {

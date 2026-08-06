@@ -80,6 +80,12 @@ DECLARE
   v_bounded_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_scope_change_tx_token uuid := NULL::uuid;
   v_scope_invalidation_result jsonb := '{}'::jsonb;
+  v_scope_state_precedes_job boolean := false;
+  v_payload_scope_change_generation bigint := NULL::bigint;
+  v_finalized_scope_tx_state text := NULL::text;
+  v_finalized_scope_tx_generation bigint := NULL::bigint;
+  v_registry_dirty_generation bigint := NULL::bigint;
+  v_scope_state_generation_match_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -505,15 +511,78 @@ BEGIN
      ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     v_scope_change_tx_token:=(v_payload_json->>'scope_change_tx_token')::uuid;
   END IF;
-  v_scope_invalidation_result:=private.pay_workbench_scope_invalidate_v1(
-    CASE WHEN cardinality(v_bounded_timesheet_ids)=0 THEN ARRAY[p_candidate_id]
-      ELSE array_fill(p_candidate_id,ARRAY[cardinality(v_bounded_timesheet_ids)]) END,
-    CASE WHEN cardinality(v_bounded_timesheet_ids)=0 THEN ARRAY[NULL::uuid]
-      ELSE v_bounded_timesheet_ids END,
-    COALESCE(v_reason,'CANDIDATE_REFRESH_ENQUEUED'),
-    v_scope_change_tx_token,
-    v_payload_json||jsonb_build_object('skip_candidate_job_enqueue',true)
-  );
+  v_scope_state_precedes_job := lower(BTRIM(COALESCE(
+    v_payload_json->>'bounded_scope_state_precedes_job','false'
+  ))) IN ('true','t','1','yes','y','on');
+  IF COALESCE(v_payload_json->>'scope_change_generation','') ~ '^\d+$' THEN
+    v_payload_scope_change_generation :=
+      (v_payload_json->>'scope_change_generation')::bigint;
+  END IF;
+
+  IF v_scope_state_precedes_job THEN
+    SELECT scope_tx.state,
+           scope_tx.allocated_generation,
+           registry.dirty_generation
+    INTO v_finalized_scope_tx_state,
+         v_finalized_scope_tx_generation,
+         v_registry_dirty_generation
+    FROM public.banking_pay_scope_change_transactions AS scope_tx
+    JOIN private.banking_pay_workbench_candidate_scope_registry AS registry
+      ON registry.candidate_id=p_candidate_id
+    WHERE scope_tx.tx_token=v_scope_change_tx_token;
+
+    SELECT count(*)::integer
+    INTO v_scope_state_generation_match_count
+    FROM unnest(v_bounded_timesheet_ids) AS requested(timesheet_id)
+    JOIN private.banking_pay_workbench_timesheet_scope_state AS scope_state
+      ON scope_state.timesheet_id=requested.timesheet_id
+     AND scope_state.candidate_id=p_candidate_id
+     AND scope_state.dirty_generation>=v_payload_scope_change_generation;
+
+    IF v_scope_change_tx_token IS NULL
+       OR v_payload_scope_change_generation IS NULL
+       OR v_payload_scope_change_generation < 1
+       OR v_finalized_scope_tx_state IS DISTINCT FROM 'FINALIZED'
+       OR v_finalized_scope_tx_generation IS DISTINCT FROM
+          v_payload_scope_change_generation
+       OR COALESCE(v_registry_dirty_generation,0) <
+          v_payload_scope_change_generation
+       OR v_scope_state_generation_match_count IS DISTINCT FROM
+          cardinality(v_bounded_timesheet_ids) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_PRECEDING_SCOPE_INVALIDATION_UNPROVED'
+        USING ERRCODE='22023', DETAIL=jsonb_build_object(
+          'code','PAY_WORKBENCH_PRECEDING_SCOPE_INVALIDATION_UNPROVED',
+          'candidate_id',p_candidate_id,
+          'scope_change_tx_token',v_scope_change_tx_token,
+          'payload_scope_change_generation',v_payload_scope_change_generation,
+          'transaction_state',v_finalized_scope_tx_state,
+          'transaction_generation',v_finalized_scope_tx_generation,
+          'registry_dirty_generation',v_registry_dirty_generation,
+          'requested_timesheet_count',cardinality(v_bounded_timesheet_ids),
+          'matched_scope_state_count',v_scope_state_generation_match_count
+        )::text;
+    END IF;
+
+    v_scope_invalidation_result := jsonb_build_object(
+      'ok',true,
+      'already_finalized',true,
+      'scope_change_tx_token',v_scope_change_tx_token,
+      'scope_change_generation',v_finalized_scope_tx_generation,
+      'candidate_count',1,
+      'timesheet_count',cardinality(v_bounded_timesheet_ids),
+      'reason',COALESCE(v_reason,'CANDIDATE_REFRESH_ENQUEUED')
+    );
+  ELSE
+    v_scope_invalidation_result:=private.pay_workbench_scope_invalidate_v1(
+      CASE WHEN cardinality(v_bounded_timesheet_ids)=0 THEN ARRAY[p_candidate_id]
+        ELSE array_fill(p_candidate_id,ARRAY[cardinality(v_bounded_timesheet_ids)]) END,
+      CASE WHEN cardinality(v_bounded_timesheet_ids)=0 THEN ARRAY[NULL::uuid]
+        ELSE v_bounded_timesheet_ids END,
+      COALESCE(v_reason,'CANDIDATE_REFRESH_ENQUEUED'),
+      v_scope_change_tx_token,
+      v_payload_json||jsonb_build_object('skip_candidate_job_enqueue',true)
+    );
+  END IF;
 
   v_payload_shadow_compare_required := lower(BTRIM(COALESCE(
     v_payload_json->>'shadow_compare_required',

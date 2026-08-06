@@ -28,6 +28,9 @@ const triggers = read('supabase/repeatable/04082026_1234_banking_pay_bounded_sco
 const markCandidateDirty = read('supabase/repeatable/04082026_1219_pay_workbench_mark_candidate_dirty.sql');
 const markFinanceDirty = read('supabase/repeatable/04082026_1219_pay_workbench_mark_finance_case_dirty.sql');
 const scopeInvalidator = read('supabase/repeatable/04082026_1139_pay_workbench_scope_invalidate_v1.sql');
+const enqueueCandidateRefresh = read(
+  'supabase/repeatable/04082026_1219_pay_workbench_enqueue_candidate_refresh.sql'
+);
 
 const newFunctionFiles = [
   '04082026_1139_pay_workbench_scope_invalidate_v1.sql',
@@ -328,6 +331,29 @@ test('scope invalidation uses one lifecycle timestamp for conflict-safe registry
   assert.match(
     scopeInvalidator,
     /current_source_change_seq=GREATEST\([\s\S]*?registry\.current_source_change_seq,[\s\S]*?EXCLUDED\.current_source_change_seq/i,
+  );
+});
+
+test('a dirty-apply job reuses only its proved finalized scope generation', () => {
+  assert.match(
+    enqueueCandidateRefresh,
+    /v_scope_state_precedes_job[\s\S]*bounded_scope_state_precedes_job/
+  );
+  assert.match(
+    enqueueCandidateRefresh,
+    /scope_tx\.state[\s\S]*scope_tx\.allocated_generation[\s\S]*registry\.dirty_generation/
+  );
+  assert.match(
+    enqueueCandidateRefresh,
+    /v_finalized_scope_tx_state IS DISTINCT FROM 'FINALIZED'[\s\S]*v_finalized_scope_tx_generation IS DISTINCT FROM[\s\S]*v_registry_dirty_generation,0\) <[\s\S]*v_scope_state_generation_match_count IS DISTINCT FROM/
+  );
+  assert.match(
+    enqueueCandidateRefresh,
+    /PAY_WORKBENCH_PRECEDING_SCOPE_INVALIDATION_UNPROVED/
+  );
+  assert.match(
+    enqueueCandidateRefresh,
+    /IF v_scope_state_precedes_job THEN[\s\S]*'already_finalized',true[\s\S]*ELSE[\s\S]*private\.pay_workbench_scope_invalidate_v1/
   );
 });
 
