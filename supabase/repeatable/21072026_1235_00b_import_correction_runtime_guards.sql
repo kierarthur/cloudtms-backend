@@ -2255,11 +2255,34 @@ begin
             when v_component_outstanding < 0
               then jsonb_build_object(
                 'amount_ex_vat',0,
-                'amount_display',0,
+                -- Keep the unresolved recovery non-allocatable, but do not
+                -- erase the amount whose pay-channel treatment still needs
+                -- an operator decision.  Presentation is not draft authority.
+                'amount_display',case
+                  when v_component_needs_resolution
+                    then round(
+                      coalesce(
+                        v_suggestion_current_basis,
+                        abs(v_component_outstanding)
+                      ),
+                      2
+                    )
+                  else 0
+                end,
                 'preview_amount_ex_vat',0,
                 'ready_preview_amount_ex_vat',0,
                 'section_amount_ex_vat',0,
-                'section_amount_display',0,
+                'section_amount_display',case
+                  when v_component_needs_resolution
+                    then round(
+                      coalesce(
+                        v_suggestion_current_basis,
+                        abs(v_component_outstanding)
+                      ),
+                      2
+                    )
+                  else 0
+                end,
                 'component_amount_ex_vat',0,
                 'preview_component_amount_ex_vat',0,
                 'target_pay_ex_vat',0,

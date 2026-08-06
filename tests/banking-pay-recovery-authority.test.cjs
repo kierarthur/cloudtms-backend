@@ -1417,6 +1417,11 @@ test('negative correction residuals preserve the finance-case carrier while posi
     /when v_component_outstanding < 0[\s\S]*'amount_ex_vat',0[\s\S]*'nominal_due_amount_ex_vat',[\s\S]*round\(abs\(v_component_outstanding\),2\)[\s\S]*'recoverable_this_pay_run_ex_vat',0/,
     'negative carriers must retain dated finance authority while remaining non-allocatable until headroom is known'
   );
+  assert.match(
+    body,
+    /'amount_display',case[\s\S]*when v_component_needs_resolution[\s\S]*v_suggestion_current_basis[\s\S]*'preview_amount_ex_vat',0[\s\S]*'section_amount_ex_vat',0[\s\S]*'section_amount_display',case[\s\S]*when v_component_needs_resolution[\s\S]*v_suggestion_current_basis[\s\S]*'component_amount_ex_vat',0/,
+    'an unresolved negative carrier must expose its decision amount without making any economic amount allocatable'
+  );
   assert.match(body, /else jsonb_build_object\([\s\S]*'amount_ex_vat',v_component_outstanding/);
 });
 
