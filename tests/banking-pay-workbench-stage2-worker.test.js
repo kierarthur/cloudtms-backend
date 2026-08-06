@@ -619,9 +619,33 @@ test('only the minute schedule owns Banking Pay cron lanes', () => {
   assert.match(worker, /SCHEDULED_BANKING_PAY_WORKBENCH_CRON_NOT_OWNER/);
 });
 
+test('database-owned Worker runtime settings are not silently clamped below the configured reconciliation window', () => {
+  const cron = functionBody('bankingPayWorkbenchCronTick');
+  const drain = functionBody('drainBankingPayWorkbenchJobs');
+  assert.match(
+    cron,
+    /const dbWorkerMaxRuntimeMs = readDrainOption\([^;]*8000,\s*1000,\s*30000\s*\)/
+  );
+  assert.doesNotMatch(
+    cron,
+    /const dbWorkerMaxRuntimeMs = readDrainOption\([^;]*8000,\s*1000,\s*8000\s*\)/
+  );
+  assert.match(
+    drain,
+    /const dbWorkerMaxRuntimeMs = numberInRange\([\s\S]*?8000,\s*1000,\s*30000\s*\)/
+  );
+  assert.doesNotMatch(
+    drain,
+    /const dbWorkerMaxRuntimeMs = numberInRange\([\s\S]*?8000,\s*1000,\s*8000\s*\)/
+  );
+  assert.match(drain, /dbStatementTimeoutMs - rpcSafetyBufferMs/);
+  assert.match(drain, /dbWorkerMaxRuntimeMs \+ rpcSafetyBufferMs/);
+  assert.match(drain, /executeTimeoutMs: dbRpcHardCapMs/);
+});
+
 test('runtime version advertises the bounded-scope Stage 2 source marker', () => {
   const version = functionBody('handleVersion');
   assert.match(version, /banking_pay_bounded_scope_stage2/);
-  assert.match(version, /V1\.2\.16_STAGE2_LANE_COORDINATION_20260806/);
+  assert.match(version, /V1\.2\.16_STAGE2_RECONCILIATION_WINDOW_20260806/);
   assert.match(version, /7165360304f8ef12b3790078e450ed1d4b128c55/);
 });

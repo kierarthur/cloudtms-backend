@@ -16428,7 +16428,7 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   const rolloverNudgeAfterCreate = readBoolean(firstConfiguredValue(source.rolloverNudgeAfterCreate, source.rollover_nudge_after_create, rolloverSettings.nudge_after_create, rolloverSettings.nudgeAfterCreate), true);
   const rolloverScanLimit = clampInt(firstConfiguredValue(source.rolloverScanLimit, source.rollover_scan_limit, rolloverSettings.scan_limit, rolloverSettings.scanLimit), Math.max(25, rolloverMaxSessionsPerTick * 5), 1, 250);
   const configuredDbWorkerLeaseSeconds = readDrainOption('dbWorkerLeaseSeconds', 'db_worker_lease_seconds', 'DB_WORKER_LEASE_SECONDS', 25, 25, 3600, { nullable: true });
-  const dbWorkerMaxRuntimeMs = readDrainOption('dbWorkerMaxRuntimeMs', 'db_worker_max_runtime_ms', 'DB_WORKER_MAX_RUNTIME_MS', 8000, 1000, 8000);
+  const dbWorkerMaxRuntimeMs = readDrainOption('dbWorkerMaxRuntimeMs', 'db_worker_max_runtime_ms', 'DB_WORKER_MAX_RUNTIME_MS', 8000, 1000, 30000);
   const dbWorkerMinPhaseBudgetMs = Math.min(
     readDrainOption('dbWorkerMinPhaseBudgetMs', 'db_worker_min_phase_budget_ms', 'DB_WORKER_MIN_PHASE_BUDGET_MS', 2500, 250, 15000),
     Math.max(250, dbWorkerMaxRuntimeMs - 250)
@@ -158665,7 +158665,7 @@ function handleVersion() {
     },
     banking_pay_bounded_scope_stage2: {
       revision: "1.2.15",
-      source_marker: "V1.2.16_STAGE2_LANE_COORDINATION_20260806",
+      source_marker: "V1.2.16_STAGE2_RECONCILIATION_WINDOW_20260806",
       stage1_baseline_commit: "7165360304f8ef12b3790078e450ed1d4b128c55"
     },
     built_at: new Date().toISOString()
@@ -182409,7 +182409,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     firstConfiguredValue(sourceOptions.dbWorkerMaxRuntimeMs, sourceOptions.db_worker_max_runtime_ms, drainSettings.db_worker_max_runtime_ms, drainSettings.dbWorkerMaxRuntimeMs),
     8000,
     1000,
-    8000
+    30000
   );
   const dbWorkerMinPhaseBudgetMs = Math.min(
     numberInRange(firstConfiguredValue(sourceOptions.dbWorkerMinPhaseBudgetMs, sourceOptions.db_worker_min_phase_budget_ms, drainSettings.db_worker_min_phase_budget_ms, drainSettings.dbWorkerMinPhaseBudgetMs), 2500, 250, 15000),
