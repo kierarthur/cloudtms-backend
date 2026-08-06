@@ -291,21 +291,27 @@ BEGIN
           'job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD','private_stage',v_result_json->>'next_action')) END;
       v_continuation_count:=CASE WHEN v_continuation_enqueued THEN 1 ELSE 0 END;
     END IF;
-    UPDATE public.banking_pay_workbench_jobs target_job SET status='SUCCEEDED',
-      completed_at_utc=clock_timestamp(),failed_at_utc=NULL,last_error_json=NULL,
-      payload_json=COALESCE(target_job.payload_json,'{}'::jsonb)
-        ||jsonb_build_object('result_json',public.pay_workbench_compact_job_result_json(v_result_json))
-        ||jsonb_build_object('completion_json',jsonb_build_object(
-          'attempt_id',v_material_attempt_id,'continuation_enqueued',v_continuation_enqueued,
-          'continuation_jobs',v_continuation_jobs,'continuation_count',v_continuation_count,
-          'next_recommended_action',v_result_json->>'next_action',
-          'completed_at_utc',clock_timestamp())),updated_at_utc=clock_timestamp()
-    WHERE target_job.id=p_job_id AND target_job.status='RUNNING';
-    IF NOT FOUND THEN RAISE EXCEPTION 'PAY_WORKBENCH_JOB_COMPLETION_STALE' USING ERRCODE='40001'; END IF;
-    RETURN jsonb_build_object('ok',true,'job_id',p_job_id,'status','SUCCEEDED',
-      'duplicate_completion',false,'continuation_enqueued',v_continuation_enqueued,
-      'continuation_jobs',v_continuation_jobs,'continuation_count',v_continuation_count,
-      'next_recommended_action',v_result_json->>'next_action','completed_at_utc',clock_timestamp());
+    -- A nonterminal material page owns only its exact continuation. Terminal
+    -- material completion must continue through the common successful-source
+    -- reconciliation below so the public session scope cannot remain bound to
+    -- a job that has already succeeded.
+    IF v_has_more THEN
+      UPDATE public.banking_pay_workbench_jobs target_job SET status='SUCCEEDED',
+        completed_at_utc=clock_timestamp(),failed_at_utc=NULL,last_error_json=NULL,
+        payload_json=COALESCE(target_job.payload_json,'{}'::jsonb)
+          ||jsonb_build_object('result_json',public.pay_workbench_compact_job_result_json(v_result_json))
+          ||jsonb_build_object('completion_json',jsonb_build_object(
+            'attempt_id',v_material_attempt_id,'continuation_enqueued',v_continuation_enqueued,
+            'continuation_jobs',v_continuation_jobs,'continuation_count',v_continuation_count,
+            'next_recommended_action',v_result_json->>'next_action',
+            'completed_at_utc',clock_timestamp())),updated_at_utc=clock_timestamp()
+      WHERE target_job.id=p_job_id AND target_job.status='RUNNING';
+      IF NOT FOUND THEN RAISE EXCEPTION 'PAY_WORKBENCH_JOB_COMPLETION_STALE' USING ERRCODE='40001'; END IF;
+      RETURN jsonb_build_object('ok',true,'job_id',p_job_id,'status','SUCCEEDED',
+        'duplicate_completion',false,'continuation_enqueued',v_continuation_enqueued,
+        'continuation_jobs',v_continuation_jobs,'continuation_count',v_continuation_count,
+        'next_recommended_action',v_result_json->>'next_action','completed_at_utc',clock_timestamp());
+    END IF;
   END IF;
 
   v_seeded_count := CASE WHEN COALESCE(v_result_json->>'seeded_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'seeded_count')::integer ELSE 0 END;
@@ -324,17 +330,27 @@ BEGIN
   END;
   v_source_rows_written := CASE
     WHEN COALESCE(v_result_json->>'source_rows_written', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'source_rows_written')::integer
+    WHEN COALESCE(v_result_json->>'published_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'published_count')::integer
     ELSE 0
   END;
   v_current_source_row_count := CASE
     WHEN COALESCE(v_result_json->>'current_source_row_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'current_source_row_count')::integer
     WHEN COALESCE(v_result_json->>'source_rows_written', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'source_rows_written')::integer
+    WHEN COALESCE(v_result_json->>'published_count', '') ~ '^-?[0-9]+$' THEN (v_result_json->>'published_count')::integer
     ELSE 0
   END;
   v_current_source_row_count_authoritative := LOWER(BTRIM(COALESCE(
     v_result_json->>'current_source_row_count_authoritative',
     'false'
-  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+    OR (
+      v_stage_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+      AND v_job_row.economic_build_id IS NOT NULL
+      AND COALESCE(v_has_more, false) IS NOT TRUE
+      AND UPPER(BTRIM(COALESCE(v_result_json->>'private_stage', ''))) = 'COMPLETE'
+      AND UPPER(BTRIM(COALESCE(v_result_json->>'stage_status', ''))) = 'COMPLETE'
+      AND COALESCE(v_result_json->>'published_count', '') ~ '^-?[0-9]+$'
+    );
   v_source_build_run_id_text := COALESCE(
     NULLIF(BTRIM(COALESCE(v_result_json->>'source_build_run_id', '')), ''),
     NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'source_build_run_id', '')), ''),

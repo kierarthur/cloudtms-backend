@@ -210,6 +210,53 @@ test('material completion and retry paths are fenced by immutable attempt eviden
   assert.match(fail, /v_attempt_count,0\)<COALESCE\(v_max_attempts,8\)/i);
 });
 
+test('terminal material completion reaches public successful-source reconciliation', () => {
+  const materialBranchStart = complete.indexOf(
+    "IF v_stage_job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'",
+  );
+  const sourceCountParsingStart = complete.indexOf('v_source_rows_written := CASE');
+  assert.ok(materialBranchStart >= 0 && sourceCountParsingStart > materialBranchStart);
+
+  const materialBranch = complete.slice(materialBranchStart, sourceCountParsingStart);
+  assert.match(
+    materialBranch,
+    /IF v_has_more THEN[\s\S]*UPDATE public\.banking_pay_workbench_jobs[\s\S]*RETURN jsonb_build_object[\s\S]*END IF;[\s\S]*END IF;/i,
+  );
+  assert.doesNotMatch(
+    materialBranch,
+    /END IF;\s*UPDATE public\.banking_pay_workbench_jobs[\s\S]*RETURN jsonb_build_object[\s\S]*END IF;\s*v_source_rows_written/i,
+  );
+
+  assert.match(
+    complete,
+    /v_source_rows_written := CASE[\s\S]*v_result_json->>'published_count'/i,
+  );
+  assert.match(
+    complete,
+    /v_current_source_row_count := CASE[\s\S]*v_result_json->>'published_count'/i,
+  );
+  assert.match(
+    complete,
+    /v_current_source_row_count_authoritative :=[\s\S]*v_stage_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'[\s\S]*v_result_json->>'private_stage'[\s\S]*v_result_json->>'stage_status'[\s\S]*v_result_json->>'published_count'/i,
+  );
+
+  const reconciliationCall = complete.indexOf(
+    'public.pay_workbench_reconcile_successful_source_build(',
+    sourceCountParsingStart,
+  );
+  const terminalJobUpdate = complete.indexOf(
+    'UPDATE public.banking_pay_workbench_jobs AS update_job',
+    sourceCountParsingStart,
+  );
+  const terminalScopeClear = complete.indexOf(
+    'SET pending_job_id = NULL::uuid',
+    reconciliationCall,
+  );
+  assert.ok(reconciliationCall > sourceCountParsingStart);
+  assert.ok(terminalJobUpdate > sourceCountParsingStart && terminalJobUpdate < reconciliationCall);
+  assert.ok(terminalScopeClear > reconciliationCall);
+});
+
 test('expired delivered attempts wait for cancellation grace and receive a new nonce on retry', () => {
   assert.match(recovery, /attempt_status='STARTED'/i);
   assert.match(recovery, /lease_expires_at_utc\+interval '15 seconds'/i);
