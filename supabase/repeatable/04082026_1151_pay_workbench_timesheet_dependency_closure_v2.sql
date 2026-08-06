@@ -134,9 +134,14 @@ BEGIN
       source_key text PRIMARY KEY,member_timesheet_id uuid NOT NULL,
       edge_kind text NOT NULL,edge_source_id uuid NOT NULL
     ) ON COMMIT DROP;
-    TRUNCATE pg_temp._bpay_wb_closure_edge_page_v2;
+    -- Empty dependency families are metadata transitions, not material edge
+    -- pages. Skip the fixed ten-family set inside this one bounded attempt and
+    -- stop as soon as a real edge page is found. This removes one-job-per-empty-
+    -- family latency without increasing the 25-unit edge/emission budget.
+    LOOP
+      TRUNCATE pg_temp._bpay_wb_closure_edge_page_v2;
 
-    IF v_family=1 THEN
+      IF v_family=1 THEN
       INSERT INTO pg_temp._bpay_wb_closure_edge_page_v2
       SELECT 'PARENT:'||parent_timesheet_id::text,parent_timesheet_id,'CORRECTION_FORWARD',timesheet_id
       FROM public.timesheets WHERE timesheet_id=v_frontier AND parent_timesheet_id IS NOT NULL
@@ -202,7 +207,7 @@ BEGIN
       FROM authoritative_edges
       WHERE v_last_key IS NULL OR source_key>v_last_key
       ORDER BY source_key LIMIT v_limit+1;
-    ELSIF v_family=10 THEN
+      ELSIF v_family=10 THEN
       INSERT INTO pg_temp._bpay_wb_closure_edge_page_v2
       WITH frontier_components AS (
         SELECT DISTINCT frontier_component.id,frontier_component.finance_case_id
@@ -235,7 +240,13 @@ BEGIN
       FROM authoritative_edges
       WHERE v_last_key IS NULL OR source_key>v_last_key
       ORDER BY source_key LIMIT v_limit+1;
-    END IF;
+      END IF;
+
+      EXIT WHEN EXISTS(SELECT 1 FROM pg_temp._bpay_wb_closure_edge_page_v2)
+        OR v_family>=10;
+      v_family:=v_family+1;
+      v_last_key:=NULL;
+    END LOOP;
 
     FOR v_row IN SELECT * FROM pg_temp._bpay_wb_closure_edge_page_v2 ORDER BY source_key
     LOOP

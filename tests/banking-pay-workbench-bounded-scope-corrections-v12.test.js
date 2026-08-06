@@ -87,6 +87,9 @@ test('D4 finance closure deduplicates frontier authority', () => {
   assert.match(closure, /SELECT DISTINCT frontier_component\.finance_case_id/);
   assert.match(closure, /SELECT DISTINCT frontier_component\.id,frontier_component\.finance_case_id/);
   assert.match(closure, /SELECT reservation_row\.id[\s\S]*UNION/);
+  assert.match(closure, /LOOP[\s\S]*TRUNCATE pg_temp\._bpay_wb_closure_edge_page_v2[\s\S]*EXIT WHEN EXISTS\(SELECT 1 FROM pg_temp\._bpay_wb_closure_edge_page_v2\)[\s\S]*OR v_family>=10/);
+  assert.match(closure, /v_family:=v_family\+1;\s*v_last_key:=NULL;\s*END LOOP;/);
+  assert.match(closure, /IF v_used\+1\+\(CASE WHEN v_scope_exists THEN 0 ELSE 1 END\)>v_limit THEN EXIT; END IF;/);
 });
 test('D5 component digests are derived internally', () => {
   assert.match(syncCore, /p_mismatch_choices:=[\s\S]{0,220}- 'overpayment_sync_negative_component_digest'/);
