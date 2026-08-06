@@ -31,6 +31,7 @@ DECLARE
   v_job_result jsonb;
   v_candidate record;
   v_source_change_seq bigint := 0;
+  v_invalidation_at_utc timestamptz;
 BEGIN
   IF jsonb_typeof(v_payload) <> 'object' THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_INVALIDATION_INPUT_INVALID'
@@ -139,16 +140,35 @@ BEGIN
     SELECT DISTINCT candidate_id FROM pg_temp._bpay_wb_invalidation_pairs_v1
   );
 
+  -- Use one timestamp for every lifecycle column in the proposed inserts.
+  -- PostgreSQL validates CHECK constraints on the proposed INSERT row before
+  -- resolving ON CONFLICT, so separate clock_timestamp() calls can otherwise
+  -- make created_at_utc a few microseconds later than last_dirtied/updated.
+  v_invalidation_at_utc := clock_timestamp();
+  v_source_change_seq := GREATEST(
+    COALESCE(CASE WHEN COALESCE(v_payload->>'latest_source_change_seq','') ~ '^\d+$'
+      THEN (v_payload->>'latest_source_change_seq')::bigint END,0),
+    COALESCE(CASE WHEN COALESCE(v_payload->>'source_change_seq','') ~ '^\d+$'
+      THEN (v_payload->>'source_change_seq')::bigint END,0),
+    COALESCE(CASE WHEN COALESCE(v_payload->>'source_change_sequence','') ~ '^\d+$'
+      THEN (v_payload->>'source_change_sequence')::bigint END,0)
+  );
+
   INSERT INTO private.banking_pay_workbench_candidate_scope_registry AS registry(
     candidate_id,last_dirty_reason,last_scope_change_tx_token,
-    last_dirtied_at_utc,updated_at_utc
+    current_source_change_seq,last_dirtied_at_utc,created_at_utc,updated_at_utc
   )
-  SELECT DISTINCT candidate_id,v_reason,v_tx_token,clock_timestamp(),clock_timestamp()
+  SELECT DISTINCT candidate_id,v_reason,v_tx_token,v_source_change_seq,
+         v_invalidation_at_utc,v_invalidation_at_utc,v_invalidation_at_utc
   FROM pg_temp._bpay_wb_invalidation_pairs_v1
   ORDER BY candidate_id
   ON CONFLICT(candidate_id) DO UPDATE
   SET last_dirty_reason=EXCLUDED.last_dirty_reason,
       last_scope_change_tx_token=EXCLUDED.last_scope_change_tx_token,
+      current_source_change_seq=GREATEST(
+        registry.current_source_change_seq,
+        EXCLUDED.current_source_change_seq
+      ),
       last_dirtied_at_utc=EXCLUDED.last_dirtied_at_utc,
       updated_at_utc=EXCLUDED.updated_at_utc;
   GET DIAGNOSTICS v_registry_affected = ROW_COUNT;
@@ -166,7 +186,7 @@ BEGIN
     last_dirtied_at_utc,updated_at_utc
   )
   SELECT timesheet_id,candidate_id,'DIRTY',0,v_reason,v_tx_token,
-         clock_timestamp(),clock_timestamp(),clock_timestamp()
+         v_invalidation_at_utc,v_invalidation_at_utc,v_invalidation_at_utc
   FROM pg_temp._bpay_wb_invalidation_pairs_v1
   WHERE timesheet_id IS NOT NULL
   ORDER BY candidate_id,timesheet_id

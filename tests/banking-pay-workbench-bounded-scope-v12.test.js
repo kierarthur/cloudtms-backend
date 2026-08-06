@@ -15,6 +15,9 @@ const factPageAuthorityMigration = read(
 const expectedEffectAuthorityMigration = read(
   'supabase/migrations/06082026_0518_banking_pay_expected_effect_fact_authority.sql'
 );
+const readyDirtyRegistryMigration = read(
+  'supabase/migrations/06082026_1108_banking_pay_scope_registry_ready_dirty.sql'
+);
 const closure = read(
   'supabase/repeatable/04082026_1151_pay_workbench_timesheet_dependency_closure_v2.sql'
 ).replace(/\r\n/g, '\n');
@@ -24,6 +27,7 @@ const syncCore = read('supabase/repeatable/04082026_1210_pay_sync_overpayments_f
 const triggers = read('supabase/repeatable/04082026_1234_banking_pay_bounded_scope_triggers_v12.sql');
 const markCandidateDirty = read('supabase/repeatable/04082026_1219_pay_workbench_mark_candidate_dirty.sql');
 const markFinanceDirty = read('supabase/repeatable/04082026_1219_pay_workbench_mark_finance_case_dirty.sql');
+const scopeInvalidator = read('supabase/repeatable/04082026_1139_pay_workbench_scope_invalidate_v1.sql');
 
 const newFunctionFiles = [
   '04082026_1139_pay_workbench_scope_invalidate_v1.sql',
@@ -304,6 +308,59 @@ test('all 18 invalidation backstops and nine independent finance observers use o
   for (const parent of ['pay_batch_candidates', 'pay_batches', 'pay_bank_transfers']) {
     assert.match(triggers, new RegExp(`ON public\\.${parent}[\\s\\S]{0,180}OLD TABLE AS old_rows`, 'i'));
   }
+});
+
+test('scope invalidation uses one lifecycle timestamp for conflict-safe registry and state inserts', () => {
+  assert.match(scopeInvalidator, /v_invalidation_at_utc\s+timestamptz/i);
+  assert.match(scopeInvalidator, /v_invalidation_at_utc\s*:=\s*clock_timestamp\(\)/i);
+  assert.match(
+    scopeInvalidator,
+    /current_source_change_seq,last_dirtied_at_utc,created_at_utc,updated_at_utc[\s\S]*?v_source_change_seq,[\s\S]*?v_invalidation_at_utc,v_invalidation_at_utc,v_invalidation_at_utc/i,
+  );
+  assert.match(
+    scopeInvalidator,
+    /registered_at_utc,[\s\S]*?last_dirtied_at_utc,updated_at_utc[\s\S]*?v_invalidation_at_utc,v_invalidation_at_utc,v_invalidation_at_utc/i,
+  );
+  assert.doesNotMatch(
+    scopeInvalidator,
+    /SELECT DISTINCT candidate_id,v_reason,v_tx_token,clock_timestamp\(\),clock_timestamp\(\)/i,
+  );
+  assert.match(
+    scopeInvalidator,
+    /current_source_change_seq=GREATEST\([\s\S]*?registry\.current_source_change_seq,[\s\S]*?EXCLUDED\.current_source_change_seq/i,
+  );
+});
+
+test('a bootstrapped READY registry may be generation-dirty until its queued refresh publishes', () => {
+  assert.match(
+    readyDirtyRegistryMigration,
+    /DROP CONSTRAINT IF EXISTS bpay_wb_scope_registry_terminal_chk/i,
+  );
+  assert.match(
+    readyDirtyRegistryMigration,
+    /initialisation_status\s*<>\s*'READY'[\s\S]*?initialised_at_utc IS NOT NULL[\s\S]*?failure_json\s*=\s*'\{\}'::jsonb/i,
+  );
+  assert.doesNotMatch(
+    readyDirtyRegistryMigration,
+    /evaluated_generation\s*=\s*dirty_generation/i,
+  );
+  assert.match(
+    migration,
+    /evaluated_generation\s*<=\s*dirty_generation/i,
+  );
+});
+
+test('source publication evaluates each timesheet at its own dirty generation', () => {
+  assert.match(
+    dispatcher,
+    /evaluated_generation\s*=\s*state_row\.dirty_generation/i,
+    'publication must close each timesheet against its row-level dirty generation, not the candidate generation',
+  );
+  assert.doesNotMatch(
+    dispatcher,
+    /evaluated_generation\s*=\s*v_build\.captured_candidate_generation/i,
+    'candidate generations cannot be written into independent timesheet generation counters',
+  );
 });
 
 test('finance-effect observer compares temporary relation attributes using one text-array type', () => {

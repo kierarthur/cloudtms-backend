@@ -9,6 +9,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const worker = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 
+test('timesheet lifecycle nudges debounce and execute without waiting for cron', () => {
+  const nudge = functionBody('nudgeBankingPayWorkbenchDrain');
+  assert.doesNotMatch(nudge, /BANKING_PAY_WORKBENCH_LIFECYCLE_NUDGE_DEFERRED_TO_CRON/);
+  assert.doesNotMatch(nudge, /LIFECYCLE_ORIGIN_DEFERRED_TO_CRON/);
+  assert.match(nudge, /if \(lifecycleOriginNudge && lifecycleOriginDrainDelayMs > 0\)/);
+  assert.match(nudge, /await sleepMs\(lifecycleOriginDrainDelayMs\)/);
+  assert.match(nudge, /const firstTick = await bankingPayWorkbenchCronTick\(env, passthroughOptions\)/);
+});
+
 function functionBody(name) {
   const match = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\(`).exec(worker);
   const start = match?.index;

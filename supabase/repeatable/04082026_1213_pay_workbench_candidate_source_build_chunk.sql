@@ -1429,7 +1429,7 @@ BEGIN
         WHERE authority.truth_ex_vat IS DISTINCT FROM authority.baseline_ex_vat
           OR authority.reserved_source_amount<>0 OR authority.has_finance_case
       ) THEN 'LIVE' ELSE 'CLOSED' END,
-      evaluated_generation=v_build.captured_candidate_generation,
+      evaluated_generation=state_row.dirty_generation,
       current_input_fingerprint=scope_row.captured_input_fingerprint,
       evaluated_input_fingerprint=scope_row.captured_input_fingerprint,
       current_build_id=NULL,last_evaluated_at_utc=clock_timestamp(),
