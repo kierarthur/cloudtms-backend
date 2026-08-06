@@ -49,6 +49,12 @@ test('D2 fact pages carry and verify a cumulative replay-safe chain', () => {
 test('D3 physical live-input pages precede durable derived-family paging', () => {
   assert.match(dispatcher, /WITH scope_page AS MATERIALIZED/);
   assert.match(dispatcher, /LIMIT v_fact_limit\+1[\s\S]*LEFT JOIN LATERAL/);
+  const fixedProjection = dispatcher.match(
+    /WITH scope_page AS MATERIALIZED[\s\S]*?LEFT JOIN LATERAL \(([\s\S]*?)\) canonical ON true/i,
+  );
+  assert.ok(fixedProjection);
+  assert.match(fixedProjection[1], /current_member\.is_current IS TRUE/i);
+  assert.doesNotMatch(fixedProjection[1], /current_member\.(?:revoked_at|archived_at_utc)/i);
   assert.match(dispatcher, /private\.pay_workbench_unit_economic_occurrence_bundle_v1\(/);
   assert.match(projection, /canonical\.canonical_timesheet_id AS projected_timesheet_id/);
   assert.match(occurrence, /paged_raw_rows AS MATERIALIZED/);

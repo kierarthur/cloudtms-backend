@@ -356,9 +356,10 @@ BEGIN
             ON current_scope.build_id=v_build_id
            AND current_scope.dependency_unit_key=v_unit_key
            AND current_scope.timesheet_id=current_member.timesheet_id
+          -- Preserve the established rotation authority exactly: canonical
+          -- identity is the highest-ranked is_current family member. Revocation
+          -- and archival remain captured facts; they do not erase identity.
           WHERE current_member.is_current IS TRUE
-            AND current_member.revoked_at IS NULL
-            AND current_member.archived_at_utc IS NULL
             AND (CASE WHEN NULLIF(BTRIM(member.booking_id),'') IS NULL
                   THEN current_member.timesheet_id=member.timesheet_id
                   ELSE current_member.booking_id=member.booking_id END)
