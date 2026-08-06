@@ -26,7 +26,11 @@ function canonicalProviderState(fixture) {
     || fixture.unscopedPendingNonFinal === true;
   const providerOutage = fixture.providerOutage === true || fixture.unscopedProviderOutage === true;
   const providerRequestSent = fixture.providerRequestSent === true
-    || fixture.unscopedProviderRequestSent === true;
+    || fixture.providerEventPresent === true
+    || fixture.providerResponsePresent === true
+    || fixture.providerExternalIdPresent === true
+    || fixture.unscopedProviderRequestSent === true
+    || (fixture.operationPayload && operationPayloadHasProviderRequest(fixture.operationPayload));
   const providerExternalIdPresent = fixture.providerExternalIdPresent === true
     || fixture.unscopedProviderExternalIdPresent === true;
 
@@ -60,6 +64,7 @@ function diagnosticCanNoMoneyUnwind(fixture) {
 
 function eligibleForOrdinaryCancellation(fixture) {
   return canonicalProviderState(fixture) === 'NO_TRANSFER_EVIDENCE'
+    && fixture.activeItemCount !== 0
     && fixture.providerSubmissionInProgress !== true
     && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus)
     && fixture.manualCarryForwardBlocked !== true
@@ -67,7 +72,96 @@ function eligibleForOrdinaryCancellation(fixture) {
 }
 
 function diagnosticCanPreProviderCancel(fixture) {
-  return eligibleForOrdinaryCancellation(fixture);
+  const providerEvidencePresent = fixture.providerRequestSent === true
+    || fixture.providerExternalIdPresent === true
+    || fixture.providerEventPresent === true
+    || fixture.providerResponsePresent === true;
+  const localNotSent = fixture.paidOrSettled !== true
+    && fixture.terminalNoMoney !== true
+    && fixture.providerPendingNonFinal !== true
+    && fixture.providerOutcomeUnknown !== true
+    && fixture.providerOutage !== true
+    && fixture.unscopedTerminalNoMoney !== true
+    && fixture.unscopedPendingNonFinal !== true
+    && fixture.unscopedProviderOutcomeUnknown !== true
+    && fixture.unscopedProviderOutage !== true
+    && fixture.providerSubmissionInProgress !== true
+    && !providerEvidencePresent;
+
+  return localNotSent
+    && fixture.scopeIsFull !== false
+    && fixture.manualCarryForwardBlocked !== true
+    && fixture.carryForwardFreshnessBlocked !== true;
+}
+
+function preparedOrdinaryCancellationEligible(fixture) {
+  return diagnosticCanPreProviderCancel(fixture)
+    && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus);
+}
+
+function nonEmptyProviderValue(value) {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value).length > 0;
+  if (typeof value === 'number') return true;
+  if (typeof value !== 'string') return false;
+  const normalised = value.trim().toLowerCase();
+  return normalised !== '' && !['null', 'false', 'true', 'none', 'n/a', 'na'].includes(normalised);
+}
+
+function operationPayloadHasProviderRequest(payload) {
+  const truthy = (value) => ['true', 't', 'yes', 'y', '1'].includes(String(value ?? '').trim().toLowerCase());
+  const positive = (value) => /^\d+(\.\d+)?$/.test(String(value ?? '').trim()) && Number(value) > 0;
+  const diagnostic = payload.provider_submit_diagnostic ?? {};
+  const camelDiagnostic = payload.providerSubmitDiagnostic ?? {};
+  const providerEvidence = payload.provider_evidence ?? {};
+  const camelEvidence = payload.providerEvidence ?? {};
+  const diagnosticEnvelope = payload.diagnostic ?? {};
+  const outcome = payload.outcome ?? {};
+  return [
+    payload.provider_request_sent,
+    payload.providerRequestSent,
+    payload.provider_request_sent_confirmed,
+    payload.providerRequestSentConfirmed,
+    payload.request_sent,
+    payload.requestSent,
+    payload.request_dispatched,
+    payload.requestDispatched,
+    payload.provider_submit_attempted,
+    payload.providerSubmitAttempted,
+    diagnostic.provider_request_sent,
+    camelDiagnostic.providerRequestSent,
+    providerEvidence.provider_request_sent,
+    camelEvidence.providerRequestSent,
+    diagnosticEnvelope.provider_request_sent,
+    diagnosticEnvelope.providerRequestSent,
+    outcome.provider_request_sent,
+    outcome.providerRequestSent,
+  ].some(truthy)
+    || [
+      payload.request_sent_at_utc,
+      payload.provider_request_sent_at_utc,
+      payload.requestSentAtUtc,
+      payload.providerRequestSentAtUtc,
+      diagnostic.request_sent_at_utc,
+      camelDiagnostic.requestSentAtUtc,
+    ].some((value) => nonEmptyProviderValue(value))
+    || [
+      payload.provider_request_sent_count,
+      payload.providerRequestSentCount,
+      payload.provider_call_sent_count,
+      payload.providerCallSentCount,
+      diagnostic.provider_request_sent_count,
+      camelDiagnostic.providerRequestSentCount,
+    ].some(positive)
+    || [
+      payload.provider_response,
+      payload.provider_response_json,
+      payload.submit_response,
+      payload.response_json,
+      payload.provider_result,
+      payload.provider_payload,
+    ].some(nonEmptyProviderValue);
 }
 
 test('Current Payment Status has one set-wise failed-release eligibility authority', () => {
@@ -286,14 +380,96 @@ test('reviewed and immutable failed-release sets are equal in both directions', 
   ]);
 });
 
+test('ordinary cancellation has one fail-closed reviewed authority and preparation excludes prior failed work', () => {
+  assert.match(statusPage, /AS pre_provider_cancel_eligible/);
+  assert.match(statusPage, /pre_provider_cancel_eligible THEN ARRAY\['CANCEL_PAYMENT'\]/);
+  assert.match(statusPage, /active_item_count > 0/);
+  assert.match(statusPage, /manual_carry_forward_blocked IS NOT TRUE/);
+  assert.match(statusPage, /carry_forward_freshness_blocked IS NOT TRUE/);
+
+  const classifiedStart = statusPage.indexOf('candidate_classified_index AS MATERIALIZED');
+  const classifiedEnd = statusPage.indexOf('candidate_filtered_index AS MATERIALIZED', classifiedStart);
+  const classified = statusPage.slice(classifiedStart, classifiedEnd);
+  assert.doesNotMatch(classified, /ELSE ARRAY\['CANCEL_PAYMENT'\]/);
+
+  const actionStart = selectionPrepare.indexOf('v_action_allowed := CASE');
+  const actionEnd = selectionPrepare.indexOf('v_effective_display_state := CASE', actionStart);
+  const action = selectionPrepare.slice(actionStart, actionEnd);
+  for (const branch of [
+    "WHEN v_requested_action = 'DRAFT_CANCEL'",
+    "WHEN v_requested_action IN ('PRE_BANK_CANCEL', 'CANCEL_PAYMENT')",
+    "WHEN v_requested_action IN ('NO_MONEY_RELEASE', 'NO_MONEY_UNWIND')",
+  ]) {
+    const branchStart = action.indexOf(branch);
+    assert.notEqual(branchStart, -1, branch);
+    const nextBranch = action.indexOf('WHEN v_requested_action', branchStart + branch.length);
+    const branchBody = action.slice(branchStart, nextBranch === -1 ? action.length : nextBranch);
+    for (const status of ['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE']) {
+      assert.match(branchBody, new RegExp(`latest_work_status IS DISTINCT FROM '${status}'`));
+    }
+  }
+});
+
+test('operation and chunk provider payload aliases match provider-evidence empty and sentinel semantics', () => {
+  for (const payload of [
+    { provider_request_sent_confirmed: true },
+    { request_dispatched: true },
+    { provider_evidence: { provider_request_sent: true } },
+    { diagnostic: { provider_request_sent: true } },
+    { outcome: { provider_request_sent: true } },
+    { provider_request_sent_count: 1 },
+    { providerCallSentCount: 2 },
+    { provider_submit_diagnostic: { provider_request_sent_count: 1 } },
+    { provider_response: { accepted: true } },
+    { provider_response: ['accepted'] },
+    { provider_response: 200 },
+  ]) {
+    assert.equal(operationPayloadHasProviderRequest(payload), true, JSON.stringify(payload));
+  }
+
+  for (const payload of [
+    {},
+    { provider_response: {} },
+    { provider_response: [] },
+    { provider_response: null },
+    { provider_response: '' },
+    { provider_response: 'null' },
+    { provider_response: 'false' },
+    { provider_response: 'true' },
+    { provider_response: 'none' },
+    { provider_response: 'n/a' },
+    { provider_request_sent_count: 0 },
+  ]) {
+    assert.equal(operationPayloadHasProviderRequest(payload), false, JSON.stringify(payload));
+  }
+
+  for (const marker of [
+    'provider_request_sent_confirmed',
+    'request_dispatched',
+    "{provider_evidence,provider_request_sent}",
+    "{diagnostic,provider_request_sent}",
+    "{outcome,provider_request_sent}",
+    'provider_call_sent_count',
+    "provider_response') = 'object'",
+    "provider_response') = 'array'",
+    "NOT IN ('null','false','true','none','n/a','na')",
+  ]) {
+    assert.equal(statusPage.includes(marker), true, marker);
+  }
+});
+
 test('reviewed and immutable ordinary-cancellation sets are equal in both directions', () => {
   const common = {
+    activeItemCount: 1,
+    scopeIsFull: true,
     paidOrSettled: false,
     terminalNoMoney: false,
     providerPendingNonFinal: false,
     providerOutcomeUnknown: false,
     providerOutage: false,
     providerRequestSent: false,
+    providerEventPresent: false,
+    providerResponsePresent: false,
     providerExternalIdPresent: false,
     providerSubmissionInProgress: false,
     latestWorkStatus: null,
@@ -302,6 +478,21 @@ test('reviewed and immutable ordinary-cancellation sets are equal in both direct
   };
   const fixtures = [
     { id: 'plain-local', ...common },
+    { id: 'empty-scope', ...common, activeItemCount: 0, scopeIsFull: false },
+    { id: 'manual-carry-blocker', ...common, manualCarryForwardBlocked: true },
+    { id: 'freshness-blocker', ...common, carryForwardFreshnessBlocked: true },
+    { id: 'blocked-work', ...common, latestWorkStatus: 'BLOCKED' },
+    { id: 'failed-final-work', ...common, latestWorkStatus: 'FAILED_FINAL' },
+    { id: 'failed-retryable-work', ...common, latestWorkStatus: 'FAILED_RETRYABLE' },
+    { id: 'active-provider-submission', ...common, providerSubmissionInProgress: true },
+    { id: 'provider-event', ...common, providerEventPresent: true },
+    { id: 'provider-response', ...common, providerResponsePresent: true },
+    { id: 'provider-external-id', ...common, providerExternalIdPresent: true },
+    { id: 'request-confirmed-alias', ...common, operationPayload: { provider_request_sent_confirmed: true }, providerRequestSent: true },
+    { id: 'request-dispatched-alias', ...common, operationPayload: { request_dispatched: true }, providerRequestSent: true },
+    { id: 'positive-request-count', ...common, operationPayload: { provider_request_sent_count: 1 }, providerRequestSent: true },
+    { id: 'empty-provider-response', ...common, operationPayload: { provider_response: {} } },
+    { id: 'sentinel-provider-response', ...common, operationPayload: { provider_response: 'none' } },
     { id: 'outage-only', ...common, providerOutage: true },
     { id: 'terminal', ...common, terminalNoMoney: true },
     { id: 'pending', ...common, providerPendingNonFinal: true },
@@ -314,8 +505,12 @@ test('reviewed and immutable ordinary-cancellation sets are equal in both direct
   ];
 
   const reviewedIds = fixtures.filter(eligibleForOrdinaryCancellation).map(({ id }) => id).sort();
-  const preparedIds = fixtures.filter(diagnosticCanPreProviderCancel).map(({ id }) => id).sort();
+  const preparedIds = fixtures.filter(preparedOrdinaryCancellationEligible).map(({ id }) => id).sort();
   assert.deepEqual(reviewedIds.filter((id) => !preparedIds.includes(id)), []);
   assert.deepEqual(preparedIds.filter((id) => !reviewedIds.includes(id)), []);
-  assert.deepEqual(reviewedIds, ['plain-local']);
+  assert.deepEqual(reviewedIds, [
+    'empty-provider-response',
+    'plain-local',
+    'sentinel-provider-response',
+  ]);
 });
