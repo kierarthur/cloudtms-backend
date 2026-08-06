@@ -894,7 +894,7 @@
       "schema": "public",
       "name": "pay_payment_cancelability_diagnostic",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_actor_user_id uuid, p_diagnostic_context text",
-      "definition_sha256": "748d71e174278e4d977b5d615bcae239374ecdadd30c9c38e927fa2d35e91e21",
+      "definition_sha256": "a7583c3f250c81c581344840a3f864aee2c514c5d402f54ef42484c0bc619da1",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
