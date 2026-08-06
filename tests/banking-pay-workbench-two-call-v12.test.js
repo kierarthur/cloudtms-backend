@@ -67,6 +67,19 @@ test('fact-page completion and creation use one database timestamp', () => {
   );
 });
 
+test('post-seal bootstrap progress preserves the immutable terminal seed cursor', () => {
+  assert.equal((sourceBuild.match(/scope_cursor_json=v_next/gi) || []).length, 3);
+  assert.match(
+    sourceBuild,
+    /fact_cursor_json=jsonb_build_object\('cursor_kind','WORKSPACE_FACT','cursor_version',2,\s*'terminal',true,'build_id',v_build_id\),\s*updated_at_utc=clock_timestamp\(\)/i,
+  );
+  assert.match(sourceBuild, /bootstrap_cursor_json=v_next/i);
+  assert.match(
+    sourceBuild,
+    /private_stage='PREPARE_SCOPE',scope_cursor_json=v_next[\s\S]*seed_scope_digest=NULL[\s\S]*seed_scope_sealed_at_utc=NULL/i,
+  );
+});
+
 test('RPC 1 attempt start, creation, update and lease use one ordered timestamp authority', () => {
   assert.match(claim, /v_attempt_started_at\s+timestamptz/i);
   assert.match(claim, /v_attempt_started_at\s*:=\s*clock_timestamp\(\);/i);

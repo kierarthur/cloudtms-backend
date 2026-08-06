@@ -1080,7 +1080,7 @@ BEGIN
           UPDATE private.banking_pay_workbench_economic_builds
           SET status='COLLECTING',private_stage='BOOTSTRAP_DISCOVERY',
             fact_cursor_json=jsonb_build_object('cursor_kind','WORKSPACE_FACT','cursor_version',2,
-              'terminal',true,'build_id',v_build_id),scope_cursor_json=v_next,
+              'terminal',true,'build_id',v_build_id),
             updated_at_utc=clock_timestamp()
           WHERE id=v_build_id;
           UPDATE private.banking_pay_workbench_candidate_scope_registry
@@ -1589,8 +1589,10 @@ BEGIN
           SET bootstrap_stream='RESET_FACTS',bootstrap_cursor_json=v_next,
               updated_at_utc=clock_timestamp()
           WHERE candidate_id=p_candidate_id AND current_build_id=v_build_id;
+          -- The sealed seed cursor remains immutable. Bootstrap continuation is
+          -- owned by the registry's dedicated bootstrap_cursor_json.
           UPDATE private.banking_pay_workbench_economic_builds
-          SET scope_cursor_json=v_next,updated_at_utc=clock_timestamp() WHERE id=v_build_id;
+          SET updated_at_utc=clock_timestamp() WHERE id=v_build_id;
           RETURN jsonb_build_object('ok',true,'build_id',v_build_id,
             'private_stage','BOOTSTRAP_DISCOVERY','stage_status','CLASSIFYING',
             'has_more',true,'continuation_enqueued',false,'next_cursor_json',v_next,
@@ -1845,8 +1847,9 @@ BEGIN
           bootstrap_rows_seen=bootstrap_rows_seen+v_bootstrap_page_count,
           updated_at_utc=clock_timestamp()
       WHERE candidate_id=p_candidate_id AND current_build_id=v_build_id;
+      -- Do not replace the terminal seed-scope cursor during classification.
       UPDATE private.banking_pay_workbench_economic_builds
-      SET scope_cursor_json=v_next,updated_at_utc=clock_timestamp() WHERE id=v_build_id;
+      SET updated_at_utc=clock_timestamp() WHERE id=v_build_id;
       RETURN jsonb_build_object('ok',true,'build_id',v_build_id,
         'private_stage','BOOTSTRAP_DISCOVERY','stage_status','CLASSIFYING',
         'has_more',true,'continuation_enqueued',false,'next_cursor_json',v_next,
@@ -1871,8 +1874,10 @@ BEGIN
       SET bootstrap_stream=v_next->>'bootstrap_stream',bootstrap_cursor_json=v_next,
           updated_at_utc=clock_timestamp()
       WHERE candidate_id=p_candidate_id AND current_build_id=v_build_id;
+      -- Reset progress belongs to bootstrap_cursor_json until the atomic
+      -- seed-seal reset below clears both the digest and sealed timestamp.
       UPDATE private.banking_pay_workbench_economic_builds
-      SET scope_cursor_json=v_next,updated_at_utc=clock_timestamp() WHERE id=v_build_id;
+      SET updated_at_utc=clock_timestamp() WHERE id=v_build_id;
       RETURN jsonb_build_object('ok',true,'build_id',v_build_id,
         'private_stage','BOOTSTRAP_DISCOVERY','stage_status','CLASSIFYING',
         'has_more',true,'continuation_enqueued',false,'next_cursor_json',v_next,
