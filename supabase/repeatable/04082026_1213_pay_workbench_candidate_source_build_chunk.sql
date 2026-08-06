@@ -215,6 +215,46 @@ BEGIN
       RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_FACTS_INCOMPLETE' USING ERRCODE='23514';
     END IF;
 
+    -- A build that crossed an older bootstrap reset implementation can reach
+    -- a fresh page-one cursor while its earlier bootstrap fact ledger is still
+    -- attached.  Do not weaken the page-chain invariant or repair rows out of
+    -- band.  Complete this exact material attempt by returning to the same
+    -- bounded page -> fact -> scope reset owner used by current bootstrap
+    -- classification.  The ordinary RPC-2 completion path then delivers the
+    -- reset continuation atomically.
+    IF v_page_number=1
+       AND v_cumulative_fact_count=0
+       AND v_cursor->>'previous_page_digest' IS NULL
+       AND v_registry.initialisation_status='CLASSIFYING'
+       AND v_registry.bootstrap_id IS NOT NULL
+       AND EXISTS(
+         SELECT 1
+         FROM private.banking_pay_workbench_economic_build_fact_pages page
+         WHERE page.build_id=v_build_id
+           AND page.dependency_unit_key=v_unit_key
+           AND page.fact_family=v_fact_family
+         LIMIT 1
+       ) THEN
+      v_next:=jsonb_build_object('cursor_kind','BOOTSTRAP_DISCOVERY','cursor_version',1,
+        'bootstrap_id',v_registry.bootstrap_id,'bootstrap_stream','RESET_FACT_PAGES',
+        'build_id',v_build_id,'candidate_id',p_candidate_id,
+        'captured_candidate_generation',v_build.captured_candidate_generation,
+        'captured_source_change_seq',v_build.source_change_seq,
+        'recovery_reason','STALE_BOOTSTRAP_FACT_AUTHORITY');
+      UPDATE private.banking_pay_workbench_economic_builds
+      SET private_stage='BOOTSTRAP_DISCOVERY',updated_at_utc=clock_timestamp()
+      WHERE id=v_build_id;
+      UPDATE private.banking_pay_workbench_candidate_scope_registry
+      SET bootstrap_stream='RESET_FACT_PAGES',bootstrap_cursor_json=v_next,
+          updated_at_utc=clock_timestamp()
+      WHERE candidate_id=p_candidate_id AND current_build_id=v_build_id;
+      RETURN jsonb_build_object('ok',true,'build_id',v_build_id,
+        'private_stage','BOOTSTRAP_DISCOVERY','stage_status','RESETTING',
+        'has_more',true,'continuation_enqueued',false,'next_cursor_json',v_next,
+        'next_action','BOOTSTRAP_DISCOVERY','classification_phase','RESET_FACT_PAGES',
+        'recovery_reason','STALE_BOOTSTRAP_FACT_AUTHORITY');
+    END IF;
+
     IF v_unit_key IS NULL THEN
       IF NOT EXISTS(SELECT 1
         FROM private.banking_pay_workbench_economic_build_fact_pages page

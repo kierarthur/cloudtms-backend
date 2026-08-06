@@ -226,6 +226,9 @@ test('fact collection and legacy bootstrap page independently of total candidate
   assert.doesNotMatch(resetFacts, /fact\.fact_family='DEPENDENCY_EDGE'/i);
   assert.match(resetFacts, /THEN 'RESET_SCOPE' ELSE 'RESET_FACTS'/i);
   assert.match(dispatcher, /v_bootstrap_stream='RESET_SCOPE'|THEN 'RESET_SCOPE'/i);
+  assert.match(dispatcher, /v_page_number=1[\s\S]*?v_registry\.initialisation_status='CLASSIFYING'[\s\S]*?banking_pay_workbench_economic_build_fact_pages[\s\S]*?private_stage='BOOTSTRAP_DISCOVERY'[\s\S]*?bootstrap_stream='RESET_FACT_PAGES'/i);
+  assert.match(dispatcher, /'recovery_reason','STALE_BOOTSTRAP_FACT_AUTHORITY'/i);
+  assert.doesNotMatch(dispatcher, /STALE_BOOTSTRAP_FACT_AUTHORITY[\s\S]{0,2500}DELETE FROM private\.banking_pay_workbench_economic_build_fact_pages/i);
   assert.doesNotMatch(dispatcher, /SELECT count\(\*\)[^;]*economic_state='DIRTY'/is);
   assert.doesNotMatch(dispatcher, /p_max_members|LIMIT\s+100\b/i);
 });
