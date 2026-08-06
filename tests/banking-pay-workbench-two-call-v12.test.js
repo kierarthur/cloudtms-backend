@@ -67,6 +67,24 @@ test('fact-page completion and creation use one database timestamp', () => {
   );
 });
 
+test('RPC 1 attempt start, creation, update and lease use one ordered timestamp authority', () => {
+  assert.match(claim, /v_attempt_started_at\s+timestamptz/i);
+  assert.match(claim, /v_attempt_started_at\s*:=\s*clock_timestamp\(\);/i);
+  assert.match(
+    claim,
+    /v_lease_expires\s*:=\s*v_attempt_started_at\+make_interval\(secs=>v_effective_lease\)/i,
+  );
+  assert.match(
+    claim,
+    /v_captured_generation,v_source_change_seq,1,v_attempt_started_at,v_lease_expires,\s*v_attempt_started_at,v_attempt_started_at/i,
+  );
+  assert.match(claim, /'attempt_started_at_utc',v_attempt_started_at/i);
+  assert.doesNotMatch(
+    claim,
+    /v_captured_generation,v_source_change_seq,1,clock_timestamp\(\),v_lease_expires/i,
+  );
+});
+
 test('RPC 2 executes only the exact current nonce and fails closed without mutating stale delivery', () => {
   assert.match(execute, /CREATE OR REPLACE FUNCTION public\.pay_workbench_source_build_attempt_execute_v1\(/i);
   assert.match(execute, /attempt_row\.id=p_attempt_id[\s\S]*v_attempt\.attempt_nonce IS DISTINCT FROM p_attempt_nonce/i);

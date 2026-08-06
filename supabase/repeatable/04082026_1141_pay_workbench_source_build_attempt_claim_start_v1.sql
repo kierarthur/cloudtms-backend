@@ -40,6 +40,7 @@ DECLARE
   v_source_build_run_id uuid;
   v_source_change_seq bigint;
   v_captured_generation bigint;
+  v_attempt_started_at timestamptz;
   v_lease_expires timestamptz;
   v_bootstrap_id uuid;
   v_is_bootstrap boolean:=false;
@@ -515,22 +516,23 @@ BEGIN
       )::text;
   END IF;
 
-  v_lease_expires := clock_timestamp()+make_interval(secs=>v_effective_lease);
+  v_attempt_started_at := clock_timestamp();
+  v_lease_expires := v_attempt_started_at+make_interval(secs=>v_effective_lease);
   INSERT INTO private.banking_pay_workbench_stage_attempts(
     job_id,build_id,candidate_id,private_stage,attempt_number,worker_id,lane_identity,
     captured_candidate_generation,captured_source_change_seq,execution_profile_version,
     started_at_utc,lease_expires_at_utc,created_at_utc,updated_at_utc
   ) VALUES (
     v_job.id,v_build_id,v_job.candidate_id,v_stage,v_attempt_number,v_worker_id,v_lane_identity,
-    v_captured_generation,v_source_change_seq,1,clock_timestamp(),v_lease_expires,
-    clock_timestamp(),clock_timestamp()
+    v_captured_generation,v_source_change_seq,1,v_attempt_started_at,v_lease_expires,
+    v_attempt_started_at,v_attempt_started_at
   ) RETURNING id,attempt_nonce INTO v_attempt_id,v_attempt_nonce;
 
   RETURN jsonb_build_object(
     'ok',true,'claimed',true,'job_id',v_job.id,'build_id',v_build_id,
     'candidate_id',v_job.candidate_id,'private_stage',v_stage,
     'attempt_id',v_attempt_id,'attempt_number',v_attempt_number,
-    'attempt_nonce',v_attempt_nonce,'attempt_started_at_utc',clock_timestamp(),
+    'attempt_nonce',v_attempt_nonce,'attempt_started_at_utc',v_attempt_started_at,
     'lease_expires_at_utc',v_lease_expires,'execution_profile_version',1
   );
 END;
