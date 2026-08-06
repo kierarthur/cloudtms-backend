@@ -1109,7 +1109,9 @@ BEGIN
           RAISE EXCEPTION 'PAY_WORKBENCH_PHYSICAL_SOURCE_SEAL_INCOMPLETE' USING ERRCODE='23514';
         END IF;
         IF v_registry.initialisation_status IN ('DISCOVERING','CLASSIFYING')
-           AND v_registry.bootstrap_id IS NOT NULL THEN
+           AND v_registry.bootstrap_id IS NOT NULL
+           AND COALESCE((v_build.attestation_json->>'bootstrap_active_reconciliation')::boolean,false)
+             IS NOT TRUE THEN
           v_next:=jsonb_build_object('cursor_kind','BOOTSTRAP_DISCOVERY','cursor_version',1,
             'bootstrap_id',v_registry.bootstrap_id,'bootstrap_stream','CLASSIFY_UNITS',
             'classification_phase','EVIDENCE','last_dependency_unit_key',NULL,
@@ -2012,6 +2014,9 @@ BEGIN
         edge_tag_stream_terminal_key_json='{}'::jsonb,unit_digest=NULL,
         sealed_fingerprint_digest=NULL,scope_digest=NULL,dependency_digest=NULL,
         seed_scope_sealed_at_utc=NULL,dependency_closure_sealed_at_utc=NULL,
+        attestation_json=COALESCE(attestation_json,'{}'::jsonb)||jsonb_build_object(
+          'bootstrap_active_reconciliation',true,
+          'bootstrap_active_reconciliation_started_at_utc',statement_timestamp()),
         updated_at_utc=clock_timestamp() WHERE id=v_build_id;
       UPDATE private.banking_pay_workbench_candidate_scope_registry SET
         initialisation_status='CLASSIFYING',bootstrap_stream='ACTIVE_RECONCILIATION',
