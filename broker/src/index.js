@@ -18460,6 +18460,30 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
 }
 
+function shouldContinueBankingPayWorkbenchAfterCron(summary) {
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary) || summary.ok === false) return false;
+
+  const boolish = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(String(value ?? '').trim().toLowerCase());
+  const count = (...keys) => keys.reduce((total, key) => {
+    const value = Number(summary[key]);
+    return total + (Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0);
+  }, 0);
+  const stopReason = String(summary.stop_reason || summary.code || summary.error_code || '').trim().toUpperCase();
+  const unsafeStopReasons = new Set([
+    'RPC_ERROR',
+    'NO_PROGRESS',
+    'DRAIN_UNAVAILABLE',
+    'DISABLED',
+    'INVALID_RESPONSE',
+    'INVARIANT_FAILURE'
+  ]);
+  if (unsafeStopReasons.has(stopReason)) return false;
+
+  const madeProgress = boolish(summary.made_progress)
+    || count('processed_count', 'processed', 'succeeded_count', 'succeeded', 'recovered_stale_count') > 0;
+  return boolish(summary.more_due) && madeProgress;
+}
+
 
 
 
@@ -72994,7 +73018,7 @@ async function handleBankingPayPayeeReadinessEnsure(env, req, user, ctx = null) 
 
 
 
-async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
+async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null, internalOptions = null) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
@@ -73472,6 +73496,15 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
         });
       }
       const results = Array.isArray(pairFlow.mutation?.results) ? pairFlow.mutation.results : [];
+      if (!timesheetLifecycleWorkbenchWakeSuppressed(internalOptions)) {
+        requestTimesheetLifecycleWorkbenchWake(env, ctx, {
+          action: 'UNAUTHORISE',
+          sourceRoute: 'TIMESHEET_UNAUTHORISE_CORRECTION_PAIR',
+          lifecycleChangedCount: timesheetLifecycleMutationChangedCount(pairFlow.mutation),
+          actorUserId: user?.id || null,
+          timesheetId: currentTimesheetId || requestedTimesheetId || null
+        });
+      }
       return withJson(200, {
         ok: true, success: true, unauthorised: true, authorised: false,
         operation: 'correction_pair_unauthorise', pair_lifecycle: pairFlow.preview,
@@ -73702,28 +73735,15 @@ async function handleTimesheetUnauthorise(env, req, timesheetId, ctx = null) {
   const previousStatus = firstString(rpcPayload.previous_processing_status, rpcPayload.previous_status);
   const newStatus = firstString(rpcPayload.new_processing_status, rpcPayload.processing_status, 'PENDING_AUTH');
 
-  try {
-    if (typeof logBankingPayWorkbenchDiag === 'function') {
-      logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
-        origin: 'TIMESHEET_UNAUTHORISE',
-        reason: 'PAYMENT_ELIGIBILITY_REMOVED',
-        mutation_type: 'TIMESHEET_UNAUTHORISED',
-        actor_user_id: user?.id || null,
-        timesheet_id: finalTimesheetId || requestedTimesheetId || null,
-        current_timesheet_id: finalTimesheetId || null
-      });
-    }
-    if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
-      nudgeBankingPayWorkbenchDrain(env, ctx, {
-        origin: 'TIMESHEET_UNAUTHORISE',
-        reason: 'PAYMENT_ELIGIBILITY_REMOVED',
-        mutation_type: 'TIMESHEET_UNAUTHORISED',
-        timesheetId: finalTimesheetId || requestedTimesheetId || null,
-        actorUserId: user?.id || null,
-        budgetProfile: 'NUDGE'
-      });
-    }
-  } catch {}
+  if (!timesheetLifecycleWorkbenchWakeSuppressed(internalOptions)) {
+    requestTimesheetLifecycleWorkbenchWake(env, ctx, {
+      action: 'UNAUTHORISE',
+      sourceRoute: 'TIMESHEET_UNAUTHORISE',
+      lifecycleChangedCount: 1,
+      actorUserId: user?.id || null,
+      timesheetId: finalTimesheetId || requestedTimesheetId || null
+    });
+  }
 
   const lifecyclePatchBundle = buildTimesheetLifecyclePatchFromMutation({
     action: 'UNAUTHORISE',
@@ -89519,6 +89539,96 @@ function buildTimesheetLifecyclePatchFromMutation(input = {}) {
 // index.js — INSERT this helper block before handleBulkTimesheetAuthoriseSelected / handleBulkTimesheetUnauthoriseSelected.
 // Purpose: durable, bounded Bulk Authorise/Unauthorise orchestration around the existing Simple Modal gold handlers.
 
+const TIMESHEET_LIFECYCLE_INTERNAL_CALL = Symbol('TIMESHEET_LIFECYCLE_INTERNAL_CALL');
+
+function timesheetLifecycleWorkbenchWakeSuppressed(internalOptions) {
+  return !!(
+    internalOptions
+    && internalOptions[TIMESHEET_LIFECYCLE_INTERNAL_CALL] === true
+    && internalOptions.suppressWorkbenchNudge === true
+  );
+}
+
+function timesheetLifecycleMutationChangedCount(mutation) {
+  if (!mutation || typeof mutation !== 'object' || Array.isArray(mutation)) return 0;
+
+  const affectedIds = Array.isArray(mutation.affected_timesheet_ids)
+    ? mutation.affected_timesheet_ids.filter(Boolean)
+    : [];
+  if (affectedIds.length) return new Set(affectedIds.map((value) => String(value))).size;
+
+  for (const key of ['lifecycle_changed_count', 'changed_count', 'success_count', 'updated_count']) {
+    const value = Number(mutation[key]);
+    if (Number.isFinite(value) && value > 0) return Math.max(1, Math.trunc(value));
+  }
+
+  const results = Array.isArray(mutation.results) ? mutation.results : [];
+  const changedResults = results.filter((row) => {
+    if (!row || typeof row !== 'object') return false;
+    if (row.no_change === true || row.lifecycle_changed === false || row.changed === false) return false;
+    return row.ok === true || row.success === true || String(row.status || '').trim().toUpperCase() === 'SUCCEEDED';
+  });
+  if (changedResults.length) return changedResults.length;
+
+  if (
+    mutation.no_change === true
+    || mutation.lifecycle_changed === false
+    || mutation.changed === false
+    || mutation.ok === false
+    || mutation.success === false
+  ) return 0;
+
+  // A successful but sparsely shaped mutation response is treated as changed.
+  // An unnecessary bounded wake is safer than leaving committed lifecycle truth idle.
+  if (mutation.ok === true || mutation.success === true || mutation.all_success === true) return 1;
+  return 0;
+}
+
+function requestTimesheetLifecycleWorkbenchWake(env, ctx, options = {}) {
+  const action = String(options?.action || '').trim().toUpperCase();
+  const lifecycleChangedCount = Math.max(0, Math.trunc(Number(options?.lifecycleChangedCount) || 0));
+  if (lifecycleChangedCount <= 0 || !['AUTHORISE', 'UNAUTHORISE'].includes(action)) return false;
+
+  const origin = action === 'AUTHORISE' ? 'TIMESHEET_AUTHORISE' : 'TIMESHEET_UNAUTHORISE';
+  const reason = action === 'AUTHORISE' ? 'PAYMENT_ELIGIBILITY_RESTORED' : 'PAYMENT_ELIGIBILITY_REMOVED';
+  const mutationType = action === 'AUTHORISE' ? 'TIMESHEET_AUTHORISED' : 'TIMESHEET_UNAUTHORISED';
+  const sourceRoute = String(options?.sourceRoute || '').trim().slice(0, 120) || null;
+
+  try {
+    if (typeof logBankingPayWorkbenchDiag === 'function') {
+      logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
+        origin,
+        reason,
+        mutation_type: mutationType,
+        source_route: sourceRoute,
+        lifecycle_changed_count: lifecycleChangedCount,
+        actor_user_id: options?.actorUserId || null,
+        timesheet_id: options?.timesheetId || null
+      });
+    }
+    if (typeof nudgeBankingPayWorkbenchDrain !== 'function') return false;
+    nudgeBankingPayWorkbenchDrain(env, ctx, {
+      origin,
+      reason,
+      mutation_type: mutationType,
+      source_route: sourceRoute,
+      actorUserId: options?.actorUserId || null,
+      timesheetId: options?.timesheetId || null,
+      budgetProfile: 'NUDGE'
+    });
+    return true;
+  } catch (error) {
+    try {
+      console.warn('[requestTimesheetLifecycleWorkbenchWake] Workbench wake registration failed; cron recovery remains active.', {
+        source_route: sourceRoute,
+        lifecycle_changed_count: lifecycleChangedCount,
+        error: String(error?.message || error || 'Unknown wake registration error').slice(0, 300)
+      });
+    } catch {}
+    return false;
+  }
+}
+
 function lifecycleBulkNowIso() {
   try { return typeof nowIso === 'function' ? nowIso() : new Date().toISOString(); }
   catch (_) { return new Date().toISOString(); }
@@ -89677,7 +89787,7 @@ async function runCorrectionPairLifecycleIfApplicable(env, action, timesheetId, 
   return { is_pair: true, preview, group, mutation };
 }
 
-async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, item, actorUser) {
+async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, item, actorUser, internalOptions = null) {
   const timesheetId = lifecycleBulkReadFirst(item, ['timesheet_id', 'current_timesheet_id', 'requested_timesheet_id']);
   const expectedTimesheetId = lifecycleBulkReadFirst(item, ['expected_timesheet_id', 'current_timesheet_id', 'timesheet_id']) || timesheetId;
   const expectedSignature = lifecycleBulkReadFirst(item, ['expected_row_signature', 'backend_row_signature', 'mutation_row_signature', 'row_signature']);
@@ -89766,9 +89876,9 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
   let response;
   try {
     if (action === 'AUTHORISE') {
-      response = await handleTimesheetAuthoriseGeneric(env, subReq, timesheetId);
+      response = await handleTimesheetAuthoriseGeneric(env, subReq, timesheetId, internalOptions?.ctx || null, internalOptions);
     } else if (action === 'UNAUTHORISE') {
-      response = await handleTimesheetUnauthorise(env, subReq, timesheetId);
+      response = await handleTimesheetUnauthorise(env, subReq, timesheetId, internalOptions?.ctx || null, internalOptions);
     } else {
       return {
         ok: false,
@@ -89800,6 +89910,7 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
   const payload = await lifecycleBulkReadResponseJson(response);
   const status = response?.status || 500;
   const success = !!response?.ok && payload?.ok !== false && payload?.success !== false;
+  const explicitNoChange = payload?.no_change === true || payload?.lifecycle_changed === false || payload?.changed === false;
   const affectedRows = lifecycleBulkCollectAffectedRows(payload, item);
   return {
     ok: success,
@@ -89820,6 +89931,7 @@ async function callGoldTimesheetLifecycleActionForBulkItem(env, req, action, ite
       lifecycleBulkReadFirst(affectedRows[0] || {}, ['row_signature', 'backend_row_signature']) ||
       null,
     raw_status: status,
+    lifecycle_changed: success && !explicitNoChange,
   };
 }
 
@@ -90080,55 +90192,87 @@ async function drainTimesheetLifecycleBulkOperationChunk(env, req, operationId, 
     queuedItems = [];
   }
   let processed = 0;
-  for (const queued of (Array.isArray(queuedItems) ? queuedItems : [])) {
-    if (processed >= maxItems || Date.now() - started >= maxRuntimeMs) break;
-    const claimed = await claimTimesheetLifecycleBulkItem(env, queued);
-    if (!claimed) continue;
-    const itemForGold = {
-      timesheet_id: claimed.timesheet_id,
-      current_timesheet_id: claimed.current_timesheet_id,
-      requested_timesheet_id: claimed.requested_timesheet_id,
-      expected_timesheet_id: claimed.expected_timesheet_id,
-      contract_week_id: claimed.contract_week_id,
-      expected_row_signature: claimed.expected_row_signature,
-      backend_row_signature: claimed.expected_row_signature,
-      mutation_row_signature: claimed.expected_row_signature,
-      row_signature: claimed.expected_row_signature,
-      row_key: claimed.row_key,
-    };
-    const result = await callGoldTimesheetLifecycleActionForBulkItem(env, req, claimed.action || operation.action, itemForGold, null);
-    await completeTimesheetLifecycleBulkItem(env, claimed, result);
-    processed += 1;
-  }
+  let lifecycleChangedCount = 0;
+  let workbenchWakeRequested = false;
+  let chunkSummary = null;
+  const internalOptions = {
+    [TIMESHEET_LIFECYCLE_INTERNAL_CALL]: true,
+    suppressWorkbenchNudge: true,
+    ctx: options.ctx || null
+  };
 
-  const allItems = await fetchTimesheetLifecycleBulkOperationItems(env, operationId);
-  const summary = summarizeTimesheetLifecycleBulkOperation(operation, allItems);
-  await patchTimesheetLifecycleBulkOperation(env, operationId, {
-    status: summary.batch_completed ? 'COMPLETED' : 'RUNNING',
-    success_count: summary.success_count,
-    failure_count: summary.failure_count,
-    completed_at_utc: summary.batch_completed ? lifecycleBulkNowIso() : null,
-    progress_json: {
-      requested_count: summary.requested_count,
+  try {
+    for (const queued of (Array.isArray(queuedItems) ? queuedItems : [])) {
+      if (processed >= maxItems || Date.now() - started >= maxRuntimeMs) break;
+      const claimed = await claimTimesheetLifecycleBulkItem(env, queued);
+      if (!claimed) continue;
+      const itemForGold = {
+        timesheet_id: claimed.timesheet_id,
+        current_timesheet_id: claimed.current_timesheet_id,
+        requested_timesheet_id: claimed.requested_timesheet_id,
+        expected_timesheet_id: claimed.expected_timesheet_id,
+        contract_week_id: claimed.contract_week_id,
+        expected_row_signature: claimed.expected_row_signature,
+        backend_row_signature: claimed.expected_row_signature,
+        mutation_row_signature: claimed.expected_row_signature,
+        row_signature: claimed.expected_row_signature,
+        row_key: claimed.row_key,
+      };
+      const result = await callGoldTimesheetLifecycleActionForBulkItem(
+        env,
+        req,
+        claimed.action || operation.action,
+        itemForGold,
+        null,
+        internalOptions
+      );
+      if (result?.lifecycle_changed === true) lifecycleChangedCount += 1;
+      await completeTimesheetLifecycleBulkItem(env, claimed, result);
+      processed += 1;
+    }
+
+    const allItems = await fetchTimesheetLifecycleBulkOperationItems(env, operationId);
+    const summary = summarizeTimesheetLifecycleBulkOperation(operation, allItems);
+    await patchTimesheetLifecycleBulkOperation(env, operationId, {
+      status: summary.batch_completed ? 'COMPLETED' : 'RUNNING',
       success_count: summary.success_count,
       failure_count: summary.failure_count,
-      pending_count: summary.pending_count,
-      stale_count: summary.stale_count,
-      last_drain_processed: processed,
-      more_due: summary.more_due,
+      completed_at_utc: summary.batch_completed ? lifecycleBulkNowIso() : null,
+      progress_json: {
+        requested_count: summary.requested_count,
+        success_count: summary.success_count,
+        failure_count: summary.failure_count,
+        pending_count: summary.pending_count,
+        stale_count: summary.stale_count,
+        last_drain_processed: processed,
+        more_due: summary.more_due,
+        elapsed_ms: Date.now() - started,
+      },
+      result_json: summary.batch_completed ? {
+        all_success: summary.all_success,
+        has_failures: summary.has_failures,
+        stale_count: summary.stale_count,
+      } : {},
+    });
+    chunkSummary = {
+      ...summary,
+      drain_processed: processed,
       elapsed_ms: Date.now() - started,
-    },
-    result_json: summary.batch_completed ? {
-      all_success: summary.all_success,
-      has_failures: summary.has_failures,
-      stale_count: summary.stale_count,
-    } : {},
-  });
+      stop_reason: summary.batch_completed ? 'COMPLETE' : (processed >= maxItems ? 'CHUNK_LIMIT' : 'RUNTIME_LIMIT_OR_NO_DUE'),
+    };
+  } finally {
+    workbenchWakeRequested = requestTimesheetLifecycleWorkbenchWake(env, options.ctx || null, {
+      action: operation.action,
+      sourceRoute: 'TIMESHEET_LIFECYCLE_BULK_OPERATION_CHUNK',
+      lifecycleChangedCount,
+      actorUserId: options.actorUserId || null
+    });
+  }
+
   return {
-    ...summary,
-    drain_processed: processed,
-    elapsed_ms: Date.now() - started,
-    stop_reason: summary.batch_completed ? 'COMPLETE' : (processed >= maxItems ? 'CHUNK_LIMIT' : 'RUNTIME_LIMIT_OR_NO_DUE'),
+    ...chunkSummary,
+    lifecycle_changed_count: lifecycleChangedCount,
+    workbench_wake_requested: workbenchWakeRequested
   };
 }
 
@@ -90188,6 +90332,12 @@ async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, ac
       p_actor_user_id: user?.id || null,
       p_now_utc: nowIso()
     }, { timeoutMs: 20000 });
+    requestTimesheetLifecycleWorkbenchWake(env, ctx, {
+      action,
+      sourceRoute: 'TIMESHEET_LIFECYCLE_SELECTED_CORRECTION_PAIR',
+      lifecycleChangedCount: timesheetLifecycleMutationChangedCount(mutation),
+      actorUserId: user?.id || null
+    });
     return withCORS(env, req, lifecycleBulkJson(
       mutation?.all_success === false ? 207 : 200,
       { ...(mutation || {}), pair_lifecycle: pairPreview, atomic_pair_lifecycle: true }
@@ -90195,7 +90345,18 @@ async function handleTimesheetLifecycleBulkActionRequest(env, req, ctx, user, ac
   }
 
   if (selected.length === 1) {
-    const result = await callGoldTimesheetLifecycleActionForBulkItem(env, req, action, selected[0], user);
+    const result = await callGoldTimesheetLifecycleActionForBulkItem(env, req, action, selected[0], user, {
+      [TIMESHEET_LIFECYCLE_INTERNAL_CALL]: true,
+      suppressWorkbenchNudge: true,
+      ctx
+    });
+    requestTimesheetLifecycleWorkbenchWake(env, ctx, {
+      action,
+      sourceRoute: 'TIMESHEET_LIFECYCLE_SELECTED_SINGLE',
+      lifecycleChangedCount: result.lifecycle_changed === true ? 1 : 0,
+      actorUserId: user?.id || null,
+      timesheetId: result.current_timesheet_id || result.timesheet_id || null
+    });
     const payload = {
       ok: true,
       action,
@@ -90252,6 +90413,8 @@ async function handleTimesheetLifecycleBulkOperationDrain(env, req, operationId,
   const summary = await drainTimesheetLifecycleBulkOperationChunk(env, req, operationId, {
     maxItems: body.max_items || body.maxItems || 5,
     maxRuntimeMs: body.max_runtime_ms || body.maxRuntimeMs || 7000,
+    ctx,
+    actorUserId: user?.id || null,
   });
   return withCORS(env, req, lifecycleBulkJson(summary.ok === false ? (summary.status || 500) : 200, summary));
 }
@@ -162319,7 +162482,7 @@ async function runTsfinWorkerOnce(env, { limit = 50, onlyTimesheetIds = null } =
 }
 
 
-async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null) {
+async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null, internalOptions = null) {
   const enc = encodeURIComponent;
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -162816,6 +162979,15 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
         });
       }
       const results = Array.isArray(pairFlow.mutation?.results) ? pairFlow.mutation.results : [];
+      if (!timesheetLifecycleWorkbenchWakeSuppressed(internalOptions)) {
+        requestTimesheetLifecycleWorkbenchWake(env, ctx, {
+          action: 'AUTHORISE',
+          sourceRoute: 'TIMESHEET_AUTHORISE_CORRECTION_PAIR',
+          lifecycleChangedCount: timesheetLifecycleMutationChangedCount(pairFlow.mutation),
+          actorUserId: user?.id || null,
+          timesheetId: currentTimesheetId || requestedTimesheetId || null
+        });
+      }
       return withJson(200, {
         ok: true, success: true, authorised: true,
         operation: 'correction_pair_authorise', pair_lifecycle: pairFlow.preview,
@@ -163146,28 +163318,15 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   }
 
 
-  try {
-    if (typeof logBankingPayWorkbenchDiag === 'function') {
-      logBankingPayWorkbenchDiag(env, 'WORKBENCH_POST_MUTATION_NUDGE', {
-        origin: 'TIMESHEET_AUTHORISE',
-        reason: 'PAYMENT_ELIGIBILITY_RESTORED',
-        mutation_type: 'TIMESHEET_AUTHORISED',
-        actor_user_id: user?.id || null,
-        timesheet_id: finalTimesheetId || requestedTimesheetId || null,
-        current_timesheet_id: finalTimesheetId || null
-      });
-    }
-    if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
-      nudgeBankingPayWorkbenchDrain(env, ctx, {
-        origin: 'TIMESHEET_AUTHORISE',
-        reason: 'PAYMENT_ELIGIBILITY_RESTORED',
-        mutation_type: 'TIMESHEET_AUTHORISED',
-        timesheetId: finalTimesheetId || requestedTimesheetId || null,
-        actorUserId: user?.id || null,
-        budgetProfile: 'NUDGE'
-      });
-    }
-  } catch {}
+  if (!timesheetLifecycleWorkbenchWakeSuppressed(internalOptions)) {
+    requestTimesheetLifecycleWorkbenchWake(env, ctx, {
+      action: 'AUTHORISE',
+      sourceRoute: 'TIMESHEET_AUTHORISE',
+      lifecycleChangedCount: 1,
+      actorUserId: user?.id || null,
+      timesheetId: finalTimesheetId || requestedTimesheetId || null
+    });
+  }
 
   const decision = {
     ok: true,
@@ -193745,11 +193904,11 @@ if (req.method === 'GET' && p === '/api/timesheets/bulk-row-freshness') {
 
 
 if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-selected') {
-  return handleBulkTimesheetAuthoriseSelected(env, req);
+  return handleBulkTimesheetAuthoriseSelected(env, req, ctx);
 }
 
 if (req.method === 'POST' && p === '/api/timesheets/bulk-unauthorise-selected') {
-  return handleBulkTimesheetUnauthoriseSelected(env, req);
+  return handleBulkTimesheetUnauthoriseSelected(env, req, ctx);
 }
 
 if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-import-evidence') {
@@ -194748,7 +194907,7 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
       }
       {
         const m = matchPath(p, '/api/contract-weeks/:id/manual-authorise');
-        if (m && req.method === 'POST') return handleContractWeekManualAuthorise(env, req, m.id);
+        if (m && req.method === 'POST') return handleContractWeekManualAuthorise(env, req, m.id, ctx);
       }
 
       {
@@ -195424,6 +195583,20 @@ async scheduled(event, env, ctx) {
         ctx,
         executionContext: ctx
       });
+      if (shouldContinueBankingPayWorkbenchAfterCron(workbenchCronRes)) {
+        try {
+          nudgeBankingPayWorkbenchDrain(env, ctx, {
+            origin: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON_CONTINUATION',
+            reason: 'SCHEDULED_PROGRESS_MORE_DUE',
+            budgetProfile: 'NUDGE'
+          });
+        } catch (continuationError) {
+          console.warn('[scheduled] Banking Pay workbench continuation nudge registration failed; minute cron recovery remains active.', {
+            cron: cronExpr || null,
+            error: String(continuationError?.message || continuationError || 'Unknown continuation registration error').slice(0, 300)
+          });
+        }
+      }
       if (workbenchCronRes && typeof workbenchCronRes === 'object' && workbenchCronRes.ok === false) {
         console.warn('[scheduled] Banking Pay workbench cron tick reported failure:', workbenchCronRes);
       } else {
