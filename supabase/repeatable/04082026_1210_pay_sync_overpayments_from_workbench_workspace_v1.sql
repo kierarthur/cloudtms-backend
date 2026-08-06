@@ -178,14 +178,41 @@ begin
   WHERE build_id=p_build_id AND closure_status='SEALED';
   v_bounded_scope_ids:=COALESCE(v_bounded_scope_ids,array[]::uuid[]);
 
+  IF to_regclass('pg_temp._bpay_wb_pre_sync_freshness_v1') IS NOT NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_FRESHNESS_CONTEXT_CONFLICT'
+      USING ERRCODE='23514';
+  END IF;
+  CREATE TEMP TABLE pg_temp._bpay_wb_pre_sync_freshness_v1(
+    timesheet_id uuid PRIMARY KEY,
+    input_fingerprint text NULL,
+    revision_json jsonb NULL,
+    settled_authority_digest text NOT NULL
+  ) ON COMMIT DROP;
+  INSERT INTO pg_temp._bpay_wb_pre_sync_freshness_v1(
+    timesheet_id,input_fingerprint,revision_json,settled_authority_digest)
+  SELECT scope_row.timesheet_id,current_fingerprint.input_fingerprint,
+    current_fingerprint.revision_json,
+    md5(jsonb_build_object(
+      'last_settled_snapshot_json',pay_state.last_settled_snapshot_json,
+      'last_settled_signature',pay_state.last_settled_signature,
+      'last_settled_pay_batch_id',pay_state.last_settled_pay_batch_id,
+      'last_settled_at_utc',pay_state.last_settled_at_utc
+    )::text)
+  FROM private.banking_pay_workbench_economic_build_scope scope_row
+  LEFT JOIN LATERAL private.pay_workbench_timesheet_input_fingerprint_v1(
+    p_build_id,v_bounded_build.candidate_id,ARRAY[scope_row.timesheet_id]
+  ) current_fingerprint ON true
+  LEFT JOIN public.timesheet_pay_state pay_state
+    ON pay_state.timesheet_id=scope_row.timesheet_id
+  WHERE scope_row.build_id=p_build_id;
+
   IF EXISTS(
     SELECT 1
     FROM private.banking_pay_workbench_economic_build_scope scope_row
-    LEFT JOIN LATERAL private.pay_workbench_timesheet_input_fingerprint_v1(
-      p_build_id,v_bounded_build.candidate_id,ARRAY[scope_row.timesheet_id]
-    ) current_fingerprint ON true
+    LEFT JOIN pg_temp._bpay_wb_pre_sync_freshness_v1 pre_sync
+      ON pre_sync.timesheet_id=scope_row.timesheet_id
     WHERE scope_row.build_id=p_build_id
-      AND current_fingerprint.input_fingerprint IS DISTINCT FROM scope_row.captured_input_fingerprint
+      AND pre_sync.input_fingerprint IS DISTINCT FROM scope_row.captured_input_fingerprint
     LIMIT 1
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_ATTEMPT_STALE' USING ERRCODE='40001';
@@ -3706,6 +3733,11 @@ begin
 
   -- Final freshness fence: preview helpers retained for presentation metadata
   -- cannot publish if any build-bound economic input changed during this RPC.
+  -- Finance-case DML legitimately refreshes derived timesheet-pay summary cache
+  -- fields.  The initial full-row fingerprint above remains exact; after DML,
+  -- compare every non-pay-state revision plus the four settled-authority fields
+  -- so cache-only refreshes cannot make the transaction stale while Policy X
+  -- settlement authority and every other captured input remain fail-closed.
   IF EXISTS(
       SELECT 1
       FROM private.banking_pay_workbench_candidate_scope_registry registry
@@ -3716,11 +3748,26 @@ begin
     ) OR EXISTS(
       SELECT 1
       FROM private.banking_pay_workbench_economic_build_scope scope_row
+      LEFT JOIN pg_temp._bpay_wb_pre_sync_freshness_v1 pre_sync
+        ON pre_sync.timesheet_id=scope_row.timesheet_id
       LEFT JOIN LATERAL private.pay_workbench_timesheet_input_fingerprint_v1(
         p_build_id,v_bounded_build.candidate_id,ARRAY[scope_row.timesheet_id]
       ) current_fingerprint ON true
+      LEFT JOIN public.timesheet_pay_state pay_state
+        ON pay_state.timesheet_id=scope_row.timesheet_id
       WHERE scope_row.build_id=p_build_id
-        AND current_fingerprint.input_fingerprint IS DISTINCT FROM scope_row.captured_input_fingerprint
+        AND (
+          pre_sync.timesheet_id IS NULL
+          OR current_fingerprint.input_fingerprint IS NULL
+          OR (current_fingerprint.revision_json-'pay_state_digest')
+               IS DISTINCT FROM (pre_sync.revision_json-'pay_state_digest')
+          OR md5(jsonb_build_object(
+               'last_settled_snapshot_json',pay_state.last_settled_snapshot_json,
+               'last_settled_signature',pay_state.last_settled_signature,
+               'last_settled_pay_batch_id',pay_state.last_settled_pay_batch_id,
+               'last_settled_at_utc',pay_state.last_settled_at_utc
+             )::text) IS DISTINCT FROM pre_sync.settled_authority_digest
+        )
       LIMIT 1
     ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_ATTEMPT_STALE' USING ERRCODE='40001';

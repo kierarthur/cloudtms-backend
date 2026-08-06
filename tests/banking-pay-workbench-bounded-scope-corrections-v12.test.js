@@ -130,6 +130,13 @@ test('D6 reconciliation consumes sealed facts and fences live metadata', () => {
   assert.match(syncCore, /PAY_WORKBENCH_CANONICAL_LINE_IDENTITY_CONFLICT/);
   assert.doesNotMatch(syncCore, /actual_line_count,0\)>1/);
   assert.ok((syncCore.match(/private\.pay_workbench_timesheet_input_fingerprint_v1/g) || []).length >= 2);
+  assert.match(syncCore, /CREATE TEMP TABLE pg_temp\._bpay_wb_pre_sync_freshness_v1\(/);
+  assert.match(syncCore, /pre_sync\.input_fingerprint IS DISTINCT FROM scope_row\.captured_input_fingerprint/);
+  assert.match(syncCore, /current_fingerprint\.revision_json-'pay_state_digest'[\s\S]*pre_sync\.revision_json-'pay_state_digest'/);
+  for (const field of ['last_settled_snapshot_json', 'last_settled_signature', 'last_settled_pay_batch_id', 'last_settled_at_utc']) {
+    assert.ok((syncCore.match(new RegExp(`'${field}'`, 'g')) || []).length >= 2, `${field} must be fenced before and after finance DML`);
+  }
+  assert.match(syncCore, /settled_authority_digest[\s\S]*PAY_WORKBENCH_RECONCILIATION_ATTEMPT_STALE/);
 });
 test('D7 pay-batch update and delete have statement backstops', () => {
   assert.match(triggers, /trg_bpay_wb_batch_items_update_dirty_v1\s+AFTER UPDATE ON public\.pay_batch_items/);
