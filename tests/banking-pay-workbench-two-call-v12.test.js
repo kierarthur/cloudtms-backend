@@ -24,7 +24,13 @@ test('RPC 1 is service-role-only metadata claim/start with a concrete durable at
   assert.match(claim, /'attempt_nonce',v_attempt_nonce/i);
   assert.match(claim, /v_scan_limit integer:=50/i);
   assert.match(claim, /WITH claim_source AS MATERIALIZED[\s\S]*LIMIT v_scan_limit/i);
-  assert.match(claim, /IF NOT pg_catalog\.pg_try_advisory_xact_lock[\s\S]*claim_scan_deferral_count[\s\S]*CONTINUE/i);
+  assert.match(claim, /FOR UPDATE SKIP LOCKED;[\s\S]*'result_code','LANE_SCAN_BUSY'/i);
+  const advisoryBusyBranch = claim.match(
+    /IF NOT pg_catalog\.pg_try_advisory_xact_lock[\s\S]*?THEN([\s\S]*?)END IF;/i,
+  );
+  assert.ok(advisoryBusyBranch);
+  assert.match(advisoryBusyBranch[1], /CONTINUE/i);
+  assert.doesNotMatch(advisoryBusyBranch[1], /UPDATE public\.banking_pay_workbench_jobs/i);
   assert.match(claim, /recovery_scan_deferral_count/i);
   assert.match(claim, /pg_try_advisory_xact_lock[\s\S]*FOR UPDATE OF claimed_job SKIP LOCKED/i);
   assert.match(claim, /UPDATE public\.banking_pay_workbench_jobs claimed_job[\s\S]*SET status='RUNNING'[\s\S]*economic_build_id=v_build_id/i);

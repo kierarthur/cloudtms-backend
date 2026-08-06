@@ -1140,6 +1140,13 @@ function bankingPayWorkbenchNudgeSingleFlightKey(sessionId) {
     : 'BANKING_PAY_WORKBENCH_GLOBAL_DRAIN';
 }
 
+function bankingPayWorkbenchScheduledCronEligible(cronExpression) {
+  // The Worker has both minute and five-minute schedules for unrelated queues.
+  // Banking Pay uses the minute schedule only; otherwise every fifth minute
+  // would start two independent drains and silently double the lane ceiling.
+  return String(cronExpression == null ? '' : cronExpression).trim() === '* * * * *';
+}
+
 async function loadSettingsDefaults(env) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
 
@@ -158658,7 +158665,7 @@ function handleVersion() {
     },
     banking_pay_bounded_scope_stage2: {
       revision: "1.2.15",
-      source_marker: "V1.2.15_STAGE2_CLAIM_UNCERTAINTY_CLOSURE_20260805",
+      source_marker: "V1.2.16_STAGE2_LANE_COORDINATION_20260806",
       stage1_baseline_commit: "7165360304f8ef12b3790078e450ed1d4b128c55"
     },
     built_at: new Date().toISOString()
@@ -181602,6 +181609,7 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   ]);
   const allowedNoClaimResultCodes = new Set([
     'NO_CLAIM',
+    'LANE_SCAN_BUSY',
     'CANDIDATE_DELETED',
     'SESSION_OBSOLETE',
     'ATTEMPT_GENERATION_OBSOLETE'
@@ -195308,6 +195316,19 @@ async scheduled(event, env, ctx) {
       deployment_version: deploymentVersion,
       ctx_present: !!ctx
     });
+    if (!bankingPayWorkbenchScheduledCronEligible(cronExpr)) {
+      console.log('[scheduled] Banking Pay workbench task skipped for non-minute schedule:', {
+        cron: cronExpr || null,
+        code: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON_NOT_OWNER'
+      });
+      return {
+        ok: true,
+        skipped: true,
+        code: 'SCHEDULED_BANKING_PAY_WORKBENCH_CRON_NOT_OWNER',
+        claimed: 0,
+        processed: 0
+      };
+    }
     const scheduledSettings = await getScheduledSettings();
     if (!scheduledSettings) {
       console.warn('[scheduled] Banking Pay workbench task skipped: database settings gate unavailable');

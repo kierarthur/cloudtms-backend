@@ -93,7 +93,10 @@ BEGIN
   FROM private.banking_pay_workbench_queue_scan_state
   WHERE lane_identity=v_lane_identity AND scan_kind='RECOVERY'
     AND scan_scope_key=v_scan_scope_key
-  FOR UPDATE;
+  FOR UPDATE SKIP LOCKED;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok',true,'claimed',false,'result_code','LANE_SCAN_BUSY');
+  END IF;
 
   -- Small indexed lease-recovery page.  No financial source relation is read.
   FOR v_recovery IN
@@ -174,23 +177,10 @@ BEGIN
         IF v_recovered_count>=5 THEN EXIT; END IF;
       END IF;
     ELSE
-      UPDATE public.banking_pay_workbench_jobs blocked_job
-      SET payload_json=COALESCE(blocked_job.payload_json,'{}'::jsonb)||jsonb_build_object(
-          'recovery_scan_deferred_epoch',extract(epoch FROM clock_timestamp()+make_interval(secs=>
-            LEAST(300,5*power(2,LEAST(CASE
-              WHEN COALESCE(blocked_job.payload_json->>'recovery_scan_deferral_count','') ~ '^\d+$'
-                THEN (blocked_job.payload_json->>'recovery_scan_deferral_count')::integer
-              ELSE 0 END,6))::integer))),
-          'recovery_scan_deferral_count',LEAST(7,CASE
-            WHEN COALESCE(blocked_job.payload_json->>'recovery_scan_deferral_count','') ~ '^\d+$'
-              THEN (blocked_job.payload_json->>'recovery_scan_deferral_count')::integer+1
-            ELSE 1 END),
-          'recovery_scan_generation',LEAST(2147483647,CASE
-            WHEN COALESCE(blocked_job.payload_json->>'recovery_scan_generation','') ~ '^\d+$'
-              THEN (blocked_job.payload_json->>'recovery_scan_generation')::bigint+1
-            ELSE 1 END)),
-        updated_at_utc=clock_timestamp()
-      WHERE blocked_job.id=v_recovery.job_id AND blocked_job.status='RUNNING';
+      -- The durable lane cursor already advanced past this attempt. Never wait
+      -- behind the transaction that owns the candidate merely to annotate its
+      -- public job; another bounded scan can revisit it after cursor wrap.
+      CONTINUE;
     END IF;
   END LOOP;
 
@@ -214,7 +204,10 @@ BEGIN
   FROM private.banking_pay_workbench_queue_scan_state
   WHERE lane_identity=v_lane_identity AND scan_kind='CLAIM'
     AND scan_scope_key=v_scan_scope_key
-  FOR UPDATE;
+  FOR UPDATE SKIP LOCKED;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok',true,'claimed',false,'result_code','LANE_SCAN_BUSY');
+  END IF;
 
   -- Source-only form of the installed claim ordering and candidate-serial
   -- predicates.  The advisory lock is attempted only after the bounded final
@@ -297,48 +290,16 @@ BEGIN
     WHERE lane_identity=v_lane_identity AND scan_kind='CLAIM'
       AND scan_scope_key=v_scan_scope_key;
     IF v_claim.serial_blocked THEN
-      UPDATE public.banking_pay_workbench_jobs blocked_job
-      SET run_at_utc=GREATEST(blocked_job.run_at_utc,clock_timestamp()+make_interval(secs=>
-          LEAST(300,5*power(2,LEAST(CASE
-            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
-              THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer
-            ELSE 0 END,6))::integer))),
-        payload_json=COALESCE(blocked_job.payload_json,'{}'::jsonb)||jsonb_build_object(
-          'claim_scan_deferred_reason','CANDIDATE_SERIAL_BLOCKED',
-          'claim_scan_deferral_count',LEAST(7,CASE
-            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
-              THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer+1
-            ELSE 1 END),
-          'claim_scan_generation',LEAST(2147483647,CASE
-            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_generation','') ~ '^\d+$'
-              THEN (blocked_job.payload_json->>'claim_scan_generation')::bigint+1
-            ELSE 1 END)),
-        updated_at_utc=clock_timestamp()
-      WHERE blocked_job.id=v_claim.id AND blocked_job.status='QUEUED'
-        AND blocked_job.run_at_utc<=v_now;
+      -- Cursor progress supplies fairness. Mutating a serial-blocked queue row
+      -- here can wait behind its owner and turn a safe no-claim into an
+      -- uncertain HTTP result.
       CONTINUE;
     END IF;
     IF NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
       COALESCE(v_claim.serial_key,v_claim.id::text),24062027)) THEN
-      UPDATE public.banking_pay_workbench_jobs blocked_job
-      SET run_at_utc=GREATEST(blocked_job.run_at_utc,clock_timestamp()+make_interval(secs=>
-          LEAST(300,5*power(2,LEAST(CASE
-            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
-              THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer
-            ELSE 0 END,6))::integer))),
-        payload_json=COALESCE(blocked_job.payload_json,'{}'::jsonb)||jsonb_build_object(
-          'claim_scan_deferred_reason','CANDIDATE_ADVISORY_LOCK_BUSY',
-          'claim_scan_deferral_count',LEAST(7,CASE
-            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_deferral_count','') ~ '^\d+$'
-              THEN (blocked_job.payload_json->>'claim_scan_deferral_count')::integer+1
-            ELSE 1 END),
-          'claim_scan_generation',LEAST(2147483647,CASE
-            WHEN COALESCE(blocked_job.payload_json->>'claim_scan_generation','') ~ '^\d+$'
-              THEN (blocked_job.payload_json->>'claim_scan_generation')::bigint+1
-            ELSE 1 END)),
-        updated_at_utc=clock_timestamp()
-      WHERE blocked_job.id=v_claim.id AND blocked_job.status='QUEUED'
-        AND blocked_job.run_at_utc<=v_now;
+      -- Losing lanes skip immediately. They must not update the row protected
+      -- by the winning lane, because that update introduces an avoidable wait
+      -- into the one-second claim transaction.
       CONTINUE;
     END IF;
     v_job:=NULL;

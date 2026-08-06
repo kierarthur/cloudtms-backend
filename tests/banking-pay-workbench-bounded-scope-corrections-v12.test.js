@@ -163,8 +163,14 @@ test('D11 claim and recovery use durable keyset progress before exact row locks'
   assert.match(claim, /WHERE id=v_recovery\.job_id FOR UPDATE SKIP LOCKED/);
   assert.match(claim, /WHERE id=v_recovery\.attempt_id FOR UPDATE SKIP LOCKED/);
   assert.match(v128Migration, /PRIMARY KEY \(lane_identity,scan_kind,scan_scope_key\)/);
-  assert.match(claim, /LEAST\(300,5\*power\(2/);
+  assert.match(claim, /GREATEST\(1,power\(2,LEAST\(v_recovery\.attempt_count,8\)\)/);
   assert.match(claim, /-'claim_scan_deferred_reason'-'claim_scan_deferral_count'-'claim_scan_generation'/);
+  assert.equal((claim.match(/'result_code','LANE_SCAN_BUSY'/g) || []).length, 2);
+  assert.match(claim, /scan_kind='RECOVERY'[\s\S]{0,180}FOR UPDATE SKIP LOCKED/);
+  assert.match(claim, /scan_kind='CLAIM'[\s\S]{0,180}FOR UPDATE SKIP LOCKED/);
+  assert.match(claim, /IF v_claim\.serial_blocked THEN[\s\S]{0,360}CONTINUE;\s+END IF/);
+  assert.doesNotMatch(claim, /IF v_claim\.serial_blocked THEN[\s\S]{0,1200}UPDATE public\.banking_pay_workbench_jobs/);
+  assert.doesNotMatch(claim, /IF NOT pg_catalog\.pg_try_advisory_xact_lock[\s\S]{0,1200}UPDATE public\.banking_pay_workbench_jobs/);
 });
 
 test('V1.2.8 physical additional identities are lossless and live dates fail closed', () => {

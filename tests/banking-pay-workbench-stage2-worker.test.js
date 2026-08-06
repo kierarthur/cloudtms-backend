@@ -99,6 +99,15 @@ function loadUuidIdentityHelpers() {
   return context.helpers;
 }
 
+function loadScheduledCronEligibility() {
+  const context = { String };
+  vm.runInNewContext(
+    `${functionBody('bankingPayWorkbenchScheduledCronEligible')}\nthis.eligible = bankingPayWorkbenchScheduledCronEligible;`,
+    context
+  );
+  return context.eligible;
+}
+
 function loadDiagnosticLogger() {
   const entries = [];
   const context = {
@@ -601,9 +610,18 @@ test('cron and nudge preserve database-owned stable worker and lane identities a
   assert.match(lane, /canonicalBankingPayWorkbenchUuid\(execution\.job_id\) === jobId/);
 });
 
+test('only the minute schedule owns Banking Pay cron lanes', () => {
+  const eligible = loadScheduledCronEligibility();
+  assert.equal(eligible('* * * * *'), true);
+  assert.equal(eligible('*/5 * * * *'), false);
+  assert.equal(eligible(''), false);
+  assert.match(worker, /if \(!bankingPayWorkbenchScheduledCronEligible\(cronExpr\)\)/);
+  assert.match(worker, /SCHEDULED_BANKING_PAY_WORKBENCH_CRON_NOT_OWNER/);
+});
+
 test('runtime version advertises the bounded-scope Stage 2 source marker', () => {
   const version = functionBody('handleVersion');
   assert.match(version, /banking_pay_bounded_scope_stage2/);
-  assert.match(version, /V1\.2\.15_STAGE2_CLAIM_UNCERTAINTY_CLOSURE_20260805/);
+  assert.match(version, /V1\.2\.16_STAGE2_LANE_COORDINATION_20260806/);
   assert.match(version, /7165360304f8ef12b3790078e450ed1d4b128c55/);
 });
