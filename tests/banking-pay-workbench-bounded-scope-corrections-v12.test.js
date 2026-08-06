@@ -55,8 +55,14 @@ test('D3 physical live-input pages precede durable derived-family paging', () =>
   assert.ok(fixedProjection);
   assert.match(fixedProjection[1], /current_member\.is_current IS TRUE/i);
   assert.doesNotMatch(fixedProjection[1], /current_member\.(?:revoked_at|archived_at_utc)/i);
+  assert.match(dispatcher, /COALESCE\(canonical\.timesheet_id,fallback_member\.timesheet_id\) AS projected_timesheet_id/i);
+  assert.match(dispatcher, /fallback_scope\.build_id=v_build_id[\s\S]*fallback_scope\.dependency_unit_key=v_unit_key/i);
+  assert.match(dispatcher, /ORDER BY fallback_scope\.stable_ordinal,fallback_row\.timesheet_id/i);
+  assert.match(dispatcher, /'SEALED_FAMILY_FALLBACK_NO_CURRENT'/i);
   assert.match(dispatcher, /private\.pay_workbench_unit_economic_occurrence_bundle_v1\(/);
-  assert.match(projection, /canonical\.canonical_timesheet_id AS projected_timesheet_id/);
+  assert.match(projection, /fallback_member AS \(/i);
+  assert.match(projection, /COALESCE\(canonical\.canonical_timesheet_id,fallback_member\.fallback_timesheet_id\) AS projected_timesheet_id/i);
+  assert.match(projection, /member\.stable_ordinal,member\.family_timesheet_id/i);
   assert.match(occurrence, /paged_raw_rows AS MATERIALIZED/);
   assert.match(occurrence, /generate_series\([\s\S]*v_limit-1/);
   assert.match(occurrence, /UPPER\(COALESCE\(canonical\.sheet_scope::text,''\)\)='DAILY'/);

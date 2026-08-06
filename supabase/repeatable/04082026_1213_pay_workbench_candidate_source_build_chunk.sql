@@ -364,6 +364,7 @@ BEGIN
           'family_timesheet_id',projection.family_timesheet_id,
           'canonical_timesheet_id',projection.canonical_timesheet_id,
           'projected_timesheet_id',projection.projected_timesheet_id,
+          'projection_resolution_status',projection.projection_resolution_status,
           'stable_ordinal',projection.stable_ordinal,
           'resolution_failure',CASE WHEN projection.projected_timesheet_id IS NULL
             THEN 'UNIT_PROJECTION_MISSING_CURRENT' END),
@@ -385,8 +386,11 @@ BEGIN
         )
         SELECT scope_page.stable_ordinal,scope_page.timesheet_id AS family_timesheet_id,
           COALESCE(NULLIF(BTRIM(member.booking_id),''),scope_page.timesheet_id::text) AS scope_family_key,
-          canonical.timesheet_id AS canonical_timesheet_id,
-          canonical.timesheet_id AS projected_timesheet_id,
+          COALESCE(canonical.timesheet_id,fallback_member.timesheet_id) AS canonical_timesheet_id,
+          COALESCE(canonical.timesheet_id,fallback_member.timesheet_id) AS projected_timesheet_id,
+          CASE WHEN canonical.timesheet_id IS NOT NULL THEN 'CURRENT_FAMILY_MEMBER'
+            WHEN fallback_member.timesheet_id IS NOT NULL THEN 'SEALED_FAMILY_FALLBACK_NO_CURRENT'
+            ELSE 'UNRESOLVED' END AS projection_resolution_status,
           '00:'||LPAD(scope_page.stable_ordinal::text,20,'0')||':'||scope_page.timesheet_id::text AS source_key
         FROM scope_page
         JOIN public.timesheets member ON member.timesheet_id=scope_page.timesheet_id
@@ -409,6 +413,23 @@ BEGIN
             current_member.timesheet_id
           LIMIT 1
         ) canonical ON true
+        LEFT JOIN LATERAL (
+          -- Some bounded legacy families legitimately have no row still marked
+          -- current. Keep one page-independent owner from the sealed unit rather
+          -- than losing the physical family or projecting each page differently.
+          SELECT fallback_row.timesheet_id
+          FROM private.banking_pay_workbench_economic_build_scope fallback_scope
+          JOIN public.timesheets fallback_row
+            ON fallback_row.timesheet_id=fallback_scope.timesheet_id
+          WHERE canonical.timesheet_id IS NULL
+            AND fallback_scope.build_id=v_build_id
+            AND fallback_scope.dependency_unit_key=v_unit_key
+            AND (CASE WHEN NULLIF(BTRIM(member.booking_id),'') IS NULL
+                  THEN fallback_row.timesheet_id=member.timesheet_id
+                  ELSE fallback_row.booking_id=member.booking_id END)
+          ORDER BY fallback_scope.stable_ordinal,fallback_row.timesheet_id
+          LIMIT 1
+        ) fallback_member ON true
         ORDER BY scope_page.stable_ordinal,scope_page.timesheet_id
       ) projection;
     ELSIF v_fact_family IN ('LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK') THEN

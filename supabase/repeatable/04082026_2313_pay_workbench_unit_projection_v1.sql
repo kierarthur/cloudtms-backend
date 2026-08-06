@@ -23,6 +23,7 @@ WITH members AS (
     scope_row.dependency_unit_key,
     COALESCE(NULLIF(BTRIM(timesheet_row.booking_id),''),scope_row.timesheet_id::text) AS scope_family_key,
     scope_row.timesheet_id AS family_timesheet_id,
+    scope_row.stable_ordinal,
     timesheet_row.is_current,
     timesheet_row.version,
     timesheet_row.updated_at,
@@ -44,17 +45,28 @@ WITH members AS (
   ORDER BY member.dependency_unit_key,member.scope_family_key,
     member.version DESC NULLS LAST,member.updated_at DESC NULLS LAST,
     member.created_at DESC NULLS LAST,member.family_timesheet_id
+), fallback_member AS (
+  SELECT DISTINCT ON (member.dependency_unit_key,member.scope_family_key)
+    member.dependency_unit_key,
+    member.scope_family_key,
+    member.family_timesheet_id AS fallback_timesheet_id
+  FROM members AS member
+  ORDER BY member.dependency_unit_key,member.scope_family_key,
+    member.stable_ordinal,member.family_timesheet_id
 )
 SELECT
   member.dependency_unit_key,
   member.scope_family_key,
   member.family_timesheet_id,
-  canonical.canonical_timesheet_id,
-  canonical.canonical_timesheet_id AS projected_timesheet_id
+  COALESCE(canonical.canonical_timesheet_id,fallback_member.fallback_timesheet_id),
+  COALESCE(canonical.canonical_timesheet_id,fallback_member.fallback_timesheet_id) AS projected_timesheet_id
 FROM members AS member
 LEFT JOIN canonical
   ON canonical.dependency_unit_key=member.dependency_unit_key
  AND canonical.scope_family_key=member.scope_family_key
+JOIN fallback_member
+  ON fallback_member.dependency_unit_key=member.dependency_unit_key
+ AND fallback_member.scope_family_key=member.scope_family_key
 ORDER BY member.dependency_unit_key,member.scope_family_key,
   member.family_timesheet_id;
 $function$;
