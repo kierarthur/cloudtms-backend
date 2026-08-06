@@ -12,6 +12,7 @@ const complete = read('supabase/repeatable/04082026_1219_pay_workbench_complete_
 const fail = read('supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql');
 const recovery = read('supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql');
 const oldDrain = read('supabase/repeatable/04082026_1219_pay_workbench_worker_drain_chunk.sql');
+const sourceBuild = read('supabase/repeatable/04082026_1213_pay_workbench_candidate_source_build_chunk.sql');
 
 test('RPC 1 is service-role-only metadata claim/start with a concrete durable attempt', () => {
   assert.match(claim, /CREATE OR REPLACE FUNCTION public\.pay_workbench_source_build_attempt_claim_start_v1\(/i);
@@ -55,6 +56,15 @@ test('initial source-build jobs are the only null-build jobs and RPC 1 assigns b
   const attemptInsert = claim.indexOf('INSERT INTO private.banking_pay_workbench_stage_attempts');
   const result = claim.indexOf("'claimed',true");
   assert.ok(buildInsert >= 0 && attemptInsert > buildInsert && result > attemptInsert);
+});
+
+test('fact-page completion and creation use one database timestamp', () => {
+  assert.match(sourceBuild, /v_fact_page_timestamp\s+timestamptz/i);
+  assert.match(sourceBuild, /v_fact_page_timestamp:=clock_timestamp\(\);/i);
+  assert.match(
+    sourceBuild,
+    /is_family_final,\s*completed_at_utc,created_at_utc\s*\)[\s\S]*v_is_final,\s*v_fact_page_timestamp,v_fact_page_timestamp\s*\)/i,
+  );
 });
 
 test('RPC 2 executes only the exact current nonce and fails closed without mutating stale delivery', () => {

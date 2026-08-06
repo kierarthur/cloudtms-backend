@@ -69,6 +69,7 @@ DECLARE
   v_cursor_end_hash text;
   v_existing_page private.banking_pay_workbench_economic_build_fact_pages%ROWTYPE;
   v_previous_page private.banking_pay_workbench_economic_build_fact_pages%ROWTYPE;
+  v_fact_page_timestamp timestamptz;
   v_replay_cursor jsonb;
   v_unit_ids uuid[]:=ARRAY[]::uuid[];
   v_family_ordinal integer;
@@ -926,13 +927,20 @@ BEGIN
     v_derived_settled_count:=0;
     v_derived_fallback_count:=0;
 
+    -- The table's physical column order evaluates completed_at_utc before
+    -- created_at_utc.  Supplying one database-owned timestamp prevents two
+    -- independent clock_timestamp() defaults from intermittently violating
+    -- completed_at_utc >= created_at_utc under fast concurrent lanes.
+    v_fact_page_timestamp:=clock_timestamp();
     INSERT INTO private.banking_pay_workbench_economic_build_fact_pages(
       build_id,attempt_id,dependency_unit_key,fact_family,page_number,
       cursor_start_json,cursor_start_hash,cursor_end_json,cursor_end_hash,
-      expected_source_count,actual_fact_count,cumulative_fact_count,page_digest,cumulative_digest,is_family_final
+      expected_source_count,actual_fact_count,cumulative_fact_count,page_digest,cumulative_digest,is_family_final,
+      completed_at_utc,created_at_utc
     ) VALUES(v_build_id,v_attempt_id,v_unit_key,v_fact_family,v_page_number,
       v_cursor,v_cursor_start_hash,v_next,v_cursor_end_hash,v_expected_source_count,v_page_count,
-      v_next_cumulative_fact_count,v_page_digest,v_cumulative_digest,v_is_final);
+      v_next_cumulative_fact_count,v_page_digest,v_cumulative_digest,v_is_final,
+      v_fact_page_timestamp,v_fact_page_timestamp);
 
     IF v_unit_key<>'GLOBAL' THEN
       UPDATE private.banking_pay_workbench_economic_build_scope scope_row
