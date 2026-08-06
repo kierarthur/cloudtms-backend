@@ -165,11 +165,11 @@ test('cancellation producers preserve the typed SQL descriptor and report enqueu
   assert.doesNotMatch(eventWake, /Object\.values|recursive/i);
 });
 
-test('public version route carries the deployed Stage 2 source marker', () => {
+test('public version route carries the deployed Revision 5M source marker', () => {
   const body = functionBody('handleVersion');
   assert.match(body, /banking_pay_cancellation_stage2/);
-  assert.match(body, /revision:\s*"5G"/);
-  assert.match(body, /implementation_commit:\s*"4bc7fd2d"/);
+  assert.match(body, /revision:\s*"5M"/);
+  assert.match(body, /implementation_commit:\s*"3e1b5995"/);
 });
 
 test('selection canonicalisation rejects conflicting membership semantics before planning', () => {
