@@ -643,6 +643,21 @@ test('database-owned Worker runtime settings are not silently clamped below the 
   assert.match(drain, /executeTimeoutMs: dbRpcHardCapMs/);
 });
 
+test('terminal reconciliation calibration remains statement- and lease-bounded', () => {
+  const migration = fs.readFileSync(
+    path.resolve(__dirname, '../supabase/migrations/06082026_0440_banking_pay_workbench_terminal_reconciliation_window.sql'),
+    'utf8'
+  );
+  assert.match(migration, /banking_pay_workbench_db_worker_max_runtime_ms\s*=\s*22000/);
+  assert.match(migration, /banking_pay_workbench_db_statement_timeout_ms\s*=\s*24000/);
+  assert.match(migration, /banking_pay_workbench_db_worker_lease_seconds\s*=\s*25/);
+  assert.match(migration, /banking_pay_workbench_rpc_safety_buffer_ms\s*=\s*1000/);
+  assert.match(migration, /cron_source_build_parallelism\s*=\s*0/);
+  assert.match(migration, /nudge_source_build_parallelism\s*=\s*0/);
+  assert.match(migration, /TERMINAL_WINDOW_BASELINE_CONFLICT/);
+  assert.match(migration, /Policy X:/);
+});
+
 test('runtime version advertises the bounded-scope Stage 2 source marker', () => {
   const version = functionBody('handleVersion');
   assert.match(version, /banking_pay_bounded_scope_stage2/);
