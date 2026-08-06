@@ -256,6 +256,12 @@ test('every installed source-build enqueue writer creates the one permitted type
 test('candidate-wide reconciliation stages privately and publication switches CURRENT authority atomically', () => {
   assert.match(syncCore, /INSERT INTO private\.banking_pay_workbench_canonical_stage_lines/i);
   assert.doesNotMatch(syncCore, /INSERT INTO public\.banking_pay_workbench_candidate_source_lines/i);
+  assert.match(syncCore, /v_bounded_canonical_stage_timestamp\s+timestamptz/i);
+  assert.match(syncCore, /v_bounded_canonical_stage_timestamp:=clock_timestamp\(\);/i);
+  assert.match(
+    syncCore,
+    /stage_status,verified_at_utc,created_at_utc[\s\S]*'VERIFIED',\s*v_bounded_canonical_stage_timestamp,v_bounded_canonical_stage_timestamp/i,
+  );
 
   const publishStart = dispatcher.indexOf("IF v_stage='SOURCE_PUBLISH' THEN");
   const publishEnd = dispatcher.indexOf("IF v_stage='BUILD_CLEANUP' THEN", publishStart);

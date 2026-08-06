@@ -39,6 +39,7 @@ declare
   v_bounded_economic_component_digest text;
   v_bounded_presentation_allocation_digest text;
   v_bounded_canonical_count integer := 0;
+  v_bounded_canonical_stage_timestamp timestamptz;
   v_bounded_canonical_result jsonb := '{}'::jsonb;
   v_public_result_json jsonb := '{}'::jsonb;
   v_scope text := upper(btrim(coalesce(p_pay_channel_scope, '')));
@@ -4046,11 +4047,12 @@ begin
   END IF;
 
   DELETE FROM private.banking_pay_workbench_canonical_stage_lines WHERE build_id=p_build_id;
+  v_bounded_canonical_stage_timestamp:=clock_timestamp();
   INSERT INTO private.banking_pay_workbench_canonical_stage_lines(
     build_id,source_ordinal,session_id,candidate_id,session_version,source_change_seq,
     source_build_run_id,timesheet_id,line_key,parent_line_key,split_suffix,section,
     source_row_json,economic_key_json,contract_json,pay_channel_scope,
-    refresh_scope_kind,row_digest,stage_status,verified_at_utc
+    refresh_scope_kind,row_digest,stage_status,verified_at_utc,created_at_utc
   )
   SELECT p_build_id,
     row_number() OVER(ORDER BY public.pay_workbench_preview_section_from_line_json(line.line_json),
@@ -4075,7 +4077,8 @@ begin
       THEN line.line_json->'contract_json'
       WHEN jsonb_typeof(line.line_json->'contract')='object' THEN line.line_json->'contract'
       ELSE '{}'::jsonb END,
-    v_scope,'BOUNDED_ECONOMIC_BUILD',md5(line.line_json::text),'VERIFIED',clock_timestamp()
+    v_scope,'BOUNDED_ECONOMIC_BUILD',md5(line.line_json::text),'VERIFIED',
+    v_bounded_canonical_stage_timestamp,v_bounded_canonical_stage_timestamp
   FROM pg_temp.canonical_preview_lines line
   WHERE line.candidate_id=v_bounded_build.candidate_id;
 
