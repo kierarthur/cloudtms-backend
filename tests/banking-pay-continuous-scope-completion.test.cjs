@@ -32,6 +32,19 @@ test('generated blockers are recovery aware only inside the requested generation
 test('blockers distinguish current failure authority from superseded execution history', () => {
   const body = lastFunction(runtime, 'pay_workbench_scope_blocker_state_v1');
   assert.match(body, /non_blocking_terminal_failure/);
+  assert.match(body, /WORKBENCH_CANDIDATE_DIRTY_APPLY/);
+  assert.match(body, /unnest\(generated_ranked\.candidate_ids\)/);
+  assert.match(body, /recovered_registry\.dirty_generation = recovered_registry\.evaluated_generation/);
+  assert.match(body, /recovered_registry\.evaluated_generation >= generated_ranked\.scope_change_generation/);
+  assert.match(body, /recovered_registry\.current_build_id IS NULL/);
+  assert.match(body, /recovered_registry\.failure_json, '\{\}'::jsonb/);
+  assert.match(body, /recovered_build\.session_id = p_session_id/);
+  assert.match(body, /recovered_build\.session_version = v_session\.version/);
+  assert.match(body, /recovered_build\.captured_candidate_generation = recovered_registry\.evaluated_generation/);
+  assert.match(body, /recovered_build\.source_change_seq = recovered_registry\.current_source_change_seq/);
+  assert.match(body, /recovered_build\.status = 'COMPLETE'/);
+  assert.match(body, /recovered_build\.private_stage = 'COMPLETE'/);
+  assert.match(body, /recovered_build\.completed_at_utc >= generated_ranked\.created_at_utc/);
   assert.match(body, /WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
   assert.match(body, /superseding_session_id'[\s\S]*p_session_id::text/);
   assert.match(body, /refresh_scope_kind'[\s\S]*CANDIDATE_FULL_LIVE/);

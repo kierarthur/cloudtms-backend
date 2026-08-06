@@ -1629,6 +1629,46 @@ BEGIN
         WHEN generated_ranked.status IN ('FAILED', 'DEAD')
          AND LOWER(BTRIM(COALESCE(generated_ranked.payload_json->>'non_blocking_terminal_failure', 'false'))) = 'true'
           THEN 'SUCCEEDED'
+        -- A direct dirty-apply failure is also recovered once every candidate
+        -- asserted by that row has subsequently completed and published a
+        -- generation-fenced build for this exact session version.  The
+        -- original FAILED/DEAD row is immutable history and can have a
+        -- different dedupe key from the replacement source build, so ranking
+        -- by work_identity alone cannot establish recovery.  Require the
+        -- registry and completed build to agree on generation and source
+        -- sequence, and require the registry to have no newer dirty work,
+        -- active build or failure authority.  Partial or stale recovery keeps
+        -- the original terminal row blocking.
+        WHEN generated_ranked.status IN ('FAILED', 'DEAD')
+         AND generated_ranked.job_type IN (
+           'WORKBENCH_CANDIDATE_DIRTY_APPLY',
+           'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'
+         )
+         AND COALESCE(array_length(generated_ranked.candidate_ids, 1), 0) > 0
+         AND NOT EXISTS (
+           SELECT 1
+           FROM unnest(generated_ranked.candidate_ids) AS recovered_candidate(candidate_id)
+           WHERE NOT EXISTS (
+             SELECT 1
+             FROM private.banking_pay_workbench_candidate_scope_registry AS recovered_registry
+             JOIN private.banking_pay_workbench_economic_builds AS recovered_build
+               ON recovered_build.candidate_id = recovered_registry.candidate_id
+              AND recovered_build.session_id = p_session_id
+              AND recovered_build.session_version = v_session.version
+              AND recovered_build.captured_candidate_generation = recovered_registry.evaluated_generation
+              AND recovered_build.source_change_seq = recovered_registry.current_source_change_seq
+              AND recovered_build.status = 'COMPLETE'
+              AND recovered_build.private_stage = 'COMPLETE'
+              AND recovered_build.completed_at_utc IS NOT NULL
+              AND recovered_build.completed_at_utc >= generated_ranked.created_at_utc
+             WHERE recovered_registry.candidate_id = recovered_candidate.candidate_id
+               AND recovered_registry.initialisation_status = 'READY'
+               AND recovered_registry.current_build_id IS NULL
+               AND recovered_registry.dirty_generation = recovered_registry.evaluated_generation
+               AND recovered_registry.evaluated_generation >= generated_ranked.scope_change_generation
+               AND COALESCE(recovered_registry.failure_json, '{}'::jsonb) = '{}'::jsonb
+           )
+         ) THEN 'SUCCEEDED'
         -- Backward compatibility for cancellation jobs written before
         -- supersessions became successful terminal work. Do not trust the flag
         -- alone: require the exact legacy code and the replacement full-candidate
