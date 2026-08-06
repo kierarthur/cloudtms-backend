@@ -6,6 +6,8 @@ const repoRoot = new URL('..', import.meta.url);
 const read = path => readFileSync(new URL(path, repoRoot), 'utf8').replace(/\r\n/g, '\n');
 
 const authority = read('supabase/repeatable/05082026_1540_pay_workbench_financial_source_authority_v3.sql');
+const baseAuthority = read('supabase/repeatable/05082026_1229_pay_workbench_financial_source_authority_v1.sql');
+const financePage = read('supabase/repeatable/05082026_1231_pay_workbench_finance_item_authority_page_v1.sql');
 const canonical = read('supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql');
 const verification = read('supabase/verification/05082026_1638_banking_pay_bounded_scope_v1211_semantics.sql');
 
@@ -70,4 +72,31 @@ test('V1.2.11 preserves function signatures, ownership and Policy X boundary', (
   assert.match(authority, /Policy X remains frozen post-draft authority/);
   assert.match(canonical, /CREATE OR REPLACE FUNCTION public\.pay_preview_candidate_build_canonical_lines\(p_context_json jsonb, p_candidate_id uuid\)/);
   assert.match(canonical, /SET search_path TO 'public'/);
+});
+
+test('V1.2.16 settled rotation evidence selects frozen ownership only inside one sealed unit', () => {
+  assert.match(baseAuthority, /'frozen_owner_role'/);
+  assert.match(baseAuthority, /'frozen_owner_id',v_frozen_owner/);
+  assert.match(financePage, /pay_workbench_financial_source_authority_v2\(/);
+  assert.match(financePage, /authority_failure='FINANCE_OWNER_CONFLICT'/);
+  assert.match(financePage, /authority_owner_in_scope_count=\s*scoped_authority\.authority_owner_count/);
+  assert.match(financePage, /authority_dependency_unit_count=1/);
+  assert.match(financePage, /FROZEN_OWNER_SELECTED_SAME_DEPENDENCY_UNIT/);
+  assert.match(financePage, /THEN resolution_policy\.frozen_owner_id\s+ELSE resolution_policy\.resolved_timesheet_id/);
+  assert.match(financePage, /cardinality\(COALESCE\(scoped_authority\.component_key_pairs,ARRAY\[\]::text\[\]\)\)=1/);
+});
+
+test('V1.2.16 ownerless terminal history remains explicit evidence and cannot bypass active authority', () => {
+  assert.match(financePage, /legacy_terminal_unowned_evidence/);
+  assert.match(financePage, /authority_failure='FINANCE_OWNER_UNRESOLVED'/);
+  assert.match(financePage, /case_status,''\)\)\)='PAID_OFF'/);
+  assert.match(financePage, /case_outstanding_amount,0\),2\)=0/);
+  assert.match(financePage, /NOT EXISTS\(SELECT 1\s+FROM public\.pay_finance_case_components legacy_component/s);
+  assert.match(financePage, /NOT EXISTS\(SELECT 1\s+FROM public\.pay_advance_reservations legacy_reservation/s);
+  assert.match(financePage, /NOT EXISTS\(SELECT 1\s+FROM public\.pay_payment_correction_items legacy_correction/s);
+  assert.match(financePage, /NOT EXISTS\(SELECT 1\s+FROM public\.pay_item_snoozes legacy_snooze/s);
+  assert.match(financePage, /NOT EXISTS\(SELECT 1\s+FROM public\.pay_finance_case_events legacy_event/s);
+  assert.match(financePage, /LEGACY_TERMINAL_UNOWNED_EVIDENCE/);
+  assert.match(financePage, /'authority_resolution_status',projected\.authority_resolution_status/);
+  assert.match(financePage, /'source_timesheet_id',projected\.effective_timesheet_id/);
 });

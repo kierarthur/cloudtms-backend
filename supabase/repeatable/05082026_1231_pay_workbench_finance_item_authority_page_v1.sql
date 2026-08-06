@@ -1,8 +1,15 @@
--- Banking Pay bounded-scope Version 1.2.9.
+-- Banking Pay bounded-scope Version 1.2.16.
 -- Page the candidate's physical finance-movement items before any ownership,
 -- scope, frozen-JSON, component or key filtering.  Every selected item is then
 -- either authoritative in-scope evidence, explicit outside-scope evidence, or
 -- a typed blocking authority failure.
+--
+-- Settled Policy-X evidence may retain a frozen rotation-family owner after
+-- mutable case/component projection has moved to another member.  That frozen
+-- owner is accepted only when every asserted owner is already sealed in the
+-- same dependency unit.  Truly ownerless legacy PAID_OFF cases are retained as
+-- explicit terminal evidence only after proving that they have no component,
+-- reservation, correction, snooze, protection or outstanding authority.
 
 CREATE OR REPLACE FUNCTION private.pay_workbench_finance_item_authority_page_v1(
   p_build_id uuid,
@@ -191,8 +198,14 @@ BEGIN
       component.candidate_id AS component_candidate_id,
       component.finance_case_id AS component_case_id,
       component.component_key_type,component.component_key_value,
+      finance_case.id AS linked_case_row_id,
       finance_case.linked_timesheet_id AS case_timesheet_id,
       finance_case.candidate_id AS case_candidate_id,
+      finance_case.status::text AS case_status,
+      finance_case.advance_kind::text AS case_advance_kind,
+      finance_case.case_type::text AS case_type,
+      finance_case.outstanding_amount AS case_outstanding_amount,
+      finance_case.cleared_at_utc AS case_cleared_at_utc,
       transfer.status AS transfer_status,transfer.completed_at_utc,
       COALESCE(reservation.has_settled,false) AS reservation_has_settled,
       reservation.settled_source_amount,
@@ -251,34 +264,174 @@ BEGIN
       ),
       enriched.frozen_source_basis_json,enriched.frozen_component_snapshot_json,'FINANCE'
     ) authority
-  ), classified AS (
+  ), scoped_authority AS (
     SELECT resolved.*,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(resolved.evidence_json->>'frozen_owner_id','')),'') IS NOT NULL
+         AND pg_input_is_valid(resolved.evidence_json->>'frozen_owner_id','uuid')
+          THEN (resolved.evidence_json->>'frozen_owner_id')::uuid
+      END AS frozen_owner_id,
+      cardinality(COALESCE(resolved.owner_ids,ARRAY[]::uuid[])) AS authority_owner_count,
+      (SELECT COUNT(*)::integer
+       FROM private.banking_pay_workbench_economic_build_scope owner_scope
+       WHERE owner_scope.build_id=p_build_id
+         AND owner_scope.timesheet_id=ANY(COALESCE(resolved.owner_ids,ARRAY[]::uuid[])))
+        AS authority_owner_in_scope_count,
+      (SELECT COUNT(DISTINCT owner_scope.dependency_unit_key)::integer
+       FROM private.banking_pay_workbench_economic_build_scope owner_scope
+       WHERE owner_scope.build_id=p_build_id
+         AND owner_scope.timesheet_id=ANY(COALESCE(resolved.owner_ids,ARRAY[]::uuid[])))
+        AS authority_dependency_unit_count
+    FROM resolved
+  ), resolution_policy AS (
+    SELECT scoped_authority.*,
+      (
+        scoped_authority.settled_authority
+        AND scoped_authority.authority_failure='FINANCE_OWNER_CONFLICT'
+        AND scoped_authority.frozen_owner_id IS NOT NULL
+        AND scoped_authority.authority_owner_count>=2
+        AND scoped_authority.authority_owner_in_scope_count=
+          scoped_authority.authority_owner_count
+        AND scoped_authority.authority_dependency_unit_count=1
+        AND EXISTS(SELECT 1
+          FROM private.banking_pay_workbench_economic_build_scope frozen_scope
+          WHERE frozen_scope.build_id=p_build_id
+            AND frozen_scope.timesheet_id=scoped_authority.frozen_owner_id)
+        AND cardinality(COALESCE(scoped_authority.candidate_ids,ARRAY[]::uuid[]))=1
+        AND scoped_authority.candidate_ids[1]=scoped_authority.batch_candidate_candidate_id
+        AND cardinality(COALESCE(scoped_authority.finance_case_ids,ARRAY[]::uuid[]))=1
+        AND cardinality(COALESCE(scoped_authority.finance_component_ids,ARRAY[]::uuid[]))<=1
+        AND cardinality(COALESCE(scoped_authority.component_key_pairs,ARRAY[]::text[]))=1
+        AND COALESCE((scoped_authority.evidence_json->>
+          'invalid_frozen_uuid_count')::integer,0)=0
+        AND COALESCE((scoped_authority.evidence_json->>
+          'invalid_finance_component_uuid_count')::integer,0)=0
+        AND COALESCE((scoped_authority.evidence_json->>
+          'incomplete_component_key_count')::integer,0)=0
+      ) AS use_frozen_same_unit_owner,
+      (
+        scoped_authority.settled_authority
+        AND scoped_authority.authority_failure='FINANCE_OWNER_UNRESOLVED'
+        AND scoped_authority.authority_owner_count=0
+        AND cardinality(COALESCE(scoped_authority.candidate_ids,ARRAY[]::uuid[]))=1
+        AND scoped_authority.candidate_ids[1]=scoped_authority.batch_candidate_candidate_id
+        AND cardinality(COALESCE(scoped_authority.finance_case_ids,ARRAY[]::uuid[]))=1
+        AND scoped_authority.linked_case_row_id=scoped_authority.finance_case_ids[1]
+        AND scoped_authority.timesheet_id IS NULL
+        AND scoped_authority.component_timesheet_id IS NULL
+        AND scoped_authority.case_timesheet_id IS NULL
+        AND scoped_authority.finance_component_id IS NULL
+        AND scoped_authority.component_case_id IS NULL
+        AND scoped_authority.frozen_owner_id IS NULL
+        AND COALESCE(scoped_authority.frozen_source_basis_json,'{}'::jsonb)='{}'::jsonb
+        AND COALESCE(scoped_authority.frozen_component_snapshot_json,'{}'::jsonb)='{}'::jsonb
+        AND NULLIF(BTRIM(COALESCE(scoped_authority.frozen_component_key_type,'')),'') IS NULL
+        AND NULLIF(BTRIM(COALESCE(scoped_authority.frozen_component_key_value,'')),'') IS NULL
+        AND NULLIF(BTRIM(COALESCE(scoped_authority.operation_source_key,'')),'') IS NULL
+        AND scoped_authority.source_ref='advance:'||scoped_authority.linked_case_row_id::text
+        AND UPPER(BTRIM(COALESCE(scoped_authority.case_status,'')))='PAID_OFF'
+        AND UPPER(BTRIM(COALESCE(scoped_authority.case_advance_kind,'')))='OVERPAYMENT'
+        AND UPPER(BTRIM(COALESCE(scoped_authority.case_type,'')))='OVERPAYMENT'
+        AND ROUND(COALESCE(scoped_authority.case_outstanding_amount,0),2)=0
+        AND NOT EXISTS(SELECT 1
+          FROM public.pay_finance_case_components legacy_component
+          WHERE legacy_component.finance_case_id=scoped_authority.linked_case_row_id)
+        AND NOT EXISTS(SELECT 1
+          FROM public.pay_advance_reservations legacy_reservation
+          WHERE (legacy_reservation.pay_batch_item_id=scoped_authority.id
+              OR legacy_reservation.finance_case_id=scoped_authority.linked_case_row_id)
+            AND UPPER(BTRIM(COALESCE(legacy_reservation.status,'')))
+              NOT IN ('RELEASED','SETTLED'))
+        AND NOT EXISTS(SELECT 1
+          FROM public.pay_payment_correction_items legacy_correction
+          WHERE (legacy_correction.pay_batch_item_id=scoped_authority.id
+              OR legacy_correction.finance_case_id=scoped_authority.linked_case_row_id)
+            AND (legacy_correction.timesheet_id IS NOT NULL
+              OR UPPER(BTRIM(COALESCE(legacy_correction.status,'')))<>'APPLIED'))
+        AND NOT EXISTS(SELECT 1
+          FROM public.pay_item_snoozes legacy_snooze
+          WHERE legacy_snooze.source_ref='advance:'||scoped_authority.linked_case_row_id::text
+            AND legacy_snooze.cleared_at_utc IS NULL
+            AND legacy_snooze.cancelled_at_utc IS NULL)
+        AND NOT EXISTS(SELECT 1
+          FROM public.pay_finance_case_events legacy_event
+          WHERE legacy_event.finance_case_id=scoped_authority.linked_case_row_id
+            AND (
+              UPPER(BTRIM(COALESCE(legacy_event.event_type,''))) LIKE '%WRITE%OFF%'
+              OR UPPER(BTRIM(COALESCE(legacy_event.event_type,''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE','MANUAL_WRITE_OFF',
+                'CASE_MANUAL_ECONOMIC_OVERRIDE','COMPONENT_MANUAL_ECONOMIC_OVERRIDE')
+              OR UPPER(BTRIM(COALESCE(legacy_event.reason,''))) IN (
+                'MANUAL_ECONOMIC_OVERRIDE','WRITE_OFF','COMPONENT_MANUAL_ECONOMIC_OVERRIDE')
+              OR (UPPER(BTRIM(COALESCE(legacy_event.event_type,'')))='CASE_CLEARED'
+                AND LOWER(BTRIM(COALESCE(legacy_event.reason,'')))='rail_settlement')
+              OR (UPPER(BTRIM(COALESCE(legacy_event.event_type,'')))='CLEARED'
+                AND UPPER(BTRIM(COALESCE(legacy_event.reason,'')))='PREVIEW_FINANCE_SYNC')
+            ))
+      ) AS legacy_terminal_unowned_evidence
+    FROM scoped_authority
+  ), effective_authority AS (
+    SELECT resolution_policy.*,
+      CASE WHEN resolution_policy.use_frozen_same_unit_owner
+        THEN resolution_policy.frozen_owner_id
+        ELSE resolution_policy.resolved_timesheet_id END AS effective_timesheet_id,
+      CASE
+        WHEN resolution_policy.use_frozen_same_unit_owner
+          OR resolution_policy.legacy_terminal_unowned_evidence THEN NULL
+        ELSE resolution_policy.authority_failure
+      END AS effective_authority_failure,
+      CASE
+        WHEN resolution_policy.use_frozen_same_unit_owner
+          THEN 'FROZEN_OWNER_SELECTED_SAME_DEPENDENCY_UNIT'
+        WHEN resolution_policy.legacy_terminal_unowned_evidence
+          THEN 'LEGACY_TERMINAL_UNOWNED_EVIDENCE'
+        WHEN resolution_policy.authority_failure IS NOT NULL THEN 'BLOCKED_AUTHORITY_FAILURE'
+        WHEN resolution_policy.settled_authority THEN 'RESOLVED_SETTLED_AUTHORITY'
+        ELSE 'NON_SETTLED_EVIDENCE'
+      END AS authority_resolution_status
+    FROM resolution_policy
+  ), classified AS (
+    SELECT effective_authority.*,
       EXISTS(SELECT 1
         FROM private.banking_pay_workbench_economic_build_scope scope_row
         WHERE scope_row.build_id=p_build_id
-          AND scope_row.timesheet_id=resolved.resolved_timesheet_id) AS owner_in_scope,
+          AND scope_row.timesheet_id=effective_authority.effective_timesheet_id) AS owner_in_scope,
       CASE
-        WHEN resolved.settled_authority AND resolved.authority_failure IS NOT NULL
-          THEN resolved.authority_failure
-        WHEN resolved.settled_authority
-         AND (resolved.resolved_source_amount IS NULL OR resolved.resolved_source_amount<=0)
+        WHEN effective_authority.effective_authority_failure IS NOT NULL
+          THEN effective_authority.effective_authority_failure
+        WHEN effective_authority.settled_authority
+         AND EXISTS(SELECT 1
+           FROM private.banking_pay_workbench_economic_build_scope scope_row
+           WHERE scope_row.build_id=p_build_id
+             AND scope_row.timesheet_id=effective_authority.effective_timesheet_id)
+         AND (effective_authority.resolved_source_amount IS NULL
+           OR effective_authority.resolved_source_amount<=0)
           THEN 'FROZEN_FINANCE_AMOUNT_INVALID'
-        WHEN resolved.settled_authority
-         AND (resolved.resolved_component_key_type NOT IN
+        WHEN effective_authority.settled_authority
+         AND EXISTS(SELECT 1
+           FROM private.banking_pay_workbench_economic_build_scope scope_row
+           WHERE scope_row.build_id=p_build_id
+             AND scope_row.timesheet_id=effective_authority.effective_timesheet_id)
+         AND (effective_authority.resolved_component_key_type NOT IN
             ('TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE','EXPENSE_CODE',
               'MANUAL_CARRY_FORWARD')
-          OR NULLIF(BTRIM(COALESCE(resolved.resolved_component_key_value,'')),'') IS NULL)
+          OR NULLIF(BTRIM(COALESCE(effective_authority.resolved_component_key_value,'')),'') IS NULL)
           THEN 'FROZEN_ECONOMIC_KEY_INVALID'
-        WHEN resolved.settled_authority AND resolved.resolved_component_key_type='TS_DAY'
+        WHEN effective_authority.settled_authority
+         AND EXISTS(SELECT 1
+           FROM private.banking_pay_workbench_economic_build_scope scope_row
+           WHERE scope_row.build_id=p_build_id
+             AND scope_row.timesheet_id=effective_authority.effective_timesheet_id)
+         AND effective_authority.resolved_component_key_type='TS_DAY'
          AND NOT (
-           resolved.resolved_component_key_value ~ '^\d{4}-\d{2}-\d{2}$'
-           AND pg_input_is_valid(resolved.resolved_component_key_value,'date')
-           AND CASE WHEN pg_input_is_valid(resolved.resolved_component_key_value,'date')
-             THEN (resolved.resolved_component_key_value::date)::text=
-               resolved.resolved_component_key_value ELSE false END)
+           effective_authority.resolved_component_key_value ~ '^\d{4}-\d{2}-\d{2}$'
+           AND pg_input_is_valid(effective_authority.resolved_component_key_value,'date')
+           AND CASE WHEN pg_input_is_valid(effective_authority.resolved_component_key_value,'date')
+             THEN (effective_authority.resolved_component_key_value::date)::text=
+               effective_authority.resolved_component_key_value ELSE false END)
           THEN 'FROZEN_ECONOMIC_KEY_INVALID'
       END AS final_failure
-    FROM resolved
+    FROM effective_authority
   ), projected AS (
     SELECT classified.*,
       classified.settled_authority AND classified.owner_in_scope
@@ -297,7 +450,7 @@ BEGIN
     FROM classified
   )
   SELECT '05:'||projected.pay_batch_candidate_id::text||':'||projected.id::text,
-    projected.pay_batch_candidate_id,projected.id,projected.resolved_timesheet_id,
+    projected.pay_batch_candidate_id,projected.id,projected.effective_timesheet_id,
     projected.resolved_candidate_id,projected.resolved_finance_case_id,
     projected.resolved_finance_component_id,projected.resolved_component_key_type,
     projected.resolved_component_key_value,
@@ -315,9 +468,11 @@ BEGIN
       'authoritative_in_scope',projected.authoritative_in_scope,
       'owner_in_scope',projected.owner_in_scope,
       'evidence_only',NOT projected.authoritative_in_scope,
+      'authority_resolution_status',projected.authority_resolution_status,
       'owner_evidence',projected.evidence_json,
+      'finance_case_id',projected.resolved_finance_case_id,
       'finance_component_id',projected.resolved_finance_component_id,
-      'source_timesheet_id',projected.resolved_timesheet_id,
+      'source_timesheet_id',projected.effective_timesheet_id,
       'raw_physical_source_key','05:'||projected.pay_batch_candidate_id::text||':'||projected.id::text,
       'raw_physical_digest',projected.raw_physical_digest,
       'raw_physical_amount_ex_vat',ROUND(CASE
@@ -330,7 +485,7 @@ BEGIN
       'frozen_component_snapshot_json',projected.frozen_component_snapshot_json),
     md5(jsonb_build_object('pay_batch_item_id',projected.id,
       'pay_batch_candidate_id',projected.pay_batch_candidate_id,
-      'resolved_timesheet_id',projected.resolved_timesheet_id,
+      'resolved_timesheet_id',projected.effective_timesheet_id,
       'resolved_candidate_id',projected.resolved_candidate_id,
       'resolved_finance_case_id',projected.resolved_finance_case_id,
       'resolved_finance_component_id',projected.resolved_finance_component_id,
@@ -339,6 +494,7 @@ BEGIN
       'amount_ex_vat',projected.resolved_source_amount,
       'settled_authority',projected.settled_authority,
       'authoritative_in_scope',projected.authoritative_in_scope,
+      'authority_resolution_status',projected.authority_resolution_status,
       'raw_physical_digest',projected.raw_physical_digest)::text),
     projected.final_failure
   FROM projected

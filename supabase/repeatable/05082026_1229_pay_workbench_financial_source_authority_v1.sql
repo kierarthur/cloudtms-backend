@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope Version 1.2.8.
+-- Banking Pay bounded-scope Version 1.2.16.
 -- Resolve one immutable finance/reservation owner from every applicable mutable
 -- and frozen assertion. Policy X is preserved: frozen post-draft evidence is
 -- compared, never replaced with a live fallback.
@@ -147,6 +147,7 @@ BEGIN
     'frozen_owner_role',CASE WHEN cardinality(v_linked_ids)=1 THEN 'LINKED'
       WHEN cardinality(v_direct_ids)=1 THEN 'DIRECT'
       WHEN cardinality(v_carrier_ids)=1 THEN 'CARRIER' END,
+    'frozen_owner_id',v_frozen_owner,
     'resolution_failure',resolution_failure
   );
   RETURN NEXT;
