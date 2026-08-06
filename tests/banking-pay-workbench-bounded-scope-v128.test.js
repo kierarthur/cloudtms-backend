@@ -52,12 +52,17 @@ test('V1.2.8 raw bundle evidence cannot certify an unresolved occurrence', () =>
   assert.match(bundle, /failed_page_count/);
 });
 
-test('V1.2.8 fallback occurrence SQL resolves table columns ahead of RETURNS TABLE outputs', () => {
+test('V1.2.8 fallback occurrence CTEs name ex-VAT and inc-VAT columns independently', () => {
   assert.match(
     occurrence,
-    /AS \$function\$\s*#variable_conflict use_column\s*DECLARE/i,
+    /amount\.amount_ex_vat AS amount_ex_vat,amount\.amount_ex_vat AS amount_inc_vat/i,
   );
-  assert.match(occurrence, /'role','PAY_STATE_FALLBACK'/i);
+  assert.match(
+    occurrence,
+    /expense\.amount_ex_vat AS amount_ex_vat,expense\.amount_ex_vat AS amount_inc_vat/i,
+  );
+  assert.match(occurrence, /SUM\(existing\.amount_ex_vat\)/i);
+  assert.doesNotMatch(occurrence, /#variable_conflict use_column/i);
 });
 
 test('V1.2.8 canonical multiplicity is checked per stable line before split collapse', () => {

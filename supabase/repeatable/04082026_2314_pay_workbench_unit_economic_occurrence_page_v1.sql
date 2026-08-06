@@ -35,7 +35,6 @@ PARALLEL UNSAFE
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
-#variable_conflict use_column
 DECLARE
   v_limit integer:=LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1;
   v_family text:=UPPER(NULLIF(BTRIM(COALESCE(p_fact_family,'')),''));
@@ -725,7 +724,8 @@ BEGIN
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':20:ADDITIONAL:'||
         LPAD(octet_length(entry.key)::text,10,'0')||':'||
         encode(convert_to(entry.key,'UTF8'),'hex'),
-      'ADDITIONAL_CODE'::text,UPPER(BTRIM(entry.key)),amount.amount_ex_vat,amount.amount_ex_vat,
+      'ADDITIONAL_CODE'::text,UPPER(BTRIM(entry.key)),
+      amount.amount_ex_vat AS amount_ex_vat,amount.amount_ex_vat AS amount_inc_vat,
       NULL::text,false,'ADDITIONAL'::text
     FROM fallback_states state
     CROSS JOIN LATERAL jsonb_each(CASE
@@ -755,8 +755,10 @@ BEGIN
   ), additional_total_occurrence AS (
     SELECT state.timesheet_id,state.last_settled_signature,0::bigint,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':25:ADDITIONAL_TOTAL',
-      'ADDITIONAL_CODE'::text,'TOTAL'::text,ROUND((state.snapshot->>'additional_pay_ex_vat')::numeric,2),
-      ROUND((state.snapshot->>'additional_pay_ex_vat')::numeric,2),NULL::text,false,'ADDITIONAL_TOTAL'::text
+      'ADDITIONAL_CODE'::text,'TOTAL'::text,
+      ROUND((state.snapshot->>'additional_pay_ex_vat')::numeric,2) AS amount_ex_vat,
+      ROUND((state.snapshot->>'additional_pay_ex_vat')::numeric,2) AS amount_inc_vat,
+      NULL::text,false,'ADDITIONAL_TOTAL'::text
     FROM fallback_states state
     WHERE COALESCE(state.snapshot->>'additional_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$'
       AND ROUND((state.snapshot->>'additional_pay_ex_vat')::numeric,2)<>0
@@ -766,7 +768,8 @@ BEGIN
   ), expense_occurrence AS (
     SELECT state.timesheet_id,state.last_settled_signature,0::bigint,
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':30:EXPENSE:'||expense.key_value,
-      'EXPENSE_CODE'::text,expense.key_value,expense.amount_ex_vat,expense.amount_ex_vat,
+      'EXPENSE_CODE'::text,expense.key_value,
+      expense.amount_ex_vat AS amount_ex_vat,expense.amount_ex_vat AS amount_inc_vat,
       NULL::text,false,'EXPENSE'::text
     FROM fallback_states state
     CROSS JOIN LATERAL (SELECT
@@ -793,8 +796,9 @@ BEGIN
       '30:'||p_projected_timesheet_id::text||':'||state.timesheet_id::text||':40:ADJUSTMENT:'||
         LPAD(adjustment.ordinality::text,12,'0'),
       'ADJUSTMENT_CODE'::text,BTRIM(adjustment.value->>'id'),
-      ROUND((adjustment.value->>'delta_pay_ex_vat')::numeric,2),
-      ROUND((adjustment.value->>'delta_pay_ex_vat')::numeric,2),NULL::text,false,'ADJUSTMENT'::text
+      ROUND((adjustment.value->>'delta_pay_ex_vat')::numeric,2) AS amount_ex_vat,
+      ROUND((adjustment.value->>'delta_pay_ex_vat')::numeric,2) AS amount_inc_vat,
+      NULL::text,false,'ADJUSTMENT'::text
     FROM fallback_states state
     CROSS JOIN LATERAL jsonb_array_elements(CASE
       WHEN jsonb_typeof(state.snapshot->'adjustments')='array' AND pg_column_size(state.snapshot)<=65536
