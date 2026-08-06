@@ -60,6 +60,11 @@ DECLARE
   v_claim_examined integer:=0;
   v_recovered_count integer:=0;
   v_scan_limit integer:=50;
+  -- Four source-build lanes may collect and publish concurrently, but the
+  -- reconciliation stage performs the expensive finance/effect comparison.
+  -- Admit at most two such attempts at once so four Worker lanes cannot turn
+  -- a healthy ~6 second attempt into a 25 second lease-expiry stampede.
+  v_reconcile_attempt_limit integer:=2;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -217,6 +222,7 @@ BEGIN
   FOR v_claim IN
     WITH claim_source AS MATERIALIZED (
       SELECT job.id,job.priority,job.run_at_utc,job.created_at_utc,job.payload_json,
+        job.private_stage,
         CASE WHEN COALESCE(job.payload_json->>'claim_scan_generation','') ~ '^\d+$'
           THEN LEAST((job.payload_json->>'claim_scan_generation')::bigint,2147483647)
           ELSE 0 END AS scan_generation,
@@ -302,6 +308,28 @@ BEGIN
       -- by the winning lane, because that update introduces an avoidable wait
       -- into the one-second claim transaction.
       CONTINUE;
+    END IF;
+    IF v_claim.private_stage='RECONCILE_EXECUTE' THEN
+      -- Serialise the admission check itself.  The lock is transaction-scoped:
+      -- once the first claim commits, the next lane observes its durable
+      -- STARTED attempt before deciding whether another reconciliation fits.
+      IF NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
+        'BANKING_PAY_WORKBENCH:RECONCILE_EXECUTE:ADMISSION',24062027)) THEN
+        CONTINUE;
+      END IF;
+      IF (
+        SELECT count(*)
+        FROM private.banking_pay_workbench_stage_attempts AS active_reconcile
+        JOIN public.banking_pay_workbench_jobs AS active_reconcile_job
+          ON active_reconcile_job.id=active_reconcile.job_id
+        WHERE active_reconcile.attempt_status='STARTED'
+          AND active_reconcile.private_stage='RECONCILE_EXECUTE'
+          AND active_reconcile_job.status='RUNNING'
+          AND clock_timestamp()
+              < active_reconcile.lease_expires_at_utc+interval '15 seconds'
+      )>=v_reconcile_attempt_limit THEN
+        CONTINUE;
+      END IF;
     END IF;
     v_job:=NULL;
     SELECT claimed_job.* INTO v_job

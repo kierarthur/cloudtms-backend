@@ -210,6 +210,22 @@ test('D11 claim and recovery use durable keyset progress before exact row locks'
   assert.doesNotMatch(claim, /IF NOT pg_catalog\.pg_try_advisory_xact_lock[\s\S]{0,1200}UPDATE public\.banking_pay_workbench_jobs/);
 });
 
+test('four source lanes retain throughput without concurrent reconciliation stampede', () => {
+  assert.match(claim, /v_reconcile_attempt_limit integer:=2/);
+  assert.match(claim, /job\.private_stage/);
+  assert.match(claim, /IF v_claim\.private_stage='RECONCILE_EXECUTE' THEN/);
+  assert.match(claim, /BANKING_PAY_WORKBENCH:RECONCILE_EXECUTE:ADMISSION/);
+  assert.match(claim, /active_reconcile\.attempt_status='STARTED'/);
+  assert.match(claim, /active_reconcile\.private_stage='RECONCILE_EXECUTE'/);
+  assert.match(claim, /active_reconcile_job\.status='RUNNING'/);
+  assert.match(claim, /active_reconcile\.lease_expires_at_utc\+interval '15 seconds'/);
+  assert.match(claim, />=v_reconcile_attempt_limit THEN\s+CONTINUE;/);
+  assert.ok(
+    claim.indexOf('BANKING_PAY_WORKBENCH:RECONCILE_EXECUTE:ADMISSION')
+      < claim.indexOf('FOR UPDATE OF claimed_job SKIP LOCKED'),
+  );
+});
+
 test('V1.2.8 physical additional identities are lossless and live dates fail closed', () => {
   assert.match(occurrence, /octet_length\(additional\.key\)/);
   assert.match(occurrence, /encode\(convert_to\(additional\.key,'UTF8'\),'hex'\)/);
