@@ -82,7 +82,8 @@ test('V1.2.9 canonical attestation distinguishes private truth from exact presen
   assert.match(presentation, /parent_line_identity/);
   assert.match(presentation, /excluded_from_allocation/);
   assert.match(presentation, /resolved_segment_rows_replace_source_total/);
-  assert.match(sync, /projection_target AS/);
+  assert.match(sync, /economic_target AS/);
+  assert.match(sync, /economic_target AS \([\s\S]*pg_temp\.tmp_sync_authoritative_components component/);
   assert.match(sync, /FULL OUTER JOIN actual USING\(timesheet_id,line_identity\)/);
   assert.match(sync, /actual\.parent_line_identity IS DISTINCT FROM expected\.parent_line_identity/);
   assert.match(sync, /actual\.presentation_section IS DISTINCT FROM expected\.presentation_section/);

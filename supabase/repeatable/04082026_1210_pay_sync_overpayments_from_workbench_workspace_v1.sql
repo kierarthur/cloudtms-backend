@@ -3783,22 +3783,22 @@ begin
     RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_FACT_WORKSPACE_MISSING' USING ERRCODE='23514';
   END IF;
   -- The legacy renderer may omit a revoked or otherwise zero-current-truth
-  -- projection target from its case rollup.  Preserve the complete private
-  -- presentation graph by creating a neutral metadata-only row; the sealed
-  -- build facts below remain the sole source of every economic value.
+  -- economic target from its case rollup.  Preserve the complete private
+  -- presentation graph by creating a neutral metadata-only row for every
+  -- fact-derived economic target.  UNIT_PROJECTION also contains physical
+  -- dependency evidence which deliberately owns no economic occurrence; that
+  -- evidence remains sealed/attested but must not invent a presentation row.
+  -- The sealed build facts below remain the sole source of every economic
+  -- value.
   IF (SELECT count(*) FROM pg_temp.cand_payee payee
       WHERE payee.candidate_id=v_bounded_build.candidate_id)<>1
      OR EXISTS(
-       WITH projection_target AS (
-         SELECT DISTINCT projection.timesheet_id
-         FROM private.banking_pay_workbench_economic_build_facts projection
-         WHERE projection.build_id=p_build_id
-           AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
-           AND projection.source_relation='UNIT_PROJECTION'
-           AND projection.timesheet_id IS NOT NULL
+       WITH economic_target AS (
+         SELECT DISTINCT component.timesheet_id
+         FROM pg_temp.tmp_sync_authoritative_components component
        )
        SELECT 1
-       FROM projection_target target
+       FROM economic_target target
        LEFT JOIN pg_temp.ts_baseline baseline
          ON baseline.candidate_id=v_bounded_build.candidate_id
         AND baseline.timesheet_id=target.timesheet_id
@@ -3845,12 +3845,8 @@ begin
       'economic_authority','SEALED_ECONOMIC_BUILD_FACTS','build_id',p_build_id::text),
     '[]'::jsonb
   FROM (
-    SELECT DISTINCT projection.timesheet_id
-    FROM private.banking_pay_workbench_economic_build_facts projection
-    WHERE projection.build_id=p_build_id
-      AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
-      AND projection.source_relation='UNIT_PROJECTION'
-      AND projection.timesheet_id IS NOT NULL
+    SELECT DISTINCT component.timesheet_id
+    FROM pg_temp.tmp_sync_authoritative_components component
   ) target
   JOIN pg_temp.ts_baseline baseline
     ON baseline.candidate_id=v_bounded_build.candidate_id
@@ -3862,21 +3858,18 @@ begin
   );
   IF EXISTS(
     SELECT 1
-    FROM private.banking_pay_workbench_economic_build_facts projection
-    WHERE projection.build_id=p_build_id
-      AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
-      AND projection.source_relation='UNIT_PROJECTION'
-      AND projection.timesheet_id IS NOT NULL
+    FROM pg_temp.tmp_sync_authoritative_components component
+    WHERE component.timesheet_id IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM pg_temp.timesheet_case_rollup_effective preview_row
         WHERE preview_row.candidate_id=v_bounded_build.candidate_id
-          AND preview_row.timesheet_id=projection.timesheet_id)
+          AND preview_row.timesheet_id=component.timesheet_id)
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_SCOPE_INCOMPLETE' USING ERRCODE='23514';
   END IF;
   DELETE FROM pg_temp.timesheet_case_rollup_effective preview_row
   WHERE preview_row.candidate_id=v_bounded_build.candidate_id
-    AND NOT EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_build_scope scope_row
-      WHERE scope_row.build_id=p_build_id AND scope_row.timesheet_id=preview_row.timesheet_id);
+    AND NOT EXISTS(SELECT 1 FROM pg_temp.tmp_sync_authoritative_components component
+      WHERE component.timesheet_id=preview_row.timesheet_id);
   WITH fact_totals AS (
     SELECT component.timesheet_id,
       ROUND(COALESCE(SUM(component.truth_ex_vat),0),2)::numeric(12,2) AS truth_ex_vat,
@@ -3963,17 +3956,13 @@ begin
   -- complete private economic truth.  Case-resolution presentation is an
   -- overlay and is intentionally not added to that economic total.
   IF EXISTS(
-    WITH projection_target AS (
-      SELECT DISTINCT projection.timesheet_id
-      FROM private.banking_pay_workbench_economic_build_facts projection
-      WHERE projection.build_id=p_build_id
-        AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
-        AND projection.source_relation='UNIT_PROJECTION'
-        AND projection.timesheet_id IS NOT NULL
+    WITH economic_target AS (
+      SELECT DISTINCT component.timesheet_id
+      FROM pg_temp.tmp_sync_authoritative_components component
     ), fact_truth AS (
       SELECT target.timesheet_id,
         ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS truth_ex_vat
-      FROM projection_target target
+      FROM economic_target target
       LEFT JOIN pg_temp.tmp_sync_authoritative_components component
         ON component.timesheet_id=target.timesheet_id
       GROUP BY target.timesheet_id
