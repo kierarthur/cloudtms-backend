@@ -3731,12 +3731,98 @@ begin
   IF to_regclass('pg_temp.timesheet_case_rollup_effective') IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_FACT_WORKSPACE_MISSING' USING ERRCODE='23514';
   END IF;
+  IF to_regclass('pg_temp.ts_baseline') IS NULL
+     OR to_regclass('pg_temp.cand_payee') IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_FACT_WORKSPACE_MISSING' USING ERRCODE='23514';
+  END IF;
+  -- The legacy renderer may omit a revoked or otherwise zero-current-truth
+  -- projection target from its case rollup.  Preserve the complete private
+  -- presentation graph by creating a neutral metadata-only row; the sealed
+  -- build facts below remain the sole source of every economic value.
+  IF (SELECT count(*) FROM pg_temp.cand_payee payee
+      WHERE payee.candidate_id=v_bounded_build.candidate_id)<>1
+     OR EXISTS(
+       WITH projection_target AS (
+         SELECT DISTINCT projection.timesheet_id
+         FROM private.banking_pay_workbench_economic_build_facts projection
+         WHERE projection.build_id=p_build_id
+           AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
+           AND projection.source_relation='UNIT_PROJECTION'
+           AND projection.timesheet_id IS NOT NULL
+       )
+       SELECT 1
+       FROM projection_target target
+       LEFT JOIN pg_temp.ts_baseline baseline
+         ON baseline.candidate_id=v_bounded_build.candidate_id
+        AND baseline.timesheet_id=target.timesheet_id
+       GROUP BY target.timesheet_id
+       HAVING count(baseline.timesheet_id)<>1
+     ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_PRESENTATION_METADATA_INCOMPLETE' USING ERRCODE='23514';
+  END IF;
+  INSERT INTO pg_temp.timesheet_case_rollup_effective(
+    candidate_id,timesheet_id,client_id,ts_week_ending_date,ts_client_name,ts_pay_method,
+    cand_pay_method,cand_tms_ref,cand_display_name,cand_umbrella_id,umb_enabled,
+    umb_vat_chargeable,candidate_has_bank_details,candidate_bank_hash,
+    umbrella_has_bank_details,umbrella_bank_hash,resolution_family,case_needs_resolution,
+    case_resolution_satisfied_now,resolution_action_label,linked_resolution_scope_json,
+    case_total_amount_ex,safe_amount_ex,unresolved_taxable_amount_ex,open_taxable_count,
+    open_reimbursement_count,unresolved_taxable_count,stale_count,is_mixed_case,is_blocked,
+    segments_total_ex,delta_additional_pay_ex_vat,delta_expenses_pay_ex_vat,
+    delta_travel_pay_ex_vat,delta_accommodation_pay_ex_vat,delta_other_pay_ex_vat,
+    delta_mileage_pay_ex_vat,segment_deltas_json,adjustment_deltas_json,
+    additional_unit_deltas_json,reservation_overrun_detected,payment_amount_ex_vat,
+    payment_amount_inc_vat,payment_amount,case_resolution_summary_json,case_components_json
+  )
+  SELECT v_bounded_build.candidate_id,target.timesheet_id,baseline.client_id,
+    baseline.ts_week_ending_date,baseline.ts_client_name,baseline.ts_pay_method,
+    baseline.cand_pay_method,baseline.cand_tms_ref,baseline.cand_display_name,
+    baseline.cand_umbrella_id,baseline.umb_enabled,baseline.umb_vat_chargeable,
+    (baseline.cand_bank_hash IS NOT NULL AND BTRIM(baseline.cand_bank_hash)<>''),
+    baseline.cand_bank_hash,
+    (baseline.umb_bank_hash IS NOT NULL AND BTRIM(baseline.umb_bank_hash)<>''),
+    baseline.umb_bank_hash,'BUCKETED',false,true,'Suggested Rate',
+    jsonb_build_object(
+      'resolve_all_linked_timesheets_default',true,
+      'linked_scope_type','SELF_ONLY','linked_timesheet_count',1,
+      'linked_timesheet_ids',jsonb_build_array(target.timesheet_id::text),
+      'seed_timesheet_id',target.timesheet_id::text),
+    0::numeric,0::numeric,0::numeric,0,0,0,0,false,false,
+    0::numeric,0::numeric,0::numeric,0::numeric,0::numeric,0::numeric,0::numeric,
+    '[]'::jsonb,'[]'::jsonb,'[]'::jsonb,false,
+    0::numeric,0::numeric,0::numeric,
+    jsonb_build_object(
+      'case_needs_resolution',false,'case_resolution_satisfied_now',true,
+      'safe_amount_ex_vat',0,'blocked_case_amount_ex_vat',0,
+      'unresolved_taxable_amount_ex_vat',0,
+      'economic_authority','SEALED_ECONOMIC_BUILD_FACTS','build_id',p_build_id::text),
+    '[]'::jsonb
+  FROM (
+    SELECT DISTINCT projection.timesheet_id
+    FROM private.banking_pay_workbench_economic_build_facts projection
+    WHERE projection.build_id=p_build_id
+      AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
+      AND projection.source_relation='UNIT_PROJECTION'
+      AND projection.timesheet_id IS NOT NULL
+  ) target
+  JOIN pg_temp.ts_baseline baseline
+    ON baseline.candidate_id=v_bounded_build.candidate_id
+   AND baseline.timesheet_id=target.timesheet_id
+  WHERE NOT EXISTS(
+    SELECT 1 FROM pg_temp.timesheet_case_rollup_effective preview_row
+    WHERE preview_row.candidate_id=v_bounded_build.candidate_id
+      AND preview_row.timesheet_id=target.timesheet_id
+  );
   IF EXISTS(
-    SELECT 1 FROM private.banking_pay_workbench_economic_build_scope scope_row
-    WHERE scope_row.build_id=p_build_id
+    SELECT 1
+    FROM private.banking_pay_workbench_economic_build_facts projection
+    WHERE projection.build_id=p_build_id
+      AND projection.fact_family='LIVE_ENTITLEMENT_INPUT'
+      AND projection.source_relation='UNIT_PROJECTION'
+      AND projection.timesheet_id IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM pg_temp.timesheet_case_rollup_effective preview_row
         WHERE preview_row.candidate_id=v_bounded_build.candidate_id
-          AND preview_row.timesheet_id=scope_row.timesheet_id)
+          AND preview_row.timesheet_id=projection.timesheet_id)
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_SCOPE_INCOMPLETE' USING ERRCODE='23514';
   END IF;

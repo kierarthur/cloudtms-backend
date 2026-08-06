@@ -97,6 +97,20 @@ test('D6 reconciliation consumes sealed facts and fences live metadata', () => {
   assert.match(syncCore, /fact\.fact_family in \('FROZEN_SETTLED_COMPONENT','RESERVATION_COMPONENT'\)/);
   assert.match(syncCore, /FULL OUTER JOIN actual USING\(timesheet_id,line_identity\)/);
   assert.match(syncCore, /projection_target AS/);
+  const canonicalScopeFence = syncCore.slice(
+    syncCore.lastIndexOf('IF EXISTS(', syncCore.indexOf('PAY_WORKBENCH_CANONICAL_FACT_SCOPE_INCOMPLETE')),
+    syncCore.indexOf('PAY_WORKBENCH_CANONICAL_FACT_SCOPE_INCOMPLETE'),
+  );
+  assert.match(canonicalScopeFence, /economic_build_facts projection/i);
+  assert.match(canonicalScopeFence, /fact_family='LIVE_ENTITLEMENT_INPUT'/i);
+  assert.match(canonicalScopeFence, /source_relation='UNIT_PROJECTION'/i);
+  assert.doesNotMatch(canonicalScopeFence, /economic_build_scope scope_row/i);
+  assert.match(syncCore, /INSERT INTO pg_temp\.timesheet_case_rollup_effective\(/i);
+  assert.match(syncCore, /JOIN pg_temp\.ts_baseline baseline/i);
+  assert.match(syncCore, /PAY_WORKBENCH_CANONICAL_PRESENTATION_METADATA_INCOMPLETE/i);
+  assert.match(syncCore, /'economic_authority','SEALED_ECONOMIC_BUILD_FACTS'/i);
+  assert.doesNotMatch(syncCore, /fact_truth AS \([\s\S]*?GROUP BY target\.timesheet_id\s+HAVING/i);
+  assert.match(syncCore, /v_bounded_economic_component_digest[\s\S]*FROM pg_temp\.tmp_sync_authoritative_components component/i);
   assert.match(syncCore, /PAY_WORKBENCH_CANONICAL_PRESENTATION_ALLOCATION_MISMATCH/);
   assert.match(syncCore, /private\.pay_workbench_canonical_component_core_v1/);
   assert.match(syncCore, /GROUP BY timesheet_id,line_identity,key_type,key_value/);
