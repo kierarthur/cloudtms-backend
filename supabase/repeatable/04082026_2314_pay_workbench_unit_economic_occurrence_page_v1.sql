@@ -35,6 +35,7 @@ PARALLEL UNSAFE
 SECURITY DEFINER
 SET search_path = ''
 AS $function$
+#variable_conflict use_column
 DECLARE
   v_limit integer:=LEAST(GREATEST(COALESCE(p_limit,25),1),25)+1;
   v_family text:=UPPER(NULLIF(BTRIM(COALESCE(p_fact_family,'')),''));

@@ -52,6 +52,14 @@ test('V1.2.8 raw bundle evidence cannot certify an unresolved occurrence', () =>
   assert.match(bundle, /failed_page_count/);
 });
 
+test('V1.2.8 fallback occurrence SQL resolves table columns ahead of RETURNS TABLE outputs', () => {
+  assert.match(
+    occurrence,
+    /AS \$function\$\s*#variable_conflict use_column\s*DECLARE/i,
+  );
+  assert.match(occurrence, /'role','PAY_STATE_FALLBACK'/i);
+});
+
 test('V1.2.8 canonical multiplicity is checked per stable line before split collapse', () => {
   const lineA = [JSON.stringify({ key: 'K', amount: 10 }), JSON.stringify({ key: 'K', amount: 10 })];
   const lineB = [JSON.stringify({ key: 'K', amount: 10 })];
