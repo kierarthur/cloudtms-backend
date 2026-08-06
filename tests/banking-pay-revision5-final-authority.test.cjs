@@ -57,6 +57,21 @@ test('all thirty manifest functions have exactly one canonical repeatable body',
   }
 });
 
+test('selection dependencies are hash-pinned to one saved source authority', () => {
+  const manifest = JSON.parse(fs.readFileSync(
+    path.join(root, 'supabase', 'verification', 'banking_pay_revision5_catalog_manifest.json'),
+    'utf8'
+  ));
+  assert.equal(manifest.dependency_function_count, 2);
+  assert.equal(manifest.dependency_functions.length, 2);
+  for (const item of manifest.dependency_functions) {
+    const re = new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+(?:public\\.)?${item.name}\\s*\\(`, 'gi');
+    const owners = sqlFiles.flatMap(({ name, source }) => (source.match(re) || []).map(() => `supabase/repeatable/${name}`));
+    assert.deepEqual(owners, item.source_files, `${item.schema}.${item.name} dependency source authorities`);
+    assert.match(item.definition_sha256, /^[0-9a-f]{64}$/);
+  }
+});
+
 test('legacy monolith cannot reinstall Revision 5 amended identities', () => {
   const monolith = sqlFiles.find(({ name }) => name === '26052026_2100HRS_NEW_FUNCTIONS.sql')?.source || '';
   for (const identity of canonicalIdentities) {

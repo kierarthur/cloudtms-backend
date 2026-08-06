@@ -108,14 +108,19 @@ test('whole draft cancellation owns its audit reason and uses the existing cerem
 
 test('manual not-paid resolution is exact evidence only and cannot auto-release', () => {
   const body = functionBody('handleBankingPayPaymentStatusResolveV1');
-  assert.match(body, /instruction_scope_ids/);
+  assert.match(body, /resolution_context/);
+  assert.match(body, /pay_batch_payment_status_page_v1/);
+  assert.match(body, /pay_payment_cancelability_diagnostic/);
+  assert.match(body, /resolved_full_payment_scope_json/);
+  assert.match(body, /banking_pay_operation_transfer_scope_items/);
+  assert.match(body, /PAYMENT_STATUS_RESOLUTION_CLIENT_AUTHORITY_PROHIBITED/);
   assert.match(body, /manual_ambiguity_resolution: true/);
   assert.match(body, /suppress_auto_unwind: true/);
   assert.match(body, /MANUAL_RESOLUTION_AUTO_RELEASE_PROHIBITED/);
   assert.match(body, /reauthProofHash/);
   assert.doesNotMatch(body, /pay_payment_correction_request_start/);
   assert.doesNotMatch(body, /\.\.\.\(body\?\.event_json/);
-  assert.equal((body.match(/sbRpc\(/g) || []).length, 1);
+  assert.equal((body.match(/sbRpc\(/g) || []).length, 3);
 });
 
 test('paid-after-release acknowledgement is a separate exact Finance route', () => {

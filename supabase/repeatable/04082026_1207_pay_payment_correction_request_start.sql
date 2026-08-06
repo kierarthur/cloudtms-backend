@@ -130,6 +130,16 @@ BEGIN
         USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'PAY_BATCH_NOT_FOUND')::text;
     END IF;
 
+    IF pg_catalog.upper(pg_catalog.btrim(coalesce(v_batch.status, ''))) IN (
+      'COMMITTED', 'COMPLETED', 'PAID', 'SETTLED', 'CANCELLED', 'CANCELED'
+    ) THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_BATCH_TERMINAL'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'PAYMENT_CORRECTION_BATCH_TERMINAL',
+          'batch_status', v_batch.status
+        )::text;
+    END IF;
+
     IF p_source_bank_event_id IS NOT NULL THEN
       SELECT event_row.*
       INTO v_source_event
@@ -680,6 +690,16 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'PAY_BATCH_NOT_FOUND'
       USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'PAY_BATCH_NOT_FOUND')::text;
+  END IF;
+
+  IF pg_catalog.upper(pg_catalog.btrim(coalesce(v_batch.status, ''))) IN (
+    'COMMITTED', 'COMPLETED', 'PAID', 'SETTLED', 'CANCELLED', 'CANCELED'
+  ) THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_BATCH_TERMINAL'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+        'code', 'PAYMENT_CORRECTION_BATCH_TERMINAL',
+        'batch_status', v_batch.status
+      )::text;
   END IF;
 
   SELECT operation_row.* INTO v_operation

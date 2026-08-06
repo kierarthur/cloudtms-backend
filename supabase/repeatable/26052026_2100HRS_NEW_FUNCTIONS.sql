@@ -124652,6 +124652,7 @@ DECLARE
   v_status_update_signature text := NULL::text;
   v_result jsonb := '{}'::jsonb;
   v_actor_valid boolean := true;
+  v_batch_terminal boolean := false;
   v_diagnostic_context text := UPPER(REPLACE(NULLIF(BTRIM(COALESCE(p_diagnostic_context, '')), ''), '-', '_'));
 BEGIN
   IF p_pay_batch_id IS NULL THEN
@@ -124754,6 +124755,10 @@ BEGIN
               'pay_batch_id', p_pay_batch_id::text
             )::text;
   END IF;
+
+  v_batch_terminal := upper(btrim(COALESCE(v_batch.status, ''))) IN (
+    'COMMITTED', 'COMPLETED', 'PAID', 'SETTLED', 'CANCELLED', 'CANCELED'
+  );
 
   IF p_actor_user_id IS NOT NULL THEN
     SELECT EXISTS (
@@ -125185,6 +125190,14 @@ BEGIN
       'message', 'Provider submission is in progress for this batch.'
     ));
     v_blockers := v_blockers || v_race_or_submission_blockers;
+  END IF;
+
+  IF v_batch_terminal THEN
+    v_blockers := v_blockers || jsonb_build_array(jsonb_build_object(
+      'code', 'PAYMENT_CORRECTION_BATCH_TERMINAL',
+      'message', 'This payment batch is already complete and cannot be changed.',
+      'batch_status', v_batch.status
+    ));
   END IF;
 
   IF v_has_paid_or_settled AND COALESCE(v_has_actual_recovery_context, false) THEN
@@ -128549,6 +128562,7 @@ BEGIN
     LEFT JOIN public.pay_bank_transfers AS candidate_transfer_rows
       ON candidate_transfer_rows.id = candidate_item_rows.pay_bank_transfer_id
     WHERE candidate_batch_rows.pay_batch_id = p_pay_batch_id
+      AND COALESCE(candidate_item_rows.is_voided, false) IS NOT TRUE
       AND (
         v_scope_type = 'BATCH'
         OR candidate_item_rows.id = ANY(COALESCE(v_selected_pay_batch_item_ids, ARRAY[]::uuid[]))

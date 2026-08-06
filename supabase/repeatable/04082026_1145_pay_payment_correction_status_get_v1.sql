@@ -379,8 +379,15 @@ BEGIN
             v_user_title := 'Cancellation ready to process';
             v_user_message := 'CloudTMS has prepared the cancellation work.';
         WHEN 'PROCESSING' THEN
-            v_user_title := 'Cancelling payments';
-            v_user_message := 'CloudTMS is processing the selected payments.';
+            v_user_title := CASE
+                WHEN v_request_kind = 'RELEASE_FAILED_PAYMENT' THEN 'Releasing failed payments'
+                ELSE 'Cancelling payments'
+            END;
+            v_user_message := CASE
+                WHEN v_request_kind = 'RELEASE_FAILED_PAYMENT'
+                    THEN 'CloudTMS is releasing the selected failed payments.'
+                ELSE 'CloudTMS is processing the selected payments.'
+            END;
         WHEN 'APPLIED' THEN
             v_user_title := 'Cancellation complete';
             v_user_message := CASE

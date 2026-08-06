@@ -176,6 +176,17 @@ BEGIN
                   )::text;
     END IF;
 
+    IF pg_catalog.upper(pg_catalog.btrim(COALESCE(v_batch.status, ''))) IN (
+        'COMMITTED', 'COMPLETED', 'PAID', 'SETTLED', 'CANCELLED', 'CANCELED'
+    ) THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_BATCH_TERMINAL'
+            USING ERRCODE = 'P0001',
+                  DETAIL = pg_catalog.jsonb_build_object(
+                      'code', 'PAYMENT_CORRECTION_BATCH_TERMINAL',
+                      'batch_status', v_batch.status
+                  )::text;
+    END IF;
+
     SELECT operation_row.*
     INTO v_operation
     FROM public.banking_pay_operations AS operation_row

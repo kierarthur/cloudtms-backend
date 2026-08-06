@@ -16,7 +16,9 @@ if (!databaseUrl) {
 
 const sqlLiteral = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-const expected = Array.isArray(manifest.functions) ? manifest.functions : [];
+const coreExpected = Array.isArray(manifest.functions) ? manifest.functions : [];
+const dependencyExpected = Array.isArray(manifest.dependency_functions) ? manifest.dependency_functions : [];
+const expected = [...coreExpected, ...dependencyExpected];
 const tuples = expected.map((item) => `(${sqlLiteral(item.schema)},${sqlLiteral(item.name)})`).join(',');
 const query = `
 with catalogue as (
@@ -76,11 +78,19 @@ if (result.status !== 0) {
 const actual = JSON.parse(String(result.stdout || '').trim() || '[]');
 const keyOf = (item) => `${item.schema}\u0000${item.name}\u0000${item.identity_arguments}`;
 const expectedByKey = new Map(expected.map((item) => [keyOf(item), item]));
+const coreByKey = new Map(coreExpected.map((item) => [keyOf(item), item]));
+const dependencyByKey = new Map(dependencyExpected.map((item) => [keyOf(item), item]));
 const actualByKey = new Map(actual.map((item) => [keyOf(item), item]));
 const problems = [];
 
-if (expectedByKey.size !== manifest.function_count) {
+if (coreByKey.size !== manifest.function_count) {
   problems.push('manifest function count is inconsistent');
+}
+if (dependencyByKey.size !== manifest.dependency_function_count) {
+  problems.push('manifest dependency function count is inconsistent');
+}
+if (expectedByKey.size !== coreByKey.size + dependencyByKey.size) {
+  problems.push('a function identity is duplicated across core and dependency authority');
 }
 for (const [key, item] of expectedByKey) {
   if (!actualByKey.has(key)) problems.push(`missing identity: ${item.schema}.${item.name}`);
@@ -102,4 +112,4 @@ if (problems.length) {
   for (const problem of problems) console.error(`- ${problem}`);
   process.exit(1);
 }
-console.log(`Revision 5 final catalogue verified: ${actualByKey.size} functions`);
+console.log(`Revision 5 final catalogue verified: ${coreByKey.size} core functions and ${dependencyByKey.size} dependency functions`);

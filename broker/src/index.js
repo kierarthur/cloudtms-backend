@@ -49847,26 +49847,133 @@ async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId
   if (!['CONFIRMED_NOT_PAID','CONFIRMED_PAID'].includes(resolution)) {
     return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'RESOLUTION_INVALID', message: 'Select Confirmed paid or Confirmed not paid.' });
   }
-  let operationId;
-  let instructionScopeIds;
-  let payBankTransferId;
-  let candidateId = null;
-  let snapshotToken;
+  const forbiddenClientAuthority = [
+    'operation_id', 'operationId', 'banking_pay_operation_id',
+    'instruction_scope_ids', 'instructionScopeIds',
+    'pay_bank_transfer_id', 'payBankTransferId', 'pay_bank_transfer_ids', 'payBankTransferIds',
+    'candidate_id', 'candidateId', 'snapshot_token', 'snapshotToken'
+  ];
+  if (forbiddenClientAuthority.some((key) => Object.prototype.hasOwnProperty.call(body || {}, key))) {
+    return bankingPayCancellationResponse(env, req, 400, {
+      ok: false,
+      code: 'PAYMENT_STATUS_RESOLUTION_CLIENT_AUTHORITY_PROHIBITED',
+      message: 'Refresh Current Payment Status and use the server-provided resolution context.'
+    });
+  }
+  let resolutionContext;
+  let candidateId;
+  let activeBatchScopeHash;
+  let contextToken;
   let evidenceReference;
   try {
-    operationId = bankingPayCorrectionUuid(body?.operation_id || body?.operationId, 'operation_id').toLowerCase();
-    const scopeSource = body?.instruction_scope_ids || body?.instructionScopeIds || (body?.pay_bank_transfer_id || body?.payBankTransferId ? [body?.pay_bank_transfer_id || body?.payBankTransferId] : null);
-    instructionScopeIds = bankingPayCorrectionCanonicalUuidArray(scopeSource, 'instruction_scope_ids', 128, { required: true });
-    payBankTransferId = bankingPayCorrectionUuid(body?.pay_bank_transfer_id || body?.payBankTransferId || instructionScopeIds[0], 'pay_bank_transfer_id').toLowerCase();
-    if (!instructionScopeIds.includes(payBankTransferId)) throw Object.assign(new Error('The selected transfer is outside the reviewed instruction scope.'), { code: 'INSTRUCTION_SCOPE_INCOMPLETE' });
-    if (body?.candidate_id || body?.candidateId) candidateId = bankingPayCorrectionUuid(body?.candidate_id || body?.candidateId, 'candidate_id').toLowerCase();
-    snapshotToken = bankingPayCorrectionBoundedText(body?.snapshot_token || body?.snapshotToken, 512, 'snapshot_token', { required: true });
+    resolutionContext = body?.resolution_context || body?.resolutionContext;
+    if (!isBankingPayCorrectionPlainObject(resolutionContext) || Number(resolutionContext.version) !== 1) {
+      throw Object.assign(new Error('The bank-outcome context is invalid. Refresh Current Payment Status and try again.'), { code: 'RESOLUTION_CONTEXT_INVALID' });
+    }
+    candidateId = bankingPayCorrectionUuid(resolutionContext.candidate_token, 'candidate_token').toLowerCase();
+    activeBatchScopeHash = bankingPayCorrectionBoundedText(resolutionContext.active_batch_scope_hash, 128, 'active_batch_scope_hash', { required: true }).toLowerCase();
+    contextToken = bankingPayCorrectionBoundedText(resolutionContext.context_token, 128, 'context_token', { required: true }).toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(activeBatchScopeHash) || !/^[0-9a-f]{64}$/.test(contextToken)) {
+      throw Object.assign(new Error('The bank-outcome context is invalid. Refresh Current Payment Status and try again.'), { code: 'RESOLUTION_CONTEXT_INVALID' });
+    }
     evidenceReference = bankingPayCorrectionBoundedText(body?.evidence_reference || body?.evidenceReference, 1000, 'evidence_reference', { required: true });
   } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
   const ceremonyToken = String(body?.reauth_token || body?.reauthToken || '').trim();
   const ceremony = await verifyPaymentReversalReauth(env, user, ceremonyToken);
   if (!ceremony.ok) return bankingPayCancellationResponse(env, req, Number(ceremony.response?.status || 401), { ok: false, code: 'REAUTH_CEREMONY_INVALID', message: 'Please verify your identity again.' });
   try {
+    const statusResult = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_batch_payment_status_page_v1', {
+      p_pay_batch_id: payBatchId,
+      p_actor_user_id: actor.actorUserId,
+      p_filter_json: { included_candidate_tokens: [candidateId] },
+      p_sort_key: 'STATUS',
+      p_sort_direction: 'ASC',
+      p_limit: 25,
+      p_cursor_json: null
+    }), 'pay_batch_payment_status_page_v1');
+    const currentRow = (Array.isArray(statusResult?.rows) ? statusResult.rows : [])
+      .find((row) => String(row?.candidate_token || '').toLowerCase() === candidateId) || null;
+    const currentContext = currentRow?.resolution_context;
+    const currentActions = Array.isArray(currentRow?.available_actions)
+      ? currentRow.available_actions.map((value) => String(value || '').trim().toUpperCase())
+      : [];
+    if (!currentRow || !currentActions.includes('RESOLVE_PAYMENT_STATUS') || !isBankingPayCorrectionPlainObject(currentContext)
+        || String(currentContext.candidate_token || '').toLowerCase() !== candidateId
+        || String(currentContext.active_batch_scope_hash || '').toLowerCase() !== activeBatchScopeHash
+        || String(currentContext.context_token || '').toLowerCase() !== contextToken) {
+      return bankingPayCancellationResponse(env, req, 409, {
+        ok: false,
+        code: 'PAYMENT_STATUS_RESOLUTION_CONTEXT_STALE',
+        message: 'Payment status changed. Refresh Current Payment Status and review the bank evidence again.'
+      });
+    }
+
+    const diagnostic = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_cancelability_diagnostic', {
+      p_pay_batch_id: payBatchId,
+      p_selection_json: {
+        scope_type: 'CANDIDATES',
+        pay_batch_candidate_ids: [candidateId],
+        requested_action: 'RESOLVE_PAYMENT_STATUS'
+      },
+      p_actor_user_id: actor.actorUserId,
+      p_diagnostic_context: 'CURRENT_PAYMENT_STATUS'
+    }), 'pay_payment_cancelability_diagnostic');
+    if (diagnostic?.ok !== true || diagnostic?.requires_bank_check !== true) {
+      return bankingPayCancellationResponse(env, req, 409, {
+        ok: false,
+        code: 'PAYMENT_STATUS_RESOLUTION_NO_LONGER_REQUIRED',
+        message: 'The bank outcome no longer needs manual resolution. Refresh Current Payment Status.'
+      });
+    }
+    const resolvedScope = isBankingPayCorrectionPlainObject(diagnostic?.resolved_full_payment_scope_json)
+      ? diagnostic.resolved_full_payment_scope_json
+      : {};
+    const instructionScopeIds = bankingPayCorrectionCanonicalUuidArray(resolvedScope.pay_bank_transfer_ids, 'instruction_scope_ids', 128, { required: true }).sort();
+    const activeItemIds = bankingPayCorrectionCanonicalUuidArray(resolvedScope.pay_batch_item_ids, 'pay_batch_item_ids', 128, { required: true }).sort();
+
+    const scopeQuery = new URLSearchParams();
+    scopeQuery.set('pay_batch_id', `eq.${String(payBatchId).toLowerCase()}`);
+    scopeQuery.set('pay_bank_transfer_id', `in.(${instructionScopeIds.join(',')})`);
+    scopeQuery.set('select', 'id,operation_id,pay_bank_transfer_id,updated_at_utc');
+    scopeQuery.set('order', 'updated_at_utc.desc,id.asc');
+    scopeQuery.set('limit', '256');
+    const scopeResponse = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_transfer_scope?${scopeQuery.toString()}`, false);
+    const scopeRows = Array.isArray(scopeResponse?.rows) ? scopeResponse.rows : [];
+    if (!scopeRows.length || scopeRows.length >= 256) throw Object.assign(new Error('The exact bank instruction scope could not be resolved safely.'), { code: 'INSTRUCTION_SCOPE_INCOMPLETE' });
+
+    const scopeIdSet = new Set(scopeRows.map((row) => String(row?.id || '').toLowerCase()).filter(Boolean));
+    const operationIds = Array.from(new Set(scopeRows.map((row) => String(row?.operation_id || '').toLowerCase()).filter(Boolean)));
+    if (!operationIds.length || operationIds.length > 64) throw Object.assign(new Error('The exact bank operation could not be resolved safely.'), { code: 'OPERATION_SCOPE_AMBIGUOUS' });
+
+    const scopeItemsQuery = new URLSearchParams();
+    scopeItemsQuery.set('pay_batch_id', `eq.${String(payBatchId).toLowerCase()}`);
+    scopeItemsQuery.set('pay_batch_candidate_id', `eq.${candidateId}`);
+    scopeItemsQuery.set('operation_id', `in.(${operationIds.join(',')})`);
+    scopeItemsQuery.set('select', 'operation_id,transfer_scope_id,pay_batch_item_id');
+    scopeItemsQuery.set('limit', '512');
+    const scopeItemsResponse = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_transfer_scope_items?${scopeItemsQuery.toString()}`, false);
+    const scopeItemRows = (Array.isArray(scopeItemsResponse?.rows) ? scopeItemsResponse.rows : [])
+      .filter((row) => scopeIdSet.has(String(row?.transfer_scope_id || '').toLowerCase()));
+    if (!scopeItemRows.length || scopeItemRows.length >= 512) throw Object.assign(new Error('The exact bank instruction items could not be resolved safely.'), { code: 'INSTRUCTION_SCOPE_INCOMPLETE' });
+
+    const expectedTransferKey = instructionScopeIds.join(',');
+    const expectedItemKey = activeItemIds.join(',');
+    const exactOperationIds = operationIds.filter((operationId) => {
+      const transferKey = Array.from(new Set(scopeRows
+        .filter((row) => String(row?.operation_id || '').toLowerCase() === operationId)
+        .map((row) => String(row?.pay_bank_transfer_id || '').toLowerCase()).filter(Boolean))).sort().join(',');
+      const itemKey = Array.from(new Set(scopeItemRows
+        .filter((row) => String(row?.operation_id || '').toLowerCase() === operationId)
+        .map((row) => String(row?.pay_batch_item_id || '').toLowerCase()).filter(Boolean))).sort().join(',');
+      return transferKey === expectedTransferKey && itemKey === expectedItemKey;
+    });
+    if (!exactOperationIds.length) throw Object.assign(new Error('The reviewed payment no longer matches one complete bank instruction scope.'), { code: 'INSTRUCTION_SCOPE_INCOMPLETE' });
+
+    const operationsResponse = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=in.(${exactOperationIds.map(encodeURIComponent).join(',')})&pay_batch_id=eq.${encodeURIComponent(payBatchId)}&status=neq.CANCELLED&select=id,status,created_at_utc&order=created_at_utc.desc,id.asc&limit=${exactOperationIds.length}`, false);
+    const operationRow = Array.isArray(operationsResponse?.rows) ? operationsResponse.rows[0] || null : null;
+    if (!operationRow?.id) throw Object.assign(new Error('The reviewed bank operation is no longer available.'), { code: 'OPERATION_SCOPE_STALE' });
+    const operationId = bankingPayCorrectionUuid(operationRow.id, 'operation_id').toLowerCase();
+    const payBankTransferId = instructionScopeIds[0];
     const instructionScopeHash = await sha256BankingPayContinuationValue(instructionScopeIds);
     const evidenceReferenceHash = await sha256BankingPayRawText(evidenceReference);
     const ceremonyHash = await sha256BankingPayRawText(ceremonyToken);
@@ -49875,7 +49982,7 @@ async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId
       instruction_scope_hash: instructionScopeHash,
       operation_id: operationId,
       outcome: resolution,
-      snapshot_token: snapshotToken
+      resolution_context_token: contextToken
     });
     const eventJson = {
       pay_batch_id: String(payBatchId).toLowerCase(),
@@ -49892,7 +49999,7 @@ async function handleBankingPayPaymentStatusResolveV1(env, req, user, payBatchId
         instruction_scope_hash: instructionScopeHash,
         evidence_reference_hash: evidenceReferenceHash,
         operation_id: operationId,
-        snapshot_token: snapshotToken
+        resolution_context_token: contextToken
       }
     };
     const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_bank_event_ingest', {

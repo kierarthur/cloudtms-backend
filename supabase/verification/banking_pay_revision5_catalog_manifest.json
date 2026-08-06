@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "f021cd5d7f48c05e7163e1f4ea62fc0f70c3cb5bc5b2033dce4012041270ccd2",
+      "definition_sha256": "b6cc0cf96536463c98fb08958e96345cb351bf7e5539561a87f89260ec2f50e5",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -708,7 +708,7 @@
       "schema": "public",
       "name": "pay_payment_correction_request_start",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_reason text, p_actor_user_id uuid, p_source_bank_event_id uuid, p_auto_requested boolean, p_accepted_resolution_json jsonb",
-      "definition_sha256": "245d86134dd9f5fea003bb74eb88e760e6305f85cae792ab5053403d0093887a",
+      "definition_sha256": "5f96ca1e211758092da4fd595c92055bba0f2cfef5be7ea7bbab7f4846a430e6",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -738,7 +738,7 @@
       "schema": "public",
       "name": "pay_payment_correction_selection_prepare_chunk_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_cursor_json jsonb, p_limit integer, p_worker_id text, p_actor_user_id uuid",
-      "definition_sha256": "60ae848075160afc478ea94755553b9003e0ce72cb56a0c9941e1f0dd0029ba3",
+      "definition_sha256": "1f17bbf8c16899522fc102acda135445885365e5d559c79b223acab9e4415d36",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -768,7 +768,7 @@
       "schema": "public",
       "name": "pay_payment_correction_status_get_v1",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "3bae1fc5a1f20929badcd6a45102af2b2041c7326c534eb38bb7bbbf44c74af6",
+      "definition_sha256": "6b67527fbb9c557614d94f682239caa6866d16f3a726b994cb2289f506334966",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -851,6 +851,72 @@
       ],
       "source_files": [
         "supabase/repeatable/04082026_1211_pay_settle_rail.sql"
+      ]
+    }
+  ],
+  "dependency_function_count": 2,
+  "dependency_functions": [
+    {
+      "schema": "public",
+      "name": "_pay_resolve_payment_scope_for_cancel_rewind",
+      "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_lock_mode boolean, p_actor_user_id uuid",
+      "definition_sha256": "8a26e3452fac777e683f9f8d111f63f9f18db0d5fce91e22802b2e11a6ea585f",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_payment_cancelability_diagnostic",
+      "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_actor_user_id uuid, p_diagnostic_context text",
+      "definition_sha256": "748d71e174278e4d977b5d615bcae239374ecdadd30c9c38e927fa2d35e91e21",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public",
+        "plpgsql_check.mode=disabled"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"
       ]
     }
   ]

@@ -36,10 +36,12 @@ DECLARE
     v_original_overview_amount_pence bigint := 0;
     v_active_paye_schedule_line_count integer := 0;
     v_active_paye_schedule_amount_pence bigint := 0;
+    v_has_more boolean := false;
     v_next_cursor_json jsonb := NULL;
     v_previous_cursor_json jsonb := NULL;
     v_last_row jsonb;
     v_latest_correction_request jsonb := NULL;
+    v_batch_terminal boolean := false;
 BEGIN
     IF p_pay_batch_id IS NULL THEN
         RETURN pg_catalog.jsonb_build_object(
@@ -141,6 +143,10 @@ BEGIN
             'message', 'The Banking Pay batch was not found.'
         );
     END IF;
+
+    v_batch_terminal := pg_catalog.upper(pg_catalog.btrim(coalesce(v_batch.status, ''))) IN (
+        'COMMITTED', 'COMPLETED', 'PAID', 'SETTLED', 'CANCELLED', 'CANCELED'
+    );
 
     IF p_actor_user_id IS NOT NULL AND NOT EXISTS (
         SELECT 1
@@ -501,6 +507,21 @@ BEGIN
                      AND COALESCE(shared_scope_item.is_voided, false) IS NOT TRUE
                    )
                ) AS complete_candidate_instruction_scope,
+               EXISTS (
+                 SELECT 1
+                 FROM public.banking_pay_operation_transfer_scope_items AS resolution_scope_item
+                 JOIN public.banking_pay_operation_transfer_scope AS resolution_scope
+                   ON resolution_scope.id = resolution_scope_item.transfer_scope_id
+                  AND resolution_scope.operation_id = resolution_scope_item.operation_id
+                  AND resolution_scope.pay_batch_id = resolution_scope_item.pay_batch_id
+                 JOIN public.banking_pay_operations AS resolution_operation
+                   ON resolution_operation.id = resolution_scope.operation_id
+                  AND resolution_operation.pay_batch_id = resolution_scope.pay_batch_id
+                 WHERE resolution_scope_item.pay_batch_id = p_pay_batch_id
+                   AND resolution_scope_item.pay_batch_candidate_id = candidate_row.id
+                   AND resolution_scope.pay_bank_transfer_id IS NOT NULL
+                   AND resolution_operation.status <> 'CANCELLED'
+               ) AS has_resolution_context,
                EXISTS (
                  SELECT 1 FROM public.pay_batch_items AS paye_item
                  WHERE paye_item.pay_batch_candidate_id = candidate_row.id
@@ -1036,6 +1057,8 @@ BEGIN
     ), candidate_release_eligibility_index AS MATERIALIZED (
         SELECT candidate_provider_precedence_index.*,
                (
+                  v_batch_terminal IS NOT TRUE
+                  AND
                   candidate_provider_precedence_index.canonical_provider_state = 'TERMINAL_NO_MONEY'
                   AND candidate_provider_precedence_index.paid_or_settled IS NOT TRUE
                   AND candidate_provider_precedence_index.ambiguous IS NOT TRUE
@@ -1049,6 +1072,8 @@ BEGIN
                   AND provider_facts.provider_outcome_unknown IS NOT TRUE
                 ) AS release_failed_payment_eligible,
                 (
+                  v_batch_terminal IS NOT TRUE
+                  AND
                   candidate_provider_precedence_index.removed IS NOT TRUE
                   AND candidate_provider_precedence_index.active_item_count > 0
                   AND candidate_provider_precedence_index.canonical_provider_state = 'NO_TRANSFER_EVIDENCE'
@@ -1087,13 +1112,15 @@ BEGIN
                END AS payment_display_state,
                CASE
                  WHEN removed OR paid_or_settled THEN ARRAY[]::text[]
+                 WHEN v_batch_terminal THEN ARRAY[]::text[]
                  WHEN latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
                  WHEN canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY[]::text[]
                  WHEN v_batch.status = 'DRAFT' AND pre_provider_cancel_eligible
                    THEN ARRAY['DRAFT_CANCEL']::text[]
                  WHEN v_batch.status = 'DRAFT' THEN ARRAY[]::text[]
                  WHEN release_failed_payment_eligible THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
-                 WHEN ambiguous THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
+                 WHEN ambiguous AND has_resolution_context THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
+                 WHEN ambiguous THEN ARRAY[]::text[]
                  WHEN terminal_no_money THEN ARRAY[]::text[]
                  WHEN pre_provider_cancel_eligible THEN ARRAY['CANCEL_PAYMENT']::text[]
                  ELSE ARRAY[]::text[]
@@ -1378,13 +1405,15 @@ BEGIN
                 END AS payment_display_state,
                   CASE
                       WHEN base.removed OR base.paid_or_settled THEN ARRAY[]::text[]
+                      WHEN v_batch_terminal THEN ARRAY[]::text[]
                       WHEN base.latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
                       WHEN base.canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY[]::text[]
                       WHEN v_batch.status = 'DRAFT' AND base.pre_provider_cancel_eligible
                         THEN ARRAY['DRAFT_CANCEL']::text[]
                       WHEN v_batch.status = 'DRAFT' THEN ARRAY[]::text[]
                      WHEN base.release_failed_payment_eligible THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
-                    WHEN base.ambiguous THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
+                    WHEN base.ambiguous AND base.has_resolution_context THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
+                    WHEN base.ambiguous THEN ARRAY[]::text[]
                     WHEN base.terminal_no_money THEN ARRAY[]::text[]
                     WHEN base.pre_provider_cancel_eligible THEN ARRAY['CANCEL_PAYMENT']::text[]
                     ELSE ARRAY[]::text[]
@@ -1580,6 +1609,23 @@ BEGIN
                         ELSE NULL::text
                     END,
                     'snapshot_token', v_snapshot_token,
+                    'resolution_context', CASE
+                        WHEN 'RESOLVE_PAYMENT_STATUS' = ANY(page_rows.available_actions) THEN
+                            pg_catalog.jsonb_build_object(
+                                'version', 1,
+                                'candidate_token', page_rows.pay_batch_candidate_id::text,
+                                'active_batch_scope_hash', v_active_batch_scope_hash,
+                                'context_token', private.pay_payment_correction_sha256_v1(
+                                    pg_catalog.jsonb_build_object(
+                                        'version', 1,
+                                        'pay_batch_id', p_pay_batch_id,
+                                        'candidate_token', page_rows.pay_batch_candidate_id,
+                                        'active_batch_scope_hash', v_active_batch_scope_hash
+                                    )
+                                )
+                            )
+                        ELSE NULL::jsonb
+                    END,
                     'stable_sort_cursor', pg_catalog.jsonb_build_object(
                         'status_rank', page_rows.status_rank,
                         'candidate_name', pg_catalog.lower(page_rows.candidate_display_name),
@@ -1667,6 +1713,10 @@ BEGIN
             FROM page_rows AS last_page_row
             ORDER BY last_page_row.page_ordinal DESC
             LIMIT 1
+        ),
+        (
+            SELECT pg_catalog.count(*) > p_limit
+            FROM paged
         )
     INTO
         v_rows,
@@ -1679,10 +1729,11 @@ BEGIN
         v_original_overview_amount_pence,
         v_active_paye_schedule_line_count,
         v_active_paye_schedule_amount_pence,
-        v_last_row
+        v_last_row,
+        v_has_more
     FROM page_rows;
 
-    IF v_last_row IS NOT NULL AND v_row_count = p_limit THEN
+    IF v_last_row IS NOT NULL AND v_has_more THEN
         v_next_cursor_json := pg_catalog.jsonb_build_object(
             'snapshot_token', v_snapshot_token,
             'sort_key', v_sort_key,
@@ -1753,6 +1804,7 @@ BEGIN
         'sort_direction', v_sort_direction,
         'page_size', p_limit,
         'row_count', v_row_count,
+        'has_more', v_has_more,
         'total_matching_count', v_total_matching_count,
         'eligible_matching_count', v_eligible_matching_count,
         'selected_amount_pence_available', v_selected_amount_pence_available,
