@@ -231,6 +231,7 @@ test('fact collection and legacy bootstrap page independently of total candidate
   assert.doesNotMatch(dispatcher, /STALE_BOOTSTRAP_FACT_AUTHORITY[\s\S]{0,2500}DELETE FROM private\.banking_pay_workbench_economic_build_fact_pages/i);
   assert.match(dispatcher, /initialisation_status IN \('DISCOVERING','CLASSIFYING'\)[\s\S]*?bootstrap_active_reconciliation[\s\S]*?IS NOT TRUE[\s\S]*?'bootstrap_stream','CLASSIFY_UNITS'/i);
   assert.match(dispatcher, /private_stage='PREPARE_SCOPE'[\s\S]*?attestation_json=COALESCE\(attestation_json,'\{\}'::jsonb\)\|\|jsonb_build_object\([\s\S]*?'bootstrap_active_reconciliation',true/i);
+  assert.match(closure, /private_stage='WORKSPACE_FACT'[\s\S]*?v_registry\.bootstrap_stream='ACTIVE_RECONCILIATION'[\s\S]*?'bootstrap_active_reconciliation',true/i);
   assert.doesNotMatch(dispatcher, /SELECT count\(\*\)[^;]*economic_state='DIRTY'/is);
   assert.doesNotMatch(dispatcher, /p_max_members|LIMIT\s+100\b/i);
 });

@@ -556,6 +556,13 @@ BEGIN
         'last_stable_ordinal',v_last_ordinal,'rolling_scope_digest',v_scope_digest,
         'rolling_fingerprint_digest',v_fingerprint_digest,'rolling_edge_tag_digest',edge_tag_digest),
       fact_cursor_json=v_next,
+      attestation_json=COALESCE(attestation_json,'{}'::jsonb)||CASE
+        WHEN v_registry.bootstrap_stream='ACTIVE_RECONCILIATION' THEN jsonb_build_object(
+          'bootstrap_active_reconciliation',true,
+          'bootstrap_active_reconciliation_started_at_utc',COALESCE(
+            NULLIF(attestation_json->>'bootstrap_active_reconciliation_started_at_utc','')::timestamptz,
+            statement_timestamp()))
+        ELSE '{}'::jsonb END,
       updated_at_utc=clock_timestamp()
     WHERE id=p_build_id;
     IF v_registry.initialisation_status IN ('DISCOVERING','CLASSIFYING')
