@@ -96,6 +96,8 @@ DECLARE
   v_internal_after_digest text := NULL::text;
   v_expected_match_count integer := 0;
   v_delete_owner_candidate_id uuid := NULL::uuid;
+  v_delete_context regclass := pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1');
+  v_delete_context_suppressed boolean := false;
   v_effect_capture_mode boolean := lower(COALESCE(current_setting('cloudtms.pay_workbench_effect_capture_mode',true),''))='capture';
 BEGIN
   PERFORM public._temp_diag_log(
@@ -121,7 +123,7 @@ BEGIN
   END IF;
 
 
-  IF TG_OP='DELETE' AND pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1') IS NOT NULL THEN
+  IF TG_OP='DELETE' AND v_delete_context IS NOT NULL THEN
     IF v_trigger_table='candidates' AND NULLIF(v_old_row->>'id','')~*v_uuid_re THEN
       v_delete_owner_candidate_id:=(v_old_row->>'id')::uuid;
     ELSIF NULLIF(v_old_row->>'candidate_id','')~*v_uuid_re THEN
@@ -149,33 +151,41 @@ BEGIN
     END IF;
   END IF;
 
-  IF TG_OP='DELETE'
-     AND pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1') IS NOT NULL
-     AND v_delete_owner_candidate_id IS NOT NULL
-     AND EXISTS(
-       SELECT 1 FROM pg_catalog.pg_class relation
-       WHERE relation.oid=pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1')
-         AND relation.relowner=current_user::regrole::oid AND relation.relpersistence='t'
-         AND relation.relnamespace=pg_catalog.pg_my_temp_schema()
-     )
-     AND (SELECT array_agg(attribute.attname||':'||pg_catalog.format_type(attribute.atttypid,attribute.atttypmod)
-            ORDER BY attribute.attnum)
-          FROM pg_catalog.pg_attribute attribute
-          WHERE attribute.attrelid=pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1')
-            AND attribute.attnum>0 AND NOT attribute.attisdropped)
-       =ARRAY['candidate_id:uuid','delete_operation_id:uuid','candidate_lock_key:bigint',
-         'backend_pid:integer','transaction_id:bigint','created_at_utc:timestamp with time zone',
-         'suppress:boolean']
-     AND EXISTS(
-       SELECT 1 FROM pg_temp._bpay_candidate_delete_context_v1 context
-        WHERE context.candidate_id=v_delete_owner_candidate_id AND context.suppress
-         AND context.candidate_lock_key=pg_catalog.hashtextextended(
-           public._pay_workbench_candidate_serial_key(context.candidate_id),24062027)
-         AND context.backend_pid=pg_catalog.pg_backend_pid()
-         AND context.transaction_id=pg_catalog.txid_current()
-         AND (SELECT count(*) FROM pg_temp._bpay_candidate_delete_context_v1)=1
-     ) THEN
-    RETURN OLD;
+  IF TG_OP='DELETE' AND v_delete_context IS NOT NULL
+     AND v_delete_owner_candidate_id IS NOT NULL THEN
+    IF EXISTS(
+         SELECT 1 FROM pg_catalog.pg_class relation
+         WHERE relation.oid=v_delete_context
+           AND relation.relowner=current_user::regrole::oid AND relation.relpersistence='t'
+           AND relation.relnamespace=pg_catalog.pg_my_temp_schema()
+       )
+       AND (SELECT array_agg(attribute.attname||':'||pg_catalog.format_type(attribute.atttypid,attribute.atttypmod)
+              ORDER BY attribute.attnum)
+            FROM pg_catalog.pg_attribute attribute
+            WHERE attribute.attrelid=v_delete_context
+              AND attribute.attnum>0 AND NOT attribute.attisdropped)
+         =ARRAY['candidate_id:uuid','delete_operation_id:uuid','candidate_lock_key:bigint',
+           'backend_pid:integer','transaction_id:bigint','created_at_utc:timestamp with time zone',
+           'suppress:boolean'] THEN
+      -- The delete context is optional.  Keep its only row read behind dynamic
+      -- SQL so an ordinary finance DELETE cannot fail during statement planning
+      -- merely because candidate deletion did not create the temporary table.
+      EXECUTE $delete_context$
+        SELECT EXISTS(
+          SELECT 1
+          FROM pg_temp._bpay_candidate_delete_context_v1 context
+          WHERE context.candidate_id=$1 AND context.suppress
+            AND context.candidate_lock_key=pg_catalog.hashtextextended(
+              public._pay_workbench_candidate_serial_key(context.candidate_id),24062027)
+            AND context.backend_pid=pg_catalog.pg_backend_pid()
+            AND context.transaction_id=pg_catalog.txid_current()
+            AND (SELECT count(*) FROM pg_temp._bpay_candidate_delete_context_v1)=1
+        )
+      $delete_context$ INTO v_delete_context_suppressed USING v_delete_owner_candidate_id;
+    END IF;
+    IF v_delete_context_suppressed THEN
+      RETURN OLD;
+    END IF;
   END IF;
 
   -- The retained pay_advances dirty trigger is recreated as BEFORE ROW.  It

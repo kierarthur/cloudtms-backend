@@ -276,6 +276,9 @@ test('D14 cascade suppression resolves child-row ownership', () => {
   assert.match(markCandidate, /v_trigger_table='candidates'[\s\S]*v_delete_owner_candidate_id:=\(v_old_row->>'id'\)::uuid/);
   assert.match(markCandidate, /v_old_row->>'candidate_id'[\s\S]*v_delete_owner_candidate_id:=\(v_old_row->>'candidate_id'\)::uuid/);
   assert.match(markCandidate, /pg_backend_pid\(\)[\s\S]*txid_current\(\)/);
+  assert.match(markCandidate, /v_delete_context regclass := pg_catalog\.to_regclass\('pg_temp\._bpay_candidate_delete_context_v1'\)/);
+  assert.match(markCandidate, /EXECUTE \$delete_context\$[\s\S]*FROM pg_temp\._bpay_candidate_delete_context_v1 context[\s\S]*\$delete_context\$ INTO v_delete_context_suppressed/);
+  assert.doesNotMatch(markCandidate, /AND EXISTS\(\s*SELECT 1 FROM pg_temp\._bpay_candidate_delete_context_v1 context/);
 });
 test('D15 expected effects are sealed then independently observed', () => {
   assert.match(correctionMigration, /'EXPECTED_FINANCE_EFFECT'/);
