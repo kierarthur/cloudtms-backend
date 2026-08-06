@@ -774,13 +774,8 @@ BEGIN
 
         v_diagnostic := public.pay_payment_cancelability_diagnostic(
             v_batch.id,
-            pg_catalog.jsonb_build_object(
-                'scope_type',
-                'CANDIDATES',
-                'pay_batch_candidate_ids',
-                pg_catalog.jsonb_build_array(v_candidate.pay_batch_candidate_id),
-                'requested_action',
-                v_requested_action
+            v_candidate_selection_json || pg_catalog.jsonb_build_object(
+                'requested_action', v_requested_action
             ),
             v_actor_user_id,
             'PAYMENT_CORRECTION_PLAN'
@@ -794,9 +789,9 @@ BEGIN
             WHEN v_requested_action = 'DRAFT_CANCEL' THEN
                 v_batch.status = 'DRAFT'
                 AND COALESCE(
-                    (v_diagnostic ->> 'requires_bank_check')::boolean,
+                    (v_diagnostic ->> 'can_pre_provider_cancel')::boolean,
                     false
-                ) IS NOT TRUE
+                )
                 AND v_candidate.latest_work_status IS DISTINCT FROM 'BLOCKED'
                 AND v_candidate.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
                 AND v_candidate.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'

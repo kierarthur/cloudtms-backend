@@ -16,6 +16,12 @@ const selectionPrepare = fs.readFileSync(path.join(
   'repeatable',
   '04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql'
 ), 'utf8');
+const correctionStatus = fs.readFileSync(path.join(
+  root,
+  'supabase',
+  'repeatable',
+  '04082026_1145_pay_payment_correction_status_get_v1.sql'
+), 'utf8');
 
 function canonicalProviderState(fixture) {
   const paidOrSettled = fixture.paidOrSettled === true || fixture.unscopedFinalPaid === true;
@@ -51,7 +57,8 @@ function eligibleForFailedRelease(fixture) {
     && fixture.providerSubmissionInProgress !== true
     && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus)
     && fixture.manualCarryForwardBlocked !== true
-    && fixture.carryForwardFreshnessBlocked !== true;
+    && fixture.carryForwardFreshnessBlocked !== true
+    && fixture.scopeIsFull !== false;
 }
 
 function diagnosticCanNoMoneyUnwind(fixture) {
@@ -59,7 +66,8 @@ function diagnosticCanNoMoneyUnwind(fixture) {
     && fixture.providerSubmissionInProgress !== true
     && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus)
     && fixture.manualCarryForwardBlocked !== true
-    && fixture.carryForwardFreshnessBlocked !== true;
+    && fixture.carryForwardFreshnessBlocked !== true
+    && fixture.scopeIsFull !== false;
 }
 
 function eligibleForOrdinaryCancellation(fixture) {
@@ -68,7 +76,8 @@ function eligibleForOrdinaryCancellation(fixture) {
     && fixture.providerSubmissionInProgress !== true
     && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus)
     && fixture.manualCarryForwardBlocked !== true
-    && fixture.carryForwardFreshnessBlocked !== true;
+    && fixture.carryForwardFreshnessBlocked !== true
+    && fixture.scopeIsFull !== false;
 }
 
 function diagnosticCanPreProviderCancel(fixture) {
@@ -182,6 +191,8 @@ test('Current Payment Status has one set-wise failed-release eligibility authori
   assert.match(statusPage, /carry_forward_freshness_blocked IS NOT TRUE/);
   assert.match(statusPage, /provider_submission_in_progress IS NOT TRUE/);
   assert.match(statusPage, /provider_outcome_unknown IS NOT TRUE/);
+  assert.match(statusPage, /AS complete_candidate_instruction_scope/);
+  assert.match(statusPage, /complete_candidate_instruction_scope/);
   assert.doesNotMatch(statusPage, /pay_payment_cancelability_diagnostic\s*\(/);
 
   const classifiedStart = statusPage.indexOf('candidate_classified_index AS MATERIALIZED');
@@ -207,6 +218,8 @@ test('immutable preparation cannot reinstate blocked or failed failed-release wo
   const actionEnd = selectionPrepare.indexOf('v_effective_display_state := CASE', actionStart);
   const action = selectionPrepare.slice(actionStart, actionEnd);
   assert.match(action, /can_no_money_unwind/);
+  assert.match(selectionPrepare, /v_candidate_selection_json \|\| pg_catalog\.jsonb_build_object\(/);
+  assert.match(selectionPrepare, /'pay_batch_item_ids', pg_catalog\.to_jsonb\(v_item_ids\)/);
   for (const status of ['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE']) {
     assert.match(action, new RegExp(`latest_work_status IS DISTINCT FROM '${status}'`));
   }
@@ -222,6 +235,7 @@ test('failed-release safety matrix is closed for every reviewed blocker family',
     latestWorkStatus: null,
     manualCarryForwardBlocked: false,
     carryForwardFreshnessBlocked: false,
+    scopeIsFull: true,
   };
   assert.equal(eligibleForFailedRelease(safe), true);
 
@@ -234,6 +248,7 @@ test('failed-release safety matrix is closed for every reviewed blocker family',
     { latestWorkStatus: 'FAILED_RETRYABLE' },
     { manualCarryForwardBlocked: true },
     { carryForwardFreshnessBlocked: true },
+    { scopeIsFull: false },
     { terminalNoMoney: false },
   ]) {
     assert.equal(eligibleForFailedRelease({ ...safe, ...unsafe }), false, JSON.stringify(unsafe));
@@ -250,6 +265,7 @@ test('terminal no-money outranks historical pending while unknown and paid remai
     latestWorkStatus: null,
     manualCarryForwardBlocked: false,
     carryForwardFreshnessBlocked: false,
+    scopeIsFull: true,
   };
 
   assert.equal(canonicalProviderState({
@@ -365,6 +381,7 @@ test('reviewed and immutable failed-release sets are equal in both directions', 
     { id: 'failed-retryable-work', ...common, terminalNoMoney: true, latestWorkStatus: 'FAILED_RETRYABLE' },
     { id: 'manual-blocker', ...common, terminalNoMoney: true, manualCarryForwardBlocked: true },
     { id: 'freshness-blocker', ...common, terminalNoMoney: true, carryForwardFreshnessBlocked: true },
+    { id: 'partial-shared-scope', ...common, terminalNoMoney: true, scopeIsFull: false },
     { id: 'active', ...common },
   ];
 
@@ -386,6 +403,7 @@ test('ordinary cancellation has one fail-closed reviewed authority and preparati
   assert.match(statusPage, /active_item_count > 0/);
   assert.match(statusPage, /manual_carry_forward_blocked IS NOT TRUE/);
   assert.match(statusPage, /carry_forward_freshness_blocked IS NOT TRUE/);
+  assert.match(statusPage, /complete_candidate_instruction_scope/);
 
   const classifiedStart = statusPage.indexOf('candidate_classified_index AS MATERIALIZED');
   const classifiedEnd = statusPage.indexOf('candidate_filtered_index AS MATERIALIZED', classifiedStart);
@@ -479,6 +497,7 @@ test('reviewed and immutable ordinary-cancellation sets are equal in both direct
   const fixtures = [
     { id: 'plain-local', ...common },
     { id: 'empty-scope', ...common, activeItemCount: 0, scopeIsFull: false },
+    { id: 'partial-shared-scope', ...common, activeItemCount: 1, scopeIsFull: false },
     { id: 'manual-carry-blocker', ...common, manualCarryForwardBlocked: true },
     { id: 'freshness-blocker', ...common, carryForwardFreshnessBlocked: true },
     { id: 'blocked-work', ...common, latestWorkStatus: 'BLOCKED' },
@@ -513,4 +532,58 @@ test('reviewed and immutable ordinary-cancellation sets are equal in both direct
     'plain-local',
     'sentinel-provider-response',
   ]);
+});
+
+test('draft cancellation uses the same provider, full-scope and prior-work authority in both readers', () => {
+  const common = {
+    activeItemCount: 1,
+    scopeIsFull: true,
+    paidOrSettled: false,
+    terminalNoMoney: false,
+    providerPendingNonFinal: false,
+    providerOutcomeUnknown: false,
+    providerOutage: false,
+    providerRequestSent: false,
+    providerEventPresent: false,
+    providerResponsePresent: false,
+    providerExternalIdPresent: false,
+    providerSubmissionInProgress: false,
+    latestWorkStatus: null,
+    manualCarryForwardBlocked: false,
+    carryForwardFreshnessBlocked: false,
+  };
+  const fixtures = [
+    { id: 'local-full', ...common },
+    { id: 'partial-scope', ...common, scopeIsFull: false },
+    { id: 'pending', ...common, providerPendingNonFinal: true },
+    { id: 'unknown', ...common, providerOutcomeUnknown: true },
+    { id: 'submission', ...common, providerSubmissionInProgress: true },
+    { id: 'outage', ...common, providerOutage: true },
+    { id: 'paid', ...common, paidOrSettled: true },
+    { id: 'blocked-work', ...common, latestWorkStatus: 'BLOCKED' },
+    { id: 'failed-final-work', ...common, latestWorkStatus: 'FAILED_FINAL' },
+    { id: 'failed-retryable-work', ...common, latestWorkStatus: 'FAILED_RETRYABLE' },
+  ];
+  const reviewed = fixtures.filter(eligibleForOrdinaryCancellation).map(({ id }) => id).sort();
+  const prepared = fixtures.filter(preparedOrdinaryCancellationEligible).map(({ id }) => id).sort();
+  assert.deepEqual(reviewed, ['local-full']);
+  assert.deepEqual(prepared, reviewed);
+  assert.match(statusPage, /WHEN v_batch\.status = 'DRAFT' AND pre_provider_cancel_eligible/);
+  assert.match(selectionPrepare, /WHEN v_requested_action = 'DRAFT_CANCEL'[\s\S]*can_pre_provider_cancel/);
+});
+
+test('status readers expose only safe selection and actor-tailored progress contracts', () => {
+  assert.match(statusPage, /v_explicit_snapshot_token/);
+  assert.match(statusPage, /'filter', '\{\}'::jsonb/);
+  assert.match(statusPage, /'explicit_snapshot_token', v_explicit_snapshot_token/);
+  assert.doesNotMatch(statusPage, /'operation_id', \(\s*SELECT operation_row\.id/);
+  assert.match(correctionStatus, /pay_payment_correction_request_candidates AS membership/);
+  assert.match(correctionStatus, /v_can_authorise/);
+  assert.match(correctionStatus, /v_can_use_golden_key/);
+  assert.match(correctionStatus, /'selected_amount_pence'/);
+  assert.match(correctionStatus, /'remaining_amount_pence'/);
+  assert.match(correctionStatus, /'percent'/);
+  assert.match(correctionStatus, /'label', blocker_summary\.label/);
+  assert.doesNotMatch(correctionStatus, /'operation_id', v_operation\.id/);
+  assert.doesNotMatch(correctionStatus, /'root_operation_id'/);
 });

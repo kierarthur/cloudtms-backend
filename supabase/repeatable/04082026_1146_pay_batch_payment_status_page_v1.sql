@@ -24,6 +24,7 @@ DECLARE
     v_sort_key text := pg_catalog.upper(pg_catalog.btrim(coalesce(p_sort_key, '')));
     v_sort_direction text := pg_catalog.upper(pg_catalog.btrim(coalesce(p_sort_direction, '')));
     v_snapshot_token text;
+    v_explicit_snapshot_token text;
     v_active_batch_scope_hash text;
     v_rows jsonb := '[]'::jsonb;
     v_row_count integer := 0;
@@ -208,6 +209,19 @@ BEGIN
             'version', 1,
             'active_batch_scope_hash', v_active_batch_scope_hash,
             'filter', v_filter,
+            'sort_key', v_sort_key,
+            'sort_direction', v_sort_direction
+        )
+    );
+
+    -- EXPLICIT selection deliberately carries no filter authority. Bind a
+    -- second token to that exact empty-filter contract so a filtered review
+    -- can still submit an explicit UUID set without changing either scope.
+    v_explicit_snapshot_token := private.pay_payment_correction_sha256_v1(
+        pg_catalog.jsonb_build_object(
+            'version', 1,
+            'active_batch_scope_hash', v_active_batch_scope_hash,
+            'filter', '{}'::jsonb,
             'sort_key', v_sort_key,
             'sort_direction', v_sort_direction
         )
@@ -470,6 +484,23 @@ BEGIN
                  WHERE active_item.pay_batch_candidate_id = candidate_row.id
                    AND COALESCE(active_item.is_voided, false) IS NOT TRUE
                ) THEN 1 ELSE 0 END::integer AS active_item_count,
+               NOT EXISTS (
+                 SELECT 1
+                 FROM public.pay_batch_items AS selected_scope_item
+                 JOIN public.pay_batch_items AS shared_scope_item
+                   ON shared_scope_item.pay_bank_transfer_id = selected_scope_item.pay_bank_transfer_id
+                  AND shared_scope_item.id IS DISTINCT FROM selected_scope_item.id
+                 JOIN public.pay_batch_candidates AS shared_scope_candidate
+                   ON shared_scope_candidate.id = shared_scope_item.pay_batch_candidate_id
+                 WHERE selected_scope_item.pay_batch_candidate_id = candidate_row.id
+                   AND COALESCE(selected_scope_item.is_voided, false) IS NOT TRUE
+                   AND selected_scope_item.pay_bank_transfer_id IS NOT NULL
+                   AND shared_scope_candidate.pay_batch_id = p_pay_batch_id
+                   AND NOT (
+                     shared_scope_item.pay_batch_candidate_id = candidate_row.id
+                     AND COALESCE(shared_scope_item.is_voided, false) IS NOT TRUE
+                   )
+               ) AS complete_candidate_instruction_scope,
                EXISTS (
                  SELECT 1 FROM public.pay_batch_items AS paye_item
                  WHERE paye_item.pay_batch_candidate_id = candidate_row.id
@@ -1013,6 +1044,7 @@ BEGIN
                   AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
                   AND candidate_provider_precedence_index.manual_carry_forward_blocked IS NOT TRUE
                   AND candidate_provider_precedence_index.carry_forward_freshness_blocked IS NOT TRUE
+                  AND candidate_provider_precedence_index.complete_candidate_instruction_scope
                   AND provider_facts.provider_submission_in_progress IS NOT TRUE
                   AND provider_facts.provider_outcome_unknown IS NOT TRUE
                 ) AS release_failed_payment_eligible,
@@ -1033,6 +1065,7 @@ BEGIN
                   AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
                   AND candidate_provider_precedence_index.manual_carry_forward_blocked IS NOT TRUE
                   AND candidate_provider_precedence_index.carry_forward_freshness_blocked IS NOT TRUE
+                  AND candidate_provider_precedence_index.complete_candidate_instruction_scope
                   AND provider_facts.provider_submission_in_progress IS NOT TRUE
                   AND provider_facts.provider_outcome_unknown IS NOT TRUE
                 ) AS pre_provider_cancel_eligible
@@ -1056,7 +1089,9 @@ BEGIN
                  WHEN removed OR paid_or_settled THEN ARRAY[]::text[]
                  WHEN latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
                  WHEN canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY[]::text[]
-                 WHEN v_batch.status = 'DRAFT' THEN ARRAY['DRAFT_CANCEL']::text[]
+                 WHEN v_batch.status = 'DRAFT' AND pre_provider_cancel_eligible
+                   THEN ARRAY['DRAFT_CANCEL']::text[]
+                 WHEN v_batch.status = 'DRAFT' THEN ARRAY[]::text[]
                  WHEN release_failed_payment_eligible THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
                  WHEN ambiguous THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
                  WHEN terminal_no_money THEN ARRAY[]::text[]
@@ -1304,6 +1339,7 @@ BEGIN
                 status_index.terminal_no_money,
                 status_index.ambiguous,
                 status_index.canonical_provider_state,
+                status_index.complete_candidate_instruction_scope,
                 status_index.release_failed_payment_eligible,
                  status_index.pre_provider_cancel_eligible,
                status_index.latest_work_status,
@@ -1344,7 +1380,9 @@ BEGIN
                       WHEN base.removed OR base.paid_or_settled THEN ARRAY[]::text[]
                       WHEN base.latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
                       WHEN base.canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY[]::text[]
-                      WHEN v_batch.status = 'DRAFT' THEN ARRAY['DRAFT_CANCEL']::text[]
+                      WHEN v_batch.status = 'DRAFT' AND base.pre_provider_cancel_eligible
+                        THEN ARRAY['DRAFT_CANCEL']::text[]
+                      WHEN v_batch.status = 'DRAFT' THEN ARRAY[]::text[]
                      WHEN base.release_failed_payment_eligible THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
                     WHEN base.ambiguous THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
                     WHEN base.terminal_no_money THEN ARRAY[]::text[]
@@ -1555,6 +1593,8 @@ BEGIN
                     'payment_display_state', page_rows.payment_display_state,
                     'release_failed_payment_eligible', page_rows.release_failed_payment_eligible,
                     'pre_provider_cancel_eligible', page_rows.pre_provider_cancel_eligible,
+                    'draft_cancel_eligible', v_batch.status = 'DRAFT' AND page_rows.pre_provider_cancel_eligible,
+                    'complete_candidate_instruction_scope', page_rows.complete_candidate_instruction_scope,
                     'available_actions', page_rows.available_actions,
                     'original_payment_amount_pence', page_rows.original_payment_amount_pence,
                     'active_payment_amount_pence', page_rows.active_payment_amount_pence,
@@ -1682,13 +1722,10 @@ BEGIN
             ) THEN 'Payment cancellation in progress'
             ELSE 'Latest payment cancellation'
         END,
-        'operation_id', (
-            SELECT operation_row.id
-            FROM public.banking_pay_operations AS operation_row
-            WHERE operation_row.operation_type = 'PAYMENT_CORRECTION'
-              AND operation_row.input_json->>'correction_request_id' = request_row.id::text
-            ORDER BY operation_row.created_at_utc DESC, operation_row.id DESC
-            LIMIT 1
+        'request_kind', COALESCE(
+            NULLIF(request_row.selection_json->>'requested_action', ''),
+            NULLIF(request_row.plan_json->>'requested_action', ''),
+            request_row.correction_kind
         )
     ))
     INTO v_latest_correction_request
@@ -1710,6 +1747,7 @@ BEGIN
         'ok', true,
         'pay_batch_id', p_pay_batch_id,
         'snapshot_token', v_snapshot_token,
+        'explicit_snapshot_token', v_explicit_snapshot_token,
         'active_batch_scope_hash', v_active_batch_scope_hash,
         'sort_key', v_sort_key,
         'sort_direction', v_sort_direction,

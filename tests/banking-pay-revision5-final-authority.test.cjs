@@ -110,6 +110,9 @@ test('the eleven transaction owners return typed continuation contracts', () => 
     assert.match(source, /'continuation(?:s)?'/i, `${name} continuation result missing`);
     if (name === '04082026_1206_pay_batch_cancel.sql') {
       assert.match(source, /'continuation'\s*,\s*v_result->'continuation'/i, `${name} must forward the transaction-owned descriptor`);
+    } else if (['04082026_1145_pay_payment_correction_status_get_v1.sql', '04082026_1146_pay_batch_payment_status_page_v1.sql'].includes(name)) {
+      assert.match(source, /'required'\s*,\s*false/i, `${name} must return an inert status descriptor`);
+      assert.match(source, /'successor_relation'\s*,\s*'NONE'/i, `${name} successor relation missing`);
     } else {
       assert.match(source, /'required'/i, `${name} required flag missing`);
       assert.match(source, /'operation_id'/i, `${name} operation id missing`);

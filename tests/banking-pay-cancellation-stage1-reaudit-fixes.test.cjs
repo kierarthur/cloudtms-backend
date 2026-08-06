@@ -62,7 +62,8 @@ test('selection replay uses exact cursor sequence, prior digest and scope fence'
 });
 
 test('selection preparation uses exact candidate diagnostics and Current Payment Status precedence', () => {
-  assert.match(selection, /pay_payment_cancelability_diagnostic\([\s\S]*?'scope_type',[\s\S]*?'CANDIDATES'/);
+  assert.match(selection, /v_candidate_selection_json := pg_catalog\.jsonb_build_object\([\s\S]*?'scope_type',[\s\S]*?'CANDIDATES'[\s\S]*?'pay_batch_item_ids'/);
+  assert.match(selection, /pay_payment_cancelability_diagnostic\([\s\S]*?v_candidate_selection_json/);
   assert.match(selection, /AS latest_work_status/);
   assert.match(selection, /latest_work_status = 'BLOCKED'[\s\S]*?THEN 'BLOCKED'/);
   assert.match(selection, /latest_work_status IN \('FAILED_FINAL', 'FAILED_RETRYABLE'\)[\s\S]*?THEN 'FAILED'/);
@@ -120,9 +121,10 @@ test('latest correction progress prefers an active request over terminal history
   const latest = statusPage.slice(statusPage.lastIndexOf('SELECT pg_catalog.jsonb_strip_nulls', latestInto), statusPage.indexOf('LIMIT 1;', latestInto) + 8);
   assert.match(latest, /WHEN request_row\.status IN[\s\S]*'PLANNING'[\s\S]*THEN 0/);
   assert.match(latest, /request_row\.updated_at_utc DESC/);
-  for (const field of ['correction_request_id', 'request_status', 'is_active', 'is_terminal', 'user_title', 'operation_id']) {
+  for (const field of ['correction_request_id', 'request_status', 'is_active', 'is_terminal', 'user_title', 'request_kind']) {
     assert.match(latest, new RegExp(`'${field}'`));
   }
+  assert.doesNotMatch(latest, /'operation_id'/);
 });
 
 test('all correction mutation functions follow guard request batch operation ordering', () => {
