@@ -1099,10 +1099,10 @@ BEGIN
                   AND candidate_provider_precedence_index.canonical_provider_state = 'NO_TRANSFER_EVIDENCE'
                   AND candidate_provider_precedence_index.paid_or_settled IS NOT TRUE
                   AND candidate_provider_precedence_index.ambiguous IS NOT TRUE
-                   AND candidate_provider_precedence_index.provider_request_sent IS NOT TRUE
-                   AND candidate_provider_precedence_index.provider_external_id_present IS NOT TRUE
-                   AND candidate_provider_precedence_index.provider_outcome_unknown IS NOT TRUE
-                   AND candidate_provider_precedence_index.provider_outage IS NOT TRUE
+                  AND candidate_provider_precedence_index.provider_request_sent IS NOT TRUE
+                  AND candidate_provider_precedence_index.provider_external_id_present IS NOT TRUE
+                  AND candidate_provider_precedence_index.provider_outcome_unknown IS NOT TRUE
+                  AND candidate_provider_precedence_index.provider_outage IS NOT TRUE
                   AND candidate_provider_precedence_index.terminal_no_money IS NOT TRUE
                   AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'BLOCKED'
                   AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
