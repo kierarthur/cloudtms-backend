@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay cancellation Revision 5 final catalogue",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 30,
+  "function_count": 31,
   "functions": [
     {
       "schema": "private",
@@ -791,6 +791,36 @@
       ],
       "source_files": [
         "supabase/repeatable/04082026_1145_pay_payment_correction_status_get_v1.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_payment_correction_retry_planning_v1",
+      "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
+      "definition_sha256": "6fc16cca782b244ad45c5d9bbd700c14159bbbfc3bc5d390e35f599a2ebd2f42",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=pg_catalog, private, extensions, pg_temp",
+        "statement_timeout=5000ms",
+        "lock_timeout=1000ms"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/07082026_1538_pay_payment_correction_retry_planning_v1.sql"
       ]
     },
     {
