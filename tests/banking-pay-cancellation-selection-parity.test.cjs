@@ -22,6 +22,12 @@ const correctionStatus = fs.readFileSync(path.join(
   'repeatable',
   '04082026_1145_pay_payment_correction_status_get_v1.sql'
 ), 'utf8');
+const catalogueFunctions = fs.readFileSync(path.join(
+  root,
+  'supabase',
+  'repeatable',
+  '26052026_2100HRS_NEW_FUNCTIONS.sql'
+), 'utf8');
 
 function canonicalProviderState(fixture) {
   const paidOrSettled = fixture.paidOrSettled === true || fixture.unscopedFinalPaid === true;
@@ -42,7 +48,14 @@ function canonicalProviderState(fixture) {
 
   if (paidOrSettled) return 'FINAL_PAID';
   if (providerOutcomeUnknown) return 'PROVIDER_OUTCOME_UNKNOWN';
-  if ((providerPendingNonFinal || providerRequestSent || fixture.providerSubmissionInProgress === true)
+  const effectiveProviderPending = providerPendingNonFinal
+    && (fixture.localPreparedOnly !== true
+      || providerRequestSent
+      || providerExternalIdPresent
+      || fixture.providerSubmissionInProgress === true);
+
+  if ((effectiveProviderPending || providerRequestSent || providerExternalIdPresent
+      || fixture.providerSubmissionInProgress === true)
       && !terminalNoMoney && !paidOrSettled) return 'PENDING_NON_FINAL';
   if (providerOutage
       && !providerRequestSent
@@ -87,7 +100,7 @@ function diagnosticCanPreProviderCancel(fixture) {
     || fixture.providerResponsePresent === true;
   const localNotSent = fixture.paidOrSettled !== true
     && fixture.terminalNoMoney !== true
-    && fixture.providerPendingNonFinal !== true
+    && (fixture.providerPendingNonFinal !== true || fixture.localPreparedOnly === true)
     && fixture.providerOutcomeUnknown !== true
     && fixture.providerOutage !== true
     && fixture.unscopedTerminalNoMoney !== true
@@ -426,6 +439,39 @@ test('ordinary cancellation has one fail-closed reviewed authority and preparati
       assert.match(branchBody, new RegExp(`latest_work_status IS DISTINCT FROM '${status}'`));
     }
   }
+});
+
+test('locally prepared pending transfers remain cancellable until provider evidence exists', () => {
+  const scheduledLocalPending = {
+    activeItemCount: 1,
+    scopeIsFull: true,
+    providerPendingNonFinal: true,
+    localPreparedOnly: true,
+    providerRequestSent: false,
+    providerEventPresent: false,
+    providerResponsePresent: false,
+    providerExternalIdPresent: false,
+    providerSubmissionInProgress: false,
+    latestWorkStatus: null,
+    manualCarryForwardBlocked: false,
+    carryForwardFreshnessBlocked: false,
+  };
+
+  assert.equal(canonicalProviderState(scheduledLocalPending), 'NO_TRANSFER_EVIDENCE');
+  assert.equal(eligibleForOrdinaryCancellation(scheduledLocalPending), true);
+  assert.equal(preparedOrdinaryCancellationEligible(scheduledLocalPending), true);
+
+  const providerPending = { ...scheduledLocalPending, providerRequestSent: true };
+  assert.equal(canonicalProviderState(providerPending), 'PENDING_NON_FINAL');
+  assert.equal(eligibleForOrdinaryCancellation(providerPending), false);
+  assert.equal(preparedOrdinaryCancellationEligible(providerPending), false);
+
+  assert.match(statusPage, /provider_pending_non_final[\s\S]*provider_event_present/);
+  assert.match(statusPage, /provider_external_id_present[\s\S]*provider_submission_in_progress/);
+  assert.match(
+    catalogueFunctions,
+    /CASE WHEN v_local_prepared_only THEN 0 ELSE v_transfer_pending_count END/
+  );
 });
 
 test('operation and chunk provider payload aliases match provider-evidence empty and sentinel semantics', () => {

@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "43e3e84f8bb5cdac95a4959458a94129fed097925e6c5430a258a7027b9bbcf0",
+      "definition_sha256": "51de5b8a777183b75db590a6e056f6cb26521880d5f0d3b3cab7e2699c763078",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -894,7 +894,7 @@
       "schema": "public",
       "name": "pay_payment_cancelability_diagnostic",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_actor_user_id uuid, p_diagnostic_context text",
-      "definition_sha256": "a7583c3f250c81c581344840a3f864aee2c514c5d402f54ef42484c0bc619da1",
+      "definition_sha256": "f3fdf3ba363f82f62b26040e6f24d90294d2accaeea125b14ea8203972de8319",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

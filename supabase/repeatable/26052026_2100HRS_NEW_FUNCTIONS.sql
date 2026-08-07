@@ -125145,7 +125145,14 @@ BEGIN
 
   v_final_evidence_count := v_transfer_final_count + v_event_final_count;
   v_terminal_no_money_count := v_transfer_terminal_no_money_count + v_event_terminal_no_money_count;
-  v_pending_provider_count := v_transfer_pending_count + v_event_pending_count + CASE WHEN v_provider_submitted OR v_provider_request_sent THEN 1 ELSE 0 END;
+  -- A locally prepared transfer is stored as PENDING before any provider call.
+  -- Do not turn that local row into provider-pending authority when the central
+  -- evidence classifier proves that nothing was submitted or sent. Provider
+  -- events and explicit request/submission evidence remain fail-closed.
+  v_pending_provider_count :=
+    CASE WHEN v_local_prepared_only THEN 0 ELSE v_transfer_pending_count END
+    + v_event_pending_count
+    + CASE WHEN v_provider_submitted OR v_provider_request_sent THEN 1 ELSE 0 END;
   v_unknown_provider_count := v_event_unknown_count + CASE
     WHEN v_provider_outage_count > 0 OR v_provider_blocker_code = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 0
     WHEN v_provider_evidence_class = 'PROVIDER_OUTCOME_UNKNOWN' OR v_provider_blocker_code = 'PAYMENT_OUTCOME_UNKNOWN_CHECK_PROVIDER' THEN 1

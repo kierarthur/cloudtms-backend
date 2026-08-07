@@ -431,6 +431,7 @@ BEGIN
                 nullif(pg_catalog.btrim(coalesce(unscoped_event.provider_transaction_id, '')), '') IS NOT NULL
                 OR nullif(pg_catalog.btrim(coalesce(unscoped_event.provider_event_key, '')), '') IS NOT NULL
             ), false) AS provider_external_id_present,
+            coalesce(pg_catalog.bool_or(true), false) AS provider_event_present,
             coalesce(pg_catalog.bool_or(
                 nullif(pg_catalog.btrim(coalesce(unscoped_event.provider_transaction_id, '')), '') IS NOT NULL
                 OR nullif(pg_catalog.btrim(coalesce(unscoped_event.provider_event_key, '')), '') IS NOT NULL
@@ -835,6 +836,17 @@ BEGIN
                       )
                  )
                ) AS provider_external_id_present,
+               (
+                 unscoped_event_facts.provider_event_present
+                 OR EXISTS (
+                    SELECT 1
+                    FROM public.pay_batch_items AS provider_event_item
+                    JOIN public.pay_bank_transfer_events AS provider_event
+                      ON provider_event.pay_bank_transfer_id = provider_event_item.pay_bank_transfer_id
+                    WHERE provider_event_item.pay_batch_candidate_id = candidate_row.id
+                      AND provider_event.pay_batch_id = p_pay_batch_id
+                 )
+               ) AS provider_event_present,
                EXISTS (
                  SELECT 1
                  FROM public.pay_batch_items AS manual_item
@@ -1023,11 +1035,15 @@ BEGIN
                  WHEN candidate_status_index.paid_or_settled THEN 'FINAL_PAID'
                  WHEN candidate_status_index.provider_outcome_unknown
                       OR provider_facts.provider_outcome_unknown THEN 'PROVIDER_OUTCOME_UNKNOWN'
-                 WHEN (
-                        candidate_status_index.provider_pending_non_final
-                        OR candidate_status_index.provider_request_sent
-                        OR provider_facts.provider_submission_in_progress
-                      )
+                  WHEN (
+                         candidate_status_index.provider_request_sent
+                         OR candidate_status_index.provider_external_id_present
+                         OR provider_facts.provider_submission_in_progress
+                         OR (
+                           candidate_status_index.provider_pending_non_final
+                           AND candidate_status_index.provider_event_present
+                         )
+                       )
                       AND candidate_status_index.terminal_no_money IS NOT TRUE
                       AND candidate_status_index.paid_or_settled IS NOT TRUE
                    THEN 'PENDING_NON_FINAL'
@@ -1043,11 +1059,15 @@ BEGIN
                  candidate_status_index.provider_outcome_unknown
                  OR provider_facts.provider_outcome_unknown
                  OR (
-                   (
-                     candidate_status_index.provider_pending_non_final
-                     OR candidate_status_index.provider_request_sent
-                     OR provider_facts.provider_submission_in_progress
-                   )
+                    (
+                      candidate_status_index.provider_request_sent
+                      OR candidate_status_index.provider_external_id_present
+                      OR provider_facts.provider_submission_in_progress
+                      OR (
+                        candidate_status_index.provider_pending_non_final
+                        AND candidate_status_index.provider_event_present
+                      )
+                    )
                    AND candidate_status_index.terminal_no_money IS NOT TRUE
                    AND candidate_status_index.paid_or_settled IS NOT TRUE
                  )
