@@ -39520,16 +39520,53 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       });
     }
 
+    let failedLocalArtifactCleanup = null;
+    let failedLocalArtifactCleanupError = null;
     if (!releaseFailure) {
       try {
-        await rpc('pay_execute_operation_cleanup_failed_local_artifacts', {
+        failedLocalArtifactCleanup = await rpc('pay_execute_operation_cleanup_failed_local_artifacts', {
           p_operation_id: operationId,
           p_actor_user_id: actorUserId,
           p_failure_phase: currentPhase,
           p_failure_error_json: { message: String(error && error.message ? error.message : error), name: error && error.name ? String(error.name) : null },
           p_dry_run: false
         }, 'pay_execute_operation_cleanup_failed_local_artifacts');
+      } catch (cleanupError) {
+        failedLocalArtifactCleanupError = compactErrorMessage(cleanupError, 400);
+      }
+    }
+
+    const cleanupResult = safeObject(failedLocalArtifactCleanup);
+    const cleanupMadeRetrySafe = !releaseFailure
+      && cleanupResult.ok !== false
+      && cleanupResult.safe_to_retry === true
+      && cleanupResult.retry_blocked === false
+      && cleanupResult.review_required === false;
+
+    if (cleanupMadeRetrySafe) {
+      let latest = {};
+      try {
+        latest = await fetchOperationRawById(operationId);
       } catch {}
+      const latestPublic = publicPayload(latest);
+      return Object.assign({}, latestPublic, {
+        ok: false,
+        status: upper(latest.status || latestPublic.status || 'FAILED') || 'FAILED',
+        phase: latest.phase || latestPublic.phase || currentPhase,
+        runner_state: latest.runner_state || latestPublic.runner_state || 'FAILED',
+        terminal: true,
+        requires_user_action: false,
+        review_required: false,
+        safe_to_retry: true,
+        retryable_pre_provider_failure: true,
+        code: 'PAYMENT_EXECUTE_PRE_PROVIDER_FAILURE_RETRYABLE',
+        message: 'Payment execution stopped before provider submission. The local attempt was safely cleaned up and may be retried.',
+        cleanup: cleanupResult,
+        bounded_advance: true,
+        advanced_phase: currentPhase,
+        next_phase: null,
+        already_released_after_advance: true
+      });
     }
 
     const reviewCode = releaseFailure && providerEvidence && providerEvidence.provider_call_started === true
@@ -39557,7 +39594,9 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
       error_name: error && error.name ? String(error.name) : null,
       last_rpc_failure: reviewDiagnostic,
       provider_evidence_state: providerEvidence,
-      release_failure_checked_provider_evidence: releaseFailure === true
+      release_failure_checked_provider_evidence: releaseFailure === true,
+      failed_local_artifact_cleanup: Object.keys(cleanupResult).length ? cleanupResult : null,
+      failed_local_artifact_cleanup_error: failedLocalArtifactCleanupError
     });
   }
 }
@@ -43106,6 +43145,78 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
     if (rawResponse instanceof Response) return typeof withCORS === 'function' ? withCORS(env, req, rawResponse) : rawResponse;
     return fail(401, 'REAUTH_VERIFICATION_FAILED', 'Payment verification failed.');
   }
+
+  const retryPreProviderFailure = body.retry_pre_provider_failure === true || body.retryPreProviderFailure === true;
+  const retryPreProviderOperationId = trimStr(body.retry_pre_provider_operation_id || body.retryPreProviderOperationId);
+  if (retryPreProviderFailure && !uuidRe.test(retryPreProviderOperationId)) {
+    return fail(400, 'RETRY_PRE_PROVIDER_OPERATION_ID_REQUIRED', 'Refresh the batch before retrying this payment.');
+  }
+
+  let retryPreProviderCleanup = null;
+  if (retryPreProviderFailure) {
+    let priorOperation = null;
+    try {
+      const { rows: priorOperationRows } = await sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${encodeURIComponent(retryPreProviderOperationId)}&pay_batch_id=eq.${encodeURIComponent(id)}&operation_type=eq.PAYMENT_EXECUTE&status=eq.REVIEW_REQUIRED&select=id,pay_batch_id,operation_type,status,phase,resume_reason,error_json,progress_json&limit=1`,
+        false
+      );
+      priorOperation = Array.isArray(priorOperationRows) && isPlainObject(priorOperationRows[0]) ? priorOperationRows[0] : null;
+    } catch {}
+
+    const priorError = isPlainObject(priorOperation?.error_json) ? priorOperation.error_json : {};
+    const priorProgress = isPlainObject(priorOperation?.progress_json) ? priorOperation.progress_json : {};
+    const priorFailureCode = upperTrim(priorOperation?.resume_reason || priorError.code || priorError.error_code || priorProgress.code || priorProgress.error_code);
+    if (!priorOperation || priorFailureCode !== 'PAYMENT_EXECUTE_OPERATION_FAILED') {
+      return fail(409, 'PAYMENT_EXECUTION_RETRY_REQUIRES_REVIEW', 'This payment attempt cannot be retried automatically. Review Current Payment Status before continuing.', {
+        pay_batch_id: id,
+        retry_operation_id: retryPreProviderOperationId,
+        review_required: true,
+        safe_to_retry: false
+      });
+    }
+
+    try {
+      retryPreProviderCleanup = unwrapObjectRpc(await sbRpc(env, 'pay_execute_operation_cleanup_failed_local_artifacts', {
+        p_operation_id: retryPreProviderOperationId,
+        p_actor_user_id: actorUserId,
+        p_failure_phase: trimStr(priorOperation.phase) || null,
+        p_failure_error_json: {
+          code: 'PAYMENT_EXECUTE_OPERATION_FAILED',
+          source: 'handleBankingPayBatchExecutePayment',
+          explicit_retry_requested: true
+        },
+        p_dry_run: false
+      }), 'pay_execute_operation_cleanup_failed_local_artifacts');
+    } catch (cleanupError) {
+      return fail(409, 'PAYMENT_EXECUTION_RETRY_CLEANUP_FAILED', 'CloudTMS could not safely prepare the earlier attempt for retry. No new payment attempt was started.', {
+        pay_batch_id: id,
+        retry_operation_id: retryPreProviderOperationId,
+        review_required: true,
+        safe_to_retry: false,
+        internal_diagnostic: String(cleanupError?.message || cleanupError || 'cleanup failed').slice(0, 400)
+      });
+    }
+
+    const cleanupBatchId = trimStr(retryPreProviderCleanup.pay_batch_id || retryPreProviderCleanup.payBatchId);
+    const cleanupOperationId = trimStr(retryPreProviderCleanup.operation_id || retryPreProviderCleanup.operationId);
+    const cleanupIsSafe = retryPreProviderCleanup.ok !== false
+      && cleanupBatchId === id
+      && cleanupOperationId === retryPreProviderOperationId
+      && retryPreProviderCleanup.safe_to_retry === true
+      && retryPreProviderCleanup.retry_blocked === false
+      && retryPreProviderCleanup.review_required === false;
+    if (!cleanupIsSafe) {
+      return fail(409, 'PAYMENT_EXECUTION_RETRY_REQUIRES_REVIEW', 'The earlier payment attempt contains evidence that prevents automatic retry. No new payment attempt was started.', {
+        pay_batch_id: id,
+        retry_operation_id: retryPreProviderOperationId,
+        review_required: true,
+        safe_to_retry: false,
+        retry_blocked_reason: trimStr(retryPreProviderCleanup.retry_blocked_reason) || null
+      });
+    }
+  }
+
   const loadScopedProjectionProof = async () => {
     const rows = unwrapRowsRpc(await sbRpc(env, '_pay_batch_bank_payment_projection_rows', {
       p_pay_batch_id: id,
@@ -43509,6 +43620,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       scheduled_at_utc: scheduledAtUtc,
       funding_account_ref: fundingAccountRef,
       retry_blocked_funds: false,
+      retry_pre_provider_failure: retryPreProviderFailure,
+      retry_pre_provider_operation_id: retryPreProviderFailure ? retryPreProviderOperationId : null,
       suppress_remittances: suppressRemittances,
       suppress_remittances_confirmed: suppressRemittancesConfirmed,
       warning_hours_json: warningHoursJson,
@@ -43555,6 +43668,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       warning_hours_json: warningHoursJson,
       actor_intent: actorIntent,
       retry_blocked_funds: false,
+      retry_pre_provider_failure: retryPreProviderFailure,
+      retry_pre_provider_operation_id: retryPreProviderFailure ? retryPreProviderOperationId : null,
       suppress_remittances: suppressRemittances,
       suppress_remittances_confirmed: suppressRemittancesConfirmed,
       csv_uploaded_confirmed: executionMode === 'CSV_SETTLEMENT' ? csvUploadedConfirmed : false,
@@ -43703,6 +43818,8 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
       ok: true,
       operation_created: operationCreated,
       operation_reused: operationReused,
+      retry_pre_provider_failure_recovered: retryPreProviderFailure,
+      retry_pre_provider_cleanup: retryPreProviderFailure ? retryPreProviderCleanup : null,
       active_operation_reused: operationReused,
       existing_active_operation: operationReused,
       active_execution_already_exists: operationReused,
