@@ -256,6 +256,11 @@ BEGIN
           completed_at_utc = v_now,
           failed_at_utc = NULL::timestamptz,
           last_error_json = NULL::jsonb,
+          economic_build_id = NULL::uuid,
+          private_stage = NULL::text,
+          private_cursor_kind = NULL::text,
+          private_cursor_json = '{}'::jsonb,
+          private_stage_version = NULL::integer,
           payload_json = COALESCE(targeted_job.payload_json, '{}'::jsonb) || jsonb_build_object(
             'superseded_by_cancel_full_candidate_refresh', true,
             'superseding_session_id', p_session_id::text,

@@ -56,6 +56,7 @@ DECLARE
   v_refresh_cursor bigint := 0;
   v_refresh_next bigint := 0;
   v_refresh_candidate_ids jsonb := '[]'::jsonb;
+  v_refresh_pay_batch_item_ids jsonb := '[]'::jsonb;
   v_refresh_count integer := 0;
   v_refresh_has_more boolean := false;
   v_refresh_result jsonb := '{}'::jsonb;
@@ -1252,6 +1253,23 @@ BEGIN
     INTO v_refresh_candidate_ids, v_refresh_count, v_refresh_next
     FROM refresh_page;
 
+    SELECT COALESCE(
+             pg_catalog.jsonb_agg(item_scope.pay_batch_item_id::text ORDER BY item_scope.pay_batch_item_id),
+             '[]'::jsonb
+           )
+    INTO v_refresh_pay_batch_item_ids
+    FROM (
+      SELECT DISTINCT correction_item.pay_batch_item_id
+      FROM public.pay_payment_correction_items AS correction_item
+      WHERE correction_item.correction_request_id = p_correction_request_id
+        AND correction_item.status = 'APPLIED'
+        AND correction_item.pay_batch_item_id IS NOT NULL
+        AND correction_item.candidate_id IN (
+          SELECT candidate_value.value::uuid
+          FROM pg_catalog.jsonb_array_elements_text(v_refresh_candidate_ids) AS candidate_value(value)
+        )
+    ) AS item_scope;
+
     v_refresh_has_more := EXISTS (
       SELECT 1
       FROM public.pay_payment_correction_request_candidates AS member_row
@@ -1301,15 +1319,31 @@ BEGIN
           'code', 'REFRESH_RETRY',
           'session_id', v_session_id
         )::text;
-    ELSIF v_requested_action = 'DRAFT_CANCEL' THEN
+    ELSIF v_requested_action IN ('DRAFT_CANCEL', 'PRE_BANK_CANCEL', 'NO_MONEY_UNWIND') THEN
+      -- This helper's DRAFT_CANCEL operation type names the Workbench overlay
+      -- reversal (not the economic cancellation mode).  Every successfully
+      -- cancelled batch must retire the same active-batch reservation overlay
+      -- before the bounded live-truth refresh is queued, whether the frozen
+      -- correction action was draft, pre-bank, or terminal-no-money release.
       v_refresh_result := public.pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1(
-        v_session_id, v_request.pay_batch_id, 'PAYMENT_CORRECTION_DRAFT_CANCEL', v_refresh_actor_user_id,
+        v_session_id, v_request.pay_batch_id, 'DRAFT_CANCEL', v_refresh_actor_user_id,
         pg_catalog.jsonb_build_object(
           'correction_request_id', p_correction_request_id,
+          'correction_action', v_requested_action,
           'candidate_ids', v_refresh_candidate_ids,
+          'changed_pay_batch_item_ids', v_refresh_pay_batch_item_ids,
           'maximum_candidate_count', 100
         )
       );
+      IF COALESCE((v_refresh_result->>'ok')::boolean, false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_OVERLAY_RESTORE_RETRY'
+          USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+            'code', 'REFRESH_RETRY',
+            'reason', COALESCE(v_refresh_result->>'fallback_reason', 'WORKBENCH_OVERLAY_RESTORE_FAILED'),
+            'session_id', v_session_id,
+            'candidate_count', v_refresh_count
+          )::text;
+      END IF;
     ELSE
       v_refresh_result := public.pay_workbench_enqueue_candidate_refresh_many(
         v_session_id, v_refresh_candidate_ids, 'PAYMENT_CORRECTION_FINALISED', v_refresh_actor_user_id

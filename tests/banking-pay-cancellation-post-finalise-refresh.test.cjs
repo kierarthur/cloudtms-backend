@@ -24,6 +24,12 @@ test('the post-financial refresh phase stages Workbench work and does not repeat
   assert.ok(start > 0 && end > start);
   const body = processChunk.slice(start, end);
   assert.match(body, /pay_workbench_enqueue_candidate_refresh_many\s*\(/);
+  assert.match(body, /pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1\s*\(/);
+  assert.match(body, /v_requested_action\s+IN\s*\('DRAFT_CANCEL',\s*'PRE_BANK_CANCEL',\s*'NO_MONEY_UNWIND'\)/);
+  assert.match(body, /v_session_id,\s*v_request\.pay_batch_id,\s*'DRAFT_CANCEL'/);
+  assert.match(body, /'changed_pay_batch_item_ids',\s*v_refresh_pay_batch_item_ids/);
+  assert.match(body, /public\.pay_payment_correction_items\s+AS\s+correction_item/);
+  assert.match(body, /PAYMENT_CORRECTION_WORKBENCH_OVERLAY_RESTORE_RETRY/);
   assert.match(body, /workbench_refresh_status/);
   assert.doesNotMatch(body, /pay_pre_bank_cancel_apply_work_item\s*\(/);
   assert.doesNotMatch(body, /pay_no_money_unwind_apply_work_item\s*\(/);

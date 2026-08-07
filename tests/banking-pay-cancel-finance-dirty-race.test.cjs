@@ -35,6 +35,11 @@ test('cancellation supersession is successful terminal work with durable audit m
   assert.match(sql, /completed_at_utc = v_now/);
   assert.match(sql, /failed_at_utc = NULL::timestamptz/);
   assert.match(sql, /last_error_json = NULL::jsonb/);
+  assert.match(sql, /economic_build_id = NULL::uuid/);
+  assert.match(sql, /private_stage = NULL::text/);
+  assert.match(sql, /private_cursor_kind = NULL::text/);
+  assert.match(sql, /private_cursor_json = '\{\}'::jsonb/);
+  assert.match(sql, /private_stage_version = NULL::integer/);
   assert.match(sql, /'completion_code', 'WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH'/);
   assert.match(sql, /'completion_code', 'WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH'/);
   assert.match(sql, /'superseding_session_id', p_session_id::text/);
