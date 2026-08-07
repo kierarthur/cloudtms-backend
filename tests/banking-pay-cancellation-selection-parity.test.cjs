@@ -468,6 +468,10 @@ test('locally prepared pending transfers remain cancellable until provider evide
 
   assert.match(statusPage, /provider_pending_non_final[\s\S]*provider_event_present/);
   assert.match(statusPage, /provider_external_id_present[\s\S]*provider_submission_in_progress/);
+  const eligibilityStart = statusPage.indexOf('candidate_release_eligibility_index AS MATERIALIZED');
+  const eligibilityEnd = statusPage.indexOf('candidate_classified_index AS MATERIALIZED', eligibilityStart);
+  const eligibility = statusPage.slice(eligibilityStart, eligibilityEnd);
+  assert.doesNotMatch(eligibility, /provider_pending_non_final IS NOT TRUE/);
   assert.match(
     catalogueFunctions,
     /CASE WHEN v_local_prepared_only THEN 0 ELSE v_transfer_pending_count END/

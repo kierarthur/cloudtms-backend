@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "96ebc9dfbe1e1e3afbeffad30cbc8bbf4eeb850b6f9084b34d69614559a9554f",
+      "definition_sha256": "11b65039db9a131fc4a34f7734ac4f4766c0bdf710f71727c8752b1995ba23f1",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
