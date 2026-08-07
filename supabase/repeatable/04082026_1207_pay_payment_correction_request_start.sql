@@ -758,43 +758,7 @@ BEGIN
         FROM public.banking_pay_batch_change_signals AS signal_row
         WHERE signal_row.pay_batch_id = v_batch.id
       ),
-      'candidate_count', (
-        SELECT pg_catalog.count(*)
-        FROM public.pay_batch_candidates AS candidate_row
-        WHERE candidate_row.pay_batch_id = v_batch.id
-      ),
-      'active_item_count', (
-        SELECT pg_catalog.count(*)
-        FROM public.pay_batch_items AS item_row
-        JOIN public.pay_batch_candidates AS candidate_row
-          ON candidate_row.id = item_row.pay_batch_candidate_id
-        WHERE candidate_row.pay_batch_id = v_batch.id
-          AND coalesce(item_row.is_voided, false) IS NOT TRUE
-      ),
-      'transfer_marker', (
-        SELECT pg_catalog.jsonb_build_object(
-          'count', pg_catalog.count(*),
-          'latest_updated_at', pg_catalog.max(transfer_row.updated_at)
-        )
-        FROM public.pay_bank_transfers AS transfer_row
-        WHERE transfer_row.pay_batch_id = v_batch.id
-      ),
-      'latest_request_update', (
-        SELECT pg_catalog.max(other_request.updated_at_utc)
-        FROM public.pay_payment_correction_requests AS other_request
-        WHERE other_request.pay_batch_id = v_batch.id
-          AND other_request.status NOT IN ('PLANNING', 'PLANNED')
-      ),
-      'latest_provider_event', (
-        SELECT pg_catalog.max(event_row.received_at_utc)
-        FROM public.pay_bank_transfer_events AS event_row
-        WHERE event_row.pay_batch_id = v_batch.id
-      ),
-      'provider_event_count', (
-        SELECT pg_catalog.count(*)
-        FROM public.pay_bank_transfer_events AS event_row
-        WHERE event_row.pay_batch_id = v_batch.id
-      )
+      'scope_version_authority', 'banking_pay_batch_change_signals'
     )
   );
 

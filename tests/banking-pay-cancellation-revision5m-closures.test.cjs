@@ -85,3 +85,17 @@ test('failed-payment release has server-owned processing wording', () => {
   assert.match(progressStatus, /Releasing failed payments/);
   assert.match(progressStatus, /releasing the selected failed payments/);
 });
+
+test('prepared cancellation start reuses the exact constant-size planning fence', () => {
+  const fences = Array.from(requestStart.matchAll(
+    /v_active_scope_hash := private\.pay_payment_correction_sha256_v1\(\s*pg_catalog\.jsonb_build_object\(([\s\S]*?'scope_version_authority'\s*,\s*'banking_pay_batch_change_signals')\s*\)\s*\);/g
+  )).map((match) => match[1]);
+  assert.equal(fences.length, 2);
+
+  const [planningFence, startFence] = fences;
+  const normalise = (value) => value.replace(/^\s+/gm, '').replace(/\s+/g, ' ').trim();
+
+  assert.equal(normalise(startFence), normalise(planningFence));
+  assert.match(startFence, /'scope_version_authority', 'banking_pay_batch_change_signals'/);
+  assert.doesNotMatch(startFence, /transfer_row\.updated_at|candidate_count|active_item_count|provider_event_count/);
+});

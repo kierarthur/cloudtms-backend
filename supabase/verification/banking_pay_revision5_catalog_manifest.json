@@ -708,7 +708,7 @@
       "schema": "public",
       "name": "pay_payment_correction_request_start",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_reason text, p_actor_user_id uuid, p_source_bank_event_id uuid, p_auto_requested boolean, p_accepted_resolution_json jsonb",
-      "definition_sha256": "5f96ca1e211758092da4fd595c92055bba0f2cfef5be7ea7bbab7f4846a430e6",
+      "definition_sha256": "31417c4ecec4a1d46fceeba4fd99c5d01879aa1b4f9ee332e19b02d38bf4f3af",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
