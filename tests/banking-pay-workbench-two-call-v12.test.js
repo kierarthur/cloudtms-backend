@@ -279,13 +279,22 @@ test('terminal material completion reaches public successful-source reconciliati
     'UPDATE public.banking_pay_workbench_jobs AS update_job',
     sourceCountParsingStart,
   );
-  const terminalScopeClear = complete.indexOf(
-    'SET pending_job_id = NULL::uuid',
+  const certifiedPublicationCall = complete.indexOf(
+    'private.pay_workbench_publish_certified_source_preview_v1(',
     reconciliationCall,
   );
+  const certifiedScopeFinalisation = complete.indexOf(
+    'UPDATE public.banking_pay_workbench_session_scope AS certified_scope',
+    certifiedPublicationCall,
+  );
   assert.ok(reconciliationCall > sourceCountParsingStart);
-  assert.ok(terminalJobUpdate > sourceCountParsingStart && terminalJobUpdate < reconciliationCall);
-  assert.ok(terminalScopeClear > reconciliationCall);
+  assert.ok(certifiedPublicationCall > reconciliationCall);
+  assert.ok(certifiedScopeFinalisation > certifiedPublicationCall);
+  assert.match(
+    complete.slice(certifiedScopeFinalisation, terminalJobUpdate),
+    /pending_job_id = NULL::uuid/i,
+  );
+  assert.ok(terminalJobUpdate > certifiedScopeFinalisation);
 });
 
 test('expired delivered attempts wait for cancellation grace and receive a new nonce on retry', () => {
