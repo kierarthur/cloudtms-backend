@@ -250,26 +250,20 @@ jobs:
             echo "BASELINE complete for unchanged repeatables."
           fi
 
-          REAPPLY_AFTER_EARLIER_CHANGE=false
           for f in "${REP_FILES_SORTED[@]}"; do
             base="$(basename "$f")"
             content_hash="$(repeatable_hash "$f")"
             installed_hash="${REPEATABLE_LEDGER_HASHES[$base]:-}"
 
-            if [[ "$installed_hash" == "$content_hash" && "$REAPPLY_AFTER_EARLIER_CHANGE" != "true" ]]; then
+            if [[ "$installed_hash" == "$content_hash" ]]; then
               echo "SKIP unchanged repeatable: $base"
               continue
             fi
 
-            if [[ "$installed_hash" == "$content_hash" ]]; then
-              echo "REAPPLY unchanged later repeatable after earlier authority change: $base"
-            else
-              echo "APPLY new/changed repeatable: $base"
-            fi
+            echo "APPLY new/changed repeatable: $base"
             apply_file "$f"
             record_repeatable_hash "$base" "$content_hash"
             REPEATABLE_LEDGER_HASHES["${base}"]="${content_hash}"
-            REAPPLY_AFTER_EARLIER_CHANGE=true
           done
 
           if [[ "${REPEATABLE_BOOTSTRAP_COMPLETE}" != "v1" ]]; then

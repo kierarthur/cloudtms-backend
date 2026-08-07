@@ -146,8 +146,10 @@ test('cancellation mutation routes fail closed and proof binding uses the locked
   assert.doesNotMatch(worker, /p_reason:\s*String\(body\?\.reason\s*\|\|\s*'DRAFT_PAYMENT_CANCELLED_BY_USER'/);
 });
 
-test('repeatable runner reapplies later authorities after an earlier change', () => {
+test('repeatable runner applies only new or content-changed files', () => {
   const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'supabase-migrate.yml'), 'utf8');
-  assert.match(workflow, /REAPPLY_AFTER_EARLIER_CHANGE=false/);
-  assert.match(workflow, /REAPPLY unchanged later repeatable after earlier authority change/);
+  assert.match(workflow, /if \[\[ "\$installed_hash" == "\$content_hash" \]\]; then[\s\S]+?SKIP unchanged repeatable/);
+  assert.match(workflow, /APPLY new\/changed repeatable/);
+  assert.doesNotMatch(workflow, /REAPPLY_AFTER_EARLIER_CHANGE/);
+  assert.doesNotMatch(workflow, /REAPPLY unchanged later repeatable after earlier authority change/);
 });
