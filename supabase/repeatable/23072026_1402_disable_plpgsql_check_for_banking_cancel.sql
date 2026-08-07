@@ -7,6 +7,8 @@
 -- involved in draft cancellation and its post-cancel workbench refresh. This
 -- changes no cancellation scope, reservation state, frozen batch artefact,
 -- finance calculation, remittance behaviour, or Policy X authority.
+-- Reasserted after the final retirement of obsolete monolithic Workbench
+-- owners so any one-time monolith replay cannot reset this function setting.
 
 ALTER FUNCTION public.pay_payment_cancelability_diagnostic(
   uuid,
