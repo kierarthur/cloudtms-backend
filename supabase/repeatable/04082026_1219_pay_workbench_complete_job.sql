@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope Version 1.2.4
+-- Banking Pay bounded-scope Version 1.2.15 — certified source publication
 -- Exact installed TEST baseline; intentionally replaced in place by exact identity.
 -- Policy X: pre-draft freshness/orchestration only; frozen post-draft authority is unchanged.
 
@@ -99,6 +99,10 @@ DECLARE
   v_source_reconciliation_applied boolean := false;
   v_source_reconciliation_deferred boolean := false;
   v_source_reconciliation_deferred_reason text := NULL::text;
+  v_certified_publication_json jsonb := '{}'::jsonb;
+  v_certified_publication_applied boolean := false;
+  v_certified_targeted_timesheet_ids jsonb := '[]'::jsonb;
+  v_certified_linked_timesheet_ids jsonb := '[]'::jsonb;
   v_source_empty_session_progress_deferred boolean := false;
   v_source_empty_session_progress_deferred_reason text := NULL::text;
   v_source_empty_cleanup_source_row_count integer := 0;
@@ -259,10 +263,98 @@ BEGIN
   IF v_stage_job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'
      AND v_job_row.economic_build_id IS NOT NULL THEN
     IF v_duplicate_completion THEN
+      -- A lost terminal response may leave certified CURRENT source without
+      -- the public preview.  Duplicate completion is therefore the normal,
+      -- idempotent self-heal owner; it never reruns source economics.
+      SELECT build_row.source_build_run_id::text,
+             build_row.source_change_seq,
+             build_row.session_version
+      INTO v_source_build_run_id_text,
+           v_source_change_seq,
+           v_result_session_version
+      FROM private.banking_pay_workbench_economic_builds AS build_row
+      WHERE build_row.id = v_job_row.economic_build_id
+        AND build_row.session_id = v_job_row.session_id
+        AND build_row.candidate_id = v_job_row.candidate_id
+        AND UPPER(BTRIM(COALESCE(build_row.status, ''))) = 'COMPLETE'
+        AND UPPER(BTRIM(COALESCE(build_row.private_stage, ''))) = 'COMPLETE';
+
+      IF FOUND THEN
+        v_certified_targeted_timesheet_ids := CASE
+          WHEN jsonb_typeof(v_job_row.payload_json->'targeted_timesheet_ids') = 'array'
+            THEN v_job_row.payload_json->'targeted_timesheet_ids'
+          WHEN jsonb_typeof(v_job_row.payload_json#>'{source_build,targeted_timesheet_ids}') = 'array'
+            THEN v_job_row.payload_json#>'{source_build,targeted_timesheet_ids}'
+          ELSE COALESCE((
+            SELECT jsonb_agg(DISTINCT build_scope.timesheet_id::text ORDER BY build_scope.timesheet_id::text)
+            FROM private.banking_pay_workbench_economic_build_scope AS build_scope
+            WHERE build_scope.build_id = v_job_row.economic_build_id
+              AND build_scope.timesheet_id IS NOT NULL
+          ), '[]'::jsonb)
+        END;
+        v_certified_linked_timesheet_ids := CASE
+          WHEN jsonb_typeof(v_job_row.payload_json->'linked_timesheet_ids') = 'array'
+            THEN v_job_row.payload_json->'linked_timesheet_ids'
+          WHEN jsonb_typeof(v_job_row.payload_json#>'{source_build,linked_timesheet_ids}') = 'array'
+            THEN v_job_row.payload_json#>'{source_build,linked_timesheet_ids}'
+          ELSE '[]'::jsonb
+        END;
+
+        v_certified_publication_json := private.pay_workbench_publish_certified_source_preview_v1(
+          p_session_id => v_job_row.session_id,
+          p_candidate_id => v_job_row.candidate_id,
+          p_economic_build_id => v_job_row.economic_build_id,
+          p_source_build_run_id => v_source_build_run_id_text::uuid,
+          p_source_change_seq => v_source_change_seq,
+          p_session_version => v_result_session_version,
+          p_completion_job_id => p_job_id,
+          p_refresh_scope_kind => COALESCE(
+            NULLIF(BTRIM(v_job_row.payload_json->>'refresh_scope_kind'), ''),
+            NULLIF(BTRIM(v_job_row.payload_json#>>'{source_build,refresh_scope_kind}'), ''),
+            'CANDIDATE_FULL_LIVE'
+          ),
+          p_targeted_timesheet_ids => v_certified_targeted_timesheet_ids,
+          p_linked_timesheet_ids => v_certified_linked_timesheet_ids,
+          p_publication_options_json => jsonb_build_object(
+            'authority_kind', 'BOUNDED_FULL_SOURCE_BUILD',
+            'invocation_kind', 'DUPLICATE_REPLAY_REPAIR',
+            'contract_version', 1
+          )
+        );
+        v_certified_publication_applied := COALESCE((v_certified_publication_json->>'parity_complete')::boolean, false);
+
+        IF v_certified_publication_applied IS NOT TRUE THEN
+          RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_PARITY_FAILED' USING ERRCODE = 'P0001';
+        END IF;
+
+        IF COALESCE((v_certified_publication_json->>'already_current')::boolean, false) IS NOT TRUE THEN
+          UPDATE public.banking_pay_workbench_session_scope AS duplicate_scope
+          SET status = CASE
+                WHEN COALESCE((v_certified_publication_json->>'source_row_count')::integer, 0) = 0 THEN 'SOURCE_EMPTY'
+                ELSE 'MATERIALISED'
+              END,
+              seeded = true,
+              dirty = false,
+              pending_job_id = NULL::uuid,
+              error_json = NULL::jsonb,
+              updated_at_utc = v_now
+          WHERE duplicate_scope.session_id = v_job_row.session_id
+            AND duplicate_scope.candidate_id = v_job_row.candidate_id;
+
+          PERFORM public.pay_workbench_session_recompute_progress_counters(
+            v_job_row.session_id,
+            true,
+            'CERTIFIED_SOURCE_PREVIEW_DUPLICATE_SELF_HEAL',
+            true
+          );
+        END IF;
+      END IF;
+
       RETURN jsonb_build_object('ok',true,'job_id',p_job_id,'status','SUCCEEDED',
         'duplicate_completion',true,'continuation_enqueued',
         COALESCE((v_existing_completion_json->>'continuation_enqueued')::boolean,false),
         'continuation_jobs',COALESCE(v_existing_completion_json->'continuation_jobs','[]'::jsonb),
+        'certified_source_preview',v_certified_publication_json,
         'completed_at_utc',v_job_row.completed_at_utc);
     END IF;
     SELECT attempt.id INTO v_material_attempt_id
@@ -1477,6 +1569,7 @@ BEGIN
               'continuation_jobs', COALESCE(v_continuation_jobs, '[]'::jsonb),
               'continuation_count', COALESCE(v_continuation_count, 0),
               'continuation_reused_count', COALESCE(v_continuation_reused_count, 0),
+              'certified_source_preview', COALESCE(v_certified_publication_json, '{}'::jsonb),
               'next_recommended_action', v_next_recommended_action,
               'completed_at_utc', v_now::text
             )
@@ -2400,6 +2493,145 @@ BEGIN
       END IF;
     END IF;
 
+    -- Bounded terminal ownership is not complete until the certified CURRENT
+    -- source has been reconciled and published into the one public preview
+    -- read model.  All work remains in this completion transaction.
+    IF v_stage_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+       AND v_job_row.economic_build_id IS NOT NULL
+       AND COALESCE(v_has_more, false) IS NOT TRUE
+       AND UPPER(BTRIM(COALESCE(v_result_json->>'private_stage', ''))) = 'COMPLETE'
+       AND UPPER(BTRIM(COALESCE(v_result_json->>'stage_status', ''))) = 'COMPLETE'
+       AND v_current_source_row_count_authoritative IS TRUE
+       AND v_source_build_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       AND v_source_change_seq IS NOT NULL THEN
+      IF COALESCE(v_current_source_row_count, 0) > 0 THEN
+        v_source_reconciliation_json := public.pay_workbench_reconcile_successful_source_build(
+          p_session_id => v_job_row.session_id,
+          p_candidate_id => v_job_row.candidate_id,
+          p_source_build_run_id => v_source_build_run_id_text::uuid,
+          p_source_change_seq => v_source_change_seq,
+          p_session_version => COALESCE(v_result_session_version, v_session_row.version),
+          p_success_job_id => p_job_id,
+          p_refresh_scope_kind => COALESCE(
+            NULLIF(BTRIM(COALESCE(v_result_json->>'refresh_scope_kind', '')), ''),
+            NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'refresh_scope_kind', '')), ''),
+            NULLIF(BTRIM(COALESCE(v_job_row.payload_json#>>'{source_build,refresh_scope_kind}', '')), ''),
+            'CANDIDATE_FULL_LIVE'
+          ),
+          p_targeted_timesheet_ids => CASE
+            WHEN jsonb_typeof(v_result_json->'targeted_timesheet_ids') = 'array' THEN v_result_json->'targeted_timesheet_ids'
+            WHEN jsonb_typeof(v_job_row.payload_json->'targeted_timesheet_ids') = 'array' THEN v_job_row.payload_json->'targeted_timesheet_ids'
+            WHEN jsonb_typeof(v_job_row.payload_json#>'{source_build,targeted_timesheet_ids}') = 'array' THEN v_job_row.payload_json#>'{source_build,targeted_timesheet_ids}'
+            ELSE '[]'::jsonb
+          END,
+          p_linked_timesheet_ids => CASE
+            WHEN jsonb_typeof(v_result_json->'linked_timesheet_ids') = 'array' THEN v_result_json->'linked_timesheet_ids'
+            WHEN jsonb_typeof(v_job_row.payload_json->'linked_timesheet_ids') = 'array' THEN v_job_row.payload_json->'linked_timesheet_ids'
+            WHEN jsonb_typeof(v_job_row.payload_json#>'{source_build,linked_timesheet_ids}') = 'array' THEN v_job_row.payload_json#>'{source_build,linked_timesheet_ids}'
+            ELSE '[]'::jsonb
+          END,
+          p_recompute_session_progress => false
+        );
+
+        v_source_reconciliation_deferred := LOWER(BTRIM(COALESCE(v_source_reconciliation_json->>'deferred', 'false')))
+          IN ('true', 't', '1', 'yes', 'y', 'on');
+        v_source_reconciliation_applied := v_source_reconciliation_deferred IS NOT TRUE
+          AND LOWER(BTRIM(COALESCE(v_source_reconciliation_json->>'ok', 'true')))
+            NOT IN ('false', 'f', '0', 'no', 'n', 'off');
+
+        IF v_source_reconciliation_applied IS NOT TRUE THEN
+          RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
+            USING ERRCODE = 'P0001',
+                  DETAIL = jsonb_build_object(
+                    'code', 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH',
+                    'reason', 'SOURCE_RECONCILIATION_NOT_COMPLETE'
+                  )::text;
+        END IF;
+      ELSE
+        v_source_reconciliation_applied := true;
+        v_source_reconciliation_json := jsonb_build_object(
+          'ok', true,
+          'skipped', true,
+          'reason', 'POSITIVELY_CERTIFIED_EMPTY_SOURCE',
+          'progress_recomputed', false
+        );
+      END IF;
+
+      v_certified_targeted_timesheet_ids := CASE
+        WHEN jsonb_typeof(v_result_json->'targeted_timesheet_ids') = 'array'
+          THEN v_result_json->'targeted_timesheet_ids'
+        WHEN jsonb_typeof(v_job_row.payload_json->'targeted_timesheet_ids') = 'array'
+          THEN v_job_row.payload_json->'targeted_timesheet_ids'
+        WHEN jsonb_typeof(v_job_row.payload_json#>'{source_build,targeted_timesheet_ids}') = 'array'
+          THEN v_job_row.payload_json#>'{source_build,targeted_timesheet_ids}'
+        ELSE COALESCE((
+          SELECT jsonb_agg(DISTINCT build_scope.timesheet_id::text ORDER BY build_scope.timesheet_id::text)
+          FROM private.banking_pay_workbench_economic_build_scope AS build_scope
+          WHERE build_scope.build_id = v_job_row.economic_build_id
+            AND build_scope.timesheet_id IS NOT NULL
+        ), '[]'::jsonb)
+      END;
+      v_certified_linked_timesheet_ids := CASE
+        WHEN jsonb_typeof(v_result_json->'linked_timesheet_ids') = 'array'
+          THEN v_result_json->'linked_timesheet_ids'
+        WHEN jsonb_typeof(v_job_row.payload_json->'linked_timesheet_ids') = 'array'
+          THEN v_job_row.payload_json->'linked_timesheet_ids'
+        WHEN jsonb_typeof(v_job_row.payload_json#>'{source_build,linked_timesheet_ids}') = 'array'
+          THEN v_job_row.payload_json#>'{source_build,linked_timesheet_ids}'
+        ELSE '[]'::jsonb
+      END;
+
+      v_certified_publication_json := private.pay_workbench_publish_certified_source_preview_v1(
+        p_session_id => v_job_row.session_id,
+        p_candidate_id => v_job_row.candidate_id,
+        p_economic_build_id => v_job_row.economic_build_id,
+        p_source_build_run_id => v_source_build_run_id_text::uuid,
+        p_source_change_seq => v_source_change_seq,
+        p_session_version => COALESCE(v_result_session_version, v_session_row.version),
+        p_completion_job_id => p_job_id,
+        p_refresh_scope_kind => COALESCE(
+          NULLIF(BTRIM(COALESCE(v_result_json->>'refresh_scope_kind', '')), ''),
+          NULLIF(BTRIM(COALESCE(v_job_row.payload_json->>'refresh_scope_kind', '')), ''),
+          NULLIF(BTRIM(COALESCE(v_job_row.payload_json#>>'{source_build,refresh_scope_kind}', '')), ''),
+          'CANDIDATE_FULL_LIVE'
+        ),
+        p_targeted_timesheet_ids => v_certified_targeted_timesheet_ids,
+        p_linked_timesheet_ids => v_certified_linked_timesheet_ids,
+        p_publication_options_json => jsonb_build_object(
+          'authority_kind', 'BOUNDED_FULL_SOURCE_BUILD',
+          'invocation_kind', 'INITIAL_COMPLETION',
+          'contract_version', 1
+        )
+      );
+      v_certified_publication_applied := COALESCE((v_certified_publication_json->>'parity_complete')::boolean, false);
+
+      IF v_certified_publication_applied IS NOT TRUE THEN
+        RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_PARITY_FAILED' USING ERRCODE = 'P0001';
+      END IF;
+
+      UPDATE public.banking_pay_workbench_session_scope AS certified_scope
+      SET status = CASE
+            WHEN COALESCE((v_certified_publication_json->>'source_row_count')::integer, 0) = 0 THEN 'SOURCE_EMPTY'
+            ELSE 'MATERIALISED'
+          END,
+          seeded = true,
+          dirty = false,
+          pending_job_id = NULL::uuid,
+          error_json = NULL::jsonb,
+          updated_at_utc = v_now
+      WHERE certified_scope.session_id = v_job_row.session_id
+        AND certified_scope.candidate_id = v_job_row.candidate_id;
+      GET DIAGNOSTICS v_bounded_terminal_scope_finalised_count = ROW_COUNT;
+
+      v_finalisation_progress_json := public.pay_workbench_session_recompute_progress_counters(
+        v_job_row.session_id,
+        true,
+        'CERTIFIED_SOURCE_PREVIEW_TERMINAL_COMPLETION',
+        true
+      );
+      v_next_recommended_action := 'READ_PREVIEW_PAGE';
+    END IF;
+
     UPDATE public.banking_pay_workbench_jobs AS update_job
     SET status = 'SUCCEEDED',
         updated_at_utc = v_now,
@@ -2425,6 +2657,7 @@ BEGIN
     v_completed_at_utc := v_now;
 
     IF v_stage_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+       AND v_source_reconciliation_applied IS NOT TRUE
        AND v_job_row.session_id IS NOT NULL
        AND v_job_row.candidate_id IS NOT NULL
        AND v_source_build_run_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -2963,6 +3196,8 @@ BEGIN
     'counter_reconciliation', COALESCE(v_finalisation_counter_reconciliation_json, '{}'::jsonb),
     'source_build_reconciliation_applied', v_source_reconciliation_applied,
     'source_build_reconciliation', COALESCE(v_source_reconciliation_json, '{}'::jsonb),
+    'certified_source_preview_applied', v_certified_publication_applied,
+    'certified_source_preview', COALESCE(v_certified_publication_json, '{}'::jsonb),
     'actual_precheck_required', v_finalisation_actual_precheck_required,
     'actual_precheck_passed', v_finalisation_actual_precheck_passed,
     'scope_pending_job_cleared_count', COALESCE(v_scope_pending_job_cleared_count, 0),
@@ -3036,6 +3271,7 @@ BEGIN
         'error_count', COALESCE(v_error_count, 0),
         'finalisation', v_completion_finalisation_json,
         'source_build_reconciliation', COALESCE(v_source_reconciliation_json, '{}'::jsonb),
+        'certified_source_preview', COALESCE(v_certified_publication_json, '{}'::jsonb),
         'source_build_reconciliation_deferred', COALESCE(v_source_reconciliation_deferred, false),
         'source_build_reconciliation_deferred_reason', v_source_reconciliation_deferred_reason
       ),
@@ -3067,7 +3303,9 @@ BEGIN
     'source_build_reconciliation_applied', v_source_reconciliation_applied,
     'source_build_reconciliation_deferred', COALESCE(v_source_reconciliation_deferred, false),
     'source_build_reconciliation_deferred_reason', v_source_reconciliation_deferred_reason,
-    'source_build_reconciliation', COALESCE(v_source_reconciliation_json, '{}'::jsonb)
+    'source_build_reconciliation', COALESCE(v_source_reconciliation_json, '{}'::jsonb),
+    'certified_source_preview_applied', v_certified_publication_applied,
+    'certified_source_preview', COALESCE(v_certified_publication_json, '{}'::jsonb)
   )
   || jsonb_build_object(
     'finalisation_evaluated', v_finalisation_evaluated,

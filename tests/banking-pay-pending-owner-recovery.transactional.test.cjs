@@ -16,7 +16,7 @@ const completionHashes = {
   pay_workbench_session_get_progress_light:
     '9f7489d1242697dea393fab3a1d748e3',
   pay_workbench_session_recompute_progress_counters:
-    '46b1686a98b3baeb7cbbadbcdc456f75'
+    '3ba446a42bab9f8d25dd165a77b0af82'
 };
 
 const preDeltaHashes = {
@@ -120,7 +120,7 @@ const progressSql = extractFunction(
   'pay_workbench_session_get_progress_light'
 );
 const recomputeSql = extractFunction(
-  canonicalSql,
+  readSql('07082026_2155_pay_workbench_session_recompute_progress_counters.sql'),
   'pay_workbench_session_recompute_progress_counters'
 );
 const helperSql = extractFunction(

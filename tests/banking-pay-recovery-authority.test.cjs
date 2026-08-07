@@ -8,6 +8,10 @@ const readSql = (file) => normalizeSql(fs.readFileSync(file, 'utf8'));
 
 const sqlPath = path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
 const sql = fs.readFileSync(sqlPath, 'utf8');
+const completionSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/04082026_1219_pay_workbench_complete_job.sql'),
+  'utf8'
+);
 const sourceBuildSql = fs.readFileSync(
   path.resolve(__dirname, './fixtures/banking-pay-installed-baselines/21072026_1235_39_pay_workbench_candidate_source_build_chunk.sql'),
   'utf8'
@@ -706,7 +710,7 @@ test('terminal source build reports the post-materialisation carrier count as au
 });
 
 test('source-build completion handles a proven targeted empty carrier set without broad candidate cleanup', () => {
-  const body = functionBody('pay_workbench_complete_job', 'pay_workbench_fail_job');
+  const body = functionBody('pay_workbench_complete_job', null, completionSql);
 
   assert.match(
     body,

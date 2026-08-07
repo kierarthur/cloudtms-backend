@@ -286,5 +286,6 @@ jobs:
           done
 
           node supabase/verification/verify_banking_pay_revision5_catalog.mjs
+          node supabase/verification/verify_banking_pay_workbench_certified_source_preview_catalog.mjs
 
           echo "Done."

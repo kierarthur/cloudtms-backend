@@ -53,12 +53,14 @@ const correctionEntryPointSources = [
     '_pay_week_start_monday',
     'pay_paye_guardrails',
     'pay_preview_build_context',
-    'pay_workbench_session_recompute_progress_counters',
     'pay_workbench_session_compact_progress_json',
     '_pay_batch_item_source_reservation_amount_ex_vat',
     'pay_preview_candidate_collect_scope',
     'pay_workbench_worker_drain_chunk',
     'pay_finance_case_apply_taxable_channel_restructure'
+  ]],
+  ['07082026_2155_pay_workbench_session_recompute_progress_counters.sql', [
+    'pay_workbench_session_recompute_progress_counters'
   ]]
 ];
 

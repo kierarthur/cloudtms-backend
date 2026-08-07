@@ -35,7 +35,10 @@ const claimSql = extractFunction(canonicalBundleSql, 'pay_workbench_claim_due_jo
 const failSql = extractFunction(canonicalBundleSql, 'pay_workbench_fail_job');
 const drainSql = extractFunction(canonicalBundleSql, 'pay_workbench_worker_drain_chunk');
 const progressSql = extractFunction(canonicalBundleSql, 'pay_workbench_session_get_progress_light');
-const recomputeSql = extractFunction(canonicalBundleSql, 'pay_workbench_session_recompute_progress_counters');
+const recomputeSql = extractFunction(
+  repeatable('07082026_2155_pay_workbench_session_recompute_progress_counters.sql'),
+  'pay_workbench_session_recompute_progress_counters'
+);
 const workerSource = fs.readFileSync(path.resolve(__dirname, '../broker/src/index.js'), 'utf8');
 const affectedFunctions = [
   'pay_workbench_repair_orphaned_pending_source_build',

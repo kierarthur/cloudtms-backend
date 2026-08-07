@@ -16783,7 +16783,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_complete_job(p_job_id uuid, p_result_json jsonb DEFAULT '{}'::jsonb)
+/*
+Retired legacy body. The sole authoritative definition is now maintained in:
+04082026_1219_pay_workbench_complete_job.sql
+
+FUNCTION public.pay_workbench_complete_job(p_job_id uuid, p_result_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -19613,6 +19617,8 @@ BEGIN
   );
 END;
 $function$;
+
+*/
 
 
 
@@ -172381,7 +172387,11 @@ END;
 $function$;
 
 
-CREATE OR REPLACE FUNCTION public.pay_workbench_session_recompute_progress_counters(p_session_id uuid, p_apply boolean DEFAULT true, p_reason text DEFAULT 'AUTHORITATIVE_COUNTER_RECOMPUTE'::text, p_write_progress_json boolean DEFAULT true)
+/*
+Retired legacy body. The sole authoritative definition is now maintained in:
+07082026_2155_pay_workbench_session_recompute_progress_counters.sql
+
+FUNCTION public.pay_workbench_session_recompute_progress_counters(p_session_id uuid, p_apply boolean DEFAULT true, p_reason text DEFAULT 'AUTHORITATIVE_COUNTER_RECOMPUTE'::text, p_write_progress_json boolean DEFAULT true)
  RETURNS jsonb
  LANGUAGE plpgsql
  SECURITY DEFINER
@@ -173120,6 +173130,8 @@ BEGIN
   );
 END;
 $function$;
+
+*/
 
 
 
