@@ -231,7 +231,7 @@
       "schema": "public",
       "name": "pay_batch_auth_apply_action",
       "identity_arguments": "p_auth_request_id uuid, p_actor_user_id uuid, p_action text, p_note text",
-      "definition_sha256": "dd2b037b2b4ebe73b2f5dca93455061777cc087c3020e1abf29a249ba04d28d6",
+      "definition_sha256": "42157edf5d4754dd6b22625c40b233ef682abbf30bcd24bc5b2853ff94b331fb",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -350,7 +350,7 @@
       "schema": "public",
       "name": "pay_batch_schedule",
       "identity_arguments": "p_pay_batch_id uuid, p_schedule_kind text, p_scheduled_at_utc timestamp with time zone, p_funding_account_ref text, p_warning_hours_json jsonb, p_actor_user_id uuid, p_operation_id uuid, p_freshness_result_hash text",
-      "definition_sha256": "8fe070e0003f97d85ea11017aac7fc8638d47de4c1ae707fa83e83a913c5c07b",
+      "definition_sha256": "e32a848569141a5fa6132b91a5808eec7d2aa12c72c2bcfdcdc4615ab6c46fdb",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

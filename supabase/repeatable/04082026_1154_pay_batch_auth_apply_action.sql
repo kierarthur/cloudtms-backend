@@ -110,6 +110,8 @@ begin
     jsonb_build_object(
       'version', 1,
       'pay_batch_id', v_req.pay_batch_id,
+      'freshness_result_hash', v_execution_intent_json->>'freshness_result_hash',
+      'freshness_scope_hash', v_execution_intent_json->>'freshness_scope_hash',
       'active_items', (
         select coalesce(
           jsonb_agg(
