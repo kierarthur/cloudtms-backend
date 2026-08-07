@@ -776,7 +776,7 @@ test('correction residual source authority excludes its own finance cases', () =
 
   assert.match(
     sourceBlock,
-    /public\._pay_current_timesheet_entitlement_components\(\s*v_member_ids\s*\)/
+    /private\.pay_workbench_current_entitlement_components_cached_v1\(\s*v_member_ids\s*\)/
   );
   assert.match(
     sourceBlock,

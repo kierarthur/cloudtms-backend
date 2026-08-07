@@ -356,7 +356,7 @@ BEGIN
       entitlement_row.baseline_ex_vat,
       entitlement_row.truth_inc_vat,
       entitlement_row.baseline_inc_vat
-    FROM public._pay_current_timesheet_entitlement_components(
+    FROM private.pay_workbench_current_entitlement_components_cached_v1(
       v_member_ids
     ) AS entitlement_row
     WHERE UPPER(BTRIM(entitlement_row.key_type)) = 'TS_DAY'

@@ -24,6 +24,8 @@ DECLARE
   v_field text;
   v_before_value jsonb;
   v_after_value jsonb;
+  v_nested_before jsonb := '{}'::jsonb;
+  v_nested_after jsonb := '{}'::jsonb;
 BEGIN
   IF v_relation NOT IN ('pay_advances','pay_finance_case_components','pay_finance_case_events')
      OR v_operation NOT IN ('INSERT','UPDATE','DELETE') THEN
@@ -33,6 +35,50 @@ BEGIN
   v_row:=v_row-'created_at'-'created_at_utc'-'updated_at'-'updated_at_utc'-'event_at_utc';
   IF v_operation='INSERT' THEN
     v_row:=v_row-'id'-'finance_case_id'-'finance_component_id';
+
+    -- Event rows duplicate their stable parent identities inside the captured
+    -- before/after snapshots.  A newly inserted case/component receives a new
+    -- physical UUID in capture and execute, while its logical parent identity
+    -- is already attested independently by the expected-effect identity map.
+    -- Remove only those duplicated generated identities from the event digest;
+    -- all economic, classification and lifecycle fields remain exact.
+    IF v_relation='pay_finance_case_events' THEN
+      IF jsonb_typeof(v_row->'before_json')='object' THEN
+        v_row:=jsonb_set(v_row,ARRAY['before_json'],
+          (v_row->'before_json')-'id'-'finance_case_id'-'finance_component_id',false);
+      END IF;
+      IF jsonb_typeof(v_row->'after_json')='object' THEN
+        v_row:=jsonb_set(v_row,ARRAY['after_json'],
+          (v_row->'after_json')-'id'-'finance_case_id'-'finance_component_id',false);
+      END IF;
+
+      -- Closure timestamps are repeated in the immutable event snapshot.  The
+      -- capture and execute transactions generate different instants for the
+      -- same NULL -> non-NULL lifecycle transition, so attest that transition
+      -- semantically.  Existing/manual timestamps, removals, and every other
+      -- nested field remain exact and therefore still fail on any difference.
+      v_nested_before:=CASE WHEN jsonb_typeof(v_row->'before_json')='object'
+        THEN v_row->'before_json' ELSE '{}'::jsonb END;
+      v_nested_after:=CASE WHEN jsonb_typeof(v_row->'after_json')='object'
+        THEN v_row->'after_json' ELSE '{}'::jsonb END;
+      FOR v_field IN
+        SELECT field_name FROM unnest(ARRAY[
+          'closed_at_utc','cleared_at_utc','written_off_at_utc'
+        ]::text[]) field_name
+      LOOP
+        v_before_value:=v_nested_before->v_field;
+        v_after_value:=v_nested_after->v_field;
+        IF (v_before_value IS NULL OR v_before_value='null'::jsonb)
+           AND v_after_value IS NOT NULL
+           AND v_after_value<>'null'::jsonb THEN
+          v_nested_after:=jsonb_set(v_nested_after,ARRAY[v_field],
+            to_jsonb('__GENERATED_NON_NULL__'::text),true);
+        END IF;
+      END LOOP;
+      IF jsonb_typeof(v_row->'after_json')='object' THEN
+        v_row:=jsonb_set(v_row,ARRAY['after_json'],v_nested_after,false);
+      END IF;
+    END IF;
   END IF;
 
   FOR v_field IN

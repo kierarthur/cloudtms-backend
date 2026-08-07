@@ -37,6 +37,9 @@ DECLARE
   v_more_due boolean := false;
   v_next_cursor_json jsonb := NULL::jsonb;
   v_clone_eligibility jsonb := '{}'::jsonb;
+  v_bounded_clone_eligibility jsonb := '{}'::jsonb;
+  v_bounded_build_clone boolean := false;
+  v_clone_projection_run_id uuid := NULL::uuid;
   v_candidate_state_result jsonb := '{}'::jsonb;
   v_candidate_id uuid := NULL::uuid;
   v_scope_ordinal bigint := NULL::bigint;
@@ -231,6 +234,10 @@ BEGIN
     WHERE page_row.page_index <= v_limit
     ORDER BY page_row.scope_ordinal, page_row.candidate_id
   LOOP
+    v_bounded_clone_eligibility := '{}'::jsonb;
+    v_bounded_build_clone := false;
+    v_clone_projection_run_id := p_target_session_id;
+
     INSERT INTO public.banking_pay_workbench_session_scope (
       session_id,
       candidate_id,
@@ -274,6 +281,41 @@ BEGIN
       v_options_json
     );
 
+    /*
+     * The legacy clone proof deliberately recognises only the original
+     * one-source-row/one-preview-row projection.  Bounded-source publication
+     * has a richer canonical shape, so give it one independent fail-closed
+     * proof before selecting the existing full-build fallback.
+     */
+    IF COALESCE((v_clone_eligibility->>'clone_eligible')::boolean, false) IS NOT TRUE THEN
+      v_bounded_clone_eligibility := private.pay_workbench_session_clone_bounded_certification_v1(
+        v_source_session_id,
+        p_target_session_id,
+        v_candidate_id,
+        v_options_json
+      );
+
+      IF COALESCE((v_bounded_clone_eligibility->>'clone_eligible')::boolean, false) IS TRUE THEN
+        v_clone_eligibility := v_bounded_clone_eligibility;
+        v_bounded_build_clone := true;
+
+        IF COALESCE(v_clone_eligibility->>'source_build_run_id', '')
+             ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+          v_clone_projection_run_id := (v_clone_eligibility->>'source_build_run_id')::uuid;
+        ELSE
+          v_clone_eligibility := jsonb_build_object(
+            'ok', true,
+            'clone_eligible', false,
+            'bounded_build_certified', false,
+            'reason', 'BOUNDED_BUILD_PROJECTION_ID_INVALID',
+            'required_refresh_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+          );
+          v_bounded_build_clone := false;
+          v_clone_projection_run_id := p_target_session_id;
+        END IF;
+      END IF;
+    END IF;
+
     IF COALESCE((v_clone_eligibility->>'clone_eligible')::boolean, false) IS TRUE THEN
       IF COALESCE((v_clone_eligibility->>'ready_empty')::boolean, false) IS TRUE THEN
         UPDATE public.banking_pay_workbench_session_scope AS target_scope_update
@@ -315,23 +357,32 @@ BEGIN
             source_line.candidate_id,
             v_target_session.version,
             COALESCE(source_line.source_change_seq, 0),
-            p_target_session_id,
+            CASE
+              WHEN v_bounded_build_clone IS TRUE THEN source_line.source_build_run_id
+              ELSE p_target_session_id
+            END,
             source_line.source_ordinal,
             source_line.line_key,
             source_line.parent_line_key,
             source_line.split_suffix,
             source_line.timesheet_id,
             source_line.section,
-            jsonb_strip_nulls(
-              COALESCE(source_line.source_row_json, '{}'::jsonb)
-              || jsonb_build_object(
-                'clone_certified', true,
-                'clone_from_session_id', v_source_session_id::text,
-                'clone_to_session_id', p_target_session_id::text,
-                'clone_applied_at_utc', v_now::text,
-                'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+            CASE
+              /* The bounded build's canonical digest is over source_row_json.
+                 Preserve those bytes exactly so the immutable publication
+                 proof remains verifiable through later session clones. */
+              WHEN v_bounded_build_clone IS TRUE THEN source_line.source_row_json
+              ELSE jsonb_strip_nulls(
+                COALESCE(source_line.source_row_json, '{}'::jsonb)
+                || jsonb_build_object(
+                  'clone_certified', true,
+                  'clone_from_session_id', v_source_session_id::text,
+                  'clone_to_session_id', p_target_session_id::text,
+                  'clone_applied_at_utc', v_now::text,
+                  'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+                )
               )
-            ),
+            END,
             source_line.economic_key_json,
             jsonb_strip_nulls(
               COALESCE(source_line.contract_json, '{}'::jsonb)
@@ -339,6 +390,8 @@ BEGIN
                 'clone_certified', true,
                 'clone_from_session_id', v_source_session_id::text,
                 'clone_to_session_id', p_target_session_id::text,
+                'bounded_build_certified', v_bounded_build_clone,
+                'bounded_build_proof_version', CASE WHEN v_bounded_build_clone IS TRUE THEN 1 ELSE NULL::integer END,
                 'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
               )
             ),
@@ -469,6 +522,10 @@ BEGIN
                 'clone_from_session_id', v_source_session_id::text,
                 'clone_to_session_id', p_target_session_id::text,
                 'clone_applied_at_utc', v_now::text,
+                'session_id', p_target_session_id::text,
+                'session_version', v_target_session.version,
+                'bounded_build_certified', v_bounded_build_clone,
+                'bounded_build_proof_version', CASE WHEN v_bounded_build_clone IS TRUE THEN 1 ELSE NULL::integer END,
                 'selected', COALESCE(preview_row.selected, false),
                 'selection_state', COALESCE(NULLIF(BTRIM(preview_row.selection_state), ''), CASE WHEN COALESCE(preview_row.selected, false) THEN 'SELECTED' ELSE 'NOT_SELECTABLE' END),
                 'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
@@ -602,12 +659,14 @@ BEGIN
         v_candidate_state_result := public.pay_workbench_delta_update_candidate_state_v1(
           p_target_session_id,
           v_candidate_id,
-          p_target_session_id,
+          v_clone_projection_run_id,
           jsonb_build_object(
             'context', 'CLONE_REBASE',
             'source_session_id', v_source_session_id::text,
             'target_session_id', p_target_session_id::text,
             'clone_certified', true,
+            'bounded_build_certified', v_bounded_build_clone,
+            'source_change_seq', COALESCE(v_clone_eligibility->>'current_source_change_seq', '0'),
             'session_version', COALESCE(v_target_session.version, 1)
           )
         );
