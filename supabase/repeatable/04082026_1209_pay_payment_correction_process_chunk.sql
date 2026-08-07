@@ -777,7 +777,7 @@ BEGIN
         AND item_row.pay_bank_transfer_id IS NOT NULL
     ), transfer_owner AS (
       SELECT transfer_row.id, transfer_row.amount,
-             pg_catalog.min(owner_candidate.id) AS owner_candidate_id
+             pg_catalog.min(owner_candidate.id::text)::uuid AS owner_candidate_id
       FROM public.pay_bank_transfers AS transfer_row
       JOIN page_transfer_ids ON page_transfer_ids.pay_bank_transfer_id = transfer_row.id
       JOIN public.pay_batch_items AS owner_item ON owner_item.pay_bank_transfer_id = transfer_row.id
@@ -788,8 +788,8 @@ BEGIN
       GROUP BY transfer_row.id, transfer_row.amount
     )
     SELECT pg_catalog.count(*)::integer,
-           pg_catalog.min(fact_row.pay_batch_candidate_id),
-           pg_catalog.max(fact_row.pay_batch_candidate_id),
+           pg_catalog.min(fact_row.pay_batch_candidate_id::text)::uuid,
+           pg_catalog.max(fact_row.pay_batch_candidate_id::text)::uuid,
            pg_catalog.count(*) FILTER (WHERE fact_row.selection_ordinal IS NOT NULL)::integer,
            pg_catalog.count(*) FILTER (WHERE fact_row.work_status = 'APPLIED')::integer,
            pg_catalog.count(*) FILTER (WHERE fact_row.work_status IN ('BLOCKED','SKIPPED'))::integer,

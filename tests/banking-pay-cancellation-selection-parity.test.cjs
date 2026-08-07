@@ -22,6 +22,12 @@ const correctionStatus = fs.readFileSync(path.join(
   'repeatable',
   '04082026_1145_pay_payment_correction_status_get_v1.sql'
 ), 'utf8');
+const processChunk = fs.readFileSync(path.join(
+  root,
+  'supabase',
+  'repeatable',
+  '04082026_1209_pay_payment_correction_process_chunk.sql'
+), 'utf8');
 const catalogueFunctions = fs.readFileSync(path.join(
   root,
   'supabase',
@@ -636,4 +642,14 @@ test('status readers expose only safe selection and actor-tailored progress cont
   assert.match(correctionStatus, /'label', blocker_summary\.label/);
   assert.doesNotMatch(correctionStatus, /'operation_id', v_operation\.id/);
   assert.doesNotMatch(correctionStatus, /'root_operation_id'/);
+});
+
+test('bounded selection and finalisation order UUIDs through supported text aggregates', () => {
+  assert.match(selectionPrepare, /pg_catalog\.min\(scan_row\.id::text\)::uuid/);
+  assert.match(selectionPrepare, /pg_catalog\.max\(scan_row\.id::text\)::uuid/);
+  assert.doesNotMatch(selectionPrepare, /pg_catalog\.(?:min|max)\(scan_row\.id\)/);
+  assert.match(processChunk, /pg_catalog\.min\(owner_candidate\.id::text\)::uuid/);
+  assert.match(processChunk, /pg_catalog\.min\(fact_row\.pay_batch_candidate_id::text\)::uuid/);
+  assert.match(processChunk, /pg_catalog\.max\(fact_row\.pay_batch_candidate_id::text\)::uuid/);
+  assert.doesNotMatch(processChunk, /pg_catalog\.(?:min|max)\((?:owner_candidate\.id|fact_row\.pay_batch_candidate_id)\)/);
 });

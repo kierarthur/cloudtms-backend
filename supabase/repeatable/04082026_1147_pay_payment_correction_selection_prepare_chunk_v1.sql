@@ -530,7 +530,9 @@ BEGIN
       AND prior_chunk.sequence_no < v_page_sequence_no;
 
     SELECT COALESCE(pg_catalog.jsonb_agg(scan_row.id::text ORDER BY scan_row.id), '[]'::jsonb),
-           pg_catalog.min(scan_row.id), pg_catalog.max(scan_row.id), pg_catalog.count(*)::integer
+           pg_catalog.min(scan_row.id::text)::uuid,
+           pg_catalog.max(scan_row.id::text)::uuid,
+           pg_catalog.count(*)::integer
     INTO v_scan_candidate_tokens, v_first_scanned_candidate_id,
          v_scan_last_candidate_id, v_scan_candidate_count
     FROM (
