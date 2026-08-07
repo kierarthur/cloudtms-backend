@@ -3678,20 +3678,31 @@ BEGIN
     FROM public.timesheet_summary_lightweight_rows_v1(
       v_filters||jsonb_build_object('disable_paging',true,'apply_paging',false,'profile','list','include_evidence',false,'include_compare',false,'include_import_source_rows',false)
     ) s
-    WHERE s.correction_is_current=true and s.correction_archived_at_utc is null
-      and coalesce(s.correction_is_adjustment,false) and s.correction_parent_timesheet_id is not null
-      and s.correction_id is not null and upper(coalesce(s.adjustment_origin,''))='IMPORT_CORRECTION'
-      and s.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
+    JOIN public.timesheets AS correction_timesheet
+      ON correction_timesheet.timesheet_id = s.timesheet_id
+    WHERE correction_timesheet.is_current=true and correction_timesheet.archived_at_utc is null
+      and coalesce(correction_timesheet.is_adjustment,false) and correction_timesheet.parent_timesheet_id is not null
+      and correction_timesheet.correction_id is not null and upper(coalesce(correction_timesheet.adjustment_origin,''))='IMPORT_CORRECTION'
+      and correction_timesheet.correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
       and ((upper(coalesce(s.route_type,'')) like '%NHSP%' or upper(coalesce(s.basis,'')) like 'NHSP%'
-          or upper(coalesce(s.correction_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='NHSP')
+          or upper(coalesce(correction_timesheet.candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='NHSP')
         = (upper(coalesce(s.route_type,'')) like '%HEALTHROSTER%' or upper(coalesce(s.basis,'')) like 'HEALTHROSTER%'
-          or upper(coalesce(s.correction_candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='HEALTHROSTER'))
+          or upper(coalesce(correction_timesheet.candidate_hint_text#>>'{correction_financials_policy_envelope,classification,source_system}',''))='HEALTHROSTER'))
   ) THEN
     RAISE EXCEPTION 'BULK_AUTHORISE_CORRECTION_SOURCE_CONFLICT' USING ERRCODE='22023';
   END IF;
 
   WITH lightweight_rows AS MATERIALIZED (
-    SELECT summary_row.*
+    SELECT
+      summary_row.*,
+      correction_timesheet.is_current AS correction_is_current,
+      correction_timesheet.archived_at_utc AS correction_archived_at_utc,
+      correction_timesheet.is_adjustment AS correction_is_adjustment,
+      correction_timesheet.parent_timesheet_id AS correction_parent_timesheet_id,
+      correction_timesheet.correction_id,
+      correction_timesheet.adjustment_origin,
+      correction_timesheet.correction_kind,
+      correction_timesheet.candidate_hint_text AS correction_candidate_hint_text
     FROM public.timesheet_summary_lightweight_rows_v1(
       v_filters || JSONB_BUILD_OBJECT(
         'disable_paging', TRUE,
@@ -3705,6 +3716,8 @@ BEGIN
         'include_import_source_rows', FALSE
       )
     ) AS summary_row
+    LEFT JOIN public.timesheets AS correction_timesheet
+      ON correction_timesheet.timesheet_id = summary_row.timesheet_id
     WHERE (summary_row.timesheet_id IS NOT NULL
        OR summary_row.contract_week_id IS NOT NULL)
       AND UPPER(COALESCE(summary_row.tools_stage, '')) <> 'ARCHIVED'
@@ -4845,6 +4858,7 @@ BEGIN
       timesheet_row.version AS timesheet_version,
       timesheet_row.updated_at AS timesheet_updated_at,
       timesheet_row.is_current AS timesheet_is_current,
+      timesheet_row.archived_at_utc AS timesheet_archived_at_utc,
       timesheet_row.manual_pdf_r2_key,
       timesheet_row.qr_r2_key,
       timesheet_row.generated_pdf_at_utc,
@@ -5179,7 +5193,7 @@ BEGIN
       classified_rows.*,
       CASE
         WHEN classified_rows.timesheet_is_current=true
-         AND classified_rows.archived_at_utc is null
+         AND classified_rows.timesheet_archived_at_utc is null
          AND coalesce(classified_rows.timesheet_is_adjustment,false)
          AND classified_rows.timesheet_parent_timesheet_id is not null
          AND classified_rows.timesheet_correction_id is not null
@@ -5721,12 +5735,12 @@ BEGIN
         'correction_id',payload_rows.timesheet_correction_id,
         'correction_kind',payload_rows.timesheet_correction_kind,
         'adjustment_origin',payload_rows.timesheet_adjustment_origin,
-        'correction_source_system',case when payload_rows.timesheet_is_current=true and payload_rows.archived_at_utc is null
+        'correction_source_system',case when payload_rows.timesheet_is_current=true and payload_rows.timesheet_archived_at_utc is null
           and coalesce(payload_rows.timesheet_is_adjustment,false) and payload_rows.timesheet_parent_timesheet_id is not null
           and payload_rows.timesheet_correction_id is not null and upper(coalesce(payload_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
           and payload_rows.timesheet_correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
           then case when payload_rows.bulk_authorise_classification_calc='HR' then 'HEALTHROSTER' else 'NHSP' end end,
-        'correction_display_label',case when payload_rows.timesheet_is_current=true and payload_rows.archived_at_utc is null
+        'correction_display_label',case when payload_rows.timesheet_is_current=true and payload_rows.timesheet_archived_at_utc is null
           and coalesce(payload_rows.timesheet_is_adjustment,false) and payload_rows.timesheet_parent_timesheet_id is not null
           and payload_rows.timesheet_correction_id is not null and upper(coalesce(payload_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
           then case
@@ -5975,12 +5989,12 @@ BEGIN
             'correction_id',payload_rows.timesheet_correction_id,
             'correction_kind',payload_rows.timesheet_correction_kind,
             'adjustment_origin',payload_rows.timesheet_adjustment_origin,
-            'correction_source_system',case when payload_rows.timesheet_is_current=true and payload_rows.archived_at_utc is null
+            'correction_source_system',case when payload_rows.timesheet_is_current=true and payload_rows.timesheet_archived_at_utc is null
               and coalesce(payload_rows.timesheet_is_adjustment,false) and payload_rows.timesheet_parent_timesheet_id is not null
               and payload_rows.timesheet_correction_id is not null and upper(coalesce(payload_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
               and payload_rows.timesheet_correction_kind in ('CHANGED_HOURS_REVERSAL','CHANGED_HOURS_REPLACEMENT')
               then case when payload_rows.bulk_authorise_classification_calc='HR' then 'HEALTHROSTER' else 'NHSP' end end,
-            'correction_display_label',case when payload_rows.timesheet_is_current=true and payload_rows.archived_at_utc is null
+            'correction_display_label',case when payload_rows.timesheet_is_current=true and payload_rows.timesheet_archived_at_utc is null
               and coalesce(payload_rows.timesheet_is_adjustment,false) and payload_rows.timesheet_parent_timesheet_id is not null
               and payload_rows.timesheet_correction_id is not null and upper(coalesce(payload_rows.timesheet_adjustment_origin,''))='IMPORT_CORRECTION'
               then case
