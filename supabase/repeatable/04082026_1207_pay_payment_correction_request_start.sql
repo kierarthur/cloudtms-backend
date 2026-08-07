@@ -63,6 +63,7 @@ DECLARE
   v_source_event public.pay_bank_transfer_events%rowtype;
   v_auto_classification_result jsonb := '{}'::jsonb;
   v_existing_money_moved boolean := false;
+  v_resume_reauthenticated_request boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'PAY_BATCH_ID_REQUIRED'
@@ -86,13 +87,17 @@ BEGIN
   END IF;
 
     SELECT settings_row.banking_pay_candidate_cancellation_enabled,
-           greatest(coalesce(settings_row.payment_authoriser_quantity, 1), 1),
            least(coalesce(settings_row.banking_pay_correction_max_candidates, 10000), 10000),
            coalesce(settings_row.banking_pay_auto_unwind_terminal_no_money, false)
-    INTO v_enabled, v_required_quantity, v_max_candidates, v_auto_unwind_enabled
+    INTO v_enabled, v_max_candidates, v_auto_unwind_enabled
   FROM public.settings_defaults AS settings_row
   ORDER BY settings_row.id
   LIMIT 1;
+
+  -- Cancellation is authorised by exactly one authenticated user.  The
+  -- organisation's payment_authoriser_quantity applies to creating/executing
+  -- payments; it must never introduce a second-person cancellation approval.
+  v_required_quantity := 1;
 
   IF coalesce(v_enabled, false) IS NOT TRUE THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_FEATURE_DISABLED'
@@ -624,7 +629,22 @@ BEGIN
   END IF;
 
   v_proof_hash := NULLIF(p_selection_json->>'proof_hash', '');
+  v_resume_reauthenticated_request :=
+    v_command = 'START_PREPARED'
+    AND coalesce(v_request.auto_requested, false) IS NOT TRUE
+    AND v_request.status IN ('REQUESTED', 'AWAITING_AUTHORISATION')
+    AND v_request.requested_by_user_id IS NOT DISTINCT FROM p_actor_user_id
+    AND greatest(coalesce(v_request.required_quantity, 1), 1) = 1
+    AND coalesce(v_request.approved_count, 0) = 0
+    AND v_request.reauth_consumed_at_utc IS NOT NULL
+    AND v_request.reauth_proof_hash IS NOT DISTINCT FROM v_proof_hash
+    AND coalesce(v_request.plan_json->>'requested_action', '') IN (
+      'DRAFT_CANCEL', 'PRE_BANK_CANCEL', 'CANCEL_PAYMENT',
+      'NO_MONEY_RELEASE', 'NO_MONEY_UNWIND'
+    );
+
   IF v_request.status IN ('REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING')
+     AND coalesce(v_resume_reauthenticated_request, false) IS NOT TRUE
      AND (
        (
          v_command = 'START_AUTO'
@@ -666,10 +686,12 @@ BEGIN
     );
   END IF;
 
-  v_mutation_guard := private.pay_payment_mutation_guard_v1(p_pay_batch_id, NULL::uuid, 'NEW_PAYMENT_ACTION');
-  IF coalesce((v_mutation_guard->>'ok')::boolean, false) IS NOT TRUE THEN
-    RAISE EXCEPTION '%', coalesce(v_mutation_guard->>'code', 'PAYMENT_CHANGE_IN_PROGRESS')
-      USING ERRCODE = 'P0001', DETAIL = v_mutation_guard::text;
+  IF coalesce(v_resume_reauthenticated_request, false) IS NOT TRUE THEN
+    v_mutation_guard := private.pay_payment_mutation_guard_v1(p_pay_batch_id, NULL::uuid, 'NEW_PAYMENT_ACTION');
+    IF coalesce((v_mutation_guard->>'ok')::boolean, false) IS NOT TRUE THEN
+      RAISE EXCEPTION '%', coalesce(v_mutation_guard->>'code', 'PAYMENT_CHANGE_IN_PROGRESS')
+        USING ERRCODE = 'P0001', DETAIL = v_mutation_guard::text;
+    END IF;
   END IF;
 
   SELECT request_row.* INTO v_request
@@ -709,7 +731,13 @@ BEGIN
   ORDER BY operation_row.created_at_utc LIMIT 1
   FOR UPDATE;
 
-  IF v_request.status IS DISTINCT FROM 'PLANNED' OR v_operation.id IS NULL THEN
+  IF v_operation.id IS NULL THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_STATE_INVALID'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_STATE_INVALID')::text;
+  END IF;
+
+  IF v_request.status IS DISTINCT FROM 'PLANNED'
+     AND NOT coalesce(v_resume_reauthenticated_request, false) THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_STATE_INVALID'
       USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_STATE_INVALID')::text;
   END IF;
@@ -961,8 +989,17 @@ BEGIN
     IF p_actor_user_id IS DISTINCT FROM v_request.requested_by_user_id
        OR v_proof_hash IS NULL OR v_proof_hash !~ '^[0-9a-f]{64}$'
        OR v_request.reauth_proof_hash IS DISTINCT FROM v_proof_hash
-       OR v_request.reauth_consumed_at_utc IS NOT NULL
-       OR v_request.reauth_expires_at_utc IS NULL OR v_request.reauth_expires_at_utc <= v_now
+       OR (
+         coalesce(v_resume_reauthenticated_request, false) IS NOT TRUE
+         AND v_request.reauth_consumed_at_utc IS NOT NULL
+       )
+       OR (
+         coalesce(v_resume_reauthenticated_request, false) IS NOT TRUE
+         AND (
+           v_request.reauth_expires_at_utc IS NULL
+           OR v_request.reauth_expires_at_utc <= v_now
+         )
+       )
        OR p_selection_json->>'selection_hash' IS DISTINCT FROM v_request.selection_hash
        OR p_selection_json->>'plan_hash' IS DISTINCT FROM v_request.plan_hash
        OR NULLIF(pg_catalog.btrim(coalesce(p_reason, '')), '') IS DISTINCT FROM v_request.reason THEN
@@ -971,7 +1008,7 @@ BEGIN
     END IF;
   END IF;
 
-  IF v_command = 'START_AUTO' THEN
+  IF v_command IN ('START_AUTO', 'START_PREPARED') THEN
     SELECT coalesce(
              pg_catalog.jsonb_agg(auth_request.id ORDER BY auth_request.created_at_utc),
              '[]'::jsonb
@@ -999,51 +1036,59 @@ BEGIN
     )
       AND old_token.used_at_utc IS NULL;
 
-    UPDATE public.pay_batches AS auto_batch
-    SET status = 'AWAITING_AUTHORISATION',
+    UPDATE public.pay_batches AS correction_batch
+    SET status = CASE
+          WHEN coalesce(v_request.plan_json->>'requested_action', '') = 'DRAFT_CANCEL'
+            THEN correction_batch.status
+          ELSE 'AWAITING_AUTHORISATION'
+        END,
         schedule_kind = NULL,
         scheduled_at_utc = NULL,
         scheduled_by_user_id = NULL,
         funding_account_ref = NULL,
         funds_warning_hours_json = NULL,
-        execution_intent_json = coalesce(auto_batch.execution_intent_json, '{}'::jsonb)
+        execution_intent_json = coalesce(correction_batch.execution_intent_json, '{}'::jsonb)
           || pg_catalog.jsonb_build_object(
             'correction_request_id', v_request.id,
             'old_authorisation_invalidated_at_utc', v_now,
             'old_schedule_invalidated_at_utc', v_now,
-            'reauthorisation_required', true,
-            'automatic_provider_no_money', true
+            'reauthorisation_required',
+              coalesce(v_request.plan_json->>'requested_action', '') <> 'DRAFT_CANCEL',
+            'automatic_provider_no_money', v_command = 'START_AUTO',
+            'requester_reauthenticated_cancellation', v_command = 'START_PREPARED'
           )
-    WHERE auto_batch.id = v_request.pay_batch_id;
+    WHERE correction_batch.id = v_request.pay_batch_id;
   END IF;
 
   UPDATE public.pay_payment_correction_requests AS started_request
-  SET status = CASE WHEN v_command = 'START_AUTO' THEN 'AUTHORISED' ELSE 'REQUESTED' END,
-      reauth_consumed_at_utc = CASE WHEN v_command = 'START_AUTO' THEN NULL ELSE v_now END,
-      authorised_at_utc = CASE WHEN v_command = 'START_AUTO' THEN v_now ELSE started_request.authorised_at_utc END,
-      approved_count = CASE WHEN v_command = 'START_AUTO' THEN started_request.required_quantity ELSE started_request.approved_count END,
-      plan_json = CASE
-        WHEN v_command = 'START_AUTO' THEN
-          coalesce(started_request.plan_json, '{}'::jsonb)
-          || pg_catalog.jsonb_build_object(
-            'old_authorisation_request_ids', v_old_auth_request_ids,
-            'old_schedule_kind', v_old_schedule_kind,
-            'old_scheduled_at_utc', v_old_scheduled_at_utc,
-            'old_authorisation_invalidated_at_utc', v_now,
-            'old_schedule_invalidated_at_utc', v_now
-          )
-        ELSE started_request.plan_json
+  SET status = 'AUTHORISED',
+      required_quantity = 1,
+      reauth_consumed_at_utc = CASE
+        WHEN v_command = 'START_AUTO' THEN NULL
+        WHEN coalesce(v_resume_reauthenticated_request, false) THEN started_request.reauth_consumed_at_utc
+        ELSE v_now
       END,
+      authorised_at_utc = coalesce(started_request.authorised_at_utc, v_now),
+      approved_count = 1,
+      plan_json = coalesce(started_request.plan_json, '{}'::jsonb)
+        || pg_catalog.jsonb_build_object(
+          'old_authorisation_request_ids', v_old_auth_request_ids,
+          'old_schedule_kind', v_old_schedule_kind,
+          'old_scheduled_at_utc', v_old_scheduled_at_utc,
+          'old_authorisation_invalidated_at_utc', v_now,
+          'old_schedule_invalidated_at_utc', v_now,
+          'single_user_cancellation_authority', true
+        ),
       updated_at_utc = v_now
   WHERE started_request.id = v_request_id
   RETURNING * INTO v_request;
 
   UPDATE public.banking_pay_operations AS started_operation
-  SET status = CASE WHEN v_command = 'START_AUTO' THEN 'RUNNING' ELSE 'WAITING_AUTHORISATION' END,
-      phase = CASE WHEN v_command = 'START_AUTO' THEN 'EXPAND_WORK' ELSE 'AWAITING_AUTHORISATION' END,
-      runner_state = CASE WHEN v_command = 'START_AUTO' THEN 'RUNNABLE' ELSE 'WAITING_USER' END,
-      requires_user_action = v_command <> 'START_AUTO',
-      run_after_utc = CASE WHEN v_command = 'START_AUTO' THEN v_now ELSE NULL END,
+  SET status = 'RUNNING',
+      phase = 'EXPAND_WORK',
+      runner_state = 'RUNNABLE',
+      requires_user_action = false,
+      run_after_utc = v_now,
       lease_owner = NULL, lease_expires_at_utc = NULL, locked_by = NULL, lock_expires_at_utc = NULL,
       updated_at_utc = v_now
   WHERE started_operation.id = v_operation.id
@@ -1055,23 +1100,37 @@ BEGIN
   ) VALUES (
     v_request_id, p_pay_batch_id, CASE WHEN v_command = 'START_AUTO' THEN 'SYSTEM' ELSE 'USER' END,
     CASE WHEN v_command = 'START_AUTO' THEN NULL ELSE p_actor_user_id END,
-    'REQUEST', v_now, 'Immutable correction request started.', NULL, pg_catalog.to_jsonb(v_request),
-    pg_catalog.jsonb_build_object('code', CASE WHEN v_command = 'START_AUTO' THEN 'AUTO_REQUEST_STARTED' ELSE 'REAUTH_PROOF_CONSUMED' END)
+    CASE WHEN coalesce(v_resume_reauthenticated_request, false) THEN 'AUTHORISE' ELSE 'REQUEST' END,
+    v_now,
+    CASE
+      WHEN v_command = 'START_AUTO' THEN 'Immutable automatic correction request started.'
+      ELSE 'Requester reauthenticated and authorised the single-user cancellation.'
+    END,
+    NULL, pg_catalog.to_jsonb(v_request),
+    pg_catalog.jsonb_build_object(
+      'code', CASE
+        WHEN v_command = 'START_AUTO' THEN 'AUTO_REQUEST_STARTED'
+        WHEN coalesce(v_resume_reauthenticated_request, false) THEN 'LEGACY_REQUESTER_REAUTHORISED_CANCELLATION_RESUMED'
+        ELSE 'REQUESTER_REAUTHORISED_CANCELLATION'
+      END
+    )
   );
 
-  IF v_command = 'START_AUTO' THEN
-    PERFORM public.banking_pay_batch_signal_touch(
-      p_pay_batch_id := v_request.pay_batch_id,
-      p_change_reason := 'PAYMENT_CORRECTION_AUTO_AUTHORISED',
-      p_change_source := 'pay_payment_correction_request_start',
-      p_change_scope_json := pg_catalog.jsonb_build_object(
-        'correction_request_id', v_request.id,
-        'operation_id', v_operation.id,
-        'source_bank_event_id', v_request.source_bank_event_id,
-        'requested_action', v_request.plan_json ->> 'requested_action'
-      )
-    );
-  END IF;
+  PERFORM public.banking_pay_batch_signal_touch(
+    p_pay_batch_id := v_request.pay_batch_id,
+    p_change_reason := CASE
+      WHEN v_command = 'START_AUTO' THEN 'PAYMENT_CORRECTION_AUTO_AUTHORISED'
+      ELSE 'PAYMENT_CORRECTION_REQUESTER_AUTHORISED'
+    END,
+    p_change_source := 'pay_payment_correction_request_start',
+    p_change_scope_json := pg_catalog.jsonb_build_object(
+      'correction_request_id', v_request.id,
+      'operation_id', v_operation.id,
+      'source_bank_event_id', v_request.source_bank_event_id,
+      'requested_action', v_request.plan_json ->> 'requested_action',
+      'single_user_cancellation_authority', v_command = 'START_PREPARED'
+    )
+  );
 
   RETURN pg_catalog.jsonb_build_object(
     'ok', true, 'is_existing', false, 'correction_request_id', v_request_id, 'operation_id', v_operation.id,
@@ -1082,9 +1141,9 @@ BEGIN
     'approved_count', coalesce(v_request.approved_count, 0),
     'required_quantity', greatest(coalesce(v_request.required_quantity, 1), 1),
     'requires_reauthentication', false,
-    'requires_authorisation', v_request.status IN ('REQUESTED','AWAITING_AUTHORISATION'),
-    'display_status', CASE WHEN v_command = 'START_AUTO' THEN 'Failed payment release authorised' ELSE 'Cancellation requested' END,
-    'display_message', CASE WHEN v_command = 'START_AUTO' THEN 'CloudTMS is processing the provider-confirmed failed-payment release.' ELSE 'The cancellation request is awaiting the configured financial approval.' END,
+    'requires_authorisation', false,
+    'display_status', CASE WHEN v_command = 'START_AUTO' THEN 'Failed payment release authorised' ELSE 'Cancellation authorised' END,
+    'display_message', CASE WHEN v_command = 'START_AUTO' THEN 'CloudTMS is processing the provider-confirmed failed-payment release.' ELSE 'CloudTMS is processing the authorised cancellation.' END,
     'continuation', pg_catalog.jsonb_build_object(
       'required', v_request.status IN ('AUTHORISED','EXPANDED','PROCESSING'),
       'operation_id', v_operation.id, 'operation_type', 'PAYMENT_CORRECTION',
@@ -1092,10 +1151,10 @@ BEGIN
       'phase', v_operation.phase, 'run_after_utc', v_operation.run_after_utc,
       'reason', CASE WHEN v_command = 'START_AUTO' THEN 'AUTO_NO_MONEY_START' ELSE 'PAYMENT_CORRECTION_START' END,
       'successor_relation', CASE WHEN v_request.status IN ('AUTHORISED','EXPANDED','PROCESSING') THEN 'SELF' ELSE 'NONE' END,
-      'requires_user_action', v_request.status IN ('REQUESTED','AWAITING_AUTHORISATION'),
+      'requires_user_action', false,
       'terminal', false
     ),
-    'code', CASE WHEN v_command = 'START_AUTO' THEN 'AUTO_REQUEST_STARTED' ELSE 'PAYMENT_CORRECTION_REQUESTED' END
+    'code', CASE WHEN v_command = 'START_AUTO' THEN 'AUTO_REQUEST_STARTED' ELSE 'PAYMENT_CORRECTION_AUTHORISED' END
   );
 END;
 $function$;
