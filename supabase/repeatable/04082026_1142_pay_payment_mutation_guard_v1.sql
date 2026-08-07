@@ -92,12 +92,23 @@ BEGIN
     INTO v_active_gate_request_id
     FROM public.pay_payment_correction_requests AS request_row
     WHERE request_row.pay_batch_id = p_pay_batch_id
-      AND request_row.status IN (
-          'REQUESTED',
-          'AWAITING_AUTHORISATION',
-          'AUTHORISED',
-          'EXPANDED',
-          'PROCESSING'
+      AND (
+          request_row.status IN (
+              'REQUESTED',
+              'AWAITING_AUTHORISATION',
+              'AUTHORISED',
+              'EXPANDED',
+              'PROCESSING'
+          )
+          OR EXISTS (
+              SELECT 1
+              FROM public.banking_pay_operations AS refresh_operation
+              WHERE refresh_operation.operation_type = 'PAYMENT_CORRECTION'
+                AND refresh_operation.pay_batch_id = request_row.pay_batch_id
+                AND refresh_operation.input_json ->> 'correction_request_id' = request_row.id::text
+                AND refresh_operation.phase = 'REFRESH_WORKBENCH'
+                AND refresh_operation.status NOT IN ('COMPLETE', 'FAILED', 'CANCELLED')
+          )
       )
     ORDER BY request_row.requested_at_utc DESC, request_row.id DESC
     LIMIT 1;

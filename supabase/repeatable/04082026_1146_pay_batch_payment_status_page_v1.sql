@@ -1264,6 +1264,43 @@ BEGIN
         JOIN page_keys ON page_keys.pay_batch_candidate_id = correction_item.pay_batch_candidate_id
         WHERE correction_item.pay_batch_id = p_pay_batch_id
         GROUP BY correction_item.pay_batch_candidate_id
+    ), latest_removal_request AS (
+        SELECT DISTINCT ON (correction_item.pay_batch_candidate_id)
+               correction_item.pay_batch_candidate_id,
+               correction_item.correction_request_id
+        FROM public.pay_payment_correction_items AS correction_item
+        JOIN page_keys ON page_keys.pay_batch_candidate_id = correction_item.pay_batch_candidate_id
+        JOIN public.pay_payment_correction_requests AS request_row
+          ON request_row.id = correction_item.correction_request_id
+         AND request_row.pay_batch_id = correction_item.pay_batch_id
+        WHERE correction_item.pay_batch_id = p_pay_batch_id
+          AND correction_item.status = 'APPLIED'
+          AND correction_item.correction_item_kind IN (
+              'PRE_BANK_CANCEL',
+              'NO_MONEY_UNWIND'
+          )
+        ORDER BY correction_item.pay_batch_candidate_id,
+                 correction_item.applied_at_utc DESC NULLS LAST,
+                 request_row.updated_at_utc DESC,
+                 correction_item.correction_request_id DESC
+    ), removed_amount_rollup AS (
+        SELECT latest_removal.pay_batch_candidate_id,
+               pg_catalog.sum(correction_item.source_amount) AS removed_frozen_source_amount,
+               pg_catalog.sum(correction_item.amount_inc_vat) AS removed_frozen_payable_amount,
+               pg_catalog.max(member_row.active_amount) AS removed_reviewed_payment_amount
+        FROM latest_removal_request AS latest_removal
+        JOIN public.pay_payment_correction_items AS correction_item
+          ON correction_item.correction_request_id = latest_removal.correction_request_id
+         AND correction_item.pay_batch_candidate_id = latest_removal.pay_batch_candidate_id
+         AND correction_item.status = 'APPLIED'
+         AND correction_item.correction_item_kind IN (
+             'PRE_BANK_CANCEL',
+             'NO_MONEY_UNWIND'
+         )
+        LEFT JOIN public.pay_payment_correction_request_candidates AS member_row
+          ON member_row.correction_request_id = latest_removal.correction_request_id
+         AND member_row.pay_batch_candidate_id = latest_removal.pay_batch_candidate_id
+        GROUP BY latest_removal.pay_batch_candidate_id
     ), work_rollup AS (
         SELECT work_item.pay_batch_candidate_id,
                (pg_catalog.array_agg(work_item.status ORDER BY work_item.created_at_utc DESC, work_item.id DESC))[1]
@@ -1368,6 +1405,39 @@ BEGIN
                    ) * 100
                )::bigint
                    AS original_payment_amount_pence,
+               CASE
+                   WHEN coalesce(correction_rollup.has_applied_removal, false)
+                     OR coalesce(item_rollup.active_item_count, 0) = 0
+                   THEN pg_catalog.round(
+                       coalesce(removed_amount_rollup.removed_frozen_source_amount, 0) * 100
+                   )::bigint
+                   ELSE NULL::bigint
+               END AS cancelled_gross_base_amount_pence,
+               CASE
+                   WHEN coalesce(correction_rollup.has_applied_removal, false)
+                     OR coalesce(item_rollup.active_item_count, 0) = 0
+                   THEN pg_catalog.round(
+                       coalesce(
+                           removed_amount_rollup.removed_frozen_payable_amount,
+                           removed_amount_rollup.removed_reviewed_payment_amount,
+                           0
+                       ) * 100
+                   )::bigint
+                   ELSE NULL::bigint
+               END AS cancelled_payable_amount_pence,
+               CASE
+                   WHEN coalesce(correction_rollup.has_applied_removal, false)
+                     OR coalesce(item_rollup.active_item_count, 0) = 0
+                   THEN pg_catalog.round(
+                       coalesce(
+                           removed_amount_rollup.removed_reviewed_payment_amount,
+                           membership_history.reviewed_payment_amount,
+                           candidate_row.net_bank_amount,
+                           0
+                       ) * 100
+                   )::bigint
+                   ELSE NULL::bigint
+               END AS cancelled_bank_amount_pence,
                coalesce(item_rollup.active_item_count, 0) AS active_item_count,
                coalesce(item_rollup.has_paye_item, false) AS has_paye_item,
                coalesce(item_rollup.has_non_paye_item, false) AS has_non_paye_item,
@@ -1404,6 +1474,7 @@ BEGIN
            ON status_index.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN item_rollup ON item_rollup.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN correction_rollup ON correction_rollup.pay_batch_candidate_id = candidate_row.id
+        LEFT JOIN removed_amount_rollup ON removed_amount_rollup.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN work_rollup ON work_rollup.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN membership_history ON membership_history.pay_batch_candidate_id = candidate_row.id
         LEFT JOIN provider_rollup ON provider_rollup.pay_batch_candidate_id = candidate_row.id
@@ -1664,6 +1735,9 @@ BEGIN
                     'available_actions', page_rows.available_actions,
                     'original_payment_amount_pence', page_rows.original_payment_amount_pence,
                     'active_payment_amount_pence', page_rows.active_payment_amount_pence,
+                    'cancelled_gross_base_amount_pence', page_rows.cancelled_gross_base_amount_pence,
+                    'cancelled_payable_amount_pence', page_rows.cancelled_payable_amount_pence,
+                    'cancelled_bank_amount_pence', page_rows.cancelled_bank_amount_pence,
                     'include_in_active_overview', NOT page_rows.removed,
                     'include_in_active_paye_schedule', page_rows.has_paye_item AND NOT page_rows.removed,
                     'active_item_count', page_rows.active_item_count,
