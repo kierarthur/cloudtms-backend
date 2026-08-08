@@ -827,7 +827,7 @@
       "schema": "public",
       "name": "pay_pre_bank_cancel_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "3f63d887b3825519dec6913370c9ece2e7a0b9693983db5e0a4ce6dc9079f348",
+      "definition_sha256": "0cbc5cc00f8eb7fab4745dfb8af6a284d57912db40c0b7b93be4a5a5299bef04",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -924,7 +924,7 @@
       "schema": "public",
       "name": "pay_payment_cancelability_diagnostic",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_actor_user_id uuid, p_diagnostic_context text",
-      "definition_sha256": "3fd95ef29193a0224de11a052c93dbe055231a4417058b4149279ddb4920a1d4",
+      "definition_sha256": "7888b5bd9bca1c1a375f88f2e8631d3dd6f8d3839d84820fa1597f2de1a5e065",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
