@@ -4,7 +4,7 @@
 -- file invalidated an unchanged later authority.
 --
 -- legacy_monolith_sha256:
--- 6b10d0b74fe2a71a616a9d0bea3bffcac44fda63d2e1e01575bb8ad030d06264
+-- 8e5151ae39ff7cf01c15ca65c55081b049be86e836ec283f6bf680d425f9ccb3
 --
 -- A source-authority regression test derives this complete include list and
 -- hash from the repository. Any future omnibus edit must therefore update this
