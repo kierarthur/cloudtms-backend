@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_sync_overpayments_from_workbench_workspace_v1",
       "identity_arguments": "p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]",
-      "definition_sha256": "2416fc4249d106f2754600cb3eba5e724eb25f227f44ff102f8cc01baa72b9fc",
+      "definition_sha256": "c366e8b29b9d735d1a446fef44c26e160a965e5746ce9b06b0ad54923ed2dbb4",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
