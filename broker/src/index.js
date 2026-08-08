@@ -38453,14 +38453,27 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         }
         const scheduledNotice = await queueScheduledPaymentNoticeBestEffort(progressJson.pay_batch_auth_start, progressJson, inputJson);
         if (scheduledTimeMs > Date.now() + 1000) {
-          const delaySeconds = Math.max(1, Math.min(86400, Math.ceil((scheduledTimeMs - Date.now()) / 1000)));
-          return moreWork('SCHEDULE_PAYMENT', Object.assign({
-            status_text: 'The authorised no-bank payment execution is waiting for its scheduled time.',
+          const scheduled = await rpc('pay_batch_schedule', {
+            p_pay_batch_id: payBatchId,
+            p_schedule_kind: scheduleKind,
+            p_scheduled_at_utc: scheduledAtUtc,
+            p_funding_account_ref: inputJson.funding_account_ref || inputJson.fundingAccountRef || null,
+            p_warning_hours_json: Array.isArray(inputJson.warning_hours_json) ? inputJson.warning_hours_json : [],
+            p_actor_user_id: actorUserId,
+            p_operation_id: operationId,
+            p_freshness_result_hash: progressJson.freshness_result_hash || inputJson.freshness_result_hash || null
+          }, 'pay_batch_schedule');
+          if (scheduled.ok === false) {
+            return reviewRequired(currentPhase, scheduled.code || 'PAY_BATCH_SCHEDULE_FAILED', scheduled.message || 'The authorised no-bank payment could not be scheduled.', { pay_batch_schedule: scheduled, no_bank_payment_proof: scheduledNoBankProof });
+          }
+          return complete(Object.assign({
+            status_text: 'The authorised no-bank payment was scheduled without provider submission.',
+            pay_batch_schedule: scheduled,
             pay_batch_scheduled_notice: scheduledNotice,
             scheduled_wait_until_utc: new Date(scheduledTimeMs).toISOString(),
             scheduled_no_bank_payment_wait: true,
-            next_required_phase: 'WAIT_FOR_SCHEDULE'
-          }, projectionProofProgressPatch(scheduledNoBankProof)), delaySeconds, 'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT');
+            provider_submission_suppressed: true
+          }, projectionProofProgressPatch(scheduledNoBankProof)));
         }
         return moreWork('START_LOCAL_SETTLEMENT', Object.assign({
           status_text: 'The scheduled no-bank payment execution is due; local settlement is next without provider submission.',
@@ -40622,6 +40635,37 @@ async function processBankingPayContinuationMessage(env, message, options = {}) 
   });
   const current = await readBankingPayContinuationOperation(env, parsed.operation_id);
   if (!current) return { ok: true, terminal: true, successor: null, worker_result: workerResult };
+  if (!workerResult || workerResult.claimed !== true) {
+    const notClaimedReason = String(workerResult && workerResult.not_claimed_reason || 'NO_RUNNABLE_OPERATION').trim().toUpperCase();
+    const safeDelayedReasons = new Set(['RUN_AFTER_NOT_DUE', 'LEASE_ACTIVE']);
+    if (!safeDelayedReasons.has(notClaimedReason)) {
+      return {
+        ok: workerResult && workerResult.ok !== false,
+        terminal: false,
+        successor: null,
+        worker_result: workerResult,
+        continuation_suppressed: true,
+        continuation_suppressed_reason: notClaimedReason
+      };
+    }
+
+    const delayedSuccessor = deriveBankingPayContinuationDescriptor(current, workerResult);
+    if (delayedSuccessor && delayedSuccessor.required !== false && notClaimedReason === 'LEASE_ACTIVE') {
+      const leaseExpiresAtUtc = String(current.lease_expires_at_utc || current.lock_expires_at_utc || '').trim();
+      const leaseExpiresAtMs = leaseExpiresAtUtc ? Date.parse(leaseExpiresAtUtc) : NaN;
+      delayedSuccessor.run_after_utc = Number.isFinite(leaseExpiresAtMs)
+        ? new Date(Math.max(Date.now() + 1000, leaseExpiresAtMs + 1000)).toISOString()
+        : new Date(Date.now() + 5000).toISOString();
+      delayedSuccessor.reason = 'LEASE_ACTIVE_RETRY';
+    }
+    return {
+      ok: workerResult && workerResult.ok !== false,
+      terminal: false,
+      operation: current,
+      worker_result: workerResult,
+      successor: delayedSuccessor
+    };
+  }
   const successor = deriveBankingPayContinuationDescriptor(current, workerResult);
   return { ok: workerResult && workerResult.ok !== false, operation: current, worker_result: workerResult, successor };
 }

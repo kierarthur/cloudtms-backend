@@ -27,6 +27,22 @@ test('one queue message makes one generic claim-and-advance call and never precl
   assert.equal((body.match(/claimAndAdvanceOneBankingPayOperation\(/g) || []).length, 1);
   assert.doesNotMatch(body, /banking_pay_operation_claim_next/);
   assert.match(body, /executionContext:\s*options\.executionContext\s*\|\|\s*null/);
+  assert.match(body, /workerResult\.claimed\s*!==\s*true/);
+  assert.match(body, /safeDelayedReasons\s*=\s*new Set\(\['RUN_AFTER_NOT_DUE', 'LEASE_ACTIVE'\]\)/);
+  assert.match(body, /continuation_suppressed:\s*true/);
+  assert.match(body, /LEASE_ACTIVE_RETRY/);
+});
+
+test('a future scheduled no-bank payment is committed by the schedule owner and completes without provider submission', () => {
+  const body = functionBody('advanceBankingPayExecuteOperation');
+  const noBankStart = body.indexOf('if (scheduledNoBankProof.valid === true)');
+  const manualStart = body.indexOf('if (isLocalManualSettlementMode())', noBankStart);
+  assert.ok(noBankStart >= 0 && manualStart > noBankStart);
+  const noBankBranch = body.slice(noBankStart, manualStart);
+  assert.match(noBankBranch, /await rpc\('pay_batch_schedule'/);
+  assert.match(noBankBranch, /return complete\(Object\.assign\(/);
+  assert.match(noBankBranch, /provider_submission_suppressed:\s*true/);
+  assert.doesNotMatch(noBankBranch, /WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT/);
 });
 
 test('queue continuation is explicit, bounded and awaits a successor before acknowledgement', () => {
