@@ -3,9 +3,14 @@ import test from 'node:test';
 
 import {
   evaluateTestCsvExecutionBypass,
+  evaluateTestFutureStandardPaymentBypass,
+  evaluateTestPaymentReversalBypass,
   evaluateTestSameWeekPayeOverrideBypass,
+  isTestFutureStandardPaymentOnlyToken,
+  isTestPaymentReversalOnlyToken,
   isTestSameWeekPayeOverrideOnlyToken,
-  testCsvExecutionTokenMatchesMode
+  testCsvExecutionTokenMatchesMode,
+  testPaymentScheduleTokenMatchesRequest
 } from '../src/test-csv-execution-bypass.js';
 
 const userId = '11111111-1111-4111-8111-111111111111';
@@ -31,6 +36,53 @@ test('allows only the configured TEST user to bypass same-week PAYE draft 2FA af
     user: { id: userId },
     purpose: 'PAYE_SAME_WEEK_OVERRIDE'
   }).allowed, true);
+});
+
+test('allows only the configured TEST user for the exact future STANDARD_BANK test schedule', () => {
+  const result = evaluateTestFutureStandardPaymentBypass({
+    env: testEnv,
+    user: { id: userId },
+    purpose: 'PAYMENT_SCHEDULE',
+    executionMode: 'STANDARD_BANK',
+    scheduleKind: 'SCHEDULED',
+    scheduledAtUtc: '2026-08-15T02:00:00+01:00'
+  });
+  assert.equal(result.allowed, true);
+  assert.equal(result.scheduledAtUtc, '2026-08-15T01:00:00.000Z');
+});
+
+for (const [name, patch] of [
+  ['different user', { user: { id: '22222222-2222-4222-8222-222222222222' } }],
+  ['immediate schedule', { scheduleKind: 'IMMEDIATE' }],
+  ['CSV mode', { executionMode: 'CSV_SETTLEMENT' }],
+  ['different date', { scheduledAtUtc: '2026-08-16T01:00:00.000Z' }],
+  ['reversal purpose', { purpose: 'PAYMENT_REVERSAL' }]
+]) {
+  test(`future standard-payment bypass denies ${name}`, () => {
+    const input = {
+      env: testEnv,
+      user: { id: userId },
+      purpose: 'PAYMENT_SCHEDULE',
+      executionMode: 'STANDARD_BANK',
+      scheduleKind: 'SCHEDULED',
+      scheduledAtUtc: '2026-08-15T01:00:00.000Z',
+      ...patch
+    };
+    assert.equal(evaluateTestFutureStandardPaymentBypass(input).allowed, false);
+  });
+}
+
+test('allows only the configured TEST user to bypass payment-reversal 2FA', () => {
+  assert.equal(evaluateTestPaymentReversalBypass({
+    env: testEnv,
+    user: { id: userId },
+    purpose: 'PAYMENT_REVERSAL'
+  }).allowed, true);
+  assert.equal(evaluateTestPaymentReversalBypass({
+    env: testEnv,
+    user: { id: userId },
+    purpose: 'PAYMENT_SCHEDULE'
+  }).allowed, false);
 });
 
 for (const [name, patch] of [
@@ -88,4 +140,32 @@ test('CSV-only token cannot be reused for another execution mode', () => {
 test('normal reauthentication tokens remain compatible with all modes', () => {
   assert.equal(testCsvExecutionTokenMatchesMode({}, 'STANDARD_BANK'), true);
   assert.equal(testCsvExecutionTokenMatchesMode({}, 'CSV_SETTLEMENT'), true);
+});
+
+test('future-payment TEST token is bound to mode, schedule kind and exact UTC instant', () => {
+  const payload = {
+    test_future_standard_payment_only: true,
+    test_scheduled_at_utc: '2026-08-15T01:00:00.000Z'
+  };
+  assert.equal(isTestFutureStandardPaymentOnlyToken(payload), true);
+  assert.equal(testPaymentScheduleTokenMatchesRequest(payload, {
+    executionMode: 'STANDARD_BANK',
+    scheduleKind: 'SCHEDULED',
+    scheduledAtUtc: '2026-08-15T02:00:00+01:00'
+  }), true);
+  assert.equal(testPaymentScheduleTokenMatchesRequest(payload, {
+    executionMode: 'STANDARD_BANK',
+    scheduleKind: 'IMMEDIATE',
+    scheduledAtUtc: null
+  }), false);
+  assert.equal(testPaymentScheduleTokenMatchesRequest(payload, {
+    executionMode: 'STANDARD_BANK',
+    scheduleKind: 'SCHEDULED',
+    scheduledAtUtc: '2026-08-15T01:01:00.000Z'
+  }), false);
+});
+
+test('payment-reversal TEST token is explicitly purpose restricted', () => {
+  assert.equal(isTestPaymentReversalOnlyToken({ test_payment_reversal_only: true }), true);
+  assert.equal(isTestPaymentReversalOnlyToken({ test_future_standard_payment_only: true }), false);
 });

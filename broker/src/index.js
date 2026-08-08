@@ -49,10 +49,14 @@ import {
 import { normalisePostgresTimestampIso } from './timestamp-normalisation.js';
 import {
   evaluateTestCsvExecutionBypass,
+  evaluateTestFutureStandardPaymentBypass,
+  evaluateTestPaymentReversalBypass,
   evaluateTestSameWeekPayeOverrideBypass,
   isTestCsvExecutionOnlyToken,
+  isTestFutureStandardPaymentOnlyToken,
+  isTestPaymentReversalOnlyToken,
   isTestSameWeekPayeOverrideOnlyToken,
-  testCsvExecutionTokenMatchesMode
+  testPaymentScheduleTokenMatchesRequest
 } from './test-csv-execution-bypass.js';
 import {
   createReadyInvoiceDocumentLink,
@@ -43136,7 +43140,11 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
 
   let reauthResult;
   try {
-    reauthResult = await verifyPaymentScheduleReauth(env, user, reauthToken, { executionMode });
+    reauthResult = await verifyPaymentScheduleReauth(env, user, reauthToken, {
+      executionMode,
+      scheduleKind,
+      scheduledAtUtc
+    });
   } catch (error) {
     return fail(401, 'REAUTH_VERIFICATION_FAILED', String(error?.message || error || 'Payment verification failed.'));
   }
@@ -43895,14 +43903,19 @@ async function verifyPaymentScheduleReauth(env, user, reauthToken, options = {})
   if (String(payload.typ || '').trim() !== 'reauth') return { ok: false, response: unauthorized('Invalid reauth_token') };
   if (String(payload.purpose || '').trim() !== 'PAYMENT_SCHEDULE') return { ok: false, response: unauthorized('Invalid reauth_token') };
   if (String(payload.sub || '').trim() !== String(user?.id || '').trim()) return { ok: false, response: unauthorized('Invalid reauth_token') };
-  if (!testCsvExecutionTokenMatchesMode(payload, options?.executionMode)) {
+  if (!testPaymentScheduleTokenMatchesRequest(payload, {
+    executionMode: options?.executionMode,
+    scheduleKind: options?.scheduleKind,
+    scheduledAtUtc: options?.scheduledAtUtc
+  })) {
     return { ok: false, response: unauthorized('Invalid reauth_token') };
   }
 
   return {
     ok: true,
     payload,
-    test_csv_execution_bypass_used: isTestCsvExecutionOnlyToken(payload)
+    test_csv_execution_bypass_used: isTestCsvExecutionOnlyToken(payload),
+    test_future_standard_payment_bypass_used: isTestFutureStandardPaymentOnlyToken(payload)
   };
 }
 
@@ -133773,7 +133786,8 @@ async function verifyPaymentReversalReauth(env, user, sessionOrToken, tokenOrExp
   return {
     ok: true,
     verified_by_user_id: currentUserId,
-    verified_at_utc: new Date().toISOString()
+    verified_at_utc: new Date().toISOString(),
+    test_payment_reversal_bypass_used: isTestPaymentReversalOnlyToken(payload)
   };
 }
 
@@ -133796,6 +133810,8 @@ async function handleAuthReauthStart(env, req) {
   const allowedPurposes = new Set(['PAYMENT_SCHEDULE', 'PAYE_SAME_WEEK_OVERRIDE', 'PAYMENT_REVERSAL']);
   if (!allowedPurposes.has(requestedPurpose)) return badRequest('invalid_reauth_purpose');
   const requestedExecutionMode = String(body.execution_mode || body.executionMode || '').trim().toUpperCase();
+  const requestedScheduleKind = String(body.schedule_kind || body.scheduleKind || '').trim().toUpperCase();
+  const requestedScheduledAtUtc = String(body.scheduled_at_utc || body.scheduledAtUtc || '').trim();
 
   // Verify current password against stored hash
   const userRow = await sbGetUserById(env, u.id); // includes password_hash
@@ -133838,6 +133854,83 @@ async function handleAuthReauthStart(env, req) {
       reauth_token: token,
       expires_in: ttlSec,
       test_csv_execution_bypass: true
+    }), { status: 200, headers: JSON_HEADERS });
+  }
+
+  const testFutureStandardPaymentBypass = evaluateTestFutureStandardPaymentBypass({
+    env,
+    user: userRow,
+    purpose: requestedPurpose,
+    executionMode: requestedExecutionMode,
+    scheduleKind: requestedScheduleKind,
+    scheduledAtUtc: requestedScheduledAtUtc
+  });
+  if (testFutureStandardPaymentBypass.allowed) {
+    const ttlSec = 300;
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const payload = {
+      typ: 'reauth',
+      sub: String(userRow.id),
+      purpose: 'PAYMENT_SCHEDULE',
+      test_future_standard_payment_only: true,
+      test_scheduled_at_utc: testFutureStandardPaymentBypass.scheduledAtUtc,
+      iat: nowUnix,
+      exp: nowUnix + ttlSec
+    };
+    let token;
+    try {
+      token = await createToken(sessionSecret(env), payload);
+    } catch (e) {
+      return serverError(e?.message || String(e));
+    }
+    try {
+      console.warn('[security] TEST-only future standard-payment 2FA override used after password verification.');
+    } catch {}
+    return new Response(JSON.stringify({
+      ok: true,
+      tfa_required: false,
+      purpose: 'PAYMENT_SCHEDULE',
+      execution_mode: 'STANDARD_BANK',
+      schedule_kind: 'SCHEDULED',
+      scheduled_at_utc: testFutureStandardPaymentBypass.scheduledAtUtc,
+      reauth_token: token,
+      expires_in: ttlSec,
+      test_future_standard_payment_bypass: true
+    }), { status: 200, headers: JSON_HEADERS });
+  }
+
+  const testPaymentReversalBypass = evaluateTestPaymentReversalBypass({
+    env,
+    user: userRow,
+    purpose: requestedPurpose
+  });
+  if (testPaymentReversalBypass.allowed) {
+    const ttlSec = 300;
+    const nowUnix = Math.floor(Date.now() / 1000);
+    const payload = {
+      typ: 'reauth',
+      sub: String(userRow.id),
+      purpose: 'PAYMENT_REVERSAL',
+      test_payment_reversal_only: true,
+      iat: nowUnix,
+      exp: nowUnix + ttlSec
+    };
+    let token;
+    try {
+      token = await createToken(sessionSecret(env), payload);
+    } catch (e) {
+      return serverError(e?.message || String(e));
+    }
+    try {
+      console.warn('[security] TEST-only payment-reversal 2FA override used after password verification.');
+    } catch {}
+    return new Response(JSON.stringify({
+      ok: true,
+      tfa_required: false,
+      purpose: 'PAYMENT_REVERSAL',
+      reauth_token: token,
+      expires_in: ttlSec,
+      test_payment_reversal_bypass: true
     }), { status: 200, headers: JSON_HEADERS });
   }
 

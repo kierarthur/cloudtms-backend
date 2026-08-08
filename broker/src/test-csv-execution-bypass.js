@@ -1,5 +1,6 @@
 const TEST_SUPABASE_URL = 'https://yakevhtttcsljosbdpov.supabase.co';
 const TEST_FRONTEND_ORIGIN = 'https://testmode.arthur-rai.co.uk';
+const TEST_FUTURE_STANDARD_PAYMENT_AT_UTC = '2026-08-15T01:00:00.000Z';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const text = (value) => String(value == null ? '' : value).trim();
@@ -52,6 +53,46 @@ export function evaluateTestSameWeekPayeOverrideBypass({ env, user, purpose } = 
   };
 }
 
+const canonicalIso = (value) => {
+  const parsed = Date.parse(text(value));
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : '';
+};
+
+export function evaluateTestFutureStandardPaymentBypass({
+  env,
+  user,
+  purpose,
+  executionMode,
+  scheduleKind,
+  scheduledAtUtc
+} = {}) {
+  const allowed = evaluateConfiguredTestUser({ env, user })
+    && upper(purpose) === 'PAYMENT_SCHEDULE'
+    && upper(executionMode) === 'STANDARD_BANK'
+    && upper(scheduleKind) === 'SCHEDULED'
+    && canonicalIso(scheduledAtUtc) === TEST_FUTURE_STANDARD_PAYMENT_AT_UTC;
+
+  return {
+    allowed,
+    scheduledAtUtc: allowed ? TEST_FUTURE_STANDARD_PAYMENT_AT_UTC : null,
+    reason: allowed
+      ? 'TEST_FUTURE_STANDARD_PAYMENT_BYPASS_ALLOWED'
+      : 'TEST_FUTURE_STANDARD_PAYMENT_BYPASS_DENIED'
+  };
+}
+
+export function evaluateTestPaymentReversalBypass({ env, user, purpose } = {}) {
+  const allowed = evaluateConfiguredTestUser({ env, user })
+    && upper(purpose) === 'PAYMENT_REVERSAL';
+
+  return {
+    allowed,
+    reason: allowed
+      ? 'TEST_PAYMENT_REVERSAL_BYPASS_ALLOWED'
+      : 'TEST_PAYMENT_REVERSAL_BYPASS_DENIED'
+  };
+}
+
 export function isTestCsvExecutionOnlyToken(payload) {
   return payload?.test_csv_execution_only === true;
 }
@@ -60,7 +101,25 @@ export function isTestSameWeekPayeOverrideOnlyToken(payload) {
   return payload?.test_same_week_paye_override_only === true;
 }
 
+export function isTestFutureStandardPaymentOnlyToken(payload) {
+  return payload?.test_future_standard_payment_only === true;
+}
+
+export function isTestPaymentReversalOnlyToken(payload) {
+  return payload?.test_payment_reversal_only === true;
+}
+
 export function testCsvExecutionTokenMatchesMode(payload, executionMode) {
   if (!isTestCsvExecutionOnlyToken(payload)) return true;
   return upper(executionMode) === 'CSV_SETTLEMENT';
+}
+
+export function testPaymentScheduleTokenMatchesRequest(payload, request = {}) {
+  if (!testCsvExecutionTokenMatchesMode(payload, request.executionMode)) return false;
+  if (!isTestFutureStandardPaymentOnlyToken(payload)) return true;
+
+  return upper(request.executionMode) === 'STANDARD_BANK'
+    && upper(request.scheduleKind) === 'SCHEDULED'
+    && canonicalIso(request.scheduledAtUtc) === TEST_FUTURE_STANDARD_PAYMENT_AT_UTC
+    && canonicalIso(payload?.test_scheduled_at_utc) === TEST_FUTURE_STANDARD_PAYMENT_AT_UTC;
 }
