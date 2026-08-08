@@ -81130,16 +81130,11 @@ $function$;
 
 
 
-DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid);
-
-
-DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid);
-DROP FUNCTION IF EXISTS public.pay_batch_prepare(uuid, uuid, uuid, text);
-
-
-
 -- pay_batch_prepare is maintained in
 -- 20072026_1228_allow_paye_group_destination_in_prepare.sql.
+-- Do not drop that later authority here. Repeatables are hash-applied
+-- independently, so this legacy monolith may be reapplied without the
+-- unchanged canonical prepare file being replayed in the same workflow.
 
 
 

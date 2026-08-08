@@ -2275,3 +2275,9 @@ BEGIN
 END;
 $function$;
 
+ALTER FUNCTION public.pay_batch_prepare(uuid, uuid, uuid, text) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.pay_batch_prepare(uuid, uuid, uuid, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.pay_batch_prepare(uuid, uuid, uuid, text) FROM anon;
+REVOKE ALL ON FUNCTION public.pay_batch_prepare(uuid, uuid, uuid, text) FROM authenticated;
+REVOKE ALL ON FUNCTION public.pay_batch_prepare(uuid, uuid, uuid, text) FROM service_role;
+GRANT EXECUTE ON FUNCTION public.pay_batch_prepare(uuid, uuid, uuid, text) TO service_role;
