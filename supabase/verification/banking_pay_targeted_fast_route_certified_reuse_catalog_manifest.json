@@ -98,7 +98,7 @@
       "schema": "private",
       "name": "pay_workbench_session_clone_bounded_certification_v1",
       "identity_arguments": "p_source_session_id uuid, p_target_session_id uuid, p_candidate_id uuid, p_options_json jsonb",
-      "definition_sha256": "8bcbc91b5654fcb51ca638f78961681b959e2e58d4caec013ddf912b92c5b669",
+      "definition_sha256": "4c43c3bcd65358b6650260e1b2a23086958ec375891d18f5b47f55375cfcbd67",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -298,7 +298,7 @@
       "schema": "public",
       "name": "pay_workbench_session_clone_eligibility_v1",
       "identity_arguments": "p_source_session_id uuid, p_target_session_id uuid, p_candidate_id uuid, p_options_json jsonb",
-      "definition_sha256": "823d3bf459a001ccd45daf99f40bcad84a51452ed5d373447187404b63343ab1",
+      "definition_sha256": "ecb17fb1d112d315dd6c64f2983fb30e7b5468d6c475731e234008112c8c2138",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
