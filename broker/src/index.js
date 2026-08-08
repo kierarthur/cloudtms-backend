@@ -38453,27 +38453,14 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         }
         const scheduledNotice = await queueScheduledPaymentNoticeBestEffort(progressJson.pay_batch_auth_start, progressJson, inputJson);
         if (scheduledTimeMs > Date.now() + 1000) {
-          const scheduled = await rpc('pay_batch_schedule', {
-            p_pay_batch_id: payBatchId,
-            p_schedule_kind: scheduleKind,
-            p_scheduled_at_utc: scheduledAtUtc,
-            p_funding_account_ref: inputJson.funding_account_ref || inputJson.fundingAccountRef || null,
-            p_warning_hours_json: Array.isArray(inputJson.warning_hours_json) ? inputJson.warning_hours_json : [],
-            p_actor_user_id: actorUserId,
-            p_operation_id: operationId,
-            p_freshness_result_hash: progressJson.freshness_result_hash || inputJson.freshness_result_hash || null
-          }, 'pay_batch_schedule');
-          if (scheduled.ok === false) {
-            return reviewRequired(currentPhase, scheduled.code || 'PAY_BATCH_SCHEDULE_FAILED', scheduled.message || 'The authorised no-bank payment could not be scheduled.', { pay_batch_schedule: scheduled, no_bank_payment_proof: scheduledNoBankProof });
-          }
-          return complete(Object.assign({
-            status_text: 'The authorised no-bank payment was scheduled without provider submission.',
-            pay_batch_schedule: scheduled,
+          const delaySeconds = Math.max(1, Math.min(86400, Math.ceil((scheduledTimeMs - Date.now()) / 1000)));
+          return moreWork('SCHEDULE_PAYMENT', Object.assign({
+            status_text: 'The authorised no-bank payment execution is waiting for its scheduled time.',
             pay_batch_scheduled_notice: scheduledNotice,
             scheduled_wait_until_utc: new Date(scheduledTimeMs).toISOString(),
             scheduled_no_bank_payment_wait: true,
-            provider_submission_suppressed: true
-          }, projectionProofProgressPatch(scheduledNoBankProof)));
+            next_required_phase: 'WAIT_FOR_SCHEDULE'
+          }, projectionProofProgressPatch(scheduledNoBankProof)), delaySeconds, 'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT');
         }
         return moreWork('START_LOCAL_SETTLEMENT', Object.assign({
           status_text: 'The scheduled no-bank payment execution is due; local settlement is next without provider submission.',

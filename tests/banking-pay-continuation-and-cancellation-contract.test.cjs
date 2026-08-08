@@ -33,16 +33,16 @@ test('one queue message makes one generic claim-and-advance call and never precl
   assert.match(body, /LEASE_ACTIVE_RETRY/);
 });
 
-test('a future scheduled no-bank payment is committed by the schedule owner and completes without provider submission', () => {
+test('a future scheduled no-bank payment remains a durable cancellable wait without provider submission', () => {
   const body = functionBody('advanceBankingPayExecuteOperation');
   const noBankStart = body.indexOf('if (scheduledNoBankProof.valid === true)');
   const manualStart = body.indexOf('if (isLocalManualSettlementMode())', noBankStart);
   assert.ok(noBankStart >= 0 && manualStart > noBankStart);
   const noBankBranch = body.slice(noBankStart, manualStart);
-  assert.match(noBankBranch, /await rpc\('pay_batch_schedule'/);
-  assert.match(noBankBranch, /return complete\(Object\.assign\(/);
-  assert.match(noBankBranch, /provider_submission_suppressed:\s*true/);
-  assert.doesNotMatch(noBankBranch, /WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT/);
+  assert.match(noBankBranch, /return moreWork\('SCHEDULE_PAYMENT'/);
+  assert.match(noBankBranch, /WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT/);
+  assert.match(noBankBranch, /scheduled_no_bank_payment_wait:\s*true/);
+  assert.doesNotMatch(noBankBranch, /await rpc\('pay_batch_schedule'/);
 });
 
 test('queue continuation is explicit, bounded and awaits a successor before acknowledgement', () => {

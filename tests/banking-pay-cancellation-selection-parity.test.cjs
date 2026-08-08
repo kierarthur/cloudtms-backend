@@ -491,6 +491,13 @@ test('locally prepared pending transfers remain cancellable until provider evide
 });
 
 test('scheduled no-bank waits are cancellable but provider execution phases remain blockers', () => {
+  const statusProviderStart = statusPage.indexOf('batch_provider_operation_facts AS MATERIALIZED');
+  const statusProviderEnd = statusPage.indexOf('batch_unscoped_event_facts AS MATERIALIZED', statusProviderStart);
+  assert.notEqual(statusProviderStart, -1);
+  assert.notEqual(statusProviderEnd, -1);
+  const statusProviderAuthority = statusPage.slice(statusProviderStart, statusProviderEnd);
+  assert.match(statusProviderAuthority, /AND NOT \([\s\S]*phase, ''\)[\s\S]*SCHEDULE_PAYMENT[\s\S]*WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT[\s\S]*WAIT_FOR_SCHEDULED_LOCAL_MANUAL_SETTLEMENT[\s\S]*\)/);
+
   const openProviderInto = catalogueFunctions.indexOf('INTO v_open_provider_submit_count');
   const openProviderStart = catalogueFunctions.lastIndexOf('SELECT count(*)::integer', openProviderInto);
   const openProviderEnd = catalogueFunctions.indexOf('v_transfer_count := COALESCE', openProviderInto);

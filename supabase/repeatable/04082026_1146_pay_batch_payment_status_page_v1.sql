@@ -392,6 +392,13 @@ BEGIN
                       'CLAIMED',
                       'IN_PROGRESS'
                   )
+                  AND NOT (
+                      pg_catalog.upper(pg_catalog.btrim(coalesce(provider_operation.phase, ''))) = 'SCHEDULE_PAYMENT'
+                      AND pg_catalog.upper(pg_catalog.btrim(coalesce(provider_operation.resume_reason, ''))) IN (
+                          'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT',
+                          'WAIT_FOR_SCHEDULED_LOCAL_MANUAL_SETTLEMENT'
+                      )
+                  )
             ) AS provider_submission_in_progress,
             coalesce(pg_catalog.bool_or(has_provider_outcome_unknown), false)
                 AS provider_outcome_unknown,
