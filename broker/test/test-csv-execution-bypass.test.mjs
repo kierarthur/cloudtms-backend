@@ -14,6 +14,7 @@ import {
 } from '../src/test-csv-execution-bypass.js';
 
 const userId = '11111111-1111-4111-8111-111111111111';
+const testUser = { id: userId, email: 'test@arthur-rai.co.uk' };
 const testEnv = {
   SUPABASE_URL: 'https://yakevhtttcsljosbdpov.supabase.co',
   ALLOWED_ORIGINS: 'https://testmode.arthur-rai.co.uk,https://kierarthur.github.io',
@@ -21,27 +22,27 @@ const testEnv = {
   TEST_CSV_EXECUTION_2FA_BYPASS_USER_ID: userId
 };
 
-test('allows only the configured TEST user and CSV settlement action', () => {
+test('allows only the exact TEST email and CSV settlement action', () => {
   assert.equal(evaluateTestCsvExecutionBypass({
     env: testEnv,
-    user: { id: userId },
+    user: testUser,
     purpose: 'PAYMENT_SCHEDULE',
     executionMode: 'CSV_SETTLEMENT'
   }).allowed, true);
 });
 
-test('allows only the configured TEST user to bypass same-week PAYE draft 2FA after password verification', () => {
+test('allows only the exact TEST email to bypass same-week PAYE draft 2FA after password verification', () => {
   assert.equal(evaluateTestSameWeekPayeOverrideBypass({
     env: testEnv,
-    user: { id: userId },
+    user: testUser,
     purpose: 'PAYE_SAME_WEEK_OVERRIDE'
   }).allowed, true);
 });
 
-test('allows only the configured TEST user for the exact future STANDARD_BANK test schedule', () => {
+test('allows only the exact TEST email for a valid scheduled STANDARD_BANK test payment', () => {
   const result = evaluateTestFutureStandardPaymentBypass({
     env: testEnv,
-    user: { id: userId },
+    user: testUser,
     purpose: 'PAYMENT_SCHEDULE',
     executionMode: 'STANDARD_BANK',
     scheduleKind: 'SCHEDULED',
@@ -51,17 +52,46 @@ test('allows only the configured TEST user for the exact future STANDARD_BANK te
   assert.equal(result.scheduledAtUtc, '2026-08-15T01:00:00.000Z');
 });
 
+test('the exact TEST email remains the authority even when a stale configured user ID is present', () => {
+  assert.equal(evaluateTestPaymentReversalBypass({
+    env: { ...testEnv, TEST_CSV_EXECUTION_2FA_BYPASS_USER_ID: '22222222-2222-4222-8222-222222222222' },
+    user: testUser,
+    purpose: 'PAYMENT_REVERSAL'
+  }).allowed, true);
+});
+
+test('scheduled STANDARD_BANK bypass binds to the requested valid UTC instant', () => {
+  const result = evaluateTestFutureStandardPaymentBypass({
+    env: testEnv,
+    user: testUser,
+    purpose: 'PAYMENT_SCHEDULE',
+    executionMode: 'STANDARD_BANK',
+    scheduleKind: 'SCHEDULED',
+    scheduledAtUtc: '2026-08-22T02:00:00+01:00'
+  });
+  assert.equal(result.allowed, true);
+  assert.equal(result.scheduledAtUtc, '2026-08-22T01:00:00.000Z');
+  assert.equal(testPaymentScheduleTokenMatchesRequest({
+    test_future_standard_payment_only: true,
+    test_scheduled_at_utc: result.scheduledAtUtc
+  }, {
+    executionMode: 'STANDARD_BANK',
+    scheduleKind: 'SCHEDULED',
+    scheduledAtUtc: '2026-08-22T02:00:00+01:00'
+  }), true);
+});
+
 for (const [name, patch] of [
-  ['different user', { user: { id: '22222222-2222-4222-8222-222222222222' } }],
+  ['different email', { user: { id: userId, email: 'someone-else@arthur-rai.co.uk' } }],
   ['immediate schedule', { scheduleKind: 'IMMEDIATE' }],
   ['CSV mode', { executionMode: 'CSV_SETTLEMENT' }],
-  ['different date', { scheduledAtUtc: '2026-08-16T01:00:00.000Z' }],
+  ['missing date', { scheduledAtUtc: '' }],
   ['reversal purpose', { purpose: 'PAYMENT_REVERSAL' }]
 ]) {
   test(`future standard-payment bypass denies ${name}`, () => {
     const input = {
       env: testEnv,
-      user: { id: userId },
+      user: testUser,
       purpose: 'PAYMENT_SCHEDULE',
       executionMode: 'STANDARD_BANK',
       scheduleKind: 'SCHEDULED',
@@ -72,15 +102,15 @@ for (const [name, patch] of [
   });
 }
 
-test('allows only the configured TEST user to bypass payment-reversal 2FA', () => {
+test('allows only the exact TEST email to bypass payment-reversal 2FA', () => {
   assert.equal(evaluateTestPaymentReversalBypass({
     env: testEnv,
-    user: { id: userId },
+    user: testUser,
     purpose: 'PAYMENT_REVERSAL'
   }).allowed, true);
   assert.equal(evaluateTestPaymentReversalBypass({
     env: testEnv,
-    user: { id: userId },
+    user: testUser,
     purpose: 'PAYMENT_SCHEDULE'
   }).allowed, false);
 });
@@ -89,13 +119,13 @@ for (const [name, patch] of [
   ['disabled configuration', { env: { ...testEnv, TEST_CSV_EXECUTION_2FA_BYPASS_ENABLED: '' } }],
   ['production database', { env: { ...testEnv, SUPABASE_URL: 'https://zojgukxyyklcyjbyyqlz.supabase.co' } }],
   ['production origin', { env: { ...testEnv, ALLOWED_ORIGINS: 'https://cloudtms.arthur-rai.co.uk' } }],
-  ['different user', { user: { id: '22222222-2222-4222-8222-222222222222' } }],
+  ['different email', { user: { id: userId, email: 'someone-else@arthur-rai.co.uk' } }],
   ['different purpose', { purpose: 'PAYMENT_SCHEDULE' }]
 ]) {
   test(`same-week PAYE bypass denies ${name}`, () => {
     const input = {
       env: testEnv,
-      user: { id: userId },
+      user: testUser,
       purpose: 'PAYE_SAME_WEEK_OVERRIDE',
       ...patch
     };
@@ -113,7 +143,7 @@ for (const [name, patch] of [
   ['disabled configuration', { env: { ...testEnv, TEST_CSV_EXECUTION_2FA_BYPASS_ENABLED: '' } }],
   ['production database', { env: { ...testEnv, SUPABASE_URL: 'https://zojgukxyyklcyjbyyqlz.supabase.co' } }],
   ['production origin', { env: { ...testEnv, ALLOWED_ORIGINS: 'https://cloudtms.arthur-rai.co.uk' } }],
-  ['different user', { user: { id: '22222222-2222-4222-8222-222222222222' } }],
+  ['different email', { user: { id: userId, email: 'someone-else@arthur-rai.co.uk' } }],
   ['different purpose', { purpose: 'PAYMENT_REVERSAL' }],
   ['standard bank execution', { executionMode: 'STANDARD_BANK' }],
   ['external settlement', { executionMode: 'EXTERNAL_SETTLEMENT' }]
@@ -121,7 +151,7 @@ for (const [name, patch] of [
   test(`denies ${name}`, () => {
     const input = {
       env: testEnv,
-      user: { id: userId },
+      user: testUser,
       purpose: 'PAYMENT_SCHEDULE',
       executionMode: 'CSV_SETTLEMENT',
       ...patch
