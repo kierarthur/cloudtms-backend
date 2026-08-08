@@ -101,6 +101,9 @@ test('presentation allocation failure reports bounded aggregate categories only'
   assert.match(reconcile, /state_multiplicity_mismatch_count/);
   assert.match(reconcile, /truth_amount_mismatch_count/);
   assert.match(reconcile, /allocation_sum_mismatch_count/);
+  assert.match(reconcile, /missing_state_with_rollup_count/);
+  assert.match(reconcile, /missing_state_with_canonical_line_count/);
+  assert.match(reconcile, /missing_state_with_presentation_seed_count/);
   assert.match(reconcile, /PRESENTATION_ALLOCATION_AUTHORITY_MISMATCH[\s\S]+v_presentation_mismatch_detail::text/i);
   assert.match(mismatchRaise, /v_presentation_mismatch_detail::text/i);
   assert.doesNotMatch(mismatchRaise, /(timesheet_id|truth_ex_vat|amount_ex_vat|digest)/i);

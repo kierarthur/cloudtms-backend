@@ -4393,6 +4393,21 @@ begin
     FROM pg_temp.canonical_timesheet_presentation_state state
     WHERE state.candidate_id=v_bounded_build.candidate_id
     GROUP BY state.timesheet_id
+  ), rollup_row AS (
+    SELECT rollup.timesheet_id,COUNT(*) AS rollup_count
+    FROM pg_temp.timesheet_case_rollup_effective rollup
+    WHERE rollup.candidate_id=v_bounded_build.candidate_id
+    GROUP BY rollup.timesheet_id
+  ), canonical_line_row AS (
+    SELECT line.timesheet_id,COUNT(*) AS line_count
+    FROM pg_temp.canonical_timesheet_lines line
+    WHERE line.candidate_id=v_bounded_build.candidate_id
+    GROUP BY line.timesheet_id
+  ), presentation_seed_row AS (
+    SELECT seed.timesheet_id,COUNT(*) AS seed_count
+    FROM pg_temp.canonical_timesheet_presentation_seed seed
+    WHERE seed.candidate_id=v_bounded_build.candidate_id
+    GROUP BY seed.timesheet_id
   ), mismatch AS (
     SELECT
       fact.timesheet_id IS NULL AS missing_fact_target,
@@ -4403,9 +4418,15 @@ begin
       ABS(COALESCE(state.amount_ex_vat,0)-(
         COALESCE(state.ready_amount,0)+COALESCE(state.blocked_amount,0)
         +COALESCE(state.hidden_segment_amount,0)+COALESCE(state.hidden_expense_amount,0)))>0.01
-        AS allocation_sum_mismatch
+        AS allocation_sum_mismatch,
+      COALESCE(rollup.rollup_count,0)>0 AS rollup_present,
+      COALESCE(canonical_line.line_count,0)>0 AS canonical_line_present,
+      COALESCE(presentation_seed.seed_count,0)>0 AS presentation_seed_present
     FROM fact_truth fact
     FULL OUTER JOIN state_row state USING(timesheet_id)
+    LEFT JOIN rollup_row rollup USING(timesheet_id)
+    LEFT JOIN canonical_line_row canonical_line USING(timesheet_id)
+    LEFT JOIN presentation_seed_row presentation_seed USING(timesheet_id)
   )
   SELECT jsonb_build_object(
     'mismatch_count',count(*) FILTER (
@@ -4415,7 +4436,12 @@ begin
     'missing_state_count',count(*) FILTER (WHERE missing_state),
     'state_multiplicity_mismatch_count',count(*) FILTER (WHERE state_multiplicity_mismatch),
     'truth_amount_mismatch_count',count(*) FILTER (WHERE truth_amount_mismatch),
-    'allocation_sum_mismatch_count',count(*) FILTER (WHERE allocation_sum_mismatch)
+    'allocation_sum_mismatch_count',count(*) FILTER (WHERE allocation_sum_mismatch),
+    'missing_state_with_rollup_count',count(*) FILTER (WHERE missing_state AND rollup_present),
+    'missing_state_with_canonical_line_count',count(*) FILTER (
+      WHERE missing_state AND canonical_line_present),
+    'missing_state_with_presentation_seed_count',count(*) FILTER (
+      WHERE missing_state AND presentation_seed_present)
   )
   INTO v_presentation_mismatch_detail
   FROM mismatch;
