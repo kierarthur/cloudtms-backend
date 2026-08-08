@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 21,
+  "function_count": 22,
   "functions": [
     {
       "schema": "private",
@@ -524,6 +524,48 @@
       "source_files": [
         "supabase/repeatable/07082026_1013_pay_workbench_candidate_source_build_chunk.sql",
         "supabase/repeatable/08082026_0322_pay_workbench_candidate_source_build_chunk_authority.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_preview_candidate_build_canonical_lines",
+      "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
+      "definition_sha256": "6d0968010e6395a8e4921d512f5ceefe1dee18a55601190afa5b0b2f7bf56bb9",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public",
+        "plpgsql_check.mode=disabled",
+        "plpgsql_check.profiler=off",
+        "plpgsql_check.tracer=off",
+        "plpgsql_check.constants_tracing=off",
+        "plpgsql_check.cursors_leaks=off",
+        "plpgsql_check.strict_cursors_leaks=off",
+        "plpgsql_check.fatal_errors=off"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
+        "supabase/repeatable/08082026_0354_pay_preview_candidate_build_canonical_lines_authority.sql"
       ]
     },
     {
