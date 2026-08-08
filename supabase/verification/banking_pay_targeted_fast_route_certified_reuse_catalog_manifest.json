@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 24,
+  "function_count": 25,
   "functions": [
     {
       "schema": "private",
@@ -14,6 +14,29 @@
       "security_definer": false,
       "proconfig": [
         "search_path=\"\"",
+        "plpgsql_check.mode=disabled"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "_ctms_candidate_correction_residuals_v1",
+      "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_exclude_pay_batch_id uuid, p_context text",
+      "definition_sha256": "6d82c04a36acc926126df2a5f922b55ecd12eb6b2f4eeb78cb85cbf0e4581247",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public, extensions, pg_temp",
         "plpgsql_check.mode=disabled"
       ],
       "expanded_acl": [

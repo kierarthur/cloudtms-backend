@@ -36,6 +36,7 @@
 \ir 04082026_1302_pay_workbench_session_replay_replaced_queue_v1.sql
 \ir 04082026_2035_banking_pay_correction_helper_acl.sql
 \ir 05082026_1545_pay_preview_candidate_build_canonical_lines.sql
+\ir 07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql
 \ir 07082026_1016_banking_pay_targeted_delta_runtime.sql
 \ir 07082026_1017_pay_workbench_enqueue_candidate_refresh.sql
 \ir 07082026_2358_banking_pay_targeted_fast_route_acl.sql

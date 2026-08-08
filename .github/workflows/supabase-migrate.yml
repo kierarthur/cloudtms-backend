@@ -8,6 +8,7 @@ on:
       - "supabase/repeatable/**"
       - "supabase/verification/**"
       - "tests/banking-pay-revision5-final-authority.test.cjs"
+      - "tests/banking-pay-legacy-monolith-authority-reassert.test.cjs"
       - ".github/workflows/supabase-migrate.yml"
   workflow_dispatch: {}
 
@@ -36,7 +37,10 @@ jobs:
           sudo apt-get install -y postgresql-client
 
       - name: Verify Banking Pay function source authority
-        run: node --test tests/banking-pay-revision5-final-authority.test.cjs
+        run: |
+          node --test \
+            tests/banking-pay-revision5-final-authority.test.cjs \
+            tests/banking-pay-legacy-monolith-authority-reassert.test.cjs
 
       - name: Apply repeatables first, then migrations (UK date order)
         shell: bash
