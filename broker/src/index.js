@@ -59,6 +59,7 @@ import {
   testPaymentScheduleTokenMatchesRequest
 } from './test-csv-execution-bypass.js';
 import { evaluateCreateDraftRecoveryHeadroom } from './banking-pay-create-draft-headroom.js';
+import { isCertifiedDeferredFinanceOnlyInsertItemsResult } from './banking-pay-draft-insert-items.js';
 import {
   createReadyInvoiceDocumentLink,
   handleInvoiceAsyncHttpRequest
@@ -64371,7 +64372,16 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     if (resultObject.ok === false || sumNumberFromObjectKeys(resultObject, ['failed_count', 'failed_candidate_rows', 'failed_item_rows']) > 0) {
       throw new Error(`${phaseName}_RPC_FAILED`);
     }
-    if (candidateScopeCount > 0 && ['INSERT_CANDIDATES', 'INSERT_ITEMS', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS'].includes(phaseName) && countDraftCreateRpcWork(phaseName, resultObject) <= 0) {
+    const certifiedDeferredFinanceOnlyInsertItems = phaseName === 'INSERT_ITEMS'
+      && isCertifiedDeferredFinanceOnlyInsertItemsResult(resultObject, {
+        payBatchId: group?.pay_batch_id,
+        operationId,
+        candidateScopeIds: group?.candidate_scope_ids
+      });
+    if (candidateScopeCount > 0
+      && ['INSERT_CANDIDATES', 'INSERT_ITEMS', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS'].includes(phaseName)
+      && countDraftCreateRpcWork(phaseName, resultObject) <= 0
+      && !certifiedDeferredFinanceOnlyInsertItems) {
       throw new Error(`${phaseName}_RPC_EMPTY_RESULT`);
     }
     return true;
