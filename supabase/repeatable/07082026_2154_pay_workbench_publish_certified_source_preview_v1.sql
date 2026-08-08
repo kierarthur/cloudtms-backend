@@ -65,6 +65,24 @@ DECLARE
   v_unmatched_target_id_count integer := 0;
   v_row_contract_error_count integer := 0;
   v_already_current boolean := false;
+  v_contract_version integer := CASE
+    WHEN COALESCE(p_publication_options_json->>'contract_version','1') ~ '^[12]$'
+      THEN (COALESCE(p_publication_options_json->>'contract_version','1'))::integer
+    ELSE -1
+  END;
+  v_final_state text := UPPER(BTRIM(COALESCE(p_publication_options_json->>'final_state','READY')));
+  v_certification_version text := NULLIF(BTRIM(COALESCE(p_publication_options_json->>'certification_version','')),'');
+  v_certification_digest text := NULLIF(BTRIM(COALESCE(p_publication_options_json->>'certification_digest','')),'');
+  v_projection_run public.banking_pay_workbench_candidate_delta_projection_runs%ROWTYPE;
+  v_admission_seal_version integer := NULL::integer;
+  v_admission_seal_digest text := NULL::text;
+  v_projection_fingerprint text := NULL::text;
+  v_original_economic_build_id uuid := NULL::uuid;
+  v_original_source_build_run_id uuid := NULL::uuid;
+  v_source_session_id uuid := NULL::uuid;
+  v_clone_fence jsonb := '{}'::jsonb;
+  v_min_public_ordinal bigint := NULL::bigint;
+  v_max_public_ordinal bigint := NULL::bigint;
 BEGIN
   IF p_session_id IS NULL OR p_candidate_id IS NULL OR p_economic_build_id IS NULL
      OR p_source_build_run_id IS NULL OR p_completion_job_id IS NULL THEN
@@ -97,11 +115,34 @@ BEGIN
   SELECT COUNT(*)::integer
   INTO v_unknown_option_count
   FROM jsonb_object_keys(COALESCE(p_publication_options_json, '{}'::jsonb)) AS option_key(key)
-  WHERE option_key.key NOT IN ('authority_kind', 'invocation_kind', 'contract_version');
+  WHERE option_key.key NOT IN (
+    'contract_version','authority_kind','invocation_kind','final_state',
+    'certification_version','certification_digest','post_clone_action','post_clone_job_id',
+    'source_session_id','original_economic_build_id','original_source_build_run_id','clone_job_id',
+    'projection_run_id','admission_seal_version','admission_seal_digest',
+    'projection_fingerprint','accepted_baseline_build_id'
+  );
 
-  IF v_unknown_option_count > 0
-     OR v_authority_kind <> 'BOUNDED_FULL_SOURCE_BUILD'
-     OR v_invocation_kind NOT IN ('AUTO', 'INITIAL_COMPLETION', 'DUPLICATE_REPLAY_REPAIR') THEN
+  IF v_unknown_option_count > 0 OR v_contract_version NOT IN (1,2)
+     OR (
+       v_contract_version=1
+       AND (
+         EXISTS (
+           SELECT 1 FROM jsonb_object_keys(COALESCE(p_publication_options_json,'{}'::jsonb)) AS v1_key(key)
+           WHERE v1_key.key NOT IN ('authority_kind','invocation_kind','contract_version')
+         )
+         OR v_authority_kind <> 'BOUNDED_FULL_SOURCE_BUILD'
+         OR v_invocation_kind NOT IN ('AUTO','INITIAL_COMPLETION','DUPLICATE_REPLAY_REPAIR')
+       )
+     )
+     OR (
+       v_contract_version=2
+       AND (
+         v_authority_kind NOT IN ('CERTIFIED_CLONE','TARGETED_DELTA')
+         OR v_final_state NOT IN ('READY','SOURCE_EMPTY','PENDING_DELTA')
+         OR v_invocation_kind NOT IN ('CLONE_OWNER_FINALISE','DELTA_FINALISE')
+       )
+     ) THEN
     RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
@@ -129,18 +170,40 @@ BEGIN
 
   IF NOT FOUND
      OR v_job.session_id IS DISTINCT FROM p_session_id
-     OR v_job.candidate_id IS DISTINCT FROM p_candidate_id
-     OR v_job.economic_build_id IS DISTINCT FROM p_economic_build_id
-     OR UPPER(BTRIM(COALESCE(v_job.job_type, ''))) NOT IN (
-       'WORKBENCH_CANDIDATE_SOURCE_BUILD',
-       'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
-       'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
-       'CANDIDATE_SOURCE_BUILD',
-       'CANDIDATE_SOURCE_BUILD_CHUNK',
-       'SOURCE_BUILD',
-       'SOURCE_BUILD_PAGE'
+     OR (
+       v_job.candidate_id IS DISTINCT FROM p_candidate_id
+       AND NOT (v_contract_version=2 AND v_authority_kind='CERTIFIED_CLONE' AND v_job.candidate_id IS NULL)
      )
-     OR UPPER(BTRIM(COALESCE(v_job.status, ''))) NOT IN ('RUNNING', 'SUCCEEDED') THEN
+     OR UPPER(BTRIM(COALESCE(v_job.status, ''))) NOT IN ('RUNNING', 'SUCCEEDED')
+     OR (
+       v_contract_version=1
+       AND (
+         v_job.economic_build_id IS DISTINCT FROM p_economic_build_id
+         OR UPPER(BTRIM(COALESCE(v_job.job_type, ''))) NOT IN (
+           'WORKBENCH_CANDIDATE_SOURCE_BUILD','WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+           'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE','CANDIDATE_SOURCE_BUILD',
+           'CANDIDATE_SOURCE_BUILD_CHUNK','SOURCE_BUILD','SOURCE_BUILD_PAGE'
+         )
+       )
+     )
+     OR (
+       v_contract_version=2 AND v_authority_kind='CERTIFIED_CLONE'
+       AND (
+         UPPER(BTRIM(COALESCE(v_job.job_type,''))) NOT IN (
+           'WORKBENCH_SESSION_CLONE_REBASE','SESSION_CLONE_REBASE','CLONE_REBASE',
+           'WORKBENCH_CANDIDATE_DIRTY_APPLY'
+         )
+         OR COALESCE(p_publication_options_json->>'clone_job_id','') IS DISTINCT FROM p_completion_job_id::text
+       )
+     )
+     OR (
+       v_contract_version=2 AND v_authority_kind='TARGETED_DELTA'
+       AND (
+         UPPER(BTRIM(COALESCE(v_job.job_type,''))) NOT IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH','CANDIDATE_DELTA_REFRESH','DELTA_REFRESH')
+         OR COALESCE(p_publication_options_json->>'projection_run_id','') IS DISTINCT FROM p_source_build_run_id::text
+       )
+     )
+  THEN
     RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
@@ -172,6 +235,32 @@ BEGIN
             DETAIL = jsonb_build_object('code', 'CERTIFIED_SOURCE_PREVIEW_SOURCE_SEQUENCE_STALE')::text;
   END IF;
 
+  IF v_contract_version=2 AND v_authority_kind='CERTIFIED_CLONE' THEN
+    IF COALESCE(p_publication_options_json->>'source_session_id','')
+         !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR COALESCE(p_publication_options_json->>'original_economic_build_id','')
+         !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR COALESCE(p_publication_options_json->>'original_source_build_run_id','')
+         !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR v_certification_version IS NULL OR v_certification_digest IS NULL THEN
+      RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object('code','CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH','reason','CLONE_OPTIONS_INCOMPLETE')::text;
+    END IF;
+    v_source_session_id := (p_publication_options_json->>'source_session_id')::uuid;
+    v_original_economic_build_id := (p_publication_options_json->>'original_economic_build_id')::uuid;
+    v_original_source_build_run_id := (p_publication_options_json->>'original_source_build_run_id')::uuid;
+  ELSIF v_contract_version=2 AND v_authority_kind='TARGETED_DELTA' THEN
+    v_admission_seal_version := CASE WHEN COALESCE(p_publication_options_json->>'admission_seal_version','') ~ '^\d+$' THEN (p_publication_options_json->>'admission_seal_version')::integer END;
+    v_admission_seal_digest := NULLIF(BTRIM(COALESCE(p_publication_options_json->>'admission_seal_digest','')),'');
+    v_projection_fingerprint := NULLIF(BTRIM(COALESCE(p_publication_options_json->>'projection_fingerprint','')),'');
+    IF v_admission_seal_version IS NULL OR v_admission_seal_digest IS NULL
+       OR v_projection_fingerprint IS NULL
+       OR COALESCE(p_publication_options_json->>'accepted_baseline_build_id','') IS DISTINCT FROM p_economic_build_id::text THEN
+      RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object('code','CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH','reason','DELTA_OPTIONS_INCOMPLETE')::text;
+    END IF;
+  END IF;
+
   SELECT build_row.*
   INTO v_build
   FROM private.banking_pay_workbench_economic_builds AS build_row
@@ -179,12 +268,29 @@ BEGIN
   FOR UPDATE;
 
   IF NOT FOUND
-     OR v_build.session_id IS DISTINCT FROM p_session_id
      OR v_build.candidate_id IS DISTINCT FROM p_candidate_id
-     OR v_build.session_version IS DISTINCT FROM p_session_version
-     OR v_build.source_build_run_id IS DISTINCT FROM p_source_build_run_id
-     OR v_build.source_change_seq IS DISTINCT FROM p_source_change_seq
-     OR v_build.source_job_id IS DISTINCT FROM p_completion_job_id THEN
+     OR (
+       v_contract_version=1
+       AND (
+         v_build.session_id IS DISTINCT FROM p_session_id
+         OR v_build.session_version IS DISTINCT FROM p_session_version
+         OR v_build.source_build_run_id IS DISTINCT FROM p_source_build_run_id
+         OR v_build.source_change_seq IS DISTINCT FROM p_source_change_seq
+         OR v_build.source_job_id IS DISTINCT FROM p_completion_job_id
+       )
+     )
+     OR (
+       v_contract_version=2 AND v_authority_kind='CERTIFIED_CLONE'
+       AND (
+         v_original_economic_build_id IS DISTINCT FROM p_economic_build_id
+         OR v_build.source_build_run_id IS DISTINCT FROM v_original_source_build_run_id
+         OR v_build.session_id IS DISTINCT FROM v_source_session_id
+       )
+     )
+     OR (
+       v_contract_version=2 AND v_authority_kind='TARGETED_DELTA'
+       AND v_build.id IS DISTINCT FROM p_economic_build_id
+     ) THEN
     RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object('code', 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH')::text;
@@ -222,7 +328,7 @@ BEGIN
      OR UPPER(BTRIM(COALESCE(v_session.status, ''))) <> 'OPEN'
      OR v_session.discarded_at_utc IS NOT NULL
      OR v_session.version IS DISTINCT FROM p_session_version
-     OR v_session.source_snapshot_run_id IS DISTINCT FROM v_build.source_snapshot_run_id THEN
+     OR (v_contract_version=1 AND v_session.source_snapshot_run_id IS DISTINCT FROM v_build.source_snapshot_run_id) THEN
     RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_SESSION_STALE'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object('code', 'CERTIFIED_SOURCE_PREVIEW_SESSION_STALE')::text;
@@ -268,6 +374,50 @@ BEGIN
             DETAIL = jsonb_build_object('code', 'CERTIFIED_SOURCE_PREVIEW_SOURCE_SEQUENCE_STALE')::text;
   END IF;
 
+  IF v_contract_version=2 AND v_authority_kind='TARGETED_DELTA' THEN
+    SELECT projection_row.*
+    INTO v_projection_run
+    FROM public.banking_pay_workbench_candidate_delta_projection_runs AS projection_row
+    WHERE projection_row.id=p_source_build_run_id
+      AND projection_row.session_id=p_session_id
+      AND projection_row.candidate_id=p_candidate_id
+    FOR UPDATE;
+
+    IF NOT FOUND
+       OR v_projection_run.session_version IS DISTINCT FROM p_session_version
+       OR v_projection_run.source_change_seq IS DISTINCT FROM p_source_change_seq
+       OR v_projection_run.admission_seal_version IS DISTINCT FROM v_admission_seal_version
+       OR v_projection_run.admission_seal_digest IS DISTINCT FROM v_admission_seal_digest
+       OR v_projection_run.projection_fingerprint IS DISTINCT FROM v_projection_fingerprint
+       OR v_projection_run.admission_seal_json->>'accepted_build_id' IS DISTINCT FROM p_economic_build_id::text
+       OR UPPER(BTRIM(COALESCE(v_projection_run.status,''))) NOT IN ('RUNNING','PROCESSING','WRITING','READY') THEN
+      RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object('code','CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH','reason','DELTA_AUTHORITY_NOT_EXACT')::text;
+    END IF;
+  ELSIF v_contract_version=2 AND v_authority_kind='CERTIFIED_CLONE' THEN
+    v_clone_fence := private.pay_workbench_session_clone_bounded_certification_v1(
+      v_source_session_id,
+      p_session_id,
+      p_candidate_id,
+      jsonb_build_object(
+        'certification_version',v_certification_version,
+        'expected_certification_digest',v_certification_digest,
+        'expected_economic_build_id',p_economic_build_id,
+        'expected_source_build_run_id',v_original_source_build_run_id,
+        'final_fence',true,
+        'caller_holds_candidate_and_session_locks',true
+      )
+    );
+
+    IF COALESCE((v_clone_fence->>'clone_eligible')::boolean,false) IS NOT TRUE
+       OR COALESCE(v_clone_fence->>'certification_digest','') IS DISTINCT FROM v_certification_digest
+       OR COALESCE(v_clone_fence->>'economic_build_id',v_clone_fence->>'original_economic_build_id','') IS DISTINCT FROM p_economic_build_id::text
+       OR COALESCE(v_clone_fence->>'source_build_run_id',v_clone_fence->>'original_source_build_run_id','') IS DISTINCT FROM v_original_source_build_run_id::text THEN
+      RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object('code','CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH','reason','CLONE_CERTIFICATION_STALE')::text;
+    END IF;
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM private.banking_pay_workbench_economic_builds AS newer_build
@@ -309,6 +459,7 @@ BEGIN
     SELECT 1
     FROM public.banking_pay_workbench_candidate_delta_projection_runs AS projection_run
     WHERE projection_run.session_id = p_session_id
+      AND (v_contract_version<>2 OR projection_run.id IS DISTINCT FROM p_source_build_run_id)
       AND projection_run.candidate_id = p_candidate_id
       AND projection_run.session_version = p_session_version
       AND projection_run.source_change_seq >= p_source_change_seq
@@ -423,11 +574,66 @@ BEGIN
     AND source_row.source_change_seq = p_source_change_seq
     AND source_row.status = 'CURRENT';
 
-  IF v_source_count IS DISTINCT FROM v_build.canonical_count
-     OR v_source_digest IS DISTINCT FROM v_build.canonical_digest THEN
+  IF v_contract_version=1
+     AND (
+       v_source_count IS DISTINCT FROM v_build.canonical_count
+       OR v_source_digest IS DISTINCT FROM v_build.canonical_digest) THEN
     RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_SOURCE_DIGEST_MISMATCH'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object('code', 'CERTIFIED_SOURCE_PREVIEW_SOURCE_DIGEST_MISMATCH')::text;
+  END IF;
+
+  IF v_contract_version=2 AND v_final_state='PENDING_DELTA' THEN
+    v_attestation:=jsonb_build_object(
+      'attestation_version','CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V2',
+      'contract_version',2,
+      'authority_kind',v_authority_kind,
+      'final_state','PENDING_DELTA',
+      'parity_complete',false,
+      'economic_build_id',p_economic_build_id,
+      'source_build_run_id',p_source_build_run_id,
+      'source_change_seq',p_source_change_seq,
+      'session_version',p_session_version,
+      'completion_job_id',p_completion_job_id,
+      'certification_version',v_certification_version,
+      'certification_digest',v_certification_digest,
+      'attested_at_utc',v_now,
+      'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
+    );
+
+    UPDATE public.banking_pay_workbench_session_scope AS pending_scope
+    SET certified_preview_publication_required=true,
+        certified_preview_publication_parity_ok=false,
+        certified_preview_publication_session_version=p_session_version,
+        certified_preview_publication_source_change_seq=p_source_change_seq,
+        certified_preview_publication_source_build_run_id=p_source_build_run_id,
+        certified_preview_publication_attestation_json=v_attestation,
+        certified_preview_publication_attested_at_utc=NULL,
+        status='DELTA_REFRESH_PENDING',
+        dirty=true,
+        updated_at_utc=v_now
+    WHERE pending_scope.id=v_scope.id;
+
+    RETURN jsonb_build_object(
+      'ok',true,
+      'contract_version',2,
+      'authority_kind',v_authority_kind,
+      'final_state','PENDING_DELTA',
+      'parity_complete',false,
+      'source_row_count',v_source_count,
+      'session_id',p_session_id,
+      'candidate_id',p_candidate_id,
+      'source_change_seq',p_source_change_seq,
+      'session_version',p_session_version,
+      'retry_safe',true,
+      'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
+    );
+  END IF;
+
+  IF v_contract_version=2 AND ((v_final_state='SOURCE_EMPTY' AND v_source_count<>0)
+     OR (v_final_state='READY' AND v_source_count=0)) THEN
+    RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_PARITY_FAILED'
+      USING ERRCODE='P0001',DETAIL=jsonb_build_object('code','CERTIFIED_SOURCE_PREVIEW_PARITY_FAILED','reason','FINAL_STATE_SOURCE_COUNT_MISMATCH')::text;
   END IF;
 
   PERFORM preview_lock.id
@@ -622,6 +828,8 @@ BEGIN
     AND v_scope.certified_preview_publication_attestation_json->>'economic_build_id' = p_economic_build_id::text
     AND v_scope.certified_preview_publication_attestation_json->>'completion_job_id' = p_completion_job_id::text
     AND COALESCE((v_scope.certified_preview_publication_attestation_json->>'parity_complete')::boolean, false)
+    AND v_scope.certified_preview_publication_attestation_json->>'attestation_version' = CASE WHEN v_contract_version=1 THEN 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V1' ELSE 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V2' END
+    AND v_scope.certified_preview_publication_attestation_json->>'authority_kind'=v_authority_kind
     AND NOT EXISTS (
       SELECT 1
       FROM pg_temp._bpay_certified_preview_ready_rows AS exact_row
@@ -840,7 +1048,7 @@ BEGIN
      OR v_preview_minus_source <> 0
      OR v_source_count IS DISTINCT FROM v_preview_count
      OR v_source_identity_digest IS DISTINCT FROM v_preview_identity_digest
-     OR v_source_count IS DISTINCT FROM v_build.canonical_count THEN
+     OR (v_contract_version=1 AND v_source_count IS DISTINCT FROM v_build.canonical_count) THEN
     RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_PARITY_FAILED'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
@@ -880,28 +1088,76 @@ BEGIN
       updated_at_utc = v_now
   WHERE session_update.id = p_session_id;
 
-  v_attestation := jsonb_build_object(
-    'attestation_version', 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V1',
-    'authority_kind', v_authority_kind,
-    'parity_complete', true,
-    'economic_build_id', p_economic_build_id::text,
-    'source_build_run_id', p_source_build_run_id::text,
-    'source_change_seq', p_source_change_seq,
-    'session_version', p_session_version,
-    'completion_job_id', p_completion_job_id::text,
-    'refresh_scope_kind', v_refresh_scope_kind,
-    'source_row_count', v_source_count,
-    'preview_row_count', v_preview_count,
-    'selectable_row_count', v_selectable_count,
-    'context_row_count', v_context_count,
-    'selected_row_count', v_selected_count,
-    'source_digest', v_source_digest,
-    'source_identity_digest', v_source_identity_digest,
-    'preview_identity_digest', v_preview_identity_digest,
-    'section_counts', v_section_counts,
-    'attested_at_utc', v_now::text,
-    'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
-  );
+  SELECT pg_catalog.min(preview_row.row_ordinal),pg_catalog.max(preview_row.row_ordinal)
+  INTO v_min_public_ordinal,v_max_public_ordinal
+  FROM public.banking_pay_workbench_preview_rows AS preview_row
+  WHERE preview_row.session_id=p_session_id
+    AND preview_row.candidate_id=p_candidate_id
+    AND preview_row.session_version=p_session_version
+    AND preview_row.status='READY';
+
+  IF v_contract_version=1 THEN
+    v_attestation := jsonb_build_object(
+      'attestation_version', 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V1',
+      'authority_kind', v_authority_kind,
+      'parity_complete', true,
+      'economic_build_id', p_economic_build_id::text,
+      'source_build_run_id', p_source_build_run_id::text,
+      'source_change_seq', p_source_change_seq,
+      'session_version', p_session_version,
+      'completion_job_id', p_completion_job_id::text,
+      'refresh_scope_kind', v_refresh_scope_kind,
+      'source_row_count', v_source_count,
+      'preview_row_count', v_preview_count,
+      'selectable_row_count', v_selectable_count,
+      'context_row_count', v_context_count,
+      'selected_row_count', v_selected_count,
+      'source_digest', v_source_digest,
+      'source_identity_digest', v_source_identity_digest,
+      'preview_identity_digest', v_preview_identity_digest,
+      'section_counts', v_section_counts,
+      'attested_at_utc', v_now::text,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    );
+  ELSE
+    v_attestation := jsonb_strip_nulls(jsonb_build_object(
+      'attestation_version','CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V2',
+      'contract_version',2,
+      'authority_kind',v_authority_kind,
+      'final_state',v_final_state,
+      'parity_complete',true,
+      'session_id',p_session_id,
+      'candidate_id',p_candidate_id,
+      'economic_build_id',p_economic_build_id,
+      'source_build_run_id',p_source_build_run_id,
+      'original_economic_build_id',v_original_economic_build_id,
+      'original_source_build_run_id',v_original_source_build_run_id,
+      'source_session_id',v_source_session_id,
+      'source_change_seq',p_source_change_seq,
+      'session_version',p_session_version,
+      'completion_job_id',p_completion_job_id,
+      'refresh_scope_kind',v_refresh_scope_kind,
+      'source_row_count',v_source_count,
+      'preview_row_count',v_preview_count,
+      'selectable_row_count',v_selectable_count,
+      'context_row_count',v_context_count,
+      'selected_row_count',v_selected_count,
+      'source_digest',v_source_digest,
+      'source_identity_digest',v_source_identity_digest,
+      'preview_identity_digest',v_preview_identity_digest,
+      'section_counts',v_section_counts,
+      'scope_ordinal',v_scope_ordinal,
+      'minimum_public_ordinal',v_min_public_ordinal,
+      'maximum_public_ordinal',v_max_public_ordinal,
+      'certification_version',v_certification_version,
+      'certification_digest',v_certification_digest,
+      'admission_seal_version',v_admission_seal_version,
+      'admission_seal_digest',v_admission_seal_digest,
+      'projection_fingerprint',v_projection_fingerprint,
+      'attested_at_utc',v_now,
+      'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
+    ));
+  END IF;
 
   UPDATE public.banking_pay_workbench_session_scope AS scope_update
   SET certified_preview_publication_required = true,
@@ -932,6 +1188,9 @@ BEGIN
   RETURN jsonb_build_object(
     'ok', true,
     'parity_complete', true,
+    'contract_version',v_contract_version,
+    'authority_kind',v_authority_kind,
+    'final_state',CASE WHEN v_contract_version=1 THEN 'READY' ELSE v_final_state END,
     'already_current', false,
     'session_id', p_session_id::text,
     'candidate_id', p_candidate_id::text,

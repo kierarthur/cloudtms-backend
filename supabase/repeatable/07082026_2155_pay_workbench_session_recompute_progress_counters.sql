@@ -133,9 +133,19 @@ BEGIN
           AND scope_row.certified_preview_publication_source_change_seq = candidate_state.source_change_seq
           AND scope_row.certified_preview_publication_source_build_run_id IS NOT NULL
           AND scope_row.certified_preview_publication_attested_at_utc IS NOT NULL
-          AND scope_row.certified_preview_publication_attestation_json->>'attestation_version' = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V1'
-          AND scope_row.certified_preview_publication_attestation_json->>'authority_kind' = 'BOUNDED_FULL_SOURCE_BUILD'
-          AND scope_row.certified_preview_publication_attestation_json->>'parity_complete' = 'true'
+          AND scope_row.certified_preview_publication_attestation_json->>'parity_complete'='true'
+          AND (
+            (
+              scope_row.certified_preview_publication_attestation_json->>'attestation_version'='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V1'
+              AND scope_row.certified_preview_publication_attestation_json->>'authority_kind'='BOUNDED_FULL_SOURCE_BUILD'
+            )
+            OR (
+              scope_row.certified_preview_publication_attestation_json->>'attestation_version'='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V2'
+              AND scope_row.certified_preview_publication_attestation_json->>'contract_version'='2'
+              AND scope_row.certified_preview_publication_attestation_json->>'authority_kind' IN ('CERTIFIED_CLONE','TARGETED_DELTA')
+              AND scope_row.certified_preview_publication_attestation_json->>'final_state' IN ('READY','SOURCE_EMPTY')
+            )
+          )
         )
       ) AS publication_current
     FROM public.banking_pay_workbench_session_scope AS scope_row
@@ -206,9 +216,19 @@ BEGIN
         AND scope_row.certified_preview_publication_source_change_seq = candidate_state.source_change_seq
         AND scope_row.certified_preview_publication_source_build_run_id IS NOT NULL
         AND scope_row.certified_preview_publication_attested_at_utc IS NOT NULL
-        AND scope_row.certified_preview_publication_attestation_json->>'attestation_version' = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V1'
-        AND scope_row.certified_preview_publication_attestation_json->>'authority_kind' = 'BOUNDED_FULL_SOURCE_BUILD'
-        AND scope_row.certified_preview_publication_attestation_json->>'parity_complete' = 'true'
+        AND scope_row.certified_preview_publication_attestation_json->>'parity_complete'='true'
+        AND (
+          (
+            scope_row.certified_preview_publication_attestation_json->>'attestation_version'='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V1'
+            AND scope_row.certified_preview_publication_attestation_json->>'authority_kind'='BOUNDED_FULL_SOURCE_BUILD'
+          )
+          OR (
+            scope_row.certified_preview_publication_attestation_json->>'attestation_version'='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V2'
+            AND scope_row.certified_preview_publication_attestation_json->>'contract_version'='2'
+            AND scope_row.certified_preview_publication_attestation_json->>'authority_kind' IN ('CERTIFIED_CLONE','TARGETED_DELTA')
+            AND scope_row.certified_preview_publication_attestation_json->>'final_state' IN ('READY','SOURCE_EMPTY')
+          )
+        )
       )
     ORDER BY scope_row.scope_ordinal, scope_row.candidate_id
     LIMIT 10

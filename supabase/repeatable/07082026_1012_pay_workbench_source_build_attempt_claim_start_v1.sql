@@ -66,6 +66,7 @@ DECLARE
   -- a healthy ~6 second attempt into a 25 second lease-expiry stampede.
   v_reconcile_attempt_limit integer:=2;
   v_execution_profile_version integer:=1;
+  v_reconciliation_optimization_version integer:=0;
   v_settings_json jsonb:='{}'::jsonb;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
@@ -425,6 +426,16 @@ BEGIN
     IF v_execution_profile_version NOT IN (1,2) THEN
       v_execution_profile_version := 1;
     END IF;
+    IF v_execution_profile_version=2 THEN
+      BEGIN
+        v_reconciliation_optimization_version:=COALESCE(
+          NULLIF(v_settings_json->>'banking_pay_workbench_reconciliation_optimization_version','')::integer,0
+        );
+      EXCEPTION WHEN OTHERS THEN
+        v_reconciliation_optimization_version:=0;
+      END;
+    END IF;
+    v_reconciliation_optimization_version:=CASE WHEN v_reconciliation_optimization_version=1 THEN 1 ELSE 0 END;
     IF COALESCE(v_job.payload_json->>'source_build_run_id','')
        !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_RUN_ID_REQUIRED'
@@ -463,7 +474,10 @@ BEGIN
       jsonb_build_object(
         'execution_profile_version',v_execution_profile_version,
         'execution_profile_frozen_at_utc',clock_timestamp(),
-        'execution_profile_authority','BUILD_CREATION_SETTINGS'
+        'execution_profile_authority','BUILD_CREATION_SETTINGS',
+        'reconciliation_optimization_version',v_reconciliation_optimization_version,
+        'reconciliation_optimization_frozen_at_utc',clock_timestamp(),
+        'reconciliation_optimization_authority','BUILD_CREATION_SETTINGS'
       )
     ) RETURNING id,scope_cursor_json INTO v_build_id,v_cursor_json;
     UPDATE private.banking_pay_workbench_candidate_scope_registry
@@ -543,6 +557,21 @@ BEGIN
           'execution_profile_version',v_execution_profile_version
         )::text;
     END IF;
+    BEGIN
+      v_reconciliation_optimization_version:=COALESCE(
+        NULLIF(v_build.attestation_json->>'reconciliation_optimization_version','')::integer,0
+      );
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_OPTIMIZATION_INVALID'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+          'code','PAY_WORKBENCH_RECONCILIATION_OPTIMIZATION_INVALID','build_id',v_build_id
+        )::text;
+    END;
+    IF v_reconciliation_optimization_version NOT IN (0,1)
+       OR (v_execution_profile_version=1 AND v_reconciliation_optimization_version<>0) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_OPTIMIZATION_CONFLICT'
+        USING ERRCODE='P0001';
+    END IF;
     UPDATE private.banking_pay_workbench_economic_builds
     SET source_job_id=v_job.id,updated_at_utc=clock_timestamp()
     WHERE id=v_build_id;
@@ -605,7 +634,8 @@ BEGIN
     'candidate_id',v_job.candidate_id,'private_stage',v_stage,
     'attempt_id',v_attempt_id,'attempt_number',v_attempt_number,
     'attempt_nonce',v_attempt_nonce,'attempt_started_at_utc',v_attempt_started_at,
-    'lease_expires_at_utc',v_lease_expires,'execution_profile_version',v_execution_profile_version
+    'lease_expires_at_utc',v_lease_expires,'execution_profile_version',v_execution_profile_version,
+    'reconciliation_optimization_version',v_reconciliation_optimization_version
   );
 END;
 $function$;

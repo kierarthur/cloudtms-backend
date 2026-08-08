@@ -1725,14 +1725,26 @@ DECLARE
   v_scope_ensure_result jsonb := '{}'::jsonb;
   v_new_scope_baseline_required boolean := false;
   v_session_scan_cutoff_created_at timestamptz;
+  v_session_scan_cutoff_id uuid;
   v_session_scan_last_created_at timestamptz;
   v_session_scan_last_id uuid;
   v_session_scan_has_more boolean := false;
+  v_session_scan_started_at timestamptz;
+  v_session_scan_sessions_examined bigint := 0;
+  v_session_page_ids uuid[] := ARRAY[]::uuid[];
+  v_candidate_lock_acquired boolean := false;
+  v_private_cursor jsonb := '{}'::jsonb;
+  v_cursor_sequence bigint := NULL::bigint;
+  v_reuse_selection jsonb := '{}'::jsonb;
+  v_reuse_job_id uuid := NULL::uuid;
+  v_reuse_source_session_id uuid := NULL::uuid;
+  v_reuse_dedupe_key text := NULL::text;
 BEGIN
   SELECT job_row.*
   INTO v_job
   FROM public.banking_pay_workbench_jobs AS job_row
-  WHERE job_row.id = p_job_id;
+  WHERE job_row.id = p_job_id
+  FOR UPDATE;
 
   IF v_job.id IS NULL THEN
     RAISE EXCEPTION 'Banking Pay candidate dirty apply job not found: %', p_job_id
@@ -1757,18 +1769,29 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  v_candidate_serial_state := public._pay_workbench_candidate_serial_active_state(
-    p_job_id,
-    v_candidate_id,
-    v_job.job_type,
-    v_payload,
-    v_now
+  v_candidate_lock_acquired := pg_catalog.pg_try_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      public._pay_workbench_candidate_serial_key(v_candidate_id),
+      24062027
+    )
   );
-  v_candidate_serial_blocked := lower(BTRIM(COALESCE(v_candidate_serial_state->>'blocked', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  IF v_candidate_lock_acquired THEN
+    v_candidate_serial_state := public._pay_workbench_candidate_serial_active_state(
+      p_job_id,
+      v_candidate_id,
+      v_job.job_type,
+      v_payload,
+      v_now
+    );
+  END IF;
+  v_candidate_serial_blocked := NOT v_candidate_lock_acquired
+    OR lower(BTRIM(COALESCE(v_candidate_serial_state->>'blocked', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
   IF v_candidate_serial_blocked IS TRUE THEN
     UPDATE public.banking_pay_workbench_jobs AS delayed_job
     SET status = 'QUEUED',
+        attempt_count = GREATEST(COALESCE(delayed_job.attempt_count, 0) - 1, 0),
         run_at_utc = GREATEST(COALESCE(delayed_job.run_at_utc, v_now), v_now + interval '5 seconds'),
         started_at_utc = NULL,
         updated_at_utc = v_now,
@@ -1780,7 +1803,7 @@ BEGIN
             'candidate_serial_blocked_by_job_id', v_candidate_serial_state->>'blocked_job_id',
             'candidate_serial_blocked_by_chain_job_id', v_candidate_serial_state->>'blocked_chain_job_id',
             'candidate_serial_blocked_by_projection_run_id', v_candidate_serial_state->>'projection_run_id',
-            'candidate_serial_wait_reason', COALESCE(v_candidate_serial_state->>'reason', 'CANDIDATE_SERIAL_DIRTY_APPLY_DELAYED'),
+            'candidate_serial_wait_reason', COALESCE(v_candidate_serial_state->>'reason', CASE WHEN NOT v_candidate_lock_acquired THEN 'CANDIDATE_SERIAL_LOCK_BUSY' ELSE 'CANDIDATE_SERIAL_DIRTY_APPLY_DELAYED' END),
             'candidate_serial_delayed_at_utc', v_now::text,
             'dirty_apply_row_marking_applied', false,
             'dirty_marking_skipped', true,
@@ -1817,8 +1840,8 @@ BEGIN
       'candidate_serial_delayed', true,
       'has_more', true,
       'rerun_required', true,
-      'next_cursor_json', '{}'::jsonb,
-      'reason', COALESCE(v_candidate_serial_state->>'reason', 'CANDIDATE_SERIAL_DIRTY_APPLY_DELAYED'),
+      'next_cursor_json', COALESCE(v_job.private_cursor_json, '{}'::jsonb),
+      'reason', COALESCE(v_candidate_serial_state->>'reason', CASE WHEN NOT v_candidate_lock_acquired THEN 'CANDIDATE_SERIAL_LOCK_BUSY' ELSE 'CANDIDATE_SERIAL_DIRTY_APPLY_DELAYED' END),
       'dirty_apply_row_marking_applied', false,
       'dirty_marking_skipped', true,
       'session_progress_dirtying_skipped', true,
@@ -1963,16 +1986,75 @@ BEGIN
   WHERE change_counter.entity_key = 'pay_candidate:' || v_candidate_id::text;
 
   v_processed_source_change_seq := GREATEST(COALESCE(v_payload_seq, 0), COALESCE(v_live_seq, 0));
+  IF v_job.private_cursor_kind IS NOT NULL
+     AND v_job.private_cursor_kind <> 'DIRTY_SESSION_SCAN_V1' THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_DIRTY_SESSION_CURSOR_KIND_INVALID'
+      USING ERRCODE='P0001';
+  END IF;
+
+  v_private_cursor := COALESCE(v_job.private_cursor_json, '{}'::jsonb);
   BEGIN
-    v_session_scan_cutoff_created_at := COALESCE(
-      NULLIF(BTRIM(COALESCE(v_payload->>'session_scan_cutoff_created_at_utc','')),'')::timestamptz,
+    v_cursor_sequence := CASE
+      WHEN COALESCE(v_private_cursor->>'scan_source_change_seq','') ~ '^\d+$'
+        THEN (v_private_cursor->>'scan_source_change_seq')::bigint
+      ELSE NULL::bigint
+    END;
+    v_session_scan_cutoff_created_at := NULLIF(BTRIM(COALESCE(v_private_cursor->>'upper_created_at_utc','')),'')::timestamptz;
+    v_session_scan_cutoff_id := NULLIF(BTRIM(COALESCE(v_private_cursor->>'upper_session_id','')),'')::uuid;
+    v_session_scan_last_created_at := NULLIF(BTRIM(COALESCE(v_private_cursor->>'last_created_at_utc','')),'')::timestamptz;
+    v_session_scan_last_id := NULLIF(BTRIM(COALESCE(v_private_cursor->>'last_session_id','')),'')::uuid;
+    v_session_scan_started_at := COALESCE(
+      NULLIF(BTRIM(COALESCE(v_private_cursor->>'scan_started_at_utc','')),'')::timestamptz,
       v_now
     );
-    v_session_scan_last_created_at := NULLIF(BTRIM(COALESCE(v_payload->>'session_scan_last_created_at_utc','')),'')::timestamptz;
-    v_session_scan_last_id := NULLIF(BTRIM(COALESCE(v_payload->>'session_scan_last_id','')),'')::uuid;
+    v_session_scan_sessions_examined := COALESCE(
+      CASE WHEN COALESCE(v_private_cursor->>'sessions_examined','') ~ '^\d+$'
+        THEN (v_private_cursor->>'sessions_examined')::bigint END,
+      0
+    );
   EXCEPTION WHEN OTHERS THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_DIRTY_SESSION_CURSOR_INVALID' USING ERRCODE='P0001';
   END;
+
+  IF v_job.private_cursor_kind IS NULL
+     OR v_job.private_stage_version IS DISTINCT FROM 1
+     OR v_cursor_sequence IS DISTINCT FROM v_processed_source_change_seq THEN
+    SELECT session_candidate.created_at_utc, session_candidate.id
+    INTO v_session_scan_cutoff_created_at, v_session_scan_cutoff_id
+    FROM public.banking_pay_workbench_sessions AS session_candidate
+    WHERE session_candidate.status='OPEN'
+      AND session_candidate.discarded_at_utc IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_sessions AS newer_session
+        WHERE newer_session.actor_user_id=session_candidate.actor_user_id
+          AND newer_session.status='OPEN' AND newer_session.discarded_at_utc IS NULL
+          AND (newer_session.pay_date,newer_session.created_at_utc,newer_session.id)>
+              (session_candidate.pay_date,session_candidate.created_at_utc,session_candidate.id)
+      )
+    ORDER BY session_candidate.created_at_utc DESC,session_candidate.id DESC
+    LIMIT 1;
+
+    v_session_scan_last_created_at := NULL::timestamptz;
+    v_session_scan_last_id := NULL::uuid;
+    v_session_scan_started_at := v_now;
+    v_session_scan_sessions_examined := 0;
+
+    UPDATE public.banking_pay_workbench_jobs AS cursor_job
+    SET private_cursor_kind='DIRTY_SESSION_SCAN_V1',
+        private_stage_version=1,
+        private_cursor_json=jsonb_strip_nulls(jsonb_build_object(
+          'scan_source_change_seq',v_processed_source_change_seq,
+          'upper_created_at_utc',v_session_scan_cutoff_created_at,
+          'upper_session_id',v_session_scan_cutoff_id,
+          'last_created_at_utc',NULL,
+          'last_session_id',NULL,
+          'scan_started_at_utc',v_session_scan_started_at,
+          'sessions_examined',0
+        )),
+        updated_at_utc=v_now
+    WHERE cursor_job.id=p_job_id;
+  END IF;
   v_lifecycle_context := LOWER(BTRIM(COALESCE(v_payload->>'lifecycle_mutation_context', v_payload->>'mutation_context', v_payload->>'lifecycle_context', '')));
   v_is_authorise_delta_targeted := v_refresh_scope_kind = 'TARGETED_TIMESHEETS'
     AND COALESCE(array_length(v_canonical_targeted_timesheet_ids, 1), 0) > 0
@@ -1988,12 +2070,16 @@ BEGIN
 
   PERFORM public._temp_diag_log('TEMP_TRIGGER_DIRTY_STAGE', 'TEMP_BANKING_PAY_DIRTY', p_job_id::text, jsonb_build_object('function_name', 'pay_workbench_candidate_dirty_apply_job_process', 'stage', 'dirty_worker_apply_start', 'job_id', p_job_id::text, 'candidate_id', v_candidate_id::text, 'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_ids, 1), 0), 'family_timesheet_count', COALESCE(array_length(v_family_timesheet_ids, 1), 0), 'latest_source_change_seq', v_payload_seq, 'processed_source_change_seq', v_processed_source_change_seq));
 
-  FOR v_session_row IN
-    SELECT session_candidate.*
+  SELECT COALESCE(array_agg(page_row.id ORDER BY page_row.created_at_utc,page_row.id),ARRAY[]::uuid[])
+  INTO v_session_page_ids
+  FROM (
+    SELECT session_candidate.id,session_candidate.created_at_utc
     FROM public.banking_pay_workbench_sessions AS session_candidate
     WHERE session_candidate.status='OPEN'
       AND session_candidate.discarded_at_utc IS NULL
-      AND session_candidate.created_at_utc<=v_session_scan_cutoff_created_at
+      AND v_session_scan_cutoff_created_at IS NOT NULL
+      AND (session_candidate.created_at_utc,session_candidate.id)<=
+          (v_session_scan_cutoff_created_at,v_session_scan_cutoff_id)
       AND (
         v_session_scan_last_created_at IS NULL
         OR (session_candidate.created_at_utc,session_candidate.id)>
@@ -2009,9 +2095,23 @@ BEGIN
       )
     ORDER BY session_candidate.created_at_utc,session_candidate.id
     LIMIT GREATEST(1, COALESCE(p_limit, 100))
+  ) AS page_row;
+
+  PERFORM session_lock.id
+  FROM public.banking_pay_workbench_sessions AS session_lock
+  WHERE session_lock.id=ANY(v_session_page_ids)
+  ORDER BY session_lock.id
+  FOR UPDATE;
+
+  FOR v_session_row IN
+    SELECT session_candidate.*
+    FROM public.banking_pay_workbench_sessions AS session_candidate
+    WHERE session_candidate.id=ANY(v_session_page_ids)
+    ORDER BY session_candidate.created_at_utc,session_candidate.id
   LOOP
     v_session_scan_last_created_at:=v_session_row.created_at_utc;
     v_session_scan_last_id:=v_session_row.id;
+    v_session_scan_sessions_examined:=v_session_scan_sessions_examined+1;
     IF NOT EXISTS (
       SELECT 1 FROM public.banking_pay_workbench_session_scope AS existing_scope
       WHERE existing_scope.session_id=v_session_row.id
@@ -2027,6 +2127,85 @@ BEGIN
     ELSE
       v_new_scope_baseline_required:=false;
     END IF;
+    IF v_new_scope_baseline_required IS TRUE THEN
+      v_reuse_selection := private.pay_workbench_candidate_reuse_source_select_v1(
+        v_session_row.id,
+        v_candidate_id,
+        v_processed_source_change_seq,
+        jsonb_build_object(
+          'source_job_id',p_job_id::text,
+          'direct_candidate_id',v_candidate_id::text,
+          'target_session_id',v_session_row.id::text
+        )
+      );
+
+      IF coalesce((v_reuse_selection->>'reuse_available')::boolean,false) IS TRUE
+         AND coalesce(v_reuse_selection->>'selected_source_session_id','')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        v_reuse_source_session_id := (v_reuse_selection->>'selected_source_session_id')::uuid;
+        v_reuse_dedupe_key := 'workbench:certified-reuse-v2:'
+          ||v_session_row.id::text||':'||v_candidate_id::text||':'||v_processed_source_change_seq::text;
+
+        INSERT INTO public.banking_pay_workbench_jobs AS reuse_job(
+          id,job_type,status,priority,run_at_utc,attempt_count,max_attempts,
+          dedupe_key,snapshot_run_id,session_id,candidate_id,payload_json,
+          created_at_utc,updated_at_utc,started_at_utc,completed_at_utc,
+          failed_at_utc,last_error_json
+        ) VALUES (
+          gen_random_uuid(),'WORKBENCH_SESSION_CLONE_REBASE','QUEUED',42,v_now,0,8,
+          v_reuse_dedupe_key,v_session_row.source_snapshot_run_id,v_session_row.id,v_candidate_id,
+          jsonb_strip_nulls(jsonb_build_object(
+            'job_type','WORKBENCH_SESSION_CLONE_REBASE',
+            'source_session_id',v_reuse_source_session_id::text,
+            'target_session_id',v_session_row.id::text,
+            'direct_candidate_id',v_candidate_id::text,
+            'source_change_seq',v_processed_source_change_seq,
+            'source_job_id',p_job_id::text,
+            'source_selection_authorised',true,
+            'allow_session_rebase',true,
+            'rebase_simple_rows_only',true,
+            'clone_mode','CERTIFIED_ONLY',
+            'cursor_json','{}'::jsonb,
+            'limit',1,
+            'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
+          )),
+          v_now,v_now,NULL,NULL,NULL,NULL
+        )
+        ON CONFLICT (dedupe_key) WHERE status IN ('QUEUED','RUNNING')
+        DO UPDATE SET
+          run_at_utc=LEAST(reuse_job.run_at_utc,EXCLUDED.run_at_utc),
+          payload_json=coalesce(reuse_job.payload_json,'{}'::jsonb)||EXCLUDED.payload_json,
+          updated_at_utc=v_now
+        RETURNING reuse_job.id INTO v_reuse_job_id;
+
+        UPDATE public.banking_pay_workbench_session_scope AS reuse_scope
+        SET status='PENDING',dirty=true,pending_job_id=v_reuse_job_id,
+            error_json=NULL::jsonb,
+            certified_preview_publication_required=true,
+            certified_preview_publication_parity_ok=false,
+            certified_preview_publication_session_version=NULL,
+            certified_preview_publication_source_change_seq=NULL,
+            certified_preview_publication_source_build_run_id=NULL,
+            certified_preview_publication_attestation_json='{}'::jsonb,
+            certified_preview_publication_attested_at_utc=NULL,
+            updated_at_utc=v_now
+        WHERE reuse_scope.session_id=v_session_row.id
+          AND reuse_scope.candidate_id=v_candidate_id;
+
+        v_jobs_queued:=v_jobs_queued+1;
+        v_session_count:=v_session_count+1;
+        v_refresh_result:=jsonb_build_object(
+          'ok',true,
+          'job_id',v_reuse_job_id::text,
+          'job_type','WORKBENCH_SESSION_CLONE_REBASE',
+          'scope_status','PENDING',
+          'source_build_required',false,
+          'certified_reuse_pending',true
+        );
+        CONTINUE;
+      END IF;
+    END IF;
+
 
     IF v_is_authorise_delta_targeted AND NOT v_new_scope_baseline_required THEN
       SELECT public.pay_workbench_authorise_delta_hotkey_preflight(
@@ -2117,6 +2296,13 @@ BEGIN
     SET status = 'SOURCE_BUILD_PENDING',
         dirty = true,
         error_json = NULL::jsonb,
+        certified_preview_publication_required = true,
+        certified_preview_publication_parity_ok = false,
+        certified_preview_publication_session_version = NULL,
+        certified_preview_publication_source_change_seq = NULL,
+        certified_preview_publication_source_build_run_id = NULL,
+        certified_preview_publication_attestation_json = '{}'::jsonb,
+        certified_preview_publication_attested_at_utc = NULL,
         updated_at_utc = v_now
     WHERE scope_row.session_id = v_session_row.id
       AND scope_row.candidate_id = v_candidate_id;
@@ -2284,7 +2470,9 @@ BEGIN
     SELECT 1
     FROM public.banking_pay_workbench_sessions AS remaining_session
     WHERE remaining_session.status='OPEN' AND remaining_session.discarded_at_utc IS NULL
-      AND remaining_session.created_at_utc<=v_session_scan_cutoff_created_at
+      AND v_session_scan_cutoff_created_at IS NOT NULL
+      AND (remaining_session.created_at_utc,remaining_session.id)<=
+          (v_session_scan_cutoff_created_at,v_session_scan_cutoff_id)
       AND (v_session_scan_last_created_at IS NULL OR
         (remaining_session.created_at_utc,remaining_session.id)>
           (v_session_scan_last_created_at,v_session_scan_last_id))
@@ -2323,12 +2511,27 @@ BEGIN
           END,
           'refresh_enqueue_result', COALESCE(v_refresh_result, '{}'::jsonb)
           ,'session_scan_cutoff_created_at_utc',v_session_scan_cutoff_created_at::text
+          ,'session_scan_cutoff_id',v_session_scan_cutoff_id::text
           ,'session_scan_last_created_at_utc',CASE WHEN v_session_scan_has_more THEN v_session_scan_last_created_at::text ELSE NULL END
           ,'session_scan_last_id',CASE WHEN v_session_scan_has_more THEN v_session_scan_last_id::text ELSE NULL END
           ,'rerun_required',v_session_scan_has_more
           ,'has_more',v_session_scan_has_more
         )
       ),
+      private_cursor_kind=CASE WHEN v_session_scan_has_more THEN 'DIRTY_SESSION_SCAN_V1' ELSE NULL::text END,
+      private_stage_version=CASE WHEN v_session_scan_has_more THEN 1 ELSE NULL::integer END,
+      private_cursor_json=CASE
+        WHEN v_session_scan_has_more THEN jsonb_strip_nulls(jsonb_build_object(
+          'scan_source_change_seq',v_processed_source_change_seq,
+          'upper_created_at_utc',v_session_scan_cutoff_created_at,
+          'upper_session_id',v_session_scan_cutoff_id,
+          'last_created_at_utc',v_session_scan_last_created_at,
+          'last_session_id',v_session_scan_last_id,
+          'scan_started_at_utc',v_session_scan_started_at,
+          'sessions_examined',v_session_scan_sessions_examined
+        ))
+        ELSE '{}'::jsonb
+      END,
       updated_at_utc = v_now
   WHERE job_update.id = p_job_id;
 
@@ -5768,6 +5971,22 @@ BEGIN
     AND projection_run.session_id = p_session_id
     AND projection_run.candidate_id = p_candidate_id
   LIMIT 1;
+
+  IF COALESCE(v_sealed_targeted_delta,false) IS TRUE THEN
+    UPDATE public.banking_pay_workbench_session_scope AS staged_scope
+    SET certified_preview_publication_required=true,
+        certified_preview_publication_parity_ok=false,
+        certified_preview_publication_session_version=NULL,
+        certified_preview_publication_source_change_seq=NULL,
+        certified_preview_publication_source_build_run_id=NULL,
+        certified_preview_publication_attestation_json='{}'::jsonb,
+        certified_preview_publication_attested_at_utc=NULL,
+        status='DELTA_REFRESH_PENDING',
+        dirty=true,
+        updated_at_utc=v_now
+    WHERE staged_scope.session_id=p_session_id
+      AND staged_scope.candidate_id=p_candidate_id;
+  END IF;
 
   IF lower(BTRIM(COALESCE(v_payload_json->>'reset_write_phase', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on') THEN
     v_write_phase := 'SUPERSEDE_PREVIEW';

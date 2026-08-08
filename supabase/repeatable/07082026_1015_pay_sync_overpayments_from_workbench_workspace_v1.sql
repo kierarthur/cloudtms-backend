@@ -35,6 +35,7 @@ BEGIN
 
   v_cache_enabled :=
     COALESCE(current_setting('cloudtms.pay_workbench_execution_profile_version', true), '') = '2'
+    AND COALESCE(current_setting('cloudtms.pay_workbench_reconciliation_optimization_version', true), '') = '1'
     AND NULLIF(BTRIM(COALESCE(
       current_setting('cloudtms.pay_workbench_overpayment_sync_token', true),
       ''
@@ -255,6 +256,7 @@ declare
       THEN current_setting('cloudtms.pay_workbench_execution_profile_version', true)::integer
     ELSE 1
   END;
+  v_reconciliation_optimization_version integer := 0;
   v_reconcile_started_at timestamptz := clock_timestamp();
   v_freshness_set_ms integer := 0;
   v_workspace_cache_ms integer := 0;
@@ -315,6 +317,29 @@ begin
      OR COALESCE(v_bounded_attempt.execution_profile_version,1)
        IS DISTINCT FROM v_execution_profile_version THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_EXECUTION_PROFILE_MISMATCH' USING ERRCODE='23514';
+  END IF;
+  BEGIN
+    v_reconciliation_optimization_version:=COALESCE(
+      NULLIF(v_bounded_build.attestation_json->>'reconciliation_optimization_version','')::integer,0
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_OPTIMIZATION_INVALID' USING ERRCODE='23514';
+  END;
+  IF v_reconciliation_optimization_version NOT IN (0,1)
+     OR (v_execution_profile_version=1 AND v_reconciliation_optimization_version<>0) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_OPTIMIZATION_MISMATCH' USING ERRCODE='23514';
+  END IF;
+  PERFORM pg_catalog.set_config(
+    'cloudtms.pay_workbench_reconciliation_optimization_version',
+    v_reconciliation_optimization_version::text,
+    true
+  );
+  IF v_reconciliation_optimization_version=1 THEN
+    CREATE TEMPORARY TABLE IF NOT EXISTS pg_temp._bpay_wb_correction_residual_cache_v2(
+      candidate_id uuid NOT NULL,session_key text NOT NULL,exclude_key text NOT NULL,result_json jsonb NOT NULL,
+      PRIMARY KEY(candidate_id,session_key,exclude_key)
+    ) ON COMMIT DROP;
+    TRUNCATE TABLE pg_temp._bpay_wb_correction_residual_cache_v2;
   END IF;
 
   IF EXISTS(
@@ -4006,6 +4031,7 @@ begin
       'ok',true,'effect_plan_capture',true,'captured_effects',v_captured_effects,
       '_internal_reconcile_timing',jsonb_build_object(
         'execution_profile_version',v_execution_profile_version,
+      'reconciliation_optimization_version',v_reconciliation_optimization_version,
         'workspace_cache_ms',v_workspace_cache_ms,
         'freshness_set_ms',v_freshness_set_ms,
         'authoritative_components_ms',v_authoritative_components_ms,
@@ -4023,6 +4049,7 @@ begin
       'internal_result_json',jsonb_build_object(
         'captured_effect_count',jsonb_array_length(v_captured_effects),
         'execution_profile_version',v_execution_profile_version,
+      'reconciliation_optimization_version',v_reconciliation_optimization_version,
         'freshness_set_ms',v_freshness_set_ms,
         'workspace_cache_ms',v_workspace_cache_ms,
         'authoritative_components_ms',v_authoritative_components_ms,
@@ -4631,6 +4658,7 @@ begin
         'canonical_digest',v_bounded_canonical_digest,
         'reconcile_execute_timing_json',jsonb_build_object(
           'execution_profile_version',v_execution_profile_version,
+      'reconciliation_optimization_version',v_reconciliation_optimization_version,
           'workspace_cache_ms',v_workspace_cache_ms,
           'freshness_set_ms',v_freshness_set_ms,
           'authoritative_components_ms',v_authoritative_components_ms,
@@ -4665,6 +4693,7 @@ begin
       'pre_sync_digest',v_bounded_pre_sync_digest,'post_sync_digest',v_bounded_post_sync_digest,
       'canonical_digest',v_bounded_canonical_digest,
       'execution_profile_version',v_execution_profile_version,
+      'reconciliation_optimization_version',v_reconciliation_optimization_version,
       'freshness_set_ms',v_freshness_set_ms,
       'workspace_cache_ms',v_workspace_cache_ms,
       'authoritative_components_ms',v_authoritative_components_ms,

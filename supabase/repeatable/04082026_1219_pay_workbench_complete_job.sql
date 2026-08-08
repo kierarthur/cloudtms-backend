@@ -188,6 +188,27 @@ BEGIN
     RAISE EXCEPTION 'banking_pay_workbench_jobs row % not found', p_job_id;
   END IF;
 
+  IF v_job_row.candidate_id IS NOT NULL
+     AND UPPER(BTRIM(COALESCE(v_job_row.job_type,''))) IN (
+       'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+       'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+       'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
+       'CANDIDATE_SOURCE_BUILD',
+       'CANDIDATE_SOURCE_BUILD_CHUNK',
+       'SOURCE_BUILD',
+       'SOURCE_BUILD_PAGE',
+       'WORKBENCH_SESSION_CLONE_REBASE',
+       'SESSION_CLONE_REBASE',
+       'CLONE_REBASE'
+     ) THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        public._pay_workbench_candidate_serial_key(v_job_row.candidate_id),
+        24062027
+      )
+    );
+  END IF;
+
   v_duplicate_completion := UPPER(BTRIM(COALESCE(v_job_row.status, ''))) = 'SUCCEEDED'
     AND v_job_row.completed_at_utc IS NOT NULL;
 
@@ -1648,6 +1669,20 @@ BEGIN
     ELSE
       v_clone_source_session_id := NULL::uuid;
     END IF;
+
+    PERFORM session_lock.id
+    FROM public.banking_pay_workbench_sessions AS session_lock
+    WHERE session_lock.id=ANY(array_remove(ARRAY[
+      v_job_row.session_id,
+      v_clone_source_session_id
+    ]::uuid[],NULL::uuid))
+    ORDER BY session_lock.id
+    FOR UPDATE;
+
+    SELECT target_session.*
+    INTO v_session_row
+    FROM public.banking_pay_workbench_sessions AS target_session
+    WHERE target_session.id=v_job_row.session_id;
 
     IF v_clone_more_due IS TRUE THEN
       INSERT INTO public.banking_pay_workbench_jobs AS clone_continuation (

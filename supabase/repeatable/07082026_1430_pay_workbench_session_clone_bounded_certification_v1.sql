@@ -58,6 +58,11 @@ DECLARE
   v_option_source_session_id uuid := NULL::uuid;
   v_option_target_session_id uuid := NULL::uuid;
   v_controlled_clone_rebase boolean := false;
+  v_final_fence_mode boolean := false;
+  v_clone_job_id uuid := NULL::uuid;
+  v_source_mode text := 'NONEMPTY';
+  v_certification_digest text := NULL::text;
+  v_live_eligibility jsonb := '{}'::jsonb;
 BEGIN
   IF p_source_session_id IS NULL
      OR p_target_session_id IS NULL
@@ -83,7 +88,6 @@ BEGIN
       OR (
         pg_catalog.upper(pg_catalog.btrim(coalesce(source_session.status, ''))) = 'DISCARDED'
         AND source_session.discarded_at_utc IS NOT NULL
-        AND source_session.replacement_session_id = p_target_session_id
       )
     )
   FOR SHARE;
@@ -107,18 +111,9 @@ BEGIN
   FOR SHARE;
 
   IF NOT FOUND
-     OR v_source_session.pay_date >= v_target_session.pay_date
-     OR v_source_session.pay_date IS NOT DISTINCT FROM v_target_session.pay_date
-     OR v_source_session.week_ending_cutoff IS DISTINCT FROM v_target_session.week_ending_cutoff
-     OR public.pay_workbench_filters_sanitise_v1(
-          coalesce(v_source_session.filters_json, '{}'::jsonb),
-          v_source_session.pay_date,
-          v_source_session.week_ending_cutoff
-        ) IS DISTINCT FROM public.pay_workbench_filters_sanitise_v1(
-          coalesce(v_target_session.filters_json, '{}'::jsonb),
-          v_target_session.pay_date,
-          v_target_session.week_ending_cutoff
-        ) THEN
+     OR v_source_session.pay_date IS NULL
+     OR v_target_session.pay_date IS NULL
+     OR v_source_session.pay_date >= v_target_session.pay_date THEN
     RETURN pg_catalog.jsonb_build_object(
       'ok', true,
       'clone_eligible', false,
@@ -149,6 +144,19 @@ BEGIN
 
   IF v_option_target_session_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
     v_option_target_session_id := v_option_target_session_id_text::uuid;
+  END IF;
+  v_final_fence_mode := pg_catalog.lower(pg_catalog.btrim(coalesce(
+    v_options_json->>'final_fence_mode','false'
+  ))) IN ('true','t','1','yes','y','on');
+
+  IF NULLIF(pg_catalog.btrim(coalesce(
+       v_options_json->>'clone_job_id',
+       v_options_json->>'source_job_id',
+       ''
+     )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_clone_job_id := NULLIF(pg_catalog.btrim(coalesce(
+      v_options_json->>'clone_job_id',v_options_json->>'source_job_id',''
+    )), '')::uuid;
   END IF;
 
   v_controlled_clone_rebase := (
@@ -185,12 +193,13 @@ BEGIN
     AND v_option_target_session_id_text IS NOT NULL
     AND v_option_target_session_id = p_target_session_id
     AND (
-      v_source_session.replacement_session_id = p_target_session_id
+      v_final_fence_mode IS TRUE
       OR pg_catalog.upper(pg_catalog.btrim(coalesce(v_target_session.progress_state, ''))) = 'CLONE_REBASING'
       OR NULLIF(pg_catalog.btrim(coalesce(
         v_target_session.progress_json->>'clone_from_session_id',
         ''
       )), '') = p_source_session_id::text
+      OR pg_catalog.lower(pg_catalog.btrim(coalesce(v_options_json->>'source_selection_authorised','false'))) IN ('true','t','1','yes','y','on')
     )
   );
 
@@ -204,6 +213,32 @@ BEGIN
     );
   END IF;
 
+  v_live_eligibility := public.pay_workbench_session_clone_eligibility_v1(
+    p_source_session_id,
+    p_target_session_id,
+    p_candidate_id,
+    v_options_json || pg_catalog.jsonb_build_object(
+      'source_session_id',p_source_session_id::text,
+      'target_session_id',p_target_session_id::text,
+      'source_selection_authorised',true,
+      'allow_session_rebase',true,
+      'rebase_simple_rows_only',true
+    )
+  );
+
+  IF coalesce((v_live_eligibility->>'clone_eligible')::boolean,false) IS NOT TRUE THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ok',true,
+      'clone_eligible',false,
+      'bounded_build_certified',false,
+      'reason',coalesce(
+        nullif(v_live_eligibility->>'reason',''),
+        'TARGET_DATE_REUSE_NOT_CERTIFIED'
+      ),
+      'required_refresh_job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD'
+    );
+  END IF;
+
   SELECT source_scope.*
   INTO v_source_scope
   FROM public.banking_pay_workbench_session_scope AS source_scope
@@ -211,6 +246,8 @@ BEGIN
     AND source_scope.candidate_id = p_candidate_id
     AND pg_catalog.upper(pg_catalog.btrim(coalesce(source_scope.status, '')))
           IN ('READY', 'MATERIALISED', 'MATERIALIZED')
+    AND coalesce(source_scope.certified_preview_publication_required,false) IS TRUE
+    AND coalesce(source_scope.certified_preview_publication_parity_ok,false) IS TRUE
     AND coalesce(source_scope.dirty, false) IS NOT TRUE
     AND source_scope.pending_job_id IS NULL
   FOR SHARE;
@@ -286,8 +323,15 @@ BEGIN
     AND source_line.session_version = v_source_session.version
     AND source_line.status = 'CURRENT';
 
-  IF coalesce(v_source_count, 0) = 0
-     OR v_source_run_count <> 1
+  IF coalesce(v_source_count,0)=0 THEN
+    v_source_mode := 'SOURCE_EMPTY';
+    v_source_build_run_id := v_source_scope.certified_preview_publication_source_build_run_id;
+    v_source_run_count := CASE WHEN v_source_build_run_id IS NULL THEN 0 ELSE 1 END;
+    v_source_seq_min := v_current_source_change_seq;
+    v_source_seq_max := v_current_source_change_seq;
+    v_source_digest := pg_catalog.md5('');
+  END IF;
+  IF v_source_run_count <> 1
      OR v_source_build_run_id IS NULL
      OR v_source_seq_min IS DISTINCT FROM v_current_source_change_seq
      OR v_source_seq_max IS DISTINCT FROM v_current_source_change_seq THEN
@@ -316,6 +360,10 @@ BEGIN
     AND candidate_build.canonical_count = v_source_count
     AND candidate_build.canonical_digest = v_source_digest
     AND candidate_build.sealed_fingerprint_digest IS NOT NULL
+    AND coalesce((candidate_build.attestation_json->>'effect_plan_sealed')::boolean,false) IS TRUE
+    AND NULLIF(candidate_build.attestation_json->>'effect_plan_digest','') IS NOT NULL
+    AND NULLIF(candidate_build.attestation_json->>'observed_finance_effect_digest','') IS NOT NULL
+    AND candidate_build.attestation_json->>'observed_finance_effect_count' ~ '^[0-9]+$'
     AND candidate_build.pre_sync_digest IS NOT NULL
     AND candidate_build.post_sync_digest IS NOT NULL
     AND candidate_build.canonical_digest IS NOT NULL
@@ -414,9 +462,10 @@ BEGIN
     AND (
       job_row.session_id IN (p_source_session_id, p_target_session_id)
       OR job_row.session_id IS NULL
-    );
+    )
+    AND (v_clone_job_id IS NULL OR job_row.id <> v_clone_job_id);
 
-  IF v_ready_preview_count = 0
+  IF (v_source_mode='NONEMPTY' AND v_ready_preview_count = 0)
      OR v_active_preview_poison_count > 0
      OR v_bad_ready_preview_count > 0
      OR v_active_line_work_count > 0
@@ -642,7 +691,11 @@ BEGIN
   END IF;
 
   v_proof_digest := pg_catalog.md5(pg_catalog.jsonb_build_object(
-    'proof_version', 1,
+    'certification_version', 2,
+    'source_session_id',p_source_session_id::text,
+    'target_session_id',p_target_session_id::text,
+    'original_economic_build_id',v_build.id::text,
+    'source_mode',v_source_mode,
     'candidate_generation', v_registry.evaluated_generation,
     'source_change_seq', v_current_source_change_seq,
     'source_build_run_id', v_source_build_run_id::text,
@@ -652,22 +705,38 @@ BEGIN
     'sealed_fingerprint_digest', v_build.sealed_fingerprint_digest,
     'pre_sync_digest', v_build.pre_sync_digest,
     'post_sync_digest', v_build.post_sync_digest,
-    'ready_preview_count', v_ready_preview_count
+    'ready_preview_count', v_ready_preview_count,
+    'target_authority_scope_digest',v_live_eligibility->>'authority_scope_digest',
+    'target_authority_timesheet_count',v_live_eligibility->>'authority_timesheet_count',
+    'target_snapshot_key_count',v_live_eligibility->>'target_snapshot_key_count'
   )::text);
+  v_certification_digest := v_proof_digest;
 
   RETURN pg_catalog.jsonb_build_object(
     'ok', true,
     'clone_eligible', true,
     'bounded_build_certified', true,
-    'bounded_build_proof_version', 1,
+    'bounded_build_proof_version', 2,
+    'certification_version',2,
+    'certification_digest',v_certification_digest,
+    'source_mode',v_source_mode,
+    'ready_empty',(v_source_mode='SOURCE_EMPTY'),
+    'post_clone_action','NONE',
     'reason', NULL::text,
     'required_refresh_job_type', NULL::text,
     'current_source_change_seq', v_current_source_change_seq,
     'source_build_run_id', v_source_build_run_id::text,
     'source_row_count', v_source_count,
+    'original_economic_build_id',v_build.id::text,
+    'economic_build_id',v_build.id::text,
+    'original_source_build_run_id',v_source_build_run_id::text,
+    'source_session_id',p_source_session_id::text,
     'source_digest', v_source_digest,
     'ready_preview_row_count', v_ready_preview_count,
     'proof_digest', v_proof_digest,
+    'target_authority_scope_digest',v_live_eligibility->>'authority_scope_digest',
+    'target_authority_timesheet_count',v_live_eligibility->>'authority_timesheet_count',
+    'target_snapshot_key_count',v_live_eligibility->>'target_snapshot_key_count',
     'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
   );
 END;

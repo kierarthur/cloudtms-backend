@@ -78,6 +78,14 @@ DECLARE
   v_existing_source_build_contract_valid boolean := false;
   v_target_invalidated_preview_count integer := 0;
   v_target_invalidated_source_count integer := 0;
+  v_lock_candidate_id uuid := NULL::uuid;
+  v_direct_candidate_id uuid := NULL::uuid;
+  v_direct_candidate_id_text text := NULL::text;
+  v_source_selection jsonb := '{}'::jsonb;
+  v_clone_owner_job_id uuid := NULL::uuid;
+  v_clone_fence jsonb := '{}'::jsonb;
+  v_certified_publication jsonb := '{}'::jsonb;
+  v_current_source_change_seq bigint := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -95,6 +103,46 @@ BEGIN
     );
   END IF;
 
+  v_direct_candidate_id_text := NULLIF(BTRIM(COALESCE(
+    v_options_json->>'direct_candidate_id',
+    v_options_json->>'candidate_id',
+    ''
+  )), '');
+  IF v_direct_candidate_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_direct_candidate_id := v_direct_candidate_id_text::uuid;
+  END IF;
+
+  IF NULLIF(BTRIM(COALESCE(v_options_json->>'source_job_id',v_options_json->>'clone_job_id','')),'')
+       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    v_clone_owner_job_id := NULLIF(BTRIM(COALESCE(v_options_json->>'source_job_id',v_options_json->>'clone_job_id','')),'')::uuid;
+  END IF;
+
+  IF v_source_session_id IS NULL AND v_direct_candidate_id IS NOT NULL THEN
+    SELECT coalesce(change_counter.seq,0)::bigint
+    INTO v_current_source_change_seq
+    FROM (SELECT 1) AS authority_anchor
+    LEFT JOIN public.app_change_counters AS change_counter
+      ON change_counter.entity_key='pay_candidate:'||v_direct_candidate_id::text;
+
+    v_source_selection := private.pay_workbench_candidate_reuse_source_select_v1(
+      p_target_session_id,
+      v_direct_candidate_id,
+      v_current_source_change_seq,
+      v_options_json||jsonb_build_object('source_job_id',CASE WHEN v_clone_owner_job_id IS NULL THEN NULL ELSE v_clone_owner_job_id::text END)
+    );
+    IF coalesce((v_source_selection->>'reuse_available')::boolean,false) IS TRUE
+       AND coalesce(v_source_selection->>'selected_source_session_id','')
+            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_source_session_id := (v_source_selection->>'selected_source_session_id')::uuid;
+      v_options_json := v_options_json||jsonb_build_object(
+        'source_session_id',v_source_session_id::text,
+        'target_session_id',p_target_session_id::text,
+        'source_selection_authorised',true,
+        'allow_session_rebase',true,
+        'rebase_simple_rows_only',true
+      );
+    END IF;
+  END IF;
   IF v_source_session_id IS NULL THEN
     v_source_session_id_text := NULLIF(BTRIM(COALESCE(v_options_json->>'source_session_id', v_options_json->>'replacement_source_session_id', '')), '');
     IF v_source_session_id_text ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
@@ -121,8 +169,7 @@ BEGIN
   FROM public.banking_pay_workbench_sessions AS target_session
   WHERE target_session.id = p_target_session_id
     AND UPPER(BTRIM(COALESCE(target_session.status, ''))) = 'OPEN'
-    AND target_session.discarded_at_utc IS NULL
-  FOR UPDATE;
+    AND target_session.discarded_at_utc IS NULL;
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object(
@@ -148,12 +195,10 @@ BEGIN
         AND source_session.discarded_at_utc IS NULL
       )
       OR (
-        UPPER(BTRIM(COALESCE(source_session.status, ''))) = 'DISCARDED'
+        UPPER(BTRIM(COALESCE(source_session.status, ''))) IN ('DISCARDED', 'REPLACED')
         AND source_session.discarded_at_utc IS NOT NULL
-        AND source_session.replacement_session_id = p_target_session_id
       )
-    )
-  FOR SHARE;
+    );
 
   IF NOT FOUND THEN
     RETURN jsonb_build_object(
@@ -185,6 +230,7 @@ BEGIN
          ROW_NUMBER() OVER (ORDER BY paged_source_scope.scope_ordinal, paged_source_scope.candidate_id) AS page_index
   FROM public.banking_pay_workbench_session_scope AS paged_source_scope
   WHERE paged_source_scope.session_id = v_source_session_id
+    AND (v_direct_candidate_id IS NULL OR paged_source_scope.candidate_id=v_direct_candidate_id)
     AND paged_source_scope.candidate_id IS NOT NULL
     AND (
       v_after_scope_ordinal IS NULL
@@ -197,6 +243,81 @@ BEGIN
     )
   ORDER BY paged_source_scope.scope_ordinal, paged_source_scope.candidate_id
   LIMIT (v_limit + 1);
+
+  -- Freeze candidate ownership before locking either source or target
+  -- session. Every concurrent clone page takes these locks in the same UUID
+  -- order, then locks the complete session union in UUID order.
+  FOR v_lock_candidate_id IN
+    SELECT DISTINCT page_row.candidate_id
+    FROM pg_temp._bpay_clone_candidate_page AS page_row
+    WHERE page_row.page_index<=v_limit
+    ORDER BY page_row.candidate_id
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended(
+        public._pay_workbench_candidate_serial_key(v_lock_candidate_id),
+        24062027
+      )
+    );
+  END LOOP;
+
+  PERFORM candidate_lock.id
+  FROM public.candidates AS candidate_lock
+  JOIN pg_temp._bpay_clone_candidate_page AS page_row
+    ON page_row.candidate_id=candidate_lock.id
+   AND page_row.page_index<=v_limit
+  ORDER BY candidate_lock.id
+  FOR UPDATE;
+
+  PERFORM registry_lock.candidate_id
+  FROM private.banking_pay_workbench_candidate_scope_registry AS registry_lock
+  JOIN pg_temp._bpay_clone_candidate_page AS page_row
+    ON page_row.candidate_id=registry_lock.candidate_id
+   AND page_row.page_index<=v_limit
+  ORDER BY registry_lock.candidate_id
+  FOR UPDATE;
+
+  PERFORM session_lock.id
+  FROM public.banking_pay_workbench_sessions AS session_lock
+  WHERE session_lock.id=ANY(ARRAY[p_target_session_id,v_source_session_id]::uuid[])
+  ORDER BY session_lock.id
+  FOR UPDATE;
+
+  SELECT target_session.*
+  INTO v_target_session
+  FROM public.banking_pay_workbench_sessions AS target_session
+  WHERE target_session.id=p_target_session_id
+    AND UPPER(BTRIM(COALESCE(target_session.status,'')))='OPEN'
+    AND target_session.discarded_at_utc IS NULL;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CLONE_TARGET_CHANGED_BEFORE_LOCK'
+      USING ERRCODE='P0001';
+  END IF;
+
+  SELECT source_session.*
+  INTO v_source_session
+  FROM public.banking_pay_workbench_sessions AS source_session
+  WHERE source_session.id=v_source_session_id
+    AND (
+      (UPPER(BTRIM(COALESCE(source_session.status,'')))='OPEN' AND source_session.discarded_at_utc IS NULL)
+      OR (UPPER(BTRIM(COALESCE(source_session.status,''))) IN ('DISCARDED','REPLACED')
+          AND source_session.discarded_at_utc IS NOT NULL)
+    );
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_CLONE_SOURCE_CHANGED_BEFORE_LOCK'
+      USING ERRCODE='P0001';
+  END IF;
+
+  PERFORM scope_lock.id
+  FROM public.banking_pay_workbench_session_scope AS scope_lock
+  JOIN pg_temp._bpay_clone_candidate_page AS page_row
+    ON page_row.candidate_id=scope_lock.candidate_id
+   AND page_row.page_index<=v_limit
+  WHERE scope_lock.session_id=ANY(ARRAY[p_target_session_id,v_source_session_id]::uuid[])
+  ORDER BY scope_lock.session_id,scope_lock.candidate_id
+  FOR UPDATE;
 
   SELECT COUNT(*)::integer
   INTO v_processed_candidate_count
@@ -292,7 +413,14 @@ BEGIN
         v_source_session_id,
         p_target_session_id,
         v_candidate_id,
-        v_options_json
+        jsonb_strip_nulls(v_options_json||jsonb_build_object(
+          'source_session_id',v_source_session_id::text,
+          'target_session_id',p_target_session_id::text,
+          'source_selection_authorised',true,
+          'allow_session_rebase',true,
+          'rebase_simple_rows_only',true,
+          'clone_job_id',CASE WHEN v_clone_owner_job_id IS NULL THEN NULL ELSE v_clone_owner_job_id::text END
+        ))
       );
 
       IF COALESCE((v_bounded_clone_eligibility->>'clone_eligible')::boolean, false) IS TRUE THEN
@@ -313,6 +441,23 @@ BEGIN
           v_bounded_build_clone := false;
           v_clone_projection_run_id := p_target_session_id;
         END IF;
+      END IF;
+    END IF;
+
+    IF v_bounded_build_clone IS TRUE THEN
+      v_clone_eligibility := v_clone_eligibility||jsonb_build_object(
+        'clone_job_id',CASE WHEN v_clone_owner_job_id IS NULL THEN NULL ELSE v_clone_owner_job_id::text END
+      );
+      v_clone_fence := private.pay_workbench_session_clone_publication_fence_v1(
+        v_source_session_id,p_target_session_id,v_candidate_id,v_clone_eligibility
+      );
+      IF coalesce((v_clone_fence->>'fence_passed')::boolean,false) IS NOT TRUE THEN
+        v_clone_eligibility := jsonb_build_object(
+          'ok',true,'clone_eligible',false,'bounded_build_certified',false,
+          'reason',coalesce(NULLIF(v_clone_fence->>'reason',''),'CLONE_CERTIFICATION_DRIFT'),
+          'required_refresh_job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD'
+        );
+        v_bounded_build_clone := false;
       END IF;
     END IF;
 
@@ -654,6 +799,54 @@ BEGIN
 
         v_copied_candidate_count := v_copied_candidate_count + 1;
       END IF;
+
+      UPDATE public.banking_pay_workbench_candidate_source_lines AS stale_target_source
+      SET status='SUPERSEDED',updated_at_utc=v_now
+      WHERE stale_target_source.session_id=p_target_session_id
+        AND stale_target_source.candidate_id=v_candidate_id
+        AND stale_target_source.session_version=v_target_session.version
+        AND stale_target_source.status='CURRENT'
+        AND stale_target_source.source_build_run_id IS DISTINCT FROM v_clone_projection_run_id;
+
+      IF v_clone_owner_job_id IS NULL
+         OR coalesce(v_clone_eligibility->>'original_economic_build_id','')
+              !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+        RAISE EXCEPTION 'CERTIFIED_CLONE_OWNER_REQUIRED'
+          USING ERRCODE='P0001',
+                DETAIL=jsonb_build_object(
+                  'code','CERTIFIED_CLONE_OWNER_REQUIRED',
+                  'candidate_id',v_candidate_id::text
+                )::text;
+      END IF;
+
+      v_certified_publication := private.pay_workbench_publish_certified_source_preview_v1(
+        p_session_id=>p_target_session_id,
+        p_candidate_id=>v_candidate_id,
+        p_economic_build_id=>(v_clone_eligibility->>'original_economic_build_id')::uuid,
+        p_source_build_run_id=>v_clone_projection_run_id,
+        p_source_change_seq=>coalesce(NULLIF(v_clone_eligibility->>'current_source_change_seq',''),'0')::bigint,
+        p_session_version=>v_target_session.version,
+        p_completion_job_id=>v_clone_owner_job_id,
+        p_refresh_scope_kind=>'CANDIDATE_FULL_LIVE',
+        p_targeted_timesheet_ids=>'[]'::jsonb,
+        p_linked_timesheet_ids=>'[]'::jsonb,
+        p_publication_options_json=>jsonb_strip_nulls(jsonb_build_object(
+          'contract_version',2,
+          'authority_kind','CERTIFIED_CLONE',
+          'invocation_kind','CLONE_OWNER_FINALISE',
+          'final_state',CASE
+            WHEN coalesce((v_clone_eligibility->>'ready_empty')::boolean,false) THEN 'SOURCE_EMPTY'
+            ELSE 'READY'
+          END,
+          'certification_version',2,
+          'certification_digest',v_clone_eligibility->>'certification_digest',
+          'source_session_id',v_source_session_id::text,
+          'original_economic_build_id',v_clone_eligibility->>'original_economic_build_id',
+          'original_source_build_run_id',v_clone_eligibility->>'original_source_build_run_id',
+          'clone_job_id',v_clone_owner_job_id::text,
+          'post_clone_action','NONE'
+        ))
+      );
 
       IF to_regprocedure('public.pay_workbench_delta_update_candidate_state_v1(uuid,uuid,uuid,jsonb)') IS NOT NULL THEN
         v_candidate_state_result := public.pay_workbench_delta_update_candidate_state_v1(

@@ -46,13 +46,13 @@ BEGIN
       24062027
     )
   ) THEN
-    RETURN jsonb_build_object(
-      'ok', true,
-      'eligible', false,
-      'inserted', false,
-      'reused', false,
-      'reason', 'CANDIDATE_SERIAL_BUSY'
-    );
+    RAISE EXCEPTION 'PAY_WORKBENCH_SCOPE_ENSURE_CANDIDATE_LOCK_NOT_OWNED'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code','PAY_WORKBENCH_SCOPE_ENSURE_CANDIDATE_LOCK_NOT_OWNED',
+              'candidate_id',p_candidate_id,
+              'dirty_job_id',p_dirty_job_id
+            )::text;
   END IF;
 
   SELECT job_row.*
@@ -223,6 +223,7 @@ BEGIN
     'inserted', v_inserted,
     'reused', NOT v_inserted,
     'baseline_required', v_inserted,
+    'baseline_resolution_required', v_inserted,
     'scope_id', v_scope_id,
     'scope_ordinal', v_scope_ordinal,
     'source_change_seq', p_source_change_seq,
@@ -277,6 +278,9 @@ DECLARE
   v_source_run_digest text;
   v_seal jsonb;
   v_seal_digest text;
+  v_exact_import_candidate boolean:=false;
+  v_exact_import_admission jsonb:='{}'::jsonb;
+  v_exact_import_family_kind text:=NULL::text;
 BEGIN
   IF p_session_id IS NULL OR p_candidate_id IS NULL OR p_source_change_seq IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_TARGETED_DELTA_ADMISSION_ARGUMENT_REQUIRED'
@@ -300,6 +304,34 @@ BEGIN
   IF COALESCE(array_length(v_targets,1),0) = 0 OR array_length(v_targets,1) > 250 THEN
     RETURN jsonb_build_object('ok',true,'admitted',false,'full_route_required',true,'reason','TARGETED_DELTA_TARGET_INVALID');
   END IF;
+  SELECT EXISTS(
+    SELECT 1
+    FROM public.timesheets AS import_timesheet
+    JOIN public.contracts AS import_contract ON import_contract.id=import_timesheet.contract_id
+    WHERE import_timesheet.timesheet_id=ANY(v_targets)
+      AND import_contract.candidate_id=p_candidate_id
+      AND pg_catalog.upper(import_contract.weekly_timesheet_source::text) IN ('NHSP','HEALTHROSTER')
+  ) INTO v_exact_import_candidate;
+
+  IF v_exact_import_candidate THEN
+    v_exact_import_admission:=private.pay_workbench_exact_import_family_admission_v1(
+      p_session_id,p_candidate_id,v_targets,p_source_change_seq
+    );
+    IF coalesce((v_exact_import_admission->>'admitted')::boolean,false) IS NOT TRUE THEN
+      RETURN jsonb_build_object(
+        'ok',true,'admitted',false,'full_route_required',true,
+        'reason',coalesce(NULLIF(v_exact_import_admission->>'reason',''),'EXACT_IMPORT_FAMILY_NOT_ADMITTED')
+      );
+    END IF;
+    SELECT coalesce(array_agg(DISTINCT value::uuid ORDER BY value::uuid),ARRAY[]::uuid[])
+    INTO v_targets
+    FROM jsonb_array_elements_text(
+      coalesce(v_exact_import_admission->'family_timesheet_ids','[]'::jsonb)
+    ) AS family_value(value)
+    WHERE value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+    v_exact_import_family_kind:=NULLIF(v_exact_import_admission->>'family_kind','');
+  END IF;
+
 
   SELECT session_row.* INTO v_session
   FROM public.banking_pay_workbench_sessions AS session_row
@@ -340,6 +372,25 @@ BEGIN
            completed_build.completed_at_utc DESC,
            completed_build.id DESC
   LIMIT 1;
+  IF v_accepted_full_build_id IS NULL
+     AND coalesce(v_scope.certified_preview_publication_parity_ok,false) IS TRUE
+     AND v_scope.certified_preview_publication_attestation_json->>'attestation_version'
+           ='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V2'
+     AND v_scope.certified_preview_publication_attestation_json->>'authority_kind'
+           ='CERTIFIED_CLONE'
+     AND coalesce(v_scope.certified_preview_publication_attestation_json->>'original_economic_build_id','')
+           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    SELECT completed_build.id
+    INTO v_accepted_full_build_id
+    FROM private.banking_pay_workbench_economic_builds AS completed_build
+    WHERE completed_build.id=(v_scope.certified_preview_publication_attestation_json->>'original_economic_build_id')::uuid
+      AND completed_build.candidate_id=p_candidate_id
+      AND completed_build.status='COMPLETE'
+      AND completed_build.private_stage='COMPLETE'
+      AND completed_build.completed_at_utc IS NOT NULL
+      AND completed_build.failure_json='{}'::jsonb;
+  END IF;
+
   IF v_accepted_full_build_id IS NULL THEN
     RETURN jsonb_build_object('ok',true,'admitted',false,'full_route_required',true,'reason','TARGETED_DELTA_BASELINE_NOT_ESTABLISHED');
   END IF;
@@ -384,7 +435,14 @@ BEGIN
   SELECT v_connected_count + count(*)::integer INTO v_connected_count
   FROM public.timesheets_financials AS tf
   WHERE tf.timesheet_id=ANY(v_affected) AND tf.is_current
-    AND tf.nhsp_import_id IS NOT NULL;
+    AND tf.nhsp_import_id IS NOT NULL
+    AND v_exact_import_candidate IS NOT TRUE;
+  SELECT v_connected_count+count(*)::integer INTO v_connected_count
+  FROM public.timesheets AS import_timesheet
+  JOIN public.contracts AS import_contract ON import_contract.id=import_timesheet.contract_id
+  WHERE import_timesheet.timesheet_id=ANY(v_affected)
+    AND pg_catalog.upper(import_contract.weekly_timesheet_source::text) IN ('NHSP','HEALTHROSTER')
+    AND v_exact_import_candidate IS NOT TRUE;
   IF v_connected_count > 0 THEN
     RETURN jsonb_build_object('ok',true,'admitted',false,'full_route_required',true,'reason','TARGETED_DELTA_CONNECTED_AUTHORITY_PRESENT');
   END IF;
@@ -589,6 +647,11 @@ BEGIN
     'input_digest',v_input_digest,
     'preview_selection_digest',v_preview_digest,
     'current_source_count',v_current_count,
+    'exact_import_family',v_exact_import_candidate,
+    'exact_import_family_kind',v_exact_import_family_kind,
+    'exact_import_tsfin_revision_digest',v_exact_import_admission->>'tsfin_revision_digest',
+    'exact_import_occurrence_count',v_exact_import_admission->>'occurrence_count',
+    'exact_import_occurrence_digest',v_exact_import_admission->>'occurrence_digest',
     'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
   );
   v_seal_digest := pg_catalog.encode(
@@ -635,9 +698,27 @@ DECLARE
   v_preview_promoted integer := 0;
   v_preview_retired integer := 0;
   v_state jsonb;
+  v_publication jsonb := '{}'::jsonb;
+  v_completion_job_id uuid := NULL::uuid;
 BEGIN
   IF p_session_id IS NULL OR p_candidate_id IS NULL OR p_projection_run_id IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_TARGETED_DELTA_FINALIZE_ARGUMENT_REQUIRED' USING ERRCODE='P0001';
+  END IF;
+
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(public._pay_workbench_candidate_serial_key(p_candidate_id),24062027)
+  );
+  PERFORM candidate_lock.id
+  FROM public.candidates AS candidate_lock
+  WHERE candidate_lock.id=p_candidate_id
+  FOR UPDATE;
+
+  SELECT registry_row.* INTO v_registry
+  FROM private.banking_pay_workbench_candidate_scope_registry AS registry_row
+  WHERE registry_row.candidate_id=p_candidate_id
+  FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_TARGETED_DELTA_FINALIZE_AUTHORITY_MISSING' USING ERRCODE='P0001';
   END IF;
 
   SELECT run_row.* INTO v_run
@@ -673,8 +754,6 @@ BEGIN
   WHERE session_row.id=p_session_id FOR UPDATE;
   SELECT scope_row.* INTO v_scope FROM public.banking_pay_workbench_session_scope AS scope_row
   WHERE scope_row.session_id=p_session_id AND scope_row.candidate_id=p_candidate_id FOR UPDATE;
-  SELECT registry_row.* INTO v_registry FROM private.banking_pay_workbench_candidate_scope_registry AS registry_row
-  WHERE registry_row.candidate_id=p_candidate_id FOR UPDATE;
   IF v_session.id IS NULL OR v_scope.id IS NULL OR v_registry.candidate_id IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_TARGETED_DELTA_FINALIZE_AUTHORITY_MISSING' USING ERRCODE='P0001';
   END IF;
@@ -746,6 +825,41 @@ BEGIN
     );
   GET DIAGNOSTICS v_preview_retired = ROW_COUNT;
 
+  SELECT delta_job.id
+  INTO v_completion_job_id
+  FROM public.banking_pay_workbench_jobs AS delta_job
+  WHERE delta_job.session_id=p_session_id
+    AND delta_job.candidate_id=p_candidate_id
+    AND UPPER(BTRIM(COALESCE(delta_job.job_type,''))) IN ('WORKBENCH_CANDIDATE_DELTA_REFRESH','CANDIDATE_DELTA_REFRESH','DELTA_REFRESH')
+    AND UPPER(BTRIM(COALESCE(delta_job.status,'')))='RUNNING'
+    AND COALESCE(delta_job.payload_json->>'projection_run_id','')=p_projection_run_id::text
+  ORDER BY delta_job.started_at_utc DESC NULLS LAST,delta_job.id
+  LIMIT 1
+  FOR UPDATE;
+  IF v_completion_job_id IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_TARGETED_DELTA_FINALIZE_JOB_MISSING' USING ERRCODE='P0001';
+  END IF;
+
+  v_publication:=private.pay_workbench_publish_certified_source_preview_v1(
+    p_session_id,p_candidate_id,(v_seal->>'accepted_build_id')::uuid,p_projection_run_id,
+    v_run.source_change_seq,v_run.session_version,v_completion_job_id,'TARGETED_TIMESHEETS',
+    COALESCE(v_run.targeted_timesheet_ids,'[]'::jsonb),COALESCE(v_run.linked_timesheet_ids,'[]'::jsonb),
+    jsonb_build_object(
+      'contract_version',2,
+      'authority_kind','TARGETED_DELTA',
+      'invocation_kind','DELTA_FINALISE',
+      'final_state',CASE WHEN EXISTS (
+        SELECT 1 FROM public.banking_pay_workbench_candidate_source_lines AS current_source
+        WHERE current_source.session_id=p_session_id AND current_source.candidate_id=p_candidate_id AND current_source.status='CURRENT'
+      ) THEN 'READY' ELSE 'SOURCE_EMPTY' END,
+      'projection_run_id',p_projection_run_id,
+      'admission_seal_version',v_run.admission_seal_version,
+      'admission_seal_digest',v_run.admission_seal_digest,
+      'projection_fingerprint',v_run.projection_fingerprint,
+      'accepted_baseline_build_id',v_seal->>'accepted_build_id'
+    )
+  );
+
   v_state := public.pay_workbench_delta_update_candidate_state_v1(
     p_session_id,p_candidate_id,p_projection_run_id,
     jsonb_build_object('context','TARGETED_LIFECYCLE_DELTA_FINALIZE','source_change_seq',v_run.source_change_seq)
@@ -787,7 +901,8 @@ BEGIN
     'source_promoted',v_source_promoted,'source_retired',v_source_retired,
     'line_promoted',v_line_promoted,'line_retired',v_line_retired,
     'preview_promoted',v_preview_promoted,'preview_retired',v_preview_retired,
-    'candidate_state',v_state
+    'candidate_state',v_state,
+    'certified_publication',v_publication
   );
 END;
 $function$;
