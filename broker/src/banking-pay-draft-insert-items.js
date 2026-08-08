@@ -65,3 +65,31 @@ export function isCertifiedDeferredFinanceOnlyInsertItemsResult(resultLike, expe
     && reusedItemRows === 0
     && failedItemRows === 0;
 }
+
+export function isCertifiedEmptyTimesheetSnapshotsResult(resultLike, expected = {}) {
+  const result = resultLike && typeof resultLike === 'object' && !Array.isArray(resultLike)
+    ? resultLike
+    : {};
+  const expectedScopeIds = canonicalUniqueIds(expected.candidateScopeIds);
+  const candidateScopeCount = nonNegativeInteger(result.candidate_scope_count);
+  const insertedCount = nonNegativeInteger(result.inserted_count);
+  const updatedCount = nonNegativeInteger(result.updated_count);
+  const reusedCount = nonNegativeInteger(result.reused_count);
+  const failedCount = nonNegativeInteger(result.failed_count);
+  const insertedSnapshotRows = nonNegativeInteger(result.inserted_snapshot_rows);
+  const missingSnapshotCount = nonNegativeInteger(result.missing_snapshot_count);
+
+  return result.ok === true
+    && result.has_more === false
+    && canonicalId(result.pay_batch_id) === canonicalId(expected.payBatchId)
+    && canonicalId(result.operation_id) === canonicalId(expected.operationId)
+    && !!expectedScopeIds
+    && expectedScopeIds.length > 0
+    && candidateScopeCount === expectedScopeIds.length
+    && insertedCount === 0
+    && updatedCount === 0
+    && reusedCount === 0
+    && failedCount === 0
+    && insertedSnapshotRows === 0
+    && missingSnapshotCount === 0;
+}

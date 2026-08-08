@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { isCertifiedDeferredFinanceOnlyInsertItemsResult } from '../broker/src/banking-pay-draft-insert-items.js';
+import {
+  isCertifiedDeferredFinanceOnlyInsertItemsResult,
+  isCertifiedEmptyTimesheetSnapshotsResult
+} from '../broker/src/banking-pay-draft-insert-items.js';
 
 const payBatchId = '11111111-1111-4111-8111-111111111111';
 const operationId = '22222222-2222-4222-8222-222222222222';
@@ -67,4 +70,45 @@ test('rejects malformed or missing proof fields instead of guessing', () => {
   for (const result of [null, [], {}, certifiedResult({ deferred_finance_adjustment_rows: 'not-a-number' }), certifiedResult({ skipped_item_rows: -1 })]) {
     assert.equal(isCertifiedDeferredFinanceOnlyInsertItemsResult(result, expected), false);
   }
+});
+
+const emptySnapshotResult = (overrides = {}) => ({
+  ok: true,
+  pay_batch_id: payBatchId,
+  operation_id: operationId,
+  candidate_scope_count: 2,
+  inserted_count: 0,
+  updated_count: 0,
+  reused_count: 0,
+  failed_count: 0,
+  inserted_snapshot_rows: 0,
+  missing_snapshot_count: 0,
+  has_more: false,
+  ...overrides
+});
+
+test('accepts an exact database-certified empty timesheet snapshot phase', () => {
+  assert.equal(isCertifiedEmptyTimesheetSnapshotsResult(emptySnapshotResult(), expected), true);
+});
+
+test('empty timesheet snapshot certification remains fail closed', () => {
+  const invalidResults = [
+    { pay_batch_id: operationId },
+    { operation_id: payBatchId },
+    { candidate_scope_count: 1 },
+    { inserted_count: 1 },
+    { updated_count: 1 },
+    { reused_count: 1 },
+    { failed_count: 1 },
+    { inserted_snapshot_rows: 1 },
+    { missing_snapshot_count: 1 },
+    { has_more: true },
+    { ok: false }
+  ];
+  for (const overrides of invalidResults) {
+    assert.equal(isCertifiedEmptyTimesheetSnapshotsResult(emptySnapshotResult(overrides), expected), false);
+  }
+  assert.equal(isCertifiedEmptyTimesheetSnapshotsResult({}, expected), false);
+  assert.equal(isCertifiedEmptyTimesheetSnapshotsResult(emptySnapshotResult(), { ...expected, candidateScopeIds: [] }), false);
+  assert.equal(isCertifiedEmptyTimesheetSnapshotsResult(emptySnapshotResult(), { ...expected, candidateScopeIds: [candidateScopeIds[0], candidateScopeIds[0]] }), false);
 });
