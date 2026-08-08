@@ -1,4 +1,6 @@
-/* Banking Pay targeted fast-route least-privilege boundary. */
+/* Banking Pay targeted fast-route least-privilege boundary.
+ * Reasserted after the final removal of the legacy monolith's prepare drop.
+ */
 
 ALTER FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(uuid,uuid,integer,jsonb,jsonb) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(uuid,uuid,integer,jsonb,jsonb)
