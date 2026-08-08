@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 19,
+  "function_count": 21,
   "functions": [
     {
       "schema": "private",
@@ -442,6 +442,64 @@
       "source_files": [
         "supabase/repeatable/07082026_1013_pay_workbench_candidate_source_build_chunk.sql",
         "supabase/repeatable/08082026_0322_pay_workbench_candidate_source_build_chunk_authority.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_mark_candidate_dirty",
+      "identity_arguments": "",
+      "definition_sha256": "a837cb8db96a68f1f1ee8394f392456db7f7cf92f3ebe59fc8faa0d19d501f74",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/04082026_1219_pay_workbench_mark_candidate_dirty.sql",
+        "supabase/repeatable/08082026_0327_pay_workbench_finance_effect_trigger_authority.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_mark_finance_case_dirty",
+      "identity_arguments": "",
+      "definition_sha256": "50962ed4c2a7acdbf2a9e38d741d5cb017d56bb1501a92b76b8c980837cd7f08",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/04082026_1219_pay_workbench_mark_finance_case_dirty.sql",
+        "supabase/repeatable/08082026_0327_pay_workbench_finance_effect_trigger_authority.sql"
       ]
     },
     {
