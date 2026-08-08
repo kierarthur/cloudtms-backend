@@ -29,15 +29,25 @@ test('legacy monolith changes force a complete later-authority replay', () => {
   const monolithHash = crypto.createHash('sha256').update(monolith).digest('hex');
   assert.match(reassert, new RegExp(`legacy_monolith_sha256:\\s*\\n-- ${monolithHash}`));
 
-  const monolithFunctions = new Set(createdFunctions(monolith));
-  const expectedFiles = fs.readdirSync(repeatableDir)
+  const replayedFunctions = new Set(createdFunctions(monolith));
+  const laterFiles = fs.readdirSync(repeatableDir)
     .filter((name) => name.endsWith('.sql'))
     .filter((name) => name !== monolithName && name !== reassertName)
     .filter((name) => dateKey(name) > dateKey(monolithName))
-    .filter((name) => touchedFunctions(
-      fs.readFileSync(path.join(repeatableDir, name), 'utf8'),
-    ).some((identity) => monolithFunctions.has(identity)))
     .sort((left, right) => dateKey(left).localeCompare(dateKey(right)) || left.localeCompare(right));
+
+  // Follow the complete authority chain, not only direct overlaps with the
+  // legacy omnibus. A replayed intermediate file can define another function
+  // whose newer focused authority must then also be replayed.
+  const expectedFiles = [];
+  for (const name of laterFiles) {
+    const source = fs.readFileSync(path.join(repeatableDir, name), 'utf8');
+    const identities = touchedFunctions(source);
+    if (!identities.some((identity) => replayedFunctions.has(identity))) continue;
+
+    expectedFiles.push(name);
+    for (const identity of identities) replayedFunctions.add(identity);
+  }
 
   const includedFiles = [...reassert.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
     .map((match) => match[1]);
