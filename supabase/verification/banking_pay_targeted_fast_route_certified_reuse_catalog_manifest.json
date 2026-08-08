@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 17,
+  "function_count": 19,
   "functions": [
     {
       "schema": "private",
@@ -418,6 +418,54 @@
       "source_files": [
         "supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql",
         "supabase/repeatable/08082026_0313_pay_workbench_fail_job_authority.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_candidate_source_build_chunk_legacy_v1",
+      "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
+      "definition_sha256": "1a91039f17c8c97610dac6d62624da5b3ac8d331d41b626baa38bdd4f3865ec1",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=\"\"",
+        "plpgsql_check.mode=disabled"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/07082026_1013_pay_workbench_candidate_source_build_chunk.sql",
+        "supabase/repeatable/08082026_0322_pay_workbench_candidate_source_build_chunk_authority.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_candidate_source_build_chunk",
+      "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
+      "definition_sha256": "4f7cb51c5ea55bbf550036f4a1363f23965ba32fb02064faa89c1cf81adc6fd0",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=\"\"",
+        "plpgsql_check.mode=disabled"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/07082026_1013_pay_workbench_candidate_source_build_chunk.sql",
+        "supabase/repeatable/08082026_0322_pay_workbench_candidate_source_build_chunk_authority.sql"
       ]
     },
     {
