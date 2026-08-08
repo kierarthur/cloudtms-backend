@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_sync_overpayments_from_workbench_workspace_v1",
       "identity_arguments": "p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]",
-      "definition_sha256": "7106da6bf585db07d1840c3c35b6c78c43b3f45c7fa93b7cb25702957689fbfb",
+      "definition_sha256": "2cbc3db2883273b0c0c581f727f24fbfdaf700a7a25675dd7252450f9c26e669",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -298,7 +298,7 @@
       "schema": "public",
       "name": "pay_workbench_enqueue_candidate_refresh",
       "identity_arguments": "p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb",
-      "definition_sha256": "ca37ae6ba5ddfbdc90c9c007e4ff4841df0e8b38f4ec02adbd67ca1672151a7f",
+      "definition_sha256": "384ac8ebb3fab696730b566c072beded61348f19d3ce2dd3b7930d9d8f8a9c25",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -459,7 +459,7 @@
       "schema": "private",
       "name": "pay_workbench_candidate_source_build_chunk_legacy_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
-      "definition_sha256": "c09de532eea2c1f5eafd99497c5b6b9127e5b9bc410ffb0e9a38a538272dc951",
+      "definition_sha256": "21812183533d6253f5786e5b898b64e1f788c902671e64025ea16384fb922d6c",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -541,7 +541,7 @@
       "schema": "public",
       "name": "pay_workbench_candidate_source_build_chunk",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
-      "definition_sha256": "26841508e1352657a1ba012b13347c8a54a86122b2694cda89236f144f8fba7f",
+      "definition_sha256": "4f7cb51c5ea55bbf550036f4a1363f23965ba32fb02064faa89c1cf81adc6fd0",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -607,7 +607,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "efd896aa41ae393853116b15b8a52393b365d94ff531771d6efa6f59d260ffcd",
+      "definition_sha256": "08538b8909e1685159f6509bc8a5a62bbf58de49bf26ceb9a20bae3ac380ca79",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
