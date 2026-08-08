@@ -90,6 +90,23 @@ DECLARE
   v_registry_source_change_seq_after bigint := 0;
   v_registry_sequence_synchronised boolean := false;
   v_scope_state_generation_match_count integer := 0;
+  v_requested_source_build_run_id uuid := NULL::uuid;
+  v_authority_fingerprint_text text := NULL::text;
+  v_authority_fingerprint text := NULL::text;
+  v_owner_build private.banking_pay_workbench_economic_builds%ROWTYPE;
+  v_owner_root_job public.banking_pay_workbench_jobs%ROWTYPE;
+  v_owner_active_job_id uuid := NULL::uuid;
+  v_owner_refresh_scope_kind text := NULL::text;
+  v_owner_pay_channel_scope text := NULL::text;
+  v_owner_targeted_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_owner_linked_timesheet_ids_json jsonb := '[]'::jsonb;
+  v_owner_covers_request boolean := false;
+  v_owner_resolution text := 'NO_CURRENT_OWNER';
+  v_owner_reasons_json jsonb := '[]'::jsonb;
+  v_owner_trigger_sources_json jsonb := '[]'::jsonb;
+  v_owner_provenance_json jsonb := '{}'::jsonb;
+  v_owner_request_count bigint := 0;
+  v_owner_scope_status text := NULL::text;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -116,6 +133,17 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'candidates row % not found', p_candidate_id;
   END IF;
+
+  -- One candidate may be requested through several independent refresh routes
+  -- in the same lifecycle. Elect/reuse its economic owner under the common
+  -- candidate serial authority before taking any session or scope row lock.
+  -- This is re-entrant for callers which already own the transaction lock.
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      public._pay_workbench_candidate_serial_key(p_candidate_id),
+      24062027
+    )
+  );
 
   v_session_id_text := NULLIF(BTRIM(COALESCE(
     v_payload_json->>'session_id',
@@ -1076,39 +1104,36 @@ BEGIN
                   'candidate_id', p_candidate_id::text
                 )::text;
       END IF;
-      v_source_build_run_id := v_source_build_run_id_text::uuid;
-    ELSE
-      v_source_build_seed_text := concat_ws(':',
-        'WORKBENCH_CANDIDATE_SOURCE_BUILD',
-        p_snapshot_run_id::text,
-        v_session_id::text,
-        p_candidate_id::text,
-        COALESCE(v_session_row.version, 0)::text,
-        COALESCE(v_source_change_seq, 0)::text,
-        v_refresh_scope_kind,
-        md5(COALESCE(v_targeted_timesheet_ids_json, '[]'::jsonb)::text),
-        md5(COALESCE(v_linked_timesheet_ids_json, '[]'::jsonb)::text),
-        v_pay_channel_scope,
-        v_reason
-      );
-      v_source_build_hash := md5(v_source_build_seed_text);
-      v_source_build_run_id := (
-        substr(v_source_build_hash, 1, 8) || '-' ||
-        substr(v_source_build_hash, 9, 4) || '-' ||
-        substr(v_source_build_hash, 13, 4) || '-' ||
-        substr(v_source_build_hash, 17, 4) || '-' ||
-        substr(v_source_build_hash, 21, 12)
-      )::uuid;
+      v_requested_source_build_run_id := v_source_build_run_id_text::uuid;
     END IF;
 
-    v_dedupe_key := 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
-      || ':session:' || v_session_id::text
-      || ':version:' || COALESCE(v_session_row.version, 0)::text
-      || ':snapshot:' || v_session_row.source_snapshot_run_id::text
-      || ':signature:' || v_session_signature_token
-      || ':candidate:' || p_candidate_id::text
-      || ':source_change:' || COALESCE(v_source_change_seq, 0)::text
-      || ':source_build:' || v_source_build_run_id::text
+    v_authority_fingerprint_text := concat_ws('|',
+      'WORKBENCH_SOURCE_OWNER_V2',
+      v_session_id::text,
+      COALESCE(v_session_row.version, 0)::text,
+      v_session_row.source_snapshot_run_id::text,
+      v_session_signature_token,
+      p_candidate_id::text,
+      COALESCE(v_source_change_seq, 0)::text,
+      COALESCE(v_registry_dirty_generation, 0)::text,
+      UPPER(BTRIM(COALESCE(v_pay_channel_scope, 'ALL'))),
+      'FULL_CANDIDATE'
+    );
+    v_authority_fingerprint := pg_catalog.encode(
+      extensions.digest(pg_catalog.convert_to(v_authority_fingerprint_text, 'UTF8'), 'sha256'),
+      'hex'
+    );
+    v_source_build_hash := substr(v_authority_fingerprint, 1, 32);
+    v_source_build_run_id := (
+      substr(v_source_build_hash, 1, 8) || '-' ||
+      substr(v_source_build_hash, 9, 4) || '-' ||
+      substr(v_source_build_hash, 13, 4) || '-' ||
+      substr(v_source_build_hash, 17, 4) || '-' ||
+      substr(v_source_build_hash, 21, 12)
+    )::uuid;
+
+    v_dedupe_key := 'WORKBENCH_SOURCE_OWNER_V2:'
+      || v_authority_fingerprint
       || ':cursor:' || v_cursor_token;
 
     v_payload_out_json := jsonb_strip_nulls(
@@ -1158,6 +1183,9 @@ BEGIN
         'trigger_operation', NULLIF(BTRIM(COALESCE(v_payload_json->>'trigger_operation', v_payload_json->>'trigger_op', v_payload_json#>>'{trigger,operation}', '')), ''),
         'trigger_op', NULLIF(BTRIM(COALESCE(v_payload_json->>'trigger_op', v_payload_json->>'trigger_operation', v_payload_json#>>'{trigger,operation}', '')), ''),
         'dedupe_key', v_dedupe_key,
+        'authority_fingerprint_version', 2,
+        'authority_fingerprint', v_authority_fingerprint,
+        'requested_source_build_run_id', CASE WHEN v_requested_source_build_run_id IS NULL THEN NULL ELSE v_requested_source_build_run_id::text END,
         'created_by_helper', 'pay_workbench_enqueue_candidate_refresh',
         'created_at_utc', v_now::text,
         'classifier_result', v_classifier_result
@@ -1179,6 +1207,300 @@ BEGIN
         ))
       )
     );
+  END IF;
+
+  IF v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN
+    -- An active economic build, rather than the lifecycle reason or the root
+    -- job's current status, is the durable refresh owner.  A succeeded root
+    -- with queued/running stage continuations therefore remains active.
+    SELECT build_row.*
+    INTO v_owner_build
+    FROM private.banking_pay_workbench_economic_builds AS build_row
+    WHERE build_row.candidate_id = p_candidate_id
+      AND build_row.session_id = v_session_id
+      AND build_row.session_version = COALESCE(v_session_row.version, 0)
+      AND build_row.source_snapshot_run_id = v_session_row.source_snapshot_run_id
+      AND build_row.source_change_seq = COALESCE(v_source_change_seq, 0)
+      AND build_row.captured_candidate_generation = COALESCE(v_registry_dirty_generation, 0)
+      AND UPPER(BTRIM(COALESCE(build_row.status, ''))) IN (
+        'COLLECTING',
+        'READY_FOR_RECONCILIATION',
+        'RECONCILING',
+        'RECONCILED',
+        'PUBLISHING',
+        'BLOCKED_UNVALIDATED_RECONCILIATION_SCALE'
+      )
+      AND EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_jobs AS owner_active_job
+        WHERE owner_active_job.economic_build_id = build_row.id
+          AND UPPER(BTRIM(COALESCE(owner_active_job.status, ''))) IN ('QUEUED', 'RUNNING')
+      )
+    ORDER BY
+      CASE
+        WHEN build_row.id = (
+          SELECT registry.current_build_id
+          FROM private.banking_pay_workbench_candidate_scope_registry AS registry
+          WHERE registry.candidate_id = p_candidate_id
+        ) THEN 0
+        ELSE 1
+      END,
+      build_row.created_at_utc DESC,
+      build_row.id DESC
+    LIMIT 1
+    FOR UPDATE;
+
+    IF FOUND THEN
+      SELECT source_job.*
+      INTO v_owner_root_job
+      FROM public.banking_pay_workbench_jobs AS source_job
+      WHERE source_job.economic_build_id = v_owner_build.id
+        AND UPPER(BTRIM(COALESCE(source_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+        AND COALESCE(
+          source_job.payload_json->>'source_build_run_id',
+          source_job.payload_json#>>'{source_build,source_build_run_id}',
+          ''
+        ) = v_owner_build.source_build_run_id::text
+      ORDER BY source_job.created_at_utc, source_job.id
+      LIMIT 1
+      FOR UPDATE;
+
+      IF FOUND THEN
+        v_owner_refresh_scope_kind := UPPER(BTRIM(COALESCE(
+          v_owner_root_job.payload_json->>'refresh_scope_kind',
+          v_owner_root_job.payload_json#>>'{source_build,refresh_scope_kind}',
+          ''
+        )));
+        v_owner_pay_channel_scope := UPPER(BTRIM(COALESCE(
+          v_owner_root_job.payload_json->>'pay_channel_scope',
+          v_owner_root_job.payload_json#>>'{source_build,pay_channel_scope}',
+          'ALL'
+        )));
+        v_owner_targeted_timesheet_ids_json := CASE
+          WHEN jsonb_typeof(v_owner_root_job.payload_json->'targeted_timesheet_ids') = 'array'
+            THEN v_owner_root_job.payload_json->'targeted_timesheet_ids'
+          WHEN jsonb_typeof(v_owner_root_job.payload_json#>'{source_build,targeted_timesheet_ids}') = 'array'
+            THEN v_owner_root_job.payload_json#>'{source_build,targeted_timesheet_ids}'
+          ELSE '[]'::jsonb
+        END;
+        v_owner_linked_timesheet_ids_json := CASE
+          WHEN jsonb_typeof(v_owner_root_job.payload_json->'linked_timesheet_ids') = 'array'
+            THEN v_owner_root_job.payload_json->'linked_timesheet_ids'
+          WHEN jsonb_typeof(v_owner_root_job.payload_json#>'{source_build,linked_timesheet_ids}') = 'array'
+            THEN v_owner_root_job.payload_json#>'{source_build,linked_timesheet_ids}'
+          ELSE '[]'::jsonb
+        END;
+        -- Every WORKBENCH_CANDIDATE_SOURCE_BUILD owns complete candidate truth.
+        -- Diagnostic refresh scope is retained as provenance, not identity.
+        v_owner_covers_request :=
+          v_owner_pay_channel_scope = UPPER(BTRIM(COALESCE(v_pay_channel_scope, 'ALL')));
+        IF v_owner_covers_request THEN
+          v_owner_resolution := 'ACTIVE_CURRENT_OWNER_COVERS_REQUEST';
+        END IF;
+      END IF;
+    END IF;
+
+    -- A delayed dirty event which revalidates to an already published current
+    -- authority is a true no-op.  This branch is deliberately limited to the
+    -- caller's proven, already-finalised scope generation.
+    IF v_owner_resolution = 'NO_CURRENT_OWNER'
+       AND v_scope_state_precedes_job IS TRUE THEN
+      SELECT build_row.*
+      INTO v_owner_build
+      FROM private.banking_pay_workbench_economic_builds AS build_row
+      JOIN public.banking_pay_workbench_session_scope AS current_scope
+        ON current_scope.session_id = build_row.session_id
+       AND current_scope.candidate_id = build_row.candidate_id
+      JOIN public.banking_pay_workbench_session_candidate_state AS current_state
+        ON current_state.session_id = build_row.session_id
+       AND current_state.candidate_id = build_row.candidate_id
+      WHERE build_row.candidate_id = p_candidate_id
+        AND build_row.session_id = v_session_id
+        AND build_row.session_version = COALESCE(v_session_row.version, 0)
+        AND build_row.source_snapshot_run_id = v_session_row.source_snapshot_run_id
+        AND build_row.source_change_seq = COALESCE(v_source_change_seq, 0)
+        AND build_row.captured_candidate_generation = COALESCE(v_registry_dirty_generation, 0)
+        AND UPPER(BTRIM(COALESCE(build_row.status, ''))) = 'COMPLETE'
+        AND UPPER(BTRIM(COALESCE(build_row.private_stage, ''))) = 'COMPLETE'
+        AND current_scope.dirty IS FALSE
+        AND current_scope.pending_job_id IS NULL
+        AND current_scope.certified_preview_publication_required IS TRUE
+        AND current_scope.certified_preview_publication_parity_ok IS TRUE
+        AND current_scope.certified_preview_publication_session_version = build_row.session_version
+        AND current_scope.certified_preview_publication_source_change_seq = build_row.source_change_seq
+        AND current_scope.certified_preview_publication_source_build_run_id = build_row.source_build_run_id
+        AND UPPER(BTRIM(COALESCE(current_state.status, ''))) = 'READY'
+        AND current_state.pending_job_id IS NULL
+        AND current_state.session_version = build_row.session_version
+        AND current_state.source_change_seq = build_row.source_change_seq
+      ORDER BY build_row.completed_at_utc DESC NULLS LAST, build_row.id DESC
+      LIMIT 1
+      FOR UPDATE OF build_row, current_scope, current_state;
+
+      IF FOUND THEN
+        SELECT source_job.*
+        INTO v_owner_root_job
+        FROM public.banking_pay_workbench_jobs AS source_job
+        WHERE source_job.economic_build_id = v_owner_build.id
+          AND UPPER(BTRIM(COALESCE(source_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+          AND COALESCE(
+            source_job.payload_json->>'source_build_run_id',
+            source_job.payload_json#>>'{source_build,source_build_run_id}',
+            ''
+          ) = v_owner_build.source_build_run_id::text
+        ORDER BY source_job.created_at_utc, source_job.id
+        LIMIT 1
+        FOR UPDATE;
+
+        IF FOUND THEN
+          v_owner_refresh_scope_kind := UPPER(BTRIM(COALESCE(
+            v_owner_root_job.payload_json->>'refresh_scope_kind',
+            v_owner_root_job.payload_json#>>'{source_build,refresh_scope_kind}',
+            ''
+          )));
+          v_owner_pay_channel_scope := UPPER(BTRIM(COALESCE(
+            v_owner_root_job.payload_json->>'pay_channel_scope',
+            v_owner_root_job.payload_json#>>'{source_build,pay_channel_scope}',
+            'ALL'
+          )));
+          v_owner_covers_request :=
+            v_owner_pay_channel_scope = UPPER(BTRIM(COALESCE(v_pay_channel_scope, 'ALL')));
+          IF v_owner_covers_request THEN
+            v_owner_resolution := 'COMPLETE_CURRENT_AUTHORITY';
+          END IF;
+        END IF;
+      END IF;
+    END IF;
+
+    IF v_owner_resolution IN (
+      'ACTIVE_CURRENT_OWNER_COVERS_REQUEST',
+      'COMPLETE_CURRENT_AUTHORITY'
+    ) THEN
+      SELECT COALESCE(jsonb_agg(bounded_reason.reason ORDER BY bounded_reason.reason), '[]'::jsonb)
+      INTO v_owner_reasons_json
+      FROM (
+        SELECT DISTINCT reason_value.reason
+        FROM jsonb_array_elements_text(
+          CASE
+            WHEN jsonb_typeof(v_owner_root_job.payload_json->'reasons') = 'array'
+              THEN v_owner_root_job.payload_json->'reasons'
+            WHEN NULLIF(BTRIM(COALESCE(v_owner_root_job.payload_json->>'reason', '')), '') IS NOT NULL
+              THEN jsonb_build_array(v_owner_root_job.payload_json->>'reason')
+            ELSE '[]'::jsonb
+          END || jsonb_build_array(v_reason)
+        ) AS reason_value(reason)
+        WHERE NULLIF(BTRIM(reason_value.reason), '') IS NOT NULL
+        ORDER BY reason_value.reason
+        LIMIT 16
+      ) AS bounded_reason;
+
+      SELECT COALESCE(jsonb_agg(bounded_source.source ORDER BY bounded_source.source), '[]'::jsonb)
+      INTO v_owner_trigger_sources_json
+      FROM (
+        SELECT DISTINCT source_value.source
+        FROM jsonb_array_elements_text(
+          CASE
+            WHEN jsonb_typeof(v_owner_root_job.payload_json->'trigger_sources') = 'array'
+              THEN v_owner_root_job.payload_json->'trigger_sources'
+            ELSE '[]'::jsonb
+          END || jsonb_build_array(NULLIF(BTRIM(COALESCE(
+            v_payload_json->>'trigger_source',
+            v_payload_json->>'trigger_table',
+            v_payload_json->>'enqueue_origin',
+            ''
+          )), ''))
+        ) AS source_value(source)
+        WHERE NULLIF(BTRIM(source_value.source), '') IS NOT NULL
+        ORDER BY source_value.source
+        LIMIT 16
+      ) AS bounded_source;
+
+      v_owner_request_count := GREATEST(
+        CASE WHEN COALESCE(v_owner_root_job.payload_json->>'reason_count', '') ~ '^\d+$'
+          THEN (v_owner_root_job.payload_json->>'reason_count')::bigint ELSE 1 END,
+        CASE WHEN COALESCE(v_owner_root_job.payload_json#>>'{orchestration_provenance,coalesced_request_count}', '') ~ '^\d+$'
+          THEN (v_owner_root_job.payload_json#>>'{orchestration_provenance,coalesced_request_count}')::bigint ELSE 1 END
+      ) + 1;
+      v_owner_provenance_json := jsonb_strip_nulls(
+        CASE WHEN jsonb_typeof(v_owner_root_job.payload_json->'orchestration_provenance') = 'object'
+          THEN v_owner_root_job.payload_json->'orchestration_provenance' ELSE '{}'::jsonb END
+        || jsonb_build_object(
+          'primary_reason', COALESCE(v_owner_root_job.payload_json#>>'{orchestration_provenance,primary_reason}', v_owner_root_job.payload_json->>'reason', v_reason),
+          'reason_latest', v_reason,
+          'reasons', v_owner_reasons_json,
+          'trigger_sources', v_owner_trigger_sources_json,
+          'coalesced_request_count', v_owner_request_count,
+          'last_requested_at_utc', v_now::text,
+          'authority_fingerprint_version', 2,
+          'authority_fingerprint', v_authority_fingerprint
+        )
+      );
+
+      UPDATE public.banking_pay_workbench_jobs AS owner_job
+      SET payload_json = jsonb_strip_nulls(
+            COALESCE(owner_job.payload_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'reason_latest', v_reason,
+              'reason_count', v_owner_request_count,
+              'reasons', v_owner_reasons_json,
+              'trigger_sources', v_owner_trigger_sources_json,
+              'orchestration_provenance', v_owner_provenance_json
+            )
+          ),
+          updated_at_utc = v_now
+      WHERE owner_job.id = v_owner_root_job.id;
+
+      SELECT active_job.id
+      INTO v_owner_active_job_id
+      FROM public.banking_pay_workbench_jobs AS active_job
+      WHERE active_job.economic_build_id = v_owner_build.id
+        AND UPPER(BTRIM(COALESCE(active_job.status, ''))) IN ('QUEUED', 'RUNNING')
+      ORDER BY CASE WHEN UPPER(BTRIM(active_job.status)) = 'RUNNING' THEN 0 ELSE 1 END,
+               active_job.run_at_utc,
+               active_job.created_at_utc,
+               active_job.id
+      LIMIT 1;
+
+      SELECT scope_row.status
+      INTO v_owner_scope_status
+      FROM public.banking_pay_workbench_session_scope AS scope_row
+      WHERE scope_row.session_id = v_session_id
+        AND scope_row.candidate_id = p_candidate_id;
+
+      RETURN jsonb_strip_nulls(jsonb_build_object(
+        'ok', true,
+        'job_id', v_owner_root_job.id::text,
+        'job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+        'canonical_job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+        'session_id', v_session_id::text,
+        'candidate_id', p_candidate_id::text,
+        'session_version', COALESCE(v_session_row.version, 0),
+        'source_change_seq', COALESCE(v_source_change_seq, 0),
+        'registry_source_change_seq', COALESCE(v_registry_source_change_seq_after, v_source_change_seq, 0),
+        'source_build_run_id', v_owner_build.source_build_run_id::text,
+        'requested_source_build_run_id', CASE WHEN v_requested_source_build_run_id IS NULL THEN NULL ELSE v_requested_source_build_run_id::text END,
+        'authority_fingerprint', v_authority_fingerprint,
+        'authority_fingerprint_version', 2,
+        'owner_resolution', v_owner_resolution,
+        'owner_build_id', v_owner_build.id::text,
+        'owner_root_job_id', v_owner_root_job.id::text,
+        'owner_active_job_id', CASE WHEN v_owner_active_job_id IS NULL THEN NULL ELSE v_owner_active_job_id::text END,
+        'owner_source_build_run_id', v_owner_build.source_build_run_id::text,
+        'requested_coverage', 'FULL_CANDIDATE',
+        'owner_coverage', 'FULL_CANDIDATE',
+        'scope_status', COALESCE(v_owner_scope_status, CASE WHEN v_owner_resolution = 'COMPLETE_CURRENT_AUTHORITY' THEN 'MATERIALISED' ELSE 'SOURCE_BUILD_PENDING' END),
+        'source_build_required', v_owner_resolution <> 'COMPLETE_CURRENT_AUTHORITY',
+        'delta_refresh_required', false,
+        'coalesced', true,
+        'reused', true,
+        'new_owner_created', false,
+        'no_op', v_owner_resolution = 'COMPLETE_CURRENT_AUTHORITY',
+        'diagnostic_provenance_merged', true,
+        'reason', v_reason,
+        'reason_count', v_owner_request_count,
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+      ));
+    END IF;
   END IF;
 
   IF v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN
@@ -2119,6 +2441,13 @@ BEGIN
     END IF;
   END IF;
 
+  IF v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN
+    v_owner_resolution := CASE
+      WHEN v_job_was_inserted THEN 'NEW_OWNER_CREATED'
+      ELSE 'ACTIVE_ROOT_JOB_REUSED'
+    END;
+  END IF;
+
   UPDATE public.banking_pay_workbench_session_scope AS session_scope
   SET status = CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN 'DELTA_REFRESH_PENDING' ELSE 'SOURCE_BUILD_PENDING' END,
       pending_job_id = v_job_id,
@@ -2241,6 +2570,15 @@ BEGIN
     'projection_class', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN v_projection_class ELSE NULL::text END,
     'full_snapshot_job', false,
     'reused', NOT v_job_was_inserted,
+    'coalesced', v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' AND NOT v_job_was_inserted,
+    'new_owner_created', v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' AND v_job_was_inserted,
+    'owner_resolution', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_owner_resolution ELSE NULL::text END,
+    'authority_fingerprint_version', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN 2 ELSE NULL::integer END,
+    'authority_fingerprint', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_authority_fingerprint ELSE NULL::text END,
+    'owner_root_job_id', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_job_id::text ELSE NULL::text END,
+    'requested_coverage', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN 'FULL_CANDIDATE' ELSE NULL::text END,
+    'owner_coverage', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN 'FULL_CANDIDATE' ELSE NULL::text END,
+    'owner_source_build_run_id', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_source_build_run_id::text ELSE NULL::text END,
     'delta_scope_merge_reused_existing', COALESCE(v_delta_merge_reused_existing, false),
     'delta_coalescing_key', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN v_delta_coalescing_key ELSE NULL::text END,
     'delta_coalescing_hash', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN v_delta_coalescing_hash ELSE NULL::text END,
