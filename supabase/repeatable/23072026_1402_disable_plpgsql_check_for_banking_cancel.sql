@@ -9,6 +9,7 @@
 -- finance calculation, remittance behaviour, or Policy X authority.
 -- Reasserted after the final retirement of obsolete monolithic Workbench
 -- owners so any one-time monolith replay cannot reset this function setting.
+-- Reapplied after removing the monolith's obsolete pay_batch_prepare drop.
 
 ALTER FUNCTION public.pay_payment_cancelability_diagnostic(
   uuid,
