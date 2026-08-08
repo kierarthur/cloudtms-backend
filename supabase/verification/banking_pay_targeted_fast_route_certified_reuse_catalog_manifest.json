@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_sync_overpayments_from_workbench_workspace_v1",
       "identity_arguments": "p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]",
-      "definition_sha256": "15f42c6fe16d3031cbdce0075c926cfa5281bb02cd5c12147c1b0501ea875048",
+      "definition_sha256": "978957f9d18c686c511fb4c74e7c01902af687daacd593f4e84d147a6ed82b2c",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -32,7 +32,7 @@
       "schema": "private",
       "name": "pay_workbench_candidate_reuse_source_select_v1",
       "identity_arguments": "p_target_session_id uuid, p_candidate_id uuid, p_source_change_seq bigint, p_options_json jsonb",
-      "definition_sha256": "c9c354975ffd1fe25386493f8ea62bf72993d1705f401daf8d1fbe6e6434c9e0",
+      "definition_sha256": "c4471c87574710508d33a42f9251169c751be0862c1d3e0f922352a6f0f6a983",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -54,7 +54,7 @@
       "schema": "private",
       "name": "pay_workbench_exact_import_family_admission_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_seed_timesheet_ids uuid[], p_source_change_seq bigint",
-      "definition_sha256": "1000528000eec0144c261b1ba09179917312e7d94410e5807df016b7efc5492e",
+      "definition_sha256": "78a7b014206b2a962e3dcd5c5dd87b1d1f7723f47ff35a763af2cce2f19e3713",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -98,7 +98,7 @@
       "schema": "private",
       "name": "pay_workbench_session_clone_bounded_certification_v1",
       "identity_arguments": "p_source_session_id uuid, p_target_session_id uuid, p_candidate_id uuid, p_options_json jsonb",
-      "definition_sha256": "d94c770aac812c672a2eb34e11e9fb41bc01f50b5c0e793e8f7a81270e6e2d8c",
+      "definition_sha256": "a7031d061f6afcd70ff750b27886161c43e92345c794be42a6c135839975ef14",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -142,7 +142,7 @@
       "schema": "private",
       "name": "pay_workbench_targeted_delta_admission_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_event_class text, p_targeted_timesheet_ids uuid[], p_linked_timesheet_ids uuid[], p_source_change_seq bigint",
-      "definition_sha256": "bdbaa14196c6e7707605749f705549f5b59a7f2e64222a1f0629cc6733a699c7",
+      "definition_sha256": "3d4f4846bc5fa68425eae9f7c57e68afa340e7b1e7d11b3931397434e59512df",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -214,7 +214,7 @@
       "schema": "public",
       "name": "pay_workbench_candidate_dirty_apply_job_process",
       "identity_arguments": "p_job_id uuid, p_limit integer",
-      "definition_sha256": "ea0dfbad1add4c85f2b4735c5f6fe32488cc6a753f0435073ce4126b0db12776",
+      "definition_sha256": "43afa661c9ddbae4ac623ba85c327940aa04266f425db6a22e48a37a5b352e0a",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -264,7 +264,7 @@
       "schema": "public",
       "name": "pay_workbench_dirty_apply_jobs_chunk",
       "identity_arguments": "p_limit integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid, p_worker_id text, p_lease_seconds integer",
-      "definition_sha256": "adfdbfe393473f1c8ce0c68f2488e862eb67c35abf545ecc849f6ec0b69948a6",
+      "definition_sha256": "b89fe8cdba64e95bb4fa5716230435c3b7225f43fa75e1dc7511a8d8aedc17d4",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -298,7 +298,7 @@
       "schema": "public",
       "name": "pay_workbench_session_clone_eligibility_v1",
       "identity_arguments": "p_source_session_id uuid, p_target_session_id uuid, p_candidate_id uuid, p_options_json jsonb",
-      "definition_sha256": "a507a6fd2df33393ac09dafd91de15c3691223f4a87e2a08037bb25f6df3b747",
+      "definition_sha256": "4b8b62ce7327caca304df0f20f712a58a606f921e56eae2eeca8b9750e9c6881",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -332,7 +332,7 @@
       "schema": "public",
       "name": "pay_workbench_session_clone_eligible_rows_v1",
       "identity_arguments": "p_target_session_id uuid, p_source_session_id uuid, p_limit integer, p_cursor_json jsonb, p_options_json jsonb",
-      "definition_sha256": "56fe709c5f380d4d87ee2f897d3788d308b9d1acad4e34d30d76598d6fe14eff",
+      "definition_sha256": "a80b48ac73c8e3c773c85526baf061ff72779e67fd11e01e1e8979d5d80defdb",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -360,7 +360,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "3c35307da4583be94782d837497b19ae519d06a30651c0ed0cb793324eb1a18f",
+      "definition_sha256": "63117ef31e444e944ef07ff3d6bbfb156f1339e9cbe3fdd7fbda228b910ede22",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
