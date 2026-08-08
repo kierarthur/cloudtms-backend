@@ -81,11 +81,28 @@ test('historical reuse is bounded and target-date eligibility remains authoritat
   assert.match(reuseHelpers, /banking_pay_workbench_clone_bounded_reuse_v2_enabled/);
   assert.match(reuseHelpers, /banking_pay_workbench_clone_source_empty_reuse_enabled/);
   assert.match(cloneCert, /pay_workbench_session_clone_eligibility_v1\(/);
+  assert.match(cloneCert, /target_date_eligible/);
+  assert.match(cloneCert, /CERTIFIED_PUBLICATION_ATTESTATION_DRIFT/);
+  assert.match(cloneCert, /source_identity_digest/);
+  assert.match(cloneCert, /preview_identity_digest/);
   assert.match(cloneCert, /'source_selection_authorised',true/);
   assert.match(cloneCert, /target_authority_scope_digest/);
   assert.match(cloneCert, /PAYEE_READINESS_FINGERPRINT_CHANGED/);
   assert.match(dirtyLane, /source_selection_authorised/);
   assert.match(cloneOwner, /source_session\.status,''\)\)\) IN \('DISCARDED','REPLACED'\)/);
+});
+
+test('retired preview history is excluded only from the V2 target-date probe', () => {
+  assert.match(
+    dirtyLane,
+    /v_certified_reuse_v2_probe IS NOT TRUE[\s\S]+preview_row\.status, ''\)\)\) <> 'SUPERSEDED'/
+  );
+  assert.match(
+    dirtyLane,
+    /COUNT\(\*\) FILTER \(WHERE UPPER\(BTRIM\(COALESCE\(all_preview\.status, ''\)\)\) <> 'READY'\)/
+  );
+  assert.match(dirtyLane, /'clone_eligible', CASE WHEN v_certified_reuse_v2_probe IS TRUE THEN false ELSE true END/);
+  assert.match(dirtyLane, /'target_date_eligible', CASE WHEN v_certified_reuse_v2_probe IS TRUE THEN true ELSE NULL::boolean END/);
 });
 
 test('clone owner locks deterministic session union, fences, then uses V2 publisher', () => {

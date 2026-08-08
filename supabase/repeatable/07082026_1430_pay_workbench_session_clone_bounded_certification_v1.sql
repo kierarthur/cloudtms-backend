@@ -30,6 +30,8 @@ DECLARE
   v_source_seq_min bigint := NULL::bigint;
   v_source_seq_max bigint := NULL::bigint;
   v_source_digest text := NULL::text;
+  v_source_identity_digest text := NULL::text;
+  v_preview_identity_digest text := NULL::text;
   v_ready_preview_count integer := 0;
   v_active_preview_poison_count integer := 0;
   v_bad_ready_preview_count integer := 0;
@@ -226,7 +228,7 @@ BEGIN
     )
   );
 
-  IF coalesce((v_live_eligibility->>'clone_eligible')::boolean,false) IS NOT TRUE THEN
+  IF coalesce((v_live_eligibility->>'target_date_eligible')::boolean,false) IS NOT TRUE THEN
     RETURN pg_catalog.jsonb_build_object(
       'ok',true,
       'clone_eligible',false,
@@ -309,6 +311,16 @@ BEGIN
         '' ORDER BY source_line.source_ordinal
       ),
       ''
+    )),
+    pg_catalog.md5(coalesce(
+      pg_catalog.string_agg(
+        public.pay_workbench_preview_section_from_line_json(source_line.source_row_json)
+          || E'\x1f' || source_line.line_key || E'\x1f' || source_line.source_ordinal::text,
+        E'\x1e' ORDER BY source_line.source_ordinal,
+          public.pay_workbench_preview_section_from_line_json(source_line.source_row_json),
+          source_line.line_key
+      ),
+      ''
     ))
   INTO
     v_source_count,
@@ -316,7 +328,8 @@ BEGIN
     v_source_build_run_id,
     v_source_seq_min,
     v_source_seq_max,
-    v_source_digest
+    v_source_digest,
+    v_source_identity_digest
   FROM public.banking_pay_workbench_candidate_source_lines AS source_line
   WHERE source_line.session_id = p_source_session_id
     AND source_line.candidate_id = p_candidate_id
@@ -464,6 +477,56 @@ BEGIN
       OR job_row.session_id IS NULL
     )
     AND (v_clone_job_id IS NULL OR job_row.id <> v_clone_job_id);
+
+  SELECT pg_catalog.md5(coalesce(pg_catalog.string_agg(
+    preview_row.section || E'\x1f' || preview_row.row_key || E'\x1f'
+      || (preview_row.row_ordinal - (v_source_scope.scope_ordinal * 1000000))::text,
+    E'\x1e' ORDER BY preview_row.row_ordinal,preview_row.section,preview_row.row_key
+  ),''))
+  INTO v_preview_identity_digest
+  FROM public.banking_pay_workbench_preview_rows AS preview_row
+  WHERE preview_row.session_id=p_source_session_id
+    AND preview_row.candidate_id=p_candidate_id
+    AND preview_row.session_version=v_source_session.version
+    AND preview_row.status='READY';
+
+  IF v_ready_preview_count IS DISTINCT FROM v_source_count
+     OR v_source_identity_digest IS DISTINCT FROM v_preview_identity_digest
+     OR coalesce(v_source_scope.certified_preview_publication_attestation_json->>'source_row_count','')
+          IS DISTINCT FROM v_source_count::text
+     OR coalesce(v_source_scope.certified_preview_publication_attestation_json->>'preview_row_count','')
+          IS DISTINCT FROM v_ready_preview_count::text
+     OR nullif(v_source_scope.certified_preview_publication_attestation_json->>'source_identity_digest','')
+          IS DISTINCT FROM v_source_identity_digest
+     OR nullif(v_source_scope.certified_preview_publication_attestation_json->>'preview_identity_digest','')
+          IS DISTINCT FROM v_preview_identity_digest
+     OR v_source_scope.certified_preview_publication_source_build_run_id IS DISTINCT FROM v_source_build_run_id
+     OR v_source_scope.certified_preview_publication_source_change_seq IS DISTINCT FROM v_current_source_change_seq
+     OR v_source_scope.certified_preview_publication_session_version IS DISTINCT FROM v_source_session.version
+     OR NOT (
+       (
+         v_source_scope.certified_preview_publication_attestation_json->>'attestation_version'
+           = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V1'
+         AND v_source_scope.certified_preview_publication_attestation_json->>'authority_kind'
+           = 'BOUNDED_FULL_SOURCE_BUILD'
+       )
+       OR (
+         v_source_scope.certified_preview_publication_attestation_json->>'attestation_version'
+           = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V2'
+         AND v_source_scope.certified_preview_publication_attestation_json->>'authority_kind'
+           IN ('CERTIFIED_CLONE','TARGETED_DELTA')
+         AND v_source_scope.certified_preview_publication_attestation_json->>'final_state'
+           IN ('READY','SOURCE_EMPTY')
+       )
+     ) THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ok',true,
+      'clone_eligible',false,
+      'bounded_build_certified',false,
+      'reason','CERTIFIED_PUBLICATION_ATTESTATION_DRIFT',
+      'required_refresh_job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD'
+    );
+  END IF;
 
   IF (v_source_mode='NONEMPTY' AND v_ready_preview_count = 0)
      OR v_active_preview_poison_count > 0

@@ -405,6 +405,7 @@ DECLARE
   v_target_snapshot_key_count integer := 0;
   v_target_scope_missing_allowed boolean := false;
   v_target_snapshot_empty_allowed boolean := false;
+  v_certified_reuse_v2_probe boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_PROGRESS');
 
@@ -518,6 +519,14 @@ BEGIN
     AND v_source_session.pay_date IS DISTINCT FROM v_target_session.pay_date
   );
 
+  /* This mode is a target-date proof only.  It is deliberately not clone
+     authority: the postgres-only bounded certifier must still prove the
+     immutable build, current publication parity and original lineage. */
+  v_certified_reuse_v2_probe := COALESCE(v_controlled_clone_rebase, false) IS TRUE
+    AND COALESCE(v_options_json->>'certification_version', '') = '2'
+    AND LOWER(BTRIM(COALESCE(v_options_json->>'source_selection_authorised', 'false')))
+          IN ('true', 't', '1', 'yes', 'y', 'on');
+
   SELECT target_scope.*
   INTO v_target_scope
   FROM public.banking_pay_workbench_session_scope AS target_scope
@@ -601,7 +610,11 @@ BEGIN
   FROM public.banking_pay_workbench_preview_rows AS preview_row
   WHERE preview_row.session_id = p_source_session_id
     AND preview_row.candidate_id = p_candidate_id
-    AND preview_row.session_version = v_source_session.version;
+    AND preview_row.session_version = v_source_session.version
+    AND (
+      v_certified_reuse_v2_probe IS NOT TRUE
+      OR UPPER(BTRIM(COALESCE(preview_row.status, ''))) <> 'SUPERSEDED'
+    );
 
   DROP TABLE IF EXISTS pg_temp._bpay_clone_source_preview;
   CREATE TEMP TABLE _bpay_clone_source_preview ON COMMIT DROP AS
@@ -810,7 +823,12 @@ BEGIN
        v_bad_line_count
   FROM public.banking_pay_workbench_candidate_line_work AS line_work
   WHERE line_work.session_id = p_source_session_id
-    AND line_work.candidate_id = p_candidate_id;
+    AND line_work.candidate_id = p_candidate_id
+    AND (
+      v_certified_reuse_v2_probe IS NOT TRUE
+      OR UPPER(BTRIM(COALESCE(line_work.status, '')))
+           IN ('PENDING', 'READY', 'ERROR', 'FAILED')
+    );
 
   SELECT COUNT(*)::integer
   INTO v_unmaterialised_source_count
@@ -855,14 +873,17 @@ BEGIN
     );
   END IF;
 
-  IF COALESCE(v_bad_preview_count, 0) > 0
+  IF v_certified_reuse_v2_probe IS NOT TRUE
+     AND (
+       COALESCE(v_bad_preview_count, 0) > 0
      OR COALESCE(v_bad_source_count, 0) > 0
      OR COALESCE(v_bad_line_count, 0) > 0
      OR COALESCE(v_unmaterialised_source_count, 0) > 0
      OR COALESCE(v_orphan_ready_preview_count, 0) > 0
      OR (COALESCE(v_preview_count, 0) > 0 AND COALESCE(v_source_row_count, 0) = 0)
      OR (COALESCE(v_preview_count, 0) = 0 AND COALESCE(v_source_row_count, 0) > 0)
-     OR (COALESCE(v_preview_count, 0) = 0 AND COALESCE(v_line_work_count, 0) > 0) THEN
+     OR (COALESCE(v_preview_count, 0) = 0 AND COALESCE(v_line_work_count, 0) > 0)
+     ) THEN
     RETURN jsonb_build_object(
       'ok', true,
       'clone_eligible', false,
@@ -1310,7 +1331,8 @@ BEGIN
        AND COALESCE(v_has_snooze_target_date_risk, false) IS NOT TRUE THEN
       RETURN jsonb_build_object(
         'ok', true,
-        'clone_eligible', true,
+        'clone_eligible', CASE WHEN v_certified_reuse_v2_probe IS TRUE THEN false ELSE true END,
+        'target_date_eligible', CASE WHEN v_certified_reuse_v2_probe IS TRUE THEN true ELSE NULL::boolean END,
         'reason', NULL::text,
         'ready_empty', true,
         'controlled_clone_rebase', COALESCE(v_controlled_clone_rebase, false),
@@ -1343,7 +1365,8 @@ BEGIN
 
   RETURN jsonb_build_object(
     'ok', true,
-    'clone_eligible', true,
+    'clone_eligible', CASE WHEN v_certified_reuse_v2_probe IS TRUE THEN false ELSE true END,
+    'target_date_eligible', CASE WHEN v_certified_reuse_v2_probe IS TRUE THEN true ELSE NULL::boolean END,
     'reason', NULL::text,
     'source_preview_row_count', COALESCE(v_preview_count, 0),
     'source_row_count', COALESCE(v_source_row_count, 0),
