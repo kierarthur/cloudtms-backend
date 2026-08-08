@@ -155,6 +155,10 @@ BEGIN
         COALESCE(preview_row.selected, false) IS TRUE
         AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) = 'SELECTED'
       )
+      OR (
+        LOWER(BTRIM(COALESCE(preview_row.row_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'policy_x_authority_scope', ''))) = 'PRE_DRAFT_LIVE_TRUTH'
+      )
     )
     AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'line_type', preview_row.row_json->>'item_type', ''))) NOT IN (
       'MANUAL_DEBT_RECOVERY',
@@ -204,6 +208,10 @@ BEGIN
           OR (
             COALESCE(positive_row.selected, false) IS TRUE
             AND UPPER(BTRIM(COALESCE(positive_row.selection_state, ''))) = 'SELECTED'
+          )
+          OR (
+            LOWER(BTRIM(COALESCE(positive_row.row_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+            AND UPPER(BTRIM(COALESCE(positive_row.row_json->>'policy_x_authority_scope', ''))) = 'PRE_DRAFT_LIVE_TRUTH'
           )
         )
         AND UPPER(BTRIM(COALESCE(positive_row.row_json->>'line_type', positive_row.row_json->>'item_type', ''))) NOT IN (
@@ -630,6 +638,10 @@ BEGIN
             COALESCE(preview_row.selected, false) IS TRUE
             AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) = 'SELECTED'
           )
+          OR (
+            LOWER(BTRIM(COALESCE(preview_row.row_json->>'selection_allowed', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+            AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'policy_x_authority_scope', ''))) = 'PRE_DRAFT_LIVE_TRUTH'
+          )
         )
         AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'line_type', preview_row.row_json->>'item_type', ''))) NOT IN (
           'MANUAL_DEBT_RECOVERY',
@@ -805,7 +817,6 @@ BEGIN
           v_session_row.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
           ''
         ))) = 'EXPLICIT_INCLUDE'
-          OR COALESCE(v_session_row.server_selected_preview_row_ids_provided, false) IS TRUE
         THEN EXISTS (
           SELECT 1
           FROM jsonb_array_elements_text(

@@ -93,6 +93,23 @@ test('revalidator caps every component recovery to the selected positive-pay hea
   );
 });
 
+test('explicit selection retains certified non-selectable live-truth carrier headroom', () => {
+  assert.equal(
+    (
+      repeatableSql.match(
+        /v_selection_intent_mode <> 'EXPLICIT_INCLUDE'[\s\S]{0,520}selection_allowed'[\s\S]{0,260}PRE_DRAFT_LIVE_TRUTH/g
+      ) || []
+    ).length,
+    3,
+    'all retained-positive-pay aggregations must count certified context carriers that the user cannot select'
+  );
+  assert.doesNotMatch(
+    repeatableSql,
+    /WHEN UPPER\(BTRIM\(COALESCE\([\s\S]{0,180}selection_intent_v1[\s\S]{0,180}= 'EXPLICIT_INCLUDE'[\s\S]{0,120}OR COALESCE\(v_session_row\.server_selected_preview_row_ids_provided/,
+    'a sticky server-selection flag must not turn an implicit select-all into explicit selection while promoting recovered rows'
+  );
+});
+
 test('zero retained headroom demotes recovery and clears draft selection', () => {
   assert.match(repeatableSql, /'readiness_state', 'BLOCKED_FOR_PAY'/);
   assert.match(repeatableSql, /'presentation_reason', 'NO_PAY_HEADROOM'/);
