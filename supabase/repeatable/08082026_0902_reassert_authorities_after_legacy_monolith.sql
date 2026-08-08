@@ -1,0 +1,42 @@
+-- Reapply every later saved authority that touches a function also defined by
+-- the historical 26052026 omnibus. This file is intentionally psql-driven:
+-- the hash-only repeatable runner otherwise cannot know that a changed earlier
+-- file invalidated an unchanged later authority.
+--
+-- legacy_monolith_sha256:
+-- 9602796299504c41cba69073764b98171a6ed21f03d15ebcd9a9fbfa8b66ec93
+--
+-- A source-authority regression test derives this complete include list and
+-- hash from the repository. Any future omnibus edit must therefore update this
+-- file, which causes the safe runner to replay the later authorities again.
+
+\ir 13062026_1544_process_authorise_unprocess_unauthorise.sql
+\ir 19072026_0233_finance_audit_and_refresh_guard.sql
+\ir 19072026_2344_banking_pay_shared_selection_guard.sql
+\ir 20072026_0302_disable_plpgsql_check_for_reservation_finalizer.sql
+\ir 20072026_1105_resolve_paye_deduction_bank_projection.sql
+\ir 23072026_1402_disable_plpgsql_check_for_banking_cancel.sql
+\ir 31072026_1720_pay_batch_nested_resolution_breakdowns.sql
+\ir 31072026_2350_banking_pay_continuous_scope_runtime.sql
+\ir 04082026_1219_pay_timesheet_summary_pay_state_refresh_trigger.sql
+\ir 04082026_1219_pay_workbench_contract_client_dirty_fanout_chunk.sql
+\ir 04082026_1219_pay_workbench_dirty_event_enqueue.sql
+\ir 04082026_1219_pay_workbench_enqueue_candidate_refresh.sql
+\ir 04082026_1219_pay_workbench_enqueue_stage_continuation.sql
+\ir 04082026_1219_pay_workbench_fail_job.sql
+\ir 04082026_1219_pay_workbench_mark_candidate_dirty.sql
+\ir 04082026_1219_pay_workbench_mark_finance_case_dirty.sql
+\ir 04082026_1219_pay_workbench_worker_drain_chunk.sql
+\ir 04082026_1231_retire_pay_payment_cancel_not_sent_and_recalculate.sql
+\ir 04082026_1231_retire_pay_payment_confirm_no_money_and_unwind.sql
+\ir 04082026_1302_pay_workbench_repair_invalid_source_build_poison.sql
+\ir 04082026_1302_pay_workbench_session_clone_eligible_rows_v1.sql
+\ir 04082026_1302_pay_workbench_session_replay_replaced_queue_v1.sql
+\ir 04082026_2035_banking_pay_correction_helper_acl.sql
+\ir 05082026_1545_pay_preview_candidate_build_canonical_lines.sql
+\ir 07082026_1016_banking_pay_targeted_delta_runtime.sql
+\ir 07082026_1017_pay_workbench_enqueue_candidate_refresh.sql
+\ir 07082026_2358_banking_pay_targeted_fast_route_acl.sql
+\ir 08082026_0054_banking_pay_dirty_lane_clone_eligibility.sql
+\ir 08082026_0717_pay_workbench_prepare_draft_allocation_rows_seed_sort_order.sql
+\ir 08082026_0820_pay_batch_freshness_scope_seed_active_items.sql
