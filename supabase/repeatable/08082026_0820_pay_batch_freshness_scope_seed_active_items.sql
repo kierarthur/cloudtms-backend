@@ -382,3 +382,10 @@ BEGIN
   );
 END;
 $function$;
+
+ALTER FUNCTION public.pay_batch_freshness_scope_seed(uuid, uuid, jsonb, integer) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.pay_batch_freshness_scope_seed(uuid, uuid, jsonb, integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.pay_batch_freshness_scope_seed(uuid, uuid, jsonb, integer) FROM anon;
+REVOKE ALL ON FUNCTION public.pay_batch_freshness_scope_seed(uuid, uuid, jsonb, integer) FROM authenticated;
+REVOKE ALL ON FUNCTION public.pay_batch_freshness_scope_seed(uuid, uuid, jsonb, integer) FROM service_role;
+GRANT EXECUTE ON FUNCTION public.pay_batch_freshness_scope_seed(uuid, uuid, jsonb, integer) TO service_role;

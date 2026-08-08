@@ -40,3 +40,14 @@ test('freshness authority preserves the installed function contract', () => {
   assert.match(sql, /SECURITY\s+DEFINER/i);
   assert.match(sql, /SET\s+search_path\s+TO\s+'public'/i);
 });
+
+test('freshness scope seeding remains a service-role Worker authority', () => {
+  assert.match(
+    sql,
+    /REVOKE\s+ALL\s+ON\s+FUNCTION\s+public\.pay_batch_freshness_scope_seed\(uuid, uuid, jsonb, integer\)\s+FROM\s+authenticated/i,
+  );
+  assert.match(
+    sql,
+    /GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.pay_batch_freshness_scope_seed\(uuid, uuid, jsonb, integer\)\s+TO\s+service_role/i,
+  );
+});
