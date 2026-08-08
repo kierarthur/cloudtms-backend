@@ -32066,7 +32066,7 @@ const idempotencyHash = await sha256Hex(stableStringify({
       });
     }
     const publicPayload = isPlainObject(healthyActiveOperation.public_payload) ? healthyActiveOperation.public_payload : {};
-    scheduleDraftCreateDrainBestEffort(publicPayload);
+    await scheduleDraftCreateDrainBestEffort(publicPayload);
     return buildCreateDraftOperationResponse(publicPayload, { reused: true });
   }
 
@@ -32092,7 +32092,7 @@ const idempotencyHash = await sha256Hex(stableStringify({
       }
     }, { publicPayloadOptions: { mode: 'PROGRESS_LIGHT' } });
 
-    scheduleDraftCreateDrainBestEffort(operationPayload);
+    await scheduleDraftCreateDrainBestEffort(operationPayload);
     return buildCreateDraftOperationResponse(operationPayload, { reused: operationPayload.operation_created === false });
   } catch (error) {
     const activeSnoozeFailureResponse = buildActiveSnoozeDraftFailureResponse(error);
