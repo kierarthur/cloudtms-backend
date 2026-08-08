@@ -26,6 +26,7 @@ test('one queue message makes one generic claim-and-advance call and never precl
   const body = functionBody('processBankingPayContinuationMessage');
   assert.equal((body.match(/claimAndAdvanceOneBankingPayOperation\(/g) || []).length, 1);
   assert.doesNotMatch(body, /banking_pay_operation_claim_next/);
+  assert.match(body, /executionContext:\s*options\.executionContext\s*\|\|\s*null/);
 });
 
 test('queue continuation is explicit, bounded and awaits a successor before acknowledgement', () => {
@@ -36,6 +37,7 @@ test('queue continuation is explicit, bounded and awaits a successor before ackn
   assert.match(queueBody, /message\.ack\(\)/);
   assert.match(queueBody, /message\.retry\(/);
   assert.match(queueBody, /await enqueueBankingPayOperationContinuations/);
+  assert.match(queueBody, /processBankingPayContinuationMessage\(env, message, \{ executionContext: ctx \}\)/);
   assert.match(worker, /encoded\.byteLength > 2048/);
   assert.match(worker, /sourceRows\.length > 50/);
 });
@@ -86,6 +88,27 @@ test('payment correction dispatcher preserves the exact SQL retry descriptor', (
   assert.match(body, /PAYMENT_CORRECTION_SQL_CONTINUATION_INVALID/);
   assert.match(body, /sqlContinuationSource\.run_after_utc/);
   assert.match(body, /reason: String\(sqlContinuationSource\.reason/);
+  assert.match(body, /parsePaymentCorrectionWorkbenchNudgeEnvelope/);
+  assert.match(body, /schedulePaymentCorrectionWorkbenchNudge/);
+  assert.match(body, /workbench_refresh_nudge_scheduled/);
+});
+
+test('terminal correction refresh hands one database-owned session to a durable Workbench nudge', () => {
+  const parser = functionBody('parsePaymentCorrectionWorkbenchNudgeEnvelope');
+  const nudge = functionBody('schedulePaymentCorrectionWorkbenchNudge');
+  const runnable = functionBody('advanceBankingPayRunnableOperations');
+  const cron = functionBody('bankingCronTick');
+  const genericAdvance = functionBody('claimAndAdvanceOneBankingPayOperation');
+  assert.match(parser, /PAYMENT_CORRECTION_WORKBENCH_NUDGE_V1/);
+  assert.match(parser, /UNKNOWN_FIELD/);
+  assert.match(parser, /COUNT_MISMATCH/);
+  assert.match(nudge, /nudgeBankingPayWorkbenchDrain\(env, executionContext/);
+  assert.match(nudge, /enqueueBankingPayWorkbenchDrainWake/);
+  assert.match(nudge, /cron_fallback_required:\s*true/);
+  assert.match(runnable, /executionContext:\s*opts\.executionContext\s*\|\|\s*null/);
+  assert.match(cron, /executionContext:\s*opts\.executionContext\s*\|\|\s*null/);
+  assert.match(genericAdvance, /executionContext:\s*opts\.executionContext\s*\|\|\s*null/);
+  assert.match(worker, /bankingCronTick\(env, \{ executionContext: ctx \}\)/);
 });
 
 test('recovery RPC is read-only, bounded and calculates the effective stale threshold', () => {

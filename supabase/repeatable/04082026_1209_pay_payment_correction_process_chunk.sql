@@ -63,6 +63,13 @@ DECLARE
   v_refresh_sequence integer := 0;
   v_session_id uuid;
   v_refresh_actor_user_id uuid;
+  v_workbench_refresh_nudge jsonb := '{}'::jsonb;
+  v_workbench_nudge_candidate_ids jsonb := '[]'::jsonb;
+  v_workbench_nudge_job_ids jsonb := '[]'::jsonb;
+  v_workbench_nudge_candidate_count integer := 0;
+  v_workbench_nudge_job_count integer := 0;
+  v_workbench_nudge_refresh_status text := 'NOT_REQUIRED';
+  v_latest_refresh_payload jsonb := '{}'::jsonb;
   v_error_message text;
   v_error_state text;
   v_preflight record;
@@ -138,7 +145,7 @@ BEGIN
       NULL::uuid,
       'NEW_PAYMENT_ACTION'
     );
-  ELSIF v_preflight.phase IS DISTINCT FROM 'PREPARE_SELECTION' THEN
+  ELSIF v_preflight.phase NOT IN ('PREPARE_SELECTION', 'COMPLETE') THEN
     v_mutation_guard := private.pay_payment_mutation_guard_v1(
       v_preflight.pay_batch_id,
       p_correction_request_id,
@@ -146,7 +153,7 @@ BEGIN
     );
   END IF;
 
-  IF v_preflight.phase IS DISTINCT FROM 'PREPARE_SELECTION'
+  IF v_preflight.phase NOT IN ('PREPARE_SELECTION', 'COMPLETE')
      AND COALESCE((v_mutation_guard->>'ok')::boolean, false) IS NOT TRUE THEN
     RAISE EXCEPTION '%', COALESCE(v_mutation_guard->>'code', 'PAYMENT_MUTATION_LOCK_TIMEOUT')
       USING ERRCODE = 'P0001', DETAIL = v_mutation_guard::text;
@@ -1350,6 +1357,120 @@ BEGIN
       );
     END IF;
 
+    -- Normalize one database-owned, page-scoped Workbench wake contract.  The
+    -- envelope is scheduling evidence only: it never changes the cancellation
+    -- result and it never asks the Worker to infer financial scope.
+    v_refresh_result := COALESCE(v_refresh_result, '{}'::jsonb) - 'workbench_refresh_nudge';
+
+    SELECT COALESCE(pg_catalog.jsonb_agg(candidate_scope.candidate_id::text ORDER BY candidate_scope.candidate_id), '[]'::jsonb),
+           pg_catalog.count(*)::integer
+    INTO v_workbench_nudge_candidate_ids, v_workbench_nudge_candidate_count
+    FROM (
+      SELECT DISTINCT candidate_value.value::uuid AS candidate_id
+      FROM pg_catalog.jsonb_array_elements_text(COALESCE(v_refresh_candidate_ids, '[]'::jsonb)) AS candidate_value(value)
+      WHERE pg_catalog.pg_input_is_valid(candidate_value.value, 'uuid')
+    ) AS candidate_scope;
+
+    WITH page_candidates AS (
+      SELECT candidate_value.value::uuid AS candidate_id
+      FROM pg_catalog.jsonb_array_elements_text(v_workbench_nudge_candidate_ids) AS candidate_value(value)
+    ),
+    raw_job_ids AS (
+      SELECT job_value.value AS job_id_text
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'job_ids') = 'array'
+          THEN v_refresh_result->'job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT job_value.value
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'full_candidate_refresh_job_ids') = 'array'
+          THEN v_refresh_result->'full_candidate_refresh_job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT job_value.value
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'session_recompute_job_ids') = 'array'
+          THEN v_refresh_result->'session_recompute_job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT job_value.value
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'workbench_refresh_job_ids') = 'array'
+          THEN v_refresh_result->'workbench_refresh_job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT scope_row.pending_job_id::text
+      FROM public.banking_pay_workbench_session_scope AS scope_row
+      JOIN page_candidates AS page_candidate ON page_candidate.candidate_id = scope_row.candidate_id
+      WHERE scope_row.session_id = v_session_id
+        AND scope_row.pending_job_id IS NOT NULL
+    ),
+    canonical_job_ids AS (
+      SELECT DISTINCT raw_job.job_id_text::uuid AS job_id
+      FROM raw_job_ids AS raw_job
+      WHERE pg_catalog.pg_input_is_valid(raw_job.job_id_text, 'uuid')
+    ),
+    active_jobs AS (
+      SELECT job_row.id
+      FROM canonical_job_ids AS canonical_job
+      JOIN public.banking_pay_workbench_jobs AS job_row ON job_row.id = canonical_job.job_id
+      JOIN page_candidates AS page_candidate ON page_candidate.candidate_id = job_row.candidate_id
+      JOIN public.banking_pay_workbench_session_scope AS scope_row
+        ON scope_row.session_id = job_row.session_id
+       AND scope_row.candidate_id = job_row.candidate_id
+       AND scope_row.pending_job_id = job_row.id
+      WHERE job_row.session_id = v_session_id
+        AND job_row.status IN ('QUEUED', 'RUNNING')
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(job_row.job_type, ''))) IN (
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+          'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+        )
+      ORDER BY job_row.id
+      LIMIT 100
+    )
+    SELECT COALESCE(pg_catalog.jsonb_agg(active_job.id::text ORDER BY active_job.id), '[]'::jsonb),
+           pg_catalog.count(*)::integer
+    INTO v_workbench_nudge_job_ids, v_workbench_nudge_job_count
+    FROM active_jobs AS active_job;
+
+    v_workbench_nudge_refresh_status := CASE
+      WHEN v_refresh_count = 0 THEN 'NOT_REQUIRED'
+      WHEN v_session_id IS NULL THEN 'NOT_REQUIRED_NO_SOURCE_SESSION'
+      WHEN v_workbench_nudge_job_count > 0 THEN 'STAGED'
+      ELSE 'CURRENT'
+    END;
+
+    v_workbench_refresh_nudge := pg_catalog.jsonb_build_object(
+      'contract_version', 'PAYMENT_CORRECTION_WORKBENCH_NUDGE_V1',
+      'nudge_required', v_workbench_nudge_refresh_status = 'STAGED'
+        AND v_session_id IS NOT NULL
+        AND v_refresh_actor_user_id IS NOT NULL
+        AND v_workbench_nudge_candidate_count > 0
+        AND v_workbench_nudge_job_count > 0,
+      'refresh_status', v_workbench_nudge_refresh_status,
+      'reason', CASE
+        WHEN v_workbench_nudge_refresh_status = 'STAGED' THEN 'PAYMENT_CORRECTION_WORKBENCH_JOBS_STAGED'
+        WHEN v_workbench_nudge_refresh_status = 'NOT_REQUIRED_NO_SOURCE_SESSION' THEN 'PAYMENT_CORRECTION_WORKBENCH_NO_SOURCE_SESSION'
+        WHEN v_workbench_nudge_refresh_status = 'CURRENT' THEN 'PAYMENT_CORRECTION_WORKBENCH_NO_ACTIVE_JOB'
+        ELSE 'PAYMENT_CORRECTION_WORKBENCH_NOT_REQUIRED'
+      END,
+      'operation_id', v_operation.id,
+      'correction_request_id', p_correction_request_id,
+      'session_id', v_session_id,
+      'actor_user_id', v_refresh_actor_user_id,
+      'refresh_sequence_no', v_refresh_sequence,
+      'refresh_has_more', v_refresh_has_more,
+      'candidate_ids', v_workbench_nudge_candidate_ids,
+      'candidate_count', v_workbench_nudge_candidate_count,
+      'job_ids', v_workbench_nudge_job_ids,
+      'job_count', v_workbench_nudge_job_count,
+      'source', 'PAYMENT_CORRECTION_REFRESH_WORKBENCH'
+    );
+
+    v_refresh_result := v_refresh_result
+      || pg_catalog.jsonb_build_object('workbench_refresh_nudge', v_workbench_refresh_nudge);
+
     INSERT INTO public.banking_pay_operation_chunks (
       operation_id, phase, chunk_type, sequence_no, status, payload_json, result_json,
       error_json, unit_count, completed_count, failed_count, started_at_utc, completed_at_utc
@@ -1383,6 +1504,7 @@ BEGIN
       'ok', true, 'phase', CASE WHEN v_refresh_has_more THEN 'REFRESH_WORKBENCH' ELSE 'COMPLETE' END,
       'candidate_count', v_refresh_count, 'complete', NOT v_refresh_has_more,
       'workbench_refresh', v_refresh_result,
+      'workbench_refresh_nudge', v_workbench_refresh_nudge,
       'processed', v_refresh_count,
       'applied', 0,
       'skipped', 0,
@@ -1425,10 +1547,167 @@ BEGIN
   END IF;
 
   IF v_phase = 'COMPLETE' OR v_operation.status = 'COMPLETE' THEN
+    -- Lost-response and terminal replay must be able to wake the latest
+    -- committed refresh page without repeating any correction work.  Rebuild
+    -- the scheduling decision from the durable page and current pending job.
+    v_session_id := v_batch.source_workbench_session_id;
+    v_refresh_actor_user_id := NULL;
+    IF v_session_id IS NOT NULL THEN
+      SELECT session_row.actor_user_id
+      INTO v_refresh_actor_user_id
+      FROM public.banking_pay_workbench_sessions AS session_row
+      WHERE session_row.id = v_session_id
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(session_row.status, ''))) = 'OPEN'
+        AND session_row.discarded_at_utc IS NULL;
+    END IF;
+
+    SELECT completed_refresh.result_json,
+           completed_refresh.payload_json,
+           completed_refresh.sequence_no
+    INTO v_refresh_result, v_latest_refresh_payload, v_refresh_sequence
+    FROM public.banking_pay_operation_chunks AS completed_refresh
+    WHERE completed_refresh.operation_id = v_operation.id
+      AND completed_refresh.phase = 'REFRESH_WORKBENCH'
+      AND completed_refresh.chunk_type = 'CANDIDATE_SCOPE'
+      AND completed_refresh.status = 'COMPLETE'
+    ORDER BY completed_refresh.sequence_no DESC
+    LIMIT 1;
+
+    IF NOT FOUND THEN
+      v_refresh_result := '{}'::jsonb;
+      v_latest_refresh_payload := '{}'::jsonb;
+      v_refresh_sequence := 1;
+      v_refresh_candidate_ids := '[]'::jsonb;
+    ELSE
+      v_refresh_result := COALESCE(v_refresh_result, '{}'::jsonb);
+      v_latest_refresh_payload := COALESCE(v_latest_refresh_payload, '{}'::jsonb);
+      v_refresh_sequence := GREATEST(COALESCE(v_refresh_sequence, 1), 1);
+      v_refresh_candidate_ids := CASE
+        WHEN pg_catalog.jsonb_typeof(v_latest_refresh_payload->'candidate_ids') = 'array'
+          THEN v_latest_refresh_payload->'candidate_ids'
+        ELSE '[]'::jsonb
+      END;
+    END IF;
+    v_refresh_has_more := false;
+
+    SELECT COALESCE(pg_catalog.jsonb_agg(candidate_scope.candidate_id::text ORDER BY candidate_scope.candidate_id), '[]'::jsonb),
+           pg_catalog.count(*)::integer
+    INTO v_workbench_nudge_candidate_ids, v_workbench_nudge_candidate_count
+    FROM (
+      SELECT DISTINCT candidate_value.value::uuid AS candidate_id
+      FROM pg_catalog.jsonb_array_elements_text(COALESCE(v_refresh_candidate_ids, '[]'::jsonb)) AS candidate_value(value)
+      WHERE pg_catalog.pg_input_is_valid(candidate_value.value, 'uuid')
+    ) AS candidate_scope;
+
+    WITH page_candidates AS (
+      SELECT candidate_value.value::uuid AS candidate_id
+      FROM pg_catalog.jsonb_array_elements_text(v_workbench_nudge_candidate_ids) AS candidate_value(value)
+    ),
+    raw_job_ids AS (
+      SELECT job_value.value AS job_id_text
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'job_ids') = 'array'
+          THEN v_refresh_result->'job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT job_value.value
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'full_candidate_refresh_job_ids') = 'array'
+          THEN v_refresh_result->'full_candidate_refresh_job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT job_value.value
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'session_recompute_job_ids') = 'array'
+          THEN v_refresh_result->'session_recompute_job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT job_value.value
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'workbench_refresh_job_ids') = 'array'
+          THEN v_refresh_result->'workbench_refresh_job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT job_value.value
+      FROM pg_catalog.jsonb_array_elements_text(
+        CASE WHEN pg_catalog.jsonb_typeof(v_refresh_result->'workbench_refresh_nudge'->'job_ids') = 'array'
+          THEN v_refresh_result->'workbench_refresh_nudge'->'job_ids' ELSE '[]'::jsonb END
+      ) AS job_value(value)
+      UNION ALL
+      SELECT scope_row.pending_job_id::text
+      FROM public.banking_pay_workbench_session_scope AS scope_row
+      JOIN page_candidates AS page_candidate ON page_candidate.candidate_id = scope_row.candidate_id
+      WHERE scope_row.session_id = v_session_id
+        AND scope_row.pending_job_id IS NOT NULL
+    ),
+    canonical_job_ids AS (
+      SELECT DISTINCT raw_job.job_id_text::uuid AS job_id
+      FROM raw_job_ids AS raw_job
+      WHERE pg_catalog.pg_input_is_valid(raw_job.job_id_text, 'uuid')
+    ),
+    active_jobs AS (
+      SELECT job_row.id
+      FROM canonical_job_ids AS canonical_job
+      JOIN public.banking_pay_workbench_jobs AS job_row ON job_row.id = canonical_job.job_id
+      JOIN page_candidates AS page_candidate ON page_candidate.candidate_id = job_row.candidate_id
+      JOIN public.banking_pay_workbench_session_scope AS scope_row
+        ON scope_row.session_id = job_row.session_id
+       AND scope_row.candidate_id = job_row.candidate_id
+       AND scope_row.pending_job_id = job_row.id
+      WHERE job_row.session_id = v_session_id
+        AND job_row.status IN ('QUEUED', 'RUNNING')
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(job_row.job_type, ''))) IN (
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+          'WORKBENCH_CANDIDATE_DELTA_REFRESH'
+        )
+      ORDER BY job_row.id
+      LIMIT 100
+    )
+    SELECT COALESCE(pg_catalog.jsonb_agg(active_job.id::text ORDER BY active_job.id), '[]'::jsonb),
+           pg_catalog.count(*)::integer
+    INTO v_workbench_nudge_job_ids, v_workbench_nudge_job_count
+    FROM active_jobs AS active_job;
+
+    v_workbench_nudge_refresh_status := CASE
+      WHEN v_workbench_nudge_candidate_count = 0 THEN 'NOT_REQUIRED'
+      WHEN v_session_id IS NULL THEN 'NOT_REQUIRED_NO_SOURCE_SESSION'
+      WHEN v_refresh_actor_user_id IS NULL THEN 'CURRENT'
+      WHEN v_workbench_nudge_job_count > 0 THEN 'STAGED'
+      ELSE 'CURRENT'
+    END;
+
+    v_workbench_refresh_nudge := pg_catalog.jsonb_build_object(
+      'contract_version', 'PAYMENT_CORRECTION_WORKBENCH_NUDGE_V1',
+      'nudge_required', v_workbench_nudge_refresh_status = 'STAGED'
+        AND v_session_id IS NOT NULL
+        AND v_refresh_actor_user_id IS NOT NULL
+        AND v_workbench_nudge_candidate_count > 0
+        AND v_workbench_nudge_job_count > 0,
+      'refresh_status', v_workbench_nudge_refresh_status,
+      'reason', CASE
+        WHEN v_workbench_nudge_refresh_status = 'STAGED' THEN 'PAYMENT_CORRECTION_WORKBENCH_JOBS_STAGED'
+        WHEN v_workbench_nudge_refresh_status = 'NOT_REQUIRED_NO_SOURCE_SESSION' THEN 'PAYMENT_CORRECTION_WORKBENCH_NO_SOURCE_SESSION'
+        WHEN v_workbench_nudge_refresh_status = 'CURRENT' THEN 'PAYMENT_CORRECTION_WORKBENCH_NO_ACTIVE_JOB'
+        ELSE 'PAYMENT_CORRECTION_WORKBENCH_NOT_REQUIRED'
+      END,
+      'operation_id', v_operation.id,
+      'correction_request_id', p_correction_request_id,
+      'session_id', v_session_id,
+      'actor_user_id', v_refresh_actor_user_id,
+      'refresh_sequence_no', v_refresh_sequence,
+      'refresh_has_more', false,
+      'candidate_ids', v_workbench_nudge_candidate_ids,
+      'candidate_count', v_workbench_nudge_candidate_count,
+      'job_ids', v_workbench_nudge_job_ids,
+      'job_count', v_workbench_nudge_job_count,
+      'source', 'PAYMENT_CORRECTION_REFRESH_WORKBENCH'
+    );
+
     RETURN pg_catalog.jsonb_build_object(
       'ok', true, 'correction_request_id', p_correction_request_id,
       'operation_id', v_operation.id, 'phase', 'COMPLETE',
       'result', v_operation.result_json,
+      'workbench_refresh_nudge', v_workbench_refresh_nudge,
       'processed', 0,
       'applied', COALESCE((v_operation.result_json->>'applied_candidate_count')::integer, 0),
       'skipped', 0,

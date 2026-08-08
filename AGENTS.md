@@ -125,6 +125,17 @@ Every new SQL file must use the filename format `DDMMYYYY_HHMM_name.sql`; the fi
 * Do not save SQL functions as one-time migrations unless a separately required schema/data migration calls or installs them as part of an explicitly approved change.
 * Never rename an already-applied migration merely to adopt this convention unless the user explicitly requests it and the migration history has been checked safe.
 
+## Catalogued SQL and migration-workflow verification
+
+Before changing or publishing any SQL function that is covered by a catalogue manifest:
+
+* Inspect the current migration/deployment workflow and the current catalogue verifier immediately before editing. Do not rely on how an earlier workflow behaved.
+* Identify the function's one authoritative manifest owner and preserve the verifier's current owner, security, configuration, ACL, signature, and source-file requirements.
+* When TEST DDL validation is explicitly authorised, compile the exact saved replacement inside a transaction, obtain the definition hash from PostgreSQL's canonical `pg_get_functiondef` representation using the same algorithm as the current verifier, and roll the transaction back.
+* Put that canonical database-derived hash in the manifest. Do not substitute a hash of saved SQL file bytes: newline, formatting, and canonicalisation differences can make it wrong even when the function body is correct.
+* Do not guess a manifest hash when canonical compilation or verification is unavailable. Stop and report the missing proof.
+* After publishing, require the current workflow to pass and recheck the installed TEST definition and manifest hash before declaring deployment complete.
+
 ## TEST-only diagnostic RPC
 
 The TEST Supabase project has a diagnostic RPC:
