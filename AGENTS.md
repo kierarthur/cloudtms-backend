@@ -131,8 +131,8 @@ Before changing or publishing any SQL function that is covered by a catalogue ma
 
 * Inspect the current migration/deployment workflow and the current catalogue verifier immediately before editing. Do not rely on how an earlier workflow behaved.
 * Identify the function's one authoritative manifest owner and preserve the verifier's current owner, security, configuration, ACL, signature, and source-file requirements.
-* When TEST DDL validation is explicitly authorised, compile the exact saved replacement inside a transaction, obtain the definition hash from PostgreSQL's canonical `pg_get_functiondef` representation using the same algorithm as the current verifier, and roll the transaction back.
-* Put that canonical database-derived hash in the manifest. Do not substitute a hash of saved SQL file bytes: newline, formatting, and canonicalisation differences can make it wrong even when the function body is correct.
+* When TEST DDL validation is explicitly authorised, compile the exact staged Git blob (or committed Git blob)—not a Windows working-tree rendering—inside a transaction, obtain the definition hash from PostgreSQL's canonical `pg_get_functiondef` representation using the same algorithm as the current verifier, and roll the transaction back. The staged/committed blob is the authority because it is what the Linux workflow will install.
+* Put that canonical database-derived hash in the manifest. Do not substitute a hash of saved SQL file bytes, and do not compile a CRLF working-tree copy when Git will publish LF: function-body line endings survive inside `pg_get_functiondef` and can change the verifier hash even when the SQL logic is identical.
 * Do not guess a manifest hash when canonical compilation or verification is unavailable. Stop and report the missing proof.
 * After publishing, require the current workflow to pass and recheck the installed TEST definition and manifest hash before declaring deployment complete.
 
