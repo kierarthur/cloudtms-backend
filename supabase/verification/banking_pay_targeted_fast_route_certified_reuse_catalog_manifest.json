@@ -214,7 +214,7 @@
       "schema": "public",
       "name": "pay_workbench_candidate_dirty_apply_job_process",
       "identity_arguments": "p_job_id uuid, p_limit integer",
-      "definition_sha256": "5781e8a507317f0a28d367a6d6ede12da29e55ce1735fa1b550bfa6f143a02b6",
+      "definition_sha256": "d4bd1c977eae202f5e0a5784b65ef151ef7132f6dc97e0cf5f539145eaa69c29",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -298,7 +298,7 @@
       "schema": "public",
       "name": "pay_workbench_enqueue_candidate_refresh",
       "identity_arguments": "p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb",
-      "definition_sha256": "251adce4afc24247a27726720e1bf0d98d3354ea5a63e4f04d61b8f624019c74",
+      "definition_sha256": "8dbf361be1836824526d8f3e5492fbd44ab65751239000bc0d7758eed40290a5",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
