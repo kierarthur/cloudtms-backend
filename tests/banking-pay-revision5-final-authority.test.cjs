@@ -62,8 +62,8 @@ test('selection dependencies are hash-pinned to one saved source authority', () 
     path.join(root, 'supabase', 'verification', 'banking_pay_revision5_catalog_manifest.json'),
     'utf8'
   ));
-  assert.equal(manifest.dependency_function_count, 2);
-  assert.equal(manifest.dependency_functions.length, 2);
+  assert.equal(manifest.dependency_function_count, 3);
+  assert.equal(manifest.dependency_functions.length, 3);
   for (const item of manifest.dependency_functions) {
     const re = new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+(?:public\\.)?${item.name}\\s*\\(`, 'gi');
     const owners = sqlFiles.flatMap(({ name, source }) => (source.match(re) || []).map(() => `supabase/repeatable/${name}`));

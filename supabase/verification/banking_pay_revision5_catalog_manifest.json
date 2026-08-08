@@ -884,7 +884,7 @@
       ]
     }
   ],
-  "dependency_function_count": 2,
+  "dependency_function_count": 3,
   "dependency_functions": [
     {
       "schema": "public",
@@ -947,6 +947,34 @@
       ],
       "source_files": [
         "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_batch_prepare",
+      "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_operation_id uuid, p_freshness_result_hash text",
+      "definition_sha256": "3055dde896961bf4e1079f5bfd4b7f37538082a9f1d7052532e2eb7db2950012",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/20072026_1228_allow_paye_group_destination_in_prepare.sql"
       ]
     }
   ]
