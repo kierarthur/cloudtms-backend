@@ -400,6 +400,19 @@ test('finance-effect observer compares temporary relation attributes using one t
   );
 });
 
+test('finance-effect observer reports only bounded aggregate mismatch diagnostics', () => {
+  const transition = read('supabase/repeatable/04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql');
+  assert.match(transition, /'impact_count',\(SELECT count\(\*\) FROM pg_temp\._bpay_wb_transition_impacts_v1\)/i);
+  assert.match(transition, /'identity_match_count'/i);
+  assert.match(transition, /'before_match_count'/i);
+  assert.match(transition, /'after_match_count'/i);
+  assert.match(transition, /'by_relation_operation'/i);
+  assert.match(transition, /PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH %',v_mismatch_detail::text/i);
+  assert.doesNotMatch(transition, /'candidate_id',\s*impact\.candidate_id/i);
+  assert.doesNotMatch(transition, /'timesheet_id',\s*impact\.timesheet_id/i);
+  assert.doesNotMatch(transition, /'source_id',\s*impact\.source_id/i);
+});
+
 test('retained finance dirty triggers validate a sealed effect plan before finance DML', () => {
   for (const name of [
     'trg_pay_workbench_mark_candidate_dirty__pay_advances',

@@ -17,6 +17,7 @@ DECLARE
   v_delete_context regclass:=pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1');
   v_relation_owner oid;
   v_duplicate boolean:=false;
+  v_mismatch_detail jsonb:='{}'::jsonb;
 BEGIN
   CREATE TEMP TABLE IF NOT EXISTS pg_temp._bpay_wb_transition_impacts_v1(
     relation_name text NOT NULL,
@@ -485,7 +486,61 @@ BEGIN
           AND expected.expected_after_digest IS NOT DISTINCT FROM impact.after_digest
       $sql$;
       IF EXISTS(SELECT 1 FROM pg_temp._bpay_wb_transition_impacts_v1) THEN
-        RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH'
+        SELECT jsonb_build_object(
+          'impact_count',(SELECT count(*) FROM pg_temp._bpay_wb_transition_impacts_v1),
+          'expected_count',(SELECT count(*) FROM pg_temp._bpay_wb_expected_effects),
+          'identity_match_count',(
+            SELECT count(*)
+            FROM pg_temp._bpay_wb_transition_impacts_v1 impact
+            WHERE EXISTS(
+              SELECT 1 FROM pg_temp._bpay_wb_expected_effects expected
+              WHERE expected.relation_name=impact.relation_name
+                AND expected.operation=impact.operation
+                AND COALESCE(expected.actual_source_id,expected.source_id)=impact.source_id
+                AND expected.candidate_id=impact.candidate_id
+                AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
+            )
+          ),
+          'before_match_count',(
+            SELECT count(*)
+            FROM pg_temp._bpay_wb_transition_impacts_v1 impact
+            WHERE EXISTS(
+              SELECT 1 FROM pg_temp._bpay_wb_expected_effects expected
+              WHERE expected.relation_name=impact.relation_name
+                AND expected.operation=impact.operation
+                AND COALESCE(expected.actual_source_id,expected.source_id)=impact.source_id
+                AND expected.candidate_id=impact.candidate_id
+                AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
+                AND expected.expected_before_digest IS NOT DISTINCT FROM impact.before_digest
+            )
+          ),
+          'after_match_count',(
+            SELECT count(*)
+            FROM pg_temp._bpay_wb_transition_impacts_v1 impact
+            WHERE EXISTS(
+              SELECT 1 FROM pg_temp._bpay_wb_expected_effects expected
+              WHERE expected.relation_name=impact.relation_name
+                AND expected.operation=impact.operation
+                AND COALESCE(expected.actual_source_id,expected.source_id)=impact.source_id
+                AND expected.candidate_id=impact.candidate_id
+                AND expected.timesheet_id IS NOT DISTINCT FROM impact.timesheet_id
+                AND expected.expected_after_digest IS NOT DISTINCT FROM impact.after_digest
+            )
+          ),
+          'by_relation_operation',COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+              'relation_name',grouped.relation_name,
+              'operation',grouped.operation,
+              'impact_count',grouped.impact_count
+            ) ORDER BY grouped.relation_name,grouped.operation)
+            FROM (
+              SELECT impact.relation_name,impact.operation,count(*) AS impact_count
+              FROM pg_temp._bpay_wb_transition_impacts_v1 impact
+              GROUP BY impact.relation_name,impact.operation
+            ) grouped
+          ),'[]'::jsonb)
+        ) INTO v_mismatch_detail;
+        RAISE EXCEPTION 'PAY_WORKBENCH_EXPECTED_EFFECT_MISMATCH %',v_mismatch_detail::text
           USING ERRCODE='23514';
       END IF;
     END IF;
