@@ -57,13 +57,13 @@ test('all thirty-one manifest functions have exactly one canonical repeatable bo
   }
 });
 
-test('selection dependencies are hash-pinned to one saved source authority', () => {
+test('payment-operation dependencies are hash-pinned to one saved source authority', () => {
   const manifest = JSON.parse(fs.readFileSync(
     path.join(root, 'supabase', 'verification', 'banking_pay_revision5_catalog_manifest.json'),
     'utf8'
   ));
-  assert.equal(manifest.dependency_function_count, 3);
-  assert.equal(manifest.dependency_functions.length, 3);
+  assert.equal(manifest.dependency_function_count, 4);
+  assert.equal(manifest.dependency_functions.length, 4);
   for (const item of manifest.dependency_functions) {
     const re = new RegExp(`CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+(?:public\\.)?${item.name}\\s*\\(`, 'gi');
     const owners = sqlFiles.flatMap(({ name, source }) => (source.match(re) || []).map(() => `supabase/repeatable/${name}`));

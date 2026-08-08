@@ -884,7 +884,7 @@
       ]
     }
   ],
-  "dependency_function_count": 3,
+  "dependency_function_count": 4,
   "dependency_functions": [
     {
       "schema": "public",
@@ -975,6 +975,34 @@
       ],
       "source_files": [
         "supabase/repeatable/20072026_1228_allow_paye_group_destination_in_prepare.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_batch_freshness_scope_seed",
+      "identity_arguments": "p_operation_id uuid, p_pay_batch_id uuid, p_cursor_json jsonb, p_limit integer",
+      "definition_sha256": "4212d508710b4cdbb32b3b606d4cadc3e6530a20f6e7f1cb1003343455e7783f",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/08082026_0820_pay_batch_freshness_scope_seed_active_items.sql"
       ]
     }
   ]
