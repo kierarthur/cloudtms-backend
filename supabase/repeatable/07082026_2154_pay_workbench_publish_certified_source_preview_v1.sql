@@ -653,6 +653,11 @@ BEGIN
     source_row.source_row_json,
     source_row.economic_key_json,
     public.pay_workbench_preview_section_from_line_json(source_row.source_row_json) AS resolved_section,
+    public.pay_workbench_preview_line_contract_ok(
+      source_row.source_row_json,
+      source_row.economic_key_json,
+      public.pay_workbench_preview_section_from_line_json(source_row.source_row_json)
+    ) AS preview_contract_json,
     LOWER(BTRIM(COALESCE(source_row.source_row_json->>'selection_allowed', 'false')))
       IN ('true', 't', '1', 'yes', 'y', 'on') AS is_selectable,
     NULLIF(BTRIM(COALESCE(source_row.economic_key_json->>'key_type', '')), '') AS key_type,
@@ -741,15 +746,29 @@ BEGIN
   ) OR (
     prepared_row.is_selectable IS NOT TRUE
     AND NOT (
-      UPPER(BTRIM(COALESCE(prepared_row.source_row_json->>'line_type', ''))) = 'TIMESHEET_PAYMENT'
+      -- Retain the installed V1 allowance for non-economic timesheet context
+      -- rows.  Other blocked/case economic rows must also satisfy the existing
+      -- canonical display-row contract before this exact allow-list applies.
+      (
+        UPPER(BTRIM(COALESCE(prepared_row.source_row_json->>'line_type', ''))) = 'TIMESHEET_PAYMENT'
+        OR LOWER(BTRIM(COALESCE(
+          public.pay_workbench_preview_line_contract_ok(
+            prepared_row.source_row_json,
+            prepared_row.economic_key_json,
+            prepared_row.resolved_section
+          )->>'ok',
+          'false'
+        ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+      )
       AND UPPER(BTRIM(COALESCE(prepared_row.source_row_json->>'presentation_section', ''))) IN (
-        'READY_TO_PAY', 'CASES_RESOLUTIONS', 'SNOOZED'
+        'READY_TO_PAY', 'CASES_RESOLUTIONS', 'BLOCKED_FOR_PAY', 'SNOOZED'
       )
       AND UPPER(BTRIM(COALESCE(prepared_row.source_row_json->>'presentation_role', ''))) IN (
         'PARENT', 'CONTEXT', 'DETAIL', 'SUMMARY'
       )
       AND UPPER(BTRIM(COALESCE(prepared_row.source_row_json->>'readiness_state', ''))) IN (
-        'READY_TO_PAY', 'BLOCKED', 'SNOOZED', 'CASE_RESOLUTION'
+        'READY_TO_PAY', 'BLOCKED', 'BLOCKED_FOR_PAY', 'SNOOZED',
+        'CASE_RESOLUTION', 'CASES_RESOLUTIONS'
       )
     )
   );
@@ -869,6 +888,7 @@ BEGIN
           OR current_preview.row_json->>'source_change_seq' IS DISTINCT FROM p_source_change_seq::text
           OR current_preview.row_json->>'source_line_id' IS DISTINCT FROM exact_row.source_line_id::text
           OR current_preview.row_json->>'selection_identity_digest' IS DISTINCT FROM exact_row.selection_identity_digest
+          OR current_preview.row_json->'preview_contract' IS DISTINCT FROM exact_row.preview_contract_json
         )
     )
   INTO v_already_current;
@@ -942,6 +962,7 @@ BEGIN
           'published_at_utc', v_now::text,
           'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
           'selection_identity_digest', ready_row.selection_identity_digest,
+          'preview_contract', ready_row.preview_contract_json,
           'selected', ready_row.effective_selected,
           'selection_state', ready_row.effective_selection_state
         )

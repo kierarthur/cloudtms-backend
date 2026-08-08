@@ -385,8 +385,12 @@ BEGIN
 
   SELECT * INTO v_session
   FROM public.banking_pay_workbench_sessions AS session_row
-  WHERE session_row.id=v_job.session_id
-  FOR SHARE;
+  WHERE session_row.id=v_job.session_id;
+  -- The session is validation input, not RPC-1 mutation authority. Taking a
+  -- row lock here serialised otherwise independent candidate lanes behind a
+  -- long-running RPC-2 attempt on the same session. The claimed build freezes
+  -- the session version below and RPC 2/final publication revalidate it before
+  -- any result can become authoritative.
   IF NOT FOUND OR v_session.status NOT IN ('OPEN','READY','REFRESHING') THEN
     IF v_job.economic_build_id IS NOT NULL THEN
       UPDATE private.banking_pay_workbench_economic_builds

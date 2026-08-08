@@ -7,6 +7,7 @@ const read = (path) => readFileSync(new URL(path, repoRoot), 'utf8').replace(/\r
 
 const canonical = read('supabase/repeatable/07082026_1013_pay_workbench_candidate_source_build_chunk.sql');
 const lateAuthority = read('supabase/repeatable/08082026_0322_pay_workbench_candidate_source_build_chunk_authority.sql');
+const claimStart = read('supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql');
 
 test('late authority reasserts the profile-2 source-build owner after historical omnibus files', () => {
   assert.match(lateAuthority, /\\ir 07082026_1013_pay_workbench_candidate_source_build_chunk\.sql/);
@@ -26,4 +27,32 @@ test('capture is durably sealed before execute and does not weaken Policy X', ()
   assert.match(canonical, /captured_candidate_generation/i);
   assert.match(canonical, /captured_source_change_seq/i);
   assert.doesNotMatch(canonical, /statement_timeout\s*=/i);
+});
+
+test('candidate material work does not exclusively lock the shared session row', () => {
+  const legacyBody = canonical.match(
+    /CREATE OR REPLACE FUNCTION private\.pay_workbench_candidate_source_build_chunk_legacy_v1[\s\S]*?\$function\$;/i,
+  )?.[0] || '';
+
+  assert.match(
+    legacyBody,
+    /SELECT \* INTO v_session FROM public\.banking_pay_workbench_sessions\s+WHERE id=p_session_id;/i,
+  );
+  assert.doesNotMatch(
+    legacyBody,
+    /FROM public\.banking_pay_workbench_sessions\s+WHERE id=p_session_id\s+FOR (?:UPDATE|SHARE)/i,
+  );
+  assert.match(legacyBody, /terminal completion\/publication owns/i);
+});
+
+test('RPC 1 validates the shared session without serialising candidate lanes', () => {
+  assert.match(
+    claimStart,
+    /SELECT \* INTO v_session\s+FROM public\.banking_pay_workbench_sessions AS session_row\s+WHERE session_row\.id=v_job\.session_id;/i,
+  );
+  assert.doesNotMatch(
+    claimStart,
+    /FROM public\.banking_pay_workbench_sessions AS session_row\s+WHERE session_row\.id=v_job\.session_id\s+FOR (?:UPDATE|SHARE)/i,
+  );
+  assert.match(claimStart, /RPC 2\/final publication revalidate/i);
 });

@@ -4160,6 +4160,10 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
          OR batch_item.finance_component_id IS NOT DISTINCT FROM allocation_row.finance_component_id
        )
        AND round(abs(coalesce(batch_item.amount_ex_vat, 0)), 2) = round(abs(coalesce(allocation_row.allocated_amount, 0)), 2)
+       AND (
+         batch_item.operation_source_key IS NULL
+         OR batch_item.operation_source_key = allocation_row.operation_source_key
+       )
       WHERE allocation_row.operation_id = p_operation_id
         AND allocation_row.candidate_id = ANY(v_candidate_ids)
         AND allocation_row.pay_channel = v_scope
@@ -4185,7 +4189,15 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
           )
         )
         AND coalesce(batch_item.is_voided, false) = false
-      ORDER BY allocation_row.id, batch_item.created_at NULLS LAST, batch_item.id
+      ORDER BY
+        allocation_row.id,
+        CASE
+          WHEN batch_item.operation_source_key = allocation_row.operation_source_key THEN 0
+          WHEN batch_item.id = allocation_row.pay_batch_item_id THEN 1
+          ELSE 2
+        END,
+        batch_item.created_at NULLS LAST,
+        batch_item.id
     ),
     updated_items AS (
       UPDATE public.pay_batch_items AS batch_item_update

@@ -113,9 +113,22 @@ test('stable upsert, selection identity invalidation and stale retirement are ex
   assert.match(publisher, /ON CONFLICT \(session_id, section, candidate_id, row_key\)/);
   assert.match(publisher, /selection_identity_digest/);
   assert.match(publisher, /existing_selection_identity_digest = prepared_row\.selection_identity_digest/);
+  assert.match(publisher, /AS preview_contract_json/);
+  assert.match(publisher, /'preview_contract', ready_row\.preview_contract_json/);
   assert.match(publisher, /existing_preview_id IS NULL THEN true/);
   assert.match(publisher, /selection_state = 'SUPERSEDED'/);
   assert.match(publisher, /server_selected_preview_row_ids_provided IS TRUE/);
+});
+
+test('non-selectable blocked and case rows require the canonical display-row contract', () => {
+  assert.match(publisher, /Retain the installed V1 allowance for non-economic timesheet context/);
+  assert.match(publisher, /Other blocked\/case economic rows must also satisfy/);
+  assert.match(
+    publisher,
+    /prepared_row\.is_selectable IS NOT TRUE[\s\S]+pay_workbench_preview_line_contract_ok\([\s\S]+->>'ok'/,
+  );
+  assert.match(publisher, /'READY_TO_PAY', 'CASES_RESOLUTIONS', 'BLOCKED_FOR_PAY', 'SNOOZED'/);
+  assert.match(publisher, /'CASE_RESOLUTION', 'CASES_RESOLUTIONS'/);
 });
 
 test('parity proof compares both directions and attests only after equality', () => {
@@ -149,6 +162,7 @@ test('completion publishes before success and duplicate completion self-heals', 
 
 test('duplicate completion is an exact no-op once certified parity is current', () => {
   assert.match(publisher, /v_already_current/);
+  assert.match(publisher, /current_preview\.row_json->'preview_contract' IS DISTINCT FROM exact_row\.preview_contract_json/);
   assert.match(publisher, /'already_current', true/);
   assert.match(publisher, /'upserted_row_count', 0/);
   assert.match(publisher, /'retired_row_count', 0/);

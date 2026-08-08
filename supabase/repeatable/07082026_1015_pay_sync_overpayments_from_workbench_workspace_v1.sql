@@ -361,6 +361,21 @@ begin
   WHERE build_id=p_build_id AND closure_status='SEALED';
   v_bounded_scope_ids:=COALESCE(v_bounded_scope_ids,array[]::uuid[]);
 
+  -- Session-replacement correction decisions are registered before the
+  -- target candidate has authoritative build evidence.  The legacy source
+  -- builder consumed those registrations immediately before materialising
+  -- correction residuals; the bounded workspace must preserve that same
+  -- ordering.  Capture and execute each recompute from raw authority.  The
+  -- capture subtransaction rolls this state back with its finance DML, while
+  -- execute persists the identical carried decision before effect and
+  -- canonical-output attestation.
+  PERFORM public._pay_workbench_case_resolution_carry_process_candidate_v1(
+    v_bounded_build.session_id,
+    v_bounded_build.candidate_id,
+    v_bounded_build.source_build_run_id,
+    clock_timestamp()
+  );
+
   CREATE TEMP TABLE pg_temp.tmp_sync_entitlement_components_v2(
     timesheet_id uuid NOT NULL,
     key_type text NOT NULL,

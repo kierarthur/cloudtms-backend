@@ -3,13 +3,13 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 22,
+  "function_count": 23,
   "functions": [
     {
       "schema": "private",
       "name": "pay_sync_overpayments_from_workbench_workspace_v1",
       "identity_arguments": "p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]",
-      "definition_sha256": "c366e8b29b9d735d1a446fef44c26e160a965e5746ce9b06b0ad54923ed2dbb4",
+      "definition_sha256": "7106da6bf585db07d1840c3c35b6c78c43b3f45c7fa93b7cb25702957689fbfb",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -296,6 +296,41 @@
     },
     {
       "schema": "public",
+      "name": "pay_workbench_enqueue_candidate_refresh",
+      "identity_arguments": "p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb",
+      "definition_sha256": "ca37ae6ba5ddfbdc90c9c007e4ff4841df0e8b38f4ec02adbd67ca1672151a7f",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/07082026_1017_pay_workbench_enqueue_candidate_refresh.sql",
+        "supabase/repeatable/08082026_0411_pay_workbench_enqueue_candidate_refresh_authority.sql"
+      ]
+    },
+    {
+      "schema": "public",
       "name": "pay_workbench_session_clone_eligibility_v1",
       "identity_arguments": "p_source_session_id uuid, p_target_session_id uuid, p_candidate_id uuid, p_options_json jsonb",
       "definition_sha256": "ecb17fb1d112d315dd6c64f2983fb30e7b5468d6c475731e234008112c8c2138",
@@ -424,7 +459,7 @@
       "schema": "private",
       "name": "pay_workbench_candidate_source_build_chunk_legacy_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
-      "definition_sha256": "1a91039f17c8c97610dac6d62624da5b3ac8d331d41b626baa38bdd4f3865ec1",
+      "definition_sha256": "c09de532eea2c1f5eafd99497c5b6b9127e5b9bc410ffb0e9a38a538272dc951",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -506,7 +541,7 @@
       "schema": "public",
       "name": "pay_workbench_candidate_source_build_chunk",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
-      "definition_sha256": "4f7cb51c5ea55bbf550036f4a1363f23965ba32fb02064faa89c1cf81adc6fd0",
+      "definition_sha256": "26841508e1352657a1ba012b13347c8a54a86122b2694cda89236f144f8fba7f",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -572,7 +607,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "63117ef31e444e944ef07ff3d6bbfb156f1339e9cbe3fdd7fbda228b910ede22",
+      "definition_sha256": "efd896aa41ae393853116b15b8a52393b365d94ff531771d6efa6f59d260ffcd",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

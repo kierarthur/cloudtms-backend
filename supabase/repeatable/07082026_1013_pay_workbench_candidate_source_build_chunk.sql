@@ -150,7 +150,12 @@ BEGIN
   SELECT * INTO v_build FROM private.banking_pay_workbench_economic_builds
   WHERE id=v_build_id FOR UPDATE;
   SELECT * INTO v_session FROM public.banking_pay_workbench_sessions
-  WHERE id=p_session_id FOR UPDATE;
+  WHERE id=p_session_id;
+  -- Candidate source work never mutates the shared session row here. Holding
+  -- it FOR UPDATE made every candidate in one Workbench session execute
+  -- serially and caused concurrent RPC-1 claims to time out. The immutable
+  -- build freezes session_version, and terminal completion/publication owns
+  -- the exclusive session lock plus the final generation/version fences.
   IF v_registry.current_build_id IS DISTINCT FROM v_build_id
      OR v_build.candidate_id IS DISTINCT FROM p_candidate_id
      OR v_build.session_id IS DISTINCT FROM p_session_id

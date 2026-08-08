@@ -2052,6 +2052,52 @@ BEGIN
   WHERE session_scope.session_id = v_session_id
     AND session_scope.candidate_id = p_candidate_id;
 
+  /*
+    The certified publisher requires one session-candidate state row carrying
+    the exact session version and source sequence owned by this refresh.  A
+    freshly seeded or force-reseeded scope can legitimately have no state row
+    yet.  Establish that pending owner here, alongside the canonical job/scope
+    enqueue, rather than allowing the completed build to reach publication
+    with no state authority to adopt.
+
+    Existing fragments are deliberately retained on conflict for display
+    continuity, but they are no longer READY authority while this job owns the
+    candidate.  A state row from a newer source sequence or session version is
+    never overwritten by an older enqueue.
+  */
+  INSERT INTO public.banking_pay_workbench_session_candidate_state AS candidate_state (
+    session_id,
+    candidate_id,
+    status,
+    source_change_seq,
+    session_version,
+    pending_job_id,
+    created_at_utc,
+    updated_at_utc,
+    last_error_json
+  )
+  VALUES (
+    v_session_id,
+    p_candidate_id,
+    'PENDING',
+    COALESCE(v_source_change_seq, 0),
+    COALESCE(v_session_row.version, 1),
+    v_job_id,
+    v_now,
+    v_now,
+    NULL::jsonb
+  )
+  ON CONFLICT (session_id, candidate_id)
+  DO UPDATE
+  SET status = 'PENDING',
+      source_change_seq = EXCLUDED.source_change_seq,
+      session_version = EXCLUDED.session_version,
+      pending_job_id = EXCLUDED.pending_job_id,
+      updated_at_utc = v_now,
+      last_error_json = NULL::jsonb
+  WHERE candidate_state.source_change_seq <= EXCLUDED.source_change_seq
+    AND candidate_state.session_version <= EXCLUDED.session_version;
+
   PERFORM public._audit_insert(
     'banking_pay_workbench_job',
     v_job_id::text,

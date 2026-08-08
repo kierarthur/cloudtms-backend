@@ -265,29 +265,10 @@ BEGIN
         ELSE 'SOFT_TIME_BUDGET'
       END
     );
-  EXCEPTION WHEN OTHERS THEN
-    GET STACKED DIAGNOSTICS v_result_code=RETURNED_SQLSTATE;
-    v_error_json := jsonb_build_object(
-      'code',v_result_code,'message',SQLERRM,'private_stage',v_stage,
-      'build_id',p_build_id,'attempt_id',p_attempt_id
-    );
-    -- The inner stage subtransaction has rolled back.  fail_job owns the one
-    -- durable STARTED -> FAILED/retry transition in this outer transaction.
-    v_failure_result := public.pay_workbench_fail_job(
-      p_job_id=>p_job_id,p_error_json=>v_error_json,p_retry_after_seconds=>NULL
-    );
-    v_elapsed_ms := GREATEST(0,round(extract(epoch FROM clock_timestamp()-v_started_at)*1000)::integer);
-    RETURN jsonb_build_object(
-      'ok',false,'processed',true,'job_id',p_job_id,'build_id',p_build_id,
-      'private_stage',v_stage,'attempt_number',v_attempt.attempt_number,
-      'stage_status','FAILED','continuation_enqueued',false,'has_more',false,
-      'next_cursor_json','{}'::jsonb,'result_code','STAGE_ERROR',
-      'elapsed_ms',v_elapsed_ms,'failure_result',v_failure_result
-    );
-  END;
 
   -- Final lease/generation/nonce fence. Failure raises so all stage writes roll
-  -- back; RPC 1's committed attempt remains recoverable.
+  -- back inside this same subtransaction; fail_job then owns the one durable
+  -- STARTED -> FAILED/retry or obsolete transition.
   IF clock_timestamp() >= v_attempt.lease_expires_at_utc-interval '500 milliseconds'
      OR NOT EXISTS (
        SELECT 1
@@ -340,6 +321,39 @@ BEGIN
   END IF;
 
   v_completion_result := public.pay_workbench_complete_job(p_job_id,v_stage_result);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_result_code=RETURNED_SQLSTATE;
+    v_error_json := jsonb_build_object(
+      'code',CASE
+        WHEN SQLERRM IN (
+          'CERTIFIED_SOURCE_PREVIEW_SOURCE_SEQUENCE_STALE',
+          'CERTIFIED_SOURCE_PREVIEW_SESSION_STALE',
+          'CERTIFIED_SOURCE_PREVIEW_NEWER_WORK_PRESENT'
+        ) THEN 'PAY_WORKBENCH_SOURCE_SEQUENCE_CHANGED'
+        ELSE COALESCE(NULLIF(SQLERRM,''),v_result_code)
+      END,
+      'message',SQLERRM,
+      'sqlstate',v_result_code,
+      'private_stage',v_stage,
+      'build_id',p_build_id,
+      'attempt_id',p_attempt_id
+    );
+    -- Stage writes, attempt completion and completion/publication writes have
+    -- all rolled back together.  The committed RPC 1 attempt is STARTED here,
+    -- so the existing database failure owner can transition it exactly once.
+    v_failure_result := public.pay_workbench_fail_job(
+      p_job_id=>p_job_id,p_error_json=>v_error_json,p_retry_after_seconds=>NULL
+    );
+    v_elapsed_ms := GREATEST(0,round(extract(epoch FROM clock_timestamp()-v_started_at)*1000)::integer);
+    RETURN jsonb_build_object(
+      'ok',false,'processed',true,'job_id',p_job_id,'build_id',p_build_id,
+      'private_stage',v_stage,'attempt_number',v_attempt.attempt_number,
+      'stage_status','FAILED','continuation_enqueued',false,'has_more',false,
+      'next_cursor_json','{}'::jsonb,'result_code','STAGE_OR_FINALISATION_ERROR',
+      'elapsed_ms',v_elapsed_ms,'failure_result',v_failure_result
+    );
+  END;
+
   v_elapsed_ms := GREATEST(0,round(extract(epoch FROM clock_timestamp()-v_started_at)*1000)::integer);
   RETURN jsonb_build_object(
     'ok',true,'processed',true,'job_id',p_job_id,'build_id',p_build_id,

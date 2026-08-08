@@ -74,7 +74,22 @@ test('profile 1 remains the exact legacy owner and profile 2 packs bounded logic
   assert.doesNotMatch(execute, /LOOP[\s\S]{0,300}pay_workbench_source_build_attempt_execute_v1/);
 });
 
+test('stage and certified-publication finalisation share one rollback and failure owner', () => {
+  const stageStart = execute.indexOf('LOOP');
+  const completion = execute.indexOf('v_completion_result := public.pay_workbench_complete_job', stageStart);
+  const handler = execute.indexOf('EXCEPTION WHEN OTHERS', completion);
+  const failureOwner = execute.indexOf('v_failure_result := public.pay_workbench_fail_job', handler);
+  assert.ok(stageStart > 0 && completion > stageStart && handler > completion && failureOwner > handler);
+  assert.match(execute, /CERTIFIED_SOURCE_PREVIEW_NEWER_WORK_PRESENT[\s\S]+PAY_WORKBENCH_SOURCE_SEQUENCE_CHANGED/);
+  assert.match(execute, /Stage writes, attempt completion and completion\/publication writes have[\s\S]+rolled back together/);
+  assert.match(execute, /STAGE_OR_FINALISATION_ERROR/);
+});
+
 test('profile 2 reconciliation reuses set-owned immutable workspace without changing effect attestation', () => {
+  const carryProcess = reconcile.indexOf('_pay_workbench_case_resolution_carry_process_candidate_v1');
+  const firstCorrectionResidualRead = reconcile.indexOf('v_residuals:=public._ctms_candidate_correction_residuals_v1', carryProcess);
+  assert.ok(carryProcess > 0 && firstCorrectionResidualRead > carryProcess);
+  assert.equal((reconcile.match(/_pay_workbench_case_resolution_carry_process_candidate_v1\s*\(/g) || []).length, 1);
   assert.match(reconcile, /tmp_sync_entitlement_components_v2/);
   assert.match(reconcile, /tmp_sync_settled_basis_by_timesheet_v2/);
   assert.match(reconcile, /v_bounded_scope_ids\s*\) current_fingerprint/);
@@ -188,6 +203,18 @@ test('sealed lifecycle output stages before one final proof and atomic promotion
   assert.match(runtime, /pay_workbench_targeted_delta_scope_finalize_v1/);
   assert.match(helpers, /SET status='SUPERSEDED'[\s\S]+SET status='CURRENT'/);
   assert.match(helpers, /PAY_WORKBENCH_TARGETED_DELTA_FINALIZE_PROOF_STALE/);
+});
+
+test('canonical refresh enqueue establishes the exact pending candidate-state publication owner', () => {
+  const scopePendingAt = enqueue.indexOf('UPDATE public.banking_pay_workbench_session_scope AS session_scope');
+  const stateOwnerAt = enqueue.indexOf('INSERT INTO public.banking_pay_workbench_session_candidate_state AS candidate_state');
+  const auditAt = enqueue.indexOf('PERFORM public._audit_insert', stateOwnerAt);
+  assert.ok(scopePendingAt >= 0);
+  assert.ok(stateOwnerAt > scopePendingAt);
+  assert.ok(auditAt > stateOwnerAt);
+  assert.match(enqueue, /VALUES \(\s*v_session_id,\s*p_candidate_id,\s*'PENDING',\s*COALESCE\(v_source_change_seq, 0\),\s*COALESCE\(v_session_row\.version, 1\),\s*v_job_id/s);
+  assert.match(enqueue, /ON CONFLICT \(session_id, candidate_id\)[\s\S]+source_change_seq = EXCLUDED\.source_change_seq[\s\S]+session_version = EXCLUDED\.session_version[\s\S]+pending_job_id = EXCLUDED\.pending_job_id/);
+  assert.match(enqueue, /WHERE candidate_state\.source_change_seq <= EXCLUDED\.source_change_seq\s+AND candidate_state\.session_version <= EXCLUDED\.session_version/);
 });
 
 test('public signatures and defaults remain unchanged', () => {

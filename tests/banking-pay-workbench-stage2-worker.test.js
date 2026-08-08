@@ -108,6 +108,23 @@ function loadUuidIdentityHelpers() {
   return context.helpers;
 }
 
+function loadDurableWakeHelpers() {
+  const context = {
+    Date,
+    Number,
+    String,
+    Object,
+    Array,
+    Set,
+    Error
+  };
+  vm.runInNewContext(
+    `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('parseBankingPayWorkbenchDrainWakeMessage')}\n${functionBody('enqueueBankingPayWorkbenchDrainWake')}\nthis.helpers = { parseBankingPayWorkbenchDrainWakeMessage, enqueueBankingPayWorkbenchDrainWake };`,
+    context
+  );
+  return { helpers: context.helpers };
+}
+
 function loadScheduledCronEligibility() {
   const context = { String };
   vm.runInNewContext(
@@ -236,6 +253,79 @@ test('one valid claim delivers exactly one exact execute and returns no nonce', 
   assert.equal(result.page_number, 2);
   assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.nonce));
   assert.equal(Object.prototype.hasOwnProperty.call(result, 'next_cursor_json'), false);
+});
+
+test('four-lane runtime reserves a bounded three-second RPC 1 response window', async () => {
+  const calls = [];
+  const result = await loadLaneAttempt()({}, {
+    ...baseOptions(async (_env, fn, args, options) => {
+      calls.push({ fn, args, options });
+      return calls.length === 1 ? claim() : execution();
+    }),
+    claimReserveMs: 3000
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].fn, 'pay_workbench_source_build_attempt_claim_start_v1');
+  assert.equal(calls[0].options.timeoutMs, 3000);
+  assert.equal(calls[1].fn, 'pay_workbench_source_build_attempt_execute_v1');
+  assert.equal(result.minimum_before_claim_ms, 13000);
+  assert.equal(result.claim_timeout_ms, 3000);
+  assert.equal(result.ok, true);
+
+  const drain = functionBody('drainBankingPayWorkbenchJobs');
+  assert.match(drain, /const sourceBuildClaimReserveMs = 3000/);
+  assert.match(drain, /claimReserveMs: sourceBuildClaimReserveMs/);
+});
+
+test('bounded durable Workbench wakes continue a successful nudge without enabling payment continuations', async () => {
+  const { helpers } = loadDurableWakeHelpers();
+  const sent = [];
+  const env = {
+    BANKING_PAY_CONTINUATION_QUEUE: {
+      send: async (body, options) => sent.push({ body, options })
+    }
+  };
+  const enqueued = await helpers.enqueueBankingPayWorkbenchDrainWake(env, {
+    session_id: ids.session.toUpperCase(),
+    candidate_id: ids.candidate.toUpperCase(),
+    actor_user_id: null,
+    wake_depth: 1
+  });
+  assert.equal(enqueued.ok, true);
+  assert.equal(enqueued.enqueued, true);
+  assert.equal(enqueued.wake_depth, 1);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].options.delaySeconds, 1);
+  assert.equal(sent[0].body.message_type, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1');
+  assert.equal(sent[0].body.session_id, ids.session.toLowerCase());
+  assert.equal(sent[0].body.candidate_id, ids.candidate.toLowerCase());
+
+  assert.throws(() => helpers.parseBankingPayWorkbenchDrainWakeMessage({
+    ...sent[0].body,
+    unexpected: true
+  }), /BANKING_PAY_WORKBENCH_DRAIN_WAKE_FIELD_INVALID/);
+  assert.equal(helpers.parseBankingPayWorkbenchDrainWakeMessage({
+    ...sent[0].body,
+    wake_depth: 32
+  }).wake_depth, 32);
+  assert.throws(() => helpers.parseBankingPayWorkbenchDrainWakeMessage({
+    ...sent[0].body,
+    wake_depth: 33
+  }), /BANKING_PAY_WORKBENCH_DRAIN_WAKE_DEPTH_INVALID/);
+
+  const nudge = functionBody('nudgeBankingPayWorkbenchDrain');
+  const queue = functionBody('handleBankingPayContinuationQueue');
+  assert.match(nudge, /if \(canAutoContinueFrom\(finalSummary\)\)/);
+  assert.match(nudge, /await enqueueBankingPayWorkbenchDrainWake/);
+  assert.match(nudge, /durableWakeDepth >= 32/);
+  assert.match(nudge, /cron_remains_recovery_fallback: true/);
+  assert.ok(
+    queue.indexOf('parseBankingPayWorkbenchDrainWakeMessage') < queue.indexOf('readBankingPayContinuationFlag'),
+    'Workbench wake dispatch must be independent of the disabled payment-continuation flag'
+  );
+  assert.match(queue, /durableWakeDepth: workbenchWake\.wake_depth/);
+  assert.match(queue, /message\.ack\(\);\s*return;/);
 });
 
 test('no claim stops after RPC 1', async () => {

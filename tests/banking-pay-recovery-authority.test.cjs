@@ -278,6 +278,25 @@ test('finance adjustment recovery is capped by the selected server preview amoun
   );
 });
 
+test('finance adjustment allocation linking reuses only the exact operation key or an unowned item', () => {
+  const body = functionBody('pay_batch_apply_finance_adjustments', null, financeAdjustmentSql);
+  const linkStart = body.indexOf('WITH allocation_matches AS (');
+  const linkEnd = body.indexOf('SELECT jsonb_build_object(', linkStart);
+  assert.ok(linkStart >= 0 && linkEnd > linkStart, 'the bounded allocation-linking block must exist');
+  const linkBlock = body.slice(linkStart, linkEnd);
+
+  assert.match(
+    linkBlock,
+    /batch_item\.operation_source_key IS NULL\s+OR batch_item\.operation_source_key = allocation_row\.operation_source_key/,
+    'a retry must never take an item already owned by a different operation source key'
+  );
+  assert.match(
+    linkBlock,
+    /WHEN batch_item\.operation_source_key = allocation_row\.operation_source_key THEN 0[\s\S]*WHEN batch_item\.id = allocation_row\.pay_batch_item_id THEN 1/,
+    'an exact idempotent match must win before a remembered or otherwise unowned item'
+  );
+});
+
 test('finance adjustment draft creation freezes correction payout authority into a positive destination group', () => {
   const body = functionBody('pay_batch_apply_finance_adjustments', null, financeAdjustmentSql);
   assert.match(

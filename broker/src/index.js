@@ -17328,6 +17328,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   const requestedSessionIdValue = canonicalBankingPayWorkbenchUuid(requestedSessionId);
   const requestedCandidateIdValue = canonicalBankingPayWorkbenchUuid(requestedCandidateId);
   const requestedActorUserIdValue = canonicalBankingPayWorkbenchUuid(requestedActorUserId);
+  const durableWakeDepth = numberInRange(
+    source.durableWakeDepth ?? source.durable_wake_depth,
+    0,
+    0,
+    32
+  );
   const requestedProfile = upperTrim(source.budgetProfile || source.budget_profile || source.profile || '') || null;
   const budgetProfile = 'NUDGE';
   const requestedOrigin = trimStr(source.origin) || 'BANKING_PAY_WORKBENCH_NUDGE';
@@ -17367,6 +17373,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     worker_candidate_filter: requestedCandidateIdValue,
     worker_actor_filter: requestedActorUserIdValue,
     bounded_continuation: true,
+    durable_wake_depth: durableWakeDepth,
+    durable_wake_max_depth: 32,
     durable_cron_fallback: true,
     cron_remains_recovery_fallback: true,
     scheduled_worker_is_durable_fallback: false,
@@ -18378,6 +18386,66 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           elapsed_ms: Math.max(0, Date.now() - entry.started_at_ms)
         }, autoContinuationSkipReason === 'UNSAFE_OR_NO_PROGRESS' ? 'warn' : 'info');
       }
+
+      let durableWakeResult = {
+        ok: true,
+        enqueued: false,
+        wake_depth: durableWakeDepth,
+        reason: 'NO_MORE_DUE'
+      };
+      if (canAutoContinueFrom(finalSummary)) {
+        if (durableWakeDepth >= 32) {
+          durableWakeResult = {
+            ok: true,
+            enqueued: false,
+            wake_depth: durableWakeDepth,
+            reason: 'MAX_DURABLE_WAKE_DEPTH',
+            cron_fallback_required: true
+          };
+        } else {
+          try {
+            durableWakeResult = await enqueueBankingPayWorkbenchDrainWake(env, {
+              session_id: requestedSessionIdValue,
+              candidate_id: requestedCandidateIdValue,
+              actor_user_id: requestedActorUserIdValue,
+              wake_depth: durableWakeDepth + 1
+            });
+          } catch (durableWakeError) {
+            durableWakeResult = {
+              ok: false,
+              enqueued: false,
+              wake_depth: durableWakeDepth,
+              reason: 'DURABLE_WAKE_ENQUEUE_FAILED',
+              cron_fallback_required: true,
+              error_code: String(durableWakeError?.code || durableWakeError?.name || 'DURABLE_WAKE_ENQUEUE_FAILED').slice(0, 160)
+            };
+          }
+        }
+      }
+      finalSummary = {
+        ...finalSummary,
+        durable_wake_enqueued: durableWakeResult.enqueued === true,
+        durable_wake_depth: Number(durableWakeResult.wake_depth) || durableWakeDepth,
+        durable_wake_max_depth: 32,
+        durable_wake_result: durableWakeResult,
+        cron_remains_recovery_fallback: true
+      };
+      logNudgeDiag(
+        durableWakeResult.enqueued === true
+          ? 'WORKBENCH_DRAIN_DURABLE_WAKE_ENQUEUED'
+          : 'WORKBENCH_DRAIN_DURABLE_WAKE_NOT_ENQUEUED',
+        {
+          enqueued: durableWakeResult.enqueued === true,
+          wake_depth: Number(durableWakeResult.wake_depth) || durableWakeDepth,
+          max_wake_depth: 32,
+          reason: durableWakeResult.reason || null,
+          final_more_due: booleanFrom(finalSummary.more_due),
+          final_made_progress: booleanFrom(finalSummary.made_progress),
+          final_stop_reason: upperTrim(finalSummary.stop_reason || ''),
+          cron_fallback_required: durableWakeResult.cron_fallback_required === true
+        },
+        durableWakeResult.ok === false ? 'warn' : 'info'
+      );
 
       entry.accepting_coalesced_wakes = false;
       entry.final_summary = finalSummary;
@@ -40411,6 +40479,90 @@ function buildBankingPayContinuationMessage(descriptor, sourceOverride) {
   return message;
 }
 
+function parseBankingPayWorkbenchDrainWakeMessage(value) {
+  const source = value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  if (!source || String(source.message_type || '').trim().toUpperCase() !== 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1') return null;
+
+  const allowedKeys = new Set([
+    'message_type',
+    'contract_version',
+    'wake_depth',
+    'session_id',
+    'candidate_id',
+    'actor_user_id',
+    'enqueued_at_utc'
+  ]);
+  for (const key of Object.keys(source)) {
+    if (!allowedKeys.has(key)) {
+      throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_FIELD_INVALID'), {
+        code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_FIELD_INVALID'
+      });
+    }
+  }
+
+  const contractVersion = Number(source.contract_version);
+  const wakeDepth = Number(source.wake_depth);
+  const enqueuedAtMs = Date.parse(String(source.enqueued_at_utc || ''));
+  if (contractVersion !== 1) {
+    throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_VERSION_INVALID'), {
+      code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_VERSION_INVALID'
+    });
+  }
+  if (!Number.isInteger(wakeDepth) || wakeDepth < 1 || wakeDepth > 32) {
+    throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_DEPTH_INVALID'), {
+      code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_DEPTH_INVALID'
+    });
+  }
+  if (!Number.isFinite(enqueuedAtMs)) {
+    throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_TIMESTAMP_INVALID'), {
+      code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_TIMESTAMP_INVALID'
+    });
+  }
+
+  const canonicalOptionalUuid = (raw, code) => {
+    if (raw == null || String(raw).trim() === '') return null;
+    const id = canonicalBankingPayWorkbenchUuid(raw);
+    if (!id) throw Object.assign(new Error(code), { code });
+    return id;
+  };
+  return {
+    message_type: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1',
+    contract_version: 1,
+    wake_depth: wakeDepth,
+    session_id: canonicalOptionalUuid(source.session_id, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_SESSION_INVALID'),
+    candidate_id: canonicalOptionalUuid(source.candidate_id, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_CANDIDATE_INVALID'),
+    actor_user_id: canonicalOptionalUuid(source.actor_user_id, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_ACTOR_INVALID'),
+    enqueued_at_utc: new Date(enqueuedAtMs).toISOString()
+  };
+}
+
+async function enqueueBankingPayWorkbenchDrainWake(env, options = {}) {
+  if (!env || !env.BANKING_PAY_CONTINUATION_QUEUE || typeof env.BANKING_PAY_CONTINUATION_QUEUE.send !== 'function') {
+    throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_QUEUE_MISSING'), {
+      code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_QUEUE_MISSING'
+    });
+  }
+  const source = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  const message = parseBankingPayWorkbenchDrainWakeMessage({
+    message_type: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1',
+    contract_version: 1,
+    wake_depth: source.wake_depth,
+    session_id: source.session_id || null,
+    candidate_id: source.candidate_id || null,
+    actor_user_id: source.actor_user_id || null,
+    enqueued_at_utc: new Date().toISOString()
+  });
+  await env.BANKING_PAY_CONTINUATION_QUEUE.send(message, { delaySeconds: 1 });
+  return {
+    ok: true,
+    enqueued: true,
+    wake_depth: message.wake_depth,
+    delay_seconds: 1,
+    session_scoped: !!message.session_id,
+    reason: 'MORE_DUE_AFTER_BOUNDED_NUDGE'
+  };
+}
+
 async function enqueueBankingPayOperationContinuations(env, descriptors, options = {}) {
   const flag = readBankingPayContinuationFlag(env);
   if (flag !== true) {
@@ -40503,9 +40655,8 @@ async function processBankingPayContinuationMessage(env, message, options = {}) 
   return { ok: workerResult && workerResult.ok !== false, operation: current, worker_result: workerResult, successor };
 }
 
-async function handleBankingPayContinuationQueue(batch, env) {
+async function handleBankingPayContinuationQueue(batch, env, ctx) {
   const messages = batch && Array.isArray(batch.messages) ? batch.messages : [];
-  const flag = readBankingPayContinuationFlag(env);
   if (messages.length !== 1) {
     console.error('[banking-pay-continuation] queue batch-size contract drift', { code: 'BANKING_PAY_CONTINUATION_BATCH_SIZE_INVALID', message_count: Math.min(messages.length, 100) });
     for (const message of messages.slice(0, 100)) message.retry({ delaySeconds: 5 });
@@ -40513,6 +40664,41 @@ async function handleBankingPayContinuationQueue(batch, env) {
   }
   const message = messages[0];
   try {
+    const workbenchWake = parseBankingPayWorkbenchDrainWakeMessage(message.body);
+    if (workbenchWake) {
+      if (!ctx || typeof ctx.waitUntil !== 'function') {
+        throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_CONTEXT_INVALID'), {
+          code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_CONTEXT_INVALID'
+        });
+      }
+      const scheduled = nudgeBankingPayWorkbenchDrain(env, ctx, {
+        origin: `BANKING_PAY_WORKBENCH_DURABLE_WAKE_${workbenchWake.wake_depth}`,
+        reason: 'DURABLE_MORE_DUE_WAKE',
+        budgetProfile: 'NUDGE',
+        sessionId: workbenchWake.session_id || undefined,
+        candidateId: workbenchWake.candidate_id || undefined,
+        actorUserId: workbenchWake.actor_user_id || undefined,
+        durableWakeDepth: workbenchWake.wake_depth,
+        globalTailPass: true
+      });
+      if (!scheduled || scheduled.ok === false) {
+        throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_SCHEDULE_FAILED'), {
+          code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_SCHEDULE_FAILED'
+        });
+      }
+      console.log('[banking-pay-workbench] durable drain wake accepted', {
+        event: 'WORKBENCH_DRAIN_DURABLE_WAKE_ACCEPTED',
+        wake_depth: workbenchWake.wake_depth,
+        scheduled: scheduled.scheduled === true,
+        already_running: scheduled.already_running === true,
+        session_scoped: !!workbenchWake.session_id,
+        cron_remains_recovery_fallback: true
+      });
+      message.ack();
+      return;
+    }
+
+    const flag = readBankingPayContinuationFlag(env);
     buildBankingPayContinuationMessage(message.body, 'QUEUE_DELIVERY_VALIDATION');
     if (flag === false) {
       message.ack();
@@ -182154,7 +182340,13 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   const candidateId = canonicalBankingPayWorkbenchUuid(source.candidateId || source.candidate_id);
   const nowUtc = trim(source.nowUtc || source.now_utc) || null;
   const leaseSeconds = boundedInteger(source.leaseSeconds ?? source.lease_seconds, 25, 25, 3600);
-  const claimReserveMs = boundedInteger(source.claimReserveMs ?? source.claim_reserve_ms, 1000, 1000, 1000);
+  // RPC 1 commits the durable attempt before returning its opaque nonce.  A
+  // one-second transport deadline was too short for four healthy concurrent
+  // lanes: the database could commit after the Worker abandoned the response,
+  // leaving the attempt to expire without RPC 2.  Keep this bounded well below
+  // the statement/lease budgets while allowing the outer drain to reserve a
+  // realistic response window.
+  const claimReserveMs = boundedInteger(source.claimReserveMs ?? source.claim_reserve_ms, 3000, 1000, 5000);
   const executeTimeoutMs = boundedInteger(source.executeTimeoutMs ?? source.execute_timeout_ms, 8000, 1000, 30000);
   const rpcSafetyBufferMs = boundedInteger(source.rpcSafetyBufferMs ?? source.rpc_safety_buffer_ms, 1000, 100, 5000);
   const resultReserveMs = 500;
@@ -182961,7 +183153,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     dbWorkerMinPhaseBudgetMs,
     Math.min(configuredMinimumRpcBudgetMs, safeRpcBudgetCeilingMs)
   );
-  const sourceBuildClaimReserveMs = 1000;
+  // Four lanes may claim concurrently.  Reserve enough time for each RPC 1 to
+  // return its committed nonce; the two-call preflight below still refuses to
+  // claim unless the full execute and response budgets also remain.
+  const sourceBuildClaimReserveMs = 3000;
   const sourceBuildResultReserveMs = 500;
   const sourceBuildCancellationReserveMs = 500;
   const sourceBuildTwoCallMinimumBudgetMs = sourceBuildClaimReserveMs
