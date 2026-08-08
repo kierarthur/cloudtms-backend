@@ -360,7 +360,7 @@
       "schema": "public",
       "name": "pay_workbench_enqueue_stage_continuation",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_job_type text, p_cursor_json jsonb, p_source_job_id uuid, p_result_json jsonb, p_actor_user_id uuid, p_reason text, p_priority integer, p_limit integer",
-      "definition_sha256": "a1f996561278c3beb57cb37a9284d592e54b4a285d5747e1c571a98817a19255",
+      "definition_sha256": "2bda4aa0dc9f900053516c7fc276e77bb80e3a29cbe5985b8326a2c9ba85e4eb",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
