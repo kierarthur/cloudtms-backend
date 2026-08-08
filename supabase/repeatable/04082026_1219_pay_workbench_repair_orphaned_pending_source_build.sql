@@ -30,6 +30,7 @@ DECLARE
   v_post_live_change_seq bigint := 0;
   v_owner_canonical_type text := NULL::text;
   v_owner_valid boolean := false;
+  v_owner_generation_obsolete boolean := false;
   v_owner_reason text := NULL::text;
   v_enqueue_payload jsonb := '{}'::jsonb;
   v_enqueue_result jsonb := '{}'::jsonb;
@@ -205,6 +206,7 @@ BEGIN
     v_post_live_change_seq := 0;
     v_owner_canonical_type := NULL::text;
     v_owner_valid := false;
+    v_owner_generation_obsolete := false;
     v_owner_reason := NULL::text;
     v_enqueue_payload := '{}'::jsonb;
     v_enqueue_result := '{}'::jsonb;
@@ -240,24 +242,35 @@ BEGIN
     v_audit_failed := false;
 
     BEGIN
-      SELECT session_row.*
-      INTO v_session
-      FROM public.banking_pay_workbench_sessions AS session_row
-      WHERE session_row.id = v_candidate.session_id
-      FOR UPDATE;
-
-      IF NOT FOUND
-         OR UPPER(BTRIM(COALESCE(v_session.status, ''))) <> 'OPEN'
-         OR v_session.discarded_at_utc IS NOT NULL THEN
+      IF NOT pg_catalog.pg_try_advisory_xact_lock(pg_catalog.hashtextextended(
+        public._pay_workbench_candidate_serial_key(v_candidate.candidate_id),24062027
+      )) THEN
         v_candidate_skipped := true;
-        v_candidate_action := 'SKIPPED_AFTER_RECHECK';
+        v_candidate_action := 'SKIPPED_CANDIDATE_SERIAL_BUSY';
       ELSE
-        SELECT scope_row.*
-        INTO v_scope
-        FROM public.banking_pay_workbench_session_scope AS scope_row
-        WHERE scope_row.session_id = v_candidate.session_id
-          AND scope_row.candidate_id = v_candidate.candidate_id
+        PERFORM 1
+        FROM private.banking_pay_workbench_candidate_scope_registry AS registry
+        WHERE registry.candidate_id=v_candidate.candidate_id
         FOR UPDATE;
+
+        SELECT session_row.*
+        INTO v_session
+        FROM public.banking_pay_workbench_sessions AS session_row
+        WHERE session_row.id = v_candidate.session_id
+        FOR UPDATE;
+
+        IF NOT FOUND
+           OR UPPER(BTRIM(COALESCE(v_session.status, ''))) <> 'OPEN'
+           OR v_session.discarded_at_utc IS NOT NULL THEN
+          v_candidate_skipped := true;
+          v_candidate_action := 'SKIPPED_AFTER_RECHECK';
+        ELSE
+          SELECT scope_row.*
+          INTO v_scope
+          FROM public.banking_pay_workbench_session_scope AS scope_row
+          WHERE scope_row.session_id = v_candidate.session_id
+            AND scope_row.candidate_id = v_candidate.candidate_id
+          FOR UPDATE;
 
         IF NOT FOUND
            OR UPPER(BTRIM(COALESCE(v_scope.status, ''))) <> 'SOURCE_BUILD_PENDING' THEN
@@ -280,6 +293,10 @@ BEGIN
             WHERE owner_job.id = v_scope.pending_job_id
             FOR UPDATE;
           END IF;
+
+          v_owner_generation_obsolete := UPPER(BTRIM(COALESCE(
+            v_owner.last_error_json->>'code',''
+          )))='ATTEMPT_GENERATION_OBSOLETE';
 
           v_owner_canonical_type := CASE
             WHEN UPPER(BTRIM(COALESCE(v_owner.job_type, ''))) IN (
@@ -655,6 +672,7 @@ BEGIN
                     USING ERRCODE = 'P0001';
                 END IF;
               ELSIF v_owner.id IS NOT NULL
+                    AND v_owner_generation_obsolete IS NOT TRUE
                     AND COALESCE(v_owner.attempt_count, 0) >= COALESCE(v_owner.max_attempts, 8) THEN
                 v_candidate_failure_code := 'WORKBENCH_PENDING_SCOPE_WITHOUT_ACTIVE_JOB';
                 v_candidate_failure_message := 'Candidate refresh could not be recovered because all job attempts were used.';
@@ -739,6 +757,20 @@ BEGIN
                     'replaces_job_id', CASE WHEN v_owner.id IS NULL THEN NULL ELSE v_owner.id::text END,
                     'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
                   );
+
+                  IF v_owner_generation_obsolete
+                     AND lower(BTRIM(COALESCE(
+                       v_owner.payload_json->>'bounded_scope_state_precedes_job','false'
+                     ))) IN ('true','t','1','yes','y','on')
+                     AND COALESCE(v_owner.payload_json->>'scope_change_tx_token','') ~*
+                       '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                     AND COALESCE(v_owner.payload_json->>'scope_change_generation','') ~ '^\d+$' THEN
+                    v_enqueue_payload := v_enqueue_payload || jsonb_build_object(
+                      'bounded_scope_state_precedes_job',true,
+                      'scope_change_tx_token',v_owner.payload_json->>'scope_change_tx_token',
+                      'scope_change_generation',(v_owner.payload_json->>'scope_change_generation')::bigint
+                    );
+                  END IF;
                   v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh(
                     p_snapshot_run_id => v_session.source_snapshot_run_id,
                     p_candidate_id => v_scope.candidate_id,
@@ -928,6 +960,7 @@ BEGIN
             END IF;
           END IF;
         END IF;
+      END IF;
       END IF;
     EXCEPTION WHEN OTHERS THEN
       v_candidate_transition_proven := false;

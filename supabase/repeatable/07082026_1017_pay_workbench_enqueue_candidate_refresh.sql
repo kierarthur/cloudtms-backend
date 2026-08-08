@@ -84,7 +84,11 @@ DECLARE
   v_payload_scope_change_generation bigint := NULL::bigint;
   v_finalized_scope_tx_state text := NULL::text;
   v_finalized_scope_tx_generation bigint := NULL::bigint;
+  v_live_scope_change_generation bigint := 0;
   v_registry_dirty_generation bigint := NULL::bigint;
+  v_registry_source_change_seq_before bigint := 0;
+  v_registry_source_change_seq_after bigint := 0;
+  v_registry_sequence_synchronised boolean := false;
   v_scope_state_generation_match_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
@@ -317,15 +321,20 @@ BEGIN
 
   v_actor_user_id := COALESCE(v_actor_user_id, v_session_row.actor_user_id);
 
-  SELECT COALESCE(change_counter.seq, 0)
-  INTO v_live_change_seq
+  SELECT COALESCE(change_counter.seq, 0),
+         COALESCE(change_counter.scope_change_generation, 0)
+  INTO v_live_change_seq,
+       v_live_scope_change_generation
   FROM public.app_change_counters AS change_counter
-  WHERE change_counter.entity_key = 'pay_candidate:' || p_candidate_id::text;
+  WHERE change_counter.entity_key = 'pay_candidate:' || p_candidate_id::text
+  FOR UPDATE;
 
   IF COALESCE(v_payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$' THEN
     v_payload_source_change_seq := (v_payload_json->>'source_change_seq')::bigint;
   ELSIF COALESCE(v_payload_json->>'source_change_sequence', '') ~ '^[0-9]{1,18}$' THEN
     v_payload_source_change_seq := (v_payload_json->>'source_change_sequence')::bigint;
+  ELSIF COALESCE(v_payload_json->>'latest_source_change_seq', '') ~ '^[0-9]{1,18}$' THEN
+    v_payload_source_change_seq := (v_payload_json->>'latest_source_change_seq')::bigint;
   ELSIF COALESCE(v_payload_json#>>'{source_build,source_change_seq}', '') ~ '^[0-9]{1,18}$' THEN
     v_payload_source_change_seq := (v_payload_json#>>'{source_build,source_change_seq}')::bigint;
   END IF;
@@ -548,22 +557,25 @@ BEGIN
   IF v_scope_state_precedes_job THEN
     SELECT scope_tx.state,
            scope_tx.allocated_generation,
-           registry.dirty_generation
+           registry.dirty_generation,
+           registry.current_source_change_seq
     INTO v_finalized_scope_tx_state,
          v_finalized_scope_tx_generation,
-         v_registry_dirty_generation
+         v_registry_dirty_generation,
+         v_registry_source_change_seq_before
     FROM public.banking_pay_scope_change_transactions AS scope_tx
     JOIN private.banking_pay_workbench_candidate_scope_registry AS registry
       ON registry.candidate_id=p_candidate_id
-    WHERE scope_tx.tx_token=v_scope_change_tx_token;
+    WHERE scope_tx.tx_token=v_scope_change_tx_token
+    FOR UPDATE OF scope_tx,registry;
 
     SELECT count(*)::integer
     INTO v_scope_state_generation_match_count
     FROM unnest(v_bounded_timesheet_ids) AS requested(timesheet_id)
-    JOIN private.banking_pay_workbench_timesheet_scope_state AS scope_state
+     JOIN private.banking_pay_workbench_timesheet_scope_state AS scope_state
       ON scope_state.timesheet_id=requested.timesheet_id
      AND scope_state.candidate_id=p_candidate_id
-     AND scope_state.dirty_generation>=v_payload_scope_change_generation;
+     AND scope_state.dirty_generation=v_payload_scope_change_generation;
 
     IF v_scope_change_tx_token IS NULL
        OR v_payload_scope_change_generation IS NULL
@@ -571,7 +583,9 @@ BEGIN
        OR v_finalized_scope_tx_state IS DISTINCT FROM 'FINALIZED'
        OR v_finalized_scope_tx_generation IS DISTINCT FROM
           v_payload_scope_change_generation
-       OR COALESCE(v_registry_dirty_generation,0) <
+       OR v_live_scope_change_generation IS DISTINCT FROM
+          v_payload_scope_change_generation
+       OR COALESCE(v_registry_dirty_generation,0) IS DISTINCT FROM
           v_payload_scope_change_generation
        OR v_scope_state_generation_match_count IS DISTINCT FROM
           cardinality(v_bounded_timesheet_ids) THEN
@@ -583,11 +597,43 @@ BEGIN
           'payload_scope_change_generation',v_payload_scope_change_generation,
           'transaction_state',v_finalized_scope_tx_state,
           'transaction_generation',v_finalized_scope_tx_generation,
+          'live_scope_change_generation',v_live_scope_change_generation,
           'registry_dirty_generation',v_registry_dirty_generation,
           'requested_timesheet_count',cardinality(v_bounded_timesheet_ids),
           'matched_scope_state_count',v_scope_state_generation_match_count
         )::text;
     END IF;
+
+    UPDATE private.banking_pay_workbench_candidate_scope_registry AS registry
+    SET current_source_change_seq=GREATEST(
+          COALESCE(registry.current_source_change_seq,0),
+          COALESCE(v_source_change_seq,0)
+        ),
+        updated_at_utc=CASE
+          WHEN COALESCE(registry.current_source_change_seq,0)<COALESCE(v_source_change_seq,0)
+            THEN clock_timestamp()
+          ELSE registry.updated_at_utc
+        END
+    WHERE registry.candidate_id=p_candidate_id
+      AND registry.dirty_generation=v_payload_scope_change_generation
+    RETURNING registry.current_source_change_seq
+    INTO v_registry_source_change_seq_after;
+
+    IF NOT FOUND
+       OR COALESCE(v_registry_source_change_seq_after,0)<COALESCE(v_source_change_seq,0) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_ACCEPTED_SOURCE_SEQUENCE_NOT_SYNCHRONISED'
+        USING ERRCODE='40001', DETAIL=jsonb_build_object(
+          'code','PAY_WORKBENCH_ACCEPTED_SOURCE_SEQUENCE_NOT_SYNCHRONISED',
+          'candidate_id',p_candidate_id,
+          'accepted_source_change_seq',v_source_change_seq,
+          'registry_source_change_seq_before',v_registry_source_change_seq_before,
+          'registry_source_change_seq_after',v_registry_source_change_seq_after,
+          'scope_change_generation',v_payload_scope_change_generation
+        )::text;
+    END IF;
+    v_registry_sequence_synchronised :=
+      COALESCE(v_registry_source_change_seq_after,0)>
+      COALESCE(v_registry_source_change_seq_before,0);
 
     v_scope_invalidation_result := jsonb_build_object(
       'ok',true,
@@ -596,6 +642,10 @@ BEGIN
       'scope_change_generation',v_finalized_scope_tx_generation,
       'candidate_count',1,
       'timesheet_count',cardinality(v_bounded_timesheet_ids),
+      'accepted_source_change_seq',v_source_change_seq,
+      'registry_source_change_seq_before',v_registry_source_change_seq_before,
+      'registry_source_change_seq_after',v_registry_source_change_seq_after,
+      'registry_sequence_synchronised',v_registry_sequence_synchronised,
       'reason',COALESCE(v_reason,'CANDIDATE_REFRESH_ENQUEUED')
     );
   ELSE
@@ -606,8 +656,34 @@ BEGIN
         ELSE v_bounded_timesheet_ids END,
       COALESCE(v_reason,'CANDIDATE_REFRESH_ENQUEUED'),
       v_scope_change_tx_token,
-      v_payload_json||jsonb_build_object('skip_candidate_job_enqueue',true)
+      v_payload_json||jsonb_build_object(
+        'skip_candidate_job_enqueue',true,
+        'source_change_seq',v_source_change_seq,
+        'source_change_sequence',v_source_change_seq,
+        'latest_source_change_seq',v_source_change_seq
+      )
     );
+
+    SELECT registry.dirty_generation,
+           registry.current_source_change_seq
+    INTO v_registry_dirty_generation,
+         v_registry_source_change_seq_after
+    FROM private.banking_pay_workbench_candidate_scope_registry AS registry
+    WHERE registry.candidate_id=p_candidate_id
+    FOR UPDATE;
+
+    IF NOT FOUND
+       OR COALESCE(v_registry_source_change_seq_after,0)<COALESCE(v_source_change_seq,0) THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_ACCEPTED_SOURCE_SEQUENCE_NOT_SYNCHRONISED'
+        USING ERRCODE='40001', DETAIL=jsonb_build_object(
+          'code','PAY_WORKBENCH_ACCEPTED_SOURCE_SEQUENCE_NOT_SYNCHRONISED',
+          'candidate_id',p_candidate_id,
+          'accepted_source_change_seq',v_source_change_seq,
+          'registry_source_change_seq_after',v_registry_source_change_seq_after,
+          'registry_dirty_generation',v_registry_dirty_generation
+        )::text;
+    END IF;
+    v_registry_sequence_synchronised := true;
   END IF;
 
   v_payload_shadow_compare_required := lower(BTRIM(COALESCE(
@@ -2144,6 +2220,8 @@ BEGIN
     'candidate_id', p_candidate_id::text,
     'session_version', COALESCE(v_session_row.version, 0),
     'source_change_seq', COALESCE(v_source_change_seq, 0),
+    'registry_source_change_seq', COALESCE(v_registry_source_change_seq_after, v_source_change_seq, 0),
+    'registry_sequence_synchronised', COALESCE(v_registry_sequence_synchronised, false),
     'source_build_run_id', CASE WHEN v_source_build_run_id IS NULL THEN NULL ELSE v_source_build_run_id::text END,
     'projection_run_id', CASE WHEN v_projection_run_id IS NULL THEN NULL ELSE v_projection_run_id::text END,
     'dedupe_key', v_dedupe_key,

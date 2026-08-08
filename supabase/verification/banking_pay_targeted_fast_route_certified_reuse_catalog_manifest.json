@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 23,
+  "function_count": 24,
   "functions": [
     {
       "schema": "private",
@@ -298,7 +298,7 @@
       "schema": "public",
       "name": "pay_workbench_enqueue_candidate_refresh",
       "identity_arguments": "p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb",
-      "definition_sha256": "384ac8ebb3fab696730b566c072beded61348f19d3ce2dd3b7930d9d8f8a9c25",
+      "definition_sha256": "d32643af22d46cb1f4c5ac42fd371612d2c14cfabdaa8dc01c72152a82b217c8",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -605,9 +605,37 @@
     },
     {
       "schema": "public",
+      "name": "pay_workbench_repair_orphaned_pending_source_build",
+      "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_limit integer, p_now_utc timestamp with time zone, p_reason text",
+      "definition_sha256": "d47018c4e5ef20a0f051ea4d4acb40ead6eb635120c314d059a1ceb5d97e885f",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql"
+      ]
+    },
+    {
+      "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "08538b8909e1685159f6509bc8a5a62bbf58de49bf26ceb9a20bae3ac380ca79",
+      "definition_sha256": "98d0681da1dd51d47940a566eb4eebf9a49a574fa56954e3b70334cffa5a0f3e",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

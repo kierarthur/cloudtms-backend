@@ -68,6 +68,10 @@ DECLARE
   v_execution_profile_version integer:=1;
   v_reconciliation_optimization_version integer:=0;
   v_settings_json jsonb:='{}'::jsonb;
+  v_obsolete_repair_result jsonb:='{}'::jsonb;
+  v_obsolete_successor_job_id uuid:=NULL::uuid;
+  v_obsolete_active_successor_proven boolean:=false;
+  v_obsolete_terminal_current_proven boolean:=false;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -531,8 +535,103 @@ BEGIN
           last_error_json=jsonb_build_object('code','ATTEMPT_GENERATION_OBSOLETE'),
           updated_at_utc=clock_timestamp()
       WHERE id=v_job.id AND status='QUEUED';
+
+      v_obsolete_repair_result:=public.pay_workbench_repair_orphaned_pending_source_build(
+        p_session_id=>v_job.session_id,
+        p_candidate_id=>v_job.candidate_id,
+        p_limit=>1,
+        p_now_utc=>v_database_now,
+        p_reason=>'ATTEMPT_GENERATION_OBSOLETE_SUCCESSOR'
+      );
+
+      IF jsonb_typeof(v_obsolete_repair_result) IS DISTINCT FROM 'object'
+         OR lower(BTRIM(COALESCE(v_obsolete_repair_result->>'ok','false'))) <> 'true'
+         OR COALESCE((v_obsolete_repair_result->>'unresolved_count')::integer,0) <> 0
+         OR lower(BTRIM(COALESCE(
+              v_obsolete_repair_result->>'all_state_transitions_proven','false'
+            ))) <> 'true' THEN
+        RAISE EXCEPTION 'SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN'
+          USING ERRCODE='40001',DETAIL=jsonb_build_object(
+            'code','SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN',
+            'job_id',v_job.id,
+            'candidate_id',v_job.candidate_id,
+            'repair_result_code',v_obsolete_repair_result->>'repair_code'
+          )::text;
+      END IF;
+
+      SELECT pending_scope.pending_job_id,
+             EXISTS (
+               SELECT 1
+               FROM public.banking_pay_workbench_jobs AS successor_job
+               JOIN public.banking_pay_workbench_session_candidate_state AS successor_state
+                 ON successor_state.session_id=successor_job.session_id
+                AND successor_state.candidate_id=successor_job.candidate_id
+               WHERE successor_job.id=pending_scope.pending_job_id
+                 AND successor_job.session_id=v_job.session_id
+                 AND successor_job.candidate_id=v_job.candidate_id
+                 AND successor_job.job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'
+                 AND successor_job.status IN ('QUEUED','RUNNING')
+                 AND CASE
+                       WHEN COALESCE(successor_job.payload_json->>'source_change_seq','') ~ '^\d+$'
+                         THEN (successor_job.payload_json->>'source_change_seq')::bigint
+                       ELSE NULL::bigint
+                     END=successor_registry.current_source_change_seq
+                 AND COALESCE(
+                       successor_job.scope_change_generation,
+                       CASE
+                         WHEN COALESCE(successor_job.payload_json->>'scope_change_generation','') ~ '^\d+$'
+                           THEN (successor_job.payload_json->>'scope_change_generation')::bigint
+                         ELSE NULL::bigint
+                       END,
+                       successor_registry.dirty_generation
+                     )=successor_registry.dirty_generation
+                 AND successor_state.status='PENDING'
+                 AND successor_state.pending_job_id=successor_job.id
+                 AND successor_state.source_change_seq=successor_registry.current_source_change_seq
+                 AND successor_state.session_version=v_session.version
+             ),
+             (
+               pending_scope.status IN ('READY','MATERIALISED','MATERIALIZED','SOURCE_EMPTY')
+               AND COALESCE(pending_scope.dirty,false) IS NOT TRUE
+               AND pending_scope.pending_job_id IS NULL
+               AND COALESCE(pending_scope.certified_preview_publication_required,false) IS TRUE
+               AND COALESCE(pending_scope.certified_preview_publication_parity_ok,false) IS TRUE
+               AND pending_scope.certified_preview_publication_session_version=v_session.version
+               AND pending_scope.certified_preview_publication_source_change_seq=
+                   successor_registry.current_source_change_seq
+             )
+      INTO v_obsolete_successor_job_id,
+           v_obsolete_active_successor_proven,
+           v_obsolete_terminal_current_proven
+      FROM public.banking_pay_workbench_session_scope AS pending_scope
+      JOIN private.banking_pay_workbench_candidate_scope_registry AS successor_registry
+        ON successor_registry.candidate_id=pending_scope.candidate_id
+      WHERE pending_scope.session_id=v_job.session_id
+        AND pending_scope.candidate_id=v_job.candidate_id;
+
+      IF COALESCE(v_obsolete_active_successor_proven,false) IS NOT TRUE
+         AND COALESCE(v_obsolete_terminal_current_proven,false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN'
+          USING ERRCODE='40001',DETAIL=jsonb_build_object(
+            'code','SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN',
+            'job_id',v_job.id,
+            'candidate_id',v_job.candidate_id,
+            'successor_job_id',v_obsolete_successor_job_id,
+            'repair_result_code',v_obsolete_repair_result->>'repair_code'
+          )::text;
+      END IF;
+
       RETURN jsonb_build_object('ok',true,'claimed',false,
-        'result_code','ATTEMPT_GENERATION_OBSOLETE');
+        'result_code','ATTEMPT_GENERATION_OBSOLETE',
+        'successor_resolution',jsonb_build_object(
+          'required',true,
+          'proven',true,
+          'successor_created_or_reused',v_obsolete_active_successor_proven,
+          'successor_job_id',v_obsolete_successor_job_id,
+          'current_terminal_authority',v_obsolete_terminal_current_proven,
+          'source_change_seq',v_registry.current_source_change_seq,
+          'generation',v_registry.dirty_generation
+        ));
     END IF;
     v_captured_generation:=v_build.captured_candidate_generation;
     v_source_change_seq:=v_build.source_change_seq;
