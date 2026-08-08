@@ -178,16 +178,13 @@ test('aggregate database worker is wrapped without changing its core drain funct
   );
 });
 
-test('draft creation guard uses only the submitted scope and keeps pay channels independent', () => {
+test('draft creation guard accepts current pre-draft certified recovery allocation and keeps legacy rows fail-closed', () => {
   const selectedContractsIndex = workerSource.indexOf('const selectedPreviewRowContracts = effectiveDraftRowIds.map');
-  const recoveryGuardIndex = workerSource.indexOf('const recoveryHeadroomByCandidateChannel = new Map()', selectedContractsIndex);
+  const recoveryGuardIndex = workerSource.indexOf('evaluateCreateDraftRecoveryHeadroom(selectedPreviewRowContracts)', selectedContractsIndex);
   assert.ok(selectedContractsIndex >= 0 && recoveryGuardIndex > selectedContractsIndex);
   assert.match(workerSource, /line_type: lineType \|\| null/);
-  assert.match(workerSource, /const groupKey = `\$\{candidateId\}\|\$\{payChannel\}`/);
-  assert.match(workerSource, /const amountPence = Math\.round\(amount \* 100\)/);
-  assert.match(workerSource, /if \(amountPence > 0\) current\.positive_pence \+= amountPence/);
-  assert.match(workerSource, /if \(amountPence < 0 && financeRecoveryLineTypes\.has\(lineType\)\)/);
-  assert.match(workerSource, /if \(totals\.recovery_pence > totals\.positive_pence\)/);
+  assert.match(workerSource, /recoverable_this_pay_run_ex_vat: numericOrNull\(rowJson\.recoverable_this_pay_run_ex_vat\)/);
+  assert.match(workerSource, /policy_x_authority_scope: upperTrim\(rowJson\.policy_x_authority_scope \|\| ''\) \|\| null/);
   assert.match(workerSource, /BANKING_PAY_CREATE_DRAFT_RECOVERY_HEADROOM_INVALID/);
   assert.match(workerSource, /no_batch_created: true/);
 });

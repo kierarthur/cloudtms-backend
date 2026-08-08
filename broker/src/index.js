@@ -58,6 +58,7 @@ import {
   isTestSameWeekPayeOverrideOnlyToken,
   testPaymentScheduleTokenMatchesRequest
 } from './test-csv-execution-bypass.js';
+import { evaluateCreateDraftRecoveryHeadroom } from './banking-pay-create-draft-headroom.js';
 import {
   createReadyInvoiceDocumentLink,
   handleInvoiceAsyncHttpRequest
@@ -30104,7 +30105,9 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
         key_value: keyValue || null
       },
       economic_keyspace: 'timesheet_id,key_type,key_value',
-      policy_x_authority_scope: 'PRE_DRAFT_LIVE_TRUTH'
+      recoverable_this_pay_run_ex_vat: numericOrNull(rowJson.recoverable_this_pay_run_ex_vat),
+      nominal_due_amount_ex_vat: numericOrNull(rowJson.nominal_due_amount_ex_vat),
+      policy_x_authority_scope: upperTrim(rowJson.policy_x_authority_scope || '') || null
     };
   };
   const buildCreateDraftEconomicKeyContract = (contractLike) => {
@@ -31527,48 +31530,10 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     });
   }
 
-  const financeRecoveryLineTypes = new Set([
-    'MANUAL_DEBT_RECOVERY',
-    'OVERPAYMENT_RECOVERY',
-    'LOAN_REPAYMENT',
-    'PAYMENT_ADVANCE_REPAYMENT'
-  ]);
-  const recoveryHeadroomByCandidateChannel = new Map();
-  for (const contract of selectedPreviewRowContracts) {
-    const candidateId = trimStr(contract && contract.candidate_id);
-    const payChannel = upperTrim(contract && contract.pay_channel);
-    const lineType = upperTrim(contract && contract.line_type);
-    const amount = Number(contract && contract.amount_ex_vat);
-    if (!uuidRe.test(candidateId) || !['PAYE', 'UMBRELLA'].includes(payChannel) || !Number.isFinite(amount)) continue;
-    const groupKey = `${candidateId}|${payChannel}`;
-    const current = recoveryHeadroomByCandidateChannel.get(groupKey) || {
-      candidate_id: candidateId,
-      pay_channel: payChannel,
-      positive_pence: 0,
-      recovery_pence: 0,
-      recovery_row_count: 0
-    };
-    const amountPence = Math.round(amount * 100);
-    if (amountPence > 0) current.positive_pence += amountPence;
-    if (amountPence < 0 && financeRecoveryLineTypes.has(lineType)) {
-      current.recovery_pence += Math.abs(amountPence);
-      current.recovery_row_count += 1;
-    }
-    recoveryHeadroomByCandidateChannel.set(groupKey, current);
-  }
-
-  const invalidRecoveryHeadroomGroups = [];
-  for (const totals of recoveryHeadroomByCandidateChannel.values()) {
-    if (totals.recovery_pence > totals.positive_pence) {
-      invalidRecoveryHeadroomGroups.push({
-        candidate_id: totals.candidate_id,
-        pay_channel: totals.pay_channel,
-        retained_selected_positive_pay_ex_vat: totals.positive_pence / 100,
-        selected_finance_recovery_ex_vat: totals.recovery_pence / 100,
-        selected_finance_recovery_row_count: Math.max(0, Math.trunc(Number(totals.recovery_row_count) || 0))
-      });
-    }
-  }
+  const recoveryHeadroom = evaluateCreateDraftRecoveryHeadroom(selectedPreviewRowContracts);
+  const invalidRecoveryHeadroomGroups = Array.isArray(recoveryHeadroom.invalid_groups)
+    ? recoveryHeadroom.invalid_groups
+    : [];
 
   if (invalidRecoveryHeadroomGroups.length > 0) {
     const invalidCandidateIds = uniqueStrings(invalidRecoveryHeadroomGroups.map((group) => group.candidate_id));
