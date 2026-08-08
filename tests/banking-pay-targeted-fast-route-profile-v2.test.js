@@ -90,6 +90,22 @@ test('profile 2 reconciliation reuses set-owned immutable workspace without chan
   assert.doesNotMatch(reconcile, /\bfact\.id\b/);
 });
 
+test('presentation allocation failure reports bounded aggregate categories only', () => {
+  const mismatchRaise = reconcile.match(
+    /RAISE EXCEPTION 'PAY_WORKBENCH_PRESENTATION_ALLOCATION_AUTHORITY_MISMATCH %',[\s\S]{0,200}USING ERRCODE='23514'/i,
+  )?.[0] ?? '';
+
+  assert.match(reconcile, /v_presentation_mismatch_detail\s+jsonb/i);
+  assert.match(reconcile, /missing_fact_target_count/);
+  assert.match(reconcile, /missing_state_count/);
+  assert.match(reconcile, /state_multiplicity_mismatch_count/);
+  assert.match(reconcile, /truth_amount_mismatch_count/);
+  assert.match(reconcile, /allocation_sum_mismatch_count/);
+  assert.match(reconcile, /PRESENTATION_ALLOCATION_AUTHORITY_MISMATCH[\s\S]+v_presentation_mismatch_detail::text/i);
+  assert.match(mismatchRaise, /v_presentation_mismatch_detail::text/i);
+  assert.doesNotMatch(mismatchRaise, /(timesheet_id|truth_ex_vat|amount_ex_vat|digest)/i);
+});
+
 test('correction residuals reuse only exact entitlement inputs inside one valid profile-2 build transaction', () => {
   assert.match(entitlementCache, /private\.pay_workbench_current_entitlement_components_cached_v1/);
   assert.match(entitlementCache, /ARRAY_AGG\(DISTINCT input_id ORDER BY input_id\)/);

@@ -247,6 +247,7 @@ declare
   v_observed_effect_count integer := 0;
   v_observed_effect_digest text := md5('');
   v_effect_mismatch_detail jsonb := '{}'::jsonb;
+  v_presentation_mismatch_detail jsonb := '{}'::jsonb;
   v_exception_detail text := NULL::text;
   v_exception_context text := NULL::text;
   v_effect_capture_mode boolean := lower(COALESCE(current_setting('cloudtms.pay_workbench_effect_capture_mode',true),''))='capture';
@@ -4372,39 +4373,56 @@ begin
   -- ready + blocked + indefinitely-hidden allocation must also reconstruct the
   -- complete private economic truth.  Case-resolution presentation is an
   -- overlay and is intentionally not added to that economic total.
-  IF EXISTS(
-    WITH economic_target AS (
-      SELECT DISTINCT component.timesheet_id
-      FROM pg_temp.tmp_sync_authoritative_components component
-    ), fact_truth AS (
-      SELECT target.timesheet_id,
-        ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS truth_ex_vat
-      FROM economic_target target
-      LEFT JOIN pg_temp.tmp_sync_authoritative_components component
-        ON component.timesheet_id=target.timesheet_id
-      GROUP BY target.timesheet_id
-    ), state_row AS (
-      SELECT state.timesheet_id,COUNT(*) AS state_count,
-        MIN(state.amount_ex_vat) AS amount_ex_vat,
-        MIN(state.ready_section_amount_ex_vat) AS ready_amount,
-        MIN(state.blocked_section_amount_ex_vat) AS blocked_amount,
-        MIN(state.hidden_indefinite_segment_amount_ex_vat) AS hidden_segment_amount,
-        MIN(state.hidden_expense_amount_ex_vat) AS hidden_expense_amount
-      FROM pg_temp.canonical_timesheet_presentation_state state
-      WHERE state.candidate_id=v_bounded_build.candidate_id
-      GROUP BY state.timesheet_id
-    )
-    SELECT 1
+  WITH economic_target AS (
+    SELECT DISTINCT component.timesheet_id
+    FROM pg_temp.tmp_sync_authoritative_components component
+  ), fact_truth AS (
+    SELECT target.timesheet_id,
+      ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS truth_ex_vat
+    FROM economic_target target
+    LEFT JOIN pg_temp.tmp_sync_authoritative_components component
+      ON component.timesheet_id=target.timesheet_id
+    GROUP BY target.timesheet_id
+  ), state_row AS (
+    SELECT state.timesheet_id,COUNT(*) AS state_count,
+      MIN(state.amount_ex_vat) AS amount_ex_vat,
+      MIN(state.ready_section_amount_ex_vat) AS ready_amount,
+      MIN(state.blocked_section_amount_ex_vat) AS blocked_amount,
+      MIN(state.hidden_indefinite_segment_amount_ex_vat) AS hidden_segment_amount,
+      MIN(state.hidden_expense_amount_ex_vat) AS hidden_expense_amount
+    FROM pg_temp.canonical_timesheet_presentation_state state
+    WHERE state.candidate_id=v_bounded_build.candidate_id
+    GROUP BY state.timesheet_id
+  ), mismatch AS (
+    SELECT
+      fact.timesheet_id IS NULL AS missing_fact_target,
+      state.timesheet_id IS NULL AS missing_state,
+      COALESCE(state.state_count,0)<>1 AS state_multiplicity_mismatch,
+      ABS(COALESCE(state.amount_ex_vat,0)-COALESCE(fact.truth_ex_vat,0))>0.01
+        AS truth_amount_mismatch,
+      ABS(COALESCE(state.amount_ex_vat,0)-(
+        COALESCE(state.ready_amount,0)+COALESCE(state.blocked_amount,0)
+        +COALESCE(state.hidden_segment_amount,0)+COALESCE(state.hidden_expense_amount,0)))>0.01
+        AS allocation_sum_mismatch
     FROM fact_truth fact
     FULL OUTER JOIN state_row state USING(timesheet_id)
-    WHERE fact.timesheet_id IS NULL OR state.timesheet_id IS NULL OR state.state_count<>1
-       OR ABS(COALESCE(state.amount_ex_vat,0)-COALESCE(fact.truth_ex_vat,0))>0.01
-       OR ABS(COALESCE(state.amount_ex_vat,0)-(
-         COALESCE(state.ready_amount,0)+COALESCE(state.blocked_amount,0)
-         +COALESCE(state.hidden_segment_amount,0)+COALESCE(state.hidden_expense_amount,0)))>0.01
-    LIMIT 1
-  ) THEN
-    RAISE EXCEPTION 'PAY_WORKBENCH_PRESENTATION_ALLOCATION_AUTHORITY_MISMATCH'
+  )
+  SELECT jsonb_build_object(
+    'mismatch_count',count(*) FILTER (
+      WHERE missing_fact_target OR missing_state OR state_multiplicity_mismatch
+         OR truth_amount_mismatch OR allocation_sum_mismatch),
+    'missing_fact_target_count',count(*) FILTER (WHERE missing_fact_target),
+    'missing_state_count',count(*) FILTER (WHERE missing_state),
+    'state_multiplicity_mismatch_count',count(*) FILTER (WHERE state_multiplicity_mismatch),
+    'truth_amount_mismatch_count',count(*) FILTER (WHERE truth_amount_mismatch),
+    'allocation_sum_mismatch_count',count(*) FILTER (WHERE allocation_sum_mismatch)
+  )
+  INTO v_presentation_mismatch_detail
+  FROM mismatch;
+
+  IF COALESCE((v_presentation_mismatch_detail->>'mismatch_count')::integer,0)>0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_PRESENTATION_ALLOCATION_AUTHORITY_MISMATCH %',
+      v_presentation_mismatch_detail::text
       USING ERRCODE='23514';
   END IF;
   IF EXISTS(
