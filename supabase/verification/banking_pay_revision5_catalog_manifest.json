@@ -1002,7 +1002,8 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/08082026_0820_pay_batch_freshness_scope_seed_active_items.sql"
+        "supabase/repeatable/08082026_0820_pay_batch_freshness_scope_seed_active_items.sql",
+        "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"
       ]
     }
   ]
