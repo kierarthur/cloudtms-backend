@@ -81,6 +81,7 @@ test('durable continuation uses the existing bounded queue wake and cron remains
   assert.match(worker, /MAX_DURABLE_WAKE_DEPTH/);
   assert.match(worker, /cron_fallback_required: true/);
   assert.match(wrangler, /binding = "BANKING_PAY_CONTINUATION_QUEUE"/);
+  assert.match(wrangler, /BANKING_PAY_CONTINUATION_ENABLED = "true"/);
   assert.match(wrangler, /queue = "test-cloudtms-banking-pay-continuation"/);
   assert.match(wrangler, /max_batch_size = 1/);
 });
