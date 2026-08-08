@@ -37,6 +37,7 @@ test('orphan repair is bounded to expired deterministic source-stage failures', 
   assert.match(repair, /job\.private_stage=attempt\.private_stage/i);
   assert.match(repair, /job\.last_error_json->>'code'='23514'/i);
   assert.match(repair, /SET attempt_status='FAILED'/i);
+  assert.match(repair, /error_class='DETERMINISTIC_STAGE_ERROR'/i);
   assert.doesNotMatch(repair, /UPDATE\s+public\.banking_pay_workbench_jobs/i);
   assert.doesNotMatch(repair, /UPDATE\s+private\.banking_pay_workbench_economic_builds/i);
   assert.doesNotMatch(repair, /DELETE\s+FROM/i);

@@ -46,7 +46,7 @@ BEGIN
   SET attempt_status='FAILED',
       failed_at_utc=clock_timestamp(),
       result_code='REQUEUED_STAGE_ERROR_ATTEMPT_REPAIRED',
-      error_class='23514',
+      error_class='DETERMINISTIC_STAGE_ERROR',
       error_json=jsonb_build_object(
         'code','REQUEUED_STAGE_ERROR_ATTEMPT_REPAIRED',
         'job_error_code','23514'
