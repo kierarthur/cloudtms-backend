@@ -7141,3 +7141,4 @@ BEGIN
   );
 END;
 $function$;
+-- Reasserted after the final removal of the legacy monolith's prepare drop.

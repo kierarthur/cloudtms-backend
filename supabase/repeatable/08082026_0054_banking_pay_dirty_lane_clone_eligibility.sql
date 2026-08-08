@@ -1390,3 +1390,4 @@ $function$;
 ALTER FUNCTION public.pay_workbench_session_clone_eligibility_v1(uuid,uuid,uuid,jsonb) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_workbench_session_clone_eligibility_v1(uuid,uuid,uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.pay_workbench_session_clone_eligibility_v1(uuid,uuid,uuid,jsonb) TO postgres,authenticated,service_role;
+-- Reasserted after the final removal of the legacy monolith's prepare drop.
