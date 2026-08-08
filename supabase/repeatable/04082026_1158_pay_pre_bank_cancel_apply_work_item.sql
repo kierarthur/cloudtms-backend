@@ -1137,6 +1137,41 @@ END IF;
     RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
   END IF;
 
+  -- A scheduled no-bank/local-manual execution remains RUNNING only so its
+  -- durable runner can wake at the scheduled time. Once this work item has
+  -- re-proved that no provider or execution-commit evidence exists, retire
+  -- that exact wait before changing any frozen payment scope. Provider-bound
+  -- phases and every ambiguous execution state remain untouched.
+  UPDATE public.banking_pay_operations AS scheduled_local_operation
+  SET status = 'CANCELLED',
+      phase = 'COMPLETE',
+      runner_state = 'CANCELLED',
+      requires_user_action = false,
+      result_json = COALESCE(scheduled_local_operation.result_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'code', 'SCHEDULED_LOCAL_EXECUTION_CANCELLED_BEFORE_APPLY',
+          'correction_request_id', v_work_item.correction_request_id,
+          'work_item_id', p_work_item_id,
+          'provider_submission_attempted', false,
+          'submitted_to_bank', false
+        ),
+      completed_at_utc = COALESCE(scheduled_local_operation.completed_at_utc, v_now),
+      lease_owner = NULL,
+      lease_expires_at_utc = NULL,
+      locked_by = NULL,
+      lock_expires_at_utc = NULL,
+      run_after_utc = NULL,
+      updated_at_utc = v_now,
+      resume_reason = 'SCHEDULED_LOCAL_EXECUTION_CANCELLED_BEFORE_APPLY'
+  WHERE scheduled_local_operation.pay_batch_id = v_work_item.pay_batch_id
+    AND scheduled_local_operation.operation_type = 'PAYMENT_EXECUTE'
+    AND scheduled_local_operation.status IN ('QUEUED', 'RUNNING', 'PROCESSING', 'CLAIMED', 'IN_PROGRESS')
+    AND scheduled_local_operation.phase = 'SCHEDULE_PAYMENT'
+    AND scheduled_local_operation.resume_reason IN (
+      'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT',
+      'WAIT_FOR_SCHEDULED_LOCAL_MANUAL_SETTLEMENT'
+    );
+
   v_is_authorised_or_scheduled_batch := upper(btrim(COALESCE(v_batch.status, ''))) IN (
     'AWAITING_AUTHORISATION',
     'AUTHORISED_FOR_PAYMENT',

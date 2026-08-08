@@ -125124,7 +125124,15 @@ BEGIN
   FROM public.banking_pay_operations AS provider_operations
   WHERE provider_operations.pay_batch_id = p_pay_batch_id
     AND provider_operations.operation_type IN ('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS')
-    AND provider_operations.status IN ('QUEUED', 'RUNNING', 'PROCESSING', 'CLAIMED', 'IN_PROGRESS');
+    AND provider_operations.status IN ('QUEUED', 'RUNNING', 'PROCESSING', 'CLAIMED', 'IN_PROGRESS')
+    AND NOT (
+      provider_operations.operation_type = 'PAYMENT_EXECUTE'
+      AND provider_operations.phase = 'SCHEDULE_PAYMENT'
+      AND provider_operations.resume_reason IN (
+        'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT',
+        'WAIT_FOR_SCHEDULED_LOCAL_MANUAL_SETTLEMENT'
+      )
+    );
 
   v_transfer_count := COALESCE(v_transfer_count, 0);
   v_transfer_final_count := COALESCE(v_transfer_final_count, 0);

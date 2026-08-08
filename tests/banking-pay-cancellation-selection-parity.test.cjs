@@ -28,6 +28,12 @@ const processChunk = fs.readFileSync(path.join(
   'repeatable',
   '04082026_1209_pay_payment_correction_process_chunk.sql'
 ), 'utf8');
+const preBankCancelApply = fs.readFileSync(path.join(
+  root,
+  'supabase',
+  'repeatable',
+  '04082026_1158_pay_pre_bank_cancel_apply_work_item.sql'
+), 'utf8');
 const catalogueFunctions = fs.readFileSync(path.join(
   root,
   'supabase',
@@ -482,6 +488,36 @@ test('locally prepared pending transfers remain cancellable until provider evide
     catalogueFunctions,
     /CASE WHEN v_local_prepared_only THEN 0 ELSE v_transfer_pending_count END/
   );
+});
+
+test('scheduled no-bank waits are cancellable but provider execution phases remain blockers', () => {
+  const openProviderInto = catalogueFunctions.indexOf('INTO v_open_provider_submit_count');
+  const openProviderStart = catalogueFunctions.lastIndexOf('SELECT count(*)::integer', openProviderInto);
+  const openProviderEnd = catalogueFunctions.indexOf('v_transfer_count := COALESCE', openProviderInto);
+  assert.notEqual(openProviderStart, -1);
+  assert.notEqual(openProviderEnd, -1);
+  const openProviderAuthority = catalogueFunctions.slice(openProviderStart, openProviderEnd);
+  assert.match(openProviderAuthority, /operation_type IN \('PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'\)/);
+  assert.match(openProviderAuthority, /status IN \('QUEUED', 'RUNNING', 'PROCESSING', 'CLAIMED', 'IN_PROGRESS'\)/);
+  assert.match(openProviderAuthority, /AND NOT \([\s\S]*phase = 'SCHEDULE_PAYMENT'[\s\S]*'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT'[\s\S]*'WAIT_FOR_SCHEDULED_LOCAL_MANUAL_SETTLEMENT'[\s\S]*\)/);
+  assert.doesNotMatch(openProviderAuthority, /SUBMIT_PROVIDER_TRANSFERS|SEND_PROVIDER_CHUNK/);
+
+  const evidenceFence = preBankCancelApply.indexOf('IF v_has_bank_submission_evidence THEN');
+  const scheduledRetirement = preBankCancelApply.indexOf('UPDATE public.banking_pay_operations AS scheduled_local_operation');
+  const firstFrozenMutation = preBankCancelApply.indexOf('UPDATE public.pay_batch_items', scheduledRetirement);
+  assert.notEqual(evidenceFence, -1);
+  assert.notEqual(scheduledRetirement, -1);
+  assert.notEqual(firstFrozenMutation, -1);
+  assert.ok(evidenceFence < scheduledRetirement);
+  assert.ok(scheduledRetirement < firstFrozenMutation);
+  const retirementAuthority = preBankCancelApply.slice(scheduledRetirement, firstFrozenMutation);
+  assert.match(retirementAuthority, /status = 'CANCELLED'/);
+  assert.match(retirementAuthority, /phase = 'COMPLETE'/);
+  assert.match(retirementAuthority, /operation_type = 'PAYMENT_EXECUTE'/);
+  assert.match(retirementAuthority, /phase = 'SCHEDULE_PAYMENT'/);
+  assert.match(retirementAuthority, /'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT'/);
+  assert.match(retirementAuthority, /'WAIT_FOR_SCHEDULED_LOCAL_MANUAL_SETTLEMENT'/);
+  assert.match(retirementAuthority, /run_after_utc = NULL/);
 });
 
 test('operation and chunk provider payload aliases match provider-evidence empty and sentinel semantics', () => {
