@@ -43330,7 +43330,11 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
     const priorError = isPlainObject(priorOperation?.error_json) ? priorOperation.error_json : {};
     const priorProgress = isPlainObject(priorOperation?.progress_json) ? priorOperation.progress_json : {};
     const priorFailureCode = upperTrim(priorOperation?.resume_reason || priorError.code || priorError.error_code || priorProgress.code || priorProgress.error_code);
-    if (!priorOperation || priorFailureCode !== 'PAYMENT_EXECUTE_OPERATION_FAILED') {
+    const retryablePreProviderFailureCodes = new Set([
+      'PAYMENT_EXECUTE_OPERATION_FAILED',
+      'BATCH_STALE'
+    ]);
+    if (!priorOperation || !retryablePreProviderFailureCodes.has(priorFailureCode)) {
       return fail(409, 'PAYMENT_EXECUTION_RETRY_REQUIRES_REVIEW', 'This payment attempt cannot be retried automatically. Review Current Payment Status before continuing.', {
         pay_batch_id: id,
         retry_operation_id: retryPreProviderOperationId,
@@ -43345,7 +43349,7 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
         p_actor_user_id: actorUserId,
         p_failure_phase: trimStr(priorOperation.phase) || null,
         p_failure_error_json: {
-          code: 'PAYMENT_EXECUTE_OPERATION_FAILED',
+          code: priorFailureCode,
           source: 'handleBankingPayBatchExecutePayment',
           explicit_retry_requested: true
         },

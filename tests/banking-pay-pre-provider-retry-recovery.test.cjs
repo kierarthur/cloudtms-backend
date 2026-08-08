@@ -43,7 +43,11 @@ test('explicit payment retry revalidates the exact batch operation before cleanu
 
   assert.match(body, /retry_pre_provider_operation_id/);
   assert.match(body, /banking_pay_operations\?id=eq\.\$\{encodeURIComponent\(retryPreProviderOperationId\)\}&pay_batch_id=eq\.\$\{encodeURIComponent\(id\)\}&operation_type=eq\.PAYMENT_EXECUTE&status=eq\.REVIEW_REQUIRED/);
-  assert.match(body, /priorFailureCode !== 'PAYMENT_EXECUTE_OPERATION_FAILED'/);
+  assert.match(body, /const retryablePreProviderFailureCodes = new Set\(\[/);
+  assert.match(body, /'PAYMENT_EXECUTE_OPERATION_FAILED'/);
+  assert.match(body, /'BATCH_STALE'/);
+  assert.match(body, /!retryablePreProviderFailureCodes\.has\(priorFailureCode\)/);
+  assert.match(body, /code: priorFailureCode/);
   assert.match(body, /pay_execute_operation_cleanup_failed_local_artifacts/);
   assert.match(body, /cleanupBatchId === id/);
   assert.match(body, /cleanupOperationId === retryPreProviderOperationId/);
