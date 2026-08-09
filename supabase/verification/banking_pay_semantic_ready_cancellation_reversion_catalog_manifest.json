@@ -135,7 +135,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_set_selected_rows",
       "identity_arguments": "p_session_id uuid, p_selected_preview_row_ids jsonb, p_actor_user_id uuid",
-      "definition_sha256": "25fcec5ed6a02f59613b5921eb00880ab892ab5b4f48fbb408e712fb6698fce1",
+      "definition_sha256": "2128d3d43a1d204f3d30d3b1bd2efc39bec0664621088cd88c224098ec91000b",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

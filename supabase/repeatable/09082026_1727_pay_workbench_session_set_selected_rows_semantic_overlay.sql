@@ -772,7 +772,7 @@ BEGIN
     FROM public.banking_pay_workbench_preview_rows AS selected_row
     WHERE selected_row.session_id = p_session_id
       AND selected_row.session_version = v_session_row.version
-      AND LOWER(private.pay_workbench_preview_effective_section_v1(selected_row.section, selected_row.row_json)) = 'CANONICAL_PREVIEW_LINES'
+      AND LOWER(private.pay_workbench_preview_effective_section_v1(selected_row.section, selected_row.row_json)) = 'canonical_preview_lines'
       AND UPPER(BTRIM(COALESCE(selected_row.status, ''))) = 'READY'
       AND COALESCE(selected_row.selected, false) IS TRUE
       AND UPPER(BTRIM(COALESCE(selected_row.selection_state, ''))) = 'SELECTED';
@@ -1455,7 +1455,7 @@ BEGIN
   FROM public.banking_pay_workbench_preview_rows AS selected_row
   WHERE selected_row.session_id = p_session_id
     AND selected_row.session_version = v_session_row.version
-    AND LOWER(private.pay_workbench_preview_effective_section_v1(selected_row.section, selected_row.row_json)) = 'CANONICAL_PREVIEW_LINES'
+    AND LOWER(private.pay_workbench_preview_effective_section_v1(selected_row.section, selected_row.row_json)) = 'canonical_preview_lines'
     AND UPPER(BTRIM(COALESCE(selected_row.status, ''))) = 'READY'
     AND COALESCE(selected_row.selected, false) IS TRUE
     AND UPPER(BTRIM(COALESCE(selected_row.selection_state, ''))) = 'SELECTED';

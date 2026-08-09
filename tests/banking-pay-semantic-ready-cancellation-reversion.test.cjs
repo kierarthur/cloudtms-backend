@@ -172,6 +172,20 @@ test('selection mutation uses the same effective section without moving certifie
     semanticSelection,
     /lower\(private\.pay_workbench_preview_effective_section_v1\(preview_row\.section, preview_row\.row_json\)\)\s*=\s*'canonical_preview_lines'/,
   );
+  assert.equal(
+    (
+      semanticSelection.match(
+        /LOWER\(private\.pay_workbench_preview_effective_section_v1\(selected_row\.section, selected_row\.row_json\)\)\s*=\s*'canonical_preview_lines'/g,
+      ) || []
+    ).length,
+    2,
+    'global and row-patch responses must both return the authoritative selected-row set',
+  );
+  assert.doesNotMatch(
+    semanticSelection,
+    /LOWER\(private\.pay_workbench_preview_effective_section_v1\(selected_row\.section, selected_row\.row_json\)\)\s*=\s*'CANONICAL_PREVIEW_LINES'/,
+    'a lower-cased section cannot be compared with an upper-cased literal',
+  );
   assert.match(
     semanticSelection,
     /pay_workbench_revalidate_zero_retained_recovery_headroom_v1[\s\S]*private\.pay_workbench_preview_effective_section_v1/,
