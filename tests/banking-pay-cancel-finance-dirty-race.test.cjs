@@ -46,13 +46,15 @@ test('cancellation supersession is successful terminal work with durable audit m
   assert.match(sql, /'superseding_pay_batch_id', p_pay_batch_id::text/);
 });
 
-test('finance race guard runs before the full candidate refresh is enqueued', () => {
+test('finance race guard runs before the canonical current-authority ladder is invoked', () => {
   const supersedeAt = sql.indexOf('WITH superseded_finance_dirty_jobs AS');
   const enqueueAt = sql.indexOf('v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh');
   assert.ok(supersedeAt >= 0);
   assert.ok(enqueueAt > supersedeAt);
   assert.match(sql, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
-  assert.match(sql, /'full_candidate_recovery_reallocation_required', true/);
+  assert.match(sql, /'canonical_route_ladder_required', true/);
+  assert.match(sql, /'fallback_reason', 'CERTIFIED_CANCELLATION_REVERSION_REJECTED'/);
+  assert.doesNotMatch(sql, /'force_legacy', true/);
 });
 
 test('race fix changes orchestration only and preserves the Policy X boundary', () => {

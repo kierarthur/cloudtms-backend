@@ -63,7 +63,7 @@ test('component-aware bigint lineage remains intact and no schema or economic ru
   );
 });
 
-test('replacement differs from the saved authority only at the final sort-order expression', () => {
+test('replacement retains the historical body while adding semantic Draft guards and the final sort-order correction', () => {
   const oldExpression =
     '    allocation_expanded_rows.row_ordinal AS sort_order';
   const newExpression = [
@@ -80,10 +80,12 @@ test('replacement differs from the saved authority only at the final sort-order 
 
   const legacyFunction = extractLegacyFunction();
   assert.equal(legacyFunction.split(oldExpression).length - 1, 1);
-  assert.equal(
-    source.trim(),
-    legacyFunction.replace(oldExpression, newExpression)
-  );
+  assert.match(source, /banking_pay_workbench_semantic_ready_draft_guard_v2_enabled/);
+  assert.match(source, /PAY_WORKBENCH_DRAFT_RECOVERY_WITHOUT_POSITIVE_HEADROOM/);
+  assert.match(source, /PAY_WORKBENCH_DRAFT_CANDIDATE_RESULT_NEGATIVE/);
+  assert.match(source, /source_publication_attestation,semantic_ready/);
+  assert.ok(source.includes(newExpression));
+  assert.doesNotMatch(source, /allocation_expanded_rows\.row_ordinal AS sort_order/);
 });
 
 test('the reproduced Kier ordinal overflows int4 before the targeted correction', () => {

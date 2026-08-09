@@ -99,12 +99,17 @@ test('maker checker does not accept requester proof and cancellation route force
 
 test('whole draft cancellation owns its audit reason and uses the existing ceremony', () => {
   const body = functionBody('handleBankingPayBatchCancelV1');
+  const replay = functionBody('readExactDraftCancellationReplayV1');
   const bridge = functionBody('startVerifiedDraftCancellationAfterPlanningV1');
   assert.match(body, /DRAFT_PAYMENT_CANCELLED_BY_USER/);
   assert.match(body, /verifyPaymentReversalReauth/);
   assert.match(body, /p_correction_request_id: null/);
   assert.doesNotMatch(body, /body\?\.reason/);
   assert.equal((body.match(/sbRpc\(/g) || []).length, 1);
+  assert.match(body, /readExactDraftCancellationReplayV1/);
+  assert.match(replay, /DRAFT_PAYMENT_CANCELLATION_EXACT_REPLAY/);
+  assert.match(replay, /DRAFT_CANCELLATION_REPLAY_AMBIGUOUS/);
+  assert.doesNotMatch(replay, /sbRpc\(/);
   assert.match(body, /startVerifiedDraftCancellationAfterPlanningV1/);
   assert.match(bridge, /claimAndAdvanceOneBankingPayOperation/);
   assert.match(bridge, /operationTypes: \['PAYMENT_CORRECTION'\]/);
@@ -114,6 +119,64 @@ test('whole draft cancellation owns its audit reason and uses the existing cerem
   assert.match(bridge, /PAYMENT_CORRECTION_START_PREPARED/);
   assert.equal((bridge.match(/sbRpc\(/g) || []).length, 2);
   assert.doesNotMatch(bridge, /reauth_proof_token\s*:/);
+});
+
+test('whole Draft replay resumes only the exact prepared request and operation', async () => {
+  const actorId = '11111111-1111-4111-8111-111111111111';
+  const batchId = '22222222-2222-4222-8222-222222222222';
+  const requestId = '33333333-3333-4333-8333-333333333333';
+  const operationId = '44444444-4444-4444-8444-444444444444';
+  let requestRows = [{
+    id: requestId,
+    pay_batch_id: batchId,
+    status: 'PLANNED',
+    correction_kind: 'PRE_BANK_CANCEL',
+    requested_by_user_id: actorId,
+    reason: 'DRAFT_PAYMENT_CANCELLED_BY_USER',
+    selection_json: {
+      requested_action: 'DRAFT_CANCEL',
+      mode: 'ALL_MATCHING',
+      source_context: 'pay_batch_cancel',
+      filter_json: {},
+      exclusions: []
+    },
+    selection_hash: 'selection-hash',
+    plan_json: { requested_action: 'DRAFT_CANCEL' },
+    plan_hash: 'plan-hash',
+    source_bank_event_id: null,
+    auto_requested: false
+  }];
+  const operationRows = [{
+    id: operationId,
+    operation_type: 'PAYMENT_CORRECTION',
+    status: 'WAITING_AUTHORISATION',
+    phase: 'AWAITING_REAUTHENTICATION',
+    actor_user_id: actorId,
+    pay_batch_id: batchId,
+    input_json: {
+      correction_request_id: requestId,
+      requested_action: 'DRAFT_CANCEL',
+      auto_requested: false,
+      source_bank_event_id: null
+    },
+    requires_user_action: true,
+    run_after_utc: null
+  }];
+  const context = {
+    Set, String, Object, Array, Error, encodeURIComponent,
+    bankingPayCorrectionUuid: (value) => value,
+    sbFetch: async (_env, url) => ({ rows: url.includes('pay_payment_correction_requests') ? requestRows : operationRows })
+  };
+  vm.runInNewContext(`${functionBody('readExactDraftCancellationReplayV1')}\nthis.readReplay = readExactDraftCancellationReplayV1;`, context);
+
+  const exact = await context.readReplay({ SUPABASE_URL: 'https://example.invalid' }, actorId, batchId);
+  assert.equal(exact.correction_request_id, requestId);
+  assert.equal(exact.operation_id, operationId);
+  assert.equal(exact.code, 'DRAFT_PAYMENT_CANCELLATION_EXACT_REPLAY');
+
+  requestRows = [{ ...requestRows[0], requested_by_user_id: '55555555-5555-4555-8555-555555555555' }];
+  const wrongOwner = await context.readReplay({ SUPABASE_URL: 'https://example.invalid' }, actorId, batchId);
+  assert.equal(wrongOwner, null);
 });
 
 test('manual not-paid resolution is exact evidence only and cannot auto-release', () => {

@@ -49510,6 +49510,110 @@ async function readBankingPayCorrectionRequestForWorker(env, correctionRequestId
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+async function readExactDraftCancellationReplayV1(env, actorUserId, payBatchId) {
+  const exactActorUserId = bankingPayCorrectionUuid(actorUserId, 'actor_user_id').toLowerCase();
+  const exactPayBatchId = bankingPayCorrectionUuid(payBatchId, 'pay_batch_id').toLowerCase();
+  const requestSelect = [
+    'id','pay_batch_id','status','correction_kind','requested_by_user_id','reason',
+    'selection_json','selection_hash','plan_json','plan_hash','source_bank_event_id',
+    'auto_requested','created_at_utc'
+  ].join(',');
+  const requestUrl = `${env.SUPABASE_URL}/rest/v1/pay_payment_correction_requests`
+    + `?pay_batch_id=eq.${encodeURIComponent(exactPayBatchId)}`
+    + `&select=${encodeURIComponent(requestSelect)}`
+    + '&order=created_at_utc.desc,id.desc&limit=20';
+  const { rows: requestRows } = await sbFetch(env, requestUrl, false);
+  const resumableStatuses = new Set([
+    'PLANNING', 'PLANNED', 'REQUESTED', 'AWAITING_AUTHORISATION',
+    'AUTHORISED', 'EXPANDED', 'PROCESSING', 'APPLIED', 'APPLIED_WITH_BLOCKERS'
+  ]);
+  const exactRequests = (Array.isArray(requestRows) ? requestRows : []).filter((row) => {
+    const selection = row?.selection_json && typeof row.selection_json === 'object' && !Array.isArray(row.selection_json)
+      ? row.selection_json : {};
+    const nestedSelection = selection.selection && typeof selection.selection === 'object' && !Array.isArray(selection.selection)
+      ? selection.selection : {};
+    const filterJson = selection.filter_json && typeof selection.filter_json === 'object' && !Array.isArray(selection.filter_json)
+      ? selection.filter_json : null;
+    const exclusions = Array.isArray(selection.exclusions) ? selection.exclusions : null;
+    const plan = row?.plan_json && typeof row.plan_json === 'object' && !Array.isArray(row.plan_json)
+      ? row.plan_json : {};
+    return resumableStatuses.has(String(row?.status || '').trim().toUpperCase())
+      && String(row?.pay_batch_id || '').toLowerCase() === exactPayBatchId
+      && String(row?.correction_kind || '').trim().toUpperCase() === 'PRE_BANK_CANCEL'
+      && String(row?.requested_by_user_id || '').toLowerCase() === exactActorUserId
+      && String(row?.reason || '') === 'DRAFT_PAYMENT_CANCELLED_BY_USER'
+      && row?.source_bank_event_id == null
+      && row?.auto_requested !== true
+      && String(selection.requested_action || nestedSelection.action || '').trim().toUpperCase() === 'DRAFT_CANCEL'
+      && String(selection.mode || nestedSelection.mode || '').trim().toUpperCase() === 'ALL_MATCHING'
+      && String(selection.source_context || '') === 'pay_batch_cancel'
+      && filterJson !== null && Object.keys(filterJson).length === 0
+      && exclusions !== null && exclusions.length === 0
+      && String(plan.requested_action || '').trim().toUpperCase() === 'DRAFT_CANCEL'
+      && typeof row?.selection_hash === 'string' && row.selection_hash.length > 0
+      && typeof row?.plan_hash === 'string' && row.plan_hash.length > 0;
+  });
+  if (exactRequests.length === 0) return null;
+
+  const operationSelect = [
+    'id','operation_type','status','phase','actor_user_id','pay_batch_id','input_json',
+    'run_after_utc','requires_user_action','runner_state','created_at_utc'
+  ].join(',');
+  const operationUrl = `${env.SUPABASE_URL}/rest/v1/banking_pay_operations`
+    + `?pay_batch_id=eq.${encodeURIComponent(exactPayBatchId)}`
+    + '&operation_type=eq.PAYMENT_CORRECTION'
+    + `&select=${encodeURIComponent(operationSelect)}`
+    + '&order=created_at_utc.desc,id.desc&limit=50';
+  const { rows: operationRows } = await sbFetch(env, operationUrl, false);
+  const exactPairs = [];
+  for (const requestRow of exactRequests) {
+    const operationRow = (Array.isArray(operationRows) ? operationRows : []).find((row) => {
+      const input = row?.input_json && typeof row.input_json === 'object' && !Array.isArray(row.input_json)
+        ? row.input_json : {};
+      return String(row?.operation_type || '').trim().toUpperCase() === 'PAYMENT_CORRECTION'
+        && String(row?.actor_user_id || '').toLowerCase() === exactActorUserId
+        && String(row?.pay_batch_id || '').toLowerCase() === exactPayBatchId
+        && String(input.correction_request_id || '').toLowerCase() === String(requestRow.id || '').toLowerCase()
+        && String(input.requested_action || '').trim().toUpperCase() === 'DRAFT_CANCEL'
+        && input.auto_requested !== true
+        && input.source_bank_event_id == null;
+    });
+    if (operationRow) exactPairs.push({ requestRow, operationRow });
+  }
+  if (exactPairs.length === 0) return null;
+  if (exactPairs.length > 1) {
+    throw Object.assign(new Error('More than one exact Draft cancellation is eligible for replay.'), {
+      code: 'DRAFT_CANCELLATION_REPLAY_AMBIGUOUS'
+    });
+  }
+  const { requestRow, operationRow } = exactPairs[0];
+  return {
+    ok: true,
+    existing_request: true,
+    is_existing: true,
+    pay_batch_id: exactPayBatchId,
+    correction_request_id: requestRow.id,
+    operation_id: operationRow.id,
+    request_status: requestRow.status,
+    operation_status: operationRow.status,
+    phase: operationRow.phase,
+    selection_ready: String(requestRow.status || '').trim().toUpperCase() !== 'PLANNING',
+    continuation: {
+      required: String(requestRow.status || '').trim().toUpperCase() === 'PLANNING',
+      operation_id: operationRow.id,
+      operation_type: 'PAYMENT_CORRECTION',
+      pay_batch_id: exactPayBatchId,
+      phase: operationRow.phase,
+      run_after_utc: operationRow.run_after_utc || null,
+      reason: 'DRAFT_PAYMENT_CANCELLATION_EXACT_REPLAY',
+      successor_relation: 'SELF',
+      requires_user_action: operationRow.requires_user_action === true,
+      terminal: false
+    },
+    code: 'DRAFT_PAYMENT_CANCELLATION_EXACT_REPLAY'
+  };
+}
+
 function bankingPayBase64UrlEncode(bytes) {
   let binary = '';
   for (const byte of bytes) binary += String.fromCharCode(byte);
@@ -50342,13 +50446,14 @@ async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
   const ceremony = await verifyPaymentReversalReauth(env, user, body?.reauth_token || body?.reauthToken);
   if (!ceremony.ok) return bankingPayCancellationResponse(env, req, Number(ceremony.response?.status || 401), { ok: false, code: 'REAUTH_CEREMONY_INVALID', message: 'Please verify your identity again.' });
   try {
-    const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_batch_cancel', {
-      p_pay_batch_id: payBatchId,
-      p_actor_user_id: actor.actorUserId,
-      p_reason: 'DRAFT_PAYMENT_CANCELLED_BY_USER',
-      p_correction_request_id: null,
-      p_work_item_id: null
-    }), 'pay_batch_cancel');
+    const exactReplay = await readExactDraftCancellationReplayV1(env, actor.actorUserId, payBatchId);
+    const result = exactReplay || unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_batch_cancel', {
+        p_pay_batch_id: payBatchId,
+        p_actor_user_id: actor.actorUserId,
+        p_reason: 'DRAFT_PAYMENT_CANCELLED_BY_USER',
+        p_correction_request_id: null,
+        p_work_item_id: null
+      }), 'pay_batch_cancel');
     const started = await startVerifiedDraftCancellationAfterPlanningV1(env, user, actor, payBatchId, result);
     const responseStatus = bankingPayCorrectionRpcHttpStatus(started, 202);
     return bankingPayCancellationResponse(env, req, responseStatus, started);
