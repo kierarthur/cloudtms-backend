@@ -728,8 +728,18 @@ BEGIN
       SELECT operation_row.id
       FROM public.banking_pay_operations AS operation_row
       WHERE operation_row.operation_type='DRAFT_CREATE'
-        AND operation_row.pay_batch_id=request_row.pay_batch_id
         AND operation_row.status='COMPLETE'
+        AND (
+          operation_row.pay_batch_id=request_row.pay_batch_id
+          OR EXISTS (
+            SELECT 1
+            FROM public.banking_pay_operation_candidate_scope AS operation_scope_link
+            WHERE operation_scope_link.operation_id=operation_row.id
+              AND operation_scope_link.candidate_id=batch_candidate.candidate_id
+              AND operation_scope_link.pay_batch_id=request_row.pay_batch_id
+              AND operation_scope_link.status NOT IN ('FAILED','CANCELLED','SUPERSEDED')
+          )
+        )
       ORDER BY operation_row.completed_at_utc DESC NULLS LAST, operation_row.created_at_utc DESC
       LIMIT 1
     ) AS draft_operation ON true

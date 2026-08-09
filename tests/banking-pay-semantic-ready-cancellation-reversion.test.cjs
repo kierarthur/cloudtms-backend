@@ -222,6 +222,9 @@ test('Draft completion freezes the exact post-Draft authority before fast cancel
   assert.match(operationFinish, /'post_draft_authority'/);
   assert.match(operationFinish, /source_change_seq/);
   assert.match(operationFinish, /dirty_generation/);
+  assert.match(helpers, /operation_scope_link\.operation_id=operation_row\.id/);
+  assert.match(helpers, /operation_scope_link\.candidate_id=batch_candidate\.candidate_id/);
+  assert.match(helpers, /operation_scope_link\.pay_batch_id=request_row\.pay_batch_id/);
   assert.match(helpers, /DRAFT_OVERLAY_PREFLIGHT/);
   assert.match(helpers, /CURRENT_ECONOMIC_AUTHORITY_CHANGED/);
   assert.match(helpers, /PRE_FINANCIAL/);
