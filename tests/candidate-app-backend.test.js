@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { PDFDocument } from 'pdf-lib';
 
 import { candidateAppBackendInternals, handleCandidateAppRequest } from '../broker/src/candidate-app-backend.js';
 
@@ -11,11 +13,14 @@ const {
   finaliseReceivedPaperReturn,
   forbiddenFinancialKeys,
   officialPresentationFromRows,
+  immutablePut,
+  mileageClaimFormBytes,
   routeMatch,
   safeFinalisationResult,
   safeQrPackResponse,
   segmentBreak,
   uploadTicket,
+  validateComponentBytes,
   verifyUploadTicket,
   withoutInternalRenderContracts,
   verifyPassword
@@ -102,8 +107,11 @@ test('Candidate route matching decodes stable path parameters and rejects partia
 });
 
 test('Candidate HTTP boundary ignores unrelated routes and fails protected routes closed', async () => {
-  const env = { CANDIDATE_APP_ENVIRONMENT: 'TEST', SESSION_TOKEN_SECRET: 'test-only-secret-material' };
-  const deps = { rpc: async () => { throw new Error('unexpected RPC'); } };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material'
+  };
+  const deps = { routeAudience: 'PRIVATE', rpc: async () => { throw new Error('unexpected RPC'); } };
   assert.equal(await handleCandidateAppRequest(
     new Request('https://backend.test/healthz'), env, {}, deps
   ), null);
@@ -113,6 +121,16 @@ test('Candidate HTTP boundary ignores unrelated routes and fails protected route
   assert.equal(response.status, 401);
   const payload = await response.json();
   assert.equal(payload.error_code, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+});
+
+test('normal CloudTMS office audience cannot expose Candidate or manager public routes', async () => {
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material'
+  };
+  const request = new Request('https://backend.test/candidate-app/v1/bootstrap');
+  assert.equal(await handleCandidateAppRequest(request.clone(), env, {}, { routeAudience: 'OFFICE' }), null);
+  assert.equal(await handleCandidateAppRequest(request.clone(), env, {}, {}), null);
 });
 
 test('paper pack responses never expose an R2 storage identity', () => {
@@ -133,7 +151,7 @@ test('paper pack responses never expose an R2 storage identity', () => {
 });
 
 test('component upload tickets are encrypted and do not disclose the R2 key', async () => {
-  const env = { SESSION_TOKEN_SECRET: 'test-only-secret-material' };
+  const env = { CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-secret-material' };
   const storageKey = 'candidate-app/test/workflow/source/private-object.pdf';
   const ticket = await uploadTicket(env, {
     workflow_id: '00000000-0000-4000-8000-000000000001',
@@ -145,6 +163,66 @@ test('component upload tickets are encrypted and do not disclose the R2 key', as
   const opened = await verifyUploadTicket(env, ticket);
   assert.equal(opened.key, storageKey);
   assert.equal(opened.owner, 'candidate');
+});
+
+test('component validation accepts one-page PDFs and rejects mixed multi-page evidence', async () => {
+  const onePage = await PDFDocument.create();
+  onePage.addPage([100, 100]);
+  const accepted = await validateComponentBytes(await onePage.save(), 'application/pdf');
+  assert.deepEqual(accepted, { media_type: 'application/pdf', page_count: 1, width: null, height: null });
+
+  const twoPages = await PDFDocument.create();
+  twoPages.addPage([100, 100]);
+  twoPages.addPage([100, 100]);
+  await assert.rejects(
+    validateComponentBytes(await twoPages.save(), 'application/pdf'),
+    error => error?.code === 'CANDIDATE_SOURCE_PDF_ONE_PAGE_REQUIRED'
+  );
+});
+
+test('component validation rejects malformed images and encrypted-PDF markers', async () => {
+  await assert.rejects(
+    validateComponentBytes(new Uint8Array([137, 80, 78, 71, 0, 0, 0, 0]), 'image/png'),
+    error => error?.code === 'CANDIDATE_SOURCE_IMAGE_INVALID'
+  );
+  await assert.rejects(
+    validateComponentBytes(new TextEncoder().encode('%PDF-1.7\n/Encrypt\n%%EOF'), 'application/pdf'),
+    error => error?.code === 'CANDIDATE_SOURCE_PDF_INVALID'
+  );
+});
+
+test('immutable generated documents use create-only storage and permit only same-digest replay', async () => {
+  const objects = new Map();
+  const env = { R2: {
+    async put(key, bytes, options) {
+      if (options.onlyIf?.etagDoesNotMatch === '*' && objects.has(key)) return null;
+      const row = { key, customMetadata: options.customMetadata, bytes: new Uint8Array(bytes) };
+      objects.set(key, row);
+      return row;
+    },
+    async head(key) { return objects.get(key) || null; }
+  } };
+  const first = await immutablePut(env, 'immutable/test.pdf', new Uint8Array([1, 2, 3]), 'application/pdf');
+  const replay = await immutablePut(env, 'immutable/test.pdf', new Uint8Array([1, 2, 3]), 'application/pdf');
+  assert.equal(first.created, true);
+  assert.equal(replay.created, false);
+  await assert.rejects(
+    immutablePut(env, 'immutable/test.pdf', new Uint8Array([1, 2, 4]), 'application/pdf'),
+    error => error?.code === 'CANDIDATE_RENDER_IDEMPOTENCY_CONFLICT'
+  );
+});
+
+test('paper mileage form preserves the approved labels and UK week-ending format', async () => {
+  const bytes = await mileageClaimFormBytes({
+    week_ending_date: '2026-08-09',
+    immutable_submission_json: { expense_submission: { mileage_units: 18 } }
+  });
+  const pdf = await PDFDocument.load(bytes);
+  assert.equal(pdf.getPageCount(), 1);
+  const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
+  for (const label of ['Mileage Claim Form', 'Post Code from', 'Cost Code To', 'Number of miles', 'Total mileage']) {
+    assert.equal(source.includes(label), true);
+  }
 });
 
 test('public workflow responses omit renderer contracts and canonical financial internals', () => {

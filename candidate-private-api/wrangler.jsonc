@@ -1,0 +1,31 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "test-cloudtms-candidate-private-api",
+  "main": "../broker/src/candidate-private-worker.js",
+  "compatibility_date": "2026-08-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "vars": {
+    "CANDIDATE_APP_ENVIRONMENT": "TEST",
+    "CANDIDATE_APP_PUBLIC_URL": "https://testmode.arthur-rai.co.uk",
+    "SUPABASE_URL": "https://yakevhtttcsljosbdpov.supabase.co",
+    "CANDIDATE_MAX_UPLOAD_BYTES": "15728640",
+    "CANDIDATE_MAX_IMAGE_DIMENSION": "12000",
+    "CANDIDATE_MAX_IMAGE_PIXELS": "40000000"
+  },
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "test-cloudtms",
+      "preview_bucket_name": "test-cloudtms-preview"
+    }
+  ],
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  }
+}

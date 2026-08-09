@@ -1,17 +1,25 @@
 # CloudTMS Candidate App backend contract
 
-Status: TEST implementation contract, 9 August 2026. The CloudTMS Worker is the only server authority exposed to the future private broker. The broker, app and web client must not call Supabase or R2 directly.
+Status: versioned TEST implementation contract, 9 August 2026. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities.
+
+Machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Trust and deployment contract: `BROKER_PRIVATE_TOPOLOGY.md`.
 
 ## Boundary rules
 
-- Base Candidate API: `/candidate-app/v1`.
-- Base manager API: `/candidate-manager/v1`.
+- Public broker Candidate API: `/candidate-app/v1`.
+- Public broker manager API: `/candidate-manager/v1`.
+- Private service-bound Candidate API: `/private/candidate-app/v1`.
+- Private service-bound manager API: `/private/candidate-manager/v1`.
 - Existing CloudTMS office adapters: `/api/candidate-app`.
+- The normal CloudTMS Worker exposes only the office adapters; it does not expose the public Candidate or manager paths.
+- Public Candidate/manager paths map deterministically to their private-prefixed equivalent over a signed Cloudflare Worker service binding.
 - JSON responses use `cache-control: no-store` and stable `error_code` values.
-- Candidate access is a short-lived HMAC token bound to one environment, active session and rotation.
-- Refresh tokens are opaque, rotated on every use and stored only as hashes.
+- Public Candidate access and refresh values are independently encrypted broker envelopes bound to audience, environment, expiry and a public session identity.
+- The private access token and rotating refresh token are never returned to the browser/native client. The broker unwraps them only for the signed service-bound call; refresh hashes remain the database authority.
 - Manager access is an opaque token from the URL fragment; only its SHA-256 reaches SQL.
+- EMAIL manager access is independent of the Candidate session. Same-phone PHONE access is a separate short-lived broker envelope bound to the initiating public Candidate session and, where supplied, device identity; the raw private PHONE token is never returned by the public API.
 - Upload tickets are short-lived encrypted envelopes. They do not disclose R2 object keys.
+- Public requests have exact browser-origin/native-client policy, bounded bodies and independent authentication/manager/upload rate limits before private work.
 - Document bytes are streamed by CloudTMS after ownership/manifest checks. No response returns a raw R2 key.
 - Candidate mutation payloads containing rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN or canonical lifecycle state are rejected.
 - All factual mutations carry an idempotency key. Stale workflow generations, route contexts and lifecycle row signatures fail closed.
@@ -37,7 +45,7 @@ Challenge/outbox insertion is retry-safe: the backend deterministically reproduc
 |---|---|---|
 | POST | `/candidate-app/v1/account/select-candidate` | TEST-only selection where one email maps to several candidates. |
 | PATCH | `/candidate-app/v1/account/preferences` | Persist server-owned notification preferences. |
-| POST | `/candidate-app/v1/account/push-token` | Encrypt and register a provider token on the active session. |
+| POST | `/candidate-app/v1/account/push-token` | Broker-validates APNs/FCM/Web Push and encrypts the raw provider token before private registration on the active session. |
 | GET | `/candidate-app/v1/bootstrap` | Entitlements, selection and global capabilities. |
 | GET | `/candidate-app/v1/timesheets` | Candidate-safe paged projection. |
 | GET | `/candidate-app/v1/timesheets/:timesheetId` | Candidate-safe detail and capabilities. |
@@ -80,7 +88,7 @@ SENT                 -> the automatic candidate email has been sent
 FAILED               -> show a controlled retry/support state; never claim readiness
 ```
 
-QR token creation is not document readiness. Only the current canonical `TIMESHEET` document version in `READY` state unlocks the secure paper-pack stream. The Worker verifies Candidate ownership and streams bytes from R2; the broker/app never receives an R2 key. The notification feed and paper-pack status endpoint are authoritative even where a device push is unavailable or disabled.
+QR token creation is not document readiness. The current canonical `TIMESHEET` document version must first be `READY`; where the frozen return manifest contains expenses, the private API then assembles one complete immutable pack in exact manifest order: official unsigned timesheet, Expense and Mileage Approval Summary, Mileage Claim Form, and every evidence page. Only that completed bundle releases the Candidate email/notification and secure stream. The Worker verifies Candidate ownership and streams bytes from R2; the broker/app never receives an R2 key. The notification feed and paper-pack status endpoint are authoritative even where a device push is unavailable or disabled.
 
 ## Manager API
 
@@ -94,6 +102,8 @@ QR token creation is not document readiness. Only the current canonical `TIMESHE
 | GET | `/candidate-manager/v1/workflows/:workflowId/components/:componentId/document` | Stream only a component in the token-bound manifest. |
 
 Approval commits before guarded asynchronous final rendering/finalisation. Independent workflows do not share a global lock. A failed follow-on leaves durable manager approval and a retryable workflow; it does not create partial canonical finalisation.
+
+Manager-triggered finalisation uses a server-created `CANDIDATE_MANAGER_FINALISATION_V1` context bound to the exact workflow generation, approval method, approved request and review-manifest digest. It deliberately does not require a live Candidate session; the finalisation RPC re-locks and rechecks that complete context before canonical mutation.
 
 The initial manager email is also readiness-gated. Candidate submission first renders and registers every required review component: the candidate-signed hours page where applicable, the expense summary, mileage form and each required evidence image/PDF. The workflow becomes `READY_FOR_MANAGER_APPROVAL` only when the immutable review manifest reports every component ready. `CREATE_EMAIL_APPROVAL_REQUEST` recomputes and verifies that same manifest before it can queue the email. Consequently, the manager link opens already-created pages; it never asks the manager to wait for the review pack to render. Rendering failure leaves the workflow pending/retryable and prevents the email request.
 
@@ -124,6 +134,13 @@ All office route actions will use the approved W01–W13 warning catalogue from 
 
 ## Configuration and delivery gates
 
-The Worker requires the existing TEST Supabase/R2 bindings plus token-sealing secrets. A Candidate/public frontend base URL must be configured before transactional links are enabled. Push-provider delivery remains coupled to the provider/token format selected during the broker/app implementation; database notification creation, preferences, encryption, dedupe and readiness timing remain CloudTMS-owned.
+The deployment consists of two explicitly configured Workers:
+
+- Candidate broker: exact TEST/LIVE origin list, native-client switch, service binding, four rate-limit bindings and dedicated access/refresh/device/service secrets;
+- private CloudTMS API: no public route, explicit TEST/LIVE environment and public frontend URL, Supabase/R2 bindings and separate service/session/challenge/upload secrets.
+
+There are no environment or general-session-secret fallbacks. TEST and LIVE secrets are unrelated. Transactional links remain disabled until the approved Candidate/public frontend URL is configured.
+
+CloudTMS owns canonical notification events and preferences. The Candidate broker owns provider device material and eventual APNs/FCM/Web Push delivery. Provider credentials and app identities are a coordinated broker/app activation gate; in-app notification feed and app-resume refresh remain authoritative where external push is unavailable.
 
 No endpoint in this contract executes Banking Pay, settlement, remittance or a production action.

@@ -28512,7 +28512,8 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
   workflowId,
   expectedGeneration,
   idempotencyKey,
-  nowUtc = new Date().toISOString()
+  nowUtc = new Date().toISOString(),
+  serviceFinalisation = null
 } = {}) {
   const correlation = String(idempotencyKey || '').trim();
   if (!correlation) throw new Error('CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
@@ -28604,7 +28605,8 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
     timesheet_patch_json: timesheetPatch,
     rate_request: dailyContext.rateRequest,
     resolved_rate_row: ratesRow,
-    canonical_snapshot: snapshot
+    canonical_snapshot: snapshot,
+    service_finalisation: serviceFinalisation
   };
 }
 
@@ -28614,10 +28616,12 @@ async function finaliseCandidateDailyThroughCanonicalAuthority(env, {
   workflowId,
   expectedGeneration,
   idempotencyKey,
-  nowUtc = new Date().toISOString()
+  nowUtc = new Date().toISOString(),
+  serviceFinalisation = null
 } = {}) {
   const dailyMaterialisation = await buildCandidateDailyAtomicMaterialisation(env, {
-    sessionId, environment, workflowId, expectedGeneration, idempotencyKey, nowUtc
+    sessionId, environment, workflowId, expectedGeneration, idempotencyKey, nowUtc,
+    serviceFinalisation
   });
   return sbRpc(env, 'candidate_submission_finalize_atomic_v1', {
     p_session_id: sessionId,
@@ -192513,25 +192517,42 @@ function matchPath(pathname, pattern) {
   }
   return params;
 }
+
+export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE') {
+  return {
+    routeAudience,
+    rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+    requireOfficeUser: (request, roles) => requireUser(env, request, roles),
+    buildWeeklySubmission: ({ workflow, factualSubmission }) =>
+      buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { workflow, factualSubmission }),
+    buildDailySubmission: ({ workflow, factualSubmission }) =>
+      buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission }),
+    finaliseDaily: (options) => finaliseCandidateDailyThroughCanonicalAuthority(env, options),
+    enqueueQrPack: (options) => enqueueCandidateQrPackThroughCanonicalAuthority(env, options)
+  };
+}
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {
   async fetch(req, env, ctx) {
+    const entryPath = new URL(req.url).pathname;
+    if (entryPath.startsWith('/candidate-app/v1') || entryPath.startsWith('/candidate-manager/v1')) {
+      return new Response(JSON.stringify({ ok: false, error_code: 'NOT_FOUND' }), {
+        status: 404,
+        headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
+      });
+    }
     const pre = preflightIfNeeded(env, req);
     if (pre) return pre;
 
     const url = new URL(req.url);
     const p = url.pathname;
 
-    const candidateAppResponse = await handleCandidateAppRequest(req, env, ctx, {
-      rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
-      requireOfficeUser: (request, roles) => requireUser(env, request, roles),
-      buildWeeklySubmission: ({ workflow, factualSubmission }) =>
-        buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { workflow, factualSubmission }),
-      buildDailySubmission: ({ workflow, factualSubmission }) =>
-        buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission }),
-      finaliseDaily: (options) => finaliseCandidateDailyThroughCanonicalAuthority(env, options),
-      enqueueQrPack: (options) => enqueueCandidateQrPackThroughCanonicalAuthority(env, options)
-    });
+    const candidateAppResponse = await handleCandidateAppRequest(
+      req,
+      env,
+      ctx,
+      createCandidatePrivateDependencies(env, 'OFFICE')
+    );
     if (candidateAppResponse) return withCORS(env, req, candidateAppResponse);
 
     if (req.method === 'POST' && p === '/internal/invoice-queue/drain') {

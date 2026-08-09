@@ -1,13 +1,16 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: backend implementation map, 9 August 2026.
+Status: broker/private-backend authority map, 9 August 2026. Updated through the final manager-session, same-phone handoff, immutable-upload and complete-paper-pack corrections.
 
 ## Canonical owner graph
 
 ```text
-Candidate/broker factual request
+Candidate app/web or manager browser
         ↓
-CloudTMS Candidate HTTP boundary
+public Candidate broker
+  origin/rate-limit/public-token boundary
+        ↓ signed service binding
+private CloudTMS Candidate API
         ↓
 installed Candidate DB/RPC validation + immutable workflow
         ↓
@@ -21,7 +24,7 @@ existing Authorise authority when office/policy permits
 existing invoice and payment-eligibility pipelines
 ```
 
-The backend does not alter the existing financial algorithms. It adapts Candidate factual input to the existing WEEKLY/DAILY owners. Banking Pay is not called or changed.
+Neither Worker alters the existing financial algorithms. The broker cannot access Supabase or R2. The private API adapts factual input to the existing WEEKLY/DAILY owners. Banking Pay is not called or changed.
 
 ## Fourteen Candidate business RPCs and HTTP callers
 
@@ -56,15 +59,34 @@ The backend does not alter the existing financial algorithms. It adapts Candidat
 | Official timesheet | QR unsigned, manager review, final signed | existing official renderer with controlled variants |
 | Manager approval | email and phone | one workflow/request/manifest/signature/finalisation authority |
 
-## Backend source responsibilities
+## Source responsibilities
+
+### `candidate-broker/src/candidate-broker.js`
+
+- public Candidate and manager route boundary;
+- exact browser origins and declared iOS/Android native clients;
+- independent general/auth/manager/upload rate limits;
+- public access/refresh envelope issuance and unwrapping;
+- bounded body forwarding and public-safe error mapping;
+- device-provider validation and broker-key encryption of raw push tokens;
+- signed Cloudflare service-binding calls only—no Supabase, R2, mail or financial access.
+
+### `broker/src/candidate-private-worker.js`
+
+- accepts only `/private/candidate-app/v1` and `/private/candidate-manager/v1`;
+- verifies environment/body/authorisation-bound service HMAC;
+- has no public workers.dev route;
+- removes public browser headers and injects the `PRIVATE` Candidate route audience;
+- delegates all business work to the existing Candidate backend module and canonical owners.
 
 ### `broker/src/candidate-app-backend.js`
 
 QR/paper delivery remains one composed authority: `PAPER_PREPARE` queues the existing QR document operation and held email; durable document readiness releases the Candidate notification and email; the Candidate-only paper-pack endpoint rechecks ownership and readiness before streaming the canonical PDF without exposing an R2 key.
 
-- versioned Candidate, manager and office HTTP routing;
-- token/session/password boundary;
-- encrypted upload envelopes and R2 byte verification;
+- versioned private Candidate/manager and authenticated office routing, explicitly separated by route audience;
+- private Candidate session/password boundary behind the broker;
+- dedicated session, challenge and upload secrets with no general-secret fallback;
+- encrypted upload envelopes plus actual PNG/JPEG/PDF validation, one-page evidence PDF enforcement and R2 byte verification;
 - safe RPC adapters and response filtering;
 - official manager-review/final page rendering and registration;
 - manager email/phone orchestration and isolated follow-on recovery;
@@ -76,7 +98,8 @@ It must not own rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN,
 
 - injects the established CloudTMS RPC and canonical financial/document dependencies;
 - keeps existing office endpoints and business authorities intact;
-- dispatches Candidate routes before unrelated legacy route matching;
+- exposes authenticated Candidate office adapters only; direct public Candidate/manager paths are not dispatched by the normal CloudTMS Worker;
+- exports dependency composition for the private Candidate Worker without duplicating financial or lifecycle logic;
 - routes Candidate DAILY finalisation through the already shared canonical DAILY materialisation seam;
 - routes Candidate WEEKLY through the existing WEEKLY calculation/upsert authority;
 - routes PAPER pack creation through the existing QR enqueue/document worker.
@@ -87,9 +110,9 @@ It must not own rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN,
 - `timesheet-official-pdf.js` displays the candidate signature in the review variant and both signatures only in the final variant;
 - immutable official presentation facts are frozen at worker submission and reused for review and final derivatives.
 
-## Later consumer boundaries
+## Consumer boundaries
 
 - CloudTMS frontend consumes server warning/status/capability fields and performs preview → warning → confirm.
-- Private broker consumes only the versioned CloudTMS HTTP API.
+- Candidate broker consumes only the versioned private CloudTMS service API.
 - Candidate app/web sends factual inputs and renders server truth.
 - Google Availability/rota remains unchanged and is mediated rather than moved.

@@ -2044,6 +2044,16 @@ begin
   ) then
     return new;
   end if;
+  if exists(
+    select 1
+    from public.candidate_submission_workflows workflow
+    where workflow.route='PAPER'
+      and workflow.state='AWAITING_PAPER_RETURN'
+      and (workflow.target_timesheet_id=new.timesheet_id
+        or workflow.anchor_timesheet_id=new.timesheet_id)
+  ) then
+    return new;
+  end if;
   v_notification:=private._timesheet_route_resubmission_notifications_v1(
     new.timesheet_id,new.timesheet_id,new.version,'ALLOW_QR_AGAIN',now()
   );

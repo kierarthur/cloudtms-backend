@@ -1867,6 +1867,14 @@ begin
       and nullif(t.qr_scanned_at::text,'') is null
       and nullif(t.qr_signed_hash,'') is null
       and nullif(t.qr_signed_at_utc::text,'') is null
+      and not exists(
+        select 1
+        from public.candidate_submission_workflows candidate_workflow
+        where candidate_workflow.route='PAPER'
+          and candidate_workflow.state='AWAITING_PAPER_RETURN'
+          and (candidate_workflow.target_timesheet_id=t.timesheet_id
+            or candidate_workflow.anchor_timesheet_id=t.timesheet_id)
+      )
       and m.type='TIMESHEET_QR'
       and m.context_kind='timesheets'
       and m.context_id=t.timesheet_id

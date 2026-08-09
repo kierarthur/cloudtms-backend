@@ -488,16 +488,47 @@ declare
   v_daily_save_receipt jsonb;
   v_canonical_financials_id uuid;
   v_canonical_financial_sha256 bytea;
+  v_service_finalisation jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
-  v_context:=private._candidate_session_context_v1(p_session_id,v_environment,null,p_now_utc,true);
-  v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
-  if v_candidate_id is null then raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='28000'; end if;
   if nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023'; end if;
 
   select * into v_workflow from public.candidate_submission_workflows where id=p_workflow_id for update;
-  if not found or v_workflow.environment<>v_environment or v_workflow.candidate_id<>v_candidate_id then
+  if not found or v_workflow.environment<>v_environment then
+    raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
+  end if;
+  if p_session_id is null then
+    v_service_finalisation:=coalesce(p_daily_materialisation_json->'service_finalisation','{}'::jsonb);
+    if coalesce(v_service_finalisation->>'contract_version','')<>'CANDIDATE_MANAGER_FINALISATION_V1'
+       or coalesce((v_service_finalisation->>'workflow_generation')::integer,0)<>v_workflow.generation
+       or upper(coalesce(v_service_finalisation->>'approval_method',''))<>v_workflow.route then
+      raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
+    end if;
+    if v_workflow.route='PAPER' then
+      if nullif(v_service_finalisation->>'approval_request_id','') is not null then
+        raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
+      end if;
+    else
+      select * into v_approved_request
+      from public.candidate_approval_requests a
+      where a.id=nullif(v_service_finalisation->>'approval_request_id','')::uuid
+        and a.workflow_id=v_workflow.id
+        and a.workflow_generation=v_workflow.generation
+        and a.method=v_workflow.route
+        and a.state='APPROVED'
+        and a.review_manifest_sha256=v_workflow.review_manifest_sha256
+        and encode(a.review_manifest_sha256,'hex')=lower(coalesce(v_service_finalisation->>'review_manifest_sha256_hex',''))
+      for update;
+      if not found then raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000'; end if;
+    end if;
+    v_candidate_id:=v_workflow.candidate_id;
+  else
+    v_context:=private._candidate_session_context_v1(p_session_id,v_environment,null,p_now_utc,true);
+    v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
+    if v_candidate_id is null then raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='28000'; end if;
+  end if;
+  if v_workflow.candidate_id<>v_candidate_id then
     raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
   end if;
   if v_workflow.last_mutation_idempotency_key=p_idempotency_key and v_workflow.last_mutation_response_json is not null then

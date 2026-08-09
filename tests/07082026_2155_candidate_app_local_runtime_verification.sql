@@ -446,7 +446,11 @@ begin
   end if;
 
   v_response:=public.candidate_workflow_transition_atomic_v1(
-    v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,'{}'::jsonb,
+    v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
+    jsonb_build_object(
+      'approval_token_hash_hex',encode(extensions.digest(v_workflow::text||':phone','sha256'),'hex'),
+      'expires_at_utc',now()+interval '30 minutes'
+    ),
     'workflow-select-phone-v1',now()
   );
   v_manifest_hash:=v_response->>'review_manifest_sha256';
@@ -555,8 +559,18 @@ begin
   v_row_signature:=public.timesheet_lifecycle_guard_signature_v1(
     v_timesheet,v_week,false
   )->>'row_signature';
+  update public.candidate_app_sessions
+  set revoked_at_utc=now(), updated_at_utc=now()
+  where id=v_session;
   v_response:=public.candidate_submission_finalize_atomic_v1(
-    v_session,'TEST',v_workflow,2,v_row_signature,'workflow-finalise-v1',now()
+    null,'TEST',v_workflow,2,v_row_signature,'workflow-finalise-v1',now(),
+    jsonb_build_object('service_finalisation',jsonb_build_object(
+      'contract_version','CANDIDATE_MANAGER_FINALISATION_V1',
+      'workflow_generation',2,
+      'approval_method','PHONE',
+      'approval_request_id',v_approval_request,
+      'review_manifest_sha256_hex',v_manifest_hash
+    ))
   );
   if v_response->>'state'<>'FINALISED'
      or coalesce((v_response->>'auto_authorised')::boolean,true)=true then
@@ -723,7 +737,11 @@ begin
     raise exception 'DAILY review artefact incorrectly became canonical evidence';
   end if;
   perform public.candidate_workflow_transition_atomic_v1(
-    v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,'{}'::jsonb,
+    v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
+    jsonb_build_object(
+      'approval_token_hash_hex',encode(extensions.digest(v_workflow::text||':daily-phone','sha256'),'hex'),
+      'expires_at_utc',now()+interval '30 minutes'
+    ),
     'daily-select-phone-v1',now()
   );
   v_response:=public.candidate_workflow_transition_atomic_v1(

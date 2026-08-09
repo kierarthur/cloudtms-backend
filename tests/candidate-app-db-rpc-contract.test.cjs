@@ -265,6 +265,20 @@ test('workflow enforces one-signature approval, manager identity, reminder limit
   assert.match(workflow, /source_component_id is null[\s\S]*created_at_utc>=coalesce\(v_workflow\.worker_submitted_at_utc/i);
 });
 
+test('manager approval and evidence completion are session-independent, token-bound and byte-exact', () => {
+  const workflow = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
+  const finalise = definition(sql.final, 'candidate_submission_finalize_atomic_v1');
+  assert.match(workflow, /v_is_public_manager_action:=not v_is_service_action[\s\S]*PHONE_APPROVE[\s\S]*COMPONENT_COMPLETE/i);
+  assert.match(workflow, /method in \('EMAIL','PHONE'\)[\s\S]*expires_at_utc>p_now_utc/i);
+  assert.match(workflow, /'PHONE','PENDING',v_token_hash[\s\S]*expires_at_utc/i);
+  assert.match(workflow, /CANCEL_MANAGER_HANDOFF[\s\S]*handoff_cancelled/i);
+  assert.match(workflow, /EXPENSE_EVIDENCE'\)[\s\S]*application\/pdf/i);
+  assert.match(workflow, /v_component\.source_content_sha256=v_digest[\s\S]*CANDIDATE_COMPONENT_IMMUTABLE_CONFLICT/i);
+  assert.match(finalise, /CANDIDATE_MANAGER_FINALISATION_V1/i);
+  assert.match(finalise, /p_session_id is null[\s\S]*approval_request_id[\s\S]*state='APPROVED'/i);
+  assert.match(finalise, /v_candidate_id:=v_workflow\.candidate_id/i);
+});
+
 test('manager-review addendum uses the existing three workflow tables and adds no eighth table', () => {
   assert.doesNotMatch(sql.managerReviewSchema, /create table/i);
   for (const table of [

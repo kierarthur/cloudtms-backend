@@ -4,6 +4,9 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test tests/*.test.js",
+    "test:candidate-boundary": "node --test tests/candidate-app-backend.test.js tests/candidate-broker-boundary.test.js",
+    "check:candidate-broker": "wrangler deploy --dry-run --config candidate-broker/wrangler.jsonc",
+    "check:candidate-private-api": "wrangler deploy --dry-run --config candidate-private-api/wrangler.jsonc",
     "test:invoice-async": "node --test tests/invoice_async_backend.test.js",
     "dev": "wrangler dev",
     "preview": "wrangler dev --remote",

@@ -15,6 +15,8 @@ const CANDIDATE_PREFIX = '/candidate-app/v1';
 const MANAGER_PREFIX = '/candidate-manager/v1';
 const MAX_JSON_BYTES = 1024 * 1024;
 const MAX_COMPONENT_BYTES = 15 * 1024 * 1024;
+const MAX_IMAGE_DIMENSION = 12000;
+const MAX_IMAGE_PIXELS = 40_000_000;
 const ACCESS_TTL_SECONDS = 15 * 60;
 const REFRESH_TTL_DAYS = 30;
 const REFRESH_ABSOLUTE_TTL_DAYS = 90;
@@ -69,7 +71,7 @@ const COMPONENT_MEDIA_TYPES = Object.freeze({
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
   'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
   'CREATE_EMAIL_APPROVAL_REQUEST', 'PAPER_PREPARE', 'PAPER_RETURN', 'REMIND',
-  'RENEW', 'CANCEL', 'SUPERSEDE'
+  'RENEW', 'CANCEL', 'SUPERSEDE', 'CANCEL_MANAGER_HANDOFF'
 ]);
 
 const ROUTE_INTERVENTION_REASONS = new Set([
@@ -253,13 +255,21 @@ async function openEnvelope(secret, purpose, value) {
 }
 
 function environmentName(env) {
-  const value = upper(env.CANDIDATE_APP_ENVIRONMENT || env.ENVIRONMENT || env.WORKER_ENV || 'TEST');
+  const value = upper(env.CANDIDATE_APP_ENVIRONMENT);
   if (!['TEST', 'LIVE'].includes(value)) throw new CandidateHttpError(503, 'CANDIDATE_ENVIRONMENT_INVALID');
   return value;
 }
 
 function tokenSecret(env) {
-  return env.CANDIDATE_SESSION_TOKEN_SECRET || env.SESSION_TOKEN_SECRET;
+  const value = text(env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET);
+  if (!value) throw new CandidateHttpError(503, 'CANDIDATE_TOKEN_SECRET_UNAVAILABLE');
+  return value;
+}
+
+function challengeTokenSecret(env) {
+  const value = text(env.CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET);
+  if (!value) throw new CandidateHttpError(503, 'CANDIDATE_CHALLENGE_SECRET_UNAVAILABLE');
+  return value;
 }
 
 function serviceHeaders(env, extras = {}) {
@@ -451,11 +461,11 @@ async function rpcCall(deps, name, args, options = undefined) {
 }
 
 function publicAppBase(request, env) {
-  const configured = text(
-    env.CANDIDATE_APP_PUBLIC_URL || env.PUBLIC_APP_BASE_URL ||
-    env.PUBLIC_FRONTEND_BASE_URL || env.PUBLIC_SITE_URL
-  ).replace(/\/$/, '');
-  return configured || new URL(request.url).origin;
+  const configured = text(env.CANDIDATE_APP_PUBLIC_URL).replace(/\/$/, '');
+  if (!configured || !/^https:\/\//i.test(configured)) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PUBLIC_URL_UNAVAILABLE');
+  }
+  return configured;
 }
 
 function deferBackground(ctx, promise, label, details = {}) {
@@ -526,7 +536,7 @@ async function handleChallengeStart(request, env, deps, isResend = false) {
   if (!['ACTIVATE', 'RESET', 'RECOVERY'].includes(purpose)) throw new CandidateHttpError(400, 'CANDIDATE_CHALLENGE_PURPOSE_INVALID');
   const idempotencyKey = text(body.idempotency_key) || crypto.randomUUID();
   const challengeToken = await deterministicOpaqueToken(
-    tokenSecret(env),
+    challengeTokenSecret(env),
     'candidate-auth-challenge-v1',
     environmentName(env), purpose, email, isResend ? text(body.challenge_id) : '', idempotencyKey
   );
@@ -664,11 +674,18 @@ async function handleAccountAction(request, env, deps, action) {
     if (!isObject(body.notification_preferences)) throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_PREFERENCES_INVALID');
     payload = { notification_preferences: body.notification_preferences };
   } else if (action === 'REGISTER_PUSH_TOKEN') {
-    const encrypted = await encryptPushToken(env, text(body.push_token));
+    const ciphertext = text(body.push_token_ciphertext_hex);
+    const provider = upper(body.push_provider);
+    const keyVersion = Number(body.push_key_version);
+    if (!/^[0-9a-f]{58,32768}$/i.test(ciphertext) || ciphertext.length % 2 !== 0
+        || !['APNS', 'FCM', 'WEB_PUSH'].includes(provider)
+        || !Number.isSafeInteger(keyVersion) || keyVersion < 1) {
+      throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+    }
     payload = {
-      push_provider: upper(body.push_provider),
-      push_token_ciphertext_hex: encrypted.ciphertext_hex,
-      push_key_version: encrypted.key_version
+      push_provider: provider,
+      push_token_ciphertext_hex: ciphertext,
+      push_key_version: keyVersion
     };
   } else if (action === 'CHANGE_PASSWORD') {
     const account = await restOne(env, 'candidate_app_accounts',
@@ -700,38 +717,86 @@ async function handleAccountAction(request, env, deps, action) {
   return jsonResponse(200, result);
 }
 
-async function pushEncryptionKey(env) {
-  const material = await sha256Bytes(`candidate-push-token-v1:${String(tokenSecret(env) || '')}`);
-  return crypto.subtle.importKey('raw', material, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
-}
-
-async function encryptPushToken(env, pushToken) {
-  if (!pushToken || pushToken.length > 8192) throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = new Uint8Array(await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: encoder.encode('candidate-push-token-v1') },
-    await pushEncryptionKey(env), encoder.encode(pushToken)
-  ));
-  const packed = new Uint8Array(iv.length + encrypted.length);
-  packed.set(iv, 0);
-  packed.set(encrypted, iv.length);
-  return { ciphertext_hex: hex(packed), key_version: 1 };
-}
-
-async function decryptPushToken(env, ciphertext) {
-  const packed = bytesFromHex(ciphertext);
-  if (packed.length <= 28) throw new Error('CANDIDATE_PUSH_TOKEN_INVALID');
-  const plain = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: packed.slice(0, 12), additionalData: encoder.encode('candidate-push-token-v1') },
-    await pushEncryptionKey(env), packed.slice(12)
-  );
-  return decoder.decode(plain);
-}
-
 function componentMediaTypes(kind) {
   const allowed = COMPONENT_MEDIA_TYPES[upper(kind)];
   if (!allowed) throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_KIND_INVALID');
   return allowed;
+}
+
+function positiveLimit(value, fallback, minimum, maximum) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
+}
+
+function uploadLimits(env) {
+  return {
+    bytes: positiveLimit(env.CANDIDATE_MAX_UPLOAD_BYTES, MAX_COMPONENT_BYTES, 1024, MAX_COMPONENT_BYTES),
+    dimension: positiveLimit(env.CANDIDATE_MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION, 256, 30000),
+    pixels: positiveLimit(env.CANDIDATE_MAX_IMAGE_PIXELS, MAX_IMAGE_PIXELS, 65_536, 120_000_000)
+  };
+}
+
+function containsAscii(bytes, value) {
+  const pattern = encoder.encode(value);
+  outer: for (let index = 0; index <= bytes.length - pattern.length; index += 1) {
+    for (let offset = 0; offset < pattern.length; offset += 1) {
+      if (bytes[index + offset] !== pattern[offset]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}
+
+async function validateComponentBytes(bytes, mediaType, env = {}) {
+  const source = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const type = normaliseMediaType(mediaType);
+  const limits = uploadLimits(env);
+  if (!source.byteLength || source.byteLength > limits.bytes) {
+    throw new CandidateHttpError(413, 'CANDIDATE_COMPONENT_SIZE_INVALID');
+  }
+  if (type === 'application/pdf') {
+    const header = decoder.decode(source.slice(0, Math.min(1024, source.byteLength)));
+    if (!header.includes('%PDF-') || containsAscii(source, '/Encrypt')) {
+      throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_PDF_INVALID');
+    }
+    let document;
+    try {
+      document = await PDFDocument.load(source, { ignoreEncryption: false, updateMetadata: false });
+    } catch {
+      throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_PDF_INVALID');
+    }
+    if (document.getPageCount() !== 1) {
+      throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_PDF_ONE_PAGE_REQUIRED');
+    }
+    return { media_type: type, page_count: 1, width: null, height: null };
+  }
+  if (type === 'image/png') {
+    const signature = [137, 80, 78, 71, 13, 10, 26, 10];
+    if (source.length < signature.length || signature.some((value, index) => source[index] !== value)) {
+      throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_IMAGE_INVALID');
+    }
+  } else if (type === 'image/jpeg') {
+    if (source.length < 4 || source[0] !== 0xff || source[1] !== 0xd8
+        || source[source.length - 2] !== 0xff || source[source.length - 1] !== 0xd9) {
+      throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_IMAGE_INVALID');
+    }
+  } else {
+    throw new CandidateHttpError(415, 'CANDIDATE_COMPONENT_MEDIA_TYPE_INVALID');
+  }
+  try {
+    const document = await PDFDocument.create();
+    const image = type === 'image/png' ? await document.embedPng(source) : await document.embedJpg(source);
+    const width = Number(image.width);
+    const height = Number(image.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width < 1 || height < 1
+        || width > limits.dimension || height > limits.dimension || width * height > limits.pixels) {
+      throw new CandidateHttpError(413, 'CANDIDATE_SOURCE_IMAGE_DIMENSIONS_INVALID');
+    }
+    return { media_type: type, page_count: 1, width, height };
+  } catch (error) {
+    if (error instanceof CandidateHttpError) throw error;
+    throw new CandidateHttpError(415, 'CANDIDATE_SOURCE_IMAGE_INVALID');
+  }
 }
 
 function extensionForMedia(mediaType) {
@@ -749,7 +814,7 @@ function componentStorageKey(environment, workflowId, generation, componentKind,
 
 async function uploadTicket(env, payload) {
   const now = Math.floor(Date.now() / 1000);
-  return sealEnvelope(env.UPLOAD_TOKEN_SECRET || tokenSecret(env), 'candidate-component-upload-v1', {
+  return sealEnvelope(env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET, 'candidate-component-upload-v1', {
     typ: 'candidate_component_upload', aud: 'cloudtms-candidate-upload',
     iat: now, exp: now + 10 * 60, nonce: crypto.randomUUID(), ...payload
   });
@@ -757,7 +822,7 @@ async function uploadTicket(env, payload) {
 
 async function verifyUploadTicket(env, value) {
   const payload = await openEnvelope(
-    env.UPLOAD_TOKEN_SECRET || tokenSecret(env),
+    env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET,
     'candidate-component-upload-v1',
     value
   );
@@ -776,7 +841,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   const allowed = componentMediaTypes(componentKind);
   if (!allowed.includes(mediaType)) throw new CandidateHttpError(415, 'CANDIDATE_COMPONENT_MEDIA_TYPE_INVALID');
   const byteSize = requireInteger(body.byte_size, 'CANDIDATE_COMPONENT_SIZE_INVALID', 1);
-  if (byteSize > MAX_COMPONENT_BYTES) throw new CandidateHttpError(413, 'CANDIDATE_COMPONENT_SIZE_INVALID');
+  if (byteSize > uploadLimits(env).bytes) throw new CandidateHttpError(413, 'CANDIDATE_COMPONENT_SIZE_INVALID');
   const environment = environmentName(env);
   let sessionId = null;
   let approvalTokenHash = null;
@@ -793,10 +858,6 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   } else if (owner === 'office') {
     const user = await deps.requireOfficeUser(request, ['admin']);
     if (!user) throw new CandidateHttpError(401, 'OFFICE_AUTH_REQUIRED');
-    const workflow = await workflowRow(env, workflowId);
-    const access = await resolveWorkflowSession(env, workflow);
-    if (!access) throw new CandidateHttpError(409, 'CANDIDATE_ACTIVE_SESSION_REQUIRED');
-    sessionId = access.session_id;
     ownerId = requireUuid(user.id, 'OFFICE_AUTH_REQUIRED');
   }
   const storageKey = componentStorageKey(environment, workflowId, generation, componentKind, mediaType);
@@ -807,6 +868,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     paper_return_page_key: body.paper_return_page_key == null ? null : text(body.paper_return_page_key),
     storage_key: storageKey, media_type: mediaType, byte_size: byteSize,
     approval_request_id: body.approval_request_id ? requireUuid(body.approval_request_id) : null,
+    ...(owner === 'office' ? { service_phone_approval: true, actor_user_id: ownerId } : {}),
     ...(approvalTokenHash ? {
       approval_token_hash_hex: approvalTokenHash
     } : {})
@@ -820,7 +882,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   const componentId = requireUuid(result.component_id, 'CANDIDATE_COMPONENT_PREPARE_FAILED');
   const ticket = await uploadTicket(env, {
     env: environment, owner, owner_id: ownerId, workflow_id: workflowId,
-    candidate_session_id: owner === 'office' ? sessionId : null,
+    candidate_session_id: null,
     generation, component_id: componentId, component_kind: componentKind,
     key: storageKey, media_type: mediaType, byte_size: byteSize,
     completion_idempotency_key: `${idempotencyKey}:complete`
@@ -862,42 +924,54 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
   const declared = Number(request.headers.get('content-length') || 0);
   if (declared && declared !== Number(ticket.byte_size)) throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_SIZE_MISMATCH');
   const bytes = new Uint8Array(await request.arrayBuffer());
-  if (bytes.byteLength !== Number(ticket.byte_size) || bytes.byteLength < 1 || bytes.byteLength > MAX_COMPONENT_BYTES) {
+  if (bytes.byteLength !== Number(ticket.byte_size) || bytes.byteLength < 1
+      || bytes.byteLength > uploadLimits(env).bytes) {
     throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_SIZE_MISMATCH');
   }
+  const validated = await validateComponentBytes(bytes, contentType, env);
   const bucket = env.R2;
   if (!bucket || typeof bucket.put !== 'function') throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
-  if (typeof bucket.head === 'function' && await bucket.head(ticket.key)) {
-    throw new CandidateHttpError(409, 'CANDIDATE_UPLOAD_TICKET_ALREADY_USED');
-  }
-  await bucket.put(ticket.key, bytes, {
+  const digest = await sha256Hex(bytes);
+  const stored = await bucket.put(ticket.key, bytes, {
+    onlyIf: { etagDoesNotMatch: '*' },
     httpMetadata: { contentType }, customMetadata: {
       purpose: 'candidate-component', workflow_id: ticket.workflow_id,
-      component_id: ticket.component_id, sha256: await sha256Hex(bytes)
+      component_id: ticket.component_id, media_type: contentType,
+      byte_size: String(bytes.byteLength), sha256: digest
     }
   });
-  const digest = await sha256Hex(bytes);
-  try {
-    const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
-      p_session_id: owner.session_id, p_environment: ticket.env,
-      p_workflow_id: ticket.workflow_id, p_action: 'COMPONENT_COMPLETE',
-      p_expected_generation: Number(ticket.generation),
-      p_payload: {
-        component_id: ticket.component_id, source_content_sha256_hex: digest,
-        verified_byte_size: bytes.byteLength, verified_media_type: contentType,
-        ...(owner.approval_token_hash_hex ? { approval_token_hash_hex: owner.approval_token_hash_hex } : {})
-      }, p_idempotency_key: ticket.completion_idempotency_key,
-      p_now_utc: new Date().toISOString()
-    });
-    return jsonResponse(200, {
-      ok: true, workflow_id: ticket.workflow_id, generation: Number(ticket.generation),
-      component_id: ticket.component_id, state: result.state, media_type: contentType,
-      byte_size: bytes.byteLength, content_sha256: digest
-    });
-  } catch (error) {
-    await bucket.delete(ticket.key).catch(() => null);
-    throw error;
+  if (!stored) {
+    const existing = await bucket.head(ticket.key);
+    const metadata = existing?.customMetadata || {};
+    if (!existing || text(metadata.sha256).toLowerCase() !== digest
+        || text(metadata.workflow_id) !== ticket.workflow_id
+        || text(metadata.component_id) !== ticket.component_id
+        || text(metadata.media_type).toLowerCase() !== contentType
+        || Number(metadata.byte_size) !== bytes.byteLength) {
+      throw new CandidateHttpError(409, 'CANDIDATE_UPLOAD_TICKET_ALREADY_USED');
+    }
   }
+  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+    p_session_id: owner.session_id, p_environment: ticket.env,
+    p_workflow_id: ticket.workflow_id, p_action: 'COMPONENT_COMPLETE',
+    p_expected_generation: Number(ticket.generation),
+    p_payload: {
+      component_id: ticket.component_id, source_content_sha256_hex: digest,
+        verified_byte_size: bytes.byteLength, verified_media_type: contentType,
+        ...(ticket.owner === 'office' ? { service_phone_approval: true, actor_user_id: ticket.owner_id } : {}),
+      ...(owner.approval_token_hash_hex ? { approval_token_hash_hex: owner.approval_token_hash_hex } : {})
+    }, p_idempotency_key: ticket.completion_idempotency_key,
+    p_now_utc: new Date().toISOString()
+  });
+  return jsonResponse(200, {
+    ok: true, workflow_id: ticket.workflow_id, generation: Number(ticket.generation),
+    component_id: ticket.component_id, state: result.state, media_type: contentType,
+    byte_size: bytes.byteLength, content_sha256: digest,
+    idempotent_replay: !stored || result.idempotent_replay === true,
+    page_count: validated.page_count,
+    image_width: validated.width,
+    image_height: validated.height
+  });
 }
 
 async function r2Bytes(env, key, expectedHash = null) {
@@ -921,15 +995,20 @@ function dataUrl(bytes, mediaType) {
 async function immutablePut(env, key, bytes, mediaType, metadata = {}) {
   const bucket = env.R2;
   if (!bucket) throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
-  const existing = await bucket.get(key);
-  if (existing) {
-    const prior = new Uint8Array(await existing.arrayBuffer());
-    if ((await sha256Hex(prior)) !== (await sha256Hex(bytes))) {
-      throw new CandidateHttpError(409, 'CANDIDATE_RENDER_IDEMPOTENCY_CONFLICT');
-    }
-    return;
+  const digest = await sha256Hex(bytes);
+  const stored = await bucket.put(key, bytes, {
+    onlyIf: { etagDoesNotMatch: '*' },
+    httpMetadata: { contentType: mediaType },
+    customMetadata: { ...metadata, sha256: digest, media_type: mediaType, byte_size: String(bytes.byteLength) }
+  });
+  if (stored) return { created: true, sha256: digest };
+  const existing = await bucket.head(key);
+  if (!existing || text(existing.customMetadata?.sha256).toLowerCase() !== digest
+      || text(existing.customMetadata?.media_type).toLowerCase() !== mediaType
+      || Number(existing.customMetadata?.byte_size) !== bytes.byteLength) {
+    throw new CandidateHttpError(409, 'CANDIDATE_RENDER_IDEMPOTENCY_CONFLICT');
   }
-  await bucket.put(key, bytes, { httpMetadata: { contentType: mediaType }, customMetadata: metadata });
+  return { created: false, sha256: digest };
 }
 
 function parseJson(value, fallback = null) {
@@ -1576,27 +1655,40 @@ async function lifecycleSignature(deps, workflow) {
 
 async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKey) {
   const workflow = await workflowRow(env, workflowId);
-  const access = await resolveWorkflowSession(env, workflow);
-  if (!access) {
-    return { ok: true, finalisation_pending: true, reason: 'CANDIDATE_ACTIVE_SESSION_REQUIRED', workflow_id: workflow.id, generation: workflow.generation };
+  const approved = upper(workflow.route) === 'PAPER' ? null : await restOne(env, 'candidate_approval_requests',
+    `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(generation)}`
+    + '&state=eq.APPROVED&select=id,method,review_manifest_sha256,approved_at_utc&order=approved_at_utc.desc');
+  if (upper(workflow.route) !== 'PAPER' && !approved) {
+    throw new CandidateHttpError(409, 'FINAL_SIGNED_DOCUMENT_NOT_READY');
   }
+  const serviceFinalisation = {
+    contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
+    approval_request_id: approved?.id || null,
+    approval_method: approved?.method || 'PAPER',
+    workflow_generation: generation,
+    review_manifest_sha256_hex: text(approved?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase()
+  };
   if (workflow.workflow_kind === 'DAILY') {
     return safeFinalisationResult(await deps.finaliseDaily({
-      sessionId: access.session_id,
-      environment: access.environment,
+      sessionId: null,
+      environment: environmentName(env),
       workflowId: workflow.id,
       expectedGeneration: generation,
       idempotencyKey: idempotencyKey || crypto.randomUUID(),
-      nowUtc: new Date().toISOString()
+      nowUtc: new Date().toISOString(),
+      serviceFinalisation
     }));
   }
-  return safeFinalisationResult(await rpcCall(deps, 'candidate_submission_finalize_atomic_v1', candidateRpcArgs(access, env, {
+  return safeFinalisationResult(await rpcCall(deps, 'candidate_submission_finalize_atomic_v1', {
+    p_session_id: null,
+    p_environment: environmentName(env),
     p_workflow_id: workflow.id,
     p_expected_generation: generation,
     p_expected_row_signature: await lifecycleSignature(deps, workflow),
     p_idempotency_key: text(idempotencyKey) || crypto.randomUUID(),
-    p_daily_materialisation_json: null
-  })));
+    p_now_utc: new Date().toISOString(),
+    p_daily_materialisation_json: { service_finalisation: serviceFinalisation }
+  }));
 }
 
 async function handleCandidateRead(request, env, deps, kind, params = {}) {
@@ -1716,6 +1808,17 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       approval_route: upper(body.approval_route || payload.approval_route || workflow.route),
       renderer_contract_version: RENDERER_CONTRACT_VERSION
     };
+  } else if (dbAction === 'SELECT_PHONE_APPROVAL') {
+    const managerToken = await deterministicOpaqueToken(
+      env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
+      'candidate-phone-handoff-v1', workflowId, generation, text(body.idempotency_key)
+    );
+    payload = {
+      ...payload,
+      approval_token_hash_hex: await sha256Hex(managerToken),
+      expires_at_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+    };
+    body.__manager_handoff_token = managerToken;
   } else if (dbAction === 'CREATE_EMAIL_APPROVAL_REQUEST' || dbAction === 'RENEW' || dbAction === 'REMIND') {
     if (dbAction === 'REMIND') dbAction = 'RENEW';
     const managerToken = randomToken(32);
@@ -1736,6 +1839,9 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
     access, env, workflowId, dbAction, generation, payload, body.idempotency_key
   ));
+  if (dbAction === 'SELECT_PHONE_APPROVAL') {
+    return jsonResponse(201, { ...result, manager_handoff_token: body.__manager_handoff_token });
+  }
   if (dbAction === 'WORKER_SUBMIT' && result?.render_contract) {
     const work = renderAndRegister(env, deps, result.render_contract, 'REVIEW');
     const deferred = deferBackground(ctx, work, 'review-render', { workflow_id: workflowId, generation });
@@ -1781,16 +1887,23 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
   const auth = await managerTokenContext(request, env);
   const body = request.method === 'GET' ? {} : await readJson(request);
   const generation = body.generation == null ? null : requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
-  const dbAction = {
+  let dbAction = {
     start: 'BEGIN_MANAGER_REVIEW', progress: 'RECORD_REVIEW_PROGRESS',
     approve: 'EMAIL_APPROVE', refuse: 'MANAGER_REFUSE'
   }[action];
   if (!dbAction) throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
+  if (action === 'approve') {
+    const context = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+      null, env, workflowId, 'BEGIN_MANAGER_REVIEW', generation,
+      { approval_token_hash_hex: auth.token_hash_hex }, `manager-method:${workflowId}:${auth.token_hash_hex}`
+    ));
+    dbAction = upper(context?.method) === 'PHONE' ? 'PHONE_APPROVE' : 'EMAIL_APPROVE';
+  }
   const payload = { ...(isObject(body.payload) ? body.payload : body), approval_token_hash_hex: auth.token_hash_hex };
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
     null, env, workflowId, dbAction, generation, payload, body.idempotency_key
   ));
-  if (dbAction === 'EMAIL_APPROVE' && result?.final_render_contract) {
+  if (['EMAIL_APPROVE', 'PHONE_APPROVE'].includes(dbAction) && result?.final_render_contract) {
     const work = (async () => {
       await renderAndRegister(env, deps, result.final_render_contract, 'FINAL');
       return finaliseWorkflow(env, deps, workflowId, result.generation, `${body.idempotency_key || crypto.randomUUID()}:finalise`);
@@ -1850,6 +1963,135 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
   });
 }
 
+function ukDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '-';
+}
+
+async function appendPdfBytes(target, sourceBytes) {
+  const source = await PDFDocument.load(sourceBytes);
+  const pages = await target.copyPages(source, source.getPageIndices());
+  for (const page of pages) target.addPage(page);
+}
+
+async function mileageClaimFormBytes(workflow) {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595.28, 841.89]);
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  page.drawRectangle({ x: 0, y: 785, width: 595.28, height: 56, color: rgb(0.04, 0.12, 0.24) });
+  page.drawText('ARTHUR RAI MEDICAL SERVICES', { x: 34, y: 814, size: 10, font: bold, color: rgb(0.75, 0.9, 1) });
+  page.drawText(`Mileage Claim Form for week ending ${ukDate(workflow.week_ending_date)}`, {
+    x: 34, y: 795, size: 16, font: bold, color: rgb(1, 1, 1)
+  });
+  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
+  const expense = parseJson(immutable.expense_submission || immutable.expense_claim || immutable.expenses || immutable, {}) || {};
+  const claim = parseJson(expense.canonical_tsfin_snapshot, expense) || expense;
+  const fields = [
+    ['Post Code from', text(expense.post_code_from || expense.postcode_from || claim.post_code_from)],
+    ['Cost Code To', text(expense.cost_code_to || claim.cost_code_to)],
+    ['Number of miles', text(claim.mileage_units || expense.mileage_units)],
+    ['Total mileage', text(expense.total_mileage || claim.mileage_units)],
+    ['Manager signature', ''],
+    ['Date', '']
+  ];
+  let y = 720;
+  for (const [label, value] of fields) {
+    page.drawText(label, { x: 42, y, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
+    page.drawRectangle({ x: 205, y: y - 8, width: 335, height: 31, borderColor: rgb(0.3, 0.4, 0.5), borderWidth: 1 });
+    if (value) page.drawText(value.slice(0, 65), { x: 214, y: y + 2, size: 10, font: regular });
+    y -= 72;
+  }
+  page.drawText('This page forms part of the immutable CloudTMS paper-return manifest.', {
+    x: 42, y: 58, size: 8, font: regular, color: rgb(0.35, 0.4, 0.48)
+  });
+  return new Uint8Array(await pdf.save());
+}
+
+async function paperExpensePageBytes(env, workflow, component, ordinal) {
+  if (upper(component.component_kind) === 'MILEAGE_FORM') return mileageClaimFormBytes(workflow);
+  const rendered = await renderExpensePage(env, {
+    review_ordinal: ordinal,
+    render_input: upper(component.component_kind) === 'EXPENSE_SUMMARY'
+      ? {} : { source_component_id: component.id }
+  }, { workflow, component }, 'REVIEW');
+  return rendered.pdf_bytes;
+}
+
+async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
+  const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
+  const pages = Array.isArray(manifest.pages) ? manifest.pages : [];
+  if (!pages.length || !workflow.paper_return_manifest_sha256) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
+  const base = await r2Bytes(env, version.r2_key, text(version.sha256) || null);
+  if (base.media_type !== 'application/pdf') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+  const components = await restRows(env, 'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
+    + '&state=eq.IMMUTABLE&select=*');
+  const byId = new Map(components.map((component) => [text(component.id), component]));
+  const combined = await PDFDocument.create();
+  for (let index = 0; index < pages.length; index += 1) {
+    const expected = pages[index];
+    const kind = upper(expected.component_kind);
+    if (kind === 'HOURS_TIMESHEET') {
+      await appendPdfBytes(combined, base.bytes);
+      continue;
+    }
+    let component = null;
+    if (kind === 'EXPENSE_SUMMARY') {
+      component = components.find((entry) => upper(entry.component_kind) === 'EXPENSE_SUMMARY') || {
+        id: workflow.id, component_kind: 'EXPENSE_SUMMARY', document_role: 'EXPENSE_APPROVAL_SUMMARY',
+        expense_category: null, review_ordinal: index + 1
+      };
+    } else {
+      component = byId.get(text(expected.source_component_id));
+    }
+    if (!component || upper(component.component_kind) !== kind) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_MISSING');
+    }
+    await appendPdfBytes(combined, await paperExpensePageBytes(env, workflow, component, index + 1));
+  }
+  if (combined.getPageCount() < pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
+  const bytes = new Uint8Array(await combined.save());
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const baseHash = text(version.sha256).toLowerCase();
+  const key = `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}/paper-pack/${manifestHash}-${baseHash}.pdf`;
+  const receipt = await immutablePut(env, key, bytes, 'application/pdf', {
+    purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
+    timesheet_id: timesheet.timesheet_id, manifest_sha256: manifestHash,
+    base_document_sha256: baseHash, page_count: String(combined.getPageCount())
+  });
+  const now = new Date().toISOString();
+  const attachment = [{
+    r2_key: key,
+    filename: `Timesheet_${workflow.week_ending_date || timesheet.timesheet_id}.pdf`,
+    content_type: 'application/pdf', sha256: receipt.sha256, size_bytes: bytes.byteLength
+  }];
+  await restWrite(env, 'mail_outbox', 'PATCH',
+    `type=eq.TIMESHEET_QR&context_kind=eq.timesheets&context_id=eq.${encodeURIComponent(timesheet.timesheet_id)}`
+    + '&status=neq.SENT',
+    {
+      attachments: attachment, status: 'QUEUED', scheduled_for_utc: now, next_attempt_at_utc: now,
+      last_error: null, failed_at: null
+    }, 'return=minimal');
+  await restWrite(env, 'candidate_notifications', 'POST', 'on_conflict=dedupe_key', {
+    account_id: workflow.account_id,
+    candidate_id: workflow.candidate_id,
+    workflow_id: workflow.id,
+    timesheet_id: timesheet.timesheet_id,
+    event_type: 'PAPER_PACK_READY',
+    preference_category: 'resubmission_required',
+    template_key: 'candidate-paper-pack-ready-v1',
+    template_params: { page_count: combined.getPageCount() },
+    deep_link_json: { type: 'paper_pack', timesheet_id: timesheet.timesheet_id },
+    state: 'UNREAD', push_state: 'PENDING',
+    dedupe_key: `CANDIDATE_PAPER_PACK_READY_V1:${workflow.id}:${workflow.generation}:${manifestHash}`,
+    created_at_utc: now
+  }, 'resolution=merge-duplicates,return=minimal');
+  return { key, bytes, sha256: receipt.sha256, page_count: combined.getPageCount(), manifest_hash: manifestHash };
+}
+
 async function candidatePaperPackContext(request, env, deps, timesheetId) {
   const access = await verifyCandidateAccess(request, env);
   const id = requireUuid(timesheetId, 'CANDIDATE_TIMESHEET_NOT_FOUND');
@@ -1880,11 +2122,21 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
       + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
       + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
   }
-  const key = text(version?.r2_key || '');
-  const ready = Boolean(version && key);
+  let key = text(version?.r2_key || '');
+  let complete = null;
+  if (version && key) {
+    const workflow = await restOne(env, 'candidate_submission_workflows',
+      `environment=eq.${encodeURIComponent(environmentName(env))}&route=eq.PAPER`
+      + `&state=eq.AWAITING_PAPER_RETURN&or=(target_timesheet_id.eq.${encodeURIComponent(id)},anchor_timesheet_id.eq.${encodeURIComponent(id)})`
+      + '&select=*');
+    if (!workflow) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
+    complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
+    key = complete.key;
+  }
+  const ready = Boolean(complete && key);
   const state = ready ? 'READY'
     : upper(timesheet.document_state) === 'FAILED' ? 'FAILED' : 'PREPARING';
-  return { id, timesheet, version, key, ready, state };
+  return { id, timesheet, version, key, ready, state, complete };
 }
 
 async function handlePaperPackStatus(request, env, deps, timesheetId) {
@@ -1894,7 +2146,8 @@ async function handlePaperPackStatus(request, env, deps, timesheetId) {
     timesheet_id: context.id,
     timesheet_version: Number(context.timesheet.version || 1),
     paper_pack_state: context.state,
-    download_available: context.ready
+    download_available: context.ready,
+    page_count: context.complete?.page_count || null
   });
 }
 
@@ -1905,7 +2158,7 @@ async function handlePaperPackDownload(request, env, deps, timesheetId) {
       ? 'CANDIDATE_PAPER_PACK_FAILED' : 'CANDIDATE_PAPER_PACK_PREPARING');
   }
 
-  const stored = await r2Bytes(env, context.key, text(context.version.sha256) || null);
+  const stored = await r2Bytes(env, context.key, context.complete?.sha256 || null);
   if (stored.media_type !== 'application/pdf') {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
   }
@@ -1921,6 +2174,35 @@ async function handlePaperPackDownload(request, env, deps, timesheetId) {
   });
 }
 
+export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
+  const workflows = await restRows(env, 'candidate_submission_workflows',
+    `environment=eq.${encodeURIComponent(environmentName(env))}&route=eq.PAPER&state=eq.AWAITING_PAPER_RETURN`
+    + `&select=*&order=updated_at_utc.asc&limit=${Math.min(25, Math.max(1, Number(limit) || 10))}`);
+  const results = [];
+  for (const workflow of workflows) {
+    const id = text(workflow.target_timesheet_id || workflow.anchor_timesheet_id);
+    if (!UUID_RE.test(id)) continue;
+    try {
+      const timesheet = await restOne(env, 'timesheets',
+        `timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`
+        + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
+        + 'document_state,current_document_version_id,manual_pdf_r2_key');
+      if (!timesheet || upper(timesheet.document_state) !== 'READY'
+          || !UUID_RE.test(text(timesheet.current_document_version_id))) continue;
+      const version = await restOne(env, 'invoice_document_versions',
+        `id=eq.${encodeURIComponent(timesheet.current_document_version_id)}`
+        + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
+        + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
+      if (!version?.r2_key) continue;
+      const complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
+      results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, page_count: complete.page_count });
+    } catch (error) {
+      results.push({ workflow_id: workflow.id, timesheet_id: id, ok: false, error_code: knownErrorCode(error) });
+    }
+  }
+  return { ok: true, inspected: workflows.length, results };
+}
+
 async function handleCandidateNoWork(request, env, deps, contractWeekId) {
   const access = await verifyCandidateAccess(request, env);
   const body = await readJson(request);
@@ -1934,9 +2216,27 @@ async function handleCandidateNoWork(request, env, deps, contractWeekId) {
 async function handleNotifications(request, env, deps, notificationId = null) {
   const access = await verifyCandidateAccess(request, env);
   if (request.method === 'GET') {
+    const url = new URL(request.url);
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+    const cursor = text(url.searchParams.get('cursor'));
+    let cursorFilter = '';
+    if (cursor) {
+      const [createdAt, id] = cursor.split('|');
+      if (!createdAt || !UUID_RE.test(text(id)) || Number.isNaN(Date.parse(createdAt))) {
+        throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_CURSOR_INVALID');
+      }
+      cursorFilter = `&or=(created_at_utc.lt.${encodeURIComponent(createdAt)},and(created_at_utc.eq.${encodeURIComponent(createdAt)},id.lt.${encodeURIComponent(id)}))`;
+    }
     const rows = await restRows(env, 'candidate_notifications',
-      `account_id=eq.${encodeURIComponent(access.account_id)}&select=id,event_type,template_key,payload_json,deep_link_json,state,created_at_utc,read_at_utc&order=created_at_utc.desc&limit=100`);
-    return jsonResponse(200, { ok: true, notifications: rows });
+      `account_id=eq.${encodeURIComponent(access.account_id)}${cursorFilter}`
+      + `&select=id,event_type,template_key,payload_json,deep_link_json,state,created_at_utc,read_at_utc&order=created_at_utc.desc,id.desc&limit=${limit + 1}`);
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const tail = page[page.length - 1];
+    return jsonResponse(200, {
+      ok: true, notifications: page,
+      next_cursor: hasMore && tail ? `${tail.created_at_utc}|${tail.id}` : null
+    });
   }
   const id = requireUuid(notificationId);
   const updated = await restWrite(
@@ -1987,8 +2287,6 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
   const user = await deps.requireOfficeUser(request, ['admin']);
   if (!user) throw new CandidateHttpError(401, 'OFFICE_AUTH_REQUIRED');
   const workflow = await workflowRow(env, workflowId);
-  const access = await resolveWorkflowSession(env, workflow);
-  if (!access) throw new CandidateHttpError(409, 'CANDIDATE_ACTIVE_SESSION_REQUIRED');
   const body = await readJson(request);
   const generation = requireInteger(body.generation || workflow.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
   if (action === 'retry-finalisation') {
@@ -2003,9 +2301,13 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
     'phone-refuse': 'MANAGER_REFUSE'
   }[action];
   if (!dbAction) throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
-  const payload = isObject(body.payload) ? body.payload : body;
+  const payload = {
+    ...(isObject(body.payload) ? body.payload : body),
+    service_phone_approval: true,
+    actor_user_id: requireUuid(user.id, 'OFFICE_AUTH_REQUIRED')
+  };
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
-    access, env, workflow.id, dbAction, generation, payload, body.idempotency_key
+    null, env, workflow.id, dbAction, generation, payload, body.idempotency_key
   ));
   if (dbAction === 'PHONE_APPROVE' && result?.final_render_contract) {
     const work = (async () => {
@@ -2057,8 +2359,12 @@ function routeMatch(path, pattern) {
 export async function handleCandidateAppRequest(request, env, ctx, deps) {
   const path = new URL(request.url).pathname;
   const correlationId = requestId(request);
-  if (!path.startsWith(CANDIDATE_PREFIX) && !path.startsWith(MANAGER_PREFIX)
-      && !path.startsWith('/api/candidate-app/')) return null;
+  const routeAudience = upper(deps?.routeAudience);
+  const privateCandidateRoute = path.startsWith(CANDIDATE_PREFIX) || path.startsWith(MANAGER_PREFIX);
+  const officeRoute = path.startsWith('/api/candidate-app/');
+  if (!privateCandidateRoute && !officeRoute) return null;
+  if (privateCandidateRoute && routeAudience !== 'PRIVATE') return null;
+  if (officeRoute && routeAudience !== 'OFFICE') return null;
   try {
     if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/start`) return await handleChallengeStart(request, env, deps);
     if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/resend`) return await handleChallengeStart(request, env, deps, true);
@@ -2141,6 +2447,9 @@ export const candidateAppBackendInternals = Object.freeze({
   withoutInternalRenderContracts,
   safeFinalisationResult,
   safeQrPackResponse,
+  immutablePut,
+  mileageClaimFormBytes,
+  validateComponentBytes,
   renderContracts,
   routeMatch,
   environmentName

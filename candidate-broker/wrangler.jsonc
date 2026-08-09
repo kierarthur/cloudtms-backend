@@ -1,0 +1,46 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "test-cloudtms-candidate-broker",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "vars": {
+    "CANDIDATE_APP_ENVIRONMENT": "TEST",
+    "CANDIDATE_ALLOWED_ORIGINS": "https://testmode.arthur-rai.co.uk",
+    "CANDIDATE_ALLOW_NATIVE_CLIENTS": "true"
+  },
+  "services": [
+    {
+      "binding": "CLOUDTMS_PRIVATE",
+      "service": "test-cloudtms-candidate-private-api"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "CANDIDATE_GENERAL_RATE_LIMIT",
+      "namespace_id": "71001",
+      "simple": { "limit": 120, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_AUTH_RATE_LIMIT",
+      "namespace_id": "71002",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_MANAGER_RATE_LIMIT",
+      "namespace_id": "71003",
+      "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_UPLOAD_RATE_LIMIT",
+      "namespace_id": "71004",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  }
+}

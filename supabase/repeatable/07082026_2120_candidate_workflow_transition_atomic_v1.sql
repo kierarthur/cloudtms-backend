@@ -157,7 +157,7 @@ begin
   if v_action in (
     'SELECT_PHONE_APPROVAL','CREATE_EMAIL_APPROVAL_REQUEST','BEGIN_MANAGER_REVIEW',
     'RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
-    'REMIND','RENEW','REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT'
+    'REMIND','RENEW','CANCEL_MANAGER_HANDOFF','REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT'
   ) or (p_session_id is null and v_action in ('COMPONENT_PREPARE','COMPONENT_COMPLETE')) then
     perform private._candidate_require_feature_v1(v_environment,'candidate_manager_approval');
   end if;
@@ -174,9 +174,12 @@ begin
   v_is_service_action:=v_action in (
     'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
     'BEGIN_CANONICAL_DAILY_SAVE'
-  );
-  v_is_public_manager_action:=p_session_id is null and v_action in (
-    'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','EMAIL_APPROVE','MANAGER_REFUSE',
+  ) or (p_session_id is null
+    and coalesce((v_payload->>'service_phone_approval')::boolean,false)
+    and v_action in ('BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
+      'COMPONENT_PREPARE','COMPONENT_COMPLETE'));
+  v_is_public_manager_action:=not v_is_service_action and p_session_id is null and v_action in (
+    'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
     'COMPONENT_PREPARE','COMPONENT_COMPLETE'
   );
 
@@ -207,7 +210,7 @@ begin
     where id=v_request_id
       and workflow_id=v_workflow.id
       and workflow_generation=v_workflow.generation
-      and method='EMAIL'
+      and method in ('EMAIL','PHONE')
       and state='PENDING'
       and expires_at_utc>p_now_utc
       and review_manifest_sha256=v_workflow.review_manifest_sha256
@@ -606,7 +609,6 @@ begin
       end if;
       if v_approval.id is null
          or v_approval.state<>'PENDING'
-         or v_approval.method<>'EMAIL'
          or v_approval.expires_at_utc<=p_now_utc
          or v_approval.workflow_generation<>v_workflow.generation
          or v_approval.review_manifest_sha256 is distinct from v_workflow.review_manifest_sha256 then
@@ -731,7 +733,7 @@ begin
          or v_approval.state<>'PENDING'
          or v_approval.workflow_generation<>v_workflow.generation
          or v_approval.review_manifest_sha256 is distinct from v_workflow.review_manifest_sha256
-         or (v_approval.method='EMAIL' and v_approval.expires_at_utc<=p_now_utc) then
+         or v_approval.expires_at_utc<=p_now_utc then
         raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
       end if;
     elsif v_component.component_kind in ('CANDIDATE_SIGNATURE','MILEAGE_FORM','EXPENSE_EVIDENCE')
@@ -740,23 +742,28 @@ begin
     elsif v_component.component_kind='SIGNED_RETURN' and v_workflow.state<>'AWAITING_PAPER_RETURN' then
       raise exception 'CANDIDATE_PAPER_RETURN_PAGE_NOT_EXPECTED' using errcode='55000';
     end if;
-    if v_component.state='IMMUTABLE' then
-      return jsonb_build_object('ok',true,'idempotent_replay',true,
-        'component_id',v_component.id,'state',v_component.state);
-    end if;
     if coalesce(v_payload->>'source_content_sha256_hex','') !~ '^[0-9a-fA-F]{64}$' then
       raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
     end if;
     v_digest:=decode(v_payload->>'source_content_sha256_hex','hex');
-    if (v_component.component_kind in ('CANDIDATE_SIGNATURE','MANAGER_SIGNATURE','EXPENSE_EVIDENCE')
+    if (v_component.component_kind in ('CANDIDATE_SIGNATURE','MANAGER_SIGNATURE')
           and lower(coalesce(v_payload->>'verified_media_type',v_component.media_type,''))
             not in ('image/jpeg','image/png','image/webp'))
-       or (v_component.component_kind in ('MILEAGE_FORM','SIGNED_RETURN')
+       or (v_component.component_kind in ('MILEAGE_FORM','SIGNED_RETURN','EXPENSE_EVIDENCE')
           and lower(coalesce(v_payload->>'verified_media_type',v_component.media_type,''))
             not in ('application/pdf','image/jpeg','image/png','image/webp'))
        or coalesce(nullif(v_payload->>'verified_byte_size','')::bigint,v_component.byte_size,0)
           not between 1 and 15728640 then
       raise exception 'CANDIDATE_COMPONENT_MEDIA_INVALID' using errcode='22023';
+    end if;
+    if v_component.state='IMMUTABLE' then
+      if v_component.source_content_sha256=v_digest
+         and v_component.byte_size=coalesce(nullif(v_payload->>'verified_byte_size','')::bigint,v_component.byte_size)
+         and lower(v_component.media_type)=lower(coalesce(nullif(v_payload->>'verified_media_type',''),v_component.media_type)) then
+        return jsonb_build_object('ok',true,'idempotent_replay',true,
+          'component_id',v_component.id,'state',v_component.state);
+      end if;
+      raise exception 'CANDIDATE_COMPONENT_IMMUTABLE_CONFLICT' using errcode='40001';
     end if;
     update public.candidate_submission_components set
       state='IMMUTABLE',source_content_sha256=v_digest,
@@ -1304,13 +1311,20 @@ begin
         'CANDIDATE_MANAGER_APPROVAL_V1:'||v_approval.id::text||':0',
         'candidate-manager-approval:'||v_approval.id::text,v_workflow.id,p_now_utc);
     else
+      if coalesce(v_payload->>'approval_token_hash_hex','') !~ '^[0-9a-fA-F]{64}$'
+         or nullif(v_payload->>'expires_at_utc','')::timestamptz<=p_now_utc
+         or nullif(v_payload->>'expires_at_utc','')::timestamptz>p_now_utc+interval '2 hours' then
+        raise exception 'CANDIDATE_APPROVAL_TOKEN_INVALID' using errcode='22023';
+      end if;
+      v_token_hash:=decode(v_payload->>'approval_token_hash_hex','hex');
       insert into public.candidate_approval_requests(
-        workflow_id,workflow_generation,request_generation,method,state,
+        workflow_id,workflow_generation,request_generation,method,state,token_hash,expires_at_utc,
         review_manifest_sha256,required_component_ids,required_component_manifest_json,
         manager_review_timesheet_component_id,manager_review_timesheet_sha256,
         idempotency_key,created_at_utc,updated_at_utc
       ) values (
-        v_workflow.id,v_workflow.generation,v_request_generation,'PHONE','PENDING',
+        v_workflow.id,v_workflow.generation,v_request_generation,'PHONE','PENDING',v_token_hash,
+        nullif(v_payload->>'expires_at_utc','')::timestamptz,
         decode(v_manifest->>'manifest_sha256','hex'),v_component_ids,v_manifest->'required_components',
         nullif(v_manifest->>'manager_review_timesheet_component_id','')::uuid,
         case when nullif(v_manifest->>'manager_review_timesheet_sha256','') is null then null
@@ -1340,7 +1354,7 @@ begin
     if not found or v_approval.state<>'PENDING' then
       raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
     end if;
-    if v_approval.method='EMAIL' and v_approval.expires_at_utc<=p_now_utc then
+    if v_approval.expires_at_utc<=p_now_utc then
       raise exception 'MANAGER_APPROVAL_REQUEST_EXPIRED' using errcode='28000';
     end if;
     if v_approval.workflow_generation<>v_workflow.generation
@@ -1372,7 +1386,7 @@ begin
     if not found or v_approval.state<>'PENDING' then
       raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
     end if;
-    if v_approval.method='EMAIL' and v_approval.expires_at_utc<=p_now_utc then
+    if v_approval.expires_at_utc<=p_now_utc then
       raise exception 'MANAGER_APPROVAL_REQUEST_EXPIRED' using errcode='28000';
     end if;
     if lower(coalesce(v_payload->>'manifest_sha256_hex',''))<>encode(v_approval.review_manifest_sha256,'hex') then
@@ -1407,7 +1421,7 @@ begin
       updated_at_utc=p_now_utc where id=v_workflow.id;
 
   elsif v_action in ('PHONE_APPROVE','EMAIL_APPROVE') then
-    if v_action='EMAIL_APPROVE' then
+    if v_is_public_manager_action then
       select * into v_approval from public.candidate_approval_requests
       where workflow_id=v_workflow.id and token_hash=v_token_hash for update;
     else
@@ -1418,8 +1432,12 @@ begin
     if not found or v_approval.state<>'PENDING' then
       raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
     end if;
-    if v_approval.method='EMAIL' and v_approval.expires_at_utc<=p_now_utc then
+    if v_approval.expires_at_utc<=p_now_utc then
       raise exception 'MANAGER_APPROVAL_REQUEST_EXPIRED' using errcode='28000';
+    end if;
+    if (v_action='EMAIL_APPROVE' and v_approval.method<>'EMAIL')
+       or (v_action='PHONE_APPROVE' and v_approval.method<>'PHONE') then
+      raise exception 'MANAGER_APPROVAL_METHOD_MISMATCH' using errcode='28000';
     end if;
     if lower(coalesce(v_payload->>'manifest_sha256_hex',''))<>encode(v_approval.review_manifest_sha256,'hex')
        or v_approval.workflow_generation<>v_workflow.generation
@@ -1624,7 +1642,7 @@ begin
     if not found or v_approval.state<>'PENDING' then
       raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
     end if;
-    if v_approval.method='EMAIL' and v_approval.expires_at_utc<=p_now_utc then
+    if v_approval.expires_at_utc<=p_now_utc then
       raise exception 'MANAGER_APPROVAL_REQUEST_EXPIRED' using errcode='28000';
     end if;
     if nullif(btrim(coalesce(v_payload->>'reason','')),'') is null then
@@ -1716,6 +1734,31 @@ begin
     update public.candidate_submission_workflows set
       last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
       updated_at_utc=p_now_utc where id=v_workflow.id;
+
+  elsif v_action='CANCEL_MANAGER_HANDOFF' then
+    if v_workflow.state<>'AWAITING_MANAGER_APPROVAL' or v_workflow.route<>'PHONE' then
+      raise exception 'MANAGER_PHONE_HANDOFF_NOT_CANCELLABLE' using errcode='55000';
+    end if;
+    select * into v_approval from public.candidate_approval_requests
+    where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
+      and method='PHONE' and state='PENDING'
+    order by request_generation desc limit 1 for update;
+    if not found then raise exception 'MANAGER_PHONE_HANDOFF_NOT_CANCELLABLE' using errcode='55000'; end if;
+    update public.candidate_approval_requests set
+      state='CANCELLED',cancelled_at_utc=p_now_utc,updated_at_utc=p_now_utc
+    where id=v_approval.id;
+    update public.candidate_submission_components set
+      state='SUPERSEDED',superseded_at_utc=p_now_utc
+    where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
+      and approval_request_id=v_approval.id and component_kind='MANAGER_SIGNATURE'
+      and state<>'SUPERSEDED';
+    v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
+      'state','READY_FOR_MANAGER_APPROVAL','generation',v_workflow.generation,
+      'approval_request_id',v_approval.id,'handoff_cancelled',true);
+    update public.candidate_submission_workflows set
+      state='READY_FOR_MANAGER_APPROVAL',route='ELECTRONIC',
+      last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
+      updated_at_utc=p_now_utc where id=v_workflow.id returning * into v_workflow;
 
   elsif v_action in ('CANCEL','SUPERSEDE') then
     if v_workflow.state in ('FINALISED','CANCELLED','REJECTED','SUPERSEDED') then

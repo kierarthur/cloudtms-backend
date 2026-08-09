@@ -102,7 +102,10 @@ declare
 begin
   v_response:=public.candidate_workflow_transition_atomic_v1(
     p_session_id,'TEST',p_workflow_id,'SELECT_PHONE_APPROVAL',p_generation,
-    '{}'::jsonb,p_key_prefix||':phone-select',p_now_utc);
+    jsonb_build_object(
+      'approval_token_hash_hex',encode(extensions.digest(p_workflow_id::text||':'||p_key_prefix||':phone','sha256'),'hex'),
+      'expires_at_utc',p_now_utc+interval '30 minutes'
+    ),p_key_prefix||':phone-select',p_now_utc);
   v_manifest_hash:=v_response->>'review_manifest_sha256';
   v_approval_request_id:=(v_response->>'approval_request_id')::uuid;
   if v_response->>'state'<>'AWAITING_MANAGER_APPROVAL' or v_manifest_hash is null then
@@ -510,7 +513,11 @@ begin
   perform pg_temp.candidate_register_all_review_components(v_workflow,2,'combined',now());
 
   v_response:=public.candidate_workflow_transition_atomic_v1(
-    v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,'{}'::jsonb,
+    v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
+    jsonb_build_object(
+      'approval_token_hash_hex',encode(extensions.digest(v_workflow::text||':first-phone','sha256'),'hex'),
+      'expires_at_utc',now()+interval '30 minutes'
+    ),
     'combined:first-phone-select',now());
   select id into v_old_request from public.candidate_approval_requests
   where workflow_id=v_workflow and workflow_generation=2 and state='PENDING';

@@ -1,13 +1,14 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 9 August 2026. The DB/RPC authority is installed and the CloudTMS backend implementation is complete, published to backend `test`, deployed to the normal TEST Worker and harmlessly runtime-verified. The complete 375-test backend regression and Wrangler TEST build pass. Independent backend audit is the remaining Stage 2 gate before CloudTMS frontend implementation.
+Status: active implementation; TEST-only. Updated: 9 August 2026. The DB/RPC authority is installed. The public Candidate broker/private CloudTMS API separation and the subsequent end-to-end authority corrections are implemented and locally verified against the current backend `test` source. Publication, TEST deployment and one further independent audit remain the Stage 2 completion gate recorded by this living plan.
 
-This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current backend implementation, and the remaining CloudTMS frontend, private broker and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
+This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
 ## Controlling architecture
 
 - CloudTMS remains the sole owner of timesheet, financial and lifecycle truth.
-- The Candidate App and private broker submit factual candidate inputs only.
+- Candidate iOS/Android/web and manager browsers call a separate public Candidate broker. The broker calls a service-authenticated private CloudTMS Candidate API. Only that private API can compose DB/RPC, R2 and mail authority.
+- The Candidate App and public broker submit factual candidate inputs only.
 - DAILY office, worker and Candidate entry points use the one canonical DAILY financial owner, followed by the existing Process and Authorise authorities.
 - WEEKLY Candidate finalisation uses the existing WEEKLY calculation/lifecycle authority.
 - Route conversion uses the one SQL route/version authority and server-owned preview/confirmation context.
@@ -38,7 +39,38 @@ DB/RPC regression gates remain PostgreSQL 17.6/18.1 install/runtime suites, conc
 
 ## Stage 2 — CloudTMS backend (current stage)
 
-Implement and verify one versioned CloudTMS-owned HTTP boundary. The future broker must use it and must never query Supabase or R2 directly.
+Implement and verify one versioned private CloudTMS-owned HTTP boundary. The public broker must use it and must never query Supabase or R2 directly.
+
+### Independent-audit topology closure implemented in this revision
+
+- `candidate-broker/src/index.js` is the only Candidate/manager internet-facing entry point;
+- `broker/src/candidate-private-worker.js` accepts only private-prefixed service-bound routes and has no public Worker route in its TEST manifest;
+- the broker enforces exact browser origins, declared iOS/Android native clients, preflight policy, four fail-closed rate-limit bindings, public-safe errors and bounded request bodies;
+- public access/refresh values are broker-encrypted audience/environment-bound envelopes; internal Candidate tokens are never returned to the client;
+- broker-to-private calls use a Cloudflare service binding plus an environment/method/path/body/authorisation-bound HMAC;
+- the normal CloudTMS Worker uses the `OFFICE` route audience and cannot dispatch public Candidate or manager routes;
+- the private API uses separate service, session, challenge and upload secrets with no fallback to the general CloudTMS session secret;
+- the broker validates/encrypts raw APNs/FCM/Web Push device tokens before private persistence;
+- private upload completion validates actual PNG/JPEG/PDF bytes, rejects malformed/encrypted PDFs, enforces one evidence page per PDF, bounds dimensions/pixels and calculates SHA-256 before immutable completion;
+- the public/private route contract is frozen for audit in `CANDIDATE_API_OPENAPI_V1.yaml`; deployment/security ownership is in `BROKER_PRIVATE_TOPOLOGY.md`.
+
+This closure does not alter Candidate DB/RPC functions, DAILY/WEEKLY economics, Process, Authorise, invoice, QR/version, official rendering or Google rota/availability behaviour.
+
+### End-to-end authority closure implemented after topology audit
+
+- manager EMAIL approval, CloudTMS office PHONE approval and PAPER receipt finalise from an exact approved workflow/request/manifest service context and do not depend on a still-active Candidate login session;
+- the real same-phone manager journey creates a short-lived one-use PHONE approval request, which the broker seals to the initiating public Candidate session and device before handing the phone to the manager;
+- the Candidate may cancel an unfinished same-phone handoff without cancelling the submitted workflow; the PHONE request and signature component are retired and the workflow returns to approval-route choice;
+- TEST Candidate selection preserves the public broker session identity and never exposes or substitutes the internal database session UUID, so the existing refresh envelope remains valid;
+- service HMAC nonces are accepted once, recorded with an atomic R2 create-only write and expired by the private Worker scheduler;
+- source/signature uploads and generated official derivatives use one conditional create-only immutable write; exact same-digest replay is accepted and competing different bytes fail without deleting the winner;
+- HTTP and SQL now agree that a valid one-page PDF is acceptable category-bound expense evidence;
+- notifications use deterministic cursor pagination and the OpenAPI path/method/query inventory is tested against the actual router;
+- Candidate QR/PAPER delivery now produces one complete immutable pack in frozen manifest order: official unsigned timesheet, Expense and Mileage Approval Summary, Mileage Claim Form with the approved labels, then every evidence page;
+- the QR candidate email and `PAPER_PACK_READY` notification remain held until that complete pack exists; the private scheduler can complete the bundle without requiring the Candidate to keep polling;
+- Candidate manager/public errors remain safe, while the private API retains canonical stable errors and audit correlation.
+
+The SQL service-finalisation branch remains inside the existing fourteenth finalisation RPC. No fifteenth Candidate business RPC, eighth Candidate table, second financial engine, new Process/Authorise path or new invoice path was added.
 
 ### Candidate authentication and session boundary
 
@@ -125,7 +157,7 @@ QR/paper document generation is delegated to `timesheet_qr_send_enqueue_v1` and 
 
 The same enqueue operation creates the candidate email automatically and holds it until the official PDF is `READY`; the candidate does not request a second email. When ready, the existing mail authority attaches and releases the pack. The app uses the Candidate notification feed (and later provider push when enabled) to refresh the timesheet, then downloads the pack through `GET /candidate-app/v1/timesheets/:timesheetId/paper-pack`. CloudTMS checks ownership and durable readiness and streams the bytes; no Supabase query or R2 key is exposed to the broker/app. Queued, rendering, ready, sent and failed remain distinct states.
 
-The future broker/app must handle the asynchronous response explicitly: a `202` PAPER_PREPARE response shows **Preparing documents**, refreshes the Candidate notification feed and `GET /candidate-app/v1/timesheets/:timesheetId/paper-pack/status` with bounded backoff while that screen remains active, refreshes again when the app resumes or receives the readiness push, and enables **Download documents** only after server readiness. The app never polls Supabase/R2 and never manufactures a ready state from the presence of a QR token.
+The broker/app must handle the asynchronous response explicitly: a `202` PAPER_PREPARE response shows **Preparing documents**, refreshes the Candidate notification feed and `GET /candidate-app/v1/timesheets/:timesheetId/paper-pack/status` with bounded backoff while that screen remains active, refreshes again when the app resumes or receives the readiness push, and enables **Download documents** only after server readiness. The app never polls Supabase/R2 and never manufactures a ready state from the presence of a QR token.
 
 Manager EMAIL requests have the same fail-closed readiness rule. Every required review component—including the candidate-signed hours page, expense summary, mileage form and each evidence page—must be rendered, stored, hashed and present in the immutable all-ready manifest before the manager request or email can be created. A manager opening the link views already-generated documents. The final manager-signed derivatives remain a separate asynchronous post-approval step.
 
@@ -264,12 +296,14 @@ These office actions never create a second financial, Process, Authorise, QR/ver
 
 The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATALOGUE.md` remains controlling and must be consumed unchanged by the frontend shared warning module.
 
-## Stage 4 — private broker (after backend/frontend contract GO)
+## Stage 4 — public Candidate broker and delivery activation
 
-- CloudTMS HTTP API only; no Supabase or R2 credentials, SDKs or direct queries;
-- opaque candidate access/refresh tokens and document/upload tickets only;
+- public Candidate/manager transport and trust boundary is now implemented as a separate Worker artefact, but remains undeployed pending independent GO;
+- private CloudTMS service API only; no Supabase or R2 credentials, SDKs or direct queries in the broker;
+- broker-sealed Candidate access/refresh envelopes and opaque document/upload tickets only;
 - no financial calculations, route inference, approval truth or official PDF recreation;
-- versioned request/response validation, stable CloudTMS error mapping, retries only for idempotent operations, rate limiting and audit correlation;
+- versioned request/response validation, stable public error mapping, retries only for idempotent operations, rate limiting and audit correlation;
+- provider-facing push transport is activated only after iOS/Android/web application identities, credentials and TEST devices exist; CloudTMS notification/feed truth and QR-ready timing are already authoritative;
 - mediate the unchanged Google DAILY rota/availability integration without moving official DAILY lifecycle authority out of CloudTMS.
 
 ## Stage 5 — Candidate App and responsive web client
@@ -283,14 +317,14 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 
 ## Completion gates
 
-Backend completion requires source review, focused unit/contract tests, full backend regression, Wrangler dry run, read-only TEST catalogue/smoke verification, exact commit push, normal TEST deploy of that commit, and harmless runtime health/version proof. No Candidate workflow, email, notification, R2 or financial mutation is required for deployment verification.
+Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, dry-run builds for both new Worker artefacts, independent audit, exact approved commit/push, then an explicitly approved TEST deployment and harmless disabled-state runtime proof. No Candidate workflow, email, notification, R2 or financial mutation is required for deployment verification.
 
-This revision has completed those implementation-side gates: health and readiness returned 200, the document processor and dispatcher were ready, and an unauthenticated Candidate bootstrap request failed closed with the stable 401 access-token error. No mutation-capable Candidate endpoint was invoked during deployment verification.
+Current pre-publication verification: 75/75 focused Candidate/backend/broker/DB-contract tests, 396/396 complete backend tests, 13/13 PostgreSQL runtime/concurrency suites on PostgreSQL 17.6 and again on 18.1, clean OpenAPI 3.1 lint, and successful dry-run bundles for both Candidate Workers. The database runtime test explicitly revokes the Candidate session before manager-triggered finalisation and still proves the canonical WEEKLY completion path.
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
 
 ### Known pre-enablement dependencies for independent audit
 
-- transactional manager/candidate links require the final Candidate/public frontend base URL to be configured in the TEST Worker environment; the backend must not use its own Worker origin once those emails are enabled;
-- physical mobile push delivery remains deferred until the broker/app provider and token format are selected; the database notification feed, preferences, encrypted token registration, dedupe and QR-ready timing are already authoritative;
-- the installed finalisation RPC currently revalidates an active Candidate session. Manager approval remains durable and retryable when none is available, but independent audit must confirm whether the final enabled lifecycle may rely on the submitted account retaining an active session or whether a narrowly constrained service-finalisation seam is required before feature enablement.
+- transactional manager/candidate links require the final Candidate/public frontend base URL to be configured in the private TEST Worker environment; the backend must not use its own Worker origin once those emails are enabled;
+- physical push delivery activation remains gated on the iOS/Android/web application identities and provider credentials. The broker device-token boundary and delivery ownership are fixed; the database notification feed, preferences, encryption, dedupe and QR-ready timing remain authoritative;
+- provider push credentials and mobile/web application identities remain a later coordinated activation dependency; the canonical in-app notification feed, preferences, idempotent event creation and deep-link contract are already fixed and do not depend on push delivery.
