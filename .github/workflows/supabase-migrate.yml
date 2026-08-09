@@ -9,6 +9,10 @@ on:
       - "supabase/verification/**"
       - "tests/banking-pay-revision5-final-authority.test.cjs"
       - "tests/banking-pay-legacy-monolith-authority-reassert.test.cjs"
+      - "tests/candidate-app-db-rpc-contract.test.cjs"
+      - "tests/daily-canonical-authority.test.mjs"
+      - "broker/src/daily-canonical-authority.js"
+      - "broker/src/daily-schedule-authority.js"
       - ".github/workflows/supabase-migrate.yml"
   workflow_dispatch: {}
 
@@ -41,6 +45,15 @@ jobs:
           node --test \
             tests/banking-pay-revision5-final-authority.test.cjs \
             tests/banking-pay-legacy-monolith-authority-reassert.test.cjs
+
+      - name: Verify Candidate App DB/RPC authority
+        run: |
+          node --check broker/src/index.js
+          node --check broker/src/daily-canonical-authority.js
+          node --check broker/src/daily-schedule-authority.js
+          node --test \
+            tests/candidate-app-db-rpc-contract.test.cjs \
+            tests/daily-canonical-authority.test.mjs
 
       - name: Apply repeatables first, then migrations (UK date order)
         shell: bash
