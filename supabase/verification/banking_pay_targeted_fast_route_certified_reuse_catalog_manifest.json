@@ -453,7 +453,7 @@
       "schema": "public",
       "name": "pay_workbench_fail_job",
       "identity_arguments": "p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer",
-      "definition_sha256": "316bb32d23c92e41b8497f60baee4df8596f3cd030350b511cedb358d42045b2",
+      "definition_sha256": "68a3b42a11ecf19175651564f68075287b57ee2aa76652b4747b4b067fc2f747",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

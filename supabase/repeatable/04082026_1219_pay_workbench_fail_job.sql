@@ -56,6 +56,12 @@ DECLARE
   v_private_stage text := NULL::text;
   v_attempt_id uuid := NULL::uuid;
   v_scale_block boolean := false;
+  v_is_deterministic_stage_error boolean := false;
+  v_terminal_repair_result jsonb := '{}'::jsonb;
+  v_terminal_scope_status text := NULL::text;
+  v_terminal_scope_pending_job_id uuid := NULL::uuid;
+  v_terminal_scope_error_json jsonb := NULL::jsonb;
+  v_terminal_owner_valid boolean := false;
 BEGIN
   IF p_job_id IS NULL THEN
     RAISE EXCEPTION 'job_id is required';
@@ -125,6 +131,17 @@ BEGIN
     ELSE UPPER(BTRIM(COALESCE(v_job_type, '')))
   END;
 
+  -- Source-stage terminalisation and orphan repair must share the same
+  -- candidate-serial authority.  The initial job read above is deliberately
+  -- unlocked; candidate ownership is established before the job/attempt rows.
+  IF v_canonical_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+     AND v_job_candidate_id IS NOT NULL THEN
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      public._pay_workbench_candidate_serial_key(v_job_candidate_id),
+      24062027
+    ));
+  END IF;
+
   IF v_canonical_job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'
      AND v_economic_build_id IS NOT NULL THEN
     PERFORM 1 FROM public.banking_pay_workbench_jobs WHERE id=p_job_id FOR UPDATE;
@@ -138,6 +155,9 @@ BEGIN
     END IF;
     v_scale_block:=v_error_code IN ('BLOCKED_UNVALIDATED_RECONCILIATION_SCALE',
       'PAY_WORKBENCH_UNVALIDATED_RECONCILIATION_SCALE');
+    v_is_deterministic_stage_error := v_error_code IN (
+      'CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED'
+    );
     v_is_obsolete:=v_error_code IN ('PAY_WORKBENCH_BUILD_NOT_CURRENT','PAY_WORKBENCH_RECONCILIATION_ATTEMPT_STALE',
       'PAY_WORKBENCH_GENERATION_CHANGED','PAY_WORKBENCH_SOURCE_SEQUENCE_CHANGED');
     v_obsolete_reason:=CASE WHEN v_is_obsolete THEN COALESCE(NULLIF(v_error_code,''),'BUILD_OBSOLETE') END;
@@ -146,8 +166,12 @@ BEGIN
       failed_at_utc=CASE WHEN v_is_obsolete THEN NULL ELSE clock_timestamp() END,
       obsolete_at_utc=CASE WHEN v_is_obsolete THEN clock_timestamp() ELSE NULL END,
       result_code=COALESCE(NULLIF(v_error_code,''),'STAGE_ERROR'),
-      error_class=CASE WHEN v_scale_block THEN 'SCALE_BLOCK' WHEN v_is_obsolete THEN 'OBSOLETE'
-        ELSE 'RETRYABLE_STAGE_ERROR' END,
+      error_class=CASE
+        WHEN v_scale_block THEN 'SCALE_BLOCK'
+        WHEN v_is_obsolete THEN 'OBSOLETE'
+        WHEN v_is_deterministic_stage_error THEN 'DETERMINISTIC_STAGE_ERROR'
+        ELSE 'RETRYABLE_STAGE_ERROR'
+      END,
       error_json=jsonb_strip_nulls(jsonb_build_object('code',p_error_json->>'code',
         'message',p_error_json->>'message','sqlstate',p_error_json->>'sqlstate')),
       updated_at_utc=clock_timestamp()
@@ -173,7 +197,8 @@ BEGIN
     END IF;
     v_retry_after_seconds:=COALESCE(p_retry_after_seconds,
       LEAST(300,GREATEST(1,power(2,LEAST(COALESCE(v_attempt_count,1),8))::integer)));
-    IF COALESCE(v_attempt_count,0)<COALESCE(v_max_attempts,8) THEN
+    IF v_is_deterministic_stage_error IS NOT TRUE
+       AND COALESCE(v_attempt_count,0)<COALESCE(v_max_attempts,8) THEN
       v_next_run_at_utc:=clock_timestamp()+make_interval(secs=>v_retry_after_seconds);
       UPDATE public.banking_pay_workbench_jobs SET status='QUEUED',run_at_utc=v_next_run_at_utc,
         started_at_utc=NULL,failed_at_utc=NULL,last_error_json=p_error_json,
@@ -188,9 +213,86 @@ BEGIN
     UPDATE public.banking_pay_workbench_jobs SET status='FAILED',failed_at_utc=clock_timestamp(),
       completed_at_utc=NULL,last_error_json=p_error_json,updated_at_utc=clock_timestamp()
     WHERE id=p_job_id AND status='RUNNING';
+
+    v_terminal_repair_result := public.pay_workbench_repair_orphaned_pending_source_build(
+      p_session_id => v_job_session_id,
+      p_candidate_id => v_job_candidate_id,
+      p_limit => 1,
+      p_now_utc => clock_timestamp(),
+      p_reason => 'TERMINAL_SOURCE_STAGE_FAILURE_ATOMIC_REPAIR'
+    );
+
+    SELECT terminal_scope.status,
+           terminal_scope.pending_job_id,
+           terminal_scope.error_json
+    INTO v_terminal_scope_status,
+         v_terminal_scope_pending_job_id,
+         v_terminal_scope_error_json
+    FROM public.banking_pay_workbench_session_scope AS terminal_scope
+    WHERE terminal_scope.session_id = v_job_session_id
+      AND terminal_scope.candidate_id = v_job_candidate_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_TERMINAL_FAILURE_SCOPE_MISSING'
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    IF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_PENDING'
+       AND v_terminal_scope_pending_job_id IS NOT NULL THEN
+      SELECT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_jobs AS terminal_owner
+        WHERE terminal_owner.id = v_terminal_scope_pending_job_id
+          AND terminal_owner.session_id = v_job_session_id
+          AND terminal_owner.candidate_id = v_job_candidate_id
+          AND UPPER(BTRIM(COALESCE(terminal_owner.status, ''))) IN ('QUEUED', 'RUNNING')
+      )
+      INTO v_terminal_owner_valid;
+    ELSE
+      v_terminal_owner_valid := false;
+    END IF;
+
+    IF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_PENDING'
+       AND v_terminal_owner_valid IS NOT TRUE THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_TERMINAL_FAILURE_SUCCESSOR_NOT_PROVEN'
+        USING ERRCODE = 'P0001';
+    END IF;
+
+    IF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_ERROR'
+       AND v_terminal_scope_pending_job_id IS NULL THEN
+      UPDATE public.banking_pay_workbench_session_candidate_state AS terminal_candidate_state
+      SET status = 'ERROR',
+          pending_job_id = NULL::uuid,
+          last_error_json = COALESCE(v_terminal_scope_error_json, p_error_json),
+          updated_at_utc = clock_timestamp()
+      WHERE terminal_candidate_state.session_id = v_job_session_id
+        AND terminal_candidate_state.candidate_id = v_job_candidate_id;
+    ELSIF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_PENDING'
+          AND v_terminal_owner_valid THEN
+      UPDATE public.banking_pay_workbench_session_candidate_state AS terminal_candidate_state
+      SET status = 'PENDING',
+          pending_job_id = v_terminal_scope_pending_job_id,
+          last_error_json = '{}'::jsonb,
+          updated_at_utc = clock_timestamp()
+      WHERE terminal_candidate_state.session_id = v_job_session_id
+        AND terminal_candidate_state.candidate_id = v_job_candidate_id;
+    END IF;
+
     RETURN jsonb_build_object('ok',true,'job_id',p_job_id,'status','FAILED',
       'attempt_count',v_attempt_count,'max_attempts',v_max_attempts,
-      'retry_scheduled',false,'result_code','ATTEMPT_EXHAUSTED');
+      'retry_scheduled',false,
+      'result_code',CASE
+        WHEN v_is_deterministic_stage_error THEN 'DETERMINISTIC_STAGE_ERROR'
+        ELSE 'ATTEMPT_EXHAUSTED'
+      END,
+      'terminal_repair_result',v_terminal_repair_result,
+      'terminal_scope_status',v_terminal_scope_status,
+      'terminal_successor_job_id',v_terminal_scope_pending_job_id,
+      'terminal_successor_proven',(
+        UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) <> 'SOURCE_BUILD_PENDING'
+        OR v_terminal_owner_valid
+      ));
   END IF;
 
   v_is_statement_timeout := (

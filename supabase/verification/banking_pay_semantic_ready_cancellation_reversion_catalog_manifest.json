@@ -88,7 +88,7 @@
     {
       "schema": "private", "name": "pay_workbench_semantic_ready_proof_page_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_ids uuid[], p_source_run_by_candidate_json jsonb, p_selected_preview_row_ids_by_candidate_json jsonb, p_mode text, p_options_json jsonb",
-      "definition_sha256": "27a34839b953b2e779a2d8037216de12e88df1db27a56f1bd43fc1d28cff319b",
+      "definition_sha256": "3a2deb2e65ad37c45698ba8056705f9db5a56429346319762c34663cd9b2947a",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]

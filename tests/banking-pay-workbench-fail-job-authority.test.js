@@ -27,6 +27,21 @@ test('source-build retry cannot leave a private STARTED attempt behind', () => {
   assert.match(canonical, /GRANT EXECUTE ON FUNCTION public\.pay_workbench_fail_job[\s\S]*TO service_role/i);
 });
 
+test('deterministic semantic publication failure terminalises once and proves the replacement owner atomically', () => {
+  assert.match(canonical, /CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED/);
+  assert.match(canonical, /DETERMINISTIC_STAGE_ERROR/);
+  assert.match(canonical, /pay_workbench_repair_orphaned_pending_source_build/);
+  assert.match(canonical, /TERMINAL_SOURCE_STAGE_FAILURE_ATOMIC_REPAIR/);
+  assert.match(canonical, /PAY_WORKBENCH_TERMINAL_FAILURE_SUCCESSOR_NOT_PROVEN/);
+  assert.match(canonical, /terminal_owner\.status, ''\)\)\) IN \('QUEUED', 'RUNNING'\)/);
+  assert.match(canonical, /terminal_candidate_state[\s\S]*pending_job_id = NULL::uuid/);
+  assert.match(canonical, /terminal_successor_proven/);
+  assert.ok(
+    canonical.indexOf('pg_advisory_xact_lock') < canonical.indexOf('WHERE id=p_job_id FOR UPDATE'),
+    'candidate serial ownership must precede the source job row lock',
+  );
+});
+
 test('orphan repair is bounded to expired deterministic source-stage failures', () => {
   assert.match(repair, /v_target_count>10/i);
   assert.match(repair, /attempt\.attempt_status='STARTED'/i);

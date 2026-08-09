@@ -206,6 +206,11 @@ test('row-backed summaries exclude presentation parents and retain legacy behavi
 
 test('semantic proof is bounded, same-candidate and postgres-only', () => {
   assert.match(helpers, /CREATE OR REPLACE FUNCTION private\.pay_workbench_semantic_ready_proof_page_v1/);
+  assert.match(
+    helpers,
+    /selection_recovery_headroom_v1,effective_section[\s\S]{0,500}?AS line_contract/,
+    'semantic proof must validate a recovery against its effective overlay section, not its immutable physical section',
+  );
   assert.match(helpers, /v_candidate_count < 1 OR v_candidate_count > 100/);
   assert.match(helpers, /ordinary_positive_amount \+ rollup\.recognised_deduction_amount >= 0/);
   assert.match(helpers, /-rollup\.recognised_deduction_amount <= rollup\.ordinary_positive_amount/);

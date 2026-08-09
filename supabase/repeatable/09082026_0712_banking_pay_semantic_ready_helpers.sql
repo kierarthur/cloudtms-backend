@@ -111,7 +111,23 @@ BEGIN
           'key_type', preview_row.key_type,
           'key_value', preview_row.key_value
         )),
-        p_target_section => preview_row.section
+        p_target_section => CASE
+          WHEN COALESCE(
+                 preview_row.row_json#>>'{selection_recovery_headroom_v1,contract_version}',
+                 ''
+               ) = '1'
+            THEN COALESCE(
+              NULLIF(pg_catalog.btrim(
+                preview_row.row_json#>>'{selection_recovery_headroom_v1,effective_section}'
+              ), ''),
+              NULLIF(pg_catalog.btrim(preview_row.section), ''),
+              'canonical_preview_lines'
+            )
+          ELSE COALESCE(
+            NULLIF(pg_catalog.btrim(preview_row.section), ''),
+            'canonical_preview_lines'
+          )
+        END
       ) AS line_contract,
       CASE
         WHEN COALESCE(preview_row.row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
