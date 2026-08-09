@@ -76,6 +76,9 @@ const selectionCarryMigration = read(
 const selectionCarryRuntime = read(
   'supabase/repeatable/25072026_2153_banking_pay_selection_carry_runtime.sql'
 );
+const currentSelectionRuntime = read(
+  'supabase/repeatable/09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql'
+);
 const finalFreshnessWrapper = readSql(
   'supabase/repeatable/26072026_1519_pay_batch_validate_freshness_correction_chain_wrapper.sql'
 );
@@ -754,28 +757,28 @@ test('selection carry restores explicit unselection and selected-row authority b
   );
 });
 
-test('deselecting one row converts implicit-all selection into a durable explicit subset', () => {
-  const setSelectedStart = sessionSql.indexOf(
+test('row selection patches preserve implicit-all so new eligible rows default selected without reticking existing unticks', () => {
+  const setSelectedStart = currentSelectionRuntime.indexOf(
     'CREATE OR REPLACE FUNCTION public.pay_workbench_session_set_selected_rows'
   );
-  const setSelectedEnd = sessionSql.indexOf(
+  const setSelectedEnd = currentSelectionRuntime.indexOf(
     'CREATE OR REPLACE FUNCTION',
     setSelectedStart + 1
   );
-  const setSelected = sessionSql.slice(
+  const setSelected = currentSelectionRuntime.slice(
     setSelectedStart,
     setSelectedEnd > setSelectedStart ? setSelectedEnd : undefined
   );
 
   assert.ok(setSelectedStart >= 0, 'selected-row RPC must exist');
+  assert.match(setSelected, /v_next_selection_intent_mode := CASE\s+WHEN v_replace_mode THEN 'EXPLICIT_INCLUDE'\s+ELSE 'IMPLICIT_ALL'/);
+  assert.doesNotMatch(setSelected, /WHEN v_existing_selection_intent_mode = 'EXPLICIT_INCLUDE' THEN 'EXPLICIT_INCLUDE'/);
+  assert.doesNotMatch(setSelected, /WHEN jsonb_array_length\(COALESCE\(v_deselect_ids_source, '\[\]'::jsonb\)\) > 0 THEN 'EXPLICIT_INCLUDE'/);
+  assert.doesNotMatch(setSelected, /WHEN jsonb_array_length\(COALESCE\(v_select_ids_source, '\[\]'::jsonb\)\) > 0 THEN 'EXPLICIT_INCLUDE'/);
   assert.match(
     setSelected,
-    /WHEN jsonb_array_length\(COALESCE\(v_deselect_ids_source, '\[\]'::jsonb\)\) > 0 THEN 'EXPLICIT_INCLUDE'/
-  );
-  assert.match(
-    setSelected,
-    /WHEN jsonb_array_length\(COALESCE\(v_select_ids_source, '\[\]'::jsonb\)\) > 0 THEN 'EXPLICIT_INCLUDE'/,
-    'an explicit row tick must become durable explicit authority instead of remaining an ambiguous implicit-all selection'
+    /WHEN v_global_selection_action IN \('SELECT_ALL_SECTION', 'CLEAR_SECTION'\) THEN 'IMPLICIT_ALL'/,
+    'select-all and clear-all must preserve current row choices while leaving later new eligible rows on the server-default selected path'
   );
 });
 

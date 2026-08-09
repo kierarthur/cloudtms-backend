@@ -40507,8 +40507,14 @@ async function processBankingPayContinuationMessage(env, message, options = {}) 
     source: 'processBankingPayContinuationMessage',
     executionContext: options.executionContext || null,
     continuationEnabled: true,
-    draftCreateMaxPhaseUnits: 1,
-    draftCreateMaxChunksPerCall: 1
+    // A queue delivery is already the durable ownership boundary. Let the
+    // existing Draft runner consume its bounded phase/chunk budget in this
+    // invocation so a small Draft does not pay one queue-delivery delay per
+    // database phase. Non-Draft operations still advance once because
+    // claimAndAdvanceOneBankingPayOperation applies these limits only to
+    // DRAFT_CREATE.
+    draftCreateMaxPhaseUnits: 20,
+    draftCreateMaxChunksPerCall: 10
   });
   const current = await readBankingPayContinuationOperation(env, parsed.operation_id);
   if (!current) return { ok: true, terminal: true, successor: null, worker_result: workerResult };

@@ -22,11 +22,13 @@ function functionBody(name) {
   return worker.slice(start, end);
 }
 
-test('one queue message makes one generic claim-and-advance call and never preclaims', () => {
+test('one queue message makes one bounded generic claim-and-advance call and never preclaims', () => {
   const body = functionBody('processBankingPayContinuationMessage');
   assert.equal((body.match(/claimAndAdvanceOneBankingPayOperation\(/g) || []).length, 1);
   assert.doesNotMatch(body, /banking_pay_operation_claim_next/);
   assert.match(body, /executionContext:\s*options\.executionContext\s*\|\|\s*null/);
+  assert.match(body, /draftCreateMaxPhaseUnits:\s*20/);
+  assert.match(body, /draftCreateMaxChunksPerCall:\s*10/);
   assert.match(body, /workerResult\.claimed\s*!==\s*true/);
   assert.match(body, /safeDelayedReasons\s*=\s*new Set\(\['RUN_AFTER_NOT_DUE', 'LEASE_ACTIVE'\]\)/);
   assert.match(body, /continuation_suppressed:\s*true/);

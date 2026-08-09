@@ -360,7 +360,7 @@ BEGIN
       ELSE 'SECTION_CLEAR_CONTRACT_GUARDED'
     END;
     v_next_selection_intent_mode := CASE
-      WHEN v_global_selection_action = 'SELECT_ALL_SECTION' THEN 'IMPLICIT_ALL'
+      WHEN v_global_selection_action IN ('SELECT_ALL_SECTION', 'CLEAR_SECTION') THEN 'IMPLICIT_ALL'
       ELSE 'EXPLICIT_INCLUDE'
     END;
 
@@ -1353,9 +1353,6 @@ BEGIN
 
   v_next_selection_intent_mode := CASE
     WHEN v_replace_mode THEN 'EXPLICIT_INCLUDE'
-    WHEN v_existing_selection_intent_mode = 'EXPLICIT_INCLUDE' THEN 'EXPLICIT_INCLUDE'
-    WHEN jsonb_array_length(COALESCE(v_select_ids_source, '[]'::jsonb)) > 0 THEN 'EXPLICIT_INCLUDE'
-    WHEN jsonb_array_length(COALESCE(v_deselect_ids_source, '[]'::jsonb)) > 0 THEN 'EXPLICIT_INCLUDE'
     ELSE 'IMPLICIT_ALL'
   END;
   v_next_server_selected_ids_provided := (v_next_selection_intent_mode = 'EXPLICIT_INCLUDE');
