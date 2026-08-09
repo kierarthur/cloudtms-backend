@@ -1,6 +1,6 @@
 # Candidate broker and private CloudTMS API topology
 
-Status: TEST implementation and deployed topology contract; updated through manager-session, same-phone handoff, replay, immutable-storage and end-to-end public/private readiness closure on 9 August 2026.
+Status: TEST implementation and deployed topology contract; updated through final public-finalisation, immutable-upload replay, read-only paper-pack and scheduled-release closure on 10 August 2026.
 
 ## Required trust boundary
 
@@ -135,7 +135,7 @@ The delivery contract to implement with the app identities is: deterministic not
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The deployed code is published at backend commit `21c10e910f2ce8753a40051c4e7f9a7f8853e3ca`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The deployed runtime code is published at backend commit `657eb607396411fd9c1f50c1f44f63afdf13824e`. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 

@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented. The final backend authority correction now removes public service-finalisation, binds idempotent component preparation to the original DB-owned object identity, makes paper-pack reads strictly read-only, moves pack/mail/notification release to the scheduled private worker, fails closed on multiple paper workflows and completes the agreed professional expense/mileage documents. Publication, TEST deployment and independent re-audit remain the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
+Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST with every Candidate feature flag false. The final backend authority correction removes public service-finalisation, binds idempotent component preparation to the original DB-owned object identity, makes paper-pack reads strictly read-only, moves pack/mail/notification release to the scheduled private worker, fails closed on multiple paper workflows and completes the agreed professional expense/mileage documents. Independent re-audit is the remaining Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -37,7 +37,7 @@ Completed authority includes:
 
 DB/RPC regression gates remain PostgreSQL 17.6/18.1 install/runtime suites, concurrency suites, ACL/feature-off parity, focused Candidate tests and full backend regression.
 
-## Stage 2 — CloudTMS backend (final authority correction implemented; publication/deployment verification in progress)
+## Stage 2 — CloudTMS backend (final authority correction published/deployed; independent sign-off pending)
 
 Implement and verify one versioned private CloudTMS-owned HTTP boundary. The public broker must use it and must never query Supabase or R2 directly.
 
@@ -327,9 +327,9 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 
 ## Completion gates
 
-Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both new Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. The 10 August source correction has passed local code, contract, PDF and database regression; publication/deployment evidence is recorded in the accompanying handover after execution. No Candidate workflow, email, notification, R2 or financial mutation is required for deployment verification.
+Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both new Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. The 10 August correction passed local code, contract, PDF and database regression, was published at runtime commit `657eb607396411fd9c1f50c1f44f63afdf13824e`, installed by TEST migration workflow `31341588838` and deployed to all three TEST Workers. No Candidate workflow, email, notification, R2 or financial mutation was required for deployment verification.
 
-Current 10 August source verification: 75/75 focused Candidate/backend/broker/DB-contract tests, 400/400 complete backend tests, 13/13 PostgreSQL runtime/concurrency suites on PostgreSQL 17.6 and again on 18.1, clean OpenAPI 3.1 validation, successful builds for the public broker, private Candidate API and normal TEST backend, and single-page A4 visual verification of both generated claim forms. The database runtime test proves idempotent PREPARE returns the original stored upload contract and rejects conflicting replay. Published commit, migration run, deployment identities and health/readiness evidence are recorded in the latest handover package after the authorised TEST rollout.
+Current 10 August verification: 75/75 focused Candidate/backend/broker/DB-contract tests, 400/400 complete backend tests, 13/13 PostgreSQL runtime/concurrency suites on PostgreSQL 17.6 and again on 18.1, clean OpenAPI 3.1 validation, successful builds for the public broker, private Candidate API and normal TEST backend, and single-page A4 visual verification of both generated claim forms. The database runtime test proves idempotent PREPARE returns the original stored upload contract and rejects conflicting replay. Deployed health/readiness is 200 for the public broker and normal backend; the normal backend returns the required 404 for a direct public Candidate route. Read-only TEST verification proves environment `TEST`, all Candidate flags false, auto-authorisation false, all seven Candidate tables empty and the corrected PREPARE definition installed.
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
 
