@@ -1312,6 +1312,7 @@ BEGIN
       work_row.result_json AS work_result,
       request_row.plan_json,
       request_row.selection_json,
+      request_row.created_at_utc AS request_created_at_utc,
       request_row.selection_json->'draft_overlay_fast_pre_request_authorities'
         ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
         AS draft_overlay_pre_request_authority,
@@ -1334,7 +1335,8 @@ BEGIN
       registry.current_source_change_seq AS registry_source_change_seq,
       registry.dirty_generation AS registry_dirty_generation,
       candidate_state.source_change_seq AS candidate_state_source_change_seq,
-      candidate_state.session_version AS candidate_state_session_version
+      candidate_state.session_version AS candidate_state_session_version,
+      request_owned_dirty.job_id AS current_request_owned_dirty_job_id
     FROM requested_scope
     LEFT JOIN public.pay_payment_correction_work_items AS work_row
       ON work_row.id=requested_scope.work_id
@@ -1383,6 +1385,46 @@ BEGIN
     LEFT JOIN public.banking_pay_workbench_session_candidate_state AS candidate_state
       ON candidate_state.session_id=p_session_id
      AND candidate_state.candidate_id=batch_candidate.candidate_id
+    LEFT JOIN LATERAL (
+      SELECT dirty_job.id AS job_id
+      FROM public.banking_pay_workbench_jobs AS dirty_job
+      WHERE dirty_job.id=CASE
+          WHEN COALESCE(
+            correction_operation.input_json->'draft_overlay_fast_start_authorities'
+              ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+              ->>'request_owned_dirty_job_id',''
+          ) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (
+            correction_operation.input_json->'draft_overlay_fast_start_authorities'
+              ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+              ->>'request_owned_dirty_job_id'
+          )::uuid
+          ELSE NULL::uuid END
+        AND dirty_job.candidate_id=COALESCE(work_row.candidate_id,batch_candidate.candidate_id)
+        AND dirty_job.session_id=p_session_id
+        AND dirty_job.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
+        AND dirty_job.status IN ('QUEUED','RUNNING')
+        AND dirty_job.created_at_utc>=request_row.created_at_utc
+        AND dirty_job.scope_change_generation=COALESCE(change_counter.scope_change_generation,0)
+        AND COALESCE(dirty_job.payload_json->>'source_change_seq','')
+              =COALESCE(change_counter.seq,0)::text
+        AND COALESCE((dirty_job.payload_json->>'policy_x_dirtying_only')::boolean,false)
+        AND COALESCE((dirty_job.payload_json->>'economic_truth_mutation_allowed')::boolean,true) IS FALSE
+        AND pg_catalog.jsonb_typeof(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))='array'
+        AND pg_catalog.jsonb_array_length(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))>0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_catalog.jsonb_array_elements_text(
+            COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb)
+          ) AS dirty_reason(value)
+          WHERE pg_catalog.upper(pg_catalog.btrim(dirty_reason.value)) NOT IN (
+            'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
+            'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE',
+            'DIRTY_TRIGGER:PAY_BATCHES:UPDATE'
+          )
+        )
+      LIMIT 1
+    ) AS request_owned_dirty ON true
   ), source_proof AS (
     SELECT
       authority.*,
@@ -1492,6 +1534,18 @@ BEGIN
               !~ '^[0-9]{1,18}$'
             OR COALESCE(authority.draft_overlay_start_authority->>'dirty_generation','')
               !~ '^[0-9]{1,18}$'
+            OR (
+              COALESCE(
+                (authority.draft_overlay_start_authority->>'request_owned_dirty_proven')::boolean,
+                false
+              )
+              AND (
+                COALESCE(authority.draft_overlay_start_authority->>'request_owned_dirty_job_id','')
+                  !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                OR authority.current_request_owned_dirty_job_id IS DISTINCT FROM
+                  (authority.draft_overlay_start_authority->>'request_owned_dirty_job_id')::uuid
+              )
+            )
             OR COALESCE(authority.draft_overlay_start_authority->>'pre_request_fence_digest','')
               IS DISTINCT FROM authority.draft_overlay_pre_request_authority->>'fence_digest'
             OR COALESCE(authority.draft_overlay_start_authority->>'fence_digest','')
@@ -1501,6 +1555,11 @@ BEGIN
                 COALESCE(authority.draft_overlay_start_authority->>'source_change_seq','')||'|'||
                 COALESCE(authority.draft_overlay_start_authority->>'dirty_generation','')||'|'||
                 COALESCE(authority.draft_overlay_start_authority->>'pre_request_fence_digest','')||'|'||
+                COALESCE(authority.draft_overlay_start_authority->>'request_owned_dirty_job_id','')||'|'||
+                COALESCE(
+                  (authority.draft_overlay_start_authority->>'request_owned_dirty_proven')::boolean,
+                  false
+                )::text||'|'||
                 COALESCE((authority.draft_overlay_start_authority->>'start_exact')::boolean,false)::text||
                 '|DRAFT_OVERLAY_FAST_START_AUTHORITY_V1'
               )
@@ -1511,7 +1570,9 @@ BEGIN
               (authority.draft_overlay_start_authority->>'source_change_seq')::bigint
             OR authority.live_dirty_generation IS DISTINCT FROM
               (authority.draft_overlay_start_authority->>'dirty_generation')::bigint
-          ) THEN 'CURRENT_ECONOMIC_AUTHORITY_CHANGED'
+          )
+          AND authority.current_request_owned_dirty_job_id IS NULL
+          THEN 'CURRENT_ECONOMIC_AUTHORITY_CHANGED'
         WHEN v_mode='PRE_FINANCIAL'
           AND (
             COALESCE(authority.post_draft_authority->>'source_change_seq','') !~ '^[0-9]{1,18}$'
@@ -1537,14 +1598,25 @@ BEGIN
           ) THEN 'POST_FINANCIAL_AUTHORITY_CHANGED'
         WHEN v_mode='DRAFT_OVERLAY_PREFLIGHT'
           AND (
-            authority.registry_source_change_seq IS DISTINCT FROM
-              (authority.draft_overlay_pre_request_authority->>'source_change_seq')::bigint
-            OR authority.registry_dirty_generation IS DISTINCT FROM
-              (authority.draft_overlay_pre_request_authority->>'dirty_generation')::bigint
-            OR authority.candidate_state_source_change_seq IS DISTINCT FROM
-              (authority.draft_overlay_pre_request_authority->>'source_change_seq')::bigint
+            NOT (
+              authority.registry_source_change_seq IS NOT DISTINCT FROM
+                (authority.draft_overlay_pre_request_authority->>'source_change_seq')::bigint
+              OR authority.registry_source_change_seq IS NOT DISTINCT FROM authority.live_source_change_seq
+            )
+            OR NOT (
+              authority.registry_dirty_generation IS NOT DISTINCT FROM
+                (authority.draft_overlay_pre_request_authority->>'dirty_generation')::bigint
+              OR authority.registry_dirty_generation IS NOT DISTINCT FROM authority.live_dirty_generation
+            )
+            OR NOT (
+              authority.candidate_state_source_change_seq IS NOT DISTINCT FROM
+                (authority.draft_overlay_pre_request_authority->>'source_change_seq')::bigint
+              OR authority.candidate_state_source_change_seq IS NOT DISTINCT FROM authority.live_source_change_seq
+            )
             OR authority.candidate_state_session_version IS DISTINCT FROM authority.source_session_version
-          ) THEN 'WORKBENCH_AUTHORITY_NOT_FROZEN_DRAFT_BASELINE'
+          )
+          AND authority.current_request_owned_dirty_job_id IS NULL
+          THEN 'WORKBENCH_AUTHORITY_NOT_FROZEN_DRAFT_BASELINE'
         WHEN v_mode<>'DRAFT_OVERLAY_PREFLIGHT'
           AND (authority.registry_source_change_seq IS DISTINCT FROM authority.live_source_change_seq
           OR authority.registry_dirty_generation IS DISTINCT FROM authority.live_dirty_generation
@@ -1606,6 +1678,8 @@ BEGIN
         'cancellation_start_source_change_seq',source_proof.draft_overlay_start_authority->>'source_change_seq',
         'cancellation_start_dirty_generation',source_proof.draft_overlay_start_authority->>'dirty_generation',
         'cancellation_start_fence_digest',source_proof.draft_overlay_start_authority->>'fence_digest',
+        'request_owned_dirty_proven',source_proof.current_request_owned_dirty_job_id IS NOT NULL,
+        'request_owned_dirty_job_id',source_proof.current_request_owned_dirty_job_id,
         'financial_reversion_digest',pg_catalog.md5(
           (COALESCE(source_proof.work_result,'{}'::jsonb)
             - 'applied_at_utc' - 'processed_at_utc')::text

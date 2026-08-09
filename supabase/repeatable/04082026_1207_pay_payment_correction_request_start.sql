@@ -810,12 +810,41 @@ BEGIN
              v_request.selection_json->'draft_overlay_fast_pre_request_authorities'
                ->batch_candidate.candidate_id::text AS pre_request_authority,
              COALESCE(candidate_counter.seq,0) AS live_source_change_seq,
-             COALESCE(candidate_counter.scope_change_generation,0) AS live_dirty_generation
+             COALESCE(candidate_counter.scope_change_generation,0) AS live_dirty_generation,
+             request_owned_dirty.job_id AS request_owned_dirty_job_id
       FROM public.pay_payment_correction_request_candidates AS request_candidate
       JOIN public.pay_batch_candidates AS batch_candidate
         ON batch_candidate.id=request_candidate.pay_batch_candidate_id
       LEFT JOIN public.app_change_counters AS candidate_counter
         ON candidate_counter.entity_key='pay_candidate:'||batch_candidate.candidate_id::text
+      LEFT JOIN LATERAL (
+        SELECT dirty_job.id AS job_id
+        FROM public.banking_pay_workbench_jobs AS dirty_job
+        WHERE dirty_job.candidate_id=batch_candidate.candidate_id
+          AND dirty_job.session_id=v_batch.source_workbench_session_id
+          AND dirty_job.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
+          AND dirty_job.status IN ('QUEUED','RUNNING')
+          AND dirty_job.created_at_utc>=v_request.created_at_utc
+          AND dirty_job.scope_change_generation=COALESCE(candidate_counter.scope_change_generation,0)
+          AND COALESCE(dirty_job.payload_json->>'source_change_seq','')
+                =COALESCE(candidate_counter.seq,0)::text
+          AND COALESCE((dirty_job.payload_json->>'policy_x_dirtying_only')::boolean,false)
+          AND COALESCE((dirty_job.payload_json->>'economic_truth_mutation_allowed')::boolean,true) IS FALSE
+          AND pg_catalog.jsonb_typeof(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))='array'
+          AND pg_catalog.jsonb_array_length(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))>0
+          AND NOT EXISTS (
+            SELECT 1
+            FROM pg_catalog.jsonb_array_elements_text(
+              COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb)
+            ) AS dirty_reason(value)
+            WHERE pg_catalog.upper(pg_catalog.btrim(dirty_reason.value)) NOT IN (
+              'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
+              'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE'
+            )
+          )
+        ORDER BY dirty_job.created_at_utc,dirty_job.id
+        LIMIT 1
+      ) AS request_owned_dirty ON true
       WHERE request_candidate.correction_request_id=v_request_id
     ), classified AS (
       SELECT selected_candidates.*,
@@ -826,8 +855,13 @@ BEGIN
           AND COALESCE((pre_request_authority->>'pre_request_exact')::boolean,false)
           AND COALESCE(pre_request_authority->>'source_change_seq','') ~ '^[0-9]{1,18}$'
           AND COALESCE(pre_request_authority->>'dirty_generation','') ~ '^[0-9]{1,18}$'
-          AND live_source_change_seq=(pre_request_authority->>'source_change_seq')::bigint
-          AND live_dirty_generation=(pre_request_authority->>'dirty_generation')::bigint
+          AND (
+            (
+              live_source_change_seq=(pre_request_authority->>'source_change_seq')::bigint
+              AND live_dirty_generation=(pre_request_authority->>'dirty_generation')::bigint
+            )
+            OR request_owned_dirty_job_id IS NOT NULL
+          )
         ) AS start_exact
       FROM selected_candidates
     )
@@ -838,7 +872,9 @@ BEGIN
         'start_exact',classified.start_exact,
         'rejection_reason',CASE WHEN classified.start_exact THEN NULL
           ELSE 'ECONOMIC_AUTHORITY_CHANGED_BEFORE_CANCELLATION_START' END,
-        'pre_request_fence_digest',classified.pre_request_authority->>'fence_digest'
+        'pre_request_fence_digest',classified.pre_request_authority->>'fence_digest',
+        'request_owned_dirty_job_id',classified.request_owned_dirty_job_id,
+        'request_owned_dirty_proven',classified.request_owned_dirty_job_id IS NOT NULL
       ) ORDER BY classified.candidate_id
     ),'{}'::jsonb)
     INTO v_draft_overlay_start_admission
@@ -1361,12 +1397,18 @@ BEGIN
         'start_exact',COALESCE((selected_candidates.start_admission->>'start_exact')::boolean,false),
         'rejection_reason',selected_candidates.start_admission->>'rejection_reason',
         'pre_request_fence_digest',selected_candidates.start_admission->>'pre_request_fence_digest',
+        'request_owned_dirty_job_id',selected_candidates.start_admission->>'request_owned_dirty_job_id',
+        'request_owned_dirty_proven',COALESCE(
+          (selected_candidates.start_admission->>'request_owned_dirty_proven')::boolean,false
+        ),
         'fence_digest',pg_catalog.md5(
           v_request_id::text||'|'||v_operation.id::text||'|'||
           selected_candidates.candidate_id::text||'|'||
           selected_candidates.live_source_change_seq::text||'|'||
           selected_candidates.live_dirty_generation::text||'|'||
           COALESCE(selected_candidates.start_admission->>'pre_request_fence_digest','')||'|'||
+          COALESCE(selected_candidates.start_admission->>'request_owned_dirty_job_id','')||'|'||
+          COALESCE((selected_candidates.start_admission->>'request_owned_dirty_proven')::boolean,false)::text||'|'||
           COALESCE((selected_candidates.start_admission->>'start_exact')::boolean,false)::text||
           '|DRAFT_OVERLAY_FAST_START_AUTHORITY_V1'
         )

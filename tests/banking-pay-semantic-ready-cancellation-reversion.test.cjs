@@ -336,9 +336,18 @@ test('untouched Draft admission separates pre-request economic truth from cancel
   assert.match(correctionStart, /ECONOMIC_AUTHORITY_CHANGED_BEFORE_CANCELLATION_START/);
   assert.match(correctionStart, /DRAFT_OVERLAY_FAST_START_AUTHORITY_V1/);
   assert.match(correctionStart, /draft_overlay_fast_start_authorities/);
+  assert.match(correctionStart, /request_owned_dirty_job_id/);
+  assert.match(correctionStart, /dirty_job\.session_id=v_batch\.source_workbench_session_id/);
+  assert.match(correctionStart, /policy_x_dirtying_only/);
+  assert.match(correctionStart, /economic_truth_mutation_allowed/);
+  assert.match(correctionStart, /DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT/);
+  assert.match(correctionStart, /DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE/);
   assert.match(correctionStart, /pay_workbench_candidate_serial_key/);
   assert.match(helpers, /PRE_REQUEST_ECONOMIC_AUTHORITY_NOT_CURRENT/);
   assert.match(helpers, /CANCELLATION_START_AUTHORITY_MISSING_OR_MISMATCH/);
+  assert.match(helpers, /current_request_owned_dirty_job_id/);
+  assert.match(helpers, /dirty_job\.session_id=p_session_id/);
+  assert.match(helpers, /DIRTY_TRIGGER:PAY_BATCHES:UPDATE/);
   assert.match(helpers, /WORKBENCH_AUTHORITY_NOT_FROZEN_DRAFT_BASELINE/);
   assert.match(
     helpers,
