@@ -172,6 +172,33 @@ test('V2 contract validates the Saturday-ending Sunday-to-Saturday form', () => 
   assert.equal(model.week_period.days[6].date, '2026-07-11');
 });
 
+test('manager-review timesheet requires only the Candidate signature and renders one official page', async () => {
+  const signature = {
+    r2_key: 'candidate-app/test/workflow/candidate-signature.png',
+    sha256: 'a'.repeat(64),
+    media_type: 'image/png',
+    size_bytes: 68
+  };
+  const model = fixture({
+    form_variant: 'ELECTRONIC_MANAGER_REVIEW',
+    signatures: { candidate: signature, authoriser: {} }
+  });
+  assert.equal(validateFrozenTimesheetPresentationModel(model), model);
+  const rendered = await renderOfficialTimesheetPdfBytes(model, {
+    candidate_signature: {
+      data_url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZP8sAAAAASUVORK5CYII='
+    }
+  });
+  assert.equal(rendered.page_count, 1);
+  await assert.rejects(
+    Promise.resolve().then(() => validateFrozenTimesheetPresentationModel({
+      ...model,
+      signatures: { candidate: signature, authoriser: { ...signature, r2_key: 'manager.png' } }
+    })),
+    error => error?.code === 'TIMESHEET_SIGNATURE_ASSET_INVALID'
+  );
+});
+
 test('official renderer emits exactly one A4 landscape page with additional units', async () => {
   const model = fixture({
     additional_units_section: {
@@ -267,7 +294,7 @@ test('signature images are the final visual layer inside each declaration box', 
   );
   assert.match(
     source,
-    /drawText\(page, regular, `Date \$\{formatDmy\(box\.date\)\}`[\s\S]*if \(model\.form_variant === 'ELECTRONIC_SIGNED' && box\.signature\) \{[\s\S]*signatureFits\.push\(drawEmbeddedImage/
+    /drawText\(page, regular, `Date \$\{formatDmy\(box\.date\)\}`[\s\S]*const signatureAllowed =[\s\S]*ELECTRONIC_MANAGER_REVIEW[\s\S]*signatureFits\.push\(drawEmbeddedImage/
   );
   assert.doesNotMatch(
     source,

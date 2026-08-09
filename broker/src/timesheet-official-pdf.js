@@ -832,6 +832,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   const declarationBoxes = [
     {
       x: margin,
+      signatureRole: 'CANDIDATE',
       title: safeText(model?.wording?.temporary_worker_declaration?.title || 'Temporary Worker Declaration'),
       wording: model?.wording?.temporary_worker_declaration,
       lines: normaliseLines(model?.wording?.temporary_worker_declaration),
@@ -840,6 +841,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     },
     {
       x: margin + declarationWidth + declarationGap,
+      signatureRole: 'AUTHORISER',
       title: safeText(model?.wording?.client_declaration?.title || 'Client Declaration'),
       wording: model?.wording?.client_declaration,
       lines: normaliseLines(model?.wording?.client_declaration),
@@ -1144,7 +1146,9 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     drawText(page, regular, 'Signature', box.x + 2, top + declarationHeight - 2.5, layout.smallFont);
     drawLine(page, box.x + declarationWidth - 24, signatureLineTop, box.x + declarationWidth - 2, signatureLineTop);
     drawText(page, regular, `Date ${formatDmy(box.date)}`, box.x + declarationWidth - 24, top + declarationHeight - 6.2, layout.smallFont, 22);
-    if (model.form_variant === 'ELECTRONIC_SIGNED' && box.signature) {
+    const signatureAllowed = model.form_variant === 'ELECTRONIC_SIGNED'
+      || (model.form_variant === 'ELECTRONIC_MANAGER_REVIEW' && box.signatureRole === 'CANDIDATE');
+    if (signatureAllowed && box.signature) {
       signaturePlacements.push({
         image: box.signature,
         box: {

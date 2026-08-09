@@ -742,7 +742,7 @@ function validateFrozenTimesheetPresentationModelV2(model, options = {}) {
   const signatures = requireObject(model.signatures, 'TIMESHEET_SIGNATURE_ASSET_INVALID');
   const qr = requireObject(model.qr, 'TIMESHEET_QR_STATE_INVALID');
   const variant = String(model.form_variant || '');
-  if (!['ELECTRONIC_SIGNED','ELECTRONIC_UNSIGNED','QR_UNSIGNED'].includes(variant)) {
+  if (!['ELECTRONIC_SIGNED','ELECTRONIC_MANAGER_REVIEW','ELECTRONIC_UNSIGNED','QR_UNSIGNED'].includes(variant)) {
     fail('TIMESHEET_FORM_VARIANT_INVALID', variant);
   }
   validateAssetIdentity(signatures.candidate);
@@ -753,6 +753,14 @@ function validateFrozenTimesheetPresentationModelV2(model, options = {}) {
       fail('TIMESHEET_SIGNATURE_ASSET_INVALID');
     }
     if (qr.required === true) fail('TIMESHEET_QR_STATE_INVALID', 'electronic_signed_has_qr');
+  } else if (variant === 'ELECTRONIC_MANAGER_REVIEW') {
+    if (!signatures.candidate?.r2_key || signatures.authoriser?.r2_key) {
+      fail('TIMESHEET_SIGNATURE_ASSET_INVALID');
+    }
+    if (model.authorisation?.authorised === true || model.authorisation?.authorised_at_utc) {
+      fail('TIMESHEET_AUTHORISATION_STATE_INVALID');
+    }
+    if (qr.required === true) fail('TIMESHEET_QR_STATE_INVALID', 'electronic_manager_review_has_qr');
   } else if (variant === 'ELECTRONIC_UNSIGNED') {
     if (qr.required === true) fail('TIMESHEET_QR_STATE_INVALID', 'electronic_unsigned_has_qr');
   } else {

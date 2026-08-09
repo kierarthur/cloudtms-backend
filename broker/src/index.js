@@ -45,6 +45,7 @@ import {
   buildCanonicalDailyScheduleFromState,
   mapCanonicalDailyScheduleToIso
 } from './daily-schedule-authority.js';
+import { handleCandidateAppRequest } from './candidate-app-backend.js';
 import {
   createImportReviewDispatcher,
   importReviewSourceEvidenceFromR2,
@@ -28628,6 +28629,260 @@ async function finaliseCandidateDailyThroughCanonicalAuthority(env, {
     p_idempotency_key: `${idempotencyKey}:finalise`,
     p_now_utc: nowUtc
   });
+}
+
+async function enqueueCandidateQrPackThroughCanonicalAuthority(env, {
+  timesheetId,
+  expectedTimesheetId,
+  idempotencyKey,
+  ctx
+} = {}) {
+  const raw = await sbRpc(env, 'timesheet_qr_send_enqueue_v1', {
+    p_timesheet_id: timesheetId,
+    p_expected_timesheet_id: expectedTimesheetId || timesheetId,
+    p_actor_user_id: null,
+    p_idempotency_key: idempotencyKey || crypto.randomUUID(),
+    p_now_utc: new Date().toISOString()
+  }, { timeoutMs: 45000 });
+  const payload = unwrapRpcJsonb(raw, 'timesheet_qr_send_enqueue_v1') || raw || {};
+  if (payload?.ok === false) {
+    throw new Error(String(payload.error_code || payload.error || 'CANDIDATE_PAPER_PACK_QUEUE_FAILED'));
+  }
+  const operationId = String(payload?.document_operation_id || '').trim();
+  if (operationId) {
+    await nudgeInvoiceOperations(env, [{
+      accepted: true,
+      operation_id: operationId,
+      status: 'QUEUED',
+      operation_type: 'BUILD_DOCUMENT',
+      entity_type: 'TIMESHEET',
+      entity_id: payload?.current_timesheet_id || timesheetId
+    }], {
+      ctx,
+      rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+      lanes: ['DATABASE', 'DOCUMENT'],
+      priorityClass: 'INTERACTIVE'
+    });
+  }
+  return payload;
+}
+
+function hasExplicitCandidateZeroBreak(source) {
+  if (!source || typeof source !== 'object') return false;
+  if (source.no_break === true || source.noBreak === true) return true;
+  const hasMinutes = Object.prototype.hasOwnProperty.call(source, 'break_minutes')
+    || Object.prototype.hasOwnProperty.call(source, 'break_mins');
+  if (!hasMinutes) return false;
+  const raw = source.break_minutes ?? source.break_mins;
+  return raw !== null && raw !== '' && Number(raw) === 0;
+}
+
+function normaliseCandidateBreakInput(segment) {
+  const source = (segment && typeof segment === 'object' && !Array.isArray(segment)) ? { ...segment } : {};
+  const explicitNoBreak = hasExplicitCandidateZeroBreak(source);
+  if (explicitNoBreak) {
+    source.no_break = true;
+    source.break_minutes = 0;
+    source.break_mins = 0;
+    source.breaks = [];
+    source.break_start = null;
+    source.break_end = null;
+    source.break_start_iso = null;
+    source.break_end_iso = null;
+  }
+  return source;
+}
+
+function buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission } = {}) {
+  const factual = (factualSubmission && typeof factualSubmission === 'object' && !Array.isArray(factualSubmission))
+    ? factualSubmission : {};
+  const sourcePatch = (factual.timesheet_patch_json && typeof factual.timesheet_patch_json === 'object')
+    ? factual.timesheet_patch_json : factual;
+  const actualSchedule = Array.isArray(sourcePatch.actual_schedule_json)
+    ? sourcePatch.actual_schedule_json.map(normaliseCandidateBreakInput) : [];
+  const explicitNoBreak = hasExplicitCandidateZeroBreak(sourcePatch);
+  const patch = {
+    worked_start_iso: sourcePatch.worked_start_iso || null,
+    worked_end_iso: sourcePatch.worked_end_iso || null,
+    break_start_iso: explicitNoBreak ? null : (sourcePatch.break_start_iso || null),
+    break_end_iso: explicitNoBreak ? null : (sourcePatch.break_end_iso || null),
+    break_minutes: explicitNoBreak ? 0 : Number(sourcePatch.break_minutes || 0),
+    actual_schedule_json: actualSchedule,
+    additional_units_week: sourcePatch.additional_units_week || {},
+    additional_units_per_day: sourcePatch.additional_units_per_day || {}
+  };
+  if (!patch.worked_start_iso || !patch.worked_end_iso) throw new Error('CANDIDATE_DAILY_WORKED_INTERVAL_REQUIRED');
+  return {
+    contract_version: 'CANDIDATE_DAILY_FACTUAL_SUBMISSION_V1',
+    workflow_id: workflow?.id || null,
+    workflow_generation: workflow?.generation || null,
+    timesheet_patch_json: patch
+  };
+}
+
+async function buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { workflow, factualSubmission } = {}) {
+  const enc = encodeURIComponent;
+  const factual = (factualSubmission && typeof factualSubmission === 'object' && !Array.isArray(factualSubmission))
+    ? factualSubmission : {};
+  const contractWeekId = String(workflow?.contract_week_id || '').trim();
+  const contractId = String(workflow?.contract_id || '').trim();
+  if (!contractWeekId || !contractId) throw new Error('CANDIDATE_WORKFLOW_WEEK_NOT_FOUND');
+
+  const [cw, contract] = await Promise.all([
+    sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(contractWeekId)}&select=*`),
+    sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`)
+  ]);
+  if (!cw || !contract || String(cw.contract_id) !== String(contract.id)) throw new Error('CANDIDATE_WORKFLOW_WEEK_NOT_FOUND');
+
+  const targetTimesheetId = String(workflow.target_timesheet_id || '').trim() || crypto.randomUUID();
+  const [existingTimesheet, existingFinancials, candidate, client] = await Promise.all([
+    workflow.target_timesheet_id
+      ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(workflow.target_timesheet_id)}&is_current=eq.true&select=*`)
+      : Promise.resolve(null),
+    workflow.target_timesheet_id
+      ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets_financials?timesheet_id=eq.${enc(workflow.target_timesheet_id)}&is_current=eq.true&select=*`)
+      : Promise.resolve(null),
+    contract.candidate_id
+      ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/candidates?id=eq.${enc(contract.candidate_id)}&select=id,display_name,key_norm,mileage_pay_rate`)
+      : Promise.resolve(null),
+    contract.client_id
+      ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/clients?id=eq.${enc(contract.client_id)}&select=id,name,mileage_charge_rate`)
+      : Promise.resolve(null)
+  ]);
+
+  const schedule = Array.isArray(factual.actual_schedule_json)
+    ? factual.actual_schedule_json.map(normaliseCandidateBreakInput)
+    : Array.isArray(factual.timesheet_patch_json?.actual_schedule_json)
+      ? factual.timesheet_patch_json.actual_schedule_json.map(normaliseCandidateBreakInput)
+      : [];
+  const additionalUnitsWeek = factual.additional_units_week || factual.timesheet_patch_json?.additional_units_week || {};
+  const additionalUnitsPerDay = factual.additional_units_per_day || factual.timesheet_patch_json?.additional_units_per_day || {};
+  const claim = (factual.expense_claim && typeof factual.expense_claim === 'object') ? factual.expense_claim : {};
+  const amount = (value, field) => {
+    if (value == null || value === '') return 0;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) throw new Error(`CANDIDATE_EXPENSE_VALUE_INVALID:${field}`);
+    return Math.round(number * 100) / 100;
+  };
+  const mileageUnits = amount(claim.mileage_units, 'mileage_units');
+  const travelAmount = amount(claim.travel_amount, 'travel_amount');
+  const accommodationAmount = amount(claim.accommodation_amount, 'accommodation_amount');
+  const otherAmount = amount(claim.other_amount, 'other_amount');
+  const expensesPay = Math.round((travelAmount + accommodationAmount + otherAmount) * 100) / 100;
+  const expensesCharge = expensesPay;
+
+  let mileagePayRate = Number(contract.mileage_pay_rate || existingFinancials?.mileage_pay_rate || candidate?.mileage_pay_rate || 0) || null;
+  let mileageChargeRate = Number(contract.mileage_charge_rate || existingFinancials?.mileage_charge_rate || client?.mileage_charge_rate || 0) || null;
+  if (mileageUnits > 0 && (!mileagePayRate || !mileageChargeRate)) {
+    const financeRows = await sbRpc(env, 'settings_finance_pick', { p_date: cw.week_ending_date || null }).catch(() => []);
+    const finance = Array.isArray(financeRows) ? financeRows[0] : financeRows;
+    mileagePayRate = mileagePayRate || Number(finance?.mileage_pay_defaults || 0) || null;
+    mileageChargeRate = mileageChargeRate || Number(finance?.mileage_charge_defaults || 0) || null;
+  }
+  if (mileageUnits > 0 && (!mileagePayRate || !mileageChargeRate)) throw new Error('MILEAGE_RATE_MISSING');
+  const mileagePay = Math.round(mileageUnits * Number(mileagePayRate || 0) * 100) / 100;
+  const mileageCharge = Math.round(mileageUnits * Number(mileageChargeRate || 0) * 100) / 100;
+
+  const syntheticTimesheet = {
+    ...(existingTimesheet || {}),
+    timesheet_id: targetTimesheetId,
+    version: existingTimesheet?.version || 1,
+    contract_id: contract.id,
+    week_ending_date: cw.week_ending_date,
+    sheet_scope: 'WEEKLY',
+    submission_mode: 'MANUAL',
+    actual_schedule_json: schedule,
+    additional_units_week: additionalUnitsWeek,
+    additional_units_per_day: additionalUnitsPerDay
+  };
+  const financialInput = {
+    ...(existingFinancials || {}),
+    timesheet_id: targetTimesheetId,
+    candidate_id: contract.candidate_id,
+    client_id: contract.client_id,
+    travel_pay_ex_vat: travelAmount,
+    travel_charge_ex_vat: travelAmount,
+    accommodation_pay_ex_vat: accommodationAmount,
+    accommodation_charge_ex_vat: accommodationAmount,
+    other_pay_ex_vat: otherAmount,
+    other_charge_ex_vat: otherAmount,
+    expenses_pay_ex_vat: expensesPay,
+    expenses_charge_ex_vat: expensesCharge,
+    expenses_description: String(claim.description || '').trim() || null,
+    mileage_units: mileageUnits,
+    mileage_pay_ex_vat: mileagePay,
+    mileage_charge_ex_vat: mileageCharge,
+    mileage_pay_rate: mileagePayRate,
+    mileage_charge_rate: mileageChargeRate
+  };
+  const policy = (workflow.policy_snapshot_json && typeof workflow.policy_snapshot_json === 'object')
+    ? workflow.policy_snapshot_json : {};
+  const built = await buildWeeklyScheduleSegmentsSnapshot(env, syntheticTimesheet, cw, contract, financialInput, {
+    write_now: false,
+    policy_override: policy
+  });
+  const snapshot = {
+    ...built.snapshot,
+    travel_pay_ex_vat: travelAmount,
+    travel_charge_ex_vat: travelAmount,
+    accommodation_pay_ex_vat: accommodationAmount,
+    accommodation_charge_ex_vat: accommodationAmount,
+    other_pay_ex_vat: otherAmount,
+    other_charge_ex_vat: otherAmount,
+    expenses_description: financialInput.expenses_description,
+    mileage_pay_rate: mileagePayRate,
+    mileage_charge_rate: mileageChargeRate
+  };
+  const timesheetPatch = {
+    actual_schedule_json: schedule,
+    additional_units_week: additionalUnitsWeek,
+    additional_units_per_day: additionalUnitsPerDay
+  };
+  const timesheetCreate = existingTimesheet ? null : {
+    timesheet_id: targetTimesheetId,
+    booking_id: `CANDIDATE-WEEKLY-${String(cw.id).replace(/-/g, '')}`,
+    contract_id: contract.id,
+    week_ending_date: cw.week_ending_date,
+    occupant_key_norm: candidate?.key_norm || '',
+    hospital_norm: client?.name || '',
+    ward_norm: '',
+    job_title_norm: contract.role || '',
+    shift_label_norm: 'weekly',
+    band: contract.band || null,
+    status: 'RECEIVED',
+    submission_mode: 'MANUAL',
+    line_type: workflow.workflow_kind === 'CONTRACT_EXPENSE' ? 'EXPENSES' : 'HOURS',
+    sheet_scope: 'WEEKLY',
+    actual_schedule_json: schedule,
+    additional_units_week: additionalUnitsWeek,
+    additional_units_per_day: additionalUnitsPerDay,
+    candidate_hint_text: { display_name: candidate?.display_name || null }
+  };
+  const totals = {
+    ...(cw.totals_json && typeof cw.totals_json === 'object' ? cw.totals_json : {}),
+    actual_schedule_json: schedule,
+    expenses_draft: {
+      mileage_units: mileageUnits,
+      travel_pay: travelAmount,
+      travel_charge: travelAmount,
+      accommodation_pay: accommodationAmount,
+      accommodation_charge: accommodationAmount,
+      other_pay: otherAmount,
+      other_charge: otherAmount,
+      note: financialInput.expenses_description || ''
+    }
+  };
+  const authorityPayload = {
+    contract_version: 'CANDIDATE_WEEKLY_CANONICAL_AUTHORITY_V1',
+    timesheet_create_json: timesheetCreate,
+    timesheet_patch_json: timesheetPatch,
+    contract_week_patch_json: { totals_json: totals, planned_schedule_json: schedule },
+    canonical_tsfin_snapshot: snapshot
+  };
+  if (workflow.workflow_kind === 'CONTRACT_COMBINED') {
+    return { hours_submission: authorityPayload, expense_submission: authorityPayload };
+  }
+  return authorityPayload;
 }
 async function handleTimesheetCreateManualDaily(env, req) {
   const enc = encodeURIComponent;
@@ -192122,6 +192377,18 @@ export default {
 
     const url = new URL(req.url);
     const p = url.pathname;
+
+    const candidateAppResponse = await handleCandidateAppRequest(req, env, ctx, {
+      rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+      requireOfficeUser: (request, roles) => requireUser(env, request, roles),
+      buildWeeklySubmission: ({ workflow, factualSubmission }) =>
+        buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { workflow, factualSubmission }),
+      buildDailySubmission: ({ workflow, factualSubmission }) =>
+        buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission }),
+      finaliseDaily: (options) => finaliseCandidateDailyThroughCanonicalAuthority(env, options),
+      enqueueQrPack: (options) => enqueueCandidateQrPackThroughCanonicalAuthority(env, options)
+    });
+    if (candidateAppResponse) return withCORS(env, req, candidateAppResponse);
 
     if (req.method === 'POST' && p === '/internal/invoice-queue/drain') {
       return handleInvoiceQueueDrainRequest(req, env, { ctx, rpc: (functionName, args, options) => sbRpc(env, functionName, args, options) });
