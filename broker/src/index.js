@@ -64025,6 +64025,33 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     }
     return null;
   };
+  const isRetryableDraftChunkDatabaseError = (value) => {
+    const message = trimStr(value?.message || value?.error || value || '');
+    const status = Number(value?.status || value?.statusCode || value?.http_status || value?.httpStatus || 0);
+    return status === 408
+      || /\b408\b/.test(message)
+      || /canceling statement due to lock timeout/i.test(message)
+      || /lock timeout/i.test(message)
+      || /deadlock detected/i.test(message)
+      || /could not serialize access/i.test(message)
+      || /serialization failure/i.test(message);
+  };
+  const draftChunkRetryState = (progressValue, phaseValue, chunkIdValue) => {
+    const retryCounts = safeObject(progressValue?.draft_chunk_transient_retry_counts);
+    const retryKey = `${upperTrim(phaseValue)}:${trimStr(chunkIdValue)}`;
+    const priorCount = Number.isFinite(Number(retryCounts[retryKey]))
+      ? Math.max(0, Math.trunc(Number(retryCounts[retryKey])))
+      : 0;
+    const retryCount = priorCount + 1;
+    const retryDelaySeconds = Math.min(5, 1 + Math.floor(retryCount / 2));
+    return {
+      retryKey,
+      priorCount,
+      retryCount,
+      retryDelaySeconds,
+      retryCounts: Object.assign({}, retryCounts, { [retryKey]: retryCount })
+    };
+  };
   const scheduleActiveSnoozeDraftRefresh = (failureLike) => {
     const failure = safeObject(failureLike);
     const hasWaitUntil = (value) => !!(value && typeof value === 'object' && typeof value.waitUntil === 'function');
@@ -64579,7 +64606,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     retry_status: 'WAITING_RETRY',
     run_after_delay_seconds: Math.max(1, Math.min(60, Math.trunc(Number(waitSeconds) || 10))),
     run_after_utc: new Date(Date.now() + Math.max(1, Math.min(60, Math.trunc(Number(waitSeconds) || 10))) * 1000).toISOString(),
-    resume_reason: 'WAITING_FOR_PREVIEW_READY'
+    resume_reason: trimStr(progressPatch?.resume_reason) || 'WAITING_FOR_PREVIEW_READY'
   }), counters);
   const finish = async (status, resultJson = null, errorJson = null) => buildBankingPayOperationPublicPayload(await sbRpc(env, 'banking_pay_operation_finish', {
     p_operation_id: operationId,
@@ -66349,6 +66376,39 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
             error_json: chunkFailure,
             refresh_nudge: refreshNudge,
             refresh_nudge_scheduled: refreshNudge?.scheduled === true || refreshNudge?.already_running === true
+          });
+        }
+        const transientDatabaseFailure = isRetryableDraftChunkDatabaseError(e);
+        const transientRetry = draftChunkRetryState(progressJson, phase, chunk.chunk_id);
+        const transientRetryLimit = 12;
+        if (transientDatabaseFailure && transientRetry.retryCount <= transientRetryLimit) {
+          const retryError = {
+            code: `${phase}_CHUNK_TRANSIENT_DATABASE_RETRY`,
+            message: String(e?.message || e || ''),
+            phase,
+            chunk_id: chunk.chunk_id,
+            candidate_scope_ids: scopeIds,
+            retryable: true,
+            transaction_rolled_back: true,
+            retry_count: transientRetry.retryCount,
+            retry_limit: transientRetryLimit,
+            retry_delay_seconds: transientRetry.retryDelaySeconds
+          };
+          await finishChunk(chunk.chunk_id, 'PENDING', 0, 0, {
+            phase,
+            retryable: true,
+            retry_count: transientRetry.retryCount,
+            retry_delay_seconds: transientRetry.retryDelaySeconds
+          }, retryError);
+          return lockProgressForRetryableWait(phase, {
+            status_text: `Draft ${phase} is waiting briefly for another Banking Pay transaction to finish.`,
+            resume_reason: 'DRAFT_CHUNK_TRANSIENT_DATABASE_RETRY',
+            draft_chunk_transient_retry_counts: transientRetry.retryCounts,
+            last_draft_chunk_transient_retry: retryError
+          }, transientRetry.retryDelaySeconds, {
+            current_chunk_index: chunk.sequence_no || null,
+            completed_units: 0,
+            failed_units: 0
           });
         }
         await finishChunk(chunk.chunk_id, 'FAILED', 0, scopeIds.length || 1, null, { code: `${phase}_CHUNK_FAILED`, message: String(e?.message || e || '') });

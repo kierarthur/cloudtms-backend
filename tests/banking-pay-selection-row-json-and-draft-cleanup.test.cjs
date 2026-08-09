@@ -104,3 +104,28 @@ test('failed-draft cleanup ignores historical batches mentioned by input or vali
   assert.match(discovery, /fetchOperationChunkRowsForCleanup/);
   assert.match(discovery, /includeSingularIds \? \(source\.pay_batch_id \|\| \[\]\) : \[\]/);
 });
+
+test('Draft chunk lock contention is requeued instead of terminalising a safe partial Draft', () => {
+  const draftOperation = sliceBetween(
+    workerSource,
+    'async function advanceBankingPayDraftCreateOperation',
+    'async function advanceBankingPayRemittanceOperation'
+  );
+
+  assert.match(draftOperation, /const isRetryableDraftChunkDatabaseError =/);
+  assert.match(draftOperation, /status === 408/);
+  assert.match(draftOperation, /canceling statement due to lock timeout/i);
+  assert.match(draftOperation, /deadlock detected/i);
+  assert.match(draftOperation, /const transientRetryLimit = 12/);
+  assert.match(draftOperation, /finishChunk\(chunk\.chunk_id, 'PENDING', 0, 0/);
+  assert.match(draftOperation, /resume_reason: 'DRAFT_CHUNK_TRANSIENT_DATABASE_RETRY'/);
+  assert.match(draftOperation, /transaction_rolled_back: true/);
+
+  const retryBranch = sliceBetween(
+    draftOperation,
+    'if (transientDatabaseFailure && transientRetry.retryCount <= transientRetryLimit)',
+    "await finishChunk(chunk.chunk_id, 'FAILED'"
+  );
+  assert.match(retryBranch, /lockProgressForRetryableWait\(phase/);
+  assert.doesNotMatch(retryBranch, /finishFailedWithCleanup/);
+});
