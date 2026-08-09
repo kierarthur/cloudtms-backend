@@ -141,6 +141,21 @@ test('compatibility bodies are owner-only and absent from the new normal call gr
   }
 });
 
+test('whole Draft cancellation freezes the exact batch scope before planning', () => {
+  const sql = readRepeatable('04082026_1206_pay_batch_cancel.sql');
+  assert.match(sql, /'scope_type'\s*,\s*'BATCH'/);
+  assert.match(sql, /'requested_action'\s*,\s*'DRAFT_CANCEL'/);
+  assert.match(sql, /'mode'\s*,\s*'ALL_MATCHING'/);
+  assert.match(sql, /'source_context'\s*,\s*'pay_batch_cancel'/);
+});
+
+test('legacy whole-Draft requests receive only the exact server-owned batch-scope compatibility', () => {
+  const sql = readRepeatable('09082026_1403_pay_payment_correction_selected_items_draft_scope.sql');
+  assert.match(sql, /v_scope_type IS NULL[\s\S]*DRAFT_CANCEL[\s\S]*ALL_MATCHING[\s\S]*pay_batch_cancel[\s\S]*v_scope_type := 'BATCH'/);
+  assert.match(sql, /IF v_scope_type IS NULL THEN[\s\S]*PAYMENT_CORRECTION_SCOPE_TYPE_REQUIRED/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\._pay_payment_correction_selected_items\(uuid,jsonb,boolean\) FROM PUBLIC,anon,authenticated,service_role/);
+});
+
 test('the correction runner owns one bounded phase and the only Workbench calls', () => {
   const processSql = read('supabase/repeatable/04082026_1209_pay_payment_correction_process_chunk.sql');
   const allSql = stageOneRepeatables.map(readRepeatable).join('\n');

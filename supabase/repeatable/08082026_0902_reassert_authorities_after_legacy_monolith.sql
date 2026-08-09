@@ -46,3 +46,4 @@
 \ir 09082026_0825_pay_workbench_patch_preview_after_batch_mutation.sql
 \ir 09082026_0826_pay_preview_candidate_build_summary_fragment.sql
 \ir 09082026_1128_banking_pay_operation_finish_post_draft_authority.sql
+\ir 09082026_1403_pay_payment_correction_selected_items_draft_scope.sql

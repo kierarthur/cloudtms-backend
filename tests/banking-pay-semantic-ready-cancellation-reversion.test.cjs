@@ -170,6 +170,16 @@ test('V3 publication composes structural parity with semantic parity without wid
   assert.match(delta, /banking_pay_workbench_semantic_ready_publication_v3_enabled/);
 });
 
+test('canonical enqueue promotes legacy current authority after V3 publication is enabled', () => {
+  assert.match(enqueue, /v_semantic_ready_publication_enabled boolean := false/);
+  assert.match(enqueue, /banking_pay_workbench_semantic_ready_publication_v3_enabled/);
+  assert.match(
+    enqueue,
+    /v_semantic_ready_publication_enabled IS NOT TRUE[\s\S]*CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3/,
+  );
+  assert.match(enqueue, /READY_TO_PAY_SEMANTIC_V2/);
+});
+
 test('cancellation reversion uses deterministic candidate locks, immutable lineage and one page publication', () => {
   assert.match(helpers, /CREATE OR REPLACE FUNCTION private\.pay_workbench_cancel_reversion_admission_page_v1/);
   assert.match(helpers, /LEGACY_OR_SEMANTICALLY_UNCERTIFIED_SOURCE/);
@@ -226,8 +236,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 11);
-  assert.equal(semanticManifest.functions.length, 11);
+  assert.equal(semanticManifest.function_count, 12);
+  assert.equal(semanticManifest.functions.length, 12);
   assert.match(semanticVerifier, /definition_sha256/);
   assert.match(semanticVerifier, /unexpected overload/);
   assert.match(semanticVerifier, /missing saved source file/);

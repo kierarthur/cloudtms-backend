@@ -84,6 +84,7 @@ BEGIN
     p_selection_json => jsonb_build_object(
       'command', 'PREPARE',
       'contract_version', 1,
+      'scope_type', 'BATCH',
       'mode', 'ALL_MATCHING',
       'requested_action', 'DRAFT_CANCEL',
       'filter', '{}'::jsonb,

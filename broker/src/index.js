@@ -49545,6 +49545,8 @@ async function readExactDraftCancellationReplayV1(env, actorUserId, payBatchId) 
       && row?.source_bank_event_id == null
       && row?.auto_requested !== true
       && String(selection.requested_action || nestedSelection.action || '').trim().toUpperCase() === 'DRAFT_CANCEL'
+      && (!Object.prototype.hasOwnProperty.call(selection, 'scope_type')
+        || String(selection.scope_type || '').trim().toUpperCase() === 'BATCH')
       && String(selection.mode || nestedSelection.mode || '').trim().toUpperCase() === 'ALL_MATCHING'
       && String(selection.source_context || '') === 'pay_batch_cancel'
       && filterJson !== null && Object.keys(filterJson).length === 0

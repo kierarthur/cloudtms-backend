@@ -135,6 +135,7 @@ test('whole Draft replay resumes only the exact prepared request and operation',
     reason: 'DRAFT_PAYMENT_CANCELLED_BY_USER',
     selection_json: {
       requested_action: 'DRAFT_CANCEL',
+      scope_type: 'BATCH',
       mode: 'ALL_MATCHING',
       source_context: 'pay_batch_cancel',
       filter_json: {},
@@ -174,7 +175,11 @@ test('whole Draft replay resumes only the exact prepared request and operation',
   assert.equal(exact.operation_id, operationId);
   assert.equal(exact.code, 'DRAFT_PAYMENT_CANCELLATION_EXACT_REPLAY');
 
-  requestRows = [{ ...requestRows[0], requested_by_user_id: '55555555-5555-4555-8555-555555555555' }];
+  requestRows = [{ ...requestRows[0], selection_json: { ...requestRows[0].selection_json, scope_type: 'CANDIDATES' } }];
+  const wrongScope = await context.readReplay({ SUPABASE_URL: 'https://example.invalid' }, actorId, batchId);
+  assert.equal(wrongScope, null);
+
+  requestRows = [{ ...requestRows[0], selection_json: { ...requestRows[0].selection_json, scope_type: 'BATCH' }, requested_by_user_id: '55555555-5555-4555-8555-555555555555' }];
   const wrongOwner = await context.readReplay({ SUPABASE_URL: 'https://example.invalid' }, actorId, batchId);
   assert.equal(wrongOwner, null);
 });

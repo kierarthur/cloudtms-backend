@@ -112,6 +112,7 @@ DECLARE
   v_reversion_attestation jsonb := '{}'::jsonb;
   v_reversion_source_count integer := 0;
   v_reversion_state_exact boolean := false;
+  v_semantic_ready_publication_enabled boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -138,6 +139,14 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'candidates row % not found', p_candidate_id;
   END IF;
+
+  SELECT COALESCE(
+    settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,
+    false
+  )
+  INTO v_semantic_ready_publication_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id = 1;
 
   -- One candidate may be requested through several independent refresh routes
   -- in the same lifecycle. Elect/reuse its economic owner under the common
@@ -1445,6 +1454,20 @@ BEGIN
         AND current_scope.certified_preview_publication_session_version = build_row.session_version
         AND current_scope.certified_preview_publication_source_change_seq = build_row.source_change_seq
         AND current_scope.certified_preview_publication_source_build_run_id = build_row.source_build_run_id
+        AND (
+          v_semantic_ready_publication_enabled IS NOT TRUE
+          OR (
+            current_scope.certified_preview_publication_attestation_json->>'attestation_version'
+              = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+            AND current_scope.certified_preview_publication_attestation_json->>'contract_version' = '3'
+            AND current_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
+              = 'READY_TO_PAY_SEMANTIC_V2'
+            AND COALESCE(
+              (current_scope.certified_preview_publication_attestation_json->>'semantic_ready')::boolean,
+              false
+            )
+          )
+        )
         AND UPPER(BTRIM(COALESCE(current_state.status, ''))) = 'READY'
         AND current_state.pending_job_id IS NULL
         AND current_state.session_version = build_row.session_version
