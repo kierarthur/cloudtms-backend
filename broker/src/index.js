@@ -29951,15 +29951,80 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     const numberValue = Number(text);
     return Number.isFinite(numberValue) ? Math.round(numberValue * 100) / 100 : null;
   };
+  const normaliseCreateDraftPreviewSection = (value) => {
+    const section = trimStr(value || '').toLowerCase();
+    if (['canonical_preview_lines', 'ready_to_pay', 'ready'].includes(section)) return 'canonical_preview_lines';
+    if (['blocked_for_pay', 'blocked_for_pay_now', 'blocked_now', 'blocked_preview_lines'].includes(section)) return 'blocked_for_pay';
+    if (['cases_resolutions', 'cases_and_resolutions', 'case_resolution', 'case_resolutions'].includes(section)) return 'cases_resolutions';
+    return section || 'canonical_preview_lines';
+  };
+  const readCreateDraftRecoverySelectionOverlay = (previewRowLike) => {
+    const previewRow = isPlainObject(previewRowLike) ? previewRowLike : {};
+    const rowJson = isPlainObject(previewRow.row_json) ? previewRow.row_json : {};
+    const overlay = isPlainObject(rowJson.selection_recovery_headroom_v1)
+      ? rowJson.selection_recovery_headroom_v1
+      : {};
+    const candidateId = trimStr(previewRow.candidate_id || rowJson.candidate_id || '');
+    const payChannel = upperTrim(rowJson.pay_channel || rowJson.current_pay_method || rowJson.candidate_pay_method || '');
+    const lineType = upperTrim(rowJson.line_type || rowJson.item_type || '');
+    const selectedPositiveHeadroom = numericOrNull(overlay.selected_positive_headroom_ex_vat);
+    const recoverableAmount = numericOrNull(overlay.recoverable_amount_ex_vat);
+    const nominalDueAmount = numericOrNull(overlay.nominal_due_amount_ex_vat);
+    const rowAmount = numericOrNull(previewRow.amount_ex_vat ?? rowJson.amount_ex_vat ?? rowJson.preview_amount_ex_vat ?? rowJson.amount_display);
+    const physicalSection = normaliseCreateDraftPreviewSection(overlay.physical_section || '');
+    const effectiveSection = normaliseCreateDraftPreviewSection(overlay.effective_section || '');
+    const overlayDigest = trimStr(overlay.overlay_digest || '');
+    const recoveryLineTypes = new Set([
+      'OVERPAYMENT_RECOVERY',
+      'MANUAL_DEBT_RECOVERY',
+      'PAYMENT_ADVANCE_REPAYMENT',
+      'LOAN_REPAYMENT'
+    ]);
+    const valid = Number(overlay.contract_version) === 1
+      && uuidRe.test(candidateId)
+      && trimStr(overlay.candidate_id || '') === candidateId
+      && ['PAYE', 'UMBRELLA'].includes(payChannel)
+      && upperTrim(overlay.pay_channel || '') === payChannel
+      && recoveryLineTypes.has(lineType)
+      && physicalSection === 'blocked_for_pay'
+      && effectiveSection === 'canonical_preview_lines'
+      && selectedPositiveHeadroom !== null
+      && selectedPositiveHeadroom > 0
+      && recoverableAmount !== null
+      && recoverableAmount > 0
+      && recoverableAmount <= selectedPositiveHeadroom
+      && nominalDueAmount !== null
+      && nominalDueAmount >= recoverableAmount
+      && rowAmount !== null
+      && rowAmount < 0
+      && Math.round(Math.abs(rowAmount) * 100) === Math.round(recoverableAmount * 100)
+      && booleanFrom(overlay.static_recovery_eligible)
+      && /^[0-9a-f]{32}$/i.test(overlayDigest)
+      && upperTrim(overlay.policy_x_authority_scope || '') === 'PRE_DRAFT_LIVE_TRUTH';
+    return valid
+      ? {
+          contract_version: 1,
+          physical_section: physicalSection,
+          effective_section: effectiveSection,
+          selected_positive_headroom_ex_vat: selectedPositiveHeadroom,
+          nominal_due_amount_ex_vat: nominalDueAmount,
+          recoverable_amount_ex_vat: recoverableAmount,
+          overlay_digest: overlayDigest,
+          policy_x_authority_scope: 'PRE_DRAFT_LIVE_TRUTH'
+        }
+      : null;
+  };
   const buildCreateDraftSelectedPreviewRowContract = (previewRowLike, index = 0) => {
     const previewRow = isPlainObject(previewRowLike) ? previewRowLike : {};
     const rowJson = isPlainObject(previewRow.row_json) ? previewRow.row_json : {};
+    const recoverySelectionOverlay = readCreateDraftRecoverySelectionOverlay(previewRow);
     const economicKey = isPlainObject(rowJson.economic_key) ? rowJson.economic_key : {};
     const previewRowId = trimStr(previewRow.id || previewRow.row_id || rowJson.preview_row_pk || rowJson.row_id || '');
     const presentationPreviewRowId = trimStr(rowJson.preview_row_id || rowJson.row_id || rowJson.line_id || previewRow.row_key || '');
     const rowKey = trimStr(previewRow.row_key || rowJson.row_key || rowJson.line_key || '');
     const lineId = trimStr(rowJson.line_id || rowJson.lineId || '');
-    const section = trimStr(previewRow.section || rowJson.section || 'canonical_preview_lines') || 'canonical_preview_lines';
+    const section = recoverySelectionOverlay?.effective_section
+      || normaliseCreateDraftPreviewSection(previewRow.section || rowJson.section || 'canonical_preview_lines');
     const candidateId = trimStr(previewRow.candidate_id || rowJson.candidate_id || '');
     const clientId = trimStr(rowJson.client_id || rowJson.clientId || '');
     const timesheetId = trimStr(previewRow.timesheet_id || economicKey.timesheet_id || rowJson.timesheet_id || '');
@@ -29968,7 +30033,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     const payChannel = upperTrim(rowJson.pay_channel || rowJson.current_pay_method || rowJson.candidate_pay_method || '');
     const lineType = upperTrim(rowJson.line_type || rowJson.item_type || '');
     const amountExVat = numericOrNull(previewRow.amount_ex_vat ?? rowJson.amount_ex_vat ?? rowJson.preview_amount_ex_vat ?? rowJson.amount_display);
-    return {
+    const contract = {
       contract_version: 1,
       contract_index: Number.isFinite(Number(index)) ? Math.max(0, Math.trunc(Number(index))) : 0,
       source: 'banking_pay_workbench_preview_rows',
@@ -30003,6 +30068,13 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       nominal_due_amount_ex_vat: numericOrNull(rowJson.nominal_due_amount_ex_vat),
       policy_x_authority_scope: upperTrim(rowJson.policy_x_authority_scope || '') || null
     };
+    if (recoverySelectionOverlay) {
+      contract.recovery_selection_overlay = { ...recoverySelectionOverlay };
+      contract.physical_section = recoverySelectionOverlay.physical_section;
+      contract.selection_recovery_headroom_contract_version = recoverySelectionOverlay.contract_version;
+      contract.selection_recovery_headroom_overlay_digest = recoverySelectionOverlay.overlay_digest;
+    }
+    return contract;
   };
   const buildCreateDraftEconomicKeyContract = (contractLike) => {
     const contract = isPlainObject(contractLike) ? contractLike : {};
@@ -30296,7 +30368,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       const maxRows = 50000;
       let offset = 0;
       for (;;) {
-        const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_preview_rows?session_id=eq.${encodeURIComponent(id)}&session_version=eq.${encodeURIComponent(sessionVersionValue)}&section=eq.canonical_preview_lines&selected=eq.true&status=eq.READY&select=id,row_key,timesheet_id,key_type,key_value,candidate_id,section,status,selection_state,selected,row_json,row_ordinal&order=row_ordinal.asc,id.asc&limit=${pageSize}&offset=${offset}`, false);
+        const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_workbench_preview_rows?session_id=eq.${encodeURIComponent(id)}&session_version=eq.${encodeURIComponent(sessionVersionValue)}&selected=eq.true&status=eq.READY&select=id,row_key,timesheet_id,key_type,key_value,candidate_id,section,status,selection_state,selected,row_json,row_ordinal&order=row_ordinal.asc,id.asc&limit=${pageSize}&offset=${offset}`, false);
         const pageRows = Array.isArray(rows) ? rows : [];
         previewRows.push(...pageRows);
         if (pageRows.length < pageSize) break;
@@ -30373,12 +30445,13 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       const row = isPlainObject(previewRow) ? previewRow : {};
       const rowJson = isPlainObject(row.row_json) ? row.row_json : {};
       const previewContract = isPlainObject(rowJson.preview_contract) ? rowJson.preview_contract : {};
+      const recoverySelectionOverlay = readCreateDraftRecoverySelectionOverlay(row);
       const contract = buildCreateDraftSelectedPreviewRowContract(row, allEligibleRows.length);
       const reasons = [];
       const rowId = trimStr(row.id || '');
       const candidateId = trimStr(row.candidate_id || contract.candidate_id || '');
       const timesheetId = trimStr(row.timesheet_id || contract.timesheet_id || '');
-      const section = trimStr(row.section || contract.section || '').toLowerCase();
+      const section = normaliseCreateDraftPreviewSection(contract.section || row.section || '');
       const payChannel = upperTrim(contract.pay_channel || '');
       const keyType = upperTrim(contract.key_type || '');
       const keyValue = trimStr(contract.key_value || '');
@@ -30395,7 +30468,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       if (!booleanFrom(rowJson.is_ready_for_draft) || contract.is_ready_for_draft !== true) reasons.push('ROW_NOT_READY_FOR_DRAFT');
       if (booleanFrom(rowJson.is_excluded_from_allocation)) reasons.push('ROW_EXCLUDED_FROM_ALLOCATION');
       if (!booleanFrom(previewContract.ok)) reasons.push('PREVIEW_CONTRACT_NOT_OK');
-      if (!booleanFrom(previewContract.selection_allowed)) reasons.push('PREVIEW_CONTRACT_SELECTION_NOT_ALLOWED');
+      if (!recoverySelectionOverlay && !booleanFrom(previewContract.selection_allowed)) reasons.push('PREVIEW_CONTRACT_SELECTION_NOT_ALLOWED');
       if (hasOwn(rowJson, 'selection_allowed') && !booleanFrom(rowJson.selection_allowed)) reasons.push('ROW_SELECTION_NOT_ALLOWED');
       if (!allowedEconomicKeyTypes.has(keyType)) reasons.push('ECONOMIC_KEY_TYPE_INVALID');
       if (!keyValue) reasons.push('ECONOMIC_KEY_VALUE_MISSING');
@@ -31455,7 +31528,12 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       key_type: upperTrim(contract.key_type || contract.economic_key?.key_type || '') || null,
       key_value: trimStr(contract.key_value || contract.economic_key?.key_value || '') || null,
       pay_channel: upperTrim(contract.pay_channel || '') || null,
-      section: trimStr(contract.section || 'canonical_preview_lines') || 'canonical_preview_lines'
+      section: normaliseCreateDraftPreviewSection(contract.section || 'canonical_preview_lines'),
+      physical_section: normaliseCreateDraftPreviewSection(contract.physical_section || ''),
+      selection_recovery_headroom_contract_version: Number.isFinite(Number(contract.selection_recovery_headroom_contract_version))
+        ? Number(contract.selection_recovery_headroom_contract_version)
+        : null,
+      selection_recovery_headroom_overlay_digest: trimStr(contract.selection_recovery_headroom_overlay_digest || '') || null
     });
   };
   if (submittedDraftContractsRaw.length > 0) {
