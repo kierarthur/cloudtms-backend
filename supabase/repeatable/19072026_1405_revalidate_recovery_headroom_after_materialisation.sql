@@ -33,6 +33,8 @@ DECLARE
   v_selected_row_count integer := 0;
   v_selection_intent_mode text := '';
   v_progress_json jsonb := '{}'::jsonb;
+  v_scope_attestation jsonb := '{}'::jsonb;
+  v_v3_overlay_result jsonb := '{}'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -74,12 +76,14 @@ BEGIN
             )::text;
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM public.banking_pay_workbench_session_scope AS scope_row
-    WHERE scope_row.session_id = p_session_id
-      AND scope_row.candidate_id = p_candidate_id
-  ) THEN
+  SELECT COALESCE(scope_row.certified_preview_publication_attestation_json, '{}'::jsonb)
+  INTO v_scope_attestation
+  FROM public.banking_pay_workbench_session_scope AS scope_row
+  WHERE scope_row.session_id = p_session_id
+    AND scope_row.candidate_id = p_candidate_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_HEADROOM_CANDIDATE_NOT_IN_SCOPE'
       USING ERRCODE = 'P0001',
             DETAIL = jsonb_build_object(
@@ -130,6 +134,27 @@ BEGIN
       'nonterminal_line_count', v_nonterminal_line_count,
       'policy_x_authority_scope', 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'
     );
+  END IF;
+
+  -- V3 keeps the certified source/preview identity immutable.  Recovery
+  -- readiness is a pre-Draft selection projection: it is recalculated from
+  -- positive rows the candidate has actually selected, while the physical
+  -- source-backed preview section remains unchanged for exact parity.
+  IF v_scope_attestation->>'attestation_version' = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+     AND v_scope_attestation->>'contract_version' = '3'
+     AND v_scope_attestation->>'semantic_contract_version' = 'READY_TO_PAY_SEMANTIC_V2' THEN
+    v_v3_overlay_result := private.pay_workbench_recovery_selection_overlay_apply_v1(
+      p_session_id,
+      p_candidate_id,
+      jsonb_build_object('reason', 'SELECTION_REVALIDATION')
+    );
+
+    RETURN COALESCE(v_v3_overlay_result, '{}'::jsonb)
+      || jsonb_build_object(
+        'legacy_physical_section_revalidation_skipped', true,
+        'certified_source_preview_identity_preserved', true,
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+      );
   END IF;
 
   SELECT ROUND(COALESCE(SUM(

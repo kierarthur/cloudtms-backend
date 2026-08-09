@@ -9,6 +9,7 @@ on:
       - "supabase/verification/**"
       - "tests/banking-pay-revision5-final-authority.test.cjs"
       - "tests/banking-pay-legacy-monolith-authority-reassert.test.cjs"
+      - "tests/banking-pay-semantic-ready-cancellation-reversion.test.cjs"
       - "tests/candidate-app-db-rpc-contract.test.cjs"
       - "tests/daily-canonical-authority.test.mjs"
       - "broker/src/daily-canonical-authority.js"
@@ -44,7 +45,8 @@ jobs:
         run: |
           node --test \
             tests/banking-pay-revision5-final-authority.test.cjs \
-            tests/banking-pay-legacy-monolith-authority-reassert.test.cjs
+            tests/banking-pay-legacy-monolith-authority-reassert.test.cjs \
+            tests/banking-pay-semantic-ready-cancellation-reversion.test.cjs
 
       - name: Verify Candidate App DB/RPC authority
         run: |

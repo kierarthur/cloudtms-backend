@@ -118,7 +118,15 @@ BEGIN
   FROM public.banking_pay_workbench_preview_rows AS preview_count_row
   WHERE preview_count_row.session_id = p_session_id
     AND preview_count_row.session_version = v_session_row.version
-    AND preview_count_row.section = v_resolved_section
+    AND LOWER(BTRIM(COALESCE(
+      CASE
+        WHEN preview_count_row.row_json#>>'{selection_recovery_headroom_v1,contract_version}' = '1'
+          THEN preview_count_row.row_json#>>'{selection_recovery_headroom_v1,effective_section}'
+        ELSE NULL::text
+      END,
+      preview_count_row.section,
+      ''
+    ))) = v_resolved_section
     AND preview_count_row.status = 'READY'
     AND (
       v_resolved_section <> 'canonical_preview_lines'
@@ -186,7 +194,15 @@ BEGIN
     FROM (
       SELECT
         preview_row.id,
-        preview_row.section,
+        LOWER(BTRIM(COALESCE(
+          CASE
+            WHEN preview_row.row_json#>>'{selection_recovery_headroom_v1,contract_version}' = '1'
+              THEN preview_row.row_json#>>'{selection_recovery_headroom_v1,effective_section}'
+            ELSE NULL::text
+          END,
+          preview_row.section,
+          ''
+        ))) AS section,
         preview_row.candidate_id,
         preview_row.row_key,
         preview_row.row_ordinal,
@@ -201,7 +217,15 @@ BEGIN
       FROM public.banking_pay_workbench_preview_rows AS preview_row
       WHERE preview_row.session_id = p_session_id
         AND preview_row.session_version = v_session_row.version
-        AND preview_row.section = v_resolved_section
+        AND LOWER(BTRIM(COALESCE(
+          CASE
+            WHEN preview_row.row_json#>>'{selection_recovery_headroom_v1,contract_version}' = '1'
+              THEN preview_row.row_json#>>'{selection_recovery_headroom_v1,effective_section}'
+            ELSE NULL::text
+          END,
+          preview_row.section,
+          ''
+        ))) = v_resolved_section
         AND preview_row.status = 'READY'
         AND (
           v_resolved_section <> 'canonical_preview_lines'

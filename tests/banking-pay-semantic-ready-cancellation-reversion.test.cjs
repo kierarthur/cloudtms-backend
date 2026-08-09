@@ -54,6 +54,16 @@ const reassert = read('supabase', 'repeatable',
   '08082026_0902_reassert_authorities_after_legacy_monolith.sql');
 const operationFinish = read('supabase', 'repeatable',
   '09082026_1128_banking_pay_operation_finish_post_draft_authority.sql');
+const correctionStart = read('supabase', 'repeatable',
+  '04082026_1207_pay_payment_correction_request_start.sql');
+const recoveryRevalidation = read('supabase', 'repeatable',
+  '19072026_1405_revalidate_recovery_headroom_after_materialisation.sql');
+const previewPage = read('supabase', 'repeatable',
+  '20072026_0117_banking_pay_preview_selection_revision.sql');
+const semanticSelection = read('supabase', 'repeatable',
+  '09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql');
+const broker = read('broker', 'src', 'index.js');
+const legacyFunctions = read('supabase', 'repeatable', '26052026_2100HRS_NEW_FUNCTIONS.sql');
 
 test('semantic V3 and cancellation controls install disabled with a fail-closed dependency', () => {
   for (const setting of [
@@ -103,6 +113,73 @@ test('V3 caps recognised recoveries to exact same-candidate allocation headroom'
   assert.match(builder, /'semantic_recovery_headroom_capped'/i);
   assert.match(builder, /'NO_PAY_HEADROOM'/i);
   assert.match(builder, /'proposed_semantic_ready_amount'/i);
+});
+
+test('V3 recovery headroom follows selected positive rows without changing certified identities', () => {
+  assert.match(helpers, /CREATE OR REPLACE FUNCTION private\.pay_workbench_recovery_selection_overlay_apply_v1/);
+  assert.match(helpers, /positive_row\.selected IS TRUE/);
+  assert.match(helpers, /positive_row\.selection_state[\s\S]{0,100}?= 'SELECTED'/);
+  assert.match(helpers, /presentation_role'[\s\S]{0,100}?ALLOCATION_COMPONENT/);
+  assert.match(helpers, /PARTITION BY recovery_base\.pay_channel/);
+  assert.match(
+    helpers,
+    /WHEN recovery_base\.static_recovery_eligible[\s\S]{0,120}?THEN recovery_base\.nominal_due_amount_ex_vat/,
+  );
+  assert.match(helpers, /selected_positive_headroom_ex_vat[\s\S]{0,300}?prior_nominal_due_amount_ex_vat/);
+  assert.match(helpers, /PAY_WORKBENCH_RECOVERY_SELECTION_OVERLAY_DUPLICATE_IDENTITY/);
+  assert.match(helpers, /'effective_section'[\s\S]{0,160}?overlay_row\.effective_section/);
+  assert.match(helpers, /'ready_for_draft',[\s\S]{0,120}?v_selected_row_count/);
+  assert.match(helpers, /'draft_blocker_codes',[\s\S]{0,120}?v_draft_blocker_codes/);
+  assert.match(helpers, /'physical_sections_changed', false/);
+  assert.match(helpers, /'source_rows_changed', false/);
+  assert.match(helpers, /REVOKE ALL ON FUNCTION private\.pay_workbench_recovery_selection_overlay_apply_v1[\s\S]*FROM PUBLIC, anon, authenticated, service_role/);
+});
+
+test('V3 selection revalidation uses the overlay and skips legacy physical section movement', () => {
+  assert.match(recoveryRevalidation, /CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3/);
+  assert.match(recoveryRevalidation, /private\.pay_workbench_recovery_selection_overlay_apply_v1/);
+  assert.match(recoveryRevalidation, /legacy_physical_section_revalidation_skipped/);
+  assert.match(recoveryRevalidation, /certified_source_preview_identity_preserved/);
+});
+
+test('preview paging exposes each recovery through its single effective section', () => {
+  assert.match(previewPage, /selection_recovery_headroom_v1,contract_version/);
+  assert.match(previewPage, /selection_recovery_headroom_v1,effective_section/);
+  assert.match(
+    previewPage,
+    /preview_count_row\.row_json#>>'\{selection_recovery_headroom_v1,effective_section\}'[\s\S]{0,180}?= v_resolved_section/,
+  );
+  assert.match(
+    previewPage,
+    /preview_row\.row_json#>>'\{selection_recovery_headroom_v1,effective_section\}'[\s\S]{0,180}?AS section/,
+  );
+});
+
+test('selection mutation uses the same effective section without moving certified rows', () => {
+  assert.match(
+    semanticSelection,
+    /CREATE OR REPLACE FUNCTION private\.pay_workbench_preview_effective_section_v1/,
+  );
+  assert.match(
+    semanticSelection,
+    /selection_recovery_headroom_v1,effective_section/,
+  );
+  assert.match(
+    semanticSelection,
+    /p_target_section\s*=>\s*private\.pay_workbench_preview_effective_section_v1/,
+  );
+  assert.match(
+    semanticSelection,
+    /lower\(private\.pay_workbench_preview_effective_section_v1\(preview_row\.section, preview_row\.row_json\)\)\s*=\s*'canonical_preview_lines'/,
+  );
+  assert.match(
+    semanticSelection,
+    /pay_workbench_revalidate_zero_retained_recovery_headroom_v1[\s\S]*private\.pay_workbench_preview_effective_section_v1/,
+  );
+  assert.doesNotMatch(
+    semanticSelection,
+    /SET\s+section\s*=/i,
+  );
 });
 
 test('row-backed summaries exclude presentation parents and retain legacy behavior while disabled', () => {
@@ -160,6 +237,10 @@ test('V3 publication composes structural parity with semantic parity without wid
     /v_contract_version\s*=\s*1[\s\S]{0,500}?v_authority_kind\s*<>\s*'BOUNDED_FULL_SOURCE_BUILD'/i,
   );
   assert.match(publisher, /private\.pay_workbench_semantic_ready_proof_page_v1/);
+  assert.match(
+    publisher,
+    /private\.pay_workbench_recovery_selection_overlay_apply_v1[\s\S]*private\.pay_workbench_semantic_ready_proof_page_v1/,
+  );
   assert.match(publisher, /CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED/);
   assert.match(publisher, /'attestation_version','CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'/);
   assert.match(publisher, /'section_counts',v_section_counts\s*\)\s*\|\|\s*jsonb_build_object\(/);
@@ -231,6 +312,26 @@ test('Draft completion freezes the exact post-Draft authority before fast cancel
   assert.match(helpers, /POST_FINANCIAL/);
 });
 
+test('untouched Draft admission separates pre-request economic truth from cancellation-owned dirtying', () => {
+  assert.match(correctionStart, /DRAFT_OVERLAY_FAST_PRE_REQUEST_AUTHORITY_V1/);
+  assert.match(correctionStart, /draft_overlay_fast_pre_request_authorities/);
+  assert.match(
+    correctionStart,
+    /v_selection\s*-\s*'command'\s*-\s*'draft_overlay_fast_pre_request_authorities'/,
+  );
+  assert.match(correctionStart, /ECONOMIC_AUTHORITY_CHANGED_BEFORE_CANCELLATION_START/);
+  assert.match(correctionStart, /DRAFT_OVERLAY_FAST_START_AUTHORITY_V1/);
+  assert.match(correctionStart, /draft_overlay_fast_start_authorities/);
+  assert.match(correctionStart, /pay_workbench_candidate_serial_key/);
+  assert.match(helpers, /PRE_REQUEST_ECONOMIC_AUTHORITY_NOT_CURRENT/);
+  assert.match(helpers, /CANCELLATION_START_AUTHORITY_MISSING_OR_MISMATCH/);
+  assert.match(helpers, /WORKBENCH_AUTHORITY_NOT_FROZEN_DRAFT_BASELINE/);
+  assert.match(
+    helpers,
+    /draft_overlay_start_authority->>'source_change_seq'[\s\S]*CURRENT_ECONOMIC_AUTHORITY_CHANGED/,
+  );
+});
+
 test('focused modern authorities are replayed after the historical omnibus', () => {
   assert.match(reassert, /\\ir 09082026_0825_pay_workbench_patch_preview_after_batch_mutation\.sql/);
   assert.match(reassert, /\\ir 09082026_0826_pay_preview_candidate_build_summary_fragment\.sql/);
@@ -239,8 +340,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 12);
-  assert.equal(semanticManifest.functions.length, 12);
+  assert.equal(semanticManifest.function_count, 17);
+  assert.equal(semanticManifest.functions.length, 17);
   assert.match(semanticVerifier, /definition_sha256/);
   assert.match(semanticVerifier, /unexpected overload/);
   assert.match(semanticVerifier, /missing saved source file/);
@@ -249,4 +350,41 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
   const identities = manifests.flatMap((manifest) => manifest.functions.map((entry) =>
     `${entry.schema}.${entry.name}(${entry.identity_arguments})`));
   assert.equal(new Set(identities).size, identities.length);
+});
+
+test('changes heartbeat preserves each open batch watermark instead of forcing every signal changed', () => {
+  const start = broker.indexOf('async function handleChangesPing(');
+  const end = broker.indexOf('async function handleRolesGlobal', start);
+  assert.ok(start >= 0);
+  assert.ok(end > start);
+  const body = broker.slice(start, end);
+
+  assert.match(body, /watched_pay_batches/);
+  assert.match(body, /watchedBatchDescriptorById/);
+  assert.match(body, /watchedBatchDescriptors\.length >= 20/);
+  assert.match(body, /p_known_version: descriptor\.known_version/);
+  assert.match(body, /p_known_payment_status_version: descriptor\.known_payment_status_version/);
+  assert.match(body, /p_known_correction_progress_version: descriptor\.known_correction_progress_version/);
+  assert.match(body, /p_known_alert_version: descriptor\.known_alert_version/);
+  assert.match(body, /p_known_overview_version: descriptor\.known_overview_version/);
+  assert.doesNotMatch(body, /p_known_correction_progress_version:\s*null/);
+});
+
+test('whole-batch cancellation progress is one correction-request alert, not one alert per candidate', () => {
+  assert.match(
+    legacyFunctions,
+    /WHEN v_alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'[\s\S]{0,260}?v_cancellation_operation_id/,
+  );
+  assert.match(
+    legacyFunctions,
+    /p_pay_batch_id::text \|\| ':' \|\| v_alert_kind \|\| ':' \|\| COALESCE\(\(SELECT cs\.correction_request_id::text FROM correction_scope AS cs\)/,
+  );
+  assert.match(
+    legacyFunctions,
+    /'cancellation_operation_id'[\s\S]{0,220}?SELECT cs\.correction_request_id/,
+  );
+  assert.doesNotMatch(
+    legacyFunctions.slice(legacyFunctions.indexOf("WHEN v_alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'"), legacyFunctions.indexOf("WHEN v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'")),
+    /candidate_id|work_item_id/,
+  );
 });

@@ -8,8 +8,9 @@ const root = path.resolve(__dirname, '..');
 const repeatableDir = path.join(root, 'supabase', 'repeatable');
 const monolithName = '26052026_2100HRS_NEW_FUNCTIONS.sql';
 const reassertName = '08082026_0902_reassert_authorities_after_legacy_monolith.sql';
-const monolith = fs.readFileSync(path.join(repeatableDir, monolithName), 'utf8');
-const reassert = fs.readFileSync(path.join(repeatableDir, reassertName), 'utf8');
+const normalizeLf = (value) => String(value || '').replace(/\r\n/g, '\n');
+const monolith = normalizeLf(fs.readFileSync(path.join(repeatableDir, monolithName), 'utf8'));
+const reassert = normalizeLf(fs.readFileSync(path.join(repeatableDir, reassertName), 'utf8'));
 const targetedManifest = JSON.parse(fs.readFileSync(
   path.join(root, 'supabase', 'verification', 'banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json'),
   'utf8',
@@ -48,7 +49,7 @@ test('legacy monolith changes force a complete later-authority replay', () => {
   // whose newer focused authority must then also be replayed.
   const expectedFiles = [];
   for (const name of laterFiles) {
-    const source = fs.readFileSync(path.join(repeatableDir, name), 'utf8');
+    const source = normalizeLf(fs.readFileSync(path.join(repeatableDir, name), 'utf8'));
     const identities = touchedFunctions(source);
     if (!identities.some((identity) => replayedFunctions.has(identity))) continue;
 

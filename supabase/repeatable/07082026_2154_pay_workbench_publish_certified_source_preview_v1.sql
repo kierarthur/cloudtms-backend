@@ -88,6 +88,7 @@ DECLARE
   v_semantic_candidate_proof jsonb := '{}'::jsonb;
   v_semantic_ready boolean := false;
   v_semantic_proof_digest text := NULL::text;
+  v_selection_recovery_overlay jsonb := '{}'::jsonb;
   v_ordinary_positive_selectable_count integer := 0;
   v_ordinary_positive_amount numeric := 0;
   v_recognised_deduction_count integer := 0;
@@ -1072,6 +1073,17 @@ BEGIN
   INTO v_already_current;
 
   IF v_already_current IS TRUE THEN
+    IF v_contract_version = 3 THEN
+      v_selection_recovery_overlay := private.pay_workbench_recovery_selection_overlay_apply_v1(
+        p_session_id,
+        p_candidate_id,
+        jsonb_build_object(
+          'force_v3', true,
+          'reason', 'V3_PUBLICATION_DUPLICATE_REPLAY'
+        )
+      );
+    END IF;
+
     SELECT COUNT(*) FILTER (WHERE is_selectable)::integer,
            COUNT(*) FILTER (WHERE is_selectable IS NOT TRUE)::integer,
            COUNT(*) FILTER (WHERE effective_selected)::integer,
@@ -1266,6 +1278,17 @@ BEGIN
     GROUP BY ready_row.resolved_section
   ) AS section_count;
 
+  IF v_contract_version = 3 THEN
+    v_selection_recovery_overlay := private.pay_workbench_recovery_selection_overlay_apply_v1(
+      p_session_id,
+      p_candidate_id,
+      jsonb_build_object(
+        'force_v3', true,
+        'reason', 'V3_PUBLICATION'
+      )
+    );
+  END IF;
+
   SELECT COALESCE(jsonb_agg(selected_row.id::text ORDER BY selected_row.row_ordinal, selected_row.id), '[]'::jsonb)
   INTO v_selected_ids
   FROM public.banking_pay_workbench_preview_rows AS selected_row
@@ -1449,6 +1472,7 @@ BEGIN
       'admission_seal_digest',v_admission_seal_digest,
       'projection_fingerprint',v_projection_fingerprint,
       'semantic_proof_digest',v_semantic_proof_digest,
+      'selection_recovery_headroom_v1',COALESCE(v_selection_recovery_overlay,'{}'::jsonb),
       'cancellation_request_id',p_publication_options_json->>'cancellation_request_id',
       'cancellation_operation_id',p_publication_options_json->>'cancellation_operation_id',
       'cancellation_work_item_id',p_publication_options_json->>'cancellation_work_item_id',

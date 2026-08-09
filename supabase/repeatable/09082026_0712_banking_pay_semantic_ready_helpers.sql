@@ -295,6 +295,624 @@ GRANT EXECUTE ON FUNCTION private.pay_workbench_semantic_ready_proof_page_v1(
 ) TO postgres;
 
 
+-- Selection-dependent recovery projection for semantically certified V3
+-- sources.  The certified source identity remains immutable: this helper does
+-- not change the physical preview section, row key, ordinal, source lineage or
+-- preview contract.  It updates only the pre-Draft public selection overlay so
+-- a recovery becomes usable when the same candidate has actually selected
+-- positive pay in the same channel.
+CREATE OR REPLACE FUNCTION private.pay_workbench_recovery_selection_overlay_apply_v1(
+  p_session_id uuid,
+  p_candidate_id uuid,
+  p_options_json jsonb DEFAULT '{}'::jsonb
+) RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_now timestamptz := pg_catalog.clock_timestamp();
+  v_session public.banking_pay_workbench_sessions%ROWTYPE;
+  v_scope public.banking_pay_workbench_session_scope%ROWTYPE;
+  v_force_v3 boolean := false;
+  v_reason text := 'SELECTION_CHANGED';
+  v_unknown_option_count integer := 0;
+  v_is_v3 boolean := false;
+  v_recovery_row_count integer := 0;
+  v_ready_recovery_count integer := 0;
+  v_blocked_recovery_count integer := 0;
+  v_forced_deselected_count integer := 0;
+  v_updated_count integer := 0;
+  v_selected_positive_amount numeric := 0;
+  v_ready_recovery_amount numeric := 0;
+  v_selected_preview_row_ids jsonb := '[]'::jsonb;
+  v_selected_row_count integer := 0;
+  v_overlay_digest text := NULL::text;
+  v_select_all_intent boolean := false;
+  v_duplicate_recovery_identity_count integer := 0;
+  v_session_ready boolean := false;
+  v_draft_blocker_codes jsonb := '[]'::jsonb;
+BEGIN
+  IF p_session_id IS NULL OR p_candidate_id IS NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_SELECTION_OVERLAY_SCOPE_REQUIRED'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF p_options_json IS NULL OR pg_catalog.jsonb_typeof(p_options_json) <> 'object' THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_SELECTION_OVERLAY_OPTIONS_INVALID'
+      USING ERRCODE = '22023';
+  END IF;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_unknown_option_count
+  FROM pg_catalog.jsonb_object_keys(p_options_json) AS supplied_option(option_key)
+  WHERE supplied_option.option_key NOT IN ('force_v3', 'reason');
+
+  IF v_unknown_option_count > 0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_SELECTION_OVERLAY_OPTIONS_UNKNOWN'
+      USING ERRCODE = '22023';
+  END IF;
+
+  v_force_v3 := pg_catalog.lower(pg_catalog.btrim(COALESCE(p_options_json->>'force_v3', 'false')))
+    IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_reason := pg_catalog.upper(pg_catalog.btrim(COALESCE(NULLIF(p_options_json->>'reason', ''), 'SELECTION_CHANGED')));
+
+  SELECT session_row.*
+  INTO v_session
+  FROM public.banking_pay_workbench_sessions AS session_row
+  WHERE session_row.id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND
+     OR pg_catalog.upper(pg_catalog.btrim(COALESCE(v_session.status, ''))) <> 'OPEN'
+     OR v_session.discarded_at_utc IS NOT NULL THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_SELECTION_OVERLAY_SESSION_NOT_OPEN'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  v_select_all_intent := pg_catalog.upper(pg_catalog.btrim(COALESCE(
+    v_session.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
+    ''
+  ))) = 'IMPLICIT_ALL';
+
+  SELECT scope_row.*
+  INTO v_scope
+  FROM public.banking_pay_workbench_session_scope AS scope_row
+  WHERE scope_row.session_id = p_session_id
+    AND scope_row.candidate_id = p_candidate_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_SELECTION_OVERLAY_CANDIDATE_NOT_IN_SCOPE'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  v_is_v3 := v_force_v3 OR (
+    v_scope.certified_preview_publication_attestation_json->>'attestation_version'
+      = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+    AND v_scope.certified_preview_publication_attestation_json->>'contract_version' = '3'
+    AND v_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
+      = 'READY_TO_PAY_SEMANTIC_V2'
+  );
+
+  IF v_is_v3 IS NOT TRUE THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'ok', true,
+      'action', 'NOT_V3_SEMANTIC_SOURCE',
+      'session_id', p_session_id::text,
+      'candidate_id', p_candidate_id::text,
+      'updated_count', 0,
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+    );
+  END IF;
+
+  DROP TABLE IF EXISTS pg_temp._bpay_recovery_selection_overlay;
+  CREATE TEMPORARY TABLE pg_temp._bpay_recovery_selection_overlay ON COMMIT DROP AS
+  WITH selected_positive_by_channel AS (
+    SELECT
+      pg_catalog.upper(pg_catalog.btrim(COALESCE(
+        positive_row.row_json->>'pay_channel',
+        positive_row.row_json->>'candidate_pay_method',
+        positive_row.row_json->>'current_pay_method',
+        ''
+      ))) AS pay_channel,
+      pg_catalog.round(COALESCE(pg_catalog.sum(
+        CASE
+          WHEN COALESCE(positive_row.row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN GREATEST((positive_row.row_json->>'amount_ex_vat')::numeric, 0)
+          ELSE 0::numeric
+        END
+      ), 0), 2) AS selected_positive_headroom_ex_vat
+    FROM public.banking_pay_workbench_preview_rows AS positive_row
+    WHERE positive_row.session_id = p_session_id
+      AND positive_row.session_version = v_session.version
+      AND positive_row.candidate_id = p_candidate_id
+      AND positive_row.status = 'READY'
+      AND positive_row.selected IS TRUE
+      AND pg_catalog.upper(pg_catalog.btrim(COALESCE(positive_row.selection_state, ''))) = 'SELECTED'
+      AND pg_catalog.upper(pg_catalog.btrim(COALESCE(positive_row.row_json->>'line_type', ''))) = 'TIMESHEET_PAYMENT'
+      AND pg_catalog.upper(pg_catalog.btrim(COALESCE(positive_row.row_json->>'presentation_role', ''))) = 'ALLOCATION_COMPONENT'
+      AND pg_catalog.lower(pg_catalog.btrim(COALESCE(positive_row.row_json->>'draftable', 'false')))
+        IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND pg_catalog.lower(pg_catalog.btrim(COALESCE(positive_row.row_json->>'is_ready_for_draft', 'false')))
+        IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND pg_catalog.lower(pg_catalog.btrim(COALESCE(positive_row.row_json->>'selection_allowed', 'false')))
+        IN ('true', 't', '1', 'yes', 'y', 'on')
+      AND COALESCE(positive_row.row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+      AND (positive_row.row_json->>'amount_ex_vat')::numeric > 0
+    GROUP BY pg_catalog.upper(pg_catalog.btrim(COALESCE(
+      positive_row.row_json->>'pay_channel',
+      positive_row.row_json->>'candidate_pay_method',
+      positive_row.row_json->>'current_pay_method',
+      ''
+    )))
+  ), recovery_base AS (
+    SELECT
+      recovery_row.id,
+      recovery_row.row_ordinal,
+      recovery_row.section AS physical_section,
+      recovery_row.row_key,
+      recovery_row.selected AS current_selected,
+      recovery_row.selection_state AS current_selection_state,
+      COALESCE(recovery_row.row_json, '{}'::jsonb) AS base_row_json,
+      pg_catalog.upper(pg_catalog.btrim(COALESCE(
+        recovery_row.row_json->>'pay_channel',
+        recovery_row.row_json->>'candidate_pay_method',
+        recovery_row.row_json->>'current_pay_method',
+        ''
+      ))) AS pay_channel,
+      pg_catalog.round(COALESCE(
+        CASE
+          WHEN COALESCE(recovery_row.row_json->>'nominal_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN pg_catalog.abs((recovery_row.row_json->>'nominal_due_amount_ex_vat')::numeric)
+          ELSE NULL::numeric
+        END,
+        CASE
+          WHEN COALESCE((
+            SELECT pg_catalog.sum(
+              CASE
+                WHEN COALESCE(component.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+                  THEN pg_catalog.abs((component.value->>'preview_due_amount_ex_vat')::numeric)
+                ELSE 0::numeric
+              END
+            )
+            FROM pg_catalog.jsonb_array_elements(
+              CASE
+                WHEN pg_catalog.jsonb_typeof(recovery_row.row_json->'case_components') = 'array'
+                  THEN recovery_row.row_json->'case_components'
+                ELSE '[]'::jsonb
+              END
+            ) AS component(value)
+          ), 0) > 0 THEN (
+            SELECT pg_catalog.sum(pg_catalog.abs((component.value->>'preview_due_amount_ex_vat')::numeric))
+            FROM pg_catalog.jsonb_array_elements(recovery_row.row_json->'case_components') AS component(value)
+            WHERE COALESCE(component.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          )
+          ELSE NULL::numeric
+        END,
+        CASE
+          WHEN COALESCE(recovery_row.row_json->>'amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN pg_catalog.abs((recovery_row.row_json->>'amount_ex_vat')::numeric)
+          ELSE 0::numeric
+        END
+      ), 2) AS nominal_due_amount_ex_vat,
+      COALESCE(
+        recovery_row.row_json#>'{selection_recovery_headroom_v1,base_blocked_reason_codes}',
+        (
+          SELECT COALESCE(pg_catalog.jsonb_agg(reason.value ORDER BY reason.ordinality), '[]'::jsonb)
+          FROM pg_catalog.jsonb_array_elements_text(
+            CASE
+              WHEN pg_catalog.jsonb_typeof(recovery_row.row_json->'blocked_reason_codes') = 'array'
+                THEN recovery_row.row_json->'blocked_reason_codes'
+              ELSE '[]'::jsonb
+            END
+          ) WITH ORDINALITY AS reason(value, ordinality)
+          WHERE pg_catalog.upper(pg_catalog.btrim(reason.value)) <> 'NO_PAY_HEADROOM'
+        ),
+        '[]'::jsonb
+      ) AS base_blocked_reason_codes,
+      COALESCE(
+        NULLIF(recovery_row.row_json#>>'{selection_recovery_headroom_v1,base_presentation_reason}', ''),
+        CASE
+          WHEN pg_catalog.upper(COALESCE(recovery_row.row_json->>'presentation_reason', '')) = 'NO_PAY_HEADROOM'
+            THEN 'READY_TO_PAY'
+          ELSE NULLIF(recovery_row.row_json->>'presentation_reason', '')
+        END,
+        'READY_TO_PAY'
+      ) AS base_presentation_reason,
+      (
+        recovery_row.row_json->>'finance_case_id'
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(recovery_row.row_json->>'line_type', ''))) IN (
+          'OVERPAYMENT_RECOVERY', 'MANUAL_DEBT_RECOVERY',
+          'PAYMENT_ADVANCE_REPAYMENT', 'LOAN_REPAYMENT'
+        )
+        AND pg_catalog.lower(pg_catalog.btrim(COALESCE(recovery_row.row_json->>'post_draft_overlay_applied', 'false')))
+          NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND pg_catalog.lower(pg_catalog.btrim(COALESCE(recovery_row.row_json->>'case_needs_resolution_now', 'false')))
+          NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(recovery_row.row_json#>>'{snooze_state,state}', 'NONE'))) = 'NONE'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_catalog.jsonb_array_elements_text(
+            COALESCE(
+              recovery_row.row_json#>'{selection_recovery_headroom_v1,base_blocked_reason_codes}',
+              CASE
+                WHEN pg_catalog.jsonb_typeof(recovery_row.row_json->'blocked_reason_codes') = 'array'
+                  THEN recovery_row.row_json->'blocked_reason_codes'
+                ELSE '[]'::jsonb
+              END
+            )
+          ) AS blocker(value)
+          WHERE pg_catalog.upper(pg_catalog.btrim(blocker.value)) <> 'NO_PAY_HEADROOM'
+        )
+      ) AS static_recovery_eligible
+    FROM public.banking_pay_workbench_preview_rows AS recovery_row
+    WHERE recovery_row.session_id = p_session_id
+      AND recovery_row.session_version = v_session.version
+      AND recovery_row.candidate_id = p_candidate_id
+      AND recovery_row.status = 'READY'
+      AND pg_catalog.upper(pg_catalog.btrim(COALESCE(
+        recovery_row.row_json->>'line_type',
+        recovery_row.row_json->>'case_type',
+        ''
+      ))) IN (
+        'OVERPAYMENT_RECOVERY', 'MANUAL_DEBT_RECOVERY',
+        'PAYMENT_ADVANCE_REPAYMENT', 'LOAN_REPAYMENT'
+      )
+  ), ranked_recovery AS (
+    SELECT
+      recovery_base.*,
+      COALESCE(selected_headroom.selected_positive_headroom_ex_vat, 0)::numeric AS selected_positive_headroom_ex_vat,
+      COALESCE(pg_catalog.sum(
+        CASE
+          WHEN recovery_base.static_recovery_eligible
+            THEN recovery_base.nominal_due_amount_ex_vat
+          ELSE 0::numeric
+        END
+      ) OVER (
+        PARTITION BY recovery_base.pay_channel
+        ORDER BY recovery_base.row_ordinal, recovery_base.id
+        ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+      ), 0)::numeric AS prior_nominal_due_amount_ex_vat
+    FROM recovery_base
+    LEFT JOIN selected_positive_by_channel AS selected_headroom
+      ON selected_headroom.pay_channel = recovery_base.pay_channel
+  ), allocated_recovery AS (
+    SELECT
+      ranked_recovery.*,
+      CASE
+        WHEN ranked_recovery.static_recovery_eligible
+         AND ranked_recovery.pay_channel IN ('PAYE', 'UMBRELLA')
+          THEN pg_catalog.round(LEAST(
+            ranked_recovery.nominal_due_amount_ex_vat,
+            GREATEST(
+              ranked_recovery.selected_positive_headroom_ex_vat
+                - ranked_recovery.prior_nominal_due_amount_ex_vat,
+              0
+            )
+          ), 2)
+        ELSE 0::numeric
+      END AS recoverable_amount_ex_vat
+    FROM ranked_recovery
+  )
+  SELECT
+    allocated_recovery.*,
+    CASE
+      WHEN allocated_recovery.static_recovery_eligible
+       AND allocated_recovery.recoverable_amount_ex_vat > 0
+        THEN 'canonical_preview_lines'
+      ELSE 'blocked_for_pay'
+    END AS effective_section,
+    pg_catalog.md5(pg_catalog.jsonb_build_object(
+      'contract_version', 1,
+      'candidate_id', p_candidate_id::text,
+      'pay_channel', allocated_recovery.pay_channel,
+      'row_key', allocated_recovery.row_key,
+      'selected_positive_headroom_ex_vat', allocated_recovery.selected_positive_headroom_ex_vat,
+      'nominal_due_amount_ex_vat', allocated_recovery.nominal_due_amount_ex_vat,
+      'recoverable_amount_ex_vat', allocated_recovery.recoverable_amount_ex_vat,
+      'effective_section', CASE
+        WHEN allocated_recovery.static_recovery_eligible
+         AND allocated_recovery.recoverable_amount_ex_vat > 0
+          THEN 'canonical_preview_lines'
+        ELSE 'blocked_for_pay'
+      END
+    )::text) AS row_overlay_digest
+  FROM allocated_recovery;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_duplicate_recovery_identity_count
+  FROM (
+    SELECT
+      COALESCE(NULLIF(overlay_row.base_row_json->>'finance_case_id', ''), overlay_row.row_key) AS recovery_identity,
+      pg_catalog.upper(pg_catalog.btrim(COALESCE(overlay_row.base_row_json->>'line_type', ''))) AS recovery_family
+    FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row
+    GROUP BY
+      COALESCE(NULLIF(overlay_row.base_row_json->>'finance_case_id', ''), overlay_row.row_key),
+      pg_catalog.upper(pg_catalog.btrim(COALESCE(overlay_row.base_row_json->>'line_type', '')))
+    HAVING pg_catalog.count(*) > 1
+  ) AS duplicate_identity;
+
+  IF v_duplicate_recovery_identity_count > 0 THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_SELECTION_OVERLAY_DUPLICATE_IDENTITY'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  SELECT pg_catalog.count(*)::integer,
+         pg_catalog.count(*) FILTER (WHERE overlay_row.effective_section = 'canonical_preview_lines')::integer,
+         pg_catalog.count(*) FILTER (WHERE overlay_row.effective_section = 'blocked_for_pay')::integer,
+         (
+           SELECT pg_catalog.round(COALESCE(pg_catalog.sum(channel_headroom.selected_positive_headroom_ex_vat), 0), 2)
+           FROM (
+             SELECT overlay_channel.pay_channel,
+                    pg_catalog.max(overlay_channel.selected_positive_headroom_ex_vat) AS selected_positive_headroom_ex_vat
+             FROM pg_temp._bpay_recovery_selection_overlay AS overlay_channel
+             GROUP BY overlay_channel.pay_channel
+           ) AS channel_headroom
+         ),
+         pg_catalog.round(COALESCE(pg_catalog.sum(overlay_row.recoverable_amount_ex_vat), 0), 2),
+         pg_catalog.md5(COALESCE(pg_catalog.string_agg(
+           overlay_row.row_key || E'\x1f' || overlay_row.row_overlay_digest,
+           E'\x1e' ORDER BY overlay_row.row_ordinal, overlay_row.id
+         ), ''))
+  INTO v_recovery_row_count,
+       v_ready_recovery_count,
+       v_blocked_recovery_count,
+       v_selected_positive_amount,
+       v_ready_recovery_amount,
+       v_overlay_digest
+  FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row;
+
+  WITH updated_rows AS (
+    UPDATE public.banking_pay_workbench_preview_rows AS recovery_row
+    SET selected = CASE
+          WHEN overlay_row.effective_section = 'canonical_preview_lines'
+            THEN v_select_all_intent OR COALESCE(recovery_row.selected, false)
+          ELSE false
+        END,
+        selection_state = CASE
+          WHEN overlay_row.effective_section = 'canonical_preview_lines'
+            THEN CASE
+              WHEN v_select_all_intent
+                OR (
+                  COALESCE(recovery_row.selected, false)
+                  AND pg_catalog.upper(pg_catalog.btrim(COALESCE(recovery_row.selection_state, ''))) = 'SELECTED'
+                )
+                THEN 'SELECTED'
+              ELSE 'UNSELECTED'
+            END
+          ELSE 'NOT_SELECTABLE'
+        END,
+        row_json = pg_catalog.jsonb_strip_nulls(
+          overlay_row.base_row_json
+          || pg_catalog.jsonb_build_object(
+            'amount_ex_vat', -overlay_row.recoverable_amount_ex_vat,
+            'preview_amount_ex_vat', -overlay_row.recoverable_amount_ex_vat,
+            'amount_display', -overlay_row.recoverable_amount_ex_vat,
+            'section_amount_ex_vat', -overlay_row.recoverable_amount_ex_vat,
+            'section_amount_display', -overlay_row.recoverable_amount_ex_vat,
+            'target_pay_ex_vat', -overlay_row.recoverable_amount_ex_vat,
+            'ready_preview_amount_ex_vat', -overlay_row.recoverable_amount_ex_vat,
+            'preview_component_amount_ex_vat', -overlay_row.recoverable_amount_ex_vat,
+            'nominal_due_amount_ex_vat', overlay_row.nominal_due_amount_ex_vat,
+            'recoverable_this_pay_run_ex_vat', overlay_row.recoverable_amount_ex_vat,
+            'semantic_ordinary_positive_headroom_ex_vat', overlay_row.selected_positive_headroom_ex_vat,
+            'retained_positive_headroom_ex_vat', overlay_row.selected_positive_headroom_ex_vat,
+            'semantic_recovery_headroom_capped',
+              overlay_row.recoverable_amount_ex_vat < overlay_row.nominal_due_amount_ex_vat,
+            'readiness_state', CASE
+              WHEN overlay_row.effective_section = 'canonical_preview_lines' THEN 'READY_TO_PAY'
+              ELSE 'BLOCKED_FOR_PAY'
+            END,
+            'presentation_section', CASE
+              WHEN overlay_row.effective_section = 'canonical_preview_lines' THEN 'READY_TO_PAY'
+              ELSE 'BLOCKED_FOR_PAY'
+            END,
+            'presentation_reason', CASE
+              WHEN overlay_row.effective_section = 'canonical_preview_lines'
+                THEN overlay_row.base_presentation_reason
+              WHEN overlay_row.static_recovery_eligible THEN 'NO_PAY_HEADROOM'
+              ELSE overlay_row.base_presentation_reason
+            END,
+            'draftable', overlay_row.effective_section = 'canonical_preview_lines',
+            'is_ready_for_draft', overlay_row.effective_section = 'canonical_preview_lines',
+            'selection_allowed', overlay_row.effective_section = 'canonical_preview_lines',
+            'is_excluded_from_allocation', overlay_row.effective_section <> 'canonical_preview_lines',
+            'selected', CASE
+              WHEN overlay_row.effective_section = 'canonical_preview_lines'
+                THEN v_select_all_intent OR COALESCE(recovery_row.selected, false)
+              ELSE false
+            END,
+            'selection_state', CASE
+              WHEN overlay_row.effective_section = 'canonical_preview_lines'
+               AND (
+                 v_select_all_intent
+                 OR (
+                   COALESCE(recovery_row.selected, false)
+                   AND pg_catalog.upper(pg_catalog.btrim(COALESCE(recovery_row.selection_state, ''))) = 'SELECTED'
+                 )
+               )
+                THEN 'SELECTED'
+              WHEN overlay_row.effective_section = 'canonical_preview_lines' THEN 'UNSELECTED'
+              ELSE 'NOT_SELECTABLE'
+            END,
+            'blocked_reason_codes', CASE
+              WHEN overlay_row.effective_section = 'canonical_preview_lines'
+                THEN overlay_row.base_blocked_reason_codes
+              WHEN overlay_row.static_recovery_eligible
+                THEN overlay_row.base_blocked_reason_codes || pg_catalog.jsonb_build_array('NO_PAY_HEADROOM')
+              ELSE overlay_row.base_blocked_reason_codes
+            END,
+            'case_is_blocked', overlay_row.effective_section <> 'canonical_preview_lines',
+            'selection_recovery_headroom_v1', pg_catalog.jsonb_build_object(
+              'contract_version', 1,
+              'candidate_id', p_candidate_id::text,
+              'pay_channel', overlay_row.pay_channel,
+              'physical_section', overlay_row.physical_section,
+              'effective_section', overlay_row.effective_section,
+              'selected_positive_headroom_ex_vat', overlay_row.selected_positive_headroom_ex_vat,
+              'nominal_due_amount_ex_vat', overlay_row.nominal_due_amount_ex_vat,
+              'recoverable_amount_ex_vat', overlay_row.recoverable_amount_ex_vat,
+              'base_blocked_reason_codes', overlay_row.base_blocked_reason_codes,
+              'base_presentation_reason', overlay_row.base_presentation_reason,
+              'static_recovery_eligible', overlay_row.static_recovery_eligible,
+              'overlay_digest', overlay_row.row_overlay_digest,
+              'reason', v_reason,
+              'updated_at_utc', v_now::text,
+              'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+            ),
+            'case_resolution_summary', CASE
+              WHEN pg_catalog.jsonb_typeof(overlay_row.base_row_json->'case_resolution_summary') = 'object'
+                THEN overlay_row.base_row_json->'case_resolution_summary'
+                  || pg_catalog.jsonb_build_object('due_amount_ex_vat', overlay_row.recoverable_amount_ex_vat)
+              ELSE pg_catalog.jsonb_build_object('due_amount_ex_vat', overlay_row.recoverable_amount_ex_vat)
+            END
+          )
+        ),
+        updated_at_utc = v_now
+    FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row
+    WHERE recovery_row.id = overlay_row.id
+    RETURNING recovery_row.id,
+              overlay_row.effective_section,
+              overlay_row.current_selected,
+              recovery_row.selected
+  )
+  SELECT pg_catalog.count(*)::integer,
+         pg_catalog.count(*) FILTER (
+           WHERE updated_rows.current_selected IS TRUE
+             AND updated_rows.selected IS FALSE
+         )::integer
+  INTO v_updated_count, v_forced_deselected_count
+  FROM updated_rows;
+
+  SELECT COALESCE(
+           pg_catalog.jsonb_agg(selected_row.id::text ORDER BY selected_row.row_ordinal, selected_row.id),
+           '[]'::jsonb
+         ),
+         pg_catalog.count(*)::integer
+  INTO v_selected_preview_row_ids,
+       v_selected_row_count
+  FROM public.banking_pay_workbench_preview_rows AS selected_row
+  WHERE selected_row.session_id = p_session_id
+    AND selected_row.session_version = v_session.version
+    AND selected_row.status = 'READY'
+    AND selected_row.selected IS TRUE
+    AND pg_catalog.upper(pg_catalog.btrim(COALESCE(selected_row.selection_state, ''))) = 'SELECTED';
+
+  v_session_ready := pg_catalog.lower(pg_catalog.btrim(COALESCE(
+    v_session.progress_json->>'ready',
+    v_session.progress_json->>'session_ready',
+    v_session.progress_json->>'ready_flag',
+    'false'
+  ))) IN ('true', 't', '1', 'yes', 'y', 'on');
+
+  SELECT COALESCE(
+           pg_catalog.jsonb_agg(pg_catalog.to_jsonb(blocker.value) ORDER BY blocker.ordinality),
+           '[]'::jsonb
+         )
+  INTO v_draft_blocker_codes
+  FROM pg_catalog.jsonb_array_elements_text(
+    CASE
+      WHEN pg_catalog.jsonb_typeof(v_session.progress_json->'draft_blocker_codes') = 'array'
+        THEN v_session.progress_json->'draft_blocker_codes'
+      ELSE '[]'::jsonb
+    END
+  ) WITH ORDINALITY AS blocker(value, ordinality)
+  WHERE pg_catalog.upper(pg_catalog.btrim(blocker.value)) <> 'NO_SELECTED_ROWS';
+
+  IF v_session_ready AND COALESCE(v_selected_row_count, 0) = 0 THEN
+    v_draft_blocker_codes := COALESCE(v_draft_blocker_codes, '[]'::jsonb)
+      || pg_catalog.jsonb_build_array('NO_SELECTED_ROWS');
+  END IF;
+
+  UPDATE public.banking_pay_workbench_sessions AS session_update
+  SET selected_row_count = COALESCE(v_selected_row_count, 0),
+      server_selected_preview_row_ids = CASE
+        WHEN COALESCE(session_update.server_selected_preview_row_ids_provided, false)
+          THEN COALESCE(v_selected_preview_row_ids, '[]'::jsonb)
+        ELSE session_update.server_selected_preview_row_ids
+      END,
+      progress_json = COALESCE(session_update.progress_json, '{}'::jsonb)
+        || pg_catalog.jsonb_build_object(
+          'selection_recovery_headroom_v1', pg_catalog.jsonb_build_object(
+            'contract_version', 1,
+            'candidate_id', p_candidate_id::text,
+            'selected_positive_headroom_ex_vat', v_selected_positive_amount,
+            'ready_recovery_count', v_ready_recovery_count,
+            'blocked_recovery_count', v_blocked_recovery_count,
+            'recoverable_amount_ex_vat', v_ready_recovery_amount,
+            'overlay_digest', v_overlay_digest,
+            'reason', v_reason,
+            'updated_at_utc', v_now::text
+          ),
+          'selected_row_count', COALESCE(v_selected_row_count, 0),
+          'selected_eligible_ready_row_count', COALESCE(v_selected_row_count, 0),
+          'selected_rows_available', COALESCE(v_selected_row_count, 0) > 0,
+          'ready_for_draft', v_session_ready AND COALESCE(v_selected_row_count, 0) > 0,
+          'can_create_draft', v_session_ready AND COALESCE(v_selected_row_count, 0) > 0,
+          'draft_blocker_codes', COALESCE(v_draft_blocker_codes, '[]'::jsonb),
+          'blocker_codes', COALESCE(v_draft_blocker_codes, '[]'::jsonb)
+        ),
+      updated_at_utc = v_now
+  WHERE session_update.id = p_session_id;
+
+  UPDATE public.banking_pay_workbench_session_scope AS scope_update
+  SET certified_preview_publication_attestation_json = CASE
+        WHEN v_scope.certified_preview_publication_attestation_json->>'attestation_version'
+             = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+          THEN COALESCE(scope_update.certified_preview_publication_attestation_json, '{}'::jsonb)
+            || pg_catalog.jsonb_build_object(
+              'selection_recovery_headroom_v1', pg_catalog.jsonb_build_object(
+                'contract_version', 1,
+                'selected_positive_headroom_ex_vat', v_selected_positive_amount,
+                'ready_recovery_count', v_ready_recovery_count,
+                'blocked_recovery_count', v_blocked_recovery_count,
+                'recoverable_amount_ex_vat', v_ready_recovery_amount,
+                'overlay_digest', v_overlay_digest,
+                'reason', v_reason,
+                'updated_at_utc', v_now::text
+              )
+            )
+        ELSE scope_update.certified_preview_publication_attestation_json
+      END,
+      updated_at_utc = v_now
+  WHERE scope_update.id = v_scope.id;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true,
+    'action', 'SELECTION_DEPENDENT_RECOVERY_HEADROOM_APPLIED',
+    'session_id', p_session_id::text,
+    'candidate_id', p_candidate_id::text,
+    'recovery_row_count', v_recovery_row_count,
+    'ready_recovery_count', v_ready_recovery_count,
+    'blocked_recovery_count', v_blocked_recovery_count,
+    'forced_deselected_count', v_forced_deselected_count,
+    'updated_count', v_updated_count,
+    'selected_positive_headroom_ex_vat', v_selected_positive_amount,
+    'recoverable_amount_ex_vat', v_ready_recovery_amount,
+    'overlay_digest', v_overlay_digest,
+    'physical_sections_changed', false,
+    'source_rows_changed', false,
+    'post_draft_artifacts_touched', false,
+    'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+  );
+END;
+$function$;
+
+ALTER FUNCTION private.pay_workbench_recovery_selection_overlay_apply_v1(
+  uuid, uuid, jsonb
+) OWNER TO postgres;
+
+REVOKE ALL ON FUNCTION private.pay_workbench_recovery_selection_overlay_apply_v1(
+  uuid, uuid, jsonb
+) FROM PUBLIC, anon, authenticated, service_role;
+
+GRANT EXECUTE ON FUNCTION private.pay_workbench_recovery_selection_overlay_apply_v1(
+  uuid, uuid, jsonb
+) TO postgres;
+
+
 -- Bounded V3 publication core.  Descriptor JSON is transport only; the
 -- single-candidate publisher locks and rederives every durable authority.
 CREATE OR REPLACE FUNCTION private.pay_workbench_publish_certified_source_preview_page_v1(
@@ -694,6 +1312,12 @@ BEGIN
       work_row.result_json AS work_result,
       request_row.plan_json,
       request_row.selection_json,
+      request_row.selection_json->'draft_overlay_fast_pre_request_authorities'
+        ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+        AS draft_overlay_pre_request_authority,
+      correction_operation.input_json->'draft_overlay_fast_start_authorities'
+        ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+        AS draft_overlay_start_authority,
       batch_row.source_workbench_session_id,
       batch_row.source_session_version,
       batch_row.source_snapshot_run_id,
@@ -717,6 +1341,10 @@ BEGIN
      AND work_row.correction_request_id=p_correction_request_id
     JOIN public.pay_payment_correction_requests AS request_row
       ON request_row.id=p_correction_request_id
+    JOIN public.banking_pay_operations AS correction_operation
+      ON correction_operation.id=p_operation_id
+     AND correction_operation.operation_type='PAYMENT_CORRECTION'
+     AND correction_operation.input_json->>'correction_request_id'=request_row.id::text
     JOIN public.pay_batch_candidates AS batch_candidate
       ON batch_candidate.pay_batch_id=request_row.pay_batch_id
      AND batch_candidate.candidate_id=COALESCE(work_row.candidate_id,requested_scope.requested_candidate_id)
@@ -829,7 +1457,62 @@ BEGIN
         WHEN authority.execution_commit_state <> 'NOT_SUBMITTED' THEN 'PROVIDER_OR_EXECUTION_COMMIT_PRESENT'
         WHEN pg_catalog.upper(COALESCE(authority.settlement_status,''))='SETTLED'
           OR authority.settled_at_utc IS NOT NULL THEN 'SETTLEMENT_EVIDENCE_PRESENT'
-        WHEN v_mode IN ('DRAFT_OVERLAY_PREFLIGHT','PRE_FINANCIAL')
+        WHEN v_mode='DRAFT_OVERLAY_PREFLIGHT'
+          AND (
+            COALESCE(authority.draft_overlay_pre_request_authority->>'contract_version','')
+              <>'DRAFT_OVERLAY_FAST_PRE_REQUEST_AUTHORITY_V1'
+            OR COALESCE(authority.draft_overlay_pre_request_authority->>'candidate_id','')
+              IS DISTINCT FROM authority.candidate_id::text
+            OR COALESCE(
+              (authority.draft_overlay_pre_request_authority->>'pre_request_exact')::boolean,
+              false
+            ) IS NOT TRUE
+            OR COALESCE(authority.draft_overlay_pre_request_authority->>'source_change_seq','')
+              !~ '^[0-9]{1,18}$'
+            OR COALESCE(authority.draft_overlay_pre_request_authority->>'dirty_generation','')
+              !~ '^[0-9]{1,18}$'
+            OR NULLIF(COALESCE(authority.draft_overlay_pre_request_authority->>'fence_digest',''),'')
+              IS NULL
+            OR COALESCE(authority.draft_overlay_pre_request_authority->>'post_draft_authority_digest','')
+              IS DISTINCT FROM authority.post_draft_authority->>'authority_digest'
+          ) THEN 'PRE_REQUEST_ECONOMIC_AUTHORITY_NOT_CURRENT'
+        WHEN v_mode='DRAFT_OVERLAY_PREFLIGHT'
+          AND (
+            COALESCE(authority.draft_overlay_start_authority->>'contract_version','')
+              <>'DRAFT_OVERLAY_FAST_START_AUTHORITY_V1'
+            OR COALESCE(authority.draft_overlay_start_authority->>'correction_request_id','')
+              IS DISTINCT FROM p_correction_request_id::text
+            OR COALESCE(authority.draft_overlay_start_authority->>'operation_id','')
+              IS DISTINCT FROM p_operation_id::text
+            OR COALESCE(authority.draft_overlay_start_authority->>'candidate_id','')
+              IS DISTINCT FROM authority.candidate_id::text
+            OR COALESCE((authority.draft_overlay_start_authority->>'start_exact')::boolean,false)
+              IS NOT TRUE
+            OR COALESCE(authority.draft_overlay_start_authority->>'source_change_seq','')
+              !~ '^[0-9]{1,18}$'
+            OR COALESCE(authority.draft_overlay_start_authority->>'dirty_generation','')
+              !~ '^[0-9]{1,18}$'
+            OR COALESCE(authority.draft_overlay_start_authority->>'pre_request_fence_digest','')
+              IS DISTINCT FROM authority.draft_overlay_pre_request_authority->>'fence_digest'
+            OR COALESCE(authority.draft_overlay_start_authority->>'fence_digest','')
+              IS DISTINCT FROM pg_catalog.md5(
+                p_correction_request_id::text||'|'||p_operation_id::text||'|'||
+                authority.candidate_id::text||'|'||
+                COALESCE(authority.draft_overlay_start_authority->>'source_change_seq','')||'|'||
+                COALESCE(authority.draft_overlay_start_authority->>'dirty_generation','')||'|'||
+                COALESCE(authority.draft_overlay_start_authority->>'pre_request_fence_digest','')||'|'||
+                COALESCE((authority.draft_overlay_start_authority->>'start_exact')::boolean,false)::text||
+                '|DRAFT_OVERLAY_FAST_START_AUTHORITY_V1'
+              )
+          ) THEN 'CANCELLATION_START_AUTHORITY_MISSING_OR_MISMATCH'
+        WHEN v_mode='DRAFT_OVERLAY_PREFLIGHT'
+          AND (
+            authority.live_source_change_seq IS DISTINCT FROM
+              (authority.draft_overlay_start_authority->>'source_change_seq')::bigint
+            OR authority.live_dirty_generation IS DISTINCT FROM
+              (authority.draft_overlay_start_authority->>'dirty_generation')::bigint
+          ) THEN 'CURRENT_ECONOMIC_AUTHORITY_CHANGED'
+        WHEN v_mode='PRE_FINANCIAL'
           AND (
             COALESCE(authority.post_draft_authority->>'source_change_seq','') !~ '^[0-9]{1,18}$'
             OR COALESCE(authority.post_draft_authority->>'dirty_generation','') !~ '^[0-9]{1,18}$'
@@ -852,10 +1535,21 @@ BEGIN
             OR authority.live_dirty_generation IS DISTINCT FROM
                  (authority.work_result->'cancellation_reversion_post_financial_authority'->>'dirty_generation')::bigint
           ) THEN 'POST_FINANCIAL_AUTHORITY_CHANGED'
-        WHEN authority.registry_source_change_seq IS DISTINCT FROM authority.live_source_change_seq
+        WHEN v_mode='DRAFT_OVERLAY_PREFLIGHT'
+          AND (
+            authority.registry_source_change_seq IS DISTINCT FROM
+              (authority.draft_overlay_pre_request_authority->>'source_change_seq')::bigint
+            OR authority.registry_dirty_generation IS DISTINCT FROM
+              (authority.draft_overlay_pre_request_authority->>'dirty_generation')::bigint
+            OR authority.candidate_state_source_change_seq IS DISTINCT FROM
+              (authority.draft_overlay_pre_request_authority->>'source_change_seq')::bigint
+            OR authority.candidate_state_session_version IS DISTINCT FROM authority.source_session_version
+          ) THEN 'WORKBENCH_AUTHORITY_NOT_FROZEN_DRAFT_BASELINE'
+        WHEN v_mode<>'DRAFT_OVERLAY_PREFLIGHT'
+          AND (authority.registry_source_change_seq IS DISTINCT FROM authority.live_source_change_seq
           OR authority.registry_dirty_generation IS DISTINCT FROM authority.live_dirty_generation
           OR authority.candidate_state_source_change_seq IS DISTINCT FROM authority.live_source_change_seq
-          OR authority.candidate_state_session_version IS DISTINCT FROM authority.source_session_version
+          OR authority.candidate_state_session_version IS DISTINCT FROM authority.source_session_version)
           THEN 'WORKBENCH_AUTHORITY_NOT_CURRENT'
         WHEN source_rows.source_row_count
              IS DISTINCT FROM COALESCE(NULLIF(authority.frozen_attestation->>'source_row_count','')::integer,-1)
@@ -906,6 +1600,12 @@ BEGIN
         'semantic_proof_digest',source_proof.frozen_attestation->>'semantic_proof_digest',
         'post_draft_authority_digest',source_proof.post_draft_authority->>'authority_digest',
         'recomputed_post_draft_authority_digest',source_proof.recomputed_post_draft_authority_digest,
+        'pre_request_source_change_seq',source_proof.draft_overlay_pre_request_authority->>'source_change_seq',
+        'pre_request_dirty_generation',source_proof.draft_overlay_pre_request_authority->>'dirty_generation',
+        'pre_request_fence_digest',source_proof.draft_overlay_pre_request_authority->>'fence_digest',
+        'cancellation_start_source_change_seq',source_proof.draft_overlay_start_authority->>'source_change_seq',
+        'cancellation_start_dirty_generation',source_proof.draft_overlay_start_authority->>'dirty_generation',
+        'cancellation_start_fence_digest',source_proof.draft_overlay_start_authority->>'fence_digest',
         'financial_reversion_digest',pg_catalog.md5(
           (COALESCE(source_proof.work_result,'{}'::jsonb)
             - 'applied_at_utc' - 'processed_at_utc')::text

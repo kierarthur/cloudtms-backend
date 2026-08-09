@@ -145232,12 +145232,53 @@ async function handleChangesPing(env, req, user) {
   body = safeObject(body);
   const lastSeen = safeObject(body.last_seen || body.lastSeen);
   const watchedBatchIds = [];
-  const addWatched = (value) => {
-    if (Array.isArray(value)) { for (const item of value) addWatched(item); return; }
-    const text = String(value || '').trim();
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) && !watchedBatchIds.includes(text) && watchedBatchIds.length < 20) watchedBatchIds.push(text);
+  const watchedBatchDescriptors = [];
+  const watchedBatchDescriptorById = new Map();
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const normaliseKnownVersion = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const source = String(value).trim();
+    return /^\d+$/.test(source) ? source : null;
   };
-  addWatched(body.watched_pay_batch_ids || body.watchedPayBatchIds || body.open_pay_batch_ids || body.openPayBatchIds || body.open_batch_ids || body.openBatchIds);
+  const addWatchedDescriptor = (value) => {
+    if (Array.isArray(value)) { for (const item of value) addWatchedDescriptor(item); return; }
+    const source = safeObject(value);
+    const hasDescriptorFields = Object.keys(source).length > 0;
+    const text = String(
+      source.pay_batch_id || source.payBatchId || source.batch_id || source.batchId || source.id || value || ''
+    ).trim();
+    if (!uuidPattern.test(text)) return;
+    const existing = watchedBatchDescriptorById.get(text);
+    const currentTabRaw = String(source.current_tab || source.currentTab || 'OVERVIEW').trim().toUpperCase();
+    const allowedTabs = new Set([
+      'OVERVIEW', 'CURRENT_PAYMENT_STATUS', 'PAYMENT_STATUS', 'PAYMENT_ISSUES',
+      'CANDIDATES', 'ITEMS', 'ITEM_BREAKDOWNS', 'TRANSFERS', 'FINANCE_CASE_GROUPS',
+      'REMITTANCES', 'COMMUNICATIONS', 'AUTH_HISTORY', 'EVENTS'
+    ]);
+    const descriptor = {
+      pay_batch_id: text,
+      known_version: normaliseKnownVersion(source.known_version ?? source.knownVersion ?? source.version),
+      known_payment_status_version: normaliseKnownVersion(source.known_payment_status_version ?? source.knownPaymentStatusVersion ?? source.payment_status_version ?? source.paymentStatusVersion),
+      known_correction_progress_version: normaliseKnownVersion(source.known_correction_progress_version ?? source.knownCorrectionProgressVersion ?? source.correction_progress_version ?? source.correctionProgressVersion),
+      known_alert_version: normaliseKnownVersion(source.known_alert_version ?? source.knownAlertVersion ?? source.alert_version ?? source.alertVersion),
+      known_overview_version: normaliseKnownVersion(source.known_overview_version ?? source.knownOverviewVersion ?? source.overview_version ?? source.overviewVersion),
+      current_tab: allowedTabs.has(currentTabRaw) ? currentTabRaw : 'OVERVIEW',
+      current_section_json: safeObject(source.current_section_json || source.currentSectionJson)
+    };
+    if (existing) {
+      if (!hasDescriptorFields) return;
+      for (const [key, item] of Object.entries(descriptor)) {
+        if (item !== null && item !== undefined && !(key === 'current_section_json' && Object.keys(item).length === 0)) existing[key] = item;
+      }
+      return;
+    }
+    if (watchedBatchDescriptors.length >= 20) return;
+    watchedBatchDescriptorById.set(text, descriptor);
+    watchedBatchDescriptors.push(descriptor);
+    watchedBatchIds.push(text);
+  };
+  addWatchedDescriptor(body.watched_pay_batches || body.watchedPayBatches);
+  addWatchedDescriptor(body.watched_pay_batch_ids || body.watchedPayBatchIds || body.open_pay_batch_ids || body.openPayBatchIds || body.open_batch_ids || body.openBatchIds);
   const watchedInvoiceOperationIds = [];
   const addWatchedInvoiceOperation = (value) => {
     if (Array.isArray(value)) {
@@ -145279,18 +145320,21 @@ async function handleChangesPing(env, req, user) {
     responsePayload.banking_alert_summary_deferred = count > 0;
     if (watchedBatchIds.length) {
       responsePayload.watched_batch_signals = [];
-      for (const payBatchId of watchedBatchIds) {
+      for (const descriptor of watchedBatchDescriptors) {
         try {
           const signal = unwrapRpc(await sbRpc(env, 'banking_pay_batch_watch_signal', {
-            p_pay_batch_id: payBatchId,
+            p_pay_batch_id: descriptor.pay_batch_id,
             p_actor_user_id: currentUser.id,
-            p_known_version: null,
-            p_known_payment_status_version: null,
-            p_known_correction_progress_version: null,
-            p_known_alert_version: null,
-            p_known_overview_version: null,
-            p_current_tab: 'AUTO',
-            p_current_section_json: { source: 'handleChangesPing' }
+            p_known_version: descriptor.known_version,
+            p_known_payment_status_version: descriptor.known_payment_status_version,
+            p_known_correction_progress_version: descriptor.known_correction_progress_version,
+            p_known_alert_version: descriptor.known_alert_version,
+            p_known_overview_version: descriptor.known_overview_version,
+            p_current_tab: descriptor.current_tab,
+            p_current_section_json: {
+              ...descriptor.current_section_json,
+              source: 'handleChangesPing'
+            }
           }), 'banking_pay_batch_watch_signal');
           responsePayload.watched_batch_signals.push(signal);
         } catch {}
