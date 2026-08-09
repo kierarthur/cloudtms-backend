@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 9 August 2026. The DB/RPC authority is installed and the CloudTMS backend source is implementation-complete at this revision. The complete 375-test backend regression and Wrangler TEST dry-run pass; exact publish, normal TEST deployment, harmless runtime verification and independent audit are the remaining Stage 2 gates.
+Status: active implementation; TEST-only. Updated: 9 August 2026. The DB/RPC authority is installed and the CloudTMS backend implementation is complete, published to backend `test`, deployed to the normal TEST Worker and harmlessly runtime-verified. The complete 375-test backend regression and Wrangler TEST build pass. Independent backend audit is the remaining Stage 2 gate before CloudTMS frontend implementation.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current backend implementation, and the remaining CloudTMS frontend, private broker and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -284,6 +284,8 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 ## Completion gates
 
 Backend completion requires source review, focused unit/contract tests, full backend regression, Wrangler dry run, read-only TEST catalogue/smoke verification, exact commit push, normal TEST deploy of that commit, and harmless runtime health/version proof. No Candidate workflow, email, notification, R2 or financial mutation is required for deployment verification.
+
+This revision has completed those implementation-side gates: health and readiness returned 200, the document processor and dispatcher were ready, and an unauthenticated Candidate bootstrap request failed closed with the stable 401 access-token error. No mutation-capable Candidate endpoint was invoked during deployment verification.
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
 
