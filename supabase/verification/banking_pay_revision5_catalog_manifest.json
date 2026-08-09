@@ -291,7 +291,7 @@
       "schema": "public",
       "name": "pay_batch_cancel",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_reason text, p_correction_request_id uuid, p_work_item_id uuid",
-      "definition_sha256": "d770d5a86747fefe9bd30b0c0daa778c875bc762c07d081e8db3664d5dbf0649",
+      "definition_sha256": "10c3ffcaab90dddc256d29ab3df82b1d01d6eaf3a302688a6ba82f04234fb573",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

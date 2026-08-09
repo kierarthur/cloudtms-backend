@@ -8,7 +8,7 @@
     {
       "schema": "public", "name": "_pay_payment_correction_selected_items",
       "identity_arguments": "p_pay_batch_id uuid, p_selection_json jsonb, p_include_already_corrected boolean",
-      "definition_sha256": "5019f6df617d9217c27a6d3c7d18dd4d5919b2c10ac940861659f225c58c832a",
+      "definition_sha256": "dc89247906e064fea22d15ebdce07925118aa4fd4624c0dbb5ed9fa0dc3d247d",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_1403_pay_payment_correction_selected_items_draft_scope.sql"]
