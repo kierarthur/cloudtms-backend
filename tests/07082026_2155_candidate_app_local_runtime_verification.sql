@@ -377,6 +377,39 @@ begin
     'workflow-candidate-signature-v1',now()
   );
   v_candidate_signature:=(v_response->>'component_id')::uuid;
+  if v_response->>'storage_key'<>'workflow/candidate-signature.png'
+     or v_response->>'media_type'<>'image/png'
+     or (v_response->>'byte_size')::bigint<>128
+     or v_response->>'component_kind'<>'CANDIDATE_SIGNATURE'
+     or v_response->>'document_role'<>'CANDIDATE_SIGNATURE' then
+    raise exception 'component prepare did not return its authoritative upload contract: %',v_response;
+  end if;
+  v_response:=public.candidate_workflow_transition_atomic_v1(
+    v_session,'TEST',v_workflow,'COMPONENT_PREPARE',1,
+    jsonb_build_object(
+      'component_kind','CANDIDATE_SIGNATURE','document_role','CANDIDATE_SIGNATURE',
+      'storage_key','workflow/ignored-retry-key.png','media_type','image/png','byte_size',128
+    ),
+    'workflow-candidate-signature-v1',now()
+  );
+  if not coalesce((v_response->>'idempotent_replay')::boolean,false)
+     or (v_response->>'component_id')::uuid<>v_candidate_signature
+     or v_response->>'storage_key'<>'workflow/candidate-signature.png' then
+    raise exception 'component prepare replay did not preserve the original object identity: %',v_response;
+  end if;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_workflow,'COMPONENT_PREPARE',1,
+      jsonb_build_object(
+        'component_kind','CANDIDATE_SIGNATURE','document_role','CANDIDATE_SIGNATURE',
+        'storage_key','workflow/ignored-conflict-key.jpg','media_type','image/jpeg','byte_size',128
+      ),
+      'workflow-candidate-signature-v1',now()
+    );
+    raise exception 'component prepare replay unexpectedly accepted conflicting media';
+  exception when unique_violation then
+    if sqlerrm<>'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT' then raise; end if;
+  end;
   v_response:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'COMPONENT_COMPLETE',1,
     jsonb_build_object(

@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: deployed TEST broker/private-backend authority map, 9 August 2026. Updated through the final manager-session, same-phone handoff, immutable-upload, complete-paper-pack and end-to-end readiness corrections at backend commit `21c10e910f2ce8753a40051c4e7f9a7f8853e3ca`.
+Status: TEST broker/private-backend authority map, updated 10 August 2026 through public-finalisation closure, DB-owned upload replay identity, read-only paper-pack delivery and professional paper documents.
 
 ## Canonical owner graph
 
@@ -81,16 +81,20 @@ Neither Worker alters the existing financial algorithms. The broker cannot acces
 
 ### `broker/src/candidate-app-backend.js`
 
-QR/paper delivery remains one composed authority: `PAPER_PREPARE` queues the existing QR document operation and held email; durable document readiness releases the Candidate notification and email; the Candidate-only paper-pack endpoint rechecks ownership and readiness before streaming the canonical PDF without exposing an R2 key.
+QR/paper delivery remains one composed authority: `PAPER_PREPARE` queues the existing QR document operation and binds its exact held mail operation to the workflow generation and manifest; the private scheduler alone assembles the complete pack and releases that exact email and the idempotent Candidate notification. Candidate paper-pack status/download endpoints are read-only and only inspect/stream an already-ready immutable pack without exposing an R2 key. They cannot requeue failed mail.
 
 - versioned private Candidate/manager and authenticated office routing, explicitly separated by route audience;
 - private Candidate session/password boundary behind the broker;
 - dedicated session, challenge and upload secrets with no general-secret fallback;
 - encrypted upload envelopes plus actual PNG/JPEG/PDF validation, one-page evidence PDF enforcement and R2 byte verification;
+- DB-owned `COMPONENT_PREPARE` replay identity: the upload ticket is always built from the authoritative stored key/type/size/role/category returned by SQL;
 - safe RPC adapters and response filtering;
 - official manager-review/final page rendering and registration;
+- configured-brand professional Expense and Mileage Approval Summary and A4 repeatable-journey Mileage Claim Form rendering;
 - manager email/phone orchestration and isolated follow-on recovery;
 - no-work, notifications, route preview/confirm and rejection adapters.
+
+General public Candidate workflow actions do not expose service finalisation. Manager approval, complete paper return and authenticated office retry are the only HTTP owners that can invoke the service-finalisation context.
 
 It must not own rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN, Process, Authorise, invoice grouping or QR versions.
 

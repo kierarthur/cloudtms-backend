@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 9 August 2026. The DB/RPC authority is installed. The backend authority closure, separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST at backend commit `21c10e910f2ce8753a40051c4e7f9a7f8853e3ca`. Their health, readiness and public/private isolation checks pass. One further independent audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
+Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented. The final backend authority correction now removes public service-finalisation, binds idempotent component preparation to the original DB-owned object identity, makes paper-pack reads strictly read-only, moves pack/mail/notification release to the scheduled private worker, fails closed on multiple paper workflows and completes the agreed professional expense/mileage documents. Publication, TEST deployment and independent re-audit remain the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -37,7 +37,7 @@ Completed authority includes:
 
 DB/RPC regression gates remain PostgreSQL 17.6/18.1 install/runtime suites, concurrency suites, ACL/feature-off parity, focused Candidate tests and full backend regression.
 
-## Stage 2 — CloudTMS backend (implemented and deployed to TEST; independent sign-off pending)
+## Stage 2 — CloudTMS backend (final authority correction implemented; publication/deployment verification in progress)
 
 Implement and verify one versioned private CloudTMS-owned HTTP boundary. The public broker must use it and must never query Supabase or R2 directly.
 
@@ -72,6 +72,16 @@ This closure does not alter Candidate DB/RPC functions, DAILY/WEEKLY economics, 
 
 The SQL service-finalisation branch remains inside the existing fourteenth finalisation RPC. No fifteenth Candidate business RPC, eighth Candidate table, second financial engine, new Process/Authorise path or new invoice path was added.
 
+### Final backend authority seams closed in the 10 August revision
+
+- the general public Candidate workflow action set no longer contains `FINALISE`; manager EMAIL/PHONE approval, complete PAPER return and authenticated CloudTMS office retry remain the only HTTP owners of service-finalisation;
+- `COMPONENT_PREPARE` returns its original authoritative storage/media/size/kind/role/category/page contract on both first execution and replay, rejects conflicting idempotency-key reuse, and the private API encrypts an upload ticket from that returned contract only;
+- Candidate paper-pack status and download GETs are strictly read-only: they may inspect an immutable readiness receipt and stream ready bytes, but cannot assemble a pack, write R2, alter mail or create a notification;
+- the scheduled private worker exclusively assembles and releases paper packs, targets one deterministic workflow/generation/manifest-bound mail operation, never turns `FAILED` mail back into `QUEUED`, and creates the readiness notification idempotently;
+- paper-pack context requires exactly one active matching PAPER workflow and fails closed on multiplicity;
+- the configured agency brand is used on the professional Expense and Mileage Approval Summary and Mileage Claim Form; the summary displays plain-English canonical claim lines and the A4 mileage form contains repeatable journey rows, total mileage, manager signature/date and stable workflow/page identity;
+- these changes alter orchestration, authority checks and document presentation only. DAILY/WEEKLY economics, Process, Authorise, QR/version, invoice, payment, Banking Pay and Policy X behaviour remain unchanged.
+
 ### Candidate authentication and session boundary
 
 - enumeration-safe activation/reset/recovery challenge start and resend;
@@ -96,7 +106,7 @@ Implemented HTTP groups at this revision:
 - `/candidate-app/v1/bootstrap`, `/timesheets`, `/timesheets/:id`, missing-week options/create and notifications;
 - `/candidate-app/v1/timesheets/:id/paper-pack/status` and `/paper-pack` — Candidate-owned durable readiness and secure PDF streaming without an R2 identity;
 - `/candidate-app/v1/timesheets/:id/expense-placement` and `/expense-carrier` — Candidate-authenticated adapters over the installed placement/carrier authorities;
-- `/candidate-app/v1/workflows/*` — create, components, factual submission, approval-route selection, reminder/renewal, paper return, finalise and cancel/supersede;
+- `/candidate-app/v1/workflows/*` — create, components, factual submission, approval-route selection, reminder/renewal, paper return and cancel/supersede; no general public Candidate finalise action;
 - `/candidate-manager/v1/*` — token-bound manifest, component stream, review progress, signature upload, approve and refuse;
 - `/api/candidate-app/*` — office route preview/confirm, phone-review actions, whole-record rejection and finalisation retry.
 
@@ -104,7 +114,7 @@ Implemented HTTP groups at this revision:
 
 - opaque, scoped upload tickets;
 - backend R2 writes with strict media/size limits and server SHA-256 verification;
-- component PREPARE/COMPLETE using server-authoritative storage identity and digest;
+- component PREPARE/COMPLETE using one server-authoritative storage identity and digest; lost-response replay returns and reuses the original DB-owned upload contract and rejects conflicting reuse;
 - opaque download tickets and backend streaming; broker/app never receive an R2 key;
 - explicit no-break input (`break_minutes = 0`, no start/end) accepted for WEEKLY and DAILY; DAILY creates the existing non-60-minute checking issue while WEEKLY does not.
 
@@ -155,7 +165,7 @@ The focused backend suite includes a 50-task isolation fixture with 49 successes
 
 QR/paper document generation is delegated to `timesheet_qr_send_enqueue_v1` and the existing durable document-operation worker. Candidate `PAPER_PREPARE` records the complete immutable return manifest first, then queues the exact current timesheet through that authority. The pack-ready database trigger—not the initial route action—releases the “documents are ready” notification.
 
-The same enqueue operation creates the candidate email automatically and holds it until the official PDF is `READY`; the candidate does not request a second email. When ready, the existing mail authority attaches and releases the pack. The app uses the Candidate notification feed (and later provider push when enabled) to refresh the timesheet, then downloads the pack through `GET /candidate-app/v1/timesheets/:timesheetId/paper-pack`. CloudTMS checks ownership and durable readiness and streams the bytes; no Supabase query or R2 key is exposed to the broker/app. Queued, rendering, ready, sent and failed remain distinct states.
+The same enqueue operation creates the candidate email automatically and binds that exact outbox operation to the workflow generation and paper manifest. The candidate does not request a second email. After the official timesheet and every required page are ready, the private scheduler assembles the immutable pack, attaches it to only that bound `QUEUED` mail operation and releases the idempotent readiness notification. A failed email remains failed until the established explicit mail-retry authority acts. The app uses the Candidate notification feed (and later provider push when enabled) to refresh the timesheet, then downloads the already-ready pack through `GET /candidate-app/v1/timesheets/:timesheetId/paper-pack`. Both status and download GETs are read-only; no Candidate polling can assemble documents, update mail or create notifications. CloudTMS checks ownership/readiness and streams bytes without exposing a Supabase query or R2 key. Queued, rendering, ready, sent and failed remain distinct states.
 
 The broker/app must handle the asynchronous response explicitly: a `202` PAPER_PREPARE response shows **Preparing documents**, refreshes the Candidate notification feed and `GET /candidate-app/v1/timesheets/:timesheetId/paper-pack/status` with bounded backoff while that screen remains active, refreshes again when the app resumes or receives the readiness push, and enables **Download documents** only after server readiness. The app never polls Supabase/R2 and never manufactures a ready state from the presence of a QR token.
 
@@ -317,9 +327,9 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 
 ## Completion gates
 
-Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both new Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. All implementation, publication, deployment and harmless runtime checks are complete; independent audit is the remaining Stage 2 sign-off gate. No Candidate workflow, email, notification, R2 or financial mutation was required for deployment verification.
+Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both new Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. The 10 August source correction has passed local code, contract, PDF and database regression; publication/deployment evidence is recorded in the accompanying handover after execution. No Candidate workflow, email, notification, R2 or financial mutation is required for deployment verification.
 
-Current published/deployed verification: 75/75 focused Candidate/backend/broker/DB-contract tests, 396/396 complete backend tests, 13/13 PostgreSQL runtime/concurrency suites on PostgreSQL 17.6 and again on 18.1, clean OpenAPI 3.1 lint, successful Worker builds, successful TEST database migration workflow `31337632908`, and healthy deployed services. The public broker `/healthz` and `/readyz` return 200; the normal TEST backend `/healthz` and `/readyz` return 200; and the normal backend rejects a direct public Candidate route with 404. The database runtime test explicitly revokes the Candidate session before manager-triggered finalisation and still proves the canonical WEEKLY completion path.
+Current 10 August source verification: 75/75 focused Candidate/backend/broker/DB-contract tests, 400/400 complete backend tests, 13/13 PostgreSQL runtime/concurrency suites on PostgreSQL 17.6 and again on 18.1, clean OpenAPI 3.1 validation, successful builds for the public broker, private Candidate API and normal TEST backend, and single-page A4 visual verification of both generated claim forms. The database runtime test proves idempotent PREPARE returns the original stored upload contract and rejects conflicting replay. Published commit, migration run, deployment identities and health/readiness evidence are recorded in the latest handover package after the authorised TEST rollout.
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
 

@@ -689,6 +689,27 @@ test('Candidate App SQL does not implement payment, settlement, invoice issue or
   assert.doesNotMatch(all, /http_post|net\.http|pg_net|comms_outbox/i);
 });
 
+test('component preparation replay returns one immutable database-owned upload contract', () => {
+  const workflow = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
+  assert.match(workflow, /CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT/i);
+  assert.match(workflow, /v_component\.component_kind is distinct from v_component_kind/i);
+  assert.match(workflow, /v_component\.document_role is distinct from v_document_role/i);
+  assert.match(workflow, /v_component\.expense_category is distinct from v_expense_category/i);
+  assert.match(workflow, /lower\(v_component\.media_type\) is distinct from v_requested_media_type/i);
+  assert.match(workflow, /v_component\.byte_size is distinct from v_requested_byte_size/i);
+  const replay = workflow.match(/if found then[\s\S]*?end if;[\s\S]*?select coalesce\(max\(component_no\)/i)?.[0] || '';
+  for (const field of [
+    'storage_key', 'media_type', 'byte_size', 'component_kind',
+    'document_role', 'expense_category', 'paper_return_page_key'
+  ]) assert.match(replay, new RegExp(`'${field}'`, 'i'), `replay must return ${field}`);
+  const first = [...workflow.matchAll(/return jsonb_build_object\('ok',true,'idempotent_replay',false[\s\S]*?\);/gi)]
+    .map(match => match[0]).find(value => /'component_id'/i.test(value)) || '';
+  for (const field of [
+    'storage_key', 'media_type', 'byte_size', 'component_kind',
+    'document_role', 'expense_category', 'paper_return_page_key'
+  ]) assert.match(first, new RegExp(`'${field}'`, 'i'), `first prepare must return ${field}`);
+});
+
 test('every SQL file has complete function/migration dollar-quote pairs', () => {
   for (const [key, source] of Object.entries(sql)) {
     for (const delimiter of ['$function$', '$migration$']) {

@@ -100,6 +100,8 @@ declare
   v_component_kind text;
   v_document_role text;
   v_expense_category text;
+  v_requested_media_type text;
+  v_requested_byte_size bigint;
   v_review_ordinal integer;
   v_has_expenses boolean:=false;
   v_has_mileage boolean:=false;
@@ -590,19 +592,38 @@ begin
     if nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
       raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023';
     end if;
-    select * into v_component from public.candidate_submission_components
-    where workflow_id=v_workflow.id and upload_idempotency_key=p_idempotency_key;
-    if found then
-      return jsonb_build_object('ok',true,'idempotent_replay',true,
-        'component_id',v_component.id,'state',v_component.state);
-    end if;
-    select coalesce(max(component_no),0)+1 into v_component_no
-    from public.candidate_submission_components
-    where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation;
     v_component_kind:=upper(btrim(coalesce(v_payload->>'component_kind','')));
     v_document_role:=upper(btrim(coalesce(v_payload->>'document_role','')));
     v_expense_category:=nullif(upper(btrim(coalesce(v_payload->>'expense_category',''))),'');
     v_paper_page_key:=nullif(btrim(coalesce(v_payload->>'paper_return_page_key','')),'');
+    v_requested_media_type:=nullif(lower(btrim(coalesce(v_payload->>'media_type',''))),'');
+    begin
+      v_requested_byte_size:=nullif(v_payload->>'byte_size','')::bigint;
+    exception when invalid_text_representation or numeric_value_out_of_range then
+      raise exception 'CANDIDATE_COMPONENT_SIZE_INVALID' using errcode='22023';
+    end;
+    select * into v_component from public.candidate_submission_components
+    where workflow_id=v_workflow.id and upload_idempotency_key=p_idempotency_key;
+    if found then
+      if v_component.component_kind is distinct from v_component_kind
+         or v_component.document_role is distinct from v_document_role
+         or v_component.expense_category is distinct from v_expense_category
+         or lower(v_component.media_type) is distinct from v_requested_media_type
+         or v_component.byte_size is distinct from v_requested_byte_size
+         or v_component.paper_return_page_key is distinct from v_paper_page_key then
+        raise exception 'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT' using errcode='23505';
+      end if;
+      return jsonb_build_object('ok',true,'idempotent_replay',true,
+        'component_id',v_component.id,'component_no',v_component.component_no,
+        'workflow_generation',v_component.workflow_generation,
+        'storage_key',v_component.storage_key,'media_type',v_component.media_type,
+        'byte_size',v_component.byte_size,'component_kind',v_component.component_kind,
+        'document_role',v_component.document_role,'expense_category',v_component.expense_category,
+        'paper_return_page_key',v_component.paper_return_page_key,'state',v_component.state);
+    end if;
+    select coalesce(max(component_no),0)+1 into v_component_no
+    from public.candidate_submission_components
+    where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation;
     if v_is_public_manager_action then
       if v_component_kind<>'MANAGER_SIGNATURE' or v_document_role<>'MANAGER_SIGNATURE' then
         raise exception 'MANAGER_SIGNATURE_COMPONENT_REQUIRED' using errcode='28000';
@@ -699,16 +720,19 @@ begin
       case when v_source_component.id is null then 'PENDING' else 'IMMUTABLE' end,
       v_source_component.id,
       coalesce(v_source_component.storage_key,nullif(v_payload->>'storage_key','')),
-      coalesce(v_source_component.media_type,nullif(lower(v_payload->>'media_type'),'')),
-      coalesce(v_source_component.byte_size,nullif(v_payload->>'byte_size','')::bigint),
+      coalesce(v_source_component.media_type,v_requested_media_type),
+      coalesce(v_source_component.byte_size,v_requested_byte_size),
       v_source_component.source_content_sha256,p_idempotency_key,
       case when v_source_component.id is null then null else p_now_utc end,
       false,null,'NOT_REQUIRED','NOT_REQUIRED',v_paper_page_key,
       p_now_utc
     ) returning * into v_component;
     return jsonb_build_object('ok',true,'idempotent_replay',false,'component_id',v_component.id,
-      'component_no',v_component.component_no,'state',v_component.state,
-      'workflow_generation',v_component.workflow_generation);
+      'component_no',v_component.component_no,'workflow_generation',v_component.workflow_generation,
+      'storage_key',v_component.storage_key,'media_type',v_component.media_type,
+      'byte_size',v_component.byte_size,'component_kind',v_component.component_kind,
+      'document_role',v_component.document_role,'expense_category',v_component.expense_category,
+      'paper_return_page_key',v_component.paper_return_page_key,'state',v_component.state);
   elsif v_action='COMPONENT_COMPLETE' then
     select * into v_component from public.candidate_submission_components
     where id=nullif(v_payload->>'component_id','')::uuid and workflow_id=v_workflow.id

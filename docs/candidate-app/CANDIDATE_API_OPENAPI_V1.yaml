@@ -206,6 +206,7 @@ paths:
       tags: [Candidate]
       operationId: getPaperPackStatus
       summary: Get paper pack status
+      description: Read-only readiness lookup. Pack assembly, mail release and notification creation occur only in the private scheduled worker.
       x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}/paper-pack/status
       parameters: [{$ref: '#/components/parameters/TimesheetId'}]
       responses: *standardResponses
@@ -214,6 +215,7 @@ paths:
       tags: [Candidate]
       operationId: downloadPaperPack
       summary: Download paper pack
+      description: Streams an already-ready immutable pack. This operation never assembles documents or changes mail/notification state.
       x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}/paper-pack
       parameters: [{$ref: '#/components/parameters/TimesheetId'}]
       responses:
@@ -292,7 +294,7 @@ paths:
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/actions/{action}
       parameters:
         - {$ref: '#/components/parameters/WorkflowId'}
-        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, finalise, component-supersede]}}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede]}}
       requestBody: {$ref: '#/components/requestBodies/JsonBody'}
       responses: *standardResponses
   /candidate-app/v1/workflows/{workflowId}/components/prepare:
@@ -300,6 +302,7 @@ paths:
       tags: [Workflow]
       operationId: prepareCandidateComponent
       summary: Prepare candidate component
+      description: Idempotent preparation. A replay returns a ticket for the original database-owned component/object identity and rejects conflicting media, size, role or category reuse.
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/components/prepare
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
       requestBody: {$ref: '#/components/requestBodies/JsonBody'}

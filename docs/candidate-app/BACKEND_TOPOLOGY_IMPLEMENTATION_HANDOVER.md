@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
-Date: 9 August 2026
-Status: final Candidate broker/private API authority implementation, publication and TEST deployment for independent audit. This document is updated through manager-session-independent finalisation, same-phone approval, immutable upload arbitration, complete QR/paper pack assembly and deployed public/private readiness proof.
+Date: 10 August 2026
+Status: final Candidate broker/private API authority source correction for publication, TEST deployment and independent API-freeze audit. This document is updated through public-finalisation closure, DB-owned component replay identity, read-only paper-pack delivery, deterministic scheduled release, paper-workflow multiplicity and professional paper documents.
 
 ## Executive result
 
@@ -21,7 +21,39 @@ Candidate iOS / Android / web + manager browser
 
 The public broker has no Supabase/R2 or CloudTMS business-authority dependency. The private Candidate API has no public Worker route. The normal CloudTMS Worker retains authenticated office adapters and now rejects public Candidate/manager paths before its global preflight handler.
 
-No Candidate DB/RPC, DAILY/WEEKLY financial algorithm, Process, Authorise, route/version, invoice, payment, Banking Pay, Policy X, Google rota/availability or official-renderer economics were changed in this pass.
+No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version, invoice, payment, Banking Pay, Policy X, Google rota/availability or official-timesheet-renderer economics were changed in this pass. One existing Candidate workflow RPC definition was tightened only to return and validate the authoritative prepared-upload contract on idempotent replay.
+
+## Final audit finding closure in this revision
+
+### Public Candidate finalisation authority
+
+- removed `FINALISE` from the public Candidate action enum, router and OpenAPI contract;
+- retained manager EMAIL/PHONE, complete PAPER return and authenticated office retry as the only service-finalisation triggers;
+- service finalisation remains manager/request/manifest bound and session-independent where intended;
+- an authenticated Candidate can no longer present an unrelated workflow UUID to the service-finalisation path.
+
+### Idempotent component preparation
+
+- SQL now returns component ID, generation, original storage key, media type, byte size, kind, role, expense category, paper-page key and state on both first PREPARE and replay;
+- reuse of the same idempotency key with conflicting kind, role, category, media, size or paper-page identity fails with `CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT`;
+- the private API builds the encrypted upload ticket from the SQL-returned authoritative contract, never from a newly generated replay key;
+- the raw storage key remains private and cannot appear in the public response.
+
+### Read-only paper-pack delivery and exact release ownership
+
+- status/download GETs now perform only Candidate-safe ownership reads, immutable receipt inspection and ready-byte streaming;
+- all R2 pack assembly, outbox release and notification creation moved to the scheduled private worker;
+- PAPER_PREPARE binds the exact QR mail-outbox operation to workflow, generation and manifest identity;
+- release updates only that exact bound `QUEUED` operation and never resets a `FAILED` operation;
+- repeated polling and concurrent clients cannot create a pack, requeue mail or duplicate the readiness notification;
+- zero matching workflows remains not-ready; more than one active matching PAPER workflow fails closed with `CANDIDATE_PAPER_WORKFLOW_CONFLICT`.
+
+### Approved paper documents
+
+- the Expense and Mileage Approval Summary now uses configured agency branding, Candidate/client/week identity and plain-English claim lines instead of internal economic keys;
+- the A4 Mileage Claim Form uses the configured agency branding and exact title/columns, ten repeatable journey rows, total mileage, manager signature/date and stable workflow/page identity;
+- both outputs were rendered as single-page A4 PDFs and visually inspected for clipping, overlap and readability;
+- the renderers only present frozen canonical facts and do not derive financial truth.
 
 ## Audit finding closure
 
@@ -95,7 +127,7 @@ Implemented:
 - SQL component completion validates media type, size and digest before returning an idempotent response, so a different-byte retry cannot be mistaken for success;
 - one-page PDF expense evidence is valid end to end, matching the HTTP validator and installed database policy;
 - the Candidate PAPER return manifest drives one complete pack in frozen order: official QR timesheet page(s), professional Expense and Mileage Approval Summary, approved Mileage Claim Form, then every evidence page;
-- QR email attachment release and `PAPER_PACK_READY` notification occur only after the complete pack is durably stored; the private cron completes pending packs even where no Candidate is polling.
+- QR email attachment release and `PAPER_PACK_READY` notification occur only after the complete pack is durably stored by the private scheduler; Candidate GET polling is read-only and a failed email is never requeued by a read.
 
 ### Upload and evidence hardening
 
@@ -177,7 +209,7 @@ Implemented:
 | Changed/new JavaScript syntax | PASS |
 | Focused Candidate/backend/broker/DB-contract tests | 75 passed, 0 failed |
 | Candidate DB/RPC + canonical DAILY structural tests | 39 passed, 0 failed |
-| Complete backend test suite | 396 passed, 0 failed |
+| Complete backend test suite | 400 passed, 0 failed |
 | PostgreSQL 17.6 runtime/concurrency suites | 13 passed, 0 failed |
 | PostgreSQL 18.1 runtime/concurrency suites | 13 passed, 0 failed |
 | Candidate broker Wrangler dry run | PASS |
@@ -199,7 +231,7 @@ The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all
 
 ## Independent audit requests
 
-Please verify, function by function:
+Please verify, function by function, including the final authority seams:
 
 1. `handleCandidateBrokerRequest` never gains DB/R2/business authority and enforces origin, rate, token and body boundaries before forwarding.
 2. `signCandidatePrivateRequest` and `verifyCandidatePrivateRequest` bind the same complete request context and fail closed.
@@ -217,6 +249,11 @@ Please verify, function by function:
 14. one-page PDF expense evidence is accepted consistently by HTTP and SQL, while multi-page/malformed/encrypted PDFs fail;
 15. the downloadable/email QR pack includes every frozen required page in the exact return-manifest order and readiness is released only after the full immutable bundle exists;
 16. the OpenAPI path/method/query inventory matches the implemented broker/private router and notification pagination.
+17. public Candidate workflow actions cannot invoke service finalisation, while manager approval, PAPER completion and office retry remain functional and idempotent;
+18. PREPARE replay returns the first stored upload contract, conflict reuse fails, and no ticket can point to a second orphan object key;
+19. paper-pack status/download are read-only and cannot write R2, mail or notifications, including when a bound mail row is `FAILED`;
+20. the scheduler releases only one workflow/generation/manifest-bound outbox row and fails closed on multiple active paper workflows;
+21. the expense summary and mileage form meet the configured-brand, plain-English, A4 table and stable-identity presentation contract without altering economics.
 
 ## Remaining delivery sequence after independent GO
 

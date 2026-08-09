@@ -48,7 +48,11 @@ const CONFLICT_ERROR_CODES = new Set([
   'ROUTE_CHANGE_CONTEXT_CHANGED',
   'CANDIDATE_EXPENSE_CLAIM_ALREADY_ACTIVE',
   'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED',
+  'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT',
+  'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH',
   'CANDIDATE_PAPER_RETURN_PAGE_DUPLICATE',
+  'CANDIDATE_PAPER_WORKFLOW_CONFLICT',
+  'CANDIDATE_PAPER_OUTBOX_CONFLICT',
   'MANAGER_REVIEW_MANIFEST_MISMATCH'
 ]);
 
@@ -812,6 +816,29 @@ function componentStorageKey(environment, workflowId, generation, componentKind,
   return `candidate-app/${environment.toLowerCase()}/${workflowId}/${generation}/source/${upper(componentKind).toLowerCase()}-${crypto.randomUUID()}.${extension}`;
 }
 
+function preparedUploadContract(result, expected) {
+  const contract = {
+    component_id: requireUuid(result?.component_id, 'CANDIDATE_COMPONENT_PREPARE_FAILED'),
+    storage_key: text(result?.storage_key),
+    media_type: normaliseMediaType(result?.media_type),
+    byte_size: Number(result?.byte_size),
+    component_kind: upper(result?.component_kind),
+    document_role: upper(result?.document_role),
+    expense_category: result?.expense_category == null ? null : upper(result.expense_category),
+    paper_return_page_key: result?.paper_return_page_key == null ? null : text(result.paper_return_page_key)
+  };
+  if (!contract.storage_key
+      || contract.media_type !== expected.media_type
+      || contract.byte_size !== expected.byte_size
+      || contract.component_kind !== expected.component_kind
+      || contract.document_role !== expected.document_role
+      || contract.expense_category !== expected.expense_category
+      || contract.paper_return_page_key !== expected.paper_return_page_key) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  return contract;
+}
+
 async function uploadTicket(env, payload) {
   const now = Math.floor(Date.now() / 1000);
   return sealEnvelope(env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET, 'candidate-component-upload-v1', {
@@ -879,19 +906,25 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     p_action: 'COMPONENT_PREPARE', p_expected_generation: generation, p_payload: payload,
     p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
   });
-  const componentId = requireUuid(result.component_id, 'CANDIDATE_COMPONENT_PREPARE_FAILED');
+  const authoritative = preparedUploadContract(result, {
+    media_type: mediaType, byte_size: byteSize, component_kind: componentKind,
+    document_role: payload.document_role, expense_category: payload.expense_category,
+    paper_return_page_key: payload.paper_return_page_key
+  });
+  const componentId = authoritative.component_id;
   const ticket = await uploadTicket(env, {
     env: environment, owner, owner_id: ownerId, workflow_id: workflowId,
     candidate_session_id: null,
-    generation, component_id: componentId, component_kind: componentKind,
-    key: storageKey, media_type: mediaType, byte_size: byteSize,
+    generation, component_id: componentId, component_kind: authoritative.component_kind,
+    key: authoritative.storage_key, media_type: authoritative.media_type, byte_size: authoritative.byte_size,
     completion_idempotency_key: `${idempotencyKey}:complete`
   });
-  return jsonResponse(201, {
+  return jsonResponse(result.idempotent_replay === true ? 200 : 201, {
     ok: true, workflow_id: workflowId, generation, component_id: componentId,
+    idempotent_replay: result.idempotent_replay === true,
     upload: {
       method: 'PUT', url: `${CANDIDATE_PREFIX}/uploads/${encodeURIComponent(ticket)}`,
-      media_type: mediaType, byte_size: byteSize, expires_in_seconds: 600
+      media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600
     }
   });
 }
@@ -1368,24 +1401,80 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
   } };
 }
 
-function expenseLines(workflow, component) {
+function expenseClaim(workflow) {
   const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
   const expenseSubmission = parseJson(immutable.expense_submission || immutable.expense_claim || immutable.expenses || immutable, {}) || {};
-  const claim = parseJson(expenseSubmission.canonical_tsfin_snapshot, expenseSubmission) || expenseSubmission;
-  const allowed = [
-    'mileage_units', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat',
-    'travel_pay_ex_vat', 'travel_charge_ex_vat',
-    'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat',
-    'other_pay_ex_vat', 'other_charge_ex_vat', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat'
+  return {
+    expenseSubmission,
+    claim: parseJson(expenseSubmission.canonical_tsfin_snapshot, expenseSubmission) || expenseSubmission
+  };
+}
+
+function pounds(value) {
+  const amount = Number(value);
+  return Number.isFinite(amount) ? `£${amount.toFixed(2)}` : null;
+}
+
+function expenseSummaryDisplayLines(workflow) {
+  const { expenseSubmission, claim } = expenseClaim(workflow);
+  const mileage = Number(claim.mileage_units ?? expenseSubmission.mileage_units ?? expenseSubmission.total_mileage);
+  const values = [
+    ['Accommodation', claim.accommodation_pay_ex_vat ?? expenseSubmission.accommodation_amount],
+    ['Travel', claim.travel_pay_ex_vat ?? expenseSubmission.travel_amount],
+    ['Other', claim.other_pay_ex_vat ?? expenseSubmission.other_amount]
   ];
-  const rows = allowed.filter((key) => claim[key] != null && Number(claim[key]) !== 0)
-    .map((key) => `${key.replace(/_/g, ' ')}: ${String(claim[key])}`);
+  const lines = [];
+  if (Number.isFinite(mileage) && mileage !== 0) lines.push(`Mileage: ${mileage} miles`);
+  for (const [label, value] of values) {
+    const formatted = pounds(value);
+    if (formatted && Number(value) !== 0) lines.push(`${label}: ${formatted}`);
+  }
+  if (!lines.length && Number(claim.expenses_pay_ex_vat) !== 0) {
+    lines.push(`Expenses: ${pounds(claim.expenses_pay_ex_vat)}`);
+  }
+  const explicitTotal = Number(claim.expenses_pay_ex_vat);
+  const fallbackTotal = values.reduce((sum, [, value]) => sum + (Number(value) || 0), 0)
+    + (Number(claim.mileage_pay_ex_vat) || 0);
+  return {
+    lines,
+    total: pounds(Number.isFinite(explicitTotal) ? explicitTotal : fallbackTotal) || '£0.00'
+  };
+}
+
+function expenseLines(workflow, component) {
+  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
+  const presentation = parseJson(immutable.official_presentation, {}) || {};
+  const summary = expenseSummaryDisplayLines(workflow);
   return [
-    `Workflow: ${workflow.id}`,
-    `Week ending: ${workflow.week_ending_date || '-'}`,
-    `Category: ${component.expense_category || (component.component_kind === 'MILEAGE_FORM' ? 'MILEAGE' : 'SUMMARY')}`,
-    ...rows
+    `Candidate: ${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim(),
+    `Client: ${text(presentation.client?.name) || '-'}`,
+    `Week ending: ${ukDate(workflow.week_ending_date)}`,
+    ...summary.lines,
+    `Total claim: ${summary.total}`,
+    `CloudTMS workflow: ${workflow.id}`,
+    `Page identity: ${component.id || workflow.id}`
   ];
+}
+
+async function candidateDocumentBranding(env) {
+  const settings = await restOne(env, 'settings_defaults', 'id=eq.1&select=agency_name,agency_logo');
+  const agencyName = text(settings?.agency_name) || 'Arthur Rai Medical Services';
+  const logoKey = text(settings?.agency_logo);
+  if (!logoKey) return { agency_name: agencyName, logo: null };
+  const logo = await r2Bytes(env, logoKey);
+  if (!['image/png', 'image/jpeg'].includes(logo.media_type)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+  }
+  return { agency_name: agencyName, logo };
+}
+
+async function drawCandidateBranding(pdf, page, branding, { x = 34, y = 800, maxWidth = 140, maxHeight = 32 } = {}) {
+  if (branding.logo) {
+    const image = branding.logo.media_type === 'image/png'
+      ? await pdf.embedPng(branding.logo.bytes) : await pdf.embedJpg(branding.logo.bytes);
+    const scale = Math.min(maxWidth / image.width, maxHeight / image.height);
+    page.drawImage(image, { x, y, width: image.width * scale, height: image.height * scale });
+  }
 }
 
 async function embedExpenseSource(pdf, page, env, component, renderInput, contentTop, contentHeight) {
@@ -1424,19 +1513,49 @@ async function renderExpensePage(env, contract, state, phase) {
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const branding = await candidateDocumentBranding(env);
   page.drawRectangle({ x: 0, y: 790, width: page.getWidth(), height: 52, color: rgb(0.04, 0.12, 0.24) });
+  await drawCandidateBranding(pdf, page, branding, { x: 420, y: 800, maxWidth: 135, maxHeight: 30 });
   page.drawText(component.component_kind === 'EXPENSE_SUMMARY' ? 'Expense claim approval summary' : 'Expense evidence', {
     x: 36, y: 812, size: 16, font: bold, color: rgb(1, 1, 1)
   });
-  page.drawText(`Page ${component.review_ordinal || contract.review_ordinal} • ${component.expense_category || 'General'}`, {
+  page.drawText(`${branding.agency_name} | Page ${component.review_ordinal || contract.review_ordinal} | ${component.expense_category || 'General'}`, {
     x: 36, y: 797, size: 9, font: regular, color: rgb(0.86, 0.9, 0.96)
   });
   const hasSource = await embedExpenseSource(pdf, page, env, component, contract.render_input, 760, 570);
   if (!hasSource) {
-    let y = 750;
-    for (const line of expenseLines(workflow, component).slice(0, 24)) {
-      page.drawText(line.slice(0, 110), { x: 42, y, size: 10, font: regular, color: rgb(0.08, 0.12, 0.2) });
-      y -= 18;
+    const lines = expenseLines(workflow, component).slice(0, 24);
+    if (upper(component.component_kind) === 'EXPENSE_SUMMARY') {
+      const identity = lines.slice(0, 3);
+      let y = 752;
+      for (const line of identity) {
+        page.drawText(line.slice(0, 100), { x: 42, y, size: 10, font: regular, color: rgb(0.08, 0.12, 0.2) });
+        y -= 20;
+      }
+      const claimLines = lines.slice(3, -3);
+      const totalLine = lines.at(-3) || 'Total claim: £0.00';
+      page.drawRectangle({ x: 42, y: 670, width: 511, height: 32, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+      page.drawText('Claim details', { x: 54, y: 681, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
+      y = 632;
+      for (const line of claimLines) {
+        const colon = line.indexOf(':');
+        const label = colon >= 0 ? line.slice(0, colon) : line;
+        const value = colon >= 0 ? line.slice(colon + 1).trim() : '';
+        page.drawRectangle({ x: 42, y: y - 10, width: 511, height: 38, borderColor: rgb(0.4, 0.47, 0.55), borderWidth: 0.7 });
+        page.drawText(label.slice(0, 45), { x: 54, y: y + 3, size: 10, font: regular });
+        page.drawText(value.slice(0, 45), { x: 365, y: y + 3, size: 10, font: bold });
+        y -= 38;
+      }
+      page.drawRectangle({ x: 42, y: y - 17, width: 511, height: 45, color: rgb(0.95, 0.97, 0.99), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+      page.drawText(totalLine.slice(0, 90), { x: 365, y: y - 1, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
+      page.drawText(lines.at(-2)?.slice(0, 100) || '', { x: 42, y: 178, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5) });
+      page.drawText(lines.at(-1)?.slice(0, 100) || '', { x: 42, y: 164, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5) });
+    } else {
+      let y = 750;
+      for (const line of lines) {
+        page.drawText(line.slice(0, 110), { x: 42, y, size: 10, font: regular, color: rgb(0.08, 0.12, 0.2) });
+        y -= 18;
+      }
     }
   }
   page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
@@ -1532,6 +1651,31 @@ function safeQrPackResponse(value) {
       ? Number(source.current_version || source.timesheet_version) : null,
     recipient_available: source.recipient_available === true
   };
+}
+
+async function bindCandidatePaperOutbox(env, workflow, timesheetId, pack) {
+  if (pack?.recipient_available !== true) return { bound: false, recipient_available: false };
+  const outboxId = requireUuid(pack.mail_outbox_id, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  const row = await restOne(env, 'mail_outbox',
+    `id=eq.${encodeURIComponent(outboxId)}&select=id,type,context_kind,context_id,status,payment_scope_json`);
+  if (!row || row.type !== 'TIMESHEET_QR' || row.context_kind !== 'timesheets'
+      || row.context_id !== timesheetId || row.status === 'SENT') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  }
+  const existing = parseJson(row.payment_scope_json, {}) || {};
+  const binding = {
+    candidate_workflow_id: workflow.id,
+    candidate_workflow_generation: Number(workflow.generation),
+    paper_return_manifest_sha256: text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase()
+  };
+  for (const [key, value] of Object.entries(binding)) {
+    if (existing[key] != null && String(existing[key]) !== String(value)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT');
+    }
+  }
+  await restWrite(env, 'mail_outbox', 'PATCH', `id=eq.${encodeURIComponent(outboxId)}`,
+    { payment_scope_json: { ...existing, ...binding } }, 'return=minimal');
+  return { bound: true, recipient_available: true, mail_outbox_id: outboxId };
 }
 
 function withoutInternalRenderContracts(value) {
@@ -1791,11 +1935,8 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
   const body = await readJson(request);
   const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
   let dbAction = upper(action.replace(/-/g, '_'));
-  if (!CANDIDATE_WORKFLOW_ACTIONS.has(dbAction) && !['FINALISE', 'COMPONENT_SUPERSEDE'].includes(dbAction)) {
+  if (!CANDIDATE_WORKFLOW_ACTIONS.has(dbAction) && dbAction !== 'COMPONENT_SUPERSEDE') {
     throw new CandidateHttpError(400, 'CANDIDATE_WORKFLOW_ACTION_INVALID');
-  }
-  if (dbAction === 'FINALISE') {
-    return jsonResponse(200, await finaliseWorkflow(env, deps, workflowId, generation, body.idempotency_key));
   }
   let payload = isObject(body.payload) ? structuredClone(body.payload) : {};
   if (dbAction === 'WORKER_SUBMIT') {
@@ -1858,10 +1999,12 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       idempotencyKey: `${body.idempotency_key || crypto.randomUUID()}:paper-pack`,
       ctx
     });
+    const outboxBinding = await bindCandidatePaperOutbox(env, workflow, timesheetId, pack);
     return jsonResponse(202, {
       ...result,
       paper_pack_queued: pack?.queued !== false,
-      paper_pack: safeQrPackResponse(pack)
+      paper_pack: safeQrPackResponse(pack),
+      paper_pack_email_bound: outboxBinding.bound
     });
   }
   if (dbAction === 'PAPER_RETURN' && result?.state === 'RECEIVED') {
@@ -1974,48 +2117,183 @@ async function appendPdfBytes(target, sourceBytes) {
   for (const page of pages) target.addPage(page);
 }
 
-async function mileageClaimFormBytes(workflow) {
+function mileageJourneyRows(workflow) {
+  const { expenseSubmission, claim } = expenseClaim(workflow);
+  const source = [expenseSubmission.mileage_journeys, expenseSubmission.journeys, expenseSubmission.mileage_entries]
+    .find(Array.isArray) || [];
+  const rows = source.slice(0, 10).map((journey) => ({
+    post_code_from: text(journey?.post_code_from || journey?.postcode_from || journey?.from_postcode),
+    cost_code_to: text(journey?.cost_code_to || journey?.to_cost_code || journey?.to),
+    miles: text(journey?.number_of_miles ?? journey?.miles ?? journey?.mileage_units)
+  }));
+  if (!rows.length) {
+    const fallback = {
+      post_code_from: text(expenseSubmission.post_code_from || expenseSubmission.postcode_from || claim.post_code_from),
+      cost_code_to: text(expenseSubmission.cost_code_to || claim.cost_code_to),
+      miles: text(claim.mileage_units || expenseSubmission.mileage_units)
+    };
+    if (fallback.post_code_from || fallback.cost_code_to || fallback.miles) rows.push(fallback);
+  }
+  while (rows.length < 10) rows.push({ post_code_from: '', cost_code_to: '', miles: '' });
+  return rows;
+}
+
+async function mileageClaimFormBytes(env, workflow, brandingOverride = null) {
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const branding = brandingOverride || await candidateDocumentBranding(env);
   page.drawRectangle({ x: 0, y: 785, width: 595.28, height: 56, color: rgb(0.04, 0.12, 0.24) });
-  page.drawText('ARTHUR RAI MEDICAL SERVICES', { x: 34, y: 814, size: 10, font: bold, color: rgb(0.75, 0.9, 1) });
+  await drawCandidateBranding(pdf, page, branding, { x: 430, y: 800, maxWidth: 125, maxHeight: 30 });
+  page.drawText(branding.agency_name.slice(0, 55), { x: 34, y: 817, size: 9, font: bold, color: rgb(0.75, 0.9, 1) });
   page.drawText(`Mileage Claim Form for week ending ${ukDate(workflow.week_ending_date)}`, {
     x: 34, y: 795, size: 16, font: bold, color: rgb(1, 1, 1)
   });
   const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
-  const expense = parseJson(immutable.expense_submission || immutable.expense_claim || immutable.expenses || immutable, {}) || {};
-  const claim = parseJson(expense.canonical_tsfin_snapshot, expense) || expense;
-  const fields = [
-    ['Post Code from', text(expense.post_code_from || expense.postcode_from || claim.post_code_from)],
-    ['Cost Code To', text(expense.cost_code_to || claim.cost_code_to)],
-    ['Number of miles', text(claim.mileage_units || expense.mileage_units)],
-    ['Total mileage', text(expense.total_mileage || claim.mileage_units)],
-    ['Manager signature', ''],
-    ['Date', '']
+  const presentation = parseJson(immutable.official_presentation, {}) || {};
+  const { expenseSubmission, claim } = expenseClaim(workflow);
+  page.drawText(`Candidate: ${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim(), {
+    x: 42, y: 755, size: 10, font: regular, color: rgb(0.07, 0.14, 0.24)
+  });
+  page.drawText(`Client: ${text(presentation.client?.name) || '-'}`, {
+    x: 315, y: 755, size: 10, font: regular, color: rgb(0.07, 0.14, 0.24)
+  });
+  const columns = [
+    { label: 'Post Code from', x: 42, width: 180 },
+    { label: 'Cost Code To', x: 222, width: 180 },
+    { label: 'Number of miles', x: 402, width: 151 }
   ];
-  let y = 720;
-  for (const [label, value] of fields) {
-    page.drawText(label, { x: 42, y, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
-    page.drawRectangle({ x: 205, y: y - 8, width: 335, height: 31, borderColor: rgb(0.3, 0.4, 0.5), borderWidth: 1 });
-    if (value) page.drawText(value.slice(0, 65), { x: 214, y: y + 2, size: 10, font: regular });
-    y -= 72;
+  const headerY = 712;
+  for (const column of columns) {
+    page.drawRectangle({ x: column.x, y: headerY, width: column.width, height: 30, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+    page.drawText(column.label, { x: column.x + 8, y: headerY + 10, size: 10, font: bold, color: rgb(0.07, 0.14, 0.24) });
   }
+  const journeys = mileageJourneyRows(workflow);
+  journeys.forEach((journey, index) => {
+    const y = headerY - ((index + 1) * 38);
+    const values = [journey.post_code_from, journey.cost_code_to, journey.miles];
+    columns.forEach((column, columnIndex) => {
+      page.drawRectangle({ x: column.x, y, width: column.width, height: 38, borderColor: rgb(0.35, 0.42, 0.5), borderWidth: 0.8 });
+      if (values[columnIndex]) page.drawText(values[columnIndex].slice(0, 26), { x: column.x + 8, y: y + 13, size: 9, font: regular });
+    });
+  });
+  const totalMileage = text(expenseSubmission.total_mileage ?? claim.mileage_units ?? expenseSubmission.mileage_units) || '0';
+  page.drawText(`Total mileage: ${totalMileage}`, { x: 402, y: 278, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
+  page.drawRectangle({ x: 42, y: 120, width: 511, height: 110, borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+  page.drawText('Manager signature', { x: 56, y: 205, size: 10, font: bold });
+  page.drawText('Date', { x: 370, y: 205, size: 10, font: bold });
+  page.drawLine({ start: { x: 56, y: 150 }, end: { x: 330, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  page.drawLine({ start: { x: 370, y: 150 }, end: { x: 530, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
   page.drawText('This page forms part of the immutable CloudTMS paper-return manifest.', {
     x: 42, y: 58, size: 8, font: regular, color: rgb(0.35, 0.4, 0.48)
+  });
+  page.drawText(`Workflow ${workflow.id} | Generation ${workflow.generation}`, {
+    x: 42, y: 43, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5)
   });
   return new Uint8Array(await pdf.save());
 }
 
 async function paperExpensePageBytes(env, workflow, component, ordinal) {
-  if (upper(component.component_kind) === 'MILEAGE_FORM') return mileageClaimFormBytes(workflow);
+  if (upper(component.component_kind) === 'MILEAGE_FORM') return mileageClaimFormBytes(env, workflow);
   const rendered = await renderExpensePage(env, {
     review_ordinal: ordinal,
     render_input: upper(component.component_kind) === 'EXPENSE_SUMMARY'
       ? {} : { source_component_id: component.id }
   }, { workflow, component }, 'REVIEW');
   return rendered.pdf_bytes;
+}
+
+function paperPackIdentity(env, workflow, timesheet, version) {
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const baseHash = text(version?.sha256).replace(/^\\x/i, '').toLowerCase();
+  if (!manifestHash || !baseHash) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  return {
+    manifest_hash: manifestHash,
+    base_hash: baseHash,
+    key: `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}/paper-pack/${manifestHash}-${baseHash}.pdf`
+  };
+}
+
+async function activePaperWorkflowsForTimesheet(env, timesheetId) {
+  return restRows(env, 'candidate_submission_workflows',
+    `environment=eq.${encodeURIComponent(environmentName(env))}&route=eq.PAPER`
+    + `&state=eq.AWAITING_PAPER_RETURN&or=(target_timesheet_id.eq.${encodeURIComponent(timesheetId)},anchor_timesheet_id.eq.${encodeURIComponent(timesheetId)})`
+    + '&select=*&order=updated_at_utc.asc,id.asc&limit=2');
+}
+
+async function readyPaperPackReceipt(env, workflow, timesheet, version) {
+  const identity = paperPackIdentity(env, workflow, timesheet, version);
+  const object = await env.R2?.head(identity.key);
+  if (!object) return { ...identity, ready: false };
+  const metadata = object.customMetadata || {};
+  const valid = metadata.purpose === 'candidate-complete-paper-pack'
+    && metadata.workflow_id === workflow.id
+    && metadata.timesheet_id === timesheet.timesheet_id
+    && text(metadata.manifest_sha256).toLowerCase() === identity.manifest_hash
+    && text(metadata.base_document_sha256).toLowerCase() === identity.base_hash
+    && text(metadata.media_type).toLowerCase() === 'application/pdf'
+    && text(metadata.sha256).length === 64
+    && Number(metadata.byte_size) === Number(object.size);
+  if (!valid) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  return {
+    ...identity,
+    ready: true,
+    sha256: text(metadata.sha256).toLowerCase(),
+    page_count: Number(metadata.page_count) || null,
+    byte_size: Number(object.size)
+  };
+}
+
+async function releaseCandidatePaperPack(env, workflow, timesheet, complete) {
+  const outboxRows = await restRows(env, 'mail_outbox',
+    `type=eq.TIMESHEET_QR&context_kind=eq.timesheets&context_id=eq.${encodeURIComponent(timesheet.timesheet_id)}`
+    + '&select=id,status,payment_scope_json,attachments&order=created_at_utc.desc&limit=25');
+  const exact = outboxRows.filter((row) => {
+    const scope = parseJson(row.payment_scope_json, {}) || {};
+    return scope.candidate_workflow_id === workflow.id
+      && Number(scope.candidate_workflow_generation) === Number(workflow.generation)
+      && text(scope.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase() === complete.manifest_hash;
+  });
+  if (exact.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_CONFLICT');
+  if (!exact.length && outboxRows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  const attachment = [{
+    r2_key: complete.key,
+    filename: `Timesheet_${workflow.week_ending_date || timesheet.timesheet_id}.pdf`,
+    content_type: 'application/pdf', sha256: complete.sha256, size_bytes: complete.byte_size
+  }];
+  if (exact.length) {
+    const row = exact[0];
+    if (row.status === 'FAILED') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
+    if (row.status === 'SENT') {
+      const sentAttachments = parseJson(row.attachments, []) || [];
+      if (!sentAttachments.some((entry) => entry?.sha256 === complete.sha256 && entry?.r2_key === complete.key)) {
+        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_ALREADY_SENT');
+      }
+    } else if (row.status === 'QUEUED') {
+      const now = new Date().toISOString();
+      await restWrite(env, 'mail_outbox', 'PATCH',
+        `id=eq.${encodeURIComponent(row.id)}&status=eq.QUEUED`,
+        { attachments: attachment, scheduled_for_utc: now, next_attempt_at_utc: now }, 'return=minimal');
+    } else {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+    }
+  }
+  const now = new Date().toISOString();
+  await restWrite(env, 'candidate_notifications', 'POST', 'on_conflict=dedupe_key', {
+    account_id: workflow.account_id,
+    candidate_id: workflow.candidate_id,
+    workflow_id: workflow.id,
+    timesheet_id: timesheet.timesheet_id,
+    event_type: 'PAPER_PACK_READY',
+    preference_category: 'resubmission_required',
+    template_key: 'candidate-paper-pack-ready-v1',
+    template_params: { page_count: complete.page_count },
+    deep_link_json: { type: 'paper_pack', timesheet_id: timesheet.timesheet_id },
+    state: 'UNREAD', push_state: 'PENDING',
+    dedupe_key: `CANDIDATE_PAPER_PACK_READY_V1:${workflow.id}:${workflow.generation}:${complete.manifest_hash}`,
+    created_at_utc: now
+  }, 'resolution=merge-duplicates,return=minimal');
 }
 
 async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
@@ -2054,42 +2332,18 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   }
   if (combined.getPageCount() < pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
   const bytes = new Uint8Array(await combined.save());
-  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
-  const baseHash = text(version.sha256).toLowerCase();
-  const key = `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}/paper-pack/${manifestHash}-${baseHash}.pdf`;
-  const receipt = await immutablePut(env, key, bytes, 'application/pdf', {
+  const identity = paperPackIdentity(env, workflow, timesheet, version);
+  const receipt = await immutablePut(env, identity.key, bytes, 'application/pdf', {
     purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
-    timesheet_id: timesheet.timesheet_id, manifest_sha256: manifestHash,
-    base_document_sha256: baseHash, page_count: String(combined.getPageCount())
+    timesheet_id: timesheet.timesheet_id, manifest_sha256: identity.manifest_hash,
+    base_document_sha256: identity.base_hash, page_count: String(combined.getPageCount())
   });
-  const now = new Date().toISOString();
-  const attachment = [{
-    r2_key: key,
-    filename: `Timesheet_${workflow.week_ending_date || timesheet.timesheet_id}.pdf`,
-    content_type: 'application/pdf', sha256: receipt.sha256, size_bytes: bytes.byteLength
-  }];
-  await restWrite(env, 'mail_outbox', 'PATCH',
-    `type=eq.TIMESHEET_QR&context_kind=eq.timesheets&context_id=eq.${encodeURIComponent(timesheet.timesheet_id)}`
-    + '&status=neq.SENT',
-    {
-      attachments: attachment, status: 'QUEUED', scheduled_for_utc: now, next_attempt_at_utc: now,
-      last_error: null, failed_at: null
-    }, 'return=minimal');
-  await restWrite(env, 'candidate_notifications', 'POST', 'on_conflict=dedupe_key', {
-    account_id: workflow.account_id,
-    candidate_id: workflow.candidate_id,
-    workflow_id: workflow.id,
-    timesheet_id: timesheet.timesheet_id,
-    event_type: 'PAPER_PACK_READY',
-    preference_category: 'resubmission_required',
-    template_key: 'candidate-paper-pack-ready-v1',
-    template_params: { page_count: combined.getPageCount() },
-    deep_link_json: { type: 'paper_pack', timesheet_id: timesheet.timesheet_id },
-    state: 'UNREAD', push_state: 'PENDING',
-    dedupe_key: `CANDIDATE_PAPER_PACK_READY_V1:${workflow.id}:${workflow.generation}:${manifestHash}`,
-    created_at_utc: now
-  }, 'resolution=merge-duplicates,return=minimal');
-  return { key, bytes, sha256: receipt.sha256, page_count: combined.getPageCount(), manifest_hash: manifestHash };
+  const complete = {
+    ...identity, bytes, sha256: receipt.sha256, byte_size: bytes.byteLength,
+    page_count: combined.getPageCount(), ready: true
+  };
+  await releaseCandidatePaperPack(env, workflow, timesheet, complete);
+  return complete;
 }
 
 async function candidatePaperPackContext(request, env, deps, timesheetId) {
@@ -2122,21 +2376,17 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
       + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
       + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
   }
-  let key = text(version?.r2_key || '');
   let complete = null;
-  if (version && key) {
-    const workflow = await restOne(env, 'candidate_submission_workflows',
-      `environment=eq.${encodeURIComponent(environmentName(env))}&route=eq.PAPER`
-      + `&state=eq.AWAITING_PAPER_RETURN&or=(target_timesheet_id.eq.${encodeURIComponent(id)},anchor_timesheet_id.eq.${encodeURIComponent(id)})`
-      + '&select=*');
-    if (!workflow) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
-    complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
-    key = complete.key;
+  if (version?.r2_key) {
+    const workflows = await activePaperWorkflowsForTimesheet(env, id);
+    if (workflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
+    if (!workflows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
+    complete = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
   }
-  const ready = Boolean(complete && key);
+  const ready = complete?.ready === true;
   const state = ready ? 'READY'
     : upper(timesheet.document_state) === 'FAILED' ? 'FAILED' : 'PREPARING';
-  return { id, timesheet, version, key, ready, state, complete };
+  return { id, timesheet, version, key: complete?.key || null, ready, state, complete };
 }
 
 async function handlePaperPackStatus(request, env, deps, timesheetId) {
@@ -2183,6 +2433,9 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
     const id = text(workflow.target_timesheet_id || workflow.anchor_timesheet_id);
     if (!UUID_RE.test(id)) continue;
     try {
+      const matchingWorkflows = await activePaperWorkflowsForTimesheet(env, id);
+      if (matchingWorkflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
+      if (matchingWorkflows.length !== 1 || matchingWorkflows[0].id !== workflow.id) continue;
       const timesheet = await restOne(env, 'timesheets',
         `timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`
         + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
@@ -2448,7 +2701,14 @@ export const candidateAppBackendInternals = Object.freeze({
   safeFinalisationResult,
   safeQrPackResponse,
   immutablePut,
+  preparedUploadContract,
+  expenseSummaryDisplayLines,
+  mileageJourneyRows,
+  paperPackIdentity,
+  readyPaperPackReceipt,
+  releaseCandidatePaperPack,
   mileageClaimFormBytes,
+  renderExpensePage,
   validateComponentBytes,
   renderContracts,
   routeMatch,

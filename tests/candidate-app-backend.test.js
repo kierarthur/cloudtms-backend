@@ -14,6 +14,12 @@ const {
   forbiddenFinancialKeys,
   officialPresentationFromRows,
   immutablePut,
+  preparedUploadContract,
+  expenseSummaryDisplayLines,
+  mileageJourneyRows,
+  paperPackIdentity,
+  readyPaperPackReceipt,
+  releaseCandidatePaperPack,
   mileageClaimFormBytes,
   routeMatch,
   safeFinalisationResult,
@@ -86,8 +92,8 @@ test('blank or null break values are not silently converted into a no-break decl
 
 test('Candidate route matching decodes stable path parameters and rejects partial paths', () => {
   assert.deepEqual(
-    routeMatch('/candidate-app/v1/workflows/abc%201/actions/finalise', '/candidate-app/v1/workflows/:workflowId/actions/:action'),
-    { workflowId: 'abc 1', action: 'finalise' }
+    routeMatch('/candidate-app/v1/workflows/abc%201/actions/worker-submit', '/candidate-app/v1/workflows/:workflowId/actions/:action'),
+    { workflowId: 'abc 1', action: 'worker-submit' }
   );
   assert.equal(routeMatch('/candidate-app/v1/workflows/a', '/candidate-app/v1/workflows/:workflowId/actions/:action'), null);
   assert.deepEqual(
@@ -212,17 +218,130 @@ test('immutable generated documents use create-only storage and permit only same
   );
 });
 
+test('idempotent component preparation always uses the original database-owned object identity', () => {
+  const response = {
+    component_id: '00000000-0000-4000-8000-000000000010',
+    storage_key: 'candidate-app/test/workflow/source/original.pdf',
+    media_type: 'application/pdf', byte_size: 512,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'TRAVEL', paper_return_page_key: null
+  };
+  const expected = {
+    media_type: 'application/pdf', byte_size: 512,
+    component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'TRAVEL', paper_return_page_key: null
+  };
+  assert.equal(preparedUploadContract(response, expected).storage_key, response.storage_key);
+  assert.throws(
+    () => preparedUploadContract({ ...response, expense_category: 'OTHER' }, expected),
+    error => error?.code === 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH'
+  );
+  assert.throws(
+    () => preparedUploadContract({ ...response, media_type: 'image/png' }, expected),
+    error => error?.code === 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH'
+  );
+});
+
 test('paper mileage form preserves the approved labels and UK week-ending format', async () => {
-  const bytes = await mileageClaimFormBytes({
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000020', generation: 3,
     week_ending_date: '2026-08-09',
-    immutable_submission_json: { expense_submission: { mileage_units: 18 } }
-  });
+    immutable_submission_json: {
+      official_presentation: { worker: { first_name: 'Test', surname: 'Worker' }, client: { name: 'Test Client' } },
+      expense_submission: {
+        canonical_tsfin_snapshot: { mileage_units: 18, travel_pay_ex_vat: 10, accommodation_pay_ex_vat: 100, expenses_pay_ex_vat: 110 },
+        mileage_journeys: [{ post_code_from: 'AA1 1AA', cost_code_to: 'WARD-1', miles: 18 }]
+      }
+    }
+  };
+  const bytes = await mileageClaimFormBytes({}, workflow, { agency_name: 'Configured Agency', logo: null });
   const pdf = await PDFDocument.load(bytes);
   assert.equal(pdf.getPageCount(), 1);
+  assert.equal(mileageJourneyRows(workflow)[0].post_code_from, 'AA1 1AA');
+  assert.deepEqual(expenseSummaryDisplayLines(workflow), {
+    lines: ['Mileage: 18 miles', 'Accommodation: £100.00', 'Travel: £10.00'],
+    total: '£110.00'
+  });
   const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
-  for (const label of ['Mileage Claim Form', 'Post Code from', 'Cost Code To', 'Number of miles', 'Total mileage']) {
+  for (const label of ['Mileage Claim Form for week ending', 'Post Code from', 'Cost Code To', 'Number of miles', 'Total mileage', 'Manager signature']) {
     assert.equal(source.includes(label), true);
   }
+});
+
+test('paper pack readiness is a read-only durable-object receipt check', async () => {
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000030', generation: 1, environment: 'TEST',
+    paper_return_manifest_sha256: 'a'.repeat(64)
+  };
+  const timesheet = { timesheet_id: '00000000-0000-4000-8000-000000000031' };
+  const version = { sha256: 'b'.repeat(64) };
+  const env = { CANDIDATE_APP_ENVIRONMENT: 'TEST', R2: {
+    async head(key) {
+      return {
+        key, size: 123,
+        customMetadata: {
+          purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
+          timesheet_id: timesheet.timesheet_id, manifest_sha256: 'a'.repeat(64),
+          base_document_sha256: 'b'.repeat(64), media_type: 'application/pdf',
+          sha256: 'c'.repeat(64), byte_size: '123', page_count: '4'
+        }
+      };
+    },
+    async put() { throw new Error('read path must not write'); },
+    async get() { throw new Error('status path must not download'); }
+  } };
+  const identity = paperPackIdentity(env, workflow, timesheet, version);
+  assert.match(identity.key, /paper-pack\/[a-f0-9]{64}-[a-f0-9]{64}\.pdf$/);
+  const receipt = await readyPaperPackReceipt(env, workflow, timesheet, version);
+  assert.equal(receipt.ready, true);
+  assert.equal(receipt.page_count, 4);
+  const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
+  const readStart = source.indexOf('async function candidatePaperPackContext');
+  const readEnd = source.indexOf('async function handlePaperPackStatus', readStart);
+  const readPath = source.slice(readStart, readEnd);
+  assert.doesNotMatch(readPath, /assembleCandidatePaperPack|restWrite|immutablePut/);
+  assert.match(readPath, /readyPaperPackReceipt/);
+  assert.match(readPath, /workflows\.length > 1[\s\S]*CANDIDATE_PAPER_WORKFLOW_CONFLICT/);
+});
+
+test('paper pack release never requeues a failed mail operation', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url: String(url), method: options.method || 'GET' });
+    return Response.json([{
+      id: '00000000-0000-4000-8000-000000000040', status: 'FAILED',
+      payment_scope_json: {
+        candidate_workflow_id: '00000000-0000-4000-8000-000000000041',
+        candidate_workflow_generation: 2,
+        paper_return_manifest_sha256: 'd'.repeat(64)
+      }, attachments: []
+    }]);
+  };
+  try {
+    await assert.rejects(releaseCandidatePaperPack({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: '00000000-0000-4000-8000-000000000041', generation: 2,
+      paper_return_manifest_sha256: 'd'.repeat(64)
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000042' }, {
+      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
+      page_count: 2, manifest_hash: 'd'.repeat(64)
+    }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_FAILED');
+    assert.deepEqual(calls.map(call => call.method), ['GET']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('public Candidate workflow actions exclude service finalisation', async () => {
+  const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
+  const openapi = await readFile(new URL('../docs/candidate-app/CANDIDATE_API_OPENAPI_V1.yaml', import.meta.url), 'utf8');
+  const handler = source.match(/async function handleWorkflowAction[\s\S]*?\n}\n\nasync function managerTokenContext/)?.[0] || '';
+  assert.doesNotMatch(handler, /dbAction\s*===\s*'FINALISE'/);
+  assert.doesNotMatch(openapi, /supersede,\s*finalise,\s*component-supersede/i);
+  assert.match(source, /manager-final-render-and-finalise/);
+  assert.match(source, /paper-finalise/);
 });
 
 test('public workflow responses omit renderer contracts and canonical financial internals', () => {
