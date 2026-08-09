@@ -51,6 +51,8 @@ declare
   v_collect_recollect_blocked boolean := false;
   v_canonical_started_at timestamptz := clock_timestamp();
   v_canonical_elapsed_ms numeric := 0;
+  v_semantic_ready_observe_enabled boolean := false;
+  v_semantic_ready_publication_enabled boolean := false;
 begin
   if jsonb_typeof(v_context_json) <> 'object' then
     raise exception 'p_context_json must be a JSON object';
@@ -59,6 +61,13 @@ begin
   if v_candidate_id is null then
     raise exception 'candidate_id is required';
   end if;
+
+  SELECT
+    COALESCE(settings_row.banking_pay_workbench_semantic_ready_observe_v2_enabled,false),
+    COALESCE(settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,false)
+  INTO v_semantic_ready_observe_enabled,v_semantic_ready_publication_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id=1;
 
 
   v_source_build_mode := (
@@ -230,7 +239,7 @@ begin
   from pg_temp.pay_preview_candidate_context ctx
   limit 1;
 
-  drop table if exists pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.hidden_recovery_template_lines, pg_temp.manual_adjustment_carry_forward_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup;
+  drop table if exists pg_temp.canonical_timesheet_lines, pg_temp.timesheet_active_segment_snooze_meta, pg_temp.canonical_timesheet_segment_rows, pg_temp.canonical_timesheet_segment_rollup, pg_temp.canonical_timesheet_presentation_seed, pg_temp.canonical_timesheet_presentation_state, pg_temp.canonical_timesheet_presentation_rows, pg_temp.finance_case_lines, pg_temp.hidden_recovery_template_lines, pg_temp.manual_adjustment_carry_forward_lines, pg_temp.timesheet_allocation_component_lines, pg_temp.semantic_finance_case_lines, pg_temp.timesheet_canonical_preview_lines, pg_temp.canonical_preview_lines, pg_temp.candidate_preview_line_rollup, pg_temp.candidate_preview_timesheet_rollup;
 
   create temporary table canonical_timesheet_lines on commit drop as
         select
@@ -1756,6 +1765,7 @@ begin
           fcrr.active_snooze_note,
           round(coalesce(fcrr.due_amount_ex_vat, 0), 2) as due_amount_ex_vat,
           coalesce(finance_due_meta.nominal_due_amount_ex_vat, 0) as nominal_due_amount_ex_vat,
+          finance_due_meta.recovery_created_at_utc as semantic_recovery_sort_at_utc,
           fcrr.is_blocked as case_is_blocked,
           (
             coalesce(fcrr.blocked_reason_codes, '[]'::jsonb)
@@ -1896,7 +1906,9 @@ begin
           ) as draftable
         from finance_case_resolution_rollup fcrr
         left join lateral (
-          select round(coalesce(max(fcrrb.nominal_due_amount), 0), 2) as nominal_due_amount_ex_vat
+          select
+            round(coalesce(max(fcrrb.nominal_due_amount), 0), 2) as nominal_due_amount_ex_vat,
+            min(fcrrb.created_at) as recovery_created_at_utc
           from finance_case_recovery_rows_base fcrrb
           where fcrrb.finance_case_id = fcrr.finance_case_id
         ) finance_due_meta on true
@@ -2222,6 +2234,264 @@ begin
           and round(coalesce(carry_forward_scope.amount_inc_vat, 0), 2) <> 0
   ;
 
+  -- Aggregate timesheet rows are presentation parents only.  Exact economic
+  -- allocation authority already exists in case_components_json; promote each
+  -- positive, resolved component as its own top-level Ready-to-Pay row instead
+  -- of making the aggregate parent selectable.  This preserves Policy X's
+  -- existing TS_DAY / expense / correction identities and prevents a recovery
+  -- row from becoming the only selectable row for a candidate.
+  create temporary table timesheet_allocation_component_lines on commit drop as
+        with component_rows as (
+          select
+            ctl.*,
+            component.value as component_json,
+            upper(nullif(btrim(coalesce(component.value->>'component_key_type','')), '')) as component_key_type,
+            nullif(btrim(coalesce(component.value->>'component_key_value','')), '') as component_key_value,
+            round(coalesce(
+              nullif(component.value->>'component_amount_ex_vat','')::numeric,
+              nullif(component.value->>'authoritative_outstanding_ex_vat','')::numeric,
+              nullif(component.value->>'preview_due_amount_ex_vat','')::numeric,
+              nullif(component.value->>'ready_preview_amount_ex_vat','')::numeric,
+              nullif(component.value->>'target_pay_ex_vat','')::numeric,
+              nullif(component.value->>'preview_component_amount_ex_vat','')::numeric,
+              0::numeric
+            ), 2) as component_amount_ex_vat,
+            coalesce(nullif(btrim(coalesce(component.value->>'component_fingerprint','')), ''), md5(component.value::text)) as component_fingerprint,
+            coalesce(
+              nullif(btrim(coalesce(component.value#>>'{source_basis_json,segment_stable_key}','')), ''),
+              nullif(btrim(coalesce(component.value#>>'{source_basis_json,segment_id}','')), ''),
+              nullif(btrim(coalesce(component.value#>>'{source_basis_json,segment_key}','')), ''),
+              nullif(btrim(coalesce(component.value#>>'{source_basis_json,work_date}','')), ''),
+              nullif(btrim(coalesce(component.value#>>'{source_basis_json,date}','')), ''),
+              nullif(btrim(coalesce(component.value->>'component_key_value','')), '')
+            ) as stable_component_identity,
+            lower(btrim(coalesce(component.value->>'requires_resolution','false'))) in ('true','t','1','yes','y','on') as requires_resolution
+          from canonical_timesheet_lines ctl
+          cross join lateral jsonb_array_elements(
+            case when jsonb_typeof(ctl.case_components_json)='array'
+              then ctl.case_components_json else '[]'::jsonb end
+          ) component(value)
+        ), eligible_components as (
+          select
+            component_rows.*,
+            case
+              when component_rows.component_key_type='TS_DAY' then
+                component_rows.timesheet_id::text || ':segment:' || component_rows.stable_component_identity
+              when component_rows.component_key_type='EXPENSE_CODE' then
+                component_rows.timesheet_id::text || ':component:expense:' || component_rows.component_fingerprint
+              when lower(coalesce(component_rows.component_json->>'source_family_key','')) like 'correction%'
+              then 'correction-chain:'
+                || coalesce(
+                  nullif(btrim(coalesce(component_rows.component_json->>'source_family_key','')), ''),
+                  component_rows.timesheet_id::text
+                )
+                || ':' || lower(component_rows.component_key_type)
+                || ':' || component_rows.component_key_value
+              else component_rows.timesheet_id::text
+                || ':component:' || lower(component_rows.component_key_type)
+                || ':' || component_rows.component_fingerprint
+            end as allocation_line_key
+          from component_rows
+          where component_rows.component_key_type in ('TS_DAY','EXPENSE_CODE','ADDITIONAL_CODE','ADJUSTMENT_CODE')
+            and component_rows.component_key_value is not null
+            and component_rows.stable_component_identity is not null
+            and component_rows.component_amount_ex_vat > 0
+            and component_rows.requires_resolution is not true
+            and component_rows.is_ready_for_draft is true
+            and component_rows.case_is_blocked is false
+            and component_rows.snooze_id is null
+            and coalesce(jsonb_array_length(component_rows.payee_blockers),0)=0
+            and (
+              component_rows.component_key_type <> 'TS_DAY'
+              or exists (
+                select 1
+                from canonical_timesheet_segment_rows ready_segment
+                where ready_segment.candidate_id=component_rows.candidate_id
+                  and ready_segment.timesheet_id=component_rows.timesheet_id
+                  and ready_segment.presentation_segment_state='READY'
+                  and (
+                    ready_segment.segment_stable_key is not distinct from component_rows.stable_component_identity
+                    or ready_segment.segment_date is not distinct from component_rows.component_key_value
+                  )
+              )
+            )
+        )
+        select
+          eligible_components.candidate_id,
+          jsonb_strip_nulls(
+            jsonb_build_object(
+              'preview_row_id', eligible_components.allocation_line_key,
+              'line_id', eligible_components.allocation_line_key,
+              'line_key', eligible_components.allocation_line_key,
+              'row_key', eligible_components.allocation_line_key,
+              'source_ref', eligible_components.allocation_line_key,
+              'parent_line_key', eligible_components.timesheet_id::text,
+              'candidate_id', eligible_components.candidate_id::text,
+              'tms_ref', eligible_components.cand_tms_ref,
+              'display_name', eligible_components.cand_display_name,
+              'line_type', 'TIMESHEET_PAYMENT',
+              'case_type', 'TIMESHEET_PAYMENT',
+              'case_key', 'timesheet:' || eligible_components.timesheet_id::text
+            )
+            || jsonb_build_object(
+              'finance_case_id', null,
+              'finance_component_id', nullif(eligible_components.component_json->>'finance_component_id',''),
+              'timesheet_id', eligible_components.timesheet_id::text,
+              'real_business_timesheet_id', eligible_components.timesheet_id::text,
+              'booking_id', eligible_components.booking_id,
+              'client_id', case when eligible_components.client_id is null then null else eligible_components.client_id::text end,
+              'client_name', eligible_components.client_name,
+              'week_ending_date', case when eligible_components.week_ending_date is null then null else eligible_components.week_ending_date::text end,
+              'linked_shift_date', case when eligible_components.component_key_type='TS_DAY' then eligible_components.component_key_value else null end,
+              'component_key_type', eligible_components.component_key_type,
+              'component_key_value', eligible_components.component_key_value,
+              'key_type', eligible_components.component_key_type,
+              'key_value', eligible_components.component_key_value,
+              'economic_key', jsonb_build_object(
+                'timesheet_id', eligible_components.timesheet_id::text,
+                'key_type', eligible_components.component_key_type,
+                'key_value', eligible_components.component_key_value
+              ),
+              'component_fingerprint', eligible_components.component_fingerprint,
+              'case_components', jsonb_build_array(eligible_components.component_json),
+              'amount_ex_vat', eligible_components.component_amount_ex_vat,
+              'amount_display', eligible_components.component_amount_ex_vat,
+              'item_direction', 'PAYMENT',
+              'pay_channel', eligible_components.candidate_pay_method,
+              'paye_treatment', case when eligible_components.candidate_pay_method='PAYE' then 'GROSS_ADD' else 'NONE' end,
+              'route_type', 'NORMAL_PAYMENT',
+              'payee_entity_kind', eligible_components.payee_entity_kind,
+              'payee_entity_id', case when eligible_components.payee_entity_id is null then null else eligible_components.payee_entity_id::text end,
+              'payee_bank_hash', eligible_components.payee_bank_hash,
+              'bank_details_hash', eligible_components.payee_bank_hash,
+              'name_check_status', eligible_components.payee_name_check_status,
+              'name_check_has_override', eligible_components.payee_name_check_has_override,
+              'payee_map_present', eligible_components.payee_map_present,
+              'blockers', eligible_components.payee_blockers,
+              'payee_blockers', eligible_components.payee_blockers,
+              'presentation_section', 'READY_TO_PAY',
+              'presentation_role', 'ALLOCATION_COMPONENT',
+              'presentation_parent_line_id', eligible_components.timesheet_id::text,
+              'readiness_state', 'READY_TO_PAY',
+              'is_excluded_from_allocation', false,
+              'is_ready_for_draft', true,
+              'draftable', true,
+              'selection_allowed', true,
+              'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+            )
+          ) as line_json,
+          eligible_components.candidate_pay_method as pay_channel,
+          case when eligible_components.candidate_pay_method='PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
+          eligible_components.component_amount_ex_vat as amount_ex_vat,
+          false as is_excluded_from_allocation
+        from eligible_components
+
+  ;
+
+  -- The finance resolver's run-level headroom predates semantic allocation
+  -- children and therefore used aggregate presentation parents.  V3 replaces
+  -- that display-only basis with exact positive keyed allocation authority.
+  -- Nominal debt is never changed: only the amount recoverable in this pay run
+  -- is capped, in the existing oldest-case order, to same-candidate headroom.
+  create temporary table semantic_finance_case_lines on commit drop as
+        with allocation_headroom as (
+          select
+            component_line.candidate_id,
+            round(coalesce(sum(component_line.amount_ex_vat),0),2) as ordinary_positive_headroom
+          from timesheet_allocation_component_lines component_line
+          where component_line.amount_ex_vat > 0
+          group by component_line.candidate_id
+        ), ranked as (
+          select
+            finance_line.*,
+            coalesce(headroom.ordinary_positive_headroom,0)::numeric as ordinary_positive_headroom,
+            coalesce(
+              sum(
+                case
+                  when finance_line.draftable is true
+                   and finance_line.item_direction='DEDUCTION'
+                   and finance_line.signed_amount_ex_vat < 0
+                  then abs(finance_line.signed_amount_ex_vat)
+                  else 0
+                end
+              ) over (
+                partition by finance_line.candidate_id
+                order by finance_line.semantic_recovery_sort_at_utc nulls last,
+                         finance_line.finance_case_id
+                rows between unbounded preceding and 1 preceding
+              ),
+              0
+            )::numeric as prior_semantic_recovery_amount,
+            (
+              finance_line.draftable is true
+              and finance_line.item_direction='DEDUCTION'
+              and finance_line.signed_amount_ex_vat < 0
+            ) as is_semantic_recovery
+          from finance_case_lines finance_line
+          left join allocation_headroom headroom
+            on headroom.candidate_id=finance_line.candidate_id
+        ), capped as (
+          select
+            ranked.*,
+            case
+              when v_semantic_ready_publication_enabled and ranked.is_semantic_recovery
+              then round(least(
+                abs(ranked.signed_amount_ex_vat),
+                greatest(ranked.ordinary_positive_headroom-ranked.prior_semantic_recovery_amount,0)
+              ),2)
+              else round(abs(ranked.signed_amount_ex_vat),2)
+            end as semantic_recovery_due_amount
+          from ranked
+        )
+        select
+          capped.*,
+          case
+            when v_semantic_ready_publication_enabled and capped.is_semantic_recovery
+            then -capped.semantic_recovery_due_amount
+            else capped.signed_amount_ex_vat
+          end as semantic_signed_amount_ex_vat,
+          case
+            when v_semantic_ready_publication_enabled and capped.is_semantic_recovery
+            then capped.draftable and capped.semantic_recovery_due_amount > 0
+            else capped.draftable
+          end as semantic_draftable,
+          case
+            when v_semantic_ready_publication_enabled
+             and capped.is_semantic_recovery
+             and capped.semantic_recovery_due_amount = 0
+            then 'BLOCKED_FOR_PAY'
+            else capped.readiness_state
+          end as semantic_readiness_state,
+          case
+            when v_semantic_ready_publication_enabled
+             and capped.is_semantic_recovery
+             and capped.semantic_recovery_due_amount = 0
+            then 'BLOCKED_FOR_PAY'
+            else capped.presentation_section
+          end as semantic_presentation_section,
+          case
+            when v_semantic_ready_publication_enabled
+             and capped.is_semantic_recovery
+             and capped.semantic_recovery_due_amount = 0
+            then 'NO_PAY_HEADROOM'
+            else capped.presentation_reason
+          end as semantic_presentation_reason,
+          case
+            when v_semantic_ready_publication_enabled
+             and capped.is_semantic_recovery
+             and capped.semantic_recovery_due_amount = 0
+            then capped.blocked_reason_codes || jsonb_build_array('NO_PAY_HEADROOM')
+            else capped.blocked_reason_codes
+          end as semantic_blocked_reason_codes,
+          (
+            v_semantic_ready_publication_enabled
+            and capped.is_semantic_recovery
+            and capped.semantic_recovery_due_amount < abs(capped.signed_amount_ex_vat)
+          ) as semantic_recovery_headroom_capped
+        from capped
+
+  ;
+
   create temporary table timesheet_canonical_preview_lines on commit drop as
         select
           ctpr.candidate_id,
@@ -2237,18 +2507,38 @@ begin
                 then 'BLOCKED_FOR_PAY'
                 else 'READY_TO_PAY'
               end,
-              'draftable', (
+              'draftable', CASE WHEN v_semantic_ready_publication_enabled THEN false ELSE (
                 upper(coalesce(ctpr.line_json->>'presentation_section','')) = 'READY_TO_PAY'
                 and coalesce(nullif(ctpr.line_json->>'is_excluded_from_allocation','')::boolean, false) = false
                 and coalesce(nullif(ctpr.line_json->>'is_ready_for_draft','')::boolean, false) = true
-              )
+              ) END,
+              'is_ready_for_draft', CASE WHEN v_semantic_ready_publication_enabled THEN false
+                ELSE coalesce(nullif(ctpr.line_json->>'is_ready_for_draft','')::boolean,false) END,
+              'selection_allowed', CASE WHEN v_semantic_ready_publication_enabled THEN false
+                ELSE coalesce(nullif(ctpr.line_json->>'selection_allowed','')::boolean,
+                  coalesce(nullif(ctpr.line_json->>'draftable','')::boolean,false)) END,
+              'is_excluded_from_allocation', CASE WHEN v_semantic_ready_publication_enabled THEN true
+                ELSE coalesce(nullif(ctpr.line_json->>'is_excluded_from_allocation','')::boolean,false) END
             )
           ) as line_json,
           ctpr.pay_channel,
           ctpr.paye_treatment,
           ctpr.amount_ex_vat,
-          ctpr.is_excluded_from_allocation
+          CASE WHEN v_semantic_ready_publication_enabled THEN true
+            ELSE ctpr.is_excluded_from_allocation END as is_excluded_from_allocation
         from canonical_timesheet_presentation_rows ctpr
+
+        union all
+
+        select
+          component_line.candidate_id,
+          component_line.line_json,
+          component_line.pay_channel,
+          component_line.paye_treatment,
+          component_line.amount_ex_vat,
+          component_line.is_excluded_from_allocation
+        from timesheet_allocation_component_lines component_line
+        where v_semantic_ready_publication_enabled
 
   ;
 
@@ -2279,7 +2569,12 @@ begin
               'finance_case_id', fcl.finance_case_id::text,
               'case_key', ('finance:' || fcl.finance_case_id::text),
               'case_type', fcl.case_type::text,
-              'case_is_blocked', fcl.case_is_blocked
+              'case_is_blocked', (
+                fcl.case_is_blocked
+                or (v_semantic_ready_publication_enabled
+                  and fcl.is_semantic_recovery
+                  and fcl.semantic_recovery_due_amount = 0)
+              )
             )
             || jsonb_build_object(
               'case_resolution_summary', fcl.case_resolution_summary_json,
@@ -2315,20 +2610,28 @@ begin
               'beneficiary_name', fcl.beneficiary_name,
               'masked_bank_account', fcl.masked_bank_account,
               'bank_details_hash', fcl.payee_bank_hash,
-              'blocked_reason_codes', fcl.blocked_reason_codes,
-              'readiness_state', fcl.readiness_state,
+              'blocked_reason_codes', fcl.semantic_blocked_reason_codes,
+              'readiness_state', fcl.semantic_readiness_state,
               'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
-              'draftable', fcl.draftable,
+              'draftable', fcl.semantic_draftable,
               'snooze_allowed', fcl.snooze_allowed,
               'oneoff_bank_details_present', fcl.oneoff_bank_details_present,
               'is_candidate_directed_oneoff_payout', fcl.is_candidate_directed_oneoff_payout,
               'appears_on_umbrella_remittance', fcl.appears_on_umbrella_remittance,
               'generates_candidate_payment_advice', fcl.generates_candidate_payment_advice,
               'adjustment_comment', fcl.adjustment_comment,
-              'amount_ex_vat', fcl.signed_amount_ex_vat,
-              'amount_display', fcl.signed_amount_ex_vat,
+              'amount_ex_vat', fcl.semantic_signed_amount_ex_vat,
+              'amount_display', fcl.semantic_signed_amount_ex_vat,
               'nominal_due_amount_ex_vat', round(coalesce(fcl.nominal_due_amount_ex_vat, 0), 2),
-              'recoverable_this_pay_run_ex_vat', round(greatest(coalesce(fcl.due_amount_ex_vat, 0), 0), 2),
+              'recoverable_this_pay_run_ex_vat', case
+                when v_semantic_ready_publication_enabled and fcl.is_semantic_recovery
+                then fcl.semantic_recovery_due_amount
+                else round(greatest(coalesce(fcl.due_amount_ex_vat, 0), 0), 2)
+              end,
+              'semantic_ordinary_positive_headroom_ex_vat', case
+                when v_semantic_ready_publication_enabled then fcl.ordinary_positive_headroom
+                else null end,
+              'semantic_recovery_headroom_capped', fcl.semantic_recovery_headroom_capped,
               'next_due_week_start', case when fcl.next_due_week_start is null then null else fcl.next_due_week_start::text end,
               'is_advanced', false,
               'advanced_override_id', null,
@@ -2387,14 +2690,14 @@ begin
               )) else null end
             )
             || jsonb_build_object(
-              'is_excluded_from_allocation', (fcl.draftable is not true),
-              'selection_allowed', fcl.draftable,
-              'is_ready_for_draft', fcl.draftable,
-              'presentation_section', fcl.presentation_section,
+              'is_excluded_from_allocation', (fcl.semantic_draftable is not true),
+              'selection_allowed', fcl.semantic_draftable,
+              'is_ready_for_draft', fcl.semantic_draftable,
+              'presentation_section', fcl.semantic_presentation_section,
               'presentation_role', 'PARENT',
               'presentation_line_id', ('finance:' || fcl.finance_case_id::text || ':' || lower(fcl.line_type)),
               'presentation_parent_line_id', ('finance:' || fcl.finance_case_id::text),
-              'presentation_reason', fcl.presentation_reason,
+              'presentation_reason', fcl.semantic_presentation_reason,
               'source_ref', ('advance:' || fcl.finance_case_id::text),
               'snooze_kind', case
                 when fcl.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(fcl.lifecycle_status_display,'')) = 'PAID' then 'PAYMENT_ADVANCE_REPAYMENT'
@@ -2431,9 +2734,9 @@ begin
           ) as line_json,
           fcl.candidate_pay_method as pay_channel,
           fcl.paye_treatment,
-          fcl.signed_amount_ex_vat as amount_ex_vat,
-          (fcl.draftable is not true) as is_excluded_from_allocation
-        from finance_case_lines fcl
+          fcl.semantic_signed_amount_ex_vat as amount_ex_vat,
+          (fcl.semantic_draftable is not true) as is_excluded_from_allocation
+        from semantic_finance_case_lines fcl
 
         union all
 
@@ -2745,6 +3048,39 @@ begin
       'ready_preview_line_count', coalesce((select sum(case when coalesce(nullif(cpl.line_json->>'draftable','')::boolean, false) = true then 1 else 0 end)::int from canonical_preview_lines cpl), 0),
       'blocked_preview_line_count', coalesce((select sum(case when upper(coalesce(cpl.line_json->>'presentation_section','')) = 'BLOCKED_FOR_PAY' then 1 else 0 end)::int from canonical_preview_lines cpl), 0),
       'canonical_elapsed_ms', v_canonical_elapsed_ms,
+      'semantic_ready_observe_enabled',v_semantic_ready_observe_enabled,
+      'semantic_ready_publication_enabled',v_semantic_ready_publication_enabled,
+      'proposed_semantic_allocation_component_count',CASE
+        WHEN v_semantic_ready_observe_enabled OR v_semantic_ready_publication_enabled
+        THEN (SELECT count(*)::integer FROM timesheet_allocation_component_lines)
+        ELSE 0 END,
+      'proposed_semantic_allocation_component_amount',CASE
+        WHEN v_semantic_ready_observe_enabled OR v_semantic_ready_publication_enabled
+        THEN COALESCE((SELECT round(sum(component_line.amount_ex_vat),2)
+          FROM timesheet_allocation_component_lines AS component_line),0)
+        ELSE 0 END,
+      'proposed_semantic_recovery_amount',CASE
+        WHEN v_semantic_ready_observe_enabled OR v_semantic_ready_publication_enabled
+        THEN COALESCE((SELECT round(sum(
+          CASE WHEN finance_line.is_semantic_recovery
+            THEN -least(
+              abs(finance_line.signed_amount_ex_vat),
+              greatest(finance_line.ordinary_positive_headroom-finance_line.prior_semantic_recovery_amount,0)
+            ) ELSE 0 END
+        ),2) FROM semantic_finance_case_lines AS finance_line),0)
+        ELSE 0 END,
+      'proposed_semantic_ready_amount',CASE
+        WHEN v_semantic_ready_observe_enabled OR v_semantic_ready_publication_enabled
+        THEN COALESCE((SELECT round(sum(component_line.amount_ex_vat),2)
+          FROM timesheet_allocation_component_lines AS component_line),0)
+          + COALESCE((SELECT round(sum(
+            CASE WHEN finance_line.is_semantic_recovery
+              THEN -least(
+                abs(finance_line.signed_amount_ex_vat),
+                greatest(finance_line.ordinary_positive_headroom-finance_line.prior_semantic_recovery_amount,0)
+              ) ELSE 0 END
+          ),2) FROM semantic_finance_case_lines AS finance_line),0)
+        ELSE 0 END,
       'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
     )
   );

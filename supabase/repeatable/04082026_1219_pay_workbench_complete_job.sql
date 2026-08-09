@@ -173,6 +173,7 @@ DECLARE
   v_delta_recovery_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_delta_recovery_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_material_attempt_id uuid := NULL::uuid;
+  v_semantic_publication_v3_enabled boolean := false;
 BEGIN
   IF p_job_id IS NULL THEN
     RAISE EXCEPTION 'job_id is required';
@@ -187,6 +188,11 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'banking_pay_workbench_jobs row % not found', p_job_id;
   END IF;
+
+  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled, false)
+  INTO v_semantic_publication_v3_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id = 1;
 
   IF v_job_row.candidate_id IS NOT NULL
      AND UPPER(BTRIM(COALESCE(v_job_row.job_type,''))) IN (
@@ -336,11 +342,28 @@ BEGIN
           ),
           p_targeted_timesheet_ids => v_certified_targeted_timesheet_ids,
           p_linked_timesheet_ids => v_certified_linked_timesheet_ids,
-          p_publication_options_json => jsonb_build_object(
-            'authority_kind', 'BOUNDED_FULL_SOURCE_BUILD',
-            'invocation_kind', 'DUPLICATE_REPLAY_REPAIR',
-            'contract_version', 1
-          )
+          p_publication_options_json => CASE
+            WHEN v_semantic_publication_v3_enabled THEN jsonb_build_object(
+              'authority_kind', 'BOUNDED_FULL_SOURCE_BUILD',
+              'invocation_kind', 'DUPLICATE_REPLAY_REPAIR',
+              'contract_version', 3,
+              'final_state', CASE WHEN EXISTS (
+                SELECT 1
+                FROM public.banking_pay_workbench_candidate_source_lines AS duplicate_source
+                WHERE duplicate_source.session_id=v_job_row.session_id
+                  AND duplicate_source.candidate_id=v_job_row.candidate_id
+                  AND duplicate_source.source_build_run_id=v_source_build_run_id_text::uuid
+                  AND duplicate_source.source_change_seq=v_source_change_seq
+                  AND duplicate_source.status='CURRENT'
+              ) THEN 'READY' ELSE 'SOURCE_EMPTY' END,
+              'semantic_contract_version', 'READY_TO_PAY_SEMANTIC_V2'
+            )
+            ELSE jsonb_build_object(
+              'authority_kind', 'BOUNDED_FULL_SOURCE_BUILD',
+              'invocation_kind', 'DUPLICATE_REPLAY_REPAIR',
+              'contract_version', 1
+            )
+          END
         );
         v_certified_publication_applied := COALESCE((v_certified_publication_json->>'parity_complete')::boolean, false);
 
@@ -2632,11 +2655,20 @@ BEGIN
         ),
         p_targeted_timesheet_ids => v_certified_targeted_timesheet_ids,
         p_linked_timesheet_ids => v_certified_linked_timesheet_ids,
-        p_publication_options_json => jsonb_build_object(
-          'authority_kind', 'BOUNDED_FULL_SOURCE_BUILD',
-          'invocation_kind', 'INITIAL_COMPLETION',
-          'contract_version', 1
-        )
+        p_publication_options_json => CASE
+          WHEN v_semantic_publication_v3_enabled THEN jsonb_build_object(
+            'authority_kind', 'BOUNDED_FULL_SOURCE_BUILD',
+            'invocation_kind', 'INITIAL_COMPLETION',
+            'contract_version', 3,
+            'final_state', CASE WHEN COALESCE(v_current_source_row_count,0)=0 THEN 'SOURCE_EMPTY' ELSE 'READY' END,
+            'semantic_contract_version', 'READY_TO_PAY_SEMANTIC_V2'
+          )
+          ELSE jsonb_build_object(
+            'authority_kind', 'BOUNDED_FULL_SOURCE_BUILD',
+            'invocation_kind', 'INITIAL_COMPLETION',
+            'contract_version', 1
+          )
+        END
       );
       v_certified_publication_applied := COALESCE((v_certified_publication_json->>'parity_complete')::boolean, false);
 

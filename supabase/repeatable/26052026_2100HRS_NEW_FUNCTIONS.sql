@@ -64646,6 +64646,7 @@ DECLARE
     v_finish_blocker jsonb := '{}'::jsonb;
     v_finish_scope_status text := 'NONE';
     v_finish_freshness_status text := 'VALID_AT_SCOPE_FREEZE';
+    v_post_draft_authority_count integer := 0;
 BEGIN
     PERFORM set_config('lock_timeout', '3s', true);
 
@@ -64761,6 +64762,95 @@ BEGIN
         RAISE EXCEPTION 'DRAFT_CREATE_OPERATION_CHUNKS_INCOMPLETE'
           USING ERRCODE = 'P0001';
       END IF;
+
+      -- Freeze the live candidate authority accepted immediately after the
+      -- Draft has completed.  This is deliberately distinct from the
+      -- pre-Draft source publication stored in allocation_basis_json: an
+      -- untouched-Draft cancellation may restore that immutable V3 source
+      -- only while this post-Draft sequence/generation pair is still live.
+      -- Legacy or non-V3 scopes simply remain ineligible for the fast route.
+      WITH authority_rows AS (
+        SELECT
+          draft_scope.id AS scope_id,
+          draft_scope.candidate_id,
+          draft_scope.pay_batch_id,
+          draft_scope.workbench_session_id,
+          draft_scope.source_session_version,
+          draft_scope.source_snapshot_run_id,
+          COALESCE(candidate_counter.seq, 0) AS source_change_seq,
+          COALESCE(candidate_counter.scope_change_generation, 0) AS dirty_generation,
+          draft_scope.allocation_basis_json->>'source_build_run_id' AS original_source_build_run_id,
+          draft_scope.allocation_basis_json->>'source_identity_digest' AS original_source_identity_digest,
+          draft_scope.allocation_basis_json->>'semantic_proof_digest' AS original_semantic_proof_digest,
+          draft_scope.allocation_basis_json->'source_publication_attestation' AS source_attestation
+        FROM public.banking_pay_operation_candidate_scope AS draft_scope
+        LEFT JOIN public.app_change_counters AS candidate_counter
+          ON candidate_counter.entity_key = 'pay_candidate:' || draft_scope.candidate_id::text
+        WHERE draft_scope.operation_id = v_operation.id
+      ), eligible_authority AS (
+        SELECT authority_rows.*,
+          md5(
+            v_operation.id::text || '|' ||
+            authority_rows.pay_batch_id::text || '|' ||
+            authority_rows.workbench_session_id::text || '|' ||
+            authority_rows.candidate_id::text || '|' ||
+            authority_rows.source_change_seq::text || '|' ||
+            authority_rows.dirty_generation::text || '|' ||
+            authority_rows.source_session_version::text || '|' ||
+            authority_rows.source_snapshot_run_id::text || '|' ||
+            authority_rows.original_source_build_run_id || '|' ||
+            authority_rows.original_source_identity_digest || '|' ||
+            authority_rows.original_semantic_proof_digest || '|POST_DRAFT_LIVE_AUTHORITY_V1'
+          ) AS authority_digest
+        FROM authority_rows
+        WHERE COALESCE(authority_rows.source_attestation->>'attestation_version', '')
+                = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+          AND COALESCE(authority_rows.source_attestation->>'semantic_contract_version', '')
+                = 'READY_TO_PAY_SEMANTIC_V2'
+          AND COALESCE((authority_rows.source_attestation->>'semantic_ready')::boolean, false)
+          AND COALESCE((authority_rows.source_attestation->>'parity_complete')::boolean, false)
+          AND COALESCE(authority_rows.original_source_build_run_id, '')
+                ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND NULLIF(BTRIM(COALESCE(authority_rows.original_source_identity_digest, '')), '') IS NOT NULL
+          AND NULLIF(BTRIM(COALESCE(authority_rows.original_semantic_proof_digest, '')), '') IS NOT NULL
+      ), frozen_authority AS (
+        UPDATE public.banking_pay_operation_candidate_scope AS draft_scope
+        SET allocation_basis_json = COALESCE(draft_scope.allocation_basis_json, '{}'::jsonb)
+              || jsonb_build_object(
+                'post_draft_authority',
+                jsonb_build_object(
+                  'contract_version', 'POST_DRAFT_LIVE_AUTHORITY_V1',
+                  'draft_operation_id', v_operation.id,
+                  'pay_batch_id', eligible_authority.pay_batch_id,
+                  'workbench_session_id', eligible_authority.workbench_session_id,
+                  'candidate_id', eligible_authority.candidate_id,
+                  'source_change_seq', eligible_authority.source_change_seq,
+                  'dirty_generation', eligible_authority.dirty_generation,
+                  'source_session_version', eligible_authority.source_session_version,
+                  'source_snapshot_run_id', eligible_authority.source_snapshot_run_id,
+                  'original_source_build_run_id', eligible_authority.original_source_build_run_id,
+                  'original_source_identity_digest', eligible_authority.original_source_identity_digest,
+                  'original_semantic_proof_digest', eligible_authority.original_semantic_proof_digest,
+                  'authority_digest', eligible_authority.authority_digest,
+                  'captured_at_utc', v_now,
+                  'policy_x_authority', 'FROZEN_PRE_DRAFT_SOURCE_PLUS_POST_DRAFT_LIVE_FENCE'
+                )
+              ),
+            updated_at_utc = v_now
+        FROM eligible_authority
+        WHERE draft_scope.id = eligible_authority.scope_id
+        RETURNING draft_scope.id
+      )
+      SELECT COUNT(*)::integer
+      INTO v_post_draft_authority_count
+      FROM frozen_authority;
+
+      v_result_json := COALESCE(v_result_json, '{}'::jsonb)
+        || jsonb_build_object(
+          'post_draft_authority_contract_version', 'POST_DRAFT_LIVE_AUTHORITY_V1',
+          'post_draft_authority_count', v_post_draft_authority_count,
+          'post_draft_authority_candidate_count', v_finish_scope_count
+        );
     END IF;
 
     v_runner_state := CASE

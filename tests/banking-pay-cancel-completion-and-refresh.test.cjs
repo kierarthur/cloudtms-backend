@@ -51,28 +51,40 @@ test('terminal cancellation metadata and actor audit are fail-closed and idempot
   assert.match(repeatableSql, /existing_audit\.correlation_id = p_correction_request_id::text/);
 });
 
-test('post-cancel complex candidates receive one full live rebuild with no targeted ids', () => {
+test('post-cancel complex candidates enter the canonical current-authority ladder with no targeted ids', () => {
   assert.match(refreshRepeatableSql, /WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
+  assert.match(refreshRepeatableSql, /'defer_complex_enqueue',true/);
   assert.match(refreshRepeatableSql, /'targeted_timesheet_ids', '\[\]'::jsonb/);
   assert.match(refreshRepeatableSql, /'linked_timesheet_ids', '\[\]'::jsonb/);
   assert.match(refreshRepeatableSql, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
-  assert.match(refreshRepeatableSql, /'full_candidate_recovery_reallocation_required', true/);
+  assert.match(refreshRepeatableSql, /'canonical_route_ladder_required', true/);
+  assert.match(refreshRepeatableSql, /'fallback_reason', 'CERTIFIED_CANCELLATION_REVERSION_REJECTED'/);
+  assert.doesNotMatch(refreshRepeatableSql, /'force_legacy', true/);
   assert.match(refreshRepeatableSql, /'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'/);
   assert.doesNotMatch(refreshRepeatableSql, /selection_state\s*=\s*'READY'/);
 });
 
-test('Worker cancellation route starts the bounded asynchronous correction and never calls compatibility or Workbench RPCs', () => {
+test('Worker cancellation route binds the verified ceremony to the same bounded correction request', () => {
   const handler = sliceBetween(
     workerSource,
     'async function handleBankingPayBatchCancelV1',
     'async function handleBankingPayPaymentStatusResolveV1'
   );
+  const bridge = sliceBetween(
+    workerSource,
+    'async function startVerifiedDraftCancellationAfterPlanningV1',
+    'async function handleBankingPayBatchCancelV1'
+  );
 
   assert.match(handler, /sbRpc\(env, 'pay_batch_cancel'/);
-  assert.match(handler, /enqueueBankingPayCancellationResult/);
-  assert.match(handler, /return bankingPayCancellationResponse\(env, req, 202/);
+  assert.match(handler, /startVerifiedDraftCancellationAfterPlanningV1/);
+  assert.match(bridge, /claimAndAdvanceOneBankingPayOperation/);
+  assert.match(bridge, /pay_payment_correction_reauth_bind_v1/);
+  assert.match(bridge, /pay_payment_correction_request_start/);
+  assert.match(bridge, /enqueueBankingPayCancellationResult/);
   assert.doesNotMatch(handler, /pay_payment_cancel_not_sent_and_recalculate/);
   assert.doesNotMatch(handler, /pay_workbench_/);
+  assert.doesNotMatch(bridge, /pay_workbench_/);
 });
 
 test('Policy X remains frozen during cancel and switches to live truth only after cancel', () => {

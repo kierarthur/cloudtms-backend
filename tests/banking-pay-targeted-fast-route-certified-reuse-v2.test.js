@@ -105,22 +105,24 @@ test('retired preview history is excluded only from the V2 target-date probe', (
   assert.match(dirtyLane, /'target_date_eligible', CASE WHEN v_certified_reuse_v2_probe IS TRUE THEN true ELSE NULL::boolean END/);
 });
 
-test('clone owner locks deterministic session union, fences, then uses V2 publisher', () => {
+test('clone owner locks deterministic session union, fences, then uses V2 or semantic V3 publisher', () => {
   assert.match(cloneOwner, /ORDER BY candidate_lock\.id/);
   assert.match(cloneOwner, /ORDER BY session_lock\.id/);
   assert.match(cloneOwner, /ORDER BY scope_lock\.session_id,scope_lock\.candidate_id/);
   assert.match(cloneOwner, /pay_workbench_session_clone_publication_fence_v1/);
-  assert.match(cloneOwner, /'contract_version',2/);
+  assert.match(cloneOwner, /'contract_version',CASE WHEN v_semantic_publication_v3_enabled THEN 3 ELSE 2 END/);
+  assert.match(cloneOwner, /'semantic_contract_version',CASE WHEN v_semantic_publication_v3_enabled THEN 'READY_TO_PAY_SEMANTIC_V2' ELSE NULL END/);
   assert.match(cloneOwner, /'authority_kind','CERTIFIED_CLONE'/);
   assert.match(reuseHelpers, /certification_digest/);
 });
 
-test('sealed delta remains non-ready until one atomic V2 finaliser proves parity', () => {
+test('sealed delta remains non-ready until one atomic V2 or semantic V3 finaliser proves parity', () => {
   assert.match(runtime, /THEN 'DIRTY' ELSE 'CURRENT'/);
   assert.match(runtime, /TARGETED_DELTA_OUTPUT_NOT_READY/);
   assert.match(runtime, /pay_workbench_targeted_delta_scope_finalize_v1/);
   assert.match(helpers, /PAY_WORKBENCH_TARGETED_DELTA_FINALIZE_PROOF_STALE/);
-  assert.match(helpers, /'contract_version',2/);
+  assert.match(helpers, /'contract_version',CASE WHEN v_semantic_publication_v3_enabled THEN 3 ELSE 2 END/);
+  assert.match(helpers, /'semantic_contract_version',CASE WHEN v_semantic_publication_v3_enabled THEN 'READY_TO_PAY_SEMANTIC_V2' ELSE NULL END/);
   assert.match(helpers, /'authority_kind','TARGETED_DELTA'/);
   assert.match(helpers, /certified_preview_publication_parity_ok/);
   assert.match(helpers, /SET status='SUPERSEDED'[\s\S]+SET status='CURRENT'/);
@@ -155,9 +157,9 @@ test('ACL and catalogue verifier preserve least privilege and one manifest owner
   assert.match(acl, /pay_workbench_candidate_delta_refresh_chunk[\s\S]+FROM PUBLIC,anon,authenticated,service_role[\s\S]+TO service_role/);
   assert.match(acl, /pay_workbench_delta_write_compatible_rows_v1[\s\S]+FROM PUBLIC,anon,authenticated,service_role/);
   assert.doesNotMatch(acl.match(/pay_workbench_delta_write_compatible_rows_v1[\s\S]*$/)?.[0] || '', /TO service_role/);
-  assert.equal(catalogue.function_count, 24);
-  assert.equal(catalogue.functions.length, 24);
-  assert.equal(new Set(catalogue.functions.map((entry) => entry.schema + '.' + entry.name + '(' + entry.identity_arguments + ')')).size, 24);
+  assert.equal(catalogue.function_count, 25);
+  assert.equal(catalogue.functions.length, 25);
+  assert.equal(new Set(catalogue.functions.map((entry) => entry.schema + '.' + entry.name + '(' + entry.identity_arguments + ')')).size, 25);
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_enqueue_stage_continuation'));
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_fail_job'));
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_candidate_source_build_chunk_legacy_v1'));

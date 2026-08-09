@@ -29,6 +29,9 @@ DECLARE
   v_complete boolean := false;
   v_work_kind text;
   v_requested_action text;
+  v_fast_draft_enabled boolean := false;
+  v_fast_draft_result jsonb := '{}'::jsonb;
+  v_fast_draft_after_candidate_id uuid := NULL::uuid;
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
@@ -115,6 +118,89 @@ BEGIN
   v_requested_action := coalesce(
     v_request.plan_json->>'requested_action', v_request.selection_json->>'requested_action'
   );
+
+  SELECT COALESCE(settings_row.banking_pay_draft_overlay_fast_cancel_v1_enabled,false)
+  INTO v_fast_draft_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id=1;
+
+  IF COALESCE(v_fast_draft_enabled,false)
+     AND UPPER(BTRIM(COALESCE(v_requested_action,'')))='DRAFT_CANCEL'
+     AND UPPER(BTRIM(COALESCE(v_batch.status,''))) IN ('DRAFT','DRAFT_CREATED','CANCELLED')
+     AND v_batch.source_workbench_session_id IS NOT NULL THEN
+    v_fast_draft_after_candidate_id := CASE
+      WHEN COALESCE(v_operation.progress_json->>'last_fast_draft_candidate_id','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN (v_operation.progress_json->>'last_fast_draft_candidate_id')::uuid
+      ELSE NULL::uuid END;
+
+    v_fast_draft_result := private.pay_workbench_draft_overlay_remove_page_v1(
+      p_correction_request_id,v_request.pay_batch_id,v_batch.source_workbench_session_id,
+      v_fast_draft_after_candidate_id,100,500,p_actor_user_id,
+      jsonb_build_object('requested_action',v_requested_action)
+    );
+
+    IF COALESCE((v_fast_draft_result->>'fast_route_eligible')::boolean,true) IS NOT TRUE THEN
+      -- Admission occurs before any Draft mutation.  A rejected candidate page
+      -- therefore falls through to the existing frozen financial correction
+      -- route without partial voiding, reservation release or publication.
+      UPDATE public.banking_pay_operations AS fallback_operation
+      SET progress_json=COALESCE(fallback_operation.progress_json,'{}'::jsonb)
+            || jsonb_build_object(
+              'draft_overlay_fast_rejected',true,
+              'draft_overlay_fast_rejection',v_fast_draft_result
+            ),
+          updated_at_utc=v_now
+      WHERE fallback_operation.id=v_operation.id;
+    ELSE
+    UPDATE public.banking_pay_operations AS fast_operation
+    SET progress_json=COALESCE(fast_operation.progress_json,'{}'::jsonb)
+          || jsonb_build_object(
+            'draft_overlay_fast',true,
+            'last_fast_draft_candidate_id',v_fast_draft_result->>'last_candidate_id',
+            'last_fast_draft_page',v_fast_draft_result
+          ),
+        phase=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN 'EXPAND_WORK' ELSE 'COMPLETE' END,
+        status=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN 'RUNNING' ELSE 'COMPLETE' END,
+        runner_state=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN 'RUNNABLE' ELSE 'COMPLETE' END,
+        run_after_utc=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN v_now ELSE NULL END,
+        completed_at_utc=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN fast_operation.completed_at_utc ELSE v_now END,
+        updated_at_utc=v_now
+    WHERE fast_operation.id=v_operation.id;
+
+    IF COALESCE((v_fast_draft_result->>'has_more')::boolean,false) IS NOT TRUE THEN
+      UPDATE public.pay_payment_correction_requests AS fast_request
+      SET status='APPLIED',applied_at_utc=COALESCE(fast_request.applied_at_utc,v_now),updated_at_utc=v_now
+      WHERE fast_request.id=p_correction_request_id;
+
+      INSERT INTO public.pay_payment_correction_actions(
+        correction_request_id,pay_batch_id,actor_kind,actor_user_id,action,
+        action_at_utc,note,before_json,after_json,metadata_json
+      ) VALUES (
+        p_correction_request_id,v_request.pay_batch_id,
+        CASE WHEN p_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END,
+        p_actor_user_id,'APPLY',v_now,'DRAFT_OVERLAY_FAST_COMPLETE',NULL,
+        jsonb_build_object('status','APPLIED'),v_fast_draft_result
+      );
+    END IF;
+
+    RETURN v_fast_draft_result || jsonb_build_object(
+      'correction_request_id',p_correction_request_id,
+      'operation_id',v_operation.id,
+      'phase',CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+        THEN 'EXPAND_WORK' ELSE 'COMPLETE' END,
+      'complete',COALESCE((v_fast_draft_result->>'has_more')::boolean,false) IS NOT TRUE,
+      'processing_continues',COALESCE((v_fast_draft_result->>'has_more')::boolean,false),
+      'code',CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+        THEN 'DRAFT_OVERLAY_FAST_PAGE' ELSE 'DRAFT_OVERLAY_FAST_COMPLETE' END
+    );
+    END IF;
+  END IF;
 
   WITH page AS (
     SELECT member_row.*

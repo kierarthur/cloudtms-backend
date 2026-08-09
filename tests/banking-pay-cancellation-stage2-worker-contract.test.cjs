@@ -99,11 +99,21 @@ test('maker checker does not accept requester proof and cancellation route force
 
 test('whole draft cancellation owns its audit reason and uses the existing ceremony', () => {
   const body = functionBody('handleBankingPayBatchCancelV1');
+  const bridge = functionBody('startVerifiedDraftCancellationAfterPlanningV1');
   assert.match(body, /DRAFT_PAYMENT_CANCELLED_BY_USER/);
   assert.match(body, /verifyPaymentReversalReauth/);
   assert.match(body, /p_correction_request_id: null/);
   assert.doesNotMatch(body, /body\?\.reason/);
   assert.equal((body.match(/sbRpc\(/g) || []).length, 1);
+  assert.match(body, /startVerifiedDraftCancellationAfterPlanningV1/);
+  assert.match(bridge, /claimAndAdvanceOneBankingPayOperation/);
+  assert.match(bridge, /operationTypes: \['PAYMENT_CORRECTION'\]/);
+  assert.match(bridge, /pay_payment_correction_reauth_bind_v1/);
+  assert.match(bridge, /pay_payment_correction_request_start/);
+  assert.match(bridge, /command: 'START_PREPARED'/);
+  assert.match(bridge, /PAYMENT_CORRECTION_START_PREPARED/);
+  assert.equal((bridge.match(/sbRpc\(/g) || []).length, 2);
+  assert.doesNotMatch(bridge, /reauth_proof_token\s*:/);
 });
 
 test('manual not-paid resolution is exact evidence only and cannot auto-release', () => {
@@ -153,13 +163,17 @@ test('cancellation producers preserve the typed SQL descriptor and report enqueu
   for (const name of [
     'handleBankingPayCorrectionPlanV1',
     'handleBankingPayCorrectionStartPreparedV1',
-    'handleBankingPayCorrectionAuthActionV1',
-    'handleBankingPayBatchCancelV1'
+    'handleBankingPayCorrectionAuthActionV1'
   ]) {
     const body = functionBody(name);
     assert.match(body, /continuation_enqueue/);
     assert.doesNotMatch(body, /\{ \.\.\.result, continuation \}/);
   }
+  const draftCancelHandler = functionBody('handleBankingPayBatchCancelV1');
+  const draftCancelBridge = functionBody('startVerifiedDraftCancellationAfterPlanningV1');
+  assert.match(draftCancelHandler, /startVerifiedDraftCancellationAfterPlanningV1/);
+  assert.match(draftCancelBridge, /continuation_enqueue/);
+  assert.doesNotMatch(draftCancelBridge, /\{ \.\.\.result, continuation \}/);
   const eventWake = functionBody('enqueueBankingPayEventResultContinuations');
   assert.match(eventWake, /slice\(0, 4\)/);
   assert.doesNotMatch(eventWake, /Object\.values|recursive/i);
@@ -347,7 +361,7 @@ test('post-commit enqueue failure preserves accepted cancellation and event resu
   assert.equal(event.ok, false);
   assert.equal(event.background_start_delayed, true);
   assert.equal(event.enqueued_count, 0);
-  for (const name of ['handleBankingPayCorrectionPlanV1', 'handleBankingPayCorrectionStartPreparedV1', 'handleBankingPayCorrectionAuthActionV1', 'handleBankingPayBatchCancelV1', 'handleBankingPayPaymentStatusResolveV1', 'handleBankingPayPaidAfterReleaseReviewV1']) {
+  for (const name of ['handleBankingPayCorrectionPlanV1', 'handleBankingPayCorrectionStartPreparedV1', 'handleBankingPayCorrectionAuthActionV1', 'startVerifiedDraftCancellationAfterPlanningV1', 'handleBankingPayPaymentStatusResolveV1', 'handleBankingPayPaidAfterReleaseReviewV1']) {
     assert.match(functionBody(name), /background_start_delayed/);
   }
 });

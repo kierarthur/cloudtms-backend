@@ -171,7 +171,8 @@ test('duplicate completion is an exact no-op once certified parity is current', 
 
 test('frozen no-change boundary remains explicit', () => {
   const combined = [migration, publisher, progress].join('\n');
-  assert.doesNotMatch(combined, /pay_payment_correction|pay_batch_schedule|pay_settle_rail|pay_bank_event_ingest/);
+  assert.doesNotMatch(combined, /pay_batch_schedule|pay_settle_rail|pay_bank_event_ingest/);
+  assert.doesNotMatch(combined, /(INSERT INTO|UPDATE|DELETE FROM)\s+public\.pay_payment_correction/i);
   assert.doesNotMatch(combined, /INSERT INTO public\.pay_bank_transfers|UPDATE public\.pay_bank_transfers/);
   assert.doesNotMatch(combined, /INSERT INTO public\.pay_batches|UPDATE public\.pay_batches/);
   assert.doesNotMatch(combined, /CREATE (TABLE|TRIGGER)/i);

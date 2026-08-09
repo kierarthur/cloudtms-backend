@@ -4,7 +4,7 @@
 -- file invalidated an unchanged later authority.
 --
 -- legacy_monolith_sha256:
--- 8e5151ae39ff7cf01c15ca65c55081b049be86e836ec283f6bf680d425f9ccb3
+-- ea262cad867ffdaca1b635147864f199e5074d069e741a00cdec395bc9583383
 --
 -- A source-authority regression test derives this complete include list and
 -- hash from the repository. Any future omnibus edit must therefore update this
@@ -43,3 +43,6 @@
 \ir 08082026_0054_banking_pay_dirty_lane_clone_eligibility.sql
 \ir 08082026_0717_pay_workbench_prepare_draft_allocation_rows_seed_sort_order.sql
 \ir 08082026_0820_pay_batch_freshness_scope_seed_active_items.sql
+\ir 09082026_0825_pay_workbench_patch_preview_after_batch_mutation.sql
+\ir 09082026_0826_pay_preview_candidate_build_summary_fragment.sql
+\ir 09082026_1128_banking_pay_operation_finish_post_draft_authority.sql

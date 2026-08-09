@@ -42,7 +42,7 @@ BEGIN
     p_pay_batch_id,
     p_operation_type,
     p_actor_user_id,
-    p_options_json
+    COALESCE(p_options_json,'{}'::jsonb) || jsonb_build_object('defer_complex_enqueue',true)
   );
 
   IF COALESCE((v_result->>'ok')::boolean, true) IS NOT TRUE
@@ -306,30 +306,31 @@ BEGIN
         'session_signature', v_session.session_signature,
         'operation_type', v_operation_type,
         'pay_batch_id', p_pay_batch_id::text,
-        'enqueue_origin', 'PAYMENT_CANCEL_FULL_CANDIDATE_REFRESH_V2',
-        'force_legacy', true,
+        'enqueue_origin', 'PAYMENT_CANCEL_CANONICAL_REFRESH_V3',
         'targeted_timesheet_ids', '[]'::jsonb,
         'targeted_timesheet_ids_requested', '[]'::jsonb,
         'linked_timesheet_ids', '[]'::jsonb,
         'linked_timesheet_ids_requested', '[]'::jsonb,
         'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
         'pay_channel_scope', 'ALL',
-        'projection_mode', 'LEGACY',
-        'projection_class', 'POST_DRAFT_CANCEL_FULL_CANDIDATE',
-        'fallback_reason', 'POST_DRAFT_CANCEL_FINANCE_REALLOCATION_REQUIRED',
-        'source_build_required', true,
-        'line_work_required', true,
-        'delta_refresh_required', false,
+        'projection_class', 'POST_DRAFT_CANCEL_CURRENT_AUTHORITY',
+        'fallback_reason', 'CERTIFIED_CANCELLATION_REVERSION_REJECTED',
         'complex_refresh_required', true,
-        'full_candidate_recovery_reallocation_required', true,
+        'canonical_route_ladder_required', true,
         'superseded_finance_dirty_job_count', v_superseded_finance_dirty_job_count,
         'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
       )
     );
 
-    IF COALESCE(v_enqueue_result->>'job_id', '') !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-       OR UPPER(BTRIM(COALESCE(v_enqueue_result->>'job_type', ''))) <> 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
-       OR UPPER(BTRIM(COALESCE(v_enqueue_result->>'refresh_scope_kind', ''))) <> 'CANDIDATE_FULL_LIVE' THEN
+    IF COALESCE((v_enqueue_result->>'ok')::boolean,true) IS NOT TRUE
+       OR (
+         COALESCE(v_enqueue_result->>'job_id','')
+           !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         AND UPPER(BTRIM(COALESCE(v_enqueue_result->>'owner_resolution',''))) NOT IN (
+           'ACTIVE_CURRENT_OWNER_COVERS_REQUEST','COMPLETE_CURRENT_AUTHORITY','STALE_INCOMING_REQUEST'
+         )
+         AND COALESCE((v_enqueue_result->>'coalesced')::boolean,false) IS NOT TRUE
+       ) THEN
       RAISE EXCEPTION 'PAYMENT_CANCEL_FULL_REFRESH_JOB_INVALID'
         USING ERRCODE = 'P0001',
               DETAIL = jsonb_build_object(
@@ -341,9 +342,12 @@ BEGIN
               )::text;
     END IF;
 
-    v_job_id := (v_enqueue_result->>'job_id')::uuid;
-    v_full_refresh_job_ids := v_full_refresh_job_ids || jsonb_build_array(v_job_id::text);
-    v_full_refresh_count := v_full_refresh_count + 1;
+    IF COALESCE(v_enqueue_result->>'job_id','')
+         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_job_id := (v_enqueue_result->>'job_id')::uuid;
+      v_full_refresh_job_ids := v_full_refresh_job_ids || jsonb_build_array(v_job_id::text);
+      v_full_refresh_count := v_full_refresh_count + 1;
+    END IF;
   END LOOP;
 
   RETURN v_result || jsonb_build_object(

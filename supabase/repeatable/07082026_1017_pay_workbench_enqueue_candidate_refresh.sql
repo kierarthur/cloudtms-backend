@@ -107,6 +107,11 @@ DECLARE
   v_owner_provenance_json jsonb := '{}'::jsonb;
   v_owner_request_count bigint := 0;
   v_owner_scope_status text := NULL::text;
+  v_reversion_scope public.banking_pay_workbench_session_scope%ROWTYPE;
+  v_reversion_state public.banking_pay_workbench_session_candidate_state%ROWTYPE;
+  v_reversion_attestation jsonb := '{}'::jsonb;
+  v_reversion_source_count integer := 0;
+  v_reversion_state_exact boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -1296,6 +1301,117 @@ BEGIN
           v_owner_pay_channel_scope = UPPER(BTRIM(COALESCE(v_pay_channel_scope, 'ALL')));
         IF v_owner_covers_request THEN
           v_owner_resolution := 'ACTIVE_CURRENT_OWNER_COVERS_REQUEST';
+        END IF;
+      END IF;
+    END IF;
+
+    -- A cancellation reversion deliberately retains the immutable original
+    -- economic-build lineage while publishing a new current source run at the
+    -- cancellation sequence/generation.  It is therefore a complete current
+    -- authority even though the historical build row itself has an older
+    -- source sequence.  Recognise only the exact V3 terminal attestation; an
+    -- ordinary V1/V2 or structurally incomplete scope cannot enter this path.
+    IF v_owner_resolution='NO_CURRENT_OWNER'
+       AND v_scope_state_precedes_job IS TRUE THEN
+      SELECT current_scope.*
+      INTO v_reversion_scope
+      FROM public.banking_pay_workbench_session_scope AS current_scope
+      WHERE current_scope.session_id=v_session_id
+        AND current_scope.candidate_id=p_candidate_id
+        AND current_scope.dirty IS FALSE
+        AND current_scope.pending_job_id IS NULL
+        AND current_scope.certified_preview_publication_required IS TRUE
+        AND current_scope.certified_preview_publication_parity_ok IS TRUE
+        AND current_scope.certified_preview_publication_session_version=COALESCE(v_session_row.version,0)
+        AND current_scope.certified_preview_publication_source_change_seq=COALESCE(v_source_change_seq,0)
+        AND current_scope.certified_preview_publication_attestation_json->>'attestation_version'
+              ='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+        AND current_scope.certified_preview_publication_attestation_json->>'contract_version'='3'
+        AND current_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
+              ='READY_TO_PAY_SEMANTIC_V2'
+        AND current_scope.certified_preview_publication_attestation_json->>'authority_kind'
+              ='CERTIFIED_CANCELLATION_REVERSION'
+        AND COALESCE((current_scope.certified_preview_publication_attestation_json->>'semantic_ready')::boolean,false)
+        AND COALESCE((current_scope.certified_preview_publication_attestation_json->>'parity_complete')::boolean,false)
+      FOR UPDATE;
+
+      IF FOUND THEN
+        v_reversion_attestation:=COALESCE(
+          v_reversion_scope.certified_preview_publication_attestation_json,'{}'::jsonb
+        );
+
+        SELECT current_state.*
+        INTO v_reversion_state
+        FROM public.banking_pay_workbench_session_candidate_state AS current_state
+        WHERE current_state.session_id=v_session_id
+          AND current_state.candidate_id=p_candidate_id
+          AND UPPER(BTRIM(COALESCE(current_state.status,'')))='READY'
+          AND current_state.pending_job_id IS NULL
+          AND current_state.session_version=COALESCE(v_session_row.version,0)
+          AND current_state.source_change_seq=COALESCE(v_source_change_seq,0)
+        FOR UPDATE;
+        v_reversion_state_exact:=FOUND;
+
+        SELECT COUNT(*)::integer
+        INTO v_reversion_source_count
+        FROM public.banking_pay_workbench_candidate_source_lines AS reversion_source
+        WHERE reversion_source.session_id=v_session_id
+          AND reversion_source.candidate_id=p_candidate_id
+          AND reversion_source.session_version=COALESCE(v_session_row.version,0)
+          AND reversion_source.source_change_seq=COALESCE(v_source_change_seq,0)
+          AND reversion_source.source_build_run_id
+                =v_reversion_scope.certified_preview_publication_source_build_run_id
+          AND reversion_source.status='CURRENT';
+
+        IF v_reversion_state_exact
+           AND COALESCE(v_registry_source_change_seq_after,v_source_change_seq,0)
+                =COALESCE(v_source_change_seq,0)
+           AND COALESCE(v_registry_dirty_generation,0)=COALESCE(v_live_scope_change_generation,0)
+           AND COALESCE(v_reversion_attestation->>'source_row_count','') ~ '^[0-9]{1,9}$'
+           AND v_reversion_source_count=(v_reversion_attestation->>'source_row_count')::integer
+           AND NOT EXISTS (
+             SELECT 1
+             FROM public.banking_pay_workbench_candidate_source_lines AS foreign_current_source
+             WHERE foreign_current_source.session_id=v_session_id
+               AND foreign_current_source.candidate_id=p_candidate_id
+               AND foreign_current_source.status='CURRENT'
+               AND (
+                 foreign_current_source.session_version IS DISTINCT FROM COALESCE(v_session_row.version,0)
+                 OR foreign_current_source.source_change_seq IS DISTINCT FROM COALESCE(v_source_change_seq,0)
+                 OR foreign_current_source.source_build_run_id IS DISTINCT FROM
+                      v_reversion_scope.certified_preview_publication_source_build_run_id
+               )
+           ) THEN
+          RETURN jsonb_strip_nulls(jsonb_build_object(
+            'ok',true,
+            'job_id',NULL,
+            'job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD',
+            'canonical_job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD',
+            'session_id',v_session_id::text,
+            'candidate_id',p_candidate_id::text,
+            'session_version',COALESCE(v_session_row.version,0),
+            'source_change_seq',COALESCE(v_source_change_seq,0),
+            'registry_source_change_seq',COALESCE(v_registry_source_change_seq_after,v_source_change_seq,0),
+            'source_build_run_id',v_reversion_scope.certified_preview_publication_source_build_run_id::text,
+            'authority_fingerprint',v_authority_fingerprint,
+            'authority_fingerprint_version',2,
+            'owner_resolution','COMPLETE_CURRENT_AUTHORITY',
+            'owner_build_id',v_reversion_attestation->>'economic_build_id',
+            'owner_root_job_id',NULL,
+            'owner_source_build_run_id',v_reversion_scope.certified_preview_publication_source_build_run_id::text,
+            'requested_coverage','FULL_CANDIDATE',
+            'owner_coverage','FULL_CANDIDATE',
+            'scope_status',v_reversion_scope.status,
+            'source_build_required',false,
+            'delta_refresh_required',false,
+            'coalesced',true,
+            'reused',true,
+            'new_owner_created',false,
+            'no_op',true,
+            'diagnostic_provenance_merged',false,
+            'reason',v_reason,
+            'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
+          ));
         END IF;
       END IF;
     END IF;

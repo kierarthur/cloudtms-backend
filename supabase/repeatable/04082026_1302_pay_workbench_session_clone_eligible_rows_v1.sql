@@ -86,8 +86,14 @@ DECLARE
   v_clone_fence jsonb := '{}'::jsonb;
   v_certified_publication jsonb := '{}'::jsonb;
   v_current_source_change_seq bigint := 0;
+  v_semantic_publication_v3_enabled boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
+
+  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,false)
+  INTO v_semantic_publication_v3_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id=1;
 
   IF p_target_session_id IS NULL THEN
     RETURN jsonb_build_object(
@@ -831,7 +837,8 @@ BEGIN
         p_targeted_timesheet_ids=>'[]'::jsonb,
         p_linked_timesheet_ids=>'[]'::jsonb,
         p_publication_options_json=>jsonb_strip_nulls(jsonb_build_object(
-          'contract_version',2,
+          'contract_version',CASE WHEN v_semantic_publication_v3_enabled THEN 3 ELSE 2 END,
+          'semantic_contract_version',CASE WHEN v_semantic_publication_v3_enabled THEN 'READY_TO_PAY_SEMANTIC_V2' ELSE NULL END,
           'authority_kind','CERTIFIED_CLONE',
           'invocation_kind','CLONE_OWNER_FINALISE',
           'final_state',CASE
@@ -2052,5 +2059,5 @@ END;
 $function$;
 ALTER FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(uuid, uuid, integer, jsonb, jsonb) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(uuid, uuid, integer, jsonb, jsonb) FROM PUBLIC, anon, authenticated, service_role;
-GRANT EXECUTE ON FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(uuid, uuid, integer, jsonb, jsonb) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_clone_eligible_rows_v1(uuid, uuid, integer, jsonb, jsonb) TO service_role;
 -- Reasserted after the final removal of the legacy monolith's prepare drop.

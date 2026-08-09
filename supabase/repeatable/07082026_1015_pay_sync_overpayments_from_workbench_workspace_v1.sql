@@ -4528,6 +4528,11 @@ begin
         COALESCE((line.line_json->>'is_ready_for_draft')::boolean,false) AS draftable,
         COALESCE((line.line_json->>'is_excluded_from_allocation')::boolean,false)
           AS excluded_from_allocation,
+        (
+          UPPER(COALESCE(line.line_json->>'presentation_role',''))='PARENT'
+          AND COALESCE((line.line_json->>'selection_allowed')::boolean,false)=false
+          AND COALESCE((line.line_json->>'is_excluded_from_allocation')::boolean,false)=true
+        ) AS semantic_non_selectable_parent,
         ROUND(COALESCE((line.line_json->>'section_non_segment_amount_ex_vat')::numeric,0),2)
           AS section_non_segment_amount_ex_vat,
         CASE WHEN jsonb_typeof(line.line_json->'section_segment_rows')='array'
@@ -4537,6 +4542,13 @@ begin
       FROM pg_temp.canonical_preview_lines line
       WHERE line.candidate_id=v_bounded_build.candidate_id
         AND UPPER(COALESCE(line.line_json->>'line_type',''))='TIMESHEET_PAYMENT'
+        -- Semantic V3 publishes exact keyed allocation components beside the
+        -- aggregate presentation parent.  The protected presentation fence
+        -- continues to compare the parent only; economic component equality
+        -- is independently enforced by the canonical fact-component fence
+        -- immediately below.
+        AND UPPER(COALESCE(line.line_json->>'presentation_role','PARENT'))
+          <> 'ALLOCATION_COMPONENT'
         AND COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id','')
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -4549,8 +4561,18 @@ begin
        OR actual.presentation_section IS DISTINCT FROM expected.presentation_section
        OR actual.pay_channel IS DISTINCT FROM expected.pay_channel
        OR ABS(actual.amount_ex_vat-expected.amount_ex_vat)>0.01
-       OR actual.draftable IS DISTINCT FROM expected.draftable
-       OR actual.excluded_from_allocation IS DISTINCT FROM expected.excluded_from_allocation
+       OR (
+         actual.semantic_non_selectable_parent
+         AND actual.draftable IS DISTINCT FROM false
+       )
+       OR (
+         NOT actual.semantic_non_selectable_parent
+         AND actual.draftable IS DISTINCT FROM expected.draftable
+       )
+       OR (
+         NOT actual.semantic_non_selectable_parent
+         AND actual.excluded_from_allocation IS DISTINCT FROM expected.excluded_from_allocation
+       )
        OR ABS(actual.section_non_segment_amount_ex_vat-
          expected.section_non_segment_amount_ex_vat)>0.01
        OR actual.section_segment_rows IS DISTINCT FROM expected.section_segment_rows

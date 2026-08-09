@@ -15,6 +15,9 @@ DECLARE
   v_reused integer := 0;
   v_malformed_allocation_preview_rows jsonb := '[]'::jsonb;
   v_synthetic_total_allocation_preview_rows jsonb := '[]'::jsonb;
+  v_semantic_draft_guard_enabled boolean := false;
+  v_semantic_draft_failures jsonb := '[]'::jsonb;
+  v_semantic_source_failure_count integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -62,6 +65,11 @@ BEGIN
   IF UPPER(BTRIM(COALESCE(v_operation.status, ''))) IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED') THEN
     RAISE EXCEPTION 'pay_workbench_prepare_draft_allocation_rows_seed cannot seed allocation rows for terminal operation % with status %', p_operation_id, v_operation.status;
   END IF;
+
+  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_draft_guard_v2_enabled, false)
+  INTO v_semantic_draft_guard_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id = 1;
 
   DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_allocation_scope_rows;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_allocation_scope_rows ON COMMIT DROP AS
@@ -536,6 +544,102 @@ BEGIN
             )::text;
   END IF;
 
+  -- A set of individually valid deduction rows is not by itself a valid Draft
+  -- candidate.  Headroom is candidate-local and is calculated only from the
+  -- positive ordinary rows actually selected into this Draft operation.
+  IF COALESCE(v_semantic_draft_guard_enabled, false) THEN
+    SELECT COUNT(*)::integer
+    INTO v_semantic_source_failure_count
+    FROM pg_temp.tmp_pay_workbench_allocation_scope_rows AS selected_scope
+    WHERE selected_scope.allocation_basis_json#>>'{source_publication_attestation,attestation_version}'
+            IS DISTINCT FROM 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+       OR selected_scope.allocation_basis_json#>>'{source_publication_attestation,semantic_contract_version}'
+            IS DISTINCT FROM 'READY_TO_PAY_SEMANTIC_V2'
+       OR COALESCE((selected_scope.allocation_basis_json#>>'{source_publication_attestation,semantic_ready}')::boolean,false)
+            IS NOT TRUE
+       OR NULLIF(selected_scope.allocation_basis_json->>'semantic_proof_digest','') IS NULL
+       OR NULLIF(selected_scope.allocation_basis_json->>'source_build_run_id','') IS NULL;
+
+    IF v_semantic_source_failure_count > 0 THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_DRAFT_SOURCE_SEMANTIC_CERTIFICATION_REQUIRED'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+          'code','PAY_WORKBENCH_DRAFT_SOURCE_SEMANTIC_CERTIFICATION_REQUIRED',
+          'candidate_scope_count',v_semantic_source_failure_count,
+          'message','Allocation seeding requires the V3 semantic source frozen by Draft scope creation.'
+        )::text;
+    END IF;
+
+    WITH candidate_semantics AS (
+      SELECT
+        candidate_row.candidate_id,
+        candidate_row.candidate_scope_id,
+        ROUND(COALESCE(SUM(candidate_row.allocated_amount) FILTER (
+          WHERE candidate_row.allocated_amount > 0
+            AND candidate_row.allocation_type = 'TIMESHEET_PAYMENT'
+            AND COALESCE((candidate_row.preview_contract_json->>'ok')::boolean, false)
+            AND COALESCE((candidate_row.preview_contract_json->>'selection_allowed')::boolean, false)
+        ), 0), 2) AS selected_positive_ordinary_amount,
+        ROUND(COALESCE(SUM(candidate_row.allocated_amount) FILTER (
+          WHERE candidate_row.allocated_amount < 0
+            AND candidate_row.allocation_type IN (
+              'OVERPAYMENT_RECOVERY',
+              'MANUAL_DEBT_RECOVERY',
+              'PAYMENT_ADVANCE_REPAYMENT',
+              'LOAN_REPAYMENT'
+            )
+            AND candidate_row.finance_case_id IS NOT NULL
+            AND (candidate_row.item_direction IS NULL OR candidate_row.item_direction = 'DEDUCTION')
+            AND COALESCE((candidate_row.preview_contract_json->>'ok')::boolean, false)
+            AND COALESCE((candidate_row.preview_contract_json->>'selection_allowed')::boolean, false)
+        ), 0), 2) AS selected_deduction_amount
+      FROM pg_temp.tmp_pay_workbench_allocation_preview_candidates AS candidate_row
+      WHERE candidate_row.line_selected IS TRUE
+        AND UPPER(COALESCE(candidate_row.selection_state, '')) = 'SELECTED'
+        AND UPPER(COALESCE(candidate_row.line_status, '')) = 'READY'
+      GROUP BY candidate_row.candidate_id, candidate_row.candidate_scope_id
+    ), failed AS (
+      SELECT
+        candidate_semantics.*,
+        ROUND(candidate_semantics.selected_positive_ordinary_amount
+          + candidate_semantics.selected_deduction_amount, 2) AS selected_candidate_result,
+        CASE
+          WHEN candidate_semantics.selected_deduction_amount < 0
+           AND candidate_semantics.selected_positive_ordinary_amount <= 0
+            THEN 'PAY_WORKBENCH_DRAFT_RECOVERY_WITHOUT_POSITIVE_HEADROOM'
+          WHEN -candidate_semantics.selected_deduction_amount
+             > candidate_semantics.selected_positive_ordinary_amount
+            THEN 'PAY_WORKBENCH_DRAFT_DEDUCTION_EXCEEDS_SELECTED_HEADROOM'
+          WHEN candidate_semantics.selected_positive_ordinary_amount
+             + candidate_semantics.selected_deduction_amount < 0
+            THEN 'PAY_WORKBENCH_DRAFT_CANDIDATE_RESULT_NEGATIVE'
+          ELSE NULL
+        END AS failure_code
+      FROM candidate_semantics
+    )
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'candidate_id', failed.candidate_id::text,
+      'candidate_scope_id', failed.candidate_scope_id::text,
+      'selected_positive_ordinary_amount', failed.selected_positive_ordinary_amount,
+      'selected_deduction_amount', failed.selected_deduction_amount,
+      'selected_candidate_result', failed.selected_candidate_result,
+      'code', failed.failure_code
+    ) ORDER BY failed.candidate_id), '[]'::jsonb)
+    INTO v_semantic_draft_failures
+    FROM failed
+    WHERE failed.failure_code IS NOT NULL;
+
+    IF jsonb_array_length(COALESCE(v_semantic_draft_failures, '[]'::jsonb)) > 0 THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_DRAFT_SELECTED_SEMANTIC_PROOF_FAILED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_DRAFT_SELECTED_SEMANTIC_PROOF_FAILED',
+                'operation_id', p_operation_id::text,
+                'candidate_failures', v_semantic_draft_failures,
+                'message', 'Draft selection requires positive ordinary entitlement for the same candidate, deductions within selected headroom, and a non-negative candidate result.'
+              )::text;
+    END IF;
+  END IF;
+
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
            'preview_row_id', CASE WHEN synthetic_total_rows.preview_row_id IS NULL THEN NULL ELSE synthetic_total_rows.preview_row_id::text END,
@@ -674,7 +778,20 @@ BEGIN
         ABS(COALESCE(selected_preview_rows.allocated_amount, 0))
       ), 2)) OVER (
         PARTITION BY selected_preview_rows.operation_id, selected_preview_rows.candidate_scope_id, selected_preview_rows.preview_row_id
-      ), 2) AS component_abs_amount_sum
+      ), 2) AS component_abs_amount_sum,
+      ROUND(COALESCE(SUM(ROUND(COALESCE(
+        CASE WHEN COALESCE(component_element.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((component_element.value->>'preview_due_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+        CASE WHEN COALESCE(component_element.value->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((component_element.value->>'allocated_source_due_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+        CASE WHEN COALESCE(component_element.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((component_element.value->>'target_pay_ex_vat')::numeric) ELSE NULL::numeric END,
+        CASE WHEN COALESCE(component_element.value->>'ready_preview_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((component_element.value->>'ready_preview_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+        CASE WHEN COALESCE(component_element.value->>'preview_component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((component_element.value->>'preview_component_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+        CASE WHEN COALESCE(component_element.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$' THEN ABS((component_element.value->>'component_amount_ex_vat')::numeric) ELSE NULL::numeric END,
+        ABS(COALESCE(selected_preview_rows.allocated_amount, 0))
+      ), 2)) OVER (
+        PARTITION BY selected_preview_rows.operation_id, selected_preview_rows.candidate_scope_id, selected_preview_rows.preview_row_id
+        ORDER BY component_element.ordinality
+        ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+      ), 0), 2) AS preceding_component_abs_amount
     FROM selected_preview_rows
     CROSS JOIN LATERAL jsonb_array_elements(
       CASE
@@ -743,11 +860,14 @@ BEGIN
         WHEN ROUND(COALESCE(finance_component_source_rows.allocated_amount, 0), 2) < 0 THEN -1
         ELSE 1
       END * ROUND(
-        CASE
-          WHEN finance_component_source_rows.component_count = 1 THEN ABS(COALESCE(finance_component_source_rows.allocated_amount, 0))
-          WHEN finance_component_source_rows.component_rn = 1 THEN GREATEST(ABS(COALESCE(finance_component_source_rows.allocated_amount, 0)) - (COALESCE(finance_component_source_rows.component_abs_amount_sum, 0) - COALESCE(finance_component_source_rows.raw_component_abs_amount, 0)), 0)
-          ELSE finance_component_source_rows.raw_component_abs_amount
-        END,
+        LEAST(
+          COALESCE(finance_component_source_rows.raw_component_abs_amount, 0),
+          GREATEST(
+            ABS(COALESCE(finance_component_source_rows.allocated_amount, 0))
+              - COALESCE(finance_component_source_rows.preceding_component_abs_amount, 0),
+            0
+          )
+        ),
         2
       ) AS allocated_amount,
       finance_component_source_rows.preview_contract_json,
@@ -823,7 +943,8 @@ BEGIN
         allocation_expanded_rows.preview_row_id,
         allocation_expanded_rows.operation_source_key
     )::integer AS sort_order
-  FROM allocation_expanded_rows;
+  FROM allocation_expanded_rows
+  WHERE ROUND(COALESCE(allocation_expanded_rows.allocated_amount, 0), 2) <> 0;
 
 
   SELECT COALESCE(jsonb_agg(jsonb_build_object(

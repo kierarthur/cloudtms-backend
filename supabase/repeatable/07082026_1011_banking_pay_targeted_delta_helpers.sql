@@ -547,6 +547,20 @@ BEGIN
                  AND source_delta.status='COMPLETED'
                  AND source_delta.completed_at_utc IS NOT NULL
              )
+             OR (
+               COALESCE(v_scope.certified_preview_publication_parity_ok,false) IS TRUE
+               AND v_scope.certified_preview_publication_session_version=v_session.version
+               AND v_scope.certified_preview_publication_source_change_seq=p_source_change_seq
+               AND v_scope.certified_preview_publication_source_build_run_id=source_row.source_build_run_id
+               AND v_scope.certified_preview_publication_attestation_json->>'attestation_version'
+                     ='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+               AND v_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
+                     ='READY_TO_PAY_SEMANTIC_V2'
+               AND v_scope.certified_preview_publication_attestation_json->>'authority_kind'
+                     ='CERTIFIED_CANCELLATION_REVERSION'
+               AND COALESCE((v_scope.certified_preview_publication_attestation_json->>'semantic_ready')::boolean,false)
+               AND COALESCE((v_scope.certified_preview_publication_attestation_json->>'parity_complete')::boolean,false)
+             )
            )
          )
      ) THEN
@@ -700,10 +714,16 @@ DECLARE
   v_state jsonb;
   v_publication jsonb := '{}'::jsonb;
   v_completion_job_id uuid := NULL::uuid;
+  v_semantic_publication_v3_enabled boolean := false;
 BEGIN
   IF p_session_id IS NULL OR p_candidate_id IS NULL OR p_projection_run_id IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_TARGETED_DELTA_FINALIZE_ARGUMENT_REQUIRED' USING ERRCODE='P0001';
   END IF;
+
+  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,false)
+  INTO v_semantic_publication_v3_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id=1;
 
   PERFORM pg_catalog.pg_advisory_xact_lock(
     pg_catalog.hashtextextended(public._pay_workbench_candidate_serial_key(p_candidate_id),24062027)
@@ -845,7 +865,8 @@ BEGIN
     v_run.source_change_seq,v_run.session_version,v_completion_job_id,'TARGETED_TIMESHEETS',
     COALESCE(v_run.targeted_timesheet_ids,'[]'::jsonb),COALESCE(v_run.linked_timesheet_ids,'[]'::jsonb),
     jsonb_build_object(
-      'contract_version',2,
+      'contract_version',CASE WHEN v_semantic_publication_v3_enabled THEN 3 ELSE 2 END,
+      'semantic_contract_version',CASE WHEN v_semantic_publication_v3_enabled THEN 'READY_TO_PAY_SEMANTIC_V2' ELSE NULL END,
       'authority_kind','TARGETED_DELTA',
       'invocation_kind','DELTA_FINALISE',
       'final_state',CASE WHEN EXISTS (

@@ -150,11 +150,11 @@ test('the correction runner owns one bounded phase and the only Workbench calls'
   assert.match(processSql, /LIMIT 100/);
   assert.equal(
     (allSql.match(/pay_workbench_(?:patch_preview_after_batch_mutation_cancel_safe_v1|enqueue_candidate_refresh_many)\s*\(/g) || []).length,
-    2
+    3
   );
   assert.equal(
     (processSql.match(/pay_workbench_(?:patch_preview_after_batch_mutation_cancel_safe_v1|enqueue_candidate_refresh_many)\s*\(/g) || []).length,
-    2
+    3
   );
   assert.doesNotMatch(allSql, /(?:LIMIT|chunk_size|max_chunk_size)\s*=?\s*500\b/i);
   assert.doesNotMatch(allSql, /DELETE\s+FROM\s+public\.pay_payment_correction_request_candidates/i);

@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_sync_overpayments_from_workbench_workspace_v1",
       "identity_arguments": "p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]",
-      "definition_sha256": "2cbc3db2883273b0c0c581f727f24fbfdaf700a7a25675dd7252450f9c26e669",
+      "definition_sha256": "694f493bb10ef4c492b3114f72ea17db337c8c6ada717bbff1731fb02c672041",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -32,7 +32,7 @@
       "schema": "public",
       "name": "_ctms_candidate_correction_residuals_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_exclude_pay_batch_id uuid, p_context text",
-      "definition_sha256": "6d82c04a36acc926126df2a5f922b55ecd12eb6b2f4eeb78cb85cbf0e4581247",
+      "definition_sha256": "f4aa1c382980164d5831f03fd9c15810ad36f5763c2bee491da277a07537dfa7",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -99,7 +99,7 @@
       "schema": "private",
       "name": "pay_workbench_session_candidate_scope_ensure_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_dirty_job_id uuid, p_source_change_seq bigint, p_reason text",
-      "definition_sha256": "14da4006d9d1a9170d28803ee5660e8d02933ccea6860a5f5e09a7ce6f6883f9",
+      "definition_sha256": "a9e69f52713fe614675672d41cb60a7b96363d4f49c516129b3fb2ab9e8f07b7",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -165,7 +165,7 @@
       "schema": "private",
       "name": "pay_workbench_targeted_delta_admission_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid, p_event_class text, p_targeted_timesheet_ids uuid[], p_linked_timesheet_ids uuid[], p_source_change_seq bigint",
-      "definition_sha256": "3d4f4846bc5fa68425eae9f7c57e68afa340e7b1e7d11b3931397434e59512df",
+      "definition_sha256": "7d23eb11620e645c57dba638f899ec9da8ad2298188c8bcf1799f61d9620a013",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -187,7 +187,7 @@
       "schema": "private",
       "name": "pay_workbench_targeted_delta_scope_finalize_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_projection_run_id uuid",
-      "definition_sha256": "5168cefbef4875b7c6a9010fd63a2d2ce0a71a3fa7c1e4659e507991e36d0e94",
+      "definition_sha256": "4126751c5a1b41b98b9421e3a63db785afb6d94f10cf2370808b252aaef67e40",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_workbench_enqueue_candidate_refresh",
       "identity_arguments": "p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb",
-      "definition_sha256": "8dbf361be1836824526d8f3e5492fbd44ab65751239000bc0d7758eed40290a5",
+      "definition_sha256": "1c2c2d6f3954a7bc19bb4f437475b75b69b02e4e17268836a44a88ce91831576",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -390,7 +390,7 @@
       "schema": "public",
       "name": "pay_workbench_session_clone_eligible_rows_v1",
       "identity_arguments": "p_target_session_id uuid, p_source_session_id uuid, p_limit integer, p_cursor_json jsonb, p_options_json jsonb",
-      "definition_sha256": "a80b48ac73c8e3c773c85526baf061ff72779e67fd11e01e1e8979d5d80defdb",
+      "definition_sha256": "e49b9c9e6471ebe9718156478e42d1eae628413842a213fd93626c7b0ffa627d",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -588,7 +588,7 @@
       "schema": "public",
       "name": "pay_preview_candidate_build_canonical_lines",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "6d0968010e6395a8e4921d512f5ceefe1dee18a55601190afa5b0b2f7bf56bb9",
+      "definition_sha256": "bf9e24bc39ee2a4cb66d0358e6a2676d7d1efe1165183ff4d96159b3fa8c0672",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

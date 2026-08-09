@@ -50204,6 +50204,130 @@ async function handleBankingPayCorrectionCancelV1(env, req, user, correctionRequ
   return handleBankingPayCorrectionAuthActionV1(env, req, user, correctionRequestId, 'CANCEL');
 }
 
+async function startVerifiedDraftCancellationAfterPlanningV1(env, user, actor, payBatchId, planningResult) {
+  const correctionRequestId = bankingPayCorrectionUuid(
+    planningResult?.correction_request_id || planningResult?.correctionRequestId,
+    'correction_request_id'
+  ).toLowerCase();
+  const operationId = bankingPayCorrectionUuid(
+    planningResult?.operation_id || planningResult?.operationId,
+    'operation_id'
+  ).toLowerCase();
+  const actorUserId = bankingPayCorrectionUuid(actor?.actorUserId, 'actor_user_id').toLowerCase();
+  const prepareStartedAtMs = Date.now();
+  let inlinePrepareAdvanceCount = 0;
+  let requestRow = await readBankingPayCorrectionRequestForWorker(env, correctionRequestId);
+
+  // Whole-Draft cancellation has a server-owned ALL_MATCHING scope and reason.
+  // Advance only this exact durable operation so the already-verified ceremony
+  // can be bound to its final selection/plan hashes without a second user step.
+  while (
+    String(requestRow?.status || '').trim().toUpperCase() === 'PLANNING'
+    && inlinePrepareAdvanceCount < 20
+    && Date.now() - prepareStartedAtMs < 18000
+  ) {
+    const advance = await claimAndAdvanceOneBankingPayOperation(env, {
+      operationId,
+      actorUserId,
+      businessActorUserId: actorUserId,
+      lockOwner: `draft-cancel-prepare:${operationId}:${inlinePrepareAdvanceCount + 1}`,
+      lockSeconds: 20,
+      source: 'DRAFT_PAYMENT_CANCELLATION_INLINE_PREPARE',
+      allowBackendRunnerOwned: true,
+      operationTypes: ['PAYMENT_CORRECTION'],
+      payBatchId,
+      continuationEnabled: false
+    });
+    inlinePrepareAdvanceCount += 1;
+    requestRow = await readBankingPayCorrectionRequestForWorker(env, correctionRequestId);
+    if (String(requestRow?.status || '').trim().toUpperCase() !== 'PLANNING') break;
+    if (advance?.claimed !== true) break;
+  }
+
+  const requestStatus = String(requestRow?.status || '').trim().toUpperCase();
+  if (requestStatus !== 'PLANNED') {
+    const alreadyStarted = ['REQUESTED', 'AWAITING_AUTHORISATION', 'AUTHORISED', 'EXPANDED', 'PROCESSING', 'APPLIED', 'APPLIED_WITH_BLOCKERS'].includes(requestStatus);
+    const continuationEnqueue = await enqueueBankingPayCancellationResult(
+      env,
+      { ...planningResult, pay_batch_id: payBatchId },
+      'DRAFT_PAYMENT_CANCELLATION_PLAN'
+    );
+    return {
+      ...planningResult,
+      pay_batch_id: payBatchId,
+      correction_request_id: correctionRequestId,
+      operation_id: operationId,
+      request_status: requestStatus || planningResult?.request_status || null,
+      draft_cancellation_inline_prepare_advance_count: inlinePrepareAdvanceCount,
+      draft_cancellation_reauth_bound: false,
+      draft_cancellation_already_started: alreadyStarted,
+      draft_cancellation_preparation_incomplete: !alreadyStarted,
+      continuation_enqueue: continuationEnqueue,
+      background_start_delayed: continuationEnqueue.background_start_delayed === true
+    };
+  }
+
+  if (String(requestRow.requested_by_user_id || '').toLowerCase() !== actorUserId) {
+    throw Object.assign(new Error('Only the cancellation requester may start this request.'), { code: 'REQUEST_OWNER_REQUIRED' });
+  }
+
+  const proof = await createBankingPayCorrectionReauthProof(
+    env,
+    user,
+    user,
+    requestRow,
+    requestRow.reason ?? null,
+    requestRow.source_bank_event_id ?? null,
+    requestRow.accepted_resolution_json ?? null
+  );
+  const bound = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_reauth_bind_v1', {
+    p_correction_request_id: correctionRequestId,
+    p_actor_user_id: actorUserId,
+    p_session_hash: proof.session_hash,
+    p_proof_hash: proof.proof_hash,
+    p_issued_at_utc: proof.signed_issued_at_utc,
+    p_expires_at_utc: proof.reauth_expires_at_utc
+  }), 'pay_payment_correction_reauth_bind_v1');
+  if (bound.ok === false) {
+    throw Object.assign(new Error(bound.message || 'The verified Draft cancellation could not be bound to its prepared request.'), {
+      code: bound.code || 'DRAFT_CANCELLATION_REAUTH_BIND_FAILED'
+    });
+  }
+
+  const started = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_request_start', {
+    p_pay_batch_id: payBatchId,
+    p_selection_json: {
+      command: 'START_PREPARED',
+      context: 'START_PREPARED',
+      correction_request_id: correctionRequestId,
+      proof_hash: proof.proof_hash,
+      selection_hash: requestRow.selection_hash,
+      plan_hash: requestRow.plan_hash
+    },
+    p_reason: requestRow.reason ?? null,
+    p_actor_user_id: actorUserId,
+    p_source_bank_event_id: requestRow.source_bank_event_id,
+    p_auto_requested: false,
+    p_accepted_resolution_json: requestRow.accepted_resolution_json || null
+  }), 'pay_payment_correction_request_start');
+  const continuationEnqueue = await enqueueBankingPayCancellationResult(
+    env,
+    { ...started, pay_batch_id: payBatchId },
+    'PAYMENT_CORRECTION_START_PREPARED'
+  );
+  return {
+    ...started,
+    pay_batch_id: payBatchId,
+    correction_request_id: correctionRequestId,
+    operation_id: operationId,
+    draft_cancellation_inline_prepare_advance_count: inlinePrepareAdvanceCount,
+    draft_cancellation_reauth_bound: true,
+    draft_cancellation_started: true,
+    continuation_enqueue: continuationEnqueue,
+    background_start_delayed: continuationEnqueue.background_start_delayed === true
+  };
+}
+
 async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
   const actor = await requireBankingPayCancellationActor(env, req, user, { requireFeature: true, requirePaymentPermission: true });
   if (!actor.ok) return actor.response;
@@ -50225,10 +50349,9 @@ async function handleBankingPayBatchCancelV1(env, req, user, payBatchId) {
       p_correction_request_id: null,
       p_work_item_id: null
     }), 'pay_batch_cancel');
-    const continuationEnqueue = await enqueueBankingPayCancellationResult(env, { ...result, pay_batch_id: payBatchId }, 'DRAFT_PAYMENT_CANCELLATION_PLAN');
-    const responseStatus = bankingPayCorrectionRpcHttpStatus(result, 202);
-    if (responseStatus !== 202) return bankingPayCancellationResponse(env, req, responseStatus, { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
-    return bankingPayCancellationResponse(env, req, 202, { ...result, continuation_enqueue: continuationEnqueue, background_start_delayed: continuationEnqueue.background_start_delayed === true });
+    const started = await startVerifiedDraftCancellationAfterPlanningV1(env, user, actor, payBatchId, result);
+    const responseStatus = bankingPayCorrectionRpcHttpStatus(started, 202);
+    return bankingPayCancellationResponse(env, req, responseStatus, started);
   } catch (error) { return bankingPayCancellationError(env, req, error, 'DRAFT_CANCELLATION_FAILED'); }
 }
 

@@ -145,6 +145,19 @@ BEGIN
               AND scope_row.certified_preview_publication_attestation_json->>'authority_kind' IN ('CERTIFIED_CLONE','TARGETED_DELTA')
               AND scope_row.certified_preview_publication_attestation_json->>'final_state' IN ('READY','SOURCE_EMPTY')
             )
+            OR (
+              scope_row.certified_preview_publication_attestation_json->>'attestation_version'='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+              AND scope_row.certified_preview_publication_attestation_json->>'contract_version'='3'
+              AND scope_row.certified_preview_publication_attestation_json->>'semantic_contract_version'='READY_TO_PAY_SEMANTIC_V2'
+              AND scope_row.certified_preview_publication_attestation_json->>'authority_kind' IN (
+                'BOUNDED_FULL_SOURCE_BUILD','CERTIFIED_CLONE','TARGETED_DELTA','CERTIFIED_CANCELLATION_REVERSION'
+              )
+              AND scope_row.certified_preview_publication_attestation_json->>'final_state' IN ('READY','SOURCE_EMPTY')
+              AND scope_row.certified_preview_publication_attestation_json->>'semantic_ready'='true'
+              AND COALESCE((scope_row.certified_preview_publication_attestation_json->>'invalid_selectable_row_count')::integer,-1)=0
+              AND (scope_row.certified_preview_publication_attestation_json->>'candidate_ready_amount')::numeric>=0
+              AND NULLIF(BTRIM(COALESCE(scope_row.certified_preview_publication_attestation_json->>'semantic_proof_digest','')),'') IS NOT NULL
+            )
           )
         )
       ) AS publication_current
@@ -227,6 +240,19 @@ BEGIN
             AND scope_row.certified_preview_publication_attestation_json->>'contract_version'='2'
             AND scope_row.certified_preview_publication_attestation_json->>'authority_kind' IN ('CERTIFIED_CLONE','TARGETED_DELTA')
             AND scope_row.certified_preview_publication_attestation_json->>'final_state' IN ('READY','SOURCE_EMPTY')
+          )
+          OR (
+            scope_row.certified_preview_publication_attestation_json->>'attestation_version'='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+            AND scope_row.certified_preview_publication_attestation_json->>'contract_version'='3'
+            AND scope_row.certified_preview_publication_attestation_json->>'semantic_contract_version'='READY_TO_PAY_SEMANTIC_V2'
+            AND scope_row.certified_preview_publication_attestation_json->>'authority_kind' IN (
+              'BOUNDED_FULL_SOURCE_BUILD','CERTIFIED_CLONE','TARGETED_DELTA','CERTIFIED_CANCELLATION_REVERSION'
+            )
+            AND scope_row.certified_preview_publication_attestation_json->>'final_state' IN ('READY','SOURCE_EMPTY')
+            AND scope_row.certified_preview_publication_attestation_json->>'semantic_ready'='true'
+            AND COALESCE((scope_row.certified_preview_publication_attestation_json->>'invalid_selectable_row_count')::integer,-1)=0
+            AND (scope_row.certified_preview_publication_attestation_json->>'candidate_ready_amount')::numeric>=0
+            AND NULLIF(BTRIM(COALESCE(scope_row.certified_preview_publication_attestation_json->>'semantic_proof_digest','')),'') IS NOT NULL
           )
         )
       )

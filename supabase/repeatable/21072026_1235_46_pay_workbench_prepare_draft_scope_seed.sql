@@ -37,6 +37,9 @@ DECLARE
   v_scope_blocker jsonb := '{}'::jsonb;
   v_scope_shadow_mode boolean := false;
   v_operation_scope_hash text := NULL::text;
+  v_semantic_draft_guard_enabled boolean := false;
+  v_semantic_draft_failures jsonb := '[]'::jsonb;
+  v_semantic_source_failure_count integer := 0;
 BEGIN
   perform public._ctms_assert_session_correction_residuals_draftable_v1(p_workbench_session_id,p_selected_preview_row_ids,'PAY_WORKBENCH_PREPARE_DRAFT');
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
@@ -90,6 +93,11 @@ BEGIN
   IF UPPER(BTRIM(COALESCE(v_operation.status, ''))) IN ('COMPLETE', 'FAILED', 'CANCELLED', 'CANCELED', 'REVIEW_REQUIRED') THEN
     RAISE EXCEPTION 'pay_workbench_prepare_draft_scope_seed cannot seed terminal operation % with status %', p_operation_id, v_operation.status;
   END IF;
+
+  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_draft_guard_v2_enabled, false)
+  INTO v_semantic_draft_guard_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id = 1;
 
   IF v_operation.workbench_session_id IS NOT NULL AND v_operation.workbench_session_id <> p_workbench_session_id THEN
     RAISE EXCEPTION 'pay_workbench_prepare_draft_scope_seed operation % belongs to a different workbench session', p_operation_id;
@@ -784,6 +792,109 @@ BEGIN
             )::text;
   END IF;
 
+  -- Candidate-set Draft defence.  Individually valid finance deductions are
+  -- allowed only where the rows selected in this same candidate scope contain
+  -- enough positive ordinary entitlement.  Display parents, blocked rows,
+  -- nominal debt, and another candidate's pay never create headroom.
+  IF COALESCE(v_semantic_draft_guard_enabled, false) THEN
+    SELECT COUNT(*)::integer
+    INTO v_semantic_source_failure_count
+    FROM (
+      SELECT DISTINCT selected_candidate.candidate_id
+      FROM pg_temp.tmp_pay_workbench_draft_scope_selected_candidates AS selected_candidate
+    ) AS selected_scope
+    LEFT JOIN public.banking_pay_workbench_session_scope AS source_scope
+      ON source_scope.session_id=p_workbench_session_id
+     AND source_scope.candidate_id=selected_scope.candidate_id
+    WHERE source_scope.id IS NULL
+       OR source_scope.certified_preview_publication_parity_ok IS NOT TRUE
+       OR source_scope.certified_preview_publication_session_version IS DISTINCT FROM v_session.version
+       OR source_scope.certified_preview_publication_attestation_json->>'attestation_version'
+            IS DISTINCT FROM 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+       OR source_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
+            IS DISTINCT FROM 'READY_TO_PAY_SEMANTIC_V2'
+       OR COALESCE((source_scope.certified_preview_publication_attestation_json->>'semantic_ready')::boolean,false)
+            IS NOT TRUE;
+
+    IF v_semantic_source_failure_count > 0 THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_DRAFT_SOURCE_SEMANTIC_CERTIFICATION_REQUIRED'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+          'code','PAY_WORKBENCH_DRAFT_SOURCE_SEMANTIC_CERTIFICATION_REQUIRED',
+          'candidate_count',v_semantic_source_failure_count,
+          'message','Draft creation requires a current V3 semantically certified Ready-to-Pay source.'
+        )::text;
+    END IF;
+
+    WITH candidate_semantics AS (
+      SELECT
+        selected_candidate.candidate_id,
+        ROUND(COALESCE(SUM(selected_candidate.amount_ex_vat) FILTER (
+          WHERE selected_candidate.amount_ex_vat > 0
+            AND selected_candidate.line_type = 'TIMESHEET_PAYMENT'
+            AND COALESCE((selected_candidate.preview_contract_json->>'ok')::boolean, false)
+            AND COALESCE((selected_candidate.preview_contract_json->>'selection_allowed')::boolean, false)
+        ), 0), 2) AS selected_positive_ordinary_amount,
+        ROUND(COALESCE(SUM(selected_candidate.amount_ex_vat) FILTER (
+          WHERE selected_candidate.amount_ex_vat < 0
+            AND selected_candidate.line_type IN (
+              'OVERPAYMENT_RECOVERY',
+              'MANUAL_DEBT_RECOVERY',
+              'PAYMENT_ADVANCE_REPAYMENT',
+              'LOAN_REPAYMENT'
+            )
+            AND selected_candidate.finance_case_id IS NOT NULL
+            AND (selected_candidate.item_direction IS NULL OR selected_candidate.item_direction = 'DEDUCTION')
+            AND COALESCE((selected_candidate.preview_contract_json->>'ok')::boolean, false)
+            AND COALESCE((selected_candidate.preview_contract_json->>'selection_allowed')::boolean, false)
+        ), 0), 2) AS selected_deduction_amount
+      FROM pg_temp.tmp_pay_workbench_draft_scope_selected_candidates AS selected_candidate
+      WHERE selected_candidate.table_selected IS TRUE
+        AND UPPER(COALESCE(selected_candidate.selection_state, '')) = 'SELECTED'
+        AND UPPER(COALESCE(selected_candidate.table_status, '')) = 'READY'
+      GROUP BY selected_candidate.candidate_id
+    ), failed AS (
+      SELECT
+        candidate_semantics.*,
+        ROUND(candidate_semantics.selected_positive_ordinary_amount
+          + candidate_semantics.selected_deduction_amount, 2) AS selected_candidate_result,
+        CASE
+          WHEN candidate_semantics.selected_deduction_amount < 0
+           AND candidate_semantics.selected_positive_ordinary_amount <= 0
+            THEN 'PAY_WORKBENCH_DRAFT_RECOVERY_WITHOUT_POSITIVE_HEADROOM'
+          WHEN -candidate_semantics.selected_deduction_amount
+             > candidate_semantics.selected_positive_ordinary_amount
+            THEN 'PAY_WORKBENCH_DRAFT_DEDUCTION_EXCEEDS_SELECTED_HEADROOM'
+          WHEN candidate_semantics.selected_positive_ordinary_amount
+             + candidate_semantics.selected_deduction_amount < 0
+            THEN 'PAY_WORKBENCH_DRAFT_CANDIDATE_RESULT_NEGATIVE'
+          ELSE NULL
+        END AS failure_code
+      FROM candidate_semantics
+    )
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'candidate_id', failed.candidate_id::text,
+      'selected_positive_ordinary_amount', failed.selected_positive_ordinary_amount,
+      'selected_deduction_amount', failed.selected_deduction_amount,
+      'selected_candidate_result', failed.selected_candidate_result,
+      'code', failed.failure_code
+    ) ORDER BY failed.candidate_id), '[]'::jsonb)
+    INTO v_semantic_draft_failures
+    FROM failed
+    WHERE failed.failure_code IS NOT NULL;
+
+    IF jsonb_array_length(COALESCE(v_semantic_draft_failures, '[]'::jsonb)) > 0 THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_DRAFT_SELECTED_SEMANTIC_PROOF_FAILED'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'code', 'PAY_WORKBENCH_DRAFT_SELECTED_SEMANTIC_PROOF_FAILED',
+                'operation_id', p_operation_id::text,
+                'workbench_session_id', p_workbench_session_id::text,
+                'candidate_failures', v_semantic_draft_failures,
+                'message', 'Draft selection requires positive ordinary entitlement for the same candidate, deductions within selected headroom, and a non-negative candidate result.'
+              )::text;
+    END IF;
+  END IF;
+
   /*
    * Final pre-draft defence: selected rows must come from the current adopted
    * candidate authority. This performs only bounded validation and never
@@ -1162,6 +1273,51 @@ BEGIN
       'selected_rows_are_row_backed', true,
       'selected_preview_row_ids', COALESCE(jsonb_agg(to_jsonb(selected_page.preview_row_id::text) ORDER BY selected_page.row_ordinal, selected_page.preview_row_id), '[]'::jsonb),
       'economic_keyspace', 'timesheet_id,key_type,key_value',
+      'source_publication_attestation', COALESCE((
+        SELECT source_scope.certified_preview_publication_attestation_json
+        FROM public.banking_pay_workbench_session_scope AS source_scope
+        WHERE source_scope.session_id = p_workbench_session_id
+          AND source_scope.candidate_id = selected_page.candidate_id
+          AND source_scope.certified_preview_publication_parity_ok IS TRUE
+          AND source_scope.certified_preview_publication_session_version = v_session.version
+        LIMIT 1
+      ), '{}'::jsonb),
+      'source_build_run_id', (
+        SELECT source_scope.certified_preview_publication_source_build_run_id::text
+        FROM public.banking_pay_workbench_session_scope AS source_scope
+        WHERE source_scope.session_id = p_workbench_session_id
+          AND source_scope.candidate_id = selected_page.candidate_id
+          AND source_scope.certified_preview_publication_parity_ok IS TRUE
+          AND source_scope.certified_preview_publication_session_version = v_session.version
+        LIMIT 1
+      ),
+      'semantic_contract_version', (
+        SELECT source_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
+        FROM public.banking_pay_workbench_session_scope AS source_scope
+        WHERE source_scope.session_id = p_workbench_session_id
+          AND source_scope.candidate_id = selected_page.candidate_id
+          AND source_scope.certified_preview_publication_parity_ok IS TRUE
+          AND source_scope.certified_preview_publication_session_version = v_session.version
+        LIMIT 1
+      ),
+      'semantic_proof_digest', (
+        SELECT source_scope.certified_preview_publication_attestation_json->>'semantic_proof_digest'
+        FROM public.banking_pay_workbench_session_scope AS source_scope
+        WHERE source_scope.session_id = p_workbench_session_id
+          AND source_scope.candidate_id = selected_page.candidate_id
+          AND source_scope.certified_preview_publication_parity_ok IS TRUE
+          AND source_scope.certified_preview_publication_session_version = v_session.version
+        LIMIT 1
+      ),
+      'source_identity_digest', (
+        SELECT source_scope.certified_preview_publication_attestation_json->>'source_identity_digest'
+        FROM public.banking_pay_workbench_session_scope AS source_scope
+        WHERE source_scope.session_id = p_workbench_session_id
+          AND source_scope.candidate_id = selected_page.candidate_id
+          AND source_scope.certified_preview_publication_parity_ok IS TRUE
+          AND source_scope.certified_preview_publication_session_version = v_session.version
+        LIMIT 1
+      ),
       'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
     ),
     md5(jsonb_build_object(
