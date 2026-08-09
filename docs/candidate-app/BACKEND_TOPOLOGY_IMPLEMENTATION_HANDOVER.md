@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 9 August 2026
-Status: final Candidate broker/private API authority implementation for independent audit; TEST-only. This document is updated through manager-session-independent finalisation, same-phone approval, immutable upload arbitration and complete QR/paper pack assembly.
+Status: final Candidate broker/private API authority implementation, publication and TEST deployment for independent audit. This document is updated through manager-session-independent finalisation, same-phone approval, immutable upload arbitration, complete QR/paper pack assembly and deployed public/private readiness proof.
 
 ## Executive result
 
@@ -184,8 +184,18 @@ Implemented:
 | Private Candidate API Wrangler dry run | PASS |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
+| GitHub TEST database migration workflow `31337632908` | PASS |
+| Public Candidate broker health/readiness | 200 / 200 |
+| Normal TEST backend health/readiness | 200 / 200 |
+| Direct public Candidate route on normal backend | 404, as required |
 
-The dry runs used the repository-installed Wrangler 4.43.0 and performed no deployment.
+The pre-deployment dry runs and final deployments used repository-installed Wrangler 4.43.0. Active TEST deployment identities at handover generation are:
+
+- normal TEST backend: `da3fcf80-026f-48e2-aaa5-acd708a46143`;
+- private Candidate API: `6e670082-d166-43f0-88c3-db30dd7b5c1b`;
+- public Candidate broker: `f60f3582-2df0-4aba-af65-e19003ef274e`.
+
+The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
 ## Independent audit requests
 
@@ -210,7 +220,7 @@ Please verify, function by function:
 
 ## Remaining delivery sequence after independent GO
 
-1. independently audit this exact published/deployed source and handover manifest;
+1. independently audit exact published commit `21c10e910f2ce8753a40051c4e7f9a7f8853e3ca`, its deployed TEST services and this handover manifest;
 2. keep Candidate feature flags false until the coordinated synthetic TEST fixtures and current CloudTMS frontend are ready;
 3. implement the approved CloudTMS frontend changes, including one shared W01–W13 renderer;
 4. independently verify and freeze the OpenAPI contract after frontend acceptance;
@@ -220,14 +230,14 @@ Please verify, function by function:
 
 ## Safety and provenance
 
-- Database mutation or migration: none.
+- Database mutation or migration: the explicitly authorised TEST migration workflow installed the approved latest definitions; no Candidate business data was created or changed.
 - Candidate/manager workflow mutation: none.
 - R2 write/delete: none.
 - Email or push sent: none.
-- Normal TEST Worker deployed: no.
-- Private/broker Worker deployed: no.
+- Normal TEST Worker deployed: yes, explicitly authorised; TEST only.
+- Private/broker Worker deployed: yes, explicitly authorised; TEST only.
 - Production accessed or deployed: no.
-- Commit/push/PR: none.
+- Commit/push: backend commit `21c10e910f2ce8753a40051c4e7f9a7f8853e3ca` pushed directly to `origin/test`; no PR.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.
 

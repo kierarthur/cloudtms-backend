@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: broker/private-backend authority map, 9 August 2026. Updated through the final manager-session, same-phone handoff, immutable-upload and complete-paper-pack corrections.
+Status: deployed TEST broker/private-backend authority map, 9 August 2026. Updated through the final manager-session, same-phone handoff, immutable-upload, complete-paper-pack and end-to-end readiness corrections at backend commit `21c10e910f2ce8753a40051c4e7f9a7f8853e3ca`.
 
 ## Canonical owner graph
 

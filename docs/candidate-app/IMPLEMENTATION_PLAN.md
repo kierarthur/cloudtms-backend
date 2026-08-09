@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 9 August 2026. The DB/RPC authority is installed. The public Candidate broker/private CloudTMS API separation and the subsequent end-to-end authority corrections are implemented and locally verified against the current backend `test` source. Publication, TEST deployment and one further independent audit remain the Stage 2 completion gate recorded by this living plan.
+Status: active implementation; TEST-only. Updated: 9 August 2026. The DB/RPC authority is installed. The backend authority closure, separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST at backend commit `21c10e910f2ce8753a40051c4e7f9a7f8853e3ca`. Their health, readiness and public/private isolation checks pass. One further independent audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -37,7 +37,7 @@ Completed authority includes:
 
 DB/RPC regression gates remain PostgreSQL 17.6/18.1 install/runtime suites, concurrency suites, ACL/feature-off parity, focused Candidate tests and full backend regression.
 
-## Stage 2 — CloudTMS backend (current stage)
+## Stage 2 — CloudTMS backend (implemented and deployed to TEST; independent sign-off pending)
 
 Implement and verify one versioned private CloudTMS-owned HTTP boundary. The public broker must use it and must never query Supabase or R2 directly.
 
@@ -298,7 +298,7 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 
 ## Stage 4 — public Candidate broker and delivery activation
 
-- public Candidate/manager transport and trust boundary is now implemented as a separate Worker artefact, but remains undeployed pending independent GO;
+- public Candidate/manager transport and trust boundary is implemented and deployed to TEST as the separate `test-cloudtms-candidate-broker` Worker; Candidate business features remain disabled and the deployment is awaiting independent sign-off;
 - private CloudTMS service API only; no Supabase or R2 credentials, SDKs or direct queries in the broker;
 - broker-sealed Candidate access/refresh envelopes and opaque document/upload tickets only;
 - no financial calculations, route inference, approval truth or official PDF recreation;
@@ -317,14 +317,14 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 
 ## Completion gates
 
-Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, dry-run builds for both new Worker artefacts, independent audit, exact approved commit/push, then an explicitly approved TEST deployment and harmless disabled-state runtime proof. No Candidate workflow, email, notification, R2 or financial mutation is required for deployment verification.
+Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both new Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. All implementation, publication, deployment and harmless runtime checks are complete; independent audit is the remaining Stage 2 sign-off gate. No Candidate workflow, email, notification, R2 or financial mutation was required for deployment verification.
 
-Current pre-publication verification: 75/75 focused Candidate/backend/broker/DB-contract tests, 396/396 complete backend tests, 13/13 PostgreSQL runtime/concurrency suites on PostgreSQL 17.6 and again on 18.1, clean OpenAPI 3.1 lint, and successful dry-run bundles for both Candidate Workers. The database runtime test explicitly revokes the Candidate session before manager-triggered finalisation and still proves the canonical WEEKLY completion path.
+Current published/deployed verification: 75/75 focused Candidate/backend/broker/DB-contract tests, 396/396 complete backend tests, 13/13 PostgreSQL runtime/concurrency suites on PostgreSQL 17.6 and again on 18.1, clean OpenAPI 3.1 lint, successful Worker builds, successful TEST database migration workflow `31337632908`, and healthy deployed services. The public broker `/healthz` and `/readyz` return 200; the normal TEST backend `/healthz` and `/readyz` return 200; and the normal backend rejects a direct public Candidate route with 404. The database runtime test explicitly revokes the Candidate session before manager-triggered finalisation and still proves the canonical WEEKLY completion path.
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
 
 ### Known pre-enablement dependencies for independent audit
 
-- transactional manager/candidate links require the final Candidate/public frontend base URL to be configured in the private TEST Worker environment; the backend must not use its own Worker origin once those emails are enabled;
+- transactional manager/candidate links currently target the existing TEST frontend placeholder. They must be changed to the final Candidate/public frontend base URL before manager emails or Candidate links are enabled; the private API must never use its own Worker origin for those links;
 - physical push delivery activation remains gated on the iOS/Android/web application identities and provider credentials. The broker device-token boundary and delivery ownership are fixed; the database notification feed, preferences, encryption, dedupe and QR-ready timing remain authoritative;
 - provider push credentials and mobile/web application identities remain a later coordinated activation dependency; the canonical in-app notification feed, preferences, idempotent event creation and deep-link contract are already fixed and do not depend on push delivery.

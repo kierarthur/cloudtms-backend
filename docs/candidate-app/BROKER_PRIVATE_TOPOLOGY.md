@@ -1,6 +1,6 @@
 # Candidate broker and private CloudTMS API topology
 
-Status: TEST implementation and deployment contract; updated through the manager-session, same-phone handoff, replay and immutable-storage closure on 9 August 2026.
+Status: TEST implementation and deployed topology contract; updated through manager-session, same-phone handoff, replay, immutable-storage and end-to-end public/private readiness closure on 9 August 2026.
 
 ## Required trust boundary
 
@@ -125,9 +125,21 @@ The provider delivery adapter and retry/dead-letter worker belong to the Candida
 
 The delivery contract to implement with the app identities is: deterministic notification ID as provider collapse/dedupe key; per-device delivery; bounded exponential retry; invalid-token retirement; dead-letter after the approved attempt limit; and acknowledgement back to the canonical notification `push_state`. This provider activation is a coordinated broker/app stage, not a DB/RPC or financial-authority change.
 
+## Current TEST deployment
+
+- Public broker: `test-cloudtms-candidate-broker`, active version `f60f3582-2df0-4aba-af65-e19003ef274e`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `6e670082-d166-43f0-88c3-db30dd7b5c1b`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `da3fcf80-026f-48e2-aaa5-acd708a46143`.
+- Broker health/readiness: 200/200.
+- Normal backend health/readiness: 200/200.
+- Direct public Candidate route on normal backend: 404.
+- Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
+
+The deployed code is published at backend commit `21c10e910f2ce8753a40051c4e7f9a7f8853e3ca`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+
 ## Deployment and verification gate
 
-The local code is not permission to deploy. Before any TEST deployment:
+The following gate was applied to the current authorised TEST deployment and remains mandatory for every later deployment:
 
 1. merge only the current saved files and preserve unrelated work;
 2. provision the private Worker first with no public route;
