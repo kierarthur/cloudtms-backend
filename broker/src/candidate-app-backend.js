@@ -1906,10 +1906,13 @@ async function handlePaperPackDownload(request, env, deps, timesheetId) {
   }
 
   const stored = await r2Bytes(env, context.key, text(context.version.sha256) || null);
+  if (stored.media_type !== 'application/pdf') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID');
+  }
   return new Response(stored.bytes, {
     status: 200,
     headers: {
-      'content-type': stored.media_type === 'application/pdf' ? stored.media_type : 'application/pdf',
+      'content-type': stored.media_type,
       'content-length': String(stored.bytes.byteLength),
       'cache-control': 'private, no-store',
       'content-disposition': `attachment; filename="Timesheet_${context.id}_v${Number(context.timesheet.version || 1)}.pdf"`,

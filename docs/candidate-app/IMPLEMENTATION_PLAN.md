@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 9 August 2026. Backend source implementation approximately 75% complete at this revision; publish, TEST deployment and runtime verification remain outstanding.
+Status: active implementation; TEST-only. Updated: 9 August 2026. The DB/RPC authority is installed and the CloudTMS backend source is implementation-complete at this revision. The complete 375-test backend regression and Wrangler TEST dry-run pass; exact publish, normal TEST deployment, harmless runtime verification and independent audit are the remaining Stage 2 gates.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current backend implementation, and the remaining CloudTMS frontend, private broker and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -62,6 +62,7 @@ Implemented HTTP groups at this revision:
 - `/candidate-app/v1/auth/*` — challenge, activation/password completion, login, refresh-family rotation, logout and password change;
 - `/candidate-app/v1/account/*` — selected candidate, preferences and encrypted push-token registration;
 - `/candidate-app/v1/bootstrap`, `/timesheets`, `/timesheets/:id`, missing-week options/create and notifications;
+- `/candidate-app/v1/timesheets/:id/paper-pack/status` and `/paper-pack` — Candidate-owned durable readiness and secure PDF streaming without an R2 identity;
 - `/candidate-app/v1/timesheets/:id/expense-placement` and `/expense-carrier` — Candidate-authenticated adapters over the installed placement/carrier authorities;
 - `/candidate-app/v1/workflows/*` — create, components, factual submission, approval-route selection, reminder/renewal, paper return, finalise and cancel/supersede;
 - `/candidate-manager/v1/*` — token-bound manifest, component stream, review progress, signature upload, approve and refuse;
@@ -285,3 +286,9 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 Backend completion requires source review, focused unit/contract tests, full backend regression, Wrangler dry run, read-only TEST catalogue/smoke verification, exact commit push, normal TEST deploy of that commit, and harmless runtime health/version proof. No Candidate workflow, email, notification, R2 or financial mutation is required for deployment verification.
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
+
+### Known pre-enablement dependencies for independent audit
+
+- transactional manager/candidate links require the final Candidate/public frontend base URL to be configured in the TEST Worker environment; the backend must not use its own Worker origin once those emails are enabled;
+- physical mobile push delivery remains deferred until the broker/app provider and token format are selected; the database notification feed, preferences, encrypted token registration, dedupe and QR-ready timing are already authoritative;
+- the installed finalisation RPC currently revalidates an active Candidate session. Manager approval remains durable and retryable when none is available, but independent audit must confirm whether the final enabled lifecycle may rely on the submitted account retaining an active session or whether a narrowly constrained service-finalisation seam is required before feature enablement.
