@@ -20,8 +20,7 @@ const invoiceCompleteSource = read(
     + '24072026_1217_invoice_work_complete_batch.sql'
 );
 const claimSource = read(
-  'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
-    + '23072026_2207_email_outbox_claim_ready_batch.sql'
+  'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql'
 );
 const workflowSource = read(
   'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql'
