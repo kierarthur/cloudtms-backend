@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: current TEST broker/private-backend authority map, updated 10 August 2026 through monotonic same-family rejection projection, current-version expense anchoring, scoped hours/expense recovery arrays, immutable mail-receipt QR-source retirement, finalised PAPER lease fencing, generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release, exact manager methods and notification/outbox replay closure. Publication/deployment identifiers for this revision are recorded only after the authorised rollout gate.
+Status: deployed TEST broker/private-backend authority map, updated 10 August 2026 through monotonic same-family rejection projection, current-version expense anchoring, scoped hours/expense recovery arrays, immutable mail-receipt QR-source retirement, finalised PAPER lease fencing, generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release, exact manager methods and notification/outbox replay closure at runtime commit `802ec3ab5cc348a86163fe0f8aab9dceca1620de`.
 
 ## Canonical owner graph
 
