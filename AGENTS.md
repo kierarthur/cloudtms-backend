@@ -248,6 +248,22 @@ The temporary config must deploy only:
 codex-cloudtms-backend
 ```
 
+### Normal TEST Wrangler target
+
+When the user explicitly authorises deployment of the normal TEST Worker from
+this repository, always use:
+
+```powershell
+npx wrangler deploy --env test
+```
+
+Never use a bare `npx wrangler deploy` for normal TEST: the top-level Wrangler
+configuration targets `cloudtms-local`, not `test-cloudtms-backend`. Before the
+deploy, verify that `[env.test]` still names `test-cloudtms-backend`; after the
+deploy, require the Wrangler result to say `Uploaded test-cloudtms-backend` and
+to return the normal TEST URL. If either proof is missing, stop and report the
+wrong-target risk instead of treating the deployment as successful.
+
 It must point to:
 
 ```text
