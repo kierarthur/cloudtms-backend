@@ -821,7 +821,14 @@ BEGIN
         SELECT dirty_job.id AS job_id
         FROM public.banking_pay_workbench_jobs AS dirty_job
         WHERE dirty_job.candidate_id=batch_candidate.candidate_id
-          AND dirty_job.session_id=v_batch.source_workbench_session_id
+          -- Finance/correction transition dirty jobs are canonical
+          -- candidate-global owners and therefore legitimately carry a NULL
+          -- session_id.  Session-scoped recovery jobs must still match the
+          -- Draft's source Workbench session exactly.
+          AND (
+            dirty_job.session_id IS NULL
+            OR dirty_job.session_id=v_batch.source_workbench_session_id
+          )
           AND dirty_job.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
           AND (
             dirty_job.status IN ('QUEUED','RUNNING')

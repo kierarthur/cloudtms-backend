@@ -1440,7 +1440,13 @@ BEGIN
           )::uuid
           ELSE NULL::uuid END
         AND dirty_job.candidate_id=COALESCE(work_row.candidate_id,batch_candidate.candidate_id)
-        AND dirty_job.session_id=p_session_id
+        -- The transition-trigger job is normally candidate-global
+        -- (session_id NULL).  If a session-scoped owner is supplied it must
+        -- belong to this exact source Workbench session.
+        AND (
+          dirty_job.session_id IS NULL
+          OR dirty_job.session_id=p_session_id
+        )
         AND dirty_job.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
         AND (
           dirty_job.status IN ('QUEUED','RUNNING')

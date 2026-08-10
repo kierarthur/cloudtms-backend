@@ -412,7 +412,10 @@ test('untouched Draft admission separates pre-request economic truth from cancel
   assert.match(correctionStart, /DRAFT_OVERLAY_FAST_START_AUTHORITY_V1/);
   assert.match(correctionStart, /draft_overlay_fast_start_authorities/);
   assert.match(correctionStart, /request_owned_dirty_job_id/);
-  assert.match(correctionStart, /dirty_job\.session_id=v_batch\.source_workbench_session_id/);
+  assert.match(
+    correctionStart,
+    /dirty_job\.session_id IS NULL[\s\S]*dirty_job\.session_id=v_batch\.source_workbench_session_id/,
+  );
   assert.match(correctionStart, /policy_x_dirtying_only/);
   assert.match(correctionStart, /economic_truth_mutation_allowed/);
   assert.match(correctionStart, /coalesced_to_current_refresh_authority/);
@@ -424,7 +427,10 @@ test('untouched Draft admission separates pre-request economic truth from cancel
   assert.match(helpers, /PRE_REQUEST_ECONOMIC_AUTHORITY_NOT_CURRENT/);
   assert.match(helpers, /CANCELLATION_START_AUTHORITY_MISSING_OR_MISMATCH/);
   assert.match(helpers, /current_request_owned_dirty_job_id/);
-  assert.match(helpers, /dirty_job\.session_id=p_session_id/);
+  assert.match(
+    helpers,
+    /dirty_job\.session_id IS NULL[\s\S]*dirty_job\.session_id=p_session_id/,
+  );
   assert.match(helpers, /coalesced_to_current_refresh_authority/);
   assert.match(helpers, /COMPLETE_CURRENT_AUTHORITY/);
   assert.match(helpers, /actual_refresh_scope_status/);
