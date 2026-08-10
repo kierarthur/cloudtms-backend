@@ -175,7 +175,7 @@
     {
       "schema": "private", "name": "pay_workbench_cancel_reversion_admission_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_work_item_ids uuid[], p_options_json jsonb",
-      "definition_sha256": "ae7540893b883195f79355d7a13caaaf6603bcfe91be37c537acf55d690b2c47",
+      "definition_sha256": "20299d75aca4016eabad65d59a4d43b2e7e32aa140ead98442c6b3de946e8f85",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]

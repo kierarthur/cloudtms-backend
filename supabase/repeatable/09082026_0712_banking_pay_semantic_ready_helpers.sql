@@ -1442,7 +1442,20 @@ BEGIN
         AND dirty_job.candidate_id=COALESCE(work_row.candidate_id,batch_candidate.candidate_id)
         AND dirty_job.session_id=p_session_id
         AND dirty_job.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
-        AND dirty_job.status IN ('QUEUED','RUNNING')
+        AND (
+          dirty_job.status IN ('QUEUED','RUNNING')
+          OR (
+            dirty_job.status='SUCCEEDED'
+            AND COALESCE(
+              (dirty_job.payload_json->>'coalesced_to_current_refresh_authority')::boolean,
+              false
+            )
+            AND COALESCE(dirty_job.payload_json->>'coalesced_owner_resolution','')
+                  ='COMPLETE_CURRENT_AUTHORITY'
+            AND COALESCE(dirty_job.payload_json->>'actual_refresh_scope_status','')
+                  ='MATERIALISED'
+          )
+        )
         AND dirty_job.created_at_utc>=request_row.created_at_utc
         AND dirty_job.scope_change_generation=COALESCE(change_counter.scope_change_generation,0)
         AND COALESCE(dirty_job.payload_json->>'source_change_seq','')
