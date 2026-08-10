@@ -198,7 +198,9 @@ begin
     where timesheet_row.timesheet_id=v_timesheet_id
       and timesheet_row.is_current=true
       and nullif(btrim(coalesce(timesheet_row.qr_token,'')),'') is not null
-      and encode(digest(timesheet_row.qr_token,'sha256'),'hex')=v_qr_token_hash;
+      and encode(extensions.digest(
+        convert_to(timesheet_row.qr_token,'UTF8'),'sha256'
+      ),'hex')=v_qr_token_hash;
     v_qr_invalidated:=found;
   else
     update public.timesheets timesheet_row

@@ -6,13 +6,6 @@ create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
 create schema if not exists private;
 
--- Supabase exposes pgcrypto helpers to the public-only legacy QR function.
--- Keep the disposable catalogue equivalent without changing runtime SQL.
-create or replace function public.digest(p_value text,p_algorithm text)
-returns bytea
-language sql immutable strict
-as $$ select extensions.digest(convert_to(p_value,'UTF8'),p_algorithm) $$;
-
 do $roles$
 begin
   if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
@@ -612,6 +605,16 @@ create table public.audit_events (
   after_json jsonb,
   reason text,
   correlation_id text
+);
+
+create table public.ts_financials_outbox (
+  timesheet_id uuid not null references public.timesheets(timesheet_id),
+  reason text not null,
+  attempt_count integer not null default 0,
+  next_attempt_at timestamptz,
+  last_error text,
+  created_at timestamptz not null default now(),
+  constraint uq_tsfin_outbox unique (timesheet_id,reason)
 );
 
 create function public._audit_insert(

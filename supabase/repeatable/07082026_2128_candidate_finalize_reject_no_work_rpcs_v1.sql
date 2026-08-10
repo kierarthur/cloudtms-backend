@@ -1194,6 +1194,7 @@ declare
   v_qr_backed boolean:=false;
   v_reject_scope text;
   v_workflow record;
+  v_rejected_workflow_ids uuid[]:='{}'::uuid[];
   v_response jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
@@ -1242,19 +1243,21 @@ begin
     or exists(select 1 from public.candidate_submission_workflows w where w.target_timesheet_id=v_timesheet.timesheet_id and w.route='PAPER');
 
   for v_workflow in
-    select w.id,w.generation
+    select w.id,w.generation,w.route,w.state
     from public.candidate_submission_workflows w
     where w.environment=v_environment
-      and w.route='PAPER'
-      and w.state='AWAITING_PAPER_RETURN'
+      and w.state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')
       and (w.target_timesheet_id=v_timesheet.timesheet_id
         or w.anchor_timesheet_id=v_timesheet.timesheet_id)
     order by w.id
     for update
   loop
-    perform private._candidate_paper_delivery_retire_v1(
-      v_workflow.id,v_workflow.generation,'OFFICE_REJECTED',p_now_utc
-    );
+    v_rejected_workflow_ids:=array_append(v_rejected_workflow_ids,v_workflow.id);
+    if v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN' then
+      perform private._candidate_paper_delivery_retire_v1(
+        v_workflow.id,v_workflow.generation,'OFFICE_REJECTED',p_now_utc
+      );
+    end if;
   end loop;
 
   if v_qr_backed then
@@ -1294,24 +1297,36 @@ begin
     totals_json='{}'::jsonb,updated_at=p_now_utc where id=v_week.id;
   update public.timesheet_evidence set processing_state='SUPERSEDED'
   where timesheet_id=v_timesheet.timesheet_id and processing_state<>'SUPERSEDED';
-  update public.candidate_submission_components set state='REJECTED',superseded_at_utc=p_now_utc
-  where timesheet_id=v_timesheet.timesheet_id and state not in ('REJECTED','SUPERSEDED');
-  update public.candidate_approval_requests a set state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
-  from public.candidate_submission_workflows w
-  where w.id=a.workflow_id and w.target_timesheet_id=v_timesheet.timesheet_id and a.state='PENDING';
-  update public.candidate_submission_workflows set state='REJECTED',generation=generation+1,
-    rejection_reason=btrim(p_reason),rejection_scope=v_reject_scope,updated_at_utc=p_now_utc
-  where target_timesheet_id=v_timesheet.timesheet_id and state not in ('CANCELLED','SUPERSEDED');
-
   for v_workflow in
-    select w.id,w.account_id,w.candidate_id,w.generation from public.candidate_submission_workflows w
-    where w.target_timesheet_id=v_timesheet.timesheet_id and w.state='REJECTED'
+    select w.id,w.account_id,w.candidate_id,w.generation
+    from public.candidate_submission_workflows w
+    where w.id=any(v_rejected_workflow_ids)
+    order by w.id
+    for update
   loop
+    update public.candidate_approval_requests set
+      state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
+    where workflow_id=v_workflow.id
+      and workflow_generation=v_workflow.generation
+      and state in ('PENDING','APPROVED');
+    update public.candidate_submission_components set
+      state='REJECTED',superseded_at_utc=p_now_utc
+    where workflow_id=v_workflow.id
+      and workflow_generation=v_workflow.generation
+      and state not in ('REJECTED','SUPERSEDED','ABANDONED');
+    update public.candidate_submission_workflows set
+      state='REJECTED',generation=v_workflow.generation+1,
+      rejection_reason=btrim(p_reason),rejection_scope=v_reject_scope,updated_at_utc=p_now_utc
+    where id=v_workflow.id and generation=v_workflow.generation
+      and state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED');
+    if not found then
+      raise exception 'CANDIDATE_REJECT_WORKFLOW_CONFLICT' using errcode='40001';
+    end if;
     perform private._candidate_notification_insert_v1(v_workflow.account_id,v_workflow.candidate_id,v_workflow.id,v_new_timesheet_id,
       'OFFICE_REJECTED','office_rejection','candidate-office-rejected-v1',
       jsonb_build_object('reason',btrim(p_reason),'resubmission_scope',v_reject_scope),
       jsonb_build_object('type','timesheet','timesheet_id',v_new_timesheet_id),
-      'CANDIDATE_OFFICE_REJECTED_V1:'||v_workflow.id::text||':'||v_workflow.generation::text,p_now_utc);
+      'CANDIDATE_OFFICE_REJECTED_V1:'||v_workflow.id::text||':'||(v_workflow.generation+1)::text,p_now_utc);
   end loop;
   v_response:=jsonb_build_object(
     'ok',true,'old_timesheet_id',v_timesheet.timesheet_id,'timesheet_id',v_new_timesheet_id,

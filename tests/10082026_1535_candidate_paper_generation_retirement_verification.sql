@@ -100,7 +100,8 @@ begin
       'paper_return_manifest_sha256',v_manifest_hex,
       'candidate_paper_pack_ready',false,'mail_held_until_pdf_rendered',true,
       'mail_delayed_for_pdf_render',true,'mail_hold_reason','CANDIDATE_PAPER_PACK_PENDING',
-      'qr_token_hash',encode(digest('paper-retirement-token','sha256'),'hex')
+      'qr_token_hash',encode(extensions.digest(
+        convert_to('paper-retirement-token','UTF8'),'sha256'),'hex')
     )
   );
 
@@ -233,7 +234,8 @@ begin
       'paper_return_manifest_sha256',encode(v_manifest_sha,'hex'),
       'candidate_paper_pack_ready',false,'mail_held_until_pdf_rendered',true,
       'mail_hold_reason','CANDIDATE_PAPER_PACK_PENDING',
-      'qr_token_hash',encode(digest('leased-paper-token','sha256'),'hex')
+      'qr_token_hash',encode(extensions.digest(
+        convert_to('leased-paper-token','UTF8'),'sha256'),'hex')
     )
   );
   begin

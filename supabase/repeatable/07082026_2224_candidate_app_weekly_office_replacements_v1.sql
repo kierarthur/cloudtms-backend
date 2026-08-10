@@ -15187,34 +15187,35 @@ BEGIN
 
   v_week_period_hash := coalesce(
     nullif(v_snapshot_model->>'week_period_hash',''),
-    encode(digest(coalesce(
-      v_snapshot_model->'week_period','{}'::jsonb)::text,'sha256'),'hex'));
-  v_schedule_hash := encode(digest(
+    encode(extensions.digest(convert_to(coalesce(
+      v_snapshot_model->'week_period','{}'::jsonb)::text,'UTF8'),'sha256'),'hex'));
+  v_schedule_hash := encode(extensions.digest(convert_to(
     coalesce(v_snapshot_model#>'{week_period,days}','[]'::jsonb)::text,
-    'sha256'),'hex');
+    'UTF8'),'sha256'),'hex');
   v_reference_signature := coalesce(
     nullif(v_snapshot_model->>'reference_signature',''),
-    encode(digest(coalesce(v_snapshot_model#>'{week_period,days}',
-      '[]'::jsonb)::text,'sha256'),'hex'));
+    encode(extensions.digest(convert_to(coalesce(v_snapshot_model#>'{week_period,days}',
+      '[]'::jsonb)::text,'UTF8'),'sha256'),'hex'));
   v_additional_units_hash := coalesce(
     nullif(v_snapshot_model->>'additional_units_hash',''),
-    encode(digest(coalesce(v_snapshot_model#>'{additional_units_section,rows}',
-      '[]'::jsonb)::text,'sha256'),'hex'));
+    encode(extensions.digest(convert_to(coalesce(v_snapshot_model#>'{additional_units_section,rows}',
+      '[]'::jsonb)::text,'UTF8'),'sha256'),'hex'));
   v_presentation_settings_hash := coalesce(
     nullif(v_snapshot_model->>'presentation_settings_hash',''),
-    encode(digest(jsonb_build_object(
+    encode(extensions.digest(convert_to(jsonb_build_object(
       'branding',v_snapshot_model->'branding',
-      'wording',v_snapshot_model->'wording')::text,'sha256'),'hex'));
-  v_qr_payload_hash := encode(digest(v_qr_payload_json::text,'sha256'),'hex');
-  v_complete_printable_content_hash := encode(digest(
+      'wording',v_snapshot_model->'wording')::text,'UTF8'),'sha256'),'hex'));
+  v_qr_payload_hash := encode(extensions.digest(
+    convert_to(v_qr_payload_json::text,'UTF8'),'sha256'),'hex');
+  v_complete_printable_content_hash := encode(extensions.digest(convert_to(
     concat_ws('|',v_snapshot_hash,v_week_period_hash,v_schedule_hash,
       v_reference_signature,v_additional_units_hash,
       v_presentation_settings_hash,v_qr_payload_hash,
-      'timesheet-professional-v2'),'sha256'),'hex');
-  v_document_idempotency := encode(digest(concat_ws('|',
+      'timesheet-professional-v2'),'UTF8'),'sha256'),'hex');
+  v_document_idempotency := encode(extensions.digest(convert_to(concat_ws('|',
     'BUILD_DOCUMENT','TIMESHEET',v_current_timesheet_id::text,'TIMESHEET',
     v_document_revision::text,'timesheet-professional-v2',
-    v_qr_payload_hash,v_complete_printable_content_hash),'sha256'),'hex');
+    v_qr_payload_hash,v_complete_printable_content_hash),'UTF8'),'sha256'),'hex');
 
   SELECT v.id,v.operation_id,v.status::text,v.r2_key
     INTO v_document_version_id,v_document_operation_id,
@@ -15271,7 +15272,7 @@ BEGIN
       v_document_operation_id,v_document_revision::text,
       'timesheet-professional-v2','PLANNING',
       v_snapshot_json,v_snapshot_hash,'[]'::jsonb,
-      encode(digest('[]','sha256'),'hex'),v_now
+      encode(extensions.digest(convert_to('[]','UTF8'),'sha256'),'hex'),v_now
     )
     ON CONFLICT(entity_type,entity_id,purpose,source_revision,template_version)
       WHERE purpose IN('DRAFT_PREVIEW','TIMESHEET')
@@ -15304,9 +15305,9 @@ BEGIN
       operation_control_version,created_at_utc,updated_at_utc
     )
     SELECT v_document_operation_id,'DOCUMENT_PLAN','BUILD_MANIFEST',
-      encode(digest(concat_ws('|','DOCUMENT_PLAN',
+      encode(extensions.digest(convert_to(concat_ws('|','DOCUMENT_PLAN',
         v_document_version_id::text,v_document_revision::text,
-        'timesheet-professional-v2','1'),'sha256'),'hex'),
+        'timesheet-professional-v2','1'),'UTF8'),'sha256'),'hex'),
       0,'TIMESHEET',v_current_timesheet_id,v_document_version_id,
       'QUEUED',550,v_now,
       jsonb_build_object(
@@ -15364,7 +15365,8 @@ BEGIN
     'pdf_storage_key', v_pdf_key,
     'current_timesheet_id', v_current_timesheet_id::text,
     'current_version', v_current_version,
-    'qr_token_hash',encode(digest(v_effective_qr_token,'sha256'),'hex'),
+    'qr_token_hash',encode(extensions.digest(
+      convert_to(v_effective_qr_token,'UTF8'),'sha256'),'hex'),
     'qr_payload_hash',v_qr_payload_hash,
     'week_period_hash',v_week_period_hash,
     'schedule_hash',v_schedule_hash,

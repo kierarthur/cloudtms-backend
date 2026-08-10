@@ -28,6 +28,7 @@ const workflowSource = read(
 const routeSource = read('supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql');
 const rejectSource = read('supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql');
 const backendSource = read('broker/src/candidate-app-backend.js');
+const compileFixture = read('tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql');
 
 test('PAPER preparation atomically composes the canonical held-mail authority', () => {
   const sql = functionBody(workflowSource, 'public.candidate_workflow_transition_atomic_v1');
@@ -115,6 +116,28 @@ test('one retirement helper closes mail, notification and QR authority for every
   assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
+});
+
+test('Candidate PAPER hashing resolves pgcrypto exactly as the TEST schema exposes it', () => {
+  const helper = functionBody(workflowSource, 'private._candidate_paper_delivery_retire_v1');
+  const qr = functionBody(qrSource, 'public.timesheet_qr_send_enqueue_v1');
+  assert.match(helper, /extensions\.digest\(\s*convert_to\(timesheet_row\.qr_token,'UTF8'\)/i);
+  assert.doesNotMatch(helper.replace(/extensions\.digest/gi, ''), /\bdigest\s*\(/i);
+  assert.match(qr, /extensions\.digest\(\s*convert_to\(/i);
+  assert.doesNotMatch(qr.replace(/extensions\.digest/gi, ''), /\bdigest\s*\(/i);
+  assert.doesNotMatch(compileFixture, /function\s+public\.digest\s*\(/i);
+  assert.match(compileFixture, /create extension if not exists pgcrypto with schema extensions/i);
+});
+
+test('whole-record rejection transitions the exact target-or-anchor workflow set', () => {
+  const reject = functionBody(rejectSource, 'public.candidate_submission_reject_atomic_v1');
+  assert.match(reject, /v_rejected_workflow_ids\s+uuid\[\]/i);
+  assert.match(reject, /w\.target_timesheet_id=v_timesheet\.timesheet_id[\s\S]*w\.anchor_timesheet_id=v_timesheet\.timesheet_id/i);
+  assert.match(reject, /v_rejected_workflow_ids:=array_append\(v_rejected_workflow_ids,v_workflow\.id\)/i);
+  assert.match(reject, /candidate_approval_requests[\s\S]*workflow_id=v_workflow\.id[\s\S]*workflow_generation=v_workflow\.generation/i);
+  assert.match(reject, /candidate_submission_components[\s\S]*workflow_id=v_workflow\.id[\s\S]*workflow_generation=v_workflow\.generation/i);
+  assert.match(reject, /candidate_submission_workflows[\s\S]*where id=v_workflow\.id and generation=v_workflow\.generation/i);
+  assert.doesNotMatch(reject, /where target_timesheet_id=v_timesheet\.timesheet_id and state not in/i);
 });
 
 test('fresh PAPER generations own fresh delivery, QR and document identities', () => {

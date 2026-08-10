@@ -99,7 +99,8 @@ select
     'paper_return_manifest_sha256',encode(paper_return_manifest_sha256,'hex'),
     'candidate_paper_pack_ready',false,'mail_held_until_pdf_rendered',true,
     'mail_hold_reason','CANDIDATE_PAPER_PACK_PENDING',
-    'qr_token_hash',encode(digest('paper-race-token','sha256'),'hex')
+    'qr_token_hash',encode(extensions.digest(
+      convert_to('paper-race-token','UTF8'),'sha256'),'hex')
   )
 from public.candidate_submission_workflows
 where id='b5200000-0000-4000-8000-000000000008';
