@@ -127,9 +127,9 @@ The delivery contract to implement with the app identities is: deterministic not
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `276c54ed-0cb6-4253-b3de-34f5a0aaec92`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `37a7f7f9-dcb2-417f-a6e7-5c29b0e2add4`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `57b70f56-f76c-40a8-ba6f-e2de116cbc8a`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `d112cbf3-8bde-4289-ae07-36ac04eb16fd`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `47076223-7d1c-4b60-9003-484b4a42ebce`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `9609585c-abfa-436c-9140-2a8b5e361dda`.
 - Broker health/readiness: 200/200.
 - Normal backend health/readiness: 200/200.
 - Direct public Candidate route on normal backend: 404.

@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: deployed TEST broker/private-backend authority map, updated 10 August 2026 through monotonic same-family rejection projection, current-version expense anchoring, scoped hours/expense recovery arrays, immutable mail-receipt QR-source retirement, finalised PAPER lease fencing, generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release, exact manager methods and notification/outbox replay closure at runtime commit `802ec3ab5cc348a86163fe0f8aab9dceca1620de`.
+Status: deployed TEST broker/private-backend authority map, updated 10 August 2026 through exact claim-record replacement matching, source-set shared-QR retirement, current-version expense anchoring, scoped hours/expense recovery arrays, finalised PAPER lease fencing, generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release, exact manager methods and notification/outbox replay closure at runtime commit `2bf475c05e6fda6be68064b209f3e0398a26be6c`.
 
 ## Canonical owner graph
 
@@ -83,9 +83,9 @@ Neither Worker alters the existing financial algorithms. The broker cannot acces
 
 QR/paper delivery remains one composed authority: `PAPER_PREPARE` queues the existing QR document operation and binds its exact held mail operation to the workflow generation and manifest; the private scheduler alone assembles the complete pack and releases that exact email and the idempotent Candidate notification. Candidate paper-pack status/download endpoints are read-only and only inspect/stream an already-ready immutable pack without exposing an R2 key. They cannot requeue failed mail.
 
-Candidate rejection/read authority remains server-owned: historical workflow and carrier anchor IDs are immutable audit facts, while the current card identity is resolved through one exact current booking/version family. A newer workflow of the same HOURS or EXPENSES claim family makes an older rejection non-actionable without deleting its history. Independently actionable hours and expense rejections are returned together, so the client never guesses which recovery action survives.
+Candidate rejection/read authority remains server-owned: historical workflow and carrier anchor IDs are immutable audit facts, while the current card identity is resolved through one exact current booking/version family. A newer workflow suppresses an older rejection only when it is a true replacement of that exact logical claim: the same contract-week record for hours/combined, the same week-level expense family for expenses, or the same DAILY booking/work date. Independently actionable hours and expense rejections are returned together, so the client never guesses which recovery action survives.
 
-PAPER retirement keeps two identities separate: the QR source comes from the exact frozen delivery mail context/hash, while the rejected economic target comes from the locked workflow target. They may be the same hours row or different hours-anchor/expense-carrier rows. No Candidate, frontend or broker code may infer or interchange those identities.
+PAPER retirement keeps two identities separate: the QR source comes from the exact frozen delivery mail context/hash, while the rejected economic target comes from the locked workflow target. They may be the same hours row or different hours-anchor/expense-carrier rows. The database locks every relevant PAPER workflow and outbox row for that source, fences all live provider leases, invalidates the current token through its exact owner once, then retires every delivery surface on the source while preserving unrelated finalised workflow/economic history. No Candidate, frontend or broker code may infer or interchange those identities.
 
 - versioned private Candidate/manager and authenticated office routing, explicitly separated by route audience;
 - private Candidate session/password boundary behind the broker;

@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 10 August 2026
-Status: final Candidate broker/private API authority correction published, installed and deployed to dormant TEST for independent API-freeze audit. Runtime commit: `802ec3ab5cc348a86163fe0f8aab9dceca1620de`. This document is current through monotonic replacement-family rejection projection, current-version expense-anchor continuity, scoped hours/expense recovery arrays, immutable mail-receipt QR-source authority for finalised separate-expense PAPER, finalised PAPER artefact-generation retirement and mail-lease fencing, finalised-workflow exact-target rejection, explicit Supabase pgcrypto namespace resolution, target-or-anchor pre-finalisation rejection, generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
+Status: final Candidate broker/private API authority correction published, installed and deployed to dormant TEST for independent API-freeze audit. Runtime commit: `2bf475c05e6fda6be68064b209f3e0398a26be6c`. This document is current through exact claim-record replacement matching, source-set shared-QR retirement, current-version expense-anchor continuity, scoped hours/expense recovery arrays, finalised PAPER artefact-generation retirement and mail-lease fencing, finalised-workflow exact-target rejection, explicit Supabase pgcrypto namespace resolution, target-or-anchor pre-finalisation rejection, generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
 
 ## Executive result
 
@@ -25,7 +25,7 @@ No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version algorithm
 
 ## Final runtime namespace and anchor rejection closure
 
-Current runtime source: `802ec3ab5cc348a86163fe0f8aab9dceca1620de`.
+Current runtime source: `2bf475c05e6fda6be68064b209f3e0398a26be6c`.
 
 - Candidate PAPER retirement and canonical QR enqueue now call `extensions.digest` explicitly with UTF-8 byte conversion, matching the installed TEST pgcrypto schema and removing reliance on an unavailable public wrapper;
 - the disposable PostgreSQL fixture no longer invents `public.digest`, so clean-install verification exercises the same namespace contract as Supabase TEST;
@@ -36,7 +36,7 @@ Current runtime source: `802ec3ab5cc348a86163fe0f8aab9dceca1620de`.
 - each captured generation is retired by exact workflow ID and generation across PAPER mail/notification/token authority, approval request, component and workflow state;
 - the runtime suites prove finalised hours, combined, separate expense, anchor isolation, replacement submission, replay, Unauthorise-first and protected paid history, not merely source strings.
 
-Acceptance evidence is 19/19 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 112/112 focused Candidate/backend tests, 445/445 complete backend tests, all three Worker dry builds, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
+Acceptance evidence is 19/19 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 113/113 focused Candidate/backend tests, 445/445 complete backend tests, all three Worker dry builds, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
 
 ## Final rejection projection and finalised PAPER delivery closure
 
@@ -51,14 +51,14 @@ Acceptance evidence is 19/19 SQL runtime/concurrency suites on PostgreSQL 17.6 a
 
 ## Rejection monotonicity, anchor-family continuity and distinct PAPER QR ownership
 
-- a rejection is actionable only until a later workflow of the same candidate/contract/week and HOURS-or-EXPENSES claim family advances into draft, submission, approval, received, finalised or refused lifecycle;
+- a rejection is actionable only until a true later replacement advances: combined requires combined on the same `contract_week_id`, hours requires hours/combined on that same record, expenses require expense/combined for the same candidate/contract/week, and DAILY requires the same work date and stable booking family;
 - a later `FINALISED` workflow suppresses the historical rejection and permits the canonical current processing state to win; a later `REFUSED` workflow exposes the current refusal rather than resurrecting the prior office rejection;
 - immutable workflow history remains available, but only unresolved rejections receive a resubmission action;
 - list and detail responses return deterministic scoped `rejections` arrays, allowing independent hours and expense recovery actions to coexist without one `LIMIT 1` choice hiding the other;
 - historical workflow anchors and expense-carrier parents resolve by stable booking/version identity to exactly one current same-candidate/same-contract/same-week worked row. A finalised separate expense remains overlaid beneath H2 after hours H1 is rejected and rotated to H2;
-- `_candidate_paper_delivery_retire_v1` derives the QR source from exact workflow-generation-bound mail context and token hash. It does not use the workflow's mutable final expense-carrier target as the QR owner;
-- all bound delivery rows must agree on source and live token hash, provider leases block before mutation, and rejection requires a durable receipt proving the source token was invalidated or already absent before the economic target rotates;
-- executable PostgreSQL tests cover `WORKER_DRAFT → FINALISED → REFUSED`, simultaneous hours/expense rejection scopes, H1→H2 expense visibility, and separate-expense PAPER where H1 owns the issued QR token but E1 is the rejected target.
+- `_candidate_paper_delivery_retire_set_v1` derives each QR source from exact workflow-generation-bound mail context and composes the exact single-generation retirement owner. It does not use the workflow's mutable final expense-carrier target as the QR owner;
+- all relevant current/finalised PAPER workflows and bound outbox rows on the source are locked and lease-checked before mutation. A live token must have one immutable owner, is invalidated once, and every stale delivery surface is retired even when the token was already absent;
+- executable PostgreSQL tests cover `WORKER_DRAFT → FINALISED → REFUSED`, hours-only versus combined identity, multiple additional contract-week records, simultaneous hours/expense rejection scopes, H1→H2 expense visibility, both UUID orderings, queued/sent mail combinations, already-cleared-token cleanup and separate-expense PAPER where H1 owns the issued QR token but E1 is the rejected target.
 
 No table, public Candidate RPC, HTTP route, policy or economic owner was added or changed.
 
@@ -245,6 +245,7 @@ Implemented:
 - `broker/src/index.js`
 - `package.json`
 - `.github/workflows/candidate-db-runtime.yml`
+- `supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql`
 - `supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql`
 - `supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql`
 - `supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql`
@@ -261,6 +262,8 @@ Implemented:
 - `tests/08082026_1040_candidate_app_policy_corrections_runtime_verification.sql`
 - `tests/08082026_1200_candidate_app_expense_workflow_runtime_verification.sql`
 - `tests/10082026_1113_candidate_paper_mail_authority_verification.sql`
+- `tests/10082026_1817_candidate_finalised_rejection_verification.sql`
+- `tests/10082026_2005_candidate_finalised_paper_rejection_verification.sql`
 - `tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql`
 
 ### Living contract and plan
@@ -285,10 +288,21 @@ Implemented:
 
 ## Verification evidence
 
+### Exact replacement identity and source-set PAPER closure
+
+- `private._candidate_rejection_replaced_v1` is the one list/detail replacement predicate. A later hours-only workflow cannot suppress a rejected combined claim, a workflow on a different additional `contract_weeks` record cannot suppress another record, and a DAILY replacement must share both work date and stable booking family;
+- expense replacement remains deliberately week-level because a separate expense carrier can be recreated while still representing the same candidate/contract/week expense claim family;
+- `private._candidate_paper_delivery_retire_set_v1` freezes the complete selected workflow set, resolves immutable mail receipts to stable QR source families, locks every relevant current/finalised PAPER workflow and bound outbox row for each source, and checks every provider lease before mutation;
+- the current QR token is matched to exactly one immutable delivery owner and invalidated once. Every delivery surface on the same source is then retired, including when the token was already cleared; sent mail and immutable R2 history remain untouched;
+- an unrelated finalised separate-expense workflow can therefore remain finalised with unchanged economics while its obsolete source pack/mail/notification is made inert before the hours row rotates;
+- the full SQL fixture proves both UUID orderings, selected active versus preserved finalised expense workflows, queued/sent permutations, active-lease rollback, already-cleared-token cleanup and idempotent replay.
+
+This is lifecycle identity and stale-delivery closure only. It introduces no schema object, table, public RPC, public route, frontend change or financial calculation.
+
 | Verification | Result |
 |---|---:|
 | Changed/new JavaScript syntax | PASS |
-| Focused Candidate/backend/broker/DB-contract/PAPER tests | 112 passed, 0 failed |
+| Focused Candidate/backend/broker/DB-contract/PAPER tests | 113 passed, 0 failed |
 | Complete backend test suite | 445 passed, 0 failed |
 | PostgreSQL 17.6 runtime/concurrency suites | 19 passed, 0 failed |
 | PostgreSQL 18.1 runtime/concurrency suites | 19 passed, 0 failed |
@@ -297,17 +311,17 @@ Implemented:
 | Normal TEST backend Wrangler dry run | PASS |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
-| GitHub TEST database migration workflow `31429294986` | PASS |
-| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31429293621` | PASS |
+| GitHub TEST database migration workflow `31435115904` | PASS |
+| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31435115913` | PASS |
 | Public Candidate broker health/readiness | 200 / 200 |
 | Normal TEST backend health/readiness | 200 / 200 |
 | Direct public Candidate route on normal backend | 404, as required |
 
 The pre-deployment dry runs and deployments used repository-installed Wrangler 4.43.0. Active TEST deployment identities for this revision are:
 
-- normal TEST backend: `d2322be8-99be-4517-9b06-bf2df376f7bf`;
-- private Candidate API: `4e51efc9-bfd9-459c-88a2-6d05eb0eb2a9`;
-- public Candidate broker: `d95ac8a1-fc09-4617-8ec4-1926e6526128`.
+- normal TEST backend: `9609585c-abfa-436c-9140-2a8b5e361dda`;
+- private Candidate API: `47076223-7d1c-4b60-9003-484b4a42ebce`;
+- public Candidate broker: `d112cbf3-8bde-4289-ae07-36ac04eb16fd`.
 
 The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
@@ -354,6 +368,12 @@ Please verify, function by function, including the final authority seams:
 37. an immutable H1 anchor resolves to current H2 so a preserved finalised separate expense remains visible and overlaid without an anchor conflict;
 38. independent unresolved HOURS and EXPENSES rejections are returned together with their distinct server-owned recovery actions;
 39. finalised `CONTRACT_EXPENSE` PAPER derives the QR source from its immutable delivery receipt, invalidates H1, rotates E1, and fails atomically if source/hash/lease proof is incomplete.
+40. an hours-only workflow cannot suppress a rejected combined claim, and an additional-timesheet workflow cannot suppress rejection of another `contract_weeks` record;
+41. list and detail use the same exact replacement helper for CONTRACT and DAILY identities;
+42. every current/finalised PAPER workflow and bound outbox row on a shared source is locked and lease-checked before retirement mutation;
+43. shared-source retirement is independent of workflow UUID ordering and queued/sent combinations;
+44. a preserved finalised expense workflow retains its lifecycle/economics while every obsolete pack notification/mail generation on its hours source becomes inert;
+45. a source whose QR token was already cleared still retires all stale delivery surfaces and cannot later send an obsolete queued pack.
 
 ## Remaining delivery sequence after independent GO
 
@@ -367,14 +387,14 @@ Please verify, function by function, including the final authority seams:
 
 ## Safety and provenance
 
-- Database mutation or migration: the explicitly authorised TEST safe-migration workflow `31429294986` installed the approved changed repeatables after workflow `31429293621` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
+- Database mutation or migration: the explicitly authorised TEST safe-migration workflow `31435115904` installed the approved changed repeatables after workflow `31435115913` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
 - Candidate/manager workflow mutation: none.
 - R2 write/delete: none.
 - Email or push sent: none.
-- Normal TEST Worker deployed: yes, version `d2322be8-99be-4517-9b06-bf2df376f7bf`, explicitly authorised; TEST only.
-- Private/broker Worker deployed: yes, versions `4e51efc9-bfd9-459c-88a2-6d05eb0eb2a9` and `d95ac8a1-fc09-4617-8ec4-1926e6526128`, explicitly authorised; TEST only.
+- Normal TEST Worker deployed: yes, version `9609585c-abfa-436c-9140-2a8b5e361dda`, explicitly authorised; TEST only.
+- Private/broker Worker deployed: yes, versions `47076223-7d1c-4b60-9003-484b4a42ebce` and `d112cbf3-8bde-4289-ae07-36ac04eb16fd`, explicitly authorised; TEST only.
 - Production accessed or deployed: no.
-- Commit/push: runtime commit `802ec3ab5cc348a86163fe0f8aab9dceca1620de` was published non-forcibly directly to `origin/test` after repeated lane checks and rebases over unrelated Banking Pay commits; no PR.
+- Commit/push: runtime commit `2bf475c05e6fda6be68064b209f3e0398a26be6c` was published non-forcibly directly to `origin/test` after a clean lane check and rebase over the unrelated cancellation retry commit; no PR.
 - Deployment note: all three TEST Workers were deployed only after the repository safe-migration and exact PostgreSQL matrix gates completed. The normal backend deployment used the explicit `--env test` selector. No production or unrelated Worker was deployed.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.
