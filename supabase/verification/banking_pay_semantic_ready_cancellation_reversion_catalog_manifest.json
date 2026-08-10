@@ -245,7 +245,7 @@
     {
       "schema": "public", "name": "pay_batch_apply_finance_adjustments",
       "identity_arguments": "p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_vat_rate_pct numeric, p_week_start date, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "1ead69d2d24e9e77d1d8c9d9a7ab8bc82cedc13ee631e8d7b5dd4e13556b68be",
+      "definition_sha256": "86f2760c3602f0f70986d77a18cd8ad72d98fc18a664abec9261ee37e6f43b5b",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

@@ -168,6 +168,19 @@ BEGIN
       );
     END IF;
 
+    -- Register the exact transaction-local Draft finance authority before
+    -- either the normal materialisation path or the bounded partial-retry
+    -- cleanup can touch pay_batch_items.  ASSERT_COMPLETE at the end of this
+    -- function must never depend on the partial-retry branch having run.
+    PERFORM private.pay_workbench_draft_expected_effects_v1(
+      p_operation_id,'APPLY_FINANCE_ADJUSTMENTS','REGISTER',
+      jsonb_build_array(
+        jsonb_build_object('relation_name','pay_batch_items','operation','INSERT'),
+        jsonb_build_object('relation_name','pay_batch_items','operation','UPDATE'),
+        jsonb_build_object('relation_name','pay_batch_items','operation','DELETE')
+      ),jsonb_build_object('pay_batch_id',p_pay_batch_id)
+    );
+
     IF coalesce(v_operation_allocation_done, 0) > 0
        AND coalesce(v_operation_allocation_done, 0) < coalesce(v_operation_allocation_total, 0) THEN
       IF EXISTS (
@@ -203,15 +216,6 @@ BEGIN
           'pay_channel_scope', v_scope
         )::text;
       END IF;
-
-      PERFORM private.pay_workbench_draft_expected_effects_v1(
-        p_operation_id,'APPLY_FINANCE_ADJUSTMENTS','REGISTER',
-        jsonb_build_array(
-          jsonb_build_object('relation_name','pay_batch_items','operation','INSERT'),
-          jsonb_build_object('relation_name','pay_batch_items','operation','UPDATE'),
-          jsonb_build_object('relation_name','pay_batch_items','operation','DELETE')
-        ),jsonb_build_object('pay_batch_id',p_pay_batch_id)
-      );
 
       DELETE FROM public.pay_batch_items AS linked_item_delete
       USING public.banking_pay_operation_candidate_allocation_rows AS allocation_row

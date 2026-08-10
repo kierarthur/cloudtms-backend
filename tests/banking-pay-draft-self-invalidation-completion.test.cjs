@@ -16,6 +16,7 @@ const summary = read('supabase','repeatable','09082026_0826_pay_preview_candidat
 const semantic = read('supabase','repeatable','09082026_0712_banking_pay_semantic_ready_helpers.sql');
 const expansion = read('supabase','repeatable','04082026_1208_pay_payment_correction_expand_work.sql');
 const cancelSafe = read('supabase','repeatable','19072026_1816_cancel_refresh_supersede_finance_dirty.sql');
+const financeAdjustments = read('supabase','repeatable','21072026_1235_49_pay_batch_apply_finance_adjustments.sql');
 
 const draftWriters = [
   read('supabase','repeatable','26052026_2100HRS_NEW_FUNCTIONS.sql'),
@@ -55,6 +56,24 @@ test('all Draft writers register and assert their exact mutation phase', () => {
     assert.match(draftWriters, new RegExp(`'${phase}'`));
   }
   assert.ok((draftWriters.match(/private\.pay_workbench_draft_expected_effects_v1/g) || []).length >= 10);
+});
+
+test('finance adjustments register expected effects on the normal path before any retry cleanup or materialisation', () => {
+  const registerNeedle = "p_operation_id,'APPLY_FINANCE_ADJUSTMENTS','REGISTER'";
+  const partialRetryNeedle = 'IF coalesce(v_operation_allocation_done, 0) > 0';
+  const firstFinanceInsertNeedle = 'insert into public.pay_batch_items';
+  const assertNeedle = "p_operation_id,'APPLY_FINANCE_ADJUSTMENTS','ASSERT_COMPLETE'";
+
+  const registerIndex = financeAdjustments.indexOf(registerNeedle);
+  const partialRetryIndex = financeAdjustments.indexOf(partialRetryNeedle);
+  const firstFinanceInsertIndex = financeAdjustments.indexOf(firstFinanceInsertNeedle);
+  const assertIndex = financeAdjustments.indexOf(assertNeedle);
+
+  assert.ok(registerIndex > -1);
+  assert.ok(partialRetryIndex > registerIndex);
+  assert.ok(firstFinanceInsertIndex > registerIndex);
+  assert.ok(assertIndex > firstFinanceInsertIndex);
+  assert.equal(financeAdjustments.split(registerNeedle).length - 1, 1);
 });
 
 test('financial dirty trigger consumes only exact same-transaction Draft effects', () => {
