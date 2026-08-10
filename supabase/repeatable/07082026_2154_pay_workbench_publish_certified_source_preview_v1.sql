@@ -155,7 +155,7 @@ BEGIN
     'original_source_publication_id',
     'projection_run_id','admission_seal_version','admission_seal_digest',
     'projection_fingerprint','accepted_baseline_build_id',
-    'semantic_contract_version','semantic_proof_digest',
+    'semantic_contract_version','semantic_proof_digest','original_semantic_proof_digest',
     'cancellation_request_id','cancellation_operation_id','cancellation_work_item_id',
     'pay_batch_id','cancellation_reversion_run_id','financial_reversion_digest','source_count',
     'cancellation_route'
@@ -426,7 +426,7 @@ BEGIN
          !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
        OR COALESCE(p_publication_options_json->>'original_source_build_run_id','')
          !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-       OR NULLIF(BTRIM(COALESCE(p_publication_options_json->>'semantic_proof_digest','')),'') IS NULL THEN
+       OR NULLIF(BTRIM(COALESCE(p_publication_options_json->>'original_semantic_proof_digest','')),'') IS NULL THEN
       RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
         USING ERRCODE='P0001',DETAIL=jsonb_build_object(
           'code','CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH',
@@ -1604,6 +1604,7 @@ BEGIN
       'admission_seal_digest',v_admission_seal_digest,
       'projection_fingerprint',v_projection_fingerprint,
       'semantic_proof_digest',v_semantic_proof_digest,
+      'original_semantic_proof_digest',p_publication_options_json->>'original_semantic_proof_digest',
       'selection_recovery_headroom_v1',COALESCE(v_selection_recovery_overlay,'{}'::jsonb),
       'cancellation_request_id',p_publication_options_json->>'cancellation_request_id',
       'cancellation_operation_id',p_publication_options_json->>'cancellation_operation_id',

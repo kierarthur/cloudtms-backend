@@ -2840,7 +2840,7 @@ BEGIN
           pg_catalog.substr(admitted.run_hash,17,4)||'-'||pg_catalog.substr(admitted.run_hash,21,12),
         'cancellation_route','DRAFT_OVERLAY_FAST',
         'financial_reversion_digest',admitted.reversion_digest,
-        'semantic_proof_digest',admitted.value->>'semantic_proof_digest',
+        'original_semantic_proof_digest',admitted.value->>'semantic_proof_digest',
         'source_count',admitted.value->>'source_count'
       )
     ) AS descriptor

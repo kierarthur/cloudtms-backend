@@ -349,6 +349,26 @@ test('cancellation reversion uses deterministic candidate locks, immutable linea
   assert.match(processChunk, /private\.pay_workbench_cancel_reversion_admission_page_v1/);
   assert.match(processChunk, /private\.pay_workbench_publish_certified_source_preview_page_v1/);
   assert.match(processChunk, /CERTIFIED_CANCELLATION_REVERSION_COMPLETE/);
+  assert.match(
+    publisher,
+    /original_semantic_proof_digest[\s\S]*CANCELLATION_LINEAGE_INCOMPLETE/,
+  );
+  assert.match(
+    publisher,
+    /'original_semantic_proof_digest',p_publication_options_json->>'original_semantic_proof_digest'/,
+  );
+  assert.match(
+    helpers,
+    /'original_semantic_proof_digest',admitted\.value->>'semantic_proof_digest'/,
+  );
+  assert.match(
+    processChunk,
+    /'original_semantic_proof_digest',admitted\.value->>'semantic_proof_digest'/,
+  );
+  assert.doesNotMatch(
+    processChunk,
+    /'semantic_proof_digest',admitted\.value->>'semantic_proof_digest'/,
+  );
 });
 
 test('eligible no-provider financial reversions use one set-based page with a strict compatibility fallback', () => {
