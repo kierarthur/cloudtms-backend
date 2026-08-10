@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_workbench_enqueue_candidate_refresh",
       "identity_arguments": "p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb",
-      "definition_sha256": "26b5b4db2f0dda1797f8df51513126ca1daaf00a9c8e6704c7347fe76d129db0",
+      "definition_sha256": "46eec77cbe0bdde0f30857b508d263689eb9ba04eb2d5482eaefd25a58d6bafe",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
