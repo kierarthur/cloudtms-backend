@@ -30,7 +30,7 @@
     {
       "schema": "public", "name": "pay_preview_candidate_build_summary_fragment",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "7188ded6deb528a6cd02c908312badd02f346841485f9bbe440333b182b03126",
+      "definition_sha256": "b2e714f6af8da1250d0197c1866f4af02d1c89e0a775bb6cb1bb113f5ec2a137",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -65,7 +65,7 @@
     {
       "schema": "public", "name": "pay_workbench_patch_preview_after_batch_mutation",
       "identity_arguments": "p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "a270c910d9c105717565754ee388e310b1dabedeb67ae20169d77150716cd840",
+      "definition_sha256": "ab9389ff8b9712e27ff5682a8115f8311657ef4fd65f7fa25098f248957c02b2",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -195,7 +195,7 @@
     {
       "schema": "private", "name": "pay_workbench_financial_scope_dirty_transition_v1",
       "identity_arguments": "",
-      "definition_sha256": "a34a462530d37393be2378b193ec0e61804d9b0f6740ec3f3763b2d2fc53b618",
+      "definition_sha256": "26e6686bcb97399fceecca2ff17c1c59ccb7091aceeb518cb21388c347eb1e0e",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql"]
@@ -214,7 +214,7 @@
     {
       "schema": "public", "name": "pay_batch_apply_finance_adjustments",
       "identity_arguments": "p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_vat_rate_pct numeric, p_week_start date, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "c93e4925471e56aba5719dc5ec7006b0af4c69595615ac5d3d04a4e53cdc7431",
+      "definition_sha256": "1ead69d2d24e9e77d1d8c9d9a7ab8bc82cedc13ee631e8d7b5dd4e13556b68be",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -256,7 +256,7 @@
     {
       "schema": "public", "name": "pay_batch_build_item_breakdowns",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "3f8271f977dfdb2001a8248ec6217979155323e9a58530ae5befc1b596192a5b",
+      "definition_sha256": "620b46dfca3e2eaa20d12a34af63463ae71788d20369b5794863de76c5e1019a",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
