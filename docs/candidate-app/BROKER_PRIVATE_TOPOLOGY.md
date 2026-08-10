@@ -1,6 +1,6 @@
 # Candidate broker and private CloudTMS API topology
 
-Status: TEST implementation and deployed topology contract; updated through final generation/state-safe upload replay, deterministic immutable rendering/recovery, exact manager methods and compare-and-set paper release closure on 10 August 2026.
+Status: TEST implementation and deployed topology contract; updated through final runtime namespace and target-or-anchor rejection closure on 10 August 2026.
 
 ## Required trust boundary
 
@@ -127,15 +127,15 @@ The delivery contract to implement with the app identities is: deterministic not
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `0b4a394e-87aa-4d25-9dfb-4f6132a7a94f`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `31329082-50e7-4405-8d5b-960f6e16d96b`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `ebcfbdc1-0ad3-4706-8c6d-a3b128edfb69`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `56778d97-9439-4992-941b-dcc62b30911d`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `c6175b31-2af7-4cb1-b511-515a7cce8f1a`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `fc28c9af-9440-4e90-87b9-2e3fc8ce3d82`.
 - Broker health/readiness: 200/200.
-- Normal backend health/readiness: 200/200.
+- Normal backend health: 200. Its general readiness endpoint remains 503 because the separately owned invoice processor readiness contract is not satisfied; Candidate broker/private readiness is healthy and this correction did not alter that subsystem.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The deployed runtime code is published through backend commits `999c02b55322d5749ab2aeb48468bbc40194e0cf` and `1c004f37f42bf353dae2772407a6af3404a9dff1`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The current Candidate runtime correction is published through backend commit `792f1f9bbd61c94f4e3e1c241d0e4865a95a817b`. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 

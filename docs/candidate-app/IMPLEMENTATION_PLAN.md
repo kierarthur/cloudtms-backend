@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST with every Candidate feature flag false. The generation-retirement and provider-handoff correction is published at runtime commit `6ddba7f17f98a4265232b4b2ac51b1ac25d46687`. PostgreSQL runtime and safe-migration GitHub gates passed, the exact corrected repeatables are installed in TEST, and the private API, public broker and normal TEST backend were redeployed from that source. `PAPER_PREPARE` commits its frozen workflow/manifest only with one exact held email operation; release is one service-only database action; and every amendment, cancellation, supersession, rejection or route intervention retires the obsolete PAPER generation before its mail, token, notification or return authority can remain live. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
+Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST with every Candidate feature flag false. The final runtime namespace and anchor-only rejection correction is published at runtime commit `792f1f9bbd61c94f4e3e1c241d0e4865a95a817b`. PostgreSQL runtime and safe-migration GitHub gates passed, the exact corrected repeatables are installed in TEST, and the private API, public broker and normal TEST backend were redeployed from that source. Candidate PAPER hashing now uses the pgcrypto authority exactly as installed in Supabase, and whole-record office rejection retires every exact active workflow generation that targets or is anchored to the rejected timesheet. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -156,9 +156,23 @@ Controlling guarantees:
 - readiness notification retirement is state-safe: the old deep link is marked obsolete, pending delivery is skipped and the historical notification is not deleted;
 - no R2 evidence or signed/issued history is physically purged by generation retirement.
 
-Verified acceptance for this closure is 16/16 Candidate SQL runtime/concurrency suites on both PostgreSQL 17.6 and 18.1, 109/109 focused Candidate/backend tests, 442/442 complete backend tests, all three Worker dry builds, safe TEST migration, exact installed-repeatable hashes and healthy deployed TEST Workers. The Candidate tables remain empty and all Candidate feature flags remain false pending independent audit.
+Verified acceptance for the combined closure is 17/17 Candidate SQL runtime/concurrency suites on both PostgreSQL 17.6 and 18.1, 111/111 focused Candidate/backend tests, 444/444 complete backend tests, all three Worker dry builds, safe TEST migration, installed-definition verification and healthy Candidate broker/private API deployment. The Candidate tables remain empty and all Candidate feature flags remain false pending independent audit.
 
 This is an orchestration and stale-authority correction only. The canonical DAILY and WEEKLY financial calculations, Process, Authorise, invoice, payment, Banking Pay and Policy X authorities were not changed.
+
+### Final runtime namespace and anchor-only rejection closure
+
+The final independent runtime audit identified two installed-source seams. They are closed without adding a table, RPC, route, financial algorithm or product-policy change:
+
+- `_candidate_paper_delivery_retire_v1` and `timesheet_qr_send_enqueue_v1` call `extensions.digest(convert_to(...,'UTF8'),'sha256')` explicitly. Their security-definer search paths no longer depend on a nonexistent `public.digest` wrapper, and the disposable compile fixture deliberately provides no such wrapper;
+- the exact text converted to bytes, SHA-256 algorithm and hexadecimal output remain unchanged, so QR/document/mail identity semantics are unchanged;
+- `candidate_submission_reject_atomic_v1` locks and captures every active workflow whose `target_timesheet_id` or `anchor_timesheet_id` is the rejected current timesheet;
+- PAPER delivery retirement runs for each exact current PAPER generation before route/timesheet rotation;
+- approval requests, components and the workflow lifecycle are then changed only by the captured workflow ID and its locked generation. No target-only broad update or guessed workflow is permitted;
+- anchor-only `CONTRACT_EXPENSE` workflows therefore become `REJECTED`, their live request becomes `SUPERSEDED`, their components become `REJECTED`, and their pack mail/notification is retired. The one-active-expense gate no longer sees the obsolete claim;
+- executable regression creates that anchor-only state, performs whole-record rejection, proves every descendant authority is inert, simulates completion of replacement hours and creates a legitimate replacement expense workflow.
+
+This correction does not change the meaning or arithmetic of rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN, DAILY/WEEKLY calculation, Process, Authorise, invoice, payment, Banking Pay or Policy X. It only makes already-agreed runtime and rejection authority reachable and complete in the installed TEST schema.
 
 ### Candidate authentication and session boundary
 

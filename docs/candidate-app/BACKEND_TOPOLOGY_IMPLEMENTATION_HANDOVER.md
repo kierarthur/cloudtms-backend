@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 10 August 2026
-Status: final Candidate broker/private API authority correction published and deployed to TEST for independent API-freeze audit. This document is updated through generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
+Status: final Candidate broker/private API authority correction published and deployed to TEST for independent API-freeze audit. This document is updated through explicit Supabase pgcrypto namespace resolution and exact target-or-anchor whole-record rejection closure, in addition to generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
 
 ## Executive result
 
@@ -22,6 +22,19 @@ Candidate iOS / Android / web + manager browser
 The public broker has no Supabase/R2 or CloudTMS business-authority dependency. The private Candidate API has no public Worker route. The normal CloudTMS Worker retains authenticated office adapters and now rejects public Candidate/manager paths before its global preflight handler.
 
 No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version algorithm, invoice, payment, Banking Pay, Policy X, Google rota/availability or official-timesheet-renderer economics were changed in this closure. Existing Candidate workflow, route-orchestration, QR-enqueue and mail-claim repeatables were tightened only to make one PAPER generation the complete owner of its delivery authority and to retire stale authority safely.
+
+## Final runtime namespace and anchor rejection closure
+
+Runtime source: `792f1f9bbd61c94f4e3e1c241d0e4865a95a817b`.
+
+- Candidate PAPER retirement and canonical QR enqueue now call `extensions.digest` explicitly with UTF-8 byte conversion, matching the installed TEST pgcrypto schema and removing reliance on an unavailable public wrapper;
+- the disposable PostgreSQL fixture no longer invents `public.digest`, so clean-install verification exercises the same namespace contract as Supabase TEST;
+- whole-record office rejection locks the exact set of active workflows whose target or anchor is the rejected current timesheet;
+- each captured generation is retired by exact workflow ID and generation across PAPER mail/notification/token authority, approval request, component and workflow state;
+- an anchor-only `CONTRACT_EXPENSE` workflow can no longer remain active after its displayed/anchored hours record is rejected and cannot incorrectly block the later legitimate replacement claim;
+- the runtime suite proves the full anchor-only lifecycle and replacement-claim journey, not merely a source string.
+
+Acceptance evidence is 17/17 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 111/111 focused Candidate/backend tests, 444/444 complete backend tests, all three Worker dry builds, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
 
 ## Final PAPER generation-retirement closure
 
