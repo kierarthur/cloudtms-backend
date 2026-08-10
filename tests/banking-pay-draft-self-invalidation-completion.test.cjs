@@ -102,6 +102,11 @@ test('claim deferral is exact, bounded and reuses the same queued job', () => {
 
 test('post-create adoption is strict V3 current authority and never rewrites economics', () => {
   assert.match(helpers, /CREATE OR REPLACE FUNCTION private\.pay_workbench_draft_create_adoption_finalize_v1/);
+  assert.match(helpers, /v_operation\.phase,''\)\)\)<>'POST_CREATE_REFRESH'/);
+  assert.match(helpers, /v_operation\.status,''\)\)\)='WAITING'/);
+  assert.match(helpers, /v_operation\.runner_state,''\)\)\)='RUNNABLE'/);
+  assert.match(helpers, /operation_batch_scope\.pay_batch_id=p_pay_batch_id/);
+  assert.doesNotMatch(helpers, /v_operation\.pay_batch_id IS DISTINCT FROM p_pay_batch_id/);
   assert.match(helpers, /CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3/);
   assert.match(helpers, /READY_TO_PAY_SEMANTIC_V2/);
   assert.match(helpers, /pending_job_id IS NOT NULL/);

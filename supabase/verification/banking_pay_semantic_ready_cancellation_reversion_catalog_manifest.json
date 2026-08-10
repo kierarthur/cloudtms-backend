@@ -218,7 +218,7 @@
     {
       "schema": "private", "name": "pay_workbench_draft_create_adoption_finalize_v1",
       "identity_arguments": "p_operation_id uuid, p_pay_batch_id uuid, p_session_id uuid, p_candidate_ids uuid[], p_options_json jsonb",
-      "definition_sha256": "dcc082d30952741236eab0dff7d4ff748093172ec91b18f8c0d79c26f0877916",
+      "definition_sha256": "9ca95e321453555bfca3eceff2f3ba88d0e167cc091861fb2232d2dd536c8d00",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/10082026_0024_banking_pay_draft_expected_effects_v1.sql"]

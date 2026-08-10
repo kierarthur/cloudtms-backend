@@ -311,10 +311,25 @@ BEGIN
 
   IF NOT FOUND
      OR pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.operation_type,'')))<>'DRAFT_CREATE'
-     OR v_operation.pay_batch_id IS DISTINCT FROM p_pay_batch_id
      OR v_operation.workbench_session_id IS DISTINCT FROM p_session_id
-     OR pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.status,''))) NOT IN
-       ('QUEUED','RUNNING','PROCESSING','CLAIMED','IN_PROGRESS') THEN
+     OR pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.phase,'')))<>'POST_CREATE_REFRESH'
+     OR NOT (
+       pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.status,''))) IN
+         ('QUEUED','RUNNING','PROCESSING','CLAIMED','IN_PROGRESS')
+       OR (
+         pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.status,'')))='WAITING'
+         AND pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.runner_state,'')))='RUNNABLE'
+       )
+     )
+     OR p_pay_batch_id IS NULL
+     OR NOT EXISTS(
+       SELECT 1
+       FROM public.banking_pay_operation_candidate_scope AS operation_batch_scope
+       WHERE operation_batch_scope.operation_id=p_operation_id
+         AND operation_batch_scope.pay_batch_id=p_pay_batch_id
+         AND operation_batch_scope.workbench_session_id=p_session_id
+         AND operation_batch_scope.status NOT IN ('FAILED','CANCELLED','SUPERSEDED')
+     ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_DRAFT_ADOPTION_OPERATION_INVALID' USING ERRCODE='23514';
   END IF;
 
