@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_workbench_publish_certified_source_preview_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_economic_build_id uuid, p_source_build_run_id uuid, p_source_change_seq bigint, p_session_version bigint, p_completion_job_id uuid, p_refresh_scope_kind text, p_targeted_timesheet_ids jsonb, p_linked_timesheet_ids jsonb, p_publication_options_json jsonb",
-      "definition_sha256": "4d4ba68626da882a9de33d11d11c31bd0854e615da54a33cb8381c8cbc4c403e",
+      "definition_sha256": "daf8a7fb4d89435651d397f7a7878e5aff7bc2b1362d27d70008445a5ac89ad7",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
