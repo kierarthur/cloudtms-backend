@@ -53,6 +53,35 @@ function noLogoBranding(agencyName = 'Configured Agency') {
   };
 }
 
+function readyPaperScope(workflowId, generation, manifestHash, complete = {}) {
+  return {
+    candidate_workflow_id: workflowId,
+    candidate_workflow_generation: generation,
+    paper_return_manifest_sha256: manifestHash,
+    candidate_paper_pack_ready: true,
+    mail_held_until_pdf_rendered: false,
+    mail_hold_reason: null,
+    candidate_complete_pack_storage_key: complete.key || 'candidate-app/test/pack.pdf',
+    candidate_complete_pack_sha256: complete.sha256 || 'e'.repeat(64),
+    candidate_complete_pack_size_bytes: complete.byte_size || 500,
+    candidate_complete_pack_page_count: complete.page_count || 2,
+    candidate_complete_pack_media_type: 'application/pdf'
+  };
+}
+
+function readyPaperAttachment(workflowId, generation, manifestHash, complete = {}) {
+  return {
+    r2_key: complete.key || 'candidate-app/test/pack.pdf',
+    sha256: complete.sha256 || 'e'.repeat(64),
+    size_bytes: complete.byte_size || 500,
+    page_count: complete.page_count || 2,
+    content_type: 'application/pdf',
+    candidate_workflow_id: workflowId,
+    candidate_workflow_generation: generation,
+    paper_return_manifest_sha256: manifestHash
+  };
+}
+
 test('Candidate password verifiers accept the exact password and reject a different password', async () => {
   const verifier = await derivePasswordVerifier('correct-horse-battery-staple');
   const account = {
@@ -372,6 +401,46 @@ test('frozen branding ignores later live settings and validates its immutable co
   }
 });
 
+test('live branding is copied once to a content-addressed immutable logo key', async () => {
+  const originalFetch = globalThis.fetch;
+  const logoBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
+  const logoDigest = createHash('sha256').update(logoBytes).digest('hex');
+  const objects = new Map();
+  let putCount = 0;
+  const env = {
+    SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async get(key) {
+        if (key !== 'Assets/LOGO.png') return null;
+        return {
+          httpMetadata: { contentType: 'image/png' },
+          async arrayBuffer() { return logoBytes.buffer.slice(0); }
+        };
+      },
+      async put(key, bytes, options) {
+        if (objects.has(key)) return null;
+        putCount += 1;
+        const value = new Uint8Array(bytes);
+        const row = { key, size: value.byteLength, customMetadata: options.customMetadata };
+        objects.set(key, row);
+        return row;
+      },
+      async head(key) { return objects.get(key) || null; }
+    }
+  };
+  globalThis.fetch = async () => Response.json([{ agency_name: 'Configured Agency', agency_logo: 'Assets/LOGO.png' }]);
+  try {
+    const first = await candidateDocumentBranding(env);
+    const replay = await candidateDocumentBranding(env);
+    assert.equal(first.logo_key, `candidate-app/branding/${logoDigest}.png`);
+    assert.equal(first.logo_sha256, logoDigest);
+    assert.equal(replay.branding_contract_sha256, first.branding_contract_sha256);
+    assert.equal(putCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('document registration recovers after R2 success without rerendering a different object', async () => {
   const branding = noLogoBranding();
   const workflow = {
@@ -494,6 +563,10 @@ test('paper pack readiness is a read-only durable-object receipt check', async (
     id: '00000000-0000-4000-8000-000000000030', generation: 1, environment: 'TEST',
     renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
     paper_return_manifest_sha256: 'a'.repeat(64),
+    paper_return_manifest_json: { pages: [
+      { page_key: 'HOURS_TIMESHEET' }, { page_key: 'EXPENSE_SUMMARY' },
+      { page_key: 'MILEAGE_FORM:1' }, { page_key: 'EXPENSE_EVIDENCE:1' }
+    ] },
     immutable_submission_json: {
       official_presentation: { branding: { branding_contract_sha256: 'f'.repeat(64) } }
     }
@@ -506,6 +579,7 @@ test('paper pack readiness is a read-only durable-object receipt check', async (
         key, size: 123,
         customMetadata: {
           purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
+          workflow_generation: '1',
           timesheet_id: timesheet.timesheet_id, manifest_sha256: 'a'.repeat(64),
           base_document_sha256: 'b'.repeat(64), branding_contract_sha256: 'f'.repeat(64),
           renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1', media_type: 'application/pdf',
@@ -528,6 +602,42 @@ test('paper pack readiness is a read-only durable-object receipt check', async (
   assert.doesNotMatch(readPath, /assembleCandidatePaperPack|restWrite|immutablePut/);
   assert.match(readPath, /readyPaperPackReceipt/);
   assert.match(readPath, /workflows\.length > 1[\s\S]*CANDIDATE_PAPER_WORKFLOW_CONFLICT/);
+});
+
+test('paper pack receipt rejects malformed hashes, generation and page-count metadata', async () => {
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000032', generation: 3,
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+    paper_return_manifest_sha256: 'a'.repeat(64),
+    paper_return_manifest_json: { pages: [{ page_key: 'HOURS_TIMESHEET' }, { page_key: 'EXPENSE_SUMMARY' }] },
+    immutable_submission_json: {
+      official_presentation: { branding: { branding_contract_sha256: 'f'.repeat(64) } }
+    }
+  };
+  const timesheet = { timesheet_id: '00000000-0000-4000-8000-000000000033' };
+  const version = { sha256: 'b'.repeat(64) };
+  const baseMetadata = {
+    purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
+    workflow_generation: '3', timesheet_id: timesheet.timesheet_id,
+    manifest_sha256: 'a'.repeat(64), base_document_sha256: 'b'.repeat(64),
+    branding_contract_sha256: 'f'.repeat(64),
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+    media_type: 'application/pdf', sha256: 'c'.repeat(64), byte_size: '123', page_count: '2'
+  };
+  for (const metadata of [
+    { ...baseMetadata, sha256: 'z'.repeat(64) },
+    { ...baseMetadata, workflow_generation: '2' },
+    { ...baseMetadata, page_count: '0' },
+    { ...baseMetadata, page_count: '3' },
+    { ...baseMetadata, byte_size: '-1' }
+  ]) {
+    await assert.rejects(readyPaperPackReceipt({ CANDIDATE_APP_ENVIRONMENT: 'TEST', R2: {
+      async head() { return { size: 123, customMetadata: metadata }; }
+    } }, workflow, timesheet, version), error => error?.code === 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
+  }
+  assert.throws(() => paperPackIdentity({ CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {
+    ...workflow, paper_return_manifest_sha256: 'not-a-sha'
+  }, timesheet, version), error => error?.code === 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
 });
 
 test('paper pack release never requeues a failed mail operation', async () => {
@@ -569,12 +679,12 @@ test('paper pack release is insert-once and preserves an existing notification l
     if (path.endsWith('/mail_outbox')) {
       return Response.json([{
         id: '00000000-0000-4000-8000-000000000043', status: 'SENT',
-        payment_scope_json: {
-          candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
-          candidate_workflow_generation: 2,
-          paper_return_manifest_sha256: 'd'.repeat(64)
-        },
-        attachments: [{ r2_key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64) }]
+        payment_scope_json: readyPaperScope(
+          '00000000-0000-4000-8000-000000000044', 2, 'd'.repeat(64)
+        ),
+        attachments: [readyPaperAttachment(
+          '00000000-0000-4000-8000-000000000044', 2, 'd'.repeat(64)
+        )]
       }]);
     }
     if (path.endsWith('/candidate_notifications')) {
@@ -617,12 +727,12 @@ test('paper pack notification replay never resets terminal read or push states',
         if (path.endsWith('/mail_outbox')) {
           return Response.json([{
             id: '00000000-0000-4000-8000-000000000043', status: 'SENT',
-            payment_scope_json: {
-              candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
-              candidate_workflow_generation: 2,
-              paper_return_manifest_sha256: 'd'.repeat(64)
-            },
-            attachments: [{ r2_key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64) }]
+            payment_scope_json: readyPaperScope(
+              '00000000-0000-4000-8000-000000000044', 2, 'd'.repeat(64)
+            ),
+            attachments: [readyPaperAttachment(
+              '00000000-0000-4000-8000-000000000044', 2, 'd'.repeat(64)
+            )]
           }]);
         }
         if (path.endsWith('/candidate_notifications')) {
@@ -668,8 +778,11 @@ test('paper pack release does not notify when the guarded attachment update lose
         payment_scope_json: {
           candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
           candidate_workflow_generation: 2,
-          paper_return_manifest_sha256: 'd'.repeat(64)
-        }, attachments: []
+          paper_return_manifest_sha256: 'd'.repeat(64),
+          candidate_paper_pack_ready: false,
+          mail_held_until_pdf_rendered: true,
+          mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
+        }, attachments: [], attempt_lease_token: null
       }]);
     }
     return Response.json([{
@@ -693,20 +806,118 @@ test('paper pack release does not notify when the guarded attachment update lose
   }
 });
 
-test('paper outbox binding requires one verified compare-and-set result', async () => {
+test('paper pack release installs the exact complete pack before notification', async () => {
+  const originalFetch = globalThis.fetch;
+  const workflowId = '00000000-0000-4000-8000-000000000044';
+  const manifestHash = 'd'.repeat(64);
+  const heldScope = {
+    candidate_workflow_id: workflowId,
+    candidate_workflow_generation: 2,
+    paper_return_manifest_sha256: manifestHash,
+    candidate_paper_pack_ready: false,
+    mail_held_until_pdf_rendered: true,
+    mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
+  };
+  let released = null;
+  let notificationCalls = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/mail_outbox') && (options.method || 'GET') === 'GET') {
+      return Response.json([{
+        id: '00000000-0000-4000-8000-000000000043', status: 'QUEUED',
+        payment_scope_json: heldScope, attachments: [], attempt_lease_token: null
+      }]);
+    }
+    if (path.endsWith('/mail_outbox') && options.method === 'PATCH') {
+      released = JSON.parse(options.body);
+      return Response.json([{
+        id: '00000000-0000-4000-8000-000000000043', status: 'QUEUED',
+        ...released, attempt_lease_token: null
+      }]);
+    }
+    if (path.endsWith('/candidate_notifications')) {
+      notificationCalls += 1;
+      assert.equal(released?.payment_scope_json?.candidate_paper_pack_ready, true);
+      return Response.json([]);
+    }
+    throw new Error(`unexpected request ${path}`);
+  };
+  try {
+    await releaseCandidatePaperPack({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: workflowId, generation: 2,
+      account_id: '00000000-0000-4000-8000-000000000045',
+      candidate_id: '00000000-0000-4000-8000-000000000046'
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
+      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
+      page_count: 2, manifest_hash: manifestHash
+    });
+    assert.equal(released.attachments.length, 1);
+    assert.equal(released.attachments[0].r2_key, 'candidate-app/test/pack.pdf');
+    assert.equal(released.attachments[0].page_count, 2);
+    assert.equal(released.payment_scope_json.mail_held_until_pdf_rendered, false);
+    assert.equal(released.payment_scope_json.mail_hold_reason, null);
+    assert.equal(notificationCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper outbox binding is already atomic and the backend only adopts the exact held row', async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = async (url, options = {}) => {
     calls += 1;
-    if ((options.method || 'GET') === 'GET') {
-      return Response.json([{
-        id: '00000000-0000-4000-8000-000000000048', type: 'TIMESHEET_QR',
-        context_kind: 'timesheets', context_id: '00000000-0000-4000-8000-000000000049',
-        status: 'QUEUED', payment_scope_json: {}
-      }]);
-    }
-    return Response.json([]);
+    assert.equal(options.method || 'GET', 'GET');
+    return Response.json([{
+      id: '00000000-0000-4000-8000-000000000048', type: 'TIMESHEET_QR',
+      context_kind: 'timesheets', context_id: '00000000-0000-4000-8000-000000000049',
+      status: 'QUEUED', attachments: [], attempt_lease_token: null,
+      payment_scope_json: {
+        candidate_workflow_id: '00000000-0000-4000-8000-000000000050',
+        candidate_workflow_generation: 1,
+        paper_return_manifest_sha256: 'a'.repeat(64),
+        candidate_paper_pack_ready: false,
+        mail_held_until_pdf_rendered: true,
+        mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
+      }
+    }]);
   };
+  try {
+    const result = await bindCandidatePaperOutbox({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: '00000000-0000-4000-8000-000000000050', generation: 1,
+      paper_return_manifest_sha256: 'a'.repeat(64)
+    }, '00000000-0000-4000-8000-000000000049', {
+      recipient_available: true, mail_outbox_id: '00000000-0000-4000-8000-000000000048'
+    });
+    assert.deepEqual(result, {
+      bound: true, recipient_available: true,
+      mail_outbox_id: '00000000-0000-4000-8000-000000000048'
+    });
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper outbox adoption rejects an immediately due base-PDF row', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json([{
+    id: '00000000-0000-4000-8000-000000000048', type: 'TIMESHEET_QR',
+    context_kind: 'timesheets', context_id: '00000000-0000-4000-8000-000000000049',
+    status: 'QUEUED', attachments: [{ r2_key: 'ordinary-base.pdf' }], attempt_lease_token: null,
+    payment_scope_json: {
+      candidate_workflow_id: '00000000-0000-4000-8000-000000000050',
+      candidate_workflow_generation: 1,
+      paper_return_manifest_sha256: 'a'.repeat(64),
+      candidate_paper_pack_ready: false,
+      mail_held_until_pdf_rendered: false,
+      mail_hold_reason: null
+    }
+  }]);
   try {
     await assert.rejects(bindCandidatePaperOutbox({
       SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
@@ -716,7 +927,6 @@ test('paper outbox binding requires one verified compare-and-set result', async 
     }, '00000000-0000-4000-8000-000000000049', {
       recipient_available: true, mail_outbox_id: '00000000-0000-4000-8000-000000000048'
     }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
-    assert.equal(calls, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -741,6 +951,17 @@ test('private manager routes reject wrong HTTP methods before any RPC mutation',
     const response = await handleCandidateAppRequest(
       new Request(`https://private.test/candidate-manager/v1/workflows/${workflowId}/${action}`, { method }),
       env, {}, deps
+    );
+    assert.equal(response.status, 405);
+    assert.equal((await response.json()).error_code, 'METHOD_NOT_ALLOWED');
+  }
+  const componentId = '00000000-0000-4000-8000-000000000052';
+  for (const [path, method] of [
+    [`/candidate-manager/v1/workflows/${workflowId}/components/${componentId}/document`, 'POST'],
+    [`/candidate-manager/v1/workflows/${workflowId}/signature/prepare`, 'GET']
+  ]) {
+    const response = await handleCandidateAppRequest(
+      new Request(`https://private.test${path}`, { method }), env, {}, deps
     );
     assert.equal(response.status, 405);
     assert.equal((await response.json()).error_code, 'METHOD_NOT_ALLOWED');

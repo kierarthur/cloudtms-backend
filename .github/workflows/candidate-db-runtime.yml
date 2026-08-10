@@ -13,6 +13,8 @@ on:
       - 'supabase/repeatable/07082026_22*_candidate_*.sql'
       - 'supabase/repeatable/07082026_23*_candidate_*.sql'
       - 'supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql'
+      - 'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_email_outbox_claim_ready_batch.sql'
+      - 'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql'
       - 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql'
       - 'tests/*candidate*runtime_verification.sql'
       - 'tests/09082026_*candidate*_verification.sql'
@@ -75,6 +77,8 @@ jobs:
             supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql
             supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql
             supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql
+            supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_email_outbox_claim_ready_batch.sql
+            supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
             supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql
             supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql
             supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql
@@ -96,6 +100,7 @@ jobs:
             tests/09082026_0944_candidate_route_confirmation_runtime_verification.sql
             tests/09082026_1211_candidate_route_final_closure_verification.sql
             tests/09082026_1329_candidate_route_legacy_signature_policy_verification.sql
+            tests/10082026_1113_candidate_paper_mail_authority_verification.sql
           )
           for file in "${suites[@]}"; do apply_sql "$file"; done
 

@@ -1513,6 +1513,16 @@ async function brandingContractSha256(contract) {
   }));
 }
 
+function contentAddressedBrandingLogoKey(digest, mediaType) {
+  if (!SHA256_RE.test(text(digest))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+  }
+  const extension = mediaType === 'image/png' ? 'png'
+    : mediaType === 'image/jpeg' ? 'jpg' : null;
+  if (!extension) throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+  return `candidate-app/branding/${text(digest).toLowerCase()}.${extension}`;
+}
+
 async function candidateDocumentBranding(env, frozenSource = null) {
   const frozen = frozenBrandingContract(frozenSource);
   if (frozen) {
@@ -1539,6 +1549,9 @@ async function candidateDocumentBranding(env, frozenSource = null) {
         || !['image/png', 'image/jpeg'].includes(contract.logo_media_type)) {
       throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
     }
+    if (contract.logo_key !== contentAddressedBrandingLogoKey(contract.logo_sha256, contract.logo_media_type)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
     const logo = await r2Bytes(env, contract.logo_key, contract.logo_sha256);
     if (logo.media_type !== contract.logo_media_type) {
       throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
@@ -1561,6 +1574,11 @@ async function candidateDocumentBranding(env, frozenSource = null) {
     }
     contract.logo_sha256 = await sha256Hex(logo.bytes);
     contract.logo_media_type = logo.media_type;
+    contract.logo_key = contentAddressedBrandingLogoKey(contract.logo_sha256, contract.logo_media_type);
+    await immutablePut(env, contract.logo_key, logo.bytes, contract.logo_media_type, {
+      purpose: 'candidate-branding-logo',
+      logo_sha256: contract.logo_sha256
+    });
   }
   contract.branding_contract_sha256 = await brandingContractSha256(contract);
   return { ...contract, logo };
@@ -1755,26 +1773,43 @@ async function bindCandidatePaperOutbox(env, workflow, timesheetId, pack) {
   if (pack?.recipient_available !== true) return { bound: false, recipient_available: false };
   const outboxId = requireUuid(pack.mail_outbox_id, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
   const row = await restOne(env, 'mail_outbox',
-    `id=eq.${encodeURIComponent(outboxId)}&select=id,type,context_kind,context_id,status,payment_scope_json`);
+    `id=eq.${encodeURIComponent(outboxId)}`
+    + '&select=id,type,context_kind,context_id,status,payment_scope_json,attachments,'
+    + 'scheduled_for_utc,next_attempt_at_utc,attempt_lease_token,attempt_lease_expires_at_utc');
   if (!row || row.type !== 'TIMESHEET_QR' || row.context_kind !== 'timesheets'
-      || row.context_id !== timesheetId || row.status !== 'QUEUED') {
-    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+      || row.context_id !== timesheetId) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT');
   }
-  const existing = parseJson(row.payment_scope_json, {}) || {};
   const binding = {
     candidate_workflow_id: workflow.id,
     candidate_workflow_generation: Number(workflow.generation),
     paper_return_manifest_sha256: text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase()
   };
+  if (!UUID_RE.test(text(binding.candidate_workflow_id))
+      || !Number.isSafeInteger(binding.candidate_workflow_generation)
+      || binding.candidate_workflow_generation < 1
+      || !SHA256_RE.test(binding.paper_return_manifest_sha256)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT');
+  }
+  const existing = parseJson(row.payment_scope_json, {}) || {};
   for (const [key, value] of Object.entries(binding)) {
-    if (existing[key] != null && String(existing[key]) !== String(value)) {
+    if (String(existing[key] ?? '') !== String(value)) {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT');
     }
   }
-  const updated = await restWrite(env, 'mail_outbox', 'PATCH',
-    `id=eq.${encodeURIComponent(outboxId)}&status=eq.QUEUED`,
-    { payment_scope_json: { ...existing, ...binding } }, 'return=representation');
-  if (!updated || updated.id !== outboxId || updated.status !== 'QUEUED') {
+  if (row.status === 'FAILED') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
+  if (['QUEUED', 'SENT'].includes(row.status) && candidateCompletePackAttachmentMatchesScope(row)) {
+    return { bound: true, recipient_available: true, mail_outbox_id: outboxId, pack_ready: true };
+  }
+  if (row.status === 'SENT') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_ALREADY_SENT');
+  const attachments = parseJson(row.attachments, []) || [];
+  const held = existing.candidate_paper_pack_ready === false
+    && existing.mail_held_until_pdf_rendered === true
+    && existing.mail_hold_reason === 'CANDIDATE_PAPER_PACK_PENDING'
+    && attachments.length === 0
+    && row.status === 'QUEUED'
+    && !text(row.attempt_lease_token);
+  if (!held) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
   }
   return { bound: true, recipient_available: true, mail_outbox_id: outboxId };
@@ -2371,7 +2406,10 @@ function paperPackIdentity(env, workflow, timesheet, version) {
   const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
   const brandingHash = text(immutable.official_presentation?.branding?.branding_contract_sha256).toLowerCase();
   const rendererVersion = text(workflow.renderer_contract_version || immutable.official_presentation?.renderer_contract_version);
-  if (!manifestHash || !baseHash || !SHA256_RE.test(brandingHash)
+  const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
+  const pageCount = Array.isArray(manifest.pages) ? manifest.pages.length : 0;
+  if (!SHA256_RE.test(manifestHash) || !SHA256_RE.test(baseHash) || !SHA256_RE.test(brandingHash)
+      || !Number.isSafeInteger(pageCount) || pageCount < 1
       || rendererVersion !== RENDERER_CONTRACT_VERSION) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
   }
@@ -2380,6 +2418,7 @@ function paperPackIdentity(env, workflow, timesheet, version) {
     base_hash: baseHash,
     branding_hash: brandingHash,
     renderer_contract_version: rendererVersion,
+    page_count: pageCount,
     key: `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}/paper-pack/${manifestHash}-${baseHash}-${brandingHash}-${rendererVersion}.pdf`
   };
 }
@@ -2396,24 +2435,62 @@ async function readyPaperPackReceipt(env, workflow, timesheet, version) {
   const object = await env.R2?.head(identity.key);
   if (!object) return { ...identity, ready: false };
   const metadata = object.customMetadata || {};
+  const metadataByteSize = Number(metadata.byte_size);
+  const metadataPageCount = Number(metadata.page_count);
   const valid = metadata.purpose === 'candidate-complete-paper-pack'
     && metadata.workflow_id === workflow.id
+    && Number(metadata.workflow_generation) === Number(workflow.generation)
     && metadata.timesheet_id === timesheet.timesheet_id
     && text(metadata.manifest_sha256).toLowerCase() === identity.manifest_hash
     && text(metadata.base_document_sha256).toLowerCase() === identity.base_hash
     && text(metadata.branding_contract_sha256).toLowerCase() === identity.branding_hash
     && text(metadata.renderer_contract_version) === identity.renderer_contract_version
     && text(metadata.media_type).toLowerCase() === 'application/pdf'
-    && text(metadata.sha256).length === 64
-    && Number(metadata.byte_size) === Number(object.size);
+    && SHA256_RE.test(text(metadata.sha256))
+    && Number.isSafeInteger(metadataByteSize) && metadataByteSize > 0
+    && metadataByteSize === Number(object.size)
+    && Number.isSafeInteger(metadataPageCount) && metadataPageCount >= 1
+    && metadataPageCount === identity.page_count;
   if (!valid) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT');
   return {
     ...identity,
     ready: true,
     sha256: text(metadata.sha256).toLowerCase(),
-    page_count: Number(metadata.page_count) || null,
-    byte_size: Number(object.size)
+    page_count: metadataPageCount,
+    byte_size: metadataByteSize
   };
+}
+
+function candidateCompletePackAttachmentMatchesScope(row) {
+  const scope = parseJson(row?.payment_scope_json, {}) || {};
+  const attachments = parseJson(row?.attachments, []) || [];
+  if (scope.candidate_paper_pack_ready !== true
+      || scope.mail_held_until_pdf_rendered !== false
+      || text(scope.mail_hold_reason)) return false;
+  if (attachments.length !== 1) return false;
+  const attachment = attachments[0] || {};
+  return attachment.r2_key === scope.candidate_complete_pack_storage_key
+    && text(attachment.sha256).toLowerCase() === text(scope.candidate_complete_pack_sha256).toLowerCase()
+    && Number(attachment.size_bytes) === Number(scope.candidate_complete_pack_size_bytes)
+    && Number(attachment.page_count) === Number(scope.candidate_complete_pack_page_count)
+    && text(attachment.content_type).toLowerCase() === 'application/pdf'
+    && Number.isSafeInteger(Number(attachment.size_bytes)) && Number(attachment.size_bytes) > 0
+    && Number.isSafeInteger(Number(attachment.page_count)) && Number(attachment.page_count) > 0
+    && SHA256_RE.test(text(attachment.sha256))
+    && UUID_RE.test(text(attachment.candidate_workflow_id))
+    && attachment.candidate_workflow_id === scope.candidate_workflow_id
+    && Number(attachment.candidate_workflow_generation) === Number(scope.candidate_workflow_generation)
+    && text(attachment.paper_return_manifest_sha256).toLowerCase()
+      === text(scope.paper_return_manifest_sha256).toLowerCase();
+}
+
+function completePaperAttachmentMatches(row, complete) {
+  const scope = parseJson(row?.payment_scope_json, {}) || {};
+  return candidateCompletePackAttachmentMatchesScope(row)
+    && scope.candidate_complete_pack_storage_key === complete.key
+    && text(scope.candidate_complete_pack_sha256).toLowerCase() === complete.sha256
+    && Number(scope.candidate_complete_pack_size_bytes) === complete.byte_size
+    && Number(scope.candidate_complete_pack_page_count) === complete.page_count;
 }
 
 async function releaseCandidatePaperPack(env, workflow, timesheet, complete) {
@@ -2431,33 +2508,64 @@ async function releaseCandidatePaperPack(env, workflow, timesheet, complete) {
   const attachment = [{
     r2_key: complete.key,
     filename: `Timesheet_${workflow.week_ending_date || timesheet.timesheet_id}.pdf`,
-    content_type: 'application/pdf', sha256: complete.sha256, size_bytes: complete.byte_size
+    content_type: 'application/pdf', sha256: complete.sha256, size_bytes: complete.byte_size,
+    page_count: complete.page_count, candidate_workflow_id: workflow.id,
+    candidate_workflow_generation: Number(workflow.generation),
+    paper_return_manifest_sha256: complete.manifest_hash
   }];
   if (exact.length) {
     const row = exact[0];
     if (row.status === 'FAILED') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
     if (row.status === 'SENT') {
-      const sentAttachments = parseJson(row.attachments, []) || [];
-      if (!sentAttachments.some((entry) => entry?.sha256 === complete.sha256 && entry?.r2_key === complete.key)) {
+      if (!completePaperAttachmentMatches(row, complete)) {
         throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_ALREADY_SENT');
       }
     } else if (row.status === 'QUEUED') {
-      const now = new Date().toISOString();
-      const updated = await restWrite(env, 'mail_outbox', 'PATCH',
-        `id=eq.${encodeURIComponent(row.id)}&status=eq.QUEUED`,
-        { attachments: attachment, scheduled_for_utc: now, next_attempt_at_utc: now }, 'return=representation');
-      if (!updated || updated.id !== row.id || updated.status !== 'QUEUED') {
+      if (!completePaperAttachmentMatches(row, complete)) {
+        const scope = parseJson(row.payment_scope_json, {}) || {};
+        if (scope.candidate_paper_pack_ready !== false
+            || scope.mail_held_until_pdf_rendered !== true
+            || scope.mail_hold_reason !== 'CANDIDATE_PAPER_PACK_PENDING'
+            || (parseJson(row.attachments, []) || []).length !== 0
+            || text(row.attempt_lease_token)) {
+          throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+        }
+        const now = new Date().toISOString();
+        const releasedScope = {
+          ...scope,
+          candidate_paper_pack_ready: true,
+          mail_held_until_pdf_rendered: false,
+          mail_delayed_for_pdf_render: false,
+          mail_hold_reason: null,
+          candidate_complete_pack_storage_key: complete.key,
+          candidate_complete_pack_sha256: complete.sha256,
+          candidate_complete_pack_size_bytes: complete.byte_size,
+          candidate_complete_pack_page_count: complete.page_count,
+          candidate_complete_pack_media_type: 'application/pdf',
+          candidate_complete_pack_ready_at_utc: now
+        };
+        const updated = await restWrite(env, 'mail_outbox', 'PATCH',
+          `id=eq.${encodeURIComponent(row.id)}&status=eq.QUEUED&attempt_lease_token=is.null`,
+          {
+            attachments: attachment,
+            scheduled_for_utc: now,
+            next_attempt_at_utc: now,
+            payment_scope_json: releasedScope
+          }, 'return=representation');
+        if (!updated || updated.id !== row.id || updated.status !== 'QUEUED'
+            || !completePaperAttachmentMatches(updated, complete)) {
         const current = await restOne(env, 'mail_outbox',
-          `id=eq.${encodeURIComponent(row.id)}&select=id,status,attachments`);
-        const currentAttachments = parseJson(current?.attachments, []) || [];
-        if (current?.status === 'SENT'
-            && currentAttachments.some((entry) => entry?.sha256 === complete.sha256 && entry?.r2_key === complete.key)) {
+          `id=eq.${encodeURIComponent(row.id)}&select=id,status,attachments,payment_scope_json,attempt_lease_token`);
+        if (current?.status === 'SENT' && completePaperAttachmentMatches(current, complete)) {
           // A concurrent sender completed the exact already-bound operation.
         } else if (current?.status === 'FAILED') {
           throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
+        } else if (current?.status === 'QUEUED' && completePaperAttachmentMatches(current, complete)) {
+          // A concurrent release installed the same complete immutable pack.
         } else {
           throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
         }
+      }
       }
     } else {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
@@ -2514,11 +2622,12 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
     }
     await appendPdfBytes(combined, await paperExpensePageBytes(env, workflow, component, index + 1));
   }
-  if (combined.getPageCount() < pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
+  if (combined.getPageCount() !== pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
   const bytes = new Uint8Array(await combined.save());
   const identity = paperPackIdentity(env, workflow, timesheet, version);
   const receipt = await immutablePut(env, identity.key, bytes, 'application/pdf', {
     purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
+    workflow_generation: String(workflow.generation),
     timesheet_id: timesheet.timesheet_id, manifest_sha256: identity.manifest_hash,
     base_document_sha256: identity.base_hash,
     branding_contract_sha256: identity.branding_hash,
@@ -2857,9 +2966,15 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
       return await handleManagerAction(request, env, deps, match.workflowId, match.action, ctx);
     }
     match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/components/:componentId/document`);
-    if (match && request.method === 'GET') return await handleDocumentStream(request, env, deps, 'manager', match.workflowId, match.componentId);
+    if (match) {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleDocumentStream(request, env, deps, 'manager', match.workflowId, match.componentId);
+    }
     match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/signature/prepare`);
-    if (match && request.method === 'POST') return await handleComponentPrepare(request, env, deps, match.workflowId, 'manager');
+    if (match) {
+      if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleComponentPrepare(request, env, deps, match.workflowId, 'manager');
+    }
 
     match = routeMatch(path, '/api/candidate-app/timesheets/:timesheetId/route-preview');
     if (match && request.method === 'GET') return await handleOfficeRoute(request, env, deps, 'preview', match.timesheetId);

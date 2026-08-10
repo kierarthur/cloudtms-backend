@@ -1867,6 +1867,11 @@ begin
       and nullif(t.qr_scanned_at::text,'') is null
       and nullif(t.qr_signed_hash,'') is null
       and nullif(t.qr_signed_at_utc::text,'') is null
+      -- Candidate PAPER email is released only by the complete-pack scheduler.
+      -- The ordinary QR base-document completion must never replace its frozen
+      -- workflow binding, hold state or complete-pack attachment.
+      and nullif(btrim(coalesce(
+        m.payment_scope_json->>'candidate_workflow_id','')),'') is null
       and not exists(
         select 1
         from public.candidate_submission_workflows candidate_workflow

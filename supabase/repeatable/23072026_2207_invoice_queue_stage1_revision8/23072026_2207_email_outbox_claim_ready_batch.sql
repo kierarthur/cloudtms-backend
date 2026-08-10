@@ -24,6 +24,46 @@ begin
       and (mo.attempt_lease_token is null or mo.attempt_lease_expires_at_utc is null
         or mo.attempt_lease_expires_at_utc<=v_now)
       and (
+        nullif(btrim(coalesce(
+          mo.payment_scope_json->>'candidate_workflow_id','')),'') is null
+        or (
+          coalesce(mo.payment_scope_json->>'candidate_workflow_id','') ~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+          and coalesce(mo.payment_scope_json->>'candidate_workflow_generation','')
+            ~ '^[1-9][0-9]{0,8}$'
+          and lower(coalesce(mo.payment_scope_json->>'paper_return_manifest_sha256',''))
+            ~ '^[0-9a-f]{64}$'
+          and lower(coalesce(mo.payment_scope_json->>'candidate_paper_pack_ready','false'))
+            in('true','t','1','yes')
+          and lower(coalesce(mo.payment_scope_json->>'mail_held_until_pdf_rendered','true'))
+            in('false','f','0','no')
+          and nullif(btrim(coalesce(mo.payment_scope_json->>'mail_hold_reason','')),'') is null
+          and jsonb_typeof(mo.attachments)='array'
+          and jsonb_array_length(mo.attachments)=1
+          and nullif(btrim(coalesce(mo.attachments->0->>'r2_key','')),'') is not null
+          and lower(coalesce(mo.attachments->0->>'sha256','')) ~ '^[0-9a-f]{64}$'
+          and coalesce(mo.attachments->0->>'size_bytes','') ~ '^[1-9][0-9]{0,18}$'
+          and coalesce(mo.attachments->0->>'page_count','') ~ '^[1-9][0-9]{0,8}$'
+          and lower(coalesce(mo.attachments->0->>'content_type',''))='application/pdf'
+          and mo.attachments->0->>'r2_key'
+            =mo.payment_scope_json->>'candidate_complete_pack_storage_key'
+          and lower(mo.attachments->0->>'sha256')
+            =lower(mo.payment_scope_json->>'candidate_complete_pack_sha256')
+          and mo.attachments->0->>'size_bytes'
+            =mo.payment_scope_json->>'candidate_complete_pack_size_bytes'
+          and mo.attachments->0->>'page_count'
+            =mo.payment_scope_json->>'candidate_complete_pack_page_count'
+          and lower(coalesce(mo.payment_scope_json->>'candidate_complete_pack_media_type',''))
+            ='application/pdf'
+          and mo.attachments->0->>'candidate_workflow_id'
+            =mo.payment_scope_json->>'candidate_workflow_id'
+          and mo.attachments->0->>'candidate_workflow_generation'
+            =mo.payment_scope_json->>'candidate_workflow_generation'
+          and lower(mo.attachments->0->>'paper_return_manifest_sha256')
+            =lower(mo.payment_scope_json->>'paper_return_manifest_sha256')
+        )
+      )
+      and (
         upper(coalesce(mo.type,''))<>'INVOICE'
         or (
           mo.attachments_ready=true and mo.waiting_invoice_operation_id is null

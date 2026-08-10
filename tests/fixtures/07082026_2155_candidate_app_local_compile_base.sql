@@ -363,6 +363,7 @@ create table public.invoices (
   header_snapshot_json jsonb not null default '{}'::jsonb,
   do_not_send boolean not null default false,
   document_revision bigint not null default 1,
+  issued_document_version_id uuid,
   on_hold_reason text,
   updated_at timestamptz not null default now()
 );
@@ -451,6 +452,11 @@ create table public.invoice_document_versions (
   source_revision text,
   template_version text,
   status text not null,
+  r2_key text,
+  sha256 text,
+  size_bytes bigint,
+  page_count integer,
+  superseded_at_utc timestamptz,
   operation_id uuid references public.invoice_operations(id),
   created_at_utc timestamptz not null default now()
 );
@@ -522,7 +528,15 @@ create table public.mail_outbox (
   scheduled_for_utc timestamptz,
   next_attempt_at_utc timestamptz,
   deterministic_outbox_key text unique,
-  payment_scope_json jsonb not null default '{}'::jsonb
+  payment_scope_json jsonb not null default '{}'::jsonb,
+  sent_at timestamptz,
+  delivered_at timestamptz,
+  read_at timestamptz,
+  attempt_lease_token text,
+  attempt_leased_at_utc timestamptz,
+  attempt_lease_expires_at_utc timestamptz,
+  attachments_ready boolean not null default true,
+  waiting_invoice_operation_id uuid
 );
 
 create table public.audit_events (

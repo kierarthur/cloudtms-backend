@@ -14563,8 +14563,11 @@ DECLARE
   v_client_idempotency_key text := NULL;
   v_recipient_namespace text := NULL;
   v_mail_held_until_pdf_rendered boolean := TRUE;
+  v_mail_hold_reason text := NULL;
+  v_mail_scope_json jsonb := '{}'::jsonb;
   v_existing_mail_id uuid := NULL;
   v_existing_mail_status text := NULL;
+  v_existing_mail_scope_json jsonb := '{}'::jsonb;
   v_mail_job_id uuid := NULL;
   v_pdf_job_id uuid := NULL;
   v_existing_pdf_job_id uuid := NULL;
@@ -14599,6 +14602,11 @@ DECLARE
   v_row_key text := NULL;
   v_storage_key text := NULL;
   v_row_signature text := NULL;
+  v_candidate_paper_workflow_count integer := 0;
+  v_candidate_paper_workflow_id uuid := NULL;
+  v_candidate_paper_workflow_generation integer := NULL;
+  v_candidate_paper_manifest_sha256 text := NULL;
+  v_candidate_paper_binding_json jsonb := '{}'::jsonb;
 BEGIN
   IF p_timesheet_id IS NULL THEN
     RETURN jsonb_build_object(
@@ -14787,6 +14795,67 @@ BEGIN
       'current_timesheet_id', v_current_timesheet_id,
       'recipient_available', FALSE,
       'send_state', 'REJECTED'
+    );
+  END IF;
+
+  WITH locked_candidate_paper AS MATERIALIZED (
+    SELECT workflow.id,
+           workflow.generation,
+           workflow.paper_return_manifest_sha256
+    FROM public.candidate_submission_workflows AS workflow
+    WHERE workflow.route = 'PAPER'
+      AND workflow.state = 'AWAITING_PAPER_RETURN'
+      AND (
+        workflow.target_timesheet_id = v_current_timesheet_id
+        OR workflow.anchor_timesheet_id = v_current_timesheet_id
+      )
+    ORDER BY workflow.id
+    FOR UPDATE
+  )
+  SELECT count(*)::integer,
+         (array_agg(locked_candidate_paper.id ORDER BY locked_candidate_paper.id))[1],
+         (array_agg(locked_candidate_paper.generation ORDER BY locked_candidate_paper.id))[1],
+         (array_agg(encode(locked_candidate_paper.paper_return_manifest_sha256, 'hex')
+                    ORDER BY locked_candidate_paper.id))[1]
+    INTO v_candidate_paper_workflow_count,
+         v_candidate_paper_workflow_id,
+         v_candidate_paper_workflow_generation,
+         v_candidate_paper_manifest_sha256
+  FROM locked_candidate_paper;
+
+  IF v_candidate_paper_workflow_count > 1 THEN
+    RETURN jsonb_build_object(
+      'ok', FALSE,
+      'queued', FALSE,
+      'operation', 'timesheet_qr_send_enqueue',
+      'error_code', 'CANDIDATE_PAPER_WORKFLOW_CONFLICT',
+      'message', 'More than one active Candidate PAPER workflow targets this timesheet.',
+      'current_timesheet_id', v_current_timesheet_id,
+      'recipient_available', FALSE,
+      'send_state', 'REJECTED'
+    );
+  END IF;
+
+  IF v_candidate_paper_workflow_count = 1 THEN
+    IF v_candidate_paper_workflow_generation IS NULL
+       OR v_candidate_paper_workflow_generation < 1
+       OR COALESCE(v_candidate_paper_manifest_sha256, '') !~ '^[0-9a-f]{64}$' THEN
+      RETURN jsonb_build_object(
+        'ok', FALSE,
+        'queued', FALSE,
+        'operation', 'timesheet_qr_send_enqueue',
+        'error_code', 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
+        'message', 'The Candidate PAPER workflow does not have a valid frozen return manifest.',
+        'current_timesheet_id', v_current_timesheet_id,
+        'recipient_available', FALSE,
+        'send_state', 'REJECTED'
+      );
+    END IF;
+    v_candidate_paper_binding_json := jsonb_build_object(
+      'candidate_workflow_id', v_candidate_paper_workflow_id,
+      'candidate_workflow_generation', v_candidate_paper_workflow_generation,
+      'paper_return_manifest_sha256', v_candidate_paper_manifest_sha256,
+      'candidate_paper_pack_ready', FALSE
     );
   END IF;
 
@@ -15239,17 +15308,52 @@ BEGIN
 
   v_pdf_job_id := v_document_operation_id;
   v_mail_held_until_pdf_rendered :=
-    COALESCE(v_document_version_status,'')<>'READY';
+    v_candidate_paper_workflow_count = 1
+    OR COALESCE(v_document_version_status,'')<>'READY';
+  v_mail_hold_reason := CASE
+    WHEN v_candidate_paper_workflow_count = 1 THEN 'CANDIDATE_PAPER_PACK_PENDING'
+    WHEN v_mail_held_until_pdf_rendered THEN 'PDF_RENDER_PENDING'
+    ELSE NULL
+  END;
   v_mail_scheduled_for_utc := CASE
     WHEN v_mail_held_until_pdf_rendered THEN
       TIMESTAMPTZ '9999-12-31 00:00:00+00'
     ELSE v_now
   END;
 
+  v_mail_scope_json := jsonb_build_object(
+    'job_kind', 'TIMESHEET_QR_SEND',
+    'document_operation_id',v_document_operation_id,
+    'document_version_id',v_document_version_id,
+    'document_revision',v_document_revision,
+    'template_version','timesheet-professional-v2',
+    'idempotency_key', v_idempotency_key,
+    'client_idempotency_key', v_client_idempotency_key,
+    'requires_pdf_render', TRUE,
+    'release_mail_after_pdf_render', TRUE,
+    'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
+    'mail_held_until_pdf_rendered',v_mail_held_until_pdf_rendered,
+    'mail_hold_reason',v_mail_hold_reason,
+    'pdf_storage_key', v_pdf_key,
+    'current_timesheet_id', v_current_timesheet_id::text,
+    'current_version', v_current_version,
+    'qr_token_hash',encode(digest(v_effective_qr_token,'sha256'),'hex'),
+    'qr_payload_hash',v_qr_payload_hash,
+    'week_period_hash',v_week_period_hash,
+    'schedule_hash',v_schedule_hash,
+    'reference_signature',v_reference_signature,
+    'additional_units_hash',v_additional_units_hash,
+    'presentation_settings_hash',v_presentation_settings_hash,
+    'printable_content_hash',v_complete_printable_content_hash,
+    'recipient_email', v_candidate_email
+  ) || v_candidate_paper_binding_json;
+
   SELECT mail_existing.id,
-         mail_existing.status::text
+         mail_existing.status::text,
+         COALESCE(mail_existing.payment_scope_json, '{}'::jsonb)
     INTO v_existing_mail_id,
-         v_existing_mail_status
+         v_existing_mail_status,
+         v_existing_mail_scope_json
   FROM public.mail_outbox AS mail_existing
   WHERE mail_existing.type = 'TIMESHEET_QR'
     AND mail_existing.reference = v_mail_reference
@@ -15263,8 +15367,44 @@ BEGIN
   IF v_existing_mail_id IS NOT NULL THEN
     v_mail_job_id := v_existing_mail_id;
 
-    IF UPPER(COALESCE(v_existing_mail_status, '')) = 'SENT' THEN
+    IF v_candidate_paper_workflow_count = 1
+       AND NULLIF(BTRIM(COALESCE(v_existing_mail_scope_json->>'candidate_workflow_id', '')), '') IS NOT NULL
+       AND (
+         v_existing_mail_scope_json->>'candidate_workflow_id' IS DISTINCT FROM v_candidate_paper_workflow_id::text
+         OR COALESCE(v_existing_mail_scope_json->>'candidate_workflow_generation', '') IS DISTINCT FROM v_candidate_paper_workflow_generation::text
+         OR LOWER(COALESCE(v_existing_mail_scope_json->>'paper_return_manifest_sha256', ''))
+              IS DISTINCT FROM v_candidate_paper_manifest_sha256
+       ) THEN
+      RETURN jsonb_build_object(
+        'ok', FALSE,
+        'queued', FALSE,
+        'operation', 'timesheet_qr_send_enqueue',
+        'error_code', 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT',
+        'message', 'The existing QR email is bound to a different Candidate PAPER workflow.',
+        'current_timesheet_id', v_current_timesheet_id,
+        'mail_outbox_id', v_existing_mail_id,
+        'recipient_available', FALSE,
+        'send_state', 'REJECTED'
+      );
+    ELSIF UPPER(COALESCE(v_existing_mail_status, '')) = 'SENT' THEN
       v_send_state := 'ALREADY_SENT';
+    ELSIF v_candidate_paper_workflow_count = 1
+          AND UPPER(COALESCE(v_existing_mail_status, '')) = 'FAILED' THEN
+      v_send_state := 'CANDIDATE_PAPER_MAIL_FAILED';
+    ELSIF NULLIF(BTRIM(COALESCE(v_existing_mail_scope_json->>'candidate_workflow_id', '')), '') IS NOT NULL
+          AND (
+            LOWER(COALESCE(v_existing_mail_scope_json->>'candidate_paper_pack_ready', 'false'))
+              IN ('true','t','1','yes')
+            OR v_candidate_paper_workflow_count = 0
+          ) THEN
+      -- A Candidate complete pack (or a historical Candidate binding) must never
+      -- be replaced by the ordinary one-page QR attachment on enqueue replay.
+      v_send_state := 'CANDIDATE_PAPER_OUTBOX_PRESERVED';
+      v_mail_held_until_pdf_rendered := LOWER(COALESCE(
+        v_existing_mail_scope_json->>'mail_held_until_pdf_rendered', 'false'))
+        IN ('true','t','1','yes');
+      v_mail_hold_reason := NULLIF(BTRIM(COALESCE(
+        v_existing_mail_scope_json->>'mail_hold_reason', '')), '');
     ELSE
       UPDATE public.mail_outbox AS mail_update
          SET status = 'QUEUED'::public.mail_status_enum,
@@ -15287,36 +15427,11 @@ BEGIN
              attempt_lease_token = NULL,
              attempt_leased_at_utc = NULL,
              attempt_lease_expires_at_utc = NULL,
-             payment_scope_json = jsonb_build_object(
-               'job_kind', 'TIMESHEET_QR_SEND',
-               'document_operation_id',v_document_operation_id,
-               'document_version_id',v_document_version_id,
-               'document_revision',v_document_revision,
-               'template_version','timesheet-professional-v2',
-               'idempotency_key', v_idempotency_key,
-               'client_idempotency_key', v_client_idempotency_key,
-               'requires_pdf_render', TRUE,
-               'release_mail_after_pdf_render', TRUE,
-               'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
-               'mail_held_until_pdf_rendered',v_mail_held_until_pdf_rendered,
-               'mail_hold_reason',case when v_mail_held_until_pdf_rendered
-                 then 'PDF_RENDER_PENDING' else null end,
-               'pdf_storage_key', v_pdf_key,
-               'current_timesheet_id', v_current_timesheet_id::text,
-               'current_version', v_current_version,
-               'qr_token_hash',encode(digest(v_effective_qr_token,'sha256'),'hex'),
-               'qr_payload_hash',v_qr_payload_hash,
-               'week_period_hash',v_week_period_hash,
-               'schedule_hash',v_schedule_hash,
-               'reference_signature',v_reference_signature,
-               'additional_units_hash',v_additional_units_hash,
-               'presentation_settings_hash',v_presentation_settings_hash,
-               'printable_content_hash',v_complete_printable_content_hash,
-               'recipient_email', v_candidate_email
-             )
+             payment_scope_json = v_mail_scope_json
        WHERE mail_update.id = v_existing_mail_id;
 
       v_send_state := CASE
+        WHEN v_candidate_paper_workflow_count = 1 THEN 'CANDIDATE_PAPER_PACK_MAIL_HELD'
         WHEN NOT v_mail_held_until_pdf_rendered THEN 'DOCUMENT_READY_MAIL_QUEUED'
         WHEN UPPER(COALESCE(v_existing_mail_status,''))='FAILED'
           THEN 'DOCUMENT_REQUEUED_MAIL_HELD'
@@ -15388,37 +15503,12 @@ BEGIN
       NULL,
       v_mail_scheduled_for_utc,
       v_mail_scheduled_for_utc,
-      jsonb_build_object(
-        'job_kind', 'TIMESHEET_QR_SEND',
-        'document_operation_id',v_document_operation_id,
-        'document_version_id',v_document_version_id,
-        'document_revision',v_document_revision,
-        'template_version','timesheet-professional-v2',
-        'idempotency_key', v_idempotency_key,
-        'client_idempotency_key', v_client_idempotency_key,
-        'requires_pdf_render', TRUE,
-        'release_mail_after_pdf_render', TRUE,
-        'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
-        'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
-        'mail_hold_reason',case when v_mail_held_until_pdf_rendered
-          then 'PDF_RENDER_PENDING' else null end,
-        'pdf_storage_key', v_pdf_key,
-        'current_timesheet_id', v_current_timesheet_id::text,
-        'current_version', v_current_version,
-        'qr_token_hash',encode(digest(v_effective_qr_token,'sha256'),'hex'),
-        'qr_payload_hash',v_qr_payload_hash,
-        'week_period_hash',v_week_period_hash,
-        'schedule_hash',v_schedule_hash,
-        'reference_signature',v_reference_signature,
-        'additional_units_hash',v_additional_units_hash,
-        'presentation_settings_hash',v_presentation_settings_hash,
-        'printable_content_hash',v_complete_printable_content_hash,
-        'recipient_email', v_candidate_email
-      )
+      v_mail_scope_json
     )
     RETURNING id INTO v_mail_job_id;
 
     v_send_state := CASE
+      WHEN v_candidate_paper_workflow_count = 1 THEN 'CANDIDATE_PAPER_PACK_MAIL_HELD'
       WHEN v_mail_held_until_pdf_rendered THEN 'DOCUMENT_QUEUED_MAIL_HELD'
       ELSE 'DOCUMENT_READY_MAIL_QUEUED' END;
   END IF;
@@ -15464,8 +15554,7 @@ BEGIN
       'scheduled_for_utc', v_mail_scheduled_for_utc,
       'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
       'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
-      'mail_hold_reason',case when v_mail_held_until_pdf_rendered
-        then 'PDF_RENDER_PENDING' else null end,
+      'mail_hold_reason',v_mail_hold_reason,
       'pdf_storage_key', v_pdf_key,
       'document_operation_id',v_document_operation_id,
       'document_version_id',v_document_version_id,
@@ -15495,8 +15584,14 @@ BEGIN
     'scheduled_for_utc', v_mail_scheduled_for_utc,
     'mail_held_until_pdf_rendered', v_mail_held_until_pdf_rendered,
     'mail_delayed_for_pdf_render',v_mail_held_until_pdf_rendered,
-    'mail_hold_reason',case when v_mail_held_until_pdf_rendered
-      then 'PDF_RENDER_PENDING' else null end,
+    'mail_hold_reason',v_mail_hold_reason,
+    'candidate_paper_pack_ready',CASE
+      WHEN NULLIF(BTRIM(COALESCE(v_existing_mail_scope_json->>'candidate_workflow_id', '')), '') IS NOT NULL
+        THEN LOWER(COALESCE(v_existing_mail_scope_json->>'candidate_paper_pack_ready', 'false'))
+          IN ('true','t','1','yes')
+      WHEN v_candidate_paper_workflow_count = 1 THEN FALSE
+      ELSE NULL
+    END,
     'pdf_storage_key', v_pdf_key,
     'document_operation_id',v_document_operation_id,
     'document_version_id',v_document_version_id,

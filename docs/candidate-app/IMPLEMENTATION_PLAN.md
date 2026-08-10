@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented and deployed to TEST with every Candidate feature flag false. The current final backend correction additionally makes component replay generation/state-safe, makes every persisted Candidate PDF byte-deterministic from a frozen branding/render contract, recovers from an R2-success/registration-or-release failure without rerender drift, enforces exact manager HTTP methods before any RPC, preserves notification lifecycle on release replay, checks paper-workflow multiplicity before every read-state return and verifies outbox compare-and-set results. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
+Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented and deployed to TEST with every Candidate feature flag false. The latest paper-pack mail-authority correction is implemented in the saved backend source and its three corrected SQL functions are installed in TEST; the saved Worker source has not been committed, pushed or redeployed in this correction round. The correction atomically holds and binds the Candidate PAPER email before ordinary QR rendering, makes the private scheduler the only complete-pack release owner, and prevents the ordinary invoice-document completion and mail claimant from bypassing that authority. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -94,6 +94,35 @@ The SQL service-finalisation branch remains inside the existing fourteenth final
 - paper mail binding/release uses an expected-status compare-and-set, verifies one returned row, and reclassifies a lost race before notification. Candidate polling remains read-only;
 - expense rendering requires the explicit frozen canonical display total. It formats that value and never derives a substitute sum from category fields.
 
+### Final Candidate PAPER email and complete-pack authority
+
+The Candidate PAPER route now has one unambiguous delivery sequence:
+
+```text
+PAPER_PREPARE freezes the workflow generation and complete return manifest
+→ timesheet_qr_send_enqueue_v1 creates and atomically binds one held email
+→ ordinary QR rendering may make the official base timesheet READY
+→ invoice_work_complete_batch cannot release Candidate-bound mail
+→ private scheduler proves exactly one active PAPER workflow
+→ scheduler assembles/reuses the immutable complete pack in manifest order
+→ exact outbox compare-and-set attaches that complete pack and marks it ready
+→ email_outbox_claim_ready_batch independently proves the same binding/attachment
+→ existing mail delivery may claim the email
+```
+
+Controlling guarantees:
+
+- `timesheet_qr_send_enqueue_v1` locks and counts active matching PAPER workflows, fails closed on multiplicity, binds the exact workflow ID/generation/manifest SHA-256 to the deterministic mail row and forces `CANDIDATE_PAPER_PACK_PENDING` even where the base PDF is already ready;
+- idempotent QR enqueue replay preserves an already released or sent exact complete-pack operation, never replaces it with the one-page base PDF, and never requeues a Candidate-bound `FAILED` email;
+- `invoice_work_complete_batch` still performs its existing ordinary QR base-document completion, but explicitly excludes every Candidate-bound mail row from its release update;
+- `email_outbox_claim_ready_batch` admits a Candidate-bound email only where the hold is cleared and its one PDF attachment exactly matches the workflow generation, manifest hash, storage identity, digest, byte count, page count and media-type readiness receipt in `payment_scope_json`;
+- the private backend no longer creates or repairs workflow/outbox binding. It verifies the atomic SQL binding, reuses an existing immutable complete-pack receipt, and releases only through a guarded exact-row compare-and-set before creating the insert-once readiness notification;
+- a configured live logo is copied once to a content-addressed immutable branding key before it enters a frozen render contract. Retry therefore cannot silently substitute later logo bytes;
+- the complete-pack receipt proves the exact workflow generation and exact expected manifest page count as well as object digest and byte size;
+- only the official main hours timesheet carries the QR code. Supplementary Expense and Mileage Approval Summary, Mileage Claim Form and evidence pages remain bound through the immutable manifest and do not receive separate QR codes.
+
+This correction changes document/email orchestration and verification only. It does not alter DAILY or WEEKLY economic calculation, rates, pay, charge, VAT, ERNI, margin, TSFIN, Process, Authorise, invoice economics, payment, Banking Pay or Policy X.
+
 ### Candidate authentication and session boundary
 
 - enumeration-safe activation/reset/recovery challenge start and resend;
@@ -175,7 +204,7 @@ The focused backend suite includes a 50-task isolation fixture with 49 successes
 - QR “documents ready” push is released only by durable pack readiness;
 - manager and candidate transactional email uses deterministic `mail_outbox` rows and the existing outbox delivery system; this stage does not drain mail.
 
-QR/paper document generation is delegated to `timesheet_qr_send_enqueue_v1` and the existing durable document-operation worker. Candidate `PAPER_PREPARE` records the complete immutable return manifest first, then queues the exact current timesheet through that authority. The pack-ready database trigger—not the initial route action—releases the “documents are ready” notification.
+QR/paper document generation is delegated to `timesheet_qr_send_enqueue_v1` and the existing durable document-operation worker. Candidate `PAPER_PREPARE` records the complete immutable return manifest first, then queues the exact current timesheet through that authority. The private complete-pack scheduler—not the initial route action or ordinary one-page QR completion—releases the “documents are ready” notification.
 
 The same enqueue operation creates the candidate email automatically and binds that exact outbox operation to the workflow generation and paper manifest. The candidate does not request a second email. After the official timesheet and every required page are ready, the private scheduler assembles the immutable pack, attaches it to only that bound `QUEUED` mail operation and releases the idempotent readiness notification. A failed email remains failed until the established explicit mail-retry authority acts. The app uses the Candidate notification feed (and later provider push when enabled) to refresh the timesheet, then downloads the already-ready pack through `GET /candidate-app/v1/timesheets/:timesheetId/paper-pack`. Both status and download GETs are read-only; no Candidate polling can assemble documents, update mail or create notifications. CloudTMS checks ownership/readiness and streams bytes without exposing a Supabase query or R2 key. Queued, rendering, ready, sent and failed remain distinct states.
 
@@ -342,9 +371,9 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 
 ## Completion gates
 
-Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both new Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. The final 10 August correction passed local code, contract, PDF and database regression, was published at runtime commit `099802f7cf72e3c8ff68f286743247343cd00413`, installed by TEST migration workflow `31371552388`, proved on exact PostgreSQL 17.6 and 18.1 by workflow `31371552498`, and deployed to all three TEST Workers. No Candidate workflow, email, notification, R2 or financial mutation was required for deployment verification.
+Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both new Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. The earlier 10 August backend closure was published and deployed as recorded in its handover. The later paper-mail authority source correction in this plan is currently saved locally and independently auditable; it has not yet been committed, pushed or redeployed. Its exact three SQL definitions have been installed directly into TEST under the user's explicit authority. No Candidate workflow, Candidate email, Candidate notification, R2 object or financial mutation was created.
 
-Current 10 August verification: 109/109 focused Candidate/backend/broker/DB-contract/renderer tests, 414/414 complete backend tests, 41/41 Candidate DB/RPC plus canonical DAILY structural tests, 13/13 PostgreSQL runtime/concurrency suites on exact PostgreSQL 17.6 and again on 18.1, OpenAPI method/path parity, successful builds for the public broker, private Candidate API and normal TEST backend, and full-page visual verification of the official QR page, Expense and Mileage Approval Summary, Mileage Claim Form and combined three-page pack. Runtime tests prove generation/state-safe PREPARE and COMPLETE, deterministic persisted PDFs, frozen branding, R2-success recovery, insert-once notification release, outbox compare-and-set handling and zero-RPC manager method rejection. Deployed health/readiness is 200 for the public broker and normal backend; the normal backend returns the required 404 for a direct public Candidate route. Read-only TEST verification proves environment `TEST`, all 12 Candidate flags false, auto-authorisation false, all seven Candidate tables empty, all 14 approved RPC overloads present and the corrected replay guards installed.
+Current paper-mail closure verification: 59/59 focused changed-path tests; 421/421 complete backend tests; 41/41 Candidate DB/RPC plus canonical DAILY structural tests; the full Candidate install and all 14 SQL runtime/concurrency suites pass on clean disposable PostgreSQL 17.6 and again on PostgreSQL 18.1; both public broker and private Candidate Worker dry-run builds pass. TEST runtime verification proves the three installed definitions match the LF-normalised saved source, their owner/security/search-path/ACL boundaries are preserved, held Candidate mail is not claimable, ordinary non-Candidate QR mail is unchanged, and only an exact ready complete Candidate pack becomes claimable. Post-test TEST state remains all Candidate feature flags false, all seven Candidate tables empty and no transactional verification fixture rows retained. The current decisions PDF was rechecked as the controlling policy record and remains fully consistent with the correction.
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
 
