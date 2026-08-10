@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_workbench_enqueue_candidate_refresh",
       "identity_arguments": "p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb",
-      "definition_sha256": "671672dc2abac3f878522913fa227fcd74152597b65ef418f3f3c96ecee63d0e",
+      "definition_sha256": "1147a7b377129f6904ff5fdfcbdaab716899254c56f8fe689b511853a68be037",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -658,7 +658,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "a9f32b41dd887764ae92c2859499a6d824d9ab1a8bcf6c7a2e851c7b39eaecd4",
+      "definition_sha256": "18c47646172f8f23f1a319c48ee9e1699ee00a05ef522a6cf60ed65d8fa110a7",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
