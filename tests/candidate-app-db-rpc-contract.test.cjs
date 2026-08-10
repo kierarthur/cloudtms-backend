@@ -379,6 +379,11 @@ test('whole-record rejection clears every active economic/document field and is 
   assert.match(reject, /processing_status='UNPROCESSED'/);
   assert.match(reject, /status='OPEN'/);
   assert.match(reject, /audit_events[\s\S]*correlation_id=p_idempotency_key[\s\S]*idempotent_replay/i);
+  assert.match(reject, /w\.state='FINALISED'\s+and w\.target_timesheet_id=v_timesheet\.timesheet_id/i);
+  assert.match(reject, /w\.state not in \('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'\)[\s\S]*w\.anchor_timesheet_id=v_timesheet\.timesheet_id[\s\S]*w\.state='FINALISED'[\s\S]*w\.target_timesheet_id=v_timesheet\.timesheet_id/i);
+  assert.match(reject, /greatest\(w\.generation-1,1\) else w\.generation end as artifact_generation/i);
+  assert.match(reject, /workflow_generation=v_workflow\.artifact_generation/i);
+  assert.match(reject, /state=v_workflow\.captured_state/i);
 });
 
 test('candidate no-work composes existing delete/archive authority and replays safely', () => {

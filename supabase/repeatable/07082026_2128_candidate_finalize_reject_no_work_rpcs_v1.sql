@@ -1246,9 +1246,19 @@ begin
     select w.id,w.generation,w.route,w.state
     from public.candidate_submission_workflows w
     where w.environment=v_environment
-      and w.state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')
-      and (w.target_timesheet_id=v_timesheet.timesheet_id
-        or w.anchor_timesheet_id=v_timesheet.timesheet_id)
+      and (
+        (
+          w.state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')
+          and (
+            w.target_timesheet_id=v_timesheet.timesheet_id
+            or w.anchor_timesheet_id=v_timesheet.timesheet_id
+          )
+        )
+        or (
+          w.state='FINALISED'
+          and w.target_timesheet_id=v_timesheet.timesheet_id
+        )
+      )
     order by w.id
     for update
   loop
@@ -1298,7 +1308,8 @@ begin
   update public.timesheet_evidence set processing_state='SUPERSEDED'
   where timesheet_id=v_timesheet.timesheet_id and processing_state<>'SUPERSEDED';
   for v_workflow in
-    select w.id,w.account_id,w.candidate_id,w.generation
+    select w.id,w.account_id,w.candidate_id,w.generation,w.state as captured_state,
+      case when w.state='FINALISED' then greatest(w.generation-1,1) else w.generation end as artifact_generation
     from public.candidate_submission_workflows w
     where w.id=any(v_rejected_workflow_ids)
     order by w.id
@@ -1307,18 +1318,19 @@ begin
     update public.candidate_approval_requests set
       state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
     where workflow_id=v_workflow.id
-      and workflow_generation=v_workflow.generation
+      and workflow_generation=v_workflow.artifact_generation
       and state in ('PENDING','APPROVED');
     update public.candidate_submission_components set
       state='REJECTED',superseded_at_utc=p_now_utc
     where workflow_id=v_workflow.id
-      and workflow_generation=v_workflow.generation
+      and workflow_generation=v_workflow.artifact_generation
       and state not in ('REJECTED','SUPERSEDED','ABANDONED');
     update public.candidate_submission_workflows set
       state='REJECTED',generation=v_workflow.generation+1,
       rejection_reason=btrim(p_reason),rejection_scope=v_reject_scope,updated_at_utc=p_now_utc
     where id=v_workflow.id and generation=v_workflow.generation
-      and state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED');
+      and state=v_workflow.captured_state
+      and state not in ('REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED');
     if not found then
       raise exception 'CANDIDATE_REJECT_WORKFLOW_CONFLICT' using errcode='40001';
     end if;

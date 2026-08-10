@@ -133,9 +133,10 @@ test('whole-record rejection transitions the exact target-or-anchor workflow set
   const reject = functionBody(rejectSource, 'public.candidate_submission_reject_atomic_v1');
   assert.match(reject, /v_rejected_workflow_ids\s+uuid\[\]/i);
   assert.match(reject, /w\.target_timesheet_id=v_timesheet\.timesheet_id[\s\S]*w\.anchor_timesheet_id=v_timesheet\.timesheet_id/i);
+  assert.match(reject, /w\.state='FINALISED'\s+and w\.target_timesheet_id=v_timesheet\.timesheet_id/i);
   assert.match(reject, /v_rejected_workflow_ids:=array_append\(v_rejected_workflow_ids,v_workflow\.id\)/i);
-  assert.match(reject, /candidate_approval_requests[\s\S]*workflow_id=v_workflow\.id[\s\S]*workflow_generation=v_workflow\.generation/i);
-  assert.match(reject, /candidate_submission_components[\s\S]*workflow_id=v_workflow\.id[\s\S]*workflow_generation=v_workflow\.generation/i);
+  assert.match(reject, /candidate_approval_requests[\s\S]*workflow_id=v_workflow\.id[\s\S]*workflow_generation=v_workflow\.artifact_generation/i);
+  assert.match(reject, /candidate_submission_components[\s\S]*workflow_id=v_workflow\.id[\s\S]*workflow_generation=v_workflow\.artifact_generation/i);
   assert.match(reject, /candidate_submission_workflows[\s\S]*where id=v_workflow\.id and generation=v_workflow\.generation/i);
   assert.doesNotMatch(reject, /where target_timesheet_id=v_timesheet\.timesheet_id and state not in/i);
 });
