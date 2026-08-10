@@ -206,7 +206,7 @@
     {
       "schema": "private", "name": "pay_workbench_cancel_reversion_admission_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_work_item_ids uuid[], p_options_json jsonb",
-      "definition_sha256": "3c0c417fabac6cfa6d06fd06edd9b45329d8b5772fac14719bfc601155c1bad2",
+      "definition_sha256": "9b29eb57cad421c8d53e84c6739d85b51b76f091c1cea5ac5b1d3d5be8f61144",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -222,7 +222,7 @@
     {
       "schema": "private", "name": "pay_pre_bank_cancel_apply_work_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_work_item_ids uuid[], p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "dc8e09661301c9883cd554e75737bac0ba68ff7642fe9c34743a71f507d4b99b",
+      "definition_sha256": "503543f2b252a1eaa3166d7ec071f7fe089b6d0e125c8ebb1c1764778460db50",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -254,7 +254,7 @@
     {
       "schema": "private", "name": "pay_workbench_financial_scope_dirty_transition_v1",
       "identity_arguments": "",
-      "definition_sha256": "2fd8b6b5e6aae8bc49f2841be8880969f28108f62748285576265a56ce891cf3",
+      "definition_sha256": "8d4f43a844006c9948f71b21771425ea95fda8a2bb9067e0ee60bf19c0877fb4",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql"]
@@ -262,7 +262,7 @@
     {
       "schema": "public", "name": "pay_timesheet_summary_pay_state_refresh_trigger",
       "identity_arguments": "",
-      "definition_sha256": "da68425ece4cd2e49fc18d8c8a94940a722845d95c3c7bc3a90c51c1e54fbaec",
+      "definition_sha256": "ffcee44c5e17076fbb2764dea5c7b23dd50236a81e402bf0d16d7d3629821ccb",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
