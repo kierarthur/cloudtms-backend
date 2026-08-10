@@ -4,7 +4,7 @@
 -- file invalidated an unchanged later authority.
 --
 -- legacy_monolith_sha256:
--- 21ec8014c057f21e8e08fb8b3383855987ad53c08f91c24911496da33adb0f1e
+-- 1d74f26242bcc1c6b326cc6d4267fee62c1a14454fee8994f11ed355a4f2fbef
 -- authority_dependency_sha256: 21072026_1235_00b_import_correction_runtime_guards.sql
 -- fdfe5fbea30ddf769fbdcd3d07adf344738772be2478bad75cef14e4e4047588
 --

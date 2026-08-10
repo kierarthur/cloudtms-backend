@@ -61129,7 +61129,8 @@ BEGIN
     WHERE success_event.expires_at_utc > now()
       AND UPPER(BTRIM(COALESCE(success_event.alert_kind, ''))) IN (
         'BATCH_SCHEDULED_SUCCESS',
-        'BATCH_SETTLED_SUCCESS'
+        'BATCH_SETTLED_SUCCESS',
+        'BATCH_CANCELLATION_SUCCESS'
       )
     ORDER BY
       success_event.pay_batch_id,
@@ -61520,8 +61521,8 @@ BEGIN
   limited_alerts AS MATERIALIZED (
     SELECT counted_alerts.*
     FROM counted_alerts
-    ORDER BY counted_alerts.severity_rank DESC,
-             counted_alerts.sort_at_utc DESC NULLS LAST,
+    ORDER BY counted_alerts.sort_at_utc DESC NULLS LAST,
+             counted_alerts.severity_rank DESC,
              counted_alerts.alert_fingerprint ASC
     LIMIT v_limit
   ),
@@ -61610,8 +61611,8 @@ BEGIN
           'sort_at_utc', CASE WHEN detailed_alerts.sort_at_utc IS NULL THEN NULL::text ELSE detailed_alerts.sort_at_utc::text END,
           'payload_json', detailed_alerts.payload_json
         )
-        ORDER BY detailed_alerts.severity_rank DESC,
-                 detailed_alerts.sort_at_utc DESC NULLS LAST,
+        ORDER BY detailed_alerts.sort_at_utc DESC NULLS LAST,
+                 detailed_alerts.severity_rank DESC,
                  detailed_alerts.alert_fingerprint ASC
       ), '[]'::jsonb) AS alerts_json,
       COALESCE(MAX(detailed_alerts.filtered_count), 0)::integer AS filtered_count,

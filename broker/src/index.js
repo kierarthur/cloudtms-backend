@@ -54177,7 +54177,8 @@ async function handleBankingAlertPreferencesUpdate(env, req, user) {
     'CANCELLATION_RACED_WITH_PROVIDER_SUBMIT',
     'WEBHOOK_UNMATCHED_REVIEW_REQUIRED',
     'BATCH_SCHEDULED_SUCCESS',
-    'BATCH_SETTLED_SUCCESS'
+    'BATCH_SETTLED_SUCCESS',
+    'BATCH_CANCELLATION_SUCCESS'
   ]);
   const allowedFailureReasonGroups = new Set([
     'INSUFFICIENT_FUNDS',
@@ -64347,27 +64348,56 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
 
   if (!draftCreateSingleStepMode && draftCreateMaxPhaseUnits > 1) {
     const loopStartedAtMs = Date.now();
+    const draftCreateTraceInvocationId = (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
+      ? globalThis.crypto.randomUUID()
+      : `draft-create-${operationId}-${loopStartedAtMs}`;
     let currentOperationRow = operation;
     let lastStepPayload = null;
     let draftCreateChunkSteps = 0;
     const advancedStepSummaries = [];
+    const finishDraftCreateBoundedAdvance = (payload) => {
+      const totalElapsedMs = Date.now() - loopStartedAtMs;
+      const maxStepExecutionMs = advancedStepSummaries.reduce((max, row) => Math.max(max, Number(row.step_execution_ms || 0)), 0);
+      const maxOperationRowFetchMs = advancedStepSummaries.reduce((max, row) => Math.max(max, Number(row.operation_row_fetch_ms || 0)), 0);
+      const trace = {
+        contract_version: 'BANKING_PAY_DRAFT_CREATE_TRACE_V1',
+        invocation_id: draftCreateTraceInvocationId,
+        operation_id: operationId,
+        started_phase: phase,
+        ended_phase: String(payload?.phase || currentOperationRow?.phase || phase).trim().toUpperCase(),
+        stop_reason: String(payload?.stop_reason || 'UNKNOWN').trim().toUpperCase(),
+        advanced_steps: advancedStepSummaries.length,
+        chunk_steps: draftCreateChunkSteps,
+        request_budget_ms: draftCreateRequestBudgetMs,
+        elapsed_ms: totalElapsedMs,
+        remaining_budget_ms: Math.max(0, draftCreateRequestBudgetMs - totalElapsedMs),
+        max_step_execution_ms: maxStepExecutionMs,
+        max_operation_row_fetch_ms: maxOperationRowFetchMs
+      };
+      try { console.log('[BANKING_PAY_DRAFT_CREATE_TRACE]', JSON.stringify(trace)); } catch {}
+      return Object.assign({}, payload || {}, {
+        draft_create_trace: trace,
+        draft_create_trace_invocation_id: draftCreateTraceInvocationId
+      });
+    };
 
     for (let stepIndex = 0; stepIndex < draftCreateMaxPhaseUnits; stepIndex += 1) {
       const elapsedMs = Date.now() - loopStartedAtMs;
       const remainingBudgetMs = draftCreateRequestBudgetMs - elapsedMs;
       if (remainingBudgetMs <= 750) {
-        return Object.assign({}, lastStepPayload || buildBankingPayOperationPublicPayload(currentOperationRow), {
+        return finishDraftCreateBoundedAdvance(Object.assign({}, lastStepPayload || buildBankingPayOperationPublicPayload(currentOperationRow), {
           advanced_steps: advancedStepSummaries.length,
           draft_create_bounded_advance: true,
           budget_exhausted: true,
           stop_reason: 'REQUEST_BUDGET_EXHAUSTED',
           step_summaries: advancedStepSummaries
-        });
+        }));
       }
 
       const beforePhase = String(currentOperationRow.phase || 'VALIDATE_SESSION').trim().toUpperCase() || 'VALIDATE_SESSION';
       const beforeStatus = String(currentOperationRow.status || 'RUNNING').trim().toUpperCase() || 'RUNNING';
       const beforeUpdatedAt = String(currentOperationRow.updated_at_utc || currentOperationRow.updatedAtUtc || '').trim();
+      const stepStartedAtMs = Date.now();
       lastStepPayload = await advanceBankingPayDraftCreateOperation(env, currentOperationRow, user, Object.assign({}, options, {
         __draftCreateSingleStep: true,
         singleStep: true,
@@ -64383,32 +64413,39 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       const publicStepPayload = safeObject(lastStepPayload);
       const stepStatus = String(publicStepPayload.status || '').trim().toUpperCase();
       const stepPhase = String(publicStepPayload.phase || '').trim().toUpperCase();
-      advancedStepSummaries.push({
+      const stepSummary = {
         step: stepIndex + 1,
         started_phase: beforePhase,
         ended_phase: stepPhase || beforePhase,
-        status: stepStatus || beforeStatus
-      });
+        status: stepStatus || beforeStatus,
+        step_execution_ms: Date.now() - stepStartedAtMs,
+        operation_row_fetch_ms: 0,
+        remaining_budget_ms_after: Math.max(0, draftCreateRequestBudgetMs - (Date.now() - loopStartedAtMs))
+      };
+      advancedStepSummaries.push(stepSummary);
 
       if (isDraftCreateFailedOrReviewStatus(stepStatus) || isDraftCreateTerminalStatus(stepStatus)) {
-        return Object.assign({}, publicStepPayload, {
+        return finishDraftCreateBoundedAdvance(Object.assign({}, publicStepPayload, {
           advanced_steps: advancedStepSummaries.length,
           draft_create_bounded_advance: true,
           budget_exhausted: false,
           stop_reason: isDraftCreateFailedOrReviewStatus(stepStatus) ? 'TERMINAL_FAILURE_OR_REVIEW' : 'TERMINAL',
           step_summaries: advancedStepSummaries
-        });
+        }));
       }
 
+      const operationRowFetchStartedAtMs = Date.now();
       const latestOperationRow = await fetchLatestDraftCreateOperationRow();
+      stepSummary.operation_row_fetch_ms = Date.now() - operationRowFetchStartedAtMs;
+      stepSummary.remaining_budget_ms_after = Math.max(0, draftCreateRequestBudgetMs - (Date.now() - loopStartedAtMs));
       if (!latestOperationRow) {
-        return Object.assign({}, publicStepPayload, {
+        return finishDraftCreateBoundedAdvance(Object.assign({}, publicStepPayload, {
           advanced_steps: advancedStepSummaries.length,
           draft_create_bounded_advance: true,
           budget_exhausted: false,
           stop_reason: 'LATEST_OPERATION_ROW_NOT_FOUND',
           step_summaries: advancedStepSummaries
-        });
+        }));
       }
 
       const latestStatus = String(latestOperationRow.status || '').trim().toUpperCase();
@@ -64417,60 +64454,60 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       const latestUpdatedAt = String(latestOperationRow.updated_at_utc || '').trim();
 
       if (isDraftCreateFailedOrReviewStatus(latestStatus) || isDraftCreateTerminalStatus(latestStatus)) {
-        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+        return finishDraftCreateBoundedAdvance(Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
           advanced_steps: advancedStepSummaries.length,
           draft_create_bounded_advance: true,
           budget_exhausted: false,
           stop_reason: isDraftCreateFailedOrReviewStatus(latestStatus) ? 'TERMINAL_FAILURE_OR_REVIEW' : 'TERMINAL',
           step_summaries: advancedStepSummaries
-        });
+        }));
       }
 
       if (Number.isFinite(latestRunAfterMs) && latestRunAfterMs > Date.now() && (latestStatus === 'WAITING_RETRY' || latestStatus === 'RUNNING')) {
-        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+        return finishDraftCreateBoundedAdvance(Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
           advanced_steps: advancedStepSummaries.length,
           draft_create_bounded_advance: true,
           budget_exhausted: false,
           stop_reason: 'RETRY_RUN_AFTER_FUTURE',
           step_summaries: advancedStepSummaries
-        });
+        }));
       }
 
       if (draftCreateChunkPhaseSet.has(beforePhase) && latestPhase === beforePhase) {
         draftCreateChunkSteps += 1;
         if (draftCreateChunkSteps >= draftCreateMaxChunksPerCall) {
-          return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+          return finishDraftCreateBoundedAdvance(Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
             advanced_steps: advancedStepSummaries.length,
             chunk_steps: draftCreateChunkSteps,
             draft_create_bounded_advance: true,
             budget_exhausted: false,
             stop_reason: 'MAX_CHUNKS_PER_CALL_REACHED',
             step_summaries: advancedStepSummaries
-          });
+          }));
         }
       }
 
       if (latestPhase === beforePhase && latestStatus === beforeStatus && latestUpdatedAt && beforeUpdatedAt && latestUpdatedAt === beforeUpdatedAt) {
-        return Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
+        return finishDraftCreateBoundedAdvance(Object.assign({}, buildBankingPayOperationPublicPayload(latestOperationRow), {
           advanced_steps: advancedStepSummaries.length,
           draft_create_bounded_advance: true,
           budget_exhausted: false,
           stop_reason: 'NO_PROGRESS_MADE',
           step_summaries: advancedStepSummaries
-        });
+        }));
       }
 
       currentOperationRow = latestOperationRow;
     }
 
-    return Object.assign({}, lastStepPayload || buildBankingPayOperationPublicPayload(currentOperationRow), {
+    return finishDraftCreateBoundedAdvance(Object.assign({}, lastStepPayload || buildBankingPayOperationPublicPayload(currentOperationRow), {
       advanced_steps: advancedStepSummaries.length,
       chunk_steps: draftCreateChunkSteps,
       draft_create_bounded_advance: true,
       budget_exhausted: false,
       stop_reason: 'MAX_PHASE_UNITS_REACHED',
       step_summaries: advancedStepSummaries
-    });
+    }));
   }
   const selectedPreviewRowIds = Array.isArray(inputJson.selected_preview_row_ids)
     ? inputJson.selected_preview_row_ids
@@ -132885,7 +132922,8 @@ async function handleGetSettings(env, req) {
         'WEBHOOK_UNMATCHED_REVIEW_REQUIRED',
         'MANUAL_ADJUSTMENTS_CARRIED_FORWARD',
         'BATCH_SCHEDULED_SUCCESS',
-        'BATCH_SETTLED_SUCCESS'
+        'BATCH_SETTLED_SUCCESS',
+        'BATCH_CANCELLATION_SUCCESS'
       ],
       allowed_failure_reason_groups: [
         'INSUFFICIENT_FUNDS',
@@ -192931,7 +192969,7 @@ if (p.startsWith('/api/banking/')) {
 
   const recalcMatch = matchPath(p, '/api/banking/pay/batch/:id/cancel-not-sent-recalculate');
   if (recalcMatch && req.method === 'POST') {
-    return handleBankingPayBatchCancel(env, req, user, recalcMatch.id, ctx);
+    return handleBankingPayCancelNotSentAndRecalculate(env, req, user, recalcMatch.id);
   }
 }
 

@@ -1743,6 +1743,9 @@ DECLARE
   v_reuse_job_id uuid := NULL::uuid;
   v_reuse_source_session_id uuid := NULL::uuid;
   v_reuse_dedupe_key text := NULL::text;
+  v_request_owned_dirty_request_id uuid := NULL::uuid;
+  v_request_owned_dirty_operation_id uuid := NULL::uuid;
+  v_request_owned_dirty_operation_phase text := NULL::text;
 BEGIN
   SELECT job_row.*
   INTO v_job
@@ -1989,6 +1992,115 @@ BEGIN
   WHERE change_counter.entity_key = 'pay_candidate:' || v_candidate_id::text;
 
   v_processed_source_change_seq := GREATEST(COALESCE(v_payload_seq, 0), COALESCE(v_live_seq, 0));
+
+  -- A correction request transition is orchestration evidence, not economic
+  -- truth.  The real financial owner will advance candidate authority and
+  -- elect the Workbench route after its transaction commits.  Hold only the
+  -- exact request-owned dirty job proved and frozen by request_start; mixed
+  -- or unrelated dirty evidence continues through the normal classifier.
+  IF LOWER(BTRIM(COALESCE(v_payload->>'trigger_table', ''))) = 'pay_payment_correction_requests'
+     AND LOWER(BTRIM(COALESCE(v_payload->>'policy_x_dirtying_only', 'false'))) IN ('true','t','1','yes','y','on')
+     AND LOWER(BTRIM(COALESCE(v_payload->>'economic_truth_mutation_allowed', 'false'))) NOT IN ('true','t','1','yes','y','on')
+     AND (
+       (
+         jsonb_typeof(v_payload->'reasons') = 'array'
+         AND jsonb_array_length(v_payload->'reasons') > 0
+         AND NOT EXISTS (
+           SELECT 1
+           FROM jsonb_array_elements_text(v_payload->'reasons') AS dirty_reason(reason_text)
+           WHERE UPPER(BTRIM(dirty_reason.reason_text)) NOT IN (
+             'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
+             'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE'
+           )
+         )
+       )
+       OR (
+         jsonb_typeof(v_payload->'reasons') IS DISTINCT FROM 'array'
+         AND UPPER(BTRIM(COALESCE(v_payload->>'reason_latest', v_payload->>'reason', ''))) IN (
+           'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
+           'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE'
+         )
+       )
+     ) THEN
+    SELECT request_row.id, correction_operation.id, correction_operation.phase
+    INTO v_request_owned_dirty_request_id,
+         v_request_owned_dirty_operation_id,
+         v_request_owned_dirty_operation_phase
+    FROM public.banking_pay_operations AS correction_operation
+    JOIN public.pay_payment_correction_requests AS request_row
+      ON request_row.id = CASE
+          WHEN COALESCE(correction_operation.input_json->>'correction_request_id', '')
+                 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (correction_operation.input_json->>'correction_request_id')::uuid
+          ELSE NULL::uuid
+        END
+    JOIN public.pay_payment_correction_request_candidates AS request_candidate
+      ON request_candidate.correction_request_id = request_row.id
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id = request_candidate.pay_batch_candidate_id
+     AND batch_candidate.candidate_id = v_candidate_id
+    WHERE correction_operation.operation_type = 'PAYMENT_CORRECTION'
+      AND correction_operation.status IN ('QUEUED','RUNNING')
+      AND correction_operation.phase NOT IN ('REFRESH_WORKBENCH','COMPLETE')
+      AND correction_operation.input_json->'draft_overlay_fast_start_authorities'
+            ->v_candidate_id::text->>'request_owned_dirty_job_id' = p_job_id::text
+      AND request_row.status IN (
+        'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING'
+      )
+      AND request_row.created_at_utc <= v_job.created_at_utc
+    ORDER BY request_row.created_at_utc DESC, correction_operation.created_at_utc DESC
+    LIMIT 1;
+  END IF;
+
+  IF v_request_owned_dirty_request_id IS NOT NULL THEN
+    UPDATE public.banking_pay_workbench_jobs AS delayed_job
+    SET status = 'QUEUED',
+        attempt_count = GREATEST(COALESCE(delayed_job.attempt_count, 0) - 1, 0),
+        run_at_utc = GREATEST(COALESCE(delayed_job.run_at_utc, v_now), v_now + interval '5 seconds'),
+        started_at_utc = NULL,
+        updated_at_utc = v_now,
+        payload_json = public._pay_workbench_dirty_payload_merge(
+          COALESCE(delayed_job.payload_json, '{}'::jsonb),
+          jsonb_build_object(
+            'request_owned_dirty_classification', 'REQUEST_OWNED_POLICY_X_DIRTY',
+            'waiting_for_correction_financial_boundary', true,
+            'correction_request_id', v_request_owned_dirty_request_id::text,
+            'correction_operation_id', v_request_owned_dirty_operation_id::text,
+            'correction_operation_phase', v_request_owned_dirty_operation_phase,
+            'request_boundary_delayed_at_utc', v_now::text,
+            'dirty_apply_row_marking_applied', false,
+            'dirty_marking_skipped', true,
+            'session_progress_dirtying_skipped', true,
+            'classifier_work_skipped_by_request_boundary', true,
+            'source_build_enqueue_skipped_by_request_boundary', true,
+            'rerun_required', true,
+            'has_more', true,
+            'policy_x_authority_scope', 'POST_DRAFT_FROZEN_BATCH_EVIDENCE'
+          )
+        )
+    WHERE delayed_job.id = p_job_id;
+
+    RETURN jsonb_build_object(
+      'ok', true,
+      'job_id', p_job_id::text,
+      'candidate_id', v_candidate_id::text,
+      'candidate_serial_delayed', true,
+      'request_boundary_delayed', true,
+      'has_more', true,
+      'rerun_required', true,
+      'reason', 'REQUEST_OWNED_POLICY_X_DIRTY_WAITING_FOR_FINANCIAL_BOUNDARY',
+      'correction_request_id', v_request_owned_dirty_request_id::text,
+      'correction_operation_id', v_request_owned_dirty_operation_id::text,
+      'correction_operation_phase', v_request_owned_dirty_operation_phase,
+      'dirty_apply_row_marking_applied', false,
+      'dirty_marking_skipped', true,
+      'session_progress_dirtying_skipped', true,
+      'classifier_work_skipped_by_request_boundary', true,
+      'source_build_enqueue_skipped_by_request_boundary', true,
+      'elapsed_ms', EXTRACT(MILLISECONDS FROM clock_timestamp() - v_started_at)
+    );
+  END IF;
+
   IF v_job.private_cursor_kind IS NOT NULL
      AND v_job.private_cursor_kind <> 'DIRTY_SESSION_SCAN_V1' THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_DIRTY_SESSION_CURSOR_KIND_INVALID'

@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay semantic Ready-to-Pay and certified cancellation reversion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 31,
+  "function_count": 32,
   "functions": [
     {
       "schema": "public", "name": "_ctms_materialise_candidate_correction_residuals_v1",
@@ -23,9 +23,20 @@
       "source_files": ["supabase/repeatable/09082026_1403_pay_payment_correction_selected_items_draft_scope.sql"]
     },
     {
+      "schema": "public", "name": "banking_alerts_active_for_user",
+      "identity_arguments": "p_actor_user_id uuid, p_entity_kind text, p_entity_id uuid, p_include_acknowledged boolean, p_limit integer, p_alert_context text",
+      "definition_sha256": "bb40f0ec6b7e451ddbdf40a4970f86481263b7268937c6309bc36d85d84a5680",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
+      "expanded_acl": [
+        {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
+        {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
+      ],
+      "source_files": ["supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql"]
+    },
+    {
       "schema": "public", "name": "banking_pay_operation_finish",
       "identity_arguments": "p_operation_id uuid, p_status text, p_result_json jsonb, p_error_json jsonb",
-      "definition_sha256": "9cf197691a8fa9b6da580c43ecd3e7641337fb03874aed70db82caf56df5650c",
+      "definition_sha256": "8fce6b1e59ba506deb791edee0c185125f983c032ffe7679589e9157fbba011b",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

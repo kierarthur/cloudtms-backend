@@ -215,7 +215,7 @@ BEGIN
       ), eligible_authority AS (
         SELECT authority_rows.*,
           COALESCE(authority_rows.original_source_publication_id,'')
-            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             AS fast_reversion_eligible,
           md5(
             v_operation.id::text || '|' ||
@@ -231,7 +231,7 @@ BEGIN
             authority_rows.original_source_identity_digest || '|' ||
             authority_rows.original_semantic_proof_digest || '|' ||
             (COALESCE(authority_rows.original_source_publication_id,'')
-              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')::text ||
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')::text ||
             '|POST_DRAFT_LIVE_AUTHORITY_V2'
           ) AS authority_digest
         FROM authority_rows

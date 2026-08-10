@@ -62,10 +62,14 @@ const previewPage = read('supabase', 'repeatable',
   '20072026_0117_banking_pay_preview_selection_revision.sql');
 const semanticSelection = read('supabase', 'repeatable',
   '09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql');
+const targetedRuntime = read('supabase', 'repeatable',
+  '07082026_1016_banking_pay_targeted_delta_runtime.sql');
 const selectionCarry = read('supabase', 'repeatable',
   '25072026_2153_banking_pay_selection_carry_runtime.sql');
 const broker = read('broker', 'src', 'index.js');
 const legacyFunctions = read('supabase', 'repeatable', '26052026_2100HRS_NEW_FUNCTIONS.sql');
+const cancellationSuccessAlertMigration = read('supabase', 'migrations',
+  '10082026_2103_banking_alert_cancellation_success_kind.sql');
 
 test('semantic V3 and cancellation controls install disabled with a fail-closed dependency', () => {
   for (const setting of [
@@ -391,6 +395,14 @@ test('Draft completion freezes the exact post-Draft authority before fast cancel
   assert.match(operationFinish, /POST_DRAFT_LIVE_AUTHORITY_V2/);
   assert.match(operationFinish, /fast_reversion_eligible/);
   assert.match(operationFinish, /LEGACY_PHYSICAL_PUBLICATION_MISSING/);
+  assert.match(
+    operationFinish,
+    /\^\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\$/,
+  );
+  assert.doesNotMatch(
+    operationFinish,
+    /\^\[0-9a-f\]\{8\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{4\}-\[0-9a-f\]\{12\}\$/,
+  );
   assert.match(operationFinish, /'post_draft_authority'/);
   assert.match(operationFinish, /source_change_seq/);
   assert.match(operationFinish, /dirty_generation/);
@@ -444,6 +456,17 @@ test('untouched Draft admission separates pre-request economic truth from cancel
   );
 });
 
+test('request-owned Policy X dirty work waits for the correction financial boundary', () => {
+  assert.match(targetedRuntime, /REQUEST_OWNED_POLICY_X_DIRTY/);
+  assert.match(targetedRuntime, /waiting_for_correction_financial_boundary/);
+  assert.match(targetedRuntime, /draft_overlay_fast_start_authorities/);
+  assert.match(targetedRuntime, /request_owned_dirty_job_id/);
+  assert.match(targetedRuntime, /correction_operation\.phase NOT IN \('REFRESH_WORKBENCH','COMPLETE'\)/);
+  assert.match(targetedRuntime, /source_build_enqueue_skipped_by_request_boundary/);
+  assert.match(targetedRuntime, /candidate_serial_delayed', true/);
+  assert.match(targetedRuntime, /attempt_count = GREATEST\(COALESCE\(delayed_job\.attempt_count, 0\) - 1, 0\)/);
+});
+
 test('focused modern authorities are replayed after the historical omnibus', () => {
   assert.match(reassert, /\\ir 23072026_1402_disable_plpgsql_check_for_banking_cancel\.sql/);
   assert.match(reassert, /\\ir 09082026_0825_pay_workbench_patch_preview_after_batch_mutation\.sql/);
@@ -453,12 +476,13 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 31);
-  assert.equal(semanticManifest.functions.length, 31);
+  assert.equal(semanticManifest.function_count, 32);
+  assert.equal(semanticManifest.functions.length, 32);
   for (const identity of [
     'public._ctms_materialise_candidate_correction_residuals_v1',
     'private.pay_workbench_source_publication_identity_v1',
     'public.banking_pay_draft_create_step_v1',
+    'public.banking_alerts_active_for_user',
     'private.pay_workbench_draft_expected_effects_v1',
     'private.pay_workbench_draft_create_adoption_finalize_v1',
     'private.pay_workbench_financial_scope_dirty_transition_v1',
@@ -522,4 +546,42 @@ test('whole-batch cancellation progress is one correction-request alert, not one
     legacyFunctions.slice(legacyFunctions.indexOf("WHEN v_alert_kind = 'WHOLE_BATCH_CANCELLATION_PROGRESS'"), legacyFunctions.indexOf("WHEN v_alert_kind = 'TERMINAL_NO_MONEY_REWIND_AVAILABLE'")),
     /candidate_id|work_item_id/,
   );
+});
+
+test('cancel-not-sent uses the canonical correction request owner', () => {
+  assert.match(
+    broker,
+    /cancel-not-sent-recalculate'[\s\S]{0,220}?handleBankingPayCancelNotSentAndRecalculate\(env, req, user, recalcMatch\.id\)/,
+  );
+  assert.doesNotMatch(
+    broker,
+    /cancel-not-sent-recalculate'[\s\S]{0,220}?handleBankingPayBatchCancel\(env, req, user, recalcMatch\.id/,
+  );
+});
+
+test('Draft creation reports bounded phase and fetch timing without changing its budgets', () => {
+  assert.match(broker, /BANKING_PAY_DRAFT_CREATE_TRACE_V1/);
+  assert.match(broker, /\[BANKING_PAY_DRAFT_CREATE_TRACE\]/);
+  assert.match(broker, /step_execution_ms/);
+  assert.match(broker, /operation_row_fetch_ms/);
+  assert.match(broker, /remaining_budget_ms/);
+  assert.match(broker, /draftCreateRequestBudgetMs = Math\.max\(1000, Math\.min\(25000/);
+});
+
+test('completed cancellation emits one durable request-level success alert in newest-first order', () => {
+  assert.match(cancellationSuccessAlertMigration, /BATCH_CANCELLATION_SUCCESS/);
+  assert.match(processChunk, /BANKING_ALERT_CANCELLATION_SUCCESS_V1/);
+  assert.match(processChunk, /'CANCELLATION:' \|\| p_correction_request_id::text/);
+  assert.match(processChunk, /ON CONFLICT \(pay_batch_id, alert_kind, event_key\) DO NOTHING/);
+  assert.match(processChunk, /FROZEN_CORRECTION_REQUEST_MEMBERSHIP/);
+  assert.match(legacyFunctions, /'BATCH_CANCELLATION_SUCCESS'/);
+  assert.match(
+    legacyFunctions,
+    /ORDER BY counted_alerts\.sort_at_utc DESC NULLS LAST,\s*counted_alerts\.severity_rank DESC/,
+  );
+  assert.match(
+    legacyFunctions,
+    /ORDER BY detailed_alerts\.sort_at_utc DESC NULLS LAST,\s*detailed_alerts\.severity_rank DESC/,
+  );
+  assert.match(broker, /'BATCH_CANCELLATION_SUCCESS'/);
 });

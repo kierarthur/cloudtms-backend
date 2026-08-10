@@ -1676,6 +1676,67 @@ BEGIN
       v_refresh_count, v_refresh_count, 0, v_now, v_now
     ) ON CONFLICT (operation_id, phase, chunk_type, sequence_no) DO NOTHING;
 
+    -- One durable success event belongs to the correction request, never to
+    -- each candidate/work item.  Its count and amount come only from the
+    -- frozen request membership, preserving Policy X post-Draft authority.
+    IF NOT v_refresh_has_more
+       AND v_request.status IN ('APPLIED','APPLIED_WITH_BLOCKERS')
+       AND EXISTS (
+         SELECT 1
+         FROM public.pay_payment_correction_work_items AS successful_work
+         WHERE successful_work.correction_request_id = p_correction_request_id
+           AND successful_work.status = 'APPLIED'
+       ) THEN
+      INSERT INTO public.banking_alert_success_events (
+        pay_batch_id,
+        alert_kind,
+        event_key,
+        payload_json,
+        occurred_at_utc,
+        expires_at_utc,
+        created_at_utc,
+        updated_at_utc
+      )
+      SELECT
+        v_request.pay_batch_id,
+        'BATCH_CANCELLATION_SUCCESS',
+        'CANCELLATION:' || p_correction_request_id::text,
+        pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+          'contract_version', 'BANKING_ALERT_CANCELLATION_SUCCESS_V1',
+          'correction_request_id', p_correction_request_id::text,
+          'operation_id', v_operation.id::text,
+          'pay_batch_id', v_request.pay_batch_id::text,
+          'cancelled_payment_count', frozen_scope.payment_count,
+          'cancelled_amount_pence', frozen_scope.amount_pence,
+          'user_label', frozen_scope.payment_count::text || ' payment'
+            || CASE WHEN frozen_scope.payment_count = 1 THEN '' ELSE 's' END
+            || ' cancelled',
+          'user_description', 'Cancellation completed for '
+            || frozen_scope.payment_count::text || ' payment'
+            || CASE WHEN frozen_scope.payment_count = 1 THEN '' ELSE 's' END
+            || '. Banking Pay has been updated.',
+          'required_user_action', 'Review or clear this Banking alert.',
+          'stable_issue_key', v_request.pay_batch_id::text
+            || ':BATCH_CANCELLATION_SUCCESS:' || p_correction_request_id::text,
+          'dedupe_key', v_request.pay_batch_id::text
+            || ':BATCH_CANCELLATION_SUCCESS:' || p_correction_request_id::text,
+          'policy_x_source', 'FROZEN_CORRECTION_REQUEST_MEMBERSHIP'
+        )),
+        v_now,
+        v_now + interval '365 days',
+        v_now,
+        v_now
+      FROM (
+        SELECT
+          pg_catalog.count(*)::integer AS payment_count,
+          pg_catalog.round(COALESCE(pg_catalog.sum(request_candidate.active_amount),0) * 100)::bigint AS amount_pence
+        FROM public.pay_payment_correction_request_candidates AS request_candidate
+        WHERE request_candidate.correction_request_id = p_correction_request_id
+      ) AS frozen_scope
+      WHERE frozen_scope.payment_count > 0
+      ON CONFLICT (pay_batch_id, alert_kind, event_key) DO NOTHING;
+    END IF;
+
     UPDATE public.banking_pay_operations AS refresh_operation
     SET progress_json = COALESCE(refresh_operation.progress_json, '{}'::jsonb)
           || pg_catalog.jsonb_build_object(
