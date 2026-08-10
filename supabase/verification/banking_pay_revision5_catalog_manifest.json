@@ -797,7 +797,7 @@
       "schema": "public",
       "name": "pay_payment_correction_retry_planning_v1",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "6fc16cca782b244ad45c5d9bbd700c14159bbbfc3bc5d390e35f599a2ebd2f42",
+      "definition_sha256": "fbcda2c487039901fad738086b7decf90c18ab5e10893f1bd6f4829a35bfaacb",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

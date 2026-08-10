@@ -1,9 +1,11 @@
--- CloudTMS Banking Pay cancellation — narrowly scoped planning retry.
+-- CloudTMS Banking Pay cancellation — narrowly scoped safe retry.
 --
 -- This does not create a second request and cannot advance financial work.  It
--- only returns an existing PAYMENT_CORRECTION operation to PREPARE_SELECTION
--- after an explicit requester/admin retry where the earlier failure happened
--- before any durable selection, work, correction, provider, or chunk evidence.
+-- returns the same PAYMENT_CORRECTION operation either to PREPARE_SELECTION
+-- after a pre-selection failure, or to EXPAND_WORK for a whole-Draft
+-- cancellation that failed before any correction/provider/transfer work was
+-- durably created.  The historical function identity is retained so existing
+-- callers and ACLs do not change.
 
 CREATE OR REPLACE FUNCTION public.pay_payment_correction_retry_planning_v1(
   p_correction_request_id uuid,
@@ -27,6 +29,9 @@ DECLARE
   v_is_admin boolean := false;
   v_retry_count integer := 0;
   v_error_code text := NULL::text;
+  v_retry_mode text := NULL::text;
+  v_retry_reason text := NULL::text;
+  v_retry_counter_key text := NULL::text;
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_RETRY_REQUEST_ID_REQUIRED'
@@ -110,58 +115,99 @@ BEGIN
     v_operation.error_json ->> 'error_code',
     ''
   ));
+  IF pg_catalog.upper(COALESCE(v_request.status, '')) = 'PLANNING'
+     AND pg_catalog.upper(COALESCE(v_operation.phase, '')) = 'PREPARE_SELECTION' THEN
+    v_retry_mode := 'PLANNING';
+    v_retry_reason := 'EXPLICIT_SAFE_PLANNING_RETRY';
+    v_retry_counter_key := 'planning_retry_count';
+  ELSIF pg_catalog.upper(COALESCE(v_request.status, '')) IN ('AUTHORISED', 'AUTHORIZED')
+     AND pg_catalog.upper(COALESCE(v_operation.phase, '')) = 'EXPAND_WORK'
+     AND pg_catalog.upper(COALESCE(v_request.plan_json ->> 'requested_action', '')) = 'DRAFT_CANCEL'
+     AND pg_catalog.upper(COALESCE(v_batch.status, '')) = 'DRAFT' THEN
+    v_retry_mode := 'DRAFT_EXPAND';
+    v_retry_reason := 'EXPLICIT_SAFE_DRAFT_EXPAND_RETRY';
+    v_retry_counter_key := 'processing_retry_count';
+  END IF;
+
   v_retry_count := CASE
-    WHEN COALESCE(v_operation.progress_json ->> 'planning_retry_count', '') ~ '^[0-9]+$'
-      THEN GREATEST((v_operation.progress_json ->> 'planning_retry_count')::integer, 0)
+    WHEN v_retry_counter_key IS NOT NULL
+      AND COALESCE(v_operation.progress_json ->> v_retry_counter_key, '') ~ '^[0-9]+$'
+      THEN GREATEST((v_operation.progress_json ->> v_retry_counter_key)::integer, 0)
     ELSE 0
   END;
 
-  IF pg_catalog.upper(COALESCE(v_request.status, '')) <> 'PLANNING'
+  IF v_retry_mode IS NULL
      OR pg_catalog.upper(COALESCE(v_operation.status, '')) <> 'REVIEW_REQUIRED'
-     OR pg_catalog.upper(COALESCE(v_operation.phase, '')) <> 'PREPARE_SELECTION'
      OR pg_catalog.upper(COALESCE(v_operation.runner_state, '')) <> 'WAITING_USER_REVIEW'
      OR COALESCE(v_operation.requires_user_action, false) IS NOT TRUE
      OR v_error_code <> 'BANKING_PAY_OPERATION_ADVANCE_FAILED'
      OR v_retry_count >= 3 THEN
-    RAISE EXCEPTION 'PAYMENT_CORRECTION_PLANNING_RETRY_NOT_ALLOWED'
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_SAFE_RETRY_NOT_ALLOWED'
       USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
-        'code', 'PAYMENT_CORRECTION_PLANNING_RETRY_NOT_ALLOWED',
+        'code', 'PAYMENT_CORRECTION_SAFE_RETRY_NOT_ALLOWED',
         'request_status', v_request.status,
         'operation_status', v_operation.status,
         'operation_phase', v_operation.phase
       )::text;
   END IF;
 
-  IF EXISTS (
-       SELECT 1 FROM public.banking_pay_operation_chunks AS chunk_row
-       WHERE chunk_row.operation_id = v_operation.id
-     )
-     OR EXISTS (
-       SELECT 1 FROM public.pay_payment_correction_request_candidates AS membership_row
-       WHERE membership_row.correction_request_id = p_correction_request_id
-     )
-     OR EXISTS (
-       SELECT 1 FROM public.pay_payment_correction_work_items AS work_row
-       WHERE work_row.correction_request_id = p_correction_request_id
-     )
-     OR EXISTS (
-       SELECT 1 FROM public.pay_payment_correction_items AS correction_row
-       WHERE correction_row.correction_request_id = p_correction_request_id
-     )
-     OR EXISTS (
-       SELECT 1 FROM public.pay_payment_correction_actions AS action_row
-       WHERE action_row.correction_request_id = p_correction_request_id
-         AND action_row.action IS DISTINCT FROM 'REQUEST'
-     )
-     OR EXISTS (
-       SELECT 1 FROM public.banking_pay_operation_provider_attempts AS provider_attempt
-       WHERE provider_attempt.operation_id = v_operation.id
-          OR provider_attempt.pay_batch_id = v_request.pay_batch_id
-     ) THEN
-    RAISE EXCEPTION 'PAYMENT_CORRECTION_PLANNING_RETRY_EVIDENCE_EXISTS'
-      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
-        'code', 'PAYMENT_CORRECTION_PLANNING_RETRY_EVIDENCE_EXISTS'
-      )::text;
+  IF v_retry_mode = 'PLANNING' THEN
+    IF EXISTS (
+         SELECT 1 FROM public.banking_pay_operation_chunks AS chunk_row
+         WHERE chunk_row.operation_id = v_operation.id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_request_candidates AS membership_row
+         WHERE membership_row.correction_request_id = p_correction_request_id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_work_items AS work_row
+         WHERE work_row.correction_request_id = p_correction_request_id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_items AS correction_row
+         WHERE correction_row.correction_request_id = p_correction_request_id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_actions AS action_row
+         WHERE action_row.correction_request_id = p_correction_request_id
+           AND action_row.action IS DISTINCT FROM 'REQUEST'
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.banking_pay_operation_provider_attempts AS provider_attempt
+         WHERE provider_attempt.operation_id = v_operation.id
+            OR provider_attempt.pay_batch_id = v_request.pay_batch_id
+       ) THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_PLANNING_RETRY_EVIDENCE_EXISTS'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'PAYMENT_CORRECTION_PLANNING_RETRY_EVIDENCE_EXISTS'
+        )::text;
+    END IF;
+  ELSE
+    -- EXPAND_WORK is one PostgreSQL transaction.  A failure before these
+    -- durable owners exist therefore leaves no financial work to repeat.
+    IF EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_work_items AS work_row
+         WHERE work_row.correction_request_id = p_correction_request_id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_items AS correction_row
+         WHERE correction_row.correction_request_id = p_correction_request_id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.banking_pay_operation_provider_attempts AS provider_attempt
+         WHERE provider_attempt.operation_id = v_operation.id
+            OR provider_attempt.pay_batch_id = v_request.pay_batch_id
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.banking_pay_operation_transfer_scope AS transfer_scope
+         WHERE transfer_scope.operation_id = v_operation.id
+       ) THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_DRAFT_EXPAND_RETRY_EVIDENCE_EXISTS'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'PAYMENT_CORRECTION_DRAFT_EXPAND_RETRY_EVIDENCE_EXISTS'
+        )::text;
+    END IF;
   END IF;
 
   UPDATE public.banking_pay_operations AS operation_update
@@ -174,18 +220,20 @@ BEGIN
       locked_by = NULL,
       lock_expires_at_utc = NULL,
       error_json = NULL,
-      resume_reason = 'EXPLICIT_SAFE_PLANNING_RETRY',
+      resume_reason = v_retry_reason,
       progress_json = pg_catalog.jsonb_strip_nulls(
         COALESCE(operation_update.progress_json, '{}'::jsonb)
         || pg_catalog.jsonb_build_object(
-          'planning_retry_count', v_retry_count + 1,
-          'planning_retry_at_utc', v_now::text,
-          'planning_retry_previous_error_code', v_error_code,
+          v_retry_counter_key, v_retry_count + 1,
+          CASE WHEN v_retry_mode = 'PLANNING' THEN 'planning_retry_at_utc' ELSE 'processing_retry_at_utc' END, v_now::text,
+          CASE WHEN v_retry_mode = 'PLANNING' THEN 'planning_retry_previous_error_code' ELSE 'processing_retry_previous_error_code' END, v_error_code,
+          'safe_retry_mode', v_retry_mode,
           'status', 'RUNNING',
-          'phase', 'PREPARE_SELECTION',
+          'phase', v_operation.phase,
           'runner_state', 'RUNNABLE',
           'requires_user_action', false,
-          'resume_reason', 'EXPLICIT_SAFE_PLANNING_RETRY'
+          'review_required', false,
+          'resume_reason', v_retry_reason
         )
       ),
       updated_at_utc = v_now
@@ -193,7 +241,10 @@ BEGIN
 
   RETURN pg_catalog.jsonb_build_object(
     'ok', true,
-    'code', 'PAYMENT_CORRECTION_PLANNING_RETRY_QUEUED',
+    'code', CASE WHEN v_retry_mode = 'PLANNING'
+      THEN 'PAYMENT_CORRECTION_PLANNING_RETRY_QUEUED'
+      ELSE 'PAYMENT_CORRECTION_PROCESSING_RETRY_QUEUED' END,
+    'retry_mode', v_retry_mode,
     'correction_request_id', p_correction_request_id,
     'pay_batch_id', v_request.pay_batch_id,
     'operation_id', v_operation.id,
@@ -203,9 +254,9 @@ BEGIN
       'operation_type', 'PAYMENT_CORRECTION',
       'pay_batch_id', v_request.pay_batch_id,
       'root_operation_id', v_operation.root_operation_id,
-      'phase', 'PREPARE_SELECTION',
+      'phase', v_operation.phase,
       'run_after_utc', v_now,
-      'reason', 'EXPLICIT_SAFE_PLANNING_RETRY',
+      'reason', v_retry_reason,
       'successor_relation', 'SELF',
       'requires_user_action', false,
       'terminal', false

@@ -24,6 +24,18 @@ test('planning retry reuses one exact operation and is limited to the pre-select
   assert.doesNotMatch(retrySql, /INSERT\s+INTO\s+public\.banking_pay_operations/i);
 });
 
+test('whole-Draft expand retry reuses the same authorised operation only before durable cancellation work exists', () => {
+  assert.match(retrySql, /v_retry_mode := 'DRAFT_EXPAND'/);
+  assert.match(retrySql, /v_request\.status[\s\S]*'AUTHORISED'[\s\S]*'AUTHORIZED'/);
+  assert.match(retrySql, /v_operation\.phase[\s\S]*'EXPAND_WORK'/);
+  assert.match(retrySql, /v_request\.plan_json ->> 'requested_action'[\s\S]*'DRAFT_CANCEL'/);
+  assert.match(retrySql, /v_batch\.status[\s\S]*'DRAFT'/);
+  assert.match(retrySql, /public\.banking_pay_operation_transfer_scope/);
+  assert.match(retrySql, /PAYMENT_CORRECTION_DRAFT_EXPAND_RETRY_EVIDENCE_EXISTS/);
+  assert.match(retrySql, /processing_retry_count/);
+  assert.match(retrySql, /PAYMENT_CORRECTION_PROCESSING_RETRY_QUEUED/);
+});
+
 test('planning retry refuses any durable work or provider evidence before making the same operation runnable', () => {
   for (const relation of [
     'banking_pay_operation_chunks',
@@ -40,12 +52,15 @@ test('planning retry refuses any durable work or provider evidence before making
   assert.match(retrySql, /'operation_id', v_operation\.id[\s\S]*'successor_relation', 'SELF'/);
 });
 
-test('Worker exposes and executes only the typed safe planning retry action', () => {
+test('Worker exposes and executes the typed safe planning and processing retry actions', () => {
   assert.match(worker, /result\.planning_retry_available = true/);
+  assert.match(worker, /result\.processing_retry_available = true/);
   assert.match(worker, /result\.available_actions = Array\.from\(new Set\(\[[\s\S]*'RETRY_PLANNING'/);
-  assert.match(worker, /\['AUTHORISE','USE_GOLDEN_KEY','REJECT','CANCEL','RETRY_PLANNING'\]/);
+  assert.match(worker, /'RETRY_PROCESSING'/);
+  assert.match(worker, /\['AUTHORISE','USE_GOLDEN_KEY','REJECT','CANCEL','RETRY_PLANNING','RETRY_PROCESSING'\]/);
   assert.match(worker, /sbRpc\(env, 'pay_payment_correction_retry_planning_v1'/);
   assert.match(worker, /PAYMENT_CORRECTION_RETRY_PLANNING/);
+  assert.match(worker, /PAYMENT_CORRECTION_RETRY_PROCESSING/);
 });
 
 test('planning retry RPC remains service-only', () => {

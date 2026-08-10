@@ -50330,6 +50330,47 @@ async function handleBankingPayCorrectionStatusV1(env, req, user, correctionRequ
         // enrichment is temporarily unavailable.
       }
     }
+    if (['AUTHORISED', 'AUTHORIZED'].includes(requestStatus) && progressRequiresAction && result?.pay_batch_id) {
+      try {
+        const { rows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?pay_batch_id=eq.${encodeURIComponent(result.pay_batch_id)}&operation_type=eq.PAYMENT_CORRECTION&select=id,status,phase,runner_state,requires_user_action,input_json,error_json,progress_json,created_at_utc&order=created_at_utc.desc&limit=10`,
+          false
+        );
+        const retryOperation = (Array.isArray(rows) ? rows : []).find((operationRow) => {
+          const input = operationRow?.input_json && typeof operationRow.input_json === 'object' && !Array.isArray(operationRow.input_json)
+            ? operationRow.input_json
+            : {};
+          const error = operationRow?.error_json && typeof operationRow.error_json === 'object' && !Array.isArray(operationRow.error_json)
+            ? operationRow.error_json
+            : {};
+          const progress = operationRow?.progress_json && typeof operationRow.progress_json === 'object' && !Array.isArray(operationRow.progress_json)
+            ? operationRow.progress_json
+            : {};
+          const retryCount = Number(progress.processing_retry_count || 0);
+          return String(input.correction_request_id || '').toLowerCase() === String(correctionRequestId).toLowerCase()
+            && String(operationRow.status || '').trim().toUpperCase() === 'REVIEW_REQUIRED'
+            && String(operationRow.phase || '').trim().toUpperCase() === 'EXPAND_WORK'
+            && String(operationRow.runner_state || '').trim().toUpperCase() === 'WAITING_USER_REVIEW'
+            && operationRow.requires_user_action === true
+            && String(error.code || error.error_code || '').trim().toUpperCase() === 'BANKING_PAY_OPERATION_ADVANCE_FAILED'
+            && Number.isFinite(retryCount)
+            && retryCount < 3;
+        });
+        if (retryOperation) {
+          result.processing_retry_available = true;
+          result.available_actions = Array.from(new Set([
+            'RETRY_PROCESSING',
+            ...(Array.isArray(result.available_actions) ? result.available_actions : [])
+          ]));
+          result.user_title = 'Cancellation processing needs attention';
+          result.user_message = 'No cancellation work was committed. Continue this same cancellation request safely.';
+        }
+      } catch {
+        // The service-only retry RPC rechecks all durable evidence.  Status
+        // remains read-only and conservative if this optional enrichment fails.
+      }
+    }
     return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), result);
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_STATUS_FAILED'); }
 }
@@ -50462,7 +50503,7 @@ async function handleBankingPayCorrectionAuthActionV1(env, req, user, correction
     return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'ACTION_ROUTE_MISMATCH', message: 'The requested action does not match this route.' });
   }
   const action = String(forcedAction || submittedAction).trim().toUpperCase();
-  if (!['AUTHORISE','USE_GOLDEN_KEY','REJECT','CANCEL','RETRY_PLANNING'].includes(action)) return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'ACTION_INVALID', message: 'Choose a supported approval action.' });
+  if (!['AUTHORISE','USE_GOLDEN_KEY','REJECT','CANCEL','RETRY_PLANNING','RETRY_PROCESSING'].includes(action)) return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'ACTION_INVALID', message: 'Choose a supported approval action.' });
   if (body?.reauth_token != null || body?.reauthToken != null || body?.reauth_proof_token != null || body?.reauthProofToken != null) {
     return bankingPayCancellationResponse(env, req, 400, { ok: false, code: 'REQUESTER_PROOF_NOT_ACCEPTED_FOR_AUTHORISATION', message: 'Requester reauthentication proof is not accepted for maker/checker approval.' });
   }
@@ -50480,15 +50521,19 @@ async function handleBankingPayCorrectionAuthActionV1(env, req, user, correction
     if (action === 'USE_GOLDEN_KEY' && actor.actor?.payment_golden_key !== true) {
       return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'PAYMENT_GOLDEN_KEY_REQUIRED', message: 'Golden Key permission is required.' });
     }
-    if (['REJECT', 'CANCEL', 'RETRY_PLANNING'].includes(action) && role !== 'admin' && !isOwner) {
+    if (['REJECT', 'CANCEL', 'RETRY_PLANNING', 'RETRY_PROCESSING'].includes(action) && role !== 'admin' && !isOwner) {
       return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'REQUEST_OWNER_OR_ADMIN_REQUIRED', message: 'Only the request owner or a Banking Pay administrator may take this action.' });
     }
-    if (action === 'RETRY_PLANNING') {
+    if (action === 'RETRY_PLANNING' || action === 'RETRY_PROCESSING') {
       const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_retry_planning_v1', {
         p_correction_request_id: correctionRequestId,
         p_actor_user_id: actor.actorUserId
       }), 'pay_payment_correction_retry_planning_v1');
-      const continuationEnqueue = await enqueueBankingPayCancellationResult(env, result, 'PAYMENT_CORRECTION_RETRY_PLANNING');
+      const continuationEnqueue = await enqueueBankingPayCancellationResult(
+        env,
+        result,
+        action === 'RETRY_PROCESSING' ? 'PAYMENT_CORRECTION_RETRY_PROCESSING' : 'PAYMENT_CORRECTION_RETRY_PLANNING'
+      );
       return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 202), {
         ...result,
         continuation_enqueue: continuationEnqueue,
