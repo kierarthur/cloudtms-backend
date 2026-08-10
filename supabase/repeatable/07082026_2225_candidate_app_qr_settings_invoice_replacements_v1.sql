@@ -290,10 +290,10 @@ begin
   end if;
 
   IF v_candidate_rejection_enabled THEN
-    update public.timesheet_evidence
+    update public.timesheet_evidence as evidence_row
     set processing_state='SUPERSEDED'
-    where timesheet_id=v_current.timesheet_id
-      and processing_state<>'SUPERSEDED';
+    where evidence_row.timesheet_id=v_current.timesheet_id
+      and evidence_row.processing_state<>'SUPERSEDED';
   END IF;
 
   -- 8) Audit event

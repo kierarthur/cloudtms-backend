@@ -25,6 +25,9 @@ const claimSource = read(
 const workflowSource = read(
   'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql'
 );
+const qrSettingsSource = read(
+  'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql'
+);
 const routeSource = read('supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql');
 const rejectSource = read('supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql');
 const backendSource = read('broker/src/candidate-app-backend.js');
@@ -110,12 +113,17 @@ test('one retirement helper closes mail, notification and QR authority for every
   assert.match(helper, /CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/);
   assert.match(helper, /candidate_paper_generation_retired',true/i);
   assert.match(helper, /CANDIDATE_PAPER_GENERATION_RETIRED/);
+  assert.match(helper, /v_workflow\.state not in \('AWAITING_PAPER_RETURN','FINALISED'\)/i);
+  assert.match(helper, /when v_workflow\.state='FINALISED' then greatest\(v_workflow\.generation-1,1\)/i);
+  assert.match(helper, /candidate_workflow_generation'=v_delivery_generation::text/i);
   assert.match(helper, /state='DISMISSED'/i);
   assert.match(helper, /qr_token=null/i);
   assert.match(workflowSource, /v_action='AMEND'[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
+  assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','FINALISED'\)/i);
+  assert.match(qrSettingsSource, /update public\.timesheet_evidence as evidence_row[\s\S]*where evidence_row\.timesheet_id=v_current\.timesheet_id/i);
 });
 
 test('Candidate PAPER hashing resolves pgcrypto exactly as the TEST schema exposes it', () => {

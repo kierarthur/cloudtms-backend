@@ -55,6 +55,7 @@ declare
   v_workflow public.candidate_submission_workflows%rowtype;
   v_mail public.mail_outbox%rowtype;
   v_timesheet_id uuid;
+  v_delivery_generation integer;
   v_reason text:=upper(btrim(coalesce(p_reason_code,'')));
   v_qr_token_hash text;
   v_mail_count integer:=0;
@@ -76,12 +77,22 @@ begin
   if v_workflow.generation<>p_expected_generation then
     raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
   end if;
-  if v_workflow.route<>'PAPER' or v_workflow.state<>'AWAITING_PAPER_RETURN' then
+  if v_workflow.route<>'PAPER'
+     or v_workflow.state not in ('AWAITING_PAPER_RETURN','FINALISED') then
     return jsonb_build_object(
       'retired',false,'workflow_id',v_workflow.id,
       'generation',v_workflow.generation,'reason_code',v_reason
     );
   end if;
+
+  -- Finalisation advances the workflow generation after freezing the PAPER
+  -- return artefacts. Office rejection must therefore fence and retire the
+  -- preceding immutable delivery generation while comparing and locking the
+  -- current FINALISED workflow generation.
+  v_delivery_generation:=case
+    when v_workflow.state='FINALISED' then greatest(v_workflow.generation-1,1)
+    else v_workflow.generation
+  end;
 
   v_timesheet_id:=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id);
   if v_timesheet_id is null then
@@ -96,20 +107,21 @@ begin
     from public.mail_outbox mail_row
     where mail_row.type='TIMESHEET_QR'
       and mail_row.context_kind='timesheets'
-      and mail_row.context_id=v_timesheet_id
       and mail_row.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
-      and mail_row.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+      and mail_row.payment_scope_json->>'candidate_workflow_generation'=v_delivery_generation::text
     order by mail_row.id
     for update
   loop
     v_mail_count:=v_mail_count+1;
-    if nullif(btrim(coalesce(v_mail.attempt_lease_token,'')),'') is not null
+    if v_mail.status<>'SENT'
+       and nullif(btrim(coalesce(v_mail.attempt_lease_token,'')),'') is not null
        and (v_mail.attempt_lease_expires_at_utc is null
          or v_mail.attempt_lease_expires_at_utc>p_now_utc) then
       raise exception 'CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS'
         using errcode='40001',detail=jsonb_build_object(
           'code','CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS',
           'workflow_id',v_workflow.id,'generation',v_workflow.generation,
+          'delivery_generation',v_delivery_generation,
           'mail_outbox_id',v_mail.id
         )::text;
     end if;
@@ -149,10 +161,9 @@ begin
         )
   where mail_row.type='TIMESHEET_QR'
     and mail_row.context_kind='timesheets'
-    and mail_row.context_id=v_timesheet_id
     and mail_row.status<>'SENT'
     and mail_row.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
-    and mail_row.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text;
+    and mail_row.payment_scope_json->>'candidate_workflow_generation'=v_delivery_generation::text;
   get diagnostics v_mail_retired_count=row_count;
 
   update public.candidate_notifications notification
@@ -173,7 +184,7 @@ begin
   where notification.workflow_id=v_workflow.id
     and notification.event_type='PAPER_PACK_READY'
     and notification.dedupe_key like
-      'CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'||v_workflow.generation::text||':%'
+      'CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow.id::text||':'||v_delivery_generation::text||':%'
     and (notification.state<>'DISMISSED'
       or notification.push_state in ('PENDING','FAILED','CLAIMED'));
   get diagnostics v_notification_count=row_count;
@@ -226,17 +237,20 @@ begin
     'CANDIDATE_PAPER_DELIVERY_RETIRED',
     jsonb_build_object('state',v_workflow.state,'generation',v_workflow.generation),
     jsonb_build_object(
+      'delivery_generation',v_delivery_generation,
       'reason_code',v_reason,'mail_count',v_mail_count,
       'mail_retired_count',v_mail_retired_count,
       'notification_retired_count',v_notification_count,
       'qr_invalidated',v_qr_invalidated
     ),v_reason,null,
-    'candidate-paper-retire:'||v_workflow.id::text||':'||v_workflow.generation::text||':'||v_reason,
+    'candidate-paper-retire:'||v_workflow.id::text||':'||v_workflow.generation::text||':'
+      ||v_delivery_generation::text||':'||v_reason,
     p_now_utc
   );
 
   return jsonb_build_object(
     'retired',true,'workflow_id',v_workflow.id,'generation',v_workflow.generation,
+    'delivery_generation',v_delivery_generation,
     'reason_code',v_reason,'mail_count',v_mail_count,
     'mail_retired_count',v_mail_retired_count,
     'notification_retired_count',v_notification_count,

@@ -3,7 +3,7 @@ begin;
 
 update public.settings_defaults
 set candidate_app_feature_flags_json=candidate_app_feature_flags_json
-  ||'{"candidate_app_writes":true,"candidate_notifications":true}'::jsonb,
+  ||'{"candidate_app_reads":true,"candidate_app_writes":true,"candidate_notifications":true}'::jsonb,
     candidate_app_environment='TEST'
 where id=1;
 
@@ -39,7 +39,13 @@ declare
   v_signature text;
   v_result jsonb;
   v_replay jsonb;
+  v_page jsonb;
+  v_detail jsonb;
+  v_card jsonb;
   v_new_timesheet uuid;
+  v_expected_display_timesheet uuid;
+  v_expected_scope text;
+  v_expected_action text;
   v_state text;
   v_generation integer;
   v_notification_count integer;
@@ -140,7 +146,8 @@ begin
     week_ending_date,idempotency_key,finalised_at_utc
   ) values(
     v_workflow,'TEST',v_account,v_candidate,p_workflow_kind,'WEEKLY','EMAIL','FINALISED',2,
-    v_contract,v_base_week,v_base_timesheet,v_target_timesheet,
+    v_contract,case when p_separate_expense then v_target_week else v_base_week end,
+    v_base_timesheet,v_target_timesheet,
     current_date,'finalised-original:'||v_workflow::text,now()
   );
 
@@ -238,6 +245,54 @@ begin
   if (select timesheet_id from public.contract_weeks where id=v_target_week)<>v_new_timesheet then
     raise exception 'Rejected contract week did not point to the replacement target';
   end if;
+
+  v_expected_display_timesheet:=case when p_separate_expense
+    then v_base_timesheet else v_new_timesheet end;
+  v_expected_scope:=case when p_separate_expense
+    then 'COMPLETE_EXPENSE_CLAIM' else 'COMPLETE_TIMESHEET_RECORD' end;
+  v_expected_action:=case p_workflow_kind
+    when 'CONTRACT_EXPENSE' then 'RESUBMIT_EXPENSE_CLAIM'
+    when 'CONTRACT_COMBINED' then 'RESUBMIT_TIMESHEET_AND_EXPENSES'
+    else 'RESUBMIT_TIMESHEET' end;
+
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,now());
+  select item.value into v_card
+  from jsonb_array_elements(v_page->'items') item(value)
+  where item.value->>'timesheet_id'=v_expected_display_timesheet::text
+  limit 1;
+  if v_card is null then
+    raise exception 'Replacement current Candidate card did not retain rejected workflow: %',v_page;
+  end if;
+  if v_card->>'candidate_status_code'<>'REJECTED'
+     or v_card->>'rejection_reason'<>'Finalised Candidate submission rejected'
+     or v_card->>'rejection_scope'<>v_expected_scope
+     or v_card#>>'{rejection,workflow_id}'<>v_workflow::text
+     or v_card#>>'{rejection,scope}'<>v_expected_scope
+     or v_card#>>'{rejection,required_action}'<>v_expected_action then
+    raise exception 'Replacement Candidate rejection contract was incorrect: %',v_card;
+  end if;
+  if not exists(
+    select 1 from jsonb_array_elements(v_card->'workflows') workflow_item(value)
+    where workflow_item.value->>'workflow_id'=v_workflow::text
+      and workflow_item.value->>'state'='REJECTED'
+      and workflow_item.value->>'rejection_scope'=v_expected_scope
+      and workflow_item.value->>'required_resubmission_action'=v_expected_action
+  ) then
+    raise exception 'Rejected workflow overlay omitted server-owned recovery authority: %',v_card;
+  end if;
+
+  v_detail:=public.candidate_app_timesheet_detail_v1(
+    v_session,'TEST',null,null,v_workflow,now()
+  );
+  if not exists(
+    select 1 from jsonb_array_elements(v_detail->'workflows') workflow_item(value)
+    where workflow_item.value->>'workflow_id'=v_workflow::text
+      and workflow_item.value->>'state'='REJECTED'
+      and workflow_item.value->>'rejection_scope'=v_expected_scope
+      and workflow_item.value->>'required_resubmission_action'=v_expected_action
+  ) then
+    raise exception 'Rejected workflow detail omitted version-aware recovery authority: %',v_detail;
+  end if;
   if p_anchor_isolation then
     select state,generation into v_state,v_generation
     from public.candidate_submission_workflows where id=v_isolated_expense_workflow;
@@ -310,6 +365,24 @@ begin
   if v_result->>'state'<>'WORKER_DRAFT'
      or v_result->>'workflow_id'<>v_replacement_workflow::text then
     raise exception 'Replacement workflow was not created: %',v_result;
+  end if;
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,now());
+  select item.value into v_card
+  from jsonb_array_elements(v_page->'items') item(value)
+  where item.value->>'timesheet_id'=v_expected_display_timesheet::text
+  limit 1;
+  if v_card->>'candidate_status_code'<>'WORKER_DRAFT' then
+    raise exception 'Active replacement did not take precedence over rejection history: %',v_card;
+  end if;
+  if v_card->>'rejection' is not null or v_card->>'rejection_reason' is not null then
+    raise exception 'Historical rejection remained actionable after replacement began: %',v_card;
+  end if;
+  if not exists(
+    select 1 from jsonb_array_elements(v_card->'workflows') workflow_item(value)
+    where workflow_item.value->>'workflow_id'=v_workflow::text
+      and workflow_item.value->>'state'='REJECTED'
+  ) then
+    raise exception 'Active replacement removed immutable rejection history: %',v_card;
   end if;
 end;
 $function$;

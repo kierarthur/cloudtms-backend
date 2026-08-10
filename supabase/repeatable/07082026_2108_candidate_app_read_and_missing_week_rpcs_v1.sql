@@ -282,15 +282,45 @@ begin
       jsonb_agg(jsonb_build_object(
         'workflow_id',resolved.id,'workflow_kind',resolved.workflow_kind,'state',resolved.state,
         'target_timesheet_id',resolved.target_timesheet_id,'anchor_timesheet_id',resolved.anchor_timesheet_id,
-        'rejection_reason',resolved.rejection_reason,'updated_at_utc',resolved.updated_at_utc
+        'rejection_reason',resolved.rejection_reason,'rejection_scope',resolved.rejection_scope,
+        'required_resubmission_action',case
+          when resolved.state<>'REJECTED' then null
+          when resolved.workflow_kind='CONTRACT_EXPENSE'
+            or resolved.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+            then 'RESUBMIT_EXPENSE_CLAIM'
+          when resolved.workflow_kind='CONTRACT_COMBINED'
+            then 'RESUBMIT_TIMESHEET_AND_EXPENSES'
+          else 'RESUBMIT_TIMESHEET' end,
+        'updated_at_utc',resolved.updated_at_utc
       ) order by resolved.updated_at_utc desc,resolved.id) as workflows
     from (
       select w.*,
-        case when w.workflow_kind='CONTRACT_EXPENSE' then coalesce(
+        case
+          -- Rejection rotates the submitted timesheet to a replacement current
+          -- version while the immutable workflow continues to reference the
+          -- historical submitted target. Resolve rejected workflows through the
+          -- current contract-week authority so the Candidate card retains the
+          -- rejection reason, scope and server-owned recovery action.
+          when w.state='REJECTED' and w.workflow_kind='CONTRACT_EXPENSE' then (
+            select resolution.display_timesheet_id
+            from expense_carrier_resolution resolution
+            where resolution.carrier_contract_week_id=w.contract_week_id
+              and resolution.conflict_code is null
+            limit 1
+          )
+          when w.state='REJECTED' then (
+            select current_week.timesheet_id
+            from candidate_weeks current_week
+            where current_week.id=w.contract_week_id
+            limit 1
+          )
+          when w.workflow_kind='CONTRACT_EXPENSE' then coalesce(
           (select resolution.display_timesheet_id from expense_carrier_resolution resolution
             where resolution.carrier_timesheet_id=w.target_timesheet_id limit 1),
           w.anchor_timesheet_id
-        ) else coalesce(w.target_timesheet_id,w.anchor_timesheet_id) end as display_timesheet_id
+          )
+          else coalesce(w.target_timesheet_id,w.anchor_timesheet_id)
+        end as display_timesheet_id
       from public.candidate_submission_workflows w
       where w.candidate_id=v_candidate_id and w.state<>'SUPERSEDED'
     ) resolved
@@ -329,7 +359,28 @@ begin
     order by unresolved_rank desc,week_ending_date desc,id desc
     limit v_limit+1
   ), delivered as materialized (
-    select * from page order by unresolved_rank desc,week_ending_date desc,id desc limit v_limit
+    select page.*,
+      (
+        select workflow_item->>'state'
+        from jsonb_array_elements(page.workflows) workflow_item
+        where workflow_item->>'state' in (
+          'CREATED','WORKER_DRAFT','WORKER_SUBMITTED',
+          'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+          'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
+          'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
+          'AWAITING_PAPER_RETURN','RECEIVED'
+        )
+        limit 1
+      ) as active_workflow_state,
+      (
+        select workflow_item
+        from jsonb_array_elements(page.workflows) workflow_item
+        where workflow_item->>'state'='REJECTED'
+        limit 1
+      ) as rejected_workflow
+    from page
+    order by unresolved_rank desc,week_ending_date desc,id desc
+    limit v_limit
   )
   select
     coalesce(jsonb_agg(jsonb_build_object(
@@ -364,27 +415,8 @@ begin
         when d.authorised_at_utc is not null then 'AUTHORISED'
         when d.locked_by_invoice_id is not null or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
           then 'INVOICED_NOT_PAID'
-        when exists (
-          select 1 from jsonb_array_elements(d.workflows) workflow_item
-          where workflow_item->>'state' in (
-            'CREATED','WORKER_DRAFT','WORKER_SUBMITTED',
-            'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
-            'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
-            'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
-            'AWAITING_PAPER_RETURN','RECEIVED'
-          )
-        ) then (
-          select workflow_item->>'state'
-          from jsonb_array_elements(d.workflows) workflow_item
-          where workflow_item->>'state' in (
-            'CREATED','WORKER_DRAFT','WORKER_SUBMITTED',
-            'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
-            'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
-            'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
-            'AWAITING_PAPER_RETURN','RECEIVED'
-          )
-          limit 1
-        )
+        when d.active_workflow_state is not null then d.active_workflow_state
+        when d.rejected_workflow is not null then 'REJECTED'
         when d.processing_status is not null then d.processing_status::text
         else d.status::text end,
       'payment_state',case when d.paid_at_utc is not null then 'PAID' else 'UNPAID' end,
@@ -402,13 +434,31 @@ begin
         )
         limit 1
       ),
-      'rejection_reason',(
-        select nullif(workflow_item->>'rejection_reason','')
-        from jsonb_array_elements(d.workflows) workflow_item
-        where nullif(workflow_item->>'rejection_reason','') is not null
-        limit 1
-      ),
-      'rejection_scope',d.capabilities->'reject_scope',
+      'rejection_reason',case
+        when d.paid_at_utc is not null or d.authorised_at_utc is not null
+          or d.locked_by_invoice_id is not null
+          or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
+          or d.active_workflow_state is not null then null
+        else nullif(d.rejected_workflow->>'rejection_reason','') end,
+      'rejection_scope',case
+        when d.paid_at_utc is not null or d.authorised_at_utc is not null
+          or d.locked_by_invoice_id is not null
+          or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
+          or d.active_workflow_state is not null
+          or d.rejected_workflow is null then d.capabilities->'reject_scope'
+        else d.rejected_workflow->'rejection_scope' end,
+      'rejection',case
+        when d.paid_at_utc is not null or d.authorised_at_utc is not null
+          or d.locked_by_invoice_id is not null
+          or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
+          or d.active_workflow_state is not null
+          or d.rejected_workflow is null then null
+        else jsonb_build_object(
+          'workflow_id',d.rejected_workflow->'workflow_id',
+          'reason',d.rejected_workflow->'rejection_reason',
+          'scope',d.rejected_workflow->'rejection_scope',
+          'required_action',d.rejected_workflow->'required_resubmission_action'
+        ) end,
       'actions',jsonb_build_object(
         'can_edit_hours',d.capabilities->'can_edit_hours',
         'can_edit_expenses',d.capabilities->'can_edit_expenses',
@@ -486,7 +536,8 @@ begin
     select * into v_workflow from public.candidate_submission_workflows where id=p_workflow_id and candidate_id=v_candidate_id;
     if not found then raise exception 'CANDIDATE_DETAIL_NOT_FOUND' using errcode='P0002'; end if;
     p_contract_week_id:=v_workflow.contract_week_id;
-    p_timesheet_id:=v_workflow.target_timesheet_id;
+    p_timesheet_id:=case when v_workflow.state='REJECTED'
+      then null else v_workflow.target_timesheet_id end;
   end if;
   if p_contract_week_id is not null then
     select * into v_week from public.contract_weeks where id=p_contract_week_id;
@@ -535,6 +586,12 @@ begin
     'workflow_id',w.id,'workflow_kind',w.workflow_kind,'state',w.state,'generation',w.generation,
     'route',w.route,'target_timesheet_id',w.target_timesheet_id,'issue_codes',w.issue_codes,
     'rejection_reason',w.rejection_reason,'rejection_scope',w.rejection_scope,
+    'required_resubmission_action',case
+      when w.state<>'REJECTED' then null
+      when w.workflow_kind='CONTRACT_EXPENSE' or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+        then 'RESUBMIT_EXPENSE_CLAIM'
+      when w.workflow_kind='CONTRACT_COMBINED' then 'RESUBMIT_TIMESHEET_AND_EXPENSES'
+      else 'RESUBMIT_TIMESHEET' end,
     'review_document_ready',exists(select 1 from public.candidate_submission_components review_component
       where review_component.workflow_id=w.id and review_component.workflow_generation=w.generation
         and review_component.required=true and review_component.state<>'SUPERSEDED')

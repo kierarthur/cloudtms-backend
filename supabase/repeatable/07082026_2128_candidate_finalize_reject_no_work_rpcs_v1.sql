@@ -1263,7 +1263,8 @@ begin
     for update
   loop
     v_rejected_workflow_ids:=array_append(v_rejected_workflow_ids,v_workflow.id);
-    if v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN' then
+    if v_workflow.route='PAPER'
+       and v_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED') then
       perform private._candidate_paper_delivery_retire_v1(
         v_workflow.id,v_workflow.generation,'OFFICE_REJECTED',p_now_utc
       );

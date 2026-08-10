@@ -518,6 +518,20 @@ test('read and placement policy uses all authoritative worked and dated boundari
   assert.match(missing, /_candidate_submission_mode_v1\(v_contract\.client_id,v_contract\.id,g::date\)/i);
 });
 
+test('rejected workflows project through the replacement current version with server-owned recovery scope', () => {
+  const page = definition(sql.reads, 'candidate_app_timesheet_page_v1');
+  const detail = definition(sql.reads, 'candidate_app_timesheet_detail_v1');
+  assert.match(page, /w\.state='REJECTED'[\s\S]*resolution\.carrier_contract_week_id=w\.contract_week_id/i);
+  assert.match(page, /w\.state='REJECTED'[\s\S]*current_week\.id=w\.contract_week_id/i);
+  assert.match(page, /RESUBMIT_EXPENSE_CLAIM/);
+  assert.match(page, /RESUBMIT_TIMESHEET_AND_EXPENSES/);
+  assert.match(page, /RESUBMIT_TIMESHEET/);
+  assert.match(page, /workflow_item->>'state'='REJECTED'[\s\S]*then 'REJECTED'/i);
+  assert.match(page, /'rejection',\([\s\S]*'required_action'/i);
+  assert.match(detail, /v_workflow\.state='REJECTED'[\s\S]*then null else v_workflow\.target_timesheet_id/i);
+  assert.match(detail, /'required_resubmission_action'[\s\S]*RESUBMIT_EXPENSE_CLAIM/i);
+});
+
 test('invoice grouping derives expense-only economics and isolates the effective expense recipient', () => {
   assert.match(replacements.invoiceGroups, /tf\.hours_day,tf\.hours_night,tf\.hours_sat,tf\.hours_sun,tf\.hours_bh/i);
   assert.match(replacements.invoiceGroups, /tf\.expenses_pay_ex_vat,tf\.expenses_charge_ex_vat/i);
