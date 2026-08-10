@@ -51,6 +51,19 @@ test('published current full authority is a certified no-op', () => {
   assert.match(enqueue, /'no_op', v_owner_resolution = 'COMPLETE_CURRENT_AUTHORITY'/);
 });
 
+test('older pre-invalidated backlog can only be absorbed by newer current authority', () => {
+  assert.match(enqueue, /v_stale_preinvalidated_absorb_only :=/);
+  assert.match(enqueue, /v_payload_scope_change_generation < COALESCE\(v_live_scope_change_generation,0\)/);
+  assert.match(enqueue, /COALESCE\(v_registry_dirty_generation,0\)=COALESCE\(v_live_scope_change_generation,0\)/);
+  assert.match(enqueue, /COALESCE\(v_registry_source_change_seq_before,0\)=COALESCE\(v_source_change_seq,0\)/);
+  assert.match(enqueue, /'stale_preinvalidated_absorb_only', v_stale_preinvalidated_absorb_only/);
+  assert.match(enqueue, /PAY_WORKBENCH_STALE_PREINVALIDATED_AUTHORITY_NOT_CURRENT/);
+
+  const failClosedAt = enqueue.indexOf("PAY_WORKBENCH_STALE_PREINVALIDATED_AUTHORITY_NOT_CURRENT");
+  const newDeltaOwnerAt = enqueue.indexOf("IF v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH'", failClosedAt);
+  assert.ok(failClosedAt >= 0 && newDeltaOwnerAt > failClosedAt);
+});
+
 test('diagnostic reasons merge onto the elected owner but never change its identity', () => {
   assert.match(enqueue, /'primary_reason'/);
   assert.match(enqueue, /'reason_latest'/);

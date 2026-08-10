@@ -15,7 +15,11 @@ const worker = read('broker/src/index.js');
 test('canonical enqueue freezes live sequence authority and synchronises it before job publication', () => {
   assert.match(enqueue, /change_counter\.scope_change_generation[\s\S]*FOR UPDATE/);
   assert.match(enqueue, /v_source_change_seq := GREATEST\([\s\S]*v_payload_source_change_seq[\s\S]*v_live_change_seq/);
-  assert.match(enqueue, /scope_tx\.state[\s\S]*scope_tx\.allocated_generation[\s\S]*registry\.current_source_change_seq[\s\S]*FOR UPDATE OF scope_tx,registry/);
+  assert.match(enqueue, /SELECT registry\.dirty_generation,[\s\S]*registry\.current_source_change_seq[\s\S]*WHERE registry\.candidate_id=p_candidate_id[\s\S]*FOR UPDATE/);
+  assert.match(enqueue, /SELECT scope_tx\.state,[\s\S]*scope_tx\.allocated_generation[\s\S]*WHERE scope_tx\.tx_token=v_scope_change_tx_token[\s\S]*FOR UPDATE/);
+  const registryLockAt = enqueue.indexOf('SELECT registry.dirty_generation,');
+  const scopeTransactionLockAt = enqueue.indexOf('SELECT scope_tx.state,', registryLockAt);
+  assert.ok(registryLockAt >= 0 && scopeTransactionLockAt > registryLockAt, 'candidate registry authority must be locked before its scope-change transaction proof');
   assert.match(enqueue, /scope_state\.dirty_generation=v_payload_scope_change_generation/);
   assert.match(enqueue, /v_live_scope_change_generation IS DISTINCT FROM[\s\S]*v_payload_scope_change_generation/);
   assert.match(enqueue, /v_registry_dirty_generation,0\) IS DISTINCT FROM[\s\S]*v_payload_scope_change_generation/);

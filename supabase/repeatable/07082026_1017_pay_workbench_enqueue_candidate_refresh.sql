@@ -90,6 +90,7 @@ DECLARE
   v_registry_source_change_seq_after bigint := 0;
   v_registry_sequence_synchronised boolean := false;
   v_scope_state_generation_match_count integer := 0;
+  v_stale_preinvalidated_absorb_only boolean := false;
   v_requested_source_build_run_id uuid := NULL::uuid;
   v_authority_fingerprint_text text := NULL::text;
   v_authority_fingerprint text := NULL::text;
@@ -597,99 +598,123 @@ BEGIN
   END IF;
 
   IF v_scope_state_precedes_job THEN
-    SELECT scope_tx.state,
-           scope_tx.allocated_generation,
-           registry.dirty_generation,
+    SELECT registry.dirty_generation,
            registry.current_source_change_seq
-    INTO v_finalized_scope_tx_state,
-         v_finalized_scope_tx_generation,
-         v_registry_dirty_generation,
+    INTO v_registry_dirty_generation,
          v_registry_source_change_seq_before
-    FROM public.banking_pay_scope_change_transactions AS scope_tx
-    JOIN private.banking_pay_workbench_candidate_scope_registry AS registry
-      ON registry.candidate_id=p_candidate_id
-    WHERE scope_tx.tx_token=v_scope_change_tx_token
-    FOR UPDATE OF scope_tx,registry;
-
-    SELECT count(*)::integer
-    INTO v_scope_state_generation_match_count
-    FROM unnest(v_bounded_timesheet_ids) AS requested(timesheet_id)
-     JOIN private.banking_pay_workbench_timesheet_scope_state AS scope_state
-      ON scope_state.timesheet_id=requested.timesheet_id
-     AND scope_state.candidate_id=p_candidate_id
-     AND scope_state.dirty_generation=v_payload_scope_change_generation;
-
-    IF v_scope_change_tx_token IS NULL
-       OR v_payload_scope_change_generation IS NULL
-       OR v_payload_scope_change_generation < 1
-       OR v_finalized_scope_tx_state IS DISTINCT FROM 'FINALIZED'
-       OR v_finalized_scope_tx_generation IS DISTINCT FROM
-          v_payload_scope_change_generation
-       OR v_live_scope_change_generation IS DISTINCT FROM
-          v_payload_scope_change_generation
-       OR COALESCE(v_registry_dirty_generation,0) IS DISTINCT FROM
-          v_payload_scope_change_generation
-       OR v_scope_state_generation_match_count IS DISTINCT FROM
-          cardinality(v_bounded_timesheet_ids) THEN
-      RAISE EXCEPTION 'PAY_WORKBENCH_PRECEDING_SCOPE_INVALIDATION_UNPROVED'
-        USING ERRCODE='22023', DETAIL=jsonb_build_object(
-          'code','PAY_WORKBENCH_PRECEDING_SCOPE_INVALIDATION_UNPROVED',
-          'candidate_id',p_candidate_id,
-          'scope_change_tx_token',v_scope_change_tx_token,
-          'payload_scope_change_generation',v_payload_scope_change_generation,
-          'transaction_state',v_finalized_scope_tx_state,
-          'transaction_generation',v_finalized_scope_tx_generation,
-          'live_scope_change_generation',v_live_scope_change_generation,
-          'registry_dirty_generation',v_registry_dirty_generation,
-          'requested_timesheet_count',cardinality(v_bounded_timesheet_ids),
-          'matched_scope_state_count',v_scope_state_generation_match_count
-        )::text;
-    END IF;
-
-    UPDATE private.banking_pay_workbench_candidate_scope_registry AS registry
-    SET current_source_change_seq=GREATEST(
-          COALESCE(registry.current_source_change_seq,0),
-          COALESCE(v_source_change_seq,0)
-        ),
-        updated_at_utc=CASE
-          WHEN COALESCE(registry.current_source_change_seq,0)<COALESCE(v_source_change_seq,0)
-            THEN clock_timestamp()
-          ELSE registry.updated_at_utc
-        END
+    FROM private.banking_pay_workbench_candidate_scope_registry AS registry
     WHERE registry.candidate_id=p_candidate_id
-      AND registry.dirty_generation=v_payload_scope_change_generation
-    RETURNING registry.current_source_change_seq
-    INTO v_registry_source_change_seq_after;
+    FOR UPDATE;
 
-    IF NOT FOUND
-       OR COALESCE(v_registry_source_change_seq_after,0)<COALESCE(v_source_change_seq,0) THEN
-      RAISE EXCEPTION 'PAY_WORKBENCH_ACCEPTED_SOURCE_SEQUENCE_NOT_SYNCHRONISED'
-        USING ERRCODE='40001', DETAIL=jsonb_build_object(
-          'code','PAY_WORKBENCH_ACCEPTED_SOURCE_SEQUENCE_NOT_SYNCHRONISED',
-          'candidate_id',p_candidate_id,
-          'accepted_source_change_seq',v_source_change_seq,
-          'registry_source_change_seq_before',v_registry_source_change_seq_before,
-          'registry_source_change_seq_after',v_registry_source_change_seq_after,
-          'scope_change_generation',v_payload_scope_change_generation
-        )::text;
+    -- A delayed pre-invalidated job may be older than a newer authority which
+    -- has already adopted the live sequence and generation.  Such a request
+    -- may only be absorbed by an active/current owner below; it must never
+    -- create work from its stale transaction proof.
+    v_stale_preinvalidated_absorb_only :=
+      v_payload_scope_change_generation IS NOT NULL
+      AND v_payload_scope_change_generation < COALESCE(v_live_scope_change_generation,0)
+      AND COALESCE(v_registry_dirty_generation,0)=COALESCE(v_live_scope_change_generation,0)
+      AND COALESCE(v_registry_source_change_seq_before,0)=COALESCE(v_source_change_seq,0);
+
+    IF v_stale_preinvalidated_absorb_only THEN
+      v_registry_source_change_seq_after:=v_registry_source_change_seq_before;
+      v_scope_invalidation_result:=jsonb_build_object(
+        'ok',true,
+        'stale_preinvalidated_absorb_only',true,
+        'payload_scope_change_generation',v_payload_scope_change_generation,
+        'current_scope_change_generation',v_live_scope_change_generation,
+        'accepted_source_change_seq',v_source_change_seq,
+        'reason',COALESCE(v_reason,'CANDIDATE_REFRESH_ENQUEUED')
+      );
+    ELSE
+      SELECT scope_tx.state,
+             scope_tx.allocated_generation
+      INTO v_finalized_scope_tx_state,
+           v_finalized_scope_tx_generation
+      FROM public.banking_pay_scope_change_transactions AS scope_tx
+      WHERE scope_tx.tx_token=v_scope_change_tx_token
+      FOR UPDATE;
+
+      SELECT count(*)::integer
+      INTO v_scope_state_generation_match_count
+      FROM unnest(v_bounded_timesheet_ids) AS requested(timesheet_id)
+       JOIN private.banking_pay_workbench_timesheet_scope_state AS scope_state
+        ON scope_state.timesheet_id=requested.timesheet_id
+       AND scope_state.candidate_id=p_candidate_id
+       AND scope_state.dirty_generation=v_payload_scope_change_generation;
+
+      IF v_scope_change_tx_token IS NULL
+         OR v_payload_scope_change_generation IS NULL
+         OR v_payload_scope_change_generation < 1
+         OR v_finalized_scope_tx_state IS DISTINCT FROM 'FINALIZED'
+         OR v_finalized_scope_tx_generation IS DISTINCT FROM
+            v_payload_scope_change_generation
+         OR v_live_scope_change_generation IS DISTINCT FROM
+            v_payload_scope_change_generation
+         OR COALESCE(v_registry_dirty_generation,0) IS DISTINCT FROM
+            v_payload_scope_change_generation
+         OR v_scope_state_generation_match_count IS DISTINCT FROM
+            cardinality(v_bounded_timesheet_ids) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_PRECEDING_SCOPE_INVALIDATION_UNPROVED'
+          USING ERRCODE='22023', DETAIL=jsonb_build_object(
+            'code','PAY_WORKBENCH_PRECEDING_SCOPE_INVALIDATION_UNPROVED',
+            'candidate_id',p_candidate_id,
+            'scope_change_tx_token',v_scope_change_tx_token,
+            'payload_scope_change_generation',v_payload_scope_change_generation,
+            'transaction_state',v_finalized_scope_tx_state,
+            'transaction_generation',v_finalized_scope_tx_generation,
+            'live_scope_change_generation',v_live_scope_change_generation,
+            'registry_dirty_generation',v_registry_dirty_generation,
+            'requested_timesheet_count',cardinality(v_bounded_timesheet_ids),
+            'matched_scope_state_count',v_scope_state_generation_match_count
+          )::text;
+      END IF;
+
+      UPDATE private.banking_pay_workbench_candidate_scope_registry AS registry
+      SET current_source_change_seq=GREATEST(
+            COALESCE(registry.current_source_change_seq,0),
+            COALESCE(v_source_change_seq,0)
+          ),
+          updated_at_utc=CASE
+            WHEN COALESCE(registry.current_source_change_seq,0)<COALESCE(v_source_change_seq,0)
+              THEN clock_timestamp()
+            ELSE registry.updated_at_utc
+          END
+      WHERE registry.candidate_id=p_candidate_id
+        AND registry.dirty_generation=v_payload_scope_change_generation
+      RETURNING registry.current_source_change_seq
+      INTO v_registry_source_change_seq_after;
+
+      IF NOT FOUND
+         OR COALESCE(v_registry_source_change_seq_after,0)<COALESCE(v_source_change_seq,0) THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_ACCEPTED_SOURCE_SEQUENCE_NOT_SYNCHRONISED'
+          USING ERRCODE='40001', DETAIL=jsonb_build_object(
+            'code','PAY_WORKBENCH_ACCEPTED_SOURCE_SEQUENCE_NOT_SYNCHRONISED',
+            'candidate_id',p_candidate_id,
+            'accepted_source_change_seq',v_source_change_seq,
+            'registry_source_change_seq_before',v_registry_source_change_seq_before,
+            'registry_source_change_seq_after',v_registry_source_change_seq_after,
+            'scope_change_generation',v_payload_scope_change_generation
+          )::text;
+      END IF;
+      v_registry_sequence_synchronised :=
+        COALESCE(v_registry_source_change_seq_after,0)>
+        COALESCE(v_registry_source_change_seq_before,0);
+
+      v_scope_invalidation_result := jsonb_build_object(
+        'ok',true,
+        'already_finalized',true,
+        'scope_change_tx_token',v_scope_change_tx_token,
+        'scope_change_generation',v_finalized_scope_tx_generation,
+        'candidate_count',1,
+        'timesheet_count',cardinality(v_bounded_timesheet_ids),
+        'accepted_source_change_seq',v_source_change_seq,
+        'registry_source_change_seq_before',v_registry_source_change_seq_before,
+        'registry_source_change_seq_after',v_registry_source_change_seq_after,
+        'registry_sequence_synchronised',v_registry_sequence_synchronised,
+        'reason',COALESCE(v_reason,'CANDIDATE_REFRESH_ENQUEUED')
+      );
     END IF;
-    v_registry_sequence_synchronised :=
-      COALESCE(v_registry_source_change_seq_after,0)>
-      COALESCE(v_registry_source_change_seq_before,0);
-
-    v_scope_invalidation_result := jsonb_build_object(
-      'ok',true,
-      'already_finalized',true,
-      'scope_change_tx_token',v_scope_change_tx_token,
-      'scope_change_generation',v_finalized_scope_tx_generation,
-      'candidate_count',1,
-      'timesheet_count',cardinality(v_bounded_timesheet_ids),
-      'accepted_source_change_seq',v_source_change_seq,
-      'registry_source_change_seq_before',v_registry_source_change_seq_before,
-      'registry_source_change_seq_after',v_registry_source_change_seq_after,
-      'registry_sequence_synchronised',v_registry_sequence_synchronised,
-      'reason',COALESCE(v_reason,'CANDIDATE_REFRESH_ENQUEUED')
-    );
   ELSE
     v_scope_invalidation_result:=private.pay_workbench_scope_invalidate_v1(
       CASE WHEN cardinality(v_bounded_timesheet_ids)=0 THEN ARRAY[p_candidate_id]
@@ -1417,6 +1442,7 @@ BEGIN
             'reused',true,
             'new_owner_created',false,
             'no_op',true,
+            'stale_preinvalidated_absorb_only',v_stale_preinvalidated_absorb_only,
             'diagnostic_provenance_merged',false,
             'reason',v_reason,
             'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
@@ -1634,12 +1660,27 @@ BEGIN
         'reused', true,
         'new_owner_created', false,
         'no_op', v_owner_resolution = 'COMPLETE_CURRENT_AUTHORITY',
+        'stale_preinvalidated_absorb_only', v_stale_preinvalidated_absorb_only,
         'diagnostic_provenance_merged', true,
         'reason', v_reason,
         'reason_count', v_owner_request_count,
         'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
       ));
     END IF;
+  END IF;
+
+  IF v_stale_preinvalidated_absorb_only THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_STALE_PREINVALIDATED_AUTHORITY_NOT_CURRENT'
+      USING ERRCODE='40001', DETAIL=jsonb_build_object(
+        'code','PAY_WORKBENCH_STALE_PREINVALIDATED_AUTHORITY_NOT_CURRENT',
+        'candidate_id',p_candidate_id,
+        'payload_scope_change_generation',v_payload_scope_change_generation,
+        'live_scope_change_generation',v_live_scope_change_generation,
+        'registry_dirty_generation',v_registry_dirty_generation,
+        'source_change_seq',v_source_change_seq,
+        'registry_source_change_seq',v_registry_source_change_seq_after,
+        'owner_resolution',v_owner_resolution
+      )::text;
   END IF;
 
   IF v_job_type = 'WORKBENCH_CANDIDATE_DELTA_REFRESH' THEN
