@@ -1172,6 +1172,7 @@ begin
             session_version,
             source_change_seq,
             source_build_run_id,
+            source_publication_id,
             source_ordinal,
             line_key,
             parent_line_key,
@@ -1194,6 +1195,7 @@ begin
             finance_parent.session_version,
             finance_parent.source_change_seq,
             finance_parent.source_build_run_id,
+            finance_parent.source_publication_id,
             (
               select coalesce(max(existing_line.source_ordinal),0)+1
               from public.banking_pay_workbench_candidate_source_lines

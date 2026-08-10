@@ -16,6 +16,7 @@ DECLARE
   v_malformed_allocation_preview_rows jsonb := '[]'::jsonb;
   v_synthetic_total_allocation_preview_rows jsonb := '[]'::jsonb;
   v_semantic_draft_guard_enabled boolean := false;
+  v_source_publication_identity_enforce_enabled boolean := false;
   v_semantic_draft_failures jsonb := '[]'::jsonb;
   v_semantic_source_failure_count integer := 0;
 BEGIN
@@ -66,8 +67,9 @@ BEGIN
     RAISE EXCEPTION 'pay_workbench_prepare_draft_allocation_rows_seed cannot seed allocation rows for terminal operation % with status %', p_operation_id, v_operation.status;
   END IF;
 
-  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_draft_guard_v2_enabled, false)
-  INTO v_semantic_draft_guard_enabled
+  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_draft_guard_v2_enabled, false),
+         COALESCE(settings_row.banking_pay_source_publication_identity_enforce_v1_enabled, false)
+  INTO v_semantic_draft_guard_enabled,v_source_publication_identity_enforce_enabled
   FROM public.settings_defaults AS settings_row
   WHERE settings_row.id = 1;
 
@@ -564,7 +566,12 @@ BEGIN
        OR COALESCE((selected_scope.allocation_basis_json#>>'{source_publication_attestation,semantic_ready}')::boolean,false)
             IS NOT TRUE
        OR NULLIF(selected_scope.allocation_basis_json->>'semantic_proof_digest','') IS NULL
-       OR NULLIF(selected_scope.allocation_basis_json->>'source_build_run_id','') IS NULL;
+       OR NULLIF(selected_scope.allocation_basis_json->>'source_build_run_id','') IS NULL
+       OR (
+         v_source_publication_identity_enforce_enabled
+         AND COALESCE(selected_scope.allocation_basis_json->>'source_publication_id','')
+           !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       );
 
     IF v_semantic_source_failure_count > 0 THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_DRAFT_SOURCE_SEMANTIC_CERTIFICATION_REQUIRED'

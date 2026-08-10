@@ -488,6 +488,7 @@ BEGIN
             session_version,
             source_change_seq,
             source_build_run_id,
+            source_publication_id,
             source_ordinal,
             line_key,
             parent_line_key,
@@ -512,6 +513,14 @@ BEGIN
               WHEN v_bounded_build_clone IS TRUE THEN source_line.source_build_run_id
               ELSE p_target_session_id
             END,
+            CASE WHEN COALESCE((SELECT setting.banking_pay_source_publication_identity_write_v1_enabled
+                                 FROM public.settings_defaults AS setting WHERE setting.id=1),false)
+              THEN private.pay_workbench_source_publication_identity_v1(
+                p_target_session_id,source_line.candidate_id,v_target_session.version,
+                COALESCE(source_line.source_change_seq,0),
+                CASE WHEN v_bounded_build_clone IS TRUE
+                  THEN source_line.source_build_run_id ELSE p_target_session_id END
+              ) ELSE NULL::uuid END,
             source_line.source_ordinal,
             source_line.line_key,
             source_line.parent_line_key,
@@ -556,6 +565,18 @@ BEGIN
             AND source_line.candidate_id = v_candidate_id
             AND source_line.session_version = v_source_session.version
             AND source_line.status = 'CURRENT'
+            AND (
+              COALESCE((SELECT setting.banking_pay_source_publication_identity_enforce_v1_enabled
+                          FROM public.settings_defaults AS setting WHERE setting.id=1),false) IS NOT TRUE
+              OR source_line.source_publication_id=(
+                SELECT source_scope.certified_preview_publication_source_publication_id
+                FROM public.banking_pay_workbench_session_scope AS source_scope
+                WHERE source_scope.session_id=v_source_session_id
+                  AND source_scope.candidate_id=v_candidate_id
+                  AND source_scope.certified_preview_publication_parity_ok IS TRUE
+                LIMIT 1
+              )
+            )
           ON CONFLICT (
             session_id,
             candidate_id,

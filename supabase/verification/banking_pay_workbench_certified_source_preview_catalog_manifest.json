@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_workbench_publish_certified_source_preview_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_economic_build_id uuid, p_source_build_run_id uuid, p_source_change_seq bigint, p_session_version bigint, p_completion_job_id uuid, p_refresh_scope_kind text, p_targeted_timesheet_ids jsonb, p_linked_timesheet_ids jsonb, p_publication_options_json jsonb",
-      "definition_sha256": "cf8ed8435ae5dfc32a0826ec0d8e930d74523ce2ec9138a00d3c1e7a575dae9d",
+      "definition_sha256": "e87ed2cf1bb3fd9eda3dd1f04d66132abceff283d0dd2d6a7c232e6f309a137c",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -65,7 +65,7 @@
       "schema": "public",
       "name": "pay_workbench_session_recompute_progress_counters",
       "identity_arguments": "p_session_id uuid, p_apply boolean, p_reason text, p_write_progress_json boolean",
-      "definition_sha256": "7847bfe832d5ef24b3476ded6901345fc8c6a29d7fb927e1b14dec48be1d96d1",
+      "definition_sha256": "ccccd6f07ef2041085d6d5c40c46a33439742b0031257fb964bb4ed9958694ce",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

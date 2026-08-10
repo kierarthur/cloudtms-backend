@@ -2189,6 +2189,7 @@ BEGIN
             certified_preview_publication_session_version=NULL,
             certified_preview_publication_source_change_seq=NULL,
             certified_preview_publication_source_build_run_id=NULL,
+            certified_preview_publication_source_publication_id=NULL,
             certified_preview_publication_attestation_json='{}'::jsonb,
             certified_preview_publication_attested_at_utc=NULL,
             updated_at_utc=v_now
@@ -2384,6 +2385,7 @@ BEGIN
         certified_preview_publication_session_version = NULL,
         certified_preview_publication_source_change_seq = NULL,
         certified_preview_publication_source_build_run_id = NULL,
+        certified_preview_publication_source_publication_id = NULL,
         certified_preview_publication_attestation_json = '{}'::jsonb,
         certified_preview_publication_attested_at_utc = NULL,
         updated_at_utc = v_now
@@ -6045,6 +6047,7 @@ BEGIN
         certified_preview_publication_session_version=NULL,
         certified_preview_publication_source_change_seq=NULL,
         certified_preview_publication_source_build_run_id=NULL,
+        certified_preview_publication_source_publication_id=NULL,
         certified_preview_publication_attestation_json='{}'::jsonb,
         certified_preview_publication_attested_at_utc=NULL,
         status='DELTA_REFRESH_PENDING',
@@ -6597,6 +6600,7 @@ BEGIN
       session_version,
       source_change_seq,
       source_build_run_id,
+      source_publication_id,
       source_ordinal,
       line_key,
       parent_line_key,
@@ -6618,6 +6622,13 @@ BEGIN
       projection_rows.session_version,
       COALESCE(projection_rows.source_change_seq, 0),
       p_projection_run_id,
+      CASE WHEN COALESCE((SELECT setting.banking_pay_source_publication_identity_write_v1_enabled
+                           FROM public.settings_defaults AS setting WHERE setting.id=1),false)
+        THEN private.pay_workbench_source_publication_identity_v1(
+          projection_rows.session_id,projection_rows.candidate_id,
+          projection_rows.session_version,COALESCE(projection_rows.source_change_seq,0),
+          p_projection_run_id
+        ) ELSE NULL::uuid END,
       projection_rows.source_ordinal,
       projection_rows.line_key,
       projection_rows.parent_line_key,

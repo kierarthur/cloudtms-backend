@@ -1402,10 +1402,15 @@ BEGIN
     SET status='SUPERSEDED',updated_at_utc=clock_timestamp()
     WHERE session_id=p_session_id AND candidate_id=p_candidate_id AND status='CURRENT';
     INSERT INTO public.banking_pay_workbench_candidate_source_lines(
-      session_id,candidate_id,session_version,source_change_seq,source_build_run_id,
+      session_id,candidate_id,session_version,source_change_seq,source_build_run_id,source_publication_id,
       source_ordinal,line_key,parent_line_key,split_suffix,timesheet_id,section,
       source_row_json,economic_key_json,contract_json,pay_channel_scope,refresh_scope_kind,status
     ) SELECT session_id,candidate_id,session_version,source_change_seq,source_build_run_id,
+      CASE WHEN COALESCE((SELECT setting.banking_pay_source_publication_identity_write_v1_enabled
+                           FROM public.settings_defaults AS setting WHERE setting.id=1),false)
+        THEN private.pay_workbench_source_publication_identity_v1(
+          session_id,candidate_id,session_version,source_change_seq,source_build_run_id
+        ) ELSE NULL::uuid END,
       source_ordinal,line_key,parent_line_key,split_suffix,timesheet_id,section,
       source_row_json,economic_key_json,contract_json,pay_channel_scope,refresh_scope_kind,'CURRENT'
     FROM private.banking_pay_workbench_canonical_stage_lines WHERE build_id=v_build_id
@@ -1414,7 +1419,15 @@ BEGIN
     SELECT md5(COALESCE(string_agg(md5(source_row_json::text),'' ORDER BY source_ordinal),''))
     INTO v_published_digest FROM public.banking_pay_workbench_candidate_source_lines
     WHERE session_id=p_session_id AND candidate_id=p_candidate_id AND status='CURRENT'
-      AND source_build_run_id=v_build.source_build_run_id;
+      AND source_build_run_id=v_build.source_build_run_id
+      AND (
+        COALESCE((SELECT setting.banking_pay_source_publication_identity_write_v1_enabled
+                    FROM public.settings_defaults AS setting WHERE setting.id=1),false) IS NOT TRUE
+        OR source_publication_id=private.pay_workbench_source_publication_identity_v1(
+          p_session_id,p_candidate_id,v_build.session_version,
+          v_build.source_change_seq,v_build.source_build_run_id
+        )
+      );
     IF v_published_count<>v_build.canonical_count OR v_published_digest IS DISTINCT FROM v_build.canonical_digest THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_PUBLICATION_DIGEST_MISMATCH' USING ERRCODE='23514';
     END IF;

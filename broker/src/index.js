@@ -61824,7 +61824,6 @@ async function advanceBankingPaySettlementOperation(env, operationRow, user, opt
     p_result_json: result,
     p_error_json: error
   });
-
   const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const textOrNull = (value) => {
     const text = String(value == null ? '' : value).trim();
@@ -64126,6 +64125,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
   const draftCreateRequestBudgetMs = Math.max(1000, Math.min(25000, numberFrom(options.requestBudgetMs ?? options.request_budget_ms ?? options.requestBudget ?? options.request_budget, 20000)));
   const draftCreateSingleStepMode = options.__draftCreateSingleStep === true || options.singleStep === true || options.single_step === true;
   const draftCreateChunkPhaseSet = new Set(['SEED_ALLOCATION_ROWS', 'INSERT_CANDIDATES', 'INSERT_ITEMS', 'APPLY_FINANCE_ADJUSTMENTS', 'FINALISE_RESERVATIONS', 'POPULATE_CANDIDATE_SUMMARIES', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS']);
+  const draftCreateStepRpcPhaseSet = new Set(['SEED_ALLOCATION_ROWS', 'INSERT_CANDIDATES', 'INSERT_ITEMS', 'APPLY_FINANCE_ADJUSTMENTS', 'FINALISE_RESERVATIONS', 'POPULATE_CANDIDATE_SUMMARIES', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS']);
   const fetchLatestDraftCreateOperationRow = async () => {
     try {
       const { rows } = await sbFetch(
@@ -64633,6 +64633,41 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     p_result_json: result,
     p_error_json: error
   });
+  const tryDraftCreateStepRpc = async (phaseValue) => {
+    const stepPhase = upperTrim(phaseValue);
+    if (!draftCreateStepRpcPhaseSet.has(stepPhase)) return null;
+    try {
+      const stepStartedAtMs = Date.now();
+      const step = unwrapRpcPayload(await sbRpc(env, 'banking_pay_draft_create_step_v1', {
+        p_operation_id: operationId,
+        p_worker_id: lockOwner,
+        p_expected_phase: stepPhase,
+        p_request_budget_ms: draftCreateRequestBudgetMs
+      }, {
+        routeClass: 'BANKING_PAY_OPERATION',
+        purpose: `DRAFT_CREATE_STEP_${stepPhase}`,
+        timeoutMs: Math.min(25000, draftCreateRequestBudgetMs),
+        bankingPay: true
+      }), 'banking_pay_draft_create_step_v1');
+      if (step.handled !== true) return null;
+      const steppedOperation = safeObject(step.operation);
+      return Object.assign({}, buildBankingPayOperationPublicPayload(steppedOperation), {
+        draft_create_step_rpc: true,
+        draft_create_step_phase: stepPhase,
+        draft_create_step_phase_complete: step.phase_complete === true,
+        draft_create_step_chunk_id: step.chunk_id || null,
+        draft_create_step_business_ms: Number(step.business_ms || 0) || 0,
+        draft_create_step_database_ms: Number(step.elapsed_ms || 0) || 0,
+        draft_create_step_rpc_ms: Math.max(0, Date.now() - stepStartedAtMs),
+        draft_create_step_round_trip_count: 1,
+        draft_create_step_result: step.phase_result || null
+      });
+    } catch (stepError) {
+      // Atomic failure means no phase mutation committed. The established
+      // phase path remains the exact compatibility and retry owner.
+      return null;
+    }
+  };
   const fetchCandidateScopes = async (extraQuery = '') => {
     const { rows } = await sbFetch(env, `${env.SUPABASE_URL}/rest/v1/banking_pay_operation_candidate_scope?operation_id=eq.${enc(operationId)}&select=id,candidate_id,pay_channel,pay_batch_id,chunk_sequence,status,allocation_basis_json,candidate_totals_json,selected_preview_row_ids_json,selected_timesheet_ids_json,selected_finance_case_ids_json,selected_canonical_preview_lines_json,effective_canonical_preview_lines_json,baseline_component_rows_json,effective_payees_json${extraQuery}`);
     return rows || [];
@@ -66201,6 +66236,9 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         });
       }
 
+      const stepResult = await tryDraftCreateStepRpc(phase);
+      if (stepResult) return stepResult;
+
       const chunk = await claim();
       if (!chunk || !chunk.chunk_id) {
         return lockProgress('RUNNING', 'CREATE_BATCH_SHELLS', {
@@ -66308,6 +66346,9 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
     }
 
     if (['INSERT_CANDIDATES', 'INSERT_ITEMS', 'APPLY_FINANCE_ADJUSTMENTS', 'FINALISE_RESERVATIONS', 'POPULATE_CANDIDATE_SUMMARIES', 'CREATE_TIMESHEET_SNAPSHOTS', 'BUILD_ITEM_BREAKDOWNS'].includes(phase)) {
+      const stepResult = await tryDraftCreateStepRpc(phase);
+      if (stepResult) return stepResult;
+
       const chunk = await claim();
       const nextPhaseByCurrent = {
         INSERT_CANDIDATES: 'INSERT_ITEMS',

@@ -101,10 +101,22 @@ DECLARE
   v_cancellation_work_item_id uuid := NULL::uuid;
   v_cancellation_reversion_run_id uuid := NULL::uuid;
   v_financial_reversion_digest text := NULL::text;
+  v_source_publication_id uuid := NULL::uuid;
+  v_publication_identity_write_enabled boolean := false;
+  v_publication_identity_enforce_enabled boolean := false;
+  v_selection_intent_identity_enabled boolean := false;
   v_cancellation_route text := UPPER(BTRIM(COALESCE(
     p_publication_options_json->>'cancellation_route','PRE_BANK_CANCEL'
   )));
 BEGIN
+  SELECT COALESCE(setting.banking_pay_source_publication_identity_write_v1_enabled,false),
+         COALESCE(setting.banking_pay_source_publication_identity_enforce_v1_enabled,false),
+         COALESCE(setting.banking_pay_selection_intent_identity_v1_enabled,false)
+  INTO v_publication_identity_write_enabled,v_publication_identity_enforce_enabled,
+       v_selection_intent_identity_enabled
+  FROM public.settings_defaults AS setting
+  WHERE setting.id=1;
+
   IF p_session_id IS NULL OR p_candidate_id IS NULL OR p_economic_build_id IS NULL
      OR p_source_build_run_id IS NULL OR p_completion_job_id IS NULL THEN
     RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_BUILD_AUTHORITY_MISMATCH'
@@ -140,6 +152,7 @@ BEGIN
     'contract_version','authority_kind','invocation_kind','final_state',
     'certification_version','certification_digest','post_clone_action','post_clone_job_id',
     'source_session_id','original_economic_build_id','original_source_build_run_id','clone_job_id',
+    'original_source_publication_id',
     'projection_run_id','admission_seal_version','admission_seal_digest',
     'projection_fingerprint','accepted_baseline_build_id',
     'semantic_contract_version','semantic_proof_digest',
@@ -711,12 +724,40 @@ BEGIN
     END IF;
   END IF;
 
+  IF v_publication_identity_write_enabled OR v_publication_identity_enforce_enabled THEN
+    v_source_publication_id := private.pay_workbench_source_publication_identity_v1(
+      p_session_id,p_candidate_id,p_session_version,p_source_change_seq,p_source_build_run_id
+    );
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_workbench_candidate_source_lines AS publication_probe
+      WHERE publication_probe.session_id=p_session_id
+        AND publication_probe.candidate_id=p_candidate_id
+        AND publication_probe.session_version=p_session_version
+        AND publication_probe.source_change_seq=p_source_change_seq
+        AND publication_probe.source_build_run_id=p_source_build_run_id
+        AND publication_probe.source_publication_id=v_source_publication_id
+        AND publication_probe.status='CURRENT'
+    ) THEN
+      IF v_publication_identity_enforce_enabled THEN
+        RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_SOURCE_PUBLICATION_MISSING'
+          USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+            'code','CERTIFIED_SOURCE_PREVIEW_SOURCE_PUBLICATION_MISSING',
+            'source_publication_id',v_source_publication_id
+          )::text;
+      END IF;
+      v_source_publication_id := NULL::uuid;
+    END IF;
+  END IF;
+
   PERFORM source_lock.id
   FROM public.banking_pay_workbench_candidate_source_lines AS source_lock
   WHERE source_lock.session_id = p_session_id
     AND source_lock.candidate_id = p_candidate_id
     AND source_lock.session_version = p_session_version
     AND source_lock.status = 'CURRENT'
+    AND (v_source_publication_id IS NULL OR source_lock.source_publication_id=v_source_publication_id)
   ORDER BY source_lock.source_ordinal, source_lock.id
   FOR UPDATE;
 
@@ -728,8 +769,15 @@ BEGIN
       AND ambiguous_source.session_version = p_session_version
       AND ambiguous_source.status = 'CURRENT'
       AND (
-        ambiguous_source.source_build_run_id IS DISTINCT FROM p_source_build_run_id
-        OR ambiguous_source.source_change_seq IS DISTINCT FROM p_source_change_seq
+        ambiguous_source.source_change_seq IS DISTINCT FROM p_source_change_seq
+        OR (
+          v_source_publication_id IS NULL
+          AND ambiguous_source.source_build_run_id IS DISTINCT FROM p_source_build_run_id
+        )
+        OR (
+          v_source_publication_id IS NOT NULL
+          AND ambiguous_source.source_publication_id IS DISTINCT FROM v_source_publication_id
+        )
       )
   ) THEN
     RAISE EXCEPTION 'CERTIFIED_SOURCE_PREVIEW_SOURCE_SET_AMBIGUOUS'
@@ -744,8 +792,11 @@ BEGIN
   WHERE source_row.session_id = p_session_id
     AND source_row.candidate_id = p_candidate_id
     AND source_row.session_version = p_session_version
-    AND source_row.source_build_run_id = p_source_build_run_id
     AND source_row.source_change_seq = p_source_change_seq
+    AND (
+      (v_source_publication_id IS NOT NULL AND source_row.source_publication_id=v_source_publication_id)
+      OR (v_source_publication_id IS NULL AND source_row.source_build_run_id=p_source_build_run_id)
+    )
     AND source_row.status = 'CURRENT';
 
   IF v_contract_version IN (1,3) AND v_authority_kind='BOUNDED_FULL_SOURCE_BUILD'
@@ -767,6 +818,7 @@ BEGIN
       'parity_complete',false,
       'economic_build_id',p_economic_build_id,
       'source_build_run_id',p_source_build_run_id,
+      'source_publication_id',v_source_publication_id,
       'source_change_seq',p_source_change_seq,
       'session_version',p_session_version,
       'completion_job_id',p_completion_job_id,
@@ -782,6 +834,7 @@ BEGIN
         certified_preview_publication_session_version=p_session_version,
         certified_preview_publication_source_change_seq=p_source_change_seq,
         certified_preview_publication_source_build_run_id=p_source_build_run_id,
+        certified_preview_publication_source_publication_id=v_source_publication_id,
         certified_preview_publication_attestation_json=v_attestation,
         certified_preview_publication_attested_at_utc=NULL,
         status='DELTA_REFRESH_PENDING',
@@ -878,8 +931,11 @@ BEGIN
   WHERE source_row.session_id = p_session_id
     AND source_row.candidate_id = p_candidate_id
     AND source_row.session_version = p_session_version
-    AND source_row.source_build_run_id = p_source_build_run_id
     AND source_row.source_change_seq = p_source_change_seq
+    AND (
+      (v_source_publication_id IS NOT NULL AND source_row.source_publication_id=v_source_publication_id)
+      OR (v_source_publication_id IS NULL AND source_row.source_build_run_id=p_source_build_run_id)
+    )
     AND source_row.status = 'CURRENT';
 
   IF EXISTS (
@@ -976,12 +1032,12 @@ BEGIN
       WHEN v_contract_version = 3 THEN
         CASE
           WHEN prepared_row.existing_preview_id IS NOT NULL
-           AND prepared_row.existing_status = 'READY'
+           AND (prepared_row.existing_status = 'READY' OR v_selection_intent_identity_enabled)
            AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
            AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_user_override, ''))) = 'UNSELECTED'
             THEN false
           WHEN prepared_row.existing_preview_id IS NOT NULL
-           AND prepared_row.existing_status = 'READY'
+           AND (prepared_row.existing_status = 'READY' OR v_selection_intent_identity_enabled)
            AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
            AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_user_override, ''))) = 'SELECTED'
             THEN true
@@ -1013,12 +1069,12 @@ BEGIN
       WHEN v_contract_version = 3 THEN
         CASE
           WHEN prepared_row.existing_preview_id IS NOT NULL
-           AND prepared_row.existing_status = 'READY'
+           AND (prepared_row.existing_status = 'READY' OR v_selection_intent_identity_enabled)
            AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
            AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_user_override, ''))) = 'UNSELECTED'
             THEN 'UNSELECTED'
           WHEN prepared_row.existing_preview_id IS NOT NULL
-           AND prepared_row.existing_status = 'READY'
+           AND (prepared_row.existing_status = 'READY' OR v_selection_intent_identity_enabled)
            AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
            AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_user_override, ''))) = 'SELECTED'
             THEN 'SELECTED'
@@ -1060,6 +1116,7 @@ BEGIN
     AND v_scope.certified_preview_publication_session_version = p_session_version
     AND v_scope.certified_preview_publication_source_change_seq = p_source_change_seq
     AND v_scope.certified_preview_publication_source_build_run_id = p_source_build_run_id
+    AND v_scope.certified_preview_publication_source_publication_id IS NOT DISTINCT FROM v_source_publication_id
     AND v_scope.certified_preview_publication_attestation_json->>'economic_build_id' = p_economic_build_id::text
     AND v_scope.certified_preview_publication_attestation_json->>'completion_job_id' = p_completion_job_id::text
     AND COALESCE((v_scope.certified_preview_publication_attestation_json->>'parity_complete')::boolean, false)
@@ -1151,6 +1208,7 @@ BEGIN
       'candidate_id', p_candidate_id::text,
       'economic_build_id', p_economic_build_id::text,
       'source_build_run_id', p_source_build_run_id::text,
+      'source_publication_id', CASE WHEN v_source_publication_id IS NULL THEN NULL ELSE v_source_publication_id::text END,
       'source_change_seq', p_source_change_seq,
       'session_version', p_session_version,
       'source_row_count', v_preview_count,
@@ -1199,7 +1257,7 @@ BEGIN
           'selection_user_override', CASE
             WHEN v_contract_version = 3
              AND ready_row.existing_preview_id IS NOT NULL
-             AND ready_row.existing_status = 'READY'
+             AND (ready_row.existing_status = 'READY' OR v_selection_intent_identity_enabled)
              AND ready_row.existing_selection_identity_digest = ready_row.selection_identity_digest
              AND UPPER(BTRIM(COALESCE(ready_row.existing_selection_user_override, ''))) IN ('SELECTED', 'UNSELECTED')
               THEN UPPER(BTRIM(ready_row.existing_selection_user_override))
@@ -1208,7 +1266,7 @@ BEGIN
           'selection_origin', CASE
             WHEN v_contract_version = 3
              AND ready_row.existing_preview_id IS NOT NULL
-             AND ready_row.existing_status = 'READY'
+             AND (ready_row.existing_status = 'READY' OR v_selection_intent_identity_enabled)
              AND ready_row.existing_selection_identity_digest = ready_row.selection_identity_digest
              AND UPPER(BTRIM(COALESCE(ready_row.existing_selection_user_override, ''))) IN ('SELECTED', 'UNSELECTED')
               THEN COALESCE(NULLIF(ready_row.existing_selection_origin, ''), 'USER_EXPLICIT_SELECTION')
@@ -1219,7 +1277,7 @@ BEGIN
           'selection_user_override_at_utc', CASE
             WHEN v_contract_version = 3
              AND ready_row.existing_preview_id IS NOT NULL
-             AND ready_row.existing_status = 'READY'
+             AND (ready_row.existing_status = 'READY' OR v_selection_intent_identity_enabled)
              AND ready_row.existing_selection_identity_digest = ready_row.selection_identity_digest
              AND UPPER(BTRIM(COALESCE(ready_row.existing_selection_user_override, ''))) IN ('SELECTED', 'UNSELECTED')
               THEN ready_row.existing_selection_user_override_at_utc
@@ -1468,8 +1526,10 @@ BEGIN
       'candidate_id',p_candidate_id,
       'economic_build_id',p_economic_build_id,
       'source_build_run_id',p_source_build_run_id,
+      'source_publication_id',v_source_publication_id,
       'original_economic_build_id',v_original_economic_build_id,
       'original_source_build_run_id',v_original_source_build_run_id,
+      'original_source_publication_id',p_publication_options_json->>'original_source_publication_id',
       'source_session_id',v_source_session_id,
       'source_change_seq',p_source_change_seq,
       'session_version',p_session_version,
@@ -1508,8 +1568,10 @@ BEGIN
       'candidate_id',p_candidate_id,
       'economic_build_id',p_economic_build_id,
       'source_build_run_id',p_source_build_run_id,
+      'source_publication_id',v_source_publication_id,
       'original_economic_build_id',v_original_economic_build_id,
       'original_source_build_run_id',v_original_source_build_run_id,
+      'original_source_publication_id',p_publication_options_json->>'original_source_publication_id',
       'source_session_id',v_source_session_id,
       'source_change_seq',p_source_change_seq,
       'session_version',p_session_version,
@@ -1560,6 +1622,7 @@ BEGIN
       certified_preview_publication_session_version = p_session_version,
       certified_preview_publication_source_change_seq = p_source_change_seq,
       certified_preview_publication_source_build_run_id = p_source_build_run_id,
+      certified_preview_publication_source_publication_id = v_source_publication_id,
       certified_preview_publication_attestation_json = v_attestation,
       certified_preview_publication_attested_at_utc = v_now,
       updated_at_utc = v_now

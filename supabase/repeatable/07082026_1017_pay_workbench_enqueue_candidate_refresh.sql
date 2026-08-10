@@ -114,6 +114,7 @@ DECLARE
   v_reversion_source_count integer := 0;
   v_reversion_state_exact boolean := false;
   v_semantic_ready_publication_enabled boolean := false;
+  v_source_publication_identity_enforced boolean := false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -142,10 +143,15 @@ BEGIN
   END IF;
 
   SELECT COALESCE(
-    settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,
-    false
-  )
-  INTO v_semantic_ready_publication_enabled
+           settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,
+           false
+         ),
+         COALESCE(
+           settings_row.banking_pay_source_publication_identity_enforce_v1_enabled,
+           false
+         )
+  INTO v_semantic_ready_publication_enabled,
+       v_source_publication_identity_enforced
   FROM public.settings_defaults AS settings_row
   WHERE settings_row.id = 1;
 
@@ -1367,6 +1373,14 @@ BEGIN
               ='CERTIFIED_CANCELLATION_REVERSION'
         AND COALESCE((current_scope.certified_preview_publication_attestation_json->>'semantic_ready')::boolean,false)
         AND COALESCE((current_scope.certified_preview_publication_attestation_json->>'parity_complete')::boolean,false)
+        AND (
+          NOT v_source_publication_identity_enforced
+          OR (
+            current_scope.certified_preview_publication_source_publication_id IS NOT NULL
+            AND current_scope.certified_preview_publication_attestation_json->>'source_publication_id'
+                  =current_scope.certified_preview_publication_source_publication_id::text
+          )
+        )
       FOR UPDATE;
 
       IF FOUND THEN
@@ -1393,8 +1407,18 @@ BEGIN
           AND reversion_source.candidate_id=p_candidate_id
           AND reversion_source.session_version=COALESCE(v_session_row.version,0)
           AND reversion_source.source_change_seq=COALESCE(v_source_change_seq,0)
-          AND reversion_source.source_build_run_id
-                =v_reversion_scope.certified_preview_publication_source_build_run_id
+          AND (
+            (
+              v_source_publication_identity_enforced
+              AND reversion_source.source_publication_id
+                    =v_reversion_scope.certified_preview_publication_source_publication_id
+            )
+            OR (
+              NOT v_source_publication_identity_enforced
+              AND reversion_source.source_build_run_id
+                    =v_reversion_scope.certified_preview_publication_source_build_run_id
+            )
+          )
           AND reversion_source.status='CURRENT';
 
         IF v_reversion_state_exact
@@ -1412,8 +1436,16 @@ BEGIN
                AND (
                  foreign_current_source.session_version IS DISTINCT FROM COALESCE(v_session_row.version,0)
                  OR foreign_current_source.source_change_seq IS DISTINCT FROM COALESCE(v_source_change_seq,0)
-                 OR foreign_current_source.source_build_run_id IS DISTINCT FROM
-                      v_reversion_scope.certified_preview_publication_source_build_run_id
+                 OR (
+                   v_source_publication_identity_enforced
+                   AND foreign_current_source.source_publication_id IS DISTINCT FROM
+                        v_reversion_scope.certified_preview_publication_source_publication_id
+                 )
+                 OR (
+                   NOT v_source_publication_identity_enforced
+                   AND foreign_current_source.source_build_run_id IS DISTINCT FROM
+                        v_reversion_scope.certified_preview_publication_source_build_run_id
+                 )
                )
            ) THEN
           RETURN jsonb_strip_nulls(jsonb_build_object(
@@ -1427,6 +1459,7 @@ BEGIN
             'source_change_seq',COALESCE(v_source_change_seq,0),
             'registry_source_change_seq',COALESCE(v_registry_source_change_seq_after,v_source_change_seq,0),
             'source_build_run_id',v_reversion_scope.certified_preview_publication_source_build_run_id::text,
+            'source_publication_id',v_reversion_scope.certified_preview_publication_source_publication_id::text,
             'authority_fingerprint',v_authority_fingerprint,
             'authority_fingerprint_version',2,
             'owner_resolution','COMPLETE_CURRENT_AUTHORITY',
@@ -1480,6 +1513,14 @@ BEGIN
         AND current_scope.certified_preview_publication_session_version = build_row.session_version
         AND current_scope.certified_preview_publication_source_change_seq = build_row.source_change_seq
         AND current_scope.certified_preview_publication_source_build_run_id = build_row.source_build_run_id
+        AND (
+          NOT v_source_publication_identity_enforced
+          OR (
+            current_scope.certified_preview_publication_source_publication_id IS NOT NULL
+            AND current_scope.certified_preview_publication_attestation_json->>'source_publication_id'
+                  =current_scope.certified_preview_publication_source_publication_id::text
+          )
+        )
         AND (
           v_semantic_ready_publication_enabled IS NOT TRUE
           OR (

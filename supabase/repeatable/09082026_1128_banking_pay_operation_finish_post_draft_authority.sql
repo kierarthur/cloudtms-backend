@@ -65,8 +65,14 @@ DECLARE
     v_finish_scope_status text := 'NONE';
     v_finish_freshness_status text := 'VALID_AT_SCOPE_FREEZE';
     v_post_draft_authority_count integer := 0;
+    v_source_publication_identity_enforce_enabled boolean := false;
 BEGIN
     PERFORM set_config('lock_timeout', '3s', true);
+
+    SELECT COALESCE(setting.banking_pay_source_publication_identity_enforce_v1_enabled,false)
+    INTO v_source_publication_identity_enforce_enabled
+    FROM public.settings_defaults AS setting
+    WHERE setting.id=1;
 
     IF p_operation_id IS NULL THEN
         RAISE EXCEPTION 'BANKING_PAY_OPERATION_FINISH_OPERATION_ID_REQUIRED'
@@ -198,6 +204,7 @@ BEGIN
           COALESCE(candidate_counter.seq, 0) AS source_change_seq,
           COALESCE(candidate_counter.scope_change_generation, 0) AS dirty_generation,
           draft_scope.allocation_basis_json->>'source_build_run_id' AS original_source_build_run_id,
+          draft_scope.allocation_basis_json->>'source_publication_id' AS original_source_publication_id,
           draft_scope.allocation_basis_json->>'source_identity_digest' AS original_source_identity_digest,
           draft_scope.allocation_basis_json->>'semantic_proof_digest' AS original_semantic_proof_digest,
           draft_scope.allocation_basis_json->'source_publication_attestation' AS source_attestation
@@ -217,6 +224,7 @@ BEGIN
             authority_rows.source_session_version::text || '|' ||
             authority_rows.source_snapshot_run_id::text || '|' ||
             authority_rows.original_source_build_run_id || '|' ||
+            COALESCE(authority_rows.original_source_publication_id,'') || '|' ||
             authority_rows.original_source_identity_digest || '|' ||
             authority_rows.original_semantic_proof_digest || '|POST_DRAFT_LIVE_AUTHORITY_V1'
           ) AS authority_digest
@@ -229,6 +237,11 @@ BEGIN
           AND COALESCE((authority_rows.source_attestation->>'parity_complete')::boolean, false)
           AND COALESCE(authority_rows.original_source_build_run_id, '')
                 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          AND (
+            v_source_publication_identity_enforce_enabled IS NOT TRUE
+            OR COALESCE(authority_rows.original_source_publication_id,'')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          )
           AND NULLIF(BTRIM(COALESCE(authority_rows.original_source_identity_digest, '')), '') IS NOT NULL
           AND NULLIF(BTRIM(COALESCE(authority_rows.original_semantic_proof_digest, '')), '') IS NOT NULL
       ), frozen_authority AS (
@@ -247,6 +260,7 @@ BEGIN
                   'source_session_version', eligible_authority.source_session_version,
                   'source_snapshot_run_id', eligible_authority.source_snapshot_run_id,
                   'original_source_build_run_id', eligible_authority.original_source_build_run_id,
+                  'original_source_publication_id', eligible_authority.original_source_publication_id,
                   'original_source_identity_digest', eligible_authority.original_source_identity_digest,
                   'original_semantic_proof_digest', eligible_authority.original_semantic_proof_digest,
                   'authority_digest', eligible_authority.authority_digest,

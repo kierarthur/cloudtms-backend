@@ -68,6 +68,7 @@ DECLARE
   v_draft_overlay_pre_request_authorities jsonb := '{}'::jsonb;
   v_draft_overlay_start_admission jsonb := '{}'::jsonb;
   v_draft_overlay_start_authorities jsonb := '{}'::jsonb;
+  v_source_publication_identity_enforced boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'PAY_BATCH_ID_REQUIRED'
@@ -92,8 +93,10 @@ BEGIN
 
     SELECT settings_row.banking_pay_candidate_cancellation_enabled,
            least(coalesce(settings_row.banking_pay_correction_max_candidates, 10000), 10000),
-           coalesce(settings_row.banking_pay_auto_unwind_terminal_no_money, false)
-    INTO v_enabled, v_max_candidates, v_auto_unwind_enabled
+           coalesce(settings_row.banking_pay_auto_unwind_terminal_no_money, false),
+           coalesce(settings_row.banking_pay_source_publication_identity_enforce_v1_enabled, false)
+    INTO v_enabled, v_max_candidates, v_auto_unwind_enabled,
+         v_source_publication_identity_enforced
   FROM public.settings_defaults AS settings_row
   ORDER BY settings_row.id
   LIMIT 1;
@@ -532,6 +535,11 @@ BEGIN
             AND COALESCE(post_draft_authority->>'pay_batch_id','')=p_pay_batch_id::text
             AND COALESCE(post_draft_authority->>'workbench_session_id','')=source_workbench_session_id::text
             AND COALESCE(post_draft_authority->>'candidate_id','')=candidate_id::text
+            AND (
+              NOT v_source_publication_identity_enforced
+              OR COALESCE(post_draft_authority->>'original_source_publication_id','')
+                   ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+            )
             AND frozen_source_change_seq IS NOT NULL
             AND frozen_dirty_generation IS NOT NULL
             AND live_source_change_seq=frozen_source_change_seq
@@ -552,6 +560,8 @@ BEGIN
           'source_change_seq',classified.live_source_change_seq,
           'dirty_generation',classified.live_dirty_generation,
           'post_draft_authority_digest',classified.post_draft_authority->>'authority_digest',
+          'original_source_publication_id',
+            classified.post_draft_authority->>'original_source_publication_id',
           'pre_request_exact',classified.pre_request_exact,
           'rejection_reason',CASE WHEN classified.pre_request_exact THEN NULL
             ELSE 'PRE_REQUEST_ECONOMIC_AUTHORITY_NOT_CURRENT' END,
@@ -559,6 +569,7 @@ BEGIN
             classified.candidate_id::text||'|'||classified.live_source_change_seq::text||'|'||
             classified.live_dirty_generation::text||'|'||
             COALESCE(classified.post_draft_authority->>'authority_digest','')||'|'||
+            COALESCE(classified.post_draft_authority->>'original_source_publication_id','')||'|'||
             COALESCE(classified.registry_source_change_seq::text,'')||'|'||
             COALESCE(classified.registry_dirty_generation::text,'')||'|'||
             COALESCE(classified.candidate_state_source_change_seq::text,'')||'|'||

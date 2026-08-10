@@ -77,6 +77,9 @@ DECLARE
   v_draft_operation public.banking_pay_operations%ROWTYPE;
   v_draft_deferral_count integer:=0;
   v_draft_deferral_seconds integer:=2;
+  v_same_authority_election_enabled boolean:=false;
+  v_authority_fingerprint_version smallint:=NULL::smallint;
+  v_authority_fingerprint text:=NULL::text;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -94,6 +97,11 @@ BEGIN
   INTO v_configured_lease,v_settings_json
   FROM public.settings_defaults AS settings_row
   WHERE settings_row.id=1;
+
+  v_same_authority_election_enabled:=COALESCE(
+    (v_settings_json->>'banking_pay_same_authority_build_election_v1_enabled')::boolean,
+    false
+  );
   v_configured_lease := LEAST(GREATEST(COALESCE(v_configured_lease,25),5),120);
   v_effective_lease := LEAST(
     v_configured_lease,
@@ -529,6 +537,19 @@ BEGIN
         )::text;
     END IF;
     v_source_build_run_id := (v_job.payload_json->>'source_build_run_id')::uuid;
+    IF v_same_authority_election_enabled THEN
+      IF COALESCE(v_job.payload_json->>'authority_fingerprint_version','')<>'2'
+         OR COALESCE(v_job.payload_json->>'authority_fingerprint','') !~ '^[0-9a-f]{64}$' THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_SOURCE_BUILD_AUTHORITY_FINGERPRINT_REQUIRED'
+          USING ERRCODE='22023',DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_SOURCE_BUILD_AUTHORITY_FINGERPRINT_REQUIRED',
+            'job_id',v_job.id,
+            'candidate_id',v_job.candidate_id
+          )::text;
+      END IF;
+      v_authority_fingerprint_version:=2;
+      v_authority_fingerprint:=v_job.payload_json->>'authority_fingerprint';
+    END IF;
     v_is_bootstrap := COALESCE(v_job.payload_json->>'bootstrap_id','')
       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       AND v_registry.initialisation_status<>'READY';
@@ -539,7 +560,8 @@ BEGIN
     INSERT INTO private.banking_pay_workbench_economic_builds(
       id,candidate_id,session_id,session_version,source_snapshot_run_id,
       source_build_run_id,source_job_id,captured_candidate_generation,
-      source_change_seq,status,private_stage,scope_cursor_json,attestation_json
+      source_change_seq,status,private_stage,scope_cursor_json,attestation_json,
+      authority_fingerprint_version,authority_fingerprint
     ) VALUES (
       v_build_id,v_job.candidate_id,v_job.session_id,v_session.version,v_session.source_snapshot_run_id,
       v_source_build_run_id,v_job.id,v_captured_generation,v_source_change_seq,
@@ -562,8 +584,11 @@ BEGIN
         'execution_profile_authority','BUILD_CREATION_SETTINGS',
         'reconciliation_optimization_version',v_reconciliation_optimization_version,
         'reconciliation_optimization_frozen_at_utc',clock_timestamp(),
-        'reconciliation_optimization_authority','BUILD_CREATION_SETTINGS'
-      )
+        'reconciliation_optimization_authority','BUILD_CREATION_SETTINGS',
+        'authority_fingerprint_version',v_authority_fingerprint_version,
+        'authority_fingerprint',v_authority_fingerprint
+      ),
+      v_authority_fingerprint_version,v_authority_fingerprint
     ) RETURNING id,scope_cursor_json INTO v_build_id,v_cursor_json;
     UPDATE private.banking_pay_workbench_candidate_scope_registry
     SET current_build_id=v_build_id,

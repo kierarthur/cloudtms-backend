@@ -715,13 +715,17 @@ DECLARE
   v_publication jsonb := '{}'::jsonb;
   v_completion_job_id uuid := NULL::uuid;
   v_semantic_publication_v3_enabled boolean := false;
+  v_source_publication_identity_write_enabled boolean := false;
+  v_source_publication_id uuid := NULL::uuid;
 BEGIN
   IF p_session_id IS NULL OR p_candidate_id IS NULL OR p_projection_run_id IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_TARGETED_DELTA_FINALIZE_ARGUMENT_REQUIRED' USING ERRCODE='P0001';
   END IF;
 
-  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,false)
-  INTO v_semantic_publication_v3_enabled
+  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,false),
+         COALESCE(settings_row.banking_pay_source_publication_identity_write_v1_enabled,false)
+  INTO v_semantic_publication_v3_enabled,
+       v_source_publication_identity_write_enabled
   FROM public.settings_defaults AS settings_row
   WHERE settings_row.id=1;
 
@@ -799,6 +803,24 @@ BEGIN
     AND staged_source.source_build_run_id=p_projection_run_id
     AND staged_source.status='DIRTY' AND staged_source.timesheet_id=ANY(v_targets);
   GET DIAGNOSTICS v_source_promoted = ROW_COUNT;
+
+  -- A targeted delta changes only a subset of line lineage, but publication
+  -- identity describes the complete physical CURRENT set.  Assign one new
+  -- immutable set identity to both promoted and unaffected CURRENT rows.
+  IF v_source_publication_identity_write_enabled THEN
+    v_source_publication_id := private.pay_workbench_source_publication_identity_v1(
+      p_session_id,p_candidate_id,v_run.session_version,v_run.source_change_seq,p_projection_run_id
+    );
+
+    UPDATE public.banking_pay_workbench_candidate_source_lines AS current_source
+    SET source_change_seq=v_run.source_change_seq,
+        source_publication_id=v_source_publication_id,
+        updated_at_utc=v_now
+    WHERE current_source.session_id=p_session_id
+      AND current_source.candidate_id=p_candidate_id
+      AND current_source.session_version=v_run.session_version
+      AND current_source.status='CURRENT';
+  END IF;
 
   UPDATE public.banking_pay_workbench_candidate_line_work AS line_row
   SET status=COALESCE(NULLIF(line_row.work_payload_json#>>'{targeted_delta_stage,final_status}',''),'READY'),

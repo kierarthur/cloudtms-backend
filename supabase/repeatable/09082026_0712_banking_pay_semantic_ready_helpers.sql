@@ -29,6 +29,7 @@ DECLARE
   v_candidate_count integer := 0;
   v_result jsonb := '[]'::jsonb;
   v_semantic_ready boolean := false;
+  v_publication_identity_enforce_enabled boolean := false;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_SEMANTIC_READY_SESSION_REQUIRED'
@@ -163,9 +164,22 @@ BEGIN
       pg_catalog.upper(pg_catalog.btrim(COALESCE(ready_row.row_json->>'line_type', ready_row.row_json->>'case_type', ''))) AS line_type,
       pg_catalog.upper(pg_catalog.btrim(COALESCE(ready_row.row_json->>'presentation_role', ''))) AS presentation_role
     FROM ready_rows AS ready_row
+  ), source_authority AS (
+    SELECT
+      requested.candidate_id,
+      pg_catalog.count(DISTINCT source_row.source_publication_id)::integer AS source_publication_count,
+      pg_catalog.min(source_row.source_publication_id::text)::uuid AS source_publication_id
+    FROM requested_candidates AS requested
+    LEFT JOIN public.banking_pay_workbench_candidate_source_lines AS source_row
+      ON source_row.session_id=p_session_id
+     AND source_row.candidate_id=requested.candidate_id
+     AND source_row.status='CURRENT'
+    GROUP BY requested.candidate_id
   ), candidate_rollup AS (
     SELECT
       requested.candidate_id,
+      source_authority.source_publication_count,
+      source_authority.source_publication_id,
       pg_catalog.count(classified.preview_row_id) FILTER (
         WHERE classified.included_in_proof
           AND classified.contract_ok
@@ -239,9 +253,11 @@ BEGIN
       ), '')) AS presentation_section_digest,
       pg_catalog.count(classified.preview_row_id) FILTER (WHERE classified.included_in_proof)::integer AS proof_row_count
     FROM requested_candidates AS requested
+    JOIN source_authority ON source_authority.candidate_id=requested.candidate_id
     LEFT JOIN classified
       ON classified.candidate_id = requested.candidate_id
-    GROUP BY requested.candidate_id
+    GROUP BY requested.candidate_id,source_authority.source_publication_count,
+      source_authority.source_publication_id
   ), candidate_proof AS (
     SELECT
       rollup.*,
@@ -252,6 +268,10 @@ BEGIN
       pg_catalog.round(rollup.ordinary_positive_amount + rollup.recognised_deduction_amount, 2) AS candidate_ready_amount,
       (
         rollup.invalid_selectable_row_count = 0
+        AND (
+          v_publication_identity_enforce_enabled IS NOT TRUE
+          OR (rollup.source_publication_count=1 AND rollup.source_publication_id IS NOT NULL)
+        )
         AND rollup.invalid_ready_negative_parent_count = 0
         AND rollup.ordinary_positive_amount >= 0
         AND (
@@ -272,6 +292,8 @@ BEGIN
         'candidate_id', proof.candidate_id::text,
         'mode', v_mode,
         'semantic_contract_version', 'READY_TO_PAY_SEMANTIC_V2',
+        'source_publication_id', proof.source_publication_id,
+        'source_publication_count', proof.source_publication_count,
         'ordinary_positive_selectable_count', proof.ordinary_positive_selectable_count,
         'ordinary_positive_amount', proof.ordinary_positive_amount,
         'recognised_deduction_count', proof.recognised_deduction_count,
@@ -976,6 +998,10 @@ DECLARE
   v_descriptor_options jsonb := '{}'::jsonb;
   v_authority_kind text;
   v_original_source_build_run_id uuid;
+  v_original_source_publication_id uuid;
+  v_source_publication_id uuid;
+  v_publication_identity_write_enabled boolean := false;
+  v_publication_identity_enforce_enabled boolean := false;
   v_current_source_change_seq bigint;
   v_current_dirty_generation bigint;
   v_expected_source_count integer;
@@ -991,6 +1017,17 @@ BEGIN
         'code','CERTIFIED_SOURCE_PREVIEW_PAGE_ARGUMENT_INVALID'
       )::text;
   END IF;
+
+  SELECT COALESCE(setting.banking_pay_source_publication_identity_enforce_v1_enabled,false)
+  INTO v_publication_identity_enforce_enabled
+  FROM public.settings_defaults AS setting
+  WHERE setting.id=1;
+
+  SELECT COALESCE(setting.banking_pay_source_publication_identity_write_v1_enabled,false),
+         COALESCE(setting.banking_pay_source_publication_identity_enforce_v1_enabled,false)
+  INTO v_publication_identity_write_enabled,v_publication_identity_enforce_enabled
+  FROM public.settings_defaults AS setting
+  WHERE setting.id=1;
 
   IF (
     SELECT pg_catalog.count(*)
@@ -1077,6 +1114,11 @@ BEGIN
     IF v_authority_kind='CERTIFIED_CANCELLATION_REVERSION' THEN
       IF COALESCE(v_descriptor_options->>'original_source_build_run_id','')
            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         OR (
+           v_publication_identity_enforce_enabled
+           AND COALESCE(v_descriptor_options->>'original_source_publication_id','')
+             !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         )
          OR COALESCE(v_descriptor_options->>'source_session_id','') IS DISTINCT FROM p_session_id::text
          OR COALESCE(v_descriptor_options->>'source_count','') !~ '^[0-9]{1,9}$' THEN
         RAISE EXCEPTION 'CERTIFIED_CANCELLATION_REVERSION_SOURCE_INVALID'
@@ -1087,8 +1129,19 @@ BEGIN
       END IF;
 
       v_original_source_build_run_id := (v_descriptor_options->>'original_source_build_run_id')::uuid;
+      v_original_source_publication_id := CASE
+        WHEN COALESCE(v_descriptor_options->>'original_source_publication_id','')
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (v_descriptor_options->>'original_source_publication_id')::uuid
+        ELSE NULL::uuid
+      END;
       v_current_source_change_seq := (v_descriptor->>'source_change_seq')::bigint;
       v_expected_source_count := (v_descriptor_options->>'source_count')::integer;
+      v_source_publication_id := CASE WHEN v_publication_identity_write_enabled
+        THEN private.pay_workbench_source_publication_identity_v1(
+          p_session_id,v_candidate_id,(v_descriptor->>'session_version')::bigint,
+          v_current_source_change_seq,(v_descriptor->>'source_build_run_id')::uuid
+        ) ELSE NULL::uuid END;
 
       SELECT COALESCE(change_counter.scope_change_generation,0)
       INTO v_current_dirty_generation
@@ -1126,7 +1179,7 @@ BEGIN
         AND candidate_state.candidate_id=v_candidate_id;
 
       INSERT INTO public.banking_pay_workbench_candidate_source_lines(
-        session_id,candidate_id,session_version,source_change_seq,source_build_run_id,
+        session_id,candidate_id,session_version,source_change_seq,source_build_run_id,source_publication_id,
         source_ordinal,line_key,parent_line_key,split_suffix,timesheet_id,section,
         source_row_json,economic_key_json,contract_json,pay_channel_scope,
         refresh_scope_kind,status,created_at_utc,updated_at_utc
@@ -1134,6 +1187,7 @@ BEGIN
       SELECT
         p_session_id,source_row.candidate_id,(v_descriptor->>'session_version')::bigint,
         v_current_source_change_seq,(v_descriptor->>'source_build_run_id')::uuid,
+        v_source_publication_id,
         source_row.source_ordinal,source_row.line_key,source_row.parent_line_key,
         source_row.split_suffix,source_row.timesheet_id,source_row.section,
         source_row.source_row_json || pg_catalog.jsonb_build_object(
@@ -1154,6 +1208,10 @@ BEGIN
       WHERE source_row.session_id=p_session_id
         AND source_row.candidate_id=v_candidate_id
         AND source_row.source_build_run_id=v_original_source_build_run_id
+        AND (
+          v_publication_identity_enforce_enabled IS NOT TRUE
+          OR source_row.source_publication_id=v_original_source_publication_id
+        )
         AND NOT EXISTS (
           SELECT 1
           FROM public.banking_pay_workbench_candidate_source_lines AS replay_row
@@ -1161,6 +1219,7 @@ BEGIN
             AND replay_row.candidate_id=v_candidate_id
             AND replay_row.source_build_run_id=(v_descriptor->>'source_build_run_id')::uuid
             AND replay_row.source_change_seq=v_current_source_change_seq
+            AND replay_row.source_publication_id IS NOT DISTINCT FROM v_source_publication_id
             AND replay_row.source_ordinal=source_row.source_ordinal
             AND replay_row.line_key=source_row.line_key
         );
@@ -1172,6 +1231,7 @@ BEGIN
         AND staged_row.candidate_id=v_candidate_id
         AND staged_row.source_build_run_id=(v_descriptor->>'source_build_run_id')::uuid
         AND staged_row.source_change_seq=v_current_source_change_seq
+        AND staged_row.source_publication_id IS NOT DISTINCT FROM v_source_publication_id
         AND staged_row.status IN ('DIRTY','CURRENT');
 
       IF v_staged_source_count IS DISTINCT FROM v_expected_source_count THEN
@@ -1197,6 +1257,7 @@ BEGIN
         AND staged_row.candidate_id=v_candidate_id
         AND staged_row.source_build_run_id=(v_descriptor->>'source_build_run_id')::uuid
         AND staged_row.source_change_seq=v_current_source_change_seq
+        AND staged_row.source_publication_id IS NOT DISTINCT FROM v_source_publication_id
         AND staged_row.status='DIRTY';
     END IF;
 
@@ -1288,10 +1349,16 @@ AS $function$
 DECLARE
   v_count integer := 0;
   v_results jsonb := '[]'::jsonb;
+  v_publication_identity_enforce_enabled boolean := false;
   v_mode text := pg_catalog.upper(pg_catalog.btrim(COALESCE(
     p_options_json->>'mode','POST_FINANCIAL'
   )));
 BEGIN
+  SELECT COALESCE(setting.banking_pay_source_publication_identity_enforce_v1_enabled,false)
+  INTO v_publication_identity_enforce_enabled
+  FROM public.settings_defaults AS setting
+  WHERE setting.id=1;
+
   IF p_correction_request_id IS NULL OR p_operation_id IS NULL OR p_session_id IS NULL
      OR p_work_item_ids IS NULL OR pg_catalog.cardinality(p_work_item_ids) > 100
      OR v_mode NOT IN ('DRAFT_OVERLAY_PREFLIGHT','PRE_FINANCIAL','POST_FINANCIAL','OBSERVE_ONLY')
@@ -1368,6 +1435,7 @@ BEGIN
       draft_scope.allocation_basis_json,
       draft_scope.allocation_basis_json->'source_publication_attestation' AS frozen_attestation,
       draft_scope.allocation_basis_json->>'source_build_run_id' AS frozen_source_build_run_id,
+      draft_scope.allocation_basis_json->>'source_publication_id' AS frozen_source_publication_id,
       draft_scope.allocation_basis_json->'post_draft_authority' AS post_draft_authority,
       COALESCE(change_counter.seq,0) AS live_source_change_seq,
       COALESCE(change_counter.scope_change_generation,0) AS live_dirty_generation,
@@ -1495,6 +1563,7 @@ BEGIN
         COALESCE(authority.post_draft_authority->>'dirty_generation','')||'|'||
         authority.source_session_version::text||'|'||authority.source_snapshot_run_id::text||'|'||
         COALESCE(authority.frozen_source_build_run_id,'')||'|'||
+        COALESCE(authority.frozen_source_publication_id,'')||'|'||
         COALESCE(authority.allocation_basis_json->>'source_identity_digest','')||'|'||
         COALESCE(authority.allocation_basis_json->>'semantic_proof_digest','')||
         '|POST_DRAFT_LIVE_AUTHORITY_V1'
@@ -1521,6 +1590,10 @@ BEGIN
           OR COALESCE(authority.frozen_attestation->>'economic_build_id','')
           !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN 'ORIGINAL_BUILD_LINEAGE_MISSING'
+        WHEN v_publication_identity_enforce_enabled
+          AND authority.frozen_source_publication_id
+            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN 'ORIGINAL_SOURCE_PUBLICATION_ID_MISSING'
         WHEN COALESCE(authority.post_draft_authority->>'contract_version','')
                <>'POST_DRAFT_LIVE_AUTHORITY_V1'
           OR COALESCE(authority.post_draft_authority->>'draft_operation_id','')
@@ -1537,6 +1610,8 @@ BEGIN
                IS DISTINCT FROM authority.source_snapshot_run_id::text
           OR COALESCE(authority.post_draft_authority->>'original_source_build_run_id','')
                IS DISTINCT FROM authority.frozen_source_build_run_id
+          OR COALESCE(authority.post_draft_authority->>'original_source_publication_id','')
+               IS DISTINCT FROM COALESCE(authority.frozen_source_publication_id,'')
           OR COALESCE(authority.post_draft_authority->>'original_source_identity_digest','')
                IS DISTINCT FROM authority.allocation_basis_json->>'source_identity_digest'
           OR COALESCE(authority.post_draft_authority->>'original_semantic_proof_digest','')
@@ -1549,6 +1624,7 @@ BEGIN
                  COALESCE(authority.post_draft_authority->>'dirty_generation','')||'|'||
                  authority.source_session_version::text||'|'||authority.source_snapshot_run_id::text||'|'||
                  COALESCE(authority.frozen_source_build_run_id,'')||'|'||
+                 COALESCE(authority.frozen_source_publication_id,'')||'|'||
                  COALESCE(authority.allocation_basis_json->>'source_identity_digest','')||'|'||
                  COALESCE(authority.allocation_basis_json->>'semantic_proof_digest','')||
                  '|POST_DRAFT_LIVE_AUTHORITY_V1'
@@ -1707,6 +1783,13 @@ BEGIN
           WHEN authority.frozen_source_build_run_id
             ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN authority.frozen_source_build_run_id::uuid ELSE NULL::uuid END
+        AND (
+          v_publication_identity_enforce_enabled IS NOT TRUE
+          OR source_row.source_publication_id=CASE
+            WHEN authority.frozen_source_publication_id
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN authority.frozen_source_publication_id::uuid ELSE NULL::uuid END
+        )
     ) AS source_rows ON true
   ), result_rows AS (
     SELECT
@@ -1721,6 +1804,7 @@ BEGIN
         'draft_operation_id',source_proof.draft_operation_id,
         'original_economic_build_id',source_proof.frozen_attestation->>'economic_build_id',
         'original_source_build_run_id',source_proof.frozen_source_build_run_id,
+        'original_source_publication_id',source_proof.frozen_source_publication_id,
         'original_source_change_seq',source_proof.frozen_attestation->>'source_change_seq',
         'current_source_change_seq',source_proof.live_source_change_seq,
         'current_dirty_generation',source_proof.live_dirty_generation,
@@ -1809,6 +1893,7 @@ DECLARE
   v_now timestamptz := pg_catalog.clock_timestamp();
   v_fast_count integer := 0;
   v_mutation_guard jsonb := '{}'::jsonb;
+  v_set_page_enabled boolean := false;
 BEGIN
   IF p_correction_request_id IS NULL
      OR p_work_item_ids IS NULL
@@ -1820,6 +1905,12 @@ BEGIN
         'code','PRE_BANK_CANCEL_APPLY_PAGE_ARGUMENT_INVALID'
       )::text;
   END IF;
+
+  SELECT COALESCE(setting.banking_pay_pre_bank_cancel_set_page_v1_enabled,false)
+  INTO v_set_page_enabled
+  FROM public.settings_defaults AS setting
+  ORDER BY setting.id
+  LIMIT 1;
 
   SELECT operation_row.id,batch_row.source_workbench_session_id,request_row.pay_batch_id
   INTO v_operation_id,v_session_id,v_batch_id
@@ -1833,7 +1924,8 @@ BEGIN
   ORDER BY operation_row.created_at_utc
   LIMIT 1;
 
-  IF v_operation_id IS NOT NULL AND v_session_id IS NOT NULL THEN
+  IF v_set_page_enabled
+     AND v_operation_id IS NOT NULL AND v_session_id IS NOT NULL THEN
     v_preflight := private.pay_workbench_cancel_reversion_admission_page_v1(
       p_correction_request_id,v_operation_id,v_session_id,p_work_item_ids,
       pg_catalog.jsonb_build_object('mode','PRE_FINANCIAL')
@@ -1850,6 +1942,7 @@ BEGIN
     SELECT DISTINCT requested_id.work_id
     FROM pg_catalog.unnest(p_work_item_ids) AS requested_id(work_id)
     WHERE requested_id.work_id IS NOT NULL
+      AND v_set_page_enabled
   ), preflight AS (
     SELECT
       (entry.value->>'work_item_id')::uuid AS work_item_id,
@@ -2722,6 +2815,7 @@ BEGIN
         'source_session_id',p_session_id,
         'original_economic_build_id',admitted.value->>'original_economic_build_id',
         'original_source_build_run_id',admitted.value->>'original_source_build_run_id',
+        'original_source_publication_id',admitted.value->>'original_source_publication_id',
         'cancellation_request_id',p_correction_request_id,
         'cancellation_operation_id',v_operation_id,
         'pay_batch_id',p_pay_batch_id,

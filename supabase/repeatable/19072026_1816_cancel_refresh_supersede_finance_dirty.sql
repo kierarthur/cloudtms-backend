@@ -89,6 +89,18 @@ BEGIN
             WHEN UPPER(BTRIM(COALESCE(cancelled_preview_row.status, ''))) = 'READY' THEN 'UNSELECTED'
             ELSE 'NOT_SELECTABLE'
           END,
+          'selection_user_override', CASE
+            WHEN COALESCE((SELECT setting.banking_pay_selection_intent_identity_v1_enabled
+                             FROM public.settings_defaults AS setting WHERE setting.id=1),false)
+              THEN 'UNSELECTED' ELSE cancelled_preview_row.row_json->>'selection_user_override' END,
+          'selection_origin', CASE
+            WHEN COALESCE((SELECT setting.banking_pay_selection_intent_identity_v1_enabled
+                             FROM public.settings_defaults AS setting WHERE setting.id=1),false)
+              THEN 'POST_CANCEL_RETURN_UNSELECTED' ELSE cancelled_preview_row.row_json->>'selection_origin' END,
+          'selection_user_override_at_utc', CASE
+            WHEN COALESCE((SELECT setting.banking_pay_selection_intent_identity_v1_enabled
+                             FROM public.settings_defaults AS setting WHERE setting.id=1),false)
+              THEN v_now::text ELSE cancelled_preview_row.row_json->>'selection_user_override_at_utc' END,
           'post_cancel_selection_restored', true,
           'post_cancel_selection_restored_at_utc', v_now::text,
           'post_cancel_selection_pay_batch_id', p_pay_batch_id::text

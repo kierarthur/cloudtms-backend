@@ -73,6 +73,7 @@ DECLARE
   v_line_units_complete integer := 0;
   v_line_units_ready_not_materialised integer := 0;
   v_progress_json jsonb := '{}'::jsonb;
+  v_source_publication_identity_enforced boolean := false;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -99,6 +100,12 @@ BEGIN
       'status_text', 'Payment preview needs refreshing.'
     );
   END IF;
+
+  SELECT COALESCE(setting.banking_pay_source_publication_identity_enforce_v1_enabled,false)
+  INTO v_source_publication_identity_enforced
+  FROM public.settings_defaults AS setting
+  ORDER BY setting.id
+  LIMIT 1;
 
   v_scope_cursor_remaining := jsonb_typeof(COALESCE(v_session_row.scope_next_cursor_json, '{}'::jsonb)) = 'object'
     AND COALESCE(v_session_row.scope_next_cursor_json, '{}'::jsonb) <> '{}'::jsonb;
@@ -157,6 +164,14 @@ BEGIN
               AND COALESCE((scope_row.certified_preview_publication_attestation_json->>'invalid_selectable_row_count')::integer,-1)=0
               AND (scope_row.certified_preview_publication_attestation_json->>'candidate_ready_amount')::numeric>=0
               AND NULLIF(BTRIM(COALESCE(scope_row.certified_preview_publication_attestation_json->>'semantic_proof_digest','')),'') IS NOT NULL
+              AND (
+                NOT v_source_publication_identity_enforced
+                OR (
+                  scope_row.certified_preview_publication_source_publication_id IS NOT NULL
+                  AND scope_row.certified_preview_publication_attestation_json->>'source_publication_id'
+                        =scope_row.certified_preview_publication_source_publication_id::text
+                )
+              )
             )
           )
         )
@@ -253,6 +268,14 @@ BEGIN
             AND COALESCE((scope_row.certified_preview_publication_attestation_json->>'invalid_selectable_row_count')::integer,-1)=0
             AND (scope_row.certified_preview_publication_attestation_json->>'candidate_ready_amount')::numeric>=0
             AND NULLIF(BTRIM(COALESCE(scope_row.certified_preview_publication_attestation_json->>'semantic_proof_digest','')),'') IS NOT NULL
+            AND (
+              NOT v_source_publication_identity_enforced
+              OR (
+                scope_row.certified_preview_publication_source_publication_id IS NOT NULL
+                AND scope_row.certified_preview_publication_attestation_json->>'source_publication_id'
+                      =scope_row.certified_preview_publication_source_publication_id::text
+              )
+            )
           )
         )
       )
