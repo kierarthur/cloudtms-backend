@@ -25,7 +25,7 @@
     {
       "schema": "public", "name": "banking_alerts_active_for_user",
       "identity_arguments": "p_actor_user_id uuid, p_entity_kind text, p_entity_id uuid, p_include_acknowledged boolean, p_limit integer, p_alert_context text",
-      "definition_sha256": "bb40f0ec6b7e451ddbdf40a4970f86481263b7268937c6309bc36d85d84a5680",
+      "definition_sha256": "0227b0c13566dcb7a96e3dbafb065ccf20cce9555130eb0496bf430b4cc8603b",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -36,7 +36,7 @@
     {
       "schema": "public", "name": "banking_pay_operation_finish",
       "identity_arguments": "p_operation_id uuid, p_status text, p_result_json jsonb, p_error_json jsonb",
-      "definition_sha256": "8fce6b1e59ba506deb791edee0c185125f983c032ffe7679589e9157fbba011b",
+      "definition_sha256": "9cb6a82ec764de980ec6eb57f2472e7400604372e464d29ada2fda3a8d8c1695",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
