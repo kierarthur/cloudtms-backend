@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_workbench_enqueue_candidate_refresh",
       "identity_arguments": "p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb",
-      "definition_sha256": "361585883f99142ce00aa89d260474a0b5659bbf4b96d2280e2a8fa4210a2ec6",
+      "definition_sha256": "4f8bd9c22fbf8e83dfa5c110ecdd4251ae926bdc965c647e12f380f29d781d50",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -482,7 +482,7 @@
       "schema": "private",
       "name": "pay_workbench_candidate_source_build_chunk_legacy_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
-      "definition_sha256": "3fc111c81e610ac300c256b45ba3613d5e91d0767e9d5d6c4b2399e086bbc059",
+      "definition_sha256": "69f89131d0064bb39cd0d3e68a8ecb6a8b8463102309dad513aa82f4a79c4340",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -564,7 +564,7 @@
       "schema": "public",
       "name": "pay_workbench_candidate_source_build_chunk",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
-      "definition_sha256": "26841508e1352657a1ba012b13347c8a54a86122b2694cda89236f144f8fba7f",
+      "definition_sha256": "4f7cb51c5ea55bbf550036f4a1363f23965ba32fb02064faa89c1cf81adc6fd0",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -658,7 +658,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "79e834def321fc3b1624c82d96eb1f3041e954aa058acfe40f3100581a26249b",
+      "definition_sha256": "fa649b2fc8ab15e8d2bcee399560da5600fc28d634906070c8b84b79bf33af00",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
