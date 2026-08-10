@@ -470,6 +470,7 @@ test('request-owned Policy X dirty work waits for the correction financial bound
 test('focused modern authorities are replayed after the historical omnibus', () => {
   assert.match(reassert, /\\ir 23072026_1402_disable_plpgsql_check_for_banking_cancel\.sql/);
   assert.match(reassert, /\\ir 09082026_0825_pay_workbench_patch_preview_after_batch_mutation\.sql/);
+  assert.match(reassert, /\\ir 09082026_0825_pay_workbench_patch_preview_after_batch_mutation\.sql[\s\S]*\\ir 19072026_1816_cancel_refresh_supersede_finance_dirty\.sql/);
   assert.match(reassert, /\\ir 09082026_0826_pay_preview_candidate_build_summary_fragment\.sql/);
   assert.match(reassert, /\\ir 09082026_1128_banking_pay_operation_finish_post_draft_authority\.sql/);
 });

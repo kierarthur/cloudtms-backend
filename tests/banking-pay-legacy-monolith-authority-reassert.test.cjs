@@ -18,6 +18,9 @@ const targetedManifest = JSON.parse(fs.readFileSync(
 const criticalAuthorityFiles = [
   '07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql',
 ];
+const finalAuthorityFiles = [
+  '19072026_1816_cancel_refresh_supersede_finance_dirty.sql',
+];
 const incrementalReplayDependencies = [
   '21072026_1235_00b_import_correction_runtime_guards.sql',
 ];
@@ -64,6 +67,12 @@ test('legacy monolith changes force a complete later-authority replay', () => {
     if (!expectedFiles.includes(name)) expectedFiles.push(name);
   }
   expectedFiles.sort((left, right) => dateKey(left).localeCompare(dateKey(right)) || left.localeCompare(right));
+  for (const name of finalAuthorityFiles) {
+    assert.ok(laterFiles.includes(name), 'missing final authority file: ' + name);
+    const existingIndex = expectedFiles.indexOf(name);
+    if (existingIndex >= 0) expectedFiles.splice(existingIndex, 1);
+    expectedFiles.push(name);
+  }
 
   const includedFiles = [...reassert.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
     .map((match) => match[1]);

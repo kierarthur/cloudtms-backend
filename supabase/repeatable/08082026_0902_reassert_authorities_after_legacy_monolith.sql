@@ -51,3 +51,4 @@
 \ir 09082026_1128_banking_pay_operation_finish_post_draft_authority.sql
 \ir 09082026_1403_pay_payment_correction_selected_items_draft_scope.sql
 \ir 09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql
+\ir 19072026_1816_cancel_refresh_supersede_finance_dirty.sql
