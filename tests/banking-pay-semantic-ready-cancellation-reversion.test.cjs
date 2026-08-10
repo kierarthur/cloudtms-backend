@@ -269,6 +269,16 @@ test('Draft scope and allocation insertion both reject recovery-only or negative
   }
   assert.match(scopeSeed, /'source_publication_attestation'/);
   assert.match(scopeSeed, /'semantic_proof_digest'/);
+  assert.match(
+    scopeSeed,
+    /private\.pay_workbench_preview_effective_section_v1\(\s*preview_row\.section,\s*preview_row\.row_json\s*\) AS section/,
+    'Draft scope must freeze the certified effective recovery section, not its immutable physical partition',
+  );
+  assert.match(
+    allocationSeed,
+    /private\.pay_workbench_preview_effective_section_v1\(\s*backing_preview_row\.section,\s*backing_preview_row\.row_json\s*\) IS DISTINCT FROM/,
+    'Draft allocation must revalidate the same effective recovery section against its physical backing row',
+  );
 });
 
 test('Draft allocation expansion drops zero-value finance component rows before item insertion', () => {

@@ -555,7 +555,10 @@ BEGIN
       preview_row.row_key,
       preview_row.session_id,
       preview_row.candidate_id,
-      COALESCE(NULLIF(BTRIM(preview_row.section), ''), 'canonical_preview_lines') AS section,
+      private.pay_workbench_preview_effective_section_v1(
+        preview_row.section,
+        preview_row.row_json
+      ) AS section,
       preview_row.selection_state,
       preview_row.status AS table_status,
       COALESCE(preview_row.selected, false) AS table_selected,

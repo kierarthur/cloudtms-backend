@@ -42,7 +42,7 @@
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_scope_seed",
       "identity_arguments": "p_operation_id uuid, p_workbench_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb, p_pay_channel_scope text, p_same_week_paye_override_json jsonb",
-      "definition_sha256": "30b7554bbe4f6954a4b17bc5e579cbffd57f9fb2244535d7a4e83e79a72dc878",
+      "definition_sha256": "af153896bff3390441384368cbf02cfaa24e555c198adb553c12008e21e9a9f8",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -53,7 +53,7 @@
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_allocation_rows_seed",
       "identity_arguments": "p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "ef53289cc7f4e08855a536188a30d287e810695fb1c0a96195d86b6d2505004b",
+      "definition_sha256": "fe8011aeb87b83887579057bc1e63c2ea6a7c3c9fb95e77081b91c2a4f1afd8e",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

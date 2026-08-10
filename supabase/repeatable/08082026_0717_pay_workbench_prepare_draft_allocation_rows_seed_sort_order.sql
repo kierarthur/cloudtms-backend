@@ -324,7 +324,10 @@ BEGIN
         OR COALESCE(backing_preview_row.selected, false) IS NOT TRUE
         OR UPPER(BTRIM(COALESCE(backing_preview_row.selection_state, ''))) <> 'SELECTED'
         OR backing_preview_row.candidate_id IS DISTINCT FROM normalised_scope_lines_raw.candidate_id
-        OR COALESCE(NULLIF(BTRIM(backing_preview_row.section), ''), 'canonical_preview_lines') IS DISTINCT FROM COALESCE(NULLIF(BTRIM(normalised_scope_lines_raw.section), ''), 'canonical_preview_lines')
+        OR private.pay_workbench_preview_effective_section_v1(
+             backing_preview_row.section,
+             backing_preview_row.row_json
+           ) IS DISTINCT FROM COALESCE(NULLIF(BTRIM(normalised_scope_lines_raw.section), ''), 'canonical_preview_lines')
         OR NULLIF(BTRIM(backing_preview_row.row_key), '') IS DISTINCT FROM NULLIF(BTRIM(normalised_scope_lines_raw.row_key), '')
         OR (
           normalised_scope_lines_raw.finance_case_id IS NULL
@@ -378,7 +381,10 @@ BEGIN
         WHEN COALESCE(backing_preview_row.selected, false) IS NOT TRUE THEN 'ALLOCATION_BACKING_PREVIEW_ROW_NOT_SELECTED'
         WHEN UPPER(BTRIM(COALESCE(backing_preview_row.selection_state, ''))) <> 'SELECTED' THEN 'ALLOCATION_BACKING_PREVIEW_ROW_SELECTION_STATE_INVALID'
         WHEN backing_preview_row.candidate_id IS DISTINCT FROM normalised_scope_lines_raw.candidate_id THEN 'ALLOCATION_BACKING_PREVIEW_ROW_CANDIDATE_MISMATCH'
-        WHEN COALESCE(NULLIF(BTRIM(backing_preview_row.section), ''), 'canonical_preview_lines') IS DISTINCT FROM COALESCE(NULLIF(BTRIM(normalised_scope_lines_raw.section), ''), 'canonical_preview_lines') THEN 'ALLOCATION_BACKING_PREVIEW_ROW_SECTION_MISMATCH'
+        WHEN private.pay_workbench_preview_effective_section_v1(
+               backing_preview_row.section,
+               backing_preview_row.row_json
+             ) IS DISTINCT FROM COALESCE(NULLIF(BTRIM(normalised_scope_lines_raw.section), ''), 'canonical_preview_lines') THEN 'ALLOCATION_BACKING_PREVIEW_ROW_SECTION_MISMATCH'
         WHEN NULLIF(BTRIM(backing_preview_row.row_key), '') IS DISTINCT FROM NULLIF(BTRIM(normalised_scope_lines_raw.row_key), '') THEN 'ALLOCATION_BACKING_PREVIEW_ROW_KEY_MISMATCH'
         WHEN normalised_scope_lines_raw.finance_case_id IS NULL AND backing_preview_row.timesheet_id IS NULL THEN 'ALLOCATION_BACKING_PREVIEW_ROW_ECONOMIC_KEY_MISSING'
         WHEN normalised_scope_lines_raw.finance_case_id IS NULL AND backing_preview_row.timesheet_id IS DISTINCT FROM COALESCE(economic_key_rotation.canonical_timesheet_id, top_level_rotation.canonical_timesheet_id, normalised_scope_lines_raw.economic_key_timesheet_id, normalised_scope_lines_raw.top_level_timesheet_id) THEN 'ALLOCATION_BACKING_PREVIEW_ROW_TIMESHEET_MISMATCH'
