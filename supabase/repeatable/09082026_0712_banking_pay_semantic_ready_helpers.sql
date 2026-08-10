@@ -1550,17 +1550,39 @@ BEGIN
               =COALESCE(change_counter.seq,0)::text
         AND COALESCE((dirty_job.payload_json->>'policy_x_dirtying_only')::boolean,false)
         AND COALESCE((dirty_job.payload_json->>'economic_truth_mutation_allowed')::boolean,true) IS FALSE
-        AND pg_catalog.jsonb_typeof(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))='array'
-        AND pg_catalog.jsonb_array_length(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))>0
-        AND NOT EXISTS (
-          SELECT 1
-          FROM pg_catalog.jsonb_array_elements_text(
-            COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb)
-          ) AS dirty_reason(value)
-          WHERE pg_catalog.upper(pg_catalog.btrim(dirty_reason.value)) NOT IN (
-            'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
-            'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE',
-            'DIRTY_TRIGGER:PAY_BATCHES:UPDATE'
+        AND (
+          (
+            pg_catalog.jsonb_typeof(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))='array'
+            AND pg_catalog.jsonb_array_length(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))>0
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_catalog.jsonb_array_elements_text(
+                COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb)
+              ) AS dirty_reason(value)
+              WHERE pg_catalog.upper(pg_catalog.btrim(dirty_reason.value)) NOT IN (
+                'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
+                'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE',
+                'DIRTY_TRIGGER:PAY_BATCHES:UPDATE'
+              )
+            )
+          )
+          OR (
+            COALESCE(dirty_job.payload_json->>'correction_dirty_causal_contract_version','')
+              ='CORRECTION_OWNED_DIRTY_CAUSAL_V1'
+            AND COALESCE(
+              dirty_job.payload_json->'correction_dirty_contexts'
+                ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+                ->>'correction_request_id',''
+            )=p_correction_request_id::text
+            AND COALESCE(
+              dirty_job.payload_json->'correction_dirty_contexts'
+                ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+                ->>'pay_batch_id',''
+            )=request_row.pay_batch_id::text
+            AND COALESCE(dirty_job.payload_json->>'request_owned_scope_change_tx_token','')
+              =COALESCE(dirty_job.payload_json->>'scope_change_tx_token','')
+            AND COALESCE(dirty_job.payload_json->>'request_owned_scope_change_tx_token','')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           )
         )
       LIMIT 1
@@ -1909,6 +1931,8 @@ DECLARE
   v_fast_count integer := 0;
   v_mutation_guard jsonb := '{}'::jsonb;
   v_set_page_enabled boolean := false;
+  v_request_selection_json jsonb := '{}'::jsonb;
+  v_correction_dirty_candidate_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF p_correction_request_id IS NULL
      OR p_work_item_ids IS NULL
@@ -1927,8 +1951,9 @@ BEGIN
   ORDER BY setting.id
   LIMIT 1;
 
-  SELECT operation_row.id,batch_row.source_workbench_session_id,request_row.pay_batch_id
-  INTO v_operation_id,v_session_id,v_batch_id
+  SELECT operation_row.id,batch_row.source_workbench_session_id,
+         request_row.pay_batch_id,COALESCE(request_row.selection_json,'{}'::jsonb)
+  INTO v_operation_id,v_session_id,v_batch_id,v_request_selection_json
   FROM public.pay_payment_correction_requests AS request_row
   JOIN public.pay_batches AS batch_row ON batch_row.id=request_row.pay_batch_id
   JOIN public.banking_pay_operations AS operation_row
@@ -1938,6 +1963,42 @@ BEGIN
   WHERE request_row.id=p_correction_request_id
   ORDER BY operation_row.created_at_utc
   LIMIT 1;
+
+  -- This page is the exact financial mutation owner.  Establish causality in
+  -- the same transaction immediately before any cancellation DML so finance
+  -- triggers can retain ordinary dirty evidence without electing a competing
+  -- pre-boundary economic build.
+  SELECT COALESCE(
+    pg_catalog.array_agg(DISTINCT work_row.candidate_id ORDER BY work_row.candidate_id),
+    ARRAY[]::uuid[]
+  )
+  INTO v_correction_dirty_candidate_ids
+  FROM public.pay_payment_correction_work_items AS work_row
+  WHERE work_row.correction_request_id=p_correction_request_id
+    AND work_row.id=ANY(p_work_item_ids)
+    AND work_row.candidate_id IS NOT NULL;
+
+  IF v_operation_id IS NOT NULL
+     AND v_batch_id IS NOT NULL
+     AND pg_catalog.cardinality(v_correction_dirty_candidate_ids)>0 THEN
+    PERFORM private.pay_workbench_correction_dirty_context_set_v1(
+      p_correction_request_id:=p_correction_request_id,
+      p_pay_batch_id:=v_batch_id,
+      p_candidate_ids:=v_correction_dirty_candidate_ids,
+      p_lifecycle_phase:='FINANCIAL_PAGE_START',
+      p_policy_x_boundary:='POST_DRAFT_FROZEN_EVIDENCE',
+      p_pre_request_authorities_json:=COALESCE(
+        v_request_selection_json->'draft_overlay_fast_pre_request_authorities',
+        '{}'::jsonb
+      ),
+      p_operation_id:=v_operation_id,
+      p_work_item_id:=NULL::uuid,
+      p_options_json:=pg_catalog.jsonb_build_object(
+        'owner','pay_pre_bank_cancel_apply_work_page_v1',
+        'work_item_count',pg_catalog.cardinality(p_work_item_ids)
+      )
+    );
+  END IF;
 
   IF v_set_page_enabled
      AND v_operation_id IS NOT NULL AND v_session_id IS NOT NULL THEN

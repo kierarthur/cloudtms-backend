@@ -1,6 +1,11 @@
 -- Banking Pay bounded-scope V1.2.4: set-based financial transition adapter.
 -- Financial source triggers only identify exact impacted owners; they never run finance.
 
+-- The repository applies repeatables in UK date order.  Install the later-dated
+-- causal-context authority before any changed legacy caller is compiled so a
+-- clean database and an existing TEST database follow the same dependency order.
+\ir 10082026_2345_banking_pay_correction_owned_dirty_context.sql
+
 CREATE OR REPLACE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -23,6 +28,10 @@ DECLARE
   v_draft_operation_id uuid:=NULL::uuid;
   v_draft_phase text:=NULL::text;
   v_draft_context_token text:=NULL::text;
+  v_correction_dirty_contexts jsonb:='{}'::jsonb;
+  v_correction_context_count integer:=0;
+  v_impacted_candidate_count integer:=0;
+  v_scope_change_tx_token uuid:=NULL::uuid;
 BEGIN
   CREATE TEMP TABLE IF NOT EXISTS pg_temp._bpay_wb_transition_impacts_v1(
     relation_name text NOT NULL,
@@ -668,13 +677,56 @@ BEGIN
   ) AS impacted;
 
   IF COALESCE(cardinality(v_candidate_ids),0)>0 THEN
+    SELECT pg_catalog.count(DISTINCT candidate_id)::integer
+    INTO v_impacted_candidate_count
+    FROM pg_temp._bpay_wb_transition_impacts_v1;
+
+    -- Financial DML performed by the correction page remains genuine audit
+    -- evidence.  Where every impacted candidate belongs to the exact
+    -- transaction-local correction context, stamp (never suppress) that
+    -- causality so its durable dirty job can wait for route election.
+    IF pg_catalog.to_regclass('pg_temp._bpay_wb_correction_dirty_context_v1') IS NOT NULL THEN
+      EXECUTE $context$
+        SELECT COALESCE(
+                 pg_catalog.jsonb_object_agg(
+                   context_row.candidate_id::text,
+                   pg_catalog.to_jsonb(context_row)-'created_at_utc'
+                   ORDER BY context_row.candidate_id
+                 ),
+                 '{}'::jsonb
+               ),
+               pg_catalog.count(*)::integer
+        FROM pg_temp._bpay_wb_correction_dirty_context_v1 AS context_row
+        WHERE context_row.candidate_id=ANY($1)
+      $context$
+      INTO v_correction_dirty_contexts,v_correction_context_count
+      USING v_candidate_ids;
+
+      IF v_correction_context_count=v_impacted_candidate_count
+         AND v_correction_context_count>0 THEN
+        v_scope_change_tx_token:=public.pay_workbench_scope_change_tx_token_v1();
+      ELSE
+        v_correction_dirty_contexts:='{}'::jsonb;
+        v_scope_change_tx_token:=NULL::uuid;
+      END IF;
+    END IF;
+
     PERFORM private.pay_workbench_scope_invalidate_v1(
-      v_candidate_ids,v_timesheet_ids,v_reason,NULL,
+      v_candidate_ids,v_timesheet_ids,v_reason,v_scope_change_tx_token,
       jsonb_strip_nulls(jsonb_build_object(
         'source_relation',TG_TABLE_NAME,'source_operation',TG_OP,
         'draft_operation_id',v_draft_operation_id,
         'draft_phase',v_draft_phase,
-        'draft_context_token',v_draft_context_token
+        'draft_context_token',v_draft_context_token,
+        'correction_dirty_contexts',CASE
+          WHEN v_correction_dirty_contexts<>'{}'::jsonb
+            THEN v_correction_dirty_contexts ELSE NULL::jsonb END,
+        'request_owned_scope_change_tx_token',CASE
+          WHEN v_correction_dirty_contexts<>'{}'::jsonb
+            THEN v_scope_change_tx_token ELSE NULL::uuid END,
+        'correction_dirty_causal_contract_version',CASE
+          WHEN v_correction_dirty_contexts<>'{}'::jsonb
+            THEN 'CORRECTION_OWNED_DIRTY_CAUSAL_V1' ELSE NULL::text END
       ))
     );
   END IF;

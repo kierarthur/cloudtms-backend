@@ -237,7 +237,7 @@
       "schema": "public",
       "name": "pay_workbench_candidate_dirty_apply_job_process",
       "identity_arguments": "p_job_id uuid, p_limit integer",
-      "definition_sha256": "1ff14d72ea932f238ba117334a192d947589ccf095013bddbc4a575db0ea2f4e",
+      "definition_sha256": "69f11b2c098d51524131787bcb1327650a3a8a91c437927aaa02a1b7cd5bbbe9",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

@@ -23,6 +23,15 @@ DECLARE
   v_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_invalidation_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_scope_invalidation_result jsonb := '{}'::jsonb;
+  v_correction_dirty_contexts jsonb := '{}'::jsonb;
+  v_scope_change_tx_token uuid := NULL::uuid;
+  v_correction_request_id uuid := NULL::uuid;
+  v_correction_pay_batch_id uuid := NULL::uuid;
+  v_correction_operation_id uuid := NULL::uuid;
+  v_correction_request_status text := NULL::text;
+  v_correction_selection_json jsonb := '{}'::jsonb;
+  v_correction_plan_json jsonb := '{}'::jsonb;
+  v_correction_lifecycle_phase text := NULL::text;
 BEGIN
 
   PERFORM public._temp_diag_log(
@@ -633,11 +642,127 @@ BEGIN
     SELECT array_agg(candidate_id ORDER BY candidate_id,timesheet_id),
            array_agg(timesheet_id ORDER BY candidate_id,timesheet_id)
     INTO v_candidate_ids,v_invalidation_timesheet_ids FROM resolved;
+
+    -- The correction-request transition relation is the strongest causal
+    -- authority available: it proves that this exact statement, rather than a
+    -- caller hint, caused the summary refresh.  Establish the candidate-keyed
+    -- transaction-local envelope here.  The operation is intentionally
+    -- optional on INSERT because request_start creates it immediately after the
+    -- request row; the asynchronous dirty job cannot run before that commit.
+    IF TG_TABLE_NAME='pay_payment_correction_requests'
+       AND TG_OP IN ('INSERT','UPDATE')
+       AND pg_catalog.cardinality(COALESCE(v_candidate_ids,ARRAY[]::uuid[]))>0 THEN
+      IF TG_OP='INSERT' THEN
+        SELECT request_transition.id,request_transition.pay_batch_id,
+               request_transition.status,
+               COALESCE(request_transition.selection_json,'{}'::jsonb),
+               COALESCE(request_transition.plan_json,'{}'::jsonb)
+        INTO v_correction_request_id,v_correction_pay_batch_id,
+             v_correction_request_status,v_correction_selection_json,
+             v_correction_plan_json
+        FROM new_rows AS request_transition
+        WHERE request_transition.id IS NOT NULL
+        ORDER BY request_transition.id
+        LIMIT 1;
+      ELSE
+        SELECT new_request.id,new_request.pay_batch_id,new_request.status,
+               COALESCE(new_request.selection_json,'{}'::jsonb),
+               COALESCE(new_request.plan_json,'{}'::jsonb)
+        INTO v_correction_request_id,v_correction_pay_batch_id,
+             v_correction_request_status,v_correction_selection_json,
+             v_correction_plan_json
+        FROM new_rows AS new_request
+        JOIN old_rows AS old_request ON old_request.id=new_request.id
+        WHERE new_request.pay_batch_id IS DISTINCT FROM old_request.pay_batch_id
+           OR new_request.status IS DISTINCT FROM old_request.status
+        ORDER BY new_request.id
+        LIMIT 1;
+      END IF;
+
+      IF v_correction_request_id IS NOT NULL
+         AND v_correction_pay_batch_id IS NOT NULL THEN
+        SELECT operation_row.id
+        INTO v_correction_operation_id
+        FROM public.banking_pay_operations AS operation_row
+        WHERE operation_row.operation_type='PAYMENT_CORRECTION'
+          AND operation_row.input_json->>'correction_request_id'
+                =v_correction_request_id::text
+        ORDER BY operation_row.created_at_utc DESC,operation_row.id DESC
+        LIMIT 1;
+
+        v_correction_lifecycle_phase:=CASE
+          WHEN pg_catalog.upper(pg_catalog.btrim(COALESCE(
+                 v_correction_request_status,''
+               ))) IN ('AUTHORISED','EXPANDED','PROCESSING','APPLIED','APPLIED_WITH_BLOCKERS')
+            THEN 'REQUEST_START'
+          ELSE 'REQUEST_PREPARE'
+        END;
+
+        PERFORM private.pay_workbench_correction_dirty_context_set_v1(
+          p_correction_request_id:=v_correction_request_id,
+          p_pay_batch_id:=v_correction_pay_batch_id,
+          p_candidate_ids:=v_candidate_ids,
+          p_lifecycle_phase:=v_correction_lifecycle_phase,
+          p_policy_x_boundary:='POST_DRAFT_FROZEN_EVIDENCE',
+          p_pre_request_authorities_json:=COALESCE(
+            v_correction_selection_json->'draft_overlay_fast_pre_request_authorities',
+            '{}'::jsonb
+          ),
+          p_operation_id:=v_correction_operation_id,
+          p_work_item_id:=NULL::uuid,
+          p_options_json:=pg_catalog.jsonb_build_object(
+            'trigger_table',TG_TABLE_NAME,
+            'trigger_operation',TG_OP,
+            'request_status',v_correction_request_status,
+            'requested_action',v_correction_plan_json->>'requested_action'
+          )
+        );
+      END IF;
+    END IF;
+
+    -- A correction request may affect a subset of a statement.  Copy its exact
+    -- candidate-keyed causal envelope into the durable invalidation payload,
+    -- while retaining every other candidate in the normal invalidation.  A
+    -- mixed statement must never suppress an unrelated economic change.
+    IF pg_catalog.to_regclass('pg_temp._bpay_wb_correction_dirty_context_v1') IS NOT NULL
+       AND pg_catalog.cardinality(COALESCE(v_candidate_ids,ARRAY[]::uuid[]))>0 THEN
+      EXECUTE $context$
+        SELECT COALESCE(
+          pg_catalog.jsonb_object_agg(
+            context_row.candidate_id::text,
+            pg_catalog.to_jsonb(context_row)-'created_at_utc'
+            ORDER BY context_row.candidate_id
+          ),
+          '{}'::jsonb
+        )
+        FROM pg_temp._bpay_wb_correction_dirty_context_v1 AS context_row
+        WHERE context_row.candidate_id=ANY($1)
+      $context$
+      INTO v_correction_dirty_contexts
+      USING v_candidate_ids;
+
+      IF v_correction_dirty_contexts<>'{}'::jsonb THEN
+        v_scope_change_tx_token:=public.pay_workbench_scope_change_tx_token_v1();
+      END IF;
+    END IF;
+
     IF cardinality(COALESCE(v_candidate_ids,ARRAY[]::uuid[]))>0 THEN
       v_scope_invalidation_result:=private.pay_workbench_scope_invalidate_v1(
         v_candidate_ids,v_invalidation_timesheet_ids,
-        'DIRTY_TRIGGER:'||upper(TG_TABLE_NAME)||':'||TG_OP,NULL,
-        jsonb_build_object('trigger_table',TG_TABLE_NAME,'trigger_operation',TG_OP)
+        'DIRTY_TRIGGER:'||upper(TG_TABLE_NAME)||':'||TG_OP,v_scope_change_tx_token,
+        jsonb_strip_nulls(jsonb_build_object(
+          'trigger_table',TG_TABLE_NAME,
+          'trigger_operation',TG_OP,
+          'correction_dirty_contexts',CASE
+            WHEN v_correction_dirty_contexts<>'{}'::jsonb
+              THEN v_correction_dirty_contexts ELSE NULL::jsonb END,
+          'request_owned_scope_change_tx_token',CASE
+            WHEN v_correction_dirty_contexts<>'{}'::jsonb
+              THEN v_scope_change_tx_token ELSE NULL::uuid END,
+          'correction_dirty_causal_contract_version',CASE
+            WHEN v_correction_dirty_contexts<>'{}'::jsonb
+              THEN 'CORRECTION_OWNED_DIRTY_CAUSAL_V1' ELSE NULL::text END
+        ))
       );
     END IF;
   END IF;

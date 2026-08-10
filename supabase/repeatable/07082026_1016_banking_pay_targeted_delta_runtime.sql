@@ -1746,6 +1746,10 @@ DECLARE
   v_request_owned_dirty_request_id uuid := NULL::uuid;
   v_request_owned_dirty_operation_id uuid := NULL::uuid;
   v_request_owned_dirty_operation_phase text := NULL::text;
+  v_request_owned_dirty_context jsonb := '{}'::jsonb;
+  v_request_owned_dirty_context_digest text := NULL::text;
+  v_request_owned_dirty_deferral_enabled boolean := false;
+  v_request_owned_dirty_delay interval := interval '5 seconds';
 BEGIN
   SELECT job_row.*
   INTO v_job
@@ -1994,69 +1998,179 @@ BEGIN
   v_processed_source_change_seq := GREATEST(COALESCE(v_payload_seq, 0), COALESCE(v_live_seq, 0));
 
   -- A correction request transition is orchestration evidence, not economic
-  -- truth.  The real financial owner will advance candidate authority and
-  -- elect the Workbench route after its transaction commits.  Hold only the
-  -- exact request-owned dirty job proved and frozen by request_start; mixed
-  -- or unrelated dirty evidence continues through the normal classifier.
-  IF LOWER(BTRIM(COALESCE(v_payload->>'trigger_table', ''))) = 'pay_payment_correction_requests'
-     AND LOWER(BTRIM(COALESCE(v_payload->>'policy_x_dirtying_only', 'false'))) IN ('true','t','1','yes','y','on')
-     AND LOWER(BTRIM(COALESCE(v_payload->>'economic_truth_mutation_allowed', 'false'))) NOT IN ('true','t','1','yes','y','on')
+  -- truth.  Validate the transaction-stamped causal envelope before consulting
+  -- the durable correction lifecycle.  The latest scope token must be the
+  -- request-owned token; any later unrelated invalidation changes that token
+  -- and immediately falls through to the ordinary classifier.
+  SELECT COALESCE(
+    (pg_catalog.to_jsonb(settings_row)
+      ->>'banking_pay_correction_request_dirty_deferral_v1_enabled')::boolean,
+    false
+  )
+  INTO v_request_owned_dirty_deferral_enabled
+  FROM public.settings_defaults AS settings_row
+  ORDER BY settings_row.id
+  LIMIT 1;
+
+  v_request_owned_dirty_context:=CASE
+    WHEN pg_catalog.jsonb_typeof(v_payload->'correction_dirty_contexts')='object'
+      AND pg_catalog.jsonb_typeof(
+        v_payload->'correction_dirty_contexts'->v_candidate_id::text
+      )='object'
+      THEN v_payload->'correction_dirty_contexts'->v_candidate_id::text
+    ELSE '{}'::jsonb
+  END;
+
+  IF COALESCE(v_request_owned_dirty_deferral_enabled,false)
+     AND COALESCE(v_request_owned_dirty_context->>'contract_version','')
+           ='CORRECTION_OWNED_DIRTY_CAUSAL_V1'
+     AND COALESCE(v_request_owned_dirty_context->>'candidate_id','')=v_candidate_id::text
+     AND COALESCE(v_request_owned_dirty_context->>'correction_request_id','')
+           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     AND COALESCE(v_request_owned_dirty_context->>'pay_batch_id','')
+           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     AND COALESCE(v_request_owned_dirty_context->>'lifecycle_phase','') IN (
+       'REQUEST_PREPARE','REQUEST_START','FINANCIAL_PAGE_START',
+       'FINANCIAL_PAGE_APPLIED','FINANCIAL_TERMINAL'
+     )
+     AND COALESCE(v_request_owned_dirty_context->>'policy_x_boundary','') IN (
+       'POST_DRAFT_FROZEN_EVIDENCE','PRE_DRAFT_LIVE_TRUTH'
+     )
+     AND COALESCE(v_request_owned_dirty_context->>'pre_request_source_change_seq','')
+           ~ '^[0-9]{1,18}$'
+     AND COALESCE(v_request_owned_dirty_context->>'pre_request_dirty_generation','')
+           ~ '^[0-9]{1,18}$'
+     AND COALESCE(v_payload->>'request_owned_scope_change_tx_token','')
+           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     AND COALESCE(v_payload->>'scope_change_tx_token','')
+           =COALESCE(v_payload->>'request_owned_scope_change_tx_token','')
      AND (
-       (
-         jsonb_typeof(v_payload->'reasons') = 'array'
-         AND jsonb_array_length(v_payload->'reasons') > 0
-         AND NOT EXISTS (
-           SELECT 1
-           FROM jsonb_array_elements_text(v_payload->'reasons') AS dirty_reason(reason_text)
-           WHERE UPPER(BTRIM(dirty_reason.reason_text)) NOT IN (
+       v_job.scope_change_tx_token IS NULL
+       OR v_job.scope_change_tx_token::text
+            =COALESCE(v_payload->>'request_owned_scope_change_tx_token','')
+     )
+     AND LOWER(BTRIM(COALESCE(v_payload->>'policy_x_dirtying_only','false')))
+           IN ('true','t','1','yes','y','on')
+     AND LOWER(BTRIM(COALESCE(v_payload->>'economic_truth_mutation_allowed','false')))
+           NOT IN ('true','t','1','yes','y','on') THEN
+    v_request_owned_dirty_context_digest:=pg_catalog.encode(extensions.digest(
+      pg_catalog.convert_to(
+        'CORRECTION_OWNED_DIRTY_CAUSAL_V1'||'|'||
+        COALESCE(v_request_owned_dirty_context->>'correction_request_id','')||'|'||
+        COALESCE(v_request_owned_dirty_context->>'correction_operation_id','')||'|'||
+        COALESCE(v_request_owned_dirty_context->>'correction_work_item_id','')||'|'||
+        COALESCE(v_request_owned_dirty_context->>'pay_batch_id','')||'|'||
+        v_candidate_id::text||'|'||
+        COALESCE(v_request_owned_dirty_context->>'lifecycle_phase','')||'|'||
+        COALESCE(v_request_owned_dirty_context->>'policy_x_boundary','')||'|'||
+        COALESCE(v_request_owned_dirty_context->>'pre_request_source_change_seq','')||'|'||
+        COALESCE(v_request_owned_dirty_context->>'pre_request_dirty_generation','')||'|'||
+        COALESCE(v_request_owned_dirty_context->>'pre_request_fence_digest',''),
+        'UTF8'
+      ),
+      'sha256'
+    ),'hex');
+
+    IF v_request_owned_dirty_context_digest
+         =COALESCE(v_request_owned_dirty_context->>'context_digest','') THEN
+      SELECT request_row.id,correction_operation.id,correction_operation.phase,
+             CASE
+               WHEN correction_operation.status='WAITING_AUTHORISATION'
+                 OR correction_operation.phase='AWAITING_REAUTHENTICATION'
+                 OR request_row.status IN ('PLANNING','PLANNED','REQUESTED','AWAITING_AUTHORISATION')
+                 THEN interval '30 seconds'
+               ELSE interval '5 seconds'
+             END
+      INTO v_request_owned_dirty_request_id,
+           v_request_owned_dirty_operation_id,
+           v_request_owned_dirty_operation_phase,
+           v_request_owned_dirty_delay
+      FROM public.pay_payment_correction_requests AS request_row
+      JOIN public.banking_pay_operations AS correction_operation
+        ON correction_operation.operation_type='PAYMENT_CORRECTION'
+       AND correction_operation.input_json->>'correction_request_id'=request_row.id::text
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.pay_batch_id=request_row.pay_batch_id
+       AND batch_candidate.candidate_id=v_candidate_id
+      WHERE request_row.id=(v_request_owned_dirty_context->>'correction_request_id')::uuid
+        AND request_row.pay_batch_id=(v_request_owned_dirty_context->>'pay_batch_id')::uuid
+        AND correction_operation.status IN ('QUEUED','RUNNING','WAITING_AUTHORISATION')
+        AND correction_operation.phase<>'COMPLETE'
+        AND request_row.status NOT IN ('CANCELLED','FAILED','REJECTED')
+        AND request_row.created_at_utc<=v_job.created_at_utc
+        AND (
+          COALESCE(v_request_owned_dirty_context->>'correction_operation_id','')=''
+          OR correction_operation.id::text
+               =v_request_owned_dirty_context->>'correction_operation_id'
+        )
+      ORDER BY correction_operation.created_at_utc DESC
+      LIMIT 1;
+    END IF;
+  ELSE
+    -- Compatibility fallback while the new setting is disabled.  This is the
+    -- prior retrospective proof and is deliberately retained for rollback.
+    IF LOWER(BTRIM(COALESCE(v_payload->>'trigger_table','')))
+          ='pay_payment_correction_requests'
+       AND LOWER(BTRIM(COALESCE(v_payload->>'policy_x_dirtying_only','false')))
+             IN ('true','t','1','yes','y','on')
+       AND LOWER(BTRIM(COALESCE(v_payload->>'economic_truth_mutation_allowed','false')))
+             NOT IN ('true','t','1','yes','y','on')
+       AND (
+         (
+           jsonb_typeof(v_payload->'reasons')='array'
+           AND jsonb_array_length(v_payload->'reasons')>0
+           AND NOT EXISTS (
+             SELECT 1
+             FROM jsonb_array_elements_text(v_payload->'reasons') AS dirty_reason(reason_text)
+             WHERE UPPER(BTRIM(dirty_reason.reason_text)) NOT IN (
+               'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
+               'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE'
+             )
+           )
+         )
+         OR (
+           jsonb_typeof(v_payload->'reasons') IS DISTINCT FROM 'array'
+           AND UPPER(BTRIM(COALESCE(v_payload->>'reason_latest',v_payload->>'reason',''))) IN (
              'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
              'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE'
            )
          )
-       )
-       OR (
-         jsonb_typeof(v_payload->'reasons') IS DISTINCT FROM 'array'
-         AND UPPER(BTRIM(COALESCE(v_payload->>'reason_latest', v_payload->>'reason', ''))) IN (
-           'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
-           'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE'
-         )
-       )
-     ) THEN
-    SELECT request_row.id, correction_operation.id, correction_operation.phase
-    INTO v_request_owned_dirty_request_id,
-         v_request_owned_dirty_operation_id,
-         v_request_owned_dirty_operation_phase
-    FROM public.banking_pay_operations AS correction_operation
-    JOIN public.pay_payment_correction_requests AS request_row
-      ON request_row.id = CASE
-          WHEN COALESCE(correction_operation.input_json->>'correction_request_id', '')
-                 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-            THEN (correction_operation.input_json->>'correction_request_id')::uuid
-          ELSE NULL::uuid
-        END
-    JOIN public.pay_payment_correction_request_candidates AS request_candidate
-      ON request_candidate.correction_request_id = request_row.id
-    JOIN public.pay_batch_candidates AS batch_candidate
-      ON batch_candidate.id = request_candidate.pay_batch_candidate_id
-     AND batch_candidate.candidate_id = v_candidate_id
-    WHERE correction_operation.operation_type = 'PAYMENT_CORRECTION'
-      AND correction_operation.status IN ('QUEUED','RUNNING')
-      AND correction_operation.phase NOT IN ('REFRESH_WORKBENCH','COMPLETE')
-      AND correction_operation.input_json->'draft_overlay_fast_start_authorities'
-            ->v_candidate_id::text->>'request_owned_dirty_job_id' = p_job_id::text
-      AND request_row.status IN (
-        'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING'
-      )
-      AND request_row.created_at_utc <= v_job.created_at_utc
-    ORDER BY request_row.created_at_utc DESC, correction_operation.created_at_utc DESC
-    LIMIT 1;
+       ) THEN
+      SELECT request_row.id,correction_operation.id,correction_operation.phase
+      INTO v_request_owned_dirty_request_id,
+           v_request_owned_dirty_operation_id,
+           v_request_owned_dirty_operation_phase
+      FROM public.banking_pay_operations AS correction_operation
+      JOIN public.pay_payment_correction_requests AS request_row
+        ON request_row.id=CASE
+          WHEN COALESCE(correction_operation.input_json->>'correction_request_id','')
+            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (correction_operation.input_json->>'correction_request_id')::uuid
+          ELSE NULL::uuid END
+      JOIN public.pay_payment_correction_request_candidates AS request_candidate
+        ON request_candidate.correction_request_id=request_row.id
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.id=request_candidate.pay_batch_candidate_id
+       AND batch_candidate.candidate_id=v_candidate_id
+      WHERE correction_operation.operation_type='PAYMENT_CORRECTION'
+        AND correction_operation.status IN ('QUEUED','RUNNING')
+        AND correction_operation.phase NOT IN ('REFRESH_WORKBENCH','COMPLETE')
+        AND correction_operation.input_json->'draft_overlay_fast_start_authorities'
+              ->v_candidate_id::text->>'request_owned_dirty_job_id'=p_job_id::text
+        AND request_row.status IN (
+          'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING'
+        )
+        AND request_row.created_at_utc<=v_job.created_at_utc
+      ORDER BY request_row.created_at_utc DESC,correction_operation.created_at_utc DESC
+      LIMIT 1;
+    END IF;
   END IF;
 
   IF v_request_owned_dirty_request_id IS NOT NULL THEN
     UPDATE public.banking_pay_workbench_jobs AS delayed_job
     SET status = 'QUEUED',
         attempt_count = GREATEST(COALESCE(delayed_job.attempt_count, 0) - 1, 0),
-        run_at_utc = GREATEST(COALESCE(delayed_job.run_at_utc, v_now), v_now + interval '5 seconds'),
+        run_at_utc = GREATEST(COALESCE(delayed_job.run_at_utc, v_now), v_now + v_request_owned_dirty_delay),
         started_at_utc = NULL,
         updated_at_utc = v_now,
         payload_json = public._pay_workbench_dirty_payload_merge(
@@ -2067,6 +2181,8 @@ BEGIN
             'correction_request_id', v_request_owned_dirty_request_id::text,
             'correction_operation_id', v_request_owned_dirty_operation_id::text,
             'correction_operation_phase', v_request_owned_dirty_operation_phase,
+            'correction_dirty_context_digest', v_request_owned_dirty_context->>'context_digest',
+            'request_owned_scope_change_tx_token', v_payload->>'request_owned_scope_change_tx_token',
             'request_boundary_delayed_at_utc', v_now::text,
             'dirty_apply_row_marking_applied', false,
             'dirty_marking_skipped', true,
@@ -2092,6 +2208,8 @@ BEGIN
       'correction_request_id', v_request_owned_dirty_request_id::text,
       'correction_operation_id', v_request_owned_dirty_operation_id::text,
       'correction_operation_phase', v_request_owned_dirty_operation_phase,
+      'correction_dirty_context_digest', v_request_owned_dirty_context->>'context_digest',
+      'request_owned_scope_change_tx_token', v_payload->>'request_owned_scope_change_tx_token',
       'dirty_apply_row_marking_applied', false,
       'dirty_marking_skipped', true,
       'session_progress_dirtying_skipped', true,
