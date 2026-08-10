@@ -208,6 +208,24 @@ begin
     week_ending_date,idempotency_key
   ) values(v_qr_workflow,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','PAPER',
     'AWAITING_PAPER_RETURN',1,v_contract,v_qr_week,v_qr,v_qr,'2026-08-29','qr-old-workflow');
+  -- A PAPER workflow that has reached AWAITING_PAPER_RETURN owns an immutable
+  -- delivery receipt. Route replacement must retire that exact receipt and
+  -- invalidate the QR source proved by its context/hash, rather than infer an
+  -- owner from the workflow's mutable target.
+  insert into public.mail_outbox(
+    id,type,"to",subject,attachments,status,created_at_utc,context_kind,context_id,
+    scheduled_for_utc,next_attempt_at_utc,reference,payment_scope_json
+  ) values(
+    gen_random_uuid(),'TIMESHEET_QR','final-route@example.test','Issued paper pack',
+    jsonb_build_array(jsonb_build_object('r2_key','final-qr/issued-pack.pdf')),
+    'QUEUED',now(),'timesheets',v_qr,now(),now(),'final-route-issued-pack',
+    jsonb_build_object(
+      'candidate_workflow_id',v_qr_workflow,
+      'candidate_workflow_generation',1,
+      'qr_token_hash',encode(extensions.digest(
+        convert_to('old-qr-token','UTF8'),'sha256'),'hex')
+    )
+  );
   update public.timesheets set candidate_workflow_id=v_qr_workflow,
     candidate_workflow_generation=1 where timesheet_id=v_qr;
   v_context:=public.timesheet_route_version_preview_v1(v_qr,'REISSUE_QR');

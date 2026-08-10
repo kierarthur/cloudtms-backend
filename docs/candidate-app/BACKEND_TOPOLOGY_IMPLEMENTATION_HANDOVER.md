@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 10 August 2026
-Status: final Candidate broker/private API authority correction published and deployed to TEST for independent API-freeze audit. This document is current through version-aware rejection projection onto replacement rows, active-replacement precedence, finalised PAPER artefact-generation retirement and mail-lease fencing, in addition to finalised-workflow exact-target rejection, separate finalised-expense anchor isolation, explicit Supabase pgcrypto namespace resolution, target-or-anchor pre-finalisation rejection, generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
+Status: current Candidate broker/private API authority correction prepared for authorised TEST publication/deployment and independent API-freeze audit. This document is current through monotonic replacement-family rejection projection, current-version expense-anchor continuity, scoped hours/expense recovery arrays, immutable mail-receipt QR-source authority for finalised separate-expense PAPER, finalised PAPER artefact-generation retirement and mail-lease fencing, finalised-workflow exact-target rejection, explicit Supabase pgcrypto namespace resolution, target-or-anchor pre-finalisation rejection, generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
 
 ## Executive result
 
@@ -48,6 +48,19 @@ Acceptance evidence is 19/19 SQL runtime/concurrency suites on PostgreSQL 17.6 a
 - non-sent obsolete PAPER mail is retained but retired, `PAPER_PACK_READY` notification/deep-link authority is dismissed and obsoleted, and already `SENT` mail remains immutable history;
 - QR token/document authority is invalidated through the existing QR refusal owner, whose evidence update now qualifies its table columns so the real rejection route is executable;
 - rejection replay creates no second version, no duplicate notification and no repeated generation transition.
+
+## Rejection monotonicity, anchor-family continuity and distinct PAPER QR ownership
+
+- a rejection is actionable only until a later workflow of the same candidate/contract/week and HOURS-or-EXPENSES claim family advances into draft, submission, approval, received, finalised or refused lifecycle;
+- a later `FINALISED` workflow suppresses the historical rejection and permits the canonical current processing state to win; a later `REFUSED` workflow exposes the current refusal rather than resurrecting the prior office rejection;
+- immutable workflow history remains available, but only unresolved rejections receive a resubmission action;
+- list and detail responses return deterministic scoped `rejections` arrays, allowing independent hours and expense recovery actions to coexist without one `LIMIT 1` choice hiding the other;
+- historical workflow anchors and expense-carrier parents resolve by stable booking/version identity to exactly one current same-candidate/same-contract/same-week worked row. A finalised separate expense remains overlaid beneath H2 after hours H1 is rejected and rotated to H2;
+- `_candidate_paper_delivery_retire_v1` derives the QR source from exact workflow-generation-bound mail context and token hash. It does not use the workflow's mutable final expense-carrier target as the QR owner;
+- all bound delivery rows must agree on source and live token hash, provider leases block before mutation, and rejection requires a durable receipt proving the source token was invalidated or already absent before the economic target rotates;
+- executable PostgreSQL tests cover `WORKER_DRAFT → FINALISED → REFUSED`, simultaneous hours/expense rejection scopes, H1→H2 expense visibility, and separate-expense PAPER where H1 owns the issued QR token but E1 is the rejected target.
+
+No table, public Candidate RPC, HTTP route, policy or economic owner was added or changed.
 
 ## Final PAPER generation-retirement closure
 
@@ -275,26 +288,22 @@ Implemented:
 | Verification | Result |
 |---|---:|
 | Changed/new JavaScript syntax | PASS |
-| Focused Candidate/backend/broker/DB-contract/PAPER tests | 111 passed, 0 failed |
+| Focused Candidate/backend/broker/DB-contract/PAPER tests | 112 passed, 0 failed |
 | Complete backend test suite | 445 passed, 0 failed |
-| PostgreSQL 17.6 runtime/concurrency suites | 18 passed, 0 failed |
-| PostgreSQL 18.1 runtime/concurrency suites | 18 passed, 0 failed |
+| PostgreSQL 17.6 runtime/concurrency suites | 19 passed, 0 failed |
+| PostgreSQL 18.1 runtime/concurrency suites | 19 passed, 0 failed |
 | Candidate broker Wrangler dry run | PASS |
 | Private Candidate API Wrangler dry run | PASS |
 | Normal TEST backend Wrangler dry run | PASS |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
-| GitHub TEST database migration workflow `31423092836` | PASS |
-| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31422972982` | PASS |
-| Public Candidate broker health/readiness | 200 / 200 |
-| Normal TEST backend health/readiness | 200 / 200 |
-| Direct public Candidate route on normal backend | 404, as required |
+| GitHub TEST database migration workflow for this revision | PENDING PUBLICATION |
+| GitHub exact PostgreSQL 17.6/18.1 matrix workflow for this revision | PENDING PUBLICATION |
+| Public Candidate broker health/readiness after this revision | PENDING DEPLOYMENT |
+| Normal TEST backend health/readiness after this revision | PENDING DEPLOYMENT |
+| Direct public Candidate route on normal backend after this revision | PENDING DEPLOYMENT |
 
-The pre-deployment dry runs and final deployments used repository-installed Wrangler 4.43.0. Active TEST deployment identities at handover generation are:
-
-- normal TEST backend: `89f4a37d-ba1e-4519-816c-11c525132a3d`;
-- private Candidate API: `5cdf47c5-87aa-4166-be51-225db68a2f87`;
-- public Candidate broker: `e677ec46-1068-483c-96a4-49d63dbf5771`.
+The pre-deployment dry runs used repository-installed Wrangler 4.43.0. Exact active TEST deployment identities for this revision will be inserted only after the authorised publish/install/deploy gate completes.
 
 The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
@@ -337,10 +346,14 @@ Please verify, function by function, including the final authority seams:
 33. finalised hours, combined and separate-expense workflows reject when their exact target is rejected, while a separate finalised expense workflow survives rejection of its anchor hours;
 34. finalised approval/component artefacts close on the frozen pre-finalisation generation, and rejection replay cannot rotate or notify twice;
 35. authorised finalised targets still require Unauthorise first and paid/invoiced/protected history still blocks rejection.
+36. a replacement reaching `FINALISED` or `REFUSED` cannot make its historical office rejection actionable again;
+37. an immutable H1 anchor resolves to current H2 so a preserved finalised separate expense remains visible and overlaid without an anchor conflict;
+38. independent unresolved HOURS and EXPENSES rejections are returned together with their distinct server-owned recovery actions;
+39. finalised `CONTRACT_EXPENSE` PAPER derives the QR source from its immutable delivery receipt, invalidates H1, rotates E1, and fails atomically if source/hash/lease proof is incomplete.
 
 ## Remaining delivery sequence after independent GO
 
-1. independently audit runtime commit `0b847735160ba8b67ca3de87911ff8555c865330`, verifier commit `9361cfe34d72308530f899a7c34a124aa8c7f569`, the deployed TEST services and this handover manifest;
+1. independently audit the exact runtime/evidence commits, installed TEST repeatable hashes, deployed TEST service versions and latest-only handover manifest recorded after this revision's rollout;
 2. keep Candidate feature flags false until the coordinated synthetic TEST fixtures and current CloudTMS frontend are ready;
 3. implement the approved CloudTMS frontend changes, including one shared W01–W13 renderer;
 4. independently verify and freeze the OpenAPI contract after frontend acceptance;
@@ -350,14 +363,14 @@ Please verify, function by function, including the final authority seams:
 
 ## Safety and provenance
 
-- Database mutation or migration: the explicitly authorised TEST migration workflow `31423092836` installed the approved latest definitions and workflow `31422972982` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
+- Database mutation or migration: pending the explicitly authorised repository safe-migration workflow for this revision. Local clean exact-version PostgreSQL 17.6/18.1 installs already pass; no Candidate business data was created or changed by local verification.
 - Candidate/manager workflow mutation: none.
 - R2 write/delete: none.
 - Email or push sent: none.
-- Normal TEST Worker deployed: yes, explicitly authorised; TEST only.
-- Private/broker Worker deployed: yes, explicitly authorised; TEST only.
+- Normal TEST Worker deployed: prior dormant revision remains active; this revision pending explicitly authorised TEST rollout.
+- Private/broker Worker deployed: prior dormant revision remains active; this revision pending explicitly authorised TEST rollout.
 - Production accessed or deployed: no.
-- Commit/push: runtime backend commit `0b847735160ba8b67ca3de87911ff8555c865330` and verifier alignment `9361cfe34d72308530f899a7c34a124aa8c7f569` were published directly to `origin/test`; the subsequent plan/evidence update is documentation-only; no PR.
+- Commit/push: pending for this revision; publication will be directly to `origin/test` after the deployment-lane recheck; no PR.
 - Deployment note: all three TEST Workers were deployed only after the repository safe-migration and exact PostgreSQL matrix gates completed. The normal backend deployment used the explicit `--env test` selector. No production or unrelated Worker was deployed.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.

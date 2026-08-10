@@ -54,14 +54,20 @@ as $function$
 declare
   v_workflow public.candidate_submission_workflows%rowtype;
   v_mail public.mail_outbox%rowtype;
-  v_timesheet_id uuid;
+  v_qr_source public.timesheets%rowtype;
+  v_qr_current public.timesheets%rowtype;
+  v_rejected_target_timesheet_id uuid;
+  v_qr_source_timesheet_id uuid;
   v_delivery_generation integer;
   v_reason text:=upper(btrim(coalesce(p_reason_code,'')));
   v_qr_token_hash text;
   v_mail_count integer:=0;
+  v_qr_token_hash_missing_count integer:=0;
   v_mail_retired_count integer:=0;
   v_notification_count integer:=0;
   v_qr_invalidated boolean:=false;
+  v_qr_already_invalidated boolean:=false;
+  v_current_source_count integer:=0;
 begin
   if p_workflow_id is null or coalesce(p_expected_generation,0)<1 or v_reason='' then
     raise exception 'CANDIDATE_PAPER_RETIREMENT_CONTEXT_INVALID' using errcode='22023';
@@ -94,8 +100,10 @@ begin
     else v_workflow.generation
   end;
 
-  v_timesheet_id:=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id);
-  if v_timesheet_id is null then
+  v_rejected_target_timesheet_id:=coalesce(
+    v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id
+  );
+  if v_rejected_target_timesheet_id is null then
     raise exception 'CANDIDATE_PAPER_TIMESHEET_NOT_READY' using errcode='55000';
   end if;
 
@@ -113,6 +121,24 @@ begin
     for update
   loop
     v_mail_count:=v_mail_count+1;
+    if v_mail.context_id is null then
+      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'reason','MAIL_CONTEXT_MISSING'
+        )::text;
+    end if;
+    if v_qr_source_timesheet_id is null then
+      v_qr_source_timesheet_id:=v_mail.context_id;
+    elsif v_qr_source_timesheet_id<>v_mail.context_id then
+      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'reason','MULTIPLE_MAIL_CONTEXTS'
+        )::text;
+    end if;
     if v_mail.status<>'SENT'
        and nullif(btrim(coalesce(v_mail.attempt_lease_token,'')),'') is not null
        and (v_mail.attempt_lease_expires_at_utc is null
@@ -125,11 +151,95 @@ begin
           'mail_outbox_id',v_mail.id
         )::text;
     end if;
-    if v_qr_token_hash is null
-       and lower(coalesce(v_mail.payment_scope_json->>'qr_token_hash','')) ~ '^[0-9a-f]{64}$' then
-      v_qr_token_hash:=lower(v_mail.payment_scope_json->>'qr_token_hash');
+    if nullif(btrim(coalesce(v_mail.payment_scope_json->>'qr_token_hash','')),'') is null then
+      v_qr_token_hash_missing_count:=v_qr_token_hash_missing_count+1;
+    elsif lower(v_mail.payment_scope_json->>'qr_token_hash') !~ '^[0-9a-f]{64}$' then
+      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'reason','QR_TOKEN_HASH_INVALID'
+        )::text;
+    else
+      if v_qr_token_hash is null then
+        v_qr_token_hash:=lower(v_mail.payment_scope_json->>'qr_token_hash');
+      elsif v_qr_token_hash<>lower(v_mail.payment_scope_json->>'qr_token_hash') then
+        raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+          using errcode='40001',detail=jsonb_build_object(
+            'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+            'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+            'reason','MULTIPLE_QR_TOKEN_HASHES'
+          )::text;
+      end if;
     end if;
   end loop;
+
+  if v_mail_count<1 or v_qr_source_timesheet_id is null then
+    raise exception 'CANDIDATE_PAPER_DELIVERY_RECEIPT_NOT_FOUND'
+      using errcode='40001',detail=jsonb_build_object(
+        'code','CANDIDATE_PAPER_DELIVERY_RECEIPT_NOT_FOUND',
+        'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation
+      )::text;
+  end if;
+
+  select source_row.* into v_qr_source
+  from public.timesheets source_row
+  where source_row.timesheet_id=v_qr_source_timesheet_id;
+  if not found
+     or v_qr_source.contract_id is distinct from v_workflow.contract_id
+     or v_qr_source.week_ending_date is distinct from v_workflow.week_ending_date
+     or upper(coalesce(v_qr_source.line_type::text,'')) in ('EXPENSES','MILEAGE') then
+    raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+      using errcode='40001',detail=jsonb_build_object(
+        'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+        'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+        'reason','QR_SOURCE_SCOPE_MISMATCH'
+      )::text;
+  end if;
+
+  if nullif(btrim(coalesce(v_qr_source.booking_id,'')),'') is not null then
+    perform pg_advisory_xact_lock(hashtext(v_qr_source.booking_id));
+    select count(*)::integer into v_current_source_count
+    from public.timesheets current_source
+    where current_source.booking_id=v_qr_source.booking_id
+      and current_source.contract_id is not distinct from v_qr_source.contract_id
+      and current_source.week_ending_date is not distinct from v_qr_source.week_ending_date
+      and upper(coalesce(current_source.line_type::text,'')) not in ('EXPENSES','MILEAGE')
+      and current_source.is_current=true
+      and current_source.archived_at_utc is null;
+    if v_current_source_count<>1 then
+      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'reason','QR_SOURCE_CURRENT_VERSION_CONFLICT'
+        )::text;
+    end if;
+    select current_source.* into v_qr_current
+    from public.timesheets current_source
+    where current_source.booking_id=v_qr_source.booking_id
+      and current_source.contract_id is not distinct from v_qr_source.contract_id
+      and current_source.week_ending_date is not distinct from v_qr_source.week_ending_date
+      and upper(coalesce(current_source.line_type::text,'')) not in ('EXPENSES','MILEAGE')
+      and current_source.is_current=true
+      and current_source.archived_at_utc is null
+    for update;
+  else
+    select current_source.* into v_qr_current
+    from public.timesheets current_source
+    where current_source.timesheet_id=v_qr_source.timesheet_id
+      and current_source.is_current=true
+      and current_source.archived_at_utc is null
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'reason','QR_SOURCE_CURRENT_VERSION_MISSING'
+        )::text;
+    end if;
+  end if;
 
   update public.mail_outbox mail_row
   set attachments='[]'::jsonb,
@@ -193,26 +303,26 @@ begin
   -- current token still matches the retiring generation's bound mail receipt;
   -- the existing document invalidation trigger preserves historical bytes and
   -- makes the old printable document non-current.
-  if v_qr_token_hash is not null then
-    update public.timesheets timesheet_row
-    set qr_token=null,
-        qr_payload_json='{}'::jsonb,
-        qr_generated_at=null,
-        qr_scanned_at=null,
-        qr_scan_info_json=null,
-        qr_r2_key=null,
-        qr_last_sent_hash=null,
-        qr_last_sent_at_utc=null,
-        qr_signed_hash=null,
-        qr_signed_at_utc=null,
-        updated_at=p_now_utc
-    where timesheet_row.timesheet_id=v_timesheet_id
-      and timesheet_row.is_current=true
-      and nullif(btrim(coalesce(timesheet_row.qr_token,'')),'') is not null
-      and encode(extensions.digest(
-        convert_to(timesheet_row.qr_token,'UTF8'),'sha256'
-      ),'hex')=v_qr_token_hash;
-    v_qr_invalidated:=found;
+  if nullif(btrim(coalesce(v_qr_current.qr_token,'')),'') is null then
+    v_qr_already_invalidated:=true;
+  elsif v_qr_token_hash is null or v_qr_token_hash_missing_count>0 then
+    raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+      using errcode='40001',detail=jsonb_build_object(
+        'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+        'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+        'reason','QR_TOKEN_HASH_MISSING',
+        'qr_source_timesheet_id',v_qr_current.timesheet_id
+      )::text;
+  elsif encode(extensions.digest(
+      convert_to(v_qr_current.qr_token,'UTF8'),'sha256'
+    ),'hex')<>v_qr_token_hash then
+    raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+      using errcode='40001',detail=jsonb_build_object(
+        'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+        'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+        'reason','CURRENT_QR_TOKEN_HASH_MISMATCH',
+        'qr_source_timesheet_id',v_qr_current.timesheet_id
+      )::text;
   else
     update public.timesheets timesheet_row
     set qr_token=null,
@@ -226,10 +336,22 @@ begin
         qr_signed_hash=null,
         qr_signed_at_utc=null,
         updated_at=p_now_utc
-    where timesheet_row.timesheet_id=v_timesheet_id
+    where timesheet_row.timesheet_id=v_qr_current.timesheet_id
       and timesheet_row.is_current=true
-      and nullif(btrim(coalesce(timesheet_row.qr_token,'')),'') is not null;
+      and nullif(btrim(coalesce(timesheet_row.qr_token,'')),'') is not null
+      and encode(extensions.digest(
+        convert_to(timesheet_row.qr_token,'UTF8'),'sha256'
+      ),'hex')=v_qr_token_hash;
     v_qr_invalidated:=found;
+    if not v_qr_invalidated then
+      raise exception 'CANDIDATE_PAPER_QR_SOURCE_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_SOURCE_CONFLICT',
+          'workflow_id',v_workflow.id,'delivery_generation',v_delivery_generation,
+          'reason','QR_TOKEN_INVALIDATION_LOST_RACE',
+          'qr_source_timesheet_id',v_qr_current.timesheet_id
+        )::text;
+    end if;
   end if;
 
   perform private._candidate_audit_v1(
@@ -241,7 +363,10 @@ begin
       'reason_code',v_reason,'mail_count',v_mail_count,
       'mail_retired_count',v_mail_retired_count,
       'notification_retired_count',v_notification_count,
-      'qr_invalidated',v_qr_invalidated
+      'qr_source_timesheet_id',v_qr_current.timesheet_id,
+      'rejected_target_timesheet_id',v_rejected_target_timesheet_id,
+      'qr_invalidated',v_qr_invalidated,
+      'qr_already_invalidated',v_qr_already_invalidated
     ),v_reason,null,
     'candidate-paper-retire:'||v_workflow.id::text||':'||v_workflow.generation::text||':'
       ||v_delivery_generation::text||':'||v_reason,
@@ -254,7 +379,10 @@ begin
     'reason_code',v_reason,'mail_count',v_mail_count,
     'mail_retired_count',v_mail_retired_count,
     'notification_retired_count',v_notification_count,
-    'qr_invalidated',v_qr_invalidated
+    'qr_source_timesheet_id',v_qr_current.timesheet_id,
+    'rejected_target_timesheet_id',v_rejected_target_timesheet_id,
+    'qr_invalidated',v_qr_invalidated,
+    'qr_already_invalidated',v_qr_already_invalidated
   );
 end;
 $function$;

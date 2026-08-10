@@ -184,6 +184,8 @@ test('candidate reads do not multiply economics by workflow count and hide expen
   assert.match(bootstrap, /week_ending_weekday_snapshot[\s\S]*current_week_ending_date[\s\S]*interval '6 months'/i);
   assert.match(page, /expense_carriers as materialized/i);
   assert.match(page, /expense_carrier_resolution as materialized/i);
+  assert.match(page, /current_version_resolution as materialized/i);
+  assert.match(page, /current_row\.booking_id[\s\S]*history\.booking_id/i);
   assert.match(page, /expense_anchor_totals as materialized/i);
   assert.match(page, /workflow_overlay as materialized/i);
   assert.match(page, /AMBIGUOUS_WORKFLOW_ANCHOR|INVALID_PARENT_ANCHOR/i);
@@ -521,16 +523,23 @@ test('read and placement policy uses all authoritative worked and dated boundari
 test('rejected workflows project through the replacement current version with server-owned recovery scope', () => {
   const page = definition(sql.reads, 'candidate_app_timesheet_page_v1');
   const detail = definition(sql.reads, 'candidate_app_timesheet_detail_v1');
-  assert.match(page, /w\.state='REJECTED'[\s\S]*resolution\.carrier_contract_week_id=w\.contract_week_id/i);
-  assert.match(page, /w\.state='REJECTED'[\s\S]*current_week\.id=w\.contract_week_id/i);
+  assert.match(page, /classified\.state='REJECTED'[\s\S]*resolution\.carrier_contract_week_id=classified\.contract_week_id/i);
+  assert.match(page, /classified\.state='REJECTED'[\s\S]*current_week\.id=classified\.contract_week_id/i);
   assert.match(page, /RESUBMIT_EXPENSE_CLAIM/);
   assert.match(page, /RESUBMIT_TIMESHEET_AND_EXPENSES/);
   assert.match(page, /RESUBMIT_TIMESHEET/);
+  assert.match(page, /later\.state not in \('CANCELLED','EXPIRED','SUPERSEDED'\)/i);
+  assert.match(page, /later\.created_at_utc>w\.updated_at_utc/i);
+  assert.match(page, /'claim_family',resolved\.claim_family/i);
+  assert.match(page, /'rejection_actionable',resolved\.rejection_actionable/i);
+  assert.match(page, /'rejections',d\.actionable_rejections/i);
+  assert.match(page, /'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'/i);
   assert.match(page, /d\.rejected_workflow is not null then 'REJECTED'/i);
   assert.match(page, /'rejection',case[\s\S]*'required_action'/i);
-  assert.match(page, /d\.active_workflow_state is not null[\s\S]*or d\.rejected_workflow is null then null/i);
+  assert.doesNotMatch(page, /or d\.active_workflow_state is not null then null/i);
   assert.match(detail, /v_workflow\.state='REJECTED'[\s\S]*then null else v_workflow\.target_timesheet_id/i);
   assert.match(detail, /'required_resubmission_action'[\s\S]*RESUBMIT_EXPENSE_CLAIM/i);
+  assert.match(detail, /'rejections',[\s\S]*rejection_actionable/i);
 });
 
 test('invoice grouping derives expense-only economics and isolates the effective expense recipient', () => {

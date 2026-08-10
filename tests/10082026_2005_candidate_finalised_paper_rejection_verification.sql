@@ -23,6 +23,7 @@ set candidate_app_feature_flags_json=candidate_app_feature_flags_json||jsonb_bui
 where id=1;
 
 create or replace function pg_temp.verify_finalised_paper_rejection(
+  p_separate_expense boolean,
   p_mail_status text,
   p_active_lease boolean,
   p_expect_block boolean
@@ -38,12 +39,15 @@ declare
   v_contract uuid:=gen_random_uuid();
   v_timesheet uuid:=gen_random_uuid();
   v_week uuid:=gen_random_uuid();
+  v_target_timesheet uuid;
+  v_target_week uuid;
   v_account uuid:=gen_random_uuid();
   v_session uuid:=gen_random_uuid();
   v_workflow uuid:=gen_random_uuid();
   v_mail uuid:=gen_random_uuid();
   v_ready_notification uuid:=gen_random_uuid();
   v_booking text:='FINALISED-PAPER-'||replace(gen_random_uuid()::text,'-','');
+  v_target_booking text;
   v_qr_token text:='candidate-paper-token-'||gen_random_uuid()::text;
   v_signature text;
   v_result jsonb;
@@ -62,6 +66,9 @@ begin
   if p_expect_block is distinct from p_active_lease then
     raise exception 'Expected block must match active provider lease fixture';
   end if;
+  v_target_timesheet:=v_timesheet;
+  v_target_week:=v_week;
+  v_target_booking:=v_booking;
 
   insert into public.tms_users(id) values(v_actor);
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
@@ -93,6 +100,31 @@ begin
   insert into public.timesheets_financials(
     timesheet_id,candidate_id,client_id,is_current,processing_status,total_hours
   ) values(v_timesheet,v_candidate,v_client,true,'UNPROCESSED',8);
+  if p_separate_expense then
+    v_target_timesheet:=gen_random_uuid();
+    v_target_week:=gen_random_uuid();
+    v_target_booking:='FINALISED-PAPER-EXPENSE-'||replace(gen_random_uuid()::text,'-','');
+    insert into public.timesheets(
+      timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
+      submission_mode,is_adjustment,parent_timesheet_id
+    ) values(
+      v_target_timesheet,v_contract,v_target_booking,current_date,
+      'EXPENSES','WEEKLY','MANUAL',true,v_timesheet
+    );
+    insert into public.contract_weeks(
+      id,contract_id,week_ending_date,additional_seq,status,
+      submission_mode_snapshot,timesheet_id,is_adjustment
+    ) values(
+      v_target_week,v_contract,current_date,1,'SUBMITTED','MANUAL',
+      v_target_timesheet,true
+    );
+    insert into public.timesheets_financials(
+      timesheet_id,candidate_id,client_id,is_current,processing_status,total_hours,
+      expenses_pay_ex_vat,expenses_charge_ex_vat,other_pay_ex_vat,other_charge_ex_vat
+    ) values(
+      v_target_timesheet,v_candidate,v_client,true,'UNPROCESSED',0,25,30,25,30
+    );
+  end if;
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','paper-'||replace(v_candidate::text,'-','')||'@example.test','ACTIVE');
   insert into public.candidate_app_sessions(
@@ -109,8 +141,10 @@ begin
     week_ending_date,idempotency_key,finalised_at_utc,
     paper_return_manifest_json,paper_return_manifest_sha256,renderer_contract_version
   ) values(
-    v_workflow,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','PAPER','FINALISED',2,
-    v_contract,v_week,v_timesheet,v_timesheet,current_date,
+    v_workflow,'TEST',v_account,v_candidate,
+    case when p_separate_expense then 'CONTRACT_EXPENSE' else 'CONTRACT_HOURS' end,
+    'WEEKLY','PAPER','FINALISED',2,
+    v_contract,v_target_week,v_timesheet,v_target_timesheet,current_date,
     'finalised-paper:'||v_workflow::text,v_now,
     jsonb_build_object('workflow_id',v_workflow,'workflow_generation',1,
       'pages',jsonb_build_array(jsonb_build_object(
@@ -154,10 +188,12 @@ begin
     'CANDIDATE_PAPER_PACK_READY_V1:'||v_workflow::text||':1:finalised-paper',v_now
   );
 
-  v_signature:=public.timesheet_lifecycle_guard_signature_v1(v_timesheet,v_week,false)->>'row_signature';
+  v_signature:=public.timesheet_lifecycle_guard_signature_v1(
+    v_target_timesheet,v_target_week,false
+  )->>'row_signature';
   begin
     v_result:=public.candidate_submission_reject_atomic_v1(
-      v_actor,'TEST',v_timesheet,v_timesheet,v_signature,
+      v_actor,'TEST',v_target_timesheet,v_target_timesheet,v_signature,
       'Finalised PAPER submission rejected',
       'finalised-paper-reject:'||v_workflow::text,v_now
     );
@@ -172,8 +208,9 @@ begin
     end if;
     if (select state from public.candidate_submission_workflows where id=v_workflow)<>'FINALISED'
        or (select generation from public.candidate_submission_workflows where id=v_workflow)<>2
-       or (select timesheet_id from public.contract_weeks where id=v_week)<>v_timesheet
-       or (select count(*) from public.timesheets where booking_id=v_booking)<>1 then
+       or (select timesheet_id from public.contract_weeks where id=v_target_week)<>v_target_timesheet
+       or (select count(*) from public.timesheets where booking_id=v_target_booking)<>1
+       or (select qr_token from public.timesheets where timesheet_id=v_timesheet)<>v_qr_token then
       raise exception 'Blocked finalised PAPER rejection partially mutated lifecycle';
     end if;
     if (select state from public.candidate_notifications where id=v_ready_notification)<>'UNREAD'
@@ -189,7 +226,7 @@ begin
     raise exception 'Unleased finalised PAPER rejection was unexpectedly blocked';
   end if;
   v_new_timesheet:=nullif(v_result->>'timesheet_id','')::uuid;
-  if v_new_timesheet is null or v_new_timesheet=v_timesheet then
+  if v_new_timesheet is null or v_new_timesheet=v_target_timesheet then
     raise exception 'Finalised PAPER rejection did not rotate current timesheet: %',v_result;
   end if;
   if (select state from public.candidate_submission_workflows where id=v_workflow)<>'REJECTED'
@@ -221,33 +258,45 @@ begin
       where workflow_id=v_workflow and event_type='OFFICE_REJECTED')<>1 then
     raise exception 'Finalised PAPER rejection did not create exactly one OFFICE_REJECTED notification';
   end if;
+  if (select qr_token from public.timesheets where timesheet_id=v_timesheet) is not null then
+    raise exception 'Frozen PAPER delivery QR source token remained active';
+  end if;
+  if p_separate_expense
+     and (select timesheet_id from public.contract_weeks where id=v_week)<>v_timesheet then
+    raise exception 'Separate-expense PAPER rejection rotated the hours anchor economics';
+  end if;
 
   v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,v_now);
   select item.value into v_card
   from jsonb_array_elements(v_page->'items') item(value)
-  where item.value->>'timesheet_id'=v_new_timesheet::text
+  where item.value->>'timesheet_id'=(case when p_separate_expense
+    then v_timesheet else v_new_timesheet end)::text
   limit 1;
   if v_card->>'candidate_status_code'<>'REJECTED'
-     or v_card#>>'{rejection,required_action}'<>'RESUBMIT_TIMESHEET' then
+     or v_card#>>'{rejection,required_action}'<>(case when p_separate_expense
+       then 'RESUBMIT_EXPENSE_CLAIM' else 'RESUBMIT_TIMESHEET' end) then
     raise exception 'Finalised PAPER rejection was not projected on replacement card: %',v_card;
   end if;
 
   v_replay:=public.candidate_submission_reject_atomic_v1(
-    v_actor,'TEST',v_timesheet,v_timesheet,v_signature,
+    v_actor,'TEST',v_target_timesheet,v_target_timesheet,v_signature,
     'Finalised PAPER submission rejected',
     'finalised-paper-reject:'||v_workflow::text,v_now
   );
   if not coalesce((v_replay->>'idempotent_replay')::boolean,false)
      or (select count(*) from public.candidate_notifications
          where workflow_id=v_workflow and event_type='OFFICE_REJECTED')<>1
-     or (select count(*) from public.timesheets where booking_id=v_booking)<>2 then
+     or (select count(*) from public.timesheets where booking_id=v_target_booking)<>2 then
     raise exception 'Finalised PAPER rejection replay was not idempotent: %',v_replay;
   end if;
 end;
 $function$;
 
-select pg_temp.verify_finalised_paper_rejection('QUEUED',false,false);
-select pg_temp.verify_finalised_paper_rejection('QUEUED',true,true);
-select pg_temp.verify_finalised_paper_rejection('SENT',false,false);
+select pg_temp.verify_finalised_paper_rejection(false,'QUEUED',false,false);
+select pg_temp.verify_finalised_paper_rejection(false,'QUEUED',true,true);
+select pg_temp.verify_finalised_paper_rejection(false,'SENT',false,false);
+select pg_temp.verify_finalised_paper_rejection(true,'QUEUED',false,false);
+select pg_temp.verify_finalised_paper_rejection(true,'QUEUED',true,true);
+select pg_temp.verify_finalised_paper_rejection(true,'SENT',false,false);
 
 rollback;

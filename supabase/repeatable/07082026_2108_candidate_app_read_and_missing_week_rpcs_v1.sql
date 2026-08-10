@@ -142,7 +142,7 @@ begin
            coalesce(nullif(t.band,''),nullif(c.band,'')) as display_band,
            coalesce(c.week_ending_weekday_snapshot,effective_client.week_ending_weekday,0) as effective_week_ending_weekday,
            current_window.current_week_ending_date,
-           t.parent_timesheet_id,t.status as timesheet_status,t.submission_mode,t.line_type,t.sheet_scope,t.is_current,
+           t.booking_id,t.parent_timesheet_id,t.status as timesheet_status,t.submission_mode,t.line_type,t.sheet_scope,t.is_current,
            t.additional_units_week,t.additional_units_per_day,
            tf.additional_units_json,tf.total_hours,tf.processing_status,tf.authorised_at_utc,tf.paid_at_utc,tf.locked_by_invoice_id,
            tf.expenses_pay_ex_vat,tf.expenses_charge_ex_vat,
@@ -179,6 +179,28 @@ begin
       order by f.computed_at_utc desc nulls last,f.updated_at desc,f.id desc limit 1
     ) tf on true
     where t.timesheet_id is null or (t.is_current=true and t.archived_at_utc is null)
+  ), current_version_resolution as materialized (
+    -- Candidate workflow and parent anchors are immutable historical UUIDs.
+    -- Resolve every historical member through booking_id to the one current
+    -- Candidate-safe row in that version family. A missing or ambiguous
+    -- current member deliberately resolves to NULL so the caller fails closed.
+    select history.timesheet_id as historical_timesheet_id,
+      count(distinct current_week.timesheet_id)::integer as current_count,
+      case when count(distinct current_week.timesheet_id)=1
+        then min(current_week.timesheet_id::text)::uuid else null::uuid end
+        as current_timesheet_id
+    from public.timesheets history
+    join public.timesheets current_row
+      on nullif(btrim(coalesce(current_row.booking_id,'')),'')
+        =nullif(btrim(coalesce(history.booking_id,'')),'')
+      and current_row.contract_id is not distinct from history.contract_id
+      and current_row.week_ending_date is not distinct from history.week_ending_date
+      and current_row.is_current=true
+      and current_row.archived_at_utc is null
+    join candidate_weeks current_week
+      on current_week.timesheet_id=current_row.timesheet_id
+    where nullif(btrim(coalesce(history.booking_id,'')),'') is not null
+    group by history.timesheet_id
   ), expense_carriers as materialized (
     select expense_row.*,
       abs(coalesce(expense_row.expenses_pay_ex_vat,0))+abs(coalesce(expense_row.expenses_charge_ex_vat,0))+
@@ -218,7 +240,12 @@ begin
       select count(distinct workflow.id)::integer as workflow_count,
         min(anchor_row.timesheet_id::text)::uuid as timesheet_id
       from public.candidate_submission_workflows workflow
-      left join candidate_weeks anchor_row on anchor_row.timesheet_id=workflow.anchor_timesheet_id
+      left join current_version_resolution workflow_anchor_family
+        on workflow_anchor_family.historical_timesheet_id=workflow.anchor_timesheet_id
+      left join candidate_weeks anchor_row
+        on anchor_row.timesheet_id=coalesce(
+          workflow_anchor_family.current_timesheet_id,workflow.anchor_timesheet_id
+        )
         and anchor_row.contract_id=carrier.contract_id
         and anchor_row.week_ending_date=carrier.week_ending_date
         and anchor_row.capabilities->>'record_role'<>'EXPENSE_ONLY'
@@ -231,7 +258,11 @@ begin
     left join lateral (
       select parent_row.timesheet_id
       from candidate_weeks parent_row
-      where parent_row.timesheet_id=carrier.parent_timesheet_id
+      left join current_version_resolution parent_family
+        on parent_family.historical_timesheet_id=carrier.parent_timesheet_id
+      where parent_row.timesheet_id=coalesce(
+          parent_family.current_timesheet_id,carrier.parent_timesheet_id
+        )
         and parent_row.contract_id=carrier.contract_id
         and parent_row.week_ending_date=carrier.week_ending_date
         and parent_row.capabilities->>'record_role'<>'EXPENSE_ONLY'
@@ -281,48 +312,89 @@ begin
     select resolved.display_timesheet_id,
       jsonb_agg(jsonb_build_object(
         'workflow_id',resolved.id,'workflow_kind',resolved.workflow_kind,'state',resolved.state,
+        'claim_family',resolved.claim_family,
         'target_timesheet_id',resolved.target_timesheet_id,'anchor_timesheet_id',resolved.anchor_timesheet_id,
         'rejection_reason',resolved.rejection_reason,'rejection_scope',resolved.rejection_scope,
         'required_resubmission_action',case
-          when resolved.state<>'REJECTED' then null
+          when resolved.state<>'REJECTED' or not resolved.rejection_actionable then null
           when resolved.workflow_kind='CONTRACT_EXPENSE'
             or resolved.rejection_scope='COMPLETE_EXPENSE_CLAIM'
             then 'RESUBMIT_EXPENSE_CLAIM'
           when resolved.workflow_kind='CONTRACT_COMBINED'
             then 'RESUBMIT_TIMESHEET_AND_EXPENSES'
           else 'RESUBMIT_TIMESHEET' end,
+        'rejection_actionable',resolved.rejection_actionable,
         'updated_at_utc',resolved.updated_at_utc
       ) order by resolved.updated_at_utc desc,resolved.id) as workflows
     from (
-      select w.*,
+      select classified.*,
         case
           -- Rejection rotates the submitted timesheet to a replacement current
           -- version while the immutable workflow continues to reference the
           -- historical submitted target. Resolve rejected workflows through the
           -- current contract-week authority so the Candidate card retains the
           -- rejection reason, scope and server-owned recovery action.
-          when w.state='REJECTED' and w.workflow_kind='CONTRACT_EXPENSE' then (
+          when classified.state='REJECTED'
+            and classified.claim_family='EXPENSES' then (
             select resolution.display_timesheet_id
             from expense_carrier_resolution resolution
-            where resolution.carrier_contract_week_id=w.contract_week_id
+            where resolution.carrier_contract_week_id=classified.contract_week_id
               and resolution.conflict_code is null
             limit 1
           )
-          when w.state='REJECTED' then (
+          when classified.state='REJECTED' then (
             select current_week.timesheet_id
             from candidate_weeks current_week
-            where current_week.id=w.contract_week_id
+            where current_week.id=classified.contract_week_id
             limit 1
           )
-          when w.workflow_kind='CONTRACT_EXPENSE' then coalesce(
+          when classified.claim_family='EXPENSES' then coalesce(
           (select resolution.display_timesheet_id from expense_carrier_resolution resolution
-            where resolution.carrier_timesheet_id=w.target_timesheet_id limit 1),
-          w.anchor_timesheet_id
+            where resolution.carrier_timesheet_id=classified.target_timesheet_id limit 1),
+          (select family.current_timesheet_id from current_version_resolution family
+            where family.historical_timesheet_id=classified.anchor_timesheet_id
+              and family.current_count=1),
+          (select direct_anchor.timesheet_id from candidate_weeks direct_anchor
+            where direct_anchor.timesheet_id=classified.anchor_timesheet_id limit 1)
           )
-          else coalesce(w.target_timesheet_id,w.anchor_timesheet_id)
+          else coalesce(
+            (select family.current_timesheet_id from current_version_resolution family
+              where family.historical_timesheet_id=coalesce(
+                classified.target_timesheet_id,classified.anchor_timesheet_id
+              ) and family.current_count=1),
+            (select direct_target.timesheet_id from candidate_weeks direct_target
+              where direct_target.timesheet_id=coalesce(
+                classified.target_timesheet_id,classified.anchor_timesheet_id
+              ) limit 1)
+          )
         end as display_timesheet_id
-      from public.candidate_submission_workflows w
-      where w.candidate_id=v_candidate_id and w.state<>'SUPERSEDED'
+      from (
+        select w.*,
+          case when w.workflow_kind='CONTRACT_EXPENSE'
+              or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+            then 'EXPENSES' else 'HOURS' end as claim_family,
+          case when w.state<>'REJECTED' then false else not exists(
+            select 1
+            from public.candidate_submission_workflows later
+            where later.candidate_id=w.candidate_id
+              and later.contract_id=w.contract_id
+              and later.week_ending_date is not distinct from w.week_ending_date
+              and later.id<>w.id
+              and (case when later.workflow_kind='CONTRACT_EXPENSE'
+                    or later.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+                  then 'EXPENSES' else 'HOURS' end)
+                =(case when w.workflow_kind='CONTRACT_EXPENSE'
+                    or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+                  then 'EXPENSES' else 'HOURS' end)
+              and later.state not in ('CANCELLED','EXPIRED','SUPERSEDED')
+              and (
+                later.created_at_utc>w.updated_at_utc
+                or (later.created_at_utc=w.updated_at_utc and later.id<>w.id)
+              )
+          ) end as rejection_actionable
+        from public.candidate_submission_workflows w
+        where w.candidate_id=v_candidate_id and w.state<>'SUPERSEDED'
+      ) classified
     ) resolved
     where resolved.display_timesheet_id is not null
     group by resolved.display_timesheet_id
@@ -368,7 +440,7 @@ begin
           'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
           'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
           'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
-          'AWAITING_PAPER_RETURN','RECEIVED'
+          'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
         )
         limit 1
       ) as active_workflow_state,
@@ -376,8 +448,16 @@ begin
         select workflow_item
         from jsonb_array_elements(page.workflows) workflow_item
         where workflow_item->>'state'='REJECTED'
+          and coalesce((workflow_item->>'rejection_actionable')::boolean,false)
         limit 1
-      ) as rejected_workflow
+      ) as rejected_workflow,
+      (
+        select coalesce(jsonb_agg(workflow_item order by
+          workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'),'[]'::jsonb)
+        from jsonb_array_elements(page.workflows) workflow_item
+        where workflow_item->>'state'='REJECTED'
+          and coalesce((workflow_item->>'rejection_actionable')::boolean,false)
+      ) as actionable_rejections
     from page
     order by unresolved_rank desc,week_ending_date desc,id desc
     limit v_limit
@@ -408,6 +488,7 @@ begin
       ),
       'expense_overlay_conflict_code',d.expense_overlay_conflict_code,
       'workflows',d.workflows,
+      'rejections',d.actionable_rejections,
       'record_role',d.capabilities->'record_role',
       'route_family',d.capabilities->'route_family',
       'candidate_status_code',case
@@ -437,21 +518,18 @@ begin
       'rejection_reason',case
         when d.paid_at_utc is not null or d.authorised_at_utc is not null
           or d.locked_by_invoice_id is not null
-          or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
-          or d.active_workflow_state is not null then null
+          or upper(coalesce(d.timesheet_status::text,''))='INVOICED' then null
         else nullif(d.rejected_workflow->>'rejection_reason','') end,
       'rejection_scope',case
         when d.paid_at_utc is not null or d.authorised_at_utc is not null
           or d.locked_by_invoice_id is not null
           or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
-          or d.active_workflow_state is not null
           or d.rejected_workflow is null then d.capabilities->'reject_scope'
         else d.rejected_workflow->'rejection_scope' end,
       'rejection',case
         when d.paid_at_utc is not null or d.authorised_at_utc is not null
           or d.locked_by_invoice_id is not null
           or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
-          or d.active_workflow_state is not null
           or d.rejected_workflow is null then null
         else jsonb_build_object(
           'workflow_id',d.rejected_workflow->'workflow_id',
@@ -584,14 +662,17 @@ begin
 
   select coalesce(jsonb_agg(jsonb_build_object(
     'workflow_id',w.id,'workflow_kind',w.workflow_kind,'state',w.state,'generation',w.generation,
-    'route',w.route,'target_timesheet_id',w.target_timesheet_id,'issue_codes',w.issue_codes,
+    'claim_family',rejection_policy.claim_family,
+    'route',w.route,'target_timesheet_id',w.target_timesheet_id,
+    'anchor_timesheet_id',w.anchor_timesheet_id,'issue_codes',w.issue_codes,
     'rejection_reason',w.rejection_reason,'rejection_scope',w.rejection_scope,
     'required_resubmission_action',case
-      when w.state<>'REJECTED' then null
+      when w.state<>'REJECTED' or not rejection_policy.rejection_actionable then null
       when w.workflow_kind='CONTRACT_EXPENSE' or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
         then 'RESUBMIT_EXPENSE_CLAIM'
       when w.workflow_kind='CONTRACT_COMBINED' then 'RESUBMIT_TIMESHEET_AND_EXPENSES'
       else 'RESUBMIT_TIMESHEET' end,
+    'rejection_actionable',rejection_policy.rejection_actionable,
     'review_document_ready',exists(select 1 from public.candidate_submission_components review_component
       where review_component.workflow_id=w.id and review_component.workflow_generation=w.generation
         and review_component.required=true and review_component.state<>'SUPERSEDED')
@@ -618,6 +699,31 @@ begin
     'updated_at_utc',w.updated_at_utc
   ) order by w.updated_at_utc desc,w.id desc),'[]'::jsonb)
   into v_claims from public.candidate_submission_workflows w
+  cross join lateral (
+    select
+      case when w.workflow_kind='CONTRACT_EXPENSE'
+          or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+        then 'EXPENSES' else 'HOURS' end as claim_family,
+      case when w.state<>'REJECTED' then false else not exists(
+        select 1
+        from public.candidate_submission_workflows later
+        where later.candidate_id=w.candidate_id
+          and later.contract_id=w.contract_id
+          and later.week_ending_date is not distinct from w.week_ending_date
+          and later.id<>w.id
+          and (case when later.workflow_kind='CONTRACT_EXPENSE'
+                or later.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+              then 'EXPENSES' else 'HOURS' end)
+            =(case when w.workflow_kind='CONTRACT_EXPENSE'
+                or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+              then 'EXPENSES' else 'HOURS' end)
+          and later.state not in ('CANCELLED','EXPIRED','SUPERSEDED')
+          and (
+            later.created_at_utc>w.updated_at_utc
+            or (later.created_at_utc=w.updated_at_utc and later.id<>w.id)
+          )
+      ) end as rejection_actionable
+  ) rejection_policy
   where w.candidate_id=v_candidate_id and w.contract_id=v_contract.id
     and w.week_ending_date=v_week.week_ending_date and w.state<>'SUPERSEDED';
 
@@ -691,7 +797,14 @@ begin
     'manager_review',coalesce(v_document_state,'{}'::jsonb),
     'evidence',v_evidence,
     'components',v_components,
-    'workflows',v_claims
+    'workflows',v_claims,
+    'rejections',(
+      select coalesce(jsonb_agg(workflow_item order by
+        workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'),'[]'::jsonb)
+      from jsonb_array_elements(v_claims) workflow_item
+      where workflow_item->>'state'='REJECTED'
+        and coalesce((workflow_item->>'rejection_actionable')::boolean,false)
+    )
   );
 end;
 $function$;

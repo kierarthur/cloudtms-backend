@@ -116,6 +116,14 @@ test('one retirement helper closes mail, notification and QR authority for every
   assert.match(helper, /v_workflow\.state not in \('AWAITING_PAPER_RETURN','FINALISED'\)/i);
   assert.match(helper, /when v_workflow\.state='FINALISED' then greatest\(v_workflow\.generation-1,1\)/i);
   assert.match(helper, /candidate_workflow_generation'=v_delivery_generation::text/i);
+  assert.match(helper, /v_qr_source_timesheet_id:=v_mail\.context_id/i);
+  assert.match(helper, /MULTIPLE_MAIL_CONTEXTS/);
+  assert.match(helper, /MULTIPLE_QR_TOKEN_HASHES/);
+  assert.match(helper, /v_qr_source\.contract_id is distinct from v_workflow\.contract_id/i);
+  assert.match(helper, /current_source\.booking_id=v_qr_source\.booking_id/i);
+  assert.match(helper, /CURRENT_QR_TOKEN_HASH_MISMATCH/);
+  assert.match(helper, /'rejected_target_timesheet_id',v_rejected_target_timesheet_id/i);
+  assert.match(helper, /'qr_already_invalidated',v_qr_already_invalidated/i);
   assert.match(helper, /state='DISMISSED'/i);
   assert.match(helper, /qr_token=null/i);
   assert.match(workflowSource, /v_action='AMEND'[\s\S]*_candidate_paper_delivery_retire_v1/);
@@ -123,6 +131,7 @@ test('one retirement helper closes mail, notification and QR authority for every
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','FINALISED'\)/i);
+  assert.match(rejectSource, /CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN/);
   assert.match(qrSettingsSource, /update public\.timesheet_evidence as evidence_row[\s\S]*where evidence_row\.timesheet_id=v_current\.timesheet_id/i);
 });
 

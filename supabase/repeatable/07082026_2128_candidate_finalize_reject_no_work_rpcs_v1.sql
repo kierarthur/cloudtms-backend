@@ -1195,6 +1195,7 @@ declare
   v_reject_scope text;
   v_workflow record;
   v_rejected_workflow_ids uuid[]:='{}'::uuid[];
+  v_paper_retirement_result jsonb;
   v_response jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
@@ -1265,9 +1266,22 @@ begin
     v_rejected_workflow_ids:=array_append(v_rejected_workflow_ids,v_workflow.id);
     if v_workflow.route='PAPER'
        and v_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED') then
-      perform private._candidate_paper_delivery_retire_v1(
+      v_paper_retirement_result:=private._candidate_paper_delivery_retire_v1(
         v_workflow.id,v_workflow.generation,'OFFICE_REJECTED',p_now_utc
       );
+      if coalesce((v_paper_retirement_result->>'retired')::boolean,false)=false
+         or (
+           coalesce((v_paper_retirement_result->>'qr_invalidated')::boolean,false)=false
+           and coalesce((v_paper_retirement_result->>'qr_already_invalidated')::boolean,false)=false
+         ) then
+        raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
+          using errcode='40001',detail=jsonb_build_object(
+            'code','CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN',
+            'workflow_id',v_workflow.id,
+            'generation',v_workflow.generation,
+            'retirement_receipt',v_paper_retirement_result
+          )::text;
+      end if;
     end if;
   end loop;
 

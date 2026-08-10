@@ -35,6 +35,7 @@ declare
   v_isolated_expense_timesheet uuid:=gen_random_uuid();
   v_isolated_expense_week uuid:=gen_random_uuid();
   v_isolated_expense_workflow uuid:=gen_random_uuid();
+  v_secondary_rejection_workflow uuid:=gen_random_uuid();
   v_target_booking text:='FINALISED-REJECT-'||replace(gen_random_uuid()::text,'-','');
   v_signature text;
   v_result jsonb;
@@ -209,7 +210,7 @@ begin
       week_ending_date,idempotency_key,finalised_at_utc
     ) values(
       v_isolated_expense_workflow,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE',
-      'WEEKLY','EMAIL','FINALISED',2,v_contract,v_base_week,v_base_timesheet,
+      'WEEKLY','EMAIL','FINALISED',2,v_contract,v_isolated_expense_week,v_base_timesheet,
       v_isolated_expense_timesheet,current_date,
       'isolated-expense:'||v_isolated_expense_workflow::text,now()
     );
@@ -313,6 +314,54 @@ begin
     ) then
       raise exception 'Anchor-only finalised separate expense received a rejection notification';
     end if;
+    if v_card#>>'{expenses,other_pay_ex_vat}'<>'40'
+       or not exists(
+         select 1 from jsonb_array_elements(v_card->'workflows') workflow_item(value)
+         where workflow_item.value->>'workflow_id'=v_isolated_expense_workflow::text
+           and workflow_item.value->>'state'='FINALISED'
+           and workflow_item.value->>'claim_family'='EXPENSES'
+       )
+       or exists(
+         select 1 from jsonb_array_elements(v_page->'readiness_conflicts') conflict(value)
+         where conflict.value->>'code' in ('INVALID_WORKFLOW_ANCHOR','INVALID_PARENT_ANCHOR')
+       ) then
+      raise exception 'Version-family anchor did not preserve the separate expense overlay: %',v_page;
+    end if;
+
+    insert into public.candidate_submission_workflows(
+      id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+      contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+      week_ending_date,rejection_reason,rejection_scope,idempotency_key,
+      created_at_utc,updated_at_utc
+    ) values(
+      v_secondary_rejection_workflow,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE',
+      'WEEKLY','EMAIL','REJECTED',2,v_contract,v_isolated_expense_week,
+      v_base_timesheet,v_isolated_expense_timesheet,current_date,
+      'Separate expense also needs correction','COMPLETE_EXPENSE_CLAIM',
+      'secondary-rejection:'||v_secondary_rejection_workflow::text,
+      clock_timestamp()+interval '1 millisecond',clock_timestamp()+interval '1 millisecond'
+    );
+    v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,clock_timestamp());
+    select item.value into v_card
+    from jsonb_array_elements(v_page->'items') item(value)
+    where item.value->>'timesheet_id'=v_new_timesheet::text
+    limit 1;
+    if jsonb_array_length(v_card->'rejections')<>2
+       or not exists(
+         select 1 from jsonb_array_elements(v_card->'rejections') rejection_item(value)
+         where rejection_item.value->>'claim_family'='HOURS'
+           and rejection_item.value->>'required_resubmission_action'='RESUBMIT_TIMESHEET'
+       )
+       or not exists(
+         select 1 from jsonb_array_elements(v_card->'rejections') rejection_item(value)
+         where rejection_item.value->>'claim_family'='EXPENSES'
+           and rejection_item.value->>'required_resubmission_action'='RESUBMIT_EXPENSE_CLAIM'
+       ) then
+      raise exception 'Independent hours and expense rejections were not both represented: %',v_card;
+    end if;
+    update public.candidate_submission_workflows
+    set state='SUPERSEDED',updated_at_utc=clock_timestamp()
+    where id=v_secondary_rejection_workflow;
   end if;
 
   select count(*) into v_notification_count
@@ -374,7 +423,8 @@ begin
   if v_card->>'candidate_status_code'<>'WORKER_DRAFT' then
     raise exception 'Active replacement did not take precedence over rejection history: %',v_card;
   end if;
-  if v_card->>'rejection' is not null or v_card->>'rejection_reason' is not null then
+  if v_card->>'rejection' is not null or v_card->>'rejection_reason' is not null
+     or jsonb_array_length(v_card->'rejections')<>0 then
     raise exception 'Historical rejection remained actionable after replacement began: %',v_card;
   end if;
   if not exists(
@@ -383,6 +433,50 @@ begin
       and workflow_item.value->>'state'='REJECTED'
   ) then
     raise exception 'Active replacement removed immutable rejection history: %',v_card;
+  end if;
+
+  -- A successfully received/finalised replacement must keep the immutable old
+  -- rejection in history without allowing it to become actionable again.
+  update public.candidate_submission_workflows
+  set state='FINALISED',target_timesheet_id=v_new_timesheet,
+      contract_week_id=v_target_week,finalised_at_utc=clock_timestamp(),
+      updated_at_utc=clock_timestamp()
+  where id=v_replacement_workflow;
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,clock_timestamp());
+  select item.value into v_card
+  from jsonb_array_elements(v_page->'items') item(value)
+  where item.value->>'timesheet_id'=v_expected_display_timesheet::text
+  limit 1;
+  if v_card->>'candidate_status_code'='REJECTED'
+     or v_card->>'rejection' is not null
+     or v_card->>'rejection_reason' is not null
+     or jsonb_array_length(v_card->'rejections')<>0 then
+    raise exception 'Historical rejection resurfaced after replacement finalisation: %',v_card;
+  end if;
+  if not exists(
+    select 1 from jsonb_array_elements(v_card->'workflows') workflow_item(value)
+    where workflow_item.value->>'workflow_id'=v_workflow::text
+      and workflow_item.value->>'state'='REJECTED'
+      and coalesce((workflow_item.value->>'rejection_actionable')::boolean,false)=false
+  ) then
+    raise exception 'Finalised replacement lost immutable resolved rejection history: %',v_card;
+  end if;
+
+  -- A current manager refusal is its own recovery lifecycle and must take
+  -- precedence over the older office rejection.
+  update public.candidate_submission_workflows
+  set state='REFUSED',finalised_at_utc=null,updated_at_utc=clock_timestamp()
+  where id=v_replacement_workflow;
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,clock_timestamp());
+  select item.value into v_card
+  from jsonb_array_elements(v_page->'items') item(value)
+  where item.value->>'timesheet_id'=v_expected_display_timesheet::text
+  limit 1;
+  if v_card->>'candidate_status_code'<>'REFUSED'
+     or v_card->>'rejection' is not null
+     or v_card->>'rejection_reason' is not null
+     or jsonb_array_length(v_card->'rejections')<>0 then
+    raise exception 'Current refusal did not supersede historical office rejection: %',v_card;
   end if;
 end;
 $function$;
