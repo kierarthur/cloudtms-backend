@@ -181393,6 +181393,8 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
   const allowedNoClaimResultCodes = new Set([
     'NO_CLAIM',
     'LANE_SCAN_BUSY',
+    'CLAIM_SCAN_PROGRESS',
+    'CLAIM_SCAN_CURSOR_WRAPPED',
     'CANDIDATE_DELETED',
     'SESSION_OBSOLETE',
     'ATTEMPT_GENERATION_OBSOLETE'
@@ -181545,6 +181547,9 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       execute_called: false,
       phase: 'CLAIM',
       result_code: noClaimResultCode,
+      scan_progress: claim.scan_progress === true,
+      claim_scan_wrapped: claim.claim_scan_wrapped === true,
+      claim_examined: boundedInteger(claim.claim_examined, 0, 0, 100000),
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
     };
   }
@@ -183064,13 +183069,15 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       ? stageLimitForJobType('WORKBENCH_CANDIDATE_SOURCE_BUILD', Math.min(maxStageWorkUnitsPerJob, 25))
       : 0;
     const resultCode = upperTrim(lane.result_code || 'SOURCE_BUILD_TWO_CALL_UNKNOWN');
-    const lockContention = ['CANDIDATE_LOCK_BUSY', 'LOCKED_BY_CONCURRENT_WORKER'].includes(resultCode);
+    const lockContention = ['CANDIDATE_LOCK_BUSY', 'LOCKED_BY_CONCURRENT_WORKER', 'LANE_SCAN_BUSY'].includes(resultCode);
+    const scanProgress = ['CLAIM_SCAN_PROGRESS', 'CLAIM_SCAN_CURSOR_WRAPPED'].includes(resultCode)
+      && lane.scan_progress === true;
     const dueQueuedCount = Math.max(0, Number(context.due_queued_count) || 0);
     const passMoreDue = lane.more_due === true
       || lane.continuation_enqueued === true
       || passClaimed > 0
       || dueQueuedCount > passClaimed;
-    const passMadeProgress = passClaimed > 0 || passProcessed > 0 || passContinuationsCreated > 0;
+    const passMadeProgress = passClaimed > 0 || passProcessed > 0 || passContinuationsCreated > 0 || scanProgress;
 
     claimedCount += passClaimed;
     processedCount += passProcessed;
@@ -183137,6 +183144,9 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       private_stage: lane.private_stage || null,
       stage_status: lane.stage_status || null,
       result_code: resultCode,
+      scan_progress: scanProgress,
+      claim_scan_wrapped: lane.claim_scan_wrapped === true,
+      claim_examined: countFrom(lane, ['claim_examined']),
       cursor_kind: lane.cursor_kind || null,
       dependency_unit_key: lane.dependency_unit_key || null,
       fact_family: lane.fact_family || null,

@@ -71,6 +71,13 @@ test('same-authority build uniqueness is frozen when the economic build is inser
   assert.match(claimStart, /uq_bpay_wb_economic_build_authority_v1/);
 });
 
+test('source-build claim cursors explicitly continue bounded scans after skip or wrap', () => {
+  assert.match(claimStart, /'result_code','CLAIM_SCAN_PROGRESS'/);
+  assert.match(claimStart, /'result_code','CLAIM_SCAN_CURSOR_WRAPPED'/);
+  assert.match(claimStart, /'scan_progress',true/);
+  assert.match(claimStart, /sweep_generation=sweep_generation\+1/);
+});
+
 test('cancelled rows remain eligible but explicitly unticked across publication', () => {
   assert.match(cancelSafe, /selection_user_override'[\s\S]*'UNSELECTED'/);
   assert.match(cancelSafe, /POST_CANCEL_RETURN_UNSELECTED/);

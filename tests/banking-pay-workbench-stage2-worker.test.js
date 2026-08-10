@@ -340,6 +340,39 @@ test('no claim stops after RPC 1', async () => {
   assert.equal(result.result_code, 'NO_CLAIM');
 });
 
+test('durable claim-scan progress remains explicit and never invokes RPC 2', async () => {
+  for (const resultCode of ['CLAIM_SCAN_PROGRESS', 'CLAIM_SCAN_CURSOR_WRAPPED']) {
+    let calls = 0;
+    const result = await loadLaneAttempt()({}, baseOptions(async () => {
+      calls += 1;
+      return {
+        ok: true,
+        claimed: false,
+        result_code: resultCode,
+        scan_progress: true,
+        claim_scan_wrapped: resultCode === 'CLAIM_SCAN_CURSOR_WRAPPED',
+        claim_examined: resultCode === 'CLAIM_SCAN_PROGRESS' ? 1 : 0
+      };
+    }));
+    assert.equal(calls, 1);
+    assert.equal(result.claimed, false);
+    assert.equal(result.execute_called, false);
+    assert.equal(result.result_code, resultCode);
+    assert.equal(result.scan_progress, true);
+    assert.equal(result.claim_scan_wrapped, resultCode === 'CLAIM_SCAN_CURSOR_WRAPPED');
+  }
+});
+
+test('lane scan ownership and durable cursor movement are retryable within bounded drain budgets', () => {
+  const lane = functionBody('runBankingPayWorkbenchSourceBuildLaneAttempt');
+  const drain = functionBody('drainBankingPayWorkbenchJobs');
+  assert.match(lane, /'CLAIM_SCAN_PROGRESS'/);
+  assert.match(lane, /'CLAIM_SCAN_CURSOR_WRAPPED'/);
+  assert.match(drain, /'LANE_SCAN_BUSY'\]\s*\.includes\(resultCode\)/);
+  assert.match(drain, /\['CLAIM_SCAN_PROGRESS', 'CLAIM_SCAN_CURSOR_WRAPPED'\]\.includes\(resultCode\)/);
+  assert.match(drain, /passMadeProgress[\s\S]*\|\| scanProgress/);
+});
+
 test('uncertain or malformed claim never invokes RPC 2', async () => {
   for (const mode of ['throw', 'malformed']) {
     let calls = 0;

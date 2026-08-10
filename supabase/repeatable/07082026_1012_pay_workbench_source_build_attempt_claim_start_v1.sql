@@ -375,9 +375,36 @@ BEGIN
       sweep_generation=sweep_generation+1,updated_at_utc=clock_timestamp()
     WHERE lane_identity=v_lane_identity AND scan_kind='CLAIM'
       AND scan_scope_key=v_scan_scope_key;
+    -- Reaching the end of a non-empty durable claim sweep is progress, not an
+    -- empty queue.  The next bounded RPC 1 call must start at the beginning of
+    -- the new sweep.  Return an explicit result so the Worker can continue
+    -- within its existing burst/runtime limits instead of waiting for cron or
+    -- unrelated UI traffic.
+    RETURN jsonb_build_object(
+      'ok',true,
+      'claimed',false,
+      'result_code','CLAIM_SCAN_CURSOR_WRAPPED',
+      'scan_progress',true,
+      'claim_scan_wrapped',true,
+      'claim_examined',0
+    );
   END IF;
 
   IF v_job.id IS NULL THEN
+    IF v_claim_examined>0 THEN
+      -- The lane advanced past a candidate whose serial/advisory/job-row
+      -- authority was temporarily unavailable.  Preserve that fairness
+      -- progress and request another bounded pass; do not present it as an
+      -- authoritative no-work result.
+      RETURN jsonb_build_object(
+        'ok',true,
+        'claimed',false,
+        'result_code','CLAIM_SCAN_PROGRESS',
+        'scan_progress',true,
+        'claim_scan_wrapped',false,
+        'claim_examined',v_claim_examined
+      );
+    END IF;
     RETURN jsonb_build_object('ok',true,'claimed',false);
   END IF;
 
