@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: deployed TEST broker/private-backend authority map, updated 10 August 2026 through generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release, exact manager methods and notification/outbox replay closure at runtime commit `099802f7cf72e3c8ff68f286743247343cd00413`.
+Status: deployed TEST broker/private-backend authority map, updated 10 August 2026 through version-aware rejection projection, finalised PAPER artefact-generation retirement and lease fencing, generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release, exact manager methods and notification/outbox replay closure at runtime commit `0b847735160ba8b67ca3de87911ff8555c865330`.
 
 ## Canonical owner graph
 
@@ -33,8 +33,8 @@ Neither Worker alters the existing financial algorithms. The broker cannot acces
 | `candidate_auth_account_transition_v1` | login, activation/password completion, refresh, logout, selection, preferences, push registration and password change |
 | `candidate_auth_challenge_transition_v1` | activation/reset/recovery challenge start, resend and verify |
 | `candidate_app_bootstrap_v1` | `GET /candidate-app/v1/bootstrap` |
-| `candidate_app_timesheet_page_v1` | `GET /candidate-app/v1/timesheets` |
-| `candidate_app_timesheet_detail_v1` | `GET /candidate-app/v1/timesheets/:id` |
+| `candidate_app_timesheet_page_v1` | `GET /candidate-app/v1/timesheets`; resolves unresolved rejection through the current version with server-owned scope/action and active-replacement precedence |
+| `candidate_app_timesheet_detail_v1` | `GET /candidate-app/v1/timesheets/:id`; historical rejected workflow IDs resolve the current contract-week row while retaining immutable workflow history |
 | `candidate_missing_week_options_v1` | `GET /candidate-app/v1/contracts/:id/missing-weeks` |
 | `candidate_contract_week_add_missing_atomic_v1` | `POST /candidate-app/v1/contracts/:id/missing-weeks` |
 | `expense_placement_resolve_v1` | `POST /candidate-app/v1/timesheets/:id/expense-placement` |
@@ -42,7 +42,7 @@ Neither Worker alters the existing financial algorithms. The broker cannot acces
 | `timesheet_expense_apply_atomic_v1` | called only inside the installed finalisation authority |
 | `candidate_workflow_transition_atomic_v1` | workflow/components/manager/phone/notification orchestration |
 | `candidate_submission_finalize_atomic_v1` | final signed ELECTRONIC and complete PAPER finalisation |
-| `candidate_submission_reject_atomic_v1` | office whole-record Candidate rejection; pre-finalisation target-or-anchor retirement and finalised exact-target rejection with separate-expense anchor isolation |
+| `candidate_submission_reject_atomic_v1` | office whole-record Candidate rejection; pre-finalisation target-or-anchor retirement, finalised exact-target rejection, separate-expense anchor isolation and preceding finalised-PAPER delivery retirement before QR/version reset |
 | `candidate_no_work_atomic_v1` | Candidate no-work decision |
 
 ## Existing CloudTMS owners retained
