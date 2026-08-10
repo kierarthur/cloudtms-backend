@@ -409,6 +409,29 @@ test('untouched Draft cancellation avoids financial work items, source builds an
   assert.match(helpers, /'full_build_count',0,'reconciliation_count',0/);
   assert.match(expand, /private\.pay_workbench_draft_overlay_remove_page_v1/);
   assert.match(expand, /DRAFT_OVERLAY_FAST_COMPLETE/);
+
+  const draftOverlayStart = helpers.indexOf(
+    'CREATE OR REPLACE FUNCTION private.pay_workbench_draft_overlay_remove_page_v1',
+  );
+  const draftOverlayEnd = helpers.indexOf(
+    'ALTER FUNCTION private.pay_workbench_draft_overlay_remove_page_v1',
+    draftOverlayStart,
+  );
+  const draftOverlay = helpers.slice(draftOverlayStart, draftOverlayEnd);
+  const requestTerminalWrite = draftOverlay.indexOf(
+    'UPDATE public.pay_payment_correction_requests AS request_row',
+  );
+  const batchTerminalWrite = draftOverlay.indexOf(
+    'UPDATE public.pay_batches AS batch_row',
+  );
+  const certifiedPublication = draftOverlay.indexOf(
+    'private.pay_workbench_publish_certified_source_preview_page_v1',
+  );
+  assert.ok(requestTerminalWrite >= 0);
+  assert.ok(batchTerminalWrite >= 0);
+  assert.ok(certifiedPublication >= 0);
+  assert.ok(requestTerminalWrite < certifiedPublication);
+  assert.ok(batchTerminalWrite < certifiedPublication);
 });
 
 test('Draft completion freezes the exact post-Draft authority before fast cancellation is admitted', () => {

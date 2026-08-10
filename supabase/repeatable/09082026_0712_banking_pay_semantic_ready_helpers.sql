@@ -2827,6 +2827,37 @@ BEGIN
       )::text;
   END IF;
 
+  v_has_more := EXISTS (
+    SELECT 1
+    FROM public.pay_payment_correction_request_candidates AS request_candidate
+    JOIN public.pay_batch_candidates AS candidate_row
+      ON candidate_row.id=request_candidate.pay_batch_candidate_id
+     AND candidate_row.pay_batch_id=p_pay_batch_id
+    WHERE request_candidate.correction_request_id=p_correction_request_id
+      AND candidate_row.candidate_id>v_last_candidate_id
+  );
+
+  -- Certified cancellation reversion must be the final economic authority in
+  -- this transaction.  On the terminal page, apply every request/batch
+  -- lifecycle transition first so their ordinary request-owned dirty evidence
+  -- is reflected in the live source sequence and generation used below.  The
+  -- caller's later APPLIED write is status-idempotent and therefore cannot
+  -- create a newer financial-scope transition after publication.
+  IF NOT v_has_more THEN
+    UPDATE public.pay_payment_correction_requests AS request_row
+    SET status='APPLIED',
+        applied_at_utc=COALESCE(request_row.applied_at_utc,v_now),
+        updated_at_utc=v_now
+    WHERE request_row.id=p_correction_request_id;
+
+    UPDATE public.pay_batches AS batch_row
+    SET status='CANCELLED',cancelled_at_utc=COALESCE(batch_row.cancelled_at_utc,v_now),
+        cancelled_by_user_id=COALESCE(batch_row.cancelled_by_user_id,p_actor_user_id),
+        cancel_reason=COALESCE(batch_row.cancel_reason,'DRAFT_OVERLAY_FAST_CANCEL'),
+        total_bank_out=0,total_debt_created=0
+    WHERE batch_row.id=p_pay_batch_id;
+  END IF;
+
   WITH admitted AS (
     SELECT result_row.value,
            change_counter.seq AS current_source_change_seq,
@@ -2929,25 +2960,6 @@ BEGIN
       USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
         'code','DRAFT_OVERLAY_FAST_REVERSION_PUBLICATION_FAILED'
       )::text;
-  END IF;
-
-  v_has_more := EXISTS (
-    SELECT 1
-    FROM public.pay_payment_correction_request_candidates AS request_candidate
-    JOIN public.pay_batch_candidates AS candidate_row
-      ON candidate_row.id=request_candidate.pay_batch_candidate_id
-     AND candidate_row.pay_batch_id=p_pay_batch_id
-    WHERE request_candidate.correction_request_id=p_correction_request_id
-      AND candidate_row.candidate_id>v_last_candidate_id
-  );
-
-  IF NOT v_has_more THEN
-    UPDATE public.pay_batches AS batch_row
-    SET status='CANCELLED',cancelled_at_utc=COALESCE(batch_row.cancelled_at_utc,v_now),
-        cancelled_by_user_id=COALESCE(batch_row.cancelled_by_user_id,p_actor_user_id),
-        cancel_reason=COALESCE(batch_row.cancel_reason,'DRAFT_OVERLAY_FAST_CANCEL'),
-        total_bank_out=0,total_debt_created=0
-    WHERE batch_row.id=p_pay_batch_id;
   END IF;
 
   RETURN pg_catalog.jsonb_build_object(
