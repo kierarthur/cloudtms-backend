@@ -1880,7 +1880,6 @@ BEGIN
     JOIN public.pay_payment_correction_request_candidates AS membership
       ON membership.correction_request_id=p_correction_request_id
      AND membership.pay_batch_candidate_id=work_row.pay_batch_candidate_id
-     AND membership.candidate_id=work_row.candidate_id
     JOIN preflight ON preflight.work_item_id=work_row.id
       AND preflight.candidate_id=work_row.candidate_id
     WHERE membership.active_item_count BETWEEN 1 AND 128

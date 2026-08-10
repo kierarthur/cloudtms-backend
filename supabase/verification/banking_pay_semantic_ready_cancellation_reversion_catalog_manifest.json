@@ -194,7 +194,7 @@
     {
       "schema": "private", "name": "pay_pre_bank_cancel_apply_work_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_work_item_ids uuid[], p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "a8e1362b772946411ec784f91f70bcc2bb2c31bd4fbc3991a109cc666bfef00e",
+      "definition_sha256": "2c8069ff84be4d723ad0774c7e1b2f5143ca423e83c1175188526c07e701b1f2",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]

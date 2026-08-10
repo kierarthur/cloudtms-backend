@@ -349,6 +349,11 @@ test('cancellation reversion uses deterministic candidate locks, immutable linea
 
 test('eligible no-provider financial reversions use one set-based page with a strict compatibility fallback', () => {
   assert.match(helpers, /CREATE TEMP TABLE pg_temp\._bpay_pre_cancel_fast_work/);
+  assert.doesNotMatch(helpers, /membership\.candidate_id/);
+  assert.match(
+    helpers,
+    /JOIN public\.pay_batch_candidates AS batch_candidate[\s\S]*batch_candidate\.candidate_id=exact_work\.candidate_id/,
+  );
   assert.match(helpers, /CREATE TEMP TABLE pg_temp\._bpay_pre_cancel_fast_items/);
   assert.match(helpers, /provider_shape_count=0/);
   assert.match(helpers, /public\.pay_bank_transfer_events AS transfer_event/);
