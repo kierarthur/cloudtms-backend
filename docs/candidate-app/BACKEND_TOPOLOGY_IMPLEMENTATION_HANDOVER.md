@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 10 August 2026
-Status: final Candidate broker/private API authority correction published and deployed to TEST for independent API-freeze audit. This document is updated through public-finalisation closure, DB-owned component replay identity, read-only paper-pack delivery, deterministic scheduled release, paper-workflow multiplicity and professional paper documents.
+Status: final Candidate broker/private API authority correction published and deployed to TEST for independent API-freeze audit. This document is updated through generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity and compare-and-set outbox release.
 
 ## Executive result
 
@@ -21,7 +21,18 @@ Candidate iOS / Android / web + manager browser
 
 The public broker has no Supabase/R2 or CloudTMS business-authority dependency. The private Candidate API has no public Worker route. The normal CloudTMS Worker retains authenticated office adapters and now rejects public Candidate/manager paths before its global preflight handler.
 
-No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version, invoice, payment, Banking Pay, Policy X, Google rota/availability or official-timesheet-renderer economics were changed in this pass. One existing Candidate workflow RPC definition was tightened only to return and validate the authoritative prepared-upload contract on idempotent replay.
+No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version, invoice, payment, Banking Pay, Policy X, Google rota/availability or official-timesheet-renderer economics were changed in this pass. One existing Candidate workflow RPC definition was tightened only to make prepared-upload replay generation/state-safe and to prevent a terminal component from being revived.
+
+## Final retry, document and HTTP authority closure in this revision
+
+- `COMPONENT_PREPARE` accepts an idempotent replay only for the workflow's current generation and only while the original component is `PENDING` or already `IMMUTABLE`; cross-generation and terminal-state reuse fails before a ticket can be created;
+- `COMPONENT_COMPLETE` accepts an identical immutable digest replay, permits only `PENDING` to become `IMMUTABLE`, and guards the final update so `SUPERSEDED`, `REJECTED` or `ABANDONED` evidence cannot be revived;
+- every persisted official, expense, mileage and combined-paper-pack PDF disables live-clock metadata and binds its immutable identity to frozen input, renderer version and frozen agency/logo digest;
+- generated-document and paper-pack retries inspect the durable R2 receipt first and resume registration/release from exact existing bytes after a post-write failure;
+- manager methods are exact at both boundaries: `GET start`, `POST progress`, `POST approve`, `POST refuse`, `POST signature/prepare` and `GET document`; a mismatch returns `405` before any RPC;
+- paper notifications are insert-once and cannot reset read/dismissed or claimed/sent/failed push state;
+- paper workflow multiplicity is checked before any document-state return, and outbox bind/release requires one verified expected-status compare-and-set before notification;
+- the expense renderer requires the explicit frozen canonical display total and performs no fallback category summation.
 
 ## Final audit finding closure in this revision
 
@@ -207,25 +218,26 @@ Implemented:
 | Verification | Result |
 |---|---:|
 | Changed/new JavaScript syntax | PASS |
-| Focused Candidate/backend/broker/DB-contract tests | 75 passed, 0 failed |
-| Candidate DB/RPC + canonical DAILY structural tests | 39 passed, 0 failed |
-| Complete backend test suite | 400 passed, 0 failed |
+| Focused Candidate/backend/broker/DB-contract/renderer tests | 109 passed, 0 failed |
+| Candidate DB/RPC + canonical DAILY structural tests | 41 passed, 0 failed |
+| Complete backend test suite | 414 passed, 0 failed |
 | PostgreSQL 17.6 runtime/concurrency suites | 13 passed, 0 failed |
 | PostgreSQL 18.1 runtime/concurrency suites | 13 passed, 0 failed |
 | Candidate broker Wrangler dry run | PASS |
 | Private Candidate API Wrangler dry run | PASS |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
-| GitHub TEST database migration workflow `31341588838` | PASS |
+| GitHub TEST database migration workflow `31371552388` | PASS |
+| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31371552498` | PASS |
 | Public Candidate broker health/readiness | 200 / 200 |
 | Normal TEST backend health/readiness | 200 / 200 |
 | Direct public Candidate route on normal backend | 404, as required |
 
 The pre-deployment dry runs and final deployments used repository-installed Wrangler 4.43.0. Active TEST deployment identities at handover generation are:
 
-- normal TEST backend: `2ac68ff7-424d-4b35-adb6-6f9c016a6380`;
-- private Candidate API: `1e7bd640-7db2-4276-9e99-e0d4fd043ef3`;
-- public Candidate broker: `4c01dff4-43eb-4337-adeb-10f89b1bc090`.
+- normal TEST backend: `7064d26e-d151-42dd-a8da-7f7b95fe96b0`;
+- private Candidate API: `9d6ba30b-5671-4e21-a769-8cd16eb3efd4`;
+- public Candidate broker: `4864624d-a571-4b59-bbac-71ca292d5f68`.
 
 The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
@@ -254,10 +266,15 @@ Please verify, function by function, including the final authority seams:
 19. paper-pack status/download are read-only and cannot write R2, mail or notifications, including when a bound mail row is `FAILED`;
 20. the scheduler releases only one workflow/generation/manifest-bound outbox row and fails closed on multiple active paper workflows;
 21. the expense summary and mileage form meet the configured-brand, plain-English, A4 table and stable-identity presentation contract without altering economics.
+22. component PREPARE cannot cross a workflow generation or revive a terminal component, and COMPLETE can mutate only `PENDING` while preserving identical immutable replay;
+23. every persisted Candidate PDF is byte-identical for the same frozen contract across wall-clock time and can recover after R2 success plus later registration/release failure;
+24. unsupported manager HTTP methods return `405` with zero RPC calls at both public and private boundaries;
+25. duplicate paper release cannot reset notification read or push state, and no notification is created after a lost outbox compare-and-set race;
+26. paper multiplicity fails before PREPARING/FAILED/missing-document returns, and rendering fails closed when the explicit canonical expense total is absent.
 
 ## Remaining delivery sequence after independent GO
 
-1. independently audit exact runtime commit `657eb607396411fd9c1f50c1f44f63afdf13824e`, its deployed TEST services, the documentation-only follow-up commit and this handover manifest;
+1. independently audit exact runtime commit `099802f7cf72e3c8ff68f286743247343cd00413`, its deployed TEST services, the documentation-only follow-up commit and this handover manifest;
 2. keep Candidate feature flags false until the coordinated synthetic TEST fixtures and current CloudTMS frontend are ready;
 3. implement the approved CloudTMS frontend changes, including one shared W01–W13 renderer;
 4. independently verify and freeze the OpenAPI contract after frontend acceptance;
@@ -267,14 +284,14 @@ Please verify, function by function, including the final authority seams:
 
 ## Safety and provenance
 
-- Database mutation or migration: the explicitly authorised TEST migration workflow `31341588838` installed the approved latest definitions; no Candidate business data was created or changed.
+- Database mutation or migration: the explicitly authorised TEST migration workflow `31371552388` installed the approved latest definitions and workflow `31371552498` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
 - Candidate/manager workflow mutation: none.
 - R2 write/delete: none.
 - Email or push sent: none.
 - Normal TEST Worker deployed: yes, explicitly authorised; TEST only.
 - Private/broker Worker deployed: yes, explicitly authorised; TEST only.
 - Production accessed or deployed: no.
-- Commit/push: runtime backend commit `657eb607396411fd9c1f50c1f44f63afdf13824e` pushed directly to `origin/test`; the subsequent plan/evidence update is documentation-only; no PR.
+- Commit/push: runtime backend commit `099802f7cf72e3c8ff68f286743247343cd00413` published directly to `origin/test`; the subsequent plan/evidence update is documentation-only; no PR.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.
 

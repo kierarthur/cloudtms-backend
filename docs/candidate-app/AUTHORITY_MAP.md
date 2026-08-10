@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: deployed TEST broker/private-backend authority map, updated 10 August 2026 through public-finalisation closure, DB-owned upload replay identity, read-only paper-pack delivery and professional paper documents at runtime commit `657eb607396411fd9c1f50c1f44f63afdf13824e`.
+Status: deployed TEST broker/private-backend authority map, updated 10 August 2026 through generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release, exact manager methods and notification/outbox replay closure at runtime commit `099802f7cf72e3c8ff68f286743247343cd00413`.
 
 ## Canonical owner graph
 

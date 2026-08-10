@@ -1,6 +1,6 @@
 # Candidate broker and private CloudTMS API topology
 
-Status: TEST implementation and deployed topology contract; updated through final public-finalisation, immutable-upload replay, read-only paper-pack and scheduled-release closure on 10 August 2026.
+Status: TEST implementation and deployed topology contract; updated through final generation/state-safe upload replay, deterministic immutable rendering/recovery, exact manager methods and compare-and-set paper release closure on 10 August 2026.
 
 ## Required trust boundary
 
@@ -127,15 +127,15 @@ The delivery contract to implement with the app identities is: deterministic not
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `f60f3582-2df0-4aba-af65-e19003ef274e`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `6e670082-d166-43f0-88c3-db30dd7b5c1b`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `da3fcf80-026f-48e2-aaa5-acd708a46143`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `4864624d-a571-4b59-bbac-71ca292d5f68`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `9d6ba30b-5671-4e21-a769-8cd16eb3efd4`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `7064d26e-d151-42dd-a8da-7f7b95fe96b0`.
 - Broker health/readiness: 200/200.
 - Normal backend health/readiness: 200/200.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The deployed runtime code is published at backend commit `657eb607396411fd9c1f50c1f44f63afdf13824e`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The deployed runtime code is published at backend commit `099802f7cf72e3c8ff68f286743247343cd00413`. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 
