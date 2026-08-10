@@ -59,6 +59,7 @@ declare
   v_rejected_target_timesheet_id uuid;
   v_qr_source_timesheet_id uuid;
   v_delivery_generation integer;
+  v_source_key text;
   v_reason text:=upper(btrim(coalesce(p_reason_code,'')));
   v_qr_token_hash text;
   v_mail_count integer:=0;
@@ -84,7 +85,7 @@ begin
     raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
   end if;
   if v_workflow.route<>'PAPER'
-     or v_workflow.state not in ('AWAITING_PAPER_RETURN','FINALISED') then
+     or v_workflow.state not in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED') then
     return jsonb_build_object(
       'retired',false,'workflow_id',v_workflow.id,
       'generation',v_workflow.generation,'reason_code',v_reason
@@ -92,9 +93,9 @@ begin
   end if;
 
   -- Finalisation advances the workflow generation after freezing the PAPER
-  -- return artefacts. Office rejection must therefore fence and retire the
-  -- preceding immutable delivery generation while comparing and locking the
-  -- current FINALISED workflow generation.
+  -- return artefacts. RECEIVED remains on the immutable delivery generation
+  -- while canonical finalisation is retryable; FINALISED owns the immediately
+  -- preceding generation.
   v_delivery_generation:=case
     when v_workflow.state='FINALISED' then greatest(v_workflow.generation-1,1)
     else v_workflow.generation
@@ -197,8 +198,16 @@ begin
       )::text;
   end if;
 
+  v_source_key:=case
+    when nullif(btrim(coalesce(v_qr_source.booking_id,'')),'') is not null
+      then 'BOOKING:'||v_qr_source.booking_id
+    else 'TIMESHEET:'||v_qr_source.timesheet_id::text
+  end;
+  perform pg_advisory_xact_lock(hashtextextended(
+    'CANDIDATE_PAPER_SOURCE:'||v_source_key,0
+  ));
+
   if nullif(btrim(coalesce(v_qr_source.booking_id,'')),'') is not null then
-    perform pg_advisory_xact_lock(hashtext(v_qr_source.booking_id));
     select count(*)::integer into v_current_source_count
     from public.timesheets current_source
     where current_source.booking_id=v_qr_source.booking_id
@@ -409,6 +418,8 @@ declare
   v_source_key text;
   v_workflow_source_key text;
   v_source_keys text[]:='{}'::text[];
+  v_family_key text;
+  v_family_keys text[]:='{}'::text[];
   v_processed_keys text[]:='{}'::text[];
   v_selected_workflow_ids uuid[]:='{}'::uuid[];
   v_selected_count integer:=0;
@@ -434,6 +445,32 @@ begin
     raise exception 'CANDIDATE_PAPER_RETIREMENT_SET_DUPLICATE_WORKFLOW' using errcode='22023';
   end if;
 
+  -- Establish the common family lock order before freezing any selected
+  -- workflow. Each identity is revalidated under row locks below.
+  for v_input in
+    select workflow.environment,workflow.contract_id,
+      coalesce(workflow.week_ending_date,workflow.work_date) as family_date
+    from unnest(p_workflow_ids) input(workflow_id)
+    join public.candidate_submission_workflows workflow on workflow.id=input.workflow_id
+    order by workflow.environment,workflow.contract_id,
+      coalesce(workflow.week_ending_date,workflow.work_date)
+  loop
+    v_family_key:='CANDIDATE_PAPER_FAMILY:'||v_input.environment||':'
+      ||coalesce(v_input.contract_id::text,'-')||':'
+      ||coalesce(v_input.family_date::text,'-');
+    if not (v_family_key=any(v_family_keys)) then
+      v_family_keys:=array_append(v_family_keys,v_family_key);
+    end if;
+  end loop;
+  if cardinality(v_family_keys)<1 then
+    raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
+  end if;
+  for v_family_key in
+    select family_item from unnest(v_family_keys) family_item order by family_item
+  loop
+    perform pg_advisory_xact_lock(hashtextextended(v_family_key,0));
+  end loop;
+
   -- Freeze the exact selected workflow set first. Each selected immutable
   -- delivery generation must identify exactly one QR source family.
   for v_input in
@@ -453,7 +490,7 @@ begin
       raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
     end if;
     if v_workflow.route<>'PAPER'
-       or v_workflow.state not in ('AWAITING_PAPER_RETURN','FINALISED') then
+       or v_workflow.state not in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED') then
       raise exception 'CANDIDATE_PAPER_RETIREMENT_SET_WORKFLOW_INVALID'
         using errcode='40001',detail=jsonb_build_object(
           'code','CANDIDATE_PAPER_RETIREMENT_SET_WORKFLOW_INVALID',
@@ -531,8 +568,10 @@ begin
   for v_source_key in
     select source_item from unnest(v_source_keys) as source_item order by source_item
   loop
+    perform pg_advisory_xact_lock(hashtextextended(
+      'CANDIDATE_PAPER_SOURCE:'||v_source_key,0
+    ));
     if v_source_key like 'BOOKING:%' then
-      perform pg_advisory_xact_lock(hashtext(v_source_key));
       select count(*)::integer into v_current_source_count
       from public.timesheets current_source
       where current_source.booking_id=substring(v_source_key from 9)
@@ -554,7 +593,6 @@ begin
         and upper(coalesce(current_source.line_type::text,'')) not in ('EXPENSES','MILEAGE')
       for update;
     else
-      perform pg_advisory_xact_lock(hashtext(v_source_key));
       select current_source.* into v_current_source
       from public.timesheets current_source
       where current_source.timesheet_id=substring(v_source_key from 11)::uuid
@@ -571,12 +609,12 @@ begin
       end if;
     end if;
 
-    -- Freeze every current/finalised PAPER workflow and bound outbox row on
+    -- Freeze every live/received/finalised PAPER workflow and bound outbox row on
     -- this source before checking provider leases or changing any lifecycle.
     perform 1
     from public.candidate_submission_workflows relevant_workflow
     where relevant_workflow.route='PAPER'
-      and relevant_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED')
+      and relevant_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED')
       and exists(
         select 1
         from public.mail_outbox relevant_mail
@@ -604,7 +642,7 @@ begin
     where relevant_mail.type='TIMESHEET_QR'
       and relevant_mail.context_kind='timesheets'
       and relevant_workflow.route='PAPER'
-      and relevant_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED')
+      and relevant_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED')
       and relevant_mail.payment_scope_json->>'candidate_workflow_generation'=
         (case when relevant_workflow.state='FINALISED'
           then greatest(relevant_workflow.generation-1,1)
@@ -625,7 +663,7 @@ begin
       where leased_mail.type='TIMESHEET_QR'
         and leased_mail.context_kind='timesheets'
         and leased_workflow.route='PAPER'
-        and leased_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED')
+        and leased_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED')
         and leased_mail.payment_scope_json->>'candidate_workflow_generation'=
           (case when leased_workflow.state='FINALISED'
             then greatest(leased_workflow.generation-1,1)
@@ -673,7 +711,7 @@ begin
         where owner_mail.type='TIMESHEET_QR'
           and owner_mail.context_kind='timesheets'
           and relevant_workflow.route='PAPER'
-          and relevant_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED')
+          and relevant_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED')
           and owner_mail.payment_scope_json->>'candidate_workflow_generation'=
             (case when relevant_workflow.state='FINALISED'
               then greatest(relevant_workflow.generation-1,1)
@@ -723,7 +761,7 @@ begin
       end if;
     end if;
 
-    -- Every current/finalised delivery surface on the source becomes obsolete
+    -- Every live/received/finalised delivery surface on the source becomes obsolete
     -- when that source is rejected/rotated. Retire all of them, even where the
     -- QR token had already been cleared, while preserving workflows that are
     -- outside the selected rejection set and all immutable sent/R2 history.
@@ -736,7 +774,7 @@ begin
           relevant_workflow.id::text
       join public.timesheets mail_source on mail_source.timesheet_id=relevant_mail.context_id
       where relevant_workflow.route='PAPER'
-        and relevant_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED')
+        and relevant_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED')
         and relevant_mail.type='TIMESHEET_QR'
         and relevant_mail.context_kind='timesheets'
         and relevant_mail.payment_scope_json->>'candidate_workflow_generation'=
@@ -913,6 +951,7 @@ declare
   v_paper_renderer_contract_version text;
   v_paper_expected_storage_key text;
   v_unlocked_workflow_updated_at timestamptz;
+  v_paper_family_key text;
   v_source_component public.candidate_submission_components%rowtype;
   v_all_final_ready boolean:=false;
   v_server_issue_codes jsonb:='[]'::jsonb;
@@ -1335,6 +1374,10 @@ begin
       end if;
       v_unlocked_workflow_updated_at:=v_workflow.updated_at_utc;
       v_paper_timesheet_id:=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id);
+      v_paper_family_key:='CANDIDATE_PAPER_FAMILY:'||v_workflow.environment||':'
+        ||coalesce(v_workflow.contract_id::text,'-')||':'
+        ||coalesce(v_workflow.week_ending_date::text,v_workflow.work_date::text,'-');
+      perform pg_advisory_xact_lock(hashtextextended(v_paper_family_key,0));
       if v_action='PAPER_PREPARE' and v_paper_timesheet_id is null then
         raise exception 'CANDIDATE_PAPER_TIMESHEET_NOT_READY' using errcode='55000';
       end if;

@@ -31,6 +31,8 @@ const qrSettingsSource = read(
 const routeSource = read('supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql');
 const rejectSource = read('supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql');
 const backendSource = read('broker/src/candidate-app-backend.js');
+const normalBackendSource = read('broker/src/index.js');
+const providerAuthoritySource = read('broker/src/candidate-paper-provider-authority.js');
 const compileFixture = read('tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql');
 
 test('PAPER preparation atomically composes the canonical held-mail authority', () => {
@@ -114,7 +116,7 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(helper, /CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/);
   assert.match(helper, /candidate_paper_generation_retired',true/i);
   assert.match(helper, /CANDIDATE_PAPER_GENERATION_RETIRED/);
-  assert.match(helper, /v_workflow\.state not in \('AWAITING_PAPER_RETURN','FINALISED'\)/i);
+  assert.match(helper, /v_workflow\.state not in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
   assert.match(helper, /when v_workflow\.state='FINALISED' then greatest\(v_workflow\.generation-1,1\)/i);
   assert.match(helper, /candidate_workflow_generation'=v_delivery_generation::text/i);
   assert.match(helper, /v_qr_source_timesheet_id:=v_mail\.context_id/i);
@@ -128,7 +130,10 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(helper, /state='DISMISSED'/i);
   assert.match(helper, /qr_token=null/i);
   assert.match(setHelper, /cardinality\(p_workflow_ids\) is distinct from cardinality\(p_expected_generations\)/i);
-  assert.match(setHelper, /perform pg_advisory_xact_lock\(hashtext\(v_source_key\)\)/i);
+  assert.match(setHelper, /CANDIDATE_PAPER_FAMILY:/i);
+  assert.match(setHelper, /hashtextextended\(v_family_key,0\)/i);
+  assert.match(setHelper, /CANDIDATE_PAPER_SOURCE:'\|\|v_source_key/i);
+  assert.match(setHelper, /relevant_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
   assert.match(setHelper, /CURRENT_QR_TOKEN_OWNER_CONFLICT/);
   assert.match(setHelper, /_candidate_paper_delivery_retire_v1\([\s\S]*v_current_token_owner_workflow_id/i);
   assert.match(setHelper, /'qr_invalidation_proven',true/i);
@@ -137,9 +142,30 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_set_v1/);
-  assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','FINALISED'\)/i);
+  assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
+  assert.match(rejectSource, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_rejection_family_key,0\)\)[\s\S]*timesheet_id=p_timesheet_id for update/i);
   assert.match(rejectSource, /CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN/);
   assert.match(qrSettingsSource, /update public\.timesheet_evidence as evidence_row[\s\S]*where evidence_row\.timesheet_id=v_current\.timesheet_id/i);
+});
+
+test('provider handoff revalidates exact Candidate PAPER authority before external submission', () => {
+  const recheck = providerAuthoritySource;
+  assert.match(normalBackendSource, /import \{ candidatePaperProviderAuthorityCurrent \} from '\.\/candidate-paper-provider-authority\.js'/);
+  assert.match(recheck, /mail_outbox\?id=eq\./i);
+  assert.match(recheck, /candidate_submission_workflows\?id=eq\./i);
+  assert.match(recheck, /candidate_paper_generation_retired/i);
+  assert.match(recheck, /candidate_paper_pack_ready/i);
+  assert.match(recheck, /mail_held_until_pdf_rendered/i);
+  assert.match(recheck, /AWAITING_PAPER_RETURN/i);
+  assert.match(recheck, /paper_return_manifest_sha256/i);
+
+  const handoffStart = normalBackendSource.indexOf('const candidateJobs = bucket.jobs.slice');
+  const handoffEnd = normalBackendSource.indexOf('await reconcileBatchResult', handoffStart);
+  const handoff = normalBackendSource.slice(handoffStart, handoffEnd);
+  assert.ok(handoffStart > 0 && handoffEnd > handoffStart);
+  assert.match(handoff, /candidatePaperProviderAuthorityCurrent\(\{[\s\S]*claimedRow[\s\S]*currentLeaseToken: attemptLeaseToken/);
+  assert.match(handoff, /patchClaimedRowDeferred/);
+  assert.ok(handoff.indexOf('candidatePaperProviderAuthorityCurrent') < handoff.indexOf('postToPowerAutomate'));
 });
 
 test('Candidate PAPER hashing resolves pgcrypto exactly as the TEST schema exposes it', () => {

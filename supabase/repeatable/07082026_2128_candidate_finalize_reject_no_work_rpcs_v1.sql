@@ -1198,6 +1198,9 @@ declare
   v_paper_workflow_ids uuid[]:='{}'::uuid[];
   v_paper_workflow_generations integer[]:='{}'::integer[];
   v_paper_retirement_result jsonb;
+  v_rejection_family_contract_id uuid;
+  v_rejection_family_week_ending_date date;
+  v_rejection_family_key text;
   v_response jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
@@ -1218,6 +1221,22 @@ begin
   if found then
     return coalesce(v_response,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
   end if;
+
+  -- Serialise every Candidate rejection for the same contract/week before
+  -- locking either the hours row or a separate expense carrier. This prevents
+  -- the inverse target/workflow/source lock order that can deadlock H1/E1.
+  select target.contract_id,target.week_ending_date
+  into v_rejection_family_contract_id,v_rejection_family_week_ending_date
+  from public.timesheets target
+  where target.timesheet_id=p_timesheet_id;
+  if not found then
+    raise exception 'CANDIDATE_REJECT_TARGET_NOT_FOUND' using errcode='P0002';
+  end if;
+  v_rejection_family_key:='CANDIDATE_PAPER_FAMILY:'||v_environment||':'
+    ||coalesce(v_rejection_family_contract_id::text,'-')||':'
+    ||coalesce(v_rejection_family_week_ending_date::text,'-');
+  perform pg_advisory_xact_lock(hashtextextended(v_rejection_family_key,0));
+
   select * into v_timesheet from public.timesheets where timesheet_id=p_timesheet_id for update;
   if not found then raise exception 'CANDIDATE_REJECT_TARGET_NOT_FOUND' using errcode='P0002'; end if;
   if not v_timesheet.is_current or v_timesheet.timesheet_id<>p_expected_timesheet_id then
@@ -1267,7 +1286,7 @@ begin
   loop
     v_rejected_workflow_ids:=array_append(v_rejected_workflow_ids,v_workflow.id);
     if v_workflow.route='PAPER'
-       and v_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED') then
+       and v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED') then
       v_paper_workflow_ids:=array_append(v_paper_workflow_ids,v_workflow.id);
       v_paper_workflow_generations:=array_append(
         v_paper_workflow_generations,v_workflow.generation

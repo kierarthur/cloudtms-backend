@@ -301,7 +301,7 @@ select pg_temp.verify_finalised_paper_rejection(true,'SENT',false,false);
 
 create or replace function pg_temp.verify_shared_qr_source_rejection(
   p_hours_sorts_first boolean,
-  p_expense_finalised boolean,
+  p_expense_state text,
   p_hours_mail_status text,
   p_expense_mail_status text,
   p_lease_on_expense boolean,
@@ -338,6 +338,9 @@ declare
   v_new_timesheet uuid;
   v_blocked boolean:=false;
 begin
+  if p_expense_state not in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED') then
+    raise exception 'Unsupported shared-source expense state: %',p_expense_state;
+  end if;
   if p_hours_mail_status not in ('QUEUED','SENT')
      or p_expense_mail_status not in ('QUEUED','SENT') then
     raise exception 'Unsupported shared-source mail status';
@@ -426,12 +429,12 @@ begin
           'page_key','HOURS_TIMESHEET','component_kind','HOURS_TIMESHEET')))),
       'CANDIDATE_REVIEW_DOCUMENTS_V1'),
     (v_expense_workflow,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE','WEEKLY','PAPER',
-      case when p_expense_finalised then 'FINALISED' else 'AWAITING_PAPER_RETURN' end,
-      case when p_expense_finalised then 2 else 1 end,
-      v_contract,case when p_expense_finalised then v_expense_week else v_hours_week end,
-      v_hours_timesheet,case when p_expense_finalised then v_expense_timesheet else null end,
+      p_expense_state,
+      case when p_expense_state='FINALISED' then 2 else 1 end,
+      v_contract,case when p_expense_state='FINALISED' then v_expense_week else v_hours_week end,
+      v_hours_timesheet,case when p_expense_state='FINALISED' then v_expense_timesheet else null end,
       current_date,'shared-expense:'||v_expense_workflow::text,
-      case when p_expense_finalised then v_now else null end,
+      case when p_expense_state='FINALISED' then v_now else null end,
       jsonb_build_object('workflow_id',v_expense_workflow,'workflow_generation',1,
         'pages',jsonb_build_array(jsonb_build_object(
           'page_key','EXPENSE_SUMMARY','component_kind','EXPENSE_SUMMARY'))),
@@ -506,7 +509,7 @@ begin
     end if;
     if (select state from public.candidate_submission_workflows where id=v_hours_workflow)<>'FINALISED'
        or (select state from public.candidate_submission_workflows where id=v_expense_workflow)<>
-          (case when p_expense_finalised then 'FINALISED' else 'AWAITING_PAPER_RETURN' end)
+          p_expense_state
        or (select qr_token from public.timesheets where timesheet_id=v_hours_timesheet)
           is distinct from (case when p_current_token_present then v_current_token else null end)
        or (select expenses_pay_ex_vat from public.timesheets_financials
@@ -525,7 +528,7 @@ begin
   end if;
   if (select state from public.candidate_submission_workflows where id=v_hours_workflow)<>'REJECTED'
      or (select state from public.candidate_submission_workflows where id=v_expense_workflow)<>
-        (case when p_expense_finalised then 'FINALISED' else 'REJECTED' end)
+        (case when p_expense_state='FINALISED' then 'FINALISED' else 'REJECTED' end)
      or (select generation from public.candidate_submission_workflows where id=v_expense_workflow)<>2 then
     raise exception 'Shared-source rejection changed the wrong workflow';
   end if;
@@ -543,7 +546,7 @@ begin
     raise exception 'Shared-source current QR token remained usable';
   end if;
   if not coalesce((v_result#>>'{paper_retirement_receipt,qr_invalidation_proven}')::boolean,false)
-     or (p_expense_finalised and not exists(
+     or (p_expense_state='FINALISED' and not exists(
        select 1
        from jsonb_array_elements(
          coalesce(v_result#>'{paper_retirement_receipt,preserved_workflows}','[]'::jsonb)
@@ -584,20 +587,24 @@ begin
   if not coalesce((v_replay->>'idempotent_replay')::boolean,false)
      or (select count(*) from public.timesheets where booking_id=v_booking)<>2
      or (select state from public.candidate_submission_workflows where id=v_expense_workflow)<>
-        (case when p_expense_finalised then 'FINALISED' else 'REJECTED' end) then
+        (case when p_expense_state='FINALISED' then 'FINALISED' else 'REJECTED' end) then
     raise exception 'Shared-source rejection replay was not idempotent: %',v_replay;
   end if;
 end;
 $function$;
 
-select pg_temp.verify_shared_qr_source_rejection(true,true,'QUEUED','QUEUED',false,true,false);
-select pg_temp.verify_shared_qr_source_rejection(false,true,'QUEUED','QUEUED',false,true,false);
-select pg_temp.verify_shared_qr_source_rejection(true,true,'SENT','QUEUED',false,true,false);
-select pg_temp.verify_shared_qr_source_rejection(false,true,'QUEUED','SENT',false,true,false);
-select pg_temp.verify_shared_qr_source_rejection(true,true,'SENT','SENT',false,true,false);
-select pg_temp.verify_shared_qr_source_rejection(false,true,'QUEUED','QUEUED',true,true,true);
-select pg_temp.verify_shared_qr_source_rejection(true,false,'QUEUED','QUEUED',false,true,false);
-select pg_temp.verify_shared_qr_source_rejection(false,false,'QUEUED','QUEUED',false,true,false);
-select pg_temp.verify_shared_qr_source_rejection(true,true,'QUEUED','QUEUED',false,false,false);
+select pg_temp.verify_shared_qr_source_rejection(true,'FINALISED','QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,'FINALISED','QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(true,'FINALISED','SENT','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,'FINALISED','QUEUED','SENT',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(true,'FINALISED','SENT','SENT',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,'FINALISED','QUEUED','QUEUED',true,true,true);
+select pg_temp.verify_shared_qr_source_rejection(true,'AWAITING_PAPER_RETURN','QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,'AWAITING_PAPER_RETURN','QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(true,'RECEIVED','QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,'RECEIVED','QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(true,'RECEIVED','QUEUED','QUEUED',true,true,true);
+select pg_temp.verify_shared_qr_source_rejection(true,'RECEIVED','QUEUED','SENT',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(true,'FINALISED','QUEUED','QUEUED',false,false,false);
 
 rollback;

@@ -554,13 +554,17 @@ test('PAPER rejection retires a shared QR source as one locked set before record
   const reject = definition(sql.final, 'candidate_submission_reject_atomic_v1');
   assert.match(retireSet, /cardinality\(p_workflow_ids\) is distinct from cardinality\(p_expected_generations\)/i);
   assert.match(retireSet, /MULTIPLE_QR_SOURCE_FAMILIES|QR_SOURCE_SCOPE_MISMATCH/i);
-  assert.match(retireSet, /pg_advisory_xact_lock\(hashtext\(v_source_key\)\)/i);
+  assert.match(retireSet, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_family_key,0\)\)/i);
+  assert.match(retireSet, /CANDIDATE_PAPER_SOURCE:'\|\|v_source_key/i);
+  assert.match(retireSet, /state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
   assert.match(retireSet, /attempt_lease_expires_at_utc>p_now_utc[\s\S]*CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/i);
   assert.match(retireSet, /qr_token_hash[\s\S]*v_current_token_hash/i);
   assert.match(retireSet, /_candidate_paper_delivery_retire_v1\([\s\S]*v_current_token_owner_workflow_id[\s\S]*v_current_token_owner_generation/i);
   assert.match(retireSet, /'qr_invalidation_proven',true/i);
   assert.match(retireSet, /'preserved_workflows'/i);
   assert.match(reject, /v_paper_workflow_ids:=array_append\(v_paper_workflow_ids,v_workflow\.id\)/i);
+  assert.match(reject, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_rejection_family_key,0\)\)/i);
+  assert.match(reject, /v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
   assert.match(reject, /_candidate_paper_delivery_retire_set_v1\([\s\S]{0,80}v_paper_workflow_ids,v_paper_workflow_generations/i);
   assert.match(reject, /v_paper_retirement_result->>'qr_invalidation_proven'[\s\S]{0,40}::boolean,false/i);
   assert.doesNotMatch(reject, /_candidate_paper_delivery_retire_v1\(v_captured_workflow\.id/i);

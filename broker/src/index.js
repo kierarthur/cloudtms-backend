@@ -46,6 +46,7 @@ import {
   mapCanonicalDailyScheduleToIso
 } from './daily-schedule-authority.js';
 import { handleCandidateAppRequest } from './candidate-app-backend.js';
+import { candidatePaperProviderAuthorityCurrent } from './candidate-paper-provider-authority.js';
 import {
   createImportReviewDispatcher,
   importReviewSourceEvidenceFromR2,
@@ -126955,8 +126956,50 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     for (let start = 0; start < bucket.jobs.length; start += maxPerCall) {
       if (outboundCallCount >= maxCallsPerDrain) break;
 
-      const batchJobs = bucket.jobs.slice(start, start + maxPerCall);
-      const batchRowIds = bucket.rowIds.slice(start, start + maxPerCall);
+      const candidateJobs = bucket.jobs.slice(start, start + maxPerCall);
+      const candidateRowIds = bucket.rowIds.slice(start, start + maxPerCall);
+      if (!candidateJobs.length) continue;
+
+      const batchJobs = [];
+      const batchRowIds = [];
+      for (let itemIndex = 0; itemIndex < candidateJobs.length; itemIndex += 1) {
+        const rowId = candidateRowIds[itemIndex];
+        const claimedRow = claimedRowsById.get(String(rowId || '').trim()) || null;
+        let authority = null;
+        try {
+          authority = await candidatePaperProviderAuthorityCurrent({
+            env,
+            claimedRow,
+            currentLeaseToken: attemptLeaseToken,
+            fetchImpl: fetch,
+            headers: sbHeaders(env)
+          });
+        } catch {
+          authority = {
+            candidate_bound: true,
+            authorised: false,
+            reason: 'CANDIDATE_PAPER_PROVIDER_AUTHORITY_RECHECK_FAILED'
+          };
+        }
+        if (authority.candidate_bound && !authority.authorised) {
+          const reason = String(authority.reason || 'CANDIDATE_PAPER_PROVIDER_AUTHORITY_REVOKED');
+          const updatedRow = await patchClaimedRowDeferred(
+            rowId, reason, attemptLeaseToken
+          ).catch(() => null);
+          if (updatedRow) {
+            deferred += 1;
+            errors.push({ id: rowId, error: reason, deferred: true });
+            await recordEmailAudit(env, null, 'EMAIL_DEFERRED', {
+              outbox_id: rowId,
+              reason,
+              type: claimedRow && claimedRow.type
+            });
+          }
+          continue;
+        }
+        batchJobs.push(candidateJobs[itemIndex]);
+        batchRowIds.push(rowId);
+      }
       if (!batchJobs.length) continue;
 
       const batchPayload = { items: batchJobs };
