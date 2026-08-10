@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: deployed TEST broker/private-backend authority map, updated 10 August 2026 through exact claim-record replacement matching, source-set shared-QR retirement, current-version expense anchoring, scoped hours/expense recovery arrays, finalised PAPER lease fencing, generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release, exact manager methods and notification/outbox replay closure at runtime commit `2bf475c05e6fda6be68064b209f3e0398a26be6c`.
+Status: deployed TEST broker/private-backend authority map, updated 11 August 2026 through retryable `RECEIVED` PAPER retirement, shared-source lease/token/mail/notification fencing, deterministic linked-rejection lock ordering, provider-boundary revalidation, exact claim-record replacement, current-version expense anchoring, generation/state-safe upload replay, deterministic immutable documents, recovery-safe paper release and exact manager methods at runtime commit `6b73e18d6a7bcd85b823df435bfe1f1c18e32e4f`.
 
 ## Canonical owner graph
 
@@ -42,7 +42,7 @@ Neither Worker alters the existing financial algorithms. The broker cannot acces
 | `timesheet_expense_apply_atomic_v1` | called only inside the installed finalisation authority |
 | `candidate_workflow_transition_atomic_v1` | workflow/components/manager/phone/notification orchestration |
 | `candidate_submission_finalize_atomic_v1` | final signed ELECTRONIC and complete PAPER finalisation |
-| `candidate_submission_reject_atomic_v1` | office whole-record Candidate rejection; pre-finalisation target-or-anchor retirement, finalised exact-target rejection, separate-expense anchor isolation and preceding finalised-PAPER delivery retirement with mail-receipt-owned QR invalidation before economic-target rotation |
+| `candidate_submission_reject_atomic_v1` | office whole-record Candidate rejection; one candidate/contract/week family lock is obtained before row locks, then pre-finalisation target-or-anchor retirement, finalised exact-target rejection, separate-expense anchor isolation and `AWAITING_PAPER_RETURN`/`RECEIVED`/`FINALISED` delivery retirement with mail-receipt-owned QR invalidation occur before economic-target rotation |
 | `candidate_no_work_atomic_v1` | Candidate no-work decision |
 
 ## Existing CloudTMS owners retained
@@ -85,7 +85,7 @@ QR/paper delivery remains one composed authority: `PAPER_PREPARE` queues the exi
 
 Candidate rejection/read authority remains server-owned: historical workflow and carrier anchor IDs are immutable audit facts, while the current card identity is resolved through one exact current booking/version family. A newer workflow suppresses an older rejection only when it is a true replacement of that exact logical claim: the same contract-week record for hours/combined, the same week-level expense family for expenses, or the same DAILY booking/work date. Independently actionable hours and expense rejections are returned together, so the client never guesses which recovery action survives.
 
-PAPER retirement keeps two identities separate: the QR source comes from the exact frozen delivery mail context/hash, while the rejected economic target comes from the locked workflow target. They may be the same hours row or different hours-anchor/expense-carrier rows. The database locks every relevant PAPER workflow and outbox row for that source, fences all live provider leases, invalidates the current token through its exact owner once, then retires every delivery surface on the source while preserving unrelated finalised workflow/economic history. No Candidate, frontend or broker code may infer or interchange those identities.
+PAPER retirement keeps two identities separate: the QR source comes from the exact frozen delivery mail context/hash, while the rejected economic target comes from the locked workflow target. They may be the same hours row or different hours-anchor/expense-carrier rows. The database treats `AWAITING_PAPER_RETURN`, retryable `RECEIVED` and `FINALISED` as one closed retirement set, locks every relevant workflow and outbox row for the source, fences all live provider leases, invalidates the current token through its exact owner once, then retires every delivery surface while preserving sent/signed history and unrelated finalised workflow/economic truth. Linked hours/expense rejection uses one family advisory lock before any target or workflow row lock. The mail adapter repeats the exact workflow/generation/manifest/lease proof immediately before provider submission. No Candidate, frontend or broker code may infer, interchange or bypass these identities.
 
 - versioned private Candidate/manager and authenticated office routing, explicitly separated by route audience;
 - private Candidate session/password boundary behind the broker;
