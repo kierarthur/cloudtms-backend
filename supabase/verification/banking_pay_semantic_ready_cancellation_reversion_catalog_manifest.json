@@ -77,7 +77,7 @@
     {
       "schema": "public", "name": "pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1",
       "identity_arguments": "p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "3bfab159013fa0d51f8ecb799b410269488a67ad9e85dd01bd1628a08d90d6c4",
+      "definition_sha256": "441d37715a2cf794cab12fcbf8180810d2dbceac4dd6fa291a73b25457c504c9",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp", "plpgsql_check.mode=disabled"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
