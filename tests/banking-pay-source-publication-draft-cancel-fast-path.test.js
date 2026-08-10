@@ -107,6 +107,11 @@ test('cancelled rows remain eligible but explicitly unticked across publication'
 
 test('Draft one-step RPC preserves existing business owners while removing HTTP fanout', () => {
   assert.match(helpers, /CREATE OR REPLACE FUNCTION public\.banking_pay_draft_create_step_v1/);
+  assert.doesNotMatch(
+    helpers,
+    /pg_catalog\.(?:coalesce|nullif|greatest|least)\s*\(/i,
+    'SQL special forms must not be schema-qualified as callable pg_catalog functions'
+  );
   assert.match(helpers, /pay_workbench_prepare_draft_allocation_rows_seed/);
   assert.match(helpers, /pay_batch_insert_items_from_preview/);
   assert.match(helpers, /pay_batch_apply_finance_adjustments/);

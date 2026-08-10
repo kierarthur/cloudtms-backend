@@ -85,9 +85,9 @@ DECLARE
   v_operation public.banking_pay_operations%ROWTYPE;
   v_chunk record;
   v_group record;
-  v_phase text:=pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(p_expected_phase,'')));
+  v_phase text:=pg_catalog.upper(pg_catalog.btrim(COALESCE(p_expected_phase,'')));
   v_next_phase text;
-  v_worker_id text:=pg_catalog.nullif(pg_catalog.btrim(pg_catalog.coalesce(p_worker_id,'')),'');
+  v_worker_id text:=NULLIF(pg_catalog.btrim(COALESCE(p_worker_id,'')),'');
   v_scope_ids jsonb:='[]'::jsonb;
   v_result jsonb:='{}'::jsonb;
   v_results jsonb:='[]'::jsonb;
@@ -104,7 +104,7 @@ DECLARE
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
-  SELECT pg_catalog.coalesce(setting.banking_pay_draft_step_rpc_v1_enabled,false)
+  SELECT COALESCE(setting.banking_pay_draft_step_rpc_v1_enabled,false)
   INTO v_enabled
   FROM public.settings_defaults AS setting
   WHERE setting.id=1;
@@ -120,7 +120,7 @@ BEGIN
        'APPLY_FINANCE_ADJUSTMENTS','FINALISE_RESERVATIONS',
        'POPULATE_CANDIDATE_SUMMARIES','CREATE_TIMESHEET_SNAPSHOTS',
        'BUILD_ITEM_BREAKDOWNS'
-     ) OR pg_catalog.coalesce(p_request_budget_ms,25000) NOT BETWEEN 1000 AND 25000 THEN
+     ) OR COALESCE(p_request_budget_ms,25000) NOT BETWEEN 1000 AND 25000 THEN
     RAISE EXCEPTION 'BANKING_PAY_DRAFT_CREATE_STEP_INPUT_INVALID'
       USING ERRCODE='22023',DETAIL=pg_catalog.jsonb_build_object(
         'code','BANKING_PAY_DRAFT_CREATE_STEP_INPUT_INVALID',
@@ -137,28 +137,28 @@ BEGIN
   IF NOT FOUND THEN
     RETURN pg_catalog.jsonb_build_object('ok',false,'handled',true,'code','DRAFT_CREATE_OPERATION_NOT_FOUND');
   END IF;
-  IF pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(v_operation.operation_type,'')))<>'DRAFT_CREATE'
-     OR pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(v_operation.status,''))) NOT IN ('RUNNING','CONTINUING','WAITING_RETRY') THEN
+  IF pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.operation_type,'')))<>'DRAFT_CREATE'
+     OR pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.status,''))) NOT IN ('RUNNING','CONTINUING','WAITING_RETRY') THEN
     RETURN pg_catalog.jsonb_build_object(
       'ok',true,'handled',false,'code','DRAFT_CREATE_OPERATION_NOT_RUNNABLE',
       'operation',pg_catalog.to_jsonb(v_operation)
     );
   END IF;
-  IF pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(v_operation.phase,'')))<>v_phase THEN
+  IF pg_catalog.upper(pg_catalog.btrim(COALESCE(v_operation.phase,'')))<>v_phase THEN
     RETURN pg_catalog.jsonb_build_object(
       'ok',true,'handled',false,'code','DRAFT_CREATE_PHASE_MOVED',
       'operation',pg_catalog.to_jsonb(v_operation)
     );
   END IF;
-  IF pg_catalog.coalesce(v_operation.lease_owner,v_operation.locked_by) IS NOT NULL
-     AND pg_catalog.coalesce(v_operation.lease_owner,v_operation.locked_by)<>v_worker_id THEN
+  IF COALESCE(v_operation.lease_owner,v_operation.locked_by) IS NOT NULL
+     AND COALESCE(v_operation.lease_owner,v_operation.locked_by)<>v_worker_id THEN
     RETURN pg_catalog.jsonb_build_object(
       'ok',true,'handled',false,'code','DRAFT_CREATE_LEASE_OWNER_MISMATCH',
       'operation',pg_catalog.to_jsonb(v_operation)
     );
   END IF;
-  IF pg_catalog.coalesce(v_operation.lease_expires_at_utc,v_operation.lock_expires_at_utc) IS NOT NULL
-     AND pg_catalog.coalesce(v_operation.lease_expires_at_utc,v_operation.lock_expires_at_utc)<=v_now THEN
+  IF COALESCE(v_operation.lease_expires_at_utc,v_operation.lock_expires_at_utc) IS NOT NULL
+     AND COALESCE(v_operation.lease_expires_at_utc,v_operation.lock_expires_at_utc)<=v_now THEN
     RETURN pg_catalog.jsonb_build_object(
       'ok',true,'handled',false,'code','DRAFT_CREATE_LEASE_EXPIRED',
       'operation',pg_catalog.to_jsonb(v_operation)
@@ -215,16 +215,16 @@ BEGIN
     );
   END IF;
 
-  IF pg_catalog.coalesce((v_chunk.payload_json->>'row_backed')::boolean,false) IS NOT TRUE
-     OR pg_catalog.coalesce((v_chunk.payload_json->>'legacy_tiny_compat')::boolean,false) IS TRUE
-     OR pg_catalog.coalesce(v_chunk.payload_json->>'source_table','')='diagnostic_legacy_units' THEN
+  IF COALESCE((v_chunk.payload_json->>'row_backed')::boolean,false) IS NOT TRUE
+     OR COALESCE((v_chunk.payload_json->>'legacy_tiny_compat')::boolean,false) IS TRUE
+     OR COALESCE(v_chunk.payload_json->>'source_table','')='diagnostic_legacy_units' THEN
     RAISE EXCEPTION 'DRAFT_CREATE_STEP_CHUNK_NOT_ROW_BACKED'
       USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
         'code','DRAFT_CREATE_STEP_CHUNK_NOT_ROW_BACKED','chunk_id',v_chunk.chunk_id,'phase',v_phase
       )::text;
   END IF;
 
-  SELECT pg_catalog.coalesce(pg_catalog.jsonb_agg(scope_id ORDER BY scope_id),'[]'::jsonb)
+  SELECT COALESCE(pg_catalog.jsonb_agg(scope_id ORDER BY scope_id),'[]'::jsonb)
   INTO v_scope_ids
   FROM (
     SELECT DISTINCT value::uuid AS scope_id
@@ -239,7 +239,7 @@ BEGIN
     WHERE value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ) AS scope_ids;
   v_scope_count:=pg_catalog.jsonb_array_length(v_scope_ids);
-  IF pg_catalog.coalesce(v_chunk.unit_count,0)>0 AND v_scope_count=0 THEN
+  IF COALESCE(v_chunk.unit_count,0)>0 AND v_scope_count=0 THEN
     RAISE EXCEPTION 'DRAFT_CREATE_STEP_SCOPE_IDS_MISSING'
       USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
         'code','DRAFT_CREATE_STEP_SCOPE_IDS_MISSING','chunk_id',v_chunk.chunk_id,'phase',v_phase
@@ -254,7 +254,7 @@ BEGIN
     SELECT pg_catalog.to_jsonb(seed_row) INTO v_result
     FROM public.pay_workbench_prepare_draft_allocation_rows_seed(p_operation_id,v_scope_ids) AS seed_row
     LIMIT 1;
-    v_result:=pg_catalog.coalesce(v_result,'{}'::jsonb);
+    v_result:=COALESCE(v_result,'{}'::jsonb);
     v_results:=pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(
       'candidate_scope_ids',v_scope_ids,'result',v_result
     ));
@@ -289,7 +289,7 @@ BEGIN
         WHEN 'BUILD_ITEM_BREAKDOWNS' THEN public.pay_batch_build_item_breakdowns(
           v_group.pay_batch_id,v_operation.actor_user_id,p_operation_id,v_group.scope_ids)
       END;
-      IF pg_catalog.coalesce((v_result->>'ok')::boolean,true) IS NOT TRUE THEN
+      IF COALESCE((v_result->>'ok')::boolean,true) IS NOT TRUE THEN
         RAISE EXCEPTION 'DRAFT_CREATE_STEP_BUSINESS_OWNER_REJECTED'
           USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
             'code','DRAFT_CREATE_STEP_BUSINESS_OWNER_REJECTED','phase',v_phase,
@@ -339,7 +339,7 @@ BEGIN
   -- completed, the next loop observes no work and advances the phase inside
   -- this same RPC/transaction instead of requiring an otherwise empty HTTP
   -- round trip at 99%.
-  IF v_elapsed_ms < pg_catalog.greatest(500,p_request_budget_ms-1000) THEN
+  IF v_elapsed_ms < GREATEST(500,p_request_budget_ms-1000) THEN
     CONTINUE;
   END IF;
 

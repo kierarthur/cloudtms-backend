@@ -320,7 +320,7 @@
     {
       "schema": "public", "name": "banking_pay_draft_create_step_v1",
       "identity_arguments": "p_operation_id uuid, p_worker_id text, p_expected_phase text, p_request_budget_ms integer",
-      "definition_sha256": "90c951b0b17f5cd8408b5805bc50b09ce08effc0776ff79ffd68b22f1b023244",
+      "definition_sha256": "ea839276bd8bc66c2b732c4f2cd792919d3223f028da1e3731280ee83d18175f",
       "owner": "postgres", "security_definer": true,
       "proconfig": ["search_path=pg_catalog, public, private, pg_temp"],
       "expanded_acl": [
