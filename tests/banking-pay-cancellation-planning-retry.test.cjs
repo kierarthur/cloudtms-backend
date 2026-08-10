@@ -63,6 +63,11 @@ test('Worker exposes and executes the typed safe planning and processing retry a
   assert.match(worker, /PAYMENT_CORRECTION_RETRY_PROCESSING/);
 });
 
+test('safe cancellation retries are accepted by the durable continuation source policy', () => {
+  assert.match(worker, /PAYMENT_CORRECTION_RETRY_PLANNING:\s*\{\s*types:\s*\['PAYMENT_CORRECTION'\],\s*relations:\s*\['SELF'\]/);
+  assert.match(worker, /PAYMENT_CORRECTION_RETRY_PROCESSING:\s*\{\s*types:\s*\['PAYMENT_CORRECTION'\],\s*relations:\s*\['SELF'\]/);
+});
+
 test('planning retry RPC remains service-only', () => {
   assert.match(retrySql, /SECURITY DEFINER/);
   assert.match(retrySql, /REVOKE ALL ON FUNCTION public\.pay_payment_correction_retry_planning_v1\(uuid, uuid\) FROM PUBLIC/);
