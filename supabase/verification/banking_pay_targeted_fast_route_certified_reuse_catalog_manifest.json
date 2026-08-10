@@ -658,7 +658,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "44a0346bc031a1cb6d21e471711e9bcca093928d9139d294146ee08dcf2b01cd",
+      "definition_sha256": "002cb9be19862d575336d67d2ebb55c07d92a71f1dd9aa80cdc9fe7e809ba64f",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
