@@ -25,7 +25,7 @@
     {
       "schema": "public", "name": "banking_pay_operation_finish",
       "identity_arguments": "p_operation_id uuid, p_status text, p_result_json jsonb, p_error_json jsonb",
-      "definition_sha256": "5cbb922ceb2373fc45989c85fec5535dc57d2b94826d39a4d14220c0a19b6b95",
+      "definition_sha256": "8a972bf4d0a51bf72171ec36cda9a01d9181bb50507438d6bc0fe29dd3071bb5",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -62,7 +62,7 @@
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_scope_seed",
       "identity_arguments": "p_operation_id uuid, p_workbench_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb, p_pay_channel_scope text, p_same_week_paye_override_json jsonb",
-      "definition_sha256": "4e844ddfdaae029262ccaf728281480d9176c2f16a7f1f4e5944406df1a64701",
+      "definition_sha256": "6124292a58d8826493d86d74a92cce602fe3cf488d98a547e501b5ec5a0dc906",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -73,7 +73,7 @@
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_allocation_rows_seed",
       "identity_arguments": "p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "5aff2e737265a33a585fa876f115dd535b921400363635b4719351365f2f93b9",
+      "definition_sha256": "1d1573bd2e4927bd1422549bf75f899d65fc3f3794e44c7d3379a2305dc33cf5",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -97,7 +97,7 @@
     {
       "schema": "public", "name": "pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1",
       "identity_arguments": "p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "53d3007bab0be6380e6cce7862750434e1740dea4e8e32d0c3ec7b05c822637f",
+      "definition_sha256": "987aade83c6128ce2be3c8e61f3f17f1468b2746b4838b0830c3a8858fa2612e",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp", "plpgsql_check.mode=disabled"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -155,7 +155,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_set_selected_rows",
       "identity_arguments": "p_session_id uuid, p_selected_preview_row_ids jsonb, p_actor_user_id uuid",
-      "definition_sha256": "2745a2f49080a42e1a2d73eb85c9a48dfd8b1d31b2f1783f90fed6fad5af3221",
+      "definition_sha256": "514ae0c59ba89a80e1894acbb0e4dffc7307e9e09872afb86173c113130519d2",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -187,7 +187,7 @@
     {
       "schema": "private", "name": "pay_workbench_publish_certified_source_preview_page_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_authorities_json jsonb, p_publication_options_json jsonb",
-      "definition_sha256": "a90fe51a9a613583aa7d8596d546a9dfdbdb8274317f94fc62443b87d75a14b3",
+      "definition_sha256": "af362e6368f7da302b388504ac03700127f2fefa24530c1195689650aa3f192f",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -195,7 +195,7 @@
     {
       "schema": "private", "name": "pay_workbench_cancel_reversion_admission_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_work_item_ids uuid[], p_options_json jsonb",
-      "definition_sha256": "e9cb169b4c52875622a499f1a2da156c7e4f06695bc18cb9719a7be794f502a1",
+      "definition_sha256": "1273787284c3a5ff7b8a39d95aa867e3c13b71eb0bc1eae8a245985a9762de61",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -211,7 +211,7 @@
     {
       "schema": "private", "name": "pay_workbench_draft_overlay_remove_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_pay_batch_id uuid, p_session_id uuid, p_after_candidate_id uuid, p_candidate_limit integer, p_finance_row_limit integer, p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "19f57cf1cf25d854bb55ba01bf637999ee8027e0ecbad06dd2f4f82dfce54694",
+      "definition_sha256": "e526ba71a4fecff3e25f3e4ff3c47745d7f06691c264e191354e16b9125ed35c",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -320,7 +320,7 @@
     {
       "schema": "public", "name": "banking_pay_draft_create_step_v1",
       "identity_arguments": "p_operation_id uuid, p_worker_id text, p_expected_phase text, p_request_budget_ms integer",
-      "definition_sha256": "b6eb7b148758f3d4fc172ab2d638b37937774ddaa0f7de5e0ed3a0666ff05b22",
+      "definition_sha256": "33e02d6c8b4c66dc7a6287e42348f210b1e5d1a1226c1309402ef17dabbc6bb0",
       "owner": "postgres", "security_definer": true,
       "proconfig": ["search_path=pg_catalog, public, private, pg_temp"],
       "expanded_acl": [

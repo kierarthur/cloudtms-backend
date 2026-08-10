@@ -98,6 +98,9 @@ DECLARE
   v_pay_date date;
   v_week_start date;
   v_enabled boolean:=false;
+  v_processed_chunk_count integer:=0;
+  v_processed_scope_count integer:=0;
+  v_elapsed_ms integer:=0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -173,12 +176,19 @@ BEGIN
     WHEN 'BUILD_ITEM_BREAKDOWNS' THEN 'ASSERT_INTEGRITY'
   END;
 
-  SELECT claimed_chunk.* INTO v_chunk
-  FROM public.banking_pay_operation_claim_chunk(
-    p_operation_id,v_phase,'CANDIDATE_SCOPE',v_worker_id,
-    LEAST(GREATEST(COALESCE(v_operation.config_json->>'lock_seconds','60')::integer,5),3600)
-  ) AS claimed_chunk
-  LIMIT 1;
+  LOOP
+    v_scope_ids:='[]'::jsonb;
+    v_result:='{}'::jsonb;
+    v_results:='[]'::jsonb;
+    v_finished:='{}'::jsonb;
+    v_scope_count:=0;
+
+    SELECT claimed_chunk.* INTO v_chunk
+    FROM public.banking_pay_operation_claim_chunk(
+      p_operation_id,v_phase,'CANDIDATE_SCOPE',v_worker_id,
+      LEAST(GREATEST(COALESCE(v_operation.config_json->>'lock_seconds','60')::integer,5),3600)
+    ) AS claimed_chunk
+    LIMIT 1;
 
   IF NOT FOUND OR v_chunk.chunk_id IS NULL THEN
     SELECT pg_catalog.to_jsonb(saved_row) INTO v_saved
@@ -189,6 +199,8 @@ BEGIN
         'draft_step_rpc',true,
         'draft_step_phase_complete',true,
         'draft_step_round_trip_count',1,
+        'draft_step_processed_chunk_count',v_processed_chunk_count,
+        'draft_step_processed_scope_count',v_processed_scope_count,
         'draft_step_elapsed_ms',pg_catalog.floor(extract(epoch FROM (pg_catalog.clock_timestamp()-v_started_at))*1000)::integer
       ),NULL
     ) AS saved_row
@@ -197,6 +209,8 @@ BEGIN
       'ok',true,'handled',true,'phase_complete',true,
       'phase',v_phase,'next_phase',v_next_phase,'operation',v_saved,
       'round_trip_count',1,
+      'processed_chunk_count',v_processed_chunk_count,
+      'processed_scope_count',v_processed_scope_count,
       'elapsed_ms',pg_catalog.floor(extract(epoch FROM (pg_catalog.clock_timestamp()-v_started_at))*1000)::integer
     );
   END IF;
@@ -309,19 +323,37 @@ BEGIN
       'draft_step_chunk_id',v_chunk.chunk_id,
       'draft_step_business_ms',v_business_ms,
       'draft_step_round_trip_count',1,
+      'draft_step_processed_chunk_count',v_processed_chunk_count+1,
+      'draft_step_processed_scope_count',v_processed_scope_count+v_scope_count,
       'draft_step_elapsed_ms',pg_catalog.floor(extract(epoch FROM (pg_catalog.clock_timestamp()-v_started_at))*1000)::integer
     ),NULL
   ) AS saved_row
   LIMIT 1;
+
+  v_processed_chunk_count:=v_processed_chunk_count+1;
+  v_processed_scope_count:=v_processed_scope_count+v_scope_count;
+  v_elapsed_ms:=pg_catalog.floor(extract(epoch FROM (pg_catalog.clock_timestamp()-v_started_at))*1000)::integer;
+
+  -- Keep consuming same-phase chunks while the caller's existing bounded
+  -- request budget has safe headroom.  When the final chunk was just
+  -- completed, the next loop observes no work and advances the phase inside
+  -- this same RPC/transaction instead of requiring an otherwise empty HTTP
+  -- round trip at 99%.
+  IF v_elapsed_ms < pg_catalog.greatest(500,p_request_budget_ms-1000) THEN
+    CONTINUE;
+  END IF;
 
   RETURN pg_catalog.jsonb_build_object(
     'ok',true,'handled',true,'phase_complete',false,
     'phase',v_phase,'next_phase',v_phase,'chunk_id',v_chunk.chunk_id,
     'scope_count',v_scope_count,'phase_result',v_results,
     'chunk',v_finished,'operation',v_saved,'business_ms',v_business_ms,
+    'processed_chunk_count',v_processed_chunk_count,
+    'processed_scope_count',v_processed_scope_count,
     'round_trip_count',1,
-    'elapsed_ms',pg_catalog.floor(extract(epoch FROM (pg_catalog.clock_timestamp()-v_started_at))*1000)::integer
+    'elapsed_ms',v_elapsed_ms
   );
+  END LOOP;
 END;
 $function$;
 

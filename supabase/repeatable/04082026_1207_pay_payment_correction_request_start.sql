@@ -530,16 +530,14 @@ BEGIN
       ), classified AS (
         SELECT normalised.*,
           (
-            COALESCE(post_draft_authority->>'contract_version','')='POST_DRAFT_LIVE_AUTHORITY_V1'
+            COALESCE(post_draft_authority->>'contract_version','')='POST_DRAFT_LIVE_AUTHORITY_V2'
             AND COALESCE(post_draft_authority->>'draft_operation_id','')=draft_operation_id::text
             AND COALESCE(post_draft_authority->>'pay_batch_id','')=p_pay_batch_id::text
             AND COALESCE(post_draft_authority->>'workbench_session_id','')=source_workbench_session_id::text
             AND COALESCE(post_draft_authority->>'candidate_id','')=candidate_id::text
-            AND (
-              NOT v_source_publication_identity_enforced
-              OR COALESCE(post_draft_authority->>'original_source_publication_id','')
-                   ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-            )
+            AND COALESCE((post_draft_authority->>'fast_reversion_eligible')::boolean,false)
+            AND COALESCE(post_draft_authority->>'original_source_publication_id','')
+                  ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             AND frozen_source_change_seq IS NOT NULL
             AND frozen_dirty_generation IS NOT NULL
             AND live_source_change_seq=frozen_source_change_seq
@@ -562,8 +560,13 @@ BEGIN
           'post_draft_authority_digest',classified.post_draft_authority->>'authority_digest',
           'original_source_publication_id',
             classified.post_draft_authority->>'original_source_publication_id',
+          'fast_reversion_eligible',classified.pre_request_exact,
           'pre_request_exact',classified.pre_request_exact,
           'rejection_reason',CASE WHEN classified.pre_request_exact THEN NULL
+            WHEN COALESCE((classified.post_draft_authority->>'fast_reversion_eligible')::boolean,false) IS NOT TRUE
+              OR COALESCE(classified.post_draft_authority->>'original_source_publication_id','')
+                   !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN 'LEGACY_PHYSICAL_PUBLICATION_MISSING'
             ELSE 'PRE_REQUEST_ECONOMIC_AUTHORITY_NOT_CURRENT' END,
           'fence_digest',pg_catalog.md5(
             classified.candidate_id::text||'|'||classified.live_source_change_seq::text||'|'||

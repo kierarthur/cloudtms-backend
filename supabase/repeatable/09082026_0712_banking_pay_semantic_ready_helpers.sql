@@ -1006,6 +1006,8 @@ DECLARE
   v_current_dirty_generation bigint;
   v_expected_source_count integer;
   v_staged_source_count integer;
+  v_expected_source_identity_digest text;
+  v_staged_source_identity_digest text;
   v_progress_result jsonb := '{}'::jsonb;
 BEGIN
   IF p_session_id IS NULL
@@ -1114,13 +1116,11 @@ BEGIN
     IF v_authority_kind='CERTIFIED_CANCELLATION_REVERSION' THEN
       IF COALESCE(v_descriptor_options->>'original_source_build_run_id','')
            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-         OR (
-           v_publication_identity_enforce_enabled
-           AND COALESCE(v_descriptor_options->>'original_source_publication_id','')
-             !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-         )
+         OR COALESCE(v_descriptor_options->>'original_source_publication_id','')
+              !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
          OR COALESCE(v_descriptor_options->>'source_session_id','') IS DISTINCT FROM p_session_id::text
-         OR COALESCE(v_descriptor_options->>'source_count','') !~ '^[0-9]{1,9}$' THEN
+         OR COALESCE(v_descriptor_options->>'source_count','') !~ '^[0-9]{1,9}$'
+         OR COALESCE(v_descriptor->>'source_identity_digest','') !~ '^[0-9a-f]{32}$' THEN
         RAISE EXCEPTION 'CERTIFIED_CANCELLATION_REVERSION_SOURCE_INVALID'
           USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
             'code','CERTIFIED_CANCELLATION_REVERSION_SOURCE_INVALID',
@@ -1137,6 +1137,7 @@ BEGIN
       END;
       v_current_source_change_seq := (v_descriptor->>'source_change_seq')::bigint;
       v_expected_source_count := (v_descriptor_options->>'source_count')::integer;
+      v_expected_source_identity_digest := v_descriptor->>'source_identity_digest';
       v_source_publication_id := CASE WHEN v_publication_identity_write_enabled
         THEN private.pay_workbench_source_publication_identity_v1(
           p_session_id,v_candidate_id,(v_descriptor->>'session_version')::bigint,
@@ -1208,10 +1209,7 @@ BEGIN
       WHERE source_row.session_id=p_session_id
         AND source_row.candidate_id=v_candidate_id
         AND source_row.source_build_run_id=v_original_source_build_run_id
-        AND (
-          v_publication_identity_enforce_enabled IS NOT TRUE
-          OR source_row.source_publication_id=v_original_source_publication_id
-        )
+        AND source_row.source_publication_id=v_original_source_publication_id
         AND NOT EXISTS (
           SELECT 1
           FROM public.banking_pay_workbench_candidate_source_lines AS replay_row
@@ -1224,8 +1222,15 @@ BEGIN
             AND replay_row.line_key=source_row.line_key
         );
 
-      SELECT pg_catalog.count(*)::integer
-      INTO v_staged_source_count
+      SELECT pg_catalog.count(*)::integer,
+             pg_catalog.md5(COALESCE(pg_catalog.string_agg(
+               public.pay_workbench_preview_section_from_line_json(staged_row.source_row_json)
+                 || E'\x1f' || staged_row.line_key || E'\x1f' || staged_row.source_ordinal::text,
+               E'\x1e' ORDER BY staged_row.source_ordinal,
+                 public.pay_workbench_preview_section_from_line_json(staged_row.source_row_json),
+                 staged_row.line_key
+             ),''))
+      INTO v_staged_source_count,v_staged_source_identity_digest
       FROM public.banking_pay_workbench_candidate_source_lines AS staged_row
       WHERE staged_row.session_id=p_session_id
         AND staged_row.candidate_id=v_candidate_id
@@ -1241,6 +1246,15 @@ BEGIN
             'candidate_id',v_candidate_id,
             'expected_count',v_expected_source_count,
             'staged_count',v_staged_source_count
+          )::text;
+      END IF;
+      IF v_staged_source_identity_digest IS DISTINCT FROM v_expected_source_identity_digest THEN
+        RAISE EXCEPTION 'CERTIFIED_CANCELLATION_REVERSION_SOURCE_REPLAY_CONFLICT'
+          USING ERRCODE='23514',DETAIL=pg_catalog.jsonb_build_object(
+            'code','CERTIFIED_CANCELLATION_REVERSION_SOURCE_REPLAY_CONFLICT',
+            'candidate_id',v_candidate_id,
+            'expected_digest',v_expected_source_identity_digest,
+            'staged_digest',v_staged_source_identity_digest
           )::text;
       END IF;
 
@@ -1566,7 +1580,8 @@ BEGIN
         COALESCE(authority.frozen_source_publication_id,'')||'|'||
         COALESCE(authority.allocation_basis_json->>'source_identity_digest','')||'|'||
         COALESCE(authority.allocation_basis_json->>'semantic_proof_digest','')||
-        '|POST_DRAFT_LIVE_AUTHORITY_V1'
+        '|'||COALESCE((authority.post_draft_authority->>'fast_reversion_eligible')::boolean,false)::text||
+        '|POST_DRAFT_LIVE_AUTHORITY_V2'
       ) AS recomputed_post_draft_authority_digest,
       CASE
         WHEN v_mode<>'DRAFT_OVERLAY_PREFLIGHT' AND authority.work_item_id IS NULL THEN 'WORK_ITEM_NOT_EXACT'
@@ -1590,12 +1605,14 @@ BEGIN
           OR COALESCE(authority.frozen_attestation->>'economic_build_id','')
           !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN 'ORIGINAL_BUILD_LINEAGE_MISSING'
-        WHEN v_publication_identity_enforce_enabled
-          AND authority.frozen_source_publication_id
+        WHEN COALESCE(authority.frozen_source_publication_id,'')
             !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          THEN 'ORIGINAL_SOURCE_PUBLICATION_ID_MISSING'
+          THEN 'LEGACY_PHYSICAL_PUBLICATION_MISSING'
+        WHEN COALESCE((authority.post_draft_authority->>'fast_reversion_eligible')::boolean,false) IS NOT TRUE
+          THEN COALESCE(NULLIF(authority.post_draft_authority->>'fast_reversion_ineligible_reason',''),
+                        'LEGACY_PHYSICAL_PUBLICATION_MISSING')
         WHEN COALESCE(authority.post_draft_authority->>'contract_version','')
-               <>'POST_DRAFT_LIVE_AUTHORITY_V1'
+               <>'POST_DRAFT_LIVE_AUTHORITY_V2'
           OR COALESCE(authority.post_draft_authority->>'draft_operation_id','')
                IS DISTINCT FROM authority.draft_operation_id::text
           OR COALESCE(authority.post_draft_authority->>'pay_batch_id','')
@@ -1627,7 +1644,8 @@ BEGIN
                  COALESCE(authority.frozen_source_publication_id,'')||'|'||
                  COALESCE(authority.allocation_basis_json->>'source_identity_digest','')||'|'||
                  COALESCE(authority.allocation_basis_json->>'semantic_proof_digest','')||
-                 '|POST_DRAFT_LIVE_AUTHORITY_V1'
+                 '|'||COALESCE((authority.post_draft_authority->>'fast_reversion_eligible')::boolean,false)::text||
+                 '|POST_DRAFT_LIVE_AUTHORITY_V2'
                )
           THEN 'POST_DRAFT_AUTHORITY_MISSING_OR_MISMATCH'
         WHEN authority.execution_commit_state <> 'NOT_SUBMITTED' THEN 'PROVIDER_OR_EXECUTION_COMMIT_PRESENT'
@@ -1783,13 +1801,9 @@ BEGIN
           WHEN authority.frozen_source_build_run_id
             ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN authority.frozen_source_build_run_id::uuid ELSE NULL::uuid END
-        AND (
-          v_publication_identity_enforce_enabled IS NOT TRUE
-          OR source_row.source_publication_id=CASE
-            WHEN authority.frozen_source_publication_id
+        AND authority.frozen_source_publication_id
               ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-            THEN authority.frozen_source_publication_id::uuid ELSE NULL::uuid END
-        )
+        AND source_row.source_publication_id=authority.frozen_source_publication_id::uuid
     ) AS source_rows ON true
   ), result_rows AS (
     SELECT
@@ -1800,6 +1814,7 @@ BEGIN
         'pay_batch_candidate_id',source_proof.pay_batch_candidate_id,
         'pay_batch_id',source_proof.pay_batch_id,
         'admitted',source_proof.rejection_reason IS NULL,
+        'fast_reversion_eligible',source_proof.rejection_reason IS NULL,
         'rejection_reason',source_proof.rejection_reason,
         'draft_operation_id',source_proof.draft_operation_id,
         'original_economic_build_id',source_proof.frozen_attestation->>'economic_build_id',
@@ -2803,6 +2818,7 @@ BEGIN
         pg_catalog.substr(admitted.run_hash,9,4)||'-'||pg_catalog.substr(admitted.run_hash,13,4)||'-'||
         pg_catalog.substr(admitted.run_hash,17,4)||'-'||pg_catalog.substr(admitted.run_hash,21,12),
       'source_change_seq',admitted.current_source_change_seq,
+      'source_identity_digest',admitted.value->>'source_identity_digest',
       'session_version',admitted.value->>'session_version',
       'completion_job_id',v_operation_id,
       'refresh_scope_kind','CANDIDATE_FULL_LIVE',

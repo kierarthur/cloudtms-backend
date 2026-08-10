@@ -115,6 +115,9 @@ DECLARE
   v_reversion_state_exact boolean := false;
   v_semantic_ready_publication_enabled boolean := false;
   v_source_publication_identity_enforced boolean := false;
+  v_source_publication_baseline_required boolean := false;
+  v_required_physical_publication_contract_version smallint := 0;
+  v_authority_fingerprint_version smallint := 2;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -154,6 +157,18 @@ BEGIN
        v_source_publication_identity_enforced
   FROM public.settings_defaults AS settings_row
   WHERE settings_row.id = 1;
+
+  v_source_publication_baseline_required :=
+    v_source_publication_identity_enforced
+    OR lower(BTRIM(COALESCE(
+      v_payload_json->>'source_publication_baseline_required',
+      v_payload_json#>>'{source_publication,baseline_required}',
+      'false'
+    ))) IN ('true','t','1','yes','y','on');
+  v_required_physical_publication_contract_version :=
+    CASE WHEN v_source_publication_baseline_required THEN 1 ELSE 0 END;
+  v_authority_fingerprint_version :=
+    CASE WHEN v_source_publication_baseline_required THEN 3 ELSE 2 END;
 
   -- One candidate may be requested through several independent refresh routes
   -- in the same lifecycle. Elect/reuse its economic owner under the common
@@ -1153,7 +1168,8 @@ BEGIN
     END IF;
 
     v_authority_fingerprint_text := concat_ws('|',
-      'WORKBENCH_SOURCE_OWNER_V2',
+      CASE WHEN v_authority_fingerprint_version=3
+        THEN 'WORKBENCH_SOURCE_OWNER_V3' ELSE 'WORKBENCH_SOURCE_OWNER_V2' END,
       v_session_id::text,
       COALESCE(v_session_row.version, 0)::text,
       v_session_row.source_snapshot_run_id::text,
@@ -1162,7 +1178,9 @@ BEGIN
       COALESCE(v_source_change_seq, 0)::text,
       COALESCE(v_registry_dirty_generation, 0)::text,
       UPPER(BTRIM(COALESCE(v_pay_channel_scope, 'ALL'))),
-      'FULL_CANDIDATE'
+      'FULL_CANDIDATE',
+      CASE WHEN v_authority_fingerprint_version=3
+        THEN v_required_physical_publication_contract_version::text ELSE NULL END
     );
     v_authority_fingerprint := pg_catalog.encode(
       extensions.digest(pg_catalog.convert_to(v_authority_fingerprint_text, 'UTF8'), 'sha256'),
@@ -1177,7 +1195,8 @@ BEGIN
       substr(v_source_build_hash, 21, 12)
     )::uuid;
 
-    v_dedupe_key := 'WORKBENCH_SOURCE_OWNER_V2:'
+    v_dedupe_key := CASE WHEN v_authority_fingerprint_version=3
+        THEN 'WORKBENCH_SOURCE_OWNER_V3:' ELSE 'WORKBENCH_SOURCE_OWNER_V2:' END
       || v_authority_fingerprint
       || ':cursor:' || v_cursor_token;
 
@@ -1228,8 +1247,10 @@ BEGIN
         'trigger_operation', NULLIF(BTRIM(COALESCE(v_payload_json->>'trigger_operation', v_payload_json->>'trigger_op', v_payload_json#>>'{trigger,operation}', '')), ''),
         'trigger_op', NULLIF(BTRIM(COALESCE(v_payload_json->>'trigger_op', v_payload_json->>'trigger_operation', v_payload_json#>>'{trigger,operation}', '')), ''),
         'dedupe_key', v_dedupe_key,
-        'authority_fingerprint_version', 2,
+        'authority_fingerprint_version', v_authority_fingerprint_version,
         'authority_fingerprint', v_authority_fingerprint,
+        'source_publication_baseline_required',v_source_publication_baseline_required,
+        'required_physical_publication_contract_version',v_required_physical_publication_contract_version,
         'requested_source_build_run_id', CASE WHEN v_requested_source_build_run_id IS NULL THEN NULL ELSE v_requested_source_build_run_id::text END,
         'created_by_helper', 'pay_workbench_enqueue_candidate_refresh',
         'created_at_utc', v_now::text,
@@ -1249,6 +1270,8 @@ BEGIN
           'limit', v_stage_limit,
           'cursor', COALESCE(v_initial_cursor_json, '{}'::jsonb),
           'reason', v_reason
+          ,'source_publication_baseline_required',v_source_publication_baseline_required
+          ,'required_physical_publication_contract_version',v_required_physical_publication_contract_version
         ))
       )
     );
@@ -1267,6 +1290,13 @@ BEGIN
       AND build_row.source_snapshot_run_id = v_session_row.source_snapshot_run_id
       AND build_row.source_change_seq = COALESCE(v_source_change_seq, 0)
       AND build_row.captured_candidate_generation = COALESCE(v_registry_dirty_generation, 0)
+      AND (
+        v_source_publication_baseline_required IS NOT TRUE
+        OR (
+          build_row.authority_fingerprint_version=3
+          AND COALESCE((build_row.attestation_json->>'required_physical_publication_contract_version')::integer,0)>=1
+        )
+      )
       AND UPPER(BTRIM(COALESCE(build_row.status, ''))) IN (
         'COLLECTING',
         'READY_FOR_RECONCILIATION',
@@ -1374,7 +1404,7 @@ BEGIN
         AND COALESCE((current_scope.certified_preview_publication_attestation_json->>'semantic_ready')::boolean,false)
         AND COALESCE((current_scope.certified_preview_publication_attestation_json->>'parity_complete')::boolean,false)
         AND (
-          NOT v_source_publication_identity_enforced
+          NOT v_source_publication_baseline_required
           OR (
             current_scope.certified_preview_publication_source_publication_id IS NOT NULL
             AND current_scope.certified_preview_publication_attestation_json->>'source_publication_id'
@@ -1407,18 +1437,8 @@ BEGIN
           AND reversion_source.candidate_id=p_candidate_id
           AND reversion_source.session_version=COALESCE(v_session_row.version,0)
           AND reversion_source.source_change_seq=COALESCE(v_source_change_seq,0)
-          AND (
-            (
-              v_source_publication_identity_enforced
-              AND reversion_source.source_publication_id
-                    =v_reversion_scope.certified_preview_publication_source_publication_id
-            )
-            OR (
-              NOT v_source_publication_identity_enforced
-              AND reversion_source.source_build_run_id
-                    =v_reversion_scope.certified_preview_publication_source_build_run_id
-            )
-          )
+          AND reversion_source.source_publication_id
+                =v_reversion_scope.certified_preview_publication_source_publication_id
           AND reversion_source.status='CURRENT';
 
         IF v_reversion_state_exact
@@ -1436,16 +1456,8 @@ BEGIN
                AND (
                  foreign_current_source.session_version IS DISTINCT FROM COALESCE(v_session_row.version,0)
                  OR foreign_current_source.source_change_seq IS DISTINCT FROM COALESCE(v_source_change_seq,0)
-                 OR (
-                   v_source_publication_identity_enforced
-                   AND foreign_current_source.source_publication_id IS DISTINCT FROM
-                        v_reversion_scope.certified_preview_publication_source_publication_id
-                 )
-                 OR (
-                   NOT v_source_publication_identity_enforced
-                   AND foreign_current_source.source_build_run_id IS DISTINCT FROM
-                        v_reversion_scope.certified_preview_publication_source_build_run_id
-                 )
+                 OR foreign_current_source.source_publication_id IS DISTINCT FROM
+                      v_reversion_scope.certified_preview_publication_source_publication_id
                )
            ) THEN
           RETURN jsonb_strip_nulls(jsonb_build_object(
@@ -1461,7 +1473,8 @@ BEGIN
             'source_build_run_id',v_reversion_scope.certified_preview_publication_source_build_run_id::text,
             'source_publication_id',v_reversion_scope.certified_preview_publication_source_publication_id::text,
             'authority_fingerprint',v_authority_fingerprint,
-            'authority_fingerprint_version',2,
+            'authority_fingerprint_version',v_authority_fingerprint_version,
+            'required_physical_publication_contract_version',v_required_physical_publication_contract_version,
             'owner_resolution','COMPLETE_CURRENT_AUTHORITY',
             'owner_build_id',v_reversion_attestation->>'economic_build_id',
             'owner_root_job_id',NULL,
@@ -1514,7 +1527,7 @@ BEGIN
         AND current_scope.certified_preview_publication_source_change_seq = build_row.source_change_seq
         AND current_scope.certified_preview_publication_source_build_run_id = build_row.source_build_run_id
         AND (
-          NOT v_source_publication_identity_enforced
+          NOT v_source_publication_baseline_required
           OR (
             current_scope.certified_preview_publication_source_publication_id IS NOT NULL
             AND current_scope.certified_preview_publication_attestation_json->>'source_publication_id'
@@ -1637,7 +1650,7 @@ BEGIN
           'trigger_sources', v_owner_trigger_sources_json,
           'coalesced_request_count', v_owner_request_count,
           'last_requested_at_utc', v_now::text,
-          'authority_fingerprint_version', 2,
+          'authority_fingerprint_version', v_authority_fingerprint_version,
           'authority_fingerprint', v_authority_fingerprint
         )
       );
@@ -1686,7 +1699,8 @@ BEGIN
         'source_build_run_id', v_owner_build.source_build_run_id::text,
         'requested_source_build_run_id', CASE WHEN v_requested_source_build_run_id IS NULL THEN NULL ELSE v_requested_source_build_run_id::text END,
         'authority_fingerprint', v_authority_fingerprint,
-        'authority_fingerprint_version', 2,
+        'authority_fingerprint_version', v_authority_fingerprint_version,
+        'required_physical_publication_contract_version',v_required_physical_publication_contract_version,
         'owner_resolution', v_owner_resolution,
         'owner_build_id', v_owner_build.id::text,
         'owner_root_job_id', v_owner_root_job.id::text,
@@ -2794,7 +2808,8 @@ BEGIN
     'coalesced', v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' AND NOT v_job_was_inserted,
     'new_owner_created', v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' AND v_job_was_inserted,
     'owner_resolution', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_owner_resolution ELSE NULL::text END,
-    'authority_fingerprint_version', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN 2 ELSE NULL::integer END,
+    'authority_fingerprint_version', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_authority_fingerprint_version ELSE NULL::integer END,
+    'required_physical_publication_contract_version', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_required_physical_publication_contract_version ELSE NULL::integer END,
     'authority_fingerprint', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_authority_fingerprint ELSE NULL::text END,
     'owner_root_job_id', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN v_job_id::text ELSE NULL::text END,
     'requested_coverage', CASE WHEN v_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD' THEN 'FULL_CANDIDATE' ELSE NULL::text END,

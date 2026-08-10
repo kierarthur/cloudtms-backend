@@ -281,6 +281,8 @@ BEGIN
         'projection_class', 'POST_DRAFT_CANCEL_CURRENT_AUTHORITY',
         'fallback_reason', 'CERTIFIED_CANCELLATION_REVERSION_REJECTED',
         'canonical_route_ladder_required', true,
+        'source_publication_baseline_required', true,
+        'required_physical_publication_contract_version', 1,
         'superseded_finance_dirty_job_count', v_superseded_finance_dirty_job_count,
         'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
       )

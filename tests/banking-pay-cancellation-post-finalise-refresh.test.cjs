@@ -59,7 +59,7 @@ test('the durable correction continuation preserves its execution context and nu
   assert.match(worker, /processBankingPayContinuationMessage\(env, message, \{ executionContext: ctx \}\)/);
   assert.match(worker, /parsePaymentCorrectionWorkbenchNudgeEnvelope/);
   assert.match(worker, /schedulePaymentCorrectionWorkbenchNudge/);
-  assert.match(worker, /PAYMENT_CORRECTION_WORKBENCH_NUDGE_WAIT_UNTIL_ACCEPTED/);
+  assert.match(worker, /PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED/);
   assert.match(worker, /PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_ENQUEUED/);
   assert.match(worker, /workbench_refresh_nudge_scheduled/);
 });

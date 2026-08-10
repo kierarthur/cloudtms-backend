@@ -214,6 +214,9 @@ BEGIN
         WHERE draft_scope.operation_id = v_operation.id
       ), eligible_authority AS (
         SELECT authority_rows.*,
+          COALESCE(authority_rows.original_source_publication_id,'')
+            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            AS fast_reversion_eligible,
           md5(
             v_operation.id::text || '|' ||
             authority_rows.pay_batch_id::text || '|' ||
@@ -226,7 +229,10 @@ BEGIN
             authority_rows.original_source_build_run_id || '|' ||
             COALESCE(authority_rows.original_source_publication_id,'') || '|' ||
             authority_rows.original_source_identity_digest || '|' ||
-            authority_rows.original_semantic_proof_digest || '|POST_DRAFT_LIVE_AUTHORITY_V1'
+            authority_rows.original_semantic_proof_digest || '|' ||
+            (COALESCE(authority_rows.original_source_publication_id,'')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')::text ||
+            '|POST_DRAFT_LIVE_AUTHORITY_V2'
           ) AS authority_digest
         FROM authority_rows
         WHERE COALESCE(authority_rows.source_attestation->>'attestation_version', '')
@@ -237,11 +243,6 @@ BEGIN
           AND COALESCE((authority_rows.source_attestation->>'parity_complete')::boolean, false)
           AND COALESCE(authority_rows.original_source_build_run_id, '')
                 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          AND (
-            v_source_publication_identity_enforce_enabled IS NOT TRUE
-            OR COALESCE(authority_rows.original_source_publication_id,'')
-              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-          )
           AND NULLIF(BTRIM(COALESCE(authority_rows.original_source_identity_digest, '')), '') IS NOT NULL
           AND NULLIF(BTRIM(COALESCE(authority_rows.original_semantic_proof_digest, '')), '') IS NOT NULL
       ), frozen_authority AS (
@@ -250,7 +251,7 @@ BEGIN
               || jsonb_build_object(
                 'post_draft_authority',
                 jsonb_build_object(
-                  'contract_version', 'POST_DRAFT_LIVE_AUTHORITY_V1',
+                  'contract_version', 'POST_DRAFT_LIVE_AUTHORITY_V2',
                   'draft_operation_id', v_operation.id,
                   'pay_batch_id', eligible_authority.pay_batch_id,
                   'workbench_session_id', eligible_authority.workbench_session_id,
@@ -261,6 +262,11 @@ BEGIN
                   'source_snapshot_run_id', eligible_authority.source_snapshot_run_id,
                   'original_source_build_run_id', eligible_authority.original_source_build_run_id,
                   'original_source_publication_id', eligible_authority.original_source_publication_id,
+                  'fast_reversion_eligible', eligible_authority.fast_reversion_eligible,
+                  'fast_reversion_ineligible_reason', CASE
+                    WHEN eligible_authority.fast_reversion_eligible THEN NULL
+                    ELSE 'LEGACY_PHYSICAL_PUBLICATION_MISSING'
+                  END,
                   'original_source_identity_digest', eligible_authority.original_source_identity_digest,
                   'original_semantic_proof_digest', eligible_authority.original_semantic_proof_digest,
                   'authority_digest', eligible_authority.authority_digest,
@@ -279,9 +285,14 @@ BEGIN
 
       v_result_json := COALESCE(v_result_json, '{}'::jsonb)
         || jsonb_build_object(
-          'post_draft_authority_contract_version', 'POST_DRAFT_LIVE_AUTHORITY_V1',
+          'post_draft_authority_contract_version', 'POST_DRAFT_LIVE_AUTHORITY_V2',
           'post_draft_authority_count', v_post_draft_authority_count,
-          'post_draft_authority_candidate_count', v_finish_scope_count
+          'post_draft_authority_candidate_count', v_finish_scope_count,
+          'post_draft_fast_reversion_eligible_count', (
+            SELECT COUNT(*)::integer FROM public.banking_pay_operation_candidate_scope AS scope_row
+            WHERE scope_row.operation_id=v_operation.id
+              AND COALESCE((scope_row.allocation_basis_json->'post_draft_authority'->>'fast_reversion_eligible')::boolean,false)
+          )
         );
     END IF;
 

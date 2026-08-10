@@ -1303,6 +1303,24 @@ BEGIN
           AND source_scope.certified_preview_publication_session_version = v_session.version
         LIMIT 1
       ),
+      'fast_reversion_eligible', COALESCE((
+        SELECT source_scope.certified_preview_publication_source_publication_id IS NOT NULL
+        FROM public.banking_pay_workbench_session_scope AS source_scope
+        WHERE source_scope.session_id = p_workbench_session_id
+          AND source_scope.candidate_id = selected_page.candidate_id
+          AND source_scope.certified_preview_publication_parity_ok IS TRUE
+          AND source_scope.certified_preview_publication_session_version = v_session.version
+        LIMIT 1
+      ), false),
+      'fast_reversion_ineligible_reason', CASE WHEN COALESCE((
+        SELECT source_scope.certified_preview_publication_source_publication_id IS NOT NULL
+        FROM public.banking_pay_workbench_session_scope AS source_scope
+        WHERE source_scope.session_id = p_workbench_session_id
+          AND source_scope.candidate_id = selected_page.candidate_id
+          AND source_scope.certified_preview_publication_parity_ok IS TRUE
+          AND source_scope.certified_preview_publication_session_version = v_session.version
+        LIMIT 1
+      ), false) THEN NULL ELSE 'LEGACY_PHYSICAL_PUBLICATION_MISSING' END,
       'semantic_contract_version', (
         SELECT source_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
         FROM public.banking_pay_workbench_session_scope AS source_scope

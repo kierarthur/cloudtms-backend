@@ -56,7 +56,10 @@ test('Draft freeze and cancellation admission bind one exact physical publicatio
   assert.match(requestStart, /banking_pay_source_publication_identity_enforce_v1_enabled/);
   assert.match(admission, /original_source_publication_id/);
   assert.match(admission, /source_publication_id[\s\S]*v_original_source_publication_id/);
-  assert.match(admission, /ORIGINAL_SOURCE_PUBLICATION_ID_MISSING/);
+  assert.match(admission, /LEGACY_PHYSICAL_PUBLICATION_MISSING/);
+  assert.match(admission, /source_row\.source_publication_id=authority\.frozen_source_publication_id::uuid/);
+  assert.match(requestStart, /POST_DRAFT_LIVE_AUTHORITY_V2/);
+  assert.match(requestStart, /fast_reversion_eligible/);
 });
 
 test('same-authority build uniqueness is frozen when the economic build is inserted', () => {
@@ -64,6 +67,8 @@ test('same-authority build uniqueness is frozen when the economic build is inser
   assert.match(claimStart, /authority_fingerprint_version/);
   assert.match(claimStart, /authority_fingerprint/);
   assert.match(claimStart, /PAY_WORKBENCH_SOURCE_BUILD_AUTHORITY_FINGERPRINT_REQUIRED/);
+  assert.match(claimStart, /SAME_AUTHORITY_OWNER_COALESCED/);
+  assert.match(claimStart, /uq_bpay_wb_economic_build_authority_v1/);
 });
 
 test('cancelled rows remain eligible but explicitly unticked across publication', () => {

@@ -109,6 +109,9 @@ DECLARE
   v_publish_now boolean:=false;
   v_published_count integer:=0;
   v_published_digest text;
+  v_source_publication_id uuid:=NULL::uuid;
+  v_existing_publication_count integer:=0;
+  v_existing_publication_digest text:=NULL::text;
   v_candidate_pay_method text;
   v_actor_user_id uuid;
   v_expected_count integer;
@@ -1395,39 +1398,71 @@ BEGIN
     END IF;
     UPDATE private.banking_pay_workbench_economic_builds SET status='PUBLISHING',updated_at_utc=clock_timestamp()
     WHERE id=v_build_id;
+    v_source_publication_id:=CASE WHEN COALESCE((
+      SELECT setting.banking_pay_source_publication_identity_write_v1_enabled
+      FROM public.settings_defaults AS setting WHERE setting.id=1
+    ),false) THEN private.pay_workbench_source_publication_identity_v1(
+      p_session_id,p_candidate_id,v_build.session_version,
+      v_build.source_change_seq,v_build.source_build_run_id
+    ) ELSE NULL::uuid END;
     PERFORM 1 FROM public.banking_pay_workbench_candidate_source_lines
     WHERE session_id=p_session_id AND candidate_id=p_candidate_id AND status='CURRENT'
     ORDER BY source_ordinal FOR UPDATE;
-    UPDATE public.banking_pay_workbench_candidate_source_lines
-    SET status='SUPERSEDED',updated_at_utc=clock_timestamp()
-    WHERE session_id=p_session_id AND candidate_id=p_candidate_id AND status='CURRENT';
-    INSERT INTO public.banking_pay_workbench_candidate_source_lines(
+
+    SELECT count(*)::integer,
+           md5(COALESCE(string_agg(md5(source_row_json::text),'' ORDER BY source_ordinal),''))
+    INTO v_existing_publication_count,v_existing_publication_digest
+    FROM public.banking_pay_workbench_candidate_source_lines
+    WHERE session_id=p_session_id AND candidate_id=p_candidate_id
+      AND session_version=v_build.session_version
+      AND source_change_seq=v_build.source_change_seq
+      AND source_build_run_id=v_build.source_build_run_id
+      AND source_publication_id IS NOT DISTINCT FROM v_source_publication_id
+      AND status IN ('DIRTY','CURRENT','SUPERSEDED');
+
+    IF v_existing_publication_count>0 THEN
+      IF v_existing_publication_count IS DISTINCT FROM v_build.canonical_count
+         OR v_existing_publication_digest IS DISTINCT FROM v_build.canonical_digest THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_PUBLICATION_REPLAY_CONFLICT'
+          USING ERRCODE='23514',DETAIL=jsonb_build_object(
+            'code','PAY_WORKBENCH_CANONICAL_PUBLICATION_REPLAY_CONFLICT',
+            'build_id',v_build_id,'source_publication_id',v_source_publication_id,
+            'expected_count',v_build.canonical_count,'actual_count',v_existing_publication_count,
+            'expected_digest',v_build.canonical_digest,'actual_digest',v_existing_publication_digest
+          )::text;
+      END IF;
+      UPDATE public.banking_pay_workbench_candidate_source_lines
+      SET status='SUPERSEDED',updated_at_utc=clock_timestamp()
+      WHERE session_id=p_session_id AND candidate_id=p_candidate_id AND status='CURRENT'
+        AND source_publication_id IS DISTINCT FROM v_source_publication_id;
+      UPDATE public.banking_pay_workbench_candidate_source_lines
+      SET status='CURRENT',updated_at_utc=clock_timestamp()
+      WHERE session_id=p_session_id AND candidate_id=p_candidate_id
+        AND source_publication_id IS NOT DISTINCT FROM v_source_publication_id
+        AND source_build_run_id=v_build.source_build_run_id
+        AND status<>'CURRENT';
+      v_published_count:=v_existing_publication_count;
+    ELSE
+      UPDATE public.banking_pay_workbench_candidate_source_lines
+      SET status='SUPERSEDED',updated_at_utc=clock_timestamp()
+      WHERE session_id=p_session_id AND candidate_id=p_candidate_id AND status='CURRENT';
+      INSERT INTO public.banking_pay_workbench_candidate_source_lines(
       session_id,candidate_id,session_version,source_change_seq,source_build_run_id,source_publication_id,
       source_ordinal,line_key,parent_line_key,split_suffix,timesheet_id,section,
       source_row_json,economic_key_json,contract_json,pay_channel_scope,refresh_scope_kind,status
     ) SELECT session_id,candidate_id,session_version,source_change_seq,source_build_run_id,
-      CASE WHEN COALESCE((SELECT setting.banking_pay_source_publication_identity_write_v1_enabled
-                           FROM public.settings_defaults AS setting WHERE setting.id=1),false)
-        THEN private.pay_workbench_source_publication_identity_v1(
-          session_id,candidate_id,session_version,source_change_seq,source_build_run_id
-        ) ELSE NULL::uuid END,
+      v_source_publication_id,
       source_ordinal,line_key,parent_line_key,split_suffix,timesheet_id,section,
       source_row_json,economic_key_json,contract_json,pay_channel_scope,refresh_scope_kind,'CURRENT'
     FROM private.banking_pay_workbench_canonical_stage_lines WHERE build_id=v_build_id
     ORDER BY source_ordinal;
-    GET DIAGNOSTICS v_published_count=ROW_COUNT;
+      GET DIAGNOSTICS v_published_count=ROW_COUNT;
+    END IF;
     SELECT md5(COALESCE(string_agg(md5(source_row_json::text),'' ORDER BY source_ordinal),''))
     INTO v_published_digest FROM public.banking_pay_workbench_candidate_source_lines
     WHERE session_id=p_session_id AND candidate_id=p_candidate_id AND status='CURRENT'
       AND source_build_run_id=v_build.source_build_run_id
-      AND (
-        COALESCE((SELECT setting.banking_pay_source_publication_identity_write_v1_enabled
-                    FROM public.settings_defaults AS setting WHERE setting.id=1),false) IS NOT TRUE
-        OR source_publication_id=private.pay_workbench_source_publication_identity_v1(
-          p_session_id,p_candidate_id,v_build.session_version,
-          v_build.source_change_seq,v_build.source_build_run_id
-        )
-      );
+      AND source_publication_id IS NOT DISTINCT FROM v_source_publication_id;
     IF v_published_count<>v_build.canonical_count OR v_published_digest IS DISTINCT FROM v_build.canonical_digest THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_PUBLICATION_DIGEST_MISMATCH' USING ERRCODE='23514';
     END IF;

@@ -1441,6 +1441,7 @@ BEGIN
               pg_catalog.substr(admitted.run_hash,17,4)||'-'||
               pg_catalog.substr(admitted.run_hash,21,12),
             'source_change_seq',admitted.value->>'current_source_change_seq',
+            'source_identity_digest',admitted.value->>'source_identity_digest',
             'session_version',admitted.value->>'session_version',
             'completion_job_id',admitted.value->>'work_item_id',
             'refresh_scope_kind','CANDIDATE_FULL_LIVE',

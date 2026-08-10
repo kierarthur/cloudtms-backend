@@ -18,14 +18,14 @@ test('full-source owner identity is economic and excludes diagnostic reason', ()
   assert.ok(fingerprintStart >= 0 && fingerprintEnd > fingerprintStart);
   const fingerprint = enqueue.slice(fingerprintStart, fingerprintEnd);
 
-  assert.match(fingerprint, /WORKBENCH_SOURCE_OWNER_V2/);
+  assert.match(fingerprint, /WORKBENCH_SOURCE_OWNER_V[23]/);
   assert.match(fingerprint, /v_session_id/);
   assert.match(fingerprint, /v_source_change_seq/);
   assert.match(fingerprint, /v_registry_dirty_generation/);
   assert.match(fingerprint, /v_pay_channel_scope/);
   assert.match(fingerprint, /FULL_CANDIDATE/);
   assert.doesNotMatch(fingerprint, /v_reason|trigger|actor_user_id|source_dirty_job_id/i);
-  assert.match(enqueue, /v_dedupe_key := 'WORKBENCH_SOURCE_OWNER_V2:'[\s\S]+v_authority_fingerprint/);
+  assert.match(enqueue, /v_dedupe_key := CASE WHEN v_authority_fingerprint_version\s*=\s*3[\s\S]+WORKBENCH_SOURCE_OWNER_V3:[\s\S]+WORKBENCH_SOURCE_OWNER_V2:[\s\S]+v_authority_fingerprint/);
   assert.match(enqueue, /v_requested_source_build_run_id := v_source_build_run_id_text::uuid/);
 });
 

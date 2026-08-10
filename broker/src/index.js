@@ -60813,13 +60813,9 @@ async function schedulePaymentCorrectionWorkbenchNudge(env, executionContext, en
       base.direct_nudge_scheduled = !!(directResult && (directResult.scheduled === true || directResult.already_running === true));
       base.wait_until_used = !!(directResult && directResult.wait_until_used === true);
       base.already_running = !!(directResult && directResult.already_running === true);
-      if (directResult && directResult.ok !== false && base.direct_nudge_scheduled && base.wait_until_used) {
-        return {
-          ...base,
-          scheduled: true,
-          code: 'PAYMENT_CORRECTION_WORKBENCH_NUDGE_WAIT_UNTIL_ACCEPTED'
-        };
-      }
+      // A local waitUntil drain is useful for latency, but it is not the
+      // durable hand-off contract.  Continue to enqueue the database-backed
+      // continuation wake before the parent correction delivery may succeed.
     } catch {
       base.direct_nudge_scheduled = false;
       base.wait_until_used = false;
@@ -60844,14 +60840,16 @@ async function schedulePaymentCorrectionWorkbenchNudge(env, executionContext, en
         code: 'PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_ENQUEUED'
       };
     }
-  } catch {}
+  } catch (wakeError) {
+    throw Object.assign(new Error('PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED'), {
+      code: 'PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED',
+      cause: wakeError
+    });
+  }
 
-  return {
-    ...base,
-    scheduled: false,
-    cron_fallback_required: true,
-    code: 'PAYMENT_CORRECTION_WORKBENCH_NUDGE_CRON_FALLBACK'
-  };
+  throw Object.assign(new Error('PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED'), {
+    code: 'PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED'
+  });
 }
 
 async function advancePaymentCorrectionOperation(env, operationRow, user, options = {}) {
@@ -64663,9 +64661,15 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         draft_create_step_result: step.phase_result || null
       });
     } catch (stepError) {
-      // Atomic failure means no phase mutation committed. The established
-      // phase path remains the exact compatibility and retry owner.
-      return null;
+      const stepCode = String(stepError && (stepError.code || stepError.message) || '').toUpperCase();
+      // Compatibility fallback is permitted only when the RPC is genuinely
+      // absent/disabled.  Once installed and enabled, a SQL rejection must be
+      // visible and retried; silently dropping to the multi-call legacy path
+      // recreated the long 99% stall and hid the real failure.
+      if (stepCode.includes('DRAFT_CREATE_STEP_RPC_DISABLED')
+        || stepCode.includes('PGRST202')
+        || stepCode.includes('FUNCTION') && stepCode.includes('NOT FOUND')) return null;
+      throw stepError;
     }
   };
   const fetchCandidateScopes = async (extraQuery = '') => {

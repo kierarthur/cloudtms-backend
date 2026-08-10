@@ -571,6 +571,22 @@ BEGIN
          v_source_publication_identity_enforce_enabled
          AND COALESCE(selected_scope.allocation_basis_json->>'source_publication_id','')
            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       )
+       OR (
+         COALESCE(selected_scope.allocation_basis_json->>'source_publication_id','')
+           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM public.banking_pay_workbench_session_scope AS source_scope
+           WHERE source_scope.session_id=selected_scope.workbench_session_id
+             AND source_scope.candidate_id=selected_scope.candidate_id
+             AND source_scope.certified_preview_publication_parity_ok IS TRUE
+             AND source_scope.certified_preview_publication_session_version=selected_scope.source_session_version
+             AND source_scope.certified_preview_publication_source_publication_id=
+                   (selected_scope.allocation_basis_json->>'source_publication_id')::uuid
+             AND source_scope.certified_preview_publication_attestation_json->>'source_publication_id'=
+                   selected_scope.allocation_basis_json->>'source_publication_id'
+         )
        );
 
     IF v_semantic_source_failure_count > 0 THEN

@@ -103,12 +103,13 @@ test('one page containing 100 candidates schedules one grouped session nudge', a
   const result = await helpers.schedulePaymentCorrectionWorkbenchNudge(env, executionContext, parsed.envelope);
   assert.equal(result.scheduled, true);
   assert.equal(result.wait_until_used, true);
+  assert.equal(result.durable_wake_enqueued, true);
   assert.equal(directCalls.length, 1);
   assert.equal(directCalls[0].env, env);
   assert.equal(directCalls[0].ctx, executionContext);
   assert.equal(directCalls[0].options.sessionId, ids.session);
   assert.equal(directCalls[0].options.candidateId, undefined);
-  assert.equal(wakeCalls.length, 0);
+  assert.equal(wakeCalls.length, 1);
 });
 
 test('missing or non-durable execution context falls back to one durable session wake', async () => {
@@ -138,7 +139,7 @@ test('missing or non-durable execution context falls back to one durable session
   }
 });
 
-test('nudge and durable-wake failures preserve correction success and leave cron as fallback', async () => {
+test('nudge and durable-wake failures reject acknowledgement so durable delivery can retry', async () => {
   const helpers = loadHelpers({
     nudgeBankingPayWorkbenchDrain() {
       throw new Error('expected direct failure');
@@ -148,11 +149,10 @@ test('nudge and durable-wake failures preserve correction success and leave cron
     }
   });
   const parsed = parse(helpers, makeEnvelope());
-  const result = await helpers.schedulePaymentCorrectionWorkbenchNudge({}, { waitUntil() {} }, parsed.envelope);
-  assert.equal(result.ok, true);
-  assert.equal(result.scheduled, false);
-  assert.equal(result.cron_fallback_required, true);
-  assert.equal(result.code, 'PAYMENT_CORRECTION_WORKBENCH_NUDGE_CRON_FALLBACK');
+  await assert.rejects(
+    helpers.schedulePaymentCorrectionWorkbenchNudge({}, { waitUntil() {} }, parsed.envelope),
+    error => error && error.code === 'PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED'
+  );
 });
 
 test('a database decision that no nudge is required invokes neither wake path', async () => {

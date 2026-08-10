@@ -70,6 +70,7 @@ DECLARE
   v_draft_blocker_codes jsonb := '[]'::jsonb;
   v_revalidation_candidate_id uuid := NULL::uuid;
   v_revalidation_result jsonb := '{}'::jsonb;
+  v_selected_economic_identities jsonb := '[]'::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -570,6 +571,7 @@ BEGIN
     DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_current_selected_rows;
     CREATE TEMP TABLE _tmp_pay_wb_current_selected_rows ON COMMIT DROP AS
     SELECT selected_count_row.id,
+           selected_count_row.candidate_id,
            selected_count_row.row_ordinal,
            selected_count_row.row_key,
            selected_count_row.row_json,
@@ -688,6 +690,20 @@ BEGIN
       AND current_selected.row_key NOT LIKE 'timesheet_snapshot:%'
       AND current_selected.is_synthetic_resolved_total IS NOT TRUE;
 
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+      'candidate_id',current_selected.candidate_id,
+      'row_key',current_selected.row_key,
+      'timesheet_id',current_selected.timesheet_id,
+      'key_type',current_selected.key_type,
+      'key_value',current_selected.key_value
+    ) ORDER BY current_selected.candidate_id,current_selected.row_key,current_selected.id),'[]'::jsonb)
+    INTO v_selected_economic_identities
+    FROM pg_temp._tmp_pay_wb_current_selected_rows AS current_selected
+    WHERE current_selected.id IN (
+      SELECT selected_id.value::uuid
+      FROM jsonb_array_elements_text(COALESCE(v_selected_ids,'[]'::jsonb)) AS selected_id(value)
+    );
+
     v_server_selected_ids := COALESCE(v_selected_ids, '[]'::jsonb);
     v_session_ready := LOWER(BTRIM(COALESCE(
       v_session_row.progress_json->>'ready',
@@ -745,7 +761,9 @@ BEGIN
                   'source_selection_mode', v_selection_mode,
                   'source_selection_action', v_global_selection_action,
                   'server_selected_preview_row_ids_provided', true,
-                  'selected_row_count', COALESCE(v_current_selected_count, 0)
+                  'selected_row_count', COALESCE(v_current_selected_count, 0),
+                  'selected_economic_identities',COALESCE(v_selected_economic_identities,'[]'::jsonb),
+                  'identity_contract_version',2
                 )
               )
           ),
@@ -1253,6 +1271,7 @@ BEGIN
   DROP TABLE IF EXISTS pg_temp._tmp_pay_wb_current_selected_rows;
   CREATE TEMP TABLE _tmp_pay_wb_current_selected_rows ON COMMIT DROP AS
   SELECT selected_count_row.id,
+         selected_count_row.candidate_id,
          selected_count_row.row_ordinal,
          selected_count_row.row_key,
          selected_count_row.row_json,
@@ -1371,6 +1390,20 @@ BEGIN
     AND current_selected.row_key NOT LIKE 'timesheet_snapshot:%'
     AND current_selected.is_synthetic_resolved_total IS NOT TRUE;
 
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+    'candidate_id',current_selected.candidate_id,
+    'row_key',current_selected.row_key,
+    'timesheet_id',current_selected.timesheet_id,
+    'key_type',current_selected.key_type,
+    'key_value',current_selected.key_value
+  ) ORDER BY current_selected.candidate_id,current_selected.row_key,current_selected.id),'[]'::jsonb)
+  INTO v_selected_economic_identities
+  FROM pg_temp._tmp_pay_wb_current_selected_rows AS current_selected
+  WHERE current_selected.id IN (
+    SELECT selected_id.value::uuid
+    FROM jsonb_array_elements_text(COALESCE(v_selected_ids,'[]'::jsonb)) AS selected_id(value)
+  );
+
   v_next_selection_intent_mode := CASE
     WHEN v_replace_mode THEN 'EXPLICIT_INCLUDE'
     ELSE 'IMPLICIT_ALL'
@@ -1434,7 +1467,9 @@ BEGIN
                 'source_selection_mode', v_selection_mode,
                 'source_selection_action', CASE WHEN v_replace_mode THEN 'REPLACE_SELECTED_ROWS' ELSE 'ROW_PATCH' END,
                 'server_selected_preview_row_ids_provided', COALESCE(v_next_server_selected_ids_provided, false),
-                'selected_row_count', COALESCE(v_current_selected_count, 0)
+                'selected_row_count', COALESCE(v_current_selected_count, 0),
+                'selected_economic_identities',COALESCE(v_selected_economic_identities,'[]'::jsonb),
+                'identity_contract_version',2
               )
             )
         ),

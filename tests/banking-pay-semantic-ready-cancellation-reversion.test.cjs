@@ -388,7 +388,9 @@ test('untouched Draft cancellation avoids financial work items, source builds an
 });
 
 test('Draft completion freezes the exact post-Draft authority before fast cancellation is admitted', () => {
-  assert.match(operationFinish, /POST_DRAFT_LIVE_AUTHORITY_V1/);
+  assert.match(operationFinish, /POST_DRAFT_LIVE_AUTHORITY_V2/);
+  assert.match(operationFinish, /fast_reversion_eligible/);
+  assert.match(operationFinish, /LEGACY_PHYSICAL_PUBLICATION_MISSING/);
   assert.match(operationFinish, /'post_draft_authority'/);
   assert.match(operationFinish, /source_change_seq/);
   assert.match(operationFinish, /dirty_generation/);

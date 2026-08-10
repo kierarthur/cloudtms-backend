@@ -80,6 +80,10 @@ DECLARE
   v_same_authority_election_enabled boolean:=false;
   v_authority_fingerprint_version smallint:=NULL::smallint;
   v_authority_fingerprint text:=NULL::text;
+  v_required_physical_publication_contract_version smallint:=0;
+  v_unique_constraint_name text:=NULL::text;
+  v_winner_build private.banking_pay_workbench_economic_builds%ROWTYPE;
+  v_winner_active_job_id uuid:=NULL::uuid;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -538,7 +542,7 @@ BEGIN
     END IF;
     v_source_build_run_id := (v_job.payload_json->>'source_build_run_id')::uuid;
     IF v_same_authority_election_enabled THEN
-      IF COALESCE(v_job.payload_json->>'authority_fingerprint_version','')<>'2'
+      IF COALESCE(v_job.payload_json->>'authority_fingerprint_version','') NOT IN ('2','3')
          OR COALESCE(v_job.payload_json->>'authority_fingerprint','') !~ '^[0-9a-f]{64}$' THEN
         RAISE EXCEPTION 'PAY_WORKBENCH_SOURCE_BUILD_AUTHORITY_FINGERPRINT_REQUIRED'
           USING ERRCODE='22023',DETAIL=pg_catalog.jsonb_build_object(
@@ -547,8 +551,21 @@ BEGIN
             'candidate_id',v_job.candidate_id
           )::text;
       END IF;
-      v_authority_fingerprint_version:=2;
+      v_authority_fingerprint_version:=(v_job.payload_json->>'authority_fingerprint_version')::smallint;
       v_authority_fingerprint:=v_job.payload_json->>'authority_fingerprint';
+      v_required_physical_publication_contract_version:=CASE
+        WHEN v_authority_fingerprint_version=3 THEN COALESCE(
+          NULLIF(v_job.payload_json->>'required_physical_publication_contract_version','')::smallint,
+          0
+        ) ELSE 0 END;
+      IF v_authority_fingerprint_version=3
+         AND v_required_physical_publication_contract_version<>1 THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_SOURCE_BUILD_PHYSICAL_PUBLICATION_CONTRACT_REQUIRED'
+          USING ERRCODE='22023',DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_SOURCE_BUILD_PHYSICAL_PUBLICATION_CONTRACT_REQUIRED',
+            'job_id',v_job.id,'candidate_id',v_job.candidate_id
+          )::text;
+      END IF;
     END IF;
     v_is_bootstrap := COALESCE(v_job.payload_json->>'bootstrap_id','')
       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -557,6 +574,7 @@ BEGIN
       v_bootstrap_id := (v_job.payload_json->>'bootstrap_id')::uuid;
     END IF;
     v_build_id := gen_random_uuid();
+    BEGIN
     INSERT INTO private.banking_pay_workbench_economic_builds(
       id,candidate_id,session_id,session_version,source_snapshot_run_id,
       source_build_run_id,source_job_id,captured_candidate_generation,
@@ -586,10 +604,91 @@ BEGIN
         'reconciliation_optimization_frozen_at_utc',clock_timestamp(),
         'reconciliation_optimization_authority','BUILD_CREATION_SETTINGS',
         'authority_fingerprint_version',v_authority_fingerprint_version,
-        'authority_fingerprint',v_authority_fingerprint
+        'authority_fingerprint',v_authority_fingerprint,
+        'required_physical_publication_contract_version',v_required_physical_publication_contract_version,
+        'source_publication_baseline_required',v_required_physical_publication_contract_version>=1
       ),
       v_authority_fingerprint_version,v_authority_fingerprint
     ) RETURNING id,scope_cursor_json INTO v_build_id,v_cursor_json;
+    EXCEPTION WHEN unique_violation THEN
+      GET STACKED DIAGNOSTICS v_unique_constraint_name=CONSTRAINT_NAME;
+      IF v_same_authority_election_enabled IS NOT TRUE
+         OR v_unique_constraint_name IS DISTINCT FROM 'uq_bpay_wb_economic_build_authority_v1'
+         OR v_authority_fingerprint_version IS NULL
+         OR v_authority_fingerprint IS NULL THEN
+        RAISE;
+      END IF;
+
+      SELECT winner.* INTO v_winner_build
+      FROM private.banking_pay_workbench_economic_builds AS winner
+      WHERE winner.candidate_id=v_job.candidate_id
+        AND winner.authority_fingerprint_version=v_authority_fingerprint_version
+        AND winner.authority_fingerprint=v_authority_fingerprint
+        AND winner.status NOT IN ('FAILED','OBSOLETE','CLEANING')
+      ORDER BY winner.created_at_utc,winner.id
+      LIMIT 1
+      FOR UPDATE;
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_SAME_AUTHORITY_WINNER_NOT_PROVEN'
+          USING ERRCODE='40001',DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_SAME_AUTHORITY_WINNER_NOT_PROVEN',
+            'job_id',v_job.id,'candidate_id',v_job.candidate_id,
+            'authority_fingerprint_version',v_authority_fingerprint_version,
+            'authority_fingerprint',v_authority_fingerprint
+          )::text;
+      END IF;
+
+      SELECT winner_job.id INTO v_winner_active_job_id
+      FROM public.banking_pay_workbench_jobs AS winner_job
+      WHERE winner_job.economic_build_id=v_winner_build.id
+        AND winner_job.status IN ('QUEUED','RUNNING')
+      ORDER BY CASE WHEN winner_job.status='RUNNING' THEN 0 ELSE 1 END,
+               winner_job.run_at_utc,winner_job.created_at_utc,winner_job.id
+      LIMIT 1
+      FOR UPDATE;
+      IF v_winner_active_job_id IS NULL THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_SAME_AUTHORITY_ACTIVE_WINNER_NOT_PROVEN'
+          USING ERRCODE='40001',DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_SAME_AUTHORITY_ACTIVE_WINNER_NOT_PROVEN',
+            'job_id',v_job.id,'winner_build_id',v_winner_build.id
+          )::text;
+      END IF;
+
+      UPDATE public.banking_pay_workbench_jobs AS loser_job
+      SET status='SUCCEEDED',completed_at_utc=clock_timestamp(),updated_at_utc=clock_timestamp(),
+          economic_build_id=v_winner_build.id,private_stage=NULL,private_cursor_kind=NULL,
+          private_cursor_json='{}'::jsonb,private_stage_version=NULL,
+          last_error_json=pg_catalog.jsonb_build_object(
+            'code','SAME_AUTHORITY_OWNER_COALESCED',
+            'winner_build_id',v_winner_build.id,
+            'winner_job_id',v_winner_active_job_id,
+            'authority_fingerprint_version',v_authority_fingerprint_version,
+            'authority_fingerprint',v_authority_fingerprint
+          )
+      WHERE loser_job.id=v_job.id AND loser_job.status='QUEUED';
+
+      UPDATE public.banking_pay_workbench_session_scope AS scope_row
+      SET pending_job_id=v_winner_active_job_id,updated_at_utc=clock_timestamp()
+      WHERE scope_row.session_id=v_job.session_id
+        AND scope_row.candidate_id=v_job.candidate_id
+        AND scope_row.pending_job_id=v_job.id;
+      UPDATE public.banking_pay_workbench_session_candidate_state AS state_row
+      SET pending_job_id=v_winner_active_job_id,updated_at_utc=clock_timestamp()
+      WHERE state_row.session_id=v_job.session_id
+        AND state_row.candidate_id=v_job.candidate_id
+        AND state_row.pending_job_id=v_job.id;
+      UPDATE private.banking_pay_workbench_candidate_scope_registry
+      SET current_build_id=v_winner_build.id,updated_at_utc=clock_timestamp()
+      WHERE candidate_id=v_job.candidate_id;
+
+      RETURN pg_catalog.jsonb_build_object(
+        'ok',true,'claimed',false,'result_code','SAME_AUTHORITY_OWNER_COALESCED',
+        'job_id',v_job.id,'candidate_id',v_job.candidate_id,
+        'winner_build_id',v_winner_build.id,'winner_job_id',v_winner_active_job_id,
+        'authority_fingerprint_version',v_authority_fingerprint_version,
+        'authority_fingerprint',v_authority_fingerprint
+      );
+    END;
     UPDATE private.banking_pay_workbench_candidate_scope_registry
     SET current_build_id=v_build_id,
         initialisation_status=CASE WHEN v_is_bootstrap THEN 'DISCOVERING' ELSE initialisation_status END,
