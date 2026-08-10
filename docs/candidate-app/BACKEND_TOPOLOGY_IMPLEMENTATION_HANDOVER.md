@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 10 August 2026
-Status: final Candidate broker/private API authority correction published and deployed to TEST for independent API-freeze audit. This document is updated through generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity and compare-and-set outbox release.
+Status: final Candidate broker/private API authority correction published and deployed to TEST for independent API-freeze audit. This document is updated through generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, early paper-workflow multiplicity, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
 
 ## Executive result
 
@@ -21,7 +21,21 @@ Candidate iOS / Android / web + manager browser
 
 The public broker has no Supabase/R2 or CloudTMS business-authority dependency. The private Candidate API has no public Worker route. The normal CloudTMS Worker retains authenticated office adapters and now rejects public Candidate/manager paths before its global preflight handler.
 
-No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version, invoice, payment, Banking Pay, Policy X, Google rota/availability or official-timesheet-renderer economics were changed in this pass. One existing Candidate workflow RPC definition was tightened only to make prepared-upload replay generation/state-safe and to prevent a terminal component from being revived.
+No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version algorithm, invoice, payment, Banking Pay, Policy X, Google rota/availability or official-timesheet-renderer economics were changed in this closure. Existing Candidate workflow, route-orchestration, QR-enqueue and mail-claim repeatables were tightened only to make one PAPER generation the complete owner of its delivery authority and to retire stale authority safely.
+
+## Final PAPER generation-retirement closure
+
+Runtime source: `6ddba7f17f98a4265232b4b2ac51b1ac25d46687`.
+
+- complete-pack release is now a service-only action in the existing workflow RPC and is atomic across workflow/current-timesheet proof, the exact held outbox row, attachment receipt, release timing and insert-once notification;
+- the private scheduler no longer mutates `mail_outbox` or `candidate_notifications` directly;
+- one private retirement helper is composed by PAPER amendment, cancellation, supersession, office rejection and canonical route/QR intervention;
+- obsolete non-sent delivery rows are retained as inert audit history, old readiness notifications/deep links are retired and the old QR token/generated-document identity is invalidated;
+- a provider-owned live lease blocks retirement before mutation; a completed retirement is independently rejected by the mail claimant's current workflow/generation/route/state/manifest fence;
+- fresh PAPER generations receive fresh mail, QR token and document identities, so the previous operation cannot block or be reused by the new generation;
+- sent mail and all signed/issued R2 evidence remain immutable history and are never physically purged by this correction.
+
+The exact changed repeatables were installed by the safe TEST migration workflow. All 16 Candidate SQL runtime/concurrency suites passed on PostgreSQL 17.6 and 18.1; 109 focused tests and all 442 backend tests passed; Worker dry builds and deployed health checks passed. All Candidate tables remain empty and all Candidate feature flags remain false.
 
 ## Final retry, document and HTTP authority closure in this revision
 

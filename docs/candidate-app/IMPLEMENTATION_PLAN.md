@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST with every Candidate feature flag false. The final PAPER acceptance correction is published at runtime commit `999c02b55322d5749ab2aeb48468bbc40194e0cf`; installer/source alignment is published at `1c004f37f42bf353dae2772407a6af3404a9dff1`. PostgreSQL runtime and safe-migration GitHub gates passed, the exact corrected repeatables are installed in TEST, and the private API, public broker and normal TEST backend were redeployed from that source. `PAPER_PREPARE` now commits its frozen workflow/manifest only with one exact held email operation, while the private scheduler refuses to assemble or notify without that operation. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
+Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST with every Candidate feature flag false. The generation-retirement and provider-handoff correction is published at runtime commit `6ddba7f17f98a4265232b4b2ac51b1ac25d46687`. PostgreSQL runtime and safe-migration GitHub gates passed, the exact corrected repeatables are installed in TEST, and the private API, public broker and normal TEST backend were redeployed from that source. `PAPER_PREPARE` commits its frozen workflow/manifest only with one exact held email operation; release is one service-only database action; and every amendment, cancellation, supersession, rejection or route intervention retires the obsolete PAPER generation before its mail, token, notification or return authority can remain live. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -125,6 +125,40 @@ Controlling guarantees:
 - only the official main hours timesheet carries the QR code. Supplementary Expense and Mileage Approval Summary, Mileage Claim Form and evidence pages remain bound through the immutable manifest and do not receive separate QR codes.
 
 This correction changes document/email orchestration and verification only. It does not alter DAILY or WEEKLY economic calculation, rates, pay, charge, VAT, ERNI, margin, TSFIN, Process, Authorise, invoice economics, payment, Banking Pay or Policy X.
+
+### Final Candidate PAPER generation-retirement and provider-handoff authority
+
+The final lifecycle correction makes one PAPER generation the complete unit of email, QR token, document and notification authority:
+
+```text
+current PAPER workflow + generation + immutable manifest
+→ one held mail operation + fresh QR/document identity
+→ one service-only atomic complete-pack release
+→ independently fenced provider claim
+
+AMEND / CANCEL / SUPERSEDE / office rejection / route intervention / QR replacement
+→ retire the exact old generation first
+→ old mail cannot be claimed
+→ old readiness notification/deep link becomes obsolete
+→ old QR token and current generated-document identity are invalidated
+→ signed/sent historical bytes and audit lineage remain immutable
+```
+
+Controlling guarantees:
+
+- `PAPER_PACK_RELEASE` is a service-only action inside the existing `candidate_workflow_transition_atomic_v1`; it locks the current timesheet, workflow and exact outbox row, validates the immutable pack receipt, attaches the one complete pack, releases the one held email and inserts the readiness notification in one transaction;
+- the private scheduler is a thin adapter. It validates/reuses the durable R2 receipt and calls the atomic action; it no longer PATCHes mail or inserts notifications directly;
+- `_candidate_paper_delivery_retire_v1` is the one private retirement owner used by Candidate `AMEND`, `CANCEL`, `SUPERSEDE`, office whole-record rejection and the canonical office route/QR intervention path;
+- a non-sent retired mail keeps its audit record but loses live attachments, receives an infinite schedule and an explicit retired-generation marker. A sent mail remains immutable history;
+- a live provider lease blocks retirement with a retryable conflict before any workflow, mail, notification or QR mutation. Retirement that wins first makes the row fail the provider claimant's current-workflow fence;
+- the claim authority independently rechecks the exact workflow ID, generation, PAPER route, `AWAITING_PAPER_RETURN` state, manifest hash, target timesheet and non-retired marker before granting a delivery lease;
+- a fresh PAPER generation receives a fresh deterministic mail identity and a freshly rotated QR token/document identity. An older generation can never block or be reused by the new generation;
+- readiness notification retirement is state-safe: the old deep link is marked obsolete, pending delivery is skipped and the historical notification is not deleted;
+- no R2 evidence or signed/issued history is physically purged by generation retirement.
+
+Verified acceptance for this closure is 16/16 Candidate SQL runtime/concurrency suites on both PostgreSQL 17.6 and 18.1, 109/109 focused Candidate/backend tests, 442/442 complete backend tests, all three Worker dry builds, safe TEST migration, exact installed-repeatable hashes and healthy deployed TEST Workers. The Candidate tables remain empty and all Candidate feature flags remain false pending independent audit.
+
+This is an orchestration and stale-authority correction only. The canonical DAILY and WEEKLY financial calculations, Process, Authorise, invoice, payment, Banking Pay and Policy X authorities were not changed.
 
 ### Candidate authentication and session boundary
 
