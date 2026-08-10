@@ -204,6 +204,15 @@ BEGIN
         )::text;
       END IF;
 
+      PERFORM private.pay_workbench_draft_expected_effects_v1(
+        p_operation_id,'APPLY_FINANCE_ADJUSTMENTS','REGISTER',
+        jsonb_build_array(
+          jsonb_build_object('relation_name','pay_batch_items','operation','INSERT'),
+          jsonb_build_object('relation_name','pay_batch_items','operation','UPDATE'),
+          jsonb_build_object('relation_name','pay_batch_items','operation','DELETE')
+        ),jsonb_build_object('pay_batch_id',p_pay_batch_id)
+      );
+
       DELETE FROM public.pay_batch_items AS linked_item_delete
       USING public.banking_pay_operation_candidate_allocation_rows AS allocation_row
       WHERE allocation_row.operation_id = p_operation_id
@@ -4268,6 +4277,13 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
     WHERE scope_update.operation_id = p_operation_id
       AND scope_update.candidate_id = ANY(v_candidate_ids)
       AND scope_update.pay_channel = v_scope;
+  END IF;
+
+  IF p_operation_id IS NOT NULL THEN
+    PERFORM private.pay_workbench_draft_expected_effects_v1(
+      p_operation_id,'APPLY_FINANCE_ADJUSTMENTS','ASSERT_COMPLETE','[]'::jsonb,
+      jsonb_build_object('pay_batch_id',p_pay_batch_id)
+    );
   END IF;
 
   RETURN jsonb_build_object(

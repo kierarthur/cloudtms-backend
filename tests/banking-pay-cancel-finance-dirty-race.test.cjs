@@ -21,37 +21,29 @@ test('the cancelled frozen batch is the authority for affected finance cases', (
   assert.match(sql, /batch_item\.finance_case_id IS NOT NULL/);
 });
 
-test('only queued finance dirty jobs for matching finance cases are superseded', () => {
-  assert.match(sql, /job_type, ''\)\)\) = 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'/);
-  assert.match(sql, /status, ''\)\)\) = 'QUEUED'/);
-  assert.match(sql, /unnest\(v_changed_finance_case_ids\)/);
-  assert.match(sql, /WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
-  assert.doesNotMatch(sql, /status, ''\)\)\) IN \('QUEUED', 'RUNNING'\)/);
+test('finance dirty jobs are left for canonical current-authority election', () => {
+  assert.match(sql, /v_superseded_finance_dirty_job_count := 0/);
+  assert.match(sql, /Do not terminalise queued finance\/targeted work before canonical owner/);
+  assert.doesNotMatch(sql, /WITH superseded_finance_dirty_jobs AS/);
+  assert.doesNotMatch(sql, /WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
 });
 
-test('cancellation supersession is successful terminal work with durable audit metadata', () => {
-  assert.match(sql, /WITH superseded_finance_dirty_jobs AS \([\s\S]*SET status = 'SUCCEEDED'/);
-  assert.match(sql, /WITH superseded_targeted_jobs AS \([\s\S]*SET status = 'SUCCEEDED'/);
-  assert.match(sql, /completed_at_utc = v_now/);
-  assert.match(sql, /failed_at_utc = NULL::timestamptz/);
-  assert.match(sql, /last_error_json = NULL::jsonb/);
-  assert.match(sql, /economic_build_id = NULL::uuid/);
-  assert.match(sql, /private_stage = NULL::text/);
-  assert.match(sql, /private_cursor_kind = NULL::text/);
-  assert.match(sql, /private_cursor_json = '\{\}'::jsonb/);
-  assert.match(sql, /private_stage_version = NULL::integer/);
-  assert.match(sql, /'completion_code', 'WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH'/);
-  assert.match(sql, /'completion_code', 'WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH'/);
-  assert.match(sql, /'superseding_session_id', p_session_id::text/);
-  assert.match(sql, /'superseding_pay_batch_id', p_pay_batch_id::text/);
+test('cancellation routes targeted evidence through the canonical owner without forced-full flags', () => {
+  assert.match(sql, /v_targeted_timesheet_ids/);
+  assert.match(sql, /'targeted_timesheet_ids',\s*COALESCE\(v_targeted_timesheet_ids/);
+  assert.match(sql, /'linked_timesheet_ids',\s*COALESCE\(v_targeted_timesheet_ids/);
+  assert.match(sql, /'refresh_scope_kind',\s*v_requested_refresh_scope/);
+  assert.match(sql, /'canonical_route_ladder_required', true/);
+  assert.doesNotMatch(sql, /'force_legacy', true/);
+  assert.doesNotMatch(sql, /'projection_mode', 'LEGACY'/);
 });
 
-test('finance race guard runs before the canonical current-authority ladder is invoked', () => {
-  const supersedeAt = sql.indexOf('WITH superseded_finance_dirty_jobs AS');
+test('selection reconciliation and non-terminalisation run before canonical owner election', () => {
+  const nonTerminalAt = sql.indexOf('v_superseded_finance_dirty_job_count := 0');
   const enqueueAt = sql.indexOf('v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh');
-  assert.ok(supersedeAt >= 0);
-  assert.ok(enqueueAt > supersedeAt);
-  assert.match(sql, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
+  assert.ok(nonTerminalAt >= 0);
+  assert.ok(enqueueAt > nonTerminalAt);
+  assert.match(sql, /'refresh_scope_kind',\s*v_requested_refresh_scope/);
   assert.match(sql, /'canonical_route_ladder_required', true/);
   assert.match(sql, /'fallback_reason', 'CERTIFIED_CANCELLATION_REVERSION_REJECTED'/);
   assert.doesNotMatch(sql, /'force_legacy', true/);

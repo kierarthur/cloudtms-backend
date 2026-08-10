@@ -1736,6 +1736,37 @@ begin
 
   ;
 
+  -- An aggregate ordinary timesheet parent is presentation evidence, not an
+  -- independently payable economic component.  Negative parents without an
+  -- actionable case were previously left under READY_TO_PAY and only made
+  -- non-selectable later by the strict line contract.  That was structurally
+  -- safe but visually false: a negative payment cannot be paid.  Move the
+  -- single parent row to Blocked while retaining its exact amount and lineage.
+  UPDATE canonical_timesheet_presentation_rows AS presentation_row
+  SET
+    line_json = presentation_row.line_json
+      || pg_catalog.jsonb_build_object(
+        'presentation_section', 'BLOCKED_FOR_PAY',
+        'readiness_state', 'BLOCKED_FOR_PAY',
+        'presentation_reason', 'NEGATIVE_ORDINARY_PRESENTATION_ONLY',
+        'presentation_advisory_text', 'Negative ordinary entitlement cannot be paid directly',
+        'blocked_reason_codes', COALESCE(presentation_row.line_json->'blocked_reason_codes', '[]'::jsonb)
+          || pg_catalog.jsonb_build_array('NEGATIVE_ORDINARY_PRESENTATION_ONLY'),
+        'draftable', false,
+        'is_ready_for_draft', false,
+        'selection_allowed', false,
+        'is_excluded_from_allocation', true
+      ),
+    is_excluded_from_allocation = true
+  WHERE pg_catalog.upper(COALESCE(presentation_row.line_json->>'line_type', '')) = 'TIMESHEET_PAYMENT'
+    AND pg_catalog.upper(COALESCE(presentation_row.line_json->>'presentation_role', '')) = 'PARENT'
+    AND pg_catalog.upper(COALESCE(presentation_row.line_json->>'presentation_section', '')) = 'READY_TO_PAY'
+    AND pg_catalog.lower(pg_catalog.btrim(COALESCE(
+      presentation_row.line_json->'case_resolution_summary'->>'case_needs_resolution',
+      'false'
+    ))) NOT IN ('true','t','1','yes','y','on')
+    AND pg_catalog.round(COALESCE(presentation_row.amount_ex_vat, 0), 2) < 0;
+
   create temporary table finance_case_lines on commit drop as
         select
           fcrr.candidate_id,

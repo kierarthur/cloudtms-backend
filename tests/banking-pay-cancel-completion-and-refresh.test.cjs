@@ -51,15 +51,18 @@ test('terminal cancellation metadata and actor audit are fail-closed and idempot
   assert.match(repeatableSql, /existing_audit\.correlation_id = p_correction_request_id::text/);
 });
 
-test('post-cancel complex candidates enter the canonical current-authority ladder with no targeted ids', () => {
-  assert.match(refreshRepeatableSql, /WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
+test('post-cancel complex candidates enter the canonical current-authority ladder without pre-emptive job termination', () => {
   assert.match(refreshRepeatableSql, /'defer_complex_enqueue',true/);
-  assert.match(refreshRepeatableSql, /'targeted_timesheet_ids', '\[\]'::jsonb/);
-  assert.match(refreshRepeatableSql, /'linked_timesheet_ids', '\[\]'::jsonb/);
-  assert.match(refreshRepeatableSql, /'refresh_scope_kind', 'CANDIDATE_FULL_LIVE'/);
+  assert.match(refreshRepeatableSql, /v_superseded_finance_dirty_job_count := 0/);
+  assert.match(refreshRepeatableSql, /Do not terminalise queued finance\/targeted work before canonical owner/);
+  assert.match(refreshRepeatableSql, /v_requested_refresh_scope\s*:=\s*CASE[\s\S]*'TARGETED_TIMESHEETS'[\s\S]*'CANDIDATE_FULL_LIVE'/);
+  assert.match(refreshRepeatableSql, /'targeted_timesheet_ids',\s*COALESCE\(v_targeted_timesheet_ids/);
+  assert.match(refreshRepeatableSql, /'linked_timesheet_ids',\s*COALESCE\(v_targeted_timesheet_ids/);
+  assert.match(refreshRepeatableSql, /'refresh_scope_kind',\s*v_requested_refresh_scope/);
   assert.match(refreshRepeatableSql, /'canonical_route_ladder_required', true/);
   assert.match(refreshRepeatableSql, /'fallback_reason', 'CERTIFIED_CANCELLATION_REVERSION_REJECTED'/);
   assert.doesNotMatch(refreshRepeatableSql, /'force_legacy', true/);
+  assert.doesNotMatch(refreshRepeatableSql, /WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH/);
   assert.match(refreshRepeatableSql, /'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'/);
   assert.doesNotMatch(refreshRepeatableSql, /selection_state\s*=\s*'READY'/);
 });

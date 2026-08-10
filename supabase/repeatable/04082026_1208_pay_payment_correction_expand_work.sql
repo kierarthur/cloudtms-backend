@@ -125,7 +125,6 @@ BEGIN
   WHERE settings_row.id=1;
 
   IF COALESCE(v_fast_draft_enabled,false)
-     AND UPPER(BTRIM(COALESCE(v_requested_action,'')))='DRAFT_CANCEL'
      AND UPPER(BTRIM(COALESCE(v_batch.status,''))) IN ('DRAFT','DRAFT_CREATED','CANCELLED')
      AND v_batch.source_workbench_session_id IS NOT NULL THEN
     v_fast_draft_after_candidate_id := CASE

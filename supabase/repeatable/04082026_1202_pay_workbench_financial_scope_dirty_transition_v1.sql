@@ -14,10 +14,15 @@ DECLARE
   v_candidate_ids uuid[];
   v_timesheet_ids uuid[];
   v_expected regclass:=pg_catalog.to_regclass('pg_temp._bpay_wb_expected_effects');
+  v_draft_context regclass:=pg_catalog.to_regclass('pg_temp._bpay_wb_draft_expected_effect_context_v1');
+  v_draft_observed regclass:=pg_catalog.to_regclass('pg_temp._bpay_wb_draft_observed_effects_v1');
   v_delete_context regclass:=pg_catalog.to_regclass('pg_temp._bpay_candidate_delete_context_v1');
   v_relation_owner oid;
   v_duplicate boolean:=false;
   v_mismatch_detail jsonb:='{}'::jsonb;
+  v_draft_operation_id uuid:=NULL::uuid;
+  v_draft_phase text:=NULL::text;
+  v_draft_context_token text:=NULL::text;
 BEGIN
   CREATE TEMP TABLE IF NOT EXISTS pg_temp._bpay_wb_transition_impacts_v1(
     relation_name text NOT NULL,
@@ -390,6 +395,114 @@ BEGIN
       USING ERRCODE='22023',DETAIL=TG_TABLE_SCHEMA||'.'||TG_TABLE_NAME||':'||TG_OP;
   END IF;
 
+  -- Canonical Draft writers install a transaction-local operation context.
+  -- Only effects belonging to that exact operation/batch/candidate scope and
+  -- an allow-listed relation/action are consumed.  Everything else remains in
+  -- the normal dirty path and is recorded as an unmatched effect so the writer
+  -- fails closed at its phase assertion.
+  IF v_draft_context IS NOT NULL AND v_draft_observed IS NOT NULL THEN
+    SELECT relowner INTO v_relation_owner FROM pg_catalog.pg_class WHERE oid=v_draft_context;
+    IF v_relation_owner=current_user::regrole::oid
+       AND EXISTS(SELECT 1 FROM pg_catalog.pg_class relation
+         WHERE relation.oid=v_draft_context AND relation.relpersistence='t'
+           AND relation.relnamespace=pg_catalog.pg_my_temp_schema())
+       AND (SELECT array_agg(attribute.attname::text ORDER BY attribute.attnum)
+            FROM pg_catalog.pg_attribute attribute
+            WHERE attribute.attrelid=v_draft_context AND attribute.attnum>0 AND NOT attribute.attisdropped)
+          =ARRAY['operation_id','pay_batch_id','workbench_session_id','phase','backend_pid',
+            'transaction_id','registered_at_utc','expected_effects_json','context_token']
+       AND EXISTS(SELECT 1 FROM pg_catalog.pg_class relation
+         WHERE relation.oid=v_draft_observed AND relation.relpersistence='t'
+           AND relation.relnamespace=pg_catalog.pg_my_temp_schema())
+       AND (SELECT array_agg(attribute.attname::text ORDER BY attribute.attnum)
+            FROM pg_catalog.pg_attribute attribute
+            WHERE attribute.attrelid=v_draft_observed AND attribute.attnum>0 AND NOT attribute.attisdropped)
+          =ARRAY['operation_id','pay_batch_id','phase','relation_name','operation','source_id',
+            'candidate_id','timesheet_id','before_digest','after_digest','matched','observed_at_utc'] THEN
+      SELECT context_row.operation_id,context_row.phase,context_row.context_token
+      INTO v_draft_operation_id,v_draft_phase,v_draft_context_token
+      FROM pg_temp._bpay_wb_draft_expected_effect_context_v1 AS context_row
+      WHERE context_row.backend_pid=pg_catalog.pg_backend_pid()
+        AND context_row.transaction_id=pg_catalog.txid_current()
+      LIMIT 1;
+
+      IF v_draft_operation_id IS NOT NULL THEN
+        INSERT INTO pg_temp._bpay_wb_draft_observed_effects_v1(
+          operation_id,pay_batch_id,phase,relation_name,operation,source_id,
+          candidate_id,timesheet_id,before_digest,after_digest,matched,observed_at_utc
+        )
+        SELECT
+          context_row.operation_id,context_row.pay_batch_id,context_row.phase,
+          impact.relation_name,impact.operation,impact.source_id,impact.candidate_id,
+          impact.timesheet_id,impact.before_digest,impact.after_digest,
+          (
+            EXISTS(
+              SELECT 1
+              FROM pg_catalog.jsonb_array_elements(context_row.expected_effects_json) AS expected(value)
+              WHERE pg_catalog.lower(pg_catalog.btrim(COALESCE(expected.value->>'relation_name','')))=impact.relation_name
+                AND pg_catalog.upper(pg_catalog.btrim(COALESCE(expected.value->>'operation','')))=impact.operation
+            )
+            AND EXISTS(
+              SELECT 1
+              FROM public.banking_pay_operation_candidate_scope AS operation_scope
+              WHERE operation_scope.operation_id=context_row.operation_id
+                AND operation_scope.pay_batch_id=context_row.pay_batch_id
+                AND operation_scope.candidate_id=impact.candidate_id
+                AND operation_scope.status NOT IN ('FAILED','CANCELLED','SUPERSEDED')
+            )
+            AND CASE impact.relation_name
+              WHEN 'pay_batch_items' THEN EXISTS(
+                SELECT 1 FROM public.pay_batch_items item
+                JOIN public.pay_batch_candidates candidate ON candidate.id=item.pay_batch_candidate_id
+                WHERE item.id=impact.source_id AND candidate.pay_batch_id=context_row.pay_batch_id
+              ) OR impact.operation='DELETE'
+              WHEN 'pay_batch_item_breakdowns' THEN EXISTS(
+                SELECT 1 FROM public.pay_batch_item_breakdowns breakdown
+                JOIN public.pay_batch_items item ON item.id=breakdown.pay_batch_item_id
+                JOIN public.pay_batch_candidates candidate ON candidate.id=item.pay_batch_candidate_id
+                WHERE breakdown.id=impact.source_id AND candidate.pay_batch_id=context_row.pay_batch_id
+              ) OR impact.operation='DELETE'
+              WHEN 'pay_batch_timesheet_snapshots' THEN EXISTS(
+                SELECT 1 FROM public.pay_batch_timesheet_snapshots snapshot
+                WHERE snapshot.id=impact.source_id AND snapshot.pay_batch_id=context_row.pay_batch_id
+              )
+              WHEN 'pay_advance_reservations' THEN EXISTS(
+                SELECT 1 FROM public.pay_advance_reservations reservation
+                WHERE reservation.id=impact.source_id AND reservation.pay_batch_id=context_row.pay_batch_id
+              ) OR impact.operation='DELETE'
+              WHEN 'pay_finance_case_events' THEN EXISTS(
+                SELECT 1 FROM public.pay_finance_case_events event
+                WHERE event.id=impact.source_id AND event.pay_batch_id=context_row.pay_batch_id
+              ) OR impact.operation='DELETE'
+              WHEN 'pay_batch_candidates' THEN impact.operation='DELETE'
+              ELSE impact.relation_name IN ('pay_advances','pay_finance_case_components')
+            END
+          ),
+          pg_catalog.clock_timestamp()
+        FROM pg_temp._bpay_wb_transition_impacts_v1 AS impact
+        CROSS JOIN pg_temp._bpay_wb_draft_expected_effect_context_v1 AS context_row
+        WHERE context_row.operation_id=v_draft_operation_id
+        ON CONFLICT(operation_id,phase,relation_name,operation,source_id,candidate_id)
+        DO UPDATE SET
+          timesheet_id=EXCLUDED.timesheet_id,
+          before_digest=EXCLUDED.before_digest,
+          after_digest=EXCLUDED.after_digest,
+          matched=EXCLUDED.matched,
+          observed_at_utc=EXCLUDED.observed_at_utc;
+
+        DELETE FROM pg_temp._bpay_wb_transition_impacts_v1 AS impact
+        USING pg_temp._bpay_wb_draft_observed_effects_v1 AS observed
+        WHERE observed.operation_id=v_draft_operation_id
+          AND observed.phase=v_draft_phase
+          AND observed.matched
+          AND observed.relation_name=impact.relation_name
+          AND observed.operation=impact.operation
+          AND observed.source_id=impact.source_id
+          AND observed.candidate_id=impact.candidate_id;
+      END IF;
+    END IF;
+  END IF;
+
   -- UPDATE rows are economically relevant only where the typed digest changed.
   DELETE FROM pg_temp._bpay_wb_transition_impacts_v1
   WHERE operation='UPDATE' AND before_digest IS NOT DISTINCT FROM after_digest;
@@ -557,7 +670,12 @@ BEGIN
   IF COALESCE(cardinality(v_candidate_ids),0)>0 THEN
     PERFORM private.pay_workbench_scope_invalidate_v1(
       v_candidate_ids,v_timesheet_ids,v_reason,NULL,
-      jsonb_build_object('source_relation',TG_TABLE_NAME,'source_operation',TG_OP)
+      jsonb_strip_nulls(jsonb_build_object(
+        'source_relation',TG_TABLE_NAME,'source_operation',TG_OP,
+        'draft_operation_id',v_draft_operation_id,
+        'draft_phase',v_draft_phase,
+        'draft_context_token',v_draft_context_token
+      ))
     );
   END IF;
   RETURN NULL;

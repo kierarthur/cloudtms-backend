@@ -64,6 +64,8 @@ DECLARE
   v_scope_diagnostic_json jsonb := '{}'::jsonb;
   v_defer_complex_enqueue boolean := lower(btrim(COALESCE(v_options_json->>'defer_complex_enqueue','false')))
     IN ('true','t','1','yes','y','on');
+  v_draft_adoption_result jsonb := '{}'::jsonb;
+  v_draft_operation_id uuid := NULL::uuid;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -1270,6 +1272,20 @@ BEGIN
       updated_at_utc = v_now
   WHERE session_update.id = p_session_id;
 
+  IF v_operation_type='DRAFT_CREATE'
+     AND COALESCE(v_options_json->>'operation_id','') ~* v_uuid_regex THEN
+    v_draft_operation_id:=(v_options_json->>'operation_id')::uuid;
+    v_draft_adoption_result:=private.pay_workbench_draft_create_adoption_finalize_v1(
+      v_draft_operation_id,p_pay_batch_id,p_session_id,
+      ARRAY(
+        SELECT candidate_row.candidate_id
+        FROM pg_temp._bpay_batch_mutation_candidates AS candidate_row
+        ORDER BY candidate_row.candidate_id
+      ),
+      jsonb_build_object('operation_type',v_operation_type)
+    );
+  END IF;
+
   RETURN jsonb_build_object(
     'ok', true,
     'patch_applied', true,
@@ -1295,6 +1311,7 @@ BEGIN
     'pay_batch_id', p_pay_batch_id::text,
     'scope_resolution_mode', v_scope_resolution_mode,
     'scope_diagnostic', COALESCE(v_scope_diagnostic_json, '{}'::jsonb),
+    'draft_create_adoption',COALESCE(v_draft_adoption_result,'{}'::jsonb),
     'post_action_refresh', jsonb_build_object(
       'mode', 'PATCH_EXISTING_SESSION',
       'patch_applied', true,

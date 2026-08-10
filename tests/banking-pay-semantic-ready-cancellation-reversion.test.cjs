@@ -297,6 +297,21 @@ test('cancellation reversion uses deterministic candidate locks, immutable linea
   assert.match(processChunk, /CERTIFIED_CANCELLATION_REVERSION_COMPLETE/);
 });
 
+test('eligible no-provider financial reversions use one set-based page with a strict compatibility fallback', () => {
+  assert.match(helpers, /CREATE TEMP TABLE pg_temp\._bpay_pre_cancel_fast_work/);
+  assert.match(helpers, /CREATE TEMP TABLE pg_temp\._bpay_pre_cancel_fast_items/);
+  assert.match(helpers, /provider_shape_count=0/);
+  assert.match(helpers, /public\.pay_bank_transfer_events AS transfer_event/);
+  assert.match(helpers, /public\.banking_pay_operation_transfer_scope AS transfer_scope/);
+  assert.match(helpers, /INSERT INTO public\.pay_payment_correction_items\(/);
+  assert.match(helpers, /UPDATE public\.pay_batch_items AS item_to_void/);
+  assert.match(helpers, /CREATE TEMP TABLE pg_temp\._bpay_pre_cancel_fast_reservations/);
+  assert.match(helpers, /INSERT INTO public\.pay_finance_case_events\(/);
+  assert.match(helpers, /'set_based_work_item_count',v_fast_count/);
+  assert.match(helpers, /v_result := public\.pay_pre_bank_cancel_apply_work_item\(v_work\.id,p_actor_user_id\)/);
+  assert.match(helpers, /NOT EXISTS \([\s\S]*_bpay_pre_cancel_fast_work AS fast_work[\s\S]*fast_work\.work_item_id=work_row\.id/);
+});
+
 test('mixed cancellation failures fall through the canonical safe ladder without a forced legacy route', () => {
   assert.match(patch, /v_defer_complex_enqueue/);
   assert.match(patch, /IF NOT v_defer_complex_enqueue THEN/);
@@ -368,8 +383,24 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 17);
-  assert.equal(semanticManifest.functions.length, 17);
+  assert.equal(semanticManifest.function_count, 25);
+  assert.equal(semanticManifest.functions.length, 25);
+  for (const identity of [
+    'private.pay_workbench_draft_expected_effects_v1',
+    'private.pay_workbench_draft_create_adoption_finalize_v1',
+    'private.pay_workbench_financial_scope_dirty_transition_v1',
+    'public.pay_batch_insert_items_from_preview',
+    'public.pay_batch_apply_finance_adjustments',
+    'public.pay_batch_finalize_reservations_and_markers',
+    'public.pay_batch_create_timesheet_snapshots',
+    'public.pay_batch_build_item_breakdowns',
+  ]) {
+    const [schema, name] = identity.split('.');
+    assert.ok(
+      semanticManifest.functions.some((entry) => entry.schema === schema && entry.name === name),
+      `${identity} must have one semantic-cancellation catalogue owner`,
+    );
+  }
   assert.match(semanticVerifier, /definition_sha256/);
   assert.match(semanticVerifier, /unexpected overload/);
   assert.match(semanticVerifier, /missing saved source file/);

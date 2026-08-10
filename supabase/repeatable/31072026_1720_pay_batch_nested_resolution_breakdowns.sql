@@ -70,6 +70,14 @@ BEGIN
   ORDER BY allocation_row.candidate_scope_id, allocation_row.sort_order, pay_batch_item.id
   LIMIT 100;
 
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'BUILD_ITEM_BREAKDOWNS','REGISTER',
+    jsonb_build_array(
+      jsonb_build_object('relation_name','pay_batch_item_breakdowns','operation','INSERT'),
+      jsonb_build_object('relation_name','pay_batch_item_breakdowns','operation','UPDATE')
+    ),jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
+
   WITH segment_component_wrapper_source AS (
     SELECT
       item_page.*,
@@ -556,6 +564,11 @@ BEGIN
     ON item_page.id = existing_breakdown.pay_batch_item_id;
 
   v_reused_count := GREATEST(COALESCE(v_reused_count, 0) - COALESCE(v_inserted_count, 0), 0);
+
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'BUILD_ITEM_BREAKDOWNS','ASSERT_COMPLETE','[]'::jsonb,
+    jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
 
   RETURN jsonb_build_object(
     'ok', true,

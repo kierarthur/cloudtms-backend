@@ -588,7 +588,7 @@
       "schema": "public",
       "name": "pay_preview_candidate_build_canonical_lines",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "5839d63d40bce8402b9b8e4012cce2ab5eef4c55e3ec55cd28ea939f02ca46a6",
+      "definition_sha256": "2c5d87acb60b4e4ccac1b86825c212bef6601241a5ab45e78db5a93b867a7f05",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -658,7 +658,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "98d0681da1dd51d47940a566eb4eebf9a49a574fa56954e3b70334cffa5a0f3e",
+      "definition_sha256": "27bf38be9f799acedbad9a4f00b0fe2ad84757756a033f129a48c7a40060da04",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

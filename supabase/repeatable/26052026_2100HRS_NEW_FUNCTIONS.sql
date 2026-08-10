@@ -46233,6 +46233,14 @@ BEGIN
             )::text;
   END IF;
 
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'INSERT_ITEMS','REGISTER',
+    jsonb_build_array(
+      jsonb_build_object('relation_name','pay_batch_items','operation','INSERT'),
+      jsonb_build_object('relation_name','pay_batch_items','operation','UPDATE')
+    ),jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
+
   WITH inserted_items AS (
     INSERT INTO public.pay_batch_items(
       pay_batch_candidate_id,
@@ -46488,6 +46496,11 @@ BEGIN
       FROM jsonb_array_elements(v_scope_ids) AS supplied_scope(scope_value)
     );
 
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'INSERT_ITEMS','ASSERT_COMPLETE','[]'::jsonb,
+    jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
+
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
@@ -46627,6 +46640,16 @@ BEGIN
       FROM pg_temp.tmp_pay_batch_finalize_scope AS scope_row
       WHERE scope_row.candidate_id = candidate_before.candidate_id
     );
+
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'FINALISE_RESERVATIONS','REGISTER',
+    jsonb_build_array(
+      jsonb_build_object('relation_name','pay_batch_candidates','operation','DELETE'),
+      jsonb_build_object('relation_name','pay_advance_reservations','operation','INSERT'),
+      jsonb_build_object('relation_name','pay_advance_reservations','operation','UPDATE'),
+      jsonb_build_object('relation_name','pay_batch_items','operation','UPDATE')
+    ),jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
 
   DELETE FROM public.pay_batch_candidates AS candidate_delete
   WHERE candidate_delete.pay_batch_id = p_pay_batch_id
@@ -47333,6 +47356,11 @@ BEGIN
     p_touch_overview => true
   );
 
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'FINALISE_RESERVATIONS','ASSERT_COMPLETE','[]'::jsonb,
+    jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
+
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
@@ -47703,6 +47731,14 @@ BEGIN
       AND existing_snapshot.pay_channel = touched_timesheets.pay_channel
   );
 
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'CREATE_TIMESHEET_SNAPSHOTS','REGISTER',
+    jsonb_build_array(
+      jsonb_build_object('relation_name','pay_batch_timesheet_snapshots','operation','INSERT'),
+      jsonb_build_object('relation_name','pay_batch_timesheet_snapshots','operation','UPDATE')
+    ),jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
+
   WITH snapshot_rows AS (
     SELECT
       snapshot_page.timesheet_id,
@@ -47950,6 +47986,11 @@ BEGIN
 
   v_updated_count := 0;
 
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'CREATE_TIMESHEET_SNAPSHOTS','ASSERT_COMPLETE','[]'::jsonb,
+    jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
+
   RETURN jsonb_build_object(
     'ok', true,
     'pay_batch_id', p_pay_batch_id::text,
@@ -48063,6 +48104,14 @@ BEGIN
     )
   ORDER BY allocation_row.candidate_scope_id, allocation_row.sort_order, pay_batch_item.id
   LIMIT 100;
+
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'BUILD_ITEM_BREAKDOWNS','REGISTER',
+    jsonb_build_array(
+      jsonb_build_object('relation_name','pay_batch_item_breakdowns','operation','INSERT'),
+      jsonb_build_object('relation_name','pay_batch_item_breakdowns','operation','UPDATE')
+    ),jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
 
   WITH segment_component_source AS (
     SELECT
@@ -48476,6 +48525,11 @@ BEGIN
     ON item_page.id = existing_breakdown.pay_batch_item_id;
 
   v_reused_count := GREATEST(COALESCE(v_reused_count, 0) - COALESCE(v_inserted_count, 0), 0);
+
+  PERFORM private.pay_workbench_draft_expected_effects_v1(
+    p_operation_id,'BUILD_ITEM_BREAKDOWNS','ASSERT_COMPLETE','[]'::jsonb,
+    jsonb_build_object('pay_batch_id',p_pay_batch_id)
+  );
 
   RETURN jsonb_build_object(
     'ok', true,

@@ -69,6 +69,13 @@ declare
   v_error_line_count integer := 0;
   v_total_amount_ex_vat numeric := 0;
   v_draftable_amount_ex_vat numeric := 0;
+  v_ordinary_positive_selectable_count integer := 0;
+  v_ordinary_positive_selectable_amount numeric := 0;
+  v_recognised_deduction_selectable_count integer := 0;
+  v_recognised_deduction_selectable_amount numeric := 0;
+  v_negative_ordinary_blocked_count integer := 0;
+  v_negative_ordinary_cases_count integer := 0;
+  v_invalid_ready_negative_parent_count integer := 0;
   v_preview_section_counts jsonb := '{}'::jsonb;
   v_semantic_ready_publication_enabled boolean := false;
 begin
@@ -167,7 +174,63 @@ begin
          )
         THEN (preview_row.row_json->>'amount_ex_vat')::numeric
         ELSE 0::numeric
-      END), 0::numeric)
+      END), 0::numeric),
+      COUNT(*) FILTER (
+        WHERE preview_row.row_json->>'line_type' = 'TIMESHEET_PAYMENT'
+          AND COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          AND CASE WHEN COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END > 0
+          AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'selection_allowed','false'))) IN ('true','t','1','yes','y','on')
+          AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'is_excluded_from_allocation','false'))) NOT IN ('true','t','1','yes','y','on')
+      )::integer,
+      COALESCE(SUM(CASE
+        WHEN preview_row.row_json->>'line_type' = 'TIMESHEET_PAYMENT'
+          AND COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          AND CASE WHEN COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END > 0
+          AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'selection_allowed','false'))) IN ('true','t','1','yes','y','on')
+          AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'is_excluded_from_allocation','false'))) NOT IN ('true','t','1','yes','y','on')
+        THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END),0::numeric),
+      COUNT(*) FILTER (
+        WHERE preview_row.row_json->>'line_type' IN ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY')
+          AND COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          AND CASE WHEN COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END < 0
+          AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'selection_allowed','false'))) IN ('true','t','1','yes','y','on')
+          AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'is_excluded_from_allocation','false'))) NOT IN ('true','t','1','yes','y','on')
+      )::integer,
+      COALESCE(SUM(CASE
+        WHEN preview_row.row_json->>'line_type' IN ('OVERPAYMENT_RECOVERY','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY')
+          AND COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          AND CASE WHEN COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END < 0
+          AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'selection_allowed','false'))) IN ('true','t','1','yes','y','on')
+          AND LOWER(BTRIM(COALESCE(preview_row.row_json->>'is_excluded_from_allocation','false'))) NOT IN ('true','t','1','yes','y','on')
+        THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END),0::numeric),
+      COUNT(*) FILTER (
+        WHERE preview_row.row_json->>'line_type'='TIMESHEET_PAYMENT'
+          AND COALESCE(preview_row.row_json->>'presentation_role','')='PARENT'
+          AND COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          AND CASE WHEN COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END < 0
+          AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'presentation_section','')))='BLOCKED_FOR_PAY'
+      )::integer,
+      COUNT(*) FILTER (
+        WHERE preview_row.row_json->>'line_type'='TIMESHEET_PAYMENT'
+          AND COALESCE(preview_row.row_json->>'presentation_role','')='PARENT'
+          AND COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          AND CASE WHEN COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END < 0
+          AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'presentation_section','')))='CASES_RESOLUTIONS'
+      )::integer,
+      COUNT(*) FILTER (
+        WHERE preview_row.row_json->>'line_type'='TIMESHEET_PAYMENT'
+          AND COALESCE(preview_row.row_json->>'presentation_role','')='PARENT'
+          AND COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+          AND CASE WHEN COALESCE(preview_row.row_json->>'amount_ex_vat','') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN (preview_row.row_json->>'amount_ex_vat')::numeric ELSE 0::numeric END < 0
+          AND UPPER(BTRIM(COALESCE(preview_row.row_json->>'presentation_section','')))='READY_TO_PAY'
+      )::integer
     INTO
       v_preview_row_count,
       v_draftable_row_count,
@@ -175,7 +238,14 @@ begin
       v_do_not_pay_row_count,
       v_case_resolution_row_count,
       v_total_amount_ex_vat,
-      v_draftable_amount_ex_vat
+      v_draftable_amount_ex_vat,
+      v_ordinary_positive_selectable_count,
+      v_ordinary_positive_selectable_amount,
+      v_recognised_deduction_selectable_count,
+      v_recognised_deduction_selectable_amount,
+      v_negative_ordinary_blocked_count,
+      v_negative_ordinary_cases_count,
+      v_invalid_ready_negative_parent_count
     FROM public.banking_pay_workbench_preview_rows AS preview_row
     WHERE preview_row.session_id = v_workbench_session_id
       AND preview_row.candidate_id = v_candidate_id;
@@ -224,6 +294,13 @@ begin
       'preview_section_counts', COALESCE(v_preview_section_counts, '{}'::jsonb),
       'total_amount_ex_vat', round(COALESCE(v_total_amount_ex_vat, 0), 2),
       'draftable_amount_ex_vat', round(COALESCE(v_draftable_amount_ex_vat, 0), 2),
+      'ordinary_positive_selectable_count', COALESCE(v_ordinary_positive_selectable_count, 0),
+      'ordinary_positive_selectable_amount', round(COALESCE(v_ordinary_positive_selectable_amount, 0), 2),
+      'recognised_deduction_selectable_count', COALESCE(v_recognised_deduction_selectable_count, 0),
+      'recognised_deduction_selectable_amount', round(COALESCE(v_recognised_deduction_selectable_amount, 0), 2),
+      'negative_ordinary_blocked_count', COALESCE(v_negative_ordinary_blocked_count, 0),
+      'negative_ordinary_cases_count', COALESCE(v_negative_ordinary_cases_count, 0),
+      'invalid_ready_negative_parent_count', COALESCE(v_invalid_ready_negative_parent_count, 0),
       'semantic_ready_publication_enabled',COALESCE(v_semantic_ready_publication_enabled,false),
       'is_ready_for_draft', (COALESCE(v_draftable_row_count, 0) > 0 AND COALESCE(v_error_line_count, 0) = 0),
       'is_review_required', (COALESCE(v_blocked_row_count, 0) > 0 OR COALESCE(v_do_not_pay_row_count, 0) > 0 OR COALESCE(v_case_resolution_row_count, 0) > 0 OR COALESCE(v_error_line_count, 0) > 0),

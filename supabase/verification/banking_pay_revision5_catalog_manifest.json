@@ -559,7 +559,7 @@
       "schema": "public",
       "name": "pay_payment_correction_expand_work",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "13414aa9e6c52e289d6f56e31ad343f8454aca8da663a7688de00b8b637c4d91",
+      "definition_sha256": "153ceb5111c6d9b7081baef67256c972d8526c267236bc1167579fb312aae935",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

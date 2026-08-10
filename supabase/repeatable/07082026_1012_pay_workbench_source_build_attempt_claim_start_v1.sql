@@ -72,6 +72,11 @@ DECLARE
   v_obsolete_successor_job_id uuid:=NULL::uuid;
   v_obsolete_active_successor_proven boolean:=false;
   v_obsolete_terminal_current_proven boolean:=false;
+  v_draft_deferral_enabled boolean:=false;
+  v_draft_operation_id uuid:=NULL::uuid;
+  v_draft_operation public.banking_pay_operations%ROWTYPE;
+  v_draft_deferral_count integer:=0;
+  v_draft_deferral_seconds integer:=2;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -421,6 +426,78 @@ BEGIN
       THEN (v_job.payload_json->>'source_change_seq')::bigint END,0)
   );
   v_captured_generation := COALESCE(v_job.scope_change_generation,v_registry.dirty_generation,0);
+
+  v_draft_deferral_enabled:=COALESCE(
+    (v_settings_json->>'banking_pay_draft_self_invalidation_claim_deferral_v1_enabled')::boolean,
+    false
+  );
+  IF v_draft_deferral_enabled
+     AND v_job.economic_build_id IS NULL
+     AND COALESCE(v_job.payload_json->>'draft_operation_id','')
+       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     AND NULLIF(pg_catalog.btrim(COALESCE(v_job.payload_json->>'draft_context_token','')),'') IS NOT NULL
+     AND pg_catalog.upper(pg_catalog.btrim(COALESCE(v_job.payload_json->>'draft_phase',''))) IN (
+       'INSERT_ITEMS','APPLY_FINANCE_ADJUSTMENTS','FINALISE_RESERVATIONS',
+       'CREATE_TIMESHEET_SNAPSHOTS','BUILD_ITEM_BREAKDOWNS'
+     ) THEN
+    v_draft_operation_id:=(v_job.payload_json->>'draft_operation_id')::uuid;
+    SELECT operation_row.* INTO v_draft_operation
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.id=v_draft_operation_id;
+
+    IF FOUND
+       AND pg_catalog.upper(pg_catalog.btrim(COALESCE(v_draft_operation.operation_type,'')))='DRAFT_CREATE'
+       AND pg_catalog.upper(pg_catalog.btrim(COALESCE(v_draft_operation.status,''))) IN
+         ('QUEUED','RUNNING','PROCESSING','CLAIMED','IN_PROGRESS')
+       AND v_draft_operation.workbench_session_id=v_job.session_id
+       AND pg_catalog.upper(pg_catalog.btrim(COALESCE(v_draft_operation.phase,''))) IN (
+         'INSERT_ITEMS','APPLY_FINANCE_ADJUSTMENTS','FINALISE_RESERVATIONS',
+         'POPULATE_CANDIDATE_SUMMARIES','CREATE_TIMESHEET_SNAPSHOTS','BUILD_ITEM_BREAKDOWNS',
+         'ASSERT_INTEGRITY'
+       )
+       AND EXISTS(
+         SELECT 1
+         FROM public.banking_pay_operation_candidate_scope AS operation_scope
+         WHERE operation_scope.operation_id=v_draft_operation_id
+           AND operation_scope.workbench_session_id=v_job.session_id
+           AND operation_scope.candidate_id=v_job.candidate_id
+           AND operation_scope.pay_batch_id=v_draft_operation.pay_batch_id
+           AND operation_scope.status NOT IN ('FAILED','CANCELLED','SUPERSEDED')
+       )
+       AND v_source_change_seq<=v_registry.current_source_change_seq
+       AND v_captured_generation<=v_registry.dirty_generation THEN
+      v_draft_deferral_count:=CASE
+        WHEN COALESCE(v_job.payload_json->>'draft_self_invalidation_deferral_count','') ~ '^\d+$'
+          THEN LEAST((v_job.payload_json->>'draft_self_invalidation_deferral_count')::integer,12)
+        ELSE 0
+      END;
+      IF v_draft_deferral_count<12 THEN
+        v_draft_deferral_seconds:=CASE
+          WHEN v_draft_deferral_count=0 THEN 2
+          WHEN v_draft_deferral_count=1 THEN 3
+          ELSE 5
+        END;
+        UPDATE public.banking_pay_workbench_jobs AS deferred_job
+        SET run_at_utc=pg_catalog.clock_timestamp()+pg_catalog.make_interval(secs=>v_draft_deferral_seconds),
+            payload_json=COALESCE(deferred_job.payload_json,'{}'::jsonb)
+              || pg_catalog.jsonb_build_object(
+                'draft_self_invalidation_deferral_count',v_draft_deferral_count+1,
+                'draft_self_invalidation_deferred_at_utc',pg_catalog.clock_timestamp(),
+                'draft_self_invalidation_result_code','DRAFT_CREATE_SELF_INVALIDATION_DEFERRED'
+              ),
+            updated_at_utc=pg_catalog.clock_timestamp()
+        WHERE deferred_job.id=v_job.id AND deferred_job.status='QUEUED';
+        RETURN pg_catalog.jsonb_build_object(
+          'ok',true,'claimed',false,
+          'result_code','DRAFT_CREATE_SELF_INVALIDATION_DEFERRED',
+          'job_id',v_job.id,'candidate_id',v_job.candidate_id,
+          'operation_id',v_draft_operation_id,
+          'deferral_count',v_draft_deferral_count+1,
+          'defer_seconds',v_draft_deferral_seconds
+        );
+      END IF;
+    END IF;
+  END IF;
 
   IF v_job.economic_build_id IS NULL THEN
     BEGIN

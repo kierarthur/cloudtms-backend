@@ -29,6 +29,7 @@ DECLARE
   v_enqueue_result jsonb := '{}'::jsonb;
   v_job_id uuid;
   v_full_refresh_count integer := 0;
+  v_candidate_full_refresh_count integer := 0;
   v_superseded_targeted_job_count integer := 0;
   v_superseded_targeted_job_chunk_count integer := 0;
   v_superseded_finance_dirty_job_count integer := 0;
@@ -36,6 +37,8 @@ DECLARE
   v_preserved_selected_preview_row_ids jsonb := '[]'::jsonb;
   v_preserved_selected_row_count integer := 0;
   v_cancelled_row_unselected_count integer := 0;
+  v_targeted_timesheet_ids jsonb := '[]'::jsonb;
+  v_requested_refresh_scope text := 'CANDIDATE_FULL_LIVE';
 BEGIN
   v_result := public.pay_workbench_patch_preview_after_batch_mutation(
     p_session_id,
@@ -205,37 +208,10 @@ BEGIN
   -- candidate refresh remains responsible for rebuilding the live preview.
   -- RUNNING jobs and all unrelated finance cases are deliberately outside this
   -- update.
-  WITH superseded_finance_dirty_jobs AS (
-    UPDATE public.banking_pay_workbench_jobs AS finance_dirty_job
-    SET status = 'SUCCEEDED',
-        updated_at_utc = v_now,
-        completed_at_utc = v_now,
-        failed_at_utc = NULL::timestamptz,
-        last_error_json = NULL::jsonb,
-        payload_json = COALESCE(finance_dirty_job.payload_json, '{}'::jsonb) || jsonb_build_object(
-          'superseded_by_cancel_full_candidate_refresh', true,
-          'superseding_session_id', p_session_id::text,
-          'superseding_pay_batch_id', p_pay_batch_id::text,
-          'superseded_at_utc', v_now::text,
-          'completion_code', 'WORKBENCH_FINANCE_DIRTY_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH',
-          'completion_message', 'The cancellation finance refresh was replaced atomically by the required full-candidate refresh.'
-        )
-    WHERE UPPER(BTRIM(COALESCE(finance_dirty_job.job_type, ''))) = 'WORKBENCH_FINANCE_CASE_DIRTY_APPLY'
-      AND UPPER(BTRIM(COALESCE(finance_dirty_job.status, ''))) = 'QUEUED'
-      AND COALESCE(array_length(v_changed_finance_case_ids, 1), 0) > 0
-      AND EXISTS (
-        SELECT 1
-        FROM unnest(v_changed_finance_case_ids) AS changed_finance_case(finance_case_id)
-        WHERE COALESCE(finance_dirty_job.payload_json->>'scope_id', '') = changed_finance_case.finance_case_id::text
-           OR COALESCE(finance_dirty_job.payload_json->>'finance_case_id', '') = changed_finance_case.finance_case_id::text
-           OR COALESCE(finance_dirty_job.payload_json->'finance_case_ids', '[]'::jsonb)
-                @> jsonb_build_array(changed_finance_case.finance_case_id::text)
-      )
-    RETURNING finance_dirty_job.id
-  )
-  SELECT COUNT(*)::integer
-  INTO v_superseded_finance_dirty_job_count
-  FROM superseded_finance_dirty_jobs;
+  -- Do not terminalise queued finance/targeted work before canonical owner
+  -- election.  The enqueue owner now decides whether existing work is covered,
+  -- coalesced or genuinely superseded; RUNNING work is never killed here.
+  v_superseded_finance_dirty_job_count := 0;
 
   FOR v_candidate_id IN
     SELECT DISTINCT candidate_value.value::uuid
@@ -249,53 +225,30 @@ BEGIN
     WHERE candidate_value.value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
     ORDER BY candidate_value.value::uuid
   LOOP
-    WITH superseded_targeted_jobs AS (
-      UPDATE public.banking_pay_workbench_jobs AS targeted_job
-      SET status = 'SUCCEEDED',
-          updated_at_utc = v_now,
-          completed_at_utc = v_now,
-          failed_at_utc = NULL::timestamptz,
-          last_error_json = NULL::jsonb,
-          economic_build_id = NULL::uuid,
-          private_stage = NULL::text,
-          private_cursor_kind = NULL::text,
-          private_cursor_json = '{}'::jsonb,
-          private_stage_version = NULL::integer,
-          payload_json = COALESCE(targeted_job.payload_json, '{}'::jsonb) || jsonb_build_object(
-            'superseded_by_cancel_full_candidate_refresh', true,
-            'superseding_session_id', p_session_id::text,
-            'superseding_pay_batch_id', p_pay_batch_id::text,
-            'superseded_at_utc', v_now::text,
-            'completion_code', 'WORKBENCH_JOB_SUPERSEDED_BY_CANCEL_FULL_CANDIDATE_REFRESH',
-            'completion_message', 'The targeted cancellation refresh was replaced atomically by a full-candidate finance refresh.'
-          )
-      WHERE targeted_job.session_id = p_session_id
-        AND targeted_job.candidate_id = v_candidate_id
-        AND UPPER(BTRIM(COALESCE(targeted_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
-        AND UPPER(BTRIM(COALESCE(targeted_job.status, ''))) = 'QUEUED'
-        AND COALESCE(
-          targeted_job.payload_json->>'pay_batch_id',
-          targeted_job.payload_json#>>'{source_build,pay_batch_id}',
-          ''
-        ) = p_pay_batch_id::text
-        AND UPPER(BTRIM(COALESCE(
-          targeted_job.payload_json->>'refresh_scope_kind',
-          targeted_job.payload_json#>>'{source_build,refresh_scope_kind}',
-          ''
-        ))) = 'TARGETED_TIMESHEETS'
-      RETURNING targeted_job.id
-    )
-    SELECT COUNT(*)::integer
-    INTO v_superseded_targeted_job_chunk_count
-    FROM superseded_targeted_jobs;
+    v_superseded_targeted_job_chunk_count := 0;
 
-    v_superseded_targeted_job_count := v_superseded_targeted_job_count
-      + COALESCE(v_superseded_targeted_job_chunk_count, 0);
+    SELECT COALESCE(
+      jsonb_agg(DISTINCT batch_item.timesheet_id::text ORDER BY batch_item.timesheet_id::text),
+      '[]'::jsonb
+    )
+    INTO v_targeted_timesheet_ids
+    FROM public.pay_batch_items AS batch_item
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id=batch_item.pay_batch_candidate_id
+    WHERE batch_candidate.pay_batch_id=p_pay_batch_id
+      AND batch_candidate.candidate_id=v_candidate_id
+      AND batch_item.timesheet_id IS NOT NULL;
+
+    v_requested_refresh_scope:=CASE
+      WHEN jsonb_array_length(COALESCE(v_targeted_timesheet_ids,'[]'::jsonb))>0
+        THEN 'TARGETED_TIMESHEETS'
+      ELSE 'CANDIDATE_FULL_LIVE'
+    END;
 
     v_enqueue_result := public.pay_workbench_enqueue_candidate_refresh(
       p_snapshot_run_id => v_session.source_snapshot_run_id,
       p_candidate_id => v_candidate_id,
-      p_reason => 'POST_DRAFT_CANCEL_FULL_CANDIDATE_FINANCE_REFRESH',
+      p_reason => 'POST_DRAFT_CANCEL_CURRENT_AUTHORITY_REFRESH',
       p_actor_user_id => COALESCE(p_actor_user_id, v_session.actor_user_id),
       p_payload_json => jsonb_build_object(
         'session_id', p_session_id::text,
@@ -307,15 +260,14 @@ BEGIN
         'operation_type', v_operation_type,
         'pay_batch_id', p_pay_batch_id::text,
         'enqueue_origin', 'PAYMENT_CANCEL_CANONICAL_REFRESH_V3',
-        'targeted_timesheet_ids', '[]'::jsonb,
-        'targeted_timesheet_ids_requested', '[]'::jsonb,
-        'linked_timesheet_ids', '[]'::jsonb,
-        'linked_timesheet_ids_requested', '[]'::jsonb,
-        'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
+        'targeted_timesheet_ids', COALESCE(v_targeted_timesheet_ids,'[]'::jsonb),
+        'targeted_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids,'[]'::jsonb),
+        'linked_timesheet_ids', COALESCE(v_targeted_timesheet_ids,'[]'::jsonb),
+        'linked_timesheet_ids_requested', COALESCE(v_targeted_timesheet_ids,'[]'::jsonb),
+        'refresh_scope_kind', v_requested_refresh_scope,
         'pay_channel_scope', 'ALL',
         'projection_class', 'POST_DRAFT_CANCEL_CURRENT_AUTHORITY',
         'fallback_reason', 'CERTIFIED_CANCELLATION_REVERSION_REJECTED',
-        'complex_refresh_required', true,
         'canonical_route_ladder_required', true,
         'superseded_finance_dirty_job_count', v_superseded_finance_dirty_job_count,
         'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
@@ -347,14 +299,17 @@ BEGIN
       v_job_id := (v_enqueue_result->>'job_id')::uuid;
       v_full_refresh_job_ids := v_full_refresh_job_ids || jsonb_build_array(v_job_id::text);
       v_full_refresh_count := v_full_refresh_count + 1;
+      IF v_requested_refresh_scope='CANDIDATE_FULL_LIVE' THEN
+        v_candidate_full_refresh_count:=v_candidate_full_refresh_count+1;
+      END IF;
     END IF;
   END LOOP;
 
   RETURN v_result || jsonb_build_object(
     'targeted_refresh_enqueued', v_full_refresh_count > 0,
     'targeted_refresh_enqueued_count', v_full_refresh_count,
-    'full_candidate_refresh_enqueued', v_full_refresh_count > 0,
-    'full_candidate_refresh_enqueued_count', v_full_refresh_count,
+    'full_candidate_refresh_enqueued', v_candidate_full_refresh_count > 0,
+    'full_candidate_refresh_enqueued_count', v_candidate_full_refresh_count,
     'full_candidate_refresh_job_ids', v_full_refresh_job_ids,
     'superseded_targeted_refresh_job_count', v_superseded_targeted_job_count,
     'superseded_finance_dirty_job_count', v_superseded_finance_dirty_job_count,
@@ -363,7 +318,10 @@ BEGIN
     'server_selected_preview_row_ids', COALESCE(v_preserved_selected_preview_row_ids, '[]'::jsonb),
     'server_selected_preview_row_ids_provided', true,
     'selected_row_count', COALESCE(v_preserved_selected_row_count, 0),
-    'refresh_scope_kind', CASE WHEN v_full_refresh_count > 0 THEN 'CANDIDATE_FULL_LIVE' ELSE NULL::text END,
+    'refresh_scope_kind', CASE
+      WHEN v_candidate_full_refresh_count>0 AND v_candidate_full_refresh_count=v_full_refresh_count THEN 'CANDIDATE_FULL_LIVE'
+      WHEN v_full_refresh_count>0 THEN 'CANONICAL_ROUTE_LADDER'
+      ELSE NULL::text END,
     'source_session_preserved', true,
     'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
     'policy_x_checked', true

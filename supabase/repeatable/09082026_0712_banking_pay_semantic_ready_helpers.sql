@@ -214,6 +214,29 @@ BEGIN
       pg_catalog.count(classified.preview_row_id) FILTER (
         WHERE pg_catalog.upper(COALESCE(classified.row_json->>'presentation_section', classified.row_json->>'readiness_state', '')) = 'BLOCKED_FOR_PAY'
       )::integer AS blocked_row_count,
+      pg_catalog.count(classified.preview_row_id) FILTER (
+        WHERE classified.line_type = 'TIMESHEET_PAYMENT'
+          AND classified.presentation_role = 'PARENT'
+          AND classified.amount_ex_vat < 0
+          AND pg_catalog.upper(COALESCE(classified.row_json->>'presentation_section', classified.row_json->>'readiness_state', '')) = 'READY_TO_PAY'
+      )::integer AS invalid_ready_negative_parent_count,
+      pg_catalog.count(classified.preview_row_id) FILTER (
+        WHERE classified.line_type = 'TIMESHEET_PAYMENT'
+          AND classified.presentation_role = 'PARENT'
+          AND classified.amount_ex_vat < 0
+          AND pg_catalog.upper(COALESCE(classified.row_json->>'presentation_section', classified.row_json->>'readiness_state', '')) = 'BLOCKED_FOR_PAY'
+      )::integer AS negative_ordinary_blocked_count,
+      pg_catalog.count(classified.preview_row_id) FILTER (
+        WHERE classified.line_type = 'TIMESHEET_PAYMENT'
+          AND classified.presentation_role = 'PARENT'
+          AND classified.amount_ex_vat < 0
+          AND pg_catalog.upper(COALESCE(classified.row_json->>'presentation_section', classified.row_json->>'readiness_state', '')) = 'CASES_RESOLUTIONS'
+      )::integer AS negative_ordinary_cases_count,
+      pg_catalog.md5(COALESCE(pg_catalog.string_agg(
+        classified.preview_row_id::text || ':' ||
+        pg_catalog.upper(COALESCE(classified.row_json->>'presentation_section', classified.row_json->>'readiness_state', '')),
+        '|' ORDER BY classified.preview_row_id
+      ), '')) AS presentation_section_digest,
       pg_catalog.count(classified.preview_row_id) FILTER (WHERE classified.included_in_proof)::integer AS proof_row_count
     FROM requested_candidates AS requested
     LEFT JOIN classified
@@ -229,6 +252,7 @@ BEGIN
       pg_catalog.round(rollup.ordinary_positive_amount + rollup.recognised_deduction_amount, 2) AS candidate_ready_amount,
       (
         rollup.invalid_selectable_row_count = 0
+        AND rollup.invalid_ready_negative_parent_count = 0
         AND rollup.ordinary_positive_amount >= 0
         AND (
           rollup.recognised_deduction_amount = 0
@@ -256,6 +280,10 @@ BEGIN
         'candidate_ready_amount', proof.candidate_ready_amount,
         'context_row_count', proof.context_row_count,
         'blocked_row_count', proof.blocked_row_count,
+        'invalid_ready_negative_parent_count', proof.invalid_ready_negative_parent_count,
+        'negative_ordinary_blocked_count', proof.negative_ordinary_blocked_count,
+        'negative_ordinary_cases_count', proof.negative_ordinary_cases_count,
+        'presentation_section_digest', proof.presentation_section_digest,
         'invalid_selectable_row_count', proof.invalid_selectable_row_count,
         'proof_row_count', proof.proof_row_count,
         'negative_or_recovery_only', (
@@ -1763,6 +1791,10 @@ DECLARE
   v_candidate_preflight jsonb := '{}'::jsonb;
   v_post_source_change_seq bigint := 0;
   v_post_dirty_generation bigint := 0;
+  v_batch_id uuid := NULL::uuid;
+  v_now timestamptz := pg_catalog.clock_timestamp();
+  v_fast_count integer := 0;
+  v_mutation_guard jsonb := '{}'::jsonb;
 BEGIN
   IF p_correction_request_id IS NULL
      OR p_work_item_ids IS NULL
@@ -1775,8 +1807,8 @@ BEGIN
       )::text;
   END IF;
 
-  SELECT operation_row.id,batch_row.source_workbench_session_id
-  INTO v_operation_id,v_session_id
+  SELECT operation_row.id,batch_row.source_workbench_session_id,request_row.pay_batch_id
+  INTO v_operation_id,v_session_id,v_batch_id
   FROM public.pay_payment_correction_requests AS request_row
   JOIN public.pay_batches AS batch_row ON batch_row.id=request_row.pay_batch_id
   JOIN public.banking_pay_operations AS operation_row
@@ -1794,6 +1826,497 @@ BEGIN
     );
   END IF;
 
+  -- Elect the closed-world no-provider page.  Admission is based on the exact
+  -- V3 post-Draft authority; this extra fence deliberately narrows the bulk
+  -- path to candidate-complete local/no-bank scopes.  Any ambiguity remains on
+  -- the established single-item owner below.
+  DROP TABLE IF EXISTS pg_temp._bpay_pre_cancel_fast_work;
+  CREATE TEMP TABLE pg_temp._bpay_pre_cancel_fast_work ON COMMIT DROP AS
+  WITH requested AS (
+    SELECT DISTINCT requested_id.work_id
+    FROM pg_catalog.unnest(p_work_item_ids) AS requested_id(work_id)
+    WHERE requested_id.work_id IS NOT NULL
+  ), preflight AS (
+    SELECT
+      (entry.value->>'work_item_id')::uuid AS work_item_id,
+      (entry.value->>'candidate_id')::uuid AS candidate_id,
+      entry.value AS proof
+    FROM pg_catalog.jsonb_array_elements(
+      COALESCE(v_preflight->'candidate_results','[]'::jsonb)
+    ) AS entry(value)
+    WHERE COALESCE((entry.value->>'admitted')::boolean,false)
+      AND COALESCE(entry.value->>'work_item_id','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      AND COALESCE(entry.value->>'candidate_id','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  ), exact_work AS (
+    SELECT
+      work_row.id AS work_item_id,
+      work_row.candidate_id,
+      work_row.pay_batch_candidate_id,
+      work_row.pay_batch_id,
+      work_row.selection_json,
+      work_row.selection_hash,
+      work_row.attempt_count,
+      membership.pay_batch_item_ids,
+      membership.active_item_count,
+      membership.candidate_scope_hash,
+      preflight.proof
+    FROM requested
+    JOIN public.pay_payment_correction_work_items AS work_row
+      ON work_row.id=requested.work_id
+     AND work_row.correction_request_id=p_correction_request_id
+     AND work_row.pay_batch_id=v_batch_id
+     AND work_row.work_kind='PRE_BANK_CANCEL'
+     AND work_row.status='PROCESSING'
+    JOIN public.pay_payment_correction_request_candidates AS membership
+      ON membership.correction_request_id=p_correction_request_id
+     AND membership.pay_batch_candidate_id=work_row.pay_batch_candidate_id
+     AND membership.candidate_id=work_row.candidate_id
+    JOIN preflight ON preflight.work_item_id=work_row.id
+      AND preflight.candidate_id=work_row.candidate_id
+    WHERE membership.active_item_count BETWEEN 1 AND 128
+      AND pg_catalog.cardinality(membership.pay_batch_item_ids)=membership.active_item_count
+      AND work_row.selection_hash IS NOT DISTINCT FROM membership.candidate_scope_hash
+      AND pg_catalog.upper(pg_catalog.btrim(COALESCE(work_row.selection_json->>'scope_type','')))
+            IN ('CANDIDATES','BATCH')
+  ), item_proof AS (
+    SELECT
+      exact_work.work_item_id,
+      pg_catalog.count(item_row.id)::integer AS resolved_item_count,
+      pg_catalog.count(*) FILTER (WHERE COALESCE(item_row.is_voided,false))::integer AS voided_count,
+      pg_catalog.count(*) FILTER (
+        WHERE item_row.pay_batch_candidate_id IS DISTINCT FROM exact_work.pay_batch_candidate_id
+      )::integer AS wrong_candidate_count,
+      pg_catalog.count(*) FILTER (
+        WHERE item_row.pay_bank_transfer_id IS NOT NULL
+      )::integer AS provider_shape_count,
+      pg_catalog.count(*) FILTER (
+        WHERE pg_catalog.upper(COALESCE(item_row.item_type,'')) IN (
+          'MANUAL_ADJUSTMENT','MANUAL_CREDIT_PAYOUT','MANUAL_DEBT_RECOVERY'
+        )
+      )::integer AS manual_shape_count
+    FROM exact_work
+    CROSS JOIN LATERAL pg_catalog.unnest(exact_work.pay_batch_item_ids) AS member(item_id)
+    LEFT JOIN public.pay_batch_items AS item_row ON item_row.id=member.item_id
+    GROUP BY exact_work.work_item_id
+  )
+  SELECT exact_work.*
+  FROM exact_work
+  JOIN item_proof ON item_proof.work_item_id=exact_work.work_item_id
+  JOIN public.pay_batch_candidates AS batch_candidate
+    ON batch_candidate.id=exact_work.pay_batch_candidate_id
+   AND batch_candidate.pay_batch_id=v_batch_id
+   AND batch_candidate.candidate_id=exact_work.candidate_id
+  WHERE item_proof.resolved_item_count=exact_work.active_item_count
+    AND item_proof.voided_count=0
+    AND item_proof.wrong_candidate_count=0
+    AND item_proof.provider_shape_count=0
+    AND item_proof.manual_shape_count=0
+    AND batch_candidate.settled_at_utc IS NULL
+    AND pg_catalog.upper(COALESCE(batch_candidate.settlement_status,''))<>'SETTLED'
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_batch_items AS outside_item
+      WHERE outside_item.pay_batch_candidate_id=exact_work.pay_batch_candidate_id
+        AND COALESCE(outside_item.is_voided,false)=false
+        AND NOT (outside_item.id=ANY(exact_work.pay_batch_item_ids))
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_manual_adjustment_carry_forwards AS carry_forward
+      WHERE carry_forward.source_pay_batch_item_id=ANY(exact_work.pay_batch_item_ids)
+         OR carry_forward.target_pay_batch_item_id=ANY(exact_work.pay_batch_item_ids)
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_payment_correction_items AS prior_correction
+      WHERE prior_correction.pay_batch_item_id=ANY(exact_work.pay_batch_item_ids)
+        AND prior_correction.status='APPLIED'
+        AND prior_correction.correction_request_id IS DISTINCT FROM p_correction_request_id
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_advances AS payout_case
+      JOIN public.pay_batch_items AS finance_item
+        ON finance_item.finance_case_id=payout_case.id
+      WHERE finance_item.id=ANY(exact_work.pay_batch_item_ids)
+        AND (
+          payout_case.payout_transfer_id IS NOT NULL
+          OR pg_catalog.upper(COALESCE(payout_case.payout_status::text,''))='PAID'
+        )
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_bank_transfers AS transfer
+      WHERE transfer.pay_batch_id=v_batch_id
+        AND transfer.candidate_id=exact_work.candidate_id
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.pay_bank_transfer_events AS transfer_event
+      WHERE transfer_event.pay_batch_id=v_batch_id
+        AND transfer_event.candidate_id=exact_work.candidate_id
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.banking_pay_operation_transfer_scope AS transfer_scope
+      WHERE transfer_scope.pay_batch_id=v_batch_id
+        AND transfer_scope.candidate_id=exact_work.candidate_id
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.mail_outbox AS queued_mail
+      WHERE pg_catalog.upper(COALESCE(queued_mail.status::text,''))='QUEUED'
+        AND (
+          queued_mail.context_id=v_batch_id
+          OR queued_mail.recipient_id=exact_work.candidate_id
+          OR queued_mail.reference ILIKE '%'||v_batch_id::text||'%'
+        )
+        AND pg_catalog.lower(pg_catalog.concat_ws('|',queued_mail.type,queued_mail.email_type,
+          queued_mail.context_kind,queued_mail.reference,
+          COALESCE(queued_mail.payment_scope_json::text,'{}')))
+          LIKE ANY(ARRAY['%remittance%','%payout%','%pay_batch%','%finance_payout%'])
+    );
+
+  SELECT pg_catalog.count(*)::integer INTO v_fast_count
+  FROM pg_temp._bpay_pre_cancel_fast_work;
+
+  IF v_fast_count>0 THEN
+    v_mutation_guard:=private.pay_payment_mutation_guard_v1(
+      v_batch_id,p_correction_request_id,'CORRECTION_APPLY'
+    );
+    IF COALESCE((v_mutation_guard->>'ok')::boolean,false) IS NOT TRUE THEN
+      RAISE EXCEPTION '%',COALESCE(v_mutation_guard->>'code','PAYMENT_CORRECTION_GATE_OWNER_MISMATCH')
+        USING ERRCODE='P0001',DETAIL=v_mutation_guard::text;
+    END IF;
+
+    -- Candidate serial authority is the only deliberate page loop.  Economic
+    -- DML below is set-wise and candidates are locked in deterministic order.
+    FOR v_work IN
+      SELECT candidate_id
+      FROM pg_temp._bpay_pre_cancel_fast_work
+      ORDER BY candidate_id
+    LOOP
+      PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtext('PAY_WORKBENCH_CANDIDATE_SERIAL_V1'),
+        pg_catalog.hashtext(v_work.candidate_id::text)
+      );
+    END LOOP;
+
+    PERFORM 1 FROM public.pay_payment_correction_requests AS request_lock
+      WHERE request_lock.id=p_correction_request_id FOR UPDATE;
+    PERFORM 1 FROM public.pay_batches AS batch_lock
+      WHERE batch_lock.id=v_batch_id
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(batch_lock.execution_commit_state,'NOT_SUBMITTED')))
+              ='NOT_SUBMITTED'
+        AND batch_lock.execution_commit_ref IS NULL
+        AND batch_lock.execution_committed_at_utc IS NULL
+      FOR UPDATE;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'PRE_BANK_CANCEL_FAST_PAGE_EXECUTION_AUTHORITY_CHANGED'
+        USING ERRCODE='P0001';
+    END IF;
+
+    DROP TABLE IF EXISTS pg_temp._bpay_pre_cancel_fast_items;
+    CREATE TEMP TABLE pg_temp._bpay_pre_cancel_fast_items ON COMMIT DROP AS
+    SELECT
+      fast_work.work_item_id,fast_work.candidate_id,fast_work.proof,item_row.*
+    FROM pg_temp._bpay_pre_cancel_fast_work AS fast_work
+    CROSS JOIN LATERAL pg_catalog.unnest(fast_work.pay_batch_item_ids) AS member(item_id)
+    JOIN public.pay_batch_items AS item_row ON item_row.id=member.item_id
+    ORDER BY fast_work.candidate_id,item_row.id
+    FOR UPDATE OF item_row;
+
+    -- A local scheduled execution is only a durable wait.  The admission and
+    -- batch locks above prove no provider boundary was crossed before retiring
+    -- that wait for the whole page.
+    UPDATE public.banking_pay_operations AS scheduled_local_operation
+    SET status='CANCELLED',phase='COMPLETE',runner_state='CANCELLED',
+        requires_user_action=false,
+        result_json=COALESCE(scheduled_local_operation.result_json,'{}'::jsonb)
+          || pg_catalog.jsonb_build_object(
+            'code','SCHEDULED_LOCAL_EXECUTION_CANCELLED_BEFORE_APPLY',
+            'correction_request_id',p_correction_request_id,
+            'work_item_ids',(SELECT pg_catalog.jsonb_agg(work_item_id ORDER BY work_item_id)
+              FROM pg_temp._bpay_pre_cancel_fast_work),
+            'provider_submission_attempted',false,'submitted_to_bank',false),
+        completed_at_utc=COALESCE(scheduled_local_operation.completed_at_utc,v_now),
+        lease_owner=NULL,lease_expires_at_utc=NULL,locked_by=NULL,
+        lock_expires_at_utc=NULL,run_after_utc=NULL,updated_at_utc=v_now,
+        resume_reason='SCHEDULED_LOCAL_EXECUTION_CANCELLED_BEFORE_APPLY'
+    WHERE scheduled_local_operation.pay_batch_id=v_batch_id
+      AND scheduled_local_operation.operation_type='PAYMENT_EXECUTE'
+      AND scheduled_local_operation.status IN ('QUEUED','RUNNING','PROCESSING','CLAIMED','IN_PROGRESS')
+      AND scheduled_local_operation.phase='SCHEDULE_PAYMENT'
+      AND scheduled_local_operation.resume_reason IN (
+        'WAIT_FOR_SCHEDULED_NO_BANK_PAYMENT','WAIT_FOR_SCHEDULED_LOCAL_MANUAL_SETTLEMENT'
+      );
+
+    INSERT INTO public.pay_payment_correction_items(
+      correction_request_id,pay_batch_id,pay_batch_candidate_id,candidate_id,
+      pay_batch_item_id,pay_bank_transfer_id,timesheet_id,finance_case_id,
+      finance_component_id,reservation_id,item_type,correction_item_kind,
+      source_amount,amount_ex_vat,amount_vat,amount_inc_vat,
+      economic_key_type,economic_key_value,before_snapshot_json,
+      after_snapshot_json,status,created_at_utc,applied_at_utc
+    )
+    SELECT
+      p_correction_request_id,v_batch_id,fast_item.pay_batch_candidate_id,
+      fast_item.candidate_id,fast_item.id,fast_item.pay_bank_transfer_id,
+      fast_item.timesheet_id,fast_item.finance_case_id,fast_item.finance_component_id,
+      fast_item.reservation_id,fast_item.item_type,'PRE_BANK_CANCEL',
+      economic_component.source_amount_ex_vat,fast_item.amount_ex_vat,
+      fast_item.amount_vat,COALESCE(economic_component.source_amount_inc_vat,fast_item.amount_inc_vat),
+      economic_component.key_type,economic_component.key_value,to_jsonb(fast_item),
+      to_jsonb(fast_item)||pg_catalog.jsonb_build_object(
+        'is_voided',true,'updated_at',v_now,'set_based_page',true,
+        'work_item_id',fast_item.work_item_id),
+      'APPLIED',v_now,v_now
+    FROM pg_temp._bpay_pre_cancel_fast_items AS fast_item
+    LEFT JOIN LATERAL (
+      SELECT component.key_type,component.key_value,
+             component.source_amount_ex_vat,component.source_amount_inc_vat
+      FROM public._pay_batch_item_economic_components(
+        NULL::uuid,ARRAY[fast_item.id]::uuid[]
+      ) AS component
+      LIMIT 1
+    ) AS economic_component ON true
+    ON CONFLICT (pay_batch_item_id,correction_item_kind)
+      WHERE status='APPLIED' AND pay_batch_item_id IS NOT NULL DO NOTHING;
+
+    UPDATE public.pay_batch_items AS item_to_void
+    SET is_voided=true,updated_at=v_now
+    FROM pg_temp._bpay_pre_cancel_fast_items AS fast_item
+    WHERE item_to_void.id=fast_item.id AND COALESCE(item_to_void.is_voided,false)=false;
+
+    DROP TABLE IF EXISTS pg_temp._bpay_pre_cancel_fast_reservations;
+    CREATE TEMP TABLE pg_temp._bpay_pre_cancel_fast_reservations ON COMMIT DROP AS
+    WITH candidate AS (
+      SELECT DISTINCT reservation.id,reservation.finance_case_id,
+        reservation.finance_component_id,reservation.pay_batch_item_id,
+        reservation.reserved_amount,reservation.reserved_source_amount,
+        fast_item.work_item_id,fast_item.candidate_id
+      FROM public.pay_advance_reservations AS reservation
+      JOIN pg_temp._bpay_pre_cancel_fast_items AS fast_item
+        ON fast_item.reservation_id=reservation.id
+        OR fast_item.id=reservation.pay_batch_item_id
+      WHERE reservation.pay_batch_id=v_batch_id
+        AND (
+          pg_catalog.upper(pg_catalog.btrim(COALESCE(reservation.status,'')))='RESERVED'
+          OR (pg_catalog.upper(pg_catalog.btrim(COALESCE(reservation.status,'')))='COMMITTED'
+              AND reservation.settled_at_utc IS NULL)
+        )
+    ), released AS (
+      UPDATE public.pay_advance_reservations AS reservation
+      SET status='RELEASED',released_at_utc=COALESCE(reservation.released_at_utc,v_now),
+          released_reason='PRE_BANK_CANCEL',updated_by_user_id=p_actor_user_id
+      FROM candidate
+      WHERE reservation.id=candidate.id
+      RETURNING reservation.id
+    )
+    SELECT candidate.* FROM candidate JOIN released ON released.id=candidate.id;
+
+    DROP TABLE IF EXISTS pg_temp._bpay_pre_cancel_fast_components;
+    CREATE TEMP TABLE pg_temp._bpay_pre_cancel_fast_components ON COMMIT DROP AS
+    SELECT component.id AS finance_component_id,component.finance_case_id,
+      component.remaining_source_amount AS remaining_before,
+      COALESCE(component.remaining_source_amount,0) AS remaining_after,
+      pg_catalog.round(pg_catalog.sum(pg_catalog.abs(COALESCE(
+        reservation.reserved_source_amount,
+        public._pay_batch_item_source_reservation_amount_ex_vat(item_row.id),
+        item_row.frozen_source_amount,reservation.reserved_amount,
+        item_row.amount_ex_vat,item_row.amount_inc_vat,0
+      ))),2)::numeric AS restore_source_amount,
+      (pg_catalog.array_agg(reservation.work_item_id ORDER BY reservation.work_item_id))[1] AS work_item_id
+    FROM pg_temp._bpay_pre_cancel_fast_reservations AS reservation
+    LEFT JOIN public.pay_batch_items AS item_row ON item_row.id=reservation.pay_batch_item_id
+    JOIN public.pay_finance_case_components AS component
+      ON component.id=COALESCE(reservation.finance_component_id,item_row.finance_component_id)
+    GROUP BY component.id,component.finance_case_id,component.remaining_source_amount;
+
+    UPDATE public.pay_finance_case_components AS component
+    SET remaining_source_amount=fast_component.remaining_after,
+        resolved_at_utc=CASE WHEN fast_component.remaining_after>0 THEN NULL ELSE component.resolved_at_utc END,
+        closed_at_utc=NULL,updated_at_utc=v_now
+    FROM pg_temp._bpay_pre_cancel_fast_components AS fast_component
+    WHERE component.id=fast_component.finance_component_id;
+
+    INSERT INTO public.pay_finance_case_events(
+      finance_case_id,finance_component_id,event_type,event_at_utc,actor_user_id,
+      pay_batch_id,reservation_id,before_json,after_json,reason,note
+    )
+    SELECT finance_case_id,finance_component_id,'COMPONENT_RESTORED',v_now,
+      p_actor_user_id,v_batch_id,NULL::uuid,
+      pg_catalog.jsonb_build_object('remaining_source_amount',remaining_before),
+      pg_catalog.jsonb_build_object('remaining_source_amount',remaining_after,
+        'restored_source_amount',restore_source_amount,'correction_kind','PRE_BANK_CANCEL',
+        'work_item_id',work_item_id,'set_based_page',true),
+      'PRE_BANK_CANCEL',
+      'Set-based pre-bank cancellation released the reservation without changing live outstanding balance.'
+    FROM pg_temp._bpay_pre_cancel_fast_components;
+
+    INSERT INTO public.pay_finance_case_events(
+      finance_case_id,finance_component_id,event_type,event_at_utc,actor_user_id,
+      pay_batch_id,reservation_id,before_json,after_json,reason,note
+    )
+    SELECT finance_case_id,finance_component_id,'RESERVATION_RELEASED',v_now,
+      p_actor_user_id,v_batch_id,id,
+      pg_catalog.jsonb_build_object('reservation_status','RESERVED_OR_COMMITTED'),
+      pg_catalog.jsonb_build_object('reservation_status','RELEASED',
+        'released_reason','PRE_BANK_CANCEL','work_item_id',work_item_id,'set_based_page',true),
+      'PRE_BANK_CANCEL','Set-based pre-bank cancellation released reservation.'
+    FROM pg_temp._bpay_pre_cancel_fast_reservations
+    WHERE finance_case_id IS NOT NULL;
+
+    UPDATE public.pay_advances AS payout_case
+    SET payout_status='PENDING',payout_pay_batch_id=NULL,payout_transfer_id=NULL,updated_at=v_now
+    WHERE payout_case.id IN (
+      SELECT DISTINCT fast_item.finance_case_id
+      FROM pg_temp._bpay_pre_cancel_fast_items AS fast_item
+      WHERE fast_item.finance_case_id IS NOT NULL
+    )
+      AND COALESCE(payout_case.payout_status::text,'')<>'PAID'
+      AND payout_case.payout_pay_batch_id=v_batch_id;
+
+    -- Recalculate every affected candidate once and the batch once.
+    WITH affected AS (
+      SELECT DISTINCT pay_batch_candidate_id
+      FROM pg_temp._bpay_pre_cancel_fast_work
+    ), sums AS (
+      SELECT candidate.id,
+        pg_catalog.count(item.id) FILTER (WHERE COALESCE(item.is_voided,false)=false)::integer AS active_count,
+        pg_catalog.bool_or(COALESCE(item.is_voided,false)=false AND pg_catalog.upper(COALESCE(item.pay_channel,''))='PAYE') AS has_paye,
+        pg_catalog.bool_or(COALESCE(item.is_voided,false)=false AND pg_catalog.upper(COALESCE(item.pay_channel,''))='UMBRELLA') AS has_umbrella,
+        pg_catalog.round(COALESCE(pg_catalog.sum(CASE WHEN COALESCE(item.is_voided,false)=false
+          AND item.item_type NOT IN ('OVERPAYMENT_RECOVERY','UNDERPAYMENT_PAYMENT','LOAN_REPAYMENT','MANUAL_DEBT_RECOVERY','MANUAL_CREDIT_PAYOUT','LOAN_PAYOUT','DEBT_CREATED')
+          THEN COALESCE(item.amount_ex_vat,0) ELSE 0 END),0),2)::numeric(12,2) AS earnings_ex,
+        pg_catalog.round(COALESCE(pg_catalog.sum(CASE WHEN COALESCE(item.is_voided,false)=false AND item.item_type<>'DEBT_CREATED'
+          THEN COALESCE(item.amount_ex_vat,0) ELSE 0 END),0),2)::numeric(12,2) AS earnings_inc,
+        pg_catalog.round(COALESCE(pg_catalog.sum(CASE WHEN COALESCE(item.is_voided,false)=false
+          AND COALESCE(item.paye_treatment,'NONE') IN ('GROSS_ADD','GROSS_DEDUCT') THEN COALESCE(item.amount_ex_vat,0) ELSE 0 END),0),2)::numeric(12,2) AS gross_adj,
+        pg_catalog.round(COALESCE(pg_catalog.sum(CASE WHEN COALESCE(item.is_voided,false)=false
+          AND COALESCE(item.paye_treatment,'NONE') IN ('NET_ADD','NET_DEDUCT') THEN COALESCE(item.amount_ex_vat,0) ELSE 0 END),0),2)::numeric(12,2) AS net_adj,
+        pg_catalog.round(COALESCE(pg_catalog.sum(CASE WHEN COALESCE(item.is_voided,false)=false AND item.item_type='OVERPAYMENT_RECOVERY'
+          THEN -COALESCE(item.amount_ex_vat,0) ELSE 0 END),0),2)::numeric(12,2) AS recovery,
+        pg_catalog.round(COALESCE(pg_catalog.sum(CASE WHEN COALESCE(item.is_voided,false)=false AND item.item_type='LOAN_REPAYMENT'
+          THEN -COALESCE(item.amount_ex_vat,0) ELSE 0 END),0),2)::numeric(12,2) AS loan,
+        pg_catalog.round(COALESCE(pg_catalog.sum(CASE WHEN COALESCE(item.is_voided,false)=false AND item.item_type='DEBT_CREATED'
+          THEN COALESCE(item.amount_inc_vat,item.amount_ex_vat,0) ELSE 0 END),0),2)::numeric(12,2) AS debt
+      FROM affected JOIN public.pay_batch_candidates AS candidate ON candidate.id=affected.pay_batch_candidate_id
+      LEFT JOIN public.pay_batch_items AS item ON item.pay_batch_candidate_id=candidate.id
+      GROUP BY candidate.id
+    )
+    UPDATE public.pay_batch_candidates AS candidate
+    SET awaiting_net_amount=CASE WHEN sums.active_count=0 THEN false WHEN COALESCE(sums.has_paye,false)
+          THEN NOT EXISTS (SELECT 1 FROM public.pay_batch_paye_net_inputs AS net_input WHERE net_input.pay_batch_candidate_id=candidate.id)
+          ELSE false END,
+        gross_preview=CASE WHEN sums.active_count=0 THEN 0 WHEN COALESCE(sums.has_paye,false)
+          THEN pg_catalog.round(COALESCE(sums.earnings_ex,0)+COALESCE(sums.gross_adj,0),2)
+          ELSE GREATEST(COALESCE(sums.earnings_inc,0),0) END,
+        net_bank_amount=CASE WHEN sums.active_count=0 THEN 0 WHEN COALESCE(sums.has_paye,false)
+          THEN CASE WHEN NOT EXISTS (SELECT 1 FROM public.pay_batch_paye_net_inputs AS net_input WHERE net_input.pay_batch_candidate_id=candidate.id)
+            THEN NULL::numeric ELSE GREATEST(pg_catalog.round(COALESCE((SELECT net_amount FROM public.pay_batch_paye_net_inputs WHERE pay_batch_candidate_id=candidate.id),0)+COALESCE(sums.net_adj,0),2),0) END
+          ELSE GREATEST(COALESCE(sums.earnings_inc,0),0) END,
+        debt_created=COALESCE(sums.debt,0),overpayment_recovery_taken=COALESCE(sums.recovery,0),
+        loan_repayment_taken=COALESCE(sums.loan,0),mismatch_settlement_choice=NULL,updated_at=v_now
+    FROM sums WHERE candidate.id=sums.id AND candidate.pay_batch_id=v_batch_id;
+
+    UPDATE public.pay_batches AS batch
+    SET total_bank_out=COALESCE((SELECT pg_catalog.round(COALESCE(pg_catalog.sum(COALESCE(candidate.net_bank_amount,0)),0),2)
+          FROM public.pay_batch_candidates AS candidate WHERE candidate.pay_batch_id=v_batch_id),0),
+        total_debt_created=COALESCE((SELECT pg_catalog.round(COALESCE(pg_catalog.sum(COALESCE(candidate.debt_created,0)),0),2)
+          FROM public.pay_batch_candidates AS candidate WHERE candidate.pay_batch_id=v_batch_id),0)
+    WHERE batch.id=v_batch_id;
+
+    INSERT INTO public.app_change_counters(entity_key,seq,updated_at)
+    SELECT 'pay_candidate:'||fast_work.candidate_id::text,1,v_now
+    FROM pg_temp._bpay_pre_cancel_fast_work AS fast_work
+    ON CONFLICT (entity_key) DO UPDATE
+      SET seq=public.app_change_counters.seq+1,updated_at=v_now;
+
+    DROP TABLE IF EXISTS pg_temp._bpay_pre_cancel_fast_results;
+    CREATE TEMP TABLE pg_temp._bpay_pre_cancel_fast_results ON COMMIT DROP AS
+    WITH per_work AS (
+      SELECT fast_work.work_item_id,fast_work.candidate_id,fast_work.proof,
+        pg_catalog.count(DISTINCT fast_item.id)::integer AS selected_item_count,
+        pg_catalog.count(DISTINCT reservation.id)::integer AS released_reservation_count,
+        pg_catalog.count(DISTINCT component.finance_component_id)::integer AS restored_component_count,
+        COALESCE(change_counter.seq,0) AS source_change_seq,
+        COALESCE(change_counter.scope_change_generation,0) AS dirty_generation,
+        pg_catalog.jsonb_build_object(
+          'pay_batch_id',v_batch_id::text,'correction_request_id',p_correction_request_id::text,
+          'work_item_id',fast_work.work_item_id::text,'change_kind','PRE_BANK_CANCEL',
+          'changed_pay_batch_item_ids',pg_catalog.jsonb_agg(DISTINCT fast_item.id::text ORDER BY fast_item.id::text),
+          'changed_pay_batch_candidate_ids',pg_catalog.jsonb_build_array(fast_work.pay_batch_candidate_id::text),
+          'changed_candidate_ids',pg_catalog.jsonb_build_array(fast_work.candidate_id::text),
+          'changed_finance_case_ids',COALESCE(pg_catalog.jsonb_agg(DISTINCT fast_item.finance_case_id::text ORDER BY fast_item.finance_case_id::text)
+            FILTER (WHERE fast_item.finance_case_id IS NOT NULL),'[]'::jsonb),
+          'changed_finance_component_ids',COALESCE(pg_catalog.jsonb_agg(DISTINCT fast_item.finance_component_id::text ORDER BY fast_item.finance_component_id::text)
+            FILTER (WHERE fast_item.finance_component_id IS NOT NULL),'[]'::jsonb),
+          'changed_reservation_ids',COALESCE(pg_catalog.jsonb_agg(DISTINCT fast_item.reservation_id::text ORDER BY fast_item.reservation_id::text)
+            FILTER (WHERE fast_item.reservation_id IS NOT NULL),'[]'::jsonb),
+          'set_based_page',true
+        ) AS changed_scope_json
+      FROM pg_temp._bpay_pre_cancel_fast_work AS fast_work
+      JOIN pg_temp._bpay_pre_cancel_fast_items AS fast_item ON fast_item.work_item_id=fast_work.work_item_id
+      LEFT JOIN pg_temp._bpay_pre_cancel_fast_reservations AS reservation ON reservation.work_item_id=fast_work.work_item_id
+      LEFT JOIN pg_temp._bpay_pre_cancel_fast_components AS component ON component.work_item_id=fast_work.work_item_id
+      LEFT JOIN public.app_change_counters AS change_counter
+        ON change_counter.entity_key='pay_candidate:'||fast_work.candidate_id::text
+      GROUP BY fast_work.work_item_id,fast_work.candidate_id,fast_work.pay_batch_candidate_id,
+        fast_work.proof,change_counter.seq,change_counter.scope_change_generation
+    ), result AS (
+      SELECT per_work.*,
+        pg_catalog.jsonb_build_object(
+          'ok',true,'status','APPLIED','result_code','APPLIED','work_item_id',per_work.work_item_id,
+          'candidate_id',per_work.candidate_id,'correction_request_id',p_correction_request_id,
+          'pay_batch_id',v_batch_id,'correction_item_kind','PRE_BANK_CANCEL',
+          'selected_item_count',per_work.selected_item_count,'expected_item_count',per_work.selected_item_count,
+          'applied_item_count',per_work.selected_item_count,'voided_item_count',per_work.selected_item_count,
+          'released_reservation_count',per_work.released_reservation_count,
+          'released_reservations',per_work.released_reservation_count,
+          'restored_component_count',per_work.restored_component_count,
+          'restored_finance_components',per_work.restored_component_count,
+          'changed_scope_json',per_work.changed_scope_json,'set_based_page',true,
+          'refresh_result',pg_catalog.jsonb_build_object('status','PENDING_OPERATION_REFRESH','owner','pay_payment_correction_process_chunk'),
+          'applied_at_utc',v_now
+        ) AS base_result
+      FROM per_work
+    )
+    SELECT result.*,
+      result.base_result||pg_catalog.jsonb_build_object(
+        'cancellation_reversion_preflight',result.proof,
+        'cancellation_reversion_post_financial_authority',pg_catalog.jsonb_build_object(
+          'contract_version','POST_FINANCIAL_CANCELLATION_AUTHORITY_V1',
+          'source_change_seq',result.source_change_seq,'dirty_generation',result.dirty_generation,
+          'authority_digest',pg_catalog.md5(
+            COALESCE(result.proof->>'post_draft_authority_digest','')||'|'||result.work_item_id::text||'|'||
+            result.source_change_seq::text||'|'||result.dirty_generation::text||'|'||
+            pg_catalog.md5((result.base_result-'applied_at_utc'-'processed_at_utc')::text)||
+            '|POST_FINANCIAL_CANCELLATION_AUTHORITY_V1'
+          )
+        )
+      ) AS final_result
+    FROM result;
+
+    UPDATE public.pay_payment_correction_work_items AS work_row
+    SET status='APPLIED',locked_at_utc=NULL,locked_by=NULL,
+        processed_at_utc=COALESCE(work_row.processed_at_utc,v_now),last_error=NULL,
+        result_json=COALESCE(work_row.result_json,'{}'::jsonb)||fast_result.final_result
+    FROM pg_temp._bpay_pre_cancel_fast_results AS fast_result
+    WHERE work_row.id=fast_result.work_item_id;
+
+    SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+      'work_item_id',fast_result.work_item_id::text,
+      'candidate_id',fast_result.candidate_id::text,'result',fast_result.final_result
+    ) ORDER BY fast_result.candidate_id,fast_result.work_item_id),'[]'::jsonb)
+    INTO v_results
+    FROM pg_temp._bpay_pre_cancel_fast_results AS fast_result;
+
+    v_count:=v_fast_count;
+  END IF;
+
   FOR v_work IN
     SELECT work_row.id,work_row.candidate_id,work_row.attempt_count
     FROM public.pay_payment_correction_work_items AS work_row
@@ -1804,6 +2327,10 @@ BEGIN
     ) AS requested_work ON requested_work.work_id=work_row.id
     WHERE work_row.correction_request_id=p_correction_request_id
       AND work_row.work_kind='PRE_BANK_CANCEL'
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_temp._bpay_pre_cancel_fast_work AS fast_work
+        WHERE fast_work.work_item_id=work_row.id
+      )
     ORDER BY work_row.candidate_id,work_row.id
   LOOP
     BEGIN
@@ -1895,6 +2422,8 @@ BEGIN
     'contract_version','PRE_BANK_CANCEL_APPLY_PAGE_V1',
     'correction_request_id',p_correction_request_id::text,
     'work_item_count',v_count,
+    'set_based_work_item_count',v_fast_count,
+    'compatibility_work_item_count',v_count-v_fast_count,
     'candidate_results',v_results
   );
 END;
