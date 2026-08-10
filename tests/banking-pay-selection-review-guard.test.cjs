@@ -89,6 +89,37 @@ test('prepare-draft repeatable enforces selection and revision under the session
   assert.match(guardSql, /PAY_WORKBENCH_PREPARE_DRAFT_OPERATION_ACTOR_MISMATCH/);
 });
 
+test('prepare-draft selection review uses the certified effective recovery section end to end', () => {
+  assert.match(
+    guardSql,
+    /LOWER\(private\.pay_workbench_preview_effective_section_v1\([\s\S]{0,160}?preview_row\.section,[\s\S]{0,160}?preview_row\.row_json[\s\S]{0,80}?\)\) = 'canonical_preview_lines'/,
+    'the final reviewed-set guard must count a strictly promoted recovery exactly once'
+  );
+  assert.match(
+    guardSql,
+    /private\.pay_workbench_preview_effective_section_v1\([\s\S]{0,160}?historical_preview_row\.section,[\s\S]{0,160}?historical_preview_row\.row_json[\s\S]{0,80}?\) AS section/,
+    'historical row rotation must compare the logical certified section'
+  );
+  assert.equal(
+    (
+      guardSql.match(
+        /private\.pay_workbench_preview_effective_section_v1\(\s*current_preview_row\.section,\s*current_preview_row\.row_json\s*\)/g
+      ) || []
+    ).length,
+    2,
+    'economic-key and frozen-contract row rotation must use the same effective section'
+  );
+  assert.match(
+    guardSql,
+    /private\.pay_workbench_preview_effective_section_v1\(\s*preview_row\.section,\s*preview_row\.row_json\s*\) AS section/,
+    'the final line contract must validate the effective section rather than the immutable physical partition'
+  );
+  assert.match(
+    guardSql,
+    /p_target_section => COALESCE\(NULLIF\(BTRIM\(selected_rows\.section\), ''\), 'canonical_preview_lines'\)/
+  );
+});
+
 test('prepare-draft remains service-role only and preserves the Policy X boundary', () => {
   assert.match(guardSql, /REVOKE ALL ON FUNCTION public\.pay_workbench_prepare_draft[\s\S]*FROM PUBLIC;/);
   assert.match(guardSql, /REVOKE ALL ON FUNCTION public\.pay_workbench_prepare_draft[\s\S]*FROM anon;/);

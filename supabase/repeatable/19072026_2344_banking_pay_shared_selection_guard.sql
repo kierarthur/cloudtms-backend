@@ -320,7 +320,10 @@ BEGIN
     FROM public.banking_pay_workbench_preview_rows AS preview_row
     WHERE preview_row.session_id = p_session_id
       AND preview_row.session_version = v_session_row.version
-      AND LOWER(BTRIM(COALESCE(preview_row.section, ''))) = 'canonical_preview_lines'
+      AND LOWER(private.pay_workbench_preview_effective_section_v1(
+            preview_row.section,
+            preview_row.row_json
+          )) = 'canonical_preview_lines'
       AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
       AND COALESCE(preview_row.selected, false) = true
       AND UPPER(BTRIM(COALESCE(preview_row.selection_state, ''))) = 'SELECTED'
@@ -444,7 +447,10 @@ BEGIN
         historical_preview_row.candidate_id,
         historical_preview_row.timesheet_id,
         historical_preview_row.row_key,
-        historical_preview_row.section,
+        private.pay_workbench_preview_effective_section_v1(
+          historical_preview_row.section,
+          historical_preview_row.row_json
+        ) AS section,
         NULLIF(BTRIM(COALESCE(historical_preview_row.key_type, historical_preview_row.row_json#>>'{economic_key,key_type}', historical_preview_row.row_json->>'component_key_type', '')), '') AS key_type,
         NULLIF(BTRIM(COALESCE(historical_preview_row.key_value, historical_preview_row.row_json#>>'{economic_key,key_value}', historical_preview_row.row_json->>'component_key_value', '')), '') AS key_value,
         UPPER(BTRIM(COALESCE(historical_preview_row.row_json->>'pay_channel', historical_preview_row.row_json->>'current_pay_method', historical_preview_row.row_json->>'candidate_pay_method', ''))) AS pay_channel,
@@ -492,7 +498,10 @@ BEGIN
        AND LOWER(BTRIM(COALESCE(current_preview_row.row_json->>'is_ready_for_draft', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
        AND current_preview_row.candidate_id IS NOT DISTINCT FROM historical_best.candidate_id
        AND current_preview_row.timesheet_id IS NOT DISTINCT FROM historical_best.timesheet_id
-       AND COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines') = COALESCE(NULLIF(BTRIM(historical_best.section), ''), 'canonical_preview_lines')
+       AND private.pay_workbench_preview_effective_section_v1(
+             current_preview_row.section,
+             current_preview_row.row_json
+           ) = COALESCE(NULLIF(BTRIM(historical_best.section), ''), 'canonical_preview_lines')
        AND NULLIF(BTRIM(COALESCE(current_preview_row.key_type, current_preview_row.row_json#>>'{economic_key,key_type}', current_preview_row.row_json->>'component_key_type', '')), '') IS NOT DISTINCT FROM historical_best.key_type
        AND NULLIF(BTRIM(COALESCE(current_preview_row.key_value, current_preview_row.row_json#>>'{economic_key,key_value}', current_preview_row.row_json->>'component_key_value', '')), '') IS NOT DISTINCT FROM historical_best.key_value
        AND NULLIF(BTRIM(current_preview_row.row_key), '') IS NOT DISTINCT FROM NULLIF(BTRIM(historical_best.row_key), '')
@@ -564,7 +573,10 @@ BEGIN
        AND operation_contract.key_value IS NOT NULL
        AND current_preview_row.candidate_id IS NOT DISTINCT FROM operation_contract.candidate_id
        AND current_preview_row.timesheet_id IS NOT DISTINCT FROM operation_contract.timesheet_id
-       AND COALESCE(NULLIF(BTRIM(current_preview_row.section), ''), 'canonical_preview_lines') = COALESCE(NULLIF(BTRIM(operation_contract.section), ''), 'canonical_preview_lines')
+       AND private.pay_workbench_preview_effective_section_v1(
+             current_preview_row.section,
+             current_preview_row.row_json
+           ) = COALESCE(NULLIF(BTRIM(operation_contract.section), ''), 'canonical_preview_lines')
        AND NULLIF(BTRIM(COALESCE(current_preview_row.key_type, current_preview_row.row_json#>>'{economic_key,key_type}', current_preview_row.row_json->>'component_key_type', '')), '') IS NOT DISTINCT FROM operation_contract.key_type
        AND NULLIF(BTRIM(COALESCE(current_preview_row.key_value, current_preview_row.row_json#>>'{economic_key,key_value}', current_preview_row.row_json->>'component_key_value', '')), '') IS NOT DISTINCT FROM operation_contract.key_value
        AND NULLIF(BTRIM(current_preview_row.row_key), '') IS NOT DISTINCT FROM NULLIF(BTRIM(operation_contract.row_key), '')
@@ -835,7 +847,10 @@ BEGIN
       preview_row.selected,
       preview_row.key_type,
       preview_row.key_value,
-      preview_row.section,
+      private.pay_workbench_preview_effective_section_v1(
+        preview_row.section,
+        preview_row.row_json
+      ) AS section,
       preview_row.row_json,
       jsonb_strip_nulls(jsonb_build_object(
         'timesheet_id', CASE WHEN preview_row.timesheet_id IS NULL THEN NULL ELSE preview_row.timesheet_id::text END,

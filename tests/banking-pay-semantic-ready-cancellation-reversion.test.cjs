@@ -439,8 +439,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 27);
-  assert.equal(semanticManifest.functions.length, 27);
+  assert.equal(semanticManifest.function_count, 28);
+  assert.equal(semanticManifest.functions.length, 28);
   for (const identity of [
     'private.pay_workbench_draft_expected_effects_v1',
     'private.pay_workbench_draft_create_adoption_finalize_v1',
@@ -450,6 +450,7 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'public.pay_batch_finalize_reservations_and_markers',
     'public.pay_batch_create_timesheet_snapshots',
     'public.pay_batch_build_item_breakdowns',
+    'public.pay_workbench_prepare_draft',
     'public.pay_workbench_session_carry_forward_preview_selections_v1',
     'public.trg_banking_pay_preview_selection_carry_apply',
   ]) {

@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay semantic Ready-to-Pay and certified cancellation reversion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 27,
+  "function_count": 28,
   "functions": [
     {
       "schema": "public", "name": "_pay_payment_correction_selected_items",
@@ -38,6 +38,17 @@
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
       "source_files": ["supabase/repeatable/09082026_0826_pay_preview_candidate_build_summary_fragment.sql"]
+    },
+    {
+      "schema": "public", "name": "pay_workbench_prepare_draft",
+      "identity_arguments": "p_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb, p_pay_channel_scope text, p_override_reason text, p_override_continue boolean, p_override_verified boolean, p_override_verified_by_user_id uuid, p_override_verified_at_utc timestamp with time zone, p_operation_id uuid, p_operation_mode boolean, p_allow_legacy_unchunked boolean",
+      "definition_sha256": "5a879bc899cff1b1f08a7da0f4cfc1705ef9d3065697f22a20c9b8609ffedfb3",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
+      "expanded_acl": [
+        {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
+        {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
+      ],
+      "source_files": ["supabase/repeatable/19072026_2344_banking_pay_shared_selection_guard.sql"]
     },
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_scope_seed",
