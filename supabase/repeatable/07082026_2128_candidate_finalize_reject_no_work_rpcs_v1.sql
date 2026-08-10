@@ -1241,6 +1241,22 @@ begin
   v_qr_backed:=v_timesheet.qr_status is not null or v_timesheet.qr_token is not null or v_timesheet.qr_r2_key is not null
     or exists(select 1 from public.candidate_submission_workflows w where w.target_timesheet_id=v_timesheet.timesheet_id and w.route='PAPER');
 
+  for v_workflow in
+    select w.id,w.generation
+    from public.candidate_submission_workflows w
+    where w.environment=v_environment
+      and w.route='PAPER'
+      and w.state='AWAITING_PAPER_RETURN'
+      and (w.target_timesheet_id=v_timesheet.timesheet_id
+        or w.anchor_timesheet_id=v_timesheet.timesheet_id)
+    order by w.id
+    for update
+  loop
+    perform private._candidate_paper_delivery_retire_v1(
+      v_workflow.id,v_workflow.generation,'OFFICE_REJECTED',p_now_utc
+    );
+  end loop;
+
   if v_qr_backed then
     select * into v_qr_result from public.timesheet_qr_refuse_and_reset(
       v_timesheet.timesheet_id,v_timesheet.timesheet_id,btrim(p_reason),p_actor_user_id

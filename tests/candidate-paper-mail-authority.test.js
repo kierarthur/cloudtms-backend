@@ -25,6 +25,9 @@ const claimSource = read(
 const workflowSource = read(
   'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql'
 );
+const routeSource = read('supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql');
+const rejectSource = read('supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql');
+const backendSource = read('broker/src/candidate-app-backend.js');
 
 test('PAPER preparation atomically composes the canonical held-mail authority', () => {
   const sql = functionBody(workflowSource, 'public.candidate_workflow_transition_atomic_v1');
@@ -81,4 +84,52 @@ test('mail claim fails closed until the exact complete Candidate PAPER pack is r
   assert.match(sql, /payment_scope_json\s*\?\s*'candidate_paper_pack_ready'/i);
   assert.match(sql, /payment_scope_json\s*\?\s*'candidate_complete_pack_storage_key'/i);
   assert.match(sql, /mail_hold_reason[\s\S]*CANDIDATE_PAPER_PACK_PENDING/i);
+});
+
+test('PAPER release is a service-only atomic workflow action and the backend is only an adapter', () => {
+  const sql = functionBody(workflowSource, 'public.candidate_workflow_transition_atomic_v1');
+  const release = sql.slice(sql.indexOf("elsif v_action='PAPER_PACK_RELEASE'"), sql.indexOf("elsif v_action='PAPER_RETURN'"));
+  assert.match(release, /state<>'AWAITING_PAPER_RETURN'[\s\S]*route<>'PAPER'/i);
+  assert.match(release, /for update/i);
+  assert.match(release, /update public\.mail_outbox[\s\S]*candidate_paper_pack_ready',true/i);
+  assert.match(release, /insert into public\.candidate_notifications[\s\S]*on conflict\(dedupe_key\) do nothing/i);
+  assert.match(sql, /service_paper_pack_release/i);
+
+  const start = backendSource.indexOf('async function releaseCandidatePaperPack');
+  const end = backendSource.indexOf('async function assembleCandidatePaperPack', start);
+  const adapter = backendSource.slice(start, end);
+  assert.match(adapter, /candidate_workflow_transition_atomic_v1/);
+  assert.match(adapter, /PAPER_PACK_RELEASE/);
+  assert.doesNotMatch(adapter, /restWrite\(env,\s*'mail_outbox'/);
+  assert.doesNotMatch(adapter, /restWrite\(env,\s*'candidate_notifications'/);
+});
+
+test('one retirement helper closes mail, notification and QR authority for every retirement caller', () => {
+  const helper = functionBody(workflowSource, 'private._candidate_paper_delivery_retire_v1');
+  assert.match(helper, /CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/);
+  assert.match(helper, /candidate_paper_generation_retired',true/i);
+  assert.match(helper, /CANDIDATE_PAPER_GENERATION_RETIRED/);
+  assert.match(helper, /state='DISMISSED'/i);
+  assert.match(helper, /qr_token=null/i);
+  assert.match(workflowSource, /v_action='AMEND'[\s\S]*_candidate_paper_delivery_retire_v1/);
+  assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*_candidate_paper_delivery_retire_v1/);
+  assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
+  assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
+});
+
+test('fresh PAPER generations own fresh delivery, QR and document identities', () => {
+  const sql = functionBody(qrSource, 'public.timesheet_qr_send_enqueue_v1');
+  assert.match(sql, /candidate_paper_send:[\s\S]*v_candidate_paper_workflow_generation[\s\S]*v_candidate_paper_manifest_sha256/i);
+  assert.match(sql, /v_candidate_paper_workflow_count\s*=\s*1\s+AND NOT v_candidate_paper_exact_mail_exists/i);
+  assert.match(sql, /WHEN v_rotate_token THEN v_now/i);
+  assert.match(sql, /qr_payload_hash[\s\S]*v_complete_printable_content_hash[\s\S]*v_document_idempotency/i);
+});
+
+test('Candidate mail claim revalidates current workflow generation, route, state and manifest', () => {
+  const sql = functionBody(claimSource, 'public.email_outbox_claim_ready_batch');
+  assert.match(sql, /exists\([\s\S]*candidate_submission_workflows workflow/i);
+  assert.match(sql, /workflow\.route='PAPER'/i);
+  assert.match(sql, /workflow\.state='AWAITING_PAPER_RETURN'/i);
+  assert.match(sql, /encode\(workflow\.paper_return_manifest_sha256,'hex'\)/i);
+  assert.match(sql, /candidate_paper_generation_retired/i);
 });

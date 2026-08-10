@@ -42,6 +42,8 @@ begin
             ~ '^[0-9a-f]{64}$'
           and lower(coalesce(mo.payment_scope_json->>'candidate_paper_pack_ready','false'))
             in('true','t','1','yes')
+          and lower(coalesce(mo.payment_scope_json->>'candidate_paper_generation_retired','false'))
+            in('false','f','0','no')
           and lower(coalesce(mo.payment_scope_json->>'mail_held_until_pdf_rendered','true'))
             in('false','f','0','no')
           and nullif(btrim(coalesce(mo.payment_scope_json->>'mail_hold_reason','')),'') is null
@@ -68,6 +70,25 @@ begin
             =mo.payment_scope_json->>'candidate_workflow_generation'
           and lower(mo.attachments->0->>'paper_return_manifest_sha256')
             =lower(mo.payment_scope_json->>'paper_return_manifest_sha256')
+          and exists(
+            select 1
+            from public.candidate_submission_workflows workflow
+            where workflow.id=case
+                when coalesce(mo.payment_scope_json->>'candidate_workflow_id','') ~*
+                  '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+                then (mo.payment_scope_json->>'candidate_workflow_id')::uuid
+                else null::uuid end
+              and workflow.generation=case
+                when coalesce(mo.payment_scope_json->>'candidate_workflow_generation','')
+                  ~ '^[1-9][0-9]{0,8}$'
+                then (mo.payment_scope_json->>'candidate_workflow_generation')::integer
+                else null::integer end
+              and workflow.route='PAPER'
+              and workflow.state='AWAITING_PAPER_RETURN'
+              and encode(workflow.paper_return_manifest_sha256,'hex')
+                =lower(mo.payment_scope_json->>'paper_return_manifest_sha256')
+              and coalesce(workflow.target_timesheet_id,workflow.anchor_timesheet_id)=mo.context_id
+          )
         )
       )
       and (

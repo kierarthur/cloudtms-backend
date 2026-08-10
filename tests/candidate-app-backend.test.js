@@ -86,6 +86,20 @@ function readyPaperAttachment(workflowId, generation, manifestHash, complete = {
   };
 }
 
+function completePaperFixture(overrides = {}) {
+  return {
+    key: 'candidate-app/test/pack.pdf',
+    sha256: 'e'.repeat(64),
+    byte_size: 500,
+    page_count: 2,
+    manifest_hash: 'd'.repeat(64),
+    base_hash: 'c'.repeat(64),
+    branding_hash: 'f'.repeat(64),
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+    ...overrides
+  };
+}
+
 test('Candidate password verifiers accept the exact password and reject a different password', async () => {
   const verifier = await derivePasswordVerifier('correct-horse-battery-staple');
   const account = {
@@ -661,7 +675,7 @@ test('paper pack release never requeues a failed mail operation', async () => {
   try {
     await assert.rejects(releaseCandidatePaperPack({
       SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-    }, {
+    }, { async rpc() { throw new Error('RPC must not be called'); } }, {
       id: '00000000-0000-4000-8000-000000000041', generation: 2,
       paper_return_manifest_sha256: 'd'.repeat(64)
     }, { timesheet_id: '00000000-0000-4000-8000-000000000042' }, {
@@ -689,7 +703,7 @@ test('paper pack release rejects a missing outbox before creating a readiness no
   try {
     await assert.rejects(releaseCandidatePaperPack({
       SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-    }, {
+    }, { async rpc() { throw new Error('RPC must not be called'); } }, {
       id: '00000000-0000-4000-8000-000000000041', generation: 2,
       account_id: '00000000-0000-4000-8000-000000000045',
       candidate_id: '00000000-0000-4000-8000-000000000046'
@@ -706,7 +720,8 @@ test('paper pack release rejects a missing outbox before creating a readiness no
 test('paper pack release is insert-once and preserves an existing notification lifecycle', async () => {
   const originalFetch = globalThis.fetch;
   const existingNotification = { state: 'READ', push_state: 'SENT', created_at_utc: '2026-08-01T00:00:00Z' };
-  let notificationPrefer = '';
+  let rpcArgs = null;
+  const deps = { async rpc(name, args) { rpcArgs = { name, args }; return { data: { ok: true } }; } };
   globalThis.fetch = async (url, options = {}) => {
     const path = new URL(url).pathname;
     if (path.endsWith('/mail_outbox')) {
@@ -720,25 +735,22 @@ test('paper pack release is insert-once and preserves an existing notification l
         )]
       }]);
     }
-    if (path.endsWith('/candidate_notifications')) {
-      notificationPrefer = new Headers(options.headers).get('prefer') || '';
-      if (notificationPrefer.includes('merge-duplicates')) Object.assign(existingNotification, JSON.parse(options.body));
-      return Response.json([]);
-    }
+    if (path.endsWith('/candidate_notifications')) throw new Error('notification REST mutation is forbidden');
     throw new Error(`unexpected request ${path}`);
   };
   try {
     await releaseCandidatePaperPack({
-      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-    }, {
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+      CANDIDATE_APP_ENVIRONMENT: 'TEST'
+    }, deps, {
       id: '00000000-0000-4000-8000-000000000044', generation: 2,
+      paper_return_manifest_sha256: 'd'.repeat(64),
       account_id: '00000000-0000-4000-8000-000000000045',
       candidate_id: '00000000-0000-4000-8000-000000000046'
-    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
-      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
-      page_count: 2, manifest_hash: 'd'.repeat(64)
-    });
-    assert.match(notificationPrefer, /resolution=ignore-duplicates/);
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, completePaperFixture());
+    assert.equal(rpcArgs?.name, 'candidate_workflow_transition_atomic_v1');
+    assert.equal(rpcArgs?.args?.p_action, 'PAPER_PACK_RELEASE');
+    assert.equal(rpcArgs?.args?.p_payload?.service_paper_pack_release, true);
     assert.deepEqual(existingNotification, {
       state: 'READ', push_state: 'SENT', created_at_utc: '2026-08-01T00:00:00Z'
     });
@@ -755,6 +767,8 @@ test('paper pack notification replay never resets terminal read or push states',
   try {
     for (const [state, pushState] of lifecyclePairs) {
       const existing = { state, push_state: pushState, created_at_utc: '2026-08-01T00:00:00Z' };
+      let rpcCalls = 0;
+      const deps = { async rpc() { rpcCalls += 1; return { data: { ok: true } }; } };
       globalThis.fetch = async (url, options = {}) => {
         const path = new URL(url).pathname;
         if (path.endsWith('/mail_outbox')) {
@@ -769,22 +783,20 @@ test('paper pack notification replay never resets terminal read or push states',
           }]);
         }
         if (path.endsWith('/candidate_notifications')) {
-          const prefer = new Headers(options.headers).get('prefer') || '';
-          assert.match(prefer, /resolution=ignore-duplicates/);
-          return Response.json([]);
+          throw new Error('notification REST mutation is forbidden');
         }
         throw new Error(`unexpected request ${path}`);
       };
       await releaseCandidatePaperPack({
-        SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-      }, {
+        SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+        CANDIDATE_APP_ENVIRONMENT: 'TEST'
+      }, deps, {
         id: '00000000-0000-4000-8000-000000000044', generation: 2,
+        paper_return_manifest_sha256: 'd'.repeat(64),
         account_id: '00000000-0000-4000-8000-000000000045',
         candidate_id: '00000000-0000-4000-8000-000000000046'
-      }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
-        key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
-        page_count: 2, manifest_hash: 'd'.repeat(64)
-      });
+      }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, completePaperFixture());
+      assert.equal(rpcCalls, 1);
       assert.deepEqual(existing, { state, push_state: pushState, created_at_utc: '2026-08-01T00:00:00Z' });
     }
   } finally {
@@ -796,6 +808,11 @@ test('paper pack release does not notify when the guarded attachment update lose
   const originalFetch = globalThis.fetch;
   let notificationCalls = 0;
   let mailReads = 0;
+  const deps = { async rpc() {
+    const error = new Error('CANDIDATE_PAPER_OUTBOX_NOT_READY');
+    error.code = 'CANDIDATE_PAPER_OUTBOX_NOT_READY';
+    throw error;
+  } };
   globalThis.fetch = async (url, options = {}) => {
     const path = new URL(url).pathname;
     if (path.endsWith('/candidate_notifications')) {
@@ -825,14 +842,12 @@ test('paper pack release does not notify when the guarded attachment update lose
   try {
     await assert.rejects(releaseCandidatePaperPack({
       SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-    }, {
+    }, deps, {
       id: '00000000-0000-4000-8000-000000000044', generation: 2,
       account_id: '00000000-0000-4000-8000-000000000045',
       candidate_id: '00000000-0000-4000-8000-000000000046'
-    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
-      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
-      page_count: 2, manifest_hash: 'd'.repeat(64)
-    }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, completePaperFixture()),
+    error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
     assert.equal(notificationCalls, 0);
   } finally {
     globalThis.fetch = originalFetch;
@@ -851,8 +866,8 @@ test('paper pack release installs the exact complete pack before notification', 
     mail_held_until_pdf_rendered: true,
     mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
   };
-  let released = null;
-  let notificationCalls = 0;
+  let rpcArgs = null;
+  const deps = { async rpc(name, args) { rpcArgs = { name, args }; return { data: { ok: true } }; } };
   globalThis.fetch = async (url, options = {}) => {
     const path = new URL(url).pathname;
     if (path.endsWith('/mail_outbox') && (options.method || 'GET') === 'GET') {
@@ -862,36 +877,28 @@ test('paper pack release installs the exact complete pack before notification', 
       }]);
     }
     if (path.endsWith('/mail_outbox') && options.method === 'PATCH') {
-      released = JSON.parse(options.body);
-      return Response.json([{
-        id: '00000000-0000-4000-8000-000000000043', status: 'QUEUED',
-        ...released, attempt_lease_token: null
-      }]);
+      throw new Error('mail REST mutation is forbidden');
     }
     if (path.endsWith('/candidate_notifications')) {
-      notificationCalls += 1;
-      assert.equal(released?.payment_scope_json?.candidate_paper_pack_ready, true);
-      return Response.json([]);
+      throw new Error('notification REST mutation is forbidden');
     }
     throw new Error(`unexpected request ${path}`);
   };
   try {
     await releaseCandidatePaperPack({
-      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-    }, {
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+      CANDIDATE_APP_ENVIRONMENT: 'TEST'
+    }, deps, {
       id: workflowId, generation: 2,
+      paper_return_manifest_sha256: manifestHash,
       account_id: '00000000-0000-4000-8000-000000000045',
       candidate_id: '00000000-0000-4000-8000-000000000046'
-    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
-      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
-      page_count: 2, manifest_hash: manifestHash
-    });
-    assert.equal(released.attachments.length, 1);
-    assert.equal(released.attachments[0].r2_key, 'candidate-app/test/pack.pdf');
-    assert.equal(released.attachments[0].page_count, 2);
-    assert.equal(released.payment_scope_json.mail_held_until_pdf_rendered, false);
-    assert.equal(released.payment_scope_json.mail_hold_reason, null);
-    assert.equal(notificationCalls, 1);
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, completePaperFixture({ manifest_hash: manifestHash }));
+    assert.equal(rpcArgs?.name, 'candidate_workflow_transition_atomic_v1');
+    assert.equal(rpcArgs?.args?.p_action, 'PAPER_PACK_RELEASE');
+    assert.equal(rpcArgs?.args?.p_payload?.mail_outbox_id, '00000000-0000-4000-8000-000000000043');
+    assert.equal(rpcArgs?.args?.p_payload?.complete_pack_sha256, 'e'.repeat(64));
+    assert.equal(rpcArgs?.args?.p_payload?.complete_pack_page_count, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -959,7 +966,7 @@ test('paper pack release rejects an already claimed held email before PATCH or n
   try {
     await assert.rejects(releaseCandidatePaperPack({
       SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
-    }, {
+    }, { async rpc() { throw new Error('RPC must not be called'); } }, {
       id: '00000000-0000-4000-8000-000000000044', generation: 2,
       account_id: '00000000-0000-4000-8000-000000000045',
       candidate_id: '00000000-0000-4000-8000-000000000046'

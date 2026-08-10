@@ -2520,100 +2520,46 @@ async function requireCandidatePaperOutbox(env, workflow, timesheet) {
   return row;
 }
 
-async function releaseCandidatePaperPack(env, workflow, timesheet, complete) {
-  const outboxRows = await restRows(env, 'mail_outbox',
-    `type=eq.TIMESHEET_QR&context_kind=eq.timesheets&context_id=eq.${encodeURIComponent(timesheet.timesheet_id)}`
-    + '&select=id,status,payment_scope_json,attachments,attempt_lease_token,attempt_lease_expires_at_utc'
-    + '&order=created_at_utc.desc&limit=25');
-  const exact = outboxRows.filter((row) => {
-    const scope = parseJson(row.payment_scope_json, {}) || {};
-    return scope.candidate_workflow_id === workflow.id
-      && Number(scope.candidate_workflow_generation) === Number(workflow.generation)
-      && text(scope.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase() === complete.manifest_hash;
-  });
-  if (exact.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_CONFLICT');
-  if (exact.length !== 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
-  const attachment = [{
-    r2_key: complete.key,
-    filename: `Timesheet_${workflow.week_ending_date || timesheet.timesheet_id}.pdf`,
-    content_type: 'application/pdf', sha256: complete.sha256, size_bytes: complete.byte_size,
-    page_count: complete.page_count, candidate_workflow_id: workflow.id,
-    candidate_workflow_generation: Number(workflow.generation),
-    paper_return_manifest_sha256: complete.manifest_hash
-  }];
-  {
-    const row = exact[0];
-    if (row.status === 'FAILED') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
-    if (row.status === 'SENT') {
-      if (!completePaperAttachmentMatches(row, complete)) {
-        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_ALREADY_SENT');
-      }
-    } else if (row.status === 'QUEUED') {
-      if (!completePaperAttachmentMatches(row, complete)) {
-        const scope = parseJson(row.payment_scope_json, {}) || {};
-        if (scope.candidate_paper_pack_ready !== false
-            || scope.mail_held_until_pdf_rendered !== true
-            || scope.mail_hold_reason !== 'CANDIDATE_PAPER_PACK_PENDING'
-            || (parseJson(row.attachments, []) || []).length !== 0
-            || text(row.attempt_lease_token)) {
-          throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
-        }
-        const now = new Date().toISOString();
-        const releasedScope = {
-          ...scope,
-          candidate_paper_pack_ready: true,
-          mail_held_until_pdf_rendered: false,
-          mail_delayed_for_pdf_render: false,
-          mail_hold_reason: null,
-          candidate_complete_pack_storage_key: complete.key,
-          candidate_complete_pack_sha256: complete.sha256,
-          candidate_complete_pack_size_bytes: complete.byte_size,
-          candidate_complete_pack_page_count: complete.page_count,
-          candidate_complete_pack_media_type: 'application/pdf',
-          candidate_complete_pack_ready_at_utc: now
-        };
-        const updated = await restWrite(env, 'mail_outbox', 'PATCH',
-          `id=eq.${encodeURIComponent(row.id)}&status=eq.QUEUED&attempt_lease_token=is.null`,
-          {
-            attachments: attachment,
-            scheduled_for_utc: now,
-            next_attempt_at_utc: now,
-            payment_scope_json: releasedScope
-          }, 'return=representation');
-        if (!updated || updated.id !== row.id || updated.status !== 'QUEUED'
-            || !completePaperAttachmentMatches(updated, complete)) {
-          const current = await restOne(env, 'mail_outbox',
-            `id=eq.${encodeURIComponent(row.id)}&select=id,status,attachments,payment_scope_json,attempt_lease_token`);
-          if (current?.status === 'SENT' && completePaperAttachmentMatches(current, complete)) {
-            // A concurrent sender completed the exact already-bound operation.
-          } else if (current?.status === 'FAILED') {
-            throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
-          } else if (current?.status === 'QUEUED' && completePaperAttachmentMatches(current, complete)) {
-            // A concurrent release installed the same complete immutable pack.
-          } else {
-            throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
-          }
-        }
-      }
-    } else {
-      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+async function releaseCandidatePaperPack(env, deps, workflow, timesheet, complete, outbox = null) {
+  const row = outbox || await requireCandidatePaperOutbox(env, workflow, timesheet);
+  if (!UUID_RE.test(text(row?.id))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  }
+  for (const digest of [
+    complete?.manifest_hash, complete?.sha256, complete?.base_hash, complete?.branding_hash
+  ]) {
+    if (!SHA256_RE.test(text(digest).toLowerCase())) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
     }
   }
-  const now = new Date().toISOString();
-  await restWrite(env, 'candidate_notifications', 'POST', 'on_conflict=dedupe_key', {
-    account_id: workflow.account_id,
-    candidate_id: workflow.candidate_id,
-    workflow_id: workflow.id,
-    timesheet_id: timesheet.timesheet_id,
-    event_type: 'PAPER_PACK_READY',
-    preference_category: 'resubmission_required',
-    template_key: 'candidate-paper-pack-ready-v1',
-    template_params: { page_count: complete.page_count },
-    deep_link_json: { type: 'paper_pack', timesheet_id: timesheet.timesheet_id },
-    state: 'UNREAD', push_state: 'PENDING',
-    dedupe_key: `CANDIDATE_PAPER_PACK_READY_V1:${workflow.id}:${workflow.generation}:${complete.manifest_hash}`,
-    created_at_utc: now
-  }, 'resolution=ignore-duplicates,return=representation');
+  if (!text(complete?.key)
+      || text(complete?.renderer_contract_version) !== RENDERER_CONTRACT_VERSION
+      || !Number.isSafeInteger(Number(complete?.byte_size)) || Number(complete.byte_size) < 1
+      || !Number.isSafeInteger(Number(complete?.page_count)) || Number(complete.page_count) < 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  return rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+    p_session_id: null,
+    p_environment: environmentName(env),
+    p_workflow_id: workflow.id,
+    p_action: 'PAPER_PACK_RELEASE',
+    p_expected_generation: Number(workflow.generation),
+    p_payload: {
+      service_paper_pack_release: true,
+      mail_outbox_id: row.id,
+      paper_return_manifest_sha256: text(complete.manifest_hash).toLowerCase(),
+      complete_pack_storage_key: complete.key,
+      complete_pack_sha256: text(complete.sha256).toLowerCase(),
+      complete_pack_byte_size: Number(complete.byte_size),
+      complete_pack_page_count: Number(complete.page_count),
+      complete_pack_media_type: 'application/pdf',
+      base_document_sha256: text(complete.base_hash).toLowerCase(),
+      branding_contract_sha256: text(complete.branding_hash).toLowerCase(),
+      renderer_contract_version: complete.renderer_contract_version
+    },
+    p_idempotency_key: `paper-pack-release:${workflow.id}:${workflow.generation}:${complete.manifest_hash}:${complete.sha256}`,
+    p_now_utc: new Date().toISOString()
+  });
 }
 
 async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
@@ -2770,10 +2716,10 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
         + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
         + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
       if (!version?.r2_key) continue;
-      await requireCandidatePaperOutbox(env, workflow, timesheet);
+      const outbox = await requireCandidatePaperOutbox(env, workflow, timesheet);
       let complete = await readyPaperPackReceipt(env, workflow, timesheet, version);
       if (!complete.ready) complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
-      await releaseCandidatePaperPack(env, workflow, timesheet, complete);
+      await releaseCandidatePaperPack(env, deps, workflow, timesheet, complete, outbox);
       results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, page_count: complete.page_count });
     } catch (error) {
       results.push({ workflow_id: workflow.id, timesheet_id: id, ok: false, error_code: knownErrorCode(error) });

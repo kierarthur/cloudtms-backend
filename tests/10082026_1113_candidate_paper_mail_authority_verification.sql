@@ -32,10 +32,42 @@ declare
   v_workflow_id constant uuid := '10000000-0000-4000-8000-000000000003';
   v_timesheet_id constant uuid := '10000000-0000-4000-8000-000000000004';
   v_partial_id constant uuid := '10000000-0000-4000-8000-000000000005';
+  v_person_id constant uuid := '10000000-0000-4000-8000-000000000006';
+  v_client_id constant uuid := '10000000-0000-4000-8000-000000000007';
+  v_contract_id constant uuid := '10000000-0000-4000-8000-000000000008';
+  v_week_id constant uuid := '10000000-0000-4000-8000-000000000009';
+  v_account_id constant uuid := '10000000-0000-4000-8000-000000000010';
   v_manifest constant text := repeat('a',64);
   v_pack_hash constant text := repeat('b',64);
   v_claimed uuid[];
 begin
+  insert into public.candidates(id,email,active)
+  values(v_person_id,'candidate-paper@example.invalid',true);
+  insert into public.clients(id,name) values(v_client_id,'Candidate paper test client');
+  insert into public.contracts(id,candidate_id,client_id,start_date,end_date)
+  values(v_contract_id,v_person_id,v_client_id,'2026-01-01','2026-12-31');
+  insert into public.timesheets(
+    timesheet_id,submission_mode,sheet_scope,contract_id,booking_id,week_ending_date
+  ) values(v_timesheet_id,'MANUAL','WEEKLY',v_contract_id,'PAPER-CLAIM-TEST','2026-08-16');
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
+  ) values(v_week_id,v_contract_id,'2026-08-16','SUBMITTED','MANUAL',v_timesheet_id);
+  insert into public.candidate_app_accounts(id,environment,email_normalized,status)
+  values(v_account_id,'TEST','candidate-paper@example.invalid','ACTIVE');
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,
+    idempotency_key,paper_return_manifest_json,paper_return_manifest_sha256
+  ) values(
+    v_workflow_id,'TEST',v_account_id,v_person_id,'CONTRACT_HOURS','WEEKLY','PAPER',
+    'AWAITING_PAPER_RETURN',2,v_contract_id,v_week_id,v_timesheet_id,v_timesheet_id,
+    '2026-08-16','candidate-paper-claim-test',
+    jsonb_build_object('workflow_id',v_workflow_id,'workflow_generation',2,
+      'pages',jsonb_build_array(jsonb_build_object(
+        'page_key','HOURS_TIMESHEET','component_kind','HOURS_TIMESHEET'))),
+    decode(v_manifest,'hex')
+  );
+
   insert into public.mail_outbox(
     id,type,"to",subject,attachments,status,created_at_utc,context_kind,context_id,
     scheduled_for_utc,next_attempt_at_utc,payment_scope_json

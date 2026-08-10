@@ -14607,6 +14607,7 @@ DECLARE
   v_candidate_paper_workflow_generation integer := NULL;
   v_candidate_paper_manifest_sha256 text := NULL;
   v_candidate_paper_binding_json jsonb := '{}'::jsonb;
+  v_candidate_paper_exact_mail_exists boolean := FALSE;
 BEGIN
   IF p_timesheet_id IS NULL THEN
     RETURN jsonb_build_object(
@@ -15019,9 +15020,25 @@ BEGIN
     WHEN jsonb_typeof(v_qr_payload_json) = 'object' THEN NULLIF(BTRIM(COALESCE(v_qr_payload_json->>'tok', '')), '')
     ELSE NULL
   END;
+  IF v_candidate_paper_workflow_count = 1 THEN
+    SELECT EXISTS(
+      SELECT 1
+      FROM public.mail_outbox candidate_mail
+      WHERE candidate_mail.type='TIMESHEET_QR'
+        AND candidate_mail.context_kind='timesheets'
+        AND candidate_mail.context_id=v_current_timesheet_id
+        AND candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_candidate_paper_workflow_id::text
+        AND candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_candidate_paper_workflow_generation::text
+        AND lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+              =v_candidate_paper_manifest_sha256
+        AND lower(coalesce(candidate_mail.payment_scope_json->>'candidate_paper_generation_retired','false'))
+              IN ('false','f','0','no')
+    ) INTO v_candidate_paper_exact_mail_exists;
+  END IF;
   v_rotate_token :=
     NULLIF(BTRIM(COALESCE(v_qr_token, '')), '') IS NULL
-    OR UPPER(COALESCE(v_document_state, 'STALE')) IN ('STALE', 'FAILED');
+    OR UPPER(COALESCE(v_document_state, 'STALE')) IN ('STALE', 'FAILED')
+    OR (v_candidate_paper_workflow_count = 1 AND NOT v_candidate_paper_exact_mail_exists);
   v_effective_qr_token := CASE
     WHEN v_rotate_token THEN gen_random_uuid()::text
     ELSE COALESCE(NULLIF(BTRIM(COALESCE(v_qr_token, '')), ''),
@@ -15037,7 +15054,9 @@ BEGIN
   UPDATE public.timesheets AS ts_qr_update
      SET qr_token = v_effective_qr_token,
          qr_payload_json = v_qr_payload_json,
-         qr_generated_at = COALESCE(ts_qr_update.qr_generated_at, v_now),
+         qr_generated_at = CASE
+           WHEN v_rotate_token THEN v_now
+           ELSE COALESCE(ts_qr_update.qr_generated_at, v_now) END,
          qr_r2_key = NULL,
          qr_scanned_at = NULL,
          qr_scan_info_json = NULL,
@@ -15091,11 +15110,19 @@ BEGIN
 
   v_recipient_namespace := md5(LOWER(COALESCE(v_candidate_email, '')));
 
-  v_idempotency_key := 'timesheet_qr_send:'
-    || v_current_timesheet_id::text
-    || ':v' || COALESCE(v_current_version::text, '0')
-    || ':recipient:' || v_recipient_namespace
-    || ':key:' || md5(v_client_idempotency_key);
+  v_idempotency_key := CASE
+    WHEN v_candidate_paper_workflow_count = 1 THEN
+      'candidate_paper_send:'||v_candidate_paper_workflow_id::text
+      ||':g'||v_candidate_paper_workflow_generation::text
+      ||':manifest:'||v_candidate_paper_manifest_sha256
+      ||':timesheet:'||v_current_timesheet_id::text
+      ||':recipient:'||v_recipient_namespace
+    ELSE
+      'timesheet_qr_send:'||v_current_timesheet_id::text
+      ||':v'||COALESCE(v_current_version::text,'0')
+      ||':recipient:'||v_recipient_namespace
+      ||':key:'||md5(v_client_idempotency_key)
+    END;
 
   PERFORM pg_advisory_xact_lock(hashtext('timesheet_qr_send:' || v_current_timesheet_id::text));
   PERFORM pg_advisory_xact_lock(hashtext(v_idempotency_key));

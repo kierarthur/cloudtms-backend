@@ -1823,6 +1823,13 @@ begin
       'manager_cancellation_mail_ids','[]'::jsonb);
   end if;
 
+  if v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN' then
+    perform private._candidate_paper_delivery_retire_v1(
+      v_workflow.id,v_workflow.generation,
+      'ROUTE_INTERVENTION_'||upper(btrim(coalesce(p_action,'UNKNOWN'))),p_now_utc
+    );
+  end if;
+
   for v_request in
     select * from public.candidate_approval_requests
     where workflow_id=v_workflow.id and state in ('PENDING','APPROVED')
