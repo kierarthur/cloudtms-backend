@@ -18,6 +18,9 @@ const targetedManifest = JSON.parse(fs.readFileSync(
 const criticalAuthorityFiles = [
   '07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql',
 ];
+const incrementalReplayDependencies = [
+  '21072026_1235_00b_import_correction_runtime_guards.sql',
+];
 
 const dateKey = (name) => {
   const match = name.match(/^(\d{2})(\d{2})(\d{4})[_-]?(\d{2})?(\d{2})?/);
@@ -67,6 +70,18 @@ test('legacy monolith changes force a complete later-authority replay', () => {
   assert.deepEqual(includedFiles, expectedFiles);
   assert.equal(new Set(includedFiles).size, includedFiles.length);
   assert.doesNotMatch(reassert, /\\ir\s+26052026_2100HRS_NEW_FUNCTIONS\.sql/i);
+});
+
+test('changed earlier overlapping authorities force the final reassertion to replay', () => {
+  for (const name of incrementalReplayDependencies) {
+    const source = normalizeLf(fs.readFileSync(path.join(repeatableDir, name), 'utf8'));
+    const sourceHash = crypto.createHash('sha256').update(source).digest('hex');
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    assert.match(
+      reassert,
+      new RegExp(`authority_dependency_sha256:\\s*${escapedName}\\s*\\n-- ${sourceHash}`),
+    );
+  }
 });
 
 
