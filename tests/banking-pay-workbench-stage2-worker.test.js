@@ -116,7 +116,8 @@ function loadDurableWakeHelpers() {
     Object,
     Array,
     Set,
-    Error
+    Error,
+    crypto: { randomUUID: () => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }
   };
   vm.runInNewContext(
     `${functionBody('canonicalBankingPayWorkbenchUuid')}\n${functionBody('parseBankingPayWorkbenchDrainWakeMessage')}\n${functionBody('enqueueBankingPayWorkbenchDrainWake')}\nthis.helpers = { parseBankingPayWorkbenchDrainWakeMessage, enqueueBankingPayWorkbenchDrainWake };`,
@@ -324,7 +325,9 @@ test('bounded durable Workbench wakes continue a successful nudge without enabli
     queue.indexOf('parseBankingPayWorkbenchDrainWakeMessage') < queue.indexOf('readBankingPayContinuationFlag'),
     'Workbench wake dispatch must be independent of the disabled payment-continuation flag'
   );
-  assert.match(queue, /durableWakeDepth: workbenchWake\.wake_depth/);
+  assert.match(queue, /const drainResult = await bankingPayWorkbenchCronTick/);
+  assert.doesNotMatch(queue.slice(queue.indexOf('if \(workbenchWake\)'.replace(/\\/g, '')), queue.indexOf('const flag = readBankingPayContinuationFlag')), /nudgeBankingPayWorkbenchDrain/);
+  assert.match(queue, /successorWake = await enqueueBankingPayWorkbenchDrainWake/);
   assert.match(queue, /message\.ack\(\);\s*return;/);
 });
 

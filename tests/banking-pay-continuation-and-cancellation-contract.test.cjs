@@ -120,8 +120,8 @@ test('terminal correction refresh hands one database-owned session to a durable 
   assert.match(parser, /PAYMENT_CORRECTION_WORKBENCH_NUDGE_V1/);
   assert.match(parser, /UNKNOWN_FIELD/);
   assert.match(parser, /COUNT_MISMATCH/);
-  assert.match(nudge, /nudgeBankingPayWorkbenchDrain\(env, executionContext/);
-  assert.match(nudge, /enqueueBankingPayWorkbenchDrainWake/);
+  assert.match(nudge, /await scheduleBankingPayWorkbenchDrainWithDurableWake\(env, executionContext/);
+  assert.match(nudge, /durable_wake_enqueued/);
   assert.match(nudge, /PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED/);
   assert.match(runnable, /executionContext:\s*opts\.executionContext\s*\|\|\s*null/);
   assert.match(cron, /executionContext:\s*opts\.executionContext\s*\|\|\s*null/);

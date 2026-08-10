@@ -45,8 +45,7 @@ function makeEnvelope(overrides = {}) {
 
 function loadHelpers(stubs = {}) {
   const context = {
-    nudgeBankingPayWorkbenchDrain: stubs.nudgeBankingPayWorkbenchDrain,
-    enqueueBankingPayWorkbenchDrainWake: stubs.enqueueBankingPayWorkbenchDrainWake
+    scheduleBankingPayWorkbenchDrainWithDurableWake: stubs.scheduleBankingPayWorkbenchDrainWithDurableWake
   };
   return vm.runInNewContext(
     `${helperSource}\n({ parsePaymentCorrectionWorkbenchNudgeEnvelope, schedulePaymentCorrectionWorkbenchNudge })`,
@@ -87,13 +86,10 @@ test('one page containing 100 candidates schedules one grouped session nudge', a
   const directCalls = [];
   const wakeCalls = [];
   const helpers = loadHelpers({
-    nudgeBankingPayWorkbenchDrain(env, ctx, options) {
+    async scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, options) {
       directCalls.push({ env, ctx, options });
-      return { ok: true, scheduled: true, wait_until_used: true };
-    },
-    async enqueueBankingPayWorkbenchDrainWake(env, options) {
       wakeCalls.push({ env, options });
-      return { ok: true, enqueued: true };
+      return { ok: true, scheduled: true, wait_until_used: true, durable_wake_enqueued: true, immediate_drain_scheduled: true };
     }
   });
   const parsed = parse(helpers, envelope);
@@ -113,18 +109,14 @@ test('one page containing 100 candidates schedules one grouped session nudge', a
 });
 
 test('missing or non-durable execution context falls back to one durable session wake', async () => {
-  for (const directMode of ['missing', 'non_durable', 'throws']) {
+  for (const directMode of ['missing', 'non_durable']) {
     const directCalls = [];
     const wakeCalls = [];
     const helpers = loadHelpers({
-      nudgeBankingPayWorkbenchDrain(env, ctx, options) {
-        directCalls.push({ env, ctx, options });
-        if (directMode === 'throws') throw new Error('expected test failure');
-        return { ok: true, scheduled: true, wait_until_used: false };
-      },
-      async enqueueBankingPayWorkbenchDrainWake(env, options) {
-        wakeCalls.push({ env, options });
-        return { ok: true, enqueued: true };
+    async scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, options) {
+      directCalls.push({ env, ctx, options });
+      wakeCalls.push({ env, options });
+      return { ok: true, scheduled: true, wait_until_used: false, durable_wake_enqueued: true };
       }
     });
     const parsed = parse(helpers, makeEnvelope());
@@ -132,19 +124,16 @@ test('missing or non-durable execution context falls back to one durable session
     const result = await helpers.schedulePaymentCorrectionWorkbenchNudge({}, executionContext, parsed.envelope);
     assert.equal(result.scheduled, true);
     assert.equal(result.durable_wake_enqueued, true);
-    assert.equal(directCalls.length, directMode === 'missing' ? 0 : 1);
+    assert.equal(directCalls.length, 1);
     assert.equal(wakeCalls.length, 1);
-    assert.equal(wakeCalls[0].options.session_id, ids.session);
-    assert.equal(wakeCalls[0].options.candidate_id, ids.candidate);
+    assert.equal(wakeCalls[0].options.sessionId, ids.session);
+    assert.equal(wakeCalls[0].options.candidateId, ids.candidate);
   }
 });
 
 test('nudge and durable-wake failures reject acknowledgement so durable delivery can retry', async () => {
   const helpers = loadHelpers({
-    nudgeBankingPayWorkbenchDrain() {
-      throw new Error('expected direct failure');
-    },
-    async enqueueBankingPayWorkbenchDrainWake() {
+    async scheduleBankingPayWorkbenchDrainWithDurableWake() {
       throw new Error('expected queue failure');
     }
   });
@@ -159,8 +148,7 @@ test('a database decision that no nudge is required invokes neither wake path', 
   let directCalls = 0;
   let wakeCalls = 0;
   const helpers = loadHelpers({
-    nudgeBankingPayWorkbenchDrain() { directCalls += 1; },
-    async enqueueBankingPayWorkbenchDrainWake() { wakeCalls += 1; }
+    async scheduleBankingPayWorkbenchDrainWithDurableWake() { directCalls += 1; wakeCalls += 1; }
   });
   const parsed = parse(helpers, makeEnvelope({
     nudge_required: false,

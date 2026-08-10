@@ -14956,9 +14956,9 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
     // refresh whose browser/Worker continuation was interrupted.  Limiting the
     // nudge to newly inserted jobs can strand an existing due job indefinitely
     // because the idempotent enqueue correctly reports zero new rows.
-    if (candidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+    if (candidateCount > 0 && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function') {
       try {
-        refreshNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+        refreshNudge = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
           origin: 'USER_REQUESTED_FULL_WORKBENCH_REFRESH',
           reason: reason || 'USER_REQUESTED_FULL_REFRESH',
           mutation_type: 'WORKBENCH_REFRESH',
@@ -14983,7 +14983,9 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
       page_count: pageCount,
       delta_queued_count: deltaQueuedCount,
       legacy_queued_count: legacyQueuedCount,
-      refresh_nudge_scheduled: refreshNudge?.scheduled === true || refreshNudge?.already_running === true,
+      refresh_nudge_scheduled: refreshNudge?.scheduled === true,
+      refresh_wake_state: refreshNudge?.wake_state || (candidateCount > 0 ? 'FAILED_RETRYABLE' : 'NO_DUE_WORK'),
+      durable_wake_accepted: refreshNudge?.durable_wake_enqueued === true,
       refresh_nudge: refreshNudge,
       policy_x_scope: 'PRE_DRAFT_LIVE_WORKBENCH_ONLY',
       decisions_cleared: false,
@@ -16208,6 +16210,10 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
 
   const source = isPlainObject(options) ? options : {};
   const origin = trimStr(source.origin) || 'BANKING_PAY_WORKBENCH_CRON';
+  const drainInvocationId = trimStr(source.drainInvocationId || source.drain_invocation_id)
+    || (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function'
+      ? globalThis.crypto.randomUUID()
+      : `workbench-drain-${Date.now()}`);
   const requestedProfile = trimStr(source.budgetProfile || source.budget_profile || source.profile || source.workerProfile || source.worker_profile || '').toUpperCase();
   const budgetProfile = requestedProfile === 'NUDGE' || /NUDGE/i.test(origin) ? 'NUDGE' : 'CRON';
   const startedAtUtc = new Date().toISOString();
@@ -16604,14 +16610,21 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
   };
   const finishCronTick = (result, severity = 'info') => {
     const safe = isPlainObject(result) ? result : {};
-    const drain = isPlainObject(safe.drain_result) ? safe.drain_result : {};
+    const completed = {
+      ...safe,
+      entered: true,
+      drain_invocation_id: drainInvocationId
+    };
+    const drain = isPlainObject(completed.drain_result) ? completed.drain_result : {};
     logCronDiag('WORKBENCH_CRON_TICK_END', {
-      ok: safe.ok === true,
-      skipped: safe.skipped === true,
-      code: safe.code || safe.error_code || null,
-      error_code: safe.error_code || safe.code || null,
-      message: safe.message || null,
-      tick_elapsed_ms: safe.tick_elapsed_ms ?? Math.max(0, Date.now() - tickStartedAtMs),
+      drain_invocation_id: drainInvocationId,
+      entered: true,
+      ok: completed.ok === true,
+      skipped: completed.skipped === true,
+      code: completed.code || completed.error_code || null,
+      error_code: completed.error_code || completed.code || null,
+      message: completed.message || null,
+      tick_elapsed_ms: completed.tick_elapsed_ms ?? Math.max(0, Date.now() - tickStartedAtMs),
       drain_result_summary: {
         ok: drain.ok !== false,
         claimed: metricInt(drain, ['claimed', 'claimed_count']),
@@ -16619,9 +16632,9 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
         succeeded: metricInt(drain, ['succeeded', 'succeeded_count']),
         failed: metricInt(drain, ['failed', 'failed_count']),
         dead: metricInt(drain, ['dead', 'dead_count']),
-        more_due: metricBoolean(drain, 'more_due', safe.more_due === true),
-        stop_reason: trimStr(drain.stop_reason || safe.stop_reason || '') || null,
-        budget_exhausted: metricBoolean(drain, 'budget_exhausted', safe.budget_exhausted === true),
+        more_due: metricBoolean(drain, 'more_due', completed.more_due === true),
+        stop_reason: trimStr(drain.stop_reason || completed.stop_reason || '') || null,
+        budget_exhausted: metricBoolean(drain, 'budget_exhausted', completed.budget_exhausted === true),
         elapsed_ms: metricInt(drain, ['elapsed_ms']),
         delta_refresh_jobs_processed: metricInt(drain, ['delta_refresh_jobs_processed']),
         delta_source_rows_written: metricInt(drain, ['delta_source_rows_written']),
@@ -16635,10 +16648,12 @@ async function bankingPayWorkbenchCronTick(env, options = {}) {
         clone_more_due_count: metricInt(drain, ['clone_more_due_count'])
       }
     }, severity);
-    return result;
+    return completed;
   };
 
   logCronDiag('WORKBENCH_CRON_TICK_START', {
+    drain_invocation_id: drainInvocationId,
+    entered: true,
     requested_profile: requestedProfile || null,
     budget_profile: budgetProfile,
     enabled,
@@ -17561,20 +17576,21 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
   if (map && map.has(singleFlightKey)) {
     const rawActiveEntry = map.get(singleFlightKey);
     if (rawActiveEntry && typeof rawActiveEntry.then === 'function') {
+      try { map.delete(singleFlightKey); } catch {}
       return returnNudgeResult({
         ...commonMetadata,
-        ok: true,
+        ok: false,
         scheduled: false,
-        already_running: true,
+        already_running: false,
         coalesced_into_active_drain: false,
-        coalesced_wake_deferred_to_cron: true,
+        coalesced_wake_deferred_to_cron: false,
         coalesced_wake_count: null,
         active_started_at_utc: null,
         active_budget_profile: budgetProfile,
-        code: 'BANKING_PAY_WORKBENCH_NUDGE_ALREADY_RUNNING_LEGACY_ENTRY',
-        wait_until_used: null,
-        continuation_scheduled: true
-      }, 'WORKBENCH_DRAIN_NUDGE_SCHEDULED');
+        code: 'BANKING_PAY_WORKBENCH_NUDGE_LEGACY_ENTRY_UNPROVEN',
+        wait_until_used: false,
+        continuation_scheduled: false
+      }, 'WORKBENCH_DRAIN_NUDGE_FAILED', 'warn');
     }
 
     let activeEntry = isPlainObject(rawActiveEntry) && rawActiveEntry.promise
@@ -17605,7 +17621,9 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       }
     }
 
-    if (activeEntry && activeEntry.accepting_coalesced_wakes !== false) {
+    const activeState = upperTrim(activeEntry?.state || '');
+    const activeEntryHasEntered = activeState === 'ENTERED' || activeState === 'PROGRESS';
+    if (activeEntry && activeEntryHasEntered && activeEntry.accepting_coalesced_wakes !== false) {
       let activeWaitUntilUpgradeAttempted = false;
       let activeWaitUntilUpgradeSucceeded = activeEntry.wait_until_used === true;
       let activeWaitUntilUpgradeErrorMessage = null;
@@ -17894,7 +17912,12 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     lifecycle_origin_nudge: lifecycleOriginNudge,
     lifecycle_origin_drain_delay_ms: lifecycleOriginDrainDelayMs,
     last_progress_at_ms: Date.now(),
-    last_made_progress: false
+    last_made_progress: false,
+    state: 'CREATED',
+    created_at_utc: new Date().toISOString(),
+    entered_at_utc: null,
+    completed_at_utc: null,
+    failed_at_utc: null
   };
 
   const recordEntryProgress = (summaryLike) => {
@@ -17914,6 +17937,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     if (!madeProgress) return false;
     entry.last_progress_at_ms = Date.now();
     entry.last_made_progress = true;
+    entry.state = 'PROGRESS';
     return true;
   };
 
@@ -17935,6 +17959,9 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
           mutation_type: trimStr(source.mutation_type || source.mutationType || '') || null
         });
       }
+      entry.state = 'ENTERED';
+      entry.entered_at_utc = new Date().toISOString();
+      entry.last_progress_at_ms = Date.now();
       const firstTick = await bankingPayWorkbenchCronTick(env, passthroughOptions);
       entry.first_tick_summary = isPlainObject(firstTick) ? firstTick : {};
       applyEffectiveControlsFromSummary(entry.first_tick_summary);
@@ -18465,6 +18492,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       entry.accepting_coalesced_wakes = false;
       entry.final_summary = finalSummary;
       entry.completed_at_utc = new Date().toISOString();
+      entry.state = 'COMPLETED';
       return finalSummary;
     })
     .catch((error) => {
@@ -18488,6 +18516,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       entry.accepting_coalesced_wakes = false;
       entry.final_summary = failureSummary;
       entry.completed_at_utc = new Date().toISOString();
+      entry.failed_at_utc = entry.completed_at_utc;
+      entry.state = 'FAILED';
       logNudgeDiag('WORKBENCH_DRAIN_NUDGE_FAILED', {
         ...failureSummary,
         error_message: failureSummary.message
@@ -18514,12 +18544,16 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
       ctx.waitUntil(promise);
       waitUntilUsed = true;
       entry.wait_until_used = true;
+      entry.state = 'WAIT_UNTIL_ATTACHED';
+      entry.wait_until_attached_at_utc = new Date().toISOString();
     } catch (waitUntilError) {
       waitUntilUsed = false;
       entry.wait_until_used = false;
+      entry.state = 'WAIT_UNTIL_ATTACH_FAILED';
+      entry.wait_until_failed_at_utc = new Date().toISOString();
       logNudgeDiag('WORKBENCH_DRAIN_NUDGE_FAILED', {
         code: 'BANKING_PAY_WORKBENCH_WAIT_UNTIL_FAILED',
-        scheduled: true,
+        scheduled: false,
         wait_until_used: false,
         error_message: String(waitUntilError?.message || waitUntilError || 'ctx.waitUntil failed')
       }, 'warn');
@@ -18531,8 +18565,8 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
 
   return returnNudgeResult({
     ...commonMetadata,
-    ok: true,
-    scheduled: true,
+    ok: waitUntilUsed,
+    scheduled: waitUntilUsed,
     already_running: false,
     wait_until_used: waitUntilUsed,
     continuation_scheduled: true,
@@ -18540,7 +18574,7 @@ function nudgeBankingPayWorkbenchDrain(env, ctx, options = {}) {
     max_auto_continuation_bursts: maxAutoContinuationBursts,
     max_auto_continuation_runtime_ms: maxAutoContinuationRuntimeMs,
     workbench_stage_work_units_per_job: maxStageWorkUnitsPerJob,
-    code: 'BANKING_PAY_WORKBENCH_NUDGE_SCHEDULED',
+    code: waitUntilUsed ? 'BANKING_PAY_WORKBENCH_NUDGE_SCHEDULED' : 'BANKING_PAY_WORKBENCH_WAIT_UNTIL_UNAVAILABLE',
     active_started_at_utc: entry.started_at_utc,
     coalesced_wake_count: 0,
     budget_resolved_by: 'bankingPayWorkbenchCronTick'
@@ -30717,16 +30751,16 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
     }
     return null;
   };
-  const scheduleCreateDraftPostActionNudgeIfNeeded = (postActionRefresh) => {
+  const scheduleCreateDraftPostActionNudgeIfNeeded = async (postActionRefresh) => {
     const refresh = isPlainObject(postActionRefresh) ? postActionRefresh : {};
     const targetedCount = Number(refresh.targeted_refresh_enqueued_count ?? refresh.targetedRefreshEnqueuedCount ?? 0);
     const targetedRefreshEnqueued = refresh.targeted_refresh_enqueued === true
       || refresh.targetedRefreshEnqueued === true
       || (Number.isFinite(targetedCount) && targetedCount > 0);
     const targetSessionId = trimStr(refresh.session_id || refresh.sessionId || refresh.current_workbench_session_id || refresh.currentWorkbenchSessionId || refresh.source_session_id || refresh.sourceSessionId || sessionId);
-    if (!targetedRefreshEnqueued || !uuidRe.test(targetSessionId) || typeof nudgeBankingPayWorkbenchDrain !== 'function') return null;
+    if (!targetedRefreshEnqueued || !uuidRe.test(targetSessionId) || typeof scheduleBankingPayWorkbenchDrainWithDurableWake !== 'function') return null;
     try {
-      return nudgeBankingPayWorkbenchDrain(env, ctx, {
+      return await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
         origin: 'CREATE_DRAFT_POST_ACTION_TARGETED_REFRESH',
         reason: 'CREATE_DRAFT_POST_ACTION_TARGETED_REFRESH',
         mutation_type: 'DRAFT_CREATE',
@@ -30747,7 +30781,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       };
     }
   };
-  const buildActiveSnoozeDraftFailureResponse = (failureLike) => {
+  const buildActiveSnoozeDraftFailureResponse = async (failureLike) => {
     const failure = extractActiveSnoozeDraftFailure(failureLike);
     if (!failure) return null;
     let refreshNudge = isPlainObject(failure.refresh_nudge) ? failure.refresh_nudge : null;
@@ -30755,10 +30789,10 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       || refreshNudge?.scheduled === true
       || refreshNudge?.already_running === true;
     if (!refreshAlreadyScheduled
-        && typeof nudgeBankingPayWorkbenchDrain === 'function'
+        && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function'
         && uuidRe.test(trimStr(failure.workbench_session_id || sessionId))) {
       try {
-        refreshNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+        refreshNudge = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
           origin: 'CREATE_DRAFT_ACTIVE_SNOOZE_FAILURE',
           reason: 'ACTIVE_SNOOZE_PREVENTS_DRAFT',
           mutation_type: 'DRAFT_CREATE',
@@ -30805,10 +30839,10 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       }
     }));
   };
-  const buildCreateDraftOperationResponse = (operationPayload, meta = {}) => {
+  const buildCreateDraftOperationResponse = async (operationPayload, meta = {}) => {
     const reused = meta.reused === true;
     const basePayload = isPlainObject(operationPayload) ? operationPayload : {};
-    const activeSnoozeFailureResponse = buildActiveSnoozeDraftFailureResponse(basePayload);
+    const activeSnoozeFailureResponse = await buildActiveSnoozeDraftFailureResponse(basePayload);
     if (activeSnoozeFailureResponse) return activeSnoozeFailureResponse;
     const rawPostActionRefresh = readCreateDraftPostActionRefresh(basePayload);
     const replacementCandidateId = trimStr(
@@ -30868,7 +30902,7 @@ async function handleBankingPayCreateDraft(env, req, user, ctx) {
       requires_new_session: false,
       requiresNewSession: false
     }) : null;
-    const postActionNudge = scheduleCreateDraftPostActionNudgeIfNeeded(postActionRefresh);
+    const postActionNudge = await scheduleCreateDraftPostActionNudgeIfNeeded(postActionRefresh);
     const routeMetadata = {
       ok: true,
       create_draft_operation_started: true,
@@ -32049,7 +32083,7 @@ const idempotencyHash = await sha256Hex(stableStringify({
     }
     const publicPayload = isPlainObject(healthyActiveOperation.public_payload) ? healthyActiveOperation.public_payload : {};
     await scheduleDraftCreateDrainBestEffort(publicPayload);
-    return buildCreateDraftOperationResponse(publicPayload, { reused: true });
+    return await buildCreateDraftOperationResponse(publicPayload, { reused: true });
   }
 
   try {
@@ -32075,9 +32109,9 @@ const idempotencyHash = await sha256Hex(stableStringify({
     }, { publicPayloadOptions: { mode: 'PROGRESS_LIGHT' } });
 
     await scheduleDraftCreateDrainBestEffort(operationPayload);
-    return buildCreateDraftOperationResponse(operationPayload, { reused: operationPayload.operation_created === false });
+    return await buildCreateDraftOperationResponse(operationPayload, { reused: operationPayload.operation_created === false });
   } catch (error) {
-    const activeSnoozeFailureResponse = buildActiveSnoozeDraftFailureResponse(error);
+    const activeSnoozeFailureResponse = await buildActiveSnoozeDraftFailureResponse(error);
     if (activeSnoozeFailureResponse) return activeSnoozeFailureResponse;
     return fail(500, 'BANKING_PAY_CREATE_DRAFT_OPERATION_START_FAILED', 'Payment batch could not be created. Refresh Banking and try again.', {
       session_id: sessionId,
@@ -40439,6 +40473,12 @@ function parseBankingPayWorkbenchDrainWakeMessage(value) {
     'message_type',
     'contract_version',
     'wake_depth',
+    'wake_id',
+    'wake_reason',
+    'origin',
+    'scope_kind',
+    'requested_profile',
+    'previous_drain_invocation_id',
     'session_id',
     'candidate_id',
     'actor_user_id',
@@ -40477,10 +40517,42 @@ function parseBankingPayWorkbenchDrainWakeMessage(value) {
     if (!id) throw Object.assign(new Error(code), { code });
     return id;
   };
+  const boundedText = (raw, maxLength, code) => {
+    if (raw == null || String(raw).trim() === '') return null;
+    const text = String(raw).trim();
+    if (text.length > maxLength || /[\u0000-\u001f\u007f]/.test(text)) {
+      throw Object.assign(new Error(code), { code });
+    }
+    return text;
+  };
+  const wakeReason = String(source.wake_reason || 'LEGACY_MORE_DUE').trim().toUpperCase();
+  if (!['PRE_ENTRY_COMMITTED_WORK', 'POST_PASS_MORE_DUE', 'LEGACY_MORE_DUE'].includes(wakeReason)) {
+    throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_REASON_INVALID'), {
+      code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_REASON_INVALID'
+    });
+  }
+  const scopeKind = String(source.scope_kind || (source.candidate_id ? 'CANDIDATE' : (source.session_id ? 'SESSION' : 'GLOBAL'))).trim().toUpperCase();
+  if (!['CANDIDATE', 'SESSION', 'GLOBAL'].includes(scopeKind)) {
+    throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_SCOPE_INVALID'), {
+      code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_SCOPE_INVALID'
+    });
+  }
+  const requestedProfile = String(source.requested_profile || 'NUDGE').trim().toUpperCase();
+  if (requestedProfile !== 'NUDGE') {
+    throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_PROFILE_INVALID'), {
+      code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_PROFILE_INVALID'
+    });
+  }
   return {
     message_type: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1',
     contract_version: 1,
     wake_depth: wakeDepth,
+    wake_id: canonicalOptionalUuid(source.wake_id, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_ID_INVALID'),
+    wake_reason: wakeReason,
+    origin: boundedText(source.origin, 160, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_ORIGIN_INVALID'),
+    scope_kind: scopeKind,
+    requested_profile: requestedProfile,
+    previous_drain_invocation_id: boundedText(source.previous_drain_invocation_id, 160, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_PREVIOUS_INVOCATION_INVALID'),
     session_id: canonicalOptionalUuid(source.session_id, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_SESSION_INVALID'),
     candidate_id: canonicalOptionalUuid(source.candidate_id, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_CANDIDATE_INVALID'),
     actor_user_id: canonicalOptionalUuid(source.actor_user_id, 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_ACTOR_INVALID'),
@@ -40495,23 +40567,109 @@ async function enqueueBankingPayWorkbenchDrainWake(env, options = {}) {
     });
   }
   const source = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  const wakeReason = String(source.wake_reason || source.wakeReason || 'POST_PASS_MORE_DUE').trim().toUpperCase();
+  const wakeId = canonicalBankingPayWorkbenchUuid(source.wake_id || source.wakeId)
+    || (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function' ? globalThis.crypto.randomUUID() : null);
+  if (!wakeId) {
+    throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_ID_UNAVAILABLE'), {
+      code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_ID_UNAVAILABLE'
+    });
+  }
   const message = parseBankingPayWorkbenchDrainWakeMessage({
     message_type: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1',
     contract_version: 1,
-    wake_depth: source.wake_depth,
+    wake_depth: source.wake_depth || source.wakeDepth || 1,
+    wake_id: wakeId,
+    wake_reason: wakeReason,
+    origin: source.origin || null,
+    scope_kind: source.scope_kind || source.scopeKind || null,
+    requested_profile: source.requested_profile || source.requestedProfile || 'NUDGE',
+    previous_drain_invocation_id: source.previous_drain_invocation_id || source.previousDrainInvocationId || null,
     session_id: source.session_id || null,
     candidate_id: source.candidate_id || null,
     actor_user_id: source.actor_user_id || null,
     enqueued_at_utc: new Date().toISOString()
   });
-  await env.BANKING_PAY_CONTINUATION_QUEUE.send(message, { delaySeconds: 1 });
+  const delaySeconds = wakeReason === 'PRE_ENTRY_COMMITTED_WORK' ? 0 : 1;
+  if (delaySeconds > 0) {
+    await env.BANKING_PAY_CONTINUATION_QUEUE.send(message, { delaySeconds });
+  } else {
+    await env.BANKING_PAY_CONTINUATION_QUEUE.send(message);
+  }
   return {
     ok: true,
     enqueued: true,
+    wake_state: 'DURABLY_QUEUED',
+    wake_id: message.wake_id,
+    wake_reason: message.wake_reason,
     wake_depth: message.wake_depth,
-    delay_seconds: 1,
+    delay_seconds: delaySeconds,
     session_scoped: !!message.session_id,
-    reason: 'MORE_DUE_AFTER_BOUNDED_NUDGE'
+    candidate_scoped: !!message.candidate_id,
+    reason: wakeReason
+  };
+}
+
+async function scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, options = {}) {
+  const source = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  const sessionId = source.session_id || source.sessionId || null;
+  const candidateId = source.candidate_id || source.candidateId || null;
+  const actorUserId = source.actor_user_id || source.actorUserId || null;
+  const wakeDepthRaw = Number(source.durable_wake_depth ?? source.durableWakeDepth ?? source.wake_depth ?? source.wakeDepth ?? 1);
+  const wakeDepth = Number.isInteger(wakeDepthRaw) ? Math.max(1, Math.min(32, wakeDepthRaw)) : 1;
+  const scopeKind = candidateId ? 'CANDIDATE' : (sessionId ? 'SESSION' : 'GLOBAL');
+  let durableWake = null;
+  let durableWakeErrorCode = null;
+  try {
+    durableWake = await enqueueBankingPayWorkbenchDrainWake(env, {
+      wake_depth: wakeDepth,
+      wake_reason: 'PRE_ENTRY_COMMITTED_WORK',
+      origin: String(source.origin || 'BANKING_PAY_COMMITTED_WORK').trim().slice(0, 160),
+      scope_kind: scopeKind,
+      requested_profile: 'NUDGE',
+      session_id: sessionId,
+      candidate_id: candidateId,
+      actor_user_id: actorUserId
+    });
+  } catch (wakeError) {
+    durableWakeErrorCode = String(wakeError?.code || 'BANKING_PAY_WORKBENCH_DURABLE_WAKE_ENQUEUE_FAILED').trim().toUpperCase();
+  }
+
+  let immediateDrain = null;
+  try {
+    immediateDrain = nudgeBankingPayWorkbenchDrain(env, ctx, {
+      ...source,
+      durableWakeDepth: wakeDepth
+    });
+  } catch (nudgeError) {
+    immediateDrain = {
+      ok: false,
+      scheduled: false,
+      already_running: false,
+      code: String(nudgeError?.code || 'BANKING_PAY_WORKBENCH_IMMEDIATE_NUDGE_FAILED').trim().toUpperCase()
+    };
+  }
+
+  const durableWakeEnqueued = durableWake?.enqueued === true;
+  return {
+    ok: durableWakeEnqueued,
+    scheduled: durableWakeEnqueued,
+    already_running: immediateDrain?.already_running === true,
+    wake_state: durableWakeEnqueued ? 'DURABLY_QUEUED' : 'FAILED_RETRYABLE',
+    worker_scope: scopeKind,
+    session_scoped: scopeKind === 'SESSION' || scopeKind === 'CANDIDATE',
+    candidate_scoped: scopeKind === 'CANDIDATE',
+    requested_session_id: sessionId,
+    requested_candidate_id: candidateId,
+    durable_wake_attempted: true,
+    durable_wake_enqueued: durableWakeEnqueued,
+    durable_wake: durableWake,
+    durable_wake_error_code: durableWakeErrorCode,
+    immediate_drain_requested: true,
+    immediate_drain_scheduled: immediateDrain?.scheduled === true,
+    immediate_drain: immediateDrain,
+    wait_until_used: immediateDrain?.wait_until_used === true,
+    code: durableWakeEnqueued ? 'BANKING_PAY_WORKBENCH_DURABLE_WAKE_ENQUEUED' : (durableWakeErrorCode || 'BANKING_PAY_WORKBENCH_DURABLE_WAKE_ENQUEUE_FAILED')
   };
 }
 
@@ -40656,31 +40814,86 @@ async function handleBankingPayContinuationQueue(batch, env, ctx) {
   try {
     const workbenchWake = parseBankingPayWorkbenchDrainWakeMessage(message.body);
     if (workbenchWake) {
-      if (!ctx || typeof ctx.waitUntil !== 'function') {
-        throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_CONTEXT_INVALID'), {
-          code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_CONTEXT_INVALID'
+      const drainInvocationId = workbenchWake.wake_id
+        || (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function' ? globalThis.crypto.randomUUID() : null);
+      if (!drainInvocationId) {
+        throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_INVOCATION_ID_UNAVAILABLE'), {
+          code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_INVOCATION_ID_UNAVAILABLE'
         });
       }
-      const scheduled = nudgeBankingPayWorkbenchDrain(env, ctx, {
-        origin: `BANKING_PAY_WORKBENCH_DURABLE_WAKE_${workbenchWake.wake_depth}`,
-        reason: 'DURABLE_MORE_DUE_WAKE',
+      const drainResult = await bankingPayWorkbenchCronTick(env, {
+        origin: workbenchWake.origin || `BANKING_PAY_WORKBENCH_DURABLE_WAKE_${workbenchWake.wake_depth}`,
+        reason: workbenchWake.wake_reason,
         budgetProfile: 'NUDGE',
+        profile: 'NUDGE',
         sessionId: workbenchWake.session_id || undefined,
         candidateId: workbenchWake.candidate_id || undefined,
         actorUserId: workbenchWake.actor_user_id || undefined,
         durableWakeDepth: workbenchWake.wake_depth,
-        globalTailPass: true
+        globalTailPass: true,
+        drainInvocationId
       });
-      if (!scheduled || scheduled.ok === false) {
-        throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_SCHEDULE_FAILED'), {
-          code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_SCHEDULE_FAILED'
+      const drainResultCode = String(drainResult?.code || drainResult?.error_code || '').trim().toUpperCase();
+      if (!drainResult
+          || drainResult.entered !== true
+          || drainResult.ok === false
+          || (drainResult.skipped === true && drainResultCode === 'DISABLED')) {
+        throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_DRAIN_FAILED'), {
+          code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_DRAIN_FAILED'
         });
       }
-      console.log('[banking-pay-workbench] durable drain wake accepted', {
-        event: 'WORKBENCH_DRAIN_DURABLE_WAKE_ACCEPTED',
+
+      const drainSummary = drainResult && typeof drainResult.drain_result === 'object' && drainResult.drain_result
+        ? drainResult.drain_result
+        : drainResult;
+      const boolish = (value) => value === true || ['true', 't', '1', 'yes', 'y', 'on'].includes(String(value ?? '').trim().toLowerCase());
+      const progressCount = ['claimed', 'claimed_count', 'processed', 'processed_count', 'succeeded', 'succeeded_count', 'recovered_stale_count']
+        .reduce((total, key) => {
+          const value = Number(drainSummary?.[key]);
+          return total + (Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0);
+        }, 0);
+      const madeProgress = boolish(drainSummary?.made_progress) || progressCount > 0;
+      const moreDue = boolish(drainSummary?.more_due) || boolish(drainResult.more_due);
+      let successorWake = null;
+      if (moreDue) {
+        if (!madeProgress) {
+          throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_NO_PROGRESS'), {
+            code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_NO_PROGRESS'
+          });
+        }
+        if (workbenchWake.wake_depth >= 32) {
+          throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_DEPTH_EXHAUSTED'), {
+            code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_DEPTH_EXHAUSTED'
+          });
+        }
+        successorWake = await enqueueBankingPayWorkbenchDrainWake(env, {
+          wake_depth: workbenchWake.wake_depth + 1,
+          wake_reason: 'POST_PASS_MORE_DUE',
+          origin: 'BANKING_PAY_WORKBENCH_QUEUE_CONSUMER_SUCCESSOR',
+          scope_kind: workbenchWake.scope_kind,
+          requested_profile: 'NUDGE',
+          previous_drain_invocation_id: drainInvocationId,
+          session_id: workbenchWake.session_id,
+          candidate_id: workbenchWake.candidate_id,
+          actor_user_id: workbenchWake.actor_user_id
+        });
+        if (!successorWake || successorWake.enqueued !== true) {
+          throw Object.assign(new Error('BANKING_PAY_WORKBENCH_DRAIN_WAKE_SUCCESSOR_FAILED'), {
+            code: 'BANKING_PAY_WORKBENCH_DRAIN_WAKE_SUCCESSOR_FAILED'
+          });
+        }
+      }
+
+      console.log('[banking-pay-workbench] durable drain wake completed', {
+        event: 'WORKBENCH_DRAIN_DURABLE_WAKE_COMPLETED',
+        wake_id: workbenchWake.wake_id,
+        wake_reason: workbenchWake.wake_reason,
         wake_depth: workbenchWake.wake_depth,
-        scheduled: scheduled.scheduled === true,
-        already_running: scheduled.already_running === true,
+        drain_invocation_id: drainInvocationId,
+        drain_entered: drainResult.entered === true,
+        made_progress: madeProgress,
+        more_due: moreDue,
+        successor_wake_enqueued: successorWake?.enqueued === true,
         session_scoped: !!workbenchWake.session_id,
         cron_remains_recovery_fallback: true
       });
@@ -42869,7 +43082,7 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
     };
   };
 
-  const maybeNudgeNoMoneyWorkbenchRefresh = (payload) => {
+  const maybeNudgeNoMoneyWorkbenchRefresh = async (payload) => {
     const context = extractWorkbenchRefreshNudgeContext(payload);
     if (context.queued_count <= 0 && context.job_ids.length <= 0) {
       return {
@@ -42896,7 +43109,7 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
         requires_workbench_session: context.requires_workbench_session === true
       };
     }
-    if (typeof nudgeBankingPayWorkbenchDrain !== 'function') {
+    if (typeof scheduleBankingPayWorkbenchDrainWithDurableWake !== 'function') {
       return {
         ok: false,
         attempted: false,
@@ -42909,7 +43122,7 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
       };
     }
     try {
-      const nudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+      const nudge = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
         origin: 'PAYMENT_CONFIRM_NO_MONEY_AND_UNWIND_WORKBENCH_REFRESH',
         reason: 'PAYMENT_CORRECTION_NO_MONEY_UNWIND_REFRESH_QUEUED',
         sessionId: context.session_id,
@@ -42982,7 +43195,7 @@ async function handleBankingPayConfirmNoMoneyAndUnwind(env, req, user, payBatchI
       }
     }), 'pay_bank_event_ingest');
 
-    const workbenchRefreshNudge = maybeNudgeNoMoneyWorkbenchRefresh(rpcResult);
+    const workbenchRefreshNudge = await maybeNudgeNoMoneyWorkbenchRefresh(rpcResult);
     const liveSignal = await readLiveSignal(body);
     const alertSummary = await readGroupedAlertSummary();
     const carryForward = summariseCarryForward(rpcResult);
@@ -43204,9 +43417,9 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
         targeted_refresh_enqueued_count: targetedRefreshEnqueuedCount
       });
 
-      if (postActionRefresh.targeted_refresh_enqueued === true && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+      if (postActionRefresh.targeted_refresh_enqueued === true && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function') {
         try {
-          const workerWake = nudgeBankingPayWorkbenchDrain(env, ctx, {
+          const workerWake = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
             origin: 'PAYMENT_EXECUTE_POST_ACTION_PATCH_TARGETED_REFRESH',
             reason: 'POST_MUTATION_PATCH_TARGETED_REFRESH',
             mutation_type: 'PAYMENT_EXECUTE',
@@ -44273,9 +44486,9 @@ async function finaliseAuthorisedBankingPaySettlement(env, req, userOrActor, pay
         targeted_refresh_enqueued_count: targetedRefreshEnqueuedCount
       });
 
-      if (postActionRefresh.targeted_refresh_enqueued === true && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+      if (postActionRefresh.targeted_refresh_enqueued === true && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function') {
         try {
-          const workerWake = nudgeBankingPayWorkbenchDrain(env, ctx, {
+          const workerWake = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
             origin: 'PAYMENT_SETTLE_POST_ACTION_PATCH_TARGETED_REFRESH',
             reason: 'POST_MUTATION_PATCH_TARGETED_REFRESH',
             mutation_type: 'PAYMENT_SETTLE',
@@ -60806,47 +61019,32 @@ async function schedulePaymentCorrectionWorkbenchNudge(env, executionContext, en
     return { ...base, code: 'PAYMENT_CORRECTION_WORKBENCH_NUDGE_NOT_REQUIRED' };
   }
 
-  let directResult = null;
-  if (executionContext && typeof executionContext.waitUntil === 'function' && typeof nudgeBankingPayWorkbenchDrain === 'function') {
-    base.attempted = true;
-    base.direct_nudge_attempted = true;
-    try {
-      directResult = nudgeBankingPayWorkbenchDrain(env, executionContext, {
-        origin: 'PAYMENT_CORRECTION_REFRESH_WORKBENCH',
-        reason: source.reason,
-        budgetProfile: 'NUDGE',
-        sessionId: source.session_id,
-        candidateId: source.candidate_ids.length === 1 ? source.candidate_ids[0] : undefined,
-        actorUserId: source.actor_user_id || undefined,
-        globalTailPass: true
-      });
-      base.direct_nudge_scheduled = !!(directResult && (directResult.scheduled === true || directResult.already_running === true));
-      base.wait_until_used = !!(directResult && directResult.wait_until_used === true);
-      base.already_running = !!(directResult && directResult.already_running === true);
-      // A local waitUntil drain is useful for latency, but it is not the
-      // durable hand-off contract.  Continue to enqueue the database-backed
-      // continuation wake before the parent correction delivery may succeed.
-    } catch {
-      base.direct_nudge_scheduled = false;
-      base.wait_until_used = false;
-      base.already_running = false;
-    }
-  }
-
   base.attempted = true;
+  base.direct_nudge_attempted = true;
   base.durable_wake_attempted = true;
-  try {
-    const wake = await enqueueBankingPayWorkbenchDrainWake(env, {
-      wake_depth: 1,
-      session_id: source.session_id,
-      candidate_id: source.candidate_ids.length === 1 ? source.candidate_ids[0] : null,
-      actor_user_id: source.actor_user_id || null
+  if (typeof scheduleBankingPayWorkbenchDrainWithDurableWake !== 'function') {
+    throw Object.assign(new Error('PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED'), {
+      code: 'PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_REQUIRED'
     });
-    if (wake && wake.ok !== false && wake.enqueued === true) {
+  }
+  try {
+    const scheduled = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, executionContext, {
+      origin: 'PAYMENT_CORRECTION_REFRESH_WORKBENCH',
+      reason: source.reason,
+      budgetProfile: 'NUDGE',
+      sessionId: source.session_id,
+      candidateId: source.candidate_ids.length === 1 ? source.candidate_ids[0] : undefined,
+      actorUserId: source.actor_user_id || undefined,
+      globalTailPass: true
+    });
+    base.direct_nudge_scheduled = scheduled?.immediate_drain_scheduled === true;
+    base.wait_until_used = scheduled?.wait_until_used === true;
+    base.already_running = scheduled?.already_running === true;
+    base.durable_wake_enqueued = scheduled?.durable_wake_enqueued === true;
+    if (base.durable_wake_enqueued) {
       return {
         ...base,
         scheduled: true,
-        durable_wake_enqueued: true,
         code: 'PAYMENT_CORRECTION_WORKBENCH_DURABLE_WAKE_ENQUEUED'
       };
     }
@@ -64063,7 +64261,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
       retryCounts: Object.assign({}, retryCounts, { [retryKey]: retryCount })
     };
   };
-  const scheduleActiveSnoozeDraftRefresh = (failureLike) => {
+  const scheduleActiveSnoozeDraftRefresh = async (failureLike) => {
     const failure = safeObject(failureLike);
     const hasWaitUntil = (value) => !!(value && typeof value === 'object' && typeof value.waitUntil === 'function');
     const drainCtx = hasWaitUntil(options.ctx) ? options.ctx
@@ -64073,11 +64271,11 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
             : (hasWaitUntil(options.waitUntilContext) ? options.waitUntilContext
               : (hasWaitUntil(options.wait_until_context) ? options.wait_until_context
                 : (hasWaitUntil(options.req) ? options.req : null))))));
-    if (typeof nudgeBankingPayWorkbenchDrain !== 'function') {
+    if (typeof scheduleBankingPayWorkbenchDrainWithDurableWake !== 'function') {
       return { ok: true, scheduled: false, skipped: true, code: 'BANKING_PAY_WORKBENCH_NUDGE_UNAVAILABLE' };
     }
     try {
-      return nudgeBankingPayWorkbenchDrain(env, drainCtx, {
+      return await scheduleBankingPayWorkbenchDrainWithDurableWake(env, drainCtx, {
         origin: 'DRAFT_CREATE_ACTIVE_SNOOZE_FAILURE',
         reason: 'ACTIVE_SNOOZE_PREVENTS_DRAFT',
         mutation_type: 'DRAFT_CREATE',
@@ -66425,7 +66623,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           });
           await finishChunk(chunk.chunk_id, 'FAILED', 0, scopeIds.length || 1, null, chunkFailure);
           const failedOperation = await finishFailedWithCleanup(null, chunkFailure, { phase, reason: 'ACTIVE_SNOOZE_PREVENTS_DRAFT' });
-          const refreshNudge = scheduleActiveSnoozeDraftRefresh(chunkFailure);
+          const refreshNudge = await scheduleActiveSnoozeDraftRefresh(chunkFailure);
           return Object.assign({}, safeObject(failedOperation), chunkFailure, {
             ok: false,
             status: 'FAILED',
@@ -66585,9 +66783,9 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
               : (postMutationHasWaitUntil(options.waitUntilContext) ? options.waitUntilContext
                 : (postMutationHasWaitUntil(options.wait_until_context) ? options.wait_until_context
                   : (postMutationHasWaitUntil(options.req) ? options.req : null))))));
-      const schedulePostActionPatchNudge = (refreshSummary, targetSessionId) => {
+      const schedulePostActionPatchNudge = async (refreshSummary, targetSessionId) => {
         const targetId = String(targetSessionId || '').trim();
-        if (!isUuid(targetId) || typeof nudgeBankingPayWorkbenchDrain !== 'function') {
+        if (!isUuid(targetId) || typeof scheduleBankingPayWorkbenchDrainWithDurableWake !== 'function') {
           return {
             ok: true,
             scheduled: false,
@@ -66599,7 +66797,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           };
         }
         try {
-          return nudgeBankingPayWorkbenchDrain(env, postMutationDrainCtx, {
+          return await scheduleBankingPayWorkbenchDrainWithDurableWake(env, postMutationDrainCtx, {
             origin: 'DRAFT_CREATE_POST_ACTION_PATCH_TARGETED_REFRESH',
             reason: 'DRAFT_CREATE_POST_ACTION_PATCH_TARGETED_REFRESH',
             mutation_type: 'DRAFT_CREATE',
@@ -66820,7 +67018,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
           warning: null
         });
         const workerWake = patchTargetedRefreshEnqueued
-          ? schedulePostActionPatchNudge(postActionRefresh, workbenchSessionId)
+          ? await schedulePostActionPatchNudge(postActionRefresh, workbenchSessionId)
           : null;
         if (workerWake) {
           postActionRefresh.worker_wake = workerWake;
@@ -67024,9 +67222,9 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         requested_session_id: replacementSessionId,
         scheduled_worker_is_durable_fallback: true
       };
-      if (typeof nudgeBankingPayWorkbenchDrain === 'function') {
+      if (typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function') {
         try {
-          workerWake = nudgeBankingPayWorkbenchDrain(env, replacementDrainCtx, {
+          workerWake = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, replacementDrainCtx, {
             origin: 'DRAFT_CREATE_POST_CREATE_REPLACEMENT',
             budgetProfile: 'NUDGE',
             profile: 'NUDGE',
@@ -67631,7 +67829,7 @@ async function advanceBankingPayDraftCreateOperation(env, operationRow, user, op
         transaction_rolled_back: true
       });
       const failedOperation = await finishFailedWithCleanup(null, failure, { phase, reason: 'ACTIVE_SNOOZE_PREVENTS_DRAFT' });
-      const refreshNudge = scheduleActiveSnoozeDraftRefresh(failure);
+      const refreshNudge = await scheduleActiveSnoozeDraftRefresh(failure);
       return Object.assign({}, safeObject(failedOperation), failure, {
         ok: false,
         status: 'FAILED',
@@ -88232,7 +88430,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
     };
   };
 
-  const maybeNudgeNoMoneyWorkbenchRefresh = (payload, routeLabel) => {
+  const maybeNudgeNoMoneyWorkbenchRefresh = async (payload, routeLabel) => {
     const context = extractWorkbenchRefreshNudgeContext(payload);
     if (context.queued_count <= 0 && context.job_ids.length <= 0) {
       return {
@@ -88261,7 +88459,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
         requires_workbench_session: context.requires_workbench_session === true
       };
     }
-    if (typeof nudgeBankingPayWorkbenchDrain !== 'function') {
+    if (typeof scheduleBankingPayWorkbenchDrainWithDurableWake !== 'function') {
       return {
         ok: false,
         attempted: false,
@@ -88275,7 +88473,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
       };
     }
     try {
-      const nudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+      const nudge = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
         origin: 'PAYMENT_CORRECTION_START_NO_MONEY_UNWIND_WORKBENCH_REFRESH',
         reason: 'PAYMENT_CORRECTION_NO_MONEY_UNWIND_REFRESH_QUEUED',
         sessionId: context.session_id,
@@ -88698,7 +88896,7 @@ async function handleBankingPayCorrectionStart(env, req, user, payBatchId, ctx) 
         p_actor_user_id: actorUserId,
         p_ingest_options_json: { suppress_auto_unwind: true, reason: noMoneyReason }
       }), 'pay_bank_event_ingest');
-      workbenchRefreshNudge = maybeNudgeNoMoneyWorkbenchRefresh(result, route);
+      workbenchRefreshNudge = await maybeNudgeNoMoneyWorkbenchRefresh(result, route);
     } else if (action === 'CHECK_PROVIDER_STATUS') {
       route = 'CHECK_PROVIDER_STATUS';
       result = await callPoll();
@@ -178677,9 +178875,9 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
         targeted_refresh_enqueued: targetedRefreshEnqueuedCount > 0 || patchResult.targeted_refresh_enqueued === true,
         targeted_refresh_enqueued_count: targetedRefreshEnqueuedCount
       });
-      if (postActionRefresh.targeted_refresh_enqueued === true && typeof nudgeBankingPayWorkbenchDrain === 'function') {
+      if (postActionRefresh.targeted_refresh_enqueued === true && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function') {
         try {
-          const backgroundNudge = nudgeBankingPayWorkbenchDrain(env, ctx, {
+          const backgroundNudge = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
             origin: 'PAYMENT_CANCEL_POST_ACTION_PATCH_TARGETED_REFRESH',
             reason: 'POST_MUTATION_PATCH_TARGETED_REFRESH',
             mutation_type: patchOperationType,
@@ -178703,7 +178901,7 @@ async function handleBankingPayBatchCancel(env, req, user, payBatchId, ctx = nul
             durable_cron_fallback_retained: true
           };
           postActionRefresh.worker_wake = workbenchWorkerWake;
-          postActionRefresh.worker_wake_scheduled = backgroundNudge?.scheduled === true || backgroundNudge?.already_running === true;
+          postActionRefresh.worker_wake_scheduled = backgroundNudge?.scheduled === true;
         } catch (nudgeError) {
           workbenchWorkerWake = {
             attempted: true,

@@ -63,18 +63,19 @@ test('workbench refresh route recomputes pre-draft live rows without payment exe
   assert.match(body, /sessionRow\.status\)\.toUpperCase\(\) !== 'OPEN'/);
   assert.match(body, /pay_workbench_enqueue_session_candidate_refresh/);
   assert.match(body, /refresh_scope_kind: 'SESSION_FULL_LIVE'/);
-  assert.match(body, /nudgeBankingPayWorkbenchDrain/);
+  assert.match(body, /scheduleBankingPayWorkbenchDrainWithDurableWake/);
   assert.match(
     body,
-    /if \(candidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function'\)/,
+    /if \(candidateCount > 0 && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function'\)/,
     'a refresh must wake already-queued candidate work even when the idempotent enqueue inserts no new job'
   );
   assert.doesNotMatch(
     body,
-    /if \(enqueuedCandidateCount > 0 && typeof nudgeBankingPayWorkbenchDrain === 'function'\)/,
+    /if \(enqueuedCandidateCount > 0 && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function'\)/,
     'new-row count must not be the nudge gate because an interrupted continuation can already be queued'
   );
   assert.match(body, /policy_x_scope: 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'/);
+  assert.match(body, /durable_wake_accepted: refreshNudge\?\.durable_wake_enqueued === true/);
   assert.match(body, /decisions_cleared: false/);
   assert.match(body, /payment_execution_started: false/);
   assert.doesNotMatch(body, /pay_workbench_session_clear_all_decisions|pay_workbench_session_discard|pay_batch_execute|pay_batch_settle/);

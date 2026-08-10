@@ -89,7 +89,8 @@ test('dirty apply resolves current authority before any public dirty marking', (
 
 test('durable continuation uses the existing bounded queue wake and cron remains fallback', () => {
   assert.match(worker, /BANKING_PAY_WORKBENCH_DRAIN_WAKE_V1/);
-  assert.match(worker, /BANKING_PAY_CONTINUATION_QUEUE\.send\(message, \{ delaySeconds: 1 \}\)/);
+  assert.match(worker, /delaySeconds = wakeReason === 'PRE_ENTRY_COMMITTED_WORK' \? 0 : 1/);
+  assert.match(worker, /BANKING_PAY_CONTINUATION_QUEUE\.send\(message, \{ delaySeconds \}\)/);
   assert.match(worker, /canAutoContinueFrom\(finalSummary\)/);
   assert.match(worker, /MAX_DURABLE_WAKE_DEPTH/);
   assert.match(worker, /cron_fallback_required: true/);
