@@ -395,7 +395,7 @@ export async function selectOfficialTimesheetOnePageLayout(model, fonts = null) 
   let regular = fonts?.regular;
   let bold = fonts?.bold;
   if (!regular || !bold) {
-    const measurementPdf = await PDFDocument.create();
+    const measurementPdf = await PDFDocument.create({ updateMetadata: false });
     if (!regular) regular = await measurementPdf.embedFont(StandardFonts.Helvetica);
     if (!bold) bold = await measurementPdf.embedFont(StandardFonts.HelveticaBold);
   }
@@ -795,7 +795,7 @@ function drawWordingBlock(page, font, lines, x, top, width, size, lineHeight) {
 }
 
 export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
-  const pdf = await PDFDocument.create();
+  const pdf = await PDFDocument.create({ updateMetadata: false });
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const minimumFontSize = Number(model?.layout?.minimum_font_size || 5.5);

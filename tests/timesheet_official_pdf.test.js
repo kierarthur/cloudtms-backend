@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { PDFDocument } from 'pdf-lib';
@@ -390,6 +390,14 @@ test('layout selection preflights horizontal cells and retries a smaller readabl
   const rendered = await renderOfficialTimesheetPdfBytes(model);
   assert.equal(rendered.page_count, 1);
   assert.equal(rendered.layout_mode, layout.name);
+});
+
+test('persisted official timesheet PDF bytes are deterministic across wall-clock time', async () => {
+  const first = await renderOfficialTimesheetPdfBytes(fixture());
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  const second = await renderOfficialTimesheetPdfBytes(fixture());
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  assert.equal(digest(first.pdf_bytes), digest(second.pdf_bytes));
 });
 
 test('wrapped wording preserves an unbroken long token without overflow or truncation', async () => {

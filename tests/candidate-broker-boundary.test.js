@@ -223,6 +223,29 @@ test('OpenAPI public path inventory and pagination names match the private route
   assert.match(openapi, /Limit:\s*\{name:\s*limit/i);
   assert.match(openapi, /FromDate:\s*\{name:\s*from[\s\S]*ToDate:\s*\{name:\s*to/i);
   assert.match(openapi, /cancel-manager-handoff/i);
+  const managerMethods = candidateBrokerInternals.managerActionMethods;
+  for (const [action, method] of Object.entries(managerMethods)) {
+    const pattern = new RegExp(`^  /candidate-manager/v1/workflows/\\{workflowId\\}/${action}:\\r?\\n    ${method.toLowerCase()}:`, 'm');
+    assert.match(openapi, pattern, `${action} must be documented as ${method}`);
+  }
+});
+
+test('public broker rejects wrong manager methods before the private service binding', async () => {
+  let privateCalls = 0;
+  const env = brokerEnvironment(async () => {
+    privateCalls += 1;
+    return Response.json({ ok: true });
+  });
+  const workflowId = '00000000-0000-4000-8000-000000000201';
+  for (const [action, method] of [['start', 'POST'], ['progress', 'GET'], ['approve', 'GET'], ['refuse', 'GET']]) {
+    const response = await handleCandidateBrokerRequest(browserRequest(
+      `/candidate-manager/v1/workflows/${workflowId}/${action}`,
+      { method, headers: { authorization: 'Bearer deliberately-invalid-manager-token' } }
+    ), env);
+    assert.equal(response.status, 405);
+    assert.equal((await response.json()).error_code, 'METHOD_NOT_ALLOWED');
+  }
+  assert.equal(privateCalls, 0);
 });
 
 test('candidate selection never exposes or substitutes the private database session identity', async () => {

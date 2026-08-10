@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PDFDocument } from 'pdf-lib';
@@ -19,8 +20,14 @@ const {
   mileageJourneyRows,
   paperPackIdentity,
   readyPaperPackReceipt,
+  readyGeneratedDocumentReceipt,
   releaseCandidatePaperPack,
+  bindCandidatePaperOutbox,
+  assembleCandidatePaperPack,
+  renderAndRegister,
+  candidateDocumentBranding,
   mileageClaimFormBytes,
+  renderExpensePage,
   routeMatch,
   safeFinalisationResult,
   safeQrPackResponse,
@@ -31,6 +38,20 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+function noLogoBranding(agencyName = 'Configured Agency') {
+  const base = {
+    contract_version: 'CANDIDATE_DOCUMENT_BRANDING_V1',
+    agency_name: agencyName,
+    logo_key: null,
+    logo_sha256: null,
+    logo_media_type: null
+  };
+  return {
+    ...base,
+    branding_contract_sha256: createHash('sha256').update(JSON.stringify(base)).digest('hex')
+  };
+}
 
 test('Candidate password verifiers accept the exact password and reject a different password', async () => {
   const verifier = await derivePasswordVerifier('correct-horse-battery-staple');
@@ -224,12 +245,14 @@ test('idempotent component preparation always uses the original database-owned o
     storage_key: 'candidate-app/test/workflow/source/original.pdf',
     media_type: 'application/pdf', byte_size: 512,
     component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
-    expense_category: 'TRAVEL', paper_return_page_key: null
+    expense_category: 'TRAVEL', paper_return_page_key: null,
+    workflow_generation: 4, state: 'PENDING'
   };
   const expected = {
     media_type: 'application/pdf', byte_size: 512,
     component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
-    expense_category: 'TRAVEL', paper_return_page_key: null
+    expense_category: 'TRAVEL', paper_return_page_key: null,
+    workflow_generation: 4
   };
   assert.equal(preparedUploadContract(response, expected).storage_key, response.storage_key);
   assert.throws(
@@ -240,6 +263,16 @@ test('idempotent component preparation always uses the original database-owned o
     () => preparedUploadContract({ ...response, media_type: 'image/png' }, expected),
     error => error?.code === 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH'
   );
+  assert.throws(
+    () => preparedUploadContract({ ...response, workflow_generation: 3 }, expected),
+    error => error?.code === 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH'
+  );
+  for (const state of ['SUPERSEDED', 'REJECTED', 'ABANDONED']) {
+    assert.throws(
+      () => preparedUploadContract({ ...response, state }, expected),
+      error => error?.code === 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH'
+    );
+  }
 });
 
 test('paper mileage form preserves the approved labels and UK week-ending format', async () => {
@@ -268,10 +301,202 @@ test('paper mileage form preserves the approved labels and UK week-ending format
   }
 });
 
+test('persisted expense and mileage PDFs are byte-deterministic across wall-clock time', async () => {
+  const branding = noLogoBranding();
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000021', generation: 2,
+    week_ending_date: '2026-08-09',
+    immutable_submission_json: {
+      official_presentation: {
+        branding,
+        worker: { first_name: 'Test', surname: 'Worker' },
+        client: { name: 'Test Client' }
+      },
+      expense_submission: { canonical_tsfin_snapshot: { expenses_pay_ex_vat: 25 } }
+    }
+  };
+  const component = {
+    id: '00000000-0000-4000-8000-000000000022', component_kind: 'EXPENSE_SUMMARY',
+    document_role: 'EXPENSE_APPROVAL_SUMMARY', review_ordinal: 1
+  };
+  const env = {};
+  const firstMileage = await mileageClaimFormBytes(env, workflow, { ...branding, logo: null });
+  const firstExpense = (await renderExpensePage(env, { review_ordinal: 1, render_input: {} }, { workflow, component }, 'REVIEW')).pdf_bytes;
+  await new Promise(resolve => setTimeout(resolve, 1100));
+  const secondMileage = await mileageClaimFormBytes(env, workflow, { ...branding, logo: null });
+  const secondExpense = (await renderExpensePage(env, { review_ordinal: 1, render_input: {} }, { workflow, component }, 'REVIEW')).pdf_bytes;
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+  assert.equal(digest(firstMileage), digest(secondMileage));
+  assert.equal(digest(firstExpense), digest(secondExpense));
+});
+
+test('expense summary rendering fails closed without the frozen canonical display total', () => {
+  assert.throws(
+    () => expenseSummaryDisplayLines({
+      immutable_submission_json: {
+        expense_submission: { canonical_tsfin_snapshot: { travel_pay_ex_vat: 10, accommodation_pay_ex_vat: 20 } }
+      }
+    }),
+    error => error?.code === 'CANDIDATE_EXPENSE_DISPLAY_TOTAL_REQUIRED'
+  );
+  assert.throws(
+    () => expenseSummaryDisplayLines({
+      immutable_submission_json: { expense_submission: { canonical_tsfin_snapshot: { expenses_pay_ex_vat: null } } }
+    }),
+    error => error?.code === 'CANDIDATE_EXPENSE_DISPLAY_TOTAL_REQUIRED'
+  );
+});
+
+test('frozen branding ignores later live settings and validates its immutable contract', async () => {
+  const branding = noLogoBranding('Frozen Agency');
+  let settingsReads = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => {
+    settingsReads += 1;
+    return Response.json([{ agency_name: 'Later Agency', agency_logo: null }]);
+  };
+  try {
+    const resolved = await candidateDocumentBranding({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, { immutable_submission_json: { official_presentation: { branding } } });
+    assert.equal(resolved.agency_name, 'Frozen Agency');
+    assert.equal(settingsReads, 0);
+    await assert.rejects(
+      candidateDocumentBranding({}, {
+        immutable_submission_json: { official_presentation: { branding: { ...branding, agency_name: 'Tampered' } } }
+      }),
+      error => error?.code === 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID'
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('document registration recovers after R2 success without rerendering a different object', async () => {
+  const branding = noLogoBranding();
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000023', generation: 1,
+    candidate_id: '00000000-0000-4000-8000-000000000024', scope: 'WEEKLY',
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+    immutable_submission_json: {
+      official_presentation: {
+        renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+        branding, worker: { first_name: 'A', surname: 'B' }, client: { name: 'C' }
+      },
+      expense_submission: { canonical_tsfin_snapshot: { expenses_pay_ex_vat: 12 } }
+    }
+  };
+  const component = {
+    id: '00000000-0000-4000-8000-000000000025', workflow_id: workflow.id,
+    workflow_generation: 1, component_kind: 'EXPENSE_SUMMARY',
+    document_role: 'EXPENSE_APPROVAL_SUMMARY', review_ordinal: 1, expense_category: null
+  };
+  const objects = new Map();
+  let putCount = 0;
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async put(key, bytes, options) {
+        if (objects.has(key)) return null;
+        putCount += 1;
+        const data = new Uint8Array(bytes);
+        const row = { key, size: data.byteLength, customMetadata: options.customMetadata, bytes: data };
+        objects.set(key, row);
+        return row;
+      },
+      async head(key) { return objects.get(key) || null; }
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (path.endsWith('/candidate_submission_components')) return Response.json([component]);
+    return Response.json([]);
+  };
+  let rpcCalls = 0;
+  const deps = { async rpc() {
+    rpcCalls += 1;
+    if (rpcCalls === 1) throw new Error('simulated registration failure');
+    return { ok: true };
+  } };
+  const contract = {
+    workflow_id: workflow.id, workflow_generation: 1, component_id: component.id,
+    component_kind: component.component_kind, document_role: component.document_role,
+    review_ordinal: 1, scope: 'WEEKLY', form_variant: 'ELECTRONIC_MANAGER_REVIEW',
+    render_input_sha256: 'a'.repeat(64), candidate_signature_embedded: false, render_input: {}
+  };
+  try {
+    await assert.rejects(renderAndRegister(env, deps, [contract], 'REVIEW'), /simulated registration failure/);
+    assert.equal(putCount, 1);
+    await renderAndRegister(env, deps, [contract], 'REVIEW');
+    assert.equal(putCount, 1, 'retry must reuse the existing immutable object');
+    assert.equal(rpcCalls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('complete paper pack retry reuses the same deterministic object and digest', async () => {
+  const branding = noLogoBranding();
+  const basePdf = await PDFDocument.create({ updateMetadata: false });
+  basePdf.addPage([200, 200]);
+  const baseBytes = new Uint8Array(await basePdf.save());
+  const baseHash = createHash('sha256').update(baseBytes).digest('hex');
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000026', generation: 1,
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+    paper_return_manifest_sha256: 'b'.repeat(64),
+    paper_return_manifest_json: { pages: [{ page_key: 'HOURS_TIMESHEET', component_kind: 'HOURS_TIMESHEET' }] },
+    immutable_submission_json: { official_presentation: { branding } }
+  };
+  const timesheet = { timesheet_id: '00000000-0000-4000-8000-000000000027' };
+  const version = { r2_key: 'base.pdf', sha256: baseHash };
+  const objects = new Map();
+  let putCount = 0;
+  const baseObject = {
+    httpMetadata: { contentType: 'application/pdf' },
+    async arrayBuffer() { return baseBytes.buffer.slice(baseBytes.byteOffset, baseBytes.byteOffset + baseBytes.byteLength); }
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async get(key) { return key === 'base.pdf' ? baseObject : null; },
+      async put(key, bytes, options) {
+        if (objects.has(key)) return null;
+        putCount += 1;
+        const data = new Uint8Array(bytes);
+        const row = { key, size: data.byteLength, customMetadata: options.customMetadata, bytes: data };
+        objects.set(key, row);
+        return row;
+      },
+      async head(key) { return objects.get(key) || null; }
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json([]);
+  try {
+    const first = await assembleCandidatePaperPack(env, workflow, timesheet, version);
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    const replay = await assembleCandidatePaperPack(env, workflow, timesheet, version);
+    assert.equal(first.sha256, replay.sha256);
+    assert.equal(first.key, replay.key);
+    assert.equal(putCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('paper pack readiness is a read-only durable-object receipt check', async () => {
   const workflow = {
     id: '00000000-0000-4000-8000-000000000030', generation: 1, environment: 'TEST',
-    paper_return_manifest_sha256: 'a'.repeat(64)
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+    paper_return_manifest_sha256: 'a'.repeat(64),
+    immutable_submission_json: {
+      official_presentation: { branding: { branding_contract_sha256: 'f'.repeat(64) } }
+    }
   };
   const timesheet = { timesheet_id: '00000000-0000-4000-8000-000000000031' };
   const version = { sha256: 'b'.repeat(64) };
@@ -282,7 +507,8 @@ test('paper pack readiness is a read-only durable-object receipt check', async (
         customMetadata: {
           purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
           timesheet_id: timesheet.timesheet_id, manifest_sha256: 'a'.repeat(64),
-          base_document_sha256: 'b'.repeat(64), media_type: 'application/pdf',
+          base_document_sha256: 'b'.repeat(64), branding_contract_sha256: 'f'.repeat(64),
+          renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1', media_type: 'application/pdf',
           sha256: 'c'.repeat(64), byte_size: '123', page_count: '4'
         }
       };
@@ -291,7 +517,7 @@ test('paper pack readiness is a read-only durable-object receipt check', async (
     async get() { throw new Error('status path must not download'); }
   } };
   const identity = paperPackIdentity(env, workflow, timesheet, version);
-  assert.match(identity.key, /paper-pack\/[a-f0-9]{64}-[a-f0-9]{64}\.pdf$/);
+  assert.match(identity.key, /paper-pack\/[a-f0-9]{64}-[a-f0-9]{64}-[a-f0-9]{64}-CANDIDATE_REVIEW_DOCUMENTS_V1\.pdf$/);
   const receipt = await readyPaperPackReceipt(env, workflow, timesheet, version);
   assert.equal(receipt.ready, true);
   assert.equal(receipt.page_count, 4);
@@ -332,6 +558,194 @@ test('paper pack release never requeues a failed mail operation', async () => {
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('paper pack release is insert-once and preserves an existing notification lifecycle', async () => {
+  const originalFetch = globalThis.fetch;
+  const existingNotification = { state: 'READ', push_state: 'SENT', created_at_utc: '2026-08-01T00:00:00Z' };
+  let notificationPrefer = '';
+  globalThis.fetch = async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/mail_outbox')) {
+      return Response.json([{
+        id: '00000000-0000-4000-8000-000000000043', status: 'SENT',
+        payment_scope_json: {
+          candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
+          candidate_workflow_generation: 2,
+          paper_return_manifest_sha256: 'd'.repeat(64)
+        },
+        attachments: [{ r2_key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64) }]
+      }]);
+    }
+    if (path.endsWith('/candidate_notifications')) {
+      notificationPrefer = new Headers(options.headers).get('prefer') || '';
+      if (notificationPrefer.includes('merge-duplicates')) Object.assign(existingNotification, JSON.parse(options.body));
+      return Response.json([]);
+    }
+    throw new Error(`unexpected request ${path}`);
+  };
+  try {
+    await releaseCandidatePaperPack({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: '00000000-0000-4000-8000-000000000044', generation: 2,
+      account_id: '00000000-0000-4000-8000-000000000045',
+      candidate_id: '00000000-0000-4000-8000-000000000046'
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
+      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
+      page_count: 2, manifest_hash: 'd'.repeat(64)
+    });
+    assert.match(notificationPrefer, /resolution=ignore-duplicates/);
+    assert.deepEqual(existingNotification, {
+      state: 'READ', push_state: 'SENT', created_at_utc: '2026-08-01T00:00:00Z'
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper pack notification replay never resets terminal read or push states', async () => {
+  const originalFetch = globalThis.fetch;
+  const lifecyclePairs = [
+    ['READ', 'SENT'], ['DISMISSED', 'CLAIMED'], ['READ', 'FAILED']
+  ];
+  try {
+    for (const [state, pushState] of lifecyclePairs) {
+      const existing = { state, push_state: pushState, created_at_utc: '2026-08-01T00:00:00Z' };
+      globalThis.fetch = async (url, options = {}) => {
+        const path = new URL(url).pathname;
+        if (path.endsWith('/mail_outbox')) {
+          return Response.json([{
+            id: '00000000-0000-4000-8000-000000000043', status: 'SENT',
+            payment_scope_json: {
+              candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
+              candidate_workflow_generation: 2,
+              paper_return_manifest_sha256: 'd'.repeat(64)
+            },
+            attachments: [{ r2_key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64) }]
+          }]);
+        }
+        if (path.endsWith('/candidate_notifications')) {
+          const prefer = new Headers(options.headers).get('prefer') || '';
+          assert.match(prefer, /resolution=ignore-duplicates/);
+          return Response.json([]);
+        }
+        throw new Error(`unexpected request ${path}`);
+      };
+      await releaseCandidatePaperPack({
+        SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+      }, {
+        id: '00000000-0000-4000-8000-000000000044', generation: 2,
+        account_id: '00000000-0000-4000-8000-000000000045',
+        candidate_id: '00000000-0000-4000-8000-000000000046'
+      }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
+        key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
+        page_count: 2, manifest_hash: 'd'.repeat(64)
+      });
+      assert.deepEqual(existing, { state, push_state: pushState, created_at_utc: '2026-08-01T00:00:00Z' });
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper pack release does not notify when the guarded attachment update loses its race', async () => {
+  const originalFetch = globalThis.fetch;
+  let notificationCalls = 0;
+  let mailReads = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_notifications')) {
+      notificationCalls += 1;
+      return Response.json([]);
+    }
+    if (!path.endsWith('/mail_outbox')) throw new Error(`unexpected request ${path}`);
+    if ((options.method || 'GET') === 'PATCH') return Response.json([]);
+    mailReads += 1;
+    if (mailReads === 1) {
+      return Response.json([{
+        id: '00000000-0000-4000-8000-000000000043', status: 'QUEUED',
+        payment_scope_json: {
+          candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
+          candidate_workflow_generation: 2,
+          paper_return_manifest_sha256: 'd'.repeat(64)
+        }, attachments: []
+      }]);
+    }
+    return Response.json([{
+      id: '00000000-0000-4000-8000-000000000043', status: 'CLAIMED', attachments: []
+    }]);
+  };
+  try {
+    await assert.rejects(releaseCandidatePaperPack({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: '00000000-0000-4000-8000-000000000044', generation: 2,
+      account_id: '00000000-0000-4000-8000-000000000045',
+      candidate_id: '00000000-0000-4000-8000-000000000046'
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
+      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
+      page_count: 2, manifest_hash: 'd'.repeat(64)
+    }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+    assert.equal(notificationCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper outbox binding requires one verified compare-and-set result', async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (url, options = {}) => {
+    calls += 1;
+    if ((options.method || 'GET') === 'GET') {
+      return Response.json([{
+        id: '00000000-0000-4000-8000-000000000048', type: 'TIMESHEET_QR',
+        context_kind: 'timesheets', context_id: '00000000-0000-4000-8000-000000000049',
+        status: 'QUEUED', payment_scope_json: {}
+      }]);
+    }
+    return Response.json([]);
+  };
+  try {
+    await assert.rejects(bindCandidatePaperOutbox({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: '00000000-0000-4000-8000-000000000050', generation: 1,
+      paper_return_manifest_sha256: 'a'.repeat(64)
+    }, '00000000-0000-4000-8000-000000000049', {
+      recipient_available: true, mail_outbox_id: '00000000-0000-4000-8000-000000000048'
+    }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+    assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper workflow multiplicity is checked before every document-state early return', async () => {
+  const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function candidatePaperPackContext');
+  const end = source.indexOf('async function handlePaperPackStatus', start);
+  const body = source.slice(start, end);
+  const multiplicity = body.indexOf('workflows.length > 1');
+  const documentReadiness = body.indexOf("upper(timesheet.document_state) === 'READY'");
+  assert.ok(multiplicity >= 0 && documentReadiness >= 0 && multiplicity < documentReadiness);
+});
+
+test('private manager routes reject wrong HTTP methods before any RPC mutation', async () => {
+  let rpcCalls = 0;
+  const deps = { routeAudience: 'PRIVATE', async rpc() { rpcCalls += 1; return {}; } };
+  const env = { CANDIDATE_APP_ENVIRONMENT: 'TEST' };
+  const workflowId = '00000000-0000-4000-8000-000000000051';
+  for (const [action, method] of [['start', 'POST'], ['progress', 'GET'], ['approve', 'GET'], ['refuse', 'GET']]) {
+    const response = await handleCandidateAppRequest(
+      new Request(`https://private.test/candidate-manager/v1/workflows/${workflowId}/${action}`, { method }),
+      env, {}, deps
+    );
+    assert.equal(response.status, 405);
+    assert.equal((await response.json()).error_code, 'METHOD_NOT_ALLOWED');
+  }
+  assert.equal(rpcCalls, 0);
 });
 
 test('public Candidate workflow actions exclude service finalisation', async () => {

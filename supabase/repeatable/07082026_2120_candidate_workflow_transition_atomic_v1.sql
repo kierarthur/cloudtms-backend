@@ -605,6 +605,12 @@ begin
     select * into v_component from public.candidate_submission_components
     where workflow_id=v_workflow.id and upload_idempotency_key=p_idempotency_key;
     if found then
+      if v_component.workflow_generation is distinct from v_workflow.generation then
+        raise exception 'CANDIDATE_COMPONENT_PREPARE_GENERATION_CONFLICT' using errcode='40001';
+      end if;
+      if v_component.state not in ('PENDING','IMMUTABLE') then
+        raise exception 'CANDIDATE_COMPONENT_PREPARE_STATE_CONFLICT' using errcode='55000';
+      end if;
       if v_component.component_kind is distinct from v_component_kind
          or v_component.document_role is distinct from v_document_role
          or v_component.expense_category is distinct from v_expense_category
@@ -789,12 +795,18 @@ begin
       end if;
       raise exception 'CANDIDATE_COMPONENT_IMMUTABLE_CONFLICT' using errcode='40001';
     end if;
+    if v_component.state<>'PENDING' then
+      raise exception 'CANDIDATE_COMPONENT_COMPLETE_STATE_CONFLICT' using errcode='55000';
+    end if;
     update public.candidate_submission_components set
       state='IMMUTABLE',source_content_sha256=v_digest,
       byte_size=coalesce(nullif(v_payload->>'verified_byte_size','')::bigint,byte_size),
       media_type=coalesce(nullif(lower(v_payload->>'verified_media_type'),''),media_type),
       immutable_at_utc=p_now_utc
-    where id=v_component.id returning * into v_component;
+    where id=v_component.id and state='PENDING' returning * into v_component;
+    if not found then
+      raise exception 'CANDIDATE_COMPONENT_COMPLETE_STATE_CONFLICT' using errcode='40001';
+    end if;
     return jsonb_build_object('ok',true,'idempotent_replay',false,'component_id',v_component.id,
       'state',v_component.state,'immutable_at_utc',v_component.immutable_at_utc);
   elsif v_action='COMPONENT_SUPERSEDE' then

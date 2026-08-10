@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST with every Candidate feature flag false. The final backend authority correction removes public service-finalisation, binds idempotent component preparation to the original DB-owned object identity, makes paper-pack reads strictly read-only, moves pack/mail/notification release to the scheduled private worker, fails closed on multiple paper workflows and completes the agreed professional expense/mileage documents. Independent re-audit is the remaining Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
+Status: active implementation; TEST-only. Updated: 10 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented and deployed to TEST with every Candidate feature flag false. The current final backend correction additionally makes component replay generation/state-safe, makes every persisted Candidate PDF byte-deterministic from a frozen branding/render contract, recovers from an R2-success/registration-or-release failure without rerender drift, enforces exact manager HTTP methods before any RPC, preserves notification lifecycle on release replay, checks paper-workflow multiplicity before every read-state return and verifies outbox compare-and-set results. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -37,7 +37,7 @@ Completed authority includes:
 
 DB/RPC regression gates remain PostgreSQL 17.6/18.1 install/runtime suites, concurrency suites, ACL/feature-off parity, focused Candidate tests and full backend regression.
 
-## Stage 2 — CloudTMS backend (final authority correction published/deployed; independent sign-off pending)
+## Stage 2 — CloudTMS backend (final authority correction in verification/deployment; independent sign-off pending)
 
 Implement and verify one versioned private CloudTMS-owned HTTP boundary. The public broker must use it and must never query Supabase or R2 directly.
 
@@ -81,6 +81,18 @@ The SQL service-finalisation branch remains inside the existing fourteenth final
 - paper-pack context requires exactly one active matching PAPER workflow and fails closed on multiplicity;
 - the configured agency brand is used on the professional Expense and Mileage Approval Summary and Mileage Claim Form; the summary displays plain-English canonical claim lines and the A4 mileage form contains repeatable journey rows, total mileage, manager signature/date and stable workflow/page identity;
 - these changes alter orchestration, authority checks and document presentation only. DAILY/WEEKLY economics, Process, Authorise, QR/version, invoice, payment, Banking Pay and Policy X behaviour remain unchanged.
+
+### Final replay, deterministic-render and HTTP-contract seams
+
+- a reused component upload idempotency key is valid only for the workflow's current generation and only while the original component is `PENDING` or already `IMMUTABLE`; cross-generation or terminal-state reuse fails before any upload ticket is issued;
+- component completion permits an identical `IMMUTABLE` replay, but only `PENDING` can transition to `IMMUTABLE`; `SUPERSEDED`, `REJECTED` and `ABANDONED` components can never be revived;
+- every persisted official, expense, mileage and complete-paper-pack PDF disables current-clock metadata and binds its immutable object identity to the frozen render input, renderer version and frozen branding contract;
+- the frozen branding contract contains the agency name, versioned logo identity/hash/media type and its own digest. A later settings/logo change cannot silently change an existing workflow's immutable bytes;
+- generated-document and paper-pack workers check for a valid durable R2 receipt first. If the object write succeeded but later registration or release failed, retry resumes from that exact object rather than rerendering;
+- manager route methods are exact: `GET start`, `POST progress`, `POST approve`, `POST refuse`, `POST signature/prepare`, and `GET document`. Any mismatch returns `405` at both broker and private boundaries before an RPC call;
+- paper readiness notifications are insert-once. A retry cannot change `READ`/`DISMISSED` back to `UNREAD` or re-arm `CLAIMED`/`SENT`/`FAILED` push state;
+- paper mail binding/release uses an expected-status compare-and-set, verifies one returned row, and reclassifies a lost race before notification. Candidate polling remains read-only;
+- expense rendering requires the explicit frozen canonical display total. It formats that value and never derives a substitute sum from category fields.
 
 ### Candidate authentication and session boundary
 
@@ -299,10 +311,13 @@ These office actions never create a second financial, Process, Authorise, QR/ver
 - consume server route/capability/status projections; never infer route or economics in the browser;
 - implement Simple Timesheet, Timesheet Summary, Bulk Process and Bulk Authorise Candidate states/actions using existing UI patterns;
 - use one shared route-warning renderer containing the approved W01–W13 wording;
+- hard UI rule: warnings and confirmations must use the existing styled CloudTMS `uiConfirmModal`-family component (verify its exact current source name before implementation). Native browser/Windows `window.alert`, `window.confirm` and `window.prompt` are prohibited;
 - use preview → warning/reason → confirmed transition; never mutate on first click;
 - hide ordinary revoked-QR restore and ordinary exact electronic restore; use fresh resubmission actions;
 - retain the approved manager reminder, Candidate rejection, evidence eligibility, border, tooltip and Expense Email missing-badge decisions;
 - merge into the then-current frontend worktree and prove patched assets loaded before browser assertions.
+
+Every affected modal must be visually inspected at desktop and narrow responsive sizes using the actual patched frontend asset. If spacing, wrapping, hierarchy, disabled actions, colour, overflow or alignment looks untidy or unprofessional, it must be corrected and rechecked before frontend handover.
 
 The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATALOGUE.md` remains controlling and must be consumed unchanged by the frontend shared warning module.
 

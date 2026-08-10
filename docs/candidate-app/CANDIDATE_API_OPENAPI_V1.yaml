@@ -44,6 +44,7 @@ x-standard-responses: &standardResponses
   '401': {$ref: '#/components/responses/Error'}
   '403': {$ref: '#/components/responses/Error'}
   '404': {$ref: '#/components/responses/Error'}
+  '405': {$ref: '#/components/responses/Error'}
   '409': {$ref: '#/components/responses/Error'}
   '413': {$ref: '#/components/responses/Error'}
   '429': {$ref: '#/components/responses/Error'}
@@ -302,7 +303,7 @@ paths:
       tags: [Workflow]
       operationId: prepareCandidateComponent
       summary: Prepare candidate component
-      description: Idempotent preparation. A replay returns a ticket for the original database-owned component/object identity and rejects conflicting media, size, role or category reuse.
+      description: Idempotent preparation. A same-generation replay returns a ticket for the original database-owned component/object identity only while that component is PENDING or IMMUTABLE. Cross-generation reuse, terminal-state reuse, or conflicting media, size, role or category fails before a ticket is issued.
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/components/prepare
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
       requestBody: {$ref: '#/components/requestBodies/JsonBody'}

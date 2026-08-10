@@ -24,6 +24,13 @@ const PASSWORD_ITERATIONS = 100000;
 const PASSWORD_SCHEME = 'PBKDF2-HMAC-SHA256';
 const PASSWORD_SCHEME_VERSION = 1;
 const RENDERER_CONTRACT_VERSION = 'CANDIDATE_REVIEW_DOCUMENTS_V1';
+const DOCUMENT_BRANDING_CONTRACT_VERSION = 'CANDIDATE_DOCUMENT_BRANDING_V1';
+const MANAGER_ACTION_METHODS = Object.freeze({
+  start: 'GET',
+  progress: 'POST',
+  approve: 'POST',
+  refuse: 'POST'
+});
 
 const AUTH_ERROR_CODES = new Set([
   'CANDIDATE_ACCESS_TOKEN_INVALID',
@@ -50,6 +57,9 @@ const CONFLICT_ERROR_CODES = new Set([
   'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED',
   'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT',
   'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH',
+  'CANDIDATE_COMPONENT_PREPARE_GENERATION_CONFLICT',
+  'CANDIDATE_COMPONENT_PREPARE_STATE_CONFLICT',
+  'CANDIDATE_COMPONENT_COMPLETE_STATE_CONFLICT',
   'CANDIDATE_PAPER_RETURN_PAGE_DUPLICATE',
   'CANDIDATE_PAPER_WORKFLOW_CONFLICT',
   'CANDIDATE_PAPER_OUTBOX_CONFLICT',
@@ -357,7 +367,7 @@ function errorResponse(error, correlationId) {
   if (AUTH_ERROR_CODES.has(code)) status = 401;
   else if (CONFLICT_ERROR_CODES.has(code)) status = 409;
   else if (NOT_FOUND_ERROR_CODES.has(code)) status = 404;
-  else if (code.endsWith('_DISABLED') || code.includes('NOT_ALLOWED') || code.includes('FORBIDDEN')) status = 403;
+  else if (status !== 405 && (code.endsWith('_DISABLED') || code.includes('NOT_ALLOWED') || code.includes('FORBIDDEN'))) status = 403;
   else if (code === 'CANDIDATE_REQUEST_FAILED') status = 500;
   const body = { ok: false, error_code: code, request_id: correlationId };
   if (error instanceof CandidateHttpError && error.details != null) body.details = error.details;
@@ -788,7 +798,7 @@ async function validateComponentBytes(bytes, mediaType, env = {}) {
     throw new CandidateHttpError(415, 'CANDIDATE_COMPONENT_MEDIA_TYPE_INVALID');
   }
   try {
-    const document = await PDFDocument.create();
+    const document = await PDFDocument.create({ updateMetadata: false });
     const image = type === 'image/png' ? await document.embedPng(source) : await document.embedJpg(source);
     const width = Number(image.width);
     const height = Number(image.height);
@@ -825,7 +835,9 @@ function preparedUploadContract(result, expected) {
     component_kind: upper(result?.component_kind),
     document_role: upper(result?.document_role),
     expense_category: result?.expense_category == null ? null : upper(result.expense_category),
-    paper_return_page_key: result?.paper_return_page_key == null ? null : text(result.paper_return_page_key)
+    paper_return_page_key: result?.paper_return_page_key == null ? null : text(result.paper_return_page_key),
+    workflow_generation: Number(result?.workflow_generation),
+    state: upper(result?.state)
   };
   if (!contract.storage_key
       || contract.media_type !== expected.media_type
@@ -833,7 +845,10 @@ function preparedUploadContract(result, expected) {
       || contract.component_kind !== expected.component_kind
       || contract.document_role !== expected.document_role
       || contract.expense_category !== expected.expense_category
-      || contract.paper_return_page_key !== expected.paper_return_page_key) {
+      || contract.paper_return_page_key !== expected.paper_return_page_key
+      || !Number.isSafeInteger(contract.workflow_generation)
+      || contract.workflow_generation !== expected.workflow_generation
+      || !['PENDING', 'IMMUTABLE'].includes(contract.state)) {
     throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
   }
   return contract;
@@ -909,18 +924,19 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   const authoritative = preparedUploadContract(result, {
     media_type: mediaType, byte_size: byteSize, component_kind: componentKind,
     document_role: payload.document_role, expense_category: payload.expense_category,
-    paper_return_page_key: payload.paper_return_page_key
+    paper_return_page_key: payload.paper_return_page_key,
+    workflow_generation: generation
   });
   const componentId = authoritative.component_id;
   const ticket = await uploadTicket(env, {
     env: environment, owner, owner_id: ownerId, workflow_id: workflowId,
     candidate_session_id: null,
-    generation, component_id: componentId, component_kind: authoritative.component_kind,
+    generation: authoritative.workflow_generation, component_id: componentId, component_kind: authoritative.component_kind,
     key: authoritative.storage_key, media_type: authoritative.media_type, byte_size: authoritative.byte_size,
     completion_idempotency_key: `${idempotencyKey}:complete`
   });
   return jsonResponse(result.idempotent_replay === true ? 200 : 201, {
-    ok: true, workflow_id: workflowId, generation, component_id: componentId,
+    ok: true, workflow_id: workflowId, generation: authoritative.workflow_generation, component_id: componentId,
     idempotent_replay: result.idempotent_replay === true,
     upload: {
       method: 'PUT', url: `${CANDIDATE_PREFIX}/uploads/${encodeURIComponent(ticket)}`,
@@ -1209,7 +1225,7 @@ function candidateNameParts(candidate) {
   return { first_name: pieces.shift() || 'Candidate', surname: pieces.join(' ') || '-' };
 }
 
-function officialPresentationFromRows({ timesheet, contractRow, candidate, client } = {}) {
+function officialPresentationFromRows({ timesheet, contractRow, candidate, client, branding, renderer_contract_version } = {}) {
   const worker = candidateNameParts(candidate);
   const clientName = text(client?.name) || 'CloudTMS Client';
   return {
@@ -1224,7 +1240,8 @@ function officialPresentationFromRows({ timesheet, contractRow, candidate, clien
       site_ward: text(contractRow?.ward_hint || timesheet?.ward_norm) || '-'
     },
     band: text(contractRow?.band || timesheet?.band) || null,
-    branding: { agency_name: 'Arthur Rai Medical Services' },
+    renderer_contract_version: text(renderer_contract_version) || RENDERER_CONTRACT_VERSION,
+    branding: branding || { agency_name: 'Arthur Rai Medical Services' },
     wording: {
       header: { lines: ['Please review the recorded work and all attached evidence before approving.'] },
       footer: { lines: ['CloudTMS official timesheet'] },
@@ -1258,7 +1275,19 @@ async function buildOfficialPresentationSnapshot(env, workflow) {
   const client = clientId
     ? await restOne(env, 'clients', `id=eq.${encodeURIComponent(clientId)}&select=id,name`)
     : null;
-  return officialPresentationFromRows({ timesheet, contractRow, candidate, client });
+  const branding = await candidateDocumentBranding(env);
+  return officialPresentationFromRows({
+    timesheet, contractRow, candidate, client,
+    branding: {
+      contract_version: branding.contract_version,
+      agency_name: branding.agency_name,
+      logo_key: branding.logo_key,
+      logo_sha256: branding.logo_sha256,
+      logo_media_type: branding.logo_media_type,
+      branding_contract_sha256: branding.branding_contract_sha256
+    },
+    renderer_contract_version: RENDERER_CONTRACT_VERSION
+  });
 }
 
 async function loadRenderState(env, contract) {
@@ -1336,6 +1365,7 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
   const formVariant = phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW';
   const signedDate = text(workflow.candidate_signed_at_utc).slice(0, 10) || null;
   const managerDate = text(workflow.manager_approved_at_utc || contract.manager?.approval_date_utc).slice(0, 10) || null;
+  const branding = await candidateDocumentBranding(env, workflow);
   const model = {
     schema_version: 'TIMESHEET_RENDER_MODEL_V2',
     template_version: 'timesheet-professional-v2',
@@ -1360,7 +1390,14 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
       site_ward: text(contractRow?.ward || contractRow?.site_ward || timesheet?.ward) || '-'
     },
     band: text(frozenPresentation.band || contractRow?.band || timesheet?.band) || null,
-    branding: { agency_name: text(frozenPresentation.branding?.agency_name) || 'Arthur Rai Medical Services', logo: {} },
+    branding: {
+      agency_name: branding.agency_name,
+      logo: branding.logo ? {
+        r2_key: branding.logo_key,
+        sha256: branding.logo_sha256,
+        media_type: branding.logo_media_type
+      } : {}
+    },
     wording: isObject(frozenPresentation.wording) ? frozenPresentation.wording : {
       header: { lines: ['Please review the recorded work and all attached evidence before approving.'] },
       footer: { lines: ['CloudTMS official timesheet'] },
@@ -1396,6 +1433,7 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
   };
   validateFrozenTimesheetPresentationModel(model);
   return { model, assets: {
+    logo: branding.logo ? { data_url: dataUrl(branding.logo.bytes, branding.logo.media_type) } : null,
     candidate_signature: candidateSignature.data,
     authoriser_signature: managerSignature.data
   } };
@@ -1429,15 +1467,16 @@ function expenseSummaryDisplayLines(workflow) {
     const formatted = pounds(value);
     if (formatted && Number(value) !== 0) lines.push(`${label}: ${formatted}`);
   }
-  if (!lines.length && Number(claim.expenses_pay_ex_vat) !== 0) {
-    lines.push(`Expenses: ${pounds(claim.expenses_pay_ex_vat)}`);
+  const totalSource = claim.expenses_pay_ex_vat;
+  const explicitTotal = totalSource === null || totalSource === undefined || totalSource === ''
+    ? Number.NaN : Number(totalSource);
+  if (!Number.isFinite(explicitTotal)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_EXPENSE_DISPLAY_TOTAL_REQUIRED');
   }
-  const explicitTotal = Number(claim.expenses_pay_ex_vat);
-  const fallbackTotal = values.reduce((sum, [, value]) => sum + (Number(value) || 0), 0)
-    + (Number(claim.mileage_pay_ex_vat) || 0);
+  if (!lines.length && explicitTotal !== 0) lines.push(`Expenses: ${pounds(explicitTotal)}`);
   return {
     lines,
-    total: pounds(Number.isFinite(explicitTotal) ? explicitTotal : fallbackTotal) || '£0.00'
+    total: pounds(explicitTotal)
   };
 }
 
@@ -1456,16 +1495,75 @@ function expenseLines(workflow, component) {
   ];
 }
 
-async function candidateDocumentBranding(env) {
-  const settings = await restOne(env, 'settings_defaults', 'id=eq.1&select=agency_name,agency_logo');
-  const agencyName = text(settings?.agency_name) || 'Arthur Rai Medical Services';
-  const logoKey = text(settings?.agency_logo);
-  if (!logoKey) return { agency_name: agencyName, logo: null };
-  const logo = await r2Bytes(env, logoKey);
-  if (!['image/png', 'image/jpeg'].includes(logo.media_type)) {
-    throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+function frozenBrandingContract(value) {
+  if (!value) return null;
+  if (value.contract_version || value.branding_contract_sha256) return value;
+  const immutable = parseJson(value.immutable_submission_json, {}) || {};
+  const presentation = parseJson(immutable.official_presentation, {}) || {};
+  return isObject(presentation.branding) ? presentation.branding : null;
+}
+
+async function brandingContractSha256(contract) {
+  return sha256Hex(JSON.stringify({
+    contract_version: contract.contract_version,
+    agency_name: contract.agency_name,
+    logo_key: contract.logo_key,
+    logo_sha256: contract.logo_sha256,
+    logo_media_type: contract.logo_media_type
+  }));
+}
+
+async function candidateDocumentBranding(env, frozenSource = null) {
+  const frozen = frozenBrandingContract(frozenSource);
+  if (frozen) {
+    const contract = {
+      contract_version: text(frozen.contract_version),
+      agency_name: text(frozen.agency_name),
+      logo_key: text(frozen.logo_key) || null,
+      logo_sha256: text(frozen.logo_sha256).toLowerCase() || null,
+      logo_media_type: normaliseMediaType(frozen.logo_media_type || '') || null,
+      branding_contract_sha256: text(frozen.branding_contract_sha256).toLowerCase()
+    };
+    if (contract.contract_version !== DOCUMENT_BRANDING_CONTRACT_VERSION || !contract.agency_name
+        || !SHA256_RE.test(contract.branding_contract_sha256)
+        || contract.branding_contract_sha256 !== await brandingContractSha256(contract)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    if (!contract.logo_key) {
+      if (contract.logo_sha256 || contract.logo_media_type) {
+        throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+      }
+      return { ...contract, logo: null };
+    }
+    if (!SHA256_RE.test(contract.logo_sha256)
+        || !['image/png', 'image/jpeg'].includes(contract.logo_media_type)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+    }
+    const logo = await r2Bytes(env, contract.logo_key, contract.logo_sha256);
+    if (logo.media_type !== contract.logo_media_type) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+    }
+    return { ...contract, logo };
   }
-  return { agency_name: agencyName, logo };
+  const settings = await restOne(env, 'settings_defaults', 'id=eq.1&select=agency_name,agency_logo');
+  const contract = {
+    contract_version: DOCUMENT_BRANDING_CONTRACT_VERSION,
+    agency_name: text(settings?.agency_name) || 'Arthur Rai Medical Services',
+    logo_key: text(settings?.agency_logo) || null,
+    logo_sha256: null,
+    logo_media_type: null
+  };
+  let logo = null;
+  if (contract.logo_key) {
+    logo = await r2Bytes(env, contract.logo_key);
+    if (!['image/png', 'image/jpeg'].includes(logo.media_type)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_LOGO_MEDIA_TYPE_INVALID');
+    }
+    contract.logo_sha256 = await sha256Hex(logo.bytes);
+    contract.logo_media_type = logo.media_type;
+  }
+  contract.branding_contract_sha256 = await brandingContractSha256(contract);
+  return { ...contract, logo };
 }
 
 async function drawCandidateBranding(pdf, page, branding, { x = 34, y = 800, maxWidth = 140, maxHeight = 32 } = {}) {
@@ -1509,11 +1607,11 @@ async function embedExpenseSource(pdf, page, env, component, renderInput, conten
 
 async function renderExpensePage(env, contract, state, phase) {
   const { workflow, component } = state;
-  const pdf = await PDFDocument.create();
+  const pdf = await PDFDocument.create({ updateMetadata: false });
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const branding = await candidateDocumentBranding(env);
+  const branding = await candidateDocumentBranding(env, workflow);
   page.drawRectangle({ x: 0, y: 790, width: page.getWidth(), height: 52, color: rgb(0.04, 0.12, 0.24) });
   await drawCandidateBranding(pdf, page, branding, { x: 420, y: 800, maxWidth: 135, maxHeight: 30 });
   page.drawText(component.component_kind === 'EXPENSE_SUMMARY' ? 'Expense claim approval summary' : 'Expense evidence', {
@@ -1659,7 +1757,7 @@ async function bindCandidatePaperOutbox(env, workflow, timesheetId, pack) {
   const row = await restOne(env, 'mail_outbox',
     `id=eq.${encodeURIComponent(outboxId)}&select=id,type,context_kind,context_id,status,payment_scope_json`);
   if (!row || row.type !== 'TIMESHEET_QR' || row.context_kind !== 'timesheets'
-      || row.context_id !== timesheetId || row.status === 'SENT') {
+      || row.context_id !== timesheetId || row.status !== 'QUEUED') {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
   }
   const existing = parseJson(row.payment_scope_json, {}) || {};
@@ -1673,8 +1771,12 @@ async function bindCandidatePaperOutbox(env, workflow, timesheetId, pack) {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_IDENTITY_CONFLICT');
     }
   }
-  await restWrite(env, 'mail_outbox', 'PATCH', `id=eq.${encodeURIComponent(outboxId)}`,
-    { payment_scope_json: { ...existing, ...binding } }, 'return=minimal');
+  const updated = await restWrite(env, 'mail_outbox', 'PATCH',
+    `id=eq.${encodeURIComponent(outboxId)}&status=eq.QUEUED`,
+    { payment_scope_json: { ...existing, ...binding } }, 'return=representation');
+  if (!updated || updated.id !== outboxId || updated.status !== 'QUEUED') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+  }
   return { bound: true, recipient_available: true, mail_outbox_id: outboxId };
 }
 
@@ -1705,8 +1807,8 @@ function safeFinalisationResult(value) {
   return safe;
 }
 
-async function renderComponentDocument(env, contract, phase) {
-  const state = await loadRenderState(env, contract);
+async function renderComponentDocument(env, contract, phase, stateOverride = null) {
+  const state = stateOverride || await loadRenderState(env, contract);
   if (upper(contract.component_kind) === 'HOURS_TIMESHEET') {
     const { model, assets } = await buildOfficialCandidateModel(env, contract, state, phase);
     const rendered = await renderOfficialTimesheetPdfBytes(model, assets);
@@ -1719,6 +1821,29 @@ async function renderComponentDocument(env, contract, phase) {
   return renderExpensePage(env, contract, state, phase);
 }
 
+async function readyGeneratedDocumentReceipt(env, key, expected) {
+  const object = await env.R2?.head(key);
+  if (!object) return null;
+  const metadata = object.customMetadata || {};
+  const valid = metadata.purpose === expected.purpose
+    && metadata.workflow_id === expected.workflow_id
+    && metadata.workflow_generation === String(expected.workflow_generation)
+    && metadata.component_id === expected.component_id
+    && text(metadata.render_input_sha256).toLowerCase() === expected.render_input_sha256
+    && text(metadata.branding_contract_sha256).toLowerCase() === expected.branding_contract_sha256
+    && text(metadata.renderer_contract_version) === expected.renderer_contract_version
+    && text(metadata.media_type).toLowerCase() === 'application/pdf'
+    && SHA256_RE.test(text(metadata.sha256))
+    && Number(metadata.byte_size) === Number(object.size)
+    && Number(metadata.page_count) > 0;
+  if (!valid) throw new CandidateHttpError(409, 'CANDIDATE_RENDER_IDEMPOTENCY_CONFLICT');
+  return {
+    sha256: text(metadata.sha256).toLowerCase(),
+    byte_size: Number(object.size),
+    page_count: Number(metadata.page_count)
+  };
+}
+
 async function renderAndRegister(env, deps, renderContract, phase) {
   const contracts = renderContracts(renderContract);
   if (!contracts.length) throw new CandidateHttpError(409, 'MANAGER_REVIEW_DOCUMENT_NOT_READY');
@@ -1727,15 +1852,47 @@ async function renderAndRegister(env, deps, renderContract, phase) {
     const workflowId = requireUuid(contract.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND');
     const generation = requireInteger(contract.workflow_generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
     const componentId = requireUuid(contract.component_id, 'CANDIDATE_COMPONENT_NOT_FOUND');
-    const rendered = await renderComponentDocument(env, contract, phase);
-    const digest = await sha256Hex(rendered.pdf_bytes);
-    const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/${workflowId}/${generation}/${phase.toLowerCase()}/${String(contract.review_ordinal).padStart(3, '0')}-${componentId}.pdf`;
-    await immutablePut(env, storageKey, rendered.pdf_bytes, 'application/pdf', {
+    const renderInputHash = text(contract.render_input_sha256).toLowerCase();
+    if (!SHA256_RE.test(renderInputHash)) throw new CandidateHttpError(409, 'CANDIDATE_RENDER_CONTRACT_INVALID');
+    const state = await loadRenderState(env, contract);
+    const frozen = parseJson(state.workflow.immutable_submission_json, {}) || {};
+    const brandingHash = text(frozen.official_presentation?.branding?.branding_contract_sha256).toLowerCase();
+    const rendererVersion = text(state.workflow.renderer_contract_version || frozen.official_presentation?.renderer_contract_version);
+    if (!SHA256_RE.test(brandingHash)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    if (rendererVersion !== RENDERER_CONTRACT_VERSION) {
+      throw new CandidateHttpError(409, 'CANDIDATE_RENDERER_CONTRACT_UNSUPPORTED');
+    }
+    const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/${workflowId}/${generation}/${phase.toLowerCase()}/${String(contract.review_ordinal).padStart(3, '0')}-${componentId}-${renderInputHash}-${rendererVersion}.pdf`;
+    const identity = {
       purpose: `candidate-${phase.toLowerCase()}`,
       workflow_id: workflowId,
+      workflow_generation: generation,
       component_id: componentId,
-      sha256: digest
-    });
+      render_input_sha256: renderInputHash,
+      branding_contract_sha256: brandingHash,
+      renderer_contract_version: rendererVersion
+    };
+    let durable = await readyGeneratedDocumentReceipt(env, storageKey, identity);
+    let rendered = null;
+    if (!durable) {
+      rendered = await renderComponentDocument(env, contract, phase, state);
+      const digest = await sha256Hex(rendered.pdf_bytes);
+      await immutablePut(env, storageKey, rendered.pdf_bytes, 'application/pdf', {
+        ...identity,
+        workflow_generation: String(generation),
+        renderer_contract_version: rendererVersion,
+        page_count: String(Number(rendered.page_count || 1)),
+        sha256: digest
+      });
+      durable = {
+        sha256: digest,
+        byte_size: rendered.pdf_bytes.byteLength,
+        page_count: Number(rendered.page_count || 1)
+      };
+    }
+    const digest = durable.sha256;
     const receipt = {
       form_variant: upper(contract.form_variant),
       workflow_id: workflowId,
@@ -1745,8 +1902,10 @@ async function renderAndRegister(env, deps, renderContract, phase) {
       document_role: upper(contract.document_role),
       review_ordinal: Number(contract.review_ordinal),
       scope: upper(contract.scope),
-      page_count: Number(rendered.page_count || 1),
-      render_input_sha256: text(contract.render_input_sha256).toLowerCase(),
+      page_count: durable.page_count,
+      render_input_sha256: renderInputHash,
+      branding_contract_sha256: brandingHash,
+      renderer_contract_version: rendererVersion,
       candidate_signature_embedded: contract.candidate_signature_embedded === true,
       manager_signature_embedded: phase === 'FINAL',
       manager_approval_date_embedded: phase === 'FINAL'
@@ -1756,7 +1915,9 @@ async function renderAndRegister(env, deps, renderContract, phase) {
       receipt.manager_name = text(contract.manager?.name);
       receipt.manager_position = text(contract.manager?.position);
       receipt.manager_approved_at_utc = contract.manager?.approval_date_utc;
-      if (rendered.candidate_signature_sha256) receipt.candidate_signature_sha256 = rendered.candidate_signature_sha256;
+      const candidateSignatureSha256 = rendered?.candidate_signature_sha256
+        || text(state.workflow.candidate_signature_sha256).replace(/^\\x/i, '').toLowerCase();
+      if (candidateSignatureSha256) receipt.candidate_signature_sha256 = candidateSignatureSha256;
     }
     const action = phase === 'FINAL' ? 'REGISTER_FINAL_SIGNED_DOCUMENT' : 'REGISTER_REVIEW_COMPONENT';
     const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
@@ -1765,11 +1926,11 @@ async function renderAndRegister(env, deps, renderContract, phase) {
         component_id: componentId,
         storage_key: storageKey,
         media_type: 'application/pdf',
-        byte_size: rendered.pdf_bytes.byteLength,
-        page_count: Number(rendered.page_count || 1),
+        byte_size: durable.byte_size,
+        page_count: durable.page_count,
         content_sha256_hex: digest,
-        render_input_sha256_hex: text(contract.render_input_sha256).toLowerCase(),
-        renderer_contract_version: RENDERER_CONTRACT_VERSION,
+        render_input_sha256_hex: renderInputHash,
+        renderer_contract_version: rendererVersion,
         renderer_receipt: receipt
       },
       `candidate-render:${phase.toLowerCase()}:${workflowId}:${generation}:${componentId}:${digest}`
@@ -2139,11 +2300,11 @@ function mileageJourneyRows(workflow) {
 }
 
 async function mileageClaimFormBytes(env, workflow, brandingOverride = null) {
-  const pdf = await PDFDocument.create();
+  const pdf = await PDFDocument.create({ updateMetadata: false });
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const branding = brandingOverride || await candidateDocumentBranding(env);
+  const branding = brandingOverride || await candidateDocumentBranding(env, workflow);
   page.drawRectangle({ x: 0, y: 785, width: 595.28, height: 56, color: rgb(0.04, 0.12, 0.24) });
   await drawCandidateBranding(pdf, page, branding, { x: 430, y: 800, maxWidth: 125, maxHeight: 30 });
   page.drawText(branding.agency_name.slice(0, 55), { x: 34, y: 817, size: 9, font: bold, color: rgb(0.75, 0.9, 1) });
@@ -2207,11 +2368,19 @@ async function paperExpensePageBytes(env, workflow, component, ordinal) {
 function paperPackIdentity(env, workflow, timesheet, version) {
   const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
   const baseHash = text(version?.sha256).replace(/^\\x/i, '').toLowerCase();
-  if (!manifestHash || !baseHash) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
+  const brandingHash = text(immutable.official_presentation?.branding?.branding_contract_sha256).toLowerCase();
+  const rendererVersion = text(workflow.renderer_contract_version || immutable.official_presentation?.renderer_contract_version);
+  if (!manifestHash || !baseHash || !SHA256_RE.test(brandingHash)
+      || rendererVersion !== RENDERER_CONTRACT_VERSION) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
   return {
     manifest_hash: manifestHash,
     base_hash: baseHash,
-    key: `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}/paper-pack/${manifestHash}-${baseHash}.pdf`
+    branding_hash: brandingHash,
+    renderer_contract_version: rendererVersion,
+    key: `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}/paper-pack/${manifestHash}-${baseHash}-${brandingHash}-${rendererVersion}.pdf`
   };
 }
 
@@ -2232,6 +2401,8 @@ async function readyPaperPackReceipt(env, workflow, timesheet, version) {
     && metadata.timesheet_id === timesheet.timesheet_id
     && text(metadata.manifest_sha256).toLowerCase() === identity.manifest_hash
     && text(metadata.base_document_sha256).toLowerCase() === identity.base_hash
+    && text(metadata.branding_contract_sha256).toLowerCase() === identity.branding_hash
+    && text(metadata.renderer_contract_version) === identity.renderer_contract_version
     && text(metadata.media_type).toLowerCase() === 'application/pdf'
     && text(metadata.sha256).length === 64
     && Number(metadata.byte_size) === Number(object.size);
@@ -2272,9 +2443,22 @@ async function releaseCandidatePaperPack(env, workflow, timesheet, complete) {
       }
     } else if (row.status === 'QUEUED') {
       const now = new Date().toISOString();
-      await restWrite(env, 'mail_outbox', 'PATCH',
+      const updated = await restWrite(env, 'mail_outbox', 'PATCH',
         `id=eq.${encodeURIComponent(row.id)}&status=eq.QUEUED`,
-        { attachments: attachment, scheduled_for_utc: now, next_attempt_at_utc: now }, 'return=minimal');
+        { attachments: attachment, scheduled_for_utc: now, next_attempt_at_utc: now }, 'return=representation');
+      if (!updated || updated.id !== row.id || updated.status !== 'QUEUED') {
+        const current = await restOne(env, 'mail_outbox',
+          `id=eq.${encodeURIComponent(row.id)}&select=id,status,attachments`);
+        const currentAttachments = parseJson(current?.attachments, []) || [];
+        if (current?.status === 'SENT'
+            && currentAttachments.some((entry) => entry?.sha256 === complete.sha256 && entry?.r2_key === complete.key)) {
+          // A concurrent sender completed the exact already-bound operation.
+        } else if (current?.status === 'FAILED') {
+          throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
+        } else {
+          throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+        }
+      }
     } else {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
     }
@@ -2293,7 +2477,7 @@ async function releaseCandidatePaperPack(env, workflow, timesheet, complete) {
     state: 'UNREAD', push_state: 'PENDING',
     dedupe_key: `CANDIDATE_PAPER_PACK_READY_V1:${workflow.id}:${workflow.generation}:${complete.manifest_hash}`,
     created_at_utc: now
-  }, 'resolution=merge-duplicates,return=minimal');
+  }, 'resolution=ignore-duplicates,return=representation');
 }
 
 async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
@@ -2308,7 +2492,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
     `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
     + '&state=eq.IMMUTABLE&select=*');
   const byId = new Map(components.map((component) => [text(component.id), component]));
-  const combined = await PDFDocument.create();
+  const combined = await PDFDocument.create({ updateMetadata: false });
   for (let index = 0; index < pages.length; index += 1) {
     const expected = pages[index];
     const kind = upper(expected.component_kind);
@@ -2336,13 +2520,15 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   const receipt = await immutablePut(env, identity.key, bytes, 'application/pdf', {
     purpose: 'candidate-complete-paper-pack', workflow_id: workflow.id,
     timesheet_id: timesheet.timesheet_id, manifest_sha256: identity.manifest_hash,
-    base_document_sha256: identity.base_hash, page_count: String(combined.getPageCount())
+    base_document_sha256: identity.base_hash,
+    branding_contract_sha256: identity.branding_hash,
+    renderer_contract_version: identity.renderer_contract_version,
+    page_count: String(combined.getPageCount())
   });
   const complete = {
     ...identity, bytes, sha256: receipt.sha256, byte_size: bytes.byteLength,
     page_count: combined.getPageCount(), ready: true
   };
-  await releaseCandidatePaperPack(env, workflow, timesheet, complete);
   return complete;
 }
 
@@ -2368,6 +2554,9 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
   if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY' || !qrRoute) {
     throw new CandidateHttpError(404, 'CANDIDATE_PAPER_PACK_NOT_FOUND');
   }
+  const workflows = await activePaperWorkflowsForTimesheet(env, id);
+  if (workflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
+  if (!workflows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
 
   let version = null;
   if (upper(timesheet.document_state) === 'READY' && UUID_RE.test(text(timesheet.current_document_version_id))) {
@@ -2378,9 +2567,6 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
   }
   let complete = null;
   if (version?.r2_key) {
-    const workflows = await activePaperWorkflowsForTimesheet(env, id);
-    if (workflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
-    if (!workflows.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_NOT_READY');
     complete = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
   }
   const ready = complete?.ready === true;
@@ -2447,7 +2633,9 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
         + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
         + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
       if (!version?.r2_key) continue;
-      const complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
+      let complete = await readyPaperPackReceipt(env, workflow, timesheet, version);
+      if (!complete.ready) complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
+      await releaseCandidatePaperPack(env, workflow, timesheet, complete);
       results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, page_count: complete.page_count });
     } catch (error) {
       results.push({ workflow_id: workflow.id, timesheet_id: id, ok: false, error_code: knownErrorCode(error) });
@@ -2662,7 +2850,12 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     if (match && request.method === 'POST') return await handleNotifications(request, env, deps, match.notificationId);
 
     match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/:action`);
-    if (match && ['GET', 'POST'].includes(request.method)) return await handleManagerAction(request, env, deps, match.workflowId, match.action, ctx);
+    if (match) {
+      const expectedMethod = MANAGER_ACTION_METHODS[match.action];
+      if (!expectedMethod) throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
+      if (request.method !== expectedMethod) throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleManagerAction(request, env, deps, match.workflowId, match.action, ctx);
+    }
     match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/components/:componentId/document`);
     if (match && request.method === 'GET') return await handleDocumentStream(request, env, deps, 'manager', match.workflowId, match.componentId);
     match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/signature/prepare`);
@@ -2706,11 +2899,17 @@ export const candidateAppBackendInternals = Object.freeze({
   mileageJourneyRows,
   paperPackIdentity,
   readyPaperPackReceipt,
+  readyGeneratedDocumentReceipt,
   releaseCandidatePaperPack,
+  bindCandidatePaperOutbox,
+  assembleCandidatePaperPack,
+  renderAndRegister,
+  candidateDocumentBranding,
   mileageClaimFormBytes,
   renderExpensePage,
   validateComponentBytes,
   renderContracts,
   routeMatch,
+  managerActionMethods: MANAGER_ACTION_METHODS,
   environmentName
 });

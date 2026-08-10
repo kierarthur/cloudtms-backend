@@ -6,6 +6,12 @@ const PUBLIC_CANDIDATE_PREFIX = '/candidate-app/v1';
 const PUBLIC_MANAGER_PREFIX = '/candidate-manager/v1';
 const PRIVATE_CANDIDATE_PREFIX = '/private/candidate-app/v1';
 const PRIVATE_MANAGER_PREFIX = '/private/candidate-manager/v1';
+const MANAGER_ACTION_METHODS = Object.freeze({
+  start: 'GET',
+  progress: 'POST',
+  approve: 'POST',
+  refuse: 'POST'
+});
 const MAX_PUBLIC_JSON_BYTES = 1024 * 1024;
 const MAX_PUBLIC_UPLOAD_BYTES = 15 * 1024 * 1024;
 const PUBLIC_ERROR_BYTES = 64 * 1024;
@@ -282,6 +288,20 @@ function privatePath(publicPath) {
     return `${PRIVATE_MANAGER_PREFIX}${publicPath.slice(PUBLIC_MANAGER_PREFIX.length)}`;
   }
   throw new CandidateBrokerError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
+}
+
+function enforceManagerMethod(path, method) {
+  const actionMatch = /^\/candidate-manager\/v1\/workflows\/[0-9a-f-]+\/(start|progress|approve|refuse)$/i.exec(path);
+  if (actionMatch) {
+    const expected = MANAGER_ACTION_METHODS[actionMatch[1].toLowerCase()];
+    if (method !== expected) throw new CandidateBrokerError(405, 'METHOD_NOT_ALLOWED');
+    return;
+  }
+  const documentMatch = /^\/candidate-manager\/v1\/workflows\/[0-9a-f-]+\/components\/[0-9a-f-]+\/document$/i.test(path);
+  const signatureMatch = /^\/candidate-manager\/v1\/workflows\/[0-9a-f-]+\/signature\/prepare$/i.test(path);
+  if ((documentMatch && method !== 'GET') || (signatureMatch && method !== 'POST')) {
+    throw new CandidateBrokerError(405, 'METHOD_NOT_ALLOWED');
+  }
 }
 
 function privateRequestHeaders(request, authorization) {
@@ -636,6 +656,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
     }
 
     if (managerRoute) {
+      enforceManagerMethod(path, request.method);
       return withCors(await publicSafePrivateResponse(await forwardPrivate(request, env, {
         authorization: await managerAuthorization(request, env)
       })), origin);
@@ -691,6 +712,8 @@ export const candidateBrokerInternals = Object.freeze({
   decryptDeviceToken,
   encryptDeviceToken,
   environmentName,
+  enforceManagerMethod,
+  managerActionMethods: MANAGER_ACTION_METHODS,
   enumerationSafeChallenge,
   openEnvelope,
   openPublicAccess,

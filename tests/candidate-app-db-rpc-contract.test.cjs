@@ -697,17 +697,21 @@ test('component preparation replay returns one immutable database-owned upload c
   assert.match(workflow, /v_component\.expense_category is distinct from v_expense_category/i);
   assert.match(workflow, /lower\(v_component\.media_type\) is distinct from v_requested_media_type/i);
   assert.match(workflow, /v_component\.byte_size is distinct from v_requested_byte_size/i);
+  assert.match(workflow, /v_component\.workflow_generation is distinct from v_workflow\.generation[\s\S]*CANDIDATE_COMPONENT_PREPARE_GENERATION_CONFLICT/i);
+  assert.match(workflow, /v_component\.state not in \('PENDING','IMMUTABLE'\)[\s\S]*CANDIDATE_COMPONENT_PREPARE_STATE_CONFLICT/i);
   const replay = workflow.match(/if found then[\s\S]*?end if;[\s\S]*?select coalesce\(max\(component_no\)/i)?.[0] || '';
   for (const field of [
     'storage_key', 'media_type', 'byte_size', 'component_kind',
-    'document_role', 'expense_category', 'paper_return_page_key'
+    'document_role', 'expense_category', 'paper_return_page_key', 'workflow_generation', 'state'
   ]) assert.match(replay, new RegExp(`'${field}'`, 'i'), `replay must return ${field}`);
   const first = [...workflow.matchAll(/return jsonb_build_object\('ok',true,'idempotent_replay',false[\s\S]*?\);/gi)]
     .map(match => match[0]).find(value => /'component_id'/i.test(value)) || '';
   for (const field of [
     'storage_key', 'media_type', 'byte_size', 'component_kind',
-    'document_role', 'expense_category', 'paper_return_page_key'
+    'document_role', 'expense_category', 'paper_return_page_key', 'workflow_generation', 'state'
   ]) assert.match(first, new RegExp(`'${field}'`, 'i'), `first prepare must return ${field}`);
+  assert.match(workflow, /if v_component\.state<>'PENDING'[\s\S]*CANDIDATE_COMPONENT_COMPLETE_STATE_CONFLICT/i);
+  assert.match(workflow, /where id=v_component\.id and state='PENDING' returning \* into v_component/i);
 });
 
 test('every SQL file has complete function/migration dollar-quote pairs', () => {

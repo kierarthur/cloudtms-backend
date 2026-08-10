@@ -75,7 +75,7 @@ Explicit `no_break: true` or an explicit numeric `break_minutes: 0` is valid. Bl
 
 Category selection may be omitted by the app only when its UI context is unambiguous. The component PREPARE/COMPLETE authority still records one exact immutable server category. One evidence object cannot satisfy several categories.
 
-`COMPONENT_PREPARE` idempotency is identity-preserving. SQL returns the authoritative component ID, storage identity, media type, byte size, component kind, document role, category and paper-page key on both first execution and replay. The private API creates the encrypted upload ticket from that returned contract; a retry never substitutes a newly generated object key. Reusing an idempotency key with conflicting type, role, category, media, size or paper-page identity fails closed. The storage key remains private and is never returned as a public response field.
+`COMPONENT_PREPARE` idempotency is identity-preserving and generation-bound. SQL returns the authoritative component ID, workflow generation, state, storage identity, media type, byte size, component kind, document role, category and paper-page key. A replay is accepted only for the current generation and only in `PENDING` or `IMMUTABLE`; terminal-state and cross-generation reuse fail before ticket creation. The private API validates the complete returned contract and uses its generation/key rather than request-local identity. Reusing an idempotency key with conflicting type, role, category, media, size or paper-page identity also fails closed. The storage key remains private and is never returned publicly.
 
 ### QR/paper readiness and delivery
 
@@ -92,7 +92,7 @@ FAILED               -> show a controlled retry/support state; never claim readi
 
 QR token creation is not document readiness. The current canonical `TIMESHEET` document version must first be `READY`; the private scheduled worker then assembles one complete immutable pack in exact manifest order: official unsigned timesheet, Expense and Mileage Approval Summary, Mileage Claim Form, and every evidence page. The scheduled worker alone releases the exact workflow/generation/manifest-bound mail operation and idempotent Candidate notification. A `FAILED` mail row remains failed until the existing explicit mail-retry authority acts; Candidate polling cannot requeue it. The status and download GETs are strictly read-only. The Worker verifies Candidate ownership and streams bytes from R2; the broker/app never receives an R2 key.
 
-The Expense and Mileage Approval Summary uses configured agency branding, Candidate/client/week identity and plain-English claim lines rather than internal economic keys. The A4 Mileage Claim Form uses the configured branding, the title `Mileage Claim Form for week ending dd/mm/yyyy`, repeatable `Post Code from`, `Cost Code To` and `Number of miles` rows, total mileage, manager signature/date and stable workflow/page identity. These documents format frozen canonical claim facts only; they do not calculate financial truth.
+The Expense and Mileage Approval Summary uses configured agency branding, Candidate/client/week identity and plain-English claim lines rather than internal economic keys. The A4 Mileage Claim Form uses the configured branding, the title `Mileage Claim Form for week ending dd/mm/yyyy`, repeatable `Post Code from`, `Cost Code To` and `Number of miles` rows, total mileage, manager signature/date and stable workflow/page identity. These documents format frozen canonical claim facts only. In particular, the summary requires the explicit canonical `expenses_pay_ex_vat` display total and fails closed when it is absent; it never sums category fields to invent a replacement total.
 
 Paper-pack selection fails closed unless exactly one active `PAPER` workflow in `AWAITING_PAPER_RETURN` targets the current timesheet. More than one produces `CANDIDATE_PAPER_WORKFLOW_CONFLICT`; no arbitrary workflow is selected.
 
@@ -106,6 +106,8 @@ Paper-pack selection fails closed unless exactly one active `PAPER` workflow in 
 | POST | `/candidate-manager/v1/workflows/:workflowId/approve` | First-complete approval, then guarded final render/finalisation. |
 | POST | `/candidate-manager/v1/workflows/:workflowId/refuse` | Refuse the whole active submission. |
 | GET | `/candidate-manager/v1/workflows/:workflowId/components/:componentId/document` | Stream only a component in the token-bound manifest. |
+
+The broker and private router enforce this exact method map before any workflow RPC. Unsupported method/path pairs return `405 METHOD_NOT_ALLOWED`; for example, `GET .../approve` cannot start or touch manager review state.
 
 Approval commits before guarded asynchronous final rendering/finalisation. Independent workflows do not share a global lock. A failed follow-on leaves durable manager approval and a retryable workflow; it does not create partial canonical finalisation.
 

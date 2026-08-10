@@ -262,6 +262,7 @@ declare
   v_session uuid:='a2000000-0000-0000-0000-000000000008';
   v_workflow uuid:='a2000000-0000-0000-0000-000000000009';
   v_source_component uuid;
+  v_unsafe_component uuid;
   v_return_component uuid;
   v_response jsonb;
   v_page jsonb;
@@ -324,6 +325,37 @@ begin
       'verified_byte_size',1024,'verified_media_type','image/png'
     ),'paper:evidence:complete',now());
   v_response:=public.candidate_workflow_transition_atomic_v1(
+    v_session,'TEST',v_workflow,'COMPONENT_PREPARE',1,jsonb_build_object(
+      'component_kind','EXPENSE_EVIDENCE','expense_category','TRAVEL',
+      'document_role','SOURCE_EVIDENCE','storage_key','paper/source/unsafe.png',
+      'media_type','image/png','byte_size',128
+    ),'paper:unsafe:prepare',now());
+  v_unsafe_component:=(v_response->>'component_id')::uuid;
+  update public.candidate_submission_components
+  set state='SUPERSEDED',superseded_at_utc=now()
+  where id=v_unsafe_component;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_workflow,'COMPONENT_PREPARE',1,jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE','expense_category','TRAVEL',
+        'document_role','SOURCE_EVIDENCE','storage_key','paper/source/unsafe.png',
+        'media_type','image/png','byte_size',128
+      ),'paper:unsafe:prepare',now());
+    raise exception 'superseded component replay unexpectedly issued a contract';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'CANDIDATE_COMPONENT_PREPARE_STATE_CONFLICT' then raise; end if;
+  end;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_workflow,'COMPONENT_COMPLETE',1,jsonb_build_object(
+        'component_id',v_unsafe_component,'source_content_sha256_hex',repeat('a5',32),
+        'verified_byte_size',128,'verified_media_type','image/png'
+      ),'paper:unsafe:complete',now());
+    raise exception 'superseded component was revived by completion';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'CANDIDATE_COMPONENT_COMPLETE_STATE_CONFLICT' then raise; end if;
+  end;
+  v_response:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'WORKER_SUBMIT',1,jsonb_build_object(
       'approval_route','PAPER',
       'immutable_submission',jsonb_build_object(
@@ -353,6 +385,17 @@ begin
   if v_response->>'state'<>'WORKER_SUBMITTED' or v_response->>'generation'<>'2' then
     raise exception 'paper worker submission did not freeze generation two: %',v_response;
   end if;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_workflow,'COMPONENT_PREPARE',2,jsonb_build_object(
+        'component_kind','EXPENSE_EVIDENCE','expense_category','OTHER',
+        'document_role','SOURCE_EVIDENCE','storage_key','paper/source/other.png',
+        'media_type','image/png','byte_size',1024
+      ),'paper:evidence:prepare',now());
+    raise exception 'cross-generation component replay unexpectedly issued a contract';
+  exception when sqlstate '40001' then
+    if sqlerrm<>'CANDIDATE_COMPONENT_PREPARE_GENERATION_CONFLICT' then raise; end if;
+  end;
   v_response:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'PAPER_PREPARE',2,'{}'::jsonb,'paper:prepare',now());
   select paper_return_manifest_json into v_manifest
