@@ -101,6 +101,10 @@ test('reconciliation keeps its presentation fence while validating V3 allocation
   assert.match(reconciliation, /presentation_role','PARENT'/);
   assert.match(reconciliation, /<> 'ALLOCATION_COMPONENT'/);
   assert.match(reconciliation, /PAY_WORKBENCH_CANONICAL_PRESENTATION_ALLOCATION_MISMATCH/);
+  assert.match(reconciliation, /NEGATIVE_ORDINARY_PRESENTATION_ONLY/);
+  assert.match(reconciliation, /actual\.semantic_negative_parent/);
+  assert.match(reconciliation, /actual\.presentation_section='BLOCKED_FOR_PAY'/);
+  assert.match(reconciliation, /expected\.presentation_section='READY_TO_PAY'/);
   assert.match(reconciliation, /PAY_WORKBENCH_CANONICAL_FACT_COMPONENT_MISMATCH/);
 });
 

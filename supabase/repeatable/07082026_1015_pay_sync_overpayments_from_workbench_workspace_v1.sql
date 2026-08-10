@@ -4533,6 +4533,15 @@ begin
           AND COALESCE((line.line_json->>'selection_allowed')::boolean,false)=false
           AND COALESCE((line.line_json->>'is_excluded_from_allocation')::boolean,false)=true
         ) AS semantic_non_selectable_parent,
+        (
+          UPPER(COALESCE(line.line_json->>'presentation_role',''))='PARENT'
+          AND UPPER(COALESCE(line.line_json->>'presentation_reason',''))=
+            'NEGATIVE_ORDINARY_PRESENTATION_ONLY'
+          AND UPPER(COALESCE(line.line_json->>'presentation_section',''))='BLOCKED_FOR_PAY'
+          AND COALESCE((line.line_json->>'selection_allowed')::boolean,false)=false
+          AND COALESCE((line.line_json->>'is_excluded_from_allocation')::boolean,false)=true
+          AND ROUND(COALESCE(line.amount_ex_vat,0),2)<0
+        ) AS semantic_negative_parent,
         ROUND(COALESCE((line.line_json->>'section_non_segment_amount_ex_vat')::numeric,0),2)
           AS section_non_segment_amount_ex_vat,
         CASE WHEN jsonb_typeof(line.line_json->'section_segment_rows')='array'
@@ -4558,7 +4567,14 @@ begin
     FULL OUTER JOIN actual USING(timesheet_id,line_identity)
     WHERE expected.timesheet_id IS NULL OR actual.timesheet_id IS NULL
        OR actual.parent_line_identity IS DISTINCT FROM expected.parent_line_identity
-       OR actual.presentation_section IS DISTINCT FROM expected.presentation_section
+       OR (
+         actual.presentation_section IS DISTINCT FROM expected.presentation_section
+         AND NOT (
+           actual.semantic_negative_parent
+           AND actual.presentation_section='BLOCKED_FOR_PAY'
+           AND expected.presentation_section='READY_TO_PAY'
+         )
+       )
        OR actual.pay_channel IS DISTINCT FROM expected.pay_channel
        OR ABS(actual.amount_ex_vat-expected.amount_ex_vat)>0.01
        OR (
