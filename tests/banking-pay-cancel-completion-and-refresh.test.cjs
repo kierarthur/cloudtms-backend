@@ -90,6 +90,19 @@ test('Worker cancellation route binds the verified ceremony to the same bounded 
   assert.doesNotMatch(bridge, /pay_workbench_/);
 });
 
+test('Worker keeps Draft and scheduled pre-provider cancellation routes on their distinct owners', () => {
+  const router = sliceBetween(
+    workerSource,
+    "const cancelMatch = matchPath(p, '/api/banking/pay/batch/:id/cancel');",
+    "const m = matchPath(p, '/api/banking/pay/batch/:id/confirm-no-money-unwind');"
+  );
+
+  assert.match(router, /handleBankingPayBatchCancelV1\(env, req, user, cancelMatch\.id\)/);
+  assert.match(router, /handleBankingPayBatchCancel\(env, req, user, recalcMatch\.id, ctx\)/);
+  assert.doesNotMatch(router, /const m = cancelMatch \|\| recalcMatch/);
+  assert.doesNotMatch(router, /handleBankingPayBatchCancelV1\(env, req, user, recalcMatch\.id\)/);
+});
+
 test('Policy X remains frozen during cancel and switches to live truth only after cancel', () => {
   assert.match(repeatableSql, /cancellation itself continues to operate only on frozen batch artifacts/);
   assert.match(repeatableSql, /PRE_DRAFT_LIVE_TRUTH/);

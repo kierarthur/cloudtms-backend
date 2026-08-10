@@ -192925,13 +192925,13 @@ if (p.startsWith('/api/banking/')) {
 // ====================== BANKING (add inside /api/banking/ router block) ======================
 {
   const cancelMatch = matchPath(p, '/api/banking/pay/batch/:id/cancel');
-  const recalcMatch = cancelMatch
-    ? null
-    : matchPath(p, '/api/banking/pay/batch/:id/cancel-not-sent-recalculate');
-  const m = cancelMatch || recalcMatch;
+  if (cancelMatch && req.method === 'POST') {
+    return handleBankingPayBatchCancelV1(env, req, user, cancelMatch.id);
+  }
 
-  if (m && req.method === 'POST') {
-    return handleBankingPayBatchCancelV1(env, req, user, m.id);
+  const recalcMatch = matchPath(p, '/api/banking/pay/batch/:id/cancel-not-sent-recalculate');
+  if (recalcMatch && req.method === 'POST') {
+    return handleBankingPayBatchCancel(env, req, user, recalcMatch.id, ctx);
   }
 }
 
