@@ -88,7 +88,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 85, 'the latest-only payload must contain the closed 85-definition function inventory');
+  assert.equal(names.length, 87, 'the latest-only payload must contain the closed 87-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -523,13 +523,19 @@ test('read and placement policy uses all authoritative worked and dated boundari
 test('rejected workflows project through the replacement current version with server-owned recovery scope', () => {
   const page = definition(sql.reads, 'candidate_app_timesheet_page_v1');
   const detail = definition(sql.reads, 'candidate_app_timesheet_detail_v1');
+  const replaced = privateDefinition(sql.reads, '_candidate_rejection_replaced_v1');
   assert.match(page, /classified\.state='REJECTED'[\s\S]*resolution\.carrier_contract_week_id=classified\.contract_week_id/i);
   assert.match(page, /classified\.state='REJECTED'[\s\S]*current_week\.id=classified\.contract_week_id/i);
   assert.match(page, /RESUBMIT_EXPENSE_CLAIM/);
   assert.match(page, /RESUBMIT_TIMESHEET_AND_EXPENSES/);
   assert.match(page, /RESUBMIT_TIMESHEET/);
-  assert.match(page, /later\.state not in \('CANCELLED','EXPIRED','SUPERSEDED'\)/i);
-  assert.match(page, /later\.created_at_utc>w\.updated_at_utc/i);
+  assert.match(replaced, /later\.state not in \('CANCELLED','EXPIRED','SUPERSEDED'\)/i);
+  assert.match(replaced, /later\.created_at_utc>=v_rejected\.updated_at_utc/i);
+  assert.match(replaced, /v_rejected\.workflow_kind='CONTRACT_COMBINED'[\s\S]*later\.workflow_kind='CONTRACT_COMBINED'[\s\S]*later\.contract_week_id is not distinct from v_rejected\.contract_week_id/i);
+  assert.match(replaced, /v_rejected\.workflow_kind='CONTRACT_HOURS'[\s\S]*later\.workflow_kind in \('CONTRACT_HOURS','CONTRACT_COMBINED'\)[\s\S]*later\.contract_week_id is not distinct from v_rejected\.contract_week_id/i);
+  assert.match(replaced, /v_rejected\.workflow_kind='CONTRACT_EXPENSE'[\s\S]*later\.week_ending_date is not distinct from v_rejected\.week_ending_date[\s\S]*later\.workflow_kind in \('CONTRACT_EXPENSE','CONTRACT_COMBINED'\)/i);
+  assert.match(replaced, /v_rejected\.workflow_kind='DAILY'[\s\S]*later\.workflow_kind='DAILY'[\s\S]*later\.work_date is not distinct from v_rejected\.work_date[\s\S]*later_timesheet\.booking_id[\s\S]*rejected_timesheet\.booking_id/i);
+  assert.match(page, /_candidate_rejection_replaced_v1\(w\.id\)/i);
   assert.match(page, /'claim_family',resolved\.claim_family/i);
   assert.match(page, /'rejection_actionable',resolved\.rejection_actionable/i);
   assert.match(page, /'rejections',d\.actionable_rejections/i);
@@ -540,6 +546,24 @@ test('rejected workflows project through the replacement current version with se
   assert.match(detail, /v_workflow\.state='REJECTED'[\s\S]*then null else v_workflow\.target_timesheet_id/i);
   assert.match(detail, /'required_resubmission_action'[\s\S]*RESUBMIT_EXPENSE_CLAIM/i);
   assert.match(detail, /'rejections',[\s\S]*rejection_actionable/i);
+  assert.match(detail, /_candidate_rejection_replaced_v1\(w\.id\)/i);
+});
+
+test('PAPER rejection retires a shared QR source as one locked set before record rotation', () => {
+  const retireSet = privateDefinition(sql.workflow, '_candidate_paper_delivery_retire_set_v1');
+  const reject = definition(sql.final, 'candidate_submission_reject_atomic_v1');
+  assert.match(retireSet, /cardinality\(p_workflow_ids\) is distinct from cardinality\(p_expected_generations\)/i);
+  assert.match(retireSet, /MULTIPLE_QR_SOURCE_FAMILIES|QR_SOURCE_SCOPE_MISMATCH/i);
+  assert.match(retireSet, /pg_advisory_xact_lock\(hashtext\(v_source_key\)\)/i);
+  assert.match(retireSet, /attempt_lease_expires_at_utc>p_now_utc[\s\S]*CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/i);
+  assert.match(retireSet, /qr_token_hash[\s\S]*v_current_token_hash/i);
+  assert.match(retireSet, /_candidate_paper_delivery_retire_v1\([\s\S]*v_current_token_owner_workflow_id[\s\S]*v_current_token_owner_generation/i);
+  assert.match(retireSet, /'qr_invalidation_proven',true/i);
+  assert.match(retireSet, /'preserved_workflows'/i);
+  assert.match(reject, /v_paper_workflow_ids:=array_append\(v_paper_workflow_ids,v_workflow\.id\)/i);
+  assert.match(reject, /_candidate_paper_delivery_retire_set_v1\([\s\S]{0,80}v_paper_workflow_ids,v_paper_workflow_generations/i);
+  assert.match(reject, /v_paper_retirement_result->>'qr_invalidation_proven'[\s\S]{0,40}::boolean,false/i);
+  assert.doesNotMatch(reject, /_candidate_paper_delivery_retire_v1\(v_captured_workflow\.id/i);
 });
 
 test('invoice grouping derives expense-only economics and isolates the effective expense recipient', () => {

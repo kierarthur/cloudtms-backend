@@ -299,4 +299,305 @@ select pg_temp.verify_finalised_paper_rejection(true,'QUEUED',false,false);
 select pg_temp.verify_finalised_paper_rejection(true,'QUEUED',true,true);
 select pg_temp.verify_finalised_paper_rejection(true,'SENT',false,false);
 
+create or replace function pg_temp.verify_shared_qr_source_rejection(
+  p_hours_sorts_first boolean,
+  p_expense_finalised boolean,
+  p_hours_mail_status text,
+  p_expense_mail_status text,
+  p_lease_on_expense boolean,
+  p_current_token_present boolean,
+  p_expect_block boolean
+)
+returns void
+language plpgsql
+as $function$
+declare
+  v_now timestamptz:=clock_timestamp();
+  v_actor uuid:=gen_random_uuid();
+  v_candidate uuid:=gen_random_uuid();
+  v_client uuid:=gen_random_uuid();
+  v_contract uuid:=gen_random_uuid();
+  v_hours_timesheet uuid:=gen_random_uuid();
+  v_hours_week uuid:=gen_random_uuid();
+  v_expense_timesheet uuid:=gen_random_uuid();
+  v_expense_week uuid:=gen_random_uuid();
+  v_account uuid:=gen_random_uuid();
+  v_hours_workflow uuid:=gen_random_uuid();
+  v_expense_workflow uuid:=gen_random_uuid();
+  v_swap uuid;
+  v_hours_mail uuid:=gen_random_uuid();
+  v_expense_mail uuid:=gen_random_uuid();
+  v_hours_notification uuid:=gen_random_uuid();
+  v_expense_notification uuid:=gen_random_uuid();
+  v_booking text:='SHARED-PAPER-'||replace(gen_random_uuid()::text,'-','');
+  v_old_token text:='candidate-paper-old-'||gen_random_uuid()::text;
+  v_current_token text:='candidate-paper-current-'||gen_random_uuid()::text;
+  v_signature text;
+  v_result jsonb;
+  v_replay jsonb;
+  v_new_timesheet uuid;
+  v_blocked boolean:=false;
+begin
+  if p_hours_mail_status not in ('QUEUED','SENT')
+     or p_expense_mail_status not in ('QUEUED','SENT') then
+    raise exception 'Unsupported shared-source mail status';
+  end if;
+  if p_lease_on_expense and p_expense_mail_status='SENT' then
+    raise exception 'SENT expense mail cannot own active lease';
+  end if;
+  if p_expect_block is distinct from p_lease_on_expense then
+    raise exception 'Shared-source block expectation must match lease fixture';
+  end if;
+  if (v_hours_workflow<v_expense_workflow) is distinct from p_hours_sorts_first then
+    v_swap:=v_hours_workflow;
+    v_hours_workflow:=v_expense_workflow;
+    v_expense_workflow:=v_swap;
+  end if;
+
+  insert into public.tms_users(id) values(v_actor);
+  update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
+  insert into public.candidates(id,email,active)
+  values(v_candidate,'shared-'||replace(v_candidate::text,'-','')||'@example.test',true);
+  insert into public.clients(id,name)
+  values(v_client,'Shared PAPER source client '||left(v_client::text,8));
+  insert into public.client_settings(
+    id,client_id,effective_from,default_submission_mode,candidate_paper_submission_enabled
+  ) values(gen_random_uuid(),v_client,current_date-1,'MANUAL',true);
+  insert into public.contracts(
+    id,candidate_id,client_id,start_date,end_date,
+    week_ending_weekday_snapshot,default_submission_mode
+  ) values(
+    v_contract,v_candidate,v_client,current_date-30,current_date+30,
+    extract(dow from current_date)::integer,'MANUAL'
+  );
+  insert into public.timesheets(
+    timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
+    submission_mode,qr_status,qr_token,qr_payload_json,qr_generated_at
+  ) values(
+    v_hours_timesheet,v_contract,v_booking,current_date,'HOURS','WEEKLY','MANUAL',
+    'PENDING',case when p_current_token_present then v_current_token else null end,
+    jsonb_build_object('workflow_id',v_expense_workflow),v_now
+  );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,status,
+    submission_mode_snapshot,timesheet_id
+  ) values(v_hours_week,v_contract,current_date,0,'SUBMITTED','MANUAL',v_hours_timesheet);
+  insert into public.timesheets_financials(
+    timesheet_id,candidate_id,client_id,is_current,processing_status,total_hours
+  ) values(v_hours_timesheet,v_candidate,v_client,true,'UNPROCESSED',8);
+  insert into public.timesheets(
+    timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
+    submission_mode,is_adjustment,parent_timesheet_id
+  ) values(
+    v_expense_timesheet,v_contract,
+    'SHARED-EXPENSE-'||replace(v_expense_timesheet::text,'-',''),
+    current_date,'EXPENSES','WEEKLY','MANUAL',true,v_hours_timesheet
+  );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,status,
+    submission_mode_snapshot,timesheet_id,is_adjustment
+  ) values(
+    v_expense_week,v_contract,current_date,1,'SUBMITTED','MANUAL',
+    v_expense_timesheet,true
+  );
+  insert into public.timesheets_financials(
+    timesheet_id,candidate_id,client_id,is_current,processing_status,total_hours,
+    expenses_pay_ex_vat,expenses_charge_ex_vat,other_pay_ex_vat,other_charge_ex_vat
+  ) values(
+    v_expense_timesheet,v_candidate,v_client,true,'UNPROCESSED',0,25,30,25,30
+  );
+  insert into public.candidate_app_accounts(id,environment,email_normalized,status)
+  values(v_account,'TEST','shared-'||replace(v_candidate::text,'-','')||'@example.test','ACTIVE');
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,idempotency_key,finalised_at_utc,
+    paper_return_manifest_json,paper_return_manifest_sha256,renderer_contract_version
+  ) values
+    (v_hours_workflow,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','PAPER',
+      'FINALISED',2,v_contract,v_hours_week,v_hours_timesheet,v_hours_timesheet,
+      current_date,'shared-hours:'||v_hours_workflow::text,v_now-interval '2 minutes',
+      jsonb_build_object('workflow_id',v_hours_workflow,'workflow_generation',1,
+        'pages',jsonb_build_array(jsonb_build_object(
+          'page_key','HOURS_TIMESHEET','component_kind','HOURS_TIMESHEET'))),
+      private._candidate_sha256_jsonb_v1(jsonb_build_object(
+        'workflow_id',v_hours_workflow,'workflow_generation',1,
+        'pages',jsonb_build_array(jsonb_build_object(
+          'page_key','HOURS_TIMESHEET','component_kind','HOURS_TIMESHEET')))),
+      'CANDIDATE_REVIEW_DOCUMENTS_V1'),
+    (v_expense_workflow,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE','WEEKLY','PAPER',
+      case when p_expense_finalised then 'FINALISED' else 'AWAITING_PAPER_RETURN' end,
+      case when p_expense_finalised then 2 else 1 end,
+      v_contract,case when p_expense_finalised then v_expense_week else v_hours_week end,
+      v_hours_timesheet,case when p_expense_finalised then v_expense_timesheet else null end,
+      current_date,'shared-expense:'||v_expense_workflow::text,
+      case when p_expense_finalised then v_now else null end,
+      jsonb_build_object('workflow_id',v_expense_workflow,'workflow_generation',1,
+        'pages',jsonb_build_array(jsonb_build_object(
+          'page_key','EXPENSE_SUMMARY','component_kind','EXPENSE_SUMMARY'))),
+      private._candidate_sha256_jsonb_v1(jsonb_build_object(
+        'workflow_id',v_expense_workflow,'workflow_generation',1,
+        'pages',jsonb_build_array(jsonb_build_object(
+          'page_key','EXPENSE_SUMMARY','component_kind','EXPENSE_SUMMARY')))),
+      'CANDIDATE_REVIEW_DOCUMENTS_V1');
+  insert into public.mail_outbox(
+    id,type,"to",subject,body_text,attachments,status,created_at_utc,
+    context_kind,context_id,scheduled_for_utc,next_attempt_at_utc,
+    deterministic_outbox_key,payment_scope_json,
+    attempt_lease_token,attempt_leased_at_utc,attempt_lease_expires_at_utc
+  ) values
+    (v_hours_mail,'TIMESHEET_QR','hours@example.test','Earlier hours pack','Pack ready',
+      jsonb_build_array(jsonb_build_object('r2_key','candidate-app/test/shared/hours.pdf')),
+      p_hours_mail_status::public.mail_status_enum,v_now-interval '2 minutes',
+      'timesheets',v_hours_timesheet,v_now,v_now,
+      'shared-hours-mail:'||v_hours_workflow::text,
+      jsonb_build_object(
+        'candidate_workflow_id',v_hours_workflow,'candidate_workflow_generation',1,
+        'candidate_paper_pack_ready',true,'mail_held_until_pdf_rendered',false,
+        'qr_token_hash',encode(extensions.digest(convert_to(v_old_token,'UTF8'),'sha256'),'hex')
+      ),null,null,null),
+    (v_expense_mail,'TIMESHEET_QR','expense@example.test','Later expense pack','Pack ready',
+      jsonb_build_array(jsonb_build_object('r2_key','candidate-app/test/shared/expense.pdf')),
+      p_expense_mail_status::public.mail_status_enum,v_now,
+      'timesheets',v_hours_timesheet,v_now,v_now,
+      'shared-expense-mail:'||v_expense_workflow::text,
+      jsonb_build_object(
+        'candidate_workflow_id',v_expense_workflow,'candidate_workflow_generation',1,
+        'candidate_paper_pack_ready',true,'mail_held_until_pdf_rendered',false,
+        'qr_token_hash',encode(extensions.digest(convert_to(v_current_token,'UTF8'),'sha256'),'hex')
+      ),
+      case when p_lease_on_expense then 'active-shared-source-lease' else null end,
+      case when p_lease_on_expense then v_now else null end,
+      case when p_lease_on_expense then v_now+interval '5 minutes' else null end);
+  insert into public.candidate_notifications(
+    id,account_id,candidate_id,workflow_id,timesheet_id,event_type,preference_category,
+    template_key,template_params,deep_link_json,state,push_state,dedupe_key,created_at_utc
+  ) values
+    (v_hours_notification,v_account,v_candidate,v_hours_workflow,v_hours_timesheet,
+      'PAPER_PACK_READY','resubmission_required','candidate-paper-pack-ready-v1',
+      jsonb_build_object('workflow_generation',1),
+      jsonb_build_object('type','paper_pack','workflow_id',v_hours_workflow,'generation',1),
+      'UNREAD','PENDING',
+      'CANDIDATE_PAPER_PACK_READY_V1:'||v_hours_workflow::text||':1:shared-hours',v_now),
+    (v_expense_notification,v_account,v_candidate,v_expense_workflow,v_hours_timesheet,
+      'PAPER_PACK_READY','resubmission_required','candidate-paper-pack-ready-v1',
+      jsonb_build_object('workflow_generation',1),
+      jsonb_build_object('type','paper_pack','workflow_id',v_expense_workflow,'generation',1),
+      'UNREAD','PENDING',
+      'CANDIDATE_PAPER_PACK_READY_V1:'||v_expense_workflow::text||':1:shared-expense',v_now);
+
+  v_signature:=public.timesheet_lifecycle_guard_signature_v1(
+    v_hours_timesheet,v_hours_week,false
+  )->>'row_signature';
+  begin
+    v_result:=public.candidate_submission_reject_atomic_v1(
+      v_actor,'TEST',v_hours_timesheet,v_hours_timesheet,v_signature,
+      'Hours rejected with preserved expense PAPER history',
+      'shared-source-reject:'||v_hours_workflow::text,v_now
+    );
+  exception when sqlstate '40001' then
+    if sqlerrm<>'CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS' then raise; end if;
+    v_blocked:=true;
+  end;
+
+  if p_expect_block then
+    if not v_blocked then
+      raise exception 'Shared-source rejection ignored active lease';
+    end if;
+    if (select state from public.candidate_submission_workflows where id=v_hours_workflow)<>'FINALISED'
+       or (select state from public.candidate_submission_workflows where id=v_expense_workflow)<>
+          (case when p_expense_finalised then 'FINALISED' else 'AWAITING_PAPER_RETURN' end)
+       or (select qr_token from public.timesheets where timesheet_id=v_hours_timesheet)
+          is distinct from (case when p_current_token_present then v_current_token else null end)
+       or (select expenses_pay_ex_vat from public.timesheets_financials
+           where timesheet_id=v_expense_timesheet and is_current=true)<>25 then
+      raise exception 'Blocked shared-source rejection partially mutated lifecycle';
+    end if;
+    return;
+  end if;
+  if v_blocked then
+    raise exception 'Unleased shared-source rejection was unexpectedly blocked';
+  end if;
+
+  v_new_timesheet:=nullif(v_result->>'timesheet_id','')::uuid;
+  if v_new_timesheet is null or v_new_timesheet=v_hours_timesheet then
+    raise exception 'Shared-source rejection did not rotate hours target: %',v_result;
+  end if;
+  if (select state from public.candidate_submission_workflows where id=v_hours_workflow)<>'REJECTED'
+     or (select state from public.candidate_submission_workflows where id=v_expense_workflow)<>
+        (case when p_expense_finalised then 'FINALISED' else 'REJECTED' end)
+     or (select generation from public.candidate_submission_workflows where id=v_expense_workflow)<>2 then
+    raise exception 'Shared-source rejection changed the wrong workflow';
+  end if;
+  if (select expenses_pay_ex_vat from public.timesheets_financials
+      where timesheet_id=v_expense_timesheet and is_current=true)<>25
+     or (select other_pay_ex_vat from public.timesheets_financials
+         where timesheet_id=v_expense_timesheet and is_current=true)<>25 then
+    raise exception 'Shared-source rejection changed preserved expense economics';
+  end if;
+  if exists(
+    select 1 from public.timesheets source_row
+    where source_row.booking_id=v_booking and source_row.is_current=true
+      and nullif(btrim(coalesce(source_row.qr_token,'')),'') is not null
+  ) then
+    raise exception 'Shared-source current QR token remained usable';
+  end if;
+  if not coalesce((v_result#>>'{paper_retirement_receipt,qr_invalidation_proven}')::boolean,false)
+     or (p_expense_finalised and not exists(
+       select 1
+       from jsonb_array_elements(
+         coalesce(v_result#>'{paper_retirement_receipt,preserved_workflows}','[]'::jsonb)
+       ) preserved(value)
+       where preserved.value->>'workflow_id'=v_expense_workflow::text
+         and coalesce((preserved.value->>'workflow_preserved')::boolean,false)
+     )) then
+    raise exception 'Shared-source batch receipt did not identify preserved token owner: %',v_result;
+  end if;
+  if (select state from public.candidate_notifications where id=v_hours_notification)<>'DISMISSED'
+     or (select state from public.candidate_notifications where id=v_expense_notification)<>'DISMISSED' then
+    raise exception 'Shared-source readiness notification remained current-looking';
+  end if;
+  if p_hours_mail_status='QUEUED'
+     and not coalesce((select (payment_scope_json->>'candidate_paper_generation_retired')::boolean
+                       from public.mail_outbox where id=v_hours_mail),false) then
+    raise exception 'Selected old shared-source mail was not retired';
+  end if;
+  if p_expense_mail_status='QUEUED'
+     and not coalesce((select (payment_scope_json->>'candidate_paper_generation_retired')::boolean
+                       from public.mail_outbox where id=v_expense_mail),false) then
+    raise exception 'Preserved owner shared-source mail was not made inert';
+  end if;
+  if p_hours_mail_status='SENT'
+     and (select status from public.mail_outbox where id=v_hours_mail)<>'SENT' then
+    raise exception 'Selected SENT shared-source mail was not preserved';
+  end if;
+  if p_expense_mail_status='SENT'
+     and (select status from public.mail_outbox where id=v_expense_mail)<>'SENT' then
+    raise exception 'Preserved SENT shared-source mail was not preserved';
+  end if;
+
+  v_replay:=public.candidate_submission_reject_atomic_v1(
+    v_actor,'TEST',v_hours_timesheet,v_hours_timesheet,v_signature,
+    'Hours rejected with preserved expense PAPER history',
+    'shared-source-reject:'||v_hours_workflow::text,v_now
+  );
+  if not coalesce((v_replay->>'idempotent_replay')::boolean,false)
+     or (select count(*) from public.timesheets where booking_id=v_booking)<>2
+     or (select state from public.candidate_submission_workflows where id=v_expense_workflow)<>
+        (case when p_expense_finalised then 'FINALISED' else 'REJECTED' end) then
+    raise exception 'Shared-source rejection replay was not idempotent: %',v_replay;
+  end if;
+end;
+$function$;
+
+select pg_temp.verify_shared_qr_source_rejection(true,true,'QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,true,'QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(true,true,'SENT','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,true,'QUEUED','SENT',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(true,true,'SENT','SENT',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,true,'QUEUED','QUEUED',true,true,true);
+select pg_temp.verify_shared_qr_source_rejection(true,false,'QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(false,false,'QUEUED','QUEUED',false,true,false);
+select pg_temp.verify_shared_qr_source_rejection(true,true,'QUEUED','QUEUED',false,false,false);
+
 rollback;

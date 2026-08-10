@@ -1,5 +1,80 @@
 -- Candidate-safe bootstrap, Contract Timesheets reads and missing-week authority.
 
+create or replace function private._candidate_rejection_replaced_v1(
+  p_rejected_workflow_id uuid
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_rejected public.candidate_submission_workflows%rowtype;
+begin
+  if p_rejected_workflow_id is null then
+    return false;
+  end if;
+
+  select workflow.* into v_rejected
+  from public.candidate_submission_workflows workflow
+  where workflow.id=p_rejected_workflow_id;
+
+  if not found or v_rejected.state<>'REJECTED' then
+    return false;
+  end if;
+
+  return exists(
+    select 1
+    from public.candidate_submission_workflows later
+    where later.candidate_id=v_rejected.candidate_id
+      and later.contract_id is not distinct from v_rejected.contract_id
+      and later.id<>v_rejected.id
+      and later.state not in ('CANCELLED','EXPIRED','SUPERSEDED')
+      and later.created_at_utc>=v_rejected.updated_at_utc
+      and (
+        (
+          (
+            v_rejected.workflow_kind='CONTRACT_EXPENSE'
+            or v_rejected.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+          )
+          and later.week_ending_date is not distinct from v_rejected.week_ending_date
+          and later.workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED')
+        )
+        or (
+          v_rejected.workflow_kind='CONTRACT_COMBINED'
+          and later.workflow_kind='CONTRACT_COMBINED'
+          and later.contract_week_id is not distinct from v_rejected.contract_week_id
+        )
+        or (
+          v_rejected.workflow_kind='CONTRACT_HOURS'
+          and later.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED')
+          and later.contract_week_id is not distinct from v_rejected.contract_week_id
+        )
+        or (
+          v_rejected.workflow_kind='DAILY'
+          and later.workflow_kind='DAILY'
+          and later.work_date is not distinct from v_rejected.work_date
+          and exists(
+            select 1
+            from public.timesheets rejected_timesheet
+            join public.timesheets later_timesheet
+              on nullif(btrim(coalesce(later_timesheet.booking_id,'')),'')
+                =nullif(btrim(coalesce(rejected_timesheet.booking_id,'')),'')
+            where rejected_timesheet.timesheet_id=coalesce(
+                v_rejected.target_timesheet_id,v_rejected.anchor_timesheet_id
+              )
+              and later_timesheet.timesheet_id=coalesce(
+                later.target_timesheet_id,later.anchor_timesheet_id
+              )
+              and nullif(btrim(coalesce(rejected_timesheet.booking_id,'')),'') is not null
+          )
+        )
+      )
+  );
+end;
+$function$;
+
 create or replace function public.candidate_app_bootstrap_v1(
   p_session_id uuid,
   p_environment text,
@@ -373,25 +448,9 @@ begin
           case when w.workflow_kind='CONTRACT_EXPENSE'
               or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
             then 'EXPENSES' else 'HOURS' end as claim_family,
-          case when w.state<>'REJECTED' then false else not exists(
-            select 1
-            from public.candidate_submission_workflows later
-            where later.candidate_id=w.candidate_id
-              and later.contract_id=w.contract_id
-              and later.week_ending_date is not distinct from w.week_ending_date
-              and later.id<>w.id
-              and (case when later.workflow_kind='CONTRACT_EXPENSE'
-                    or later.rejection_scope='COMPLETE_EXPENSE_CLAIM'
-                  then 'EXPENSES' else 'HOURS' end)
-                =(case when w.workflow_kind='CONTRACT_EXPENSE'
-                    or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
-                  then 'EXPENSES' else 'HOURS' end)
-              and later.state not in ('CANCELLED','EXPIRED','SUPERSEDED')
-              and (
-                later.created_at_utc>w.updated_at_utc
-                or (later.created_at_utc=w.updated_at_utc and later.id<>w.id)
-              )
-          ) end as rejection_actionable
+          case when w.state<>'REJECTED' then false
+            else not private._candidate_rejection_replaced_v1(w.id)
+          end as rejection_actionable
         from public.candidate_submission_workflows w
         where w.candidate_id=v_candidate_id and w.state<>'SUPERSEDED'
       ) classified
@@ -704,25 +763,9 @@ begin
       case when w.workflow_kind='CONTRACT_EXPENSE'
           or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
         then 'EXPENSES' else 'HOURS' end as claim_family,
-      case when w.state<>'REJECTED' then false else not exists(
-        select 1
-        from public.candidate_submission_workflows later
-        where later.candidate_id=w.candidate_id
-          and later.contract_id=w.contract_id
-          and later.week_ending_date is not distinct from w.week_ending_date
-          and later.id<>w.id
-          and (case when later.workflow_kind='CONTRACT_EXPENSE'
-                or later.rejection_scope='COMPLETE_EXPENSE_CLAIM'
-              then 'EXPENSES' else 'HOURS' end)
-            =(case when w.workflow_kind='CONTRACT_EXPENSE'
-                or w.rejection_scope='COMPLETE_EXPENSE_CLAIM'
-              then 'EXPENSES' else 'HOURS' end)
-          and later.state not in ('CANCELLED','EXPIRED','SUPERSEDED')
-          and (
-            later.created_at_utc>w.updated_at_utc
-            or (later.created_at_utc=w.updated_at_utc and later.id<>w.id)
-          )
-      ) end as rejection_actionable
+      case when w.state<>'REJECTED' then false
+        else not private._candidate_rejection_replaced_v1(w.id)
+      end as rejection_actionable
   ) rejection_policy
   where w.candidate_id=v_candidate_id and w.contract_id=v_contract.id
     and w.week_ending_date=v_week.week_ending_date and w.state<>'SUPERSEDED';
@@ -952,6 +995,7 @@ end;
 $function$;
 
 revoke all on function public.candidate_app_bootstrap_v1(uuid,text,integer,timestamptz) from public,anon,authenticated;
+revoke all on function private._candidate_rejection_replaced_v1(uuid) from public,anon,authenticated;
 revoke all on function public.candidate_app_timesheet_page_v1(uuid,text,text,integer,timestamptz) from public,anon,authenticated;
 revoke all on function public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamptz) from public,anon,authenticated;
 revoke all on function public.candidate_missing_week_options_v1(uuid,text,uuid,date,date,timestamptz) from public,anon,authenticated;

@@ -485,6 +485,151 @@ select pg_temp.verify_finalised_rejection('CONTRACT_HOURS',false,true);
 select pg_temp.verify_finalised_rejection('CONTRACT_COMBINED',false,false);
 select pg_temp.verify_finalised_rejection('CONTRACT_EXPENSE',true,false);
 
+do $verify_exact_replacement_identity$
+declare
+  v_now timestamptz:=clock_timestamp();
+  v_candidate uuid:=gen_random_uuid();
+  v_client uuid:=gen_random_uuid();
+  v_contract uuid:=gen_random_uuid();
+  v_account uuid:=gen_random_uuid();
+  v_timesheet_a uuid:=gen_random_uuid();
+  v_timesheet_b uuid:=gen_random_uuid();
+  v_week_a uuid:=gen_random_uuid();
+  v_week_b uuid:=gen_random_uuid();
+  v_combined_rejected uuid:=gen_random_uuid();
+  v_combined_later_hours uuid:=gen_random_uuid();
+  v_combined_later_combined uuid:=gen_random_uuid();
+  v_hours_rejected uuid:=gen_random_uuid();
+  v_hours_later_other_record uuid:=gen_random_uuid();
+  v_hours_later_same_record uuid:=gen_random_uuid();
+  v_expense_rejected uuid:=gen_random_uuid();
+  v_expense_later_hours uuid:=gen_random_uuid();
+  v_expense_later_expense uuid:=gen_random_uuid();
+begin
+  insert into public.candidates(id,email,active)
+  values(v_candidate,'replacement-'||replace(v_candidate::text,'-','')||'@example.test',true);
+  insert into public.clients(id,name) values(v_client,'Exact replacement client');
+  insert into public.contracts(
+    id,candidate_id,client_id,start_date,end_date,
+    week_ending_weekday_snapshot,default_submission_mode
+  ) values(
+    v_contract,v_candidate,v_client,current_date-30,current_date+30,
+    extract(dow from current_date)::integer,'ELECTRONIC'
+  );
+  insert into public.timesheets(
+    timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
+    submission_mode,r2_nurse_key,r2_auth_key
+  ) values
+    (v_timesheet_a,v_contract,'EXACT-A-'||replace(v_timesheet_a::text,'-',''),
+      current_date,'HOURS','WEEKLY','ELECTRONIC','exact/a/candidate','exact/a/manager'),
+    (v_timesheet_b,v_contract,'EXACT-B-'||replace(v_timesheet_b::text,'-',''),
+      current_date,'HOURS','WEEKLY','ELECTRONIC','exact/b/candidate','exact/b/manager');
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,status,
+    submission_mode_snapshot,timesheet_id
+  ) values
+    (v_week_a,v_contract,current_date,0,'OPEN','ELECTRONIC',v_timesheet_a),
+    (v_week_b,v_contract,current_date,1,'OPEN','ELECTRONIC',v_timesheet_b);
+  insert into public.candidate_app_accounts(id,environment,email_normalized,status)
+  values(
+    v_account,'TEST','replacement-'||replace(v_candidate::text,'-','')||'@example.test','ACTIVE'
+  );
+
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,rejection_scope,rejection_reason,idempotency_key,
+    created_at_utc,updated_at_utc
+  ) values
+    (v_combined_rejected,'TEST',v_account,v_candidate,'CONTRACT_COMBINED','WEEKLY',
+      'ELECTRONIC','REJECTED',2,v_contract,v_week_a,v_timesheet_a,v_timesheet_a,
+      current_date,'COMPLETE_TIMESHEET_RECORD','Combined correction required',
+      'exact-combined-rejected:'||v_combined_rejected::text,v_now-interval '2 minutes',v_now),
+    (v_combined_later_hours,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY',
+      'ELECTRONIC','FINALISED',2,v_contract,v_week_a,v_timesheet_a,v_timesheet_a,
+      current_date,null,null,'exact-combined-hours:'||v_combined_later_hours::text,
+      v_now+interval '1 second',v_now+interval '1 second');
+  if private._candidate_rejection_replaced_v1(v_combined_rejected) then
+    raise exception 'Hours-only workflow incorrectly resolved a combined rejection';
+  end if;
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,idempotency_key,created_at_utc,updated_at_utc
+  ) values(
+    v_combined_later_combined,'TEST',v_account,v_candidate,'CONTRACT_COMBINED','WEEKLY',
+    'ELECTRONIC','FINALISED',2,v_contract,v_week_a,v_timesheet_a,v_timesheet_a,
+    current_date,'exact-combined-combined:'||v_combined_later_combined::text,
+    v_now+interval '2 seconds',v_now+interval '2 seconds'
+  );
+  if not private._candidate_rejection_replaced_v1(v_combined_rejected) then
+    raise exception 'Same-record combined workflow did not resolve combined rejection';
+  end if;
+
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,rejection_scope,rejection_reason,idempotency_key,
+    created_at_utc,updated_at_utc
+  ) values
+    (v_hours_rejected,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY',
+      'ELECTRONIC','REJECTED',2,v_contract,v_week_b,v_timesheet_b,v_timesheet_b,
+      current_date,'COMPLETE_TIMESHEET_RECORD','Hours correction required',
+      'exact-hours-rejected:'||v_hours_rejected::text,v_now-interval '2 minutes',v_now),
+    (v_hours_later_other_record,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY',
+      'ELECTRONIC','FINALISED',2,v_contract,v_week_a,v_timesheet_a,v_timesheet_a,
+      current_date,null,null,'exact-hours-other:'||v_hours_later_other_record::text,
+      v_now+interval '1 second',v_now+interval '1 second');
+  if private._candidate_rejection_replaced_v1(v_hours_rejected) then
+    raise exception 'Different additional record incorrectly resolved hours rejection';
+  end if;
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,idempotency_key,created_at_utc,updated_at_utc
+  ) values(
+    v_hours_later_same_record,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY',
+    'ELECTRONIC','FINALISED',2,v_contract,v_week_b,v_timesheet_b,v_timesheet_b,
+    current_date,'exact-hours-same:'||v_hours_later_same_record::text,
+    v_now+interval '2 seconds',v_now+interval '2 seconds'
+  );
+  if not private._candidate_rejection_replaced_v1(v_hours_rejected) then
+    raise exception 'Same-record hours workflow did not resolve hours rejection';
+  end if;
+
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,rejection_scope,rejection_reason,idempotency_key,
+    created_at_utc,updated_at_utc
+  ) values
+    (v_expense_rejected,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE','WEEKLY',
+      'ELECTRONIC','REJECTED',2,v_contract,v_week_a,v_timesheet_a,null,
+      current_date-7,'COMPLETE_EXPENSE_CLAIM','Expense correction required',
+      'exact-expense-rejected:'||v_expense_rejected::text,v_now-interval '2 minutes',v_now),
+    (v_expense_later_hours,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY',
+      'ELECTRONIC','FINALISED',2,v_contract,v_week_a,v_timesheet_a,v_timesheet_a,
+      current_date-7,null,null,'exact-expense-hours:'||v_expense_later_hours::text,
+      v_now+interval '1 second',v_now+interval '1 second');
+  if private._candidate_rejection_replaced_v1(v_expense_rejected) then
+    raise exception 'Hours workflow incorrectly resolved separate-expense rejection';
+  end if;
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,
+    week_ending_date,idempotency_key,created_at_utc,updated_at_utc
+  ) values(
+    v_expense_later_expense,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE','WEEKLY',
+    'ELECTRONIC','FINALISED',2,v_contract,v_week_b,v_timesheet_a,null,
+    current_date-7,'exact-expense-expense:'||v_expense_later_expense::text,
+    v_now+interval '2 seconds',v_now+interval '2 seconds'
+  );
+  if not private._candidate_rejection_replaced_v1(v_expense_rejected) then
+    raise exception 'Later week-level expense claim did not resolve expense rejection';
+  end if;
+end;
+$verify_exact_replacement_identity$;
+
 do $verify_protected_history$
 declare
   v_actor uuid:=gen_random_uuid();

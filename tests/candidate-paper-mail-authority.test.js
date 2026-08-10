@@ -108,8 +108,9 @@ test('PAPER release is a service-only atomic workflow action and the backend is 
   assert.doesNotMatch(adapter, /restWrite\(env,\s*'candidate_notifications'/);
 });
 
-test('one retirement helper closes mail, notification and QR authority for every retirement caller', () => {
+test('single-workflow and source-set retirement close mail, notification and QR authority for every caller', () => {
   const helper = functionBody(workflowSource, 'private._candidate_paper_delivery_retire_v1');
+  const setHelper = functionBody(workflowSource, 'private._candidate_paper_delivery_retire_set_v1');
   assert.match(helper, /CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/);
   assert.match(helper, /candidate_paper_generation_retired',true/i);
   assert.match(helper, /CANDIDATE_PAPER_GENERATION_RETIRED/);
@@ -126,10 +127,16 @@ test('one retirement helper closes mail, notification and QR authority for every
   assert.match(helper, /'qr_already_invalidated',v_qr_already_invalidated/i);
   assert.match(helper, /state='DISMISSED'/i);
   assert.match(helper, /qr_token=null/i);
+  assert.match(setHelper, /cardinality\(p_workflow_ids\) is distinct from cardinality\(p_expected_generations\)/i);
+  assert.match(setHelper, /perform pg_advisory_xact_lock\(hashtext\(v_source_key\)\)/i);
+  assert.match(setHelper, /CURRENT_QR_TOKEN_OWNER_CONFLICT/);
+  assert.match(setHelper, /_candidate_paper_delivery_retire_v1\([\s\S]*v_current_token_owner_workflow_id/i);
+  assert.match(setHelper, /'qr_invalidation_proven',true/i);
+  assert.match(setHelper, /'preserved_workflows'/i);
   assert.match(workflowSource, /v_action='AMEND'[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
-  assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
+  assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_set_v1/);
   assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','FINALISED'\)/i);
   assert.match(rejectSource, /CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN/);
   assert.match(qrSettingsSource, /update public\.timesheet_evidence as evidence_row[\s\S]*where evidence_row\.timesheet_id=v_current\.timesheet_id/i);

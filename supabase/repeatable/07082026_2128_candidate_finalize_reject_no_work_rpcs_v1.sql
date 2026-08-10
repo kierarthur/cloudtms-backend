@@ -1195,6 +1195,8 @@ declare
   v_reject_scope text;
   v_workflow record;
   v_rejected_workflow_ids uuid[]:='{}'::uuid[];
+  v_paper_workflow_ids uuid[]:='{}'::uuid[];
+  v_paper_workflow_generations integer[]:='{}'::integer[];
   v_paper_retirement_result jsonb;
   v_response jsonb;
 begin
@@ -1266,24 +1268,30 @@ begin
     v_rejected_workflow_ids:=array_append(v_rejected_workflow_ids,v_workflow.id);
     if v_workflow.route='PAPER'
        and v_workflow.state in ('AWAITING_PAPER_RETURN','FINALISED') then
-      v_paper_retirement_result:=private._candidate_paper_delivery_retire_v1(
-        v_workflow.id,v_workflow.generation,'OFFICE_REJECTED',p_now_utc
+      v_paper_workflow_ids:=array_append(v_paper_workflow_ids,v_workflow.id);
+      v_paper_workflow_generations:=array_append(
+        v_paper_workflow_generations,v_workflow.generation
       );
-      if coalesce((v_paper_retirement_result->>'retired')::boolean,false)=false
-         or (
-           coalesce((v_paper_retirement_result->>'qr_invalidated')::boolean,false)=false
-           and coalesce((v_paper_retirement_result->>'qr_already_invalidated')::boolean,false)=false
-         ) then
-        raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
-          using errcode='40001',detail=jsonb_build_object(
-            'code','CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN',
-            'workflow_id',v_workflow.id,
-            'generation',v_workflow.generation,
-            'retirement_receipt',v_paper_retirement_result
-          )::text;
-      end if;
     end if;
   end loop;
+
+  if cardinality(v_paper_workflow_ids)>0 then
+    v_paper_retirement_result:=private._candidate_paper_delivery_retire_set_v1(
+      v_paper_workflow_ids,v_paper_workflow_generations,
+      'OFFICE_REJECTED',p_now_utc
+    );
+    if not coalesce((v_paper_retirement_result->>'retired')::boolean,false)
+       or not coalesce(
+         (v_paper_retirement_result->>'qr_invalidation_proven')::boolean,false
+       ) then
+      raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN',
+          'workflow_ids',to_jsonb(v_paper_workflow_ids),
+          'retirement_receipt',v_paper_retirement_result
+        )::text;
+    end if;
+  end if;
 
   if v_qr_backed then
     select * into v_qr_result from public.timesheet_qr_refuse_and_reset(
@@ -1358,7 +1366,9 @@ begin
   v_response:=jsonb_build_object(
     'ok',true,'old_timesheet_id',v_timesheet.timesheet_id,'timesheet_id',v_new_timesheet_id,
     'contract_week_id',v_week.id,'contract_week_status','OPEN','processing_status','UNPROCESSED',
-    'rejection_scope',v_reject_scope,'qr_reissue_required',v_qr_backed,'idempotency_key',p_idempotency_key
+    'rejection_scope',v_reject_scope,'qr_reissue_required',v_qr_backed,
+    'paper_retirement_receipt',v_paper_retirement_result,
+    'idempotency_key',p_idempotency_key
   );
   perform private._candidate_audit_v1('timesheet',v_new_timesheet_id::text,'CANDIDATE_SUBMISSION_REJECTED',
     jsonb_build_object('old_timesheet_id',v_timesheet.timesheet_id),v_response,btrim(p_reason),
