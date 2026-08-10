@@ -526,8 +526,9 @@ test('rejected workflows project through the replacement current version with se
   assert.match(page, /RESUBMIT_EXPENSE_CLAIM/);
   assert.match(page, /RESUBMIT_TIMESHEET_AND_EXPENSES/);
   assert.match(page, /RESUBMIT_TIMESHEET/);
-  assert.match(page, /workflow_item->>'state'='REJECTED'[\s\S]*then 'REJECTED'/i);
-  assert.match(page, /'rejection',\([\s\S]*'required_action'/i);
+  assert.match(page, /d\.rejected_workflow is not null then 'REJECTED'/i);
+  assert.match(page, /'rejection',case[\s\S]*'required_action'/i);
+  assert.match(page, /d\.active_workflow_state is not null[\s\S]*or d\.rejected_workflow is null then null/i);
   assert.match(detail, /v_workflow\.state='REJECTED'[\s\S]*then null else v_workflow\.target_timesheet_id/i);
   assert.match(detail, /'required_resubmission_action'[\s\S]*RESUBMIT_EXPENSE_CLAIM/i);
 });
