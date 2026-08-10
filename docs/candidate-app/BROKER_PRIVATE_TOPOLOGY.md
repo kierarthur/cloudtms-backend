@@ -127,15 +127,15 @@ The delivery contract to implement with the app identities is: deterministic not
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `4864624d-a571-4b59-bbac-71ca292d5f68`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `9d6ba30b-5671-4e21-a769-8cd16eb3efd4`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `7064d26e-d151-42dd-a8da-7f7b95fe96b0`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `0b4a394e-87aa-4d25-9dfb-4f6132a7a94f`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `31329082-50e7-4405-8d5b-960f6e16d96b`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `ebcfbdc1-0ad3-4706-8c6d-a3b128edfb69`.
 - Broker health/readiness: 200/200.
 - Normal backend health/readiness: 200/200.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The deployed runtime code is published at backend commit `099802f7cf72e3c8ff68f286743247343cd00413`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The deployed runtime code is published through backend commits `999c02b55322d5749ab2aeb48468bbc40194e0cf` and `1c004f37f42bf353dae2772407a6af3404a9dff1`. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 

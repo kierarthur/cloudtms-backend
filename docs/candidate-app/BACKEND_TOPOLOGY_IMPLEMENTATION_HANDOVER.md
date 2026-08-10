@@ -191,9 +191,11 @@ Implemented:
 - `broker/src/candidate-app-backend.js`
 - `broker/src/index.js`
 - `package.json`
+- `.github/workflows/candidate-db-runtime.yml`
 - `supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql`
 - `supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql`
 - `supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql`
+- `supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql`
 - `supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql`
 
 ### New/amended tests
@@ -201,8 +203,12 @@ Implemented:
 - `tests/candidate-broker-boundary.test.js`
 - `tests/candidate-app-backend.test.js`
 - `tests/candidate-app-db-rpc-contract.test.cjs`
+- `tests/candidate-paper-mail-authority.test.js`
 - `tests/07082026_2155_candidate_app_local_runtime_verification.sql`
+- `tests/08082026_1040_candidate_app_policy_corrections_runtime_verification.sql`
 - `tests/08082026_1200_candidate_app_expense_workflow_runtime_verification.sql`
+- `tests/10082026_1113_candidate_paper_mail_authority_verification.sql`
+- `tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql`
 
 ### Living contract and plan
 
@@ -213,31 +219,41 @@ Implemented:
 - `docs/candidate-app/CANDIDATE_API_OPENAPI_V1.yaml`
 - `docs/candidate-app/ROUTE_WARNING_CATALOGUE.md` — unchanged controlling W01–W13 copy
 
+## Final Candidate PAPER acceptance and mail-authority closure
+
+- `candidate_workflow_transition_atomic_v1/PAPER_PREPARE` now locks the current timesheet before the workflow, freezes the PAPER return manifest and invokes the existing `timesheet_qr_send_enqueue_v1` authority inside the same PostgreSQL transaction;
+- missing, opted-out or unresolved Candidate email, a canonical QR/document queue rejection, or failure to prove one exact held outbox row raises a stable error and rolls back the workflow/QR/document/mail/audit transaction;
+- the private backend consumes the SQL receipt, verifies rather than creates the workflow/outbox binding, and never returns an accepted PAPER response unless the queue, recipient and exact binding are all proven;
+- the scheduled pack worker requires exactly one matching unclaimed held-or-complete outbox operation before R2 receipt lookup or pack assembly;
+- zero or multiple outbox rows, failed/claimed mail, a partial binding or a lost compare-and-set cannot create `PAPER_PACK_READY`;
+- the mail claim gate treats any Candidate PAPER marker as requiring the complete pack proof, so a malformed partial row cannot fall through to ordinary QR mail;
+- the sole `email_outbox_claim_ready_batch` definition was moved to the top-level repeatable directory consumed by the safe installer. No duplicate qualified function definition was introduced;
+- this is an orchestration and installation-authority correction only. It changes no DAILY/WEEKLY economics, rates, pay, charge, VAT, ERNI, margin, TSFIN, Process, Authorise, invoice economics, payment, Banking Pay, Policy X or frontend behaviour.
+
 ## Verification evidence
 
 | Verification | Result |
 |---|---:|
 | Changed/new JavaScript syntax | PASS |
-| Focused Candidate/backend/broker/DB-contract/renderer tests | 109 passed, 0 failed |
-| Candidate DB/RPC + canonical DAILY structural tests | 41 passed, 0 failed |
-| Complete backend test suite | 414 passed, 0 failed |
-| PostgreSQL 17.6 runtime/concurrency suites | 13 passed, 0 failed |
-| PostgreSQL 18.1 runtime/concurrency suites | 13 passed, 0 failed |
+| Focused Candidate/backend/broker/DB-contract/PAPER tests | 105 passed, 0 failed |
+| Complete backend test suite | 435 passed, 0 failed |
+| PostgreSQL 17.6 runtime/concurrency suites | 14 passed, 0 failed |
+| PostgreSQL 18.1 runtime/concurrency suites | 14 passed, 0 failed |
 | Candidate broker Wrangler dry run | PASS |
 | Private Candidate API Wrangler dry run | PASS |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
-| GitHub TEST database migration workflow `31371552388` | PASS |
-| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31371552498` | PASS |
+| GitHub TEST database migration workflow `31390040301` | PASS |
+| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31390040324` | PASS |
 | Public Candidate broker health/readiness | 200 / 200 |
 | Normal TEST backend health/readiness | 200 / 200 |
 | Direct public Candidate route on normal backend | 404, as required |
 
 The pre-deployment dry runs and final deployments used repository-installed Wrangler 4.43.0. Active TEST deployment identities at handover generation are:
 
-- normal TEST backend: `7064d26e-d151-42dd-a8da-7f7b95fe96b0`;
-- private Candidate API: `9d6ba30b-5671-4e21-a769-8cd16eb3efd4`;
-- public Candidate broker: `4864624d-a571-4b59-bbac-71ca292d5f68`.
+- normal TEST backend: `ebcfbdc1-0ad3-4706-8c6d-a3b128edfb69`;
+- private Candidate API: `31329082-50e7-4405-8d5b-960f6e16d96b`;
+- public Candidate broker: `0b4a394e-87aa-4d25-9dfb-4f6132a7a94f`.
 
 The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
@@ -271,10 +287,16 @@ Please verify, function by function, including the final authority seams:
 24. unsupported manager HTTP methods return `405` with zero RPC calls at both public and private boundaries;
 25. duplicate paper release cannot reset notification read or push state, and no notification is created after a lost outbox compare-and-set race;
 26. paper multiplicity fails before PREPARING/FAILED/missing-document returns, and rendering fails closed when the explicit canonical expense total is absent.
+27. `PAPER_PREPARE` and canonical QR/email enqueue share one transaction and one timesheet-before-workflow lock order;
+28. missing/opted-out email and canonical enqueue failure leave the workflow in its pre-PAPER state with no bound/partial mail operation;
+29. zero outbox rows, a claimed row or a partial binding prevent pack assembly/release and create no readiness notification;
+30. one successful PAPER preparation returns only the public-safe queued receipt while the private outbox ID remains behind the private boundary;
+31. `email_outbox_claim_ready_batch` has exactly one repository definition and its top-level repeatable ledger SHA matches the installed TEST definition;
+32. all Candidate flags/tables/mail remain disabled and empty after harmless deployment verification.
 
 ## Remaining delivery sequence after independent GO
 
-1. independently audit exact runtime commit `099802f7cf72e3c8ff68f286743247343cd00413`, its deployed TEST services, the documentation-only follow-up commit and this handover manifest;
+1. independently audit runtime commit `999c02b55322d5749ab2aeb48468bbc40194e0cf`, installer/source-alignment commit `1c004f37f42bf353dae2772407a6af3404a9dff1`, the deployed TEST services and this handover manifest;
 2. keep Candidate feature flags false until the coordinated synthetic TEST fixtures and current CloudTMS frontend are ready;
 3. implement the approved CloudTMS frontend changes, including one shared W01–W13 renderer;
 4. independently verify and freeze the OpenAPI contract after frontend acceptance;
@@ -284,14 +306,14 @@ Please verify, function by function, including the final authority seams:
 
 ## Safety and provenance
 
-- Database mutation or migration: the explicitly authorised TEST migration workflow `31371552388` installed the approved latest definitions and workflow `31371552498` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
+- Database mutation or migration: the explicitly authorised TEST migration workflow `31390040301` installed the approved latest definitions and workflow `31390040324` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
 - Candidate/manager workflow mutation: none.
 - R2 write/delete: none.
 - Email or push sent: none.
 - Normal TEST Worker deployed: yes, explicitly authorised; TEST only.
 - Private/broker Worker deployed: yes, explicitly authorised; TEST only.
 - Production accessed or deployed: no.
-- Commit/push: runtime backend commit `099802f7cf72e3c8ff68f286743247343cd00413` published directly to `origin/test`; the subsequent plan/evidence update is documentation-only; no PR.
+- Commit/push: runtime backend commit `999c02b55322d5749ab2aeb48468bbc40194e0cf` and installer/source-alignment commit `1c004f37f42bf353dae2772407a6af3404a9dff1` were published directly to `origin/test`; the subsequent plan/evidence update is documentation-only; no PR.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.
 
