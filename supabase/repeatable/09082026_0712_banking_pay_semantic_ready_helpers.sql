@@ -372,7 +372,6 @@ DECLARE
   v_selected_preview_row_ids jsonb := '[]'::jsonb;
   v_selected_row_count integer := 0;
   v_overlay_digest text := NULL::text;
-  v_select_all_intent boolean := false;
   v_duplicate_recovery_identity_count integer := 0;
   v_session_ready boolean := false;
   v_draft_blocker_codes jsonb := '[]'::jsonb;
@@ -413,11 +412,6 @@ BEGIN
     RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_SELECTION_OVERLAY_SESSION_NOT_OPEN'
       USING ERRCODE = 'P0001';
   END IF;
-
-  v_select_all_intent := pg_catalog.upper(pg_catalog.btrim(COALESCE(
-    v_session.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
-    ''
-  ))) = 'IMPLICIT_ALL';
 
   SELECT scope_row.*
   INTO v_scope
@@ -499,6 +493,10 @@ BEGIN
       recovery_row.selected AS current_selected,
       recovery_row.selection_state AS current_selection_state,
       COALESCE(recovery_row.row_json, '{}'::jsonb) AS base_row_json,
+      pg_catalog.upper(pg_catalog.btrim(COALESCE(
+        recovery_row.row_json->>'selection_user_override',
+        ''
+      ))) = 'UNSELECTED' AS explicitly_user_unselected,
       pg_catalog.upper(pg_catalog.btrim(COALESCE(
         recovery_row.row_json->>'pay_channel',
         recovery_row.row_json->>'candidate_pay_method',
@@ -712,19 +710,14 @@ BEGIN
     UPDATE public.banking_pay_workbench_preview_rows AS recovery_row
     SET selected = CASE
           WHEN overlay_row.effective_section = 'canonical_preview_lines'
-            THEN v_select_all_intent OR COALESCE(recovery_row.selected, false)
+            THEN overlay_row.explicitly_user_unselected IS NOT TRUE
           ELSE false
         END,
         selection_state = CASE
           WHEN overlay_row.effective_section = 'canonical_preview_lines'
             THEN CASE
-              WHEN v_select_all_intent
-                OR (
-                  COALESCE(recovery_row.selected, false)
-                  AND pg_catalog.upper(pg_catalog.btrim(COALESCE(recovery_row.selection_state, ''))) = 'SELECTED'
-                )
-                THEN 'SELECTED'
-              ELSE 'UNSELECTED'
+              WHEN overlay_row.explicitly_user_unselected IS TRUE THEN 'UNSELECTED'
+              ELSE 'SELECTED'
             END
           ELSE 'NOT_SELECTABLE'
         END,
@@ -765,21 +758,23 @@ BEGIN
             'is_excluded_from_allocation', overlay_row.effective_section <> 'canonical_preview_lines',
             'selected', CASE
               WHEN overlay_row.effective_section = 'canonical_preview_lines'
-                THEN v_select_all_intent OR COALESCE(recovery_row.selected, false)
+                THEN overlay_row.explicitly_user_unselected IS NOT TRUE
               ELSE false
             END,
             'selection_state', CASE
               WHEN overlay_row.effective_section = 'canonical_preview_lines'
-               AND (
-                 v_select_all_intent
-                 OR (
-                   COALESCE(recovery_row.selected, false)
-                   AND pg_catalog.upper(pg_catalog.btrim(COALESCE(recovery_row.selection_state, ''))) = 'SELECTED'
-                 )
-               )
+               AND overlay_row.explicitly_user_unselected IS NOT TRUE
                 THEN 'SELECTED'
               WHEN overlay_row.effective_section = 'canonical_preview_lines' THEN 'UNSELECTED'
               ELSE 'NOT_SELECTABLE'
+            END,
+            'selection_origin', CASE
+              WHEN overlay_row.effective_section = 'canonical_preview_lines'
+               AND overlay_row.explicitly_user_unselected IS TRUE
+                THEN 'USER_EXPLICIT_DESELECT'
+              WHEN overlay_row.effective_section = 'canonical_preview_lines'
+                THEN 'SERVER_DEFAULT_NEWLY_ELIGIBLE'
+              ELSE COALESCE(overlay_row.base_row_json->>'selection_origin', 'SERVER_HEADROOM_BLOCKED')
             END,
             'blocked_reason_codes', CASE
               WHEN overlay_row.effective_section = 'canonical_preview_lines'

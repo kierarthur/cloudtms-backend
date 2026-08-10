@@ -226,6 +226,7 @@ BEGIN
       source_preview.candidate_id,
       source_preview.selected,
       upper(btrim(source_preview.selection_state)) AS selection_state,
+      upper(btrim(COALESCE(source_preview.row_json->>'selection_user_override', ''))) AS selection_user_override,
       source_preview.row_key,
       source_preview.section,
       source_preview.timesheet_id,
@@ -247,6 +248,8 @@ BEGIN
       AND source_preview.status = 'READY'
       AND upper(btrim(COALESCE(source_preview.selection_state, '')))
         IN ('SELECTED', 'UNSELECTED')
+      AND upper(btrim(COALESCE(source_preview.row_json->>'selection_user_override', '')))
+        = upper(btrim(COALESCE(source_preview.selection_state, '')))
   ),
   grouped_keys AS (
     SELECT
@@ -295,6 +298,7 @@ BEGIN
         'stable_selection_key', source_row.stable_selection_key,
         'selected', source_row.selected,
         'selection_state', source_row.selection_state,
+        'selection_user_override', source_row.selection_user_override,
         'row_key', source_row.row_key,
         'section', source_row.section,
         'timesheet_id', source_row.timesheet_id,
@@ -405,6 +409,12 @@ BEGIN
         || jsonb_build_object(
           'selected', v_registration.selected,
           'selection_state', v_registration.selection_state,
+          'selection_user_override', CASE
+            WHEN upper(btrim(COALESCE(v_registration.source_row_snapshot_json->>'selection_user_override', '')))
+              IN ('SELECTED', 'UNSELECTED')
+              THEN upper(btrim(v_registration.source_row_snapshot_json->>'selection_user_override'))
+            ELSE NULL::text
+          END,
           'selection_origin', 'SESSION_REPLACEMENT_CARRY',
           'selection_carry_registration_id', v_registration.id,
           'selection_carried_at_utc', clock_timestamp(),

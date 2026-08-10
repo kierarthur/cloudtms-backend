@@ -839,23 +839,11 @@ BEGIN
       COALESCE(existing_ready.id, gen_random_uuid()) AS promoted_preview_row_id,
       CASE
         WHEN UPPER(BTRIM(COALESCE(
-          v_session_row.progress_json#>>'{selection_intent_v1,canonical_preview_lines,mode}',
+          allocated_recovery.base_row_json->>'selection_user_override',
+          existing_ready.row_json->>'selection_user_override',
           ''
-        ))) = 'EXPLICIT_INCLUDE'
-        THEN EXISTS (
-          SELECT 1
-          FROM jsonb_array_elements_text(
-            CASE
-              WHEN jsonb_typeof(COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)) = 'array'
-                THEN COALESCE(v_session_row.server_selected_preview_row_ids, '[]'::jsonb)
-              ELSE '[]'::jsonb
-            END
-          ) AS selected_id(value)
-          WHERE BTRIM(selected_id.value) IN (
-            allocated_recovery.blocked_preview_row_id::text,
-            existing_ready.id::text
-          )
-        )
+        ))) = 'UNSELECTED'
+          THEN false
         ELSE true
       END AS promoted_selected
     FROM allocated_recovery
@@ -909,6 +897,11 @@ BEGIN
               'is_excluded_from_allocation', false,
               'selected', promotion.promoted_selected,
               'selection_state', CASE WHEN promotion.promoted_selected THEN 'SELECTED' ELSE 'UNSELECTED' END,
+              'selection_origin', CASE
+                WHEN UPPER(BTRIM(COALESCE(promotion.base_row_json->>'selection_user_override', ''))) = 'UNSELECTED'
+                  THEN 'USER_EXPLICIT_DESELECT'
+                ELSE 'SERVER_DEFAULT_NEWLY_ELIGIBLE'
+              END,
               'materialisation_recovery_headroom_revalidated', true,
               'materialisation_recovery_headroom_revalidated_at_utc', v_now::text,
               'retained_positive_headroom_ex_vat', promotion.positive_headroom_ex_vat,

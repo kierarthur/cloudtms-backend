@@ -865,7 +865,10 @@ BEGIN
     existing_preview.selected AS existing_selected,
     existing_preview.selection_state AS existing_selection_state,
     existing_preview.status AS existing_status,
-    existing_preview.row_json->>'selection_identity_digest' AS existing_selection_identity_digest
+    existing_preview.row_json->>'selection_identity_digest' AS existing_selection_identity_digest,
+    existing_preview.row_json->>'selection_user_override' AS existing_selection_user_override,
+    existing_preview.row_json->>'selection_origin' AS existing_selection_origin,
+    existing_preview.row_json->>'selection_user_override_at_utc' AS existing_selection_user_override_at_utc
   FROM public.banking_pay_workbench_candidate_source_lines AS source_row
   LEFT JOIN public.banking_pay_workbench_preview_rows AS existing_preview
     ON existing_preview.session_id = p_session_id
@@ -970,6 +973,25 @@ BEGIN
     prepared_row.*,
     CASE
       WHEN prepared_row.is_selectable IS NOT TRUE THEN false
+      WHEN v_contract_version = 3 THEN
+        CASE
+          WHEN prepared_row.existing_preview_id IS NOT NULL
+           AND prepared_row.existing_status = 'READY'
+           AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
+           AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_user_override, ''))) = 'UNSELECTED'
+            THEN false
+          WHEN prepared_row.existing_preview_id IS NOT NULL
+           AND prepared_row.existing_status = 'READY'
+           AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
+           AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_user_override, ''))) = 'SELECTED'
+            THEN true
+          WHEN prepared_row.existing_preview_id IS NOT NULL
+           AND prepared_row.existing_status = 'READY'
+           AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
+           AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_state, ''))) IN ('SELECTED', 'UNSELECTED')
+            THEN prepared_row.existing_selected IS TRUE
+          ELSE true
+        END
       WHEN v_explicit_selection THEN
         prepared_row.existing_preview_id IS NOT NULL
         AND prepared_row.existing_status = 'READY'
@@ -988,6 +1010,25 @@ BEGIN
     END AS effective_selected,
     CASE
       WHEN prepared_row.is_selectable IS NOT TRUE THEN 'NOT_SELECTABLE'
+      WHEN v_contract_version = 3 THEN
+        CASE
+          WHEN prepared_row.existing_preview_id IS NOT NULL
+           AND prepared_row.existing_status = 'READY'
+           AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
+           AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_user_override, ''))) = 'UNSELECTED'
+            THEN 'UNSELECTED'
+          WHEN prepared_row.existing_preview_id IS NOT NULL
+           AND prepared_row.existing_status = 'READY'
+           AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
+           AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_user_override, ''))) = 'SELECTED'
+            THEN 'SELECTED'
+          WHEN prepared_row.existing_preview_id IS NOT NULL
+           AND prepared_row.existing_status = 'READY'
+           AND prepared_row.existing_selection_identity_digest = prepared_row.selection_identity_digest
+           AND UPPER(BTRIM(COALESCE(prepared_row.existing_selection_state, ''))) IN ('SELECTED', 'UNSELECTED')
+            THEN CASE WHEN prepared_row.existing_selected IS TRUE THEN 'SELECTED' ELSE 'UNSELECTED' END
+          ELSE 'SELECTED'
+        END
       WHEN v_explicit_selection THEN
         CASE
           WHEN prepared_row.existing_preview_id IS NOT NULL
@@ -1154,7 +1195,36 @@ BEGIN
           'selection_identity_digest', ready_row.selection_identity_digest,
           'preview_contract', ready_row.preview_contract_json,
           'selected', ready_row.effective_selected,
-          'selection_state', ready_row.effective_selection_state
+          'selection_state', ready_row.effective_selection_state,
+          'selection_user_override', CASE
+            WHEN v_contract_version = 3
+             AND ready_row.existing_preview_id IS NOT NULL
+             AND ready_row.existing_status = 'READY'
+             AND ready_row.existing_selection_identity_digest = ready_row.selection_identity_digest
+             AND UPPER(BTRIM(COALESCE(ready_row.existing_selection_user_override, ''))) IN ('SELECTED', 'UNSELECTED')
+              THEN UPPER(BTRIM(ready_row.existing_selection_user_override))
+            ELSE NULL::text
+          END,
+          'selection_origin', CASE
+            WHEN v_contract_version = 3
+             AND ready_row.existing_preview_id IS NOT NULL
+             AND ready_row.existing_status = 'READY'
+             AND ready_row.existing_selection_identity_digest = ready_row.selection_identity_digest
+             AND UPPER(BTRIM(COALESCE(ready_row.existing_selection_user_override, ''))) IN ('SELECTED', 'UNSELECTED')
+              THEN COALESCE(NULLIF(ready_row.existing_selection_origin, ''), 'USER_EXPLICIT_SELECTION')
+            WHEN v_contract_version = 3 AND ready_row.is_selectable IS TRUE
+              THEN 'SERVER_DEFAULT_NEW_READY_LINE'
+            ELSE NULL::text
+          END,
+          'selection_user_override_at_utc', CASE
+            WHEN v_contract_version = 3
+             AND ready_row.existing_preview_id IS NOT NULL
+             AND ready_row.existing_status = 'READY'
+             AND ready_row.existing_selection_identity_digest = ready_row.selection_identity_digest
+             AND UPPER(BTRIM(COALESCE(ready_row.existing_selection_user_override, ''))) IN ('SELECTED', 'UNSELECTED')
+              THEN ready_row.existing_selection_user_override_at_utc
+            ELSE NULL::text
+          END
         )
       ),
       ready_row.timesheet_id,

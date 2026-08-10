@@ -495,7 +495,10 @@ BEGIN
             row_json = COALESCE(preview_row.row_json, '{}'::jsonb)
               || jsonb_build_object(
                 'selected', true,
-                'selection_state', 'SELECTED'
+                'selection_state', 'SELECTED',
+                'selection_user_override', 'SELECTED',
+                'selection_origin', 'USER_GLOBAL_SELECT_ALL',
+                'selection_user_override_at_utc', v_now::text
               ),
             updated_at_utc = v_now
         FROM pg_temp._tmp_pay_wb_global_selection_rows AS global_rows
@@ -522,7 +525,10 @@ BEGIN
             row_json = COALESCE(preview_row.row_json, '{}'::jsonb)
               || jsonb_build_object(
                 'selected', false,
-                'selection_state', 'UNSELECTED'
+                'selection_state', 'UNSELECTED',
+                'selection_user_override', 'UNSELECTED',
+                'selection_origin', 'USER_GLOBAL_CLEAR',
+                'selection_user_override_at_utc', v_now::text
               ),
             updated_at_utc = v_now
         FROM pg_temp._tmp_pay_wb_global_selection_rows AS global_rows
@@ -1212,6 +1218,20 @@ BEGIN
               WHEN update_actions.action = 'SELECT' THEN 'SELECTED'
               WHEN update_actions.action = 'REJECT_SELECT' THEN 'NOT_SELECTABLE'
               ELSE 'UNSELECTED'
+            END,
+            'selection_user_override', CASE
+              WHEN update_actions.action = 'SELECT' THEN 'SELECTED'
+              WHEN update_actions.action = 'DESELECT' THEN 'UNSELECTED'
+              ELSE NULL
+            END,
+            'selection_origin', CASE
+              WHEN update_actions.action = 'SELECT' THEN 'USER_EXPLICIT_SELECT'
+              WHEN update_actions.action = 'DESELECT' THEN 'USER_EXPLICIT_DESELECT'
+              ELSE NULL
+            END,
+            'selection_user_override_at_utc', CASE
+              WHEN update_actions.action IN ('SELECT', 'DESELECT') THEN v_now::text
+              ELSE NULL
             END
           ),
         updated_at_utc = v_now

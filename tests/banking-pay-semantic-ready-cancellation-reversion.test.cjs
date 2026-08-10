@@ -62,6 +62,8 @@ const previewPage = read('supabase', 'repeatable',
   '20072026_0117_banking_pay_preview_selection_revision.sql');
 const semanticSelection = read('supabase', 'repeatable',
   '09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql');
+const selectionCarry = read('supabase', 'repeatable',
+  '25072026_2153_banking_pay_selection_carry_runtime.sql');
 const broker = read('broker', 'src', 'index.js');
 const legacyFunctions = read('supabase', 'repeatable', '26052026_2100HRS_NEW_FUNCTIONS.sql');
 
@@ -144,6 +146,40 @@ test('V3 selection revalidation uses the overlay and skips legacy physical secti
   assert.match(recoveryRevalidation, /private\.pay_workbench_recovery_selection_overlay_apply_v1/);
   assert.match(recoveryRevalidation, /legacy_physical_section_revalidation_skipped/);
   assert.match(recoveryRevalidation, /certified_source_preview_identity_preserved/);
+});
+
+test('newly eligible recovery defaults selected while explicit user deselection remains authoritative', () => {
+  assert.match(semanticSelection, /'selection_user_override', 'SELECTED'/);
+  assert.match(semanticSelection, /'selection_user_override', 'UNSELECTED'/);
+  assert.match(semanticSelection, /'selection_origin'[\s\S]{0,180}?THEN 'USER_EXPLICIT_SELECT'/);
+  assert.match(semanticSelection, /'selection_origin'[\s\S]{0,220}?THEN 'USER_EXPLICIT_DESELECT'/);
+  assert.match(
+    recoveryRevalidation,
+    /base_row_json->>'selection_user_override'[\s\S]{0,180}?existing_ready\.row_json->>'selection_user_override'/,
+  );
+  assert.match(
+    recoveryRevalidation,
+    /selection_user_override'[\s\S]{0,120}?= 'UNSELECTED'[\s\S]{0,80}?THEN false[\s\S]{0,50}?ELSE true/,
+  );
+  assert.match(recoveryRevalidation, /SERVER_DEFAULT_NEWLY_ELIGIBLE/);
+  assert.match(helpers, /AS explicitly_user_unselected/);
+  assert.match(
+    helpers,
+    /effective_section = 'canonical_preview_lines'[\s\S]{0,120}?explicitly_user_unselected IS NOT TRUE/,
+  );
+  assert.match(
+    helpers,
+    /explicitly_user_unselected IS TRUE THEN 'UNSELECTED'[\s\S]{0,80}?ELSE 'SELECTED'/,
+  );
+  assert.match(publisher, /WHEN v_contract_version = 3 THEN/);
+  assert.match(publisher, /WHEN prepared_row\.existing_preview_id IS NULL THEN true/);
+  assert.match(publisher, /existing_selection_user_override/);
+  assert.match(publisher, /SERVER_DEFAULT_NEW_READY_LINE/);
+  assert.match(
+    selectionCarry,
+    /selection_user_override'[\s\S]{0,180}?= upper\(btrim\(COALESCE\(source_preview\.selection_state/,
+  );
+  assert.match(selectionCarry, /'selection_origin', 'SESSION_REPLACEMENT_CARRY'/);
 });
 
 test('preview paging exposes each recovery through its single effective section', () => {
@@ -387,8 +423,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 25);
-  assert.equal(semanticManifest.functions.length, 25);
+  assert.equal(semanticManifest.function_count, 27);
+  assert.equal(semanticManifest.functions.length, 27);
   for (const identity of [
     'private.pay_workbench_draft_expected_effects_v1',
     'private.pay_workbench_draft_create_adoption_finalize_v1',
@@ -398,6 +434,8 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'public.pay_batch_finalize_reservations_and_markers',
     'public.pay_batch_create_timesheet_snapshots',
     'public.pay_batch_build_item_breakdowns',
+    'public.pay_workbench_session_carry_forward_preview_selections_v1',
+    'public.trg_banking_pay_preview_selection_carry_apply',
   ]) {
     const [schema, name] = identity.split('.');
     assert.ok(
