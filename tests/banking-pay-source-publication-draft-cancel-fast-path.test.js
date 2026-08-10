@@ -69,6 +69,25 @@ test('same-authority build uniqueness is frozen when the economic build is inser
   assert.match(claimStart, /PAY_WORKBENCH_SOURCE_BUILD_AUTHORITY_FINGERPRINT_REQUIRED/);
   assert.match(claimStart, /SAME_AUTHORITY_OWNER_COALESCED/);
   assert.match(claimStart, /uq_bpay_wb_economic_build_authority_v1/);
+  assert.match(claimStart, /SAME_AUTHORITY_COMPLETE_WINNER_COALESCED/);
+  assert.match(claimStart, /SAME_AUTHORITY_LEGACY_WINNER_V3_REELECTED/);
+  assert.match(claimStart, /SOURCE_BUILD_SAME_AUTHORITY_V3_SUCCESSOR_NOT_PROVEN/);
+});
+
+test('semantic V3 owner election precedes destructive refresh invalidation', () => {
+  const enqueue = read('supabase/repeatable/07082026_1017_pay_workbench_enqueue_candidate_refresh.sql');
+  assert.match(enqueue, /v_semantic_ready_publication_enabled[\s\S]*v_authority_fingerprint_version := CASE/);
+  assert.match(enqueue, /WORKBENCH_SOURCE_OWNER_V3[\s\S]*READY_TO_PAY_SEMANTIC_V2/);
+  assert.match(enqueue, /pre_invalidation_owner_election/);
+  assert.match(enqueue, /v_owner_pay_channel_scope:=UPPER\(BTRIM\(COALESCE\(/);
+  assert.match(enqueue, /v_owner_pay_channel_scope=UPPER\(BTRIM\(COALESCE\(v_pay_channel_scope,'ALL'\)\)\)/);
+  assert.ok(
+    enqueue.indexOf("'pre_invalidation_owner_election',true")
+      < enqueue.indexOf('private.pay_workbench_scope_invalidate_v1('),
+    'complete/current owner election must occur before scope invalidation'
+  );
+  assert.match(enqueue, /'owner_resolution','COMPLETE_CURRENT_AUTHORITY'/);
+  assert.match(enqueue, /'owner_resolution','ACTIVE_CURRENT_OWNER_COVERS_REQUEST'/);
 });
 
 test('source-build claim cursors explicitly continue bounded scans after skip or wrap', () => {

@@ -1,4 +1,4 @@
--- Banking Pay bounded-scope V1.2.8: durable transaction-one claim/start RPC.
+-- Banking Pay bounded-scope V1.2.10: durable transaction-one claim/start RPC.
 -- Each lane owns durable CLAIM and RECOVERY keyset cursors.  The cursor is
 -- advanced before advisory/exact-row locking, so an indefinitely locked prefix
 -- cannot make a later eligible job invisible across calls.
@@ -84,6 +84,8 @@ DECLARE
   v_unique_constraint_name text:=NULL::text;
   v_winner_build private.banking_pay_workbench_economic_builds%ROWTYPE;
   v_winner_active_job_id uuid:=NULL::uuid;
+  v_winner_scope public.banking_pay_workbench_session_scope%ROWTYPE;
+  v_winner_complete_current_proven boolean:=false;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -586,7 +588,7 @@ BEGIN
           0
         ) ELSE 0 END;
       IF v_authority_fingerprint_version=3
-         AND v_required_physical_publication_contract_version<>1 THEN
+         AND v_required_physical_publication_contract_version NOT IN (0,1) THEN
         RAISE EXCEPTION 'PAY_WORKBENCH_SOURCE_BUILD_PHYSICAL_PUBLICATION_CONTRACT_REQUIRED'
           USING ERRCODE='22023',DETAIL=pg_catalog.jsonb_build_object(
             'code','PAY_WORKBENCH_SOURCE_BUILD_PHYSICAL_PUBLICATION_CONTRACT_REQUIRED',
@@ -665,6 +667,198 @@ BEGIN
           )::text;
       END IF;
 
+      IF v_winner_build.status='COMPLETE' THEN
+        v_winner_scope:=NULL;
+        SELECT current_scope.*
+        INTO v_winner_scope
+        FROM public.banking_pay_workbench_session_scope AS current_scope
+        JOIN public.banking_pay_workbench_session_candidate_state AS current_state
+          ON current_state.session_id=current_scope.session_id
+         AND current_state.candidate_id=current_scope.candidate_id
+        WHERE current_scope.session_id=v_job.session_id
+          AND current_scope.candidate_id=v_job.candidate_id
+          AND current_scope.pending_job_id=v_job.id
+          AND current_scope.certified_preview_publication_required IS TRUE
+          AND current_scope.certified_preview_publication_parity_ok IS TRUE
+          AND current_scope.certified_preview_publication_session_version=v_winner_build.session_version
+          AND current_scope.certified_preview_publication_source_change_seq=v_winner_build.source_change_seq
+          AND current_scope.certified_preview_publication_source_build_run_id=v_winner_build.source_build_run_id
+          AND (
+            COALESCE(
+              (v_settings_json->>'banking_pay_workbench_semantic_ready_publication_v3_enabled')::boolean,
+              false
+            ) IS NOT TRUE
+            OR (
+              current_scope.certified_preview_publication_attestation_json->>'attestation_version'
+                    ='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+              AND current_scope.certified_preview_publication_attestation_json->>'contract_version'='3'
+              AND current_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
+                    ='READY_TO_PAY_SEMANTIC_V2'
+              AND COALESCE(
+                (current_scope.certified_preview_publication_attestation_json->>'semantic_ready')::boolean,
+                false
+              )
+              AND COALESCE(
+                (current_scope.certified_preview_publication_attestation_json->>'parity_complete')::boolean,
+                false
+              )
+            )
+          )
+          AND (
+            v_required_physical_publication_contract_version=0
+            OR (
+              current_scope.certified_preview_publication_source_publication_id IS NOT NULL
+              AND current_scope.certified_preview_publication_attestation_json->>'source_publication_id'
+                    =current_scope.certified_preview_publication_source_publication_id::text
+            )
+          )
+          AND current_state.pending_job_id=v_job.id
+          AND current_state.session_version=v_winner_build.session_version
+          AND current_state.source_change_seq=v_winner_build.source_change_seq
+        FOR UPDATE OF current_scope,current_state;
+        v_winner_complete_current_proven:=FOUND;
+
+        IF v_winner_complete_current_proven THEN
+          UPDATE public.banking_pay_workbench_jobs AS loser_job
+          SET status='SUCCEEDED',completed_at_utc=clock_timestamp(),updated_at_utc=clock_timestamp(),
+              economic_build_id=NULL,private_stage=NULL,private_cursor_kind=NULL,
+              private_cursor_json='{}'::jsonb,private_stage_version=NULL,
+              last_error_json=pg_catalog.jsonb_build_object(
+                'code','SAME_AUTHORITY_COMPLETE_WINNER_COALESCED',
+                'winner_build_id',v_winner_build.id,
+                'authority_fingerprint_version',v_authority_fingerprint_version,
+                'authority_fingerprint',v_authority_fingerprint
+              )
+          WHERE loser_job.id=v_job.id AND loser_job.status='QUEUED';
+
+          UPDATE public.banking_pay_workbench_session_scope AS scope_row
+          SET status='MATERIALISED',dirty=false,pending_job_id=NULL,error_json=NULL,
+              updated_at_utc=clock_timestamp()
+          WHERE scope_row.session_id=v_job.session_id
+            AND scope_row.candidate_id=v_job.candidate_id
+            AND scope_row.pending_job_id=v_job.id;
+          UPDATE public.banking_pay_workbench_session_candidate_state AS state_row
+          SET status='READY',pending_job_id=NULL,updated_at_utc=clock_timestamp()
+          WHERE state_row.session_id=v_job.session_id
+            AND state_row.candidate_id=v_job.candidate_id
+            AND state_row.pending_job_id=v_job.id;
+          UPDATE private.banking_pay_workbench_candidate_scope_registry
+          SET current_build_id=v_winner_build.id,updated_at_utc=clock_timestamp()
+          WHERE candidate_id=v_job.candidate_id
+            AND current_source_change_seq=v_winner_build.source_change_seq
+            AND dirty_generation=v_winner_build.captured_candidate_generation;
+
+          RETURN pg_catalog.jsonb_build_object(
+            'ok',true,'claimed',false,
+            'result_code','SAME_AUTHORITY_COMPLETE_WINNER_COALESCED',
+            'job_id',v_job.id,'candidate_id',v_job.candidate_id,
+            'winner_build_id',v_winner_build.id,
+            'authority_fingerprint_version',v_authority_fingerprint_version,
+            'authority_fingerprint',v_authority_fingerprint,
+            'current_terminal_authority',true
+          );
+        END IF;
+
+        -- A legacy V2 owner can be economically complete while lacking the
+        -- newly required V3 semantic publication.  The losing V2 job must not
+        -- spin forever on the uniqueness fence: terminate it, then let the
+        -- canonical orphan-repair/enqueue owner elect the distinct V3
+        -- successor in this same transaction.
+        IF COALESCE(
+             (v_settings_json->>'banking_pay_workbench_semantic_ready_publication_v3_enabled')::boolean,
+             false
+           )
+           AND COALESCE(v_authority_fingerprint_version,0)<3 THEN
+          UPDATE public.banking_pay_workbench_jobs AS loser_job
+          SET status='SUCCEEDED',completed_at_utc=clock_timestamp(),updated_at_utc=clock_timestamp(),
+              economic_build_id=NULL,private_stage=NULL,private_cursor_kind=NULL,
+              private_cursor_json='{}'::jsonb,private_stage_version=NULL,
+              last_error_json=pg_catalog.jsonb_build_object(
+                'code','SAME_AUTHORITY_LEGACY_WINNER_V3_REELECTION_REQUIRED',
+                'winner_build_id',v_winner_build.id,
+                'authority_fingerprint_version',v_authority_fingerprint_version,
+                'authority_fingerprint',v_authority_fingerprint
+              )
+          WHERE loser_job.id=v_job.id AND loser_job.status='QUEUED';
+
+          v_obsolete_repair_result:=public.pay_workbench_repair_orphaned_pending_source_build(
+            p_session_id=>v_job.session_id,
+            p_candidate_id=>v_job.candidate_id,
+            p_limit=>1,
+            p_now_utc=>v_database_now,
+            p_reason=>'SAME_AUTHORITY_LEGACY_WINNER_V3_REELECTION'
+          );
+
+          IF jsonb_typeof(v_obsolete_repair_result) IS DISTINCT FROM 'object'
+             OR lower(BTRIM(COALESCE(v_obsolete_repair_result->>'ok','false'))) <> 'true'
+             OR COALESCE((v_obsolete_repair_result->>'unresolved_count')::integer,0) <> 0
+             OR lower(BTRIM(COALESCE(
+                  v_obsolete_repair_result->>'all_state_transitions_proven','false'
+                ))) <> 'true' THEN
+            RAISE EXCEPTION 'SOURCE_BUILD_SAME_AUTHORITY_V3_SUCCESSOR_NOT_PROVEN'
+              USING ERRCODE='40001',DETAIL=pg_catalog.jsonb_build_object(
+                'code','SOURCE_BUILD_SAME_AUTHORITY_V3_SUCCESSOR_NOT_PROVEN',
+                'job_id',v_job.id,
+                'candidate_id',v_job.candidate_id,
+                'winner_build_id',v_winner_build.id
+              )::text;
+          END IF;
+
+          SELECT pending_scope.pending_job_id,
+                 EXISTS (
+                   SELECT 1
+                   FROM public.banking_pay_workbench_jobs AS successor_job
+                   JOIN public.banking_pay_workbench_session_candidate_state AS successor_state
+                     ON successor_state.session_id=successor_job.session_id
+                    AND successor_state.candidate_id=successor_job.candidate_id
+                   WHERE successor_job.id=pending_scope.pending_job_id
+                     AND successor_job.session_id=v_job.session_id
+                     AND successor_job.candidate_id=v_job.candidate_id
+                     AND successor_job.job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'
+                     AND successor_job.status IN ('QUEUED','RUNNING')
+                     AND COALESCE(
+                       NULLIF(successor_job.payload_json->>'authority_fingerprint_version','')::integer,
+                       0
+                     )>=3
+                     AND successor_state.status='PENDING'
+                     AND successor_state.pending_job_id=successor_job.id
+                 )
+          INTO v_obsolete_successor_job_id,
+               v_obsolete_active_successor_proven
+          FROM public.banking_pay_workbench_session_scope AS pending_scope
+          WHERE pending_scope.session_id=v_job.session_id
+            AND pending_scope.candidate_id=v_job.candidate_id;
+
+          IF COALESCE(v_obsolete_active_successor_proven,false) IS NOT TRUE THEN
+            RAISE EXCEPTION 'SOURCE_BUILD_SAME_AUTHORITY_V3_SUCCESSOR_NOT_PROVEN'
+              USING ERRCODE='40001',DETAIL=pg_catalog.jsonb_build_object(
+                'code','SOURCE_BUILD_SAME_AUTHORITY_V3_SUCCESSOR_NOT_PROVEN',
+                'job_id',v_job.id,
+                'candidate_id',v_job.candidate_id,
+                'successor_job_id',v_obsolete_successor_job_id
+              )::text;
+          END IF;
+
+          RETURN pg_catalog.jsonb_build_object(
+            'ok',true,'claimed',false,
+            'result_code','SAME_AUTHORITY_LEGACY_WINNER_V3_REELECTED',
+            'job_id',v_job.id,'candidate_id',v_job.candidate_id,
+            'winner_build_id',v_winner_build.id,
+            'successor_resolution',pg_catalog.jsonb_build_object(
+              'required',true,'proven',true,
+              'successor_created_or_reused',true,
+              'successor_job_id',v_obsolete_successor_job_id
+            )
+          );
+        END IF;
+
+        RAISE EXCEPTION 'PAY_WORKBENCH_SAME_AUTHORITY_COMPLETE_WINNER_NOT_CURRENT'
+          USING ERRCODE='40001',DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAY_WORKBENCH_SAME_AUTHORITY_COMPLETE_WINNER_NOT_CURRENT',
+            'job_id',v_job.id,'winner_build_id',v_winner_build.id
+          )::text;
+      END IF;
+
       SELECT winner_job.id INTO v_winner_active_job_id
       FROM public.banking_pay_workbench_jobs AS winner_job
       WHERE winner_job.economic_build_id=v_winner_build.id
@@ -683,7 +877,7 @@ BEGIN
 
       UPDATE public.banking_pay_workbench_jobs AS loser_job
       SET status='SUCCEEDED',completed_at_utc=clock_timestamp(),updated_at_utc=clock_timestamp(),
-          economic_build_id=v_winner_build.id,private_stage=NULL,private_cursor_kind=NULL,
+          economic_build_id=NULL,private_stage=NULL,private_cursor_kind=NULL,
           private_cursor_json='{}'::jsonb,private_stage_version=NULL,
           last_error_json=pg_catalog.jsonb_build_object(
             'code','SAME_AUTHORITY_OWNER_COALESCED',

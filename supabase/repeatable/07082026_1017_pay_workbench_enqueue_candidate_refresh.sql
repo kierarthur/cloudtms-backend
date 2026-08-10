@@ -1,10 +1,10 @@
--- Banking Pay bounded-scope Version 1.2.4
+-- Banking Pay bounded-scope Version 1.2.5
 -- Exact installed TEST baseline; intentionally replaced in place by exact identity.
 -- Policy X: pre-draft freshness/orchestration only; frozen post-draft authority is unchanged.
 
 -- -----------------------------------------------------------------------------
 -- public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text, p_actor_user_id uuid, p_payload_json jsonb)
--- Installed pg_get_functiondef MD5: 13e76063b68e27483e09c637379b04ac
+-- Prior installed pg_get_functiondef MD5: 13e76063b68e27483e09c637379b04ac
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.pay_workbench_enqueue_candidate_refresh(p_snapshot_run_id uuid, p_candidate_id uuid, p_reason text DEFAULT NULL::text, p_actor_user_id uuid DEFAULT NULL::uuid, p_payload_json jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -167,8 +167,16 @@ BEGIN
     ))) IN ('true','t','1','yes','y','on');
   v_required_physical_publication_contract_version :=
     CASE WHEN v_source_publication_baseline_required THEN 1 ELSE 0 END;
-  v_authority_fingerprint_version :=
-    CASE WHEN v_source_publication_baseline_required THEN 3 ELSE 2 END;
+  -- Fingerprint V3 distinguishes the semantic publication contract from the
+  -- legacy structural owner even while physical-publication enforcement is
+  -- still being rolled out.  The physical contract remains an independent
+  -- 0/1 capability inside V3, so enabling semantic V3 does not silently make
+  -- legacy Drafts fast-reversion eligible.
+  v_authority_fingerprint_version := CASE
+    WHEN v_semantic_ready_publication_enabled
+      OR v_source_publication_baseline_required THEN 3
+    ELSE 2
+  END;
 
   -- One candidate may be requested through several independent refresh routes
   -- in the same lifecycle. Elect/reuse its economic owner under the common
@@ -617,6 +625,261 @@ BEGIN
     v_payload_scope_change_generation :=
       (v_payload_json->>'scope_change_generation')::bigint;
   END IF;
+
+  -- Elect an already-current economic owner before scope invalidation.  A
+  -- reason such as USER_REQUESTED_FULL_REFRESH or force_legacy is provenance,
+  -- not proof that current certified output is stale.  This early fence is
+  -- what prevents a same-sequence refresh from first destroying the evidence
+  -- needed by COMPLETE_CURRENT_AUTHORITY.
+  IF NOT v_scope_state_precedes_job THEN
+    SELECT registry.dirty_generation,
+           registry.current_source_change_seq
+    INTO v_registry_dirty_generation,
+         v_registry_source_change_seq_before
+    FROM private.banking_pay_workbench_candidate_scope_registry AS registry
+    WHERE registry.candidate_id=p_candidate_id
+    FOR UPDATE;
+  END IF;
+
+  v_session_signature_token:=md5(COALESCE(v_session_row.session_signature,''));
+
+  v_authority_fingerprint_text := concat_ws('|',
+    CASE WHEN v_authority_fingerprint_version=3
+      THEN 'WORKBENCH_SOURCE_OWNER_V3' ELSE 'WORKBENCH_SOURCE_OWNER_V2' END,
+    v_session_id::text,
+    COALESCE(v_session_row.version,0)::text,
+    v_session_row.source_snapshot_run_id::text,
+    v_session_signature_token,
+    p_candidate_id::text,
+    COALESCE(v_source_change_seq,0)::text,
+    COALESCE(v_registry_dirty_generation,v_live_scope_change_generation,0)::text,
+    UPPER(BTRIM(COALESCE(v_pay_channel_scope,'ALL'))),
+    'FULL_CANDIDATE',
+    CASE WHEN v_authority_fingerprint_version=3
+      THEN 'READY_TO_PAY_SEMANTIC_V2' ELSE NULL END,
+    CASE WHEN v_authority_fingerprint_version=3
+      THEN v_required_physical_publication_contract_version::text ELSE NULL END
+  );
+  v_authority_fingerprint := pg_catalog.encode(
+    extensions.digest(pg_catalog.convert_to(v_authority_fingerprint_text,'UTF8'),'sha256'),
+    'hex'
+  );
+
+  SELECT build_row.*
+  INTO v_owner_build
+  FROM private.banking_pay_workbench_economic_builds AS build_row
+  JOIN public.banking_pay_workbench_session_scope AS current_scope
+    ON current_scope.session_id=build_row.session_id
+   AND current_scope.candidate_id=build_row.candidate_id
+  JOIN public.banking_pay_workbench_session_candidate_state AS current_state
+    ON current_state.session_id=build_row.session_id
+   AND current_state.candidate_id=build_row.candidate_id
+  WHERE build_row.candidate_id=p_candidate_id
+    AND build_row.session_id=v_session_id
+    AND build_row.session_version=COALESCE(v_session_row.version,0)
+    AND build_row.source_snapshot_run_id=v_session_row.source_snapshot_run_id
+    AND build_row.source_change_seq=COALESCE(v_source_change_seq,0)
+    AND build_row.captured_candidate_generation=
+          COALESCE(v_registry_dirty_generation,v_live_scope_change_generation,0)
+    AND UPPER(BTRIM(COALESCE(build_row.status,'')))='COMPLETE'
+    AND UPPER(BTRIM(COALESCE(build_row.private_stage,'')))='COMPLETE'
+    AND current_scope.dirty IS FALSE
+    AND current_scope.pending_job_id IS NULL
+    AND current_scope.certified_preview_publication_required IS TRUE
+    AND current_scope.certified_preview_publication_parity_ok IS TRUE
+    AND current_scope.certified_preview_publication_session_version=build_row.session_version
+    AND current_scope.certified_preview_publication_source_change_seq=build_row.source_change_seq
+    AND current_scope.certified_preview_publication_source_build_run_id=build_row.source_build_run_id
+    AND (
+      NOT v_source_publication_baseline_required
+      OR (
+        current_scope.certified_preview_publication_source_publication_id IS NOT NULL
+        AND current_scope.certified_preview_publication_attestation_json->>'source_publication_id'
+              =current_scope.certified_preview_publication_source_publication_id::text
+      )
+    )
+    AND (
+      NOT v_semantic_ready_publication_enabled
+      OR (
+        current_scope.certified_preview_publication_attestation_json->>'attestation_version'
+              ='CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+        AND current_scope.certified_preview_publication_attestation_json->>'contract_version'='3'
+        AND current_scope.certified_preview_publication_attestation_json->>'semantic_contract_version'
+              ='READY_TO_PAY_SEMANTIC_V2'
+        AND COALESCE(
+          (current_scope.certified_preview_publication_attestation_json->>'semantic_ready')::boolean,
+          false
+        )
+        AND COALESCE(
+          (current_scope.certified_preview_publication_attestation_json->>'parity_complete')::boolean,
+          false
+        )
+      )
+    )
+    AND UPPER(BTRIM(COALESCE(current_state.status,'')))='READY'
+    AND current_state.pending_job_id IS NULL
+    AND current_state.session_version=build_row.session_version
+    AND current_state.source_change_seq=build_row.source_change_seq
+  ORDER BY build_row.completed_at_utc DESC NULLS LAST,build_row.id DESC
+  LIMIT 1
+  FOR UPDATE OF build_row,current_scope,current_state;
+
+  IF FOUND THEN
+    SELECT source_job.*
+    INTO v_owner_root_job
+    FROM public.banking_pay_workbench_jobs AS source_job
+    WHERE source_job.economic_build_id=v_owner_build.id
+      AND UPPER(BTRIM(COALESCE(source_job.job_type,'')))='WORKBENCH_CANDIDATE_SOURCE_BUILD'
+      AND COALESCE(
+        source_job.payload_json->>'source_build_run_id',
+        source_job.payload_json#>>'{source_build,source_build_run_id}',
+        ''
+      )=v_owner_build.source_build_run_id::text
+    ORDER BY source_job.created_at_utc,source_job.id
+    LIMIT 1
+    FOR UPDATE;
+
+    IF FOUND THEN
+      v_owner_pay_channel_scope:=UPPER(BTRIM(COALESCE(
+        v_owner_root_job.payload_json->>'pay_channel_scope',
+        v_owner_root_job.payload_json#>>'{source_build,pay_channel_scope}',
+        'ALL'
+      )));
+      IF v_owner_pay_channel_scope=UPPER(BTRIM(COALESCE(v_pay_channel_scope,'ALL'))) THEN
+        UPDATE public.banking_pay_workbench_jobs AS owner_job
+        SET payload_json=jsonb_strip_nulls(
+              COALESCE(owner_job.payload_json,'{}'::jsonb)
+              || jsonb_build_object('reason_latest',v_reason)
+            ),
+            updated_at_utc=v_now
+        WHERE owner_job.id=v_owner_root_job.id;
+
+        RETURN jsonb_strip_nulls(jsonb_build_object(
+        'ok',true,
+        'job_id',v_owner_root_job.id::text,
+        'job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD',
+        'canonical_job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD',
+        'session_id',v_session_id::text,
+        'candidate_id',p_candidate_id::text,
+        'session_version',COALESCE(v_session_row.version,0),
+        'source_change_seq',COALESCE(v_source_change_seq,0),
+        'registry_source_change_seq',COALESCE(v_registry_source_change_seq_before,v_source_change_seq,0),
+        'source_build_run_id',v_owner_build.source_build_run_id::text,
+        'source_publication_id',(
+          SELECT current_scope.certified_preview_publication_source_publication_id::text
+          FROM public.banking_pay_workbench_session_scope AS current_scope
+          WHERE current_scope.session_id=v_session_id
+            AND current_scope.candidate_id=p_candidate_id
+        ),
+        'authority_fingerprint',COALESCE(v_owner_build.authority_fingerprint,v_authority_fingerprint),
+        'authority_fingerprint_version',COALESCE(v_owner_build.authority_fingerprint_version,v_authority_fingerprint_version),
+        'required_physical_publication_contract_version',v_required_physical_publication_contract_version,
+        'owner_resolution','COMPLETE_CURRENT_AUTHORITY',
+        'owner_build_id',v_owner_build.id::text,
+        'owner_root_job_id',v_owner_root_job.id::text,
+        'owner_source_build_run_id',v_owner_build.source_build_run_id::text,
+        'requested_coverage','FULL_CANDIDATE',
+        'owner_coverage','FULL_CANDIDATE',
+        'scope_status','MATERIALISED',
+        'source_build_required',false,
+        'delta_refresh_required',false,
+        'coalesced',true,
+        'reused',true,
+        'new_owner_created',false,
+        'no_op',true,
+        'pre_invalidation_owner_election',true,
+        'diagnostic_provenance_merged',true,
+        'reason',v_reason,
+        'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
+        ));
+      END IF;
+    END IF;
+  END IF;
+
+  v_owner_build:=NULL;
+  v_owner_root_job:=NULL;
+  v_owner_active_job_id:=NULL::uuid;
+  SELECT build_row.*
+  INTO v_owner_build
+  FROM private.banking_pay_workbench_economic_builds AS build_row
+  WHERE build_row.candidate_id=p_candidate_id
+    AND build_row.session_id=v_session_id
+    AND build_row.session_version=COALESCE(v_session_row.version,0)
+    AND build_row.source_snapshot_run_id=v_session_row.source_snapshot_run_id
+    AND build_row.source_change_seq=COALESCE(v_source_change_seq,0)
+    AND build_row.captured_candidate_generation=
+          COALESCE(v_registry_dirty_generation,v_live_scope_change_generation,0)
+    AND build_row.authority_fingerprint_version=v_authority_fingerprint_version
+    AND build_row.authority_fingerprint=v_authority_fingerprint
+    AND UPPER(BTRIM(COALESCE(build_row.status,''))) IN (
+      'COLLECTING','READY_FOR_RECONCILIATION','RECONCILING','RECONCILED',
+      'PUBLISHING','BLOCKED_UNVALIDATED_RECONCILIATION_SCALE'
+    )
+    AND EXISTS (
+      SELECT 1 FROM public.banking_pay_workbench_jobs AS active_job
+      WHERE active_job.economic_build_id=build_row.id
+        AND active_job.status IN ('QUEUED','RUNNING')
+    )
+  ORDER BY build_row.created_at_utc DESC,build_row.id DESC
+  LIMIT 1
+  FOR UPDATE;
+
+  IF FOUND THEN
+    SELECT source_job.*
+    INTO v_owner_root_job
+    FROM public.banking_pay_workbench_jobs AS source_job
+    WHERE source_job.economic_build_id=v_owner_build.id
+      AND UPPER(BTRIM(COALESCE(source_job.job_type,'')))='WORKBENCH_CANDIDATE_SOURCE_BUILD'
+    ORDER BY source_job.created_at_utc,source_job.id
+    LIMIT 1
+    FOR UPDATE;
+    SELECT active_job.id
+    INTO v_owner_active_job_id
+    FROM public.banking_pay_workbench_jobs AS active_job
+    WHERE active_job.economic_build_id=v_owner_build.id
+      AND active_job.status IN ('QUEUED','RUNNING')
+    ORDER BY CASE WHEN active_job.status='RUNNING' THEN 0 ELSE 1 END,
+             active_job.run_at_utc,active_job.created_at_utc,active_job.id
+    LIMIT 1;
+
+    IF v_owner_root_job.id IS NOT NULL AND v_owner_active_job_id IS NOT NULL THEN
+      RETURN jsonb_strip_nulls(jsonb_build_object(
+        'ok',true,
+        'job_id',v_owner_root_job.id::text,
+        'job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD',
+        'canonical_job_type','WORKBENCH_CANDIDATE_SOURCE_BUILD',
+        'session_id',v_session_id::text,
+        'candidate_id',p_candidate_id::text,
+        'session_version',COALESCE(v_session_row.version,0),
+        'source_change_seq',COALESCE(v_source_change_seq,0),
+        'source_build_run_id',v_owner_build.source_build_run_id::text,
+        'authority_fingerprint',v_authority_fingerprint,
+        'authority_fingerprint_version',v_authority_fingerprint_version,
+        'required_physical_publication_contract_version',v_required_physical_publication_contract_version,
+        'owner_resolution','ACTIVE_CURRENT_OWNER_COVERS_REQUEST',
+        'owner_build_id',v_owner_build.id::text,
+        'owner_root_job_id',v_owner_root_job.id::text,
+        'owner_active_job_id',v_owner_active_job_id::text,
+        'owner_source_build_run_id',v_owner_build.source_build_run_id::text,
+        'requested_coverage','FULL_CANDIDATE',
+        'owner_coverage','FULL_CANDIDATE',
+        'scope_status','SOURCE_BUILD_PENDING',
+        'source_build_required',true,
+        'delta_refresh_required',false,
+        'coalesced',true,
+        'reused',true,
+        'new_owner_created',false,
+        'no_op',false,
+        'pre_invalidation_owner_election',true,
+        'reason',v_reason,
+        'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
+      ));
+    END IF;
+  END IF;
+
+  v_owner_build:=NULL;
+  v_owner_root_job:=NULL;
+  v_owner_active_job_id:=NULL::uuid;
 
   IF v_scope_state_precedes_job THEN
     SELECT registry.dirty_generation,
@@ -1179,6 +1442,8 @@ BEGIN
       COALESCE(v_registry_dirty_generation, 0)::text,
       UPPER(BTRIM(COALESCE(v_pay_channel_scope, 'ALL'))),
       'FULL_CANDIDATE',
+      CASE WHEN v_authority_fingerprint_version=3
+        THEN 'READY_TO_PAY_SEMANTIC_V2' ELSE NULL END,
       CASE WHEN v_authority_fingerprint_version=3
         THEN v_required_physical_publication_contract_version::text ELSE NULL END
     );
