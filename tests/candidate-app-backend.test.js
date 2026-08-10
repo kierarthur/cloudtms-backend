@@ -4,7 +4,11 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { PDFDocument } from 'pdf-lib';
 
-import { candidateAppBackendInternals, handleCandidateAppRequest } from '../broker/src/candidate-app-backend.js';
+import {
+  candidateAppBackendInternals,
+  handleCandidateAppRequest,
+  processPendingCandidatePaperPacks
+} from '../broker/src/candidate-app-backend.js';
 
 const {
   deferBackground,
@@ -670,6 +674,35 @@ test('paper pack release never requeues a failed mail operation', async () => {
   }
 });
 
+test('paper pack release rejects a missing outbox before creating a readiness notification', async () => {
+  const originalFetch = globalThis.fetch;
+  let notificationCalls = 0;
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/mail_outbox')) return Response.json([]);
+    if (path.endsWith('/candidate_notifications')) {
+      notificationCalls += 1;
+      return Response.json([]);
+    }
+    throw new Error(`unexpected request ${path}`);
+  };
+  try {
+    await assert.rejects(releaseCandidatePaperPack({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: '00000000-0000-4000-8000-000000000041', generation: 2,
+      account_id: '00000000-0000-4000-8000-000000000045',
+      candidate_id: '00000000-0000-4000-8000-000000000046'
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000042' }, {
+      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
+      page_count: 2, manifest_hash: 'd'.repeat(64)
+    }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+    assert.equal(notificationCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('paper pack release is insert-once and preserves an existing notification lifecycle', async () => {
   const originalFetch = globalThis.fetch;
   const existingNotification = { state: 'READ', push_state: 'SENT', created_at_utc: '2026-08-01T00:00:00Z' };
@@ -891,7 +924,8 @@ test('paper outbox binding is already atomic and the backend only adopts the exa
       id: '00000000-0000-4000-8000-000000000050', generation: 1,
       paper_return_manifest_sha256: 'a'.repeat(64)
     }, '00000000-0000-4000-8000-000000000049', {
-      recipient_available: true, mail_outbox_id: '00000000-0000-4000-8000-000000000048'
+      queued: true, recipient_available: true,
+      mail_outbox_id: '00000000-0000-4000-8000-000000000048'
     });
     assert.deepEqual(result, {
       bound: true, recipient_available: true,
@@ -901,6 +935,109 @@ test('paper outbox binding is already atomic and the backend only adopts the exa
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('paper pack release rejects an already claimed held email before PATCH or notification', async () => {
+  const originalFetch = globalThis.fetch;
+  const methods = [];
+  globalThis.fetch = async (url, options = {}) => {
+    methods.push(options.method || 'GET');
+    const path = new URL(url).pathname;
+    if (!path.endsWith('/mail_outbox')) throw new Error(`unexpected request ${path}`);
+    return Response.json([{
+      id: '00000000-0000-4000-8000-000000000043', status: 'QUEUED',
+      payment_scope_json: {
+        candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
+        candidate_workflow_generation: 2,
+        paper_return_manifest_sha256: 'd'.repeat(64),
+        candidate_paper_pack_ready: false,
+        mail_held_until_pdf_rendered: true,
+        mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
+      }, attachments: [], attempt_lease_token: 'already-claimed'
+    }]);
+  };
+  try {
+    await assert.rejects(releaseCandidatePaperPack({
+      SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: '00000000-0000-4000-8000-000000000044', generation: 2,
+      account_id: '00000000-0000-4000-8000-000000000045',
+      candidate_id: '00000000-0000-4000-8000-000000000046'
+    }, { timesheet_id: '00000000-0000-4000-8000-000000000047' }, {
+      key: 'candidate-app/test/pack.pdf', sha256: 'e'.repeat(64), byte_size: 500,
+      page_count: 2, manifest_hash: 'd'.repeat(64)
+    }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+    assert.deepEqual(methods, ['GET']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper-pack scheduler proves the exact held email before any R2 pack work', async () => {
+  const originalFetch = globalThis.fetch;
+  let r2Calls = 0;
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000060', generation: 1,
+    route: 'PAPER', state: 'AWAITING_PAPER_RETURN',
+    target_timesheet_id: '00000000-0000-4000-8000-000000000061',
+    paper_return_manifest_sha256: 'a'.repeat(64)
+  };
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (parsed.pathname.endsWith('/timesheets')) return Response.json([{
+      timesheet_id: workflow.target_timesheet_id, version: 1, sheet_scope: 'WEEKLY',
+      submission_mode: 'MANUAL', qr_status: 'PENDING', document_state: 'READY',
+      current_document_version_id: '00000000-0000-4000-8000-000000000062'
+    }]);
+    if (parsed.pathname.endsWith('/invoice_document_versions')) return Response.json([{
+      id: '00000000-0000-4000-8000-000000000062', r2_key: 'candidate/base.pdf',
+      sha256: 'b'.repeat(64), status: 'READY'
+    }]);
+    if (parsed.pathname.endsWith('/mail_outbox')) return Response.json([]);
+    throw new Error(`unexpected request ${parsed.pathname}`);
+  };
+  try {
+    const result = await processPendingCandidatePaperPacks({
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+      R2: {
+        async head() { r2Calls += 1; return null; },
+        async get() { r2Calls += 1; return null; },
+        async put() { r2Calls += 1; }
+      }
+    }, {}, 1);
+    assert.equal(result.results.length, 1);
+    assert.equal(result.results[0].ok, false);
+    assert.equal(result.results[0].error_code, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
+    assert.equal(r2Calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper outbox binding rejects missing, opted-out or otherwise unavailable email delivery', async () => {
+  for (const pack of [
+    { queued: false, recipient_available: false },
+    { queued: false, recipient_available: true },
+    { queued: true, recipient_available: false }
+  ]) {
+    await assert.rejects(bindCandidatePaperOutbox({}, {
+      id: '00000000-0000-4000-8000-000000000050', generation: 1,
+      paper_return_manifest_sha256: 'a'.repeat(64)
+    }, '00000000-0000-4000-8000-000000000049', pack),
+    error => error?.code === 'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE');
+  }
+});
+
+test('QR pack public response never defaults a missing queue result to accepted', () => {
+  assert.equal(safeQrPackResponse({ recipient_available: true }).queued, false);
+  assert.equal(safeQrPackResponse({ queued: true, recipient_available: true }).queued, true);
+  assert.equal('mail_outbox_id' in safeQrPackResponse({
+    queued: true, recipient_available: true,
+    mail_outbox_id: '00000000-0000-4000-8000-000000000048'
+  }), false);
 });
 
 test('paper outbox adoption rejects an immediately due base-PDF row', async () => {
@@ -925,7 +1062,8 @@ test('paper outbox adoption rejects an immediately due base-PDF row', async () =
       id: '00000000-0000-4000-8000-000000000050', generation: 1,
       paper_return_manifest_sha256: 'a'.repeat(64)
     }, '00000000-0000-4000-8000-000000000049', {
-      recipient_available: true, mail_outbox_id: '00000000-0000-4000-8000-000000000048'
+      queued: true, recipient_available: true,
+      mail_outbox_id: '00000000-0000-4000-8000-000000000048'
     }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
   } finally {
     globalThis.fetch = originalFetch;

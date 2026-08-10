@@ -23,6 +23,22 @@ const claimSource = read(
   'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/'
     + '23072026_2207_email_outbox_claim_ready_batch.sql'
 );
+const workflowSource = read(
+  'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql'
+);
+
+test('PAPER preparation atomically composes the canonical held-mail authority', () => {
+  const sql = functionBody(workflowSource, 'public.candidate_workflow_transition_atomic_v1');
+  assert.match(sql, /v_action='PAPER_PREPARE'[\s\S]*timesheet_qr_send_enqueue_v1\(\$1,\$2,\$3,\$4,\$5\)/i);
+  assert.match(sql, /CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE/i);
+  assert.match(sql, /CANDIDATE_PAPER_PACK_QUEUE_FAILED/i);
+  assert.match(sql, /CANDIDATE_PAPER_OUTBOX_NOT_READY/i);
+  assert.match(sql, /candidate_paper_mail\.payment_scope_json->>'candidate_workflow_id'=v_workflow\.id::text/i);
+  assert.match(sql, /last_mutation_response_json=v_response/i);
+  const prepare = sql.slice(sql.indexOf("elsif v_action='PAPER_PREPARE'"), sql.indexOf("elsif v_action='PAPER_RETURN'"));
+  assert.ok(prepare.indexOf("state='AWAITING_PAPER_RETURN'") < prepare.indexOf('timesheet_qr_send_enqueue_v1'));
+  assert.ok(prepare.indexOf('timesheet_qr_send_enqueue_v1') < prepare.indexOf('last_mutation_response_json=v_response'));
+});
 
 test('QR enqueue atomically owns Candidate PAPER mail identity and hold state', () => {
   const sql = functionBody(qrSource, 'public.timesheet_qr_send_enqueue_v1');
@@ -63,4 +79,7 @@ test('mail claim fails closed until the exact complete Candidate PAPER pack is r
   assert.match(sql, /mail_hold_reason[\s\S]*is null/i);
   assert.match(sql, /sha256[\s\S]*\^\[0-9a-f\]\{64\}\$/i);
   assert.match(sql, /size_bytes[\s\S]*\^\[1-9\]\[0-9\]\{0,18\}\$/i);
+  assert.match(sql, /payment_scope_json\s*\?\s*'candidate_paper_pack_ready'/i);
+  assert.match(sql, /payment_scope_json\s*\?\s*'candidate_complete_pack_storage_key'/i);
+  assert.match(sql, /mail_hold_reason[\s\S]*CANDIDATE_PAPER_PACK_PENDING/i);
 });

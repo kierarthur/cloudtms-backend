@@ -286,17 +286,27 @@ begin
     extract(dow from current_date)::integer,'ELECTRONIC');
   insert into public.timesheets(
     timesheet_id,contract_id,week_ending_date,line_type,submission_mode,
-    qr_status,qr_token
+    qr_status,qr_token,actual_schedule_json
   ) values(
     v_timesheet,v_contract,current_date,'HOURS','MANUAL',
-    'PENDING','paper-complete-pack-runtime-token'
+    'PENDING','paper-complete-pack-runtime-token',
+    jsonb_build_array(jsonb_build_object(
+      'date',current_date,'start','09:00','end','17:30','break_minutes',30
+    ))
   );
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
   ) values(v_week,v_contract,current_date,'OPEN','ELECTRONIC',v_timesheet);
   insert into public.timesheets_financials(
     timesheet_id,candidate_id,client_id,total_hours,processing_status
-  ) values(v_timesheet,v_candidate,v_client,0,'UNPROCESSED');
+  ) values(v_timesheet,v_candidate,v_client,8,'UNPROCESSED');
+  insert into public.invoice_document_versions(
+    entity_type,entity_id,purpose,source_revision,template_version,status,
+    r2_key,sha256,size_bytes,page_count
+  ) values(
+    'TIMESHEET',v_timesheet,'TIMESHEET','1','timesheet-professional-v2','READY',
+    'candidate-app/test/paper-base.pdf',repeat('f',64),1024,1
+  );
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','paper-runtime@example.test','ACTIVE');
   insert into public.candidate_app_sessions(
@@ -396,12 +406,78 @@ begin
   exception when sqlstate '40001' then
     if sqlerrm<>'CANDIDATE_COMPONENT_PREPARE_GENERATION_CONFLICT' then raise; end if;
   end;
+
+  update public.timesheets set actual_schedule_json='[]'::jsonb where timesheet_id=v_timesheet;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_workflow,'PAPER_PREPARE',2,'{}'::jsonb,
+      'paper:prepare:queue-failure',now());
+    raise exception 'paper preparation was accepted when the canonical QR queue rejected the timesheet';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'CANDIDATE_PAPER_PACK_QUEUE_FAILED' then raise; end if;
+  end;
+  if (select state from public.candidate_submission_workflows where id=v_workflow)<>'WORKER_SUBMITTED'
+     or exists(
+       select 1 from public.mail_outbox
+       where payment_scope_json->>'candidate_workflow_id'=v_workflow::text
+     ) then
+    raise exception 'canonical QR queue failure did not roll back PAPER preparation atomically';
+  end if;
+  update public.timesheets
+  set actual_schedule_json=jsonb_build_array(jsonb_build_object(
+    'date',current_date,'start','09:00','end','17:30','break_minutes',30
+  ))
+  where timesheet_id=v_timesheet;
+
+  update public.candidates set email=null where id=v_candidate;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_workflow,'PAPER_PREPARE',2,'{}'::jsonb,
+      'paper:prepare:missing-email',now());
+    raise exception 'paper preparation was accepted without a candidate email';
+  exception
+    when sqlstate '28000' then
+      if sqlerrm<>'CANDIDATE_ACCOUNT_NOT_ELIGIBLE' then raise; end if;
+    when sqlstate '55000' then
+      if sqlerrm<>'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE' then raise; end if;
+  end;
+  if (select state from public.candidate_submission_workflows where id=v_workflow)<>'WORKER_SUBMITTED'
+     or exists(
+       select 1 from public.mail_outbox
+       where payment_scope_json->>'candidate_workflow_id'=v_workflow::text
+     ) then
+    raise exception 'missing-email PAPER preparation did not roll back atomically';
+  end if;
+
+  update public.candidates
+  set email='paper-runtime@example.test',opt_in_email=false
+  where id=v_candidate;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_workflow,'PAPER_PREPARE',2,'{}'::jsonb,
+      'paper:prepare:email-opted-out',now());
+    raise exception 'paper preparation was accepted after email opt-out';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE' then raise; end if;
+  end;
+  if (select state from public.candidate_submission_workflows where id=v_workflow)<>'WORKER_SUBMITTED'
+     or exists(
+       select 1 from public.mail_outbox
+       where payment_scope_json->>'candidate_workflow_id'=v_workflow::text
+     ) then
+    raise exception 'email-opt-out PAPER preparation did not roll back atomically';
+  end if;
+  update public.candidates set opt_in_email=true where id=v_candidate;
+
   v_response:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'PAPER_PREPARE',2,'{}'::jsonb,'paper:prepare',now());
   select paper_return_manifest_json into v_manifest
   from public.candidate_submission_workflows where id=v_workflow;
   if v_response->>'state'<>'AWAITING_PAPER_RETURN'
-     or jsonb_array_length(v_manifest->'pages')<>3 then
+     or jsonb_array_length(v_manifest->'pages')<>3
+     or not coalesce((v_response->'paper_pack'->>'queued')::boolean,false)
+     or not coalesce((v_response->'paper_pack'->>'recipient_available')::boolean,false)
+     or nullif(v_response->'paper_pack'->>'mail_outbox_id','') is null then
     raise exception 'paper manifest was not the complete three-page pack: %',v_response;
   end if;
 

@@ -111,6 +111,8 @@ declare
   v_paper_manifest jsonb;
   v_paper_source_pages jsonb;
   v_paper_page_key text;
+  v_paper_timesheet_id uuid;
+  v_paper_pack_result jsonb;
   v_source_component public.candidate_submission_components%rowtype;
   v_all_final_ready boolean:=false;
   v_server_issue_codes jsonb:='[]'::jsonb;
@@ -491,7 +493,48 @@ begin
   end if;
 
   if v_workflow.id is null then
-    select * into v_workflow from public.candidate_submission_workflows where id=p_workflow_id for update;
+    if v_action='PAPER_PREPARE' then
+      -- Keep the canonical route/document lock order used by
+      -- timesheet_qr_send_enqueue_v1: current timesheet, then workflow.
+      -- The unlocked identity read is rechecked after both locks are held.
+      select * into v_workflow
+      from public.candidate_submission_workflows
+      where id=p_workflow_id
+        and environment=v_environment
+        and candidate_id=v_candidate_id;
+      if not found then
+        raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
+      end if;
+      v_paper_timesheet_id:=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id);
+      if v_paper_timesheet_id is null then
+        raise exception 'CANDIDATE_PAPER_TIMESHEET_NOT_READY' using errcode='55000';
+      end if;
+      perform 1
+      from public.timesheets
+      where timesheet_id=v_paper_timesheet_id
+        and is_current=true
+        and archived_at_utc is null
+      for update;
+      if not found then
+        raise exception 'CANDIDATE_PAPER_TIMESHEET_NOT_READY' using errcode='55000';
+      end if;
+      select * into v_workflow
+      from public.candidate_submission_workflows
+      where id=p_workflow_id
+        and environment=v_environment
+        and candidate_id=v_candidate_id
+      for update;
+      if not found
+         or coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+              is distinct from v_paper_timesheet_id then
+        raise exception 'CANDIDATE_WORKFLOW_CONTEXT_CONFLICT' using errcode='40001';
+      end if;
+    else
+      select * into v_workflow
+      from public.candidate_submission_workflows
+      where id=p_workflow_id
+      for update;
+    end if;
   end if;
   if not found or v_workflow.environment<>v_environment
      or (not v_is_service_action and not v_is_public_manager_action and v_workflow.candidate_id<>v_candidate_id) then
@@ -1820,6 +1863,9 @@ begin
       updated_at_utc=p_now_utc where id=v_workflow.id;
 
   elsif v_action='PAPER_PREPARE' then
+    if nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
+      raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023';
+    end if;
     if v_workflow.state not in ('WORKER_SUBMITTED','AWAITING_PAPER_RETURN') then
       raise exception 'CANDIDATE_WORKFLOW_TRANSITION_INVALID' using errcode='55000';
     end if;
@@ -1876,16 +1922,88 @@ begin
           else '[]'::jsonb end
         || v_paper_source_pages
     );
-    v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
-      'state','AWAITING_PAPER_RETURN','generation',v_workflow.generation,
-      'paper_return_manifest_sha256',encode(private._candidate_sha256_jsonb_v1(v_paper_manifest),'hex'),
-      'paper_return_page_count',jsonb_array_length(v_paper_manifest->'pages'));
     update public.candidate_submission_workflows set
       state='AWAITING_PAPER_RETURN',route='PAPER',policy_snapshot_json=v_policy,
       paper_return_manifest_json=v_paper_manifest,
       paper_return_manifest_sha256=private._candidate_sha256_jsonb_v1(v_paper_manifest),
-      last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
       updated_at_utc=p_now_utc where id=v_workflow.id returning * into v_workflow;
+
+    -- The existing QR/document/email authority is composed inside this
+    -- transaction. A PAPER workflow is not accepted unless its exact held
+    -- email operation exists and is bound to this frozen manifest.
+    execute
+      'select public.timesheet_qr_send_enqueue_v1($1,$2,$3,$4,$5)'
+      into v_paper_pack_result
+      using v_paper_timesheet_id,v_paper_timesheet_id,null::uuid,
+        p_idempotency_key||':paper-pack',p_now_utc;
+
+    if not coalesce((v_paper_pack_result->>'ok')::boolean,false)
+       or not coalesce((v_paper_pack_result->>'queued')::boolean,false)
+       or not coalesce((v_paper_pack_result->>'recipient_available')::boolean,false) then
+      if coalesce(v_paper_pack_result->>'error_code','') in (
+        'CANDIDATE_EMAIL_MISSING','CANDIDATE_EMAIL_OPTED_OUT','CANDIDATE_NOT_FOUND'
+      ) then
+        raise exception 'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE'
+          using errcode='55000',detail=jsonb_build_object(
+            'code','CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE',
+            'cause',v_paper_pack_result->>'error_code'
+          )::text;
+      end if;
+      raise exception 'CANDIDATE_PAPER_PACK_QUEUE_FAILED'
+        using errcode='55000',detail=jsonb_build_object(
+          'code','CANDIDATE_PAPER_PACK_QUEUE_FAILED',
+          'cause',coalesce(v_paper_pack_result->>'error_code','UNKNOWN')
+        )::text;
+    end if;
+
+    v_mail_id:=nullif(v_paper_pack_result->>'mail_outbox_id','')::uuid;
+    if v_mail_id is null then
+      raise exception 'CANDIDATE_PAPER_OUTBOX_NOT_READY' using errcode='55000';
+    end if;
+    perform 1
+    from public.mail_outbox candidate_paper_mail
+    where candidate_paper_mail.id=v_mail_id
+      and candidate_paper_mail.type='TIMESHEET_QR'
+      and candidate_paper_mail.context_kind='timesheets'
+      and candidate_paper_mail.context_id=v_paper_timesheet_id
+      and candidate_paper_mail.status='QUEUED'
+      and candidate_paper_mail.attempt_lease_token is null
+      and candidate_paper_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+      and candidate_paper_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+      and lower(coalesce(candidate_paper_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+            =encode(v_workflow.paper_return_manifest_sha256,'hex')
+      and lower(coalesce(candidate_paper_mail.payment_scope_json->>'candidate_paper_pack_ready','false'))
+            in ('false','f','0','no')
+      and lower(coalesce(candidate_paper_mail.payment_scope_json->>'mail_held_until_pdf_rendered','false'))
+            in ('true','t','1','yes')
+      and candidate_paper_mail.payment_scope_json->>'mail_hold_reason'='CANDIDATE_PAPER_PACK_PENDING'
+      and jsonb_typeof(candidate_paper_mail.attachments)='array'
+      and jsonb_array_length(candidate_paper_mail.attachments)=0
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_PAPER_OUTBOX_NOT_READY' using errcode='55000';
+    end if;
+
+    v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
+      'state','AWAITING_PAPER_RETURN','generation',v_workflow.generation,
+      'paper_return_manifest_sha256',encode(v_workflow.paper_return_manifest_sha256,'hex'),
+      'paper_return_page_count',jsonb_array_length(v_paper_manifest->'pages'),
+      'paper_pack',jsonb_build_object(
+        'queued',true,
+        'recipient_available',true,
+        'mail_outbox_id',v_mail_id,
+        'send_state',v_paper_pack_result->>'send_state',
+        'document_operation_id',v_paper_pack_result->>'document_operation_id',
+        'document_version_id',v_paper_pack_result->>'document_version_id',
+        'document_version_status',v_paper_pack_result->>'document_version_status',
+        'current_timesheet_id',v_paper_pack_result->>'current_timesheet_id',
+        'current_version',v_paper_pack_result->'current_version'
+      ));
+    update public.candidate_submission_workflows set
+      last_mutation_idempotency_key=p_idempotency_key,
+      last_mutation_response_json=v_response,
+      updated_at_utc=p_now_utc
+    where id=v_workflow.id returning * into v_workflow;
 
   elsif v_action='PAPER_RETURN' then
     if v_workflow.state<>'AWAITING_PAPER_RETURN' then

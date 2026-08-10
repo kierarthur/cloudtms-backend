@@ -28652,6 +28652,16 @@ async function enqueueCandidateQrPackThroughCanonicalAuthority(env, {
   if (payload?.ok === false) {
     throw new Error(String(payload.error_code || payload.error || 'CANDIDATE_PAPER_PACK_QUEUE_FAILED'));
   }
+  await nudgeCandidateQrPackDocumentOperation(env, { pack: payload, timesheetId, ctx });
+  return payload;
+}
+
+async function nudgeCandidateQrPackDocumentOperation(env, {
+  pack,
+  timesheetId,
+  ctx
+} = {}) {
+  const payload = pack || {};
   const operationId = String(payload?.document_operation_id || '').trim();
   if (operationId) {
     await nudgeInvoiceOperations(env, [{
@@ -192573,7 +192583,8 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
     buildDailySubmission: ({ workflow, factualSubmission }) =>
       buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission }),
     finaliseDaily: (options) => finaliseCandidateDailyThroughCanonicalAuthority(env, options),
-    enqueueQrPack: (options) => enqueueCandidateQrPackThroughCanonicalAuthority(env, options)
+    enqueueQrPack: (options) => enqueueCandidateQrPackThroughCanonicalAuthority(env, options),
+    nudgeQrPack: (options) => nudgeCandidateQrPackDocumentOperation(env, options)
   };
 }
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch

@@ -112,11 +112,14 @@ PAPER_PREPARE freezes the workflow generation and complete return manifest
 
 Controlling guarantees:
 
+- `candidate_workflow_transition_atomic_v1` now composes `timesheet_qr_send_enqueue_v1` inside the same `PAPER_PREPARE` database transaction. The workflow generation/manifest and its exact held email operation therefore commit together or both roll back;
+- PAPER preparation fails closed with a stable error when the Candidate email is missing, opted out or unresolved, when the canonical QR/document enqueue rejects the record, or when the exact held outbox receipt cannot be proved;
 - `timesheet_qr_send_enqueue_v1` locks and counts active matching PAPER workflows, fails closed on multiplicity, binds the exact workflow ID/generation/manifest SHA-256 to the deterministic mail row and forces `CANDIDATE_PAPER_PACK_PENDING` even where the base PDF is already ready;
 - idempotent QR enqueue replay preserves an already released or sent exact complete-pack operation, never replaces it with the one-page base PDF, and never requeues a Candidate-bound `FAILED` email;
 - `invoice_work_complete_batch` still performs its existing ordinary QR base-document completion, but explicitly excludes every Candidate-bound mail row from its release update;
 - `email_outbox_claim_ready_batch` admits a Candidate-bound email only where the hold is cleared and its one PDF attachment exactly matches the workflow generation, manifest hash, storage identity, digest, byte count, page count and media-type readiness receipt in `payment_scope_json`;
-- the private backend no longer creates or repairs workflow/outbox binding. It verifies the atomic SQL binding, reuses an existing immutable complete-pack receipt, and releases only through a guarded exact-row compare-and-set before creating the insert-once readiness notification;
+- the private backend no longer creates or repairs workflow/outbox binding. It verifies the atomic SQL receipt, requires exactly one matching unclaimed outbox operation before any expensive pack assembly, reuses an existing immutable complete-pack receipt, and releases only through a guarded exact-row compare-and-set before creating the insert-once readiness notification;
+- zero matching outbox rows, multiple matching rows, failed mail, a claimed row or a malformed/partial Candidate PAPER binding can never produce `PAPER_PACK_READY`; the mail claimant treats any Candidate PAPER marker as requiring the full complete-pack proof;
 - a configured live logo is copied once to a content-addressed immutable branding key before it enters a frozen render contract. Retry therefore cannot silently substitute later logo bytes;
 - the complete-pack receipt proves the exact workflow generation and exact expected manifest page count as well as object digest and byte size;
 - only the official main hours timesheet carries the QR code. Supplementary Expense and Mileage Approval Summary, Mileage Claim Form and evidence pages remain bound through the immutable manifest and do not receive separate QR codes.

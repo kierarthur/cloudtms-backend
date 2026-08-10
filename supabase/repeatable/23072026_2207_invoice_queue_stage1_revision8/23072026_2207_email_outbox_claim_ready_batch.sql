@@ -24,8 +24,15 @@ begin
       and (mo.attempt_lease_token is null or mo.attempt_lease_expires_at_utc is null
         or mo.attempt_lease_expires_at_utc<=v_now)
       and (
-        nullif(btrim(coalesce(
-          mo.payment_scope_json->>'candidate_workflow_id','')),'') is null
+        not (
+          nullif(btrim(coalesce(mo.payment_scope_json->>'candidate_workflow_id','')),'') is not null
+          or mo.payment_scope_json ? 'candidate_workflow_generation'
+          or mo.payment_scope_json ? 'paper_return_manifest_sha256'
+          or mo.payment_scope_json ? 'candidate_paper_pack_ready'
+          or mo.payment_scope_json ? 'candidate_complete_pack_storage_key'
+          or upper(coalesce(mo.payment_scope_json->>'mail_hold_reason',''))
+            ='CANDIDATE_PAPER_PACK_PENDING'
+        )
         or (
           coalesce(mo.payment_scope_json->>'candidate_workflow_id','') ~*
             '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'

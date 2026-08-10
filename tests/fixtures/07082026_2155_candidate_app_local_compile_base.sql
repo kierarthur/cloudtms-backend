@@ -6,6 +6,13 @@ create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
 create schema if not exists private;
 
+-- Supabase exposes pgcrypto helpers to the public-only legacy QR function.
+-- Keep the disposable catalogue equivalent without changing runtime SQL.
+create or replace function public.digest(p_value text,p_algorithm text)
+returns bytea
+language sql immutable strict
+as $$ select extensions.digest(convert_to(p_value,'UTF8'),p_algorithm) $$;
+
 do $roles$
 begin
   if not exists (select 1 from pg_roles where rolname='anon') then create role anon nologin; end if;
@@ -21,6 +28,7 @@ create type public.timesheet_status_enum as enum ('DRAFT','OPEN','RECEIVED','SUB
 create type public.timesheet_line_type_enum as enum ('HOURS','EXPENSES','MILEAGE');
 create type public.timesheet_scope_enum as enum ('DAILY','WEEKLY');
 create type public.timesheet_qr_status_enum as enum ('PENDING','USED','CANCELLED','EXPIRED');
+create type public.mail_status_enum as enum ('QUEUED','SENT','FAILED');
 create type public.invoice_consolidation_mode_enum as enum ('NONE','BY_WEEK','ANY_WEEK');
 create type public.correction_financials_date_basis_enum as enum ('PAID_DATE','NOW');
 create type public.hr_source_enum as enum ('HEALTHROSTER','NHSP');
@@ -92,6 +100,10 @@ create table public.clients (
 create table public.candidates (
   id uuid primary key default gen_random_uuid(),
   email text,
+  display_name text,
+  first_name text,
+  last_name text,
+  opt_in_email boolean not null default true,
   active boolean not null default true,
   key_norm text,
   pay_method text
@@ -478,6 +490,44 @@ create table public.invoice_operation_chunks (
   status text not null default 'QUEUED'
 );
 
+-- Candidate QR runtime tests exercise the real QR enqueue authority while
+-- keeping this compile fixture independent of the full invoice renderer.
+create or replace function private._invoice_presentation_snapshot_batch(
+  p_requests jsonb,
+  p_now_utc timestamptz
+) returns table(
+  request_key text,
+  presentation_model jsonb,
+  snapshot_json jsonb,
+  snapshot_hash text,
+  valid boolean,
+  error_code text
+)
+language sql stable as $$
+  select request_row.value->>'request_key',
+    jsonb_build_object(
+      'schema_version','TIMESHEET_RENDER_MODEL_V2',
+      'form_variant','QR_UNSIGNED',
+      'week_period',jsonb_build_object('days','[]'::jsonb),
+      'additional_units_section',jsonb_build_object('rows','[]'::jsonb),
+      'branding','{}'::jsonb,
+      'wording','{}'::jsonb
+    ),
+    jsonb_build_object('fixture',true),
+    repeat('f',64),true,null::text
+  from jsonb_array_elements(coalesce(p_requests,'[]'::jsonb)) request_row(value)
+$$;
+
+create or replace function public.bulk_timesheet_row_decision_v1(p_filter jsonb)
+returns table(row_json jsonb)
+language sql stable as $$
+  select jsonb_build_object(
+    'row_key','timesheet:'||coalesce(p_filter->>'timesheet_id','fixture'),
+    'row_signature','fixture-row-signature',
+    'row_patch','{}'::jsonb
+  )
+$$;
+
 create or replace function private._invoice_reference_rows_batch(p_invoice_ids uuid[])
 returns table(invoice_id uuid,timesheet_id uuid,current_reference text)
 language sql stable as $$
@@ -514,16 +564,26 @@ create table public.mail_outbox (
   id uuid primary key default gen_random_uuid(),
   type text not null,
   "to" text not null,
+  cc text,
+  bcc text,
+  reply_to text,
+  importance text,
   subject text not null,
   body_html text,
   body_text text,
   attachments jsonb not null default '[]'::jsonb,
-  status text not null,
+  status public.mail_status_enum not null,
+  last_error text,
+  failed_at timestamptz,
   created_at_utc timestamptz not null default now(),
+  created_by uuid,
   reference text,
   recipient_kind text,
+  recipient_id uuid,
   context_kind text,
   context_id uuid,
+  mailshot_run_id uuid,
+  document_template_id uuid,
   email_type text,
   scheduled_for_utc timestamptz,
   next_attempt_at_utc timestamptz,
@@ -532,6 +592,8 @@ create table public.mail_outbox (
   sent_at timestamptz,
   delivered_at timestamptz,
   read_at timestamptz,
+  provider_status text,
+  provider_message_id text,
   attempt_lease_token text,
   attempt_leased_at_utc timestamptz,
   attempt_lease_expires_at_utc timestamptz,

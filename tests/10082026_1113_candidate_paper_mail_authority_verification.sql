@@ -31,6 +31,7 @@ declare
   v_ordinary_id constant uuid := '10000000-0000-4000-8000-000000000002';
   v_workflow_id constant uuid := '10000000-0000-4000-8000-000000000003';
   v_timesheet_id constant uuid := '10000000-0000-4000-8000-000000000004';
+  v_partial_id constant uuid := '10000000-0000-4000-8000-000000000005';
   v_manifest constant text := repeat('a',64);
   v_pack_hash constant text := repeat('b',64);
   v_claimed uuid[];
@@ -71,6 +72,22 @@ begin
   from public.email_outbox_claim_ready_batch(10,'ordinary-qr-check',5) claimed;
   if v_claimed is distinct from array[v_ordinary_id] then
     raise exception 'Ordinary non-Candidate QR claim regression: %',v_claimed;
+  end if;
+
+  insert into public.mail_outbox(
+    id,type,"to",subject,attachments,status,created_at_utc,context_kind,context_id,
+    scheduled_for_utc,next_attempt_at_utc,payment_scope_json
+  ) values (
+    v_partial_id,'TIMESHEET_QR','partial-candidate@example.invalid','Partial Candidate binding',
+    '[]'::jsonb,'QUEUED',clock_timestamp()-interval '1 minute','timesheets',gen_random_uuid(),
+    clock_timestamp()-interval '1 minute',clock_timestamp()-interval '1 minute',
+    jsonb_build_object('candidate_paper_pack_ready',false)
+  );
+
+  select coalesce(array_agg(claimed.id),'{}'::uuid[]) into v_claimed
+  from public.email_outbox_claim_ready_batch(10,'candidate-partial-check',5) claimed;
+  if cardinality(v_claimed) <> 0 then
+    raise exception 'A partial Candidate PAPER marker fell through to ordinary QR claim: %',v_claimed;
   end if;
 
   update public.mail_outbox
