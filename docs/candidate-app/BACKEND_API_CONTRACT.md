@@ -123,7 +123,7 @@ The initial manager email is also readiness-gated. Candidate submission first re
 |---|---|---|
 | GET | `/api/candidate-app/timesheets/:timesheetId/route-preview?action=...` | Server warning/action/context preflight. |
 | POST | `/api/candidate-app/timesheets/:timesheetId/route-confirm` | Row-signature/context-hash confirmed route transition with reason where required. |
-| POST | `/api/candidate-app/timesheets/:timesheetId/reject` | Whole-record Candidate rejection; authorised records require Unauthorise first. |
+| POST | `/api/candidate-app/timesheets/:timesheetId/reject` | Whole-record Candidate rejection. Finalised workflows are rejected only when they target the rejected timesheet; a separate finalised expense workflow is not rejected through its hours anchor. Authorised records require Unauthorise first and protected financial history remains blocked. |
 | POST | `/api/candidate-app/workflows/:workflowId/actions/phone-review` | Start the same manifest authority for phone approval. |
 | POST | `/api/candidate-app/workflows/:workflowId/actions/phone-progress` | Record exact page review. |
 | POST | `/api/candidate-app/workflows/:workflowId/actions/phone-approve` | Record manager approval and start guarded final rendering/finalisation. |

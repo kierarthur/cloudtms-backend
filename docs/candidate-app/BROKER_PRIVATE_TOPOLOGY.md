@@ -127,15 +127,15 @@ The delivery contract to implement with the app identities is: deterministic not
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `56778d97-9439-4992-941b-dcc62b30911d`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `c6175b31-2af7-4cb1-b511-515a7cce8f1a`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `fc28c9af-9440-4e90-87b9-2e3fc8ce3d82`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `276c54ed-0cb6-4253-b3de-34f5a0aaec92`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `37a7f7f9-dcb2-417f-a6e7-5c29b0e2add4`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `57b70f56-f76c-40a8-ba6f-e2de116cbc8a`.
 - Broker health/readiness: 200/200.
-- Normal backend health: 200. Its general readiness endpoint remains 503 because the separately owned invoice processor readiness contract is not satisfied; Candidate broker/private readiness is healthy and this correction did not alter that subsystem.
+- Normal backend health/readiness: 200/200.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The current Candidate runtime correction is published through backend commit `792f1f9bbd61c94f4e3e1c241d0e4865a95a817b`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The current Candidate runtime correction is published through backend commit `bf96c859c38367e6c12aee7daa694086ba50b104`. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 

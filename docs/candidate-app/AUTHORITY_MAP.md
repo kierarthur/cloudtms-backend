@@ -42,7 +42,7 @@ Neither Worker alters the existing financial algorithms. The broker cannot acces
 | `timesheet_expense_apply_atomic_v1` | called only inside the installed finalisation authority |
 | `candidate_workflow_transition_atomic_v1` | workflow/components/manager/phone/notification orchestration |
 | `candidate_submission_finalize_atomic_v1` | final signed ELECTRONIC and complete PAPER finalisation |
-| `candidate_submission_reject_atomic_v1` | office whole-record Candidate rejection |
+| `candidate_submission_reject_atomic_v1` | office whole-record Candidate rejection; pre-finalisation target-or-anchor retirement and finalised exact-target rejection with separate-expense anchor isolation |
 | `candidate_no_work_atomic_v1` | Candidate no-work decision |
 
 ## Existing CloudTMS owners retained
