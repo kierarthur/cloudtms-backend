@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 11 August 2026
-Status: final Candidate broker/private API caller-authority correction published, installed and deployed to dormant TEST for independent API-freeze audit. Runtime commit: `465924aa1d692e41a0fe3bbc204b6073571d40e5`. This document is current through retryable `RECEIVED` cancellation/supersession retirement, `RECEIVED` and finalised W09 route conversion, shared route/rejection family locking, atomic provider-submit permission, retryable `RECEIVED` rejection retirement, exact claim-record replacement, source-set shared-QR retirement, current-version expense-anchor continuity, scoped hours/expense recovery arrays, finalised PAPER artefact-generation retirement and mail-lease fencing, generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
+Status: final Candidate broker/private API PAPER source-owner and claim-isolation correction published, installed and deployed to dormant TEST for independent API-freeze audit. Runtime commit: `0349b76903057c3d01961af6dff81ea05a57576f`. This document is current through immutable current-token owner selection, terminal-only source-workflow preservation, claim-level shared-source isolation, retryable `RECEIVED` cancellation/supersession retirement, `RECEIVED` and finalised W09 route conversion, shared route/rejection family locking, atomic provider-submit permission and the previously accepted Candidate authority closures.
 
 ## Executive result
 
@@ -25,7 +25,7 @@ No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version algorithm
 
 ## Final runtime namespace and anchor rejection closure
 
-Current runtime source: `465924aa1d692e41a0fe3bbc204b6073571d40e5`.
+Current runtime source: `0349b76903057c3d01961af6dff81ea05a57576f`.
 
 - Candidate PAPER retirement and canonical QR enqueue now call `extensions.digest` explicitly with UTF-8 byte conversion, matching the installed TEST pgcrypto schema and removing reliance on an unavailable public wrapper;
 - the disposable PostgreSQL fixture no longer invents `public.digest`, so clean-install verification exercises the same namespace contract as Supabase TEST;
@@ -36,7 +36,7 @@ Current runtime source: `465924aa1d692e41a0fe3bbc204b6073571d40e5`.
 - each captured generation is retired by exact workflow ID and generation across PAPER mail/notification/token authority, approval request, component and workflow state;
 - the runtime suites prove finalised hours, combined, separate expense, anchor isolation, replacement submission, replay, Unauthorise-first and protected paid history, not merely source strings.
 
-Acceptance evidence is 21/21 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 119/119 focused Candidate/backend tests, 451/451 complete backend tests, all three Worker dry builds, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
+Acceptance evidence is 22/22 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 119/119 focused Candidate/backend tests, 451/451 complete backend tests, all three Worker builds, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
 
 ## Final rejection projection and finalised PAPER delivery closure
 
@@ -79,7 +79,7 @@ No new schema object, Candidate table, public RPC, public route or product decis
 
 ## Complete PAPER caller and provider-submit closure
 
-The remaining independent findings were caused by adjacent installed callers that still accepted PAPER `RECEIVED` or finalised delivery history without composing the shared retirement/barrier owner. Runtime `465924aa1d692e41a0fe3bbc204b6073571d40e5` closes that complete caller matrix:
+The remaining independent findings were caused by adjacent installed callers that still accepted PAPER `RECEIVED` or finalised delivery history without composing the shared retirement/barrier owner. The complete caller matrix is retained in runtime `0349b76903057c3d01961af6dff81ea05a57576f`:
 
 - `candidate_workflow_transition_atomic_v1` routes PAPER `RECEIVED` cancellation and supersession through `_candidate_paper_delivery_retire_set_v1` and requires both the durable retirement receipt and QR-invalidation proof before component/request/workflow mutation;
 - active provider permit/lease blocks cancellation/supersession with zero mutation; queued unsent mail becomes inert, `SENT` mail remains immutable and the exact readiness notification/deep link becomes obsolete;
@@ -92,6 +92,20 @@ The remaining independent findings were caused by adjacent installed callers tha
 - ordinary non-Candidate mail bypasses the Candidate permit and retains its existing provider behaviour.
 
 This is lifecycle/orchestration closure only. It adds no table, column, public RPC, public route, financial calculation or product-policy change and does not alter Banking Pay or Policy X.
+
+## PAPER source-owner and claim-isolation closure
+
+The final caller-selection defect is closed without changing the seven-table/fourteen-RPC architecture:
+
+- `private._candidate_paper_source_workflow_context_v1` resolves one stable current QR source and the exact immutable current-token workflow from workflow/generation-bound mail receipts;
+- a historical finalised workflow in `timesheets.candidate_workflow_id` cannot override a later active standalone expense workflow that owns the current token;
+- with no live token, exactly one nonterminal source workflow may be selected; finalised history is considered only when no nonterminal workflow remains, and ambiguity fails closed;
+- `_candidate_paper_delivery_retire_set_v1` rejects before mutation if any unselected workflow is `AWAITING_PAPER_RETURN` or `RECEIVED`; only terminal immutable history may be preserved;
+- W08/W09 route preview and confirmation share this identity in the signed context hash, then supersede the actual live owner before H1 rotates to MANUAL H2;
+- claim-level cancellation/supersession cannot retire another claim's live pack: shared-source conflict returns with zero mail, notification, QR or workflow mutation;
+- executable regression covers historical finalised hours W1 plus later expense W2 in both `AWAITING_PAPER_RETURN` and `RECEIVED`, ambiguous multiple nonterminal owners and cancellation isolation.
+
+This is lifecycle identity closure only. It adds no table, public RPC, public route, financial calculation or product-policy change and does not touch Banking Pay or Policy X.
 
 ## Final PAPER generation-retirement closure
 
@@ -335,24 +349,24 @@ This is lifecycle identity and stale-delivery closure only. It introduces no sch
 | Changed/new JavaScript syntax | PASS |
 | Focused Candidate/backend/broker/DB-contract/PAPER tests | 119 passed, 0 failed |
 | Complete backend test suite | 451 passed, 0 failed |
-| PostgreSQL 17.6 runtime/concurrency suites | 21 passed, 0 failed |
-| PostgreSQL 18.1 runtime/concurrency suites | 21 passed, 0 failed |
+| PostgreSQL 17.6 runtime/concurrency suites | 22 passed, 0 failed |
+| PostgreSQL 18.1 runtime/concurrency suites | 22 passed, 0 failed |
 | Candidate broker Wrangler dry run | PASS |
 | Private Candidate API Wrangler dry run | PASS |
 | Normal TEST backend Wrangler dry run | PASS |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
-| GitHub TEST database migration workflow `31444957381` | PASS |
-| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31444957385` | PASS |
+| GitHub TEST database migration workflow `31458765181` | PASS |
+| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31458765280` | PASS |
 | Public Candidate broker health/readiness | 200 / 200 |
 | Normal TEST backend health/readiness | 200 / 200 |
 | Direct public Candidate route on normal backend | 404, as required |
 
 The pre-deployment dry runs and deployments used repository-installed Wrangler 4.43.0. Active TEST deployment identities for this revision are:
 
-- normal TEST backend: `bcdd36bb-0163-421e-9303-72c5fe3cc8ab`;
-- private Candidate API: `884cf0e8-1ae6-476b-a886-3dd9086754aa`;
-- public Candidate broker: `16a251ee-895b-4d75-b1d8-bd3dfc1c2731`.
+- normal TEST backend: `c139889f-b392-46e4-9891-9fa3130d0d13`;
+- private Candidate API: `d3fabe29-dd8e-4c04-b241-4c264b3e6ed4`;
+- public Candidate broker: `287591b1-73ec-4e79-a6b0-2f0bfbb7ff20`.
 
 The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
@@ -415,6 +429,10 @@ Please verify, function by function, including the final authority seams:
 53. route conversion and office rejection share the same family lock and cannot form the E1-workflow/H1-source deadlock in either start order;
 54. `PAPER_RETURN` and every retirement-causing transition lock/respect the provider-submit lease barrier, so authority cannot change between the atomic permit and external send;
 55. ordinary non-Candidate mail and route conversion retain their existing behaviour.
+56. a historical finalised hours workflow cannot override the later active expense workflow that owns the current source token;
+57. W08/W09 route confirmation supersedes that exact owner before source rotation, leaving no waiting/received workflow bound exclusively to historical H1;
+58. source-wide retirement preserves terminal history only and fails before mutation on an unselected waiting/received workflow;
+59. claim-level cancellation cannot invalidate another claim's live source delivery and returns a controlled conflict with zero mutation.
 
 ## Remaining delivery sequence after independent GO
 
@@ -428,14 +446,14 @@ Please verify, function by function, including the final authority seams:
 
 ## Safety and provenance
 
-- Database mutation or migration: the explicitly authorised TEST safe-migration workflow `31444957381` installed the approved changed repeatables after workflow `31444957385` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
+- Database mutation or migration: the explicitly authorised TEST safe-migration workflow `31458765181` installed the approved changed repeatables after workflow `31458765280` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
 - Candidate/manager workflow mutation: none.
 - R2 business document/evidence write/delete: none. Broker readiness used the designed one-use private-service nonce and the private scheduler may purge expired nonce objects; no Candidate workflow object was created.
 - Email or push sent: none.
-- Normal TEST Worker deployed: yes, version `bcdd36bb-0163-421e-9303-72c5fe3cc8ab`, explicitly authorised; TEST only.
-- Private/broker Worker deployed: yes, versions `884cf0e8-1ae6-476b-a886-3dd9086754aa` and `16a251ee-895b-4d75-b1d8-bd3dfc1c2731`, explicitly authorised; TEST only.
+- Normal TEST Worker deployed: yes, version `c139889f-b392-46e4-9891-9fa3130d0d13`, explicitly authorised; TEST only.
+- Private/broker Worker deployed: yes, versions `d3fabe29-dd8e-4c04-b241-4c264b3e6ed4` and `287591b1-73ec-4e79-a6b0-2f0bfbb7ff20`, explicitly authorised; TEST only.
 - Production accessed or deployed: no.
-- Commit/push: runtime commit `465924aa1d692e41a0fe3bbc204b6073571d40e5` was published non-forcibly directly to `origin/test` after a clean lane check and after preserving two newer Banking Pay commits without touching their files; no PR.
+- Commit/push: runtime commit `0349b76903057c3d01961af6dff81ea05a57576f` was published non-forcibly directly to `origin/test` after a clean lane check, without touching Banking Pay files; no PR.
 - Deployment note: all three TEST Workers were deployed only after the repository safe-migration and exact PostgreSQL matrix gates completed. The normal backend deployment used the explicit `--env test` selector. No production or unrelated Worker was deployed.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.

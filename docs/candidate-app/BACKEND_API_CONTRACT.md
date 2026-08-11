@@ -1,6 +1,6 @@
 # CloudTMS Candidate App backend contract
 
-Status: versioned TEST implementation contract, updated 11 August 2026. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. PAPER delivery retirement and provider submission are coordinated by the installed service-only workflow authority across return, cancellation, supersession, office rejection and confirmed route intervention.
+Status: versioned TEST implementation contract, updated 11 August 2026. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. PAPER delivery retirement and provider submission are coordinated by the installed service-only workflow authority; route intervention is bound to the immutable current-token owner and cannot strand an unselected nonterminal claim.
 
 Machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Trust and deployment contract: `BROKER_PRIVATE_TOPOLOGY.md`.
 
@@ -134,7 +134,7 @@ The initial manager email is also readiness-gated. Candidate submission first re
 
 All office route actions will use the approved W01–W13 warning catalogue from the living implementation plan. The frontend must preview before confirmation and must not independently derive warning state.
 
-For W08/W09 PAPER intervention, confirmation resolves the exact linked delivery workflow even where it is `RECEIVED` or `FINALISED`. It retires the current delivery generation for `AWAITING_PAPER_RETURN`/`RECEIVED` or the preceding immutable delivery generation for `FINALISED`, blocks a live provider permit/lease, preserves sent mail and signed/R2 history, and requires the retirement receipt before route/version rotation. Office rejection and route confirmation use the same stable Candidate family lock before target/workflow/source row locks.
+For W08/W09 PAPER intervention, confirmation resolves the exact immutable current-token owner even where historical `timesheets.candidate_workflow_id` points at an older finalised workflow. With no live token it may select only the sole nonterminal source workflow, falling back to finalised history only when no nonterminal workflow exists. It retires the current delivery generation for `AWAITING_PAPER_RETURN`/`RECEIVED` or the preceding immutable delivery generation for `FINALISED`, blocks a live provider permit/lease, preserves sent mail and signed/R2 history, and requires both the retirement receipt and the postcondition that no unselected nonterminal workflow survives before route/version rotation. Multiple or ambiguous source workflows return a controlled conflict with zero mutation. Office rejection and route confirmation use the same stable Candidate family lock before target/workflow/source row locks.
 
 ## Finalisation contract
 

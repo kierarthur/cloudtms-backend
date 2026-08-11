@@ -1,6 +1,6 @@
 # Candidate broker and private CloudTMS API topology
 
-Status: TEST implementation and deployed topology contract; updated through complete PAPER caller retirement, atomic provider-submit permission and shared route/rejection lock-order closure on 11 August 2026.
+Status: TEST implementation and deployed topology contract; updated through PAPER source-owner/claim-isolation closure, complete caller retirement, atomic provider-submit permission and shared route/rejection lock order on 11 August 2026.
 
 ## Required trust boundary
 
@@ -138,17 +138,19 @@ Candidate PAPER email uses the existing CloudTMS mail delivery authority. The da
 
 This permit and the transactional retirement rules are one database coordination boundary. An active permit/lease blocks every supported authority-changing PAPER transition before mutation.
 
+Route intervention derives the live PAPER owner from the immutable current-token delivery receipt, not from a historical timesheet workflow pointer. Source-wide retirement is allowed to preserve only terminal history; an unselected waiting or received claim returns a controlled conflict before any delivery, notification, token, workflow or route change. Claim-level cancellation likewise cannot invalidate another claim's live pack.
+
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `16a251ee-895b-4d75-b1d8-bd3dfc1c2731`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `884cf0e8-1ae6-476b-a886-3dd9086754aa`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `bcdd36bb-0163-421e-9303-72c5fe3cc8ab`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `287591b1-73ec-4e79-a6b0-2f0bfbb7ff20`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `d3fabe29-dd8e-4c04-b241-4c264b3e6ed4`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `c139889f-b392-46e4-9891-9fa3130d0d13`.
 - Broker health/readiness: 200/200.
 - Normal backend health/readiness: 200/200.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The current Candidate runtime correction is published through backend commit `465924aa1d692e41a0fe3bbc204b6073571d40e5`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The current Candidate runtime correction is published through backend commit `0349b76903057c3d01961af6dff81ea05a57576f`. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 
