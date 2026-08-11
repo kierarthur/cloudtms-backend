@@ -88,7 +88,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 87, 'the latest-only payload must contain the closed 87-definition function inventory');
+  assert.equal(names.length, 88, 'the latest-only payload must contain the closed 88-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -551,6 +551,10 @@ test('rejected workflows project through the replacement current version with se
 
 test('PAPER rejection retires a shared QR source as one locked set before record rotation', () => {
   const retireSet = privateDefinition(sql.workflow, '_candidate_paper_delivery_retire_set_v1');
+  const sourceContext = privateDefinition(
+    sql.workflow,
+    '_candidate_paper_source_workflow_context_v1'
+  );
   const transition = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
   const reject = definition(sql.final, 'candidate_submission_reject_atomic_v1');
   assert.match(retireSet, /cardinality\(p_workflow_ids\) is distinct from cardinality\(p_expected_generations\)/i);
@@ -563,6 +567,12 @@ test('PAPER rejection retires a shared QR source as one locked set before record
   assert.match(retireSet, /_candidate_paper_delivery_retire_v1\([\s\S]*v_current_token_owner_workflow_id[\s\S]*v_current_token_owner_generation/i);
   assert.match(retireSet, /'qr_invalidation_proven',true/i);
   assert.match(retireSet, /'preserved_workflows'/i);
+  assert.match(sourceContext, /current_token_owner_workflow_id/i);
+  assert.match(sourceContext, /selected_workflow_id/i);
+  assert.match(sourceContext, /MULTIPLE_NONTERMINAL_PAPER_WORKFLOWS/i);
+  assert.match(sourceContext, /CURRENT_QR_TOKEN_OWNER_TERMINAL_WITH_LIVE_WORKFLOW/i);
+  assert.match(retireSet, /CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT/i);
+  assert.match(retireSet, /unselected_nonterminal_workflows/i);
   assert.match(reject, /v_paper_workflow_ids:=array_append\(v_paper_workflow_ids,v_workflow\.id\)/i);
   assert.match(reject, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_rejection_family_key,0\)\)/i);
   assert.match(reject, /v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
@@ -716,6 +726,9 @@ test('final route conversion is signed-state aware, stale-safe, reasoned, retent
   assert.match(route, /_timesheet_route_supersede_candidate_v1[\s\S]*state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)[\s\S]*_candidate_paper_delivery_retire_set_v1/i);
   assert.match(route, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_route_family_key,0\)\)[\s\S]*hashtext\(btrim\(v_requested\.booking_id\)\)/i);
   assert.match(route, /'paper_workflow_id',v_paper_workflow\.id/i);
+  assert.match(route, /_candidate_paper_source_workflow_context_v1\(\s*v_current\.timesheet_id/i);
+  assert.match(route, /paper_source_current_token_owner_workflow_id/i);
+  assert.match(route, /CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT/i);
   assert.match(route, /_timesheet_route_supersede_candidate_v1\([\s\S]*v_context->>'paper_workflow_id'/i);
   assert.match(route, /ALLOW_QR_AGAIN_REQUIRES_PRIOR_LINEAGE_OR_PAPER_PERMISSION/i);
   assert.match(route, /_timesheet_route_version_legacy_v1/i);

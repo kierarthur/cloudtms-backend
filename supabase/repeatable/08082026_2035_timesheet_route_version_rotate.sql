@@ -1359,6 +1359,7 @@ declare
   v_import jsonb:='{}'::jsonb;
   v_restore_proof jsonb:='{}'::jsonb;
   v_history jsonb:='{}'::jsonb;
+  v_paper_source_context jsonb:='{}'::jsonb;
   v_payload jsonb;
   v_context_hash text;
   v_route_family text;
@@ -1548,44 +1549,31 @@ begin
   order by (workflow.id=v_current.candidate_workflow_id) desc,
     workflow.updated_at_utc desc,workflow.created_at_utc desc
   limit 1;
-  -- QR/PAPER delivery ownership follows the immutable mail receipt and stable
-  -- booking/version family as well as direct workflow IDs. A finalised
-  -- separate-expense workflow may retain a historical hours anchor after the
-  -- current hours version rotates; that historical identity must not make its
-  -- live delivery surface invisible to a later route intervention.
-  select workflow.* into v_paper_workflow
-  from public.candidate_submission_workflows workflow
-  where workflow.route='PAPER'
-    and workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED')
-    and (
-      workflow.id=v_current.candidate_workflow_id
-      or workflow.target_timesheet_id=v_current.timesheet_id
-      or workflow.anchor_timesheet_id=v_current.timesheet_id
-      or exists(
-        select 1
-        from public.mail_outbox paper_mail
-        join public.timesheets mail_source
-          on mail_source.timesheet_id=paper_mail.context_id
-        where paper_mail.type='TIMESHEET_QR'
-          and paper_mail.context_kind='timesheets'
-          and paper_mail.payment_scope_json->>'candidate_workflow_id'=workflow.id::text
-          and paper_mail.payment_scope_json->>'candidate_workflow_generation'=
-            (case when workflow.state='FINALISED'
-              then greatest(workflow.generation-1,1)
-              else workflow.generation end)::text
-          and (
-            (nullif(btrim(coalesce(v_current.booking_id,'')),'') is not null
-              and mail_source.booking_id=v_current.booking_id)
-            or (nullif(btrim(coalesce(v_current.booking_id,'')),'') is null
-              and mail_source.timesheet_id=v_current.timesheet_id)
-          )
-          and mail_source.contract_id is not distinct from v_current.contract_id
-          and mail_source.week_ending_date is not distinct from v_current.week_ending_date
-      )
-    )
-  order by (workflow.id=v_current.candidate_workflow_id) desc,
-    workflow.updated_at_utc desc,workflow.created_at_utc desc,workflow.id
-  limit 1;
+  -- A QR/PAPER route is owned by the immutable delivery receipt matching the
+  -- current token. The historical candidate_workflow_id remains useful audit
+  -- lineage, but it must never outrank a later live expense/PAPER generation.
+  -- With no current token, a sole nonterminal workflow is selected; finalised
+  -- history is used only when no nonterminal workflow exists. Ambiguity is a
+  -- server-owned preview conflict and is recomputed again under confirmation
+  -- locks before any source-wide retirement or route rotation.
+  if v_route_family='QR' then
+    v_paper_source_context:=private._candidate_paper_source_workflow_context_v1(
+      v_current.timesheet_id
+    );
+    if not coalesce(
+      (v_paper_source_context->>'identity_conflict')::boolean,false
+    ) and nullif(v_paper_source_context->>'selected_workflow_id','') is not null then
+      select workflow.* into v_paper_workflow
+      from public.candidate_submission_workflows workflow
+      where workflow.id=(v_paper_source_context->>'selected_workflow_id')::uuid
+        and workflow.generation=
+          (v_paper_source_context->>'selected_workflow_generation')::integer
+        and workflow.state=v_paper_source_context->>'selected_workflow_state';
+      if not found then
+        raise exception 'CANDIDATE_PAPER_SOURCE_CONTEXT_CHANGED' using errcode='40001';
+      end if;
+    end if;
+  end if;
   select workflow.* into v_active_workflow
   from public.candidate_submission_workflows workflow
   where (workflow.id=v_current.candidate_workflow_id
@@ -1694,6 +1682,12 @@ begin
   elsif v_office_authorised then
     v_warning_code:='ROUTE_CHANGE_REQUIRES_UNAUTHORISE';
     v_block_reason:='AUTHORISED';
+  elsif coalesce((v_paper_source_context->>'identity_conflict')::boolean,false) then
+    v_warning_code:='ROUTE_CHANGE_WORKFLOW_CONFLICT';
+    v_block_reason:=coalesce(
+      v_paper_source_context->>'conflict_reason',
+      'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT'
+    );
   elsif v_active_workflow_count>1 then
     v_warning_code:='ROUTE_CHANGE_WORKFLOW_CONFLICT';
     v_block_reason:='MULTIPLE_ACTIVE_WORKFLOWS';
@@ -1807,6 +1801,11 @@ begin
     'paper_workflow_id',v_paper_workflow.id,
     'paper_workflow_generation',v_paper_workflow.generation,
     'paper_workflow_state',v_paper_workflow.state,
+    'paper_source_workflow_context',v_paper_source_context,
+    'paper_source_nonterminal_workflow_count',
+      coalesce((v_paper_source_context->>'nonterminal_workflow_count')::integer,0),
+    'paper_source_current_token_owner_workflow_id',
+      nullif(v_paper_source_context->>'current_token_owner_workflow_id','')::uuid,
     'active_workflow_id',v_active_workflow.id,
     'active_workflow_count',v_active_workflow_count,
     'active_workflow_generation',v_active_workflow.generation,
@@ -1877,6 +1876,16 @@ begin
          (v_paper_retirement_result->>'qr_invalidation_proven')::boolean,false
        ) then
       raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
+        using errcode='40001',detail=v_paper_retirement_result::text;
+    end if;
+    if exists(
+      select 1
+      from jsonb_array_elements(
+        coalesce(v_paper_retirement_result->'preserved_workflows','[]'::jsonb)
+      ) preserved
+      where preserved->>'workflow_state' in ('AWAITING_PAPER_RETURN','RECEIVED')
+    ) then
+      raise exception 'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT'
         using errcode='40001',detail=v_paper_retirement_result::text;
     end if;
     -- A finalised workflow is immutable historical approval. Retire only its

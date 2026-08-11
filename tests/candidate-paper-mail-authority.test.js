@@ -113,6 +113,10 @@ test('PAPER release is a service-only atomic workflow action and the backend is 
 test('single-workflow and source-set retirement close mail, notification and QR authority for every caller', () => {
   const helper = functionBody(workflowSource, 'private._candidate_paper_delivery_retire_v1');
   const setHelper = functionBody(workflowSource, 'private._candidate_paper_delivery_retire_set_v1');
+  const sourceContext = functionBody(
+    workflowSource,
+    'private._candidate_paper_source_workflow_context_v1'
+  );
   assert.match(helper, /CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/);
   assert.match(helper, /candidate_paper_generation_retired',true/i);
   assert.match(helper, /CANDIDATE_PAPER_GENERATION_RETIRED/);
@@ -138,11 +142,22 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(setHelper, /_candidate_paper_delivery_retire_v1\([\s\S]*v_current_token_owner_workflow_id/i);
   assert.match(setHelper, /'qr_invalidation_proven',true/i);
   assert.match(setHelper, /'preserved_workflows'/i);
+  assert.match(setHelper, /CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT/i);
+  assert.match(setHelper, /unselected_nonterminal_workflows/i);
+  assert.match(setHelper, /not \(relevant_workflow\.id=any\(v_selected_workflow_ids\)\)/i);
+  assert.match(sourceContext, /current_token_owner_workflow_id/i);
+  assert.match(sourceContext, /selected_workflow_id/i);
+  assert.match(sourceContext, /CURRENT_QR_TOKEN_OWNER_CONFLICT/i);
+  assert.match(sourceContext, /MULTIPLE_NONTERMINAL_PAPER_WORKFLOWS/i);
+  assert.match(sourceContext, /CURRENT_QR_TOKEN_OWNER_TERMINAL_WITH_LIVE_WORKFLOW/i);
   assert.match(workflowSource, /v_action='AMEND'[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*state in \('AWAITING_PAPER_RETURN','RECEIVED'\)[\s\S]*_candidate_paper_delivery_retire/i);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)[\s\S]*_candidate_paper_delivery_retire/i);
   assert.match(routeSource, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_route_family_key,0\)\)[\s\S]*hashtext\(btrim\(v_requested\.booking_id\)\)/i);
   assert.match(routeSource, /'paper_workflow_id',v_paper_workflow\.id/i);
+  assert.match(routeSource, /_candidate_paper_source_workflow_context_v1\(\s*v_current\.timesheet_id/i);
+  assert.match(routeSource, /paper_source_current_token_owner_workflow_id/i);
+  assert.match(routeSource, /CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT/i);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1\([\s\S]*v_context->>'paper_workflow_id'/i);
   assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_set_v1/);
   assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
