@@ -1,6 +1,6 @@
 # Candidate broker and private CloudTMS API topology
 
-Status: TEST implementation and deployed topology contract; updated through PAPER source-owner/claim-isolation closure, complete caller retirement, atomic provider-submit permission and shared route/rejection lock order on 11 August 2026.
+Status: TEST implementation and deployed topology contract; updated through mail-independent pre-delivery PAPER source guarding, PAPER source-owner/claim-isolation closure, complete caller retirement, atomic provider-submit permission and shared route/rejection lock order on 11 August 2026.
 
 ## Required trust boundary
 
@@ -138,19 +138,19 @@ Candidate PAPER email uses the existing CloudTMS mail delivery authority. The da
 
 This permit and the transactional retirement rules are one database coordination boundary. An active permit/lease blocks every supported authority-changing PAPER transition before mutation.
 
-Route intervention derives the live PAPER owner from the immutable current-token delivery receipt, not from a historical timesheet workflow pointer. Source-wide retirement is allowed to preserve only terminal history; an unselected waiting or received claim returns a controlled conflict before any delivery, notification, token, workflow or route change. Claim-level cancellation likewise cannot invalidate another claim's live pack.
+Route intervention derives the live PAPER owner from the immutable current-token delivery receipt, not from a historical timesheet workflow pointer. It separately finds every nonterminal PAPER workflow affected by rotating the source, including a draft/submitted workflow that has no mail receipt yet. A distinct or ambiguous affected workflow returns a controlled conflict before any delivery, notification, token, workflow or route change. Source-wide retirement preserves only terminal history, and claim-level cancellation cannot invalidate another claim's live pack.
 
 ## Current TEST deployment
 
 - Public broker: `test-cloudtms-candidate-broker`, active version `287591b1-73ec-4e79-a6b0-2f0bfbb7ff20`.
 - Private API: `test-cloudtms-candidate-private-api`, active version `d3fabe29-dd8e-4c04-b241-4c264b3e6ed4`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `c139889f-b392-46e4-9891-9fa3130d0d13`.
+- Normal backend: `test-cloudtms-backend`, active version `40b25d1c-0eaa-4932-9372-9d6313bb5bcd`.
 - Broker health/readiness: 200/200.
 - Normal backend health/readiness: 200/200.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The current Candidate runtime correction is published through backend commit `0349b76903057c3d01961af6dff81ea05a57576f`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The current Candidate runtime correction is published through backend commit `7c087bc79a010944cefc4b605dcab6ea335b6c85`, with fixture-only verifier commit `a33a25d954df3632300a65b022f10e6c255a86b4`. Candidate Worker source/configuration did not change; deployment records `3e73b76d-c75a-4257-8959-6f76a1d80185`, `45c0cf26-a1dc-459b-a031-47b5ab34ebfb` and `a0ffb037-2307-41a4-8d90-4a42423bddf1` safely reasserted the already-active private, broker and latest normal TEST versions at 100%. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 
