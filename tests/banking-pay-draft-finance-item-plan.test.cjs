@@ -33,6 +33,15 @@ test('the operation finance-item plan is deterministic, bounded and owner-only',
   assert.match(planSql, /REVOKE ALL ON FUNCTION private\.pay_workbench_draft_finance_item_plan_v1\(uuid,jsonb\) FROM PUBLIC, anon, authenticated, service_role/);
 });
 
+test('the frozen finance-item identity excludes the batch shell assigned after seeding', () => {
+  const keyStart = planSql.indexOf("'DRAFT_FINANCE_ITEM_V1:'");
+  const keyEnd = planSql.indexOf('AS effective_planned_item_key', keyStart);
+  assert.ok(keyStart >= 0 && keyEnd > keyStart, 'planned-item identity block must exist');
+  const keySql = planSql.slice(keyStart, keyEnd);
+  assert.doesNotMatch(keySql, /'pay_batch_id'/);
+  assert.match(planSql, /keyed_row\.pay_batch_id,/);
+});
+
 test('Draft allocation seeding freezes the canonical plan and rejects replay drift', () => {
   assert.match(seedSql, /private\.pay_workbench_draft_finance_item_plan_v1\(p_operation_id, v_plan_scope_ids\)/);
   assert.match(seedSql, /'draft_finance_item_plan'[\s\S]*'planned_item_key'[\s\S]*'planned_item_amount'[\s\S]*'plan_digest'/);

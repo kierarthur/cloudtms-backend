@@ -76,7 +76,6 @@ BEGIN
                'contract_version', 1,
                'operation_id', scoped_row.operation_id::text,
                'candidate_scope_id', scoped_row.candidate_scope_id::text,
-               'pay_batch_id', CASE WHEN scoped_row.pay_batch_id IS NULL THEN NULL ELSE scoped_row.pay_batch_id::text END,
                'candidate_id', scoped_row.candidate_id::text,
                'pay_channel', pg_catalog.upper(pg_catalog.btrim(COALESCE(scoped_row.pay_channel, ''))),
                'planned_item_type', scoped_row.effective_item_type,
