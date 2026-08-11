@@ -295,6 +295,23 @@ BEGIN
         FROM candidate_freshness;
 
         v_workbench_status := CASE
+            -- The untouched-Draft fast route deliberately creates no
+            -- REFRESH_WORKBENCH chunks.  Its final bounded page nevertheless
+            -- owns a certified V3 reversion publication and a whole-session
+            -- READY proof.  Treat that persisted terminal contract as CURRENT
+            -- so the read-only status owner does not leave the UI waiting on
+            -- a stage which this route never creates.
+            WHEN v_refresh_group_total = 0
+              AND v_operation.status = 'COMPLETE'
+              AND COALESCE((v_operation.progress_json->>'draft_overlay_fast')::boolean, false)
+              AND COALESCE(v_operation.progress_json#>>'{last_fast_draft_page,status}', '') = 'DRAFT_OVERLAY_FAST_COMPLETE'
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reversion_publication,ok}')::boolean, false)
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reversion_publication,progress,ready}')::boolean, false)
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reversion_publication,progress,still_running}')::boolean, false) IS NOT TRUE
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reversion_publication,progress,pending_refresh}')::boolean, false) IS NOT TRUE
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,full_build_count}')::integer, 0) = 0
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reconciliation_count}')::integer, 0) = 0
+              THEN 'CURRENT'
             WHEN v_refresh_group_total = 0 THEN 'NOT_STAGED'
             WHEN EXISTS (
                 SELECT 1 FROM public.banking_pay_operation_chunks AS failed_chunk

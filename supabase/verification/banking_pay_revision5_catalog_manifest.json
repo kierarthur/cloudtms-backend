@@ -768,7 +768,7 @@
       "schema": "public",
       "name": "pay_payment_correction_status_get_v1",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "6b67527fbb9c557614d94f682239caa6866d16f3a726b994cb2289f506334966",
+      "definition_sha256": "089cf41dda9bed42cafbcfb8a4f1eaafe2eb2264c4d25232b441db526955375b",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

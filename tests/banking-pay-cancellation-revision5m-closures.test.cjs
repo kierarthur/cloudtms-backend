@@ -86,6 +86,20 @@ test('failed-payment release has server-owned processing wording', () => {
   assert.match(progressStatus, /releasing the selected failed payments/);
 });
 
+test('untouched Draft fast cancellation reports terminal currentness from its certified publication', () => {
+  assert.match(progressStatus, /v_refresh_group_total = 0/);
+  assert.match(progressStatus, /v_operation\.status = 'COMPLETE'/);
+  assert.match(progressStatus, /progress_json->>'draft_overlay_fast'/);
+  assert.match(progressStatus, /last_fast_draft_page,status/);
+  assert.match(progressStatus, /DRAFT_OVERLAY_FAST_COMPLETE/);
+  assert.match(progressStatus, /last_fast_draft_page,reversion_publication,progress,ready/);
+  assert.match(progressStatus, /last_fast_draft_page,reversion_publication,progress,still_running/);
+  assert.match(progressStatus, /last_fast_draft_page,reversion_publication,progress,pending_refresh/);
+  assert.match(progressStatus, /last_fast_draft_page,full_build_count/);
+  assert.match(progressStatus, /last_fast_draft_page,reconciliation_count/);
+  assert.match(progressStatus, /THEN 'CURRENT'/);
+});
+
 test('prepared cancellation start reuses the exact constant-size planning fence', () => {
   const fences = Array.from(requestStart.matchAll(
     /v_active_scope_hash := private\.pay_payment_correction_sha256_v1\(\s*pg_catalog\.jsonb_build_object\(([\s\S]*?'scope_version_authority'\s*,\s*'banking_pay_batch_change_signals')\s*\)\s*\);/g
