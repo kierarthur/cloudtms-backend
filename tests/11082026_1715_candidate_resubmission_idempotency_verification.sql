@@ -90,7 +90,8 @@ begin
         week_ending_date,idempotency_key,created_at_utc,updated_at_utc
       ) values(
         v_source,'TEST','b7080000-0000-4000-8000-000000000005',
-        'b7080000-0000-4000-8000-000000000002',v_kind,'WEEKLY','ELECTRONIC',
+        'b7080000-0000-4000-8000-000000000002',v_kind,'WEEKLY',
+        case when v_no=1 then 'EMAIL' when v_no in (2,5) then 'PHONE' else 'ELECTRONIC' end,
         'REJECTED',2,'b7080000-0000-4000-8000-000000000004',v_week,v_timesheet,
         case when v_kind='CONTRACT_EXPENSE' then null else v_timesheet end,
         v_week_date,
@@ -98,6 +99,11 @@ begin
              else format('resubmit-source-%s',v_no) end,
         now()-interval '1 day',now()-interval '1 day'
       );
+      if v_no=5 then
+        update public.candidate_submission_workflows
+        set rejection_scope='COMPLETE_EXPENSE_CLAIM'
+        where id=v_source;
+      end if;
     end if;
   end loop;
 end;
@@ -211,6 +217,29 @@ begin
          where id='b7080000-0000-4000-8000-000000000301')<>'REJECTED' then
     raise exception 'sequential source-bound replay or lineage failed: %, %',v_result,v_replay;
   end if;
+  if (select route from public.candidate_submission_workflows where id=v_replacement)<>'ELECTRONIC' then
+    raise exception 'EMAIL rejected workflow did not restart through ELECTRONIC';
+  end if;
+
+  -- Progress the replacement through mutable lifecycle fields. The original
+  -- exact key must continue to replay the immutable creation receipt.
+  update public.candidate_submission_workflows set
+    route='EMAIL',state='CANCELLED',generation=4,
+    contract_week_id='b7080000-0000-4000-8000-000000000202',
+    updated_at_utc=now()
+  where id=v_replacement;
+  v_replay:=public._candidate_resubmit_probe_v1(
+    'b7080000-0000-4000-8000-000000000301',
+    'b7080000-0000-4000-8000-000000009002'
+  );
+  if v_replay->>'replacement_workflow_id'<>v_replacement::text
+     or v_replay->>'state'<>'CANCELLED'
+     or not coalesce((v_replay->>'idempotent_replay')::boolean,false)
+     or not private._candidate_rejection_replaced_v1(
+       'b7080000-0000-4000-8000-000000000301'
+     ) then
+    raise exception 'progressed/cancelled replacement did not preserve exact replay and durable lineage: %',v_replay;
+  end if;
 
   v_failed:=false;
   begin
@@ -235,6 +264,29 @@ begin
      or coalesce((v_replay->>'idempotent_replay')::boolean,false)=false then
     raise exception 'generic CREATE exact replay failed: %, %',v_result,v_replay;
   end if;
+  update public.candidate_submission_workflows set
+    route='EMAIL',state='CANCELLED',generation=3,
+    contract_week_id='b7080000-0000-4000-8000-000000000206',
+    updated_at_utc=now()
+  where id=(v_result->>'workflow_id')::uuid;
+  v_replay:=public._candidate_generic_create_probe_v1(
+    'b7080000-0000-4000-8000-000000000804',
+    'b7080000-0000-4000-8000-000000009010'
+  );
+  if v_replay->>'workflow_id'<>v_result->>'workflow_id'
+     or v_replay->>'state'<>'CANCELLED'
+     or not coalesce((v_replay->>'idempotent_replay')::boolean,false) then
+    raise exception 'generic CREATE replay depended on mutable lifecycle fields: %',v_replay;
+  end if;
+  v_failed:=false;
+  begin
+    update public.candidate_submission_workflows
+    set creation_identity_json=creation_identity_json||'{"tampered":true}'::jsonb
+    where id=(v_result->>'workflow_id')::uuid;
+  exception when sqlstate '55000' then
+    v_failed:=sqlerrm='CANDIDATE_CREATION_IDENTITY_IMMUTABLE';
+  end;
+  if not v_failed then raise exception 'immutable creation receipt accepted mutation'; end if;
   v_failed:=false;
   begin
     perform public.candidate_workflow_transition_atomic_v1(
@@ -290,6 +342,10 @@ begin
          where replacement_of_workflow_id='b7080000-0000-4000-8000-000000000302')<>1 then
     raise exception 'same-key concurrent resubmission did not return one replacement: %, %',v_first,v_second;
   end if;
+  if (select route from public.candidate_submission_workflows
+      where replacement_of_workflow_id='b7080000-0000-4000-8000-000000000302')<>'ELECTRONIC' then
+    raise exception 'PHONE rejected workflow did not restart through ELECTRONIC';
+  end if;
 end;
 $same_key_race$;
 
@@ -337,6 +393,21 @@ begin
        or (select count(*) from public.candidate_submission_workflows
            where replacement_of_workflow_id=v_source)<>1 then
       raise exception 'different-key source race failed for %',v_source;
+    end if;
+    if v_source='b7080000-0000-4000-8000-000000000304'::uuid
+       and (select workflow_kind from public.candidate_submission_workflows
+            where replacement_of_workflow_id=v_source)<>'CONTRACT_EXPENSE' then
+      raise exception 'expense rejection did not create an expense replacement';
+    end if;
+    if v_source='b7080000-0000-4000-8000-000000000305'::uuid
+       and (select workflow_kind from public.candidate_submission_workflows
+            where replacement_of_workflow_id=v_source)<>'CONTRACT_EXPENSE' then
+      raise exception 'expense-only combined rejection did not create an expense replacement';
+    end if;
+    if v_source='b7080000-0000-4000-8000-000000000305'::uuid
+       and (select route from public.candidate_submission_workflows
+              where replacement_of_workflow_id=v_source)<>'ELECTRONIC' then
+      raise exception 'weekly PHONE rejection did not restart through ELECTRONIC';
     end if;
   end loop;
 end;

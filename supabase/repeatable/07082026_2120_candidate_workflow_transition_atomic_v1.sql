@@ -1,6 +1,49 @@
 -- Candidate App workflow, immutable official review document, manager approval,
 -- final signed document, paper and reminder state machine.
 
+create or replace function private._candidate_workflow_creation_request_sha256_v1(
+  p_request_identity jsonb
+)
+returns bytea
+language sql
+immutable
+security definer
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+  select extensions.digest(
+    convert_to(coalesce(p_request_identity,'{}'::jsonb)::text,'UTF8'),
+    'sha256'
+  );
+$function$;
+
+create or replace function private._candidate_workflow_creation_identity_guard_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+begin
+  if old.creation_request_sha256 is not null
+     and (
+       new.creation_request_sha256 is distinct from old.creation_request_sha256
+       or new.creation_identity_json is distinct from old.creation_identity_json
+     ) then
+    raise exception 'CANDIDATE_CREATION_IDENTITY_IMMUTABLE' using errcode='55000';
+  end if;
+  if (new.creation_request_sha256 is null)<>(new.creation_identity_json is null) then
+    raise exception 'CANDIDATE_CREATION_IDENTITY_INVALID' using errcode='22023';
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists candidate_workflow_creation_identity_guard_v1
+  on public.candidate_submission_workflows;
+create trigger candidate_workflow_creation_identity_guard_v1
+before insert or update
+on public.candidate_submission_workflows
+for each row execute function private._candidate_workflow_creation_identity_guard_v1();
+
 create or replace function private._candidate_queue_mail_v1(
   p_mail jsonb,
   p_to text,
@@ -1482,6 +1525,13 @@ declare
   v_insert_workflow_id uuid;
   v_replacement_of_workflow_id uuid;
   v_is_rejected_resubmission boolean:=false;
+  v_creation_request_identity jsonb;
+  v_creation_identity jsonb;
+  v_creation_request_sha256 bytea;
+  v_initial_route text;
+  v_source_anchor public.timesheets%rowtype;
+  v_current_anchor_count integer:=0;
+  v_current_anchor_timesheet_id uuid;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
@@ -1510,7 +1560,8 @@ begin
   if v_action in (
     'SELECT_PHONE_APPROVAL','CREATE_EMAIL_APPROVAL_REQUEST','BEGIN_MANAGER_REVIEW',
     'RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
-    'REMIND','RENEW','CANCEL_MANAGER_HANDOFF','REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
+    'REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
+    'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
     'MANAGER_PROVIDER_SUBMIT_PERMIT'
   ) or (p_session_id is null and v_action in ('COMPONENT_PREPARE','COMPONENT_COMPLETE')) then
     perform private._candidate_require_feature_v1(v_environment,'candidate_manager_approval');
@@ -1548,7 +1599,7 @@ begin
     and coalesce((v_payload->>'service_office_action')::boolean,false)
     and coalesce(v_payload->>'actor_user_id','')
       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-    and v_action in ('REMIND','RENEW','CANCEL','CANCEL_MANAGER_HANDOFF',
+    and v_action in ('REMIND','RENEW','CANCEL','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
       'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE'));
   v_is_public_manager_action:=not v_is_service_action and p_session_id is null and v_action in (
     'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
@@ -1646,6 +1697,19 @@ begin
       raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
     end if;
 
+    v_creation_request_identity:=jsonb_build_object(
+      'version','CANDIDATE_WORKFLOW_CREATION_REQUEST_V1',
+      'action','RESUBMIT_REJECTED',
+      'environment',v_environment,
+      'account_id',v_account_id,
+      'candidate_id',v_candidate_id,
+      'rejected_workflow_id',p_workflow_id,
+      'rejected_workflow_generation',p_expected_generation
+    );
+    v_creation_request_sha256:=private._candidate_workflow_creation_request_sha256_v1(
+      v_creation_request_identity
+    );
+
     -- One account/key lock serialises exact retries. The source lock then
     -- serialises every key that attempts to replace the same rejected row.
     perform pg_advisory_xact_lock(hashtextextended(
@@ -1680,29 +1744,7 @@ begin
     if found then
       if v_existing_workflow.replacement_of_workflow_id is distinct from v_source_workflow.id
          or v_existing_workflow.candidate_id is distinct from v_source_workflow.candidate_id
-         or v_existing_workflow.workflow_kind is distinct from v_source_workflow.workflow_kind
-         or v_existing_workflow.scope is distinct from v_source_workflow.scope
-         or v_existing_workflow.route is distinct from v_source_workflow.route
-         or v_existing_workflow.contract_id is distinct from v_source_workflow.contract_id
-         or v_existing_workflow.contract_week_id is distinct from v_source_workflow.contract_week_id
-         or v_existing_workflow.work_date is distinct from v_source_workflow.work_date
-         or v_existing_workflow.week_ending_date is distinct from v_source_workflow.week_ending_date
-         or (
-           v_source_workflow.workflow_kind='DAILY'
-           and not exists (
-             select 1
-             from public.timesheets source_timesheet
-             join public.timesheets replacement_timesheet
-               on replacement_timesheet.booking_id=source_timesheet.booking_id
-             where source_timesheet.timesheet_id=coalesce(
-                     v_source_workflow.target_timesheet_id,v_source_workflow.anchor_timesheet_id
-                   )
-               and replacement_timesheet.timesheet_id=coalesce(
-                     v_existing_workflow.target_timesheet_id,v_existing_workflow.anchor_timesheet_id
-                   )
-               and nullif(btrim(coalesce(source_timesheet.booking_id,'')),'') is not null
-           )
-         ) then
+         or v_existing_workflow.creation_request_sha256 is distinct from v_creation_request_sha256 then
         raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
       end if;
       return jsonb_build_object(
@@ -1729,11 +1771,6 @@ begin
     v_is_rejected_resubmission:=true;
     v_replacement_of_workflow_id:=v_source_workflow.id;
     v_insert_workflow_id:=gen_random_uuid();
-    v_payload:=jsonb_build_object(
-      'workflow_kind',v_source_workflow.workflow_kind,
-      'scope',v_source_workflow.scope,
-      'route',v_source_workflow.route
-    );
     if v_source_workflow.workflow_kind='DAILY' then
       select current_timesheet.* into v_daily_timesheet
       from public.timesheets source_timesheet
@@ -1749,12 +1786,105 @@ begin
       if not found then
         raise exception 'CANDIDATE_DAILY_SHIFT_NOT_FOUND' using errcode='P0002';
       end if;
-      v_payload:=v_payload||jsonb_build_object('target_timesheet_id',v_daily_timesheet.timesheet_id);
+      v_workflow_kind:='DAILY';
+      v_scope:='DAILY';
+      v_initial_route:=upper(coalesce(
+        v_source_workflow.creation_identity_json#>>'{derived,initial_route}',
+        v_source_workflow.route
+      ));
+      if v_initial_route not in ('EMAIL','PHONE') then
+        raise exception 'CANDIDATE_REJECTED_REPLACEMENT_ROUTE_INVALID' using errcode='55000';
+      end if;
+      v_payload:=jsonb_build_object(
+        'workflow_kind',v_workflow_kind,
+        'scope',v_scope,
+        'route',v_initial_route,
+        'target_timesheet_id',v_daily_timesheet.timesheet_id
+      );
     else
-      v_payload:=v_payload||jsonb_build_object(
+      v_workflow_kind:=case
+        when v_source_workflow.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+          or v_source_workflow.workflow_kind='CONTRACT_EXPENSE'
+          then 'CONTRACT_EXPENSE'
+        when v_source_workflow.workflow_kind='CONTRACT_COMBINED'
+          then 'CONTRACT_COMBINED'
+        else 'CONTRACT_HOURS'
+      end;
+      v_scope:='WEEKLY';
+
+      select source_timesheet.* into v_source_anchor
+      from public.timesheets source_timesheet
+      where source_timesheet.timesheet_id=coalesce(
+        v_source_workflow.anchor_timesheet_id,v_source_workflow.target_timesheet_id
+      );
+      if not found then
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
+      end if;
+      select count(distinct current_timesheet.timesheet_id)::integer,
+        min(current_timesheet.timesheet_id::text)::uuid
+      into v_current_anchor_count,v_current_anchor_timesheet_id
+      from public.timesheets current_timesheet
+      where current_timesheet.is_current=true
+        and current_timesheet.archived_at_utc is null
+        and current_timesheet.contract_id is not distinct from v_source_anchor.contract_id
+        and current_timesheet.week_ending_date is not distinct from v_source_anchor.week_ending_date
+        and (
+          (
+            nullif(btrim(coalesce(v_source_anchor.booking_id,'')),'') is not null
+            and nullif(btrim(coalesce(current_timesheet.booking_id,'')),'')
+              =nullif(btrim(v_source_anchor.booking_id),'')
+          )
+          or (
+            nullif(btrim(coalesce(v_source_anchor.booking_id,'')),'') is null
+            and current_timesheet.timesheet_id=v_source_anchor.timesheet_id
+          )
+        );
+      if v_current_anchor_count<>1 or v_current_anchor_timesheet_id is null then
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
+      end if;
+      select current_timesheet.* into v_anchor_timesheet
+      from public.timesheets current_timesheet
+      where current_timesheet.timesheet_id=v_current_anchor_timesheet_id
+      for update;
+      select current_week.* into v_week
+      from public.contract_weeks current_week
+      where current_week.timesheet_id=v_anchor_timesheet.timesheet_id
+        and current_week.contract_id=v_source_workflow.contract_id
+        and current_week.week_ending_date=v_source_workflow.week_ending_date;
+      if not found then
+        raise exception 'CANDIDATE_WORKFLOW_WEEK_NOT_FOUND' using errcode='P0002';
+      end if;
+
+      v_initial_route:=upper(coalesce(
+        v_source_workflow.creation_identity_json#>>'{derived,initial_route}',
+        case when v_source_workflow.route='PAPER' then 'PAPER' else 'ELECTRONIC' end
+      ));
+      v_route_authority:=private._candidate_route_family_v1(
+        v_anchor_timesheet.timesheet_id,v_week.id
+      );
+      if v_initial_route='PAPER'
+         and (
+           v_route_authority->>'route_family'='QR'
+           or (
+             v_route_authority->>'route_family'='ELECTRONIC'
+             and coalesce(
+               (v_route_authority->>'candidate_paper_submission_allowed')::boolean,
+               false
+             )
+           )
+         ) then
+        v_initial_route:='PAPER';
+      else
+        v_initial_route:='ELECTRONIC';
+      end if;
+      v_payload:=jsonb_build_object(
+        'workflow_kind',v_workflow_kind,
+        'scope',v_scope,
+        'route',v_initial_route,
         'contract_id',v_source_workflow.contract_id,
-        'contract_week_id',v_source_workflow.contract_week_id,
-        'week_ending_date',v_source_workflow.week_ending_date
+        'contract_week_id',v_week.id,
+        'week_ending_date',v_week.week_ending_date,
+        'anchor_timesheet_id',v_anchor_timesheet.timesheet_id
       );
     end if;
     v_action:='CREATE';
@@ -1779,50 +1909,56 @@ begin
       raise exception 'CANDIDATE_WORKFLOW_TYPE_INVALID' using errcode='22023';
     end if;
     if not v_is_rejected_resubmission then
+      if v_workflow_kind='DAILY' then
+        select requested_timesheet.* into v_source_anchor
+        from public.timesheets requested_timesheet
+        where requested_timesheet.timesheet_id=nullif(v_payload->>'target_timesheet_id','')::uuid;
+        if not found then
+          raise exception 'CANDIDATE_DAILY_SHIFT_NOT_FOUND' using errcode='P0002';
+        end if;
+      end if;
+      v_creation_request_identity:=jsonb_strip_nulls(jsonb_build_object(
+        'version','CANDIDATE_WORKFLOW_CREATION_REQUEST_V1',
+        'action','CREATE',
+        'environment',v_environment,
+        'account_id',v_account_id,
+        'candidate_id',v_candidate_id,
+        'workflow_kind',v_workflow_kind,
+        'scope',v_scope,
+        'initial_route',v_route,
+        'contract_id',nullif(v_payload->>'contract_id','')::uuid,
+        'contract_week_id',nullif(v_payload->>'contract_week_id','')::uuid,
+        'week_ending_date',nullif(v_payload->>'week_ending_date','')::date,
+        'work_date',nullif(v_payload->>'work_date','')::date,
+        'daily_booking_id',case when v_workflow_kind='DAILY'
+          then nullif(btrim(coalesce(v_source_anchor.booking_id,'')),'') else null end,
+        'target_timesheet_id',case when v_workflow_kind='DAILY'
+          and nullif(btrim(coalesce(v_source_anchor.booking_id,'')),'') is null
+          then v_source_anchor.timesheet_id else null end,
+        'requested_anchor_timesheet_id',nullif(v_payload->>'anchor_timesheet_id','')::uuid,
+        'input_snapshot',coalesce(v_payload->'input_snapshot','{}'::jsonb),
+        'expected_row_signature',nullif(v_payload->>'expected_row_signature','')
+      ));
+      v_creation_request_sha256:=private._candidate_workflow_creation_request_sha256_v1(
+        v_creation_request_identity
+      );
       select * into v_existing_workflow
       from public.candidate_submission_workflows
       where account_id=v_account_id
         and idempotency_key=btrim(p_idempotency_key)
       for update;
-      if found and (
-        v_existing_workflow.candidate_id is distinct from v_candidate_id
-        or v_existing_workflow.replacement_of_workflow_id is not null
-        or v_existing_workflow.workflow_kind is distinct from v_workflow_kind
-        or v_existing_workflow.scope is distinct from v_scope
-        or v_existing_workflow.route is distinct from v_route
-        or v_existing_workflow.contract_id is distinct from
-             nullif(v_payload->>'contract_id','')::uuid
-        or v_existing_workflow.contract_week_id is distinct from
-             nullif(v_payload->>'contract_week_id','')::uuid
-        or (
-          nullif(v_payload->>'work_date','') is not null
-          and v_existing_workflow.work_date is distinct from (v_payload->>'work_date')::date
-        )
-        or (
-          nullif(v_payload->>'week_ending_date','') is not null
-          and v_existing_workflow.week_ending_date is distinct from
-                (v_payload->>'week_ending_date')::date
-        )
-        or v_existing_workflow.input_snapshot_json is distinct from
-             coalesce(v_payload->'input_snapshot','{}'::jsonb)
-        or v_existing_workflow.expected_row_signature is distinct from
-             nullif(v_payload->>'expected_row_signature','')
-        or (
-          v_workflow_kind='DAILY'
-          and not exists (
-            select 1
-            from public.timesheets existing_timesheet
-            join public.timesheets requested_timesheet
-              on requested_timesheet.timesheet_id=nullif(v_payload->>'target_timesheet_id','')::uuid
-             and requested_timesheet.booking_id=existing_timesheet.booking_id
-            where existing_timesheet.timesheet_id=coalesce(
-                    v_existing_workflow.target_timesheet_id,v_existing_workflow.anchor_timesheet_id
-                  )
-              and nullif(btrim(coalesce(existing_timesheet.booking_id,'')),'') is not null
-          )
-        )
-      ) then
-        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+      if found then
+        if v_existing_workflow.candidate_id is distinct from v_candidate_id
+           or v_existing_workflow.replacement_of_workflow_id is not null
+           or v_existing_workflow.creation_request_sha256 is distinct from v_creation_request_sha256 then
+          raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+        end if;
+        return jsonb_build_object(
+          'ok',true,'idempotent_replay',true,
+          'workflow_id',v_existing_workflow.id,
+          'state',v_existing_workflow.state,
+          'generation',v_existing_workflow.generation
+        );
       end if;
     end if;
     if v_workflow_kind='DAILY' then
@@ -1989,6 +2125,29 @@ begin
       end if;
     end if;
 
+    -- Store the immutable request receipt together with the canonical identity
+    -- that the server derived at creation time. Later workflow lifecycle changes
+    -- may alter route, target, contract-week and generation fields, but must never
+    -- alter this receipt or make an exact creation retry conflict.
+    v_creation_identity:=jsonb_build_object(
+      'version','CANDIDATE_WORKFLOW_CREATION_IDENTITY_V1',
+      'request',v_creation_request_identity,
+      'derived',jsonb_strip_nulls(jsonb_build_object(
+        'workflow_kind',v_workflow_kind,
+        'scope',v_scope,
+        'initial_route',v_route,
+        'contract_id',v_contract.id,
+        'contract_week_id',case when v_workflow_kind='DAILY' then null else v_week.id end,
+        'anchor_timesheet_id',case when v_workflow_kind='DAILY'
+          then v_daily_timesheet.timesheet_id else v_anchor_week.timesheet_id end,
+        'daily_booking_id',case when v_workflow_kind='DAILY'
+          then nullif(btrim(coalesce(v_daily_timesheet.booking_id,'')),'') else null end,
+        'work_date',v_canonical_work_date,
+        'week_ending_date',v_canonical_week_ending_date,
+        'replacement_of_workflow_id',v_replacement_of_workflow_id
+      ))
+    );
+
     select * into v_existing_workflow
     from public.candidate_submission_workflows
     where account_id=v_account_id
@@ -1997,30 +2156,7 @@ begin
     if found then
       if v_existing_workflow.candidate_id is distinct from v_candidate_id
          or v_existing_workflow.replacement_of_workflow_id is distinct from v_replacement_of_workflow_id
-         or v_existing_workflow.workflow_kind is distinct from v_workflow_kind
-         or v_existing_workflow.scope is distinct from v_scope
-         or v_existing_workflow.route is distinct from v_route
-         or v_existing_workflow.contract_id is distinct from v_contract.id
-         or v_existing_workflow.contract_week_id is distinct from
-              (case when v_workflow_kind='DAILY' then null else v_week.id end)
-         or v_existing_workflow.work_date is distinct from v_canonical_work_date
-         or v_existing_workflow.week_ending_date is distinct from v_canonical_week_ending_date
-         or v_existing_workflow.input_snapshot_json is distinct from
-              coalesce(v_payload->'input_snapshot','{}'::jsonb)
-         or v_existing_workflow.expected_row_signature is distinct from
-              nullif(v_payload->>'expected_row_signature','')
-         or (
-           v_workflow_kind='DAILY'
-           and not exists (
-             select 1
-             from public.timesheets existing_timesheet
-             where existing_timesheet.timesheet_id=coalesce(
-                     v_existing_workflow.target_timesheet_id,v_existing_workflow.anchor_timesheet_id
-                   )
-               and existing_timesheet.booking_id=v_daily_timesheet.booking_id
-               and nullif(btrim(coalesce(existing_timesheet.booking_id,'')),'') is not null
-           )
-         ) then
+         or v_existing_workflow.creation_request_sha256 is distinct from v_creation_request_sha256 then
         raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
       end if;
       if v_is_rejected_resubmission then
@@ -2098,7 +2234,8 @@ begin
       id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
       contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,work_date,week_ending_date,
       policy_snapshot_json,input_snapshot_json,issue_codes,expected_row_signature,idempotency_key,
-      replacement_of_workflow_id,last_mutation_idempotency_key,created_at_utc,updated_at_utc
+      replacement_of_workflow_id,creation_request_sha256,creation_identity_json,
+      last_mutation_idempotency_key,created_at_utc,updated_at_utc
     ) values (
       v_insert_workflow_id,v_environment,v_account_id,v_candidate_id,v_workflow_kind,
       v_scope,v_route,'WORKER_DRAFT',1,v_contract.id,
@@ -2112,7 +2249,8 @@ begin
       v_canonical_work_date,v_canonical_week_ending_date,
       v_policy,coalesce(v_payload->'input_snapshot','{}'::jsonb),'[]'::jsonb,
       nullif(v_payload->>'expected_row_signature',''),btrim(p_idempotency_key),
-      v_replacement_of_workflow_id,btrim(p_idempotency_key),p_now_utc,p_now_utc
+      v_replacement_of_workflow_id,v_creation_request_sha256,v_creation_identity,
+      btrim(p_idempotency_key),p_now_utc,p_now_utc
     ) returning * into v_workflow;
     perform private._candidate_audit_v1('candidate_submission_workflow',v_workflow.id::text,
       'CANDIDATE_WORKFLOW_CREATED',null,
@@ -3565,6 +3703,88 @@ begin
       last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
       updated_at_utc=p_now_utc where id=v_workflow.id;
 
+  elsif v_action='MANAGER_REQUEST_CANCEL' then
+    if not v_is_service_action then
+      raise exception 'CANDIDATE_MANAGER_REQUEST_CANCEL_SERVICE_REQUIRED' using errcode='42501';
+    end if;
+    v_cancel_reason:=nullif(btrim(coalesce(v_payload->>'reason_note',v_payload->>'reason','')), '');
+    v_cancel_reason_code:=coalesce(
+      nullif(upper(btrim(coalesce(v_payload->>'reason_code',''))),''),
+      'OFFICE_MANAGER_REQUEST_CANCELLED'
+    );
+    if v_cancel_reason is null then
+      raise exception 'CANDIDATE_CANCELLATION_REASON_REQUIRED' using errcode='22023';
+    end if;
+    if length(v_cancel_reason)>1000 then
+      raise exception 'CANDIDATE_CANCELLATION_REASON_INVALID' using errcode='22023';
+    end if;
+    v_audit_reason:=v_cancel_reason;
+    if v_workflow.state<>'AWAITING_MANAGER_APPROVAL' then
+      raise exception 'MANAGER_APPROVAL_REQUEST_NOT_CANCELLABLE' using errcode='55000';
+    end if;
+    select request_row.* into v_approval
+    from public.candidate_approval_requests request_row
+    where request_row.id=(v_payload->>'approval_request_id')::uuid
+      and request_row.workflow_id=v_workflow.id
+      and request_row.workflow_generation=v_workflow.generation
+      and request_row.request_generation=(v_payload->>'approval_request_generation')::integer
+      and request_row.method='EMAIL'
+      and request_row.state='PENDING'
+    for update;
+    if not found then
+      raise exception 'MANAGER_APPROVAL_REQUEST_NOT_CANCELLABLE' using errcode='55000';
+    end if;
+    v_manager_retirement_result:=private._candidate_manager_mail_retire_v1(
+      v_workflow.id,v_workflow.generation,array[v_approval.id],
+      'APPROVAL_REQUEST_CANCELLED',p_now_utc
+    );
+    update public.candidate_approval_requests set
+      state='CANCELLED',cancelled_at_utc=p_now_utc,updated_at_utc=p_now_utc
+    where id=v_approval.id;
+    update public.candidate_submission_components set
+      state='SUPERSEDED',superseded_at_utc=p_now_utc
+    where workflow_id=v_workflow.id
+      and workflow_generation=v_workflow.generation
+      and approval_request_id=v_approval.id
+      and component_kind='MANAGER_SIGNATURE'
+      and state<>'SUPERSEDED';
+    if coalesce((v_manager_retirement_result->>'withdrawal_required')::boolean,false) then
+      perform private._candidate_queue_mail_v1(
+        jsonb_build_object(
+          'subject','Timesheet approval request withdrawn',
+          'body_text','The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.',
+          'body_html','<p>The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.</p>',
+          'payment_scope_json',jsonb_build_object(
+            'candidate_mail_authority','MANAGER_APPROVAL_V1',
+            'candidate_manager_mail_kind','WITHDRAWAL',
+            'candidate_manager_workflow_id',v_workflow.id,
+            'candidate_manager_workflow_generation',v_workflow.generation,
+            'candidate_approval_request_id',v_approval.id,
+            'candidate_approval_request_generation',v_approval.request_generation,
+            'candidate_manager_mail_retired',false
+          )
+        ),v_approval.manager_email_normalized,
+        'CANDIDATE_MANAGER_WITHDRAWAL_V1:'||v_approval.id::text||':'||v_workflow.generation::text,
+        'candidate-manager-withdrawal:'||v_approval.id::text,v_workflow.id,p_now_utc
+      );
+      v_manager_withdrawal_count:=1;
+    end if;
+    v_response:=jsonb_build_object(
+      'ok',true,'workflow_id',v_workflow.id,
+      'state','READY_FOR_MANAGER_APPROVAL','generation',v_workflow.generation,
+      'approval_request_id',v_approval.id,'manager_request_cancelled',true,
+      'cancellation_reason',v_cancel_reason,
+      'cancellation_reason_code',v_cancel_reason_code,
+      'manager_withdrawal_count',v_manager_withdrawal_count,
+      'manager_mail_retirement',v_manager_retirement_result,
+      'claim_cancelled',false
+    );
+    update public.candidate_submission_workflows set
+      state='READY_FOR_MANAGER_APPROVAL',route='ELECTRONIC',
+      last_mutation_idempotency_key=p_idempotency_key,
+      last_mutation_response_json=v_response,updated_at_utc=p_now_utc
+    where id=v_workflow.id returning * into v_workflow;
+
   elsif v_action='CANCEL_MANAGER_HANDOFF' then
     if v_workflow.state<>'AWAITING_MANAGER_APPROVAL' or v_workflow.route<>'PHONE' then
       raise exception 'MANAGER_PHONE_HANDOFF_NOT_CANCELLABLE' using errcode='55000';
@@ -4330,6 +4550,10 @@ exception
 end;
 $function$;
 
+revoke all on function private._candidate_workflow_creation_request_sha256_v1(jsonb)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_workflow_creation_identity_guard_v1()
+  from public,anon,authenticated,service_role;
 revoke all on function private._candidate_queue_mail_v1(jsonb,text,text,text,uuid,timestamptz)
   from public,anon,authenticated,service_role;
 revoke all on function private._candidate_manager_mail_retire_v1(uuid,integer,uuid[],text,timestamptz)

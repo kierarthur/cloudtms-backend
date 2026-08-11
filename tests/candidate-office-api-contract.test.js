@@ -58,12 +58,19 @@ test('office OpenAPI and normal backend expose the same exact method/path invent
   assert.match(openapi, /maximum_projection_rows:\s*100/);
   assert.match(openapi, /CLOUDTMS_OFFICE_CANDIDATE_API_V1/);
   assert.match(openapi, /mode:\s*\{type:\s*string, const:\s*ENABLED\}/);
+  assert.match(openapi, /required_office_role:\s*\{type:\s*string, const:\s*admin\}/);
+  assert.match(openapi, /permission_source:\s*\{type:\s*string, const:\s*OFFICE_ADMIN_ROLE_V1\}/);
+  assert.match(backend, /cancel:\s*'MANAGER_REQUEST_CANCEL'/);
+  assert.match(backend, /cancel:\s*'cancel_manager_request'/);
+  assert.match(backend, /requireOfficeUser\(request, \['admin'\]\)/);
   assert.match(openapi, /enum:\s*\[remind, renew, cancel, cancel-manager-handoff, phone-review, phone-progress, phone-approve, phone-refuse, retry-finalisation, retry-paper-preparation\]/);
   assert.match(openapi, /decision_code:\s*\{const:\s*REJECT_OR_MANUAL\}/);
   assert.match(openapi, /title:\s*\{const:\s*'Does the candidate need to resubmit instead\?'\}/);
   assert.match(openapi, /label:\s*\{const:\s*'Use Reject Candidate Submission'\}/);
   assert.match(openapi, /label:\s*\{const:\s*'Continue to Manual conversion'\}/);
   assert.doesNotMatch(openapi, /mode:\s*\{[^\r\n]*(?:READ_ONLY|DISABLED)/);
+  assert.match(openapi, /cancel action cancels only the exact current manager approval/i);
+  assert.match(openapi, /It does not cancel the Candidate claim/i);
 });
 
 test('office contract preserves bounded projection and server-owned reminder batching', async () => {
@@ -81,8 +88,10 @@ test('office contract preserves bounded projection and server-owned reminder bat
   assert.match(openapi, /never call Candidate business RPCs directly/i);
   assert.match(openapi, /delivery_generation:/);
   assert.match(openapi, /FINALISED workflows use the preceding generation/i);
+  assert.match(openapi, /FAILED_RETRYABLE, FAILED_TERMINAL/);
   for (const code of [
-    'OFFICE_AUTH_REQUIRED', 'CANDIDATE_CONTEXT_STALE', 'CANDIDATE_TIMESHEET_MOVED',
+    'OFFICE_AUTH_REQUIRED', 'CANDIDATE_OFFICE_PERMISSION_DENIED',
+    'CANDIDATE_CONTEXT_STALE', 'CANDIDATE_TIMESHEET_MOVED',
     'CANDIDATE_ACTION_NOT_ELIGIBLE', 'CANDIDATE_REASON_REQUIRED', 'CANDIDATE_REASON_INVALID',
     'CANDIDATE_REQUEST_GENERATION_STALE', 'CANDIDATE_REQUIRES_UNAUTHORISE',
     'CANDIDATE_PROTECTED_FINANCIAL_HISTORY', 'CANDIDATE_IMPORT_AUTHORITATIVE',

@@ -758,6 +758,64 @@ test('office PAPER history uses the preceding immutable delivery generation and 
   assert.equal(receipt.sha256, packHash);
 });
 
+test('office cancel manager request maps to request-only authority and preserves the typed reason', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000271';
+  const workflowId = '00000000-0000-4000-8000-000000000272';
+  const approvalId = '00000000-0000-4000-8000-000000000273';
+  const idempotencyKey = '00000000-0000-4000-8000-000000000274';
+  const calls = [];
+  const officeRoles = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser(_request, roles) {
+      officeRoles.push(roles);
+      return { id: actorId, role: 'admin' };
+    },
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { ok: true, state: 'READY_FOR_MANAGER_APPROVAL', claim_cancelled: false };
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('candidate_submission_workflows')) return Response.json([{
+      id: workflowId, generation: 2, route: 'EMAIL', state: 'AWAITING_MANAGER_APPROVAL'
+    }]);
+    if (value.includes('candidate_approval_requests')) return Response.json([{
+      id: approvalId, workflow_id: workflowId, workflow_generation: 2,
+      request_generation: 1, method: 'EMAIL', state: 'PENDING'
+    }]);
+    throw new Error(`unexpected URL: ${value}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://office.test/api/candidate-app/workflows/${workflowId}/actions/cancel`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 2, approval_request_id: approvalId, approval_request_generation: 1,
+          idempotency_key: idempotencyKey,
+          reason: 'The office is selecting another approval method.'
+        })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, deps);
+    assert.equal(response.status, 200);
+    assert.deepEqual(officeRoles, [['admin']]);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, 'cloudtms_office_candidate_adapter_v1');
+    assert.equal(calls[0].args.p_action, 'WORKFLOW_ACTION_EXECUTE');
+    assert.equal(calls[0].args.p_payload.workflow_action, 'MANAGER_REQUEST_CANCEL');
+    assert.equal(calls[0].args.p_payload.payload.reason_note,
+      'The office is selecting another approval method.');
+    assert.equal((await response.json()).claim_cancelled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('office phone review sends only declared typed fields to the service adapter', async () => {
   const actorId = '00000000-0000-4000-8000-000000000241';
   const workflowId = '00000000-0000-4000-8000-000000000242';

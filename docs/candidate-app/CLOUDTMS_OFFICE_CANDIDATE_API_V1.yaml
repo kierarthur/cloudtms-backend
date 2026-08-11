@@ -8,6 +8,10 @@ info:
     lifecycle actions. This is not the public Candidate broker contract. Browser
     callers never call Candidate business RPCs directly. All state-changing
     operations use server-owned identities, generations and idempotency.
+    During the TEST implementation phase this contract is deliberately enabled
+    for authenticated CloudTMS office administrators; no separate frontend kill
+    switch is introduced. Every route independently enforces the declared admin
+    permission before calling the service-role adapter.
 servers:
   - url: https://test-cloudtms-backend.kier-88a.workers.dev
     description: Normal TEST backend only. Production is outside this contract.
@@ -36,6 +40,8 @@ x-cloudtms-authority:
   direct_browser_service_role: false
   service_rpc_grants: service_role only
   batch_result_scope: initiating authenticated office actor
+  required_office_role: admin
+  permission_source: OFFICE_ADMIN_ROLE_V1
 paths:
   /api/candidate-app/office-capabilities:
     get:
@@ -118,6 +124,10 @@ paths:
       tags: [Lifecycle]
       operationId: performOfficeCandidateWorkflowAction
       summary: Perform a typed Candidate workflow action
+      description: >-
+        The cancel action cancels only the exact current manager approval
+        request and link. It does not cancel the Candidate claim. Immutable sent
+        mail remains history and a provider handoff in progress blocks mutation.
       parameters:
         - {$ref: '#/components/parameters/WorkflowId'}
         - name: action
@@ -265,7 +275,7 @@ components:
     Capabilities:
       type: object
       additionalProperties: true
-      required: [ok, contract_version, capabilities_version, office_contract_version, authority_applies, mode, surfaces, permissions]
+      required: [ok, contract_version, capabilities_version, office_contract_version, authority_applies, mode, required_office_role, permission_source, surfaces, permissions]
       properties:
         ok: {const: true}
         contract_version: {const: CLOUDTMS_OFFICE_CANDIDATE_API_V1}
@@ -276,6 +286,8 @@ components:
         batch_version: {const: OFFICE_CANDIDATE_REMINDER_BATCH_V1}
         authority_applies: {type: boolean}
         mode: {type: string, const: ENABLED}
+        required_office_role: {type: string, const: admin}
+        permission_source: {type: string, const: OFFICE_ADMIN_ROLE_V1}
         surfaces:
           type: object
           additionalProperties: false
@@ -374,7 +386,7 @@ components:
       additionalProperties: true
       required: [state]
       properties:
-        state: {type: string, enum: [NOT_APPLICABLE, PREPARING, READY, RETURN_RECEIVED, FAILED, RETIRED, STALE]}
+        state: {type: string, enum: [NOT_APPLICABLE, PREPARING, READY, RETURN_RECEIVED, FAILED_RETRYABLE, FAILED_TERMINAL, RETIRED, STALE]}
         lifecycle_code: {type: [string, 'null']}
         delivery_generation:
           type: [integer, 'null']
@@ -382,6 +394,7 @@ components:
           description: Immutable PAPER delivery generation. FINALISED workflows use the preceding generation; live preparation uses the current generation.
         page_count: {type: [integer, 'null'], minimum: 1}
         reason_code: {type: [string, 'null']}
+        retryable: {type: boolean}
         issued_at_utc: {type: [string, 'null'], format: date-time}
         returned_at_utc: {type: [string, 'null'], format: date-time}
     RoutePreview:
@@ -535,6 +548,7 @@ components:
       description: Stable office-facing code. The normal backend maps lower-level lifecycle aliases into this catalogue without changing the public Candidate contract.
       x-stable-codes:
         - OFFICE_AUTH_REQUIRED
+        - CANDIDATE_OFFICE_PERMISSION_DENIED
         - CANDIDATE_OFFICE_PROJECTION_NOT_FOUND
         - CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID
         - CANDIDATE_CONTEXT_STALE

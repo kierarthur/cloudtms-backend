@@ -35,6 +35,8 @@ begin
     'environment',v_environment,
     'authority_applies',true,
     'mode','ENABLED',
+    'required_office_role','admin',
+    'permission_source','OFFICE_ADMIN_ROLE_V1',
     'observed_at_utc',coalesce(p_now_utc,now()),
     'surfaces',jsonb_build_object(
       'simple_timesheet',true,
@@ -220,6 +222,124 @@ begin
 end;
 $function$;
 
+create or replace function private._candidate_office_projection_identity_v1(
+  p_timesheet_id uuid,
+  p_contract_week_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_requested public.timesheets%rowtype;
+  v_requested_current_id uuid;
+  v_week public.contract_weeks%rowtype;
+  v_week_timesheet public.timesheets%rowtype;
+  v_week_current_id uuid;
+  v_current_id uuid;
+  v_current_count integer:=0;
+  v_week_count integer:=0;
+  v_resolved_week_id uuid;
+begin
+  if p_timesheet_id is null and p_contract_week_id is null then
+    raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+  end if;
+
+  if p_timesheet_id is not null then
+    select requested.* into v_requested
+    from public.timesheets requested
+    where requested.timesheet_id=p_timesheet_id;
+    if not found then
+      raise exception 'CANDIDATE_OFFICE_PROJECTION_NOT_FOUND' using errcode='P0002';
+    end if;
+    if v_requested.is_current and v_requested.archived_at_utc is null then
+      v_requested_current_id:=v_requested.timesheet_id;
+    elsif nullif(btrim(coalesce(v_requested.booking_id,'')),'') is not null then
+      select count(distinct current_row.timesheet_id)::integer,
+        min(current_row.timesheet_id::text)::uuid
+      into v_current_count,v_requested_current_id
+      from public.timesheets current_row
+      where current_row.is_current=true
+        and current_row.archived_at_utc is null
+        and current_row.contract_id is not distinct from v_requested.contract_id
+        and current_row.week_ending_date is not distinct from v_requested.week_ending_date
+        and nullif(btrim(coalesce(current_row.booking_id,'')),'')
+          =nullif(btrim(v_requested.booking_id),'');
+      if v_current_count<>1 then
+        raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+      end if;
+    else
+      raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+    end if;
+  end if;
+
+  if p_contract_week_id is not null then
+    select week_row.* into v_week
+    from public.contract_weeks week_row
+    where week_row.id=p_contract_week_id;
+    if not found or v_week.timesheet_id is null then
+      raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002';
+    end if;
+    select week_timesheet.* into v_week_timesheet
+    from public.timesheets week_timesheet
+    where week_timesheet.timesheet_id=v_week.timesheet_id;
+    if not found then
+      raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+    end if;
+    if v_week_timesheet.is_current and v_week_timesheet.archived_at_utc is null then
+      v_week_current_id:=v_week_timesheet.timesheet_id;
+    elsif nullif(btrim(coalesce(v_week_timesheet.booking_id,'')),'') is not null then
+      select count(distinct current_row.timesheet_id)::integer,
+        min(current_row.timesheet_id::text)::uuid
+      into v_current_count,v_week_current_id
+      from public.timesheets current_row
+      where current_row.is_current=true
+        and current_row.archived_at_utc is null
+        and current_row.contract_id is not distinct from v_week_timesheet.contract_id
+        and current_row.week_ending_date is not distinct from v_week_timesheet.week_ending_date
+        and nullif(btrim(coalesce(current_row.booking_id,'')),'')
+          =nullif(btrim(v_week_timesheet.booking_id),'');
+      if v_current_count<>1 then
+        raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+      end if;
+    else
+      raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+    end if;
+  end if;
+
+  if v_requested_current_id is not null and v_week_current_id is not null
+     and v_requested_current_id is distinct from v_week_current_id then
+    raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+  end if;
+  v_current_id:=coalesce(v_requested_current_id,v_week_current_id);
+
+  if p_contract_week_id is null then
+    select count(*)::integer,min(week_row.id::text)::uuid
+    into v_week_count,v_resolved_week_id
+    from public.contract_weeks week_row
+    where week_row.timesheet_id=v_current_id;
+    if v_week_count<>1 then
+      raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+    end if;
+    select week_row.* into v_week
+    from public.contract_weeks week_row
+    where week_row.id=v_resolved_week_id;
+  elsif v_week_current_id is distinct from v_current_id then
+    raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+  end if;
+
+  return jsonb_build_object(
+    'requested_timesheet_id',p_timesheet_id,
+    'current_timesheet_id',v_current_id,
+    'contract_week_id',v_week.id,
+    'additional_seq',v_week.additional_seq,
+    'moved',p_timesheet_id is not null and p_timesheet_id is distinct from v_current_id
+  );
+end;
+$function$;
+
 create or replace function private._candidate_office_timesheet_projection_v1(
   p_environment text,
   p_timesheet_id uuid,
@@ -237,6 +357,7 @@ set search_path = pg_catalog, public, private, extensions, pg_temp
 as $function$
 declare
   v_environment text;
+  v_identity jsonb;
   v_week public.contract_weeks%rowtype;
   v_requested public.timesheets%rowtype;
   v_current public.timesheets%rowtype;
@@ -265,6 +386,7 @@ declare
   v_candidate_status_label text;
   v_candidate_status_tone text;
   v_reject_preview jsonb;
+  v_primary_action jsonb;
   v_writes boolean:=true;
   v_manager_enabled boolean:=true;
   v_paper_enabled boolean:=true;
@@ -275,37 +397,32 @@ begin
   if p_actor_user_id is null or (p_timesheet_id is null and p_contract_week_id is null) then
     raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
   end if;
+  v_identity:=private._candidate_office_projection_identity_v1(
+    p_timesheet_id,p_contract_week_id
+  );
   if p_timesheet_id is not null then
     select * into v_requested from public.timesheets where timesheet_id=p_timesheet_id;
-    if not found then raise exception 'CANDIDATE_OFFICE_PROJECTION_NOT_FOUND' using errcode='P0002'; end if;
   end if;
-  if p_contract_week_id is not null then
-    select * into v_week from public.contract_weeks where id=p_contract_week_id;
-  elsif v_requested.timesheet_id is not null then
-    select * into v_week from public.contract_weeks
-    where timesheet_id=v_requested.timesheet_id
-       or (contract_id=v_requested.contract_id and week_ending_date=v_requested.week_ending_date)
-    order by (timesheet_id=v_requested.timesheet_id) desc,updated_at desc,id desc limit 1;
-  end if;
-  if not found then raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002'; end if;
-  if v_week.timesheet_id is not null then
-    select * into v_current from public.timesheets where timesheet_id=v_week.timesheet_id;
-  end if;
-  if v_current.timesheet_id is null or not v_current.is_current then
-    select t.* into v_current from public.timesheets t
-    where t.contract_id=v_week.contract_id and t.week_ending_date=v_week.week_ending_date
-      and t.is_current=true and t.archived_at_utc is null
-    order by t.version desc,t.updated_at desc,t.timesheet_id desc limit 1;
-  end if;
-  if v_current.timesheet_id is null then
-    raise exception 'CANDIDATE_OFFICE_PROJECTION_NOT_FOUND' using errcode='P0002';
-  end if;
-  if p_timesheet_id is not null and v_requested.contract_id is distinct from v_current.contract_id then
-    raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
-  end if;
+  select * into v_week from public.contract_weeks
+  where id=(v_identity->>'contract_week_id')::uuid;
+  select * into v_current from public.timesheets
+  where timesheet_id=(v_identity->>'current_timesheet_id')::uuid;
   select * into v_fin from public.timesheets_financials
   where timesheet_id=v_current.timesheet_id and is_current=true
   order by computed_at_utc desc nulls last,updated_at desc,id desc limit 1;
+  -- Financial truth outranks Candidate workflow lifecycle on every surface.
+  -- Protected records remain readable, but no Candidate mutation may be
+  -- advertised once paid, authorised or invoice-locked.
+  v_writes:=not (
+    v_fin.paid_at_utc is not null
+    or v_fin.authorised_at_utc is not null
+    or v_current.authorised_at_server is not null
+    or v_fin.locked_by_invoice_id is not null
+    or upper(coalesce(v_current.status::text,''))='INVOICED'
+  );
+  v_manager_enabled:=v_writes;
+  v_paper_enabled:=v_writes;
+  v_route_enabled:=v_writes;
   v_capabilities:=private._candidate_record_capabilities_v1(v_current.timesheet_id,v_week.id,'{}'::jsonb);
   v_signature:=coalesce(
     public.timesheet_lifecycle_guard_signature_v1(v_current.timesheet_id,v_week.id,false)->>'row_signature',
@@ -378,7 +495,10 @@ begin
       when v_workflow.state in ('CANCELLED','REJECTED','SUPERSEDED','EXPIRED') then 'RETIRED'
       when lower(coalesce(v_paper_outbox.payment_scope_json->>'candidate_paper_generation_retired','false'))
         in ('true','t','1','yes') then 'RETIRED'
-      when v_paper_outbox.status::text='FAILED' then 'FAILED'
+      when lower(coalesce(v_paper_outbox.payment_scope_json->>'candidate_paper_pack_retryable','false'))
+        in ('true','t','1','yes') then 'FAILED_RETRYABLE'
+      when v_paper_outbox.status::text='FAILED'
+        or upper(coalesce(v_current.document_state,''))='FAILED' then 'FAILED_TERMINAL'
       when coalesce((v_paper_outbox.payment_scope_json->>'candidate_paper_pack_ready')::boolean,false) then 'READY'
       when v_workflow.state='AWAITING_PAPER_RETURN' then 'PREPARING'
       else 'STALE' end;
@@ -512,13 +632,14 @@ begin
       jsonb_build_object('generation',v_workflow.generation),'[]'::jsonb,'NONE',false
     ));
     v_actions:=v_actions||jsonb_build_array(private._candidate_office_action_v1(
-      'RETRY_PAPER_PREPARATION','Retry paper pack preparation','PAPER',v_paper_enabled and v_paper_state='PREPARING',
+      'RETRY_PAPER_PREPARATION','Retry paper pack preparation','PAPER',
+      v_paper_enabled and v_paper_state='FAILED_RETRYABLE',
       'CANDIDATE_PAPER_PACK_RETRY_NOT_READY','Paper pack preparation is not currently retryable.',true,false,'POST',
       '/api/candidate-app/workflows/'||v_workflow.id::text||'/actions/retry-paper-preparation',
       jsonb_build_object('generation',v_workflow.generation),'[]'::jsonb,'REQUIRED',false
     ));
     v_actions:=v_actions||jsonb_build_array(private._candidate_office_action_v1(
-      'ISSUE_REPLACEMENT_PAPER_PACK','Issue replacement paper pack','PAPER',v_route_enabled and v_paper_state in ('READY','FAILED','STALE'),
+      'ISSUE_REPLACEMENT_PAPER_PACK','Issue replacement paper pack','PAPER',v_route_enabled and v_paper_state in ('READY','FAILED_RETRYABLE','FAILED_TERMINAL','STALE'),
       'CANDIDATE_PAPER_REPLACEMENT_NOT_READY','A replacement paper pack cannot currently be issued.',true,true,'GET',
       '/api/candidate-app/timesheets/'||v_current.timesheet_id::text||'/route-preview?action=REISSUE_QR',
       '{}'::jsonb,'[]'::jsonb,'NONE',false
@@ -550,12 +671,13 @@ begin
     ));
   end if;
 
-  v_candidate_status_code:=case
-    when v_fin.paid_at_utc is not null then 'PAID'
-    when v_fin.authorised_at_utc is not null or v_current.authorised_at_server is not null then 'AUTHORISED'
-    when v_workflow.state is not null then v_workflow.state
-    when v_fin.processing_status is not null then v_fin.processing_status::text
-    else 'AVAILABLE' end;
+  v_candidate_status_code:=private._candidate_status_code_v1(
+    v_fin.paid_at_utc is not null,
+    v_fin.authorised_at_utc is not null or v_current.authorised_at_server is not null,
+    v_fin.locked_by_invoice_id is not null
+      or upper(coalesce(v_current.status::text,''))='INVOICED',
+    v_workflow.state,false,v_fin.processing_status::text,v_week.status::text
+  );
   v_candidate_status_label:=initcap(replace(lower(v_candidate_status_code),'_',' '));
   v_candidate_status_tone:=case
     when v_candidate_status_code in ('PAID','AUTHORISED','FINALISED','MANAGER_APPROVED','READY_TO_FINALISE') then 'success'
@@ -564,6 +686,12 @@ begin
     else 'neutral' end;
   v_expense_email_missing:=coalesce((v_capabilities->>'expense_value')::numeric,0)<>0
     and not coalesce((v_capabilities->>'expense_invoice_email_ready')::boolean,false);
+  select action_item into v_primary_action
+  from jsonb_array_elements(v_actions) with ordinality actions(action_item,ordinality)
+  where coalesce((action_item->>'enabled')::boolean,false)
+    and coalesce((action_item->>'prominent')::boolean,false)
+  order by ordinality
+  limit 1;
 
   return jsonb_build_object(
     'ok',true,
@@ -582,7 +710,7 @@ begin
       'row_key',coalesce(nullif(btrim(coalesce(p_row_key,'')),''),v_week.id::text),
       'row_signature',v_signature,'route_family',v_capabilities->>'route_family',
       'record_role',v_capabilities->>'record_role',
-      'moved',p_timesheet_id is not null and p_timesheet_id is distinct from v_current.timesheet_id,
+      'moved',coalesce((v_identity->>'moved')::boolean,false),
       'stale_signature',nullif(btrim(coalesce(p_expected_row_signature,'')),'') is not null
         and p_expected_row_signature is distinct from v_signature
     ),
@@ -614,12 +742,14 @@ begin
       'delivery_generation',v_paper_delivery_generation,
       'page_count',case when coalesce(v_paper_outbox.payment_scope_json,'{}'::jsonb)->>'candidate_complete_pack_page_count'~'^[1-9][0-9]*$'
         then (v_paper_outbox.payment_scope_json->>'candidate_complete_pack_page_count')::integer else null end,
-      'reason_code',case when v_paper_state in ('FAILED','STALE') then 'CANDIDATE_PAPER_PACK_'||v_paper_state else null end,
+      'reason_code',case when v_paper_state in ('FAILED_RETRYABLE','FAILED_TERMINAL','STALE')
+        then 'CANDIDATE_PAPER_PACK_'||v_paper_state else null end,
+      'retryable',v_paper_state='FAILED_RETRYABLE',
       'issued_at_utc',v_paper_outbox.sent_at,
       'returned_at_utc',case when v_workflow.state='RECEIVED' then v_workflow.updated_at_utc else null end
     ),
     'rejections',v_rejections,
-    'primary_action',case when jsonb_array_length(v_actions)>0 then v_actions->0 else null end,
+    'primary_action',v_primary_action,
     'available_actions',v_actions,
     'diagnostics',case when v_expense_email_missing then jsonb_build_array(jsonb_build_object(
       'code','EXPENSE_EMAIL_MISSING','severity','WARNING','message','Expense Email missing',
@@ -758,6 +888,16 @@ begin
     v_family_key:='CANDIDATE_PAPER_FAMILY:'||v_environment||':'
       ||coalesce(v_timesheet.contract_id::text,'-')||':'||coalesce(v_timesheet.week_ending_date::text,'-');
     perform pg_advisory_xact_lock(hashtextextended(v_family_key,0));
+    select ae.before_json,ae.after_json into v_existing_before,v_existing_after
+    from public.audit_events ae where ae.object_type='cloudtms_office_candidate_rejection'
+      and ae.actor_user_id=p_actor_user_id and ae.correlation_id=v_idempotency_key
+    order by ae.ts_utc desc,ae.id desc limit 1;
+    if found then
+      if v_existing_before->>'request_sha256' is distinct from v_request_hash then
+        raise exception 'IDEMPOTENCY_CONFLICT' using errcode='23505';
+      end if;
+      return coalesce(v_existing_after,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
+    end if;
     perform 1 from public.timesheets where timesheet_id=v_timesheet.timesheet_id for update;
     v_preview:=private._candidate_office_reject_preview_v1(
       v_environment,v_timesheet.timesheet_id,p_actor_user_id,v_observed
@@ -788,7 +928,7 @@ begin
     return v_result;
   elsif v_action='WORKFLOW_ACTION_EXECUTE' then
     v_workflow_action:=upper(btrim(coalesce(v_payload->>'workflow_action','')));
-    if v_workflow_action not in ('REMIND','RENEW','CANCEL','CANCEL_MANAGER_HANDOFF',
+    if v_workflow_action not in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
         'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE') then
       raise exception 'CANDIDATE_WORKFLOW_ACTION_INVALID' using errcode='22023';
     end if;
@@ -812,7 +952,7 @@ begin
     end if;
     v_approval_id:=nullif(v_payload->>'approval_request_id','')::uuid;
     v_approval_generation:=nullif(v_payload->>'approval_request_generation','')::integer;
-    if v_workflow_action in ('REMIND','RENEW','CANCEL','CANCEL_MANAGER_HANDOFF',
+    if v_workflow_action in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
         'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE')
        and (v_approval_id is null or v_approval_generation is null or v_approval_generation<1) then
       raise exception 'CANDIDATE_REQUEST_GENERATION_STALE' using errcode='22023';
@@ -1034,12 +1174,14 @@ $function$;
 alter function private._candidate_office_capabilities_v1(text,uuid,timestamptz) owner to postgres;
 alter function private._candidate_office_action_v1(text,text,text,boolean,text,text,boolean,boolean,text,text,jsonb,jsonb,text,boolean) owner to postgres;
 alter function private._candidate_office_reject_preview_v1(text,uuid,uuid,timestamptz) owner to postgres;
+alter function private._candidate_office_projection_identity_v1(uuid,uuid) owner to postgres;
 alter function private._candidate_office_timesheet_projection_v1(text,uuid,uuid,text,text,uuid,timestamptz) owner to postgres;
 alter function public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz) owner to postgres;
 
 revoke all on function private._candidate_office_capabilities_v1(text,uuid,timestamptz) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_office_action_v1(text,text,text,boolean,text,text,boolean,boolean,text,text,jsonb,jsonb,text,boolean) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_office_reject_preview_v1(text,uuid,uuid,timestamptz) from public,anon,authenticated,service_role;
+revoke all on function private._candidate_office_projection_identity_v1(uuid,uuid) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_office_timesheet_projection_v1(text,uuid,uuid,text,text,uuid,timestamptz) from public,anon,authenticated,service_role;
 revoke all on function public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz) from public,anon,authenticated;
 grant execute on function public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz) to service_role;

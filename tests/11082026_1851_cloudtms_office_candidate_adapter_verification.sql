@@ -21,6 +21,8 @@ declare
   v_contract uuid:='ad510000-0000-4000-8000-000000000004';
   v_timesheet uuid:='ad510000-0000-4000-8000-000000000005';
   v_week uuid:='ad510000-0000-4000-8000-000000000006';
+  v_other_timesheet uuid:='ad510000-0000-4000-8000-000000000012';
+  v_other_week uuid:='ad510000-0000-4000-8000-000000000013';
   v_account uuid:='ad510000-0000-4000-8000-000000000007';
   v_workflow uuid:='ad510000-0000-4000-8000-000000000008';
   v_request uuid:='ad510000-0000-4000-8000-000000000009';
@@ -36,6 +38,7 @@ declare
   v_signature text;
   v_definition text;
   v_count integer;
+  v_failed boolean;
 begin
   if has_function_privilege('anon','public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz)','execute')
      or has_function_privilege('authenticated','public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz)','execute')
@@ -50,7 +53,8 @@ begin
     where n.nspname='private'
       and p.proname in (
         '_candidate_office_capabilities_v1','_candidate_office_action_v1',
-        '_candidate_office_reject_preview_v1','_candidate_office_timesheet_projection_v1'
+        '_candidate_office_reject_preview_v1','_candidate_office_projection_identity_v1',
+        '_candidate_office_timesheet_projection_v1'
       )
       and has_function_privilege(role_name.name,p.oid,'execute')
   ) or exists(
@@ -61,7 +65,8 @@ begin
     where n.nspname='private'
       and p.proname in (
         '_candidate_office_capabilities_v1','_candidate_office_action_v1',
-        '_candidate_office_reject_preview_v1','_candidate_office_timesheet_projection_v1'
+        '_candidate_office_reject_preview_v1','_candidate_office_projection_identity_v1',
+        '_candidate_office_timesheet_projection_v1'
       )
       and acl.grantee=0 and acl.privilege_type='EXECUTE'
   ) then
@@ -91,6 +96,14 @@ begin
   ) values(v_week,v_contract,current_date,'SUBMITTED','ELECTRONIC',v_timesheet);
   insert into public.timesheets_financials(timesheet_id,candidate_id,client_id,total_hours,processing_status)
   values(v_timesheet,v_candidate,v_client,8,'UNPROCESSED');
+  insert into public.timesheets(
+    timesheet_id,contract_id,booking_id,week_ending_date,line_type,submission_mode
+  ) values(v_other_timesheet,v_contract,'OFFICE-ADAPTER-ADDITIONAL',current_date,'HOURS','MANUAL');
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,additional_seq
+  ) values(v_other_week,v_contract,current_date,'SUBMITTED','ELECTRONIC',v_other_timesheet,1);
+  insert into public.timesheets_financials(timesheet_id,candidate_id,client_id,total_hours,processing_status)
+  values(v_other_timesheet,v_candidate,v_client,4,'UNPROCESSED');
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','office-adapter@example.test','ACTIVE');
   insert into public.candidate_submission_workflows(
@@ -145,6 +158,8 @@ begin
     'CAPABILITIES',v_actor,'TEST','{}'::jsonb,v_now
   );
   if v_capabilities->>'mode'<>'ENABLED'
+     or v_capabilities->>'required_office_role'<>'admin'
+     or v_capabilities->>'permission_source'<>'OFFICE_ADMIN_ROLE_V1'
      or not coalesce((v_capabilities#>>'{permissions,send_manager_reminder_batch}')::boolean,false) then
     raise exception 'office capabilities incorrect: %',v_capabilities;
   end if;
@@ -158,6 +173,16 @@ begin
     raise exception 'undeclared office projection surface unexpectedly succeeded';
   exception when others then
     if position('CANDIDATE_OFFICE_PROJECTION_SURFACE_INVALID' in sqlerrm)=0 then raise; end if;
+  end;
+  begin
+    perform public.cloudtms_office_candidate_adapter_v1(
+      'PROJECT_ONE',v_actor,'TEST',jsonb_build_object(
+        'timesheet_id',v_timesheet,'contract_week_id',v_other_week
+      ),v_now
+    );
+    raise exception 'mixed additional-record projection identity unexpectedly succeeded';
+  exception when others then
+    if position('CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' in sqlerrm)=0 then raise; end if;
   end;
   begin
     perform public.cloudtms_office_candidate_adapter_v1(
@@ -306,7 +331,8 @@ begin
     ))
      or not (v_projection->'available_actions' @> jsonb_build_array(
       jsonb_build_object('code','REFUSE_BY_PHONE','enabled',true)
-    )) then
+    ))
+     or v_projection#>>'{primary_action,code}'<>'BEGIN_PHONE_REVIEW' then
     raise exception 'typed phone action contract incomplete: %',v_projection->'available_actions';
   end if;
 
@@ -319,6 +345,130 @@ begin
       'calculation_effect','NONE','authority_effect','PRESENTATION_ONLY'
     ))) then
     raise exception 'expense email semantic diagnostic incorrect: %',v_projection->'diagnostics';
+  end if;
+
+  update public.timesheets_financials
+  set locked_by_invoice_id='ad510000-0000-4000-8000-000000000099'
+  where timesheet_id=v_timesheet;
+  v_projection:=public.cloudtms_office_candidate_adapter_v1(
+    'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now
+  );
+  if v_projection#>>'{candidate_status,code}'<>'INVOICED_NOT_PAID'
+     or exists(
+       select 1 from jsonb_array_elements(v_projection->'available_actions') action_item
+       where coalesce((action_item->>'enabled')::boolean,false)
+         and action_item->>'group' in ('MANAGER_APPROVAL','REJECTION','FINALISATION')
+     ) then
+    raise exception 'invoice-locked office status/action precedence incorrect: %',v_projection;
+  end if;
+  update public.timesheets_financials set locked_by_invoice_id=null where timesheet_id=v_timesheet;
+
+  -- Cancel the exact approval request/link, not the Candidate claim. Sent mail
+  -- remains immutable history and only mutable manager delivery is retired.
+  update public.candidate_submission_workflows
+  set route='EMAIL',state='AWAITING_MANAGER_APPROVAL'
+  where id=v_workflow;
+  update public.candidate_approval_requests
+  set method='EMAIL',state='PENDING',cancelled_at_utc=null
+  where id=v_request;
+  update public.mail_outbox set
+    attempt_lease_token='ad510000-0000-4000-8000-000000000016',
+    attempt_leased_at_utc=v_now,
+    attempt_lease_expires_at_utc=v_now+interval '10 minutes'
+  where payment_scope_json->>'candidate_manager_mail_kind'='REMINDER'
+    and payment_scope_json->>'candidate_approval_request_id'=v_request::text;
+  v_failed:=false;
+  begin
+    perform public.cloudtms_office_candidate_adapter_v1(
+      'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
+        'workflow_id',v_workflow,'generation',1,
+        'workflow_action','MANAGER_REQUEST_CANCEL',
+        'approval_request_id',v_request,'approval_request_generation',1,
+        'idempotency_key','ad510000-0000-4000-8000-000000000013',
+        'payload',jsonb_build_object('reason_note','Office is selecting a different approval method.')
+      ),v_now+interval '2 minutes'
+    );
+  exception when sqlstate '40001' then
+    v_failed:=position('CANDIDATE_MANAGER_MAIL_DELIVERY_IN_PROGRESS' in sqlerrm)>0;
+  end;
+  if not v_failed
+     or (select state from public.candidate_submission_workflows where id=v_workflow)<>'AWAITING_MANAGER_APPROVAL'
+     or (select state from public.candidate_approval_requests where id=v_request)<>'PENDING' then
+    raise exception 'active manager provider lease did not block request cancellation atomically';
+  end if;
+  update public.mail_outbox set
+    attempt_lease_token=null,attempt_leased_at_utc=null,attempt_lease_expires_at_utc=null
+  where payment_scope_json->>'candidate_manager_mail_kind'='REMINDER'
+    and payment_scope_json->>'candidate_approval_request_id'=v_request::text;
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_workflow,'generation',1,
+      'workflow_action','MANAGER_REQUEST_CANCEL',
+      'approval_request_id',v_request,'approval_request_generation',1,
+      'idempotency_key','ad510000-0000-4000-8000-000000000014',
+      'payload',jsonb_build_object('reason_note','Office is selecting a different approval method.')
+    ),v_now+interval '3 minutes'
+  );
+  if v_result->>'state'<>'READY_FOR_MANAGER_APPROVAL'
+     or coalesce((v_result->>'claim_cancelled')::boolean,true)
+     or (select state from public.candidate_submission_workflows where id=v_workflow)<>'READY_FOR_MANAGER_APPROVAL'
+     or (select state from public.candidate_approval_requests where id=v_request)<>'CANCELLED'
+     or (select count(*) from public.candidate_submission_components
+         where workflow_id=v_workflow and state='IMMUTABLE')=0
+     or (select status from public.mail_outbox where deterministic_outbox_key='OFFICE-ADAPTER-INITIAL')<>'SENT'
+     or (select count(*) from public.mail_outbox
+         where payment_scope_json->>'candidate_manager_mail_kind'='WITHDRAWAL'
+           and payment_scope_json->>'candidate_approval_request_id'=v_request::text)<>1 then
+    raise exception 'manager request cancellation changed the claim or immutable history: %',v_result;
+  end if;
+
+  -- PREPARING is ordinary asynchronous work, not a retry signal. Only the
+  -- explicit durable retryable receipt enables retry.
+  update public.candidate_submission_workflows
+  set route='PAPER',state='AWAITING_PAPER_RETURN'
+  where id=v_workflow;
+  insert into public.mail_outbox(
+    id,type,"to",subject,body_text,status,context_kind,context_id,
+    deterministic_outbox_key,payment_scope_json
+  ) values(
+    'ad510000-0000-4000-8000-000000000015','TIMESHEET_GENERAL',
+    'candidate@example.test','Paper pack','Preparing.','QUEUED','CANDIDATE_WORKFLOW',v_workflow,
+    'OFFICE-ADAPTER-PAPER',jsonb_build_object(
+      'candidate_mail_authority','CANDIDATE_PAPER_V1',
+      'candidate_workflow_id',v_workflow,'candidate_workflow_generation',1,
+      'candidate_paper_pack_ready',false,'candidate_paper_pack_retryable',false
+    )
+  );
+  v_projection:=public.cloudtms_office_candidate_adapter_v1(
+    'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now
+  );
+  if v_projection#>>'{paper_pack,state}'<>'PREPARING'
+     or v_projection#>>'{paper_pack,retryable}'<>'false'
+     or v_projection->'available_actions' @> jsonb_build_array(
+       jsonb_build_object('code','RETRY_PAPER_PREPARATION','enabled',true)
+     ) then
+    raise exception 'ordinary PAPER preparation was incorrectly retryable: %',v_projection->'paper_pack';
+  end if;
+  update public.mail_outbox set status='FAILED' where id='ad510000-0000-4000-8000-000000000015';
+  v_projection:=public.cloudtms_office_candidate_adapter_v1(
+    'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now
+  );
+  if v_projection#>>'{paper_pack,state}'<>'FAILED_TERMINAL'
+     or v_projection#>>'{paper_pack,retryable}'<>'false' then
+    raise exception 'terminal PAPER failure was incorrectly retryable: %',v_projection->'paper_pack';
+  end if;
+  update public.mail_outbox set payment_scope_json=payment_scope_json
+    ||'{"candidate_paper_pack_retryable":true}'::jsonb
+  where id='ad510000-0000-4000-8000-000000000015';
+  v_projection:=public.cloudtms_office_candidate_adapter_v1(
+    'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now
+  );
+  if v_projection#>>'{paper_pack,state}'<>'FAILED_RETRYABLE'
+     or v_projection#>>'{paper_pack,retryable}'<>'true'
+     or not (v_projection->'available_actions' @> jsonb_build_array(
+       jsonb_build_object('code','RETRY_PAPER_PREPARATION','enabled',true)
+     )) then
+    raise exception 'durable PAPER retry receipt did not enable retry: %',v_projection;
   end if;
 end;
 $office_adapter$;

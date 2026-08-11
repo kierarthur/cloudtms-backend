@@ -119,12 +119,29 @@ const OFFICE_PROJECTION_SURFACES = new Set([
 const OFFICE_MANAGER_ACTIONS = Object.freeze({
   remind: 'REMIND',
   renew: 'RENEW',
-  cancel: 'CANCEL',
+  cancel: 'MANAGER_REQUEST_CANCEL',
   'cancel-manager-handoff': 'CANCEL_MANAGER_HANDOFF',
   'phone-review': 'BEGIN_MANAGER_REVIEW',
   'phone-progress': 'RECORD_REVIEW_PROGRESS',
   'phone-approve': 'PHONE_APPROVE',
   'phone-refuse': 'MANAGER_REFUSE'
+});
+const OFFICE_ADMIN_PERMISSIONS = new Set([
+  'view_candidate_state', 'change_route', 'reject_submission', 'resubmit_rejected',
+  'send_manager_reminder', 'send_manager_reminder_batch', 'renew_manager_request',
+  'cancel_manager_request', 'manage_phone_approval', 'manage_paper',
+  'retry_finalisation', 'mark_no_work'
+]);
+const OFFICE_WORKFLOW_ACTION_PERMISSIONS = Object.freeze({
+  remind: 'send_manager_reminder',
+  renew: 'renew_manager_request',
+  cancel: 'cancel_manager_request',
+  'cancel-manager-handoff': 'manage_phone_approval',
+  'phone-review': 'manage_phone_approval',
+  'phone-progress': 'manage_phone_approval',
+  'phone-approve': 'manage_phone_approval',
+  'phone-refuse': 'manage_phone_approval',
+  'retry-finalisation': 'retry_finalisation'
 });
 
 class CandidateHttpError extends Error {
@@ -2427,7 +2444,7 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
     component = await restOne(env, 'candidate_submission_components',
       `id=eq.${encodeURIComponent(componentId)}&workflow_id=eq.${encodeURIComponent(workflowId)}&select=*`);
   } else if (owner === 'office') {
-    await requireOfficeActor(request, deps);
+    await requireOfficeActor(request, deps, 'manage_paper');
     const generation = requireInteger(
       new URL(request.url).searchParams.get('generation'), 'WORKFLOW_GENERATION_CONFLICT', 1
     );
@@ -3051,10 +3068,18 @@ async function handleNotifications(request, env, deps, notificationId = null) {
   });
 }
 
-async function requireOfficeActor(request, deps) {
+async function requireOfficeActor(request, deps, permission = 'view_candidate_state') {
+  if (!OFFICE_ADMIN_PERMISSIONS.has(permission)) {
+    throw new CandidateHttpError(403, 'CANDIDATE_OFFICE_PERMISSION_DENIED');
+  }
   const user = await deps.requireOfficeUser(request, ['admin']);
   if (!user) throw new CandidateHttpError(401, 'OFFICE_AUTH_REQUIRED');
-  return { ...user, id: requireUuid(user.id, 'OFFICE_AUTH_REQUIRED') };
+  return {
+    ...user,
+    id: requireUuid(user.id, 'OFFICE_AUTH_REQUIRED'),
+    office_permission: permission,
+    office_permission_source: 'OFFICE_ADMIN_ROLE_V1'
+  };
 }
 
 async function officeAdapter(deps, env, actorId, action, payload = {}) {
@@ -3127,14 +3152,14 @@ async function handleOfficeProjectionBatch(request, env, deps) {
 }
 
 async function handleOfficeRejectPreview(request, env, deps, timesheetId) {
-  const user = await requireOfficeActor(request, deps);
+  const user = await requireOfficeActor(request, deps, 'reject_submission');
   return jsonResponse(200, await officeAdapter(deps, env, user.id, 'REJECT_PREVIEW', {
     timesheet_id: requireUuid(timesheetId, 'TIMESHEET_NOT_FOUND')
   }));
 }
 
 async function handleOfficeRoute(request, env, deps, action, timesheetId) {
-  const user = await requireOfficeActor(request, deps);
+  const user = await requireOfficeActor(request, deps, 'change_route');
   if (action === 'preview') {
     const url = new URL(request.url);
     const routePreview = await rpcCall(deps, 'timesheet_route_version_preview_v1', {
@@ -3227,7 +3252,7 @@ async function officeManagerMutationPayload(request, env, action, body, workflow
       approval_token_hash_hex: await sha256Hex(managerToken)
     };
   }
-  if (action === 'CANCEL') {
+  if (action === 'MANAGER_REQUEST_CANCEL') {
     const reason = text(body.reason || body.reason_note);
     if (!reason) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
     if (reason.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_INVALID');
@@ -3274,7 +3299,9 @@ async function officeManagerMutationPayload(request, env, action, body, workflow
 }
 
 async function handleOfficeWorkflowAction(request, env, deps, workflowId, action, ctx) {
-  const user = await requireOfficeActor(request, deps);
+  const user = await requireOfficeActor(
+    request,deps,OFFICE_WORKFLOW_ACTION_PERMISSIONS[action] || 'view_candidate_state'
+  );
   const workflow = await workflowRow(env, workflowId);
   const body = await readJson(request);
   const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
@@ -3330,7 +3357,7 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
 }
 
 async function handleOfficeReject(request, env, deps, timesheetId) {
-  const user = await requireOfficeActor(request, deps);
+  const user = await requireOfficeActor(request, deps, 'reject_submission');
   const body = await readJson(request);
   const reason = text(body.reason);
   if (!reason) throw new CandidateHttpError(400, 'CANDIDATE_REASON_REQUIRED');
@@ -3346,7 +3373,7 @@ async function handleOfficeReject(request, env, deps, timesheetId) {
 }
 
 async function handleOfficeReminderBatch(request, env, deps, operation, batchId = null) {
-  const user = await requireOfficeActor(request, deps);
+  const user = await requireOfficeActor(request, deps, 'send_manager_reminder_batch');
   if (operation === 'status') {
     return jsonResponse(200, await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_STATUS', {
       batch_id: requireUuid(batchId, 'CANDIDATE_REMINDER_BATCH_NOT_FOUND')
@@ -3438,7 +3465,7 @@ async function handleOfficeReminderBatch(request, env, deps, operation, batchId 
 }
 
 async function officePaperContext(request, env, deps, workflowId, generationValue = null) {
-  await requireOfficeActor(request, deps);
+  await requireOfficeActor(request, deps, 'manage_paper');
   const workflow = await workflowRow(env, workflowId);
   const expectedGeneration = requireInteger(generationValue, 'WORKFLOW_GENERATION_CONFLICT', 1);
   if (Number(workflow.generation) !== expectedGeneration || upper(workflow.route) !== 'PAPER') {
@@ -3535,8 +3562,10 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
   const body = await readJson(request);
   const idempotencyKey = requireOfficeIdempotency(body.idempotency_key);
   const context = await officePaperContext(request, env, deps, workflowId, body.generation);
+  const retryScope = parseJson(context.outbox?.payment_scope_json, {}) || {};
   if (upper(context.workflow.state) !== 'AWAITING_PAPER_RETURN'
-      || !context.live_preparation || !context.version?.r2_key) {
+      || !context.live_preparation || !context.version?.r2_key
+      || retryScope.candidate_paper_pack_retryable !== true) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_RETRY_NOT_READY');
   }
   const outbox = await requireCandidatePaperOutbox(env, context.workflow, context.timesheet);

@@ -24,6 +24,18 @@ begin
     return false;
   end if;
 
+  -- Direct replacement lineage is durable historical truth.  A successor
+  -- remains the replacement even if it is later cancelled, expires or is
+  -- superseded; the original rejected workflow must never advertise a second
+  -- impossible direct resubmission.
+  if exists(
+    select 1
+    from public.candidate_submission_workflows direct_replacement
+    where direct_replacement.replacement_of_workflow_id=v_rejected.id
+  ) then
+    return true;
+  end if;
+
   return exists(
     select 1
     from public.candidate_submission_workflows later
@@ -73,6 +85,34 @@ begin
       )
   );
 end;
+$function$;
+
+create or replace function private._candidate_status_code_v1(
+  p_paid boolean,
+  p_authorised boolean,
+  p_invoiced_not_paid boolean,
+  p_active_workflow_state text,
+  p_actionable_rejection boolean,
+  p_processing_status text,
+  p_contract_week_status text
+)
+returns text
+language sql
+immutable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select case
+    when coalesce(p_paid,false) then 'PAID'
+    when coalesce(p_authorised,false) then 'AUTHORISED'
+    when coalesce(p_invoiced_not_paid,false) then 'INVOICED_NOT_PAID'
+    when nullif(btrim(coalesce(p_active_workflow_state,'')),'') is not null
+      then upper(btrim(p_active_workflow_state))
+    when coalesce(p_actionable_rejection,false) then 'REJECTED'
+    when nullif(btrim(coalesce(p_processing_status,'')),'') is not null
+      then upper(btrim(p_processing_status))
+    else upper(coalesce(nullif(btrim(p_contract_week_status),''),'AVAILABLE'))
+  end;
 $function$;
 
 create or replace function public.candidate_app_bootstrap_v1(
@@ -1175,15 +1215,14 @@ begin
       'rejections',d.actionable_rejections,
       'record_role',d.capabilities->'record_role',
       'route_family',d.capabilities->'route_family',
-      'candidate_status_code',case
-        when d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc then 'PAID'
-        when d.authorised_at_utc is not null then 'AUTHORISED'
-        when d.locked_by_invoice_id is not null or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
-          then 'INVOICED_NOT_PAID'
-        when d.active_workflow_state is not null then d.active_workflow_state
-        when d.rejected_workflow is not null then 'REJECTED'
-        when d.processing_status is not null then d.processing_status::text
-        else d.status::text end,
+      'candidate_status_code',private._candidate_status_code_v1(
+        d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc,
+        d.authorised_at_utc is not null,
+        d.locked_by_invoice_id is not null
+          or upper(coalesce(d.timesheet_status::text,''))='INVOICED',
+        d.active_workflow_state,d.rejected_workflow is not null,
+        d.processing_status::text,d.status::text
+      ),
       'payment_state',case when d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc
         then 'PAID' else 'UNPAID' end,
       'invoice_state',case
@@ -1223,15 +1262,14 @@ begin
           'required_action',d.rejected_workflow->'required_resubmission_action'
         ) end,
       'primary_action',private._candidate_action_invocation_v1(private._candidate_timesheet_primary_action_v1(
-        case
-          when d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc then 'PAID'
-          when d.authorised_at_utc is not null then 'AUTHORISED'
-          when d.locked_by_invoice_id is not null
-            or upper(coalesce(d.timesheet_status::text,''))='INVOICED' then 'INVOICED_NOT_PAID'
-          when d.active_workflow_state is not null then d.active_workflow_state
-          when d.rejected_workflow is not null then 'REJECTED'
-          when d.processing_status is not null then d.processing_status::text
-          else d.status::text end,
+        private._candidate_status_code_v1(
+          d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc,
+          d.authorised_at_utc is not null,
+          d.locked_by_invoice_id is not null
+            or upper(coalesce(d.timesheet_status::text,''))='INVOICED',
+          d.active_workflow_state,d.rejected_workflow is not null,
+          d.processing_status::text,d.status::text
+        ),
         d.workflows,d.capabilities,d.timesheet_id,d.id
       )),
       'detail_target',case
@@ -1548,15 +1586,14 @@ begin
   order by coalesce((workflow_item->>'detail_action_owner')::boolean,false) desc,
     workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
   limit 1;
-  v_candidate_status_code:=case
-    when v_fin.paid_at_utc is not null then 'PAID'
-    when v_fin.authorised_at_utc is not null then 'AUTHORISED'
-    when v_fin.locked_by_invoice_id is not null
-      or upper(coalesce(v_timesheet.status::text,''))='INVOICED' then 'INVOICED_NOT_PAID'
-    when v_active_workflow_state is not null then v_active_workflow_state
-    when v_rejected_workflow is not null then 'REJECTED'
-    when v_fin.processing_status is not null then v_fin.processing_status::text
-    else v_week.status::text end;
+  v_candidate_status_code:=private._candidate_status_code_v1(
+    v_fin.paid_at_utc is not null,
+    v_fin.authorised_at_utc is not null,
+    v_fin.locked_by_invoice_id is not null
+      or upper(coalesce(v_timesheet.status::text,''))='INVOICED',
+    v_active_workflow_state,v_rejected_workflow is not null,
+    v_fin.processing_status::text,v_week.status::text
+  );
   v_tab_bucket:=case
     when v_week.week_ending_date>v_effective_current_week_ending_date then 'EXCLUDED'
     when v_fin.paid_at_utc is null or v_fin.paid_at_utc>p_now_utc then 'CURRENT'
@@ -1779,6 +1816,8 @@ $function$;
 
 revoke all on function public.candidate_app_bootstrap_v1(uuid,text,integer,timestamptz) from public,anon,authenticated;
 revoke all on function private._candidate_rejection_replaced_v1(uuid) from public,anon,authenticated;
+revoke all on function private._candidate_status_code_v1(boolean,boolean,boolean,text,boolean,text,text)
+  from public,anon,authenticated,service_role;
 revoke all on function private._candidate_week_ending_label_v1(date)
   from public,anon,authenticated,service_role;
 revoke all on function private._candidate_workflow_maps_to_card_v1(uuid,uuid,uuid)
