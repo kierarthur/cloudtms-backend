@@ -139,8 +139,11 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(setHelper, /'qr_invalidation_proven',true/i);
   assert.match(setHelper, /'preserved_workflows'/i);
   assert.match(workflowSource, /v_action='AMEND'[\s\S]*_candidate_paper_delivery_retire_v1/);
-  assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*_candidate_paper_delivery_retire_v1/);
-  assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*_candidate_paper_delivery_retire_v1/);
+  assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*state in \('AWAITING_PAPER_RETURN','RECEIVED'\)[\s\S]*_candidate_paper_delivery_retire/i);
+  assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)[\s\S]*_candidate_paper_delivery_retire/i);
+  assert.match(routeSource, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_route_family_key,0\)\)[\s\S]*hashtext\(btrim\(v_requested\.booking_id\)\)/i);
+  assert.match(routeSource, /'paper_workflow_id',v_paper_workflow\.id/i);
+  assert.match(routeSource, /_timesheet_route_supersede_candidate_v1\([\s\S]*v_context->>'paper_workflow_id'/i);
   assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_set_v1/);
   assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
   assert.match(rejectSource, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_rejection_family_key,0\)\)[\s\S]*timesheet_id=p_timesheet_id for update/i);
@@ -148,16 +151,30 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(qrSettingsSource, /update public\.timesheet_evidence as evidence_row[\s\S]*where evidence_row\.timesheet_id=v_current\.timesheet_id/i);
 });
 
-test('provider handoff revalidates exact Candidate PAPER authority before external submission', () => {
+test('provider handoff obtains an atomic submit permit before external submission', () => {
   const recheck = providerAuthoritySource;
   assert.match(normalBackendSource, /import \{ candidatePaperProviderAuthorityCurrent \} from '\.\/candidate-paper-provider-authority\.js'/);
-  assert.match(recheck, /mail_outbox\?id=eq\./i);
-  assert.match(recheck, /candidate_submission_workflows\?id=eq\./i);
-  assert.match(recheck, /candidate_paper_generation_retired/i);
-  assert.match(recheck, /candidate_paper_pack_ready/i);
-  assert.match(recheck, /mail_held_until_pdf_rendered/i);
-  assert.match(recheck, /AWAITING_PAPER_RETURN/i);
+  assert.match(recheck, /candidate_workflow_transition_atomic_v1/i);
+  assert.match(recheck, /PAPER_PROVIDER_SUBMIT_PERMIT/i);
+  assert.match(recheck, /service_paper_provider_submit_permit/i);
+  assert.match(recheck, /attempt_lease_token/i);
   assert.match(recheck, /paper_return_manifest_sha256/i);
+  assert.doesNotMatch(recheck, /candidate_submission_workflows\?id=eq\./i);
+
+  const workflow = functionBody(workflowSource, 'public.candidate_workflow_transition_atomic_v1');
+  const permit = workflow.slice(
+    workflow.indexOf("elsif v_action='PAPER_PROVIDER_SUBMIT_PERMIT'"),
+    workflow.indexOf("elsif v_action in ('CANCEL','SUPERSEDE')")
+  );
+  assert.match(permit, /workflow\.state<>'AWAITING_PAPER_RETURN'/i);
+  assert.match(permit, /from public\.mail_outbox[\s\S]*for update/i);
+  assert.match(permit, /attempt_lease_token=v_provider_lease_token/i);
+  assert.match(permit, /attempt_lease_expires_at_utc>p_now_utc/i);
+  assert.match(permit, /p_now_utc\+interval '15 minutes'/i);
+
+  const paperReturn = workflow.slice(workflow.indexOf("elsif v_action='PAPER_RETURN'"));
+  assert.match(paperReturn, /from public\.mail_outbox[\s\S]*for update/i);
+  assert.match(paperReturn, /CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/i);
 
   const handoffStart = normalBackendSource.indexOf('const candidateJobs = bucket.jobs.slice');
   const handoffEnd = normalBackendSource.indexOf('await reconcileBatchResult', handoffStart);

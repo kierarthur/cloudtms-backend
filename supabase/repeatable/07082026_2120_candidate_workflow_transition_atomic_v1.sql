@@ -950,6 +950,8 @@ declare
   v_paper_branding_contract_sha256 text;
   v_paper_renderer_contract_version text;
   v_paper_expected_storage_key text;
+  v_provider_lease_token text;
+  v_provider_permit_expires_at timestamptz;
   v_unlocked_workflow_updated_at timestamptz;
   v_paper_family_key text;
   v_source_component public.candidate_submission_components%rowtype;
@@ -1007,7 +1009,10 @@ begin
   if v_action='BEGIN_CANONICAL_DAILY_SAVE' then
     perform private._candidate_require_feature_v1(v_environment,'candidate_daily_finalisation');
   end if;
-  if v_action in ('PAPER_PREPARE','PAPER_RETURN','PAPER_PACK_RELEASE') then
+  if v_action in (
+    'PAPER_PREPARE','PAPER_RETURN','PAPER_PACK_RELEASE',
+    'PAPER_PROVIDER_SUBMIT_PERMIT'
+  ) then
     perform private._candidate_require_feature_v1(v_environment,'candidate_paper_qr');
   end if;
   if v_action='MARK_READ' then
@@ -1020,6 +1025,9 @@ begin
   ) or (p_session_id is null
     and v_action='PAPER_PACK_RELEASE'
     and coalesce((v_payload->>'service_paper_pack_release')::boolean,false)
+  ) or (p_session_id is null
+    and v_action='PAPER_PROVIDER_SUBMIT_PERMIT'
+    and coalesce((v_payload->>'service_paper_provider_submit_permit')::boolean,false)
   ) or (p_session_id is null
     and coalesce((v_payload->>'service_phone_approval')::boolean,false)
     and v_action in ('BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
@@ -1359,8 +1367,7 @@ begin
   end if;
 
   if v_workflow.id is null then
-    if v_action='PAPER_PREPARE'
-       or v_action in ('AMEND','CANCEL','SUPERSEDE') then
+    if v_action in ('PAPER_PREPARE','PAPER_RETURN','AMEND','CANCEL','SUPERSEDE') then
       -- Keep the canonical route/document lock order used by
       -- timesheet_qr_send_enqueue_v1: current timesheet, then workflow.
       -- The unlocked identity read is rechecked after both locks are held.
@@ -1382,8 +1389,9 @@ begin
         raise exception 'CANDIDATE_PAPER_TIMESHEET_NOT_READY' using errcode='55000';
       end if;
       if v_paper_timesheet_id is not null
-         and (v_action='PAPER_PREPARE'
-           or (v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN')) then
+         and (v_action in ('PAPER_PREPARE','PAPER_RETURN')
+           or (v_workflow.route='PAPER'
+             and v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED'))) then
         perform 1
         from public.timesheets
         where timesheet_id=v_paper_timesheet_id
@@ -1405,7 +1413,7 @@ begin
               is distinct from v_paper_timesheet_id then
         raise exception 'CANDIDATE_WORKFLOW_CONTEXT_CONFLICT' using errcode='40001';
       end if;
-      if v_action in ('AMEND','CANCEL','SUPERSEDE')
+      if v_action in ('PAPER_RETURN','AMEND','CANCEL','SUPERSEDE')
          and v_workflow.updated_at_utc is distinct from v_unlocked_workflow_updated_at then
         raise exception 'CANDIDATE_WORKFLOW_CONTEXT_CONFLICT' using errcode='40001';
       end if;
@@ -2724,16 +2732,99 @@ begin
       last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
       updated_at_utc=p_now_utc where id=v_workflow.id returning * into v_workflow;
 
+  elsif v_action='PAPER_PROVIDER_SUBMIT_PERMIT' then
+    if not v_is_service_action or p_session_id is not null then
+      raise exception 'CANDIDATE_PAPER_PROVIDER_SUBMIT_PERMIT_SERVICE_REQUIRED'
+        using errcode='28000';
+    end if;
+    v_paper_mail_id:=nullif(btrim(coalesce(v_payload->>'mail_outbox_id','')),'')::uuid;
+    v_provider_lease_token:=nullif(btrim(coalesce(v_payload->>'attempt_lease_token','')),'');
+    v_paper_manifest_sha256:=lower(btrim(coalesce(
+      v_payload->>'paper_return_manifest_sha256',''
+    )));
+    if v_paper_mail_id is null or v_provider_lease_token is null
+       or v_paper_manifest_sha256 !~ '^[0-9a-f]{64}$' then
+      raise exception 'CANDIDATE_PAPER_PROVIDER_BINDING_INVALID' using errcode='22023';
+    end if;
+    if v_workflow.route<>'PAPER'
+       or v_workflow.state<>'AWAITING_PAPER_RETURN'
+       or v_workflow.paper_return_manifest_sha256 is null
+       or encode(v_workflow.paper_return_manifest_sha256,'hex')<>v_paper_manifest_sha256 then
+      raise exception 'CANDIDATE_PAPER_PROVIDER_WORKFLOW_STALE' using errcode='40001';
+    end if;
+    select candidate_mail.* into v_paper_mail
+    from public.mail_outbox candidate_mail
+    where candidate_mail.id=v_paper_mail_id
+      and candidate_mail.type='TIMESHEET_QR'
+      and candidate_mail.status='QUEUED'
+      and candidate_mail.sent_at is null
+      and candidate_mail.context_kind='timesheets'
+      and candidate_mail.context_id=coalesce(
+        v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id
+      )
+      and candidate_mail.attempt_lease_token=v_provider_lease_token
+      and candidate_mail.attempt_lease_expires_at_utc>p_now_utc
+      and candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+      and candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+      and lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+            =v_paper_manifest_sha256
+      and lower(coalesce(candidate_mail.payment_scope_json->>'candidate_paper_generation_retired','false'))
+            in ('false','f','0','no')
+      and lower(coalesce(candidate_mail.payment_scope_json->>'candidate_paper_pack_ready','false'))
+            in ('true','t','1','yes')
+      and lower(coalesce(candidate_mail.payment_scope_json->>'mail_held_until_pdf_rendered','false'))
+            in ('false','f','0','no')
+      and jsonb_typeof(candidate_mail.attachments)='array'
+      and jsonb_array_length(candidate_mail.attachments)>0
+      and candidate_mail.attachments->0->>'candidate_workflow_id'=v_workflow.id::text
+      and candidate_mail.attachments->0->>'candidate_workflow_generation'=v_workflow.generation::text
+      and lower(coalesce(candidate_mail.attachments->0->>'paper_return_manifest_sha256',''))
+            =v_paper_manifest_sha256
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_PAPER_PROVIDER_MAIL_STALE' using errcode='40001';
+    end if;
+    v_provider_permit_expires_at:=greatest(
+      v_paper_mail.attempt_lease_expires_at_utc,
+      p_now_utc+interval '15 minutes'
+    );
+    update public.mail_outbox candidate_mail
+    set attempt_lease_expires_at_utc=v_provider_permit_expires_at
+    where candidate_mail.id=v_paper_mail.id
+      and candidate_mail.status='QUEUED'
+      and candidate_mail.sent_at is null
+      and candidate_mail.attempt_lease_token=v_provider_lease_token
+      and candidate_mail.attempt_lease_expires_at_utc>p_now_utc
+      and lower(coalesce(candidate_mail.payment_scope_json->>'candidate_paper_generation_retired','false'))
+            in ('false','f','0','no');
+    if not found then
+      raise exception 'CANDIDATE_PAPER_PROVIDER_MAIL_STALE' using errcode='40001';
+    end if;
+    v_response:=jsonb_build_object(
+      'ok',true,'workflow_id',v_workflow.id,'state',v_workflow.state,
+      'generation',v_workflow.generation,'mail_outbox_id',v_paper_mail.id,
+      'provider_submit_permit',true,
+      'provider_submit_permit_expires_at_utc',v_provider_permit_expires_at
+    );
+
   elsif v_action in ('CANCEL','SUPERSEDE') then
     if v_workflow.state in ('FINALISED','CANCELLED','REJECTED','SUPERSEDED') then
       raise exception 'CANDIDATE_WORKFLOW_NOT_CANCELLABLE' using errcode='55000';
     end if;
-    if v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN' then
-      v_paper_retirement_result:=private._candidate_paper_delivery_retire_v1(
-        v_workflow.id,v_workflow.generation,
+    if v_workflow.route='PAPER'
+       and v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED') then
+      v_paper_retirement_result:=private._candidate_paper_delivery_retire_set_v1(
+        array[v_workflow.id],array[v_workflow.generation],
         case when v_action='CANCEL' then 'WORKFLOW_CANCELLED' else 'WORKFLOW_SUPERSEDED' end,
         p_now_utc
       );
+      if not coalesce((v_paper_retirement_result->>'retired')::boolean,false)
+         or not coalesce(
+           (v_paper_retirement_result->>'qr_invalidation_proven')::boolean,false
+         ) then
+        raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
+          using errcode='40001',detail=v_paper_retirement_result::text;
+      end if;
     end if;
     update public.candidate_approval_requests set
       state=case when v_action='CANCEL' then 'CANCELLED' else 'SUPERSEDED' end,
@@ -3108,6 +3199,43 @@ begin
        or private._candidate_sha256_jsonb_v1(v_workflow.paper_return_manifest_json)
           is distinct from v_workflow.paper_return_manifest_sha256 then
       raise exception 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE' using errcode='55000';
+    end if;
+    -- The claimed mail lease is the provider-submit permit. PAPER return and
+    -- every authority-changing transition lock the same exact delivery row,
+    -- so provider submission cannot be authorised and then invalidated before
+    -- its external call. An active permit is a controlled retryable conflict.
+    select count(*)::integer into v_paper_outbox_count
+    from public.mail_outbox candidate_mail
+    where candidate_mail.type='TIMESHEET_QR'
+      and candidate_mail.context_kind='timesheets'
+      and candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+      and candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+      and lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+            =encode(v_workflow.paper_return_manifest_sha256,'hex');
+    if v_paper_outbox_count<>1 then
+      raise exception 'CANDIDATE_PAPER_OUTBOX_CONFLICT' using errcode='40001';
+    end if;
+    select candidate_mail.* into v_paper_mail
+    from public.mail_outbox candidate_mail
+    where candidate_mail.type='TIMESHEET_QR'
+      and candidate_mail.context_kind='timesheets'
+      and candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+      and candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+      and lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+            =encode(v_workflow.paper_return_manifest_sha256,'hex')
+    for update;
+    if nullif(btrim(coalesce(v_paper_mail.attempt_lease_token,'')),'') is not null
+       and (v_paper_mail.attempt_lease_expires_at_utc is null
+         or v_paper_mail.attempt_lease_expires_at_utc>p_now_utc) then
+      raise exception 'CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS'
+        using errcode='40001',detail=jsonb_build_object(
+          'workflow_id',v_workflow.id,'generation',v_workflow.generation,
+          'mail_outbox_id',v_paper_mail.id
+        )::text;
+    end if;
+    if lower(coalesce(v_paper_mail.payment_scope_json->>'candidate_paper_generation_retired','false'))
+         in ('true','t','1','yes') then
+      raise exception 'CANDIDATE_PAPER_WORKFLOW_STALE' using errcode='40001';
     end if;
     if exists(
       select 1

@@ -1351,6 +1351,7 @@ declare
   v_fin public.timesheets_financials%rowtype;
   v_contract public.contracts%rowtype;
   v_linked_workflow public.candidate_submission_workflows%rowtype;
+  v_paper_workflow public.candidate_submission_workflows%rowtype;
   v_active_workflow public.candidate_submission_workflows%rowtype;
   v_request public.candidate_approval_requests%rowtype;
   v_signature jsonb:='{}'::jsonb;
@@ -1546,6 +1547,44 @@ begin
      or workflow.anchor_timesheet_id=v_current.timesheet_id
   order by (workflow.id=v_current.candidate_workflow_id) desc,
     workflow.updated_at_utc desc,workflow.created_at_utc desc
+  limit 1;
+  -- QR/PAPER delivery ownership follows the immutable mail receipt and stable
+  -- booking/version family as well as direct workflow IDs. A finalised
+  -- separate-expense workflow may retain a historical hours anchor after the
+  -- current hours version rotates; that historical identity must not make its
+  -- live delivery surface invisible to a later route intervention.
+  select workflow.* into v_paper_workflow
+  from public.candidate_submission_workflows workflow
+  where workflow.route='PAPER'
+    and workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED')
+    and (
+      workflow.id=v_current.candidate_workflow_id
+      or workflow.target_timesheet_id=v_current.timesheet_id
+      or workflow.anchor_timesheet_id=v_current.timesheet_id
+      or exists(
+        select 1
+        from public.mail_outbox paper_mail
+        join public.timesheets mail_source
+          on mail_source.timesheet_id=paper_mail.context_id
+        where paper_mail.type='TIMESHEET_QR'
+          and paper_mail.context_kind='timesheets'
+          and paper_mail.payment_scope_json->>'candidate_workflow_id'=workflow.id::text
+          and paper_mail.payment_scope_json->>'candidate_workflow_generation'=
+            (case when workflow.state='FINALISED'
+              then greatest(workflow.generation-1,1)
+              else workflow.generation end)::text
+          and (
+            (nullif(btrim(coalesce(v_current.booking_id,'')),'') is not null
+              and mail_source.booking_id=v_current.booking_id)
+            or (nullif(btrim(coalesce(v_current.booking_id,'')),'') is null
+              and mail_source.timesheet_id=v_current.timesheet_id)
+          )
+          and mail_source.contract_id is not distinct from v_current.contract_id
+          and mail_source.week_ending_date is not distinct from v_current.week_ending_date
+      )
+    )
+  order by (workflow.id=v_current.candidate_workflow_id) desc,
+    workflow.updated_at_utc desc,workflow.created_at_utc desc,workflow.id
   limit 1;
   select workflow.* into v_active_workflow
   from public.candidate_submission_workflows workflow
@@ -1765,6 +1804,9 @@ begin
     'linked_workflow_generation',v_linked_workflow.generation,
     'linked_workflow_state',v_linked_workflow.state,
     'linked_workflow_updated_at_utc',v_linked_workflow.updated_at_utc,
+    'paper_workflow_id',v_paper_workflow.id,
+    'paper_workflow_generation',v_paper_workflow.generation,
+    'paper_workflow_state',v_paper_workflow.state,
     'active_workflow_id',v_active_workflow.id,
     'active_workflow_count',v_active_workflow_count,
     'active_workflow_generation',v_active_workflow.generation,
@@ -1803,6 +1845,7 @@ as $function$
 declare
   v_workflow public.candidate_submission_workflows%rowtype;
   v_request public.candidate_approval_requests%rowtype;
+  v_paper_retirement_result jsonb:='{}'::jsonb;
   v_cancelled integer:=0;
   v_superseded integer:=0;
   v_mail_ids jsonb:='[]'::jsonb;
@@ -1817,17 +1860,45 @@ begin
   end if;
   select * into v_workflow from public.candidate_submission_workflows
   where id=p_workflow_id for update;
-  if not found or v_workflow.state in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED') then
+  if not found then
     return jsonb_build_object('workflow_changed',false,'workflow_id',p_workflow_id,
       'manager_request_cancelled',false,'manager_cancellation_email_queued',false,
       'manager_cancellation_mail_ids','[]'::jsonb);
   end if;
 
-  if v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN' then
-    perform private._candidate_paper_delivery_retire_v1(
-      v_workflow.id,v_workflow.generation,
+  if v_workflow.route='PAPER'
+     and v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED','FINALISED') then
+    v_paper_retirement_result:=private._candidate_paper_delivery_retire_set_v1(
+      array[v_workflow.id],array[v_workflow.generation],
       'ROUTE_INTERVENTION_'||upper(btrim(coalesce(p_action,'UNKNOWN'))),p_now_utc
     );
+    if not coalesce((v_paper_retirement_result->>'retired')::boolean,false)
+       or not coalesce(
+         (v_paper_retirement_result->>'qr_invalidation_proven')::boolean,false
+       ) then
+      raise exception 'CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN'
+        using errcode='40001',detail=v_paper_retirement_result::text;
+    end if;
+    -- A finalised workflow is immutable historical approval. Retire only its
+    -- preceding delivery generation; the route version may change without
+    -- rewriting the finalised workflow or signed document/evidence history.
+    if v_workflow.state='FINALISED' then
+      return jsonb_build_object(
+        'workflow_changed',false,'workflow_id',v_workflow.id,
+        'paper_delivery_retired',true,
+        'paper_delivery_retirement',v_paper_retirement_result,
+        'manager_request_cancelled',false,
+        'manager_cancellation_email_queued',false,
+        'manager_cancellation_mail_ids','[]'::jsonb
+      );
+    end if;
+  end if;
+
+  if v_workflow.state in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED') then
+    return jsonb_build_object('workflow_changed',false,'workflow_id',p_workflow_id,
+      'paper_delivery_retired',false,
+      'manager_request_cancelled',false,'manager_cancellation_email_queued',false,
+      'manager_cancellation_mail_ids','[]'::jsonb);
   end if;
 
   for v_request in
@@ -1895,6 +1966,8 @@ begin
   );
   return jsonb_build_object(
     'workflow_changed',true,'workflow_id',v_workflow.id,
+    'paper_delivery_retired',coalesce((v_paper_retirement_result->>'retired')::boolean,false),
+    'paper_delivery_retirement',v_paper_retirement_result,
     'manager_request_cancelled',v_cancelled>0,
     'cancelled_request_count',v_cancelled,'superseded_request_count',v_superseded,
     'manager_cancellation_email_queued',jsonb_array_length(v_mail_ids)>0,
@@ -2112,6 +2185,8 @@ declare
   v_reason_note text:=nullif(btrim(coalesce(p_reason_note,'')),'');
   v_requested public.timesheets%rowtype;
   v_current public.timesheets%rowtype;
+  v_environment text;
+  v_route_family_key text;
   v_context jsonb;
   v_result jsonb;
   v_workflow_result jsonb:='{}'::jsonb;
@@ -2144,6 +2219,16 @@ begin
   select * into v_requested from public.timesheets
   where timesheet_id=p_current_timesheet_id;
   if not found then raise exception 'TIMESHEET_NOT_FOUND' using errcode='P0002'; end if;
+  select candidate_app_environment into v_environment
+  from public.settings_defaults where id=1;
+  v_environment:=private._candidate_assert_environment(v_environment);
+  -- The same stable Candidate contract/week family lock is taken by office
+  -- rejection, workflow cancellation/supersession and route intervention.
+  -- It must precede target, booking, workflow and QR-source row locks.
+  v_route_family_key:='CANDIDATE_PAPER_FAMILY:'||v_environment||':'
+    ||coalesce(v_requested.contract_id::text,'-')||':'
+    ||coalesce(v_requested.week_ending_date::text,'-');
+  perform pg_advisory_xact_lock(hashtextextended(v_route_family_key,0));
   perform pg_advisory_xact_lock(hashtext(btrim(v_requested.booking_id)));
   perform 1 from public.timesheets
   where booking_id=v_requested.booking_id for update;
@@ -2201,7 +2286,11 @@ begin
     then 'QR_REPLACED_BY_OFFICE' else v_reason_code end;
   if v_retire_workflow then
     v_workflow_result:=private._timesheet_route_supersede_candidate_v1(
-      nullif(v_context->>'active_workflow_id','')::uuid,v_action,
+      nullif(case
+        when v_action in ('CONVERT_QR_TO_MANUAL','DISABLE_QR','INVALIDATE_QR','REISSUE_QR')
+          then coalesce(v_context->>'paper_workflow_id',v_context->>'linked_workflow_id')
+        else v_context->>'linked_workflow_id'
+      end,'')::uuid,v_action,
       v_retirement_reason,v_reason_note,p_actor_user_id,p_now_utc
     );
   end if;

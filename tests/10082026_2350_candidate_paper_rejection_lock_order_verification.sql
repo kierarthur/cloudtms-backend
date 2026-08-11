@@ -11,7 +11,7 @@ alter table public.timesheets_financials
   add column if not exists payment_reference text;
 update public.settings_defaults
 set candidate_app_feature_flags_json=candidate_app_feature_flags_json
-  ||'{"candidate_app_writes":true,"candidate_paper_qr":true,"candidate_notifications":true}'::jsonb,
+  ||'{"candidate_app_writes":true,"candidate_paper_qr":true,"candidate_notifications":true,"candidate_route_confirmation":true}'::jsonb,
     candidate_app_environment='TEST'
 where id=1;
 
@@ -59,12 +59,14 @@ begin
   );
   insert into public.timesheets(
     timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
-    submission_mode,qr_status,qr_token,qr_payload_json,qr_generated_at
+    submission_mode,qr_status,qr_token,qr_payload_json,qr_generated_at,
+    qr_signed_hash,qr_signed_at_utc
   ) values(
     'b5300000-0000-4000-8000-000000000006',
     'b5300000-0000-4000-8000-000000000005','PAPER-LOCK-HOURS',current_date,
     'HOURS','WEEKLY','MANUAL','PENDING',v_current_token,
-    jsonb_build_object('workflow_id','b5300000-0000-4000-8000-000000000011'::uuid),now()
+    jsonb_build_object('workflow_id','b5300000-0000-4000-8000-000000000011'::uuid),now(),
+    'paper-lock-signed-return',now()
   );
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,additional_seq,status,
@@ -182,6 +184,38 @@ begin
       'PAPER_PACK_READY','resubmission_required','candidate-paper-pack-ready-v1','{}','{}',
       'UNREAD','PENDING','CANDIDATE_PAPER_PACK_READY_V1:b5300000-0000-4000-8000-000000000011:1:lock',now()
     );
+end;
+$function$;
+
+create or replace function public._candidate_route_hours_lock_probe_v1(
+  p_key text,p_hold_seconds numeric default 0
+)
+returns jsonb language plpgsql as $function$
+declare v_context jsonb; v_result jsonb;
+begin
+  v_context:=public.timesheet_route_version_preview_v1(
+    'b5300000-0000-4000-8000-000000000006','CONVERT_QR_TO_MANUAL'
+  );
+  if not coalesce((v_context->>'permitted_action')::boolean,false) then
+    return jsonb_build_object(
+      'outcome','CONTROLLED_CONFLICT','code',coalesce(v_context->>'block_reason','ROUTE_CHANGE_NOT_PERMITTED')
+    );
+  end if;
+  v_result:=public.timesheet_route_version_confirmed_v1(
+    'b5300000-0000-4000-8000-000000000006',
+    'b5300000-0000-4000-8000-000000000006',
+    v_context->>'row_signature',v_context->>'context_sha256',
+    'CONVERT_QR_TO_MANUAL','b5300000-0000-4000-8000-000000000001',
+    'CANDIDATE_SUPPLIED_MANUAL_TIMESHEET',null,p_key,false,clock_timestamp()
+  );
+  perform pg_sleep(greatest(coalesce(p_hold_seconds,0),0));
+  return jsonb_build_object('outcome','SUCCESS','result',v_result);
+exception
+  when sqlstate '40001' then
+    return jsonb_build_object('outcome','CONTROLLED_CONFLICT','code',sqlerrm);
+  when sqlstate '55000' then
+    if sqlerrm not in ('ROUTE_CHANGE_NOT_PERMITTED','TIMESHEET_MOVED') then raise; end if;
+    return jsonb_build_object('outcome','CONTROLLED_CONFLICT','code',sqlerrm);
 end;
 $function$;
 
@@ -359,6 +393,43 @@ begin
 end;
 $function$;
 
+create or replace function public._run_candidate_route_rejection_lock_race_v1(p_reverse boolean)
+returns void language plpgsql as $function$
+declare
+  v_connection text:='host=127.0.0.1 port='||inet_server_port()::text
+    ||' dbname='||current_database()||' user='||current_user;
+  v_first text;
+  v_second text;
+begin
+  perform dblink_connect('candidate_route_first',v_connection);
+  perform dblink_connect('candidate_route_second',v_connection);
+  if not p_reverse then
+    perform dblink_send_query('candidate_route_first',
+      $$select public._candidate_route_hours_lock_probe_v1('route-reject-route-a',1)::text$$);
+    perform pg_sleep(0.1);
+    perform dblink_send_query('candidate_route_second',
+      $$select public._candidate_reject_expense_lock_probe_v1('route-reject-expense-b',0)::text$$);
+  else
+    perform dblink_send_query('candidate_route_first',
+      $$select public._candidate_reject_expense_lock_probe_v1('route-reject-expense-a',1)::text$$);
+    perform pg_sleep(0.1);
+    perform dblink_send_query('candidate_route_second',
+      $$select public._candidate_route_hours_lock_probe_v1('route-reject-route-b',0)::text$$);
+  end if;
+  select result into v_first
+  from dblink_get_result('candidate_route_first') as first_result(result text);
+  select result into v_second
+  from dblink_get_result('candidate_route_second') as second_result(result text);
+  if coalesce(v_first::jsonb->>'outcome','') not in ('SUCCESS','CONTROLLED_CONFLICT')
+     or coalesce(v_second::jsonb->>'outcome','') not in ('SUCCESS','CONTROLLED_CONFLICT')
+     or (v_first::jsonb->>'outcome')<>'SUCCESS' and (v_second::jsonb->>'outcome')<>'SUCCESS' then
+    raise exception 'Route/rejection race returned an uncontrolled result: %, %',v_first,v_second;
+  end if;
+  perform dblink_disconnect('candidate_route_first');
+  perform dblink_disconnect('candidate_route_second');
+end;
+$function$;
+
 select public._candidate_rejection_lock_fixture_v1();
 select public._run_candidate_rejection_lock_race_v1(false);
 select public._candidate_rejection_lock_cleanup_v1();
@@ -367,8 +438,18 @@ select public._candidate_rejection_lock_fixture_v1();
 select public._run_candidate_rejection_lock_race_v1(true);
 select public._candidate_rejection_lock_cleanup_v1();
 
+select public._candidate_rejection_lock_fixture_v1();
+select public._run_candidate_route_rejection_lock_race_v1(false);
+select public._candidate_rejection_lock_cleanup_v1();
+
+select public._candidate_rejection_lock_fixture_v1();
+select public._run_candidate_route_rejection_lock_race_v1(true);
+select public._candidate_rejection_lock_cleanup_v1();
+
 begin;
+drop function public._run_candidate_route_rejection_lock_race_v1(boolean);
 drop function public._run_candidate_rejection_lock_race_v1(boolean);
+drop function public._candidate_route_hours_lock_probe_v1(text,numeric);
 drop function public._candidate_reject_expense_lock_probe_v1(text,numeric);
 drop function public._candidate_reject_hours_lock_probe_v1(text,numeric);
 drop function public._candidate_rejection_lock_cleanup_v1();

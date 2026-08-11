@@ -551,6 +551,7 @@ test('rejected workflows project through the replacement current version with se
 
 test('PAPER rejection retires a shared QR source as one locked set before record rotation', () => {
   const retireSet = privateDefinition(sql.workflow, '_candidate_paper_delivery_retire_set_v1');
+  const transition = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
   const reject = definition(sql.final, 'candidate_submission_reject_atomic_v1');
   assert.match(retireSet, /cardinality\(p_workflow_ids\) is distinct from cardinality\(p_expected_generations\)/i);
   assert.match(retireSet, /MULTIPLE_QR_SOURCE_FAMILIES|QR_SOURCE_SCOPE_MISMATCH/i);
@@ -568,6 +569,10 @@ test('PAPER rejection retires a shared QR source as one locked set before record
   assert.match(reject, /_candidate_paper_delivery_retire_set_v1\([\s\S]{0,80}v_paper_workflow_ids,v_paper_workflow_generations/i);
   assert.match(reject, /v_paper_retirement_result->>'qr_invalidation_proven'[\s\S]{0,40}::boolean,false/i);
   assert.doesNotMatch(reject, /_candidate_paper_delivery_retire_v1\(v_captured_workflow\.id/i);
+
+  assert.match(transition, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED'\)[\s\S]*_candidate_paper_delivery_retire_set_v1/i);
+  assert.match(transition, /v_action='PAPER_PROVIDER_SUBMIT_PERMIT'[\s\S]*from public\.mail_outbox[\s\S]*for update[\s\S]*attempt_lease_expires_at_utc=v_provider_permit_expires_at/i);
+  assert.match(transition, /v_action='PAPER_RETURN'[\s\S]*from public\.mail_outbox[\s\S]*for update[\s\S]*CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/i);
 });
 
 test('invoice grouping derives expense-only economics and isolates the effective expense recipient', () => {
@@ -708,6 +713,10 @@ test('final route conversion is signed-state aware, stale-safe, reasoned, retent
   assert.match(route, /retain_historical_evidence/i);
   assert.match(route, /QR_RESTORE_RETIRED_USE_FRESH_GENERATION/i);
   assert.match(route, /_candidate_submission_mode_v1/i);
+  assert.match(route, /_timesheet_route_supersede_candidate_v1[\s\S]*state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)[\s\S]*_candidate_paper_delivery_retire_set_v1/i);
+  assert.match(route, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_route_family_key,0\)\)[\s\S]*hashtext\(btrim\(v_requested\.booking_id\)\)/i);
+  assert.match(route, /'paper_workflow_id',v_paper_workflow\.id/i);
+  assert.match(route, /_timesheet_route_supersede_candidate_v1\([\s\S]*v_context->>'paper_workflow_id'/i);
   assert.match(route, /ALLOW_QR_AGAIN_REQUIRES_PRIOR_LINEAGE_OR_PAPER_PERMISSION/i);
   assert.match(route, /_timesheet_route_version_legacy_v1/i);
   assert.match(route, /legacy_route_version_legacy_v1|_timesheet_route_version_legacy_v1/i);
