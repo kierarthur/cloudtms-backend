@@ -28,6 +28,7 @@ DECLARE
   v_rows_ins_manual_credit_payout_items integer := 0;
   v_rows_ins_underpayment_payout_items integer := 0;
   v_rows_ins_overpayment_recovery_items integer := 0;
+  v_rows_ins_operation_planned_overpayment_items integer := 0;
   v_rows_upd_candidates_overpayment_recovery_taken integer := 0;
   v_rows_ins_debt_items integer := 0;
   v_rows_upd_candidates_debt integer := 0;
@@ -52,6 +53,8 @@ DECLARE
   v_operation_allocation_total integer := 0;
   v_operation_allocation_done integer := 0;
   v_operation_mismatch_details jsonb := '{}'::jsonb;
+  v_operation_plan_mismatch_details jsonb := '{}'::jsonb;
+  v_operation_plan_drift_details jsonb := '[]'::jsonb;
   v_canonical_provenance_mismatch_details jsonb := '[]'::jsonb;
 BEGIN
   perform public._ctms_assert_pay_batch_mutable_v1(p_pay_batch_id,'PAY_BATCH_APPLY_FINANCE_ADJUSTMENTS');
@@ -1680,6 +1683,7 @@ v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY';
       on c.id = spr.candidate_id
     where spr.draftable = true
       and spr.line_type = 'OVERPAYMENT_RECOVERY'
+      and p_operation_id is null
       and spr.finance_case_id is not null
       and upper(coalesce(nullif(spr.pay_channel,''), v_scope)) = v_scope
       and spr.candidate_id = any(v_candidate_ids)
@@ -2180,6 +2184,212 @@ v_stage := 'STAGE_16AA_APPLY_OVERPAYMENT_RECOVERY';
   where fa.take_target_ex > 0;
 
   get diagnostics v_rows_ins_overpayment_recovery_items = row_count;
+
+  IF p_operation_id IS NOT NULL THEN
+    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+             'allocation_source_key', plan_row.allocation_source_key,
+             'frozen_plan_digest', allocation_row.allocation_basis_json#>>'{draft_finance_item_plan,plan_digest}',
+             'current_plan_digest', plan_row.plan_digest
+           ) ORDER BY plan_row.allocation_source_key), '[]'::jsonb)
+    INTO v_operation_plan_drift_details
+    FROM private.pay_workbench_draft_finance_item_plan_v1(
+      p_operation_id,
+      p_candidate_scope_ids
+    ) AS plan_row
+    JOIN public.banking_pay_operation_candidate_allocation_rows AS allocation_row
+      ON allocation_row.operation_id = plan_row.operation_id
+     AND allocation_row.operation_source_key = plan_row.allocation_source_key
+    WHERE plan_row.pay_channel = v_scope
+      AND NULLIF(allocation_row.allocation_basis_json#>>'{draft_finance_item_plan,plan_digest}', '')
+          IS DISTINCT FROM plan_row.plan_digest;
+
+    IF jsonb_array_length(COALESCE(v_operation_plan_drift_details, '[]'::jsonb)) > 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_APPLY_FINANCE_ADJUSTMENTS',
+        'code', 'DRAFT_FINANCE_ITEM_PLAN_DRIFT',
+        'message', 'Frozen Draft finance-item plan changed before materialisation',
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pay_channel_scope', v_scope,
+        'mismatches', v_operation_plan_drift_details
+      )::text;
+    END IF;
+
+    INSERT INTO public.pay_batch_items (
+      id,
+      pay_batch_candidate_id,
+      item_type,
+      timesheet_id,
+      segment_key,
+      source_ref,
+      amount_ex_vat,
+      amount_vat,
+      amount_inc_vat,
+      repayment_week_start,
+      pay_channel,
+      umbrella_id,
+      is_mismatch,
+      is_voided,
+      created_at,
+      updated_at,
+      finance_case_id,
+      reservation_id,
+      paye_treatment,
+      finance_component_id,
+      frozen_component_snapshot_json,
+      frozen_component_key_type,
+      frozen_component_key_value,
+      frozen_component_classification,
+      frozen_source_basis_json,
+      frozen_source_pay_method,
+      frozen_target_pay_method,
+      frozen_resolution_mode,
+      frozen_resolution_payload_json,
+      frozen_resolution_result_json,
+      frozen_source_amount,
+      frozen_target_amount_ex_vat,
+      frozen_target_amount_vat,
+      frozen_target_amount_inc_vat,
+      operation_source_key
+    )
+    WITH operation_plan AS (
+      SELECT plan_row.*
+      FROM private.pay_workbench_draft_finance_item_plan_v1(
+        p_operation_id,
+        p_candidate_scope_ids
+      ) AS plan_row
+      WHERE plan_row.planned_item_type = 'OVERPAYMENT_RECOVERY'
+        AND plan_row.pay_channel = v_scope
+    ), operation_plan_context AS (
+      SELECT
+        operation_plan.*,
+        pay_batch_candidate.id AS pay_batch_candidate_id,
+        candidate_context.umbrella_id,
+        COALESCE(operation_plan.plan_basis_json->'finance_component', '{}'::jsonb) AS component_json,
+        CASE
+          WHEN UPPER(BTRIM(COALESCE(operation_plan.plan_basis_json#>>'{finance_component,classification}', ''))) = 'TAXABLE_CHANNEL_SENSITIVE'
+            THEN 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+          WHEN UPPER(BTRIM(COALESCE(operation_plan.plan_basis_json#>>'{finance_component,classification}', ''))) = 'REIMBURSEMENT_GROSS_FIXED'
+            THEN 'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum
+          WHEN UPPER(BTRIM(COALESCE(operation_plan.plan_basis_json#>>'{finance_component,classification}', ''))) = 'NET_PAY_FIXED_RECOVERY'
+            THEN 'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum
+          ELSE NULL::public.pay_finance_component_classification_enum
+        END AS classification
+      FROM operation_plan
+      JOIN public.pay_batch_candidates AS pay_batch_candidate
+        ON pay_batch_candidate.pay_batch_id = v_batch_id
+       AND pay_batch_candidate.candidate_id = operation_plan.candidate_id
+      JOIN pg_temp.tmp_pay_build_candidates_ctx AS candidate_context
+        ON candidate_context.id = operation_plan.candidate_id
+    ), materialisation AS (
+      SELECT
+        operation_plan_context.*,
+        CASE
+          WHEN operation_plan_context.pay_channel = 'UMBRELLA'
+           AND operation_plan_context.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+            THEN ROUND((public._pay_umbrella_vat_calc(
+                   ABS(operation_plan_context.planned_item_amount),
+                   v_vat_rate_pct,
+                   COALESCE(umbrella_context.vat_chargeable, false)
+                 )->>'vat')::numeric, 2)
+          ELSE 0::numeric
+        END AS planned_vat_abs
+      FROM operation_plan_context
+      LEFT JOIN pg_temp.tmp_pay_build_umbrellas_ctx AS umbrella_context
+        ON umbrella_context.id = operation_plan_context.umbrella_id
+    )
+    SELECT
+      gen_random_uuid(),
+      materialisation.pay_batch_candidate_id,
+      materialisation.planned_item_type,
+      NULL::uuid,
+      NULL::text,
+      'advance:' || materialisation.finance_case_id::text,
+      ROUND(materialisation.planned_item_amount, 2)::numeric(12,2),
+      (-materialisation.planned_vat_abs)::numeric(12,2),
+      ROUND(materialisation.planned_item_amount - materialisation.planned_vat_abs, 2)::numeric(12,2),
+      v_week_start,
+      materialisation.pay_channel,
+      CASE WHEN materialisation.pay_channel = 'UMBRELLA' THEN materialisation.umbrella_id ELSE NULL::uuid END,
+      (
+        materialisation.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum
+        AND UPPER(COALESCE(materialisation.component_json->>'source_pay_method', '')) <> materialisation.pay_channel
+      ),
+      false,
+      v_now_utc,
+      v_now_utc,
+      materialisation.finance_case_id,
+      NULL::uuid,
+      CASE
+        WHEN materialisation.pay_channel <> 'PAYE' THEN 'NONE'
+        WHEN materialisation.classification = 'TAXABLE_CHANNEL_SENSITIVE'::public.pay_finance_component_classification_enum THEN 'GROSS_DEDUCT'
+        WHEN materialisation.classification IN (
+          'NET_PAY_FIXED_RECOVERY'::public.pay_finance_component_classification_enum,
+          'REIMBURSEMENT_GROSS_FIXED'::public.pay_finance_component_classification_enum
+        ) THEN 'NET_DEDUCT'
+        ELSE COALESCE(NULLIF(BTRIM(materialisation.plan_basis_json#>>'{line,paye_treatment}'), ''), 'NET_DEDUCT')
+      END,
+      materialisation.finance_component_id,
+      jsonb_strip_nulls(
+        materialisation.component_json
+        || jsonb_build_object(
+          'draft_finance_item_plan_key', materialisation.planned_item_key,
+          'draft_finance_item_plan_digest', materialisation.plan_digest,
+          'frozen_target_pay_method', materialisation.pay_channel,
+          'frozen_source_amount', ROUND(ABS(materialisation.contribution_amount), 2),
+          'frozen_target_amount_ex_vat', ROUND(materialisation.planned_item_amount, 2),
+          'frozen_target_amount_vat', ROUND(-materialisation.planned_vat_abs, 2),
+          'frozen_target_amount_inc_vat', ROUND(materialisation.planned_item_amount - materialisation.planned_vat_abs, 2),
+          'component_preview_due_amount_ex_vat', ROUND(ABS(materialisation.contribution_amount), 2)
+        )
+      ),
+      NULLIF(BTRIM(materialisation.component_json->>'component_key_type'), ''),
+      COALESCE(NULLIF(BTRIM(materialisation.component_json->>'component_key_value'), ''), 'TOTAL'),
+      materialisation.classification,
+      COALESCE(materialisation.component_json->'source_basis_json', '{}'::jsonb),
+      UPPER(NULLIF(BTRIM(materialisation.component_json->>'source_pay_method'), '')),
+      materialisation.pay_channel,
+      CASE
+        WHEN NULLIF(BTRIM(materialisation.component_json->>'saved_resolution_mode'), '') IS NULL THEN NULL::public.pay_finance_component_resolution_mode_enum
+        ELSE (materialisation.component_json->>'saved_resolution_mode')::public.pay_finance_component_resolution_mode_enum
+      END,
+      CASE
+        WHEN jsonb_typeof(materialisation.component_json->'saved_resolution_payload_json') = 'object'
+          THEN materialisation.component_json->'saved_resolution_payload_json'
+        ELSE NULL::jsonb
+      END,
+      CASE
+        WHEN jsonb_typeof(materialisation.component_json->'saved_resolution_result_json') = 'object'
+          THEN materialisation.component_json->'saved_resolution_result_json'
+        ELSE NULL::jsonb
+      END,
+      ROUND(COALESCE(
+        CASE
+          WHEN COALESCE(materialisation.component_json->>'allocated_source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN ABS((materialisation.component_json->>'allocated_source_due_amount_ex_vat')::numeric)
+          ELSE NULL::numeric
+        END,
+        ABS(materialisation.contribution_amount)
+      ), 2),
+      ROUND(materialisation.planned_item_amount, 2),
+      ROUND(-materialisation.planned_vat_abs, 2),
+      ROUND(materialisation.planned_item_amount - materialisation.planned_vat_abs, 2),
+      materialisation.planned_item_key
+    FROM materialisation
+    WHERE materialisation.planned_item_amount < 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_batch_items AS existing_planned_item
+        WHERE existing_planned_item.pay_batch_candidate_id = materialisation.pay_batch_candidate_id
+          AND existing_planned_item.operation_source_key = materialisation.planned_item_key
+          AND COALESCE(existing_planned_item.is_voided, false) = false
+      );
+
+    GET DIAGNOSTICS v_rows_ins_operation_planned_overpayment_items = ROW_COUNT;
+    v_rows_ins_overpayment_recovery_items :=
+      COALESCE(v_rows_ins_overpayment_recovery_items, 0)
+      + COALESCE(v_rows_ins_operation_planned_overpayment_items, 0);
+  END IF;
 
 
   update public.pay_batch_candidates pbc
@@ -4160,7 +4370,10 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
       SELECT DISTINCT ON (allocation_row.id)
         allocation_row.id AS allocation_row_id,
         batch_item.id AS pay_batch_item_id,
-        allocation_row.operation_source_key AS operation_source_key
+        COALESCE(
+          NULLIF(allocation_row.allocation_basis_json#>>'{draft_finance_item_plan,planned_item_key}', ''),
+          allocation_row.operation_source_key
+        ) AS operation_source_key
       FROM public.banking_pay_operation_candidate_allocation_rows AS allocation_row
       JOIN public.pay_batch_candidates AS batch_candidate
         ON batch_candidate.pay_batch_id = v_batch_id
@@ -4172,10 +4385,20 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
          allocation_row.finance_component_id IS NULL
          OR batch_item.finance_component_id IS NOT DISTINCT FROM allocation_row.finance_component_id
        )
-       AND round(abs(coalesce(batch_item.amount_ex_vat, 0)), 2) = round(abs(coalesce(allocation_row.allocated_amount, 0)), 2)
        AND (
-         batch_item.operation_source_key IS NULL
-         OR batch_item.operation_source_key = allocation_row.operation_source_key
+         (
+           NULLIF(allocation_row.allocation_basis_json#>>'{draft_finance_item_plan,planned_item_key}', '') IS NOT NULL
+           AND batch_item.operation_source_key = allocation_row.allocation_basis_json#>>'{draft_finance_item_plan,planned_item_key}'
+           AND ROUND(COALESCE(batch_item.amount_ex_vat, 0), 2) = ROUND(COALESCE(allocation_row.allocated_amount, 0), 2)
+         )
+         OR (
+           NULLIF(allocation_row.allocation_basis_json#>>'{draft_finance_item_plan,planned_item_key}', '') IS NULL
+           AND ROUND(ABS(COALESCE(batch_item.amount_ex_vat, 0)), 2) = ROUND(ABS(COALESCE(allocation_row.allocated_amount, 0)), 2)
+           AND (
+             batch_item.operation_source_key IS NULL
+             OR batch_item.operation_source_key = allocation_row.operation_source_key
+           )
+         )
        )
       WHERE allocation_row.operation_id = p_operation_id
         AND allocation_row.candidate_id = ANY(v_candidate_ids)
@@ -4206,6 +4429,9 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
         allocation_row.id,
         CASE
           WHEN batch_item.operation_source_key = allocation_row.operation_source_key THEN 0
+          WHEN batch_item.operation_source_key = NULLIF(
+            allocation_row.allocation_basis_json#>>'{draft_finance_item_plan,planned_item_key}', ''
+          ) THEN 0
           WHEN batch_item.id = allocation_row.pay_batch_item_id THEN 1
           ELSE 2
         END,
@@ -4231,6 +4457,107 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
     FROM allocation_matches
     WHERE allocation_update.id = allocation_matches.allocation_row_id
       AND (allocation_update.status <> 'ITEM_CREATED' OR allocation_update.pay_batch_item_id IS DISTINCT FROM allocation_matches.pay_batch_item_id);
+
+    WITH expected_plan AS (
+      SELECT plan_row.*
+      FROM private.pay_workbench_draft_finance_item_plan_v1(p_operation_id, p_candidate_scope_ids) AS plan_row
+      WHERE plan_row.pay_channel = v_scope
+        AND plan_row.planned_item_type = 'OVERPAYMENT_RECOVERY'
+    ), created_plan AS (
+      SELECT
+        batch_item.operation_source_key AS planned_item_key,
+        batch_item.amount_ex_vat,
+        batch_item.item_type,
+        batch_candidate.candidate_id,
+        batch_item.finance_case_id,
+        batch_item.finance_component_id,
+        count(*) OVER (PARTITION BY batch_item.operation_source_key) AS key_count
+      FROM public.pay_batch_items AS batch_item
+      JOIN public.pay_batch_candidates AS batch_candidate
+        ON batch_candidate.id = batch_item.pay_batch_candidate_id
+      WHERE batch_candidate.pay_batch_id = v_batch_id
+        AND batch_candidate.candidate_id = ANY(v_candidate_ids)
+        AND batch_item.operation_source_key LIKE 'DRAFT_FINANCE_ITEM_V1:%'
+        AND COALESCE(batch_item.is_voided, false) = false
+    ), mismatch AS (
+      SELECT
+        (SELECT count(*)::integer FROM expected_plan) AS expected_key_count,
+        (SELECT count(DISTINCT created_plan.planned_item_key)::integer FROM created_plan) AS created_key_count,
+        (SELECT count(*)::integer
+         FROM expected_plan
+         WHERE NOT EXISTS (
+           SELECT 1 FROM created_plan
+           WHERE created_plan.planned_item_key = expected_plan.planned_item_key
+         )) AS missing_key_count,
+        (SELECT count(*)::integer
+         FROM created_plan
+         WHERE NOT EXISTS (
+           SELECT 1 FROM expected_plan
+           WHERE expected_plan.planned_item_key = created_plan.planned_item_key
+         )) AS unexpected_key_count,
+        (SELECT count(*)::integer FROM created_plan WHERE created_plan.key_count > 1) AS duplicate_key_count,
+        (SELECT count(*)::integer
+         FROM expected_plan
+         JOIN created_plan ON created_plan.planned_item_key = expected_plan.planned_item_key
+         WHERE ROUND(created_plan.amount_ex_vat, 2) IS DISTINCT FROM ROUND(expected_plan.planned_item_amount, 2)
+            OR created_plan.item_type IS DISTINCT FROM expected_plan.planned_item_type
+            OR created_plan.candidate_id IS DISTINCT FROM expected_plan.candidate_id
+            OR created_plan.finance_case_id IS DISTINCT FROM expected_plan.finance_case_id
+            OR created_plan.finance_component_id IS DISTINCT FROM expected_plan.finance_component_id) AS identity_or_amount_mismatch_count,
+        COALESCE((
+          SELECT jsonb_agg(missing_row.planned_item_key ORDER BY missing_row.planned_item_key)
+          FROM (
+            SELECT expected_plan.planned_item_key
+            FROM expected_plan
+            WHERE NOT EXISTS (
+              SELECT 1 FROM created_plan
+              WHERE created_plan.planned_item_key = expected_plan.planned_item_key
+            )
+            ORDER BY expected_plan.planned_item_key
+            LIMIT 20
+          ) AS missing_row
+        ), '[]'::jsonb) AS missing_key_sample,
+        COALESCE((
+          SELECT jsonb_agg(unexpected_row.planned_item_key ORDER BY unexpected_row.planned_item_key)
+          FROM (
+            SELECT created_plan.planned_item_key
+            FROM created_plan
+            WHERE NOT EXISTS (
+              SELECT 1 FROM expected_plan
+              WHERE expected_plan.planned_item_key = created_plan.planned_item_key
+            )
+            ORDER BY created_plan.planned_item_key
+            LIMIT 20
+          ) AS unexpected_row
+        ), '[]'::jsonb) AS unexpected_key_sample
+    )
+    SELECT jsonb_build_object(
+      'expected_key_count', mismatch.expected_key_count,
+      'created_key_count', mismatch.created_key_count,
+      'missing_key_count', mismatch.missing_key_count,
+      'unexpected_key_count', mismatch.unexpected_key_count,
+      'duplicate_key_count', mismatch.duplicate_key_count,
+      'identity_or_amount_mismatch_count', mismatch.identity_or_amount_mismatch_count,
+      'missing_key_sample', mismatch.missing_key_sample,
+      'unexpected_key_sample', mismatch.unexpected_key_sample
+    )
+    INTO v_operation_plan_mismatch_details
+    FROM mismatch;
+
+    IF COALESCE((v_operation_plan_mismatch_details->>'missing_key_count')::integer, 0) > 0
+       OR COALESCE((v_operation_plan_mismatch_details->>'unexpected_key_count')::integer, 0) > 0
+       OR COALESCE((v_operation_plan_mismatch_details->>'duplicate_key_count')::integer, 0) > 0
+       OR COALESCE((v_operation_plan_mismatch_details->>'identity_or_amount_mismatch_count')::integer, 0) > 0 THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_BATCH_APPLY_FINANCE_ADJUSTMENTS',
+        'code', 'DRAFT_FINANCE_ITEM_PLAN_PARITY_FAILED',
+        'message', 'Created Draft finance items do not exactly match the frozen canonical finance-item plan',
+        'pay_batch_id', v_batch_id::text,
+        'operation_id', p_operation_id::text,
+        'pay_channel_scope', v_scope,
+        'mismatch_details', v_operation_plan_mismatch_details
+      )::text;
+    END IF;
 
     SELECT jsonb_build_object(
              'allocation_rows_total', count(*)::integer,

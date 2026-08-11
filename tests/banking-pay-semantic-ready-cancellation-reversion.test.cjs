@@ -577,8 +577,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 38);
-  assert.equal(semanticManifest.functions.length, 38);
+  assert.equal(semanticManifest.function_count, 41);
+  assert.equal(semanticManifest.functions.length, 41);
   for (const identity of [
     'public._ctms_materialise_candidate_correction_residuals_v1',
     'private.pay_workbench_source_publication_identity_v1',
@@ -586,6 +586,7 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'public.banking_alerts_active_for_user',
     'private.pay_workbench_draft_expected_effects_v1',
     'private.pay_workbench_draft_create_adoption_finalize_v1',
+    'private.pay_workbench_draft_finance_item_plan_v1',
     'private.pay_workbench_financial_scope_dirty_transition_v1',
     'private.pay_workbench_correction_dirty_context_set_v1',
     'private.pay_workbench_cancel_reversion_proof_core_v1',
@@ -599,6 +600,8 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'public.pay_batch_create_timesheet_snapshots',
     'public.pay_batch_build_item_breakdowns',
     'public.pay_workbench_prepare_draft',
+    'public.pay_workbench_session_clear_all_decisions',
+    'public.pay_workbench_session_refresh_current_authority_v1',
     'public.pay_workbench_session_carry_forward_preview_selections_v1',
     'public.trg_banking_pay_preview_selection_carry_apply',
   ]) {

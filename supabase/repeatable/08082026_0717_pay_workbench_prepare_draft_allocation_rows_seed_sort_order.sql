@@ -19,6 +19,8 @@ DECLARE
   v_source_publication_identity_enforce_enabled boolean := false;
   v_semantic_draft_failures jsonb := '[]'::jsonb;
   v_semantic_source_failure_count integer := 0;
+  v_plan_scope_ids jsonb := '[]'::jsonb;
+  v_plan_drift_details jsonb := '[]'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -106,6 +108,10 @@ BEGIN
     RETURN QUERY SELECT 0::integer, 0::integer, 0::integer, 0::integer;
     RETURN;
   END IF;
+
+  SELECT COALESCE(jsonb_agg(selected_scope.id::text ORDER BY selected_scope.id::text), '[]'::jsonb)
+  INTO v_plan_scope_ids
+  FROM pg_temp.tmp_pay_workbench_allocation_scope_rows AS selected_scope;
 
   DROP TABLE IF EXISTS pg_temp.tmp_pay_workbench_allocation_preview_candidates;
   CREATE TEMPORARY TABLE pg_temp.tmp_pay_workbench_allocation_preview_candidates ON COMMIT DROP AS
@@ -1103,6 +1109,55 @@ BEGIN
   ELSE
     v_inserted := 0;
   END IF;
+
+  SELECT COALESCE(jsonb_agg(jsonb_build_object(
+           'allocation_source_key', plan_row.allocation_source_key,
+           'existing_plan_digest', existing_row.allocation_basis_json#>>'{draft_finance_item_plan,plan_digest}',
+           'current_plan_digest', plan_row.plan_digest
+         ) ORDER BY plan_row.allocation_source_key), '[]'::jsonb)
+  INTO v_plan_drift_details
+  FROM private.pay_workbench_draft_finance_item_plan_v1(p_operation_id, v_plan_scope_ids) AS plan_row
+  JOIN public.banking_pay_operation_candidate_allocation_rows AS existing_row
+    ON existing_row.operation_id = plan_row.operation_id
+   AND existing_row.operation_source_key = plan_row.allocation_source_key
+  WHERE existing_row.allocation_basis_json ? 'draft_finance_item_plan'
+    AND NULLIF(existing_row.allocation_basis_json#>>'{draft_finance_item_plan,plan_digest}', '')
+        IS DISTINCT FROM plan_row.plan_digest;
+
+  IF jsonb_array_length(COALESCE(v_plan_drift_details, '[]'::jsonb)) > 0 THEN
+    RAISE EXCEPTION 'DRAFT_FINANCE_ITEM_PLAN_DRIFT'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'code', 'DRAFT_FINANCE_ITEM_PLAN_DRIFT',
+              'operation_id', p_operation_id::text,
+              'mismatches', v_plan_drift_details,
+              'message', 'Frozen Draft finance allocation evidence no longer matches its canonical item plan.'
+            )::text;
+  END IF;
+
+  WITH current_plan AS (
+    SELECT *
+    FROM private.pay_workbench_draft_finance_item_plan_v1(p_operation_id, v_plan_scope_ids)
+  )
+  UPDATE public.banking_pay_operation_candidate_allocation_rows AS allocation_update
+  SET allocation_basis_json = COALESCE(allocation_update.allocation_basis_json, '{}'::jsonb)
+        || jsonb_build_object(
+             'draft_finance_item_plan',
+             jsonb_build_object(
+               'contract_version', 1,
+               'planned_item_key', current_plan.planned_item_key,
+               'planned_item_type', current_plan.planned_item_type,
+               'contribution_amount', current_plan.contribution_amount,
+               'planned_item_amount', current_plan.planned_item_amount,
+               'contribution_count', current_plan.contribution_count,
+               'plan_digest', current_plan.plan_digest
+             )
+           ),
+      updated_at_utc = v_now
+  FROM current_plan
+  WHERE allocation_update.operation_id = current_plan.operation_id
+    AND allocation_update.operation_source_key = current_plan.allocation_source_key
+    AND allocation_update.allocation_basis_json#>>'{draft_finance_item_plan,plan_digest}' IS DISTINCT FROM current_plan.plan_digest;
 
   UPDATE public.banking_pay_operation_candidate_scope AS scope_update
   SET status = CASE

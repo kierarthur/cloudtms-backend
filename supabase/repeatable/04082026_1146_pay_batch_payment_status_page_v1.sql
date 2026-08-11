@@ -1031,7 +1031,30 @@ BEGIN
                    AND member_row.pay_batch_candidate_id = candidate_row.id
                  ORDER BY CASE WHEN request_row.status IN ('APPLIED','APPLIED_WITH_BLOCKERS') THEN 0 ELSE 1 END,
                           request_row.updated_at_utc DESC, request_row.id DESC LIMIT 1
-               ), candidate_row.net_bank_amount, 0)::numeric(14,2) AS reviewed_payment_amount
+               ), CASE
+                    WHEN EXISTS (
+                      SELECT 1
+                      FROM public.pay_batch_items AS paye_scope_item
+                      WHERE paye_scope_item.pay_batch_candidate_id = candidate_row.id
+                        AND COALESCE(paye_scope_item.is_voided, false) IS NOT TRUE
+                        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(paye_scope_item.pay_channel, ''))) = 'PAYE'
+                    ) THEN
+                      COALESCE((
+                        SELECT paye_input.net_amount
+                        FROM public.pay_batch_paye_net_inputs AS paye_input
+                        WHERE paye_input.pay_batch_candidate_id = candidate_row.id
+                        ORDER BY paye_input.imported_at_utc DESC, paye_input.id DESC
+                        LIMIT 1
+                      ), 0)
+                      + COALESCE((
+                        SELECT pg_catalog.sum(umbrella_scope_item.amount_inc_vat)
+                        FROM public.pay_batch_items AS umbrella_scope_item
+                        WHERE umbrella_scope_item.pay_batch_candidate_id = candidate_row.id
+                          AND COALESCE(umbrella_scope_item.is_voided, false) IS NOT TRUE
+                          AND pg_catalog.upper(pg_catalog.btrim(COALESCE(umbrella_scope_item.pay_channel, ''))) = 'UMBRELLA'
+                      ), 0)
+                    ELSE candidate_row.net_bank_amount
+                  END, 0)::numeric(14,2) AS reviewed_payment_amount
         FROM public.pay_batch_candidates AS candidate_row
         CROSS JOIN batch_provider_operation_facts AS provider_facts
         CROSS JOIN batch_unscoped_event_facts AS unscoped_event_facts
@@ -1407,7 +1430,7 @@ BEGIN
                            THEN membership_history.reviewed_payment_amount
                            ELSE NULL::numeric
                        END,
-                       candidate_row.net_bank_amount,
+                       status_index.reviewed_payment_amount,
                        0
                    ) * 100
                )::bigint

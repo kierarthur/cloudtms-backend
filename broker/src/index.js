@@ -14912,39 +14912,34 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
       return failure(409, 'OBSOLETE_SESSION', 'This payment preview is no longer current. Reopen Banking Pay.');
     }
 
-    const reason = trimStr(requestBody.reason || requestBody.refresh_reason || requestBody.refreshReason || 'USER_REQUESTED_FULL_REFRESH').toUpperCase();
+    const reason = trimStr(requestBody.reason || requestBody.refresh_reason || requestBody.refreshReason || 'USER_REQUESTED_CURRENT_AUTHORITY_REFRESH').toUpperCase();
     let cursor = null;
     let hasMore = true;
     let pageCount = 0;
     let candidateCount = 0;
+    let terminalCurrentCount = 0;
+    let activeOwnerCount = 0;
+    let workCandidateCount = 0;
     let enqueuedCandidateCount = 0;
-    let deltaQueuedCount = 0;
-    let legacyQueuedCount = 0;
 
     while (hasMore && pageCount < 100) {
-      const rpcPayload = {
-        limit: 100,
-        refresh_scope_kind: 'SESSION_FULL_LIVE',
-        user_requested_refresh: true
-      };
-      if (isPlainObject(cursor)) rpcPayload.cursor = cursor;
-      const rpcRes = await sbRpc(env, 'pay_workbench_enqueue_session_candidate_refresh', {
+      const rpcRes = await sbRpc(env, 'pay_workbench_session_refresh_current_authority_v1', {
         p_session_id: id,
-        p_candidate_id: null,
-        p_reason: reason || 'USER_REQUESTED_FULL_REFRESH',
         p_actor_user_id: actorUserId,
-        p_payload_json: rpcPayload
+        p_cursor_json: isPlainObject(cursor) ? cursor : {},
+        p_limit: 100
       }, {
         routeClass: 'BANKING_PAY_WORKBENCH_REFRESH',
-        purpose: 'USER_REQUESTED_FULL_WORKBENCH_REFRESH',
+        purpose: 'USER_REQUESTED_CURRENT_AUTHORITY_REFRESH',
         timeoutMs: 15000
       });
-      const page = unwrapRpc(rpcRes, 'pay_workbench_enqueue_session_candidate_refresh');
+      const page = unwrapRpc(rpcRes, 'pay_workbench_session_refresh_current_authority_v1');
       pageCount += 1;
       candidateCount += Math.max(0, Number(page.candidate_count || 0) || 0);
+      terminalCurrentCount += Math.max(0, Number(page.terminal_current_count || 0) || 0);
+      activeOwnerCount += Math.max(0, Number(page.active_owner_count || 0) || 0);
+      workCandidateCount += Math.max(0, Number(page.work_candidate_count || 0) || 0);
       enqueuedCandidateCount += Math.max(0, Number(page.enqueued_candidate_count || 0) || 0);
-      deltaQueuedCount += Math.max(0, Number(page.delta_queued_count || 0) || 0);
-      legacyQueuedCount += Math.max(0, Number(page.legacy_queued_count || 0) || 0);
       cursor = isPlainObject(page.next_cursor) ? page.next_cursor : null;
       hasMore = page.has_more === true && !!cursor;
     }
@@ -14958,11 +14953,11 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
     // refresh whose browser/Worker continuation was interrupted.  Limiting the
     // nudge to newly inserted jobs can strand an existing due job indefinitely
     // because the idempotent enqueue correctly reports zero new rows.
-    if (candidateCount > 0 && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function') {
+    if (workCandidateCount > 0 && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function') {
       try {
         refreshNudge = await scheduleBankingPayWorkbenchDrainWithDurableWake(env, ctx, {
-          origin: 'USER_REQUESTED_FULL_WORKBENCH_REFRESH',
-          reason: reason || 'USER_REQUESTED_FULL_REFRESH',
+          origin: 'USER_REQUESTED_CURRENT_AUTHORITY_REFRESH',
+          reason: reason || 'USER_REQUESTED_CURRENT_AUTHORITY_REFRESH',
           mutation_type: 'WORKBENCH_REFRESH',
           budgetProfile: 'NUDGE',
           profile: 'NUDGE',
@@ -14981,12 +14976,15 @@ async function handleBankingPayWorkbenchSessionRefresh(env, req, user, sessionId
       session_id: id,
       refresh_enqueued: enqueuedCandidateCount > 0,
       candidate_count: candidateCount,
+      terminal_current_count: terminalCurrentCount,
+      active_owner_count: activeOwnerCount,
+      work_candidate_count: workCandidateCount,
       enqueued_candidate_count: enqueuedCandidateCount,
       page_count: pageCount,
-      delta_queued_count: deltaQueuedCount,
-      legacy_queued_count: legacyQueuedCount,
+      no_change: candidateCount > 0 && terminalCurrentCount === candidateCount,
+      refresh_contract: 'WORKBENCH_CURRENT_AUTHORITY_REFRESH_V1',
       refresh_nudge_scheduled: refreshNudge?.scheduled === true,
-      refresh_wake_state: refreshNudge?.wake_state || (candidateCount > 0 ? 'FAILED_RETRYABLE' : 'NO_DUE_WORK'),
+      refresh_wake_state: refreshNudge?.wake_state || (workCandidateCount > 0 ? 'FAILED_RETRYABLE' : 'NO_DUE_WORK'),
       durable_wake_accepted: refreshNudge?.durable_wake_enqueued === true,
       refresh_nudge: refreshNudge,
       policy_x_scope: 'PRE_DRAFT_LIVE_WORKBENCH_ONLY',
@@ -43511,6 +43509,22 @@ async function handleBankingPayBatchExecutePayment(env, req, user, payBatchId, c
   const suppliedPaymentDateRaw = trimStr(body.payment_date || body.paymentDate || body.pay_date || body.payDate);
   const suppliedPaymentDate = parseDate(suppliedPaymentDateRaw);
   if (suppliedPaymentDateRaw && !suppliedPaymentDate) return fail(400, 'INVALID_PAYMENT_DATE', 'Choose a valid payment date.');
+  const todayUk = trimStr(toLocalParts(new Date().toISOString(), 'Europe/London')?.ymd);
+  if (suppliedPaymentDate && todayUk && suppliedPaymentDate < todayUk) {
+    return fail(400, 'PAYMENT_DATE_IN_PAST', 'The payment date must be today or in the future.', {
+      pay_batch_id: id,
+      minimum_payment_date: todayUk
+    });
+  }
+  if (scheduleKind === 'SCHEDULED' && scheduledAtUtc) {
+    const scheduledDateUk = trimStr(toLocalParts(scheduledAtUtc, 'Europe/London')?.ymd);
+    if (scheduledDateUk && todayUk && scheduledDateUk < todayUk) {
+      return fail(400, 'SCHEDULE_DATE_IN_PAST', 'The scheduled payment date must be today or in the future.', {
+        pay_batch_id: id,
+        minimum_payment_date: todayUk
+      });
+    }
+  }
 
   const retryBlockedFunds = body.retry_blocked_funds === true || body.retryBlockedFunds === true;
   if (retryBlockedFunds && executionMode !== 'STANDARD_BANK') return fail(400, 'BLOCKED_FUNDS_RETRY_MODE_INVALID', 'Blocked-funds retry must use STANDARD_BANK.');
@@ -113072,11 +113086,26 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
       ''
     ) || null;
 
-    // This endpoint has one authoritative postcondition: the saved selection is
-    // explicitly empty. Do not allow a stale preview envelope to turn that into
-    // the workbench's implicit/default "select all eligible rows" behaviour.
-    const canonicalSelectedPreviewRowIds = [];
-    const canonicalSelectedPreviewRowIdsProvided = true;
+    // Clear Decisions removes saved resolution/override decisions. It does not
+    // mean "pay nothing": the server returns the canonical IMPLICIT_ALL
+    // selection so every eligible current/new Ready row is selected by default.
+    // Prefer the mutation result over a preview read that may have started just
+    // before the affected candidates were re-materialised.
+    const canonicalSelectedPreviewRowIds = normalizeStringArray(
+      clearObj.server_selected_preview_row_ids ??
+      previewObj.server_selected_preview_row_ids ??
+      previewSessionObj.server_selected_preview_row_ids ??
+      []
+    );
+    const canonicalSelectedPreviewRowIdsProvided = clearObj.server_selected_preview_row_ids_provided === true;
+    const canonicalSelectionIntentMode = trimStr(
+      clearObj.selection_intent_mode ||
+      clearObj.selected_preview_row_mode ||
+      'IMPLICIT_ALL'
+    ).toUpperCase();
+    if (!canonicalSelectedPreviewRowIdsProvided || canonicalSelectionIntentMode !== 'IMPLICIT_ALL') {
+      return buildFriendlyFailure(409, { code: 'BANKING_PAY_CLEAR_DECISIONS_CONTRACT_INVALID' });
+    }
 
     const pendingCandidateIds = normalizeStringArray(
       previewObj.pending_candidate_ids ??
@@ -113105,6 +113134,8 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
       status: trimStr(clearObj.status || sessionRow.status || '') || null,
       server_selected_preview_row_ids: cloneJson(canonicalSelectedPreviewRowIds) || [],
       server_selected_preview_row_ids_provided: canonicalSelectedPreviewRowIdsProvided,
+      selected_preview_row_mode: canonicalSelectionIntentMode,
+      selection_intent_mode: canonicalSelectionIntentMode,
       pending_candidate_ids: cloneJson(pendingCandidateIds) || [],
       failed_candidate_ids: cloneJson(failedCandidateIds) || [],
       preview: cloneJson(previewObj) || previewObj,
@@ -113118,6 +113149,8 @@ async function handleBankingPayWorkbenchSessionClearAllDecisions(env, req, user,
         session_signature: canonicalSessionSignature,
         server_selected_preview_row_ids: cloneJson(canonicalSelectedPreviewRowIds) || [],
         server_selected_preview_row_ids_provided: canonicalSelectedPreviewRowIdsProvided,
+        selected_preview_row_mode: canonicalSelectionIntentMode,
+        selection_intent_mode: canonicalSelectionIntentMode,
         pending_candidate_ids: cloneJson(pendingCandidateIds) || [],
         failed_candidate_ids: cloneJson(failedCandidateIds) || [],
         status: trimStr(clearObj.status || sessionRow.status || previewSessionObj.status || '') || null

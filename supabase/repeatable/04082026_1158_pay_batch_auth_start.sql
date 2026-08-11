@@ -919,12 +919,30 @@ BEGIN
   IF v_payment_date IS NULL THEN
     RAISE EXCEPTION 'pay_batch_auth_start: payment_date is required';
   END IF;
+  IF v_payment_date < (v_now AT TIME ZONE 'Europe/London')::date THEN
+    RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+      'error', 'PAY_BATCH_AUTH_START',
+      'code', 'PAYMENT_DATE_IN_PAST',
+      'message', 'The payment date must be today or in the future.',
+      'payment_date', v_payment_date,
+      'minimum_payment_date', (v_now AT TIME ZONE 'Europe/London')::date
+    )::text USING ERRCODE = 'P0001';
+  END IF;
 
   IF v_kind = 'SCHEDULED' THEN
     IF p_scheduled_at_utc IS NULL THEN
       RAISE EXCEPTION 'pay_batch_auth_start: scheduled_at_utc is required when schedule_kind=SCHEDULED';
     END IF;
     v_scheduled_at_utc := p_scheduled_at_utc;
+    IF (v_scheduled_at_utc AT TIME ZONE 'Europe/London')::date < (v_now AT TIME ZONE 'Europe/London')::date THEN
+      RAISE EXCEPTION '%', JSONB_BUILD_OBJECT(
+        'error', 'PAY_BATCH_AUTH_START',
+        'code', 'SCHEDULE_DATE_IN_PAST',
+        'message', 'The scheduled payment date must be today or in the future.',
+        'scheduled_at_utc', v_scheduled_at_utc,
+        'minimum_payment_date', (v_now AT TIME ZONE 'Europe/London')::date
+      )::text USING ERRCODE = 'P0001';
+    END IF;
   ELSE
     v_scheduled_at_utc := v_now;
   END IF;

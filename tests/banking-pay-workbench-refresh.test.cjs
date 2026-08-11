@@ -35,6 +35,10 @@ const boundedScopeDrainSql = fs.readFileSync(
   path.resolve(__dirname, '../supabase/repeatable/04082026_1219_pay_workbench_worker_drain_chunk.sql'),
   'utf8'
 );
+const currentAuthorityRefreshSql = fs.readFileSync(
+  path.resolve(__dirname, '../supabase/repeatable/11082026_1557_pay_workbench_session_refresh_current_authority_v1.sql'),
+  'utf8'
+);
 
 function functionBody(name, nextName) {
   const start = workerSource.indexOf(`async function ${name}`);
@@ -52,7 +56,7 @@ function sqlFunctionBody(source, name) {
   return source.slice(start, end > start ? end : source.length);
 }
 
-test('workbench refresh route recomputes pre-draft live rows without payment execution', () => {
+test('workbench refresh proves currentness and enqueues only non-current candidates', () => {
   const body = functionBody(
     'handleBankingPayWorkbenchSessionRefresh',
     'handleBankingPayWorkbenchSessionGetPreviewPage'
@@ -61,24 +65,33 @@ test('workbench refresh route recomputes pre-draft live rows without payment exe
   assert.doesNotMatch(body, /sessionRow\.actor_user_id\) !== actorUserId/, 'shared workbench refresh must not be limited to the session creator');
   assert.match(body, /sessions are shared[\s\S]*authenticated actor is still passed/i);
   assert.match(body, /sessionRow\.status\)\.toUpperCase\(\) !== 'OPEN'/);
-  assert.match(body, /pay_workbench_enqueue_session_candidate_refresh/);
-  assert.match(body, /refresh_scope_kind: 'SESSION_FULL_LIVE'/);
+  assert.match(body, /pay_workbench_session_refresh_current_authority_v1/);
+  assert.doesNotMatch(body, /refresh_scope_kind: 'SESSION_FULL_LIVE'/);
   assert.match(body, /scheduleBankingPayWorkbenchDrainWithDurableWake/);
   assert.match(
     body,
-    /if \(candidateCount > 0 && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function'\)/,
-    'a refresh must wake already-queued candidate work even when the idempotent enqueue inserts no new job'
+    /if \(workCandidateCount > 0 && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function'\)/,
+    'a refresh wakes only a proven active owner or newly enqueued non-current candidate'
   );
-  assert.doesNotMatch(
-    body,
-    /if \(enqueuedCandidateCount > 0 && typeof scheduleBankingPayWorkbenchDrainWithDurableWake === 'function'\)/,
-    'new-row count must not be the nudge gate because an interrupted continuation can already be queued'
-  );
+  assert.match(body, /no_change: candidateCount > 0 && terminalCurrentCount === candidateCount/);
+  assert.match(body, /refresh_contract: 'WORKBENCH_CURRENT_AUTHORITY_REFRESH_V1'/);
   assert.match(body, /policy_x_scope: 'PRE_DRAFT_LIVE_WORKBENCH_ONLY'/);
   assert.match(body, /durable_wake_accepted: refreshNudge\?\.durable_wake_enqueued === true/);
   assert.match(body, /decisions_cleared: false/);
   assert.match(body, /payment_execution_started: false/);
   assert.doesNotMatch(body, /pay_workbench_session_clear_all_decisions|pay_workbench_session_discard|pay_batch_execute|pay_batch_settle/);
+});
+
+test('current-authority refresh keeps terminal candidates as no-change and reuses exact active owners', () => {
+  const body = sqlFunctionBody(currentAuthorityRefreshSql, 'pay_workbench_session_refresh_current_authority_v1');
+  assert.match(body, /pay_workbench_candidate_physical_currentness_page_v1/);
+  assert.match(body, /'allow_active_owner',\s*true/);
+  assert.match(body, /'route',\s*'CURRENT_NO_CHANGE'/);
+  assert.match(body, /'route',\s*'ACTIVE_OWNER'/);
+  assert.match(body, /pay_workbench_enqueue_session_candidate_refresh/);
+  assert.match(body, /'force_refresh',\s*false/);
+  assert.match(body, /'user_requested_refresh',\s*false/);
+  assert.match(body, /'policy_x_scope',\s*'PRE_DRAFT_LIVE_TRUTH'/);
 });
 
 test('opening an attached shared session is read-only for continuous candidate discovery', () => {

@@ -61,7 +61,7 @@ test('nudge truth distinguishes attachment, entry, progress, completion and fail
 
 test('manual refresh, Draft, execute, settlement and cancellation post-actions use durable pre-entry wakes', () => {
   const requiredOrigins = [
-    'USER_REQUESTED_FULL_WORKBENCH_REFRESH',
+    'USER_REQUESTED_CURRENT_AUTHORITY_REFRESH',
     'DRAFT_CREATE_POST_ACTION_PATCH_TARGETED_REFRESH',
     'DRAFT_CREATE_POST_CREATE_REPLACEMENT',
     'PAYMENT_EXECUTE_POST_ACTION_PATCH_TARGETED_REFRESH',

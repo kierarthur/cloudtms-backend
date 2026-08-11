@@ -8,7 +8,7 @@ const workerSource = fs.readFileSync(
   'utf8'
 );
 const repeatableSql = fs.readFileSync(
-  path.resolve(__dirname, '../supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql'),
+  path.resolve(__dirname, '../supabase/repeatable/11082026_1552_pay_workbench_session_clear_all_decisions.sql'),
   'utf8'
 );
 
@@ -28,24 +28,30 @@ function workerFunctionBody(name, nextName) {
   return workerSource.slice(start, end);
 }
 
-test('clear-all decisions persists an explicit empty selection and resets the counter', () => {
+test('clear-all decisions selects all eligible current rows and rebuilds only changed candidates', () => {
   const body = sqlFunctionBody('pay_workbench_session_clear_all_decisions');
 
-  assert.match(body, /server_selected_preview_row_ids\s*=\s*'\[\]'::jsonb/);
-  assert.match(body, /server_selected_preview_row_ids_provided\s*=\s*true/);
-  assert.match(body, /selected_row_count\s*=\s*0/);
+  assert.match(body, /pay_workbench_session_set_selected_rows/);
+  assert.match(body, /'global_selection_action',\s*'SELECT_ALL_SECTION'/);
+  assert.match(body, /'selection_intent_mode',\s*'IMPLICIT_ALL'/);
+  assert.match(body, /v_affected_candidate_ids/);
+  assert.match(body, /decision_changed_candidate_only/);
+  assert.match(body, /'force_refresh',\s*true/);
+  assert.match(body, /'no_change_candidate_rebuild_count',\s*0/);
+  assert.doesNotMatch(body, /version\s*=\s*\w+\.version\s*\+\s*1/);
   assert.match(body, /'server_selected_preview_row_ids_provided',\s*true/);
   assert.doesNotMatch(body, /'server_selected_preview_row_ids_provided',\s*false/);
 });
 
-test('clear-all Worker response cannot reintroduce stale or implicit row selection', () => {
+test('clear-all Worker preserves the server-owned implicit-all selection', () => {
   const body = workerFunctionBody(
     'handleBankingPayWorkbenchSessionClearAllDecisions',
     'openAssignmentBandMappingsModal'
   );
 
-  assert.match(body, /const canonicalSelectedPreviewRowIds = \[\]/);
-  assert.match(body, /const canonicalSelectedPreviewRowIdsProvided = true/);
+  assert.match(body, /clearObj\.server_selected_preview_row_ids/);
+  assert.match(body, /const canonicalSelectionIntentMode/);
+  assert.match(body, /canonicalSelectionIntentMode !== 'IMPLICIT_ALL'/);
   assert.match(body, /server_selected_preview_row_ids: cloneJson\(canonicalSelectedPreviewRowIds\) \|\| \[\]/);
   assert.match(body, /server_selected_preview_row_ids_provided: canonicalSelectedPreviewRowIdsProvided/);
 });
