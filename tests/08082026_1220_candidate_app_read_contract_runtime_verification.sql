@@ -100,7 +100,7 @@ begin
     raise exception 'empty GCK or older-than-six-month history granted entitlement: %',v_bootstrap;
   end if;
 
-  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,v_now);
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,v_now);
   v_items:=v_page->'items';
   if jsonb_array_length(v_items)<>2
      or (select count(*) from jsonb_array_elements(v_items) item

@@ -47,6 +47,7 @@ import {
 } from './daily-schedule-authority.js';
 import { handleCandidateAppRequest } from './candidate-app-backend.js';
 import { candidatePaperProviderAuthorityCurrent } from './candidate-paper-provider-authority.js';
+import { candidateManagerProviderAuthorityCurrent } from './candidate-manager-provider-authority.js';
 import {
   createImportReviewDispatcher,
   importReviewSourceEvidenceFromR2,
@@ -126991,6 +126992,23 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
             authorised: false,
             reason: 'CANDIDATE_PAPER_PROVIDER_AUTHORITY_RECHECK_FAILED'
           };
+        }
+        if (!authority.candidate_bound) {
+          try {
+            authority = await candidateManagerProviderAuthorityCurrent({
+              env,
+              claimedRow,
+              currentLeaseToken: attemptLeaseToken,
+              fetchImpl: fetch,
+              headers: sbHeaders(env)
+            });
+          } catch {
+            authority = {
+              candidate_bound: true,
+              authorised: false,
+              reason: 'CANDIDATE_MANAGER_PROVIDER_AUTHORITY_RECHECK_FAILED'
+            };
+          }
         }
         if (authority.candidate_bound && !authority.authorised) {
           const reason = String(authority.reason || 'CANDIDATE_PAPER_PROVIDER_AUTHORITY_REVOKED');

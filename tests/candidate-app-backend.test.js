@@ -30,6 +30,7 @@ const {
   assembleCandidatePaperPack,
   renderAndRegister,
   candidateDocumentBranding,
+  createAccessToken,
   mileageClaimFormBytes,
   renderExpensePage,
   routeMatch,
@@ -178,6 +179,116 @@ test('Candidate route matching decodes stable path parameters and rejects partia
     ),
     { timesheetId: '00000000-0000-4000-8000-000000000001' }
   );
+});
+
+test('timesheet page boundary defaults to Current and validates the explicit History view', async () => {
+  const sessionId = '00000000-0000-4000-8000-000000000071';
+  const candidateId = '00000000-0000-4000-8000-000000000072';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId,
+    id: sessionId,
+    account_id: '00000000-0000-4000-8000-000000000073',
+    selected_candidate_id: candidateId,
+    environment: 'TEST',
+    status: 'ACTIVE',
+    rotation: 2,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  const rpcCalls = [];
+  globalThis.fetch = async url => {
+    assert.match(String(url), /candidate_app_sessions/);
+    return Response.json([session]);
+  };
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      rpcCalls.push({ name, args });
+      return { ok: true, view: args.p_view, items: [] };
+    }
+  };
+  try {
+    for (const [query, expected] of [['', 'CURRENT'], ['?view=history&limit=25', 'HISTORY']]) {
+      const response = await handleCandidateAppRequest(new Request(
+        `https://private.test/candidate-app/v1/timesheets${query}`,
+        { headers: { authorization: `Bearer ${token}` } }
+      ), env, {}, deps);
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).view, expected);
+    }
+    assert.equal(rpcCalls.length, 2);
+    assert.equal(rpcCalls[0].name, 'candidate_app_timesheet_page_v1');
+    assert.equal(rpcCalls[0].args.p_view, 'CURRENT');
+    assert.equal(rpcCalls[0].args.p_limit, 50);
+    assert.equal(rpcCalls[1].args.p_view, 'HISTORY');
+    assert.equal(rpcCalls[1].args.p_limit, 25);
+
+    const invalid = await handleCandidateAppRequest(new Request(
+      'https://private.test/candidate-app/v1/timesheets?view=other',
+      { headers: { authorization: `Bearer ${token}` } }
+    ), env, {}, deps);
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).error_code, 'CANDIDATE_VIEW_INVALID');
+    assert.equal(rpcCalls.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('timesheet detail aliases pass one exact server identity to the shared detail RPC', async () => {
+  const sessionId = '00000000-0000-4000-8000-000000000081';
+  const contractWeekId = '00000000-0000-4000-8000-000000000082';
+  const workflowId = '00000000-0000-4000-8000-000000000083';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId,
+    id: sessionId,
+    account_id: '00000000-0000-4000-8000-000000000084',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000085',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  const rpcCalls = [];
+  globalThis.fetch = async () => Response.json([session]);
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) { rpcCalls.push({ name, args }); return { ok: true }; }
+  };
+  try {
+    for (const path of [
+      `/candidate-app/v1/contract-weeks/${contractWeekId}/detail`,
+      `/candidate-app/v1/workflows/${workflowId}/timesheet-detail`
+    ]) {
+      const response = await handleCandidateAppRequest(new Request(`https://private.test${path}`, {
+        headers: { authorization: `Bearer ${token}` }
+      }), env, {}, deps);
+      assert.equal(response.status, 200);
+    }
+    assert.equal(rpcCalls.length, 2);
+    assert.equal(rpcCalls[0].name, 'candidate_app_timesheet_detail_v1');
+    assert.equal(rpcCalls[0].args.p_contract_week_id, contractWeekId);
+    assert.equal(rpcCalls[0].args.p_workflow_id, null);
+    assert.equal(rpcCalls[1].args.p_contract_week_id, null);
+    assert.equal(rpcCalls[1].args.p_workflow_id, workflowId);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('Candidate HTTP boundary ignores unrelated routes and fails protected routes closed', async () => {

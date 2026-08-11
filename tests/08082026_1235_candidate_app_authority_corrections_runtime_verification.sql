@@ -519,16 +519,16 @@ begin
     timesheet_id,candidate_id,client_id,total_hours,other_pay_ex_vat,processing_status
   ) values('94200000-0000-0000-0000-000000000300',v_candidate,v_client,0,10,'UNPROCESSED');
 
-  v_page_one:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,2,v_now);
+  v_page_one:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,2,v_now);
   v_cursor:=v_page_one->>'next_cursor';
-  if jsonb_array_length(v_page_one->'items')<>2 or v_cursor not like 'v1|%'
+  if jsonb_array_length(v_page_one->'items')<>2 or v_cursor not like 'v2|CURRENT|%'
      or exists(select 1 from jsonb_array_elements(v_page_one->'items') item
        where item->>'timesheet_id'='94200000-0000-0000-0000-000000000300') then
     raise exception 'first stable page or hidden base carrier failed: %',v_page_one;
   end if;
-  v_page_two:=public.candidate_app_timesheet_page_v1(v_session,'TEST',v_cursor,2,v_now);
+  v_page_two:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',v_cursor,2,v_now);
   v_cursor_two:=v_page_two->>'next_cursor';
-  v_page_three:=public.candidate_app_timesheet_page_v1(v_session,'TEST',v_cursor_two,2,v_now);
+  v_page_three:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',v_cursor_two,2,v_now);
   select array_agg(distinct item_id order by item_id) into v_ids
   from (
     select (item->>'contract_week_id')::uuid as item_id from jsonb_array_elements(v_page_one->'items') item
@@ -550,7 +550,7 @@ begin
     raise exception 'hidden base expense carrier did not produce a readiness conflict: %',v_page_one;
   end if;
   begin
-    perform public.candidate_app_timesheet_page_v1(v_session,'TEST','v0|1|2026-01-01|'||gen_random_uuid(),2,v_now);
+    perform public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT','v0|1|2026-01-01|'||gen_random_uuid(),2,v_now);
     raise exception 'unsupported cursor version was accepted';
   exception when sqlstate '22023' then
     if sqlerrm<>'CANDIDATE_CURSOR_INVALID' then raise; end if;

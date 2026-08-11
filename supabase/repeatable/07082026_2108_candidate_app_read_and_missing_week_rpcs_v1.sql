@@ -165,9 +165,100 @@ begin
 end;
 $function$;
 
+create or replace function private._candidate_week_ending_label_v1(p_date date)
+returns text
+language sql
+immutable
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  select case when p_date is null then null else
+    'Week Ending '||extract(day from p_date)::integer::text||' '
+    ||(array['January','February','March','April','May','June','July','August',
+              'September','October','November','December'])[extract(month from p_date)::integer]
+    ||' '||extract(year from p_date)::integer::text end
+$function$;
+
+create or replace function private._candidate_timesheet_primary_action_v1(
+  p_candidate_status_code text,
+  p_workflows jsonb,
+  p_capabilities jsonb,
+  p_timesheet_id uuid,
+  p_contract_week_id uuid
+)
+returns jsonb
+language plpgsql
+stable
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_workflow jsonb;
+  v_action text;
+begin
+  if upper(coalesce(p_candidate_status_code,'')) in ('PAID','AUTHORISED','INVOICED_NOT_PAID') then
+    return null;
+  end if;
+  select item into v_workflow
+  from jsonb_array_elements(coalesce(p_workflows,'[]'::jsonb)) item
+  where item->>'state'='REJECTED'
+    and coalesce((item->>'rejection_actionable')::boolean,false)
+    and nullif(item->>'required_resubmission_action','') is not null
+  order by item->>'updated_at_utc' desc,item->>'workflow_id'
+  limit 1;
+  if v_workflow is not null then
+    v_action:=v_workflow->>'required_resubmission_action';
+    return jsonb_build_object(
+      'code',v_action,
+      'label',case v_action
+        when 'RESUBMIT_EXPENSE_CLAIM' then 'Resubmit Expense Claim'
+        when 'RESUBMIT_TIMESHEET_AND_EXPENSES' then 'Resubmit Timesheet and Expenses'
+        else 'Resubmit Timesheet' end,
+      'requires_confirmation',false,
+      'workflow_id',v_workflow->>'workflow_id'
+    );
+  end if;
+  select item into v_workflow
+  from jsonb_array_elements(coalesce(p_workflows,'[]'::jsonb)) item
+  where item->>'state' in (
+    'CREATED','WORKER_DRAFT','WORKER_SUBMITTED',
+    'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+    'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
+    'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
+    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
+  )
+  order by item->>'updated_at_utc' desc,item->>'workflow_id'
+  limit 1;
+  if v_workflow is not null then
+    return jsonb_build_object(
+      'code','CONTINUE_WORKFLOW','label','Continue',
+      'requires_confirmation',false,'workflow_id',v_workflow->>'workflow_id'
+    );
+  end if;
+  if coalesce((p_capabilities->>'can_edit_hours')::boolean,false) then
+    return jsonb_build_object(
+      'code','ENTER_TIMESHEET','label','Enter Timesheet',
+      'requires_confirmation',false,'timesheet_id',p_timesheet_id,
+      'contract_week_id',p_contract_week_id
+    );
+  end if;
+  if coalesce((p_capabilities->>'can_edit_expenses')::boolean,false) then
+    return jsonb_build_object(
+      'code','ADD_EXPENSES','label','Add Expenses',
+      'requires_confirmation',false,'timesheet_id',p_timesheet_id,
+      'contract_week_id',p_contract_week_id
+    );
+  end if;
+  return null;
+end;
+$function$;
+
+drop function if exists public.candidate_app_timesheet_page_v1(
+  uuid,text,text,integer,timestamptz
+);
+
 create or replace function public.candidate_app_timesheet_page_v1(
   p_session_id uuid,
   p_environment text,
+  p_view text default 'CURRENT',
   p_cursor text default null,
   p_limit integer default 50,
   p_now_utc timestamptz default now()
@@ -181,15 +272,24 @@ as $function$
 declare
   v_context jsonb;
   v_candidate_id uuid;
+  v_view text:=upper(btrim(coalesce(p_view,'CURRENT')));
+  v_snapshot_utc timestamptz:=p_now_utc;
   v_limit integer:=least(greatest(coalesce(p_limit,50),1),100);
   v_cursor_parts text[];
-  v_cursor_rank integer;
+  v_cursor_view text;
+  v_cursor_snapshot timestamptz;
+  v_cursor_candidate_id uuid;
   v_cursor_date date;
+  v_cursor_contract_id uuid;
+  v_cursor_additional_seq integer;
   v_cursor_id uuid;
   v_rows jsonb;
   v_next_cursor text;
   v_conflicts jsonb;
 begin
+  if v_view not in ('CURRENT','HISTORY') then
+    raise exception 'CANDIDATE_VIEW_INVALID' using errcode='22023';
+  end if;
   perform private._candidate_require_feature_v1(p_environment,'candidate_app_reads');
   v_context:=private._candidate_session_context_v1(p_session_id,p_environment,null,p_now_utc,false);
   v_candidate_id:=nullif(v_context->>'selected_candidate_id','')::uuid;
@@ -198,16 +298,38 @@ begin
   if nullif(btrim(coalesce(p_cursor,'')),'') is not null then
     begin
       v_cursor_parts:=string_to_array(p_cursor,'|');
-      if cardinality(v_cursor_parts)<>4 or v_cursor_parts[1]<>'v1' then
-        raise exception 'invalid cursor';
+      if cardinality(v_cursor_parts)<>8 then
+        raise exception 'CANDIDATE_CURSOR_INVALID' using errcode='22023';
       end if;
-      v_cursor_rank:=v_cursor_parts[2]::integer;
-      if v_cursor_rank not in (0,1) then raise exception 'invalid cursor rank'; end if;
-      v_cursor_date:=v_cursor_parts[3]::date;
-      v_cursor_id:=v_cursor_parts[4]::uuid;
+      if v_cursor_parts[1]<>'v2' then
+        raise exception 'CANDIDATE_CURSOR_VERSION_UNSUPPORTED' using errcode='22023';
+      end if;
+      v_cursor_view:=upper(v_cursor_parts[2]);
+      v_cursor_snapshot:=v_cursor_parts[3]::timestamptz;
+      v_cursor_candidate_id:=v_cursor_parts[4]::uuid;
+      v_cursor_date:=v_cursor_parts[5]::date;
+      v_cursor_contract_id:=v_cursor_parts[6]::uuid;
+      v_cursor_additional_seq:=v_cursor_parts[7]::integer;
+      v_cursor_id:=v_cursor_parts[8]::uuid;
     exception when others then
+      if sqlerrm in (
+        'CANDIDATE_CURSOR_VERSION_UNSUPPORTED','CANDIDATE_CURSOR_INVALID'
+      ) then raise; end if;
       raise exception 'CANDIDATE_CURSOR_INVALID' using errcode='22023';
     end;
+    if v_cursor_view<>v_view then
+      raise exception 'CANDIDATE_CURSOR_VIEW_MISMATCH' using errcode='22023';
+    end if;
+    if v_cursor_candidate_id<>v_candidate_id then
+      raise exception 'CANDIDATE_CURSOR_CANDIDATE_MISMATCH' using errcode='22023';
+    end if;
+    if v_cursor_snapshot is null or v_cursor_snapshot>p_now_utc+interval '1 minute' then
+      raise exception 'CANDIDATE_CURSOR_SNAPSHOT_INVALID' using errcode='22023';
+    end if;
+    if v_cursor_snapshot<p_now_utc-interval '24 hours' then
+      raise exception 'CANDIDATE_CURSOR_EXPIRED' using errcode='22023';
+    end if;
+    v_snapshot_utc:=v_cursor_snapshot;
   end if;
 
   with candidate_weeks as materialized (
@@ -233,16 +355,16 @@ begin
       select cs.week_ending_weekday
       from public.client_settings cs
       where cs.client_id=c.client_id
-        and cs.effective_from<=(p_now_utc at time zone 'Europe/London')::date
+        and cs.effective_from<=(v_snapshot_utc at time zone 'Europe/London')::date
       order by cs.effective_from desc,cs.updated_at desc nulls last,cs.id desc
       limit 1
     ) effective_client on true
     cross join lateral (
       select (
-        (p_now_utc at time zone 'Europe/London')::date
+        (v_snapshot_utc at time zone 'Europe/London')::date
         +mod(
           coalesce(c.week_ending_weekday_snapshot,effective_client.week_ending_weekday,0)
-          -extract(dow from (p_now_utc at time zone 'Europe/London')::date)::integer+7,
+          -extract(dow from (v_snapshot_utc at time zone 'Europe/London')::date)::integer+7,
           7
         )
       )::date as current_week_ending_date
@@ -466,28 +588,34 @@ begin
       coalesce(totals.other_pay_ex_vat,0) as overlay_other_pay_ex_vat,
       coalesce(workflows.workflows,'[]'::jsonb) as workflows,
       null::text as expense_overlay_conflict_code,
-      (base.paid_at_utc is null) as unresolved,
-      case when base.paid_at_utc is null then 1 else 0 end as unresolved_rank
+      membership.tab_bucket
     from candidate_weeks base
     left join expense_anchor_totals totals on totals.display_timesheet_id=base.timesheet_id
     left join workflow_overlay workflows on workflows.display_timesheet_id=base.timesheet_id
+    cross join lateral (
+      select case
+        when base.paid_at_utc is null or base.paid_at_utc>v_snapshot_utc then 'CURRENT'
+        when base.paid_at_utc>=v_snapshot_utc-interval '7 days' then 'CURRENT'
+        when base.paid_at_utc<v_snapshot_utc-interval '7 days'
+          and base.week_ending_date between base.current_week_ending_date-105
+            and base.current_week_ending_date then 'HISTORY'
+        else 'EXCLUDED' end as tab_bucket
+    ) membership
     where not exists(select 1 from expense_carriers carrier where carrier.id=base.id)
       and base.week_ending_date<=base.current_week_ending_date
+      and membership.tab_bucket=v_view
       and (
-        base.paid_at_utc is null
-        or base.week_ending_date>=base.current_week_ending_date-49
-      )
-      and (
-        v_cursor_rank is null
+        v_cursor_date is null
         or (
-          case when base.paid_at_utc is null then 1 else 0 end,
           base.week_ending_date,
+          base.contract_id,
+          base.additional_seq,
           base.id
-        )<(v_cursor_rank,v_cursor_date,v_cursor_id)
+        )<(v_cursor_date,v_cursor_contract_id,v_cursor_additional_seq,v_cursor_id)
       )
   ), page as materialized (
     select * from visible
-    order by unresolved_rank desc,week_ending_date desc,id desc
+    order by week_ending_date desc,contract_id desc,additional_seq desc,id desc
     limit v_limit+1
   ), delivered as materialized (
     select page.*,
@@ -518,7 +646,7 @@ begin
           and coalesce((workflow_item->>'rejection_actionable')::boolean,false)
       ) as actionable_rejections
     from page
-    order by unresolved_rank desc,week_ending_date desc,id desc
+    order by week_ending_date desc,contract_id desc,additional_seq desc,id desc
     limit v_limit
   )
   select
@@ -530,12 +658,16 @@ begin
       'job_title',d.display_job_title,
       'band',d.display_band,
       'week_ending_date',d.week_ending_date,
+      'week_ending_label',private._candidate_week_ending_label_v1(d.week_ending_date),
       'week_ending_weekday',btrim(to_char(d.week_ending_date,'FMDay')),
       'additional_seq',d.additional_seq,
+      'tab_bucket',d.tab_bucket,
+      'effective_current_week_ending_date',d.current_week_ending_date,
+      'paid_at_utc',case when d.paid_at_utc<=v_snapshot_utc then d.paid_at_utc else null end,
       'contract_week_status',d.status,
       'timesheet_status',d.timesheet_status,
       'processing_status',d.processing_status,
-      'paid',d.paid_at_utc is not null,
+      'paid',d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc,
       'authorised',d.authorised_at_utc is not null,
       'total_hours',coalesce(d.total_hours,0),
       'expenses',jsonb_build_object(
@@ -551,7 +683,7 @@ begin
       'record_role',d.capabilities->'record_role',
       'route_family',d.capabilities->'route_family',
       'candidate_status_code',case
-        when d.paid_at_utc is not null then 'PAID'
+        when d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc then 'PAID'
         when d.authorised_at_utc is not null then 'AUTHORISED'
         when d.locked_by_invoice_id is not null or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
           then 'INVOICED_NOT_PAID'
@@ -559,9 +691,10 @@ begin
         when d.rejected_workflow is not null then 'REJECTED'
         when d.processing_status is not null then d.processing_status::text
         else d.status::text end,
-      'payment_state',case when d.paid_at_utc is not null then 'PAID' else 'UNPAID' end,
+      'payment_state',case when d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc
+        then 'PAID' else 'UNPAID' end,
       'invoice_state',case
-        when d.paid_at_utc is not null then 'PAID'
+        when d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc then 'PAID'
         when d.locked_by_invoice_id is not null or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
           then 'INVOICED_NOT_PAID'
         else 'NOT_INVOICED' end,
@@ -575,18 +708,18 @@ begin
         limit 1
       ),
       'rejection_reason',case
-        when d.paid_at_utc is not null or d.authorised_at_utc is not null
+        when (d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc) or d.authorised_at_utc is not null
           or d.locked_by_invoice_id is not null
           or upper(coalesce(d.timesheet_status::text,''))='INVOICED' then null
         else nullif(d.rejected_workflow->>'rejection_reason','') end,
       'rejection_scope',case
-        when d.paid_at_utc is not null or d.authorised_at_utc is not null
+        when (d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc) or d.authorised_at_utc is not null
           or d.locked_by_invoice_id is not null
           or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
           or d.rejected_workflow is null then d.capabilities->'reject_scope'
         else d.rejected_workflow->'rejection_scope' end,
       'rejection',case
-        when d.paid_at_utc is not null or d.authorised_at_utc is not null
+        when (d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc) or d.authorised_at_utc is not null
           or d.locked_by_invoice_id is not null
           or upper(coalesce(d.timesheet_status::text,''))='INVOICED'
           or d.rejected_workflow is null then null
@@ -596,6 +729,31 @@ begin
           'scope',d.rejected_workflow->'rejection_scope',
           'required_action',d.rejected_workflow->'required_resubmission_action'
         ) end,
+      'primary_action',private._candidate_timesheet_primary_action_v1(
+        case
+          when d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc then 'PAID'
+          when d.authorised_at_utc is not null then 'AUTHORISED'
+          when d.locked_by_invoice_id is not null
+            or upper(coalesce(d.timesheet_status::text,''))='INVOICED' then 'INVOICED_NOT_PAID'
+          when d.active_workflow_state is not null then d.active_workflow_state
+          when d.rejected_workflow is not null then 'REJECTED'
+          when d.processing_status is not null then d.processing_status::text
+          else d.status::text end,
+        d.workflows,d.capabilities,d.timesheet_id,d.id
+      ),
+      'detail_target',case
+        when d.rejected_workflow is not null then jsonb_build_object(
+          'identity_kind','WORKFLOW','id',d.rejected_workflow->>'workflow_id',
+          'path','/candidate-app/v1/workflows/'||(d.rejected_workflow->>'workflow_id')||'/timesheet-detail'
+        )
+        when d.timesheet_id is not null then jsonb_build_object(
+          'identity_kind','TIMESHEET','id',d.timesheet_id,
+          'path','/candidate-app/v1/timesheets/'||d.timesheet_id::text
+        )
+        else jsonb_build_object(
+          'identity_kind','CONTRACT_WEEK','id',d.id,
+          'path','/candidate-app/v1/contract-weeks/'||d.id::text||'/detail'
+        ) end,
       'actions',jsonb_build_object(
         'can_edit_hours',d.capabilities->'can_edit_hours',
         'can_edit_expenses',d.capabilities->'can_edit_expenses',
@@ -604,10 +762,14 @@ begin
         'can_reject_candidate_submission',d.capabilities->'can_reject_candidate_submission',
         'reject_scope',d.capabilities->'reject_scope'
       )
-    ) order by d.unresolved_rank desc,d.week_ending_date desc,d.id desc),'[]'::jsonb),
+    ) order by d.week_ending_date desc,d.contract_id desc,d.additional_seq desc,d.id desc),'[]'::jsonb),
     case when (select count(*) from page)>v_limit then
-      (select 'v1|'||p.unresolved_rank::text||'|'||p.week_ending_date::text||'|'||p.id::text from delivered p
-       order by p.unresolved_rank asc,p.week_ending_date asc,p.id asc limit 1)
+      (select 'v2|'||v_view||'|'||to_char(v_snapshot_utc at time zone 'UTC',
+          'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')||'|'||v_candidate_id::text||'|'
+          ||p.week_ending_date::text||'|'||p.contract_id::text||'|'
+          ||p.additional_seq::text||'|'||p.id::text
+       from delivered p
+       order by p.week_ending_date asc,p.contract_id asc,p.additional_seq asc,p.id asc limit 1)
     else null end,
     (
       select coalesce(jsonb_agg(jsonb_build_object(
@@ -623,9 +785,13 @@ begin
 
   return jsonb_build_object(
     'ok',true,
+    'view',v_view,
+    'default_view','CURRENT',
+    'snapshot_utc',v_snapshot_utc,
+    'paid_current_cutoff_utc',v_snapshot_utc-interval '7 days',
     'items',v_rows,
     'next_cursor',v_next_cursor,
-    'cursor_version','v1',
+    'cursor_version','v2',
     'readiness_conflicts',coalesce(v_conflicts,'[]'::jsonb),
     'limit',v_limit
   );
@@ -660,6 +826,13 @@ declare
   v_components jsonb;
   v_claims jsonb;
   v_document_state jsonb:='{}'::jsonb;
+  v_effective_week_ending_weekday integer;
+  v_effective_current_week_ending_date date;
+  v_tab_bucket text;
+  v_candidate_status_code text;
+  v_active_workflow_state text;
+  v_rejected_workflow jsonb;
+  v_primary_action jsonb;
 begin
   perform private._candidate_require_feature_v1(p_environment,'candidate_app_reads');
   if num_nonnulls(p_timesheet_id,p_contract_week_id,p_workflow_id)<>1 then
@@ -685,6 +858,24 @@ begin
   select * into v_contract from public.contracts where id=v_week.contract_id and candidate_id=v_candidate_id;
   if not found then raise exception 'CANDIDATE_DETAIL_NOT_FOUND' using errcode='P0002'; end if;
   select * into v_client from public.clients where id=v_contract.client_id;
+  select coalesce(
+    v_contract.week_ending_weekday_snapshot,
+    (
+      select settings.week_ending_weekday
+      from public.client_settings settings
+      where settings.client_id=v_contract.client_id
+        and settings.effective_from<=(p_now_utc at time zone 'Europe/London')::date
+      order by settings.effective_from desc,settings.updated_at desc nulls last,settings.id desc
+      limit 1
+    ),0
+  ) into v_effective_week_ending_weekday;
+  v_effective_current_week_ending_date:=(
+    (p_now_utc at time zone 'Europe/London')::date
+    +mod(
+      v_effective_week_ending_weekday
+      -extract(dow from (p_now_utc at time zone 'Europe/London')::date)::integer+7,7
+    )
+  )::date;
   if p_timesheet_id is null then p_timesheet_id:=v_week.timesheet_id; end if;
   if p_timesheet_id is not null then
     select * into v_timesheet from public.timesheets where timesheet_id=p_timesheet_id and is_current=true and archived_at_utc is null;
@@ -809,8 +1000,68 @@ begin
   order by (document_workflow.id=p_workflow_id) desc,document_workflow.updated_at_utc desc
   limit 1;
 
+  select workflow_item->>'state' into v_active_workflow_state
+  from jsonb_array_elements(coalesce(v_claims,'[]'::jsonb)) workflow_item
+  where workflow_item->>'state' in (
+    'CREATED','WORKER_DRAFT','WORKER_SUBMITTED',
+    'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+    'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
+    'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
+    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
+  )
+  order by workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
+  limit 1;
+  select workflow_item into v_rejected_workflow
+  from jsonb_array_elements(coalesce(v_claims,'[]'::jsonb)) workflow_item
+  where workflow_item->>'state'='REJECTED'
+    and coalesce((workflow_item->>'rejection_actionable')::boolean,false)
+  order by workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
+  limit 1;
+  v_candidate_status_code:=case
+    when v_fin.paid_at_utc is not null then 'PAID'
+    when v_fin.authorised_at_utc is not null then 'AUTHORISED'
+    when v_fin.locked_by_invoice_id is not null
+      or upper(coalesce(v_timesheet.status::text,''))='INVOICED' then 'INVOICED_NOT_PAID'
+    when v_active_workflow_state is not null then v_active_workflow_state
+    when v_rejected_workflow is not null then 'REJECTED'
+    when v_fin.processing_status is not null then v_fin.processing_status::text
+    else v_week.status::text end;
+  v_tab_bucket:=case
+    when v_week.week_ending_date>v_effective_current_week_ending_date then 'EXCLUDED'
+    when v_fin.paid_at_utc is null or v_fin.paid_at_utc>p_now_utc then 'CURRENT'
+    when v_fin.paid_at_utc>=p_now_utc-interval '7 days' then 'CURRENT'
+    when v_fin.paid_at_utc<p_now_utc-interval '7 days'
+      and v_week.week_ending_date between v_effective_current_week_ending_date-105
+        and v_effective_current_week_ending_date then 'HISTORY'
+    else 'EXCLUDED' end;
+  v_primary_action:=private._candidate_timesheet_primary_action_v1(
+    v_candidate_status_code,v_claims,v_capabilities,p_timesheet_id,v_week.id
+  );
+
   return jsonb_build_object(
     'ok',true,
+    'week_ending_label',private._candidate_week_ending_label_v1(v_week.week_ending_date),
+    'candidate_status_code',v_candidate_status_code,
+    'list_membership',jsonb_build_object(
+      'tab_bucket',v_tab_bucket,
+      'effective_current_week_ending_date',v_effective_current_week_ending_date,
+      'paid_current_cutoff_utc',p_now_utc-interval '7 days'
+    ),
+    'primary_action',v_primary_action,
+    'available_actions',(
+      case when v_primary_action is null then '[]'::jsonb
+        else jsonb_build_array(v_primary_action) end
+      ||case when coalesce((v_capabilities->>'candidate_no_work_allowed')::boolean,false)
+        then jsonb_build_array(jsonb_build_object(
+          'code','NO_WORK_THIS_WEEK','label','I Did Not Work This Week',
+          'requires_confirmation',true
+        )) else '[]'::jsonb end
+      ||case when coalesce((v_capabilities->>'can_edit_expenses')::boolean,false)
+          and coalesce(v_primary_action->>'code','')<>'ADD_EXPENSES'
+        then jsonb_build_array(jsonb_build_object(
+          'code','ADD_EXPENSES','label','Add Expenses','requires_confirmation',false
+        )) else '[]'::jsonb end
+    ),
     'contract_week',jsonb_build_object(
       'id',v_week.id,'contract_id',v_contract.id,'week_ending_date',v_week.week_ending_date,
       'week_ending_weekday',btrim(to_char(v_week.week_ending_date,'FMDay')),
@@ -996,12 +1247,18 @@ $function$;
 
 revoke all on function public.candidate_app_bootstrap_v1(uuid,text,integer,timestamptz) from public,anon,authenticated;
 revoke all on function private._candidate_rejection_replaced_v1(uuid) from public,anon,authenticated;
-revoke all on function public.candidate_app_timesheet_page_v1(uuid,text,text,integer,timestamptz) from public,anon,authenticated;
+revoke all on function private._candidate_week_ending_label_v1(date)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_timesheet_primary_action_v1(text,jsonb,jsonb,uuid,uuid)
+  from public,anon,authenticated,service_role;
+revoke all on function public.candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamptz)
+  from public,anon,authenticated;
 revoke all on function public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamptz) from public,anon,authenticated;
 revoke all on function public.candidate_missing_week_options_v1(uuid,text,uuid,date,date,timestamptz) from public,anon,authenticated;
 revoke all on function public.candidate_contract_week_add_missing_atomic_v1(uuid,text,uuid,date,text,timestamptz) from public,anon,authenticated;
 grant execute on function public.candidate_app_bootstrap_v1(uuid,text,integer,timestamptz) to service_role;
-grant execute on function public.candidate_app_timesheet_page_v1(uuid,text,text,integer,timestamptz) to service_role;
+grant execute on function public.candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamptz)
+  to service_role;
 grant execute on function public.candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamptz) to service_role;
 grant execute on function public.candidate_missing_week_options_v1(uuid,text,uuid,date,date,timestamptz) to service_role;
 grant execute on function public.candidate_contract_week_add_missing_atomic_v1(uuid,text,uuid,date,text,timestamptz) to service_role;

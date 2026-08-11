@@ -145,6 +145,23 @@ begin
   update public.candidate_approval_requests set
     state='PENDING',approved_at_utc=null,updated_at_utc=now()
   where id=v_request;
+  insert into public.mail_outbox(
+    type,"to",subject,body_text,status,context_kind,context_id,
+    deterministic_outbox_key,payment_scope_json,sent_at,provider_status,provider_message_id
+  ) values(
+    'TIMESHEET_GENERAL','manager@example.test','Approval requested','Please review.',
+    'SENT','CANDIDATE_WORKFLOW',v_workflow,
+    'CANDIDATE_MANAGER_APPROVAL_V1:'||v_request::text||':0',
+    jsonb_build_object(
+      'candidate_mail_authority','MANAGER_APPROVAL_V1',
+      'candidate_manager_mail_kind','INITIAL',
+      'candidate_manager_workflow_id',v_workflow,
+      'candidate_manager_workflow_generation',1,
+      'candidate_approval_request_id',v_request,
+      'candidate_approval_request_generation',1,
+      'candidate_manager_mail_retired',false
+    ),now(),'ACCEPTED','provider-route-confirm'
+  );
   v_context:=public.timesheet_route_version_preview_v1(v_electronic,'SWITCH_TO_MANUAL');
   begin
     perform public.timesheet_route_version_confirmed_v1(

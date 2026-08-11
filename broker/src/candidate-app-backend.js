@@ -2042,16 +2042,31 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
     })));
   }
   if (kind === 'page') {
+    const requestedView = text(url.searchParams.get('view') || 'current').toLowerCase();
+    if (!['current', 'history'].includes(requestedView)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_VIEW_INVALID');
+    }
+    const cursor = url.searchParams.get('cursor');
+    if (cursor && cursor.length > 2048) {
+      throw new CandidateHttpError(400, 'CANDIDATE_CURSOR_INVALID');
+    }
+    const rawLimit = Number(url.searchParams.get('limit') || 50);
+    if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
+      throw new CandidateHttpError(400, 'CANDIDATE_PAGE_LIMIT_INVALID');
+    }
     return jsonResponse(200, await rpcCall(deps, 'candidate_app_timesheet_page_v1', candidateRpcArgs(access, env, {
-      p_cursor: url.searchParams.get('cursor'),
-      p_limit: Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 50)))
+      p_view: requestedView.toUpperCase(),
+      p_cursor: cursor,
+      p_limit: rawLimit
     })));
   }
   if (kind === 'detail') {
     return jsonResponse(200, await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
       p_timesheet_id: params.timesheetId ? requireUuid(params.timesheetId) : null,
-      p_contract_week_id: url.searchParams.get('contract_week_id') ? requireUuid(url.searchParams.get('contract_week_id')) : null,
-      p_workflow_id: url.searchParams.get('workflow_id') ? requireUuid(url.searchParams.get('workflow_id')) : null
+      p_contract_week_id: params.contractWeekId ? requireUuid(params.contractWeekId)
+        : (url.searchParams.get('contract_week_id') ? requireUuid(url.searchParams.get('contract_week_id')) : null),
+      p_workflow_id: params.workflowId ? requireUuid(params.workflowId)
+        : (url.searchParams.get('workflow_id') ? requireUuid(url.searchParams.get('workflow_id')) : null)
     })));
   }
   if (kind === 'missing-options') {
@@ -2909,6 +2924,10 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
 
     let match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId`);
     if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/contract-weeks/:contractWeekId/detail`);
+    if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
+    match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/timesheet-detail`);
+    if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/paper-pack/status`);
     if (match && request.method === 'GET') return await handlePaperPackStatus(request, env, deps, match.timesheetId);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/paper-pack`);
@@ -2970,6 +2989,7 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
 export const candidateAppBackendInternals = Object.freeze({
   derivePasswordVerifier,
   deterministicOpaqueToken,
+  createAccessToken,
   verifyPassword,
   forbiddenFinancialKeys,
   segmentBreak,

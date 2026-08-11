@@ -39,7 +39,7 @@ begin
 
   begin
     perform public.candidate_app_timesheet_page_v1(
-      '11111111-1111-1111-1111-111111111111','TEST',null,50,now());
+      '11111111-1111-1111-1111-111111111111','TEST','CURRENT',null,50,now());
     raise exception 'Candidate read unexpectedly ran while read flag was false';
   exception when sqlstate '42501' then
     if sqlerrm<>'CANDIDATE_FEATURE_DISABLED' then raise; end if;
@@ -56,7 +56,7 @@ begin
     'candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamp with time zone)',
     'candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamp with time zone)',
     'candidate_app_bootstrap_v1(uuid,text,integer,timestamp with time zone)',
-    'candidate_app_timesheet_page_v1(uuid,text,text,integer,timestamp with time zone)',
+    'candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamp with time zone)',
     'candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamp with time zone)',
     'candidate_missing_week_options_v1(uuid,text,uuid,date,date,timestamp with time zone)',
     'candidate_contract_week_add_missing_atomic_v1(uuid,text,uuid,date,text,timestamp with time zone)',

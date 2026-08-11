@@ -47,8 +47,10 @@ Challenge/outbox insertion is retry-safe: the backend deterministically reproduc
 | PATCH | `/candidate-app/v1/account/preferences` | Persist server-owned notification preferences. |
 | POST | `/candidate-app/v1/account/push-token` | Broker-validates APNs/FCM/Web Push and encrypts the raw provider token before private registration on the active session. |
 | GET | `/candidate-app/v1/bootstrap` | Entitlements, selection and global capabilities. |
-| GET | `/candidate-app/v1/timesheets` | Candidate-safe paged projection. |
-| GET | `/candidate-app/v1/timesheets/:timesheetId` | Candidate-safe detail and capabilities. |
+| GET | `/candidate-app/v1/timesheets?view=current\|history` | Candidate-safe, frozen-snapshot Current/History projection. Current is the default. |
+| GET | `/candidate-app/v1/timesheets/:timesheetId` | Candidate-safe detail and capabilities by current timesheet identity. |
+| GET | `/candidate-app/v1/contract-weeks/:contractWeekId/detail` | The same detail authority for an unmaterialised/current contract-week card. |
+| GET | `/candidate-app/v1/workflows/:workflowId/timesheet-detail` | The same detail authority for a workflow/rejection card. |
 | GET | `/candidate-app/v1/timesheets/:timesheetId/paper-pack/status` | Read-only return of `PREPARING`, `READY` or `FAILED` and whether secure download is available. It never assembles a pack, updates mail or creates a notification. |
 | GET | `/candidate-app/v1/timesheets/:timesheetId/paper-pack` | Read-only stream of an already-ready immutable WEEKLY QR/paper pack. It never assembles or releases work. |
 | GET | `/candidate-app/v1/contracts/:contractId/missing-weeks` | Per-week effective missing-week options. |
@@ -56,7 +58,9 @@ Challenge/outbox insertion is retry-safe: the backend deterministically reproduc
 | GET | `/candidate-app/v1/notifications` | Read the account notification feed. |
 | POST | `/candidate-app/v1/notifications/:notificationId/read` | Idempotently mark only the owning account's notification read. |
 
-The safe timesheet projection owns client name, job title, band, date/status, route family, action flags, expense overlay and exact workflow state. The broker must not fill gaps with direct database reads.
+The safe timesheet projection owns client name, job title, band, date/status, route family, action flags, expense overlay and exact workflow state. It also owns tab membership. `CURRENT` excludes future weeks, includes all unpaid rows without an age limit and includes paid rows whose authoritative `paid_at_utc` is exactly seven days old or newer. `HISTORY` contains only paid rows older than that cutoff and only within each contract's effective current week plus the previous 15 contract weeks. Equality belongs to Current, so the sets cannot overlap. Both are ordered by week ending newest first with deterministic tie-breakers.
+
+The first page freezes `snapshot_utc` and returns a v2 cursor bound to that snapshot, selected candidate and view. A Current cursor cannot be replayed against History. Every card returns the exact `week_ending_label` (for example `Week Ending 1 January 2025`), `tab_bucket`, at most one `primary_action`, and a `detail_target` whose identity is `TIMESHEET`, `CONTRACT_WEEK` or `WORKFLOW`. Clients use those fields exactly; the broker and frontend must not calculate tab membership, date wording, status precedence or action priority.
 
 ## Workflow, expense and document API
 
@@ -118,6 +122,8 @@ Manager-triggered finalisation uses a server-created `CANDIDATE_MANAGER_FINALISA
 Canonical finalisation is triggered only by manager EMAIL/PHONE approval, a complete PAPER return or the authenticated CloudTMS office retry adapter. It is not exposed as a general public Candidate action, so an authenticated Candidate cannot use the service-finalisation path against a workflow UUID owned by another account.
 
 The initial manager email is also readiness-gated. Candidate submission first renders and registers every required review component: the candidate-signed hours page where applicable, the expense summary, mileage form and each required evidence image/PDF. The workflow becomes `READY_FOR_MANAGER_APPROVAL` only when the immutable review manifest reports every component ready. `CREATE_EMAIL_APPROVAL_REQUEST` recomputes and verifies that same manifest before it can queue the email. Consequently, the manager link opens already-created pages; it never asks the manager to wait for the review pack to render. Rendering failure leaves the workflow pending/retryable and prevents the email request.
+
+Manager email delivery is bound to the exact approval lifecycle, not merely a recipient and deterministic key. Every initial, reminder, renewal and withdrawal row carries `MANAGER_APPROVAL_V1`, mail kind, workflow ID/generation, approval-request ID/generation and retirement state. The mail claimant revalidates those identities. Immediately before provider submission, the normal backend obtains `MANAGER_PROVIDER_SUBMIT_PERMIT` under the exact outbox lease. Any transition that invalidates or completes an EMAIL request centrally retires queued/failed delivery and must wait or fail while the provider permit is live. Accepted sent rows remain immutable audit history. A withdrawal is created only where an accepted earlier provider receipt exists for that exact request; an `initial_sent_at_utc` value or request state alone is insufficient.
 
 ## CloudTMS office adapters
 

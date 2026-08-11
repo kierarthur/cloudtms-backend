@@ -266,7 +266,7 @@ begin
     raise exception 'Separate-expense PAPER rejection rotated the hours anchor economics';
   end if;
 
-  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,v_now);
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,v_now);
   select item.value into v_card
   from jsonb_array_elements(v_page->'items') item(value)
   where item.value->>'timesheet_id'=(case when p_separate_expense

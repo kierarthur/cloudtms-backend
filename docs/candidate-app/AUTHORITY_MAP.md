@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: deployed TEST broker/private-backend authority map, updated 11 August 2026 through the pre-delivery PAPER route guard at Candidate runtime commit `7c087bc79a010944cefc4b605dcab6ea335b6c85`: immutable delivery ownership remains mail-receipt based, while every nonterminal PAPER workflow affected by source rotation is also catalogued independently of mail. A distinct draft/submitted/approval-stage claim blocks the route action before mutation rather than being stranded or silently cancelled.
+Status: TEST broker/private-backend authority map, updated 11 August 2026 through the manager-mail lifecycle and Current/History read-contract closure. Candidate features remain disabled pending independent approval.
 
 ## Canonical owner graph
 
@@ -33,8 +33,8 @@ Neither Worker alters the existing financial algorithms. The broker cannot acces
 | `candidate_auth_account_transition_v1` | login, activation/password completion, refresh, logout, selection, preferences, push registration and password change |
 | `candidate_auth_challenge_transition_v1` | activation/reset/recovery challenge start, resend and verify |
 | `candidate_app_bootstrap_v1` | `GET /candidate-app/v1/bootstrap` |
-| `candidate_app_timesheet_page_v1` | `GET /candidate-app/v1/timesheets`; resolves immutable anchors through the exact current version, suppresses a historical rejection after a same-family replacement advances, and returns every actionable hours/expense recovery scope |
-| `candidate_app_timesheet_detail_v1` | `GET /candidate-app/v1/timesheets/:id`; separates immutable workflow history, current replacement lifecycle and current economic record while returning the same scoped rejection contract |
+| `candidate_app_timesheet_page_v1` | `GET /candidate-app/v1/timesheets?view=current|history`; owns the frozen-snapshot, non-overlapping Current/History partition, v2 cursor, newest-first order, exact week-ending label, one primary action and stable detail target while preserving exact anchor/rejection projection |
+| `candidate_app_timesheet_detail_v1` | `GET /candidate-app/v1/timesheets/:id`, `/candidate-app/v1/contract-weeks/:id/detail` or `/candidate-app/v1/workflows/:id/timesheet-detail`; resolves one exact identity and returns current/history membership, primary/available actions and the same scoped rejection truth |
 | `candidate_missing_week_options_v1` | `GET /candidate-app/v1/contracts/:id/missing-weeks` |
 | `candidate_contract_week_add_missing_atomic_v1` | `POST /candidate-app/v1/contracts/:id/missing-weeks` |
 | `expense_placement_resolve_v1` | `POST /candidate-app/v1/timesheets/:id/expense-placement` |
@@ -86,6 +86,10 @@ QR/paper delivery remains one composed authority: `PAPER_PREPARE` queues the exi
 Candidate rejection/read authority remains server-owned: historical workflow and carrier anchor IDs are immutable audit facts, while the current card identity is resolved through one exact current booking/version family. A newer workflow suppresses an older rejection only when it is a true replacement of that exact logical claim: the same contract-week record for hours/combined, the same week-level expense family for expenses, or the same DAILY booking/work date. Independently actionable hours and expense rejections are returned together, so the client never guesses which recovery action survives.
 
 PAPER retirement keeps QR source, delivery owner, affected workflow set and economic target separate. The source and current-token owner come from exact immutable workflow-generation/mail receipts; the affected economic target comes from the locked workflow/route target and may be a different expense carrier. A second mail-independent source-family catalogue finds every nonterminal PAPER workflow that would lose its current anchor, including draft, submitted, review/approval, waiting-return and received states. The database locks the complete set and fails closed before delivery or route mutation when the selected delivery owner does not own the sole affected nonterminal lifecycle. A final locked postcondition covers `CONVERT_QR_TO_MANUAL`, `DISABLE_QR`, `INVALIDATE_QR` and `REISSUE_QR`, so no nonterminal workflow can remain tied exclusively to a source made historical. Cancellation, supersession, rejection and confirmed route conversion continue to compose the immutable delivery owner under the same family lock and mail permit barrier. No Candidate, frontend or broker code may infer, interchange or bypass these identities.
+
+Manager EMAIL delivery has the same exact-authority discipline. `MANAGER_APPROVAL_V1` scope binds mail kind, workflow ID/generation and approval-request ID/generation. Approval-request state transitions centrally retire queued or failed mail, fence an active provider lease and preserve accepted sent history. The normal backend obtains `MANAGER_PROVIDER_SUBMIT_PERMIT` for that exact outbox lease immediately before external submission. Withdrawal is allowed only when provider acceptance of earlier mail for that exact request is proved.
+
+The Timesheets list is server-partitioned. Current is the default: no future weeks, all unpaid rows regardless of age, and paid rows whose `paid_at_utc` is exactly seven days old or newer. History contains only older-paid rows inside the contract-specific 16-week window. A frozen snapshot and view/candidate-bound v2 cursor make the sets disjoint across pagination. Clients display the returned `week_ending_label`, follow `detail_target`, and render at most the returned `primary_action`; they do not recalculate membership or status.
 
 - versioned private Candidate/manager and authenticated office routing, explicitly separated by route audience;
 - private Candidate session/password boundary behind the broker;

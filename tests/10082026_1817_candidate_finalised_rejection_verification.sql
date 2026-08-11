@@ -256,7 +256,7 @@ begin
     when 'CONTRACT_COMBINED' then 'RESUBMIT_TIMESHEET_AND_EXPENSES'
     else 'RESUBMIT_TIMESHEET' end;
 
-  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,now());
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,now());
   select item.value into v_card
   from jsonb_array_elements(v_page->'items') item(value)
   where item.value->>'timesheet_id'=v_expected_display_timesheet::text
@@ -341,7 +341,7 @@ begin
       'secondary-rejection:'||v_secondary_rejection_workflow::text,
       clock_timestamp()+interval '1 millisecond',clock_timestamp()+interval '1 millisecond'
     );
-    v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,clock_timestamp());
+    v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,clock_timestamp());
     select item.value into v_card
     from jsonb_array_elements(v_page->'items') item(value)
     where item.value->>'timesheet_id'=v_new_timesheet::text
@@ -415,7 +415,7 @@ begin
      or v_result->>'workflow_id'<>v_replacement_workflow::text then
     raise exception 'Replacement workflow was not created: %',v_result;
   end if;
-  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,now());
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,now());
   select item.value into v_card
   from jsonb_array_elements(v_page->'items') item(value)
   where item.value->>'timesheet_id'=v_expected_display_timesheet::text
@@ -442,7 +442,7 @@ begin
       contract_week_id=v_target_week,finalised_at_utc=clock_timestamp(),
       updated_at_utc=clock_timestamp()
   where id=v_replacement_workflow;
-  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,clock_timestamp());
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,clock_timestamp());
   select item.value into v_card
   from jsonb_array_elements(v_page->'items') item(value)
   where item.value->>'timesheet_id'=v_expected_display_timesheet::text
@@ -467,7 +467,7 @@ begin
   update public.candidate_submission_workflows
   set state='REFUSED',finalised_at_utc=null,updated_at_utc=clock_timestamp()
   where id=v_replacement_workflow;
-  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,clock_timestamp());
+  v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,clock_timestamp());
   select item.value into v_card
   from jsonb_array_elements(v_page->'items') item(value)
   where item.value->>'timesheet_id'=v_expected_display_timesheet::text

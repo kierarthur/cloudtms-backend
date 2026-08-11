@@ -15,12 +15,51 @@ security definer
 set search_path = pg_catalog, public, private, pg_temp
 as $function$
 declare v_id uuid;
+declare v_scope jsonb:=coalesce(p_mail->'payment_scope_json','{}'::jsonb);
+declare v_request public.candidate_approval_requests%rowtype;
 begin
   if jsonb_typeof(p_mail)<>'object'
      or nullif(btrim(coalesce(p_mail->>'subject','')),'') is null
      or (nullif(btrim(coalesce(p_mail->>'body_text','')),'') is null
        and nullif(btrim(coalesce(p_mail->>'body_html','')),'') is null) then
     raise exception 'CANDIDATE_MAIL_PAYLOAD_REQUIRED' using errcode='22023';
+  end if;
+  if jsonb_typeof(v_scope)<>'object' then
+    raise exception 'CANDIDATE_MAIL_SCOPE_INVALID' using errcode='22023';
+  end if;
+  if upper(coalesce(v_scope->>'candidate_mail_authority',''))='MANAGER_APPROVAL_V1' then
+    if upper(coalesce(v_scope->>'candidate_manager_mail_kind','')) not in (
+         'INITIAL','REMINDER','RENEWAL','WITHDRAWAL'
+       )
+       or coalesce(v_scope->>'candidate_manager_workflow_id','')
+          !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or coalesce(v_scope->>'candidate_manager_workflow_generation','') !~ '^[1-9][0-9]{0,8}$'
+       or coalesce(v_scope->>'candidate_approval_request_id','')
+          !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or coalesce(v_scope->>'candidate_approval_request_generation','') !~ '^[1-9][0-9]{0,8}$'
+       or lower(coalesce(v_scope->>'candidate_manager_mail_retired','false'))
+          not in ('false','f','0','no') then
+      raise exception 'CANDIDATE_MANAGER_MAIL_SCOPE_INVALID' using errcode='22023';
+    end if;
+    select request_row.* into v_request
+    from public.candidate_approval_requests request_row
+    where request_row.id=(v_scope->>'candidate_approval_request_id')::uuid
+      and request_row.workflow_id=(v_scope->>'candidate_manager_workflow_id')::uuid
+      and request_row.workflow_id=p_context_id
+      and request_row.workflow_generation=(v_scope->>'candidate_manager_workflow_generation')::integer
+      and request_row.request_generation=(v_scope->>'candidate_approval_request_generation')::integer
+      and request_row.method='EMAIL'
+      and request_row.manager_email_normalized=p_to;
+    if not found then
+      raise exception 'CANDIDATE_MANAGER_MAIL_SCOPE_INVALID' using errcode='40001';
+    end if;
+    if upper(v_scope->>'candidate_manager_mail_kind')='WITHDRAWAL' then
+      if v_request.state not in ('CANCELLED','SUPERSEDED','EXPIRED','REFUSED') then
+        raise exception 'CANDIDATE_MANAGER_WITHDRAWAL_NOT_READY' using errcode='40001';
+      end if;
+    elsif v_request.state<>'PENDING' then
+      raise exception 'CANDIDATE_MANAGER_MAIL_REQUEST_NOT_CURRENT' using errcode='40001';
+    end if;
   end if;
   insert into public.mail_outbox(
     type,"to",subject,body_html,body_text,attachments,status,created_at_utc,
@@ -32,13 +71,156 @@ begin
     p_reference,'CANDIDATE_MANAGER','CANDIDATE_WORKFLOW',p_context_id,
     coalesce(nullif(btrim(p_mail->>'email_type'),''),'CANDIDATE_APP_TRANSACTIONAL'),
     coalesce(nullif(p_mail->>'scheduled_for_utc','')::timestamptz,p_now_utc),p_now_utc,
-    p_deterministic_key,'{}'::jsonb
+    p_deterministic_key,v_scope
   ) on conflict (deterministic_outbox_key) do update
     set deterministic_outbox_key=excluded.deterministic_outbox_key
   returning id into v_id;
   return v_id;
 end;
 $function$;
+
+create or replace function private._candidate_manager_mail_retire_v1(
+  p_workflow_id uuid,
+  p_expected_workflow_generation integer,
+  p_approval_request_ids uuid[],
+  p_reason_code text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_reason text:=upper(btrim(coalesce(p_reason_code,'')));
+  v_mail public.mail_outbox%rowtype;
+  v_seen integer:=0;
+  v_retired integer:=0;
+  v_sent integer:=0;
+  v_failed integer:=0;
+  v_request_count integer:=0;
+  v_sent_request_ids uuid[]:=array[]::uuid[];
+  v_request_id uuid;
+begin
+  if p_workflow_id is null or coalesce(p_expected_workflow_generation,0)<1
+     or coalesce(cardinality(p_approval_request_ids),0)=0 or v_reason='' then
+    raise exception 'CANDIDATE_MANAGER_MAIL_RETIREMENT_CONTEXT_INVALID' using errcode='22023';
+  end if;
+
+  select count(*) into v_request_count
+  from (
+    select request_row.id
+    from public.candidate_approval_requests request_row
+    where request_row.id=any(p_approval_request_ids)
+      and request_row.workflow_id=p_workflow_id
+      and request_row.workflow_generation=p_expected_workflow_generation
+      and request_row.method='EMAIL'
+    order by request_row.id
+    for update
+  ) locked_requests;
+  if v_request_count<>cardinality(p_approval_request_ids) then
+    raise exception 'CANDIDATE_MANAGER_MAIL_RETIREMENT_REQUEST_MISMATCH'
+      using errcode='40001';
+  end if;
+
+  for v_mail in
+    select mail_row.*
+    from public.mail_outbox mail_row
+    where upper(coalesce(mail_row.payment_scope_json->>'candidate_mail_authority',''))
+            ='MANAGER_APPROVAL_V1'
+      and mail_row.payment_scope_json->>'candidate_manager_workflow_id'=p_workflow_id::text
+      and mail_row.payment_scope_json->>'candidate_manager_workflow_generation'
+            =p_expected_workflow_generation::text
+      and coalesce(mail_row.payment_scope_json->>'candidate_approval_request_id','')
+            =any(select request_id::text from unnest(p_approval_request_ids) request_id)
+      and upper(coalesce(mail_row.payment_scope_json->>'candidate_manager_mail_kind',''))
+            in ('INITIAL','REMINDER','RENEWAL')
+    order by mail_row.id
+    for update
+  loop
+    v_seen:=v_seen+1;
+    v_request_id:=(v_mail.payment_scope_json->>'candidate_approval_request_id')::uuid;
+    if v_mail.status<>'SENT'
+       and nullif(btrim(coalesce(v_mail.attempt_lease_token,'')),'') is not null
+       and (v_mail.attempt_lease_expires_at_utc is null
+         or v_mail.attempt_lease_expires_at_utc>p_now_utc) then
+      raise exception 'CANDIDATE_MANAGER_MAIL_DELIVERY_IN_PROGRESS'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_MANAGER_MAIL_DELIVERY_IN_PROGRESS',
+          'workflow_id',p_workflow_id,'workflow_generation',p_expected_workflow_generation,
+          'approval_request_id',v_request_id,'mail_outbox_id',v_mail.id
+        )::text;
+    end if;
+    if v_mail.status='SENT' and v_mail.sent_at is not null
+       and upper(coalesce(v_mail.provider_status,'')) in ('ACCEPTED','SENT','SUCCESS','OK') then
+      v_sent:=v_sent+1;
+      if not v_request_id=any(v_sent_request_ids) then
+        v_sent_request_ids:=array_append(v_sent_request_ids,v_request_id);
+      end if;
+    elsif v_mail.status='FAILED' then
+      v_failed:=v_failed+1;
+      update public.mail_outbox mail_row set
+        payment_scope_json=coalesce(mail_row.payment_scope_json,'{}'::jsonb)
+          ||jsonb_build_object(
+            'candidate_manager_mail_retired',true,
+            'candidate_manager_mail_retired_at_utc',p_now_utc,
+            'candidate_manager_mail_retired_reason',v_reason
+          )
+      where mail_row.id=v_mail.id;
+    else
+      update public.mail_outbox mail_row set
+        attachments='[]'::jsonb,
+        scheduled_for_utc='infinity'::timestamptz,
+        next_attempt_at_utc='infinity'::timestamptz,
+        attempt_lease_token=null,
+        attempt_leased_at_utc=null,
+        attempt_lease_expires_at_utc=null,
+        payment_scope_json=coalesce(mail_row.payment_scope_json,'{}'::jsonb)
+          ||jsonb_build_object(
+            'candidate_manager_mail_retired',true,
+            'candidate_manager_mail_retired_at_utc',p_now_utc,
+            'candidate_manager_mail_retired_reason',v_reason
+          )
+      where mail_row.id=v_mail.id and mail_row.status='QUEUED' and mail_row.sent_at is null;
+      if found then v_retired:=v_retired+1; end if;
+    end if;
+  end loop;
+
+  return jsonb_build_object(
+    'ok',true,'workflow_id',p_workflow_id,
+    'workflow_generation',p_expected_workflow_generation,
+    'reason_code',v_reason,'mail_seen_count',v_seen,
+    'mail_retired_count',v_retired,'sent_mail_count',v_sent,
+    'failed_mail_count',v_failed,
+    'withdrawal_required',cardinality(v_sent_request_ids)>0,
+    'withdrawal_request_ids',to_jsonb(v_sent_request_ids)
+  );
+end;
+$function$;
+
+create or replace function private._candidate_manager_request_mail_guard_v1()
+returns trigger
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+begin
+  if old.method='EMAIL' and old.state in ('PENDING','APPROVED')
+     and new.state is distinct from old.state then
+    perform private._candidate_manager_mail_retire_v1(
+      old.workflow_id,old.workflow_generation,array[old.id],
+      'APPROVAL_REQUEST_'||upper(new.state),coalesce(new.updated_at_utc,now())
+    );
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists candidate_manager_request_mail_guard_v1
+  on public.candidate_approval_requests;
+create trigger candidate_manager_request_mail_guard_v1
+before update of state on public.candidate_approval_requests
+for each row execute function private._candidate_manager_request_mail_guard_v1();
 
 create or replace function private._candidate_paper_delivery_retire_v1(
   p_workflow_id uuid,
@@ -1262,6 +1444,8 @@ declare
   v_paper_expected_storage_key text;
   v_provider_lease_token text;
   v_provider_permit_expires_at timestamptz;
+  v_manager_mail public.mail_outbox%rowtype;
+  v_manager_mail_kind text;
   v_unlocked_workflow_updated_at timestamptz;
   v_paper_family_key text;
   v_source_component public.candidate_submission_components%rowtype;
@@ -1312,7 +1496,8 @@ begin
   if v_action in (
     'SELECT_PHONE_APPROVAL','CREATE_EMAIL_APPROVAL_REQUEST','BEGIN_MANAGER_REVIEW',
     'RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
-    'REMIND','RENEW','CANCEL_MANAGER_HANDOFF','REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT'
+    'REMIND','RENEW','CANCEL_MANAGER_HANDOFF','REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
+    'MANAGER_PROVIDER_SUBMIT_PERMIT'
   ) or (p_session_id is null and v_action in ('COMPONENT_PREPARE','COMPONENT_COMPLETE')) then
     perform private._candidate_require_feature_v1(v_environment,'candidate_manager_approval');
   end if;
@@ -1338,6 +1523,9 @@ begin
   ) or (p_session_id is null
     and v_action='PAPER_PROVIDER_SUBMIT_PERMIT'
     and coalesce((v_payload->>'service_paper_provider_submit_permit')::boolean,false)
+  ) or (p_session_id is null
+    and v_action='MANAGER_PROVIDER_SUBMIT_PERMIT'
+    and coalesce((v_payload->>'service_manager_provider_submit_permit')::boolean,false)
   ) or (p_session_id is null
     and coalesce((v_payload->>'service_phone_approval')::boolean,false)
     and v_action in ('BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
@@ -2589,7 +2777,18 @@ begin
           else decode(v_manifest->>'manager_review_timesheet_sha256','hex') end,
         p_idempotency_key,p_now_utc,p_now_utc
       ) returning * into v_approval;
-      v_mail_id:=private._candidate_queue_mail_v1(v_payload->'mail',v_approval.manager_email_normalized,
+      v_mail_id:=private._candidate_queue_mail_v1(
+        coalesce(v_payload->'mail','{}'::jsonb)||jsonb_build_object(
+          'payment_scope_json',jsonb_build_object(
+            'candidate_mail_authority','MANAGER_APPROVAL_V1',
+            'candidate_manager_mail_kind','INITIAL',
+            'candidate_manager_workflow_id',v_workflow.id,
+            'candidate_manager_workflow_generation',v_workflow.generation,
+            'candidate_approval_request_id',v_approval.id,
+            'candidate_approval_request_generation',v_approval.request_generation,
+            'candidate_manager_mail_retired',false
+          )
+        ),v_approval.manager_email_normalized,
         'CANDIDATE_MANAGER_APPROVAL_V1:'||v_approval.id::text||':0',
         'candidate-manager-approval:'||v_approval.id::text,v_workflow.id,p_now_utc);
     else
@@ -2963,7 +3162,18 @@ begin
       resend_count=resend_count+1,last_sent_at_utc=p_now_utc,
       next_reminder_at_utc=p_now_utc+interval '24 hours',updated_at_utc=p_now_utc
     where id=v_approval.id returning * into v_approval;
-    v_mail_id:=private._candidate_queue_mail_v1(v_payload->'mail',v_approval.manager_email_normalized,
+    v_mail_id:=private._candidate_queue_mail_v1(
+      coalesce(v_payload->'mail','{}'::jsonb)||jsonb_build_object(
+        'payment_scope_json',jsonb_build_object(
+          'candidate_mail_authority','MANAGER_APPROVAL_V1',
+          'candidate_manager_mail_kind','REMINDER',
+          'candidate_manager_workflow_id',v_workflow.id,
+          'candidate_manager_workflow_generation',v_workflow.generation,
+          'candidate_approval_request_id',v_approval.id,
+          'candidate_approval_request_generation',v_approval.request_generation,
+          'candidate_manager_mail_retired',false
+        )
+      ),v_approval.manager_email_normalized,
       'CANDIDATE_MANAGER_REMINDER_V1:'||v_approval.id::text||':'||v_approval.resend_count::text,
       'candidate-manager-reminder:'||v_approval.id::text||':'||v_approval.resend_count::text,
       v_workflow.id,p_now_utc);
@@ -3006,7 +3216,18 @@ begin
       v_approval.manager_review_timesheet_component_id,v_approval.manager_review_timesheet_sha256,
       p_idempotency_key,p_now_utc,p_now_utc
     ) returning * into v_approval;
-    v_mail_id:=private._candidate_queue_mail_v1(v_payload->'mail',v_approval.manager_email_normalized,
+    v_mail_id:=private._candidate_queue_mail_v1(
+      coalesce(v_payload->'mail','{}'::jsonb)||jsonb_build_object(
+        'payment_scope_json',jsonb_build_object(
+          'candidate_mail_authority','MANAGER_APPROVAL_V1',
+          'candidate_manager_mail_kind','RENEWAL',
+          'candidate_manager_workflow_id',v_workflow.id,
+          'candidate_manager_workflow_generation',v_workflow.generation,
+          'candidate_approval_request_id',v_approval.id,
+          'candidate_approval_request_generation',v_approval.request_generation,
+          'candidate_manager_mail_retired',false
+        )
+      ),v_approval.manager_email_normalized,
       'CANDIDATE_MANAGER_RENEW_V1:'||v_approval.id::text,
       'candidate-manager-renew:'||v_approval.id::text,v_workflow.id,p_now_utc);
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
@@ -3041,6 +3262,94 @@ begin
       state='READY_FOR_MANAGER_APPROVAL',route='ELECTRONIC',
       last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
       updated_at_utc=p_now_utc where id=v_workflow.id returning * into v_workflow;
+
+  elsif v_action='MANAGER_PROVIDER_SUBMIT_PERMIT' then
+    if not v_is_service_action then
+      raise exception 'CANDIDATE_MANAGER_PROVIDER_SUBMIT_PERMIT_SERVICE_REQUIRED'
+        using errcode='42501';
+    end if;
+    v_provider_lease_token:=nullif(btrim(coalesce(v_payload->>'attempt_lease_token','')),'');
+    if v_provider_lease_token is null
+       or coalesce(v_payload->>'mail_outbox_id','')
+          !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      raise exception 'CANDIDATE_MANAGER_PROVIDER_PERMIT_INVALID' using errcode='22023';
+    end if;
+    select candidate_mail.* into v_manager_mail
+    from public.mail_outbox candidate_mail
+    where candidate_mail.id=(v_payload->>'mail_outbox_id')::uuid
+      and candidate_mail.type='TIMESHEET_GENERAL'
+      and candidate_mail.context_kind='CANDIDATE_WORKFLOW'
+      and candidate_mail.context_id=v_workflow.id
+      and candidate_mail.status='QUEUED'
+      and candidate_mail.sent_at is null
+      and candidate_mail.attempt_lease_token=v_provider_lease_token
+      and candidate_mail.attempt_lease_expires_at_utc>p_now_utc
+      and upper(coalesce(candidate_mail.payment_scope_json->>'candidate_mail_authority',''))
+            ='MANAGER_APPROVAL_V1'
+      and lower(coalesce(candidate_mail.payment_scope_json->>'candidate_manager_mail_retired','false'))
+            in ('false','f','0','no')
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_MANAGER_PROVIDER_MAIL_STALE' using errcode='40001';
+    end if;
+    v_manager_mail_kind:=upper(coalesce(
+      v_manager_mail.payment_scope_json->>'candidate_manager_mail_kind',''
+    ));
+    if v_manager_mail_kind not in ('INITIAL','REMINDER','RENEWAL','WITHDRAWAL')
+       or coalesce(v_manager_mail.payment_scope_json->>'candidate_approval_request_id','')
+          !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       or coalesce(v_manager_mail.payment_scope_json->>'candidate_approval_request_generation','')
+          !~ '^[1-9][0-9]{0,8}$'
+       or coalesce(v_manager_mail.payment_scope_json->>'candidate_manager_workflow_generation','')
+          !~ '^[1-9][0-9]{0,8}$' then
+      raise exception 'CANDIDATE_MANAGER_PROVIDER_MAIL_STALE' using errcode='40001';
+    end if;
+    select request_row.* into v_approval
+    from public.candidate_approval_requests request_row
+    where request_row.id=(v_manager_mail.payment_scope_json->>'candidate_approval_request_id')::uuid
+      and request_row.workflow_id=v_workflow.id
+      and request_row.workflow_generation=
+            (v_manager_mail.payment_scope_json->>'candidate_manager_workflow_generation')::integer
+      and request_row.request_generation=
+            (v_manager_mail.payment_scope_json->>'candidate_approval_request_generation')::integer
+      and request_row.method='EMAIL'
+      and request_row.manager_email_normalized=v_manager_mail."to"
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_MANAGER_PROVIDER_MAIL_STALE' using errcode='40001';
+    end if;
+    if v_manager_mail_kind='WITHDRAWAL' then
+      if v_approval.state not in ('CANCELLED','SUPERSEDED','EXPIRED','REFUSED') then
+        raise exception 'CANDIDATE_MANAGER_PROVIDER_MAIL_STALE' using errcode='40001';
+      end if;
+    elsif v_approval.state<>'PENDING' or v_approval.expires_at_utc<=p_now_utc
+       or v_workflow.route<>'EMAIL' or v_workflow.state<>'AWAITING_MANAGER_APPROVAL'
+       or v_workflow.generation<>v_approval.workflow_generation
+       or v_approval.review_manifest_sha256 is distinct from v_workflow.review_manifest_sha256 then
+      raise exception 'CANDIDATE_MANAGER_PROVIDER_MAIL_STALE' using errcode='40001';
+    end if;
+    v_provider_permit_expires_at:=greatest(
+      v_manager_mail.attempt_lease_expires_at_utc,p_now_utc+interval '15 minutes'
+    );
+    update public.mail_outbox candidate_mail
+    set attempt_lease_expires_at_utc=v_provider_permit_expires_at
+    where candidate_mail.id=v_manager_mail.id
+      and candidate_mail.status='QUEUED' and candidate_mail.sent_at is null
+      and candidate_mail.attempt_lease_token=v_provider_lease_token
+      and candidate_mail.attempt_lease_expires_at_utc>p_now_utc
+      and lower(coalesce(candidate_mail.payment_scope_json->>'candidate_manager_mail_retired','false'))
+            in ('false','f','0','no');
+    if not found then
+      raise exception 'CANDIDATE_MANAGER_PROVIDER_MAIL_STALE' using errcode='40001';
+    end if;
+    v_response:=jsonb_build_object(
+      'ok',true,'workflow_id',v_workflow.id,'generation',v_workflow.generation,
+      'approval_request_id',v_approval.id,'mail_outbox_id',v_manager_mail.id,
+      'approval_request_generation',v_approval.request_generation,
+      'approval_workflow_generation',v_approval.workflow_generation,
+      'manager_mail_kind',v_manager_mail_kind,'provider_submit_permit',true,
+      'provider_submit_permit_expires_at_utc',v_provider_permit_expires_at
+    );
 
   elsif v_action='PAPER_PROVIDER_SUBMIT_PERMIT' then
     if not v_is_service_action or p_session_id is not null then
@@ -3617,6 +3926,10 @@ end;
 $function$;
 
 revoke all on function private._candidate_queue_mail_v1(jsonb,text,text,text,uuid,timestamptz)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_manager_mail_retire_v1(uuid,integer,uuid[],text,timestamptz)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_manager_request_mail_guard_v1()
   from public,anon,authenticated,service_role;
 revoke all on function private._candidate_paper_delivery_retire_v1(uuid,integer,text,timestamptz)
   from public,anon,authenticated,service_role;

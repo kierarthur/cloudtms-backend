@@ -77,6 +77,29 @@ The previous source-set authority was correct for `AWAITING_PAPER_RETURN` and `F
 
 No new schema object, Candidate table, public RPC, public route or product decision was introduced. The correction does not change DAILY/WEEKLY economics, Process, Authorise, invoice, payment, Banking Pay or Policy X.
 
+## Manager EMAIL lifecycle and provider-submit closure
+
+Manager invitation, reminder, renewal and withdrawal delivery now uses the same exact lifecycle model as the accepted PAPER boundary:
+
+- every row is scoped as `MANAGER_APPROVAL_V1` and binds mail kind, workflow ID/generation, approval-request ID/generation and retired state;
+- queue creation validates the exact EMAIL request, recipient, generation and current/terminal state appropriate to the mail kind;
+- a central approval-request trigger invokes `_candidate_manager_mail_retire_v1` whenever an EMAIL request leaves its current state, so no installed or later cancellation/supersession/refusal/expiry/approval caller can bypass mail retirement;
+- retirement locks the exact request and mail set, blocks a live provider lease before lifecycle mutation, makes queued mail inert, preserves `FAILED` as failed-but-retired and preserves provider-accepted `SENT` history;
+- the normal mail worker calls `MANAGER_PROVIDER_SUBMIT_PERMIT` immediately before the provider request. That service-only action locks and proves the exact outbox lease, request/workflow generations, recipient, state, expiry and manifest before extending the lease as a submit permit;
+- route takeover sends a withdrawal only where retirement proves provider-accepted earlier mail for that exact request. A request timestamp is never used as delivery proof.
+
+## Current/History read-contract closure
+
+The Timesheets read boundary now implements the approved server-owned partition:
+
+- `GET /candidate-app/v1/timesheets` defaults to `view=current`; `view=history` is explicit and invalid values fail before RPC work;
+- Current excludes future weeks, includes all unpaid rows with no age limit and includes paid rows exactly seven days old or newer;
+- History includes only paid rows older than seven days inside each contract's effective current week plus 15 preceding contract weeks;
+- classification is frozen to `snapshot_utc`; view/candidate/snapshot identity is carried by a v2 cursor, so pagination cannot cross tabs or candidates;
+- order is week ending newest first with deterministic contract, additional-sequence and row tie-breakers;
+- every card returns `Week Ending …`, one server primary action and a stable detail target; detail aliases accept timesheet, contract-week or workflow identity and return the same membership/action truth;
+- no public RPC, table or financial owner was added. Future office/client UI must consume these fields and may not recalculate them.
+
 ## Complete PAPER caller and provider-submit closure
 
 The remaining independent findings were caused by adjacent installed callers that still accepted PAPER `RECEIVED` or finalised delivery history without composing the shared retirement/barrier owner. The complete caller matrix is retained in the published Candidate runtime lineage:

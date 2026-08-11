@@ -88,7 +88,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 88, 'the latest-only payload must contain the closed 88-definition function inventory');
+  assert.equal(names.length, 92, 'the latest-only payload must contain the closed 92-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -194,7 +194,7 @@ test('candidate reads do not multiply economics by workflow count and hide expen
   assert.match(page, /expense_overlay_conflict_code/i);
   assert.doesNotMatch(page, /from candidate_weeks base\s+left join public\.candidate_submission_workflows[\s\S]*sum\(/i);
   assert.match(page, /where not exists\(select 1 from expense_carriers carrier where carrier\.id=base\.id\)/i);
-  assert.match(page, /v1\|[\s\S]*unresolved_rank[\s\S]*week_ending_date[\s\S]*id/i);
+  assert.match(page, /v2\|[\s\S]*v_view[\s\S]*v_snapshot_utc[\s\S]*week_ending_date[\s\S]*contract_id[\s\S]*additional_seq[\s\S]*id/i);
   assert.doesNotMatch(page, /candidate_name|candidate_email|storage_key|pay_rate|charge_rate|margin_ex_vat/i);
 });
 
@@ -218,8 +218,8 @@ test('authority correction binds workflow identity, manager signatures, cursor r
   assert.match(sql.helpers, /'candidate_mutation_locked',v_candidate_mutation_locked/i);
   assert.match(workflow, /CANDIDATE_RECORD_MUTATION_LOCKED/i);
   assert.match(finalise, /CANDIDATE_RECORD_MUTATION_LOCKED/i);
-  assert.match(page, /cursor_version','v1'/i);
-  assert.match(page, /unresolved_rank[\s\S]*week_ending_date[\s\S]*id/i);
+  assert.match(page, /cursor_version','v2'/i);
+  assert.match(page, /week_ending_date desc[\s\S]*contract_id desc[\s\S]*additional_seq desc[\s\S]*id desc/i);
   assert.match(workflow, /_candidate_submission_issue_codes_v1/i);
   assert.doesNotMatch(workflow, /coalesce\(v_payload->'issue_codes'/i);
   assert.match(sql.helpers, /BARRED_DOMAIN_POLICY_NOT_CONFIGURED/);
@@ -514,7 +514,7 @@ test('read and placement policy uses all authoritative worked and dated boundari
   assert.match(placement, /tf\.additional_units_json/i);
   assert.match(placement, /t\.additional_units_week[\s\S]*t\.additional_units_per_day/i);
   assert.match(page, /additional_units_json[\s\S]*additional_units_week[\s\S]*additional_units_per_day/i);
-  assert.match(page, /effective_week_ending_weekday[\s\S]*-\s*49/i);
+  assert.match(page, /current_week_ending_date-105/i);
   assert.doesNotMatch(page, /current_date\s*-\s*55/i);
   assert.match(missing, /generate_series[\s\S]*cross join lateral[\s\S]*_candidate_policy_resolve_v1\(v_contract\.client_id,v_contract\.id,g::date\)/i);
   assert.match(missing, /_candidate_submission_mode_v1\(v_contract\.client_id,v_contract\.id,g::date\)/i);

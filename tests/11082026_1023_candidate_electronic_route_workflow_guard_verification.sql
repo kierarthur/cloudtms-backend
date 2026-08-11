@@ -188,10 +188,13 @@ begin
      or (p_expense_state='REFUSED' and
          (select refused_at_utc from public.candidate_approval_requests
           where id=v_request)<>v_now)
-     or (p_expense_state='AWAITING_MANAGER_APPROVAL' and not exists(
-       select 1 from public.mail_outbox
-       where deterministic_outbox_key=
-         'CANDIDATE_MANAGER_APPROVAL_WITHDRAWN_V1:'||v_request::text
+      -- This fixture has no provider-accepted invitation receipt. Cancelling the
+      -- request must therefore not invent a withdrawal email. The positive
+      -- accepted-mail withdrawal case is covered by the route-confirmation suite.
+      or (p_expense_state='AWAITING_MANAGER_APPROVAL' and exists(
+        select 1 from public.mail_outbox
+        where deterministic_outbox_key=
+          'CANDIDATE_MANAGER_APPROVAL_WITHDRAWN_V1:'||v_request::text
      )) then
     raise exception 'Confirmed incomplete-claim removal was incomplete: %',v_result;
   end if;

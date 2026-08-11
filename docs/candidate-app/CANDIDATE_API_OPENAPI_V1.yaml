@@ -189,11 +189,23 @@ paths:
       tags: [Candidate]
       operationId: listCandidateTimesheets
       summary: List candidate timesheets
+      description: >-
+        Current is the default and contains every non-future unpaid record plus records
+        paid at or after the frozen snapshot's seven-day cutoff. History contains only
+        records paid before that cutoff whose week ending falls within the contract's
+        effective current week plus the preceding 15 weeks. The two views never overlap.
+        Both use newest week ending first and a v2 cursor bound to view, candidate and
+        frozen snapshot.
       x-cloudtms-private-path: /private/candidate-app/v1/timesheets
       parameters:
+        - {$ref: '#/components/parameters/TimesheetView'}
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
-      responses: *standardResponses
+      responses:
+        '200': {description: Candidate timesheet page, content: {application/json: {schema: {$ref: '#/components/schemas/TimesheetPage'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
   /candidate-app/v1/timesheets/{timesheetId}:
     get:
       tags: [Candidate]
@@ -201,6 +213,22 @@ paths:
       summary: Get candidate timesheet
       x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}
       parameters: [{$ref: '#/components/parameters/TimesheetId'}]
+      responses: *standardResponses
+  /candidate-app/v1/contract-weeks/{contractWeekId}/detail:
+    get:
+      tags: [Candidate]
+      operationId: getCandidateContractWeekDetail
+      summary: Get an unmaterialised or materialised contract-week detail
+      x-cloudtms-private-path: /private/candidate-app/v1/contract-weeks/{contractWeekId}/detail
+      parameters: [{$ref: '#/components/parameters/ContractWeekId'}]
+      responses: *standardResponses
+  /candidate-app/v1/workflows/{workflowId}/timesheet-detail:
+    get:
+      tags: [Candidate]
+      operationId: getCandidateWorkflowTimesheetDetail
+      summary: Get timesheet detail through immutable workflow identity
+      x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/timesheet-detail
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
       responses: *standardResponses
   /candidate-app/v1/timesheets/{timesheetId}/paper-pack/status:
     get:
@@ -427,6 +455,61 @@ components:
         refresh_token: {type: string, description: Broker-sealed refresh envelope; never a CloudTMS private token.}
         session_id: {type: string, description: Public broker session identity.}
         access_expires_in_seconds: {type: integer}
+    TimesheetPrimaryAction:
+      type: object
+      required: [code, label, requires_confirmation]
+      properties:
+        code: {type: string}
+        label: {type: string}
+        requires_confirmation: {type: boolean}
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        timesheet_id: {$ref: '#/components/schemas/Uuid'}
+        contract_week_id: {$ref: '#/components/schemas/Uuid'}
+    TimesheetDetailTarget:
+      type: object
+      required: [identity_kind, id, path]
+      additionalProperties: false
+      properties:
+        identity_kind: {type: string, enum: [TIMESHEET, CONTRACT_WEEK, WORKFLOW]}
+        id: {$ref: '#/components/schemas/Uuid'}
+        path: {type: string}
+    TimesheetCard:
+      type: object
+      required: [contract_week_id, contract_id, week_ending_date, week_ending_label, tab_bucket, candidate_status_code, detail_target]
+      properties:
+        contract_week_id: {$ref: '#/components/schemas/Uuid'}
+        contract_id: {$ref: '#/components/schemas/Uuid'}
+        timesheet_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        client_name: {type: string}
+        job_title: {type: [string, 'null']}
+        band: {type: [string, 'null']}
+        week_ending_date: {type: string, format: date}
+        week_ending_label: {type: string, example: Week Ending 1 January 2025}
+        additional_seq: {type: integer}
+        tab_bucket: {type: string, enum: [CURRENT, HISTORY]}
+        effective_current_week_ending_date: {type: string, format: date}
+        paid_at_utc: {type: [string, 'null'], format: date-time}
+        candidate_status_code: {type: string}
+        payment_state: {type: string}
+        invoice_state: {type: string}
+        route_family: {type: [string, 'null']}
+        record_role: {type: [string, 'null']}
+        primary_action: {oneOf: [{$ref: '#/components/schemas/TimesheetPrimaryAction'}, {type: 'null'}]}
+        detail_target: {$ref: '#/components/schemas/TimesheetDetailTarget'}
+    TimesheetPage:
+      type: object
+      required: [ok, view, default_view, snapshot_utc, paid_current_cutoff_utc, cursor_version, items, readiness_conflicts, limit]
+      properties:
+        ok: {const: true}
+        view: {type: string, enum: [CURRENT, HISTORY]}
+        default_view: {const: CURRENT}
+        snapshot_utc: {type: string, format: date-time}
+        paid_current_cutoff_utc: {type: string, format: date-time}
+        cursor_version: {const: v2}
+        items: {type: array, items: {$ref: '#/components/schemas/TimesheetCard'}}
+        next_cursor: {type: [string, 'null']}
+        readiness_conflicts: {type: array, items: {type: object}}
+        limit: {type: integer, minimum: 1, maximum: 100}
         absolute_expires_at_utc: {type: string, format: date-time}
     SelectedCandidateSession:
       type: object
@@ -438,11 +521,13 @@ components:
         selected_candidate_id: {$ref: '#/components/schemas/Uuid'}
         access_expires_in_seconds: {type: integer}
   parameters:
+    TimesheetView: {name: view, in: query, required: false, schema: {type: string, enum: [current, history], default: current}}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
     FromDate: {name: from, in: query, required: true, schema: {type: string, format: date}}
     ToDate: {name: to, in: query, required: true, schema: {type: string, format: date}}
     TimesheetId: {name: timesheetId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    ContractWeekId: {name: contractWeekId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
     ContractId: {name: contractId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
     WorkflowId: {name: workflowId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
     ComponentId: {name: componentId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}

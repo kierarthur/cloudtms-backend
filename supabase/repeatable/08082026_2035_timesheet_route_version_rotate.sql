@@ -1913,6 +1913,8 @@ declare
   v_workflow public.candidate_submission_workflows%rowtype;
   v_request public.candidate_approval_requests%rowtype;
   v_paper_retirement_result jsonb:='{}'::jsonb;
+  v_manager_retirement_result jsonb:='{}'::jsonb;
+  v_withdrawal_required boolean:=false;
   v_cancelled integer:=0;
   v_superseded integer:=0;
   v_mail_ids jsonb:='[]'::jsonb;
@@ -1986,6 +1988,16 @@ begin
     where workflow_id=v_workflow.id and state in ('PENDING','APPROVED')
     order by created_at_utc,id for update
   loop
+    v_withdrawal_required:=false;
+    if v_request.method='EMAIL' then
+      v_manager_retirement_result:=private._candidate_manager_mail_retire_v1(
+        v_workflow.id,v_request.workflow_generation,array[v_request.id],
+        'ROUTE_INTERVENTION_'||upper(btrim(coalesce(p_action,'UNKNOWN'))),p_now_utc
+      );
+      v_withdrawal_required:=coalesce(
+        (v_manager_retirement_result->>'withdrawal_required')::boolean,false
+      );
+    end if;
     if v_request.state='PENDING' then
       if v_request.expires_at_utc is not null and v_request.expires_at_utc<=p_now_utc then
         update public.candidate_approval_requests set
@@ -1993,14 +2005,25 @@ begin
         where id=v_request.id;
         continue;
       end if;
-      if v_request.method='EMAIL'
-         and v_request.initial_sent_at_utc is not null
+      update public.candidate_approval_requests set
+        state='CANCELLED',cancelled_at_utc=p_now_utc,updated_at_utc=p_now_utc
+      where id=v_request.id;
+      if v_request.method='EMAIL' and v_withdrawal_required
          and v_request.manager_email_normalized is not null then
         v_mail_id:=private._candidate_queue_mail_v1(
           jsonb_build_object(
             'subject','Timesheet approval request withdrawn',
             'body_text','The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.',
-            'email_type','CANDIDATE_MANAGER_APPROVAL_WITHDRAWN'
+            'email_type','CANDIDATE_MANAGER_APPROVAL_WITHDRAWN',
+            'payment_scope_json',jsonb_build_object(
+              'candidate_mail_authority','MANAGER_APPROVAL_V1',
+              'candidate_manager_mail_kind','WITHDRAWAL',
+              'candidate_manager_workflow_id',v_workflow.id,
+              'candidate_manager_workflow_generation',v_request.workflow_generation,
+              'candidate_approval_request_id',v_request.id,
+              'candidate_approval_request_generation',v_request.request_generation,
+              'candidate_manager_mail_retired',false
+            )
           ),
           v_request.manager_email_normalized,
           'CANDIDATE_MANAGER_APPROVAL_WITHDRAWN_V1:'||v_request.id::text,
@@ -2009,14 +2032,35 @@ begin
         );
         v_mail_ids:=v_mail_ids||jsonb_build_array(v_mail_id);
       end if;
-      update public.candidate_approval_requests set
-        state='CANCELLED',cancelled_at_utc=p_now_utc,updated_at_utc=p_now_utc
-      where id=v_request.id;
       v_cancelled:=v_cancelled+1;
     else
       update public.candidate_approval_requests set
         state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
       where id=v_request.id;
+      if v_request.method='EMAIL' and v_withdrawal_required
+         and v_request.manager_email_normalized is not null then
+        v_mail_id:=private._candidate_queue_mail_v1(
+          jsonb_build_object(
+            'subject','Timesheet approval request withdrawn',
+            'body_text','The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.',
+            'email_type','CANDIDATE_MANAGER_APPROVAL_WITHDRAWN',
+            'payment_scope_json',jsonb_build_object(
+              'candidate_mail_authority','MANAGER_APPROVAL_V1',
+              'candidate_manager_mail_kind','WITHDRAWAL',
+              'candidate_manager_workflow_id',v_workflow.id,
+              'candidate_manager_workflow_generation',v_request.workflow_generation,
+              'candidate_approval_request_id',v_request.id,
+              'candidate_approval_request_generation',v_request.request_generation,
+              'candidate_manager_mail_retired',false
+            )
+          ),
+          v_request.manager_email_normalized,
+          'CANDIDATE_MANAGER_APPROVAL_WITHDRAWN_V1:'||v_request.id::text,
+          'candidate-manager-approval-withdrawn:'||v_request.id::text,
+          v_workflow.id,p_now_utc
+        );
+        v_mail_ids:=v_mail_ids||jsonb_build_array(v_mail_id);
+      end if;
       v_superseded:=v_superseded+1;
     end if;
   end loop;

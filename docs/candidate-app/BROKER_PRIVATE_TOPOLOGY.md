@@ -138,6 +138,10 @@ Candidate PAPER email uses the existing CloudTMS mail delivery authority. The da
 
 This permit and the transactional retirement rules are one database coordination boundary. An active permit/lease blocks every supported authority-changing PAPER transition before mutation.
 
+## Candidate manager-email provider boundary
+
+Manager EMAIL outbox rows use exact `MANAGER_APPROVAL_V1` scope rather than an unbound recipient/deterministic key. The claimant and `candidate-manager-provider-authority.js` require the exact request/workflow IDs and generations, mail kind, recipient, current state, non-retired marker and live outbox lease. Immediately before provider submission the adapter calls service-only `MANAGER_PROVIDER_SUBMIT_PERMIT`; cancellation, supersession, expiry, refusal and approval retire the same exact mail set under that lease barrier. Queued mail becomes inert, failed mail remains failed-but-retired, accepted sent history is immutable, and a withdrawal is created only from proved accepted provider history.
+
 Route intervention derives the live PAPER owner from the immutable current-token delivery receipt, not from a historical timesheet workflow pointer. It separately finds every nonterminal PAPER workflow affected by rotating the source, including a draft/submitted workflow that has no mail receipt yet. A distinct or ambiguous affected workflow returns a controlled conflict before any delivery, notification, token, workflow or route change. Source-wide retirement preserves only terminal history, and claim-level cancellation cannot invalidate another claim's live pack.
 
 ## Current TEST deployment

@@ -32,6 +32,8 @@ begin
           or mo.payment_scope_json ? 'candidate_complete_pack_storage_key'
           or upper(coalesce(mo.payment_scope_json->>'mail_hold_reason',''))
             ='CANDIDATE_PAPER_PACK_PENDING'
+          or upper(coalesce(mo.payment_scope_json->>'candidate_mail_authority',''))
+            ='MANAGER_APPROVAL_V1'
         )
         or (
           coalesce(mo.payment_scope_json->>'candidate_workflow_id','') ~*
@@ -88,6 +90,54 @@ begin
               and encode(workflow.paper_return_manifest_sha256,'hex')
                 =lower(mo.payment_scope_json->>'paper_return_manifest_sha256')
               and coalesce(workflow.target_timesheet_id,workflow.anchor_timesheet_id)=mo.context_id
+          )
+        )
+        or (
+          upper(coalesce(mo.payment_scope_json->>'candidate_mail_authority',''))
+            ='MANAGER_APPROVAL_V1'
+          and upper(coalesce(mo.payment_scope_json->>'candidate_manager_mail_kind',''))
+            in ('INITIAL','REMINDER','RENEWAL','WITHDRAWAL')
+          and lower(coalesce(mo.payment_scope_json->>'candidate_manager_mail_retired','false'))
+            in ('false','f','0','no')
+          and coalesce(mo.payment_scope_json->>'candidate_manager_workflow_id','') ~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          and coalesce(mo.payment_scope_json->>'candidate_manager_workflow_generation','')
+            ~ '^[1-9][0-9]{0,8}$'
+          and coalesce(mo.payment_scope_json->>'candidate_approval_request_id','') ~*
+            '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          and coalesce(mo.payment_scope_json->>'candidate_approval_request_generation','')
+            ~ '^[1-9][0-9]{0,8}$'
+          and mo.context_kind='CANDIDATE_WORKFLOW'
+          and mo.context_id=(mo.payment_scope_json->>'candidate_manager_workflow_id')::uuid
+          and exists (
+            select 1
+            from public.candidate_approval_requests request_row
+            join public.candidate_submission_workflows workflow
+              on workflow.id=request_row.workflow_id
+            where request_row.id=(mo.payment_scope_json->>'candidate_approval_request_id')::uuid
+              and request_row.workflow_id=mo.context_id
+              and request_row.workflow_generation=
+                    (mo.payment_scope_json->>'candidate_manager_workflow_generation')::integer
+              and request_row.request_generation=
+                    (mo.payment_scope_json->>'candidate_approval_request_generation')::integer
+              and request_row.method='EMAIL'
+              and request_row.manager_email_normalized=mo."to"
+              and (
+                (
+                  upper(mo.payment_scope_json->>'candidate_manager_mail_kind')
+                    in ('INITIAL','REMINDER','RENEWAL')
+                  and request_row.state='PENDING'
+                  and request_row.expires_at_utc>v_now
+                  and workflow.generation=request_row.workflow_generation
+                  and workflow.route='EMAIL'
+                  and workflow.state='AWAITING_MANAGER_APPROVAL'
+                  and workflow.review_manifest_sha256=request_row.review_manifest_sha256
+                )
+                or (
+                  upper(mo.payment_scope_json->>'candidate_manager_mail_kind')='WITHDRAWAL'
+                  and request_row.state in ('CANCELLED','SUPERSEDED','EXPIRED','REFUSED')
+                )
+              )
           )
         )
       )

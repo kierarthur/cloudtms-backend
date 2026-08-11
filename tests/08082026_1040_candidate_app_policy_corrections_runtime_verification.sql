@@ -616,12 +616,12 @@ begin
     );
   end loop;
 
-  v_response:=public.candidate_app_timesheet_page_v1(v_session,'TEST',null,50,now());
+  v_response:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,now());
   if not exists(
       select 1 from jsonb_array_elements(v_response->'items') item
       where (item->>'week_ending_date')::date=v_current_week-49
     )
-     or exists(
+     or not exists(
       select 1 from jsonb_array_elements(v_response->'items') item
       where (item->>'week_ending_date')::date=v_current_week-56
     )
@@ -630,7 +630,7 @@ begin
       where (item->>'week_ending_date')::date=v_current_week-100
         and coalesce((item->>'paid')::boolean,false)=false
     ) then
-    raise exception 'paid eight-week or unresolved-history boundary was incorrect: %',v_response;
+    raise exception 'Current recent-paid or age-unbounded unpaid membership was incorrect: %',v_response;
   end if;
 
   v_response:=public.candidate_missing_week_options_v1(
