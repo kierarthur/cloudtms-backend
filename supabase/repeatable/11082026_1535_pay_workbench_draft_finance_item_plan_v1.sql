@@ -71,23 +71,11 @@ BEGIN
       AND allocation_row.finance_case_id IS NOT NULL
   ), keyed_rows AS (
     SELECT scoped_row.*,
-           'DRAFT_FINANCE_ITEM_V1:' || private.pay_payment_correction_sha256_v1(
-             pg_catalog.jsonb_build_object(
-               'contract_version', 1,
-               'operation_id', scoped_row.operation_id::text,
-               'candidate_scope_id', scoped_row.candidate_scope_id::text,
-               'candidate_id', scoped_row.candidate_id::text,
-               'pay_channel', pg_catalog.upper(pg_catalog.btrim(COALESCE(scoped_row.pay_channel, ''))),
-               'planned_item_type', scoped_row.effective_item_type,
-               'finance_case_id', scoped_row.finance_case_id::text,
-               'finance_component_id', CASE WHEN scoped_row.finance_component_id IS NULL THEN NULL ELSE scoped_row.finance_component_id::text END,
-               'direction', CASE WHEN pg_catalog.round(COALESCE(scoped_row.allocated_amount, 0), 2) < 0 THEN 'DEDUCTION' ELSE 'PAYMENT' END,
-               'allocation_source_key', scoped_row.operation_source_key
-             )
-           ) AS effective_planned_item_key
+           scoped_row.operation_source_key AS effective_planned_item_key
     FROM scoped_rows AS scoped_row
     WHERE scoped_row.effective_item_type = 'OVERPAYMENT_RECOVERY'
       AND pg_catalog.round(COALESCE(scoped_row.allocated_amount, 0), 2) <> 0
+      AND NULLIF(pg_catalog.btrim(COALESCE(scoped_row.operation_source_key, '')), '') IS NOT NULL
   )
   SELECT
     keyed_row.operation_id,

@@ -25,7 +25,8 @@ const financeSql = read(
 test('the operation finance-item plan is deterministic, bounded and owner-only', () => {
   assert.match(planSql, /^CREATE OR REPLACE FUNCTION private\.pay_workbench_draft_finance_item_plan_v1\(/);
   assert.match(planSql, /v_scope_count = 0 OR v_scope_count > 100/);
-  assert.match(planSql, /'DRAFT_FINANCE_ITEM_V1:' \|\| private\.pay_payment_correction_sha256_v1/);
+  assert.match(planSql, /scoped_row\.operation_source_key AS effective_planned_item_key/);
+  assert.match(planSql, /NULLIF\(pg_catalog\.btrim\(COALESCE\(scoped_row\.operation_source_key, ''\)\), ''\) IS NOT NULL/);
   assert.match(planSql, /scoped_row\.effective_item_type = 'OVERPAYMENT_RECOVERY'/);
   assert.match(planSql, /allocation_basis_json, '\{\}'::jsonb\) - 'draft_finance_item_plan'/);
   assert.doesNotMatch(planSql, /pg_catalog\.coalesce\s*\(/i);
@@ -34,11 +35,10 @@ test('the operation finance-item plan is deterministic, bounded and owner-only',
 });
 
 test('the frozen finance-item identity excludes the batch shell assigned after seeding', () => {
-  const keyStart = planSql.indexOf("'DRAFT_FINANCE_ITEM_V1:'");
+  const keyStart = planSql.indexOf('scoped_row.operation_source_key AS effective_planned_item_key');
   const keyEnd = planSql.indexOf('AS effective_planned_item_key', keyStart);
-  assert.ok(keyStart >= 0 && keyEnd > keyStart, 'planned-item identity block must exist');
-  const keySql = planSql.slice(keyStart, keyEnd);
-  assert.doesNotMatch(keySql, /'pay_batch_id'/);
+  assert.ok(keyStart >= 0 && keyEnd >= keyStart, 'planned-item identity block must exist');
+  assert.doesNotMatch(planSql.slice(keyStart, keyStart + 100), /pay_batch_id/);
   assert.match(planSql, /keyed_row\.pay_batch_id,/);
 });
 
@@ -62,6 +62,7 @@ test('planned Draft finance rows require exact signed two-way identity parity', 
     /batch_item\.operation_source_key = allocation_row\.allocation_basis_json#>>'\{draft_finance_item_plan,planned_item_key\}'[\s\S]*ROUND\(COALESCE\(batch_item\.amount_ex_vat, 0\), 2\) = ROUND\(COALESCE\(allocation_row\.allocated_amount, 0\), 2\)/
   );
   assert.match(financeSql, /missing_key_count[\s\S]*unexpected_key_count[\s\S]*duplicate_key_count[\s\S]*identity_or_amount_mismatch_count/);
+  assert.match(financeSql, /batch_item\.operation_source_key LIKE \(p_operation_id::text \|\| ':%'\)/);
   assert.match(financeSql, /'code', 'DRAFT_FINANCE_ITEM_PLAN_PARITY_FAILED'/);
   assert.match(financeSql, /'code', 'OPERATION_ALLOCATION_ROWS_NOT_LINKED'/);
 });

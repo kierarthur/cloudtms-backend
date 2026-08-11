@@ -4477,7 +4477,9 @@ v_stage := 'STAGE_16C1_FREEZE_ALL_FINANCE_ITEM_PAYOUT_INSTRUCTIONS';
         ON batch_candidate.id = batch_item.pay_batch_candidate_id
       WHERE batch_candidate.pay_batch_id = v_batch_id
         AND batch_candidate.candidate_id = ANY(v_candidate_ids)
-        AND batch_item.operation_source_key LIKE 'DRAFT_FINANCE_ITEM_V1:%'
+        AND batch_item.item_type = 'OVERPAYMENT_RECOVERY'
+        AND batch_item.finance_case_id IS NOT NULL
+        AND batch_item.operation_source_key LIKE (p_operation_id::text || ':%')
         AND COALESCE(batch_item.is_voided, false) = false
     ), mismatch AS (
       SELECT

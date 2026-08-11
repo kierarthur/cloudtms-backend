@@ -321,7 +321,7 @@
     {
       "schema": "public", "name": "pay_batch_apply_finance_adjustments",
       "identity_arguments": "p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_vat_rate_pct numeric, p_week_start date, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "b31193295ed0e9dfcd430156a7cccccce7cdf886b52755a4281baa358aed7001",
+      "definition_sha256": "9e30eb496c9c5bb5b50ab4da12cd3ccc936b170ded5c9789b401702b14054ec9",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -399,7 +399,7 @@
     {
       "schema": "private", "name": "pay_workbench_draft_finance_item_plan_v1",
       "identity_arguments": "p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "15165021c492a16e919f616d437db4dc1437744888a24ac70fc872fa1415cd2c",
+      "definition_sha256": "0ae7633ebaf9b85b9daf6ac0dfa543774ec49e059aa1b5f49d668b0f69899bfe",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/11082026_1535_pay_workbench_draft_finance_item_plan_v1.sql"]
