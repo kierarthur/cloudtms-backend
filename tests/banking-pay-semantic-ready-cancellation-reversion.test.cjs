@@ -620,6 +620,10 @@ test('completed cancellation emits one durable request-level success alert in ne
   assert.match(processChunk, /'CANCELLATION:' \|\| p_correction_request_id::text/);
   assert.match(processChunk, /ON CONFLICT \(pay_batch_id, alert_kind, event_key\) DO NOTHING/);
   assert.match(processChunk, /FROZEN_CORRECTION_REQUEST_MEMBERSHIP/);
+  assert.match(expand, /BANKING_ALERT_CANCELLATION_SUCCESS_V1/);
+  assert.match(expand, /'CANCELLATION:' \|\| p_correction_request_id::text/);
+  assert.match(expand, /ON CONFLICT \(pay_batch_id, alert_kind, event_key\) DO NOTHING/);
+  assert.match(expand, /FROZEN_CORRECTION_REQUEST_MEMBERSHIP/);
   assert.match(legacyFunctions, /'BATCH_CANCELLATION_SUCCESS'/);
   assert.match(
     legacyFunctions,
