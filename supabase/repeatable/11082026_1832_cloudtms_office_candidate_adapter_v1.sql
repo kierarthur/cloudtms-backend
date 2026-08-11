@@ -392,6 +392,8 @@ declare
   v_paper_enabled boolean:=true;
   v_route_enabled boolean:=true;
   v_expense_email_missing boolean:=false;
+  v_active_workflow_state text;
+  v_actionable_rejection boolean:=false;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   if p_actor_user_id is null or (p_timesheet_id is null and p_contract_week_id is null) then
@@ -486,9 +488,14 @@ begin
       else v_workflow.generation
     end;
     select m.* into v_paper_outbox from public.mail_outbox m
-    where upper(coalesce(m.payment_scope_json->>'candidate_mail_authority',''))='CANDIDATE_PAPER_V1'
+    where m.type='TIMESHEET_QR'
+      and m.context_kind='timesheets'
+      and m.context_id=coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+      and upper(coalesce(m.payment_scope_json->>'candidate_mail_authority',''))='CANDIDATE_PAPER_V1'
       and m.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
       and m.payment_scope_json->>'candidate_workflow_generation'=v_paper_delivery_generation::text
+      and lower(coalesce(m.payment_scope_json->>'paper_return_manifest_sha256',''))
+        =encode(v_workflow.paper_return_manifest_sha256,'hex')
     order by m.created_at_utc desc,m.id desc limit 1;
     v_paper_state:=case
       when v_workflow.state='RECEIVED' then 'RETURN_RECEIVED'
@@ -497,6 +504,8 @@ begin
         in ('true','t','1','yes') then 'RETIRED'
       when lower(coalesce(v_paper_outbox.payment_scope_json->>'candidate_paper_pack_retryable','false'))
         in ('true','t','1','yes') then 'FAILED_RETRYABLE'
+      when upper(coalesce(v_paper_outbox.payment_scope_json->>'candidate_paper_pack_failure_class',''))='TERMINAL'
+        then 'FAILED_TERMINAL'
       when v_paper_outbox.status::text='FAILED'
         or upper(coalesce(v_current.document_state,''))='FAILED' then 'FAILED_TERMINAL'
       when coalesce((v_paper_outbox.payment_scope_json->>'candidate_paper_pack_ready')::boolean,false) then 'READY'
@@ -509,7 +518,12 @@ begin
       when w.workflow_kind='CONTRACT_COMBINED' then 'COMBINED' else 'HOURS' end,
     'workflow_id',w.id,'workflow_generation',w.generation,'state',w.state,
     'reason',w.rejection_reason,
-    'recovery_action',case when w.state='REJECTED' then private._candidate_office_action_v1(
+    'rejection_actionable',case when w.state='REJECTED'
+      then not private._candidate_rejection_replaced_v1(w.id) else false end,
+    'replacement_workflow_id',replacement.id,
+    'replacement_state',replacement.state,
+    'recovery_action',case when w.state='REJECTED'
+      and not private._candidate_rejection_replaced_v1(w.id) then private._candidate_office_action_v1(
       'RESUBMIT_REJECTED','Resubmit rejected submission','REJECTION',v_writes,null,null,true,false,
       'CLIENT','CANDIDATE_APP:WORKFLOW_RESUBMISSION',
       jsonb_build_object('generation',w.generation),'[]'::jsonb,'REQUIRED',true
@@ -517,9 +531,21 @@ begin
   ) order by w.updated_at_utc desc,w.id desc),'[]'::jsonb)
   into v_rejections
   from public.candidate_submission_workflows w
+  left join lateral (
+    select later.id,later.state
+    from public.candidate_submission_workflows later
+    where later.replacement_of_workflow_id=w.id
+    order by later.created_at_utc, later.id
+    limit 1
+  ) replacement on true
   where w.environment=v_environment and w.state in ('REFUSED','REJECTED')
     and (w.contract_week_id=v_week.id or w.target_timesheet_id=v_current.timesheet_id
       or w.anchor_timesheet_id=v_current.timesheet_id);
+  select exists(
+    select 1 from jsonb_array_elements(v_rejections) rejection
+    where rejection->>'state'='REJECTED'
+      and coalesce((rejection->>'rejection_actionable')::boolean,false)
+  ) into v_actionable_rejection;
 
   if v_workflow.id is not null and v_approval.id is not null and v_approval.method='EMAIL' then
     v_action:=private._candidate_office_action_v1(
@@ -671,12 +697,19 @@ begin
     ));
   end if;
 
+  v_active_workflow_state:=case when v_workflow.state in (
+    'CREATED','WORKER_DRAFT','WORKER_SUBMITTED',
+    'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+    'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
+    'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
+    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
+  ) then v_workflow.state else null end;
   v_candidate_status_code:=private._candidate_status_code_v1(
     v_fin.paid_at_utc is not null,
     v_fin.authorised_at_utc is not null or v_current.authorised_at_server is not null,
     v_fin.locked_by_invoice_id is not null
       or upper(coalesce(v_current.status::text,''))='INVOICED',
-    v_workflow.state,false,v_fin.processing_status::text,v_week.status::text
+    v_active_workflow_state,v_actionable_rejection,v_fin.processing_status::text,v_week.status::text
   );
   v_candidate_status_label:=initcap(replace(lower(v_candidate_status_code),'_',' '));
   v_candidate_status_tone:=case
@@ -721,7 +754,9 @@ begin
     'workflow',case when v_workflow.id is null then null else jsonb_build_object(
       'workflow_id',v_workflow.id,'generation',v_workflow.generation,
       'state',v_workflow.state,'workflow_kind',v_workflow.workflow_kind,
-      'route',v_workflow.route,'approval_method',v_approval.method
+      'route',v_workflow.route,'approval_method',v_approval.method,
+      'is_current_action_workflow',v_active_workflow_state is not null,
+      'historical',v_active_workflow_state is null
     ) end,
     'manager_approval',case when v_approval.id is null then null else jsonb_build_object(
       'method',v_approval.method,'request_id',v_approval.id,
@@ -742,8 +777,10 @@ begin
       'delivery_generation',v_paper_delivery_generation,
       'page_count',case when coalesce(v_paper_outbox.payment_scope_json,'{}'::jsonb)->>'candidate_complete_pack_page_count'~'^[1-9][0-9]*$'
         then (v_paper_outbox.payment_scope_json->>'candidate_complete_pack_page_count')::integer else null end,
-      'reason_code',case when v_paper_state in ('FAILED_RETRYABLE','FAILED_TERMINAL','STALE')
-        then 'CANDIDATE_PAPER_PACK_'||v_paper_state else null end,
+      'reason_code',case when v_paper_state in ('FAILED_RETRYABLE','FAILED_TERMINAL')
+        then coalesce(v_paper_outbox.payment_scope_json->>'candidate_paper_pack_failure_code',
+          'CANDIDATE_PAPER_PACK_'||v_paper_state)
+        when v_paper_state='STALE' then 'CANDIDATE_PAPER_PACK_STALE' else null end,
       'retryable',v_paper_state='FAILED_RETRYABLE',
       'issued_at_utc',v_paper_outbox.sent_at,
       'returned_at_utc',case when v_workflow.state='RECEIVED' then v_workflow.updated_at_utc else null end
@@ -795,6 +832,7 @@ declare
   v_existing_before jsonb;
   v_existing_after jsonb;
   v_workflow_action text;
+  v_office_permission text;
   v_workflow_id uuid;
   v_generation integer;
   v_approval_id uuid;
@@ -908,11 +946,15 @@ begin
        or v_preview->>'expected_timesheet_id' is distinct from coalesce(v_payload->>'expected_timesheet_id',v_payload->>'timesheet_id') then
       raise exception 'CANDIDATE_CONTEXT_STALE' using errcode='40001',detail=v_preview::text;
     end if;
+    perform private._candidate_office_service_context_open_v1(
+      v_environment,p_actor_user_id,'reject_submission','REJECT_CONFIRM',v_observed
+    );
     v_result:=public.candidate_submission_reject_atomic_v1(
       p_actor_user_id,v_environment,v_timesheet.timesheet_id,
       (v_preview->>'expected_timesheet_id')::uuid,v_preview->>'expected_row_signature',
       btrim(v_payload->>'reason'),v_idempotency_key,v_observed
     );
+    perform private._candidate_office_service_context_close_v1();
     v_result:=v_result||jsonb_build_object(
       'contract_version','OFFICE_CANDIDATE_MUTATION_RESULT_V1',
       'context_sha256',v_preview->>'context_sha256',
@@ -926,10 +968,53 @@ begin
       'CANDIDATE_OFFICE_REJECTION_CONFIRMED',jsonb_build_object('request_sha256',v_request_hash),
       v_result,btrim(v_payload->>'reason'),v_idempotency_key,v_observed);
     return v_result;
+  elsif v_action='ROUTE_CONFIRM' then
+    perform private._candidate_office_service_context_open_v1(
+      v_environment,p_actor_user_id,'change_route','ROUTE_CONFIRM',v_observed
+    );
+    v_result:=public.timesheet_route_version_confirmed_v1(
+      nullif(v_payload->>'current_timesheet_id','')::uuid,
+      nullif(v_payload->>'expected_timesheet_id','')::uuid,
+      v_payload->>'expected_row_signature',
+      v_payload->>'expected_context_sha256',
+      v_payload->>'target_action',
+      p_actor_user_id,
+      v_payload->>'reason_code',
+      v_payload->>'reason_note',
+      v_payload->>'idempotency_key',
+      coalesce((v_payload->>'allow_manual_only')::boolean,false),
+      v_observed
+    )||jsonb_build_object('contract_version','OFFICE_CANDIDATE_MUTATION_RESULT_V1');
+    perform private._candidate_office_service_context_close_v1();
+    return v_result;
+  elsif v_action='FINALISE_EXECUTE' then
+    v_workflow_id:=nullif(v_payload->>'workflow_id','')::uuid;
+    v_generation:=nullif(v_payload->>'generation','')::integer;
+    v_idempotency_key:=nullif(btrim(coalesce(v_payload->>'idempotency_key','')),'');
+    if v_workflow_id is null or v_generation is null or v_generation<1
+       or v_idempotency_key is null then
+      raise exception 'CANDIDATE_WORKFLOW_PAYLOAD_INVALID' using errcode='22023';
+    end if;
+    perform private._candidate_office_service_context_open_v1(
+      v_environment,p_actor_user_id,'retry_finalisation','RETRY_FINALISATION',v_observed
+    );
+    v_result:=public.candidate_submission_finalize_atomic_v1(
+      null,v_environment,v_workflow_id,v_generation,
+      v_payload->>'expected_row_signature',v_idempotency_key,v_observed,
+      coalesce(v_payload->'daily_materialisation_json','{}'::jsonb)||jsonb_build_object(
+        'service_finalisation',
+        coalesce(v_payload->'daily_materialisation_json'->'service_finalisation','{}'::jsonb)
+          ||jsonb_build_object('actor_user_id',p_actor_user_id)
+      )
+    )||jsonb_build_object('contract_version','OFFICE_CANDIDATE_MUTATION_RESULT_V1');
+    perform private._candidate_office_service_context_close_v1();
+    return v_result;
   elsif v_action='WORKFLOW_ACTION_EXECUTE' then
     v_workflow_action:=upper(btrim(coalesce(v_payload->>'workflow_action','')));
     if v_workflow_action not in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
-        'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE') then
+        'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
+        'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE',
+        'PAPER_PACK_RELEASE') then
       raise exception 'CANDIDATE_WORKFLOW_ACTION_INVALID' using errcode='22023';
     end if;
     v_workflow_id:=nullif(v_payload->>'workflow_id','')::uuid;
@@ -957,10 +1042,25 @@ begin
        and (v_approval_id is null or v_approval_generation is null or v_approval_generation<1) then
       raise exception 'CANDIDATE_REQUEST_GENERATION_STALE' using errcode='22023';
     end if;
-    perform 1 from public.candidate_approval_requests ar
-    where ar.id=v_approval_id and ar.workflow_id=v_workflow_id
-      and ar.workflow_generation=v_generation and ar.request_generation=v_approval_generation;
-    if not found then raise exception 'CANDIDATE_REQUEST_GENERATION_STALE' using errcode='40001'; end if;
+    if v_approval_id is not null then
+      perform 1 from public.candidate_approval_requests ar
+      where ar.id=v_approval_id and ar.workflow_id=v_workflow_id
+        and ar.workflow_generation=v_generation and ar.request_generation=v_approval_generation;
+      if not found then raise exception 'CANDIDATE_REQUEST_GENERATION_STALE' using errcode='40001'; end if;
+    end if;
+    v_office_permission:=case
+      when v_workflow_action='REMIND' then 'send_manager_reminder'
+      when v_workflow_action='RENEW' then 'renew_manager_request'
+      when v_workflow_action in ('MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF') then 'cancel_manager_request'
+      when v_workflow_action in ('BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE')
+        then 'manage_phone_approval'
+      when v_workflow_action in ('REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE')
+        then 'retry_finalisation'
+      when v_workflow_action='PAPER_PACK_RELEASE' then 'manage_paper'
+      else null end;
+    perform private._candidate_office_service_context_open_v1(
+      v_environment,p_actor_user_id,v_office_permission,v_workflow_action,v_observed
+    );
     v_result:=public.candidate_workflow_transition_atomic_v1(
       null,v_environment,v_workflow_id,v_workflow_action,v_generation,
       coalesce(v_payload->'payload','{}'::jsonb)||jsonb_build_object(
@@ -968,6 +1068,7 @@ begin
         'approval_request_id',v_approval_id,'approval_request_generation',v_approval_generation
       ),v_idempotency_key,v_observed
     );
+    perform private._candidate_office_service_context_close_v1();
     v_result:=v_result||jsonb_build_object(
       'contract_version','OFFICE_CANDIDATE_MUTATION_RESULT_V1',
       'refresh_hints',jsonb_build_object(
@@ -1118,6 +1219,9 @@ begin
         continue;
       end if;
       begin
+        perform private._candidate_office_service_context_open_v1(
+          v_environment,p_actor_user_id,'send_manager_reminder_batch','REMIND',v_observed
+        );
         v_result:=public.candidate_workflow_transition_atomic_v1(
           null,v_environment,(v_item->>'workflow_id')::uuid,'REMIND',(v_item->>'workflow_generation')::integer,
           coalesce(v_item->'payload','{}'::jsonb)||jsonb_build_object(
@@ -1126,12 +1230,14 @@ begin
             'approval_request_generation',(v_item->>'approval_request_generation')::integer
           ),'office-reminder-batch:'||v_batch_id::text||':'||(v_item->>'workflow_id')||':'||(v_item->>'approval_request_generation'),v_observed
         );
+        perform private._candidate_office_service_context_close_v1();
         v_success_count:=v_success_count+1;
         v_results:=v_results||jsonb_build_array(jsonb_build_object(
           'correlation_key',v_item->>'correlation_key','workflow_id',v_item->>'workflow_id',
           'approval_request_id',v_item->>'approval_request_id','outcome','QUEUED','result',v_result
         ));
       exception when others then
+        perform private._candidate_office_service_context_close_v1();
         v_failure_count:=v_failure_count+1;
         v_error_code:=coalesce(nullif(substring(sqlerrm from '([A-Z][A-Z0-9_]{2,})'),''),'CANDIDATE_REMINDER_BATCH_ITEM_FAILED');
         v_results:=v_results||jsonb_build_array(jsonb_build_object(

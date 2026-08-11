@@ -13,6 +13,7 @@ function claimedRow(scopePatch = {}) {
   return {
     id: outboxId,
     payment_scope_json: {
+      candidate_mail_authority: 'CANDIDATE_PAPER_V1',
       candidate_workflow_id: workflowId,
       candidate_workflow_generation: 3,
       paper_return_manifest_sha256: manifest,
@@ -130,6 +131,12 @@ test('provider handoff fails before the permit RPC for invalid binding or enviro
   });
   assert.equal(badManifest.result.authorised, false);
   assert.equal(badManifest.calls.length, 0);
+
+  const missingAuthority = await check({
+    claimed: claimedRow({ candidate_mail_authority: null })
+  });
+  assert.equal(missingAuthority.result.authorised, false);
+  assert.equal(missingAuthority.calls.length, 0);
 
   const badEnvironment = await check({ fixture: { environment: 'UNKNOWN' } });
   assert.equal(badEnvironment.result.authorised, false);

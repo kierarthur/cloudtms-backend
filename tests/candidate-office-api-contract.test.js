@@ -60,6 +60,9 @@ test('office OpenAPI and normal backend expose the same exact method/path invent
   assert.match(openapi, /mode:\s*\{type:\s*string, const:\s*ENABLED\}/);
   assert.match(openapi, /required_office_role:\s*\{type:\s*string, const:\s*admin\}/);
   assert.match(openapi, /permission_source:\s*\{type:\s*string, const:\s*OFFICE_ADMIN_ROLE_V1\}/);
+  assert.match(openapi, /office_service_context:\s*CANDIDATE_OFFICE_SERVICE_CONTEXT_V1/);
+  assert.match(openapi, /candidate_client_flags_required_for_office_actions:\s*false/);
+  assert.match(openapi, /candidate_client_flags_continue_to_block_candidate_sessions:\s*true/);
   assert.match(backend, /cancel:\s*'MANAGER_REQUEST_CANCEL'/);
   assert.match(backend, /cancel:\s*'cancel_manager_request'/);
   assert.match(backend, /requireOfficeUser\(request, \['admin'\]\)/);
@@ -89,6 +92,10 @@ test('office contract preserves bounded projection and server-owned reminder bat
   assert.match(openapi, /delivery_generation:/);
   assert.match(openapi, /FINALISED workflows use the preceding generation/i);
   assert.match(openapi, /FAILED_RETRYABLE, FAILED_TERMINAL/);
+  assert.match(openapi, /is_current_action_workflow:/);
+  assert.match(openapi, /Terminal workflow history is returned for audit but never drives current status/);
+  assert.match(openapi, /rejection_actionable:/);
+  assert.match(openapi, /Null once durable direct replacement lineage exists/);
   for (const code of [
     'OFFICE_AUTH_REQUIRED', 'CANDIDATE_OFFICE_PERMISSION_DENIED',
     'CANDIDATE_CONTEXT_STALE', 'CANDIDATE_TIMESHEET_MOVED',
@@ -97,7 +104,9 @@ test('office contract preserves bounded projection and server-owned reminder bat
     'CANDIDATE_PROTECTED_FINANCIAL_HISTORY', 'CANDIDATE_IMPORT_AUTHORITATIVE',
     'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS', 'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT',
     'CANDIDATE_TOO_MANY_AFFECTED_WORKFLOWS', 'CANDIDATE_REJECTION_SCOPE_CONFLICT',
-    'CANDIDATE_IDEMPOTENCY_CONFLICT', 'CANDIDATE_ROUTE_NOT_FOUND'
+    'CANDIDATE_IDEMPOTENCY_CONFLICT', 'CANDIDATE_PAPER_OUTBOX_NOT_READY',
+    'CANDIDATE_PAPER_PACK_RETRY_NOT_READY', 'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
+    'CANDIDATE_PAPER_PACK_FAILURE_RECEIPT_INVALID', 'CANDIDATE_ROUTE_NOT_FOUND'
   ]) assert.match(openapi, new RegExp(`- ${code}\\b`));
 });
 

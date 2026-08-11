@@ -14853,10 +14853,16 @@ BEGIN
       );
     END IF;
     v_candidate_paper_binding_json := jsonb_build_object(
+      'candidate_mail_authority', 'CANDIDATE_PAPER_V1',
       'candidate_workflow_id', v_candidate_paper_workflow_id,
       'candidate_workflow_generation', v_candidate_paper_workflow_generation,
       'paper_return_manifest_sha256', v_candidate_paper_manifest_sha256,
-      'candidate_paper_pack_ready', FALSE
+      'candidate_paper_pack_ready', FALSE,
+      'candidate_paper_pack_retryable', FALSE,
+      'candidate_paper_pack_failure_class', NULL,
+      'candidate_paper_pack_failure_code', NULL,
+      'candidate_paper_pack_failure_contract_version', NULL,
+      'candidate_paper_pack_failed_at_utc', NULL
     );
   END IF;
 

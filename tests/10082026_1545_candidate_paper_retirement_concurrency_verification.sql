@@ -77,7 +77,7 @@ select
   'CONTRACT_HOURS','WEEKLY','PAPER','AWAITING_PAPER_RETURN',1,
   'b5200000-0000-4000-8000-000000000003','b5200000-0000-4000-8000-000000000005',
   'b5200000-0000-4000-8000-000000000004','b5200000-0000-4000-8000-000000000004',
-  '2026-08-16','paper-release-race',
+  '2026-08-16','paper-release-race-create',
   jsonb_build_object('official_presentation',jsonb_build_object(
     'renderer_contract_version','CANDIDATE_REVIEW_DOCUMENTS_V1',
     'branding',jsonb_build_object('branding_contract_sha256',repeat('c',64)))),
@@ -94,6 +94,7 @@ select
   'Paper race pack','[]'::jsonb,'QUEUED',now(),'timesheets',
   'b5200000-0000-4000-8000-000000000004','infinity','infinity','paper-release-race',
   jsonb_build_object(
+    'candidate_mail_authority','CANDIDATE_PAPER_V1',
     'candidate_workflow_id','b5200000-0000-4000-8000-000000000008'::uuid,
     'candidate_workflow_generation',1,
     'paper_return_manifest_sha256',encode(paper_return_manifest_sha256,'hex'),

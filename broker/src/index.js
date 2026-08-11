@@ -28547,11 +28547,12 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
   expectedGeneration,
   idempotencyKey,
   nowUtc = new Date().toISOString(),
-  serviceFinalisation = null
+  serviceFinalisation = null,
+  officeActorId = null
 } = {}) {
   const correlation = String(idempotencyKey || '').trim();
   if (!correlation) throw new Error('CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
-  const begin = await sbRpc(env, 'candidate_workflow_transition_atomic_v1', {
+  const beginPayload = {
     p_session_id: sessionId || null,
     p_environment: environment,
     p_workflow_id: workflowId,
@@ -28560,7 +28561,22 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
     p_payload: {},
     p_idempotency_key: `${correlation}:canonical-daily-begin`,
     p_now_utc: nowUtc
-  });
+  };
+  const begin = officeActorId
+    ? await sbRpc(env, 'cloudtms_office_candidate_adapter_v1', {
+      p_action: 'WORKFLOW_ACTION_EXECUTE',
+      p_actor_user_id: officeActorId,
+      p_environment: environment,
+      p_payload: {
+        workflow_id: workflowId,
+        generation: expectedGeneration,
+        workflow_action: 'BEGIN_CANONICAL_DAILY_SAVE',
+        idempotency_key: beginPayload.p_idempotency_key,
+        payload: {}
+      },
+      p_now_utc: nowUtc
+    })
+    : await sbRpc(env, 'candidate_workflow_transition_atomic_v1', beginPayload);
   const canonicalInput = begin?.canonical_save_input;
   const lockedContext = begin?.canonical_context;
   const timesheetPatch = buildCandidateDailyPatchFromFrozenInput(canonicalInput);
@@ -28651,13 +28667,14 @@ async function finaliseCandidateDailyThroughCanonicalAuthority(env, {
   expectedGeneration,
   idempotencyKey,
   nowUtc = new Date().toISOString(),
-  serviceFinalisation = null
+  serviceFinalisation = null,
+  officeActorId = null
 } = {}) {
   const dailyMaterialisation = await buildCandidateDailyAtomicMaterialisation(env, {
     sessionId, environment, workflowId, expectedGeneration, idempotencyKey, nowUtc,
-    serviceFinalisation
+    serviceFinalisation, officeActorId
   });
-  return sbRpc(env, 'candidate_submission_finalize_atomic_v1', {
+  const finalisationPayload = {
     p_session_id: sessionId,
     p_environment: environment,
     p_workflow_id: workflowId,
@@ -28666,7 +28683,22 @@ async function finaliseCandidateDailyThroughCanonicalAuthority(env, {
     p_daily_materialisation_json: dailyMaterialisation,
     p_idempotency_key: `${idempotencyKey}:finalise`,
     p_now_utc: nowUtc
-  });
+  };
+  return officeActorId
+    ? sbRpc(env, 'cloudtms_office_candidate_adapter_v1', {
+      p_action: 'FINALISE_EXECUTE',
+      p_actor_user_id: officeActorId,
+      p_environment: environment,
+      p_payload: {
+        workflow_id: workflowId,
+        generation: expectedGeneration,
+        expected_row_signature: null,
+        idempotency_key: finalisationPayload.p_idempotency_key,
+        daily_materialisation_json: dailyMaterialisation
+      },
+      p_now_utc: nowUtc
+    })
+    : sbRpc(env, 'candidate_submission_finalize_atomic_v1', finalisationPayload);
 }
 
 async function enqueueCandidateQrPackThroughCanonicalAuthority(env, {

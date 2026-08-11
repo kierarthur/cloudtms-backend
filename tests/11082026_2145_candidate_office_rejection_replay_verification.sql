@@ -8,10 +8,10 @@ begin;
 update public.settings_defaults
 set candidate_app_environment='TEST',
     candidate_app_feature_flags_json=candidate_app_feature_flags_json||jsonb_build_object(
-      'candidate_app_reads',true,
-      'candidate_app_writes',true,
-      'candidate_notifications',true,
-      'candidate_record_role_capabilities',true
+      'candidate_app_reads',false,
+      'candidate_app_writes',false,
+      'candidate_notifications',false,
+      'candidate_record_role_capabilities',false
     )
 where id=1;
 

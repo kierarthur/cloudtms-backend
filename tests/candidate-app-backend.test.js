@@ -63,6 +63,7 @@ function noLogoBranding(agencyName = 'Configured Agency') {
 
 function readyPaperScope(workflowId, generation, manifestHash, complete = {}) {
   return {
+    candidate_mail_authority: 'CANDIDATE_PAPER_V1',
     candidate_workflow_id: workflowId,
     candidate_workflow_generation: generation,
     paper_return_manifest_sha256: manifestHash,
@@ -1484,6 +1485,7 @@ test('paper pack release never requeues a failed mail operation', async () => {
     return Response.json([{
       id: '00000000-0000-4000-8000-000000000040', status: 'FAILED',
       payment_scope_json: {
+        candidate_mail_authority: 'CANDIDATE_PAPER_V1',
         candidate_workflow_id: '00000000-0000-4000-8000-000000000041',
         candidate_workflow_generation: 2,
         paper_return_manifest_sha256: 'd'.repeat(64)
@@ -1644,6 +1646,7 @@ test('paper pack release does not notify when the guarded attachment update lose
       return Response.json([{
         id: '00000000-0000-4000-8000-000000000043', status: 'QUEUED',
         payment_scope_json: {
+          candidate_mail_authority: 'CANDIDATE_PAPER_V1',
           candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
           candidate_workflow_generation: 2,
           paper_return_manifest_sha256: 'd'.repeat(64),
@@ -1677,6 +1680,7 @@ test('paper pack release installs the exact complete pack before notification', 
   const workflowId = '00000000-0000-4000-8000-000000000044';
   const manifestHash = 'd'.repeat(64);
   const heldScope = {
+    candidate_mail_authority: 'CANDIDATE_PAPER_V1',
     candidate_workflow_id: workflowId,
     candidate_workflow_generation: 2,
     paper_return_manifest_sha256: manifestHash,
@@ -1733,6 +1737,7 @@ test('paper outbox binding is already atomic and the backend only adopts the exa
       context_kind: 'timesheets', context_id: '00000000-0000-4000-8000-000000000049',
       status: 'QUEUED', attachments: [], attempt_lease_token: null,
       payment_scope_json: {
+        candidate_mail_authority: 'CANDIDATE_PAPER_V1',
         candidate_workflow_id: '00000000-0000-4000-8000-000000000050',
         candidate_workflow_generation: 1,
         paper_return_manifest_sha256: 'a'.repeat(64),
@@ -1772,6 +1777,7 @@ test('paper pack release rejects an already claimed held email before PATCH or n
     return Response.json([{
       id: '00000000-0000-4000-8000-000000000043', status: 'QUEUED',
       payment_scope_json: {
+        candidate_mail_authority: 'CANDIDATE_PAPER_V1',
         candidate_workflow_id: '00000000-0000-4000-8000-000000000044',
         candidate_workflow_generation: 2,
         paper_return_manifest_sha256: 'd'.repeat(64),
@@ -1842,6 +1848,79 @@ test('paper-pack scheduler proves the exact held email before any R2 pack work',
   }
 });
 
+test('paper-pack scheduler durably records a classified retryable storage failure', async () => {
+  const originalFetch = globalThis.fetch;
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000070', generation: 3,
+    route: 'PAPER', state: 'AWAITING_PAPER_RETURN',
+    target_timesheet_id: '00000000-0000-4000-8000-000000000071',
+    paper_return_manifest_sha256: 'a'.repeat(64),
+    paper_return_manifest_json: { pages: [{ component_kind: 'HOURS_TIMESHEET' }] },
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+    immutable_submission_json: {
+      official_presentation: { branding: { branding_contract_sha256: 'c'.repeat(64) } }
+    }
+  };
+  const timesheet = {
+    timesheet_id: workflow.target_timesheet_id, version: 1, sheet_scope: 'WEEKLY',
+    submission_mode: 'MANUAL', qr_status: 'PENDING', document_state: 'READY',
+    current_document_version_id: '00000000-0000-4000-8000-000000000072'
+  };
+  const outboxId = '00000000-0000-4000-8000-000000000073';
+  let failureRpc = null;
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (parsed.pathname.endsWith('/timesheets')) return Response.json([timesheet]);
+    if (parsed.pathname.endsWith('/invoice_document_versions')) return Response.json([{
+      id: timesheet.current_document_version_id, entity_type: 'TIMESHEET',
+      entity_id: timesheet.timesheet_id, purpose: 'TIMESHEET', status: 'READY',
+      r2_key: 'candidate/base.pdf', sha256: 'b'.repeat(64)
+    }]);
+    if (parsed.pathname.endsWith('/mail_outbox')) return Response.json([{
+      id: outboxId, type: 'TIMESHEET_QR', context_kind: 'timesheets',
+      context_id: timesheet.timesheet_id, status: 'QUEUED', attachments: [],
+      attempt_lease_token: null, attempt_lease_expires_at_utc: null,
+      payment_scope_json: {
+        candidate_mail_authority: 'CANDIDATE_PAPER_V1',
+        candidate_workflow_id: workflow.id,
+        candidate_workflow_generation: workflow.generation,
+        paper_return_manifest_sha256: workflow.paper_return_manifest_sha256,
+        candidate_paper_pack_ready: false,
+        mail_held_until_pdf_rendered: true,
+        mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
+      }
+    }]);
+    throw new Error(`unexpected request ${parsed.pathname}`);
+  };
+  try {
+    const result = await processPendingCandidatePaperPacks({
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+      R2: {
+        async head() { throw new Error('simulated R2 read outage'); }
+      }
+    }, {
+      async rpc(name, args) {
+        failureRpc = { name, args };
+        return { data: { ok: true, paper_pack_state: 'FAILED_RETRYABLE' } };
+      }
+    }, 1);
+    assert.equal(result.results.length, 1);
+    assert.equal(result.results[0].ok, false);
+    assert.equal(result.results[0].error_code, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+    assert.equal(result.results[0].failure_recorded, true);
+    assert.equal(result.results[0].failure_state, 'FAILED_RETRYABLE');
+    assert.equal(failureRpc.name, 'candidate_workflow_transition_atomic_v1');
+    assert.equal(failureRpc.args.p_action, 'PAPER_PACK_MARK_FAILURE');
+    assert.equal(failureRpc.args.p_payload.mail_outbox_id, outboxId);
+    assert.equal(failureRpc.args.p_payload.error_code, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('paper outbox binding rejects missing, opted-out or otherwise unavailable email delivery', async () => {
   for (const pack of [
     { queued: false, recipient_available: false },
@@ -1872,6 +1951,7 @@ test('paper outbox adoption rejects an immediately due base-PDF row', async () =
     context_kind: 'timesheets', context_id: '00000000-0000-4000-8000-000000000049',
     status: 'QUEUED', attachments: [{ r2_key: 'ordinary-base.pdf' }], attempt_lease_token: null,
     payment_scope_json: {
+      candidate_mail_authority: 'CANDIDATE_PAPER_V1',
       candidate_workflow_id: '00000000-0000-4000-8000-000000000050',
       candidate_workflow_generation: 1,
       paper_return_manifest_sha256: 'a'.repeat(64),

@@ -12,6 +12,10 @@ info:
     for authenticated CloudTMS office administrators; no separate frontend kill
     switch is introduced. Every route independently enforces the declared admin
     permission before calling the service-role adapter.
+    Candidate client feature flags may remain false in TEST: they continue to
+    block public Candidate sessions, while the authenticated Office adapter
+    opens a transaction-scoped, single-action service authority receipt. A
+    browser-supplied service marker is never sufficient.
 servers:
   - url: https://test-cloudtms-backend.kier-88a.workers.dev
     description: Normal TEST backend only. Production is outside this contract.
@@ -42,6 +46,9 @@ x-cloudtms-authority:
   batch_result_scope: initiating authenticated office actor
   required_office_role: admin
   permission_source: OFFICE_ADMIN_ROLE_V1
+  office_service_context: CANDIDATE_OFFICE_SERVICE_CONTEXT_V1
+  candidate_client_flags_required_for_office_actions: false
+  candidate_client_flags_continue_to_block_candidate_sessions: true
 paths:
   /api/candidate-app/office-capabilities:
     get:
@@ -334,9 +341,10 @@ components:
         observed_at_utc: {type: string, format: date-time}
         current_identity: {type: object, additionalProperties: true}
         candidate_status: {type: object, additionalProperties: true}
-        workflow: {type: [object, 'null'], additionalProperties: true}
+        workflow: {$ref: '#/components/schemas/WorkflowProjection'}
         manager_approval: {type: [object, 'null'], additionalProperties: true}
         paper_pack: {$ref: '#/components/schemas/PaperPack'}
+        rejections: {type: array, items: {$ref: '#/components/schemas/RejectionHistory'}}
         available_actions: {type: array, items: {$ref: '#/components/schemas/TypedAction'}}
         diagnostics: {type: array, items: {$ref: '#/components/schemas/Diagnostic'}}
         refresh_hints: {$ref: '#/components/schemas/RefreshHints'}
@@ -397,6 +405,36 @@ components:
         retryable: {type: boolean}
         issued_at_utc: {type: [string, 'null'], format: date-time}
         returned_at_utc: {type: [string, 'null'], format: date-time}
+    WorkflowProjection:
+      type: [object, 'null']
+      additionalProperties: true
+      properties:
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        generation: {type: integer, minimum: 1}
+        state: {type: string}
+        workflow_kind: {type: string}
+        route: {type: string}
+        approval_method: {type: [string, 'null']}
+        is_current_action_workflow:
+          type: boolean
+          description: True only for the shared Candidate active/recoverable state catalogue.
+        historical:
+          type: boolean
+          description: Terminal workflow history is returned for audit but never drives current status.
+    RejectionHistory:
+      type: object
+      additionalProperties: true
+      required: [workflow_id, workflow_generation, state, rejection_actionable]
+      properties:
+        workflow_id: {$ref: '#/components/schemas/Uuid'}
+        workflow_generation: {type: integer, minimum: 1}
+        state: {type: string, enum: [REFUSED, REJECTED]}
+        rejection_actionable: {type: boolean}
+        replacement_workflow_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        replacement_state: {type: [string, 'null']}
+        recovery_action:
+          description: Null once durable direct replacement lineage exists.
+          oneOf: [{$ref: '#/components/schemas/TypedAction'}, {type: 'null'}]
     RoutePreview:
       type: object
       additionalProperties: true
@@ -565,6 +603,10 @@ components:
         - CANDIDATE_TOO_MANY_AFFECTED_WORKFLOWS
         - CANDIDATE_REJECTION_SCOPE_CONFLICT
         - CANDIDATE_IDEMPOTENCY_CONFLICT
+        - CANDIDATE_PAPER_OUTBOX_NOT_READY
+        - CANDIDATE_PAPER_PACK_RETRY_NOT_READY
+        - CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT
+        - CANDIDATE_PAPER_PACK_FAILURE_RECEIPT_INVALID
         - CANDIDATE_ROUTE_NOT_FOUND
         - METHOD_NOT_ALLOWED
   responses:

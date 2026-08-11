@@ -267,6 +267,8 @@ declare
   v_response jsonb;
   v_page jsonb;
   v_manifest jsonb;
+  v_manifest_hash text;
+  v_mail uuid;
   v_row_signature text;
   v_counter integer:=0;
 begin
@@ -344,17 +346,16 @@ begin
   update public.candidate_submission_components
   set state='SUPERSEDED',superseded_at_utc=now()
   where id=v_unsafe_component;
-  begin
-    perform public.candidate_workflow_transition_atomic_v1(
-      v_session,'TEST',v_workflow,'COMPONENT_PREPARE',1,jsonb_build_object(
-        'component_kind','EXPENSE_EVIDENCE','expense_category','TRAVEL',
-        'document_role','SOURCE_EVIDENCE','storage_key','paper/source/unsafe.png',
-        'media_type','image/png','byte_size',128
-      ),'paper:unsafe:prepare',now());
-    raise exception 'superseded component replay unexpectedly issued a contract';
-  exception when sqlstate '55000' then
-    if sqlerrm<>'CANDIDATE_COMPONENT_PREPARE_STATE_CONFLICT' then raise; end if;
-  end;
+  v_response:=public.candidate_workflow_transition_atomic_v1(
+    v_session,'TEST',v_workflow,'COMPONENT_PREPARE',1,jsonb_build_object(
+      'component_kind','EXPENSE_EVIDENCE','expense_category','TRAVEL',
+      'document_role','SOURCE_EVIDENCE','storage_key','paper/source/unsafe.png',
+      'media_type','image/png','byte_size',128
+    ),'paper:unsafe:prepare',now());
+  if not coalesce((v_response->>'idempotent_replay')::boolean,false)
+     or (v_response->>'component_id')::uuid<>v_unsafe_component then
+    raise exception 'superseded component exact replay did not preserve its durable receipt: %',v_response;
+  end if;
   begin
     perform public.candidate_workflow_transition_atomic_v1(
       v_session,'TEST',v_workflow,'COMPONENT_COMPLETE',1,jsonb_build_object(
@@ -402,9 +403,9 @@ begin
         'document_role','SOURCE_EVIDENCE','storage_key','paper/source/other.png',
         'media_type','image/png','byte_size',1024
       ),'paper:evidence:prepare',now());
-    raise exception 'cross-generation component replay unexpectedly issued a contract';
+    raise exception 'cross-generation mutation key reuse unexpectedly issued a contract';
   exception when sqlstate '40001' then
-    if sqlerrm<>'CANDIDATE_COMPONENT_PREPARE_GENERATION_CONFLICT' then raise; end if;
+    if sqlerrm<>'CANDIDATE_IDEMPOTENCY_CONFLICT' then raise; end if;
   end;
 
   update public.timesheets set actual_schedule_json='[]'::jsonb where timesheet_id=v_timesheet;
@@ -473,12 +474,43 @@ begin
     v_session,'TEST',v_workflow,'PAPER_PREPARE',2,'{}'::jsonb,'paper:prepare',now());
   select paper_return_manifest_json into v_manifest
   from public.candidate_submission_workflows where id=v_workflow;
+  v_mail:=(v_response->'paper_pack'->>'mail_outbox_id')::uuid;
+  select encode(paper_return_manifest_sha256,'hex') into v_manifest_hash
+  from public.candidate_submission_workflows where id=v_workflow;
   if v_response->>'state'<>'AWAITING_PAPER_RETURN'
      or jsonb_array_length(v_manifest->'pages')<>3
      or not coalesce((v_response->'paper_pack'->>'queued')::boolean,false)
      or not coalesce((v_response->'paper_pack'->>'recipient_available')::boolean,false)
      or nullif(v_response->'paper_pack'->>'mail_outbox_id','') is null then
     raise exception 'paper manifest was not the complete three-page pack: %',v_response;
+  end if;
+  if not exists(
+    select 1 from public.mail_outbox mail
+    where mail.id=v_mail and mail.type='TIMESHEET_QR'
+      and mail.context_kind='timesheets' and mail.context_id=v_timesheet
+      and mail.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
+      and mail.payment_scope_json->>'candidate_workflow_id'=v_workflow::text
+      and mail.payment_scope_json->>'candidate_workflow_generation'='2'
+      and mail.payment_scope_json->>'paper_return_manifest_sha256'=v_manifest_hash
+  ) then
+    raise exception 'canonical PAPER enqueue omitted the closed Office/Candidate authority identity';
+  end if;
+  v_response:=public.candidate_workflow_transition_atomic_v1(
+    null,'TEST',v_workflow,'PAPER_PACK_MARK_FAILURE',2,jsonb_build_object(
+      'service_paper_pack_failure',true,
+      'mail_outbox_id',v_mail,
+      'paper_return_manifest_sha256',v_manifest_hash,
+      'error_code','CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT'
+    ),'paper:pack:failure:retryable',now()
+  );
+  if v_response->>'paper_pack_state'<>'FAILED_RETRYABLE'
+     or not coalesce((v_response->>'retryable')::boolean,false)
+     or not exists(
+       select 1 from public.mail_outbox mail where mail.id=v_mail
+         and lower(coalesce(mail.payment_scope_json->>'candidate_paper_pack_retryable','false'))
+           in ('true','t','1','yes')
+     ) then
+    raise exception 'production PAPER failure owner did not create a retryable receipt: %',v_response;
   end if;
 
   v_page:=(v_manifest->'pages')->0;

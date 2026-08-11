@@ -96,6 +96,7 @@ begin
     v_mail,'TIMESHEET_QR','paper-retirement@example.test','Paper pack','[]'::jsonb,
     'QUEUED',now(),'timesheets',v_timesheet,'infinity','infinity',
     'candidate-paper-retirement:1',jsonb_build_object(
+      'candidate_mail_authority','CANDIDATE_PAPER_V1',
       'candidate_workflow_id',v_workflow,'candidate_workflow_generation',1,
       'paper_return_manifest_sha256',v_manifest_hex,
       'candidate_paper_pack_ready',false,'mail_held_until_pdf_rendered',true,

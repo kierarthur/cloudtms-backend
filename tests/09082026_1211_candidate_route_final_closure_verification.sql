@@ -82,10 +82,25 @@ begin
     timesheet_id,candidate_id,client_id,basis,processing_status,total_hours
   ) values(v_manual,v_candidate,v_client,'CONTRACT_WEEKLY','UNPROCESSED',8);
   v_context:=public.timesheet_route_version_preview_v1(v_manual,'ALLOW_ELECTRONIC_AGAIN');
-  v_result:=public.timesheet_route_version_confirmed_v1(
-    v_manual,v_manual,v_context->>'row_signature',v_context->>'context_sha256',
-    'ALLOW_ELECTRONIC_AGAIN',v_actor,null,null,'final-contract-notification',false,now()
+  update public.settings_defaults set
+    candidate_app_feature_flags_json=candidate_app_feature_flags_json
+      ||'{"candidate_route_confirmation":false,"candidate_app_writes":false}'::jsonb
+  where id=1;
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'ROUTE_CONFIRM',v_actor,'TEST',jsonb_build_object(
+      'current_timesheet_id',v_manual,
+      'expected_timesheet_id',v_manual,
+      'expected_row_signature',v_context->>'row_signature',
+      'expected_context_sha256',v_context->>'context_sha256',
+      'target_action','ALLOW_ELECTRONIC_AGAIN',
+      'idempotency_key','final-contract-notification',
+      'allow_manual_only',false
+    ),now()
   );
+  update public.settings_defaults set
+    candidate_app_feature_flags_json=candidate_app_feature_flags_json
+      ||'{"candidate_route_confirmation":true,"candidate_app_writes":true}'::jsonb
+  where id=1;
   v_new:=(v_result->>'new_timesheet_id')::uuid;
   if not coalesce((v_result->>'notification_created')::boolean,false)
      or coalesce((v_result->>'notification_recipient_unavailable')::boolean,true)

@@ -28,6 +28,8 @@ declare
   v_request uuid:='ad510000-0000-4000-8000-000000000009';
   v_batch uuid:='ad510000-0000-4000-8000-000000000010';
   v_component uuid:='ad510000-0000-4000-8000-000000000011';
+  v_rejected uuid:='ad510000-0000-4000-8000-000000000017';
+  v_replacement uuid:='ad510000-0000-4000-8000-000000000018';
   v_capabilities jsonb;
   v_projection jsonb;
   v_preview jsonb;
@@ -39,6 +41,10 @@ declare
   v_definition text;
   v_count integer;
   v_failed boolean;
+  v_paper_manifest jsonb:=jsonb_build_object('pages',jsonb_build_array(
+    jsonb_build_object('page_key','hours:1','component_kind','HOURS_TIMESHEET')
+  ));
+  v_paper_manifest_hash text;
 begin
   if has_function_privilege('anon','public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz)','execute')
      or has_function_privilege('authenticated','public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz)','execute')
@@ -54,7 +60,10 @@ begin
       and p.proname in (
         '_candidate_office_capabilities_v1','_candidate_office_action_v1',
         '_candidate_office_reject_preview_v1','_candidate_office_projection_identity_v1',
-        '_candidate_office_timesheet_projection_v1'
+        '_candidate_office_timesheet_projection_v1',
+        '_candidate_office_service_context_open_v1',
+        '_candidate_office_service_context_valid_v1',
+        '_candidate_workflow_mutation_receipt_v1'
       )
       and has_function_privilege(role_name.name,p.oid,'execute')
   ) or exists(
@@ -66,7 +75,10 @@ begin
       and p.proname in (
         '_candidate_office_capabilities_v1','_candidate_office_action_v1',
         '_candidate_office_reject_preview_v1','_candidate_office_projection_identity_v1',
-        '_candidate_office_timesheet_projection_v1'
+        '_candidate_office_timesheet_projection_v1',
+        '_candidate_office_service_context_open_v1',
+        '_candidate_office_service_context_valid_v1',
+        '_candidate_workflow_mutation_receipt_v1'
       )
       and acl.grantee=0 and acl.privilege_type='EXECUTE'
   ) then
@@ -210,6 +222,37 @@ begin
      or jsonb_typeof(v_projection->'diagnostics')<>'array'
      or nullif(v_signature,'') is null then
     raise exception 'office projection incorrect: %',v_projection;
+  end if;
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,
+    rejection_reason,idempotency_key
+  ) values(
+    v_rejected,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','ELECTRONIC',
+    'REJECTED',2,v_contract,v_week,v_timesheet,v_timesheet,current_date,
+    'Historical rejection','office-rejected-history'
+  );
+  insert into public.candidate_submission_workflows(
+    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
+    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,
+    replacement_of_workflow_id,idempotency_key
+  ) values(
+    v_replacement,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','ELECTRONIC',
+    'CANCELLED',2,v_contract,v_week,v_timesheet,v_timesheet,current_date,
+    v_rejected,'office-replacement-cancelled'
+  );
+  v_projection:=public.cloudtms_office_candidate_adapter_v1(
+    'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now
+  );
+  if not exists(
+    select 1 from jsonb_array_elements(v_projection->'rejections') rejection
+    where rejection->>'workflow_id'=v_rejected::text
+      and not coalesce((rejection->>'rejection_actionable')::boolean,true)
+      and rejection->>'replacement_workflow_id'=v_replacement::text
+      and rejection->>'replacement_state'='CANCELLED'
+      and rejection->'recovery_action'='null'::jsonb
+  ) then
+    raise exception 'Office rejection projection ignored durable direct replacement lineage: %',v_projection->'rejections';
   end if;
   if exists(
     select 1 from jsonb_array_elements(v_projection->'available_actions') action_item
@@ -377,6 +420,22 @@ begin
     attempt_lease_expires_at_utc=v_now+interval '10 minutes'
   where payment_scope_json->>'candidate_manager_mail_kind'='REMINDER'
     and payment_scope_json->>'candidate_approval_request_id'=v_request::text;
+  update public.settings_defaults set candidate_app_feature_flags_json=
+    candidate_app_feature_flags_json||jsonb_build_object(
+      'candidate_app_reads',false,'candidate_app_writes',false,
+      'candidate_manager_approval',false,'candidate_paper_qr',false,
+      'candidate_route_confirmation',false
+    ) where id=1;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
+      null,'TEST',v_workflow,'REMIND',1,
+      jsonb_build_object('service_office_action',true,'actor_user_id',v_actor),
+      'ad510000-0000-4000-8000-000000000019',v_now
+    );
+    raise exception 'caller-supplied Office marker bypassed dormant Candidate client gates';
+  exception when insufficient_privilege then
+    if position('CANDIDATE_FEATURE_DISABLED' in sqlerrm)=0 then raise; end if;
+  end;
   v_failed:=false;
   begin
     perform public.cloudtms_office_candidate_adapter_v1(
@@ -425,17 +484,21 @@ begin
   -- PREPARING is ordinary asynchronous work, not a retry signal. Only the
   -- explicit durable retryable receipt enables retry.
   update public.candidate_submission_workflows
-  set route='PAPER',state='AWAITING_PAPER_RETURN'
+  set route='PAPER',state='AWAITING_PAPER_RETURN',
+      paper_return_manifest_json=v_paper_manifest,
+      paper_return_manifest_sha256=private._candidate_sha256_jsonb_v1(v_paper_manifest)
   where id=v_workflow;
+  v_paper_manifest_hash:=encode(private._candidate_sha256_jsonb_v1(v_paper_manifest),'hex');
   insert into public.mail_outbox(
     id,type,"to",subject,body_text,status,context_kind,context_id,
     deterministic_outbox_key,payment_scope_json
   ) values(
-    'ad510000-0000-4000-8000-000000000015','TIMESHEET_GENERAL',
-    'candidate@example.test','Paper pack','Preparing.','QUEUED','CANDIDATE_WORKFLOW',v_workflow,
+    'ad510000-0000-4000-8000-000000000015','TIMESHEET_QR',
+    'candidate@example.test','Paper pack','Preparing.','QUEUED','timesheets',v_timesheet,
     'OFFICE-ADAPTER-PAPER',jsonb_build_object(
       'candidate_mail_authority','CANDIDATE_PAPER_V1',
       'candidate_workflow_id',v_workflow,'candidate_workflow_generation',1,
+      'paper_return_manifest_sha256',v_paper_manifest_hash,
       'candidate_paper_pack_ready',false,'candidate_paper_pack_retryable',false
     )
   );
@@ -457,9 +520,19 @@ begin
      or v_projection#>>'{paper_pack,retryable}'<>'false' then
     raise exception 'terminal PAPER failure was incorrectly retryable: %',v_projection->'paper_pack';
   end if;
-  update public.mail_outbox set payment_scope_json=payment_scope_json
-    ||'{"candidate_paper_pack_retryable":true}'::jsonb
+  update public.mail_outbox set status='QUEUED'
   where id='ad510000-0000-4000-8000-000000000015';
+  v_result:=public.candidate_workflow_transition_atomic_v1(
+    null,'TEST',v_workflow,'PAPER_PACK_MARK_FAILURE',1,jsonb_build_object(
+      'service_paper_pack_failure',true,
+      'mail_outbox_id','ad510000-0000-4000-8000-000000000015',
+      'paper_return_manifest_sha256',v_paper_manifest_hash,
+      'error_code','CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT'
+    ),'office-paper-failure-runtime-v1',v_now
+  );
+  if v_result->>'paper_pack_state'<>'FAILED_RETRYABLE' then
+    raise exception 'runtime PAPER failure owner did not classify the transient failure: %',v_result;
+  end if;
   v_projection:=public.cloudtms_office_candidate_adapter_v1(
     'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now
   );
@@ -469,6 +542,17 @@ begin
        jsonb_build_object('code','RETRY_PAPER_PREPARATION','enabled',true)
      )) then
     raise exception 'durable PAPER retry receipt did not enable retry: %',v_projection;
+  end if;
+  update public.candidate_submission_workflows
+  set state='FINALISED',finalised_at_utc=v_now,updated_at_utc=v_now+interval '5 minutes'
+  where id=v_workflow;
+  v_projection:=public.cloudtms_office_candidate_adapter_v1(
+    'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now+interval '6 minutes'
+  );
+  if v_projection#>>'{candidate_status,code}'<>'UNPROCESSED'
+     or v_projection#>>'{workflow,historical}'<>'true'
+     or v_projection#>>'{workflow,is_current_action_workflow}'<>'false' then
+    raise exception 'terminal workflow history was projected as current Office status: %',v_projection;
   end if;
 end;
 $office_adapter$;

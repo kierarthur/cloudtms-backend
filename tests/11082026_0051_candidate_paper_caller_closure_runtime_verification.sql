@@ -119,6 +119,7 @@ begin
     p_mail_status::public.mail_status_enum,v_now,'timesheets',v_timesheet,v_now,v_now,
     'received-caller-mail:'||v_workflow::text,
     jsonb_build_object(
+      'candidate_mail_authority','CANDIDATE_PAPER_V1',
       'candidate_workflow_id',v_workflow,'candidate_workflow_generation',1,
       'paper_return_manifest_sha256',v_manifest_hash,
       'candidate_paper_pack_ready',true,'mail_held_until_pdf_rendered',false,
@@ -287,6 +288,7 @@ begin
     'QUEUED',v_now,'timesheets',v_timesheet,v_now,v_now,
     'provider-permit-mail:'||v_workflow::text,
     jsonb_build_object(
+      'candidate_mail_authority','CANDIDATE_PAPER_V1',
       'candidate_workflow_id',v_workflow,'candidate_workflow_generation',1,
       'paper_return_manifest_sha256',v_manifest_hash,
       'candidate_paper_pack_ready',true,'mail_held_until_pdf_rendered',false,

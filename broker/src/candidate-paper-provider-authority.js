@@ -27,9 +27,11 @@ export async function candidatePaperProviderAuthorityCurrent({
 
   const generation = Number(claimedScope.candidate_workflow_generation);
   const manifestHash = sha256(claimedScope.paper_return_manifest_sha256);
+  const authority = text(claimedScope.candidate_mail_authority).toUpperCase();
   const outboxId = text(claimedRow && claimedRow.id);
   const leaseToken = text(currentLeaseToken);
-  if (!env || !text(env.SUPABASE_URL) || !outboxId
+  if (authority !== 'CANDIDATE_PAPER_V1'
+      || !env || !text(env.SUPABASE_URL) || !outboxId
       || !leaseToken
       || !Number.isSafeInteger(generation) || generation < 1
       || !/^[0-9a-f]{64}$/.test(manifestHash)) {

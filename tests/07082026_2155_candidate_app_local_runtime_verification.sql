@@ -399,6 +399,19 @@ begin
   end if;
   begin
     perform public.candidate_workflow_transition_atomic_v1(
+      v_session,'TEST',v_workflow,'COMPONENT_COMPLETE',1,
+      jsonb_build_object(
+        'component_id',v_candidate_signature,
+        'source_content_sha256_hex',repeat('44',32),
+        'verified_byte_size',128,'verified_media_type','image/png'
+      ),'workflow-candidate-signature-v1',now()
+    );
+    raise exception 'different action reused a durable mutation key';
+  exception when others then
+    if sqlerrm<>'CANDIDATE_IDEMPOTENCY_CONFLICT' then raise; end if;
+  end;
+  begin
+    perform public.candidate_workflow_transition_atomic_v1(
       v_session,'TEST',v_workflow,'COMPONENT_PREPARE',1,
       jsonb_build_object(
         'component_kind','CANDIDATE_SIGNATURE','document_role','CANDIDATE_SIGNATURE',
@@ -407,8 +420,8 @@ begin
       'workflow-candidate-signature-v1',now()
     );
     raise exception 'component prepare replay unexpectedly accepted conflicting media';
-  exception when unique_violation then
-    if sqlerrm<>'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT' then raise; end if;
+  exception when others then
+    if sqlerrm<>'CANDIDATE_IDEMPOTENCY_CONFLICT' then raise; end if;
   end;
   v_response:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'COMPONENT_COMPLETE',1,

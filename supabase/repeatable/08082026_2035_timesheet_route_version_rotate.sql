@@ -1083,8 +1083,18 @@ language plpgsql
 security definer
 set search_path to 'public'
 as $function$
+declare
+  v_environment text;
+  v_office_service boolean:=false;
 begin
-  if not private._candidate_feature_enabled_current_v1('candidate_route_confirmation') then
+  select candidate_app_environment into v_environment
+  from public.settings_defaults where id=1;
+  v_environment:=private._candidate_assert_environment(v_environment);
+  v_office_service:=private._candidate_office_service_context_valid_v1(
+    v_environment,p_actor_user_id,'ROUTE_CONFIRM'
+  );
+  if not private._candidate_feature_enabled_current_v1('candidate_route_confirmation')
+     and not v_office_service then
     return private._timesheet_route_version_legacy_v1(
       p_current_timesheet_id,p_expected_timesheet_id,p_target_action,
       p_actor_user_id,p_allow_manual_only
@@ -2232,7 +2242,8 @@ as $function$
 declare
   v_notification jsonb;
 begin
-  if not private._candidate_feature_enabled_current_v1('candidate_route_confirmation')
+  if (not private._candidate_feature_enabled_current_v1('candidate_route_confirmation')
+       and not private._candidate_office_service_context_valid_v1(null,null,'ROUTE_CONFIRM'))
      or new.candidate_submission_route_intent is distinct from 'PAPER'
      or new.sheet_scope is distinct from 'WEEKLY'::public.timesheet_scope_enum
      or upper(coalesce(new.document_state::text,''))<>'READY'
@@ -2336,9 +2347,6 @@ declare
     'OTHER_EXCEPTIONAL_OFFICE_INTERVENTION'
   ];
 begin
-  if not private._candidate_feature_enabled_current_v1('candidate_route_confirmation') then
-    raise exception 'CANDIDATE_ROUTE_CONFIRMATION_DISABLED' using errcode='42501';
-  end if;
   if p_actor_user_id is null or p_expected_timesheet_id is null
      or nullif(btrim(coalesce(p_expected_row_signature,'')),'') is null
      or coalesce(p_expected_context_sha256,'') !~ '^[0-9a-fA-F]{64}$' then
@@ -2350,6 +2358,12 @@ begin
   select candidate_app_environment into v_environment
   from public.settings_defaults where id=1;
   v_environment:=private._candidate_assert_environment(v_environment);
+  if not private._candidate_feature_enabled_current_v1('candidate_route_confirmation')
+     and not private._candidate_office_service_context_valid_v1(
+       v_environment,p_actor_user_id,'ROUTE_CONFIRM'
+     ) then
+    raise exception 'CANDIDATE_ROUTE_CONFIRMATION_DISABLED' using errcode='42501';
+  end if;
   -- The same stable Candidate contract/week family lock is taken by office
   -- rejection, workflow cancellation/supersession and route intervention.
   -- It must precede target, booking, workflow and QR-source row locks.

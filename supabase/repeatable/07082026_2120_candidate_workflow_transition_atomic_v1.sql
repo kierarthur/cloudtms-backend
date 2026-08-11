@@ -488,6 +488,8 @@ begin
           'candidate_paper_generation_retired_at_utc',p_now_utc,
           'candidate_paper_generation_retired_reason',v_reason,
           'candidate_paper_pack_ready',false,
+          'candidate_paper_pack_retryable',false,
+          'candidate_paper_pack_failure_class','RETIRED',
           'mail_held_until_pdf_rendered',true,
           'mail_delayed_for_pdf_render',true,
           'mail_hold_reason','CANDIDATE_PAPER_GENERATION_RETIRED',
@@ -1395,6 +1397,173 @@ begin
 end;
 $function$;
 
+-- Opened only by the service-role-only Office adapter.  The transaction-local
+-- context is deliberately not inferred from a caller supplied boolean: every
+-- canonical Candidate authority validates this receipt before bypassing the
+-- dormant Candidate-client feature gates.
+create or replace function private._candidate_office_service_context_open_v1(
+  p_environment text,
+  p_actor_user_id uuid,
+  p_permission text,
+  p_action text,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+  v_permission text:=lower(btrim(coalesce(p_permission,'')));
+  v_action text:=upper(btrim(coalesce(p_action,'')));
+  v_context jsonb;
+begin
+  if p_actor_user_id is null
+     or v_permission not in (
+       'change_route','reject_submission','send_manager_reminder',
+       'send_manager_reminder_batch','renew_manager_request',
+       'cancel_manager_request','manage_phone_approval','manage_paper',
+       'retry_finalisation'
+     )
+     or v_action not in (
+       'ROUTE_CONFIRM','REJECT_CONFIRM','REMIND','RENEW',
+       'MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
+       'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE',
+       'MANAGER_REFUSE','REGISTER_REVIEW_COMPONENT',
+       'REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE',
+       'PAPER_PACK_RELEASE','RETRY_FINALISATION'
+     ) then
+    raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
+  end if;
+  v_context:=jsonb_build_object(
+    'contract_version','CANDIDATE_OFFICE_SERVICE_CONTEXT_V1',
+    'environment',v_environment,
+    'actor_user_id',p_actor_user_id,
+    'permission',v_permission,
+    'action',v_action,
+    'opened_at_utc',coalesce(p_now_utc,now())
+  );
+  perform set_config('cloudtms.office_candidate_context',v_context::text,true);
+  return v_context;
+end;
+$function$;
+
+create or replace function private._candidate_office_service_context_valid_v1(
+  p_environment text,
+  p_actor_user_id uuid,
+  p_action text
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_context jsonb;
+begin
+  begin
+    v_context:=nullif(current_setting('cloudtms.office_candidate_context',true),'')::jsonb;
+  exception when others then
+    return false;
+  end;
+  return coalesce(v_context->>'contract_version','')='CANDIDATE_OFFICE_SERVICE_CONTEXT_V1'
+    and (p_environment is null
+      or v_context->>'environment'=private._candidate_assert_environment(p_environment))
+    and (p_actor_user_id is null
+      or v_context->>'actor_user_id'=p_actor_user_id::text)
+    and v_context->>'action'=upper(btrim(coalesce(p_action,'')));
+end;
+$function$;
+
+create or replace function private._candidate_office_service_context_close_v1()
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+begin
+  perform set_config('cloudtms.office_candidate_context','{}',true);
+end;
+$function$;
+
+-- One workflow/key receipt is the durable mutation idempotency authority.
+-- last_mutation_* remains a compatibility cache only and can never authorise a
+-- replay without the request hash below.
+create or replace function private._candidate_workflow_mutation_receipt_v1(
+  p_workflow_id uuid,
+  p_idempotency_key text,
+  p_request_sha256 text,
+  p_action text,
+  p_channel text,
+  p_actor_identity text,
+  p_response jsonb default null,
+  p_now_utc timestamptz default now()
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_before jsonb;
+  v_after jsonb;
+  v_actor_user_id uuid;
+begin
+  if p_workflow_id is null
+     or nullif(btrim(coalesce(p_idempotency_key,'')),'') is null
+     or coalesce(p_request_sha256,'') !~ '^[0-9a-f]{64}$'
+     or nullif(btrim(coalesce(p_action,'')),'') is null
+     or nullif(btrim(coalesce(p_channel,'')),'') is null then
+    raise exception 'CANDIDATE_IDEMPOTENCY_RECEIPT_INVALID' using errcode='22023';
+  end if;
+
+  select ae.before_json,ae.after_json into v_before,v_after
+  from public.audit_events ae
+  where ae.object_type='candidate_workflow_mutation_receipt'
+    and ae.object_id_text=p_workflow_id::text
+    and ae.correlation_id=btrim(p_idempotency_key)
+  order by ae.ts_utc desc,ae.id desc
+  limit 1;
+  if found then
+    if v_before->>'request_sha256' is distinct from p_request_sha256 then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_IDEMPOTENCY_CONFLICT',
+          'workflow_id',p_workflow_id,
+          'idempotency_key',btrim(p_idempotency_key)
+        )::text;
+    end if;
+    return jsonb_build_object(
+      'found',true,
+      'response',coalesce(v_after,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true)
+    );
+  end if;
+  if p_response is null then
+    return jsonb_build_object('found',false);
+  end if;
+
+  if coalesce(p_actor_identity,'')
+       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+    v_actor_user_id:=p_actor_identity::uuid;
+  end if;
+  insert into public.audit_events(
+    actor_user_id,object_type,object_id_text,action,before_json,after_json,
+    correlation_id,ts_utc
+  ) values (
+    v_actor_user_id,'candidate_workflow_mutation_receipt',p_workflow_id::text,
+    'CANDIDATE_WORKFLOW_MUTATION_RECEIPT',jsonb_build_object(
+      'request_sha256',p_request_sha256,
+      'workflow_action',upper(btrim(p_action)),
+      'channel',upper(btrim(p_channel)),
+      'actor_identity',nullif(btrim(coalesce(p_actor_identity,'')),'')
+    ),p_response,btrim(p_idempotency_key),coalesce(p_now_utc,now())
+  );
+  return jsonb_build_object('found',false,'recorded',true);
+end;
+$function$;
+
 create or replace function public.candidate_workflow_transition_atomic_v1(
   p_session_id uuid,
   p_environment text,
@@ -1532,9 +1701,18 @@ declare
   v_source_anchor public.timesheets%rowtype;
   v_current_anchor_count integer:=0;
   v_current_anchor_timesheet_id uuid;
+  v_paper_failure_code text;
+  v_paper_failure_class text;
+  v_paper_failure_retryable boolean:=false;
+  v_office_actor_user_id uuid;
+  v_is_office_service_action boolean:=false;
+  v_is_internal_paper_service_action boolean:=false;
+  v_mutation_channel text;
+  v_mutation_actor_identity text;
+  v_mutation_request_sha256 text;
+  v_mutation_receipt jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
-  perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
   if p_workflow_id is null or jsonb_typeof(v_payload)<>'object' then
     raise exception 'CANDIDATE_WORKFLOW_PAYLOAD_INVALID' using errcode='22023';
   end if;
@@ -1557,6 +1735,27 @@ begin
     v_action:='REGISTER_REVIEW_COMPONENT';
   end if;
 
+  if coalesce(v_payload->>'actor_user_id','')
+       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+    v_office_actor_user_id:=(v_payload->>'actor_user_id')::uuid;
+  end if;
+  v_is_office_service_action:=p_session_id is null
+    and coalesce((v_payload->>'service_office_action')::boolean,false)
+    and private._candidate_office_service_context_valid_v1(
+      v_environment,v_office_actor_user_id,v_action
+    );
+  v_is_internal_paper_service_action:=p_session_id is null and (
+    (v_action='PAPER_PACK_RELEASE'
+      and coalesce((v_payload->>'service_paper_pack_release')::boolean,false))
+    or (v_action='PAPER_PROVIDER_SUBMIT_PERMIT'
+      and coalesce((v_payload->>'service_paper_provider_submit_permit')::boolean,false))
+    or (v_action='PAPER_PACK_MARK_FAILURE'
+      and coalesce((v_payload->>'service_paper_pack_failure')::boolean,false))
+  );
+  if not v_is_office_service_action and not v_is_internal_paper_service_action then
+    perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
+  end if;
+
   if v_action in (
     'SELECT_PHONE_APPROVAL','CREATE_EMAIL_APPROVAL_REQUEST','BEGIN_MANAGER_REVIEW',
     'RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
@@ -1564,16 +1763,22 @@ begin
     'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
     'MANAGER_PROVIDER_SUBMIT_PERMIT'
   ) or (p_session_id is null and v_action in ('COMPONENT_PREPARE','COMPONENT_COMPLETE')) then
+    if not v_is_office_service_action and not v_is_internal_paper_service_action then
     perform private._candidate_require_feature_v1(v_environment,'candidate_manager_approval');
+    end if;
   end if;
   if v_action='BEGIN_CANONICAL_DAILY_SAVE' then
+    if not v_is_office_service_action then
     perform private._candidate_require_feature_v1(v_environment,'candidate_daily_finalisation');
+    end if;
   end if;
   if v_action in (
     'PAPER_PREPARE','PAPER_RETURN','PAPER_PACK_RELEASE',
-    'PAPER_PROVIDER_SUBMIT_PERMIT'
+    'PAPER_PROVIDER_SUBMIT_PERMIT','PAPER_PACK_MARK_FAILURE'
   ) then
+    if not v_is_office_service_action and not v_is_internal_paper_service_action then
     perform private._candidate_require_feature_v1(v_environment,'candidate_paper_qr');
+    end if;
   end if;
   if v_action='MARK_READ' then
     perform private._candidate_require_feature_v1(v_environment,'candidate_notifications');
@@ -1589,18 +1794,20 @@ begin
     and v_action='PAPER_PROVIDER_SUBMIT_PERMIT'
     and coalesce((v_payload->>'service_paper_provider_submit_permit')::boolean,false)
   ) or (p_session_id is null
+    and v_action='PAPER_PACK_MARK_FAILURE'
+    and coalesce((v_payload->>'service_paper_pack_failure')::boolean,false)
+  ) or (p_session_id is null
     and v_action='MANAGER_PROVIDER_SUBMIT_PERMIT'
     and coalesce((v_payload->>'service_manager_provider_submit_permit')::boolean,false)
   ) or (p_session_id is null
     and coalesce((v_payload->>'service_phone_approval')::boolean,false)
     and v_action in ('BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
       'COMPONENT_PREPARE','COMPONENT_COMPLETE'))
-  or (p_session_id is null
-    and coalesce((v_payload->>'service_office_action')::boolean,false)
-    and coalesce(v_payload->>'actor_user_id','')
-      ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-    and v_action in ('REMIND','RENEW','CANCEL','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
-      'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE'));
+  or (v_is_office_service_action
+    and v_action in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
+      'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
+      'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
+      'BEGIN_CANONICAL_DAILY_SAVE','PAPER_PACK_RELEASE'));
   v_is_public_manager_action:=not v_is_service_action and p_session_id is null and v_action in (
     'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
     'COMPONENT_PREPARE','COMPONENT_COMPLETE'
@@ -1636,7 +1843,9 @@ begin
       for update;
     end if;
     if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
-    if coalesce((v_payload->>'service_office_action')::boolean,false) then
+    if v_is_office_service_action
+       and v_action in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
+         'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE') then
       if coalesce(v_payload->>'approval_request_id','')
            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
          or coalesce(v_payload->>'approval_request_generation','') !~ '^[1-9][0-9]{0,8}$' then
@@ -2333,10 +2542,45 @@ begin
      or (not v_is_service_action and not v_is_public_manager_action and v_workflow.candidate_id<>v_candidate_id) then
     raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
   end if;
-  if nullif(btrim(coalesce(p_idempotency_key,'')),'') is not null
-     and v_workflow.last_mutation_idempotency_key=p_idempotency_key
-     and v_workflow.last_mutation_response_json is not null then
-    return v_workflow.last_mutation_response_json||jsonb_build_object('idempotent_replay',true);
+  if nullif(btrim(coalesce(p_idempotency_key,'')),'') is not null then
+    if nullif(btrim(coalesce(v_workflow.idempotency_key,'')),'')=btrim(p_idempotency_key) then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_IDEMPOTENCY_CONFLICT',
+          'workflow_id',v_workflow.id,
+          'idempotency_key',btrim(p_idempotency_key),
+          'reason','CREATION_KEY_REUSED_FOR_MUTATION'
+        )::text;
+    end if;
+    v_mutation_channel:=case
+      when v_is_office_service_action then 'OFFICE'
+      when v_is_public_manager_action then 'MANAGER_PUBLIC'
+      when v_is_service_action then 'SERVICE'
+      else 'CANDIDATE_CLIENT' end;
+    v_mutation_actor_identity:=case
+      when v_is_office_service_action then v_office_actor_user_id::text
+      when v_is_public_manager_action then 'MANAGER_REQUEST:'||coalesce(v_request_id::text,'UNKNOWN')
+      when v_is_service_action then 'SERVICE:'||v_action
+      else 'ACCOUNT:'||coalesce(v_account_id::text,'UNKNOWN')
+        ||':CANDIDATE:'||coalesce(v_candidate_id::text,'UNKNOWN') end;
+    v_mutation_request_sha256:=encode(extensions.digest(convert_to(jsonb_build_object(
+      'contract_version','CANDIDATE_WORKFLOW_MUTATION_REQUEST_V1',
+      'workflow_id',v_workflow.id,
+      'action',v_action,
+      'expected_generation',p_expected_generation,
+      'payload',case when v_action='COMPONENT_PREPARE'
+        then v_payload-'service_office_action'-'actor_user_id'-'storage_key'
+        else v_payload-'service_office_action'-'actor_user_id' end,
+      'channel',v_mutation_channel,
+      'actor_identity',v_mutation_actor_identity
+    )::text,'UTF8'),'sha256'),'hex');
+    v_mutation_receipt:=private._candidate_workflow_mutation_receipt_v1(
+      v_workflow.id,btrim(p_idempotency_key),v_mutation_request_sha256,
+      v_action,v_mutation_channel,v_mutation_actor_identity,null,p_now_utc
+    );
+    if coalesce((v_mutation_receipt->>'found')::boolean,false) then
+      return v_mutation_receipt->'response';
+    end if;
   end if;
   if p_expected_generation is not null and v_workflow.generation<>p_expected_generation then
     raise exception 'WORKFLOW_GENERATION_CONFLICT'
@@ -2425,6 +2669,12 @@ begin
       'CANDIDATE_WORKFLOW_AMENDED',null,
       jsonb_build_object('generation',v_workflow.generation,'preserved_source_component_count',v_component_no),
       null,v_candidate_id,p_idempotency_key,p_now_utc);
+    if v_mutation_request_sha256 is not null then
+      perform private._candidate_workflow_mutation_receipt_v1(
+        v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+        v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+      );
+    end if;
     return v_response;
   elsif v_action='COMPONENT_PREPARE' then
     if v_workflow.state in ('FINALISED','CANCELLED','REJECTED','SUPERSEDED') then
@@ -2460,13 +2710,20 @@ begin
          or v_component.paper_return_page_key is distinct from v_paper_page_key then
         raise exception 'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT' using errcode='23505';
       end if;
-      return jsonb_build_object('ok',true,'idempotent_replay',true,
+      v_response:=jsonb_build_object('ok',true,'idempotent_replay',true,
         'component_id',v_component.id,'component_no',v_component.component_no,
         'workflow_generation',v_component.workflow_generation,
         'storage_key',v_component.storage_key,'media_type',v_component.media_type,
         'byte_size',v_component.byte_size,'component_kind',v_component.component_kind,
         'document_role',v_component.document_role,'expense_category',v_component.expense_category,
         'paper_return_page_key',v_component.paper_return_page_key,'state',v_component.state);
+      if v_mutation_request_sha256 is not null then
+        perform private._candidate_workflow_mutation_receipt_v1(
+          v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+          v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+        );
+      end if;
+      return v_response;
     end if;
     select coalesce(max(component_no),0)+1 into v_component_no
     from public.candidate_submission_components
@@ -2574,12 +2831,17 @@ begin
       false,null,'NOT_REQUIRED','NOT_REQUIRED',v_paper_page_key,
       p_now_utc
     ) returning * into v_component;
-    return jsonb_build_object('ok',true,'idempotent_replay',false,'component_id',v_component.id,
+    v_response:=jsonb_build_object('ok',true,'idempotent_replay',false,'component_id',v_component.id,
       'component_no',v_component.component_no,'workflow_generation',v_component.workflow_generation,
       'storage_key',v_component.storage_key,'media_type',v_component.media_type,
       'byte_size',v_component.byte_size,'component_kind',v_component.component_kind,
       'document_role',v_component.document_role,'expense_category',v_component.expense_category,
       'paper_return_page_key',v_component.paper_return_page_key,'state',v_component.state);
+    perform private._candidate_workflow_mutation_receipt_v1(
+      v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+      v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+    );
+    return v_response;
   elsif v_action='COMPONENT_COMPLETE' then
     select * into v_component from public.candidate_submission_components
     where id=nullif(v_payload->>'component_id','')::uuid and workflow_id=v_workflow.id
@@ -2631,8 +2893,15 @@ begin
       if v_component.source_content_sha256=v_digest
          and v_component.byte_size=coalesce(nullif(v_payload->>'verified_byte_size','')::bigint,v_component.byte_size)
          and lower(v_component.media_type)=lower(coalesce(nullif(v_payload->>'verified_media_type',''),v_component.media_type)) then
-        return jsonb_build_object('ok',true,'idempotent_replay',true,
+        v_response:=jsonb_build_object('ok',true,'idempotent_replay',true,
           'component_id',v_component.id,'state',v_component.state);
+        if v_mutation_request_sha256 is not null then
+          perform private._candidate_workflow_mutation_receipt_v1(
+            v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+            v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+          );
+        end if;
+        return v_response;
       end if;
       raise exception 'CANDIDATE_COMPONENT_IMMUTABLE_CONFLICT' using errcode='40001';
     end if;
@@ -2648,8 +2917,13 @@ begin
     if not found then
       raise exception 'CANDIDATE_COMPONENT_COMPLETE_STATE_CONFLICT' using errcode='40001';
     end if;
-    return jsonb_build_object('ok',true,'idempotent_replay',false,'component_id',v_component.id,
+    v_response:=jsonb_build_object('ok',true,'idempotent_replay',false,'component_id',v_component.id,
       'state',v_component.state,'immutable_at_utc',v_component.immutable_at_utc);
+    perform private._candidate_workflow_mutation_receipt_v1(
+      v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+      v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+    );
+    return v_response;
   elsif v_action='COMPONENT_SUPERSEDE' then
     if v_workflow.state<>'WORKER_DRAFT' then
       raise exception 'CANDIDATE_COMPONENT_AMENDMENT_REQUIRED' using errcode='55000';
@@ -2663,7 +2937,14 @@ begin
       and component_kind in ('CANDIDATE_SIGNATURE','MILEAGE_FORM','EXPENSE_EVIDENCE')
     returning * into v_component;
     if not found then raise exception 'CANDIDATE_COMPONENT_NOT_FOUND' using errcode='P0002'; end if;
-    return jsonb_build_object('ok',true,'component_id',v_component.id,'state',v_component.state);
+    v_response:=jsonb_build_object('ok',true,'component_id',v_component.id,'state',v_component.state);
+    if v_mutation_request_sha256 is not null then
+      perform private._candidate_workflow_mutation_receipt_v1(
+        v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+        v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+      );
+    end if;
+    return v_response;
   end if;
 
   if v_action='WORKER_SUBMIT' then
@@ -3111,9 +3392,16 @@ begin
       if v_component.review_storage_key=v_payload->>'storage_key'
          and v_component.review_content_sha256=v_digest
          and v_component.review_render_input_sha256=v_render_input_hash then
-        return jsonb_build_object('ok',true,'idempotent_replay',true,
+        v_response:=jsonb_build_object('ok',true,'idempotent_replay',true,
           'workflow_id',v_workflow.id,'generation',v_workflow.generation,
           'component_id',v_component.id,'state',v_workflow.state);
+        if v_mutation_request_sha256 is not null then
+          perform private._candidate_workflow_mutation_receipt_v1(
+            v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+            v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+          );
+        end if;
+        return v_response;
       end if;
       raise exception 'MANAGER_REVIEW_DOCUMENT_STALE' using errcode='55000';
     end if;
@@ -3256,7 +3544,7 @@ begin
     update public.candidate_approval_requests set
       review_started_at_utc=coalesce(review_started_at_utc,p_now_utc),updated_at_utc=p_now_utc
     where id=v_approval.id;
-    return jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
+    v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
       'workflow_generation',v_workflow.generation,'approval_request_id',v_approval.id,
       'method',v_approval.method,'expires_at_utc',v_approval.expires_at_utc,
       'manifest_sha256',encode(v_approval.review_manifest_sha256,'hex'),
@@ -3265,6 +3553,13 @@ begin
       'ordered_components',v_approval.required_component_manifest_json,
       'manager_identity_requirements',jsonb_build_object('name_required',true,'position_required',true,'signature_required',true),
       'can_approve',true,'can_refuse',true);
+    if v_mutation_request_sha256 is not null then
+      perform private._candidate_workflow_mutation_receipt_v1(
+        v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+        v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+      );
+    end if;
+    return v_response;
 
   elsif v_action='RECORD_REVIEW_PROGRESS' then
     if v_is_public_manager_action then
@@ -3447,9 +3742,16 @@ begin
       if v_component.final_signed_storage_key=v_payload->>'storage_key'
          and v_component.final_signed_content_sha256=v_digest
          and v_component.final_signed_render_input_sha256=v_render_input_hash then
-        return jsonb_build_object('ok',true,'idempotent_replay',true,
+        v_response:=jsonb_build_object('ok',true,'idempotent_replay',true,
           'workflow_id',v_workflow.id,'generation',v_workflow.generation,
           'component_id',v_component.id,'state',v_workflow.state);
+        if v_mutation_request_sha256 is not null then
+          perform private._candidate_workflow_mutation_receipt_v1(
+            v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+            v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+          );
+        end if;
+        return v_response;
       end if;
       raise exception 'FINAL_SIGNED_DOCUMENT_STALE' using errcode='55000';
     end if;
@@ -3499,7 +3801,7 @@ begin
        and v_workflow.canonical_save_input_sha256=v_expected_save_hash
        and v_workflow.canonical_save_financials_id is not null
        and nullif(btrim(coalesce(v_workflow.canonical_save_row_signature,'')),'') is not null then
-      return jsonb_build_object(
+      v_response:=jsonb_build_object(
         'ok',true,'idempotent_replay',true,'workflow_id',v_workflow.id,
         'generation',v_workflow.generation,'state',v_workflow.state,
         'canonical_save_registered',true,
@@ -3508,6 +3810,13 @@ begin
         'canonical_save_row_signature',v_workflow.canonical_save_row_signature,
         'canonical_save_financials_id',v_workflow.canonical_save_financials_id
       );
+      if v_mutation_request_sha256 is not null then
+        perform private._candidate_workflow_mutation_receipt_v1(
+          v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+          v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+        );
+      end if;
+      return v_response;
     end if;
     v_current_row_signature:=nullif(btrim(v_daily_context->>'pre_save_row_signature'),'');
     if v_current_row_signature is null then
@@ -3933,6 +4242,7 @@ begin
       )
       and candidate_mail.attempt_lease_token=v_provider_lease_token
       and candidate_mail.attempt_lease_expires_at_utc>p_now_utc
+      and candidate_mail.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
       and candidate_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
       and candidate_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
       and lower(coalesce(candidate_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
@@ -4228,6 +4538,104 @@ begin
       updated_at_utc=p_now_utc
     where id=v_workflow.id returning * into v_workflow;
 
+  elsif v_action='PAPER_PACK_MARK_FAILURE' then
+    if not v_is_service_action or p_session_id is not null
+       or not coalesce((v_payload->>'service_paper_pack_failure')::boolean,false) then
+      raise exception 'CANDIDATE_PAPER_PACK_FAILURE_SERVICE_REQUIRED' using errcode='28000';
+    end if;
+    if v_workflow.state<>'AWAITING_PAPER_RETURN' or v_workflow.route<>'PAPER'
+       or v_workflow.paper_return_manifest_sha256 is null then
+      raise exception 'CANDIDATE_PAPER_WORKFLOW_STALE' using errcode='40001';
+    end if;
+    v_paper_mail_id:=nullif(btrim(coalesce(v_payload->>'mail_outbox_id','')),'')::uuid;
+    v_paper_manifest_sha256:=lower(btrim(coalesce(v_payload->>'paper_return_manifest_sha256','')));
+    v_paper_failure_code:=upper(btrim(coalesce(v_payload->>'error_code','')));
+    if v_paper_mail_id is null
+       or v_paper_manifest_sha256 !~ '^[0-9a-f]{64}$'
+       or v_paper_manifest_sha256<>encode(v_workflow.paper_return_manifest_sha256,'hex')
+       or v_paper_failure_code='' then
+      raise exception 'CANDIDATE_PAPER_PACK_FAILURE_RECEIPT_INVALID' using errcode='22023';
+    end if;
+    if v_paper_failure_code not in (
+      'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
+      'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+      'CANDIDATE_PAPER_R2_WRITE_TRANSIENT',
+      'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT',
+      'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
+      'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID',
+      'CANDIDATE_PAPER_PACK_COMPONENT_MISSING',
+      'CANDIDATE_PAPER_PACK_INCOMPLETE',
+      'CANDIDATE_PAPER_PACK_IDENTITY_INVALID',
+      'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT',
+      'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+      'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+    ) then
+      v_paper_failure_code:='CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED';
+    end if;
+    v_paper_failure_class:=case
+      when v_paper_failure_code in (
+        'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
+        'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+        'CANDIDATE_PAPER_R2_WRITE_TRANSIENT',
+        'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT'
+      ) then 'RETRYABLE'
+      when v_paper_failure_code in (
+        'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
+        'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID',
+        'CANDIDATE_PAPER_PACK_COMPONENT_MISSING',
+        'CANDIDATE_PAPER_PACK_INCOMPLETE',
+        'CANDIDATE_PAPER_PACK_IDENTITY_INVALID',
+        'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT',
+        'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+        'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+      ) then 'TERMINAL'
+      else 'TERMINAL' end;
+    v_paper_failure_retryable:=v_paper_failure_class='RETRYABLE';
+    select * into v_paper_mail
+    from public.mail_outbox candidate_paper_mail
+    where candidate_paper_mail.id=v_paper_mail_id
+      and candidate_paper_mail.type='TIMESHEET_QR'
+      and candidate_paper_mail.context_kind='timesheets'
+      and candidate_paper_mail.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
+      and candidate_paper_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+      and candidate_paper_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+      and lower(coalesce(candidate_paper_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+            =v_paper_manifest_sha256
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_PAPER_OUTBOX_NOT_READY' using errcode='40001';
+    end if;
+    if nullif(btrim(coalesce(v_paper_mail.attempt_lease_token,'')),'') is not null
+       and v_paper_mail.attempt_lease_expires_at_utc>p_now_utc then
+      raise exception 'CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS' using errcode='40001';
+    end if;
+    if lower(coalesce(v_paper_mail.payment_scope_json->>'candidate_paper_generation_retired','false'))
+         in ('true','t','1','yes') then
+      raise exception 'CANDIDATE_PAPER_WORKFLOW_STALE' using errcode='40001';
+    end if;
+    update public.mail_outbox candidate_paper_mail
+    set payment_scope_json=candidate_paper_mail.payment_scope_json||jsonb_build_object(
+      'candidate_paper_pack_ready',false,
+      'candidate_paper_pack_retryable',v_paper_failure_retryable,
+      'candidate_paper_pack_failure_class',v_paper_failure_class,
+      'candidate_paper_pack_failure_code',v_paper_failure_code,
+      'candidate_paper_pack_failure_contract_version','CANDIDATE_PAPER_PACK_FAILURE_V1',
+      'candidate_paper_pack_failed_at_utc',p_now_utc
+    )
+    where candidate_paper_mail.id=v_paper_mail.id;
+    v_response:=jsonb_build_object(
+      'ok',true,'workflow_id',v_workflow.id,'generation',v_workflow.generation,
+      'mail_outbox_id',v_paper_mail.id,'paper_pack_state',
+        case when v_paper_failure_retryable then 'FAILED_RETRYABLE' else 'FAILED_TERMINAL' end,
+      'failure_class',v_paper_failure_class,'failure_code',v_paper_failure_code,
+      'retryable',v_paper_failure_retryable,
+      'failure_contract_version','CANDIDATE_PAPER_PACK_FAILURE_V1'
+    );
+    update public.candidate_submission_workflows
+    set last_mutation_idempotency_key=p_idempotency_key,
+        last_mutation_response_json=v_response,updated_at_utc=p_now_utc
+    where id=v_workflow.id and generation=v_workflow.generation;
+
   elsif v_action='PAPER_PACK_RELEASE' then
     if not v_is_service_action or p_session_id is not null then
       raise exception 'CANDIDATE_PAPER_PACK_RELEASE_SERVICE_REQUIRED' using errcode='28000';
@@ -4292,6 +4700,7 @@ begin
     where candidate_paper_mail.type='TIMESHEET_QR'
       and candidate_paper_mail.context_kind='timesheets'
       and candidate_paper_mail.context_id=v_paper_timesheet_id
+      and candidate_paper_mail.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
       and candidate_paper_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
       and candidate_paper_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
       and lower(coalesce(candidate_paper_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
@@ -4306,6 +4715,7 @@ begin
       and candidate_paper_mail.type='TIMESHEET_QR'
       and candidate_paper_mail.context_kind='timesheets'
       and candidate_paper_mail.context_id=v_paper_timesheet_id
+      and candidate_paper_mail.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
       and candidate_paper_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
       and candidate_paper_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
       and lower(coalesce(candidate_paper_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
@@ -4362,6 +4772,11 @@ begin
           next_attempt_at_utc=p_now_utc,
           payment_scope_json=candidate_paper_mail.payment_scope_json||jsonb_build_object(
             'candidate_paper_pack_ready',true,
+            'candidate_paper_pack_retryable',false,
+            'candidate_paper_pack_failure_class',null,
+            'candidate_paper_pack_failure_code',null,
+            'candidate_paper_pack_failure_contract_version',null,
+            'candidate_paper_pack_failed_at_utc',null,
             'mail_held_until_pdf_rendered',false,
             'mail_delayed_for_pdf_render',false,
             'mail_hold_reason',null,
@@ -4514,7 +4929,7 @@ begin
     update public.candidate_notifications set state='READ',read_at_utc=p_now_utc
     where id=nullif(v_payload->>'notification_id','')::uuid
       and account_id=v_account_id and state='UNREAD';
-    return jsonb_build_object('ok',true,
+    v_response:=jsonb_build_object('ok',true,
       'notification_id',nullif(v_payload->>'notification_id','')::uuid,'state','READ');
   else
     raise exception 'CANDIDATE_WORKFLOW_ACTION_INVALID'
@@ -4526,6 +4941,12 @@ begin
     'CANDIDATE_WORKFLOW_'||v_action,
     jsonb_build_object('state',v_workflow.state,'generation',v_workflow.generation),
     v_response,v_audit_reason,null,p_idempotency_key,p_now_utc);
+  if v_mutation_request_sha256 is not null then
+    perform private._candidate_workflow_mutation_receipt_v1(
+      v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
+      v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
+    );
+  end if;
   return v_response;
 exception
   when unique_violation then
@@ -4565,6 +4986,14 @@ revoke all on function private._candidate_paper_delivery_retire_v1(uuid,integer,
 revoke all on function private._candidate_paper_source_workflow_context_v1(uuid)
   from public,anon,authenticated,service_role;
 revoke all on function private._candidate_paper_delivery_retire_set_v1(uuid[],integer[],text,timestamptz)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_office_service_context_open_v1(text,uuid,text,text,timestamptz)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_office_service_context_valid_v1(text,uuid,text)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_office_service_context_close_v1()
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_workflow_mutation_receipt_v1(uuid,text,text,text,text,text,jsonb,timestamptz)
   from public,anon,authenticated,service_role;
 revoke all on function public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)
   from public,anon,authenticated;
