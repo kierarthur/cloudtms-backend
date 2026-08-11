@@ -1543,7 +1543,13 @@ begin
   ) or (p_session_id is null
     and coalesce((v_payload->>'service_phone_approval')::boolean,false)
     and v_action in ('BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
-      'COMPONENT_PREPARE','COMPONENT_COMPLETE'));
+      'COMPONENT_PREPARE','COMPONENT_COMPLETE'))
+  or (p_session_id is null
+    and coalesce((v_payload->>'service_office_action')::boolean,false)
+    and coalesce(v_payload->>'actor_user_id','')
+      ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    and v_action in ('REMIND','RENEW','CANCEL','CANCEL_MANAGER_HANDOFF',
+      'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE'));
   v_is_public_manager_action:=not v_is_service_action and p_session_id is null and v_action in (
     'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
     'COMPONENT_PREPARE','COMPONENT_COMPLETE'
@@ -1579,6 +1585,22 @@ begin
       for update;
     end if;
     if not found then raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002'; end if;
+    if coalesce((v_payload->>'service_office_action')::boolean,false) then
+      if coalesce(v_payload->>'approval_request_id','')
+           !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+         or coalesce(v_payload->>'approval_request_generation','') !~ '^[1-9][0-9]{0,8}$' then
+        raise exception 'CANDIDATE_REQUEST_GENERATION_STALE' using errcode='40001';
+      end if;
+      perform 1
+      from public.candidate_approval_requests office_request
+      where office_request.id=(v_payload->>'approval_request_id')::uuid
+        and office_request.workflow_id=v_workflow.id
+        and office_request.workflow_generation=v_workflow.generation
+        and office_request.request_generation=(v_payload->>'approval_request_generation')::integer;
+      if not found then
+        raise exception 'CANDIDATE_REQUEST_GENERATION_STALE' using errcode='40001';
+      end if;
+    end if;
     v_account_id:=v_workflow.account_id;
     v_candidate_id:=v_workflow.candidate_id;
   elsif v_is_public_manager_action then
@@ -3077,7 +3099,11 @@ begin
     else
       select * into v_approval from public.candidate_approval_requests
       where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
-        and method='PHONE' and state='PENDING' for update;
+        and method='PHONE' and state='PENDING'
+        and (not coalesce((v_payload->>'service_office_action')::boolean,false)
+          or (id=(v_payload->>'approval_request_id')::uuid
+            and request_generation=(v_payload->>'approval_request_generation')::integer))
+      for update;
     end if;
     if not found or v_approval.state<>'PENDING' then
       raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
@@ -3109,7 +3135,11 @@ begin
     else
       select * into v_approval from public.candidate_approval_requests
       where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
-        and method='PHONE' and state='PENDING' for update;
+        and method='PHONE' and state='PENDING'
+        and (not coalesce((v_payload->>'service_office_action')::boolean,false)
+          or (id=(v_payload->>'approval_request_id')::uuid
+            and request_generation=(v_payload->>'approval_request_generation')::integer))
+      for update;
     end if;
     if not found or v_approval.state<>'PENDING' then
       raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
@@ -3155,7 +3185,11 @@ begin
     else
       select * into v_approval from public.candidate_approval_requests
       where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
-        and method='PHONE' and state='PENDING' for update;
+        and method='PHONE' and state='PENDING'
+        and (not coalesce((v_payload->>'service_office_action')::boolean,false)
+          or (id=(v_payload->>'approval_request_id')::uuid
+            and request_generation=(v_payload->>'approval_request_generation')::integer))
+      for update;
     end if;
     if not found or v_approval.state<>'PENDING' then
       raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
@@ -3365,7 +3399,11 @@ begin
     else
       select * into v_approval from public.candidate_approval_requests
       where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
-        and state='PENDING' for update;
+        and state='PENDING'
+        and (not coalesce((v_payload->>'service_office_action')::boolean,false)
+          or (id=(v_payload->>'approval_request_id')::uuid
+            and request_generation=(v_payload->>'approval_request_generation')::integer))
+      for update;
     end if;
     if not found or v_approval.state<>'PENDING' then
       raise exception 'MANAGER_APPROVAL_REQUEST_NOT_READY' using errcode='28000';
@@ -3397,7 +3435,11 @@ begin
   elsif v_action='REMIND' then
     select * into v_approval from public.candidate_approval_requests
     where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
-      and method='EMAIL' and state='PENDING' for update skip locked;
+      and method='EMAIL' and state='PENDING'
+      and (not coalesce((v_payload->>'service_office_action')::boolean,false)
+        or (id=(v_payload->>'approval_request_id')::uuid
+          and request_generation=(v_payload->>'approval_request_generation')::integer))
+    for update skip locked;
     if not found or v_approval.review_manifest_sha256 is distinct from v_workflow.review_manifest_sha256 then
       raise exception 'MANAGER_REMINDER_NOT_ELIGIBLE' using errcode='55000';
     end if;
@@ -3468,6 +3510,9 @@ begin
     end if;
     select * into v_approval from public.candidate_approval_requests
     where workflow_id=v_workflow.id and method='EMAIL'
+      and (not coalesce((v_payload->>'service_office_action')::boolean,false)
+        or (id=(v_payload->>'approval_request_id')::uuid
+          and request_generation=(v_payload->>'approval_request_generation')::integer))
     order by request_generation desc,created_at_utc desc limit 1 for update;
     if found and v_approval.state='PENDING' and v_approval.expires_at_utc<=p_now_utc then
       update public.candidate_approval_requests set
@@ -3527,6 +3572,9 @@ begin
     select * into v_approval from public.candidate_approval_requests
     where workflow_id=v_workflow.id and workflow_generation=v_workflow.generation
       and method='PHONE' and state='PENDING'
+      and (not coalesce((v_payload->>'service_office_action')::boolean,false)
+        or (id=(v_payload->>'approval_request_id')::uuid
+          and request_generation=(v_payload->>'approval_request_generation')::integer))
     order by request_generation desc limit 1 for update;
     if not found then raise exception 'MANAGER_PHONE_HANDOFF_NOT_CANCELLABLE' using errcode='55000'; end if;
     update public.candidate_approval_requests set

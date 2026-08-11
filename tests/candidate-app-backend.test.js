@@ -23,6 +23,8 @@ const {
   expenseSummaryDisplayLines,
   mileageJourneyRows,
   paperPackIdentity,
+  candidatePaperDeliveryGeneration,
+  candidatePaperCompleteReceipt,
   readyPaperPackReceipt,
   readyGeneratedDocumentReceipt,
   releaseCandidatePaperPack,
@@ -32,6 +34,7 @@ const {
   candidateDocumentBranding,
   createAccessToken,
   mileageClaimFormBytes,
+  officeErrorCode,
   renderExpensePage,
   routeMatch,
   safeFinalisationResult,
@@ -466,6 +469,502 @@ test('normal CloudTMS office audience cannot expose Candidate or manager public 
   const request = new Request('https://backend.test/candidate-app/v1/bootstrap');
   assert.equal(await handleCandidateAppRequest(request.clone(), env, {}, { routeAudience: 'OFFICE' }), null);
   assert.equal(await handleCandidateAppRequest(request.clone(), env, {}, {}), null);
+});
+
+test('normal office Candidate endpoints enforce exact methods and use one service adapter call', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000201';
+  const timesheetId = '00000000-0000-4000-8000-000000000202';
+  const calls = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId, role: 'admin' }; },
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return name === 'cloudtms_office_candidate_adapter_v1'
+        ? { ok: true, contract_version: 'OFFICE_CANDIDATE_TIMESHEET_V1' } : { ok: true };
+    }
+  };
+  const env = { CANDIDATE_APP_ENVIRONMENT: 'TEST' };
+  const detail = await handleCandidateAppRequest(new Request(
+    `https://office.test/api/candidate-app/timesheets/${timesheetId}/office-detail?row_key=row-1`,
+    { method: 'GET' }
+  ), env, {}, deps);
+  assert.equal(detail.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'cloudtms_office_candidate_adapter_v1');
+  assert.equal(calls[0].args.p_action, 'PROJECT_ONE');
+  assert.equal(calls[0].args.p_actor_user_id, actorId);
+  assert.equal(calls[0].args.p_payload.timesheet_id, timesheetId);
+  assert.equal(calls[0].args.p_payload.row_key, 'row-1');
+
+  const wrongMethod = await handleCandidateAppRequest(new Request(
+    `https://office.test/api/candidate-app/timesheets/${timesheetId}/office-detail`,
+    { method: 'POST' }
+  ), env, {}, deps);
+  assert.equal(wrongMethod.status, 405);
+  assert.equal((await wrongMethod.json()).error_code, 'METHOD_NOT_ALLOWED');
+  assert.equal(calls.length, 1, 'wrong method must not reach an RPC');
+});
+
+test('office batch projection is bounded and never fans out into per-row RPC calls', async () => {
+  const calls = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: '00000000-0000-4000-8000-000000000211' }; },
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { ok: true, result_count: args.p_payload.identities.length, results: [] };
+    }
+  };
+  const rows = [1, 2, 3].map(value => ({
+    row_key: `row-${value}`,
+    timesheet_id: `00000000-0000-4000-8000-${String(220 + value).padStart(12, '0')}`,
+    expected_row_signature: `signature-${value}`
+  }));
+  const response = await handleCandidateAppRequest(new Request(
+    'https://office.test/api/candidate-app/timesheets/office-projections', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ surface: 'TIMESHEET_SUMMARY', selected_rows: rows })
+    }
+  ), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, deps);
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].args.p_action, 'PROJECT_BATCH');
+  assert.equal(calls[0].args.p_payload.identities.length, 3);
+});
+
+test('office route confirmation requires a caller-owned UUID before any mutation RPC', async () => {
+  const calls = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: '00000000-0000-4000-8000-000000000226' }; },
+    async rpc(name, args) { calls.push({ name, args }); return { ok: true }; }
+  };
+  const timesheetId = '00000000-0000-4000-8000-000000000227';
+  const response = await handleCandidateAppRequest(new Request(
+    `https://office.test/api/candidate-app/timesheets/${timesheetId}/route-confirm`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        expected_timesheet_id: timesheetId,
+        expected_row_signature: 'row-signature',
+        expected_context_sha256: 'a'.repeat(64),
+        action: 'SWITCH_TO_MANUAL'
+      })
+    }
+  ), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, deps);
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error_code, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  assert.equal(calls.length, 0);
+});
+
+test('office rejection requires a bounded reason before the canonical confirmation call', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000224';
+  const timesheetId = '00000000-0000-4000-8000-000000000225';
+  const idempotencyKey = '00000000-0000-4000-8000-000000000226';
+  const calls = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { ok: true, contract_version: 'OFFICE_CANDIDATE_REJECTION_RESULT_V1' };
+    }
+  };
+  const request = body => new Request(
+    `https://office.test/api/candidate-app/timesheets/${timesheetId}/reject`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    }
+  );
+  const identity = {
+    expected_timesheet_id: timesheetId,
+    expected_row_signature: 'row-signature',
+    context_sha256: 'a'.repeat(64),
+    idempotency_key: idempotencyKey
+  };
+
+  const missing = await handleCandidateAppRequest(
+    request(identity), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, deps
+  );
+  assert.equal(missing.status, 400);
+  assert.equal((await missing.json()).error_code, 'CANDIDATE_REASON_REQUIRED');
+  assert.equal(calls.length, 0);
+
+  const oversized = await handleCandidateAppRequest(
+    request({ ...identity, reason: 'x'.repeat(1001) }),
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, deps
+  );
+  assert.equal(oversized.status, 400);
+  assert.equal((await oversized.json()).error_code, 'CANDIDATE_REASON_INVALID');
+  assert.equal(calls.length, 0);
+
+  const valid = await handleCandidateAppRequest(
+    request({ ...identity, reason: 'The candidate must correct the submitted hours.' }),
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, deps
+  );
+  assert.equal(valid.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'cloudtms_office_candidate_adapter_v1');
+  assert.equal(calls[0].args.p_action, 'REJECT_CONFIRM');
+  assert.equal(calls[0].args.p_payload.reason, 'The candidate must correct the submitted hours.');
+});
+
+test('office errors use stable aliases without changing underlying lifecycle codes', () => {
+  assert.equal(officeErrorCode(new Error('IDEMPOTENCY_CONFLICT')), 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+  assert.equal(officeErrorCode(new Error('ROW_SIGNATURE_MISMATCH')), 'CANDIDATE_CONTEXT_STALE');
+  assert.equal(officeErrorCode(new Error('TIMESHEET_MOVED')), 'CANDIDATE_TIMESHEET_MOVED');
+  assert.equal(officeErrorCode(new Error('CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS')),
+    'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS');
+  assert.equal(officeErrorCode(new Error('CANDIDATE_REJECT_REQUIRES_UNAUTHORISE')),
+    'CANDIDATE_REQUIRES_UNAUTHORISE');
+  assert.equal(officeErrorCode(new Error('CANDIDATE_REJECT_PROTECTED_HISTORY')),
+    'CANDIDATE_PROTECTED_FINANCIAL_HISTORY');
+  assert.equal(officeErrorCode(new Error('CANDIDATE_WORKFLOW_NOT_FOUND')), 'CANDIDATE_WORKFLOW_NOT_FOUND');
+});
+
+test('office W07 route preview returns the server-owned reject-versus-manual decision only for a Candidate scope', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000228';
+  const timesheetId = '00000000-0000-4000-8000-000000000229';
+  const workflowId = '00000000-0000-4000-8000-00000000022a';
+  let includeScope = true;
+  const calls = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      calls.push({ name, args });
+      if (name === 'timesheet_route_version_preview_v1') {
+        return { ok: true, action: 'SWITCH_TO_MANUAL', expected_timesheet_id: timesheetId };
+      }
+      assert.equal(name, 'cloudtms_office_candidate_adapter_v1');
+      assert.equal(args.p_action, 'REJECT_PREVIEW');
+      return includeScope ? {
+        permitted: true,
+        target_workflows: [{ workflow_id: workflowId, generation: 3 }]
+      } : { permitted: false, target_workflows: [] };
+    }
+  };
+  const request = () => new Request(
+    `https://office.test/api/candidate-app/timesheets/${timesheetId}/route-preview?action=SWITCH_TO_MANUAL`
+  );
+  const first = await handleCandidateAppRequest(request(), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, deps);
+  assert.equal(first.status, 200);
+  const decision = (await first.json()).intervention_choice;
+  assert.equal(decision.required, true);
+  assert.equal(decision.decision_code, 'REJECT_OR_MANUAL');
+  assert.equal(decision.title, 'Does the candidate need to resubmit instead?');
+  assert.match(decision.message, /^Use Reject Candidate Submission/);
+  assert.match(decision.message, /Convert to Manual only/);
+  assert.equal(decision.reject_available, true);
+  assert.equal(decision.reject_action.label, 'Use Reject Candidate Submission');
+  assert.equal(decision.reject_action.method, 'GET');
+  assert.equal(decision.continue_action.label, 'Continue to Manual conversion');
+  assert.equal(decision.continue_action.method, 'POST');
+  assert.deepEqual(decision.continue_action.fixed_body, { action: 'SWITCH_TO_MANUAL' });
+
+  includeScope = false;
+  const second = await handleCandidateAppRequest(request(), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, deps);
+  assert.equal(second.status, 200);
+  assert.equal((await second.json()).intervention_choice, null);
+  includeScope = true;
+  const originalRpc = deps.rpc;
+  deps.rpc = async (name, args) => {
+    const result = await originalRpc(name, args);
+    return name === 'cloudtms_office_candidate_adapter_v1'
+      ? { ...result, permitted: false, disabled_reason_code: 'CANDIDATE_REQUIRES_UNAUTHORISE' }
+      : result;
+  };
+  const third = await handleCandidateAppRequest(request(), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, deps);
+  assert.equal(third.status, 200);
+  assert.equal((await third.json()).intervention_choice, null);
+  assert.equal(calls.length, 6);
+});
+
+test('office W07 route preview fails closed when Candidate scope authority is unavailable', async () => {
+  const timesheetId = '00000000-0000-4000-8000-00000000022d';
+  let calls = 0;
+  const response = await handleCandidateAppRequest(new Request(
+    `https://office.test/api/candidate-app/timesheets/${timesheetId}/route-preview?action=SWITCH_TO_MANUAL`
+  ), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: '00000000-0000-4000-8000-00000000022e' }; },
+    async rpc(name) {
+      calls += 1;
+      if (name === 'timesheet_route_version_preview_v1') return { ok: true };
+      throw new Error('unexpected adapter outage');
+    }
+  });
+  assert.equal(response.status, 500);
+  assert.equal((await response.json()).error_code, 'CANDIDATE_REQUEST_FAILED');
+  assert.equal(calls, 2);
+});
+
+test('office PAPER history uses the preceding immutable delivery generation and retained receipt', () => {
+  const workflowId = '00000000-0000-4000-8000-00000000022b';
+  const manifestHash = 'a'.repeat(64);
+  const baseHash = 'b'.repeat(64);
+  const brandingHash = 'c'.repeat(64);
+  const packHash = 'd'.repeat(64);
+  const workflow = {
+    id: workflowId,
+    generation: 2,
+    state: 'FINALISED',
+    paper_return_manifest_sha256: manifestHash
+  };
+  assert.equal(candidatePaperDeliveryGeneration(workflow), 1);
+  assert.equal(candidatePaperDeliveryGeneration({ ...workflow, state: 'RECEIVED' }), 2);
+  const complete = {
+    key: `candidate-app/test/${workflowId}/1/paper-pack/`
+      + `${manifestHash}-${baseHash}-${brandingHash}-CANDIDATE_REVIEW_DOCUMENTS_V1.pdf`,
+    sha256: packHash,
+    byte_size: 321,
+    page_count: 4
+  };
+  const activeScope = {
+    ...readyPaperScope(workflowId, 1, manifestHash, complete),
+    candidate_mail_authority: 'CANDIDATE_PAPER_V1',
+    base_document_sha256: baseHash,
+    branding_contract_sha256: brandingHash,
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1'
+  };
+  const attachment = readyPaperAttachment(workflowId, 1, manifestHash, complete);
+  const retired = {
+    context_id: '00000000-0000-4000-8000-00000000022c',
+    status: 'QUEUED',
+    attachments: [],
+    payment_scope_json: {
+      ...activeScope,
+      candidate_paper_generation_retired: true,
+      candidate_paper_pack_ready: false,
+      mail_held_until_pdf_rendered: true,
+      mail_hold_reason: 'CANDIDATE_PAPER_GENERATION_RETIRED',
+      candidate_retired_delivery_receipt: {
+        attachments: [attachment],
+        candidate_complete_pack_storage_key: complete.key,
+        candidate_complete_pack_sha256: complete.sha256,
+        candidate_complete_pack_size_bytes: complete.byte_size,
+        candidate_complete_pack_page_count: complete.page_count,
+        candidate_complete_pack_media_type: 'application/pdf'
+      }
+    }
+  };
+  const receipt = candidatePaperCompleteReceipt(
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, workflow, 1, retired
+  );
+  assert.equal(receipt.ready, true);
+  assert.equal(receipt.retired, true);
+  assert.equal(receipt.delivery_generation, 1);
+  assert.equal(receipt.key, complete.key);
+  assert.equal(receipt.sha256, packHash);
+});
+
+test('office phone review sends only declared typed fields to the service adapter', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000241';
+  const workflowId = '00000000-0000-4000-8000-000000000242';
+  const approvalId = '00000000-0000-4000-8000-000000000243';
+  const componentId = '00000000-0000-4000-8000-000000000244';
+  const idempotencyKey = '00000000-0000-4000-8000-000000000245';
+  const manifestHash = 'b'.repeat(64);
+  const componentHash = 'c'.repeat(64);
+  const calls = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) { calls.push({ name, args }); return { ok: true }; }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('candidate_submission_workflows')) return Response.json([{
+      id: workflowId, generation: 4, route: 'PHONE', state: 'AWAITING_MANAGER_APPROVAL'
+    }]);
+    if (value.includes('candidate_approval_requests')) return Response.json([{
+      id: approvalId, workflow_id: workflowId, workflow_generation: 4,
+      request_generation: 2, method: 'PHONE', state: 'PENDING'
+    }]);
+    throw new Error(`unexpected URL: ${value}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://office.test/api/candidate-app/workflows/${workflowId}/actions/phone-progress`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 4, approval_request_id: approvalId, approval_request_generation: 2,
+          idempotency_key: idempotencyKey, manifest_sha256_hex: manifestHash,
+          component_id: componentId, component_sha256_hex: componentHash,
+          viewed_receipt: { page_count: 1 },
+          payload: { injected_authority: true }, injected_authority: true
+        })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, deps);
+    assert.equal(response.status, 200);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, 'cloudtms_office_candidate_adapter_v1');
+    assert.equal(calls[0].args.p_action, 'WORKFLOW_ACTION_EXECUTE');
+    assert.deepEqual(calls[0].args.p_payload.payload, {
+      manifest_sha256_hex: manifestHash,
+      component_id: componentId,
+      component_sha256_hex: componentHash,
+      viewed_receipt: { page_count: 1 }
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('office signature preparation binds the exact phone request and returns an office upload route', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000251';
+  const workflowId = '00000000-0000-4000-8000-000000000252';
+  const approvalId = '00000000-0000-4000-8000-000000000253';
+  const componentId = '00000000-0000-4000-8000-000000000254';
+  const idempotencyKey = '00000000-0000-4000-8000-000000000255';
+  const calls = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return {
+        ok: true, component_id: componentId, workflow_generation: 3,
+        storage_key: 'candidate-app/test/workflow/3/manager-signature.png',
+        media_type: 'image/png', byte_size: 128, component_kind: 'MANAGER_SIGNATURE',
+        document_role: 'MANAGER_SIGNATURE', expense_category: null,
+        paper_return_page_key: null, state: 'PENDING'
+      };
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('candidate_submission_workflows')) return Response.json([{
+      id: workflowId, generation: 3, route: 'PHONE', state: 'AWAITING_MANAGER_APPROVAL'
+    }]);
+    if (value.includes('candidate_approval_requests')) return Response.json([{
+      id: approvalId, workflow_id: workflowId, workflow_generation: 3,
+      request_generation: 2, method: 'PHONE', state: 'PENDING'
+    }]);
+    throw new Error(`unexpected URL: ${value}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://office.test/api/candidate-app/workflows/${workflowId}/signature/prepare`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 3, approval_request_id: approvalId, approval_request_generation: 2,
+          idempotency_key: idempotencyKey, media_type: 'image/png', byte_size: 128
+        })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder',
+      CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-office-upload-secret'
+    }, {}, deps);
+    assert.equal(response.status, 201);
+    const result = await response.json();
+    assert.match(result.upload.url, /^\/api\/candidate-app\/uploads\//);
+    assert.equal(Object.hasOwn(result.upload, 'storage_key'), false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].args.p_action, 'COMPONENT_PREPARE');
+    assert.equal(calls[0].args.p_payload.component_kind, 'MANAGER_SIGNATURE');
+    assert.equal(calls[0].args.p_payload.document_role, 'MANAGER_SIGNATURE');
+    assert.equal(calls[0].args.p_payload.approval_request_id, approvalId);
+    assert.equal(calls[0].args.p_payload.actor_user_id, actorId);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('office reminder batch execute remains one browser operation with server-owned reminder material', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000231';
+  const workflowId = '00000000-0000-4000-8000-000000000232';
+  const requestId = '00000000-0000-4000-8000-000000000233';
+  const batchId = '00000000-0000-4000-8000-000000000234';
+  const fingerprint = 'a'.repeat(64);
+  const identity = {
+    row_key: 'row-1',
+    timesheet_id: '00000000-0000-4000-8000-000000000235',
+    expected_row_signature: 'sig-1'
+  };
+  const rpcCalls = [];
+  let replayFound = false;
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      rpcCalls.push({ name, args });
+      if (args.p_action === 'REMINDER_BATCH_REPLAY') return replayFound
+        ? { ok: true, found: true, idempotent_replay: true, batch_id: batchId, status: 'COMPLETED', items: [] }
+        : { ok: true, found: false, batch_id: batchId };
+      if (args.p_action === 'REMINDER_BATCH_PREVIEW') return {
+        ok: true, preview_context_hash: fingerprint, selection_fingerprint: fingerprint,
+        items: [{
+          correlation_key: 'row-1', eligible: true, workflow_id: workflowId,
+          workflow_generation: 2, approval_request_id: requestId,
+          approval_request_generation: 3, row_signature: 'sig-1'
+        }]
+      };
+      assert.equal(args.p_action, 'REMINDER_BATCH_EXECUTE');
+      assert.equal(args.p_payload.reminders.length, 1);
+      assert.match(args.p_payload.reminders[0].payload.approval_token_hash_hex, /^[a-f0-9]{64}$/);
+      assert.equal(args.p_payload.reminders[0].payload.mail.to, 'manager@example.test');
+      return { ok: true, batch_id: batchId, status: 'COMPLETED', items: [] };
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    assert.match(String(url), /candidate_approval_requests/);
+    return Response.json([{
+      id: requestId, workflow_id: workflowId, workflow_generation: 2,
+      request_generation: 3, method: 'EMAIL', manager_email_normalized: 'manager@example.test'
+    }]);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-batches', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          selected_rows: [identity], batch_id: batchId, idempotency_key: batchId,
+          preview_context_hash: fingerprint, selection_fingerprint: fingerprint
+        })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder',
+      CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'office-reminder-secret',
+      CANDIDATE_APP_PUBLIC_URL: 'https://candidate.example.test'
+    }, {}, deps);
+    assert.equal(response.status, 202);
+    assert.equal(rpcCalls.length, 3, 'one replay probe, preview and batch execute RPC are expected');
+    assert.equal(rpcCalls.filter(call => call.args.p_action === 'REMINDER_BATCH_EXECUTE').length, 1);
+    assert.equal((await response.json()).status_url,
+      `/api/candidate-app/manager-reminder-batches/${batchId}`);
+
+    replayFound = true;
+    globalThis.fetch = async () => { throw new Error('an exact replay must not reread manager approval state'); };
+    const replayResponse = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-batches', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          selected_rows: [identity], batch_id: batchId, idempotency_key: batchId,
+          preview_context_hash: fingerprint, selection_fingerprint: fingerprint
+        })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder',
+      CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'office-reminder-secret',
+      CANDIDATE_APP_PUBLIC_URL: 'https://candidate.example.test'
+    }, {}, deps);
+    assert.equal(replayResponse.status, 202);
+    assert.equal((await replayResponse.json()).idempotent_replay, true);
+    assert.equal(rpcCalls.length, 4, 'the replay uses only the durable database receipt probe');
+    assert.equal(rpcCalls.at(-1).args.p_action, 'REMINDER_BATCH_REPLAY');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('paper pack responses never expose an R2 storage identity', () => {

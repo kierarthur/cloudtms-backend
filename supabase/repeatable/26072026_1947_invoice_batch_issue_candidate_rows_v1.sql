@@ -221,7 +221,13 @@ begin
       || coalesce(r.hard_blocker_codes,'[]'::jsonb)
       || coalesce(r.document_dependency_codes,'[]'::jsonb) issue_blocker_codes,
       case when r.blocked_for_sending then jsonb_build_array('BLOCKED_FOR_SENDING') else '[]'::jsonb end
-        || coalesce(r.warning_codes,'[]'::jsonb) informational_codes,
+        || coalesce(r.warning_codes,'[]'::jsonb)
+        || (case when exists (
+          select 1
+          from jsonb_array_elements_text(coalesce(r.delivery_blocker_codes,'[]'::jsonb)) code(value)
+          where code.value='EXPENSE_INVOICE_EMAIL_REQUIRED'
+        ) then jsonb_build_array('EXPENSE_EMAIL_MISSING') else '[]'::jsonb end)
+        informational_codes,
       (r.generated_state='FRESH'
         and r.can_issue_only
         and jsonb_array_length(coalesce(r.hard_blocker_codes,'[]'::jsonb))=0

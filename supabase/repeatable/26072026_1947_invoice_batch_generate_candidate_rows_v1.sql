@@ -237,8 +237,29 @@ begin
           group by blocker_code
         ) blocker_rows
       ),'[]'::jsonb) action_blocker_codes,
-      case when coalesce(lg.group_json->>'active_generation_status','') in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
-        then jsonb_build_array('GENERATING') else '[]'::jsonb end informational_codes,
+      (case when coalesce(lg.group_json->>'active_generation_status','') in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')
+        then jsonb_build_array('GENERATING') else '[]'::jsonb end)
+      || (case when
+          coalesce(lg.group_json->>'blocker_code','')='EXPENSE_INVOICE_EMAIL_REQUIRED'
+          or coalesce(lg.group_json#>>'{blocker_detail,code}','')='EXPENSE_INVOICE_EMAIL_REQUIRED'
+          or exists (
+            select 1
+            from jsonb_array_elements_text(
+              case when jsonb_typeof(lg.group_json->'blocker_codes')='array'
+                then lg.group_json->'blocker_codes' else '[]'::jsonb end
+            ) code(value)
+            where code.value='EXPENSE_INVOICE_EMAIL_REQUIRED'
+          )
+          or exists (
+            select 1
+            from jsonb_array_elements(
+              case when jsonb_typeof(lg.group_json#>'{blocker_detail,sources}')='array'
+                then lg.group_json#>'{blocker_detail,sources}' else '[]'::jsonb end
+            ) source(value)
+            where source.value->>'code'='EXPENSE_INVOICE_EMAIL_REQUIRED'
+          )
+        then jsonb_build_array('EXPENSE_EMAIL_MISSING') else '[]'::jsonb end)
+        informational_codes,
       (coalesce(lg.group_json->>'active_generation_status','') in ('QUEUED','RUNNING','WAITING','RETRY_WAIT','BLOCKED')) is_active,
       lg.group_json->>'active_generation_operation_id' active_operation_id_text,
       lg.group_json->>'active_generation_status' active_operation_status,
