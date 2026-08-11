@@ -72,7 +72,7 @@ begin
     qr_last_sent_hash,qr_last_sent_at_utc
   ) values(v_timesheet,v_contract,
     'PAPER-PREDELIVERY-ROUTE-'||replace(v_timesheet::text,'-',''),
-    current_date,'HOURS','WEEKLY','MANUAL','SENT',v_current_token,'{}',v_now,
+    current_date,'HOURS','WEEKLY','MANUAL','PENDING',v_current_token,'{}',v_now,
     'predelivery-hours-pack-sent',v_now);
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,additional_seq,status,
