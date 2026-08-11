@@ -1,7 +1,9 @@
 # Candidate rejected-resubmission idempotency closure
 
-Date: 11 August 2026  
-Runtime commit: `d63bf708cdaf8de5124b0199b2b7eb79e4d13e6b`  
+Date: 11 August 2026
+
+Runtime commit: `d63bf708cdaf8de5124b0199b2b7eb79e4d13e6b`
+
 Runtime parent: `fb3d54a3d85b3e3357d3fbbf1416e5ba6d13c2ac`
 
 ## Scope and disposition
@@ -129,4 +131,3 @@ The independent reviewer should verify the whole Candidate DB/RPC/backend/API co
 - the seven-table, 14-public-RPC, disabled/empty and no-financial-authority boundaries.
 
 The reviewer is expressly invited to report any clearly wrong lifecycle, concurrency, identity, security, document-authority or API-contract issue within the decisions document's scope, including issues not listed in the originating audit. The review must remain within Candidate DB/RPC/backend/API scope and must not modify Banking Pay, financial authority, frontend code or production.
-
