@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay semantic Ready-to-Pay and certified cancellation reversion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 41,
+  "function_count": 42,
   "functions": [
     {
       "schema": "public", "name": "_ctms_materialise_candidate_correction_residuals_v1",
@@ -21,6 +21,18 @@
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_1403_pay_payment_correction_selected_items_draft_scope.sql"]
+    },
+    {
+      "schema": "public", "name": "_pay_active_settled_components",
+      "identity_arguments": "p_timesheet_ids uuid[]",
+      "definition_sha256": "83fbc69805a7a4066385dcea1fd3cfa7cc015bf1d885ca82d353eb9cada8f43c",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
+      "expanded_acl": [
+        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
+        {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
+        {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
+      ],
+      "source_files": ["supabase/repeatable/11082026_1746_pay_active_settled_components_finance_lineage.sql"]
     },
     {
       "schema": "public", "name": "banking_alerts_active_for_user",

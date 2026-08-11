@@ -577,10 +577,11 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 41);
-  assert.equal(semanticManifest.functions.length, 41);
+  assert.equal(semanticManifest.function_count, 42);
+  assert.equal(semanticManifest.functions.length, 42);
   for (const identity of [
     'public._ctms_materialise_candidate_correction_residuals_v1',
+    'public._pay_active_settled_components',
     'private.pay_workbench_source_publication_identity_v1',
     'public.banking_pay_draft_create_step_v1',
     'public.banking_alerts_active_for_user',

@@ -52,4 +52,5 @@
 \ir 09082026_1403_pay_payment_correction_selected_items_draft_scope.sql
 \ir 09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql
 \ir 11082026_1552_pay_workbench_session_clear_all_decisions.sql
+\ir 11082026_1746_pay_active_settled_components_finance_lineage.sql
 \ir 19072026_1816_cancel_refresh_supersede_finance_dirty.sql
