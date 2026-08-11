@@ -10,4 +10,3 @@ on public.audit_events (
   id desc
 )
 where object_type='candidate_workflow_mutation_receipt';
-

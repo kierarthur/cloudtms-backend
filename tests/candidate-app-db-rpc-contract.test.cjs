@@ -90,7 +90,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 99, 'the latest-only payload must contain the closed 99-definition function inventory');
+  assert.equal(names.length, 103, 'the latest-only payload must contain the closed 103-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -841,7 +841,7 @@ test('component preparation replay returns one immutable database-owned upload c
     'storage_key', 'media_type', 'byte_size', 'component_kind',
     'document_role', 'expense_category', 'paper_return_page_key', 'workflow_generation', 'state'
   ]) assert.match(replay, new RegExp(`'${field}'`, 'i'), `replay must return ${field}`);
-  const first = [...workflow.matchAll(/return jsonb_build_object\('ok',true,'idempotent_replay',false[\s\S]*?\);/gi)]
+  const first = [...workflow.matchAll(/(?:return|v_response\s*:=)\s*jsonb_build_object\('ok',true,'idempotent_replay',false[\s\S]*?\);/gi)]
     .map(match => match[0]).find(value => /'component_id'/i.test(value)) || '';
   for (const field of [
     'storage_key', 'media_type', 'byte_size', 'component_kind',
