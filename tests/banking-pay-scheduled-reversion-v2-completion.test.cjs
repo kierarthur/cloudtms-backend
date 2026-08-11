@@ -87,6 +87,11 @@ test('terminal authority is captured after finalisation and consumed before one 
   assert.ok(refreshIndex > terminalCaptureIndex);
   assert.match(processChunk,
     /cancellation_reversion_post_financial_terminal_authorities_v2/);
+  assert.doesNotMatch(processChunk, /jsonb_object_length/i);
+  assert.match(processChunk,
+    /SELECT pg_catalog\.count\(\*\)::integer[\s\S]*INTO v_terminal_authority_count[\s\S]*pg_catalog\.jsonb_object_keys\(v_terminal_authorities_v2\)/);
+  assert.match(processChunk,
+    /'post_financial_terminal_authority_v2_candidate_count',\s*v_terminal_authority_count/);
   assert.match(processChunk,
     /pay_workbench_correction_held_dirty_job_resolve_v1[\s\S]*INSERT INTO public\.banking_pay_operation_chunks/);
   assert.match(processChunk, /FINANCIAL_COMPLETE_WORKBENCH_PENDING|workbench_refresh_nudge/);

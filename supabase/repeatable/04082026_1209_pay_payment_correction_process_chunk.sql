@@ -112,6 +112,7 @@ DECLARE
   v_reversion_admitted_count integer := 0;
   v_financial_page_result jsonb := '{}'::jsonb;
   v_terminal_authorities_v2 jsonb := '{}'::jsonb;
+  v_terminal_authority_count integer := 0;
   v_held_dirty_resolution jsonb := '{}'::jsonb;
   v_finalise_candidate_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
@@ -1366,6 +1367,10 @@ BEGIN
     INTO v_terminal_authorities_v2
     FROM terminal_rows;
 
+    SELECT pg_catalog.count(*)::integer
+    INTO v_terminal_authority_count
+    FROM pg_catalog.jsonb_object_keys(v_terminal_authorities_v2);
+
     UPDATE public.banking_pay_operations AS terminal_authority_operation
     SET input_json=COALESCE(terminal_authority_operation.input_json,'{}'::jsonb)
           || pg_catalog.jsonb_build_object(
@@ -1376,7 +1381,7 @@ BEGIN
           || pg_catalog.jsonb_build_object(
             'post_financial_terminal_authority_v2_captured',true,
             'post_financial_terminal_authority_v2_candidate_count',
-              pg_catalog.jsonb_object_length(v_terminal_authorities_v2)
+              v_terminal_authority_count
           ),
         updated_at_utc=pg_catalog.clock_timestamp()
     WHERE terminal_authority_operation.id=v_operation.id
