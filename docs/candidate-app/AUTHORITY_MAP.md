@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: TEST broker/private-backend authority map, updated 11 August 2026 through the manager-mail lifecycle and Current/History read-contract closure. Candidate features remain disabled pending independent approval.
+Status: TEST broker/private-backend authority map, updated 11 August 2026 through the manager action, provider-timing, cancellation and timesheet-detail action-hub closure. Candidate features remain disabled pending independent approval.
 
 ## Canonical owner graph
 

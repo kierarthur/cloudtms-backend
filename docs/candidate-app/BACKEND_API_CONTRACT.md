@@ -1,6 +1,6 @@
 # CloudTMS Candidate App backend contract
 
-Status: versioned TEST implementation contract, updated 11 August 2026. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. PAPER delivery retirement and provider submission are coordinated by the installed service-only workflow authority; route intervention is bound to the immutable current-token owner and cannot strand an unselected nonterminal claim.
+Status: versioned TEST implementation contract, updated 11 August 2026. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. PAPER delivery retirement and provider submission are coordinated by the installed service-only workflow authority; route intervention is bound to the immutable current-token owner and cannot strand an unselected nonterminal claim. Manager reminder/renew/cancel meaning, provider-accepted timing and the closed timesheet-detail action catalogue are server-owned.
 
 Machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Trust and deployment contract: `BROKER_PRIVATE_TOPOLOGY.md`.
 

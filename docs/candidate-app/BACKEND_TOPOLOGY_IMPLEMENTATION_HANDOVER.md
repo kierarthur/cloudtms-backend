@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 11 August 2026
-Status: Candidate DB/RPC/backend closure runtime published, installed and deployed to dormant TEST for independent API-freeze audit. Candidate runtime commit: `adc399455383fc60e76159042eee78dff00896a2`. This document is current through exact manager-approval mail ownership and provider submission permits; the server-owned Current/History timesheet partition, cursor, labels, primary actions and detail identities; mail-independent affected-workflow discovery; immutable current-token owner selection; locked source-rotation postconditions; terminal-only source-workflow preservation; claim-level shared-source isolation; retryable `RECEIVED` caller retirement; shared route/rejection family locking; atomic PAPER provider-submit permission; and all previously accepted Candidate authority closures.
+Status: Candidate DB/RPC/backend closure runtime published, installed and deployed to dormant TEST for independent API-freeze audit. Candidate runtime commit: `a14b60b734560fc5ddf0109bbef6e21eb46e4857`. This document is current through exact manager reminder/renew/cancel meaning, provider-accepted timing, required cancellation reason and withdrawal, the closed timesheet-detail action hub, the server-owned Current/History timesheet partition, and all previously accepted Candidate PAPER, source-owner, route/rejection, upload, renderer and provider-permit closures.
 
 ## Executive result
 
@@ -25,7 +25,7 @@ No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version algorithm
 
 ## Runtime namespace and anchor rejection closure retained
 
-These earlier accepted controls are retained unchanged in current Candidate runtime source `adc399455383fc60e76159042eee78dff00896a2`.
+These earlier accepted controls are retained unchanged in current Candidate runtime source `a14b60b734560fc5ddf0109bbef6e21eb46e4857`.
 
 - Candidate PAPER retirement and canonical QR enqueue now call `extensions.digest` explicitly with UTF-8 byte conversion, matching the installed TEST pgcrypto schema and removing reliance on an unavailable public wrapper;
 - the disposable PostgreSQL fixture no longer invents `public.digest`, so clean-install verification exercises the same namespace contract as Supabase TEST;
@@ -36,7 +36,7 @@ These earlier accepted controls are retained unchanged in current Candidate runt
 - each captured generation is retired by exact workflow ID and generation across PAPER mail/notification/token authority, approval request, component and workflow state;
 - the runtime suites prove finalised hours, combined, separate expense, anchor isolation, replacement submission, replay, Unauthorise-first and protected paid history, not merely source strings.
 
-Current acceptance evidence is 26/26 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 122/122 focused Candidate/backend tests, 459/459 complete backend tests, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
+Current acceptance evidence is 27/27 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 124/124 focused Candidate/backend/broker/DB/PAPER tests, 460/460 complete backend tests, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
 
 ## Final rejection projection and finalised PAPER delivery closure
 
@@ -87,6 +87,10 @@ Manager invitation, reminder, renewal and withdrawal delivery now uses the same 
 - retirement locks the exact request and mail set, blocks a live provider lease before lifecycle mutation, makes queued mail inert, preserves `FAILED` as failed-but-retired and preserves provider-accepted `SENT` history;
 - the normal mail worker calls `MANAGER_PROVIDER_SUBMIT_PERMIT` immediately before the provider request. That service-only action locks and proves the exact outbox lease, request/workflow generations, recipient, state, expiry and manifest before extending the lease as a submit permit;
 - route takeover sends a withdrawal only where retirement proves provider-accepted earlier mail for that exact request. A request timestamp is never used as delivery proof.
+- initial and renewal request creation leaves send timestamps unset. The exact provider-accepted outbox receipt owns initial/latest sent time, expiry presentation and the 24-hour reminder clock;
+- `REMIND` rotates the token on the same pending approval-request ID/generation, enforces the five-resend maximum and cannot queue behind an exact pending delivery;
+- `RENEW` is accepted only for the unchanged expired request and creates a new request generation/token/expiry/resend allowance;
+- `CANCEL` requires a non-empty reason, records it in response/audit truth and creates one deterministic withdrawal only where the retired request has provider-accepted delivery history.
 
 ## Current/History read-contract closure
 
@@ -99,6 +103,15 @@ The Timesheets read boundary now implements the approved server-owned partition:
 - order is week ending newest first with deterministic contract, additional-sequence and row tie-breakers;
 - every card returns `Week Ending …`, one server primary action and a stable detail target; detail aliases accept timesheet, contract-week or workflow identity and return the same membership/action truth;
 - no public RPC, table or financial owner was added. Future office/client UI must consume these fields and may not recalculate them.
+
+## Timesheet-detail action-hub closure
+
+- all three detail aliases return the same typed detail contract;
+- the private action-contract helper supplies one `primary_action`, a closed `available_actions` array and EMAIL `manager_approval` facts without becoming a public business RPC;
+- action objects include code, label, exact method/path, workflow ID/generation, approval-request identity where applicable, confirmation, enabled state and stable disabled reason;
+- the action catalogue distinguishes continuing hours from continuing expenses, whole-claim from expense-only cancellation, reminder from expired-request renewal, PAPER download/return, rejection recovery, no-work and retry-finalisation;
+- `RETRY_FINALISATION` verifies candidate/workflow ownership and `RECEIVED` state before composing the existing service finalisation owner. A general public Candidate `FINALISE` action remains unavailable;
+- no frontend may infer action eligibility from status wording or silently translate one action into another.
 
 ## Complete PAPER caller and provider-submit closure
 
@@ -384,24 +397,24 @@ This is lifecycle identity and stale-delivery closure only. It introduces no sch
 | Verification | Result |
 |---|---:|
 | Changed/new JavaScript syntax | PASS |
-| Focused Candidate/backend/broker/DB-contract/PAPER tests | 122 passed, 0 failed |
-| Complete backend test suite | 459 passed, 0 failed |
-| PostgreSQL 17.6 runtime/concurrency suites | 26 passed, 0 failed |
-| PostgreSQL 18.1 runtime/concurrency suites | 26 passed, 0 failed |
+| Focused Candidate/backend/broker/DB-contract/PAPER tests | 124 passed, 0 failed |
+| Complete backend test suite | 460 passed, 0 failed |
+| PostgreSQL 17.6 runtime/concurrency suites | 27 passed, 0 failed |
+| PostgreSQL 18.1 runtime/concurrency suites | 27 passed, 0 failed |
 | Candidate Worker source/configuration change | Manager provider-permit adapter and Current/History HTTP adapter updated; all three Worker dry-run builds passed |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
-| GitHub TEST database migration workflow `31487593931` | PASS |
-| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31487593920` | PASS |
+| GitHub TEST database migration workflow `31495500073` | PASS |
+| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31495500205` | PASS |
 | Public Candidate broker health/readiness | 200 / 200 |
 | Normal TEST backend health/readiness | 200 / 200 |
 | Direct public Candidate route on normal backend | 404, as required |
 
 The deployment used repository-installed Wrangler 4.43.0 after the remote branch and active-workflow gate proved the exact tested runtime was still current and no other push/deployment was active. Active TEST identities are:
 
-- normal TEST backend: `c25ed724-3d11-4234-b4b4-1b08f305a3d4`;
-- private Candidate API: `e6b7d82e-1a89-4303-bfef-a6aca9c8b151`;
-- public Candidate broker: `0e1f7188-f341-4620-b8df-4c5c8703276a`.
+- normal TEST backend: `14554299-dcb6-4102-8ef9-7316d34b3654`;
+- private Candidate API: `407596b9-5dd4-48fa-939a-4a9b2885ef74`;
+- public Candidate broker: `7dfc34ec-b78f-48ca-8b0d-ebd847cfcebc`.
 
 The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
@@ -478,7 +491,12 @@ Please verify, function by function, including the final authority seams:
 67. withdrawal is created only when exact provider-accepted history exists, never from a local sent timestamp alone;
 68. `CURRENT` and `HISTORY` are disjoint at one frozen snapshot: Current contains no future week, all unpaid records and paid records at or after the exact seven-day cutoff; History contains only older-paid records in each contract's effective current week plus its previous 15 weeks;
 69. Current/History cursors are view-, candidate- and snapshot-bound; ordering is newest week ending first; the server returns the exact `Week Ending 1 January 2025` label, one primary action and stable detail identity;
-70. card/detail routes expose the same current lifecycle, available actions and scoped rejection truth, and the future office frontend must use the detail screen as the action hub rather than infer an action-menu contract.
+70. card/detail routes expose the same current lifecycle, available actions and scoped rejection truth, and the future office frontend must use the detail screen as the action hub rather than infer an action-menu contract;
+71. request creation/queue time never becomes manager-send truth; detail and reminder eligibility use the exact provider-accepted outbox receipt;
+72. `REMIND` preserves the same request ID/generation, rotates its token, enforces the 24-hour boundary, five-resend maximum and pending-delivery fence;
+73. `RENEW` is available only for an expired unchanged request and creates a new request generation/token/expiry/resend allowance;
+74. `CANCEL` requires and records a reason, retires delivery before mutation and creates at most one provider-proved withdrawal;
+75. all detail aliases return the same typed action hub, including exact method/path/identity/enabled/disabled truth and bounded `RETRY_FINALISATION`, without restoring general public `FINALISE`.
 
 ## Remaining delivery sequence after independent GO
 
@@ -492,14 +510,14 @@ Please verify, function by function, including the final authority seams:
 
 ## Safety and provenance
 
-- Database mutation or migration: explicitly authorised TEST safe-migration workflow `31487593931` installed the four approved repeatables from runtime commit `adc399455383fc60e76159042eee78dff00896a2`. Workflow `31487593920` proved all 26 Candidate suites on PostgreSQL 17.6/18.1. Installed hashes match the LF-normalised package sources. No Candidate business data was created or changed.
+- Database mutation or migration: explicitly authorised TEST safe-migration workflow `31495500073` installed the two changed repeatables from runtime commit `a14b60b734560fc5ddf0109bbef6e21eb46e4857`. Workflow `31495500205` proved all 27 Candidate suites on PostgreSQL 17.6/18.1. Installed hashes match the LF-normalised package sources. No Candidate business data was created or changed.
 - Candidate/manager workflow mutation: none.
 - R2 business document/evidence write/delete: none. Broker readiness used the designed one-use private-service nonce and the private scheduler may purge expired nonce objects; no Candidate workflow object was created.
 - Email or push sent: none.
-- Normal TEST Worker deployed: yes, version `c25ed724-3d11-4234-b4b4-1b08f305a3d4`, explicitly authorised; TEST only; exact current remote source.
-- Private/broker Workers deployed: yes, versions `e6b7d82e-1a89-4303-bfef-a6aca9c8b151` and `0e1f7188-f341-4620-b8df-4c5c8703276a`, explicitly authorised; TEST only.
+- Normal TEST Worker deployed: yes, version `14554299-dcb6-4102-8ef9-7316d34b3654`, explicitly authorised; TEST only; exact current remote source.
+- Private/broker Workers deployed: yes, versions `407596b9-5dd4-48fa-939a-4a9b2885ef74` and `7dfc34ec-b78f-48ca-8b0d-ebd847cfcebc`, explicitly authorised; TEST only.
 - Production accessed or deployed: no.
-- Commit/push: Candidate runtime commit `adc399455383fc60e76159042eee78dff00896a2` was published non-forcibly directly to `origin/test` after clean lane checks. It is based on and preserves Banking Pay-only parent `92f8b39f7870cdbaa993d40e036e97c35f2fe983`; this work changed no Banking Pay file.
+- Commit/push: Candidate runtime commit `a14b60b734560fc5ddf0109bbef6e21eb46e4857` was published non-forcibly directly to `origin/test` after clean lane checks. It is based on and preserves the then-current remote parent `ed9ce72dbcb3423e0cc20225d982301523d84377`; this work changed no Banking Pay file.
 - Deployment note: immediately before deployment, `origin/test` still equalled the exact tested runtime and GitHub reported zero queued/in-progress workflows. All three TEST Workers were rebuilt from that source. No production or unrelated Worker was deployed.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.

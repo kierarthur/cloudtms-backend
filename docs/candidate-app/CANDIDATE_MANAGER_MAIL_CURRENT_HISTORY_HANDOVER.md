@@ -1,8 +1,8 @@
 # CloudTMS Candidate manager-mail and Current/History closure handover
 
-Date: 11 August 2026  
-Environment: TEST only  
-Runtime commit: `adc399455383fc60e76159042eee78dff00896a2`  
+Date: 11 August 2026
+Environment: TEST only
+Runtime commit: `a14b60b734560fc5ddf0109bbef6e21eb46e4857`
 Status: published, installed and deployed while every Candidate feature flag remains false; independent API-freeze approval is still required before office-frontend implementation begins.
 
 ## Closure delivered
@@ -15,6 +15,19 @@ Status: published, installed and deployed while every Candidate feature flag rem
 - The claimant rejects retired, stale-generation, wrong-recipient or non-current request/workflow rows.
 - Withdrawal is created only where provider acceptance of earlier mail for that exact request is proved. A local timestamp is insufficient.
 - The rule is centralized at the request state boundary so every caller receives the same protection.
+- Initial/renewal queue creation does not claim the mail was sent. The exact bound provider-accepted outbox receipt owns first/latest sent time and the 24-hour reminder clock.
+- `REMIND` remains on the same pending request ID/generation, rotates that request's token, permits no more than five resends, requires 24 hours since the latest accepted send and cannot queue while an exact delivery remains pending.
+- `RENEW` is never substituted for reminder. It is accepted only for an expired unchanged request and creates a new request generation, fresh token, seven-day expiry and resend allowance.
+- `CANCEL` requires a non-empty plain-English reason of no more than 1,000 characters. It records that reason, retires the exact request delivery authority and queues one deterministic withdrawal only where provider acceptance is proved.
+
+### Timesheet-detail action hub
+
+- All three detail aliases return the same typed detail contract.
+- The response contains one `primary_action`, a closed `available_actions` list and EMAIL `manager_approval` facts.
+- Each action supplies its exact code, label, HTTP method/path, workflow ID/generation, approval-request identity where applicable, confirmation requirement, enabled flag and stable disabled reason.
+- The server distinguishes continue-timesheet from continue-expense, whole-claim from expense-only cancellation, reminder from expired-request renewal, PAPER download/return, rejection recovery, no-work and retry-finalisation.
+- `RETRY_FINALISATION` is allowed only for an owned retryable `RECEIVED` workflow and composes the existing service finalisation owner. General public Candidate `FINALISE` remains absent.
+- The frontend must render these actions exactly and must not infer or translate lifecycle actions from status text.
 
 ### Timesheet Current/History read contract
 
@@ -35,12 +48,8 @@ No frontend code was changed. The next UI phase is the CloudTMS office frontend 
 
 - `supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql`
 - `supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql`
-- `supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql`
-- `supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql`
-- `broker/src/candidate-manager-provider-authority.js`
 - `broker/src/candidate-app-backend.js`
-- `broker/src/index.js`
-- `docs/candidate-app/openapi.yaml`
+- `docs/candidate-app/CANDIDATE_API_OPENAPI_V1.yaml`
 - focused JavaScript and PostgreSQL regression suites plus the Candidate DB workflow.
 
 No Banking Pay, payment, settlement, invoice, DAILY/WEEKLY economics, Process, Authorise, Policy X or production source was changed by this runtime commit.
@@ -49,10 +58,8 @@ No Banking Pay, payment, settlement, invoice, DAILY/WEEKLY economics, Process, A
 
 | Repeatable | LF-normalised SHA-256 |
 |---|---|
-| `07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql` | `3d3795b4c305fec344d8e8c15226333893ff32723182a46c196102f218f31a5b` |
-| `07082026_2120_candidate_workflow_transition_atomic_v1.sql` | `c2bc4c9c1e9e27148bb7cb5b708bdc271c6edcabca918a6e23448eb6d2c611f3` |
-| `08082026_2035_timesheet_route_version_rotate.sql` | `b9656644a099a5b7d7e1163579a2dafe637ef0a8bf64608b4a805f64e78d3d90` |
-| `23072026_2207_email_outbox_claim_ready_batch.sql` | `e3d817bed564f538b5089c27b9ce4d58b7e6f6b970066f4e8be2724834c0a112` |
+| `07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql` | `30cfbe23762d92af40a40c4e0cb4e6085ecb4cf631a2f48c0f9f8b6ea0c1babd` |
+| `07082026_2120_candidate_workflow_transition_atomic_v1.sql` | `8eb1bf2762462164569b03d1964d99700055e7ebd7895250d5dc0964a686c2d3` |
 
 TEST inspection after deployment proved:
 
@@ -68,17 +75,17 @@ TEST inspection after deployment proved:
 
 | Gate | Result |
 |---|---|
-| Focused Candidate/backend tests | 122 passed, 0 failed |
-| Complete backend suite | 459 passed, 0 failed |
-| Disposable PostgreSQL 17.6 | 26 suites passed |
-| Disposable PostgreSQL 18.1 | 26 suites passed |
-| GitHub Candidate DB runtime workflow | `31487593920`, passed |
-| GitHub safe TEST migration | `31487593931`, passed |
+| Focused Candidate/backend tests | 124 passed, 0 failed |
+| Complete backend suite | 460 passed, 0 failed |
+| Disposable PostgreSQL 17.6 | 27 suites passed |
+| Disposable PostgreSQL 18.1 | 27 suites passed |
+| GitHub Candidate DB runtime workflow | `31495500205`, passed |
+| GitHub safe TEST migration | `31495500073`, passed |
 | OpenAPI validation | passed |
 | Normal/private/broker Worker dry-run builds | passed |
-| Normal TEST backend | version `c25ed724-3d11-4234-b4b4-1b08f305a3d4`, health 200 |
-| Private Candidate API | version `e6b7d82e-1a89-4303-bfef-a6aca9c8b151`, service-binding only |
-| Public Candidate broker | version `0e1f7188-f341-4620-b8df-4c5c8703276a`, health/readiness 200/200 |
+| Normal TEST backend | version `14554299-dcb6-4102-8ef9-7316d34b3654`, health/readiness 200/200 |
+| Private Candidate API | version `407596b9-5dd4-48fa-939a-4a9b2885ef74`, service-binding only |
+| Public Candidate broker | version `7dfc34ec-b78f-48ca-8b0d-ebd847cfcebc`, health/readiness 200/200 |
 | Direct Candidate route on normal backend | 404 as required |
 
 Immediately before deployment, `origin/test` equalled the exact tested runtime and no GitHub workflow was queued or in progress. The runtime preserves Banking Pay-only parent commit `92f8b39f7870cdbaa993d40e036e97c35f2fe983`; no file owned by that separate lane was changed.
@@ -100,21 +107,28 @@ At minimum, independently prove:
 9. no accepted lifecycle caller, including an adjacent one not named by this handover, can bypass those central authorities;
 10. all 26 current-decisions pages are implemented or explicitly deferred exactly as recorded, with no frontend inference required for server truth.
 
-The receiving chat should issue GO only if the complete audited server contract is safe to freeze. If GO is issued, its next deliverable should be one highly detailed, correctly sequenced UI implementation plan that follows the full decisions PDF without exception.
+The receiving chat should issue GO only if the complete audited server contract is safe to freeze. It must not limit itself to the latest findings or assume a seam is correct because an earlier audit accepted it. It should trace the complete current-decisions PDF through every relevant installed DB/RPC/backend/OpenAPI caller and report any material omission, contradiction, unsafe lifecycle path or client inference that remains within scope.
 
-The first implementation phase is the CloudTMS **office frontend** and must include:
+If backend GO is issued, the receiving chat must also produce `OFFICE_FRONTEND_IMPLEMENTATION_BLUEPRINT.md`. This must be implementation-ready rather than a high-level feature list. It must give the implementing chat enough exact evidence to edit the current office frontend directly without rediscovering the architecture or inventing product behaviour. At minimum it must contain:
 
-- incomplete expense-claim warnings and explicit confirmation before office conversion to MANUAL;
-- all W01–W14 warning/modal behavior;
-- professional, uncluttered responsive modal layouts exercised through deterministic UI states with realistic data;
-- accessibility, loading, error, stale-context and retry states.
+1. exact frontend repository baseline, current source inventory and existing route/screen/modal/component helpers to reuse;
+2. a file-by-file patch map naming every existing function to amend, every new function/component proposed, its inputs/outputs, callers, state ownership and test owner;
+3. a screen-by-screen, component-by-component and modal-by-modal map for Simple Timesheet, Timesheet Summary, Bulk Process and Bulk Authorise;
+4. an API-to-UI field map for every displayed or submitted field, including source endpoint/RPC, type, null handling, formatting, permissions and authoritative owner;
+5. a complete backend-state × server-action × UI-state matrix, including disabled actions and stable error/recovery handling;
+6. the full manager reminder/renew/cancel experience: provider-accepted sent time, expiry, resends remaining, next reminder, distinct action wording, required cancellation reason, confirmation, withdrawal result and race/error states;
+7. the approved incomplete-expense-claim-to-MANUAL warning: the office is told that an unfinished ELECTRONIC or PAPER/QR expense claim exists, **No** performs zero mutation, and **Yes** discards/supersedes that incomplete claim before the normal MANUAL conversion proceeds;
+8. one shared W01–W14 warning renderer using the controlling catalogue without rewriting its wording;
+9. exact modal structure, information hierarchy, primary/secondary button placement, spacing, overflow, narrow-screen behaviour and rules for keeping the presentation professional and uncluttered;
+10. accessibility requirements including focus entry/return, keyboard order, escape/cancel behaviour, ARIA naming/descriptions, error association, contrast and reduced-motion handling;
+11. loading, empty, stale-context, conflict, retry, partial-follow-on-failure and permission-denied states for every affected screen/action;
+12. deterministic UI state fixtures or a state-gallery harness that can render hard-to-reach modals without creating database conditions, plus realistic long/short data stress cases; the plan must explain why this is isolated from production logic and how browser tests prove the real component is rendered;
+13. desktop and narrow viewport browser-verification matrices, exact screenshot/state coverage, patched-asset proof and visual acceptance criteria;
+14. unit, contract, integration and Playwright tests with exact fixtures/assertions, including modal confirmation/no-mutation paths and server-action payloads;
+15. a correctly ordered implementation sequence with safe checkpoints, feature flags, rollback boundary and completion criteria;
+16. a separate list of genuine unresolved decisions or contract gaps. The plan must not silently fill them with frontend inference.
 
-The same master plan must retain, but not yet implement, the later Candidate web/iOS/Android phase:
-
-- Current/History tabs and the server-owned membership rules;
-- exact week labels and newest-first order;
-- row/card tap to the detail/review action hub;
-- no Candidate web/iOS/Android or public app-client implementation until the office frontend is complete and separately accepted.
+The blueprint must explicitly separate phases. The next implementation is the current CloudTMS **office frontend only**. Candidate responsive web, iOS, Android and public app-client work must not be implemented yet. The later client phase must nevertheless remain mapped from the decisions PDF, including Current/History, exact week labels/order and card-to-detail action-hub navigation, so office work does not close off the approved client design.
 
 ## Safety boundary
 
