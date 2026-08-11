@@ -214,7 +214,7 @@
     {
       "schema": "private", "name": "pay_workbench_cancel_reversion_proof_core_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_work_item_ids uuid[], p_mode text, p_options_json jsonb",
-      "definition_sha256": "ddce5fd8239da5946476471c482f0322ccb1b190357117a667061e3f5c39bad4",
+      "definition_sha256": "4a3645b89f3ad388088b650211d1170865640b6d5cde916d37fc611ac690a07a",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -250,7 +250,7 @@
     {
       "schema": "private", "name": "pay_pre_bank_cancel_apply_work_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_work_item_ids uuid[], p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "25b8a54f73d9f1c016506dcbae503552261c2282533527686004c0b01021356b",
+      "definition_sha256": "9d441532ddada0cf1a88158b5e35d794756db1298fc6560681c494d7f9068305",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
