@@ -291,6 +291,74 @@ test('timesheet detail aliases pass one exact server identity to the shared deta
   }
 });
 
+test('public reminder stays REMIND and cancellation requires and forwards a reason', async () => {
+  const sessionId = '00000000-0000-4000-8000-000000000091';
+  const accountId = '00000000-0000-4000-8000-000000000092';
+  const candidateId = '00000000-0000-4000-8000-000000000093';
+  const workflowId = '00000000-0000-4000-8000-000000000094';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    CANDIDATE_APP_PUBLIC_URL: 'https://candidate.test.invalid',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    if (value.includes('candidate_approval_requests')) {
+      return Response.json([{ manager_email_normalized: 'manager@example.test' }]);
+    }
+    throw new Error(`unexpected fetch ${value}`);
+  };
+  const calls = [];
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) { calls.push({ name, args }); return { ok: true, state: 'AWAITING_MANAGER_APPROVAL' }; }
+  };
+  const request = (action, body) => new Request(
+    `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/${action}`,
+    {
+      method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    }
+  );
+  try {
+    const reminder = await handleCandidateAppRequest(request('remind', {
+      generation: 3, idempotency_key: 'reminder-1'
+    }), env, {}, deps);
+    assert.equal(reminder.status, 200);
+    assert.equal(calls[0].name, 'candidate_workflow_transition_atomic_v1');
+    assert.equal(calls[0].args.p_action, 'REMIND');
+    assert.match(calls[0].args.p_payload.mail.subject, /^Reminder:/);
+    assert.match(calls[0].args.p_payload.approval_token_hash_hex, /^[0-9a-f]{64}$/);
+
+    const missingReason = await handleCandidateAppRequest(request('cancel', {
+      generation: 3, idempotency_key: 'cancel-1'
+    }), env, {}, deps);
+    assert.equal(missingReason.status, 400);
+    assert.equal((await missingReason.json()).error_code, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
+    assert.equal(calls.length, 1);
+
+    const cancelled = await handleCandidateAppRequest(request('cancel', {
+      generation: 3, idempotency_key: 'cancel-2', reason_note: 'I entered the wrong week.'
+    }), env, {}, deps);
+    assert.equal(cancelled.status, 200);
+    assert.equal(calls[1].args.p_action, 'CANCEL');
+    assert.equal(calls[1].args.p_payload.reason_note, 'I entered the wrong week.');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('Candidate HTTP boundary ignores unrelated routes and fails protected routes closed', async () => {
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',

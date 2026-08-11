@@ -213,7 +213,11 @@ paths:
       summary: Get candidate timesheet
       x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}
       parameters: [{$ref: '#/components/parameters/TimesheetId'}]
-      responses: *standardResponses
+      responses:
+        '200': {description: Authoritative timesheet detail and action hub, content: {application/json: {schema: {$ref: '#/components/schemas/TimesheetDetail'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
   /candidate-app/v1/contract-weeks/{contractWeekId}/detail:
     get:
       tags: [Candidate]
@@ -221,7 +225,11 @@ paths:
       summary: Get an unmaterialised or materialised contract-week detail
       x-cloudtms-private-path: /private/candidate-app/v1/contract-weeks/{contractWeekId}/detail
       parameters: [{$ref: '#/components/parameters/ContractWeekId'}]
-      responses: *standardResponses
+      responses:
+        '200': {description: Authoritative timesheet detail and action hub, content: {application/json: {schema: {$ref: '#/components/schemas/TimesheetDetail'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
   /candidate-app/v1/workflows/{workflowId}/timesheet-detail:
     get:
       tags: [Candidate]
@@ -229,7 +237,11 @@ paths:
       summary: Get timesheet detail through immutable workflow identity
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/timesheet-detail
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
-      responses: *standardResponses
+      responses:
+        '200': {description: Authoritative timesheet detail and action hub, content: {application/json: {schema: {$ref: '#/components/schemas/TimesheetDetail'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
   /candidate-app/v1/timesheets/{timesheetId}/paper-pack/status:
     get:
       tags: [Candidate]
@@ -323,8 +335,8 @@ paths:
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/actions/{action}
       parameters:
         - {$ref: '#/components/parameters/WorkflowId'}
-        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede]}}
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede, retry-finalisation]}}
+      requestBody: {$ref: '#/components/requestBodies/WorkflowActionBody'}
       responses: *standardResponses
   /candidate-app/v1/workflows/{workflowId}/components/prepare:
     post:
@@ -455,16 +467,66 @@ components:
         refresh_token: {type: string, description: Broker-sealed refresh envelope; never a CloudTMS private token.}
         session_id: {type: string, description: Public broker session identity.}
         access_expires_in_seconds: {type: integer}
-    TimesheetPrimaryAction:
+    TimesheetActionCode:
+      type: string
+      enum:
+        - ENTER_TIMESHEET
+        - ADD_EXPENSES
+        - CONTINUE_TIMESHEET
+        - CONTINUE_EXPENSE_CLAIM
+        - CANCEL_ENTIRE_CLAIM_AND_START_AGAIN
+        - DISCARD_EXPENSE_CLAIM
+        - SEND_MANAGER_REMINDER
+        - REQUEST_APPROVAL_AGAIN
+        - DOWNLOAD_PAPER_DOCUMENTS
+        - UPLOAD_SIGNED_RETURN
+        - REVIEW_AND_RESUBMIT
+        - RESUBMIT_TIMESHEET
+        - RESUBMIT_TIMESHEET_AND_EXPENSES
+        - RESUBMIT_EXPENSE_CLAIM
+        - NO_WORK_THIS_WEEK
+        - RETRY_FINALISATION
+    TimesheetAvailableAction:
       type: object
-      required: [code, label, requires_confirmation]
+      required: [code, label, requires_confirmation, enabled]
       properties:
-        code: {type: string}
+        code: {$ref: '#/components/schemas/TimesheetActionCode'}
         label: {type: string}
+        method: {type: [string, 'null'], enum: [GET, POST, null]}
+        path: {type: [string, 'null']}
         requires_confirmation: {type: boolean}
-        workflow_id: {$ref: '#/components/schemas/Uuid'}
-        timesheet_id: {$ref: '#/components/schemas/Uuid'}
-        contract_week_id: {$ref: '#/components/schemas/Uuid'}
+        requires_reason: {type: boolean, default: false}
+        enabled: {type: boolean}
+        disabled_reason: {type: [string, 'null']}
+        workflow_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        workflow_generation: {type: [integer, 'null'], minimum: 1}
+        approval_request_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        timesheet_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        contract_week_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+    TimesheetPrimaryAction:
+      allOf:
+        - {$ref: '#/components/schemas/TimesheetAvailableAction'}
+    ManagerApprovalStatus:
+      type: object
+      required: [method, request_id, request_generation, state, resend_count, resends_remaining, reminder_eligible, renewal_eligible, cancel_eligible, delivery_pending]
+      properties:
+        method: {const: EMAIL}
+        request_id: {$ref: '#/components/schemas/Uuid'}
+        request_generation: {type: integer, minimum: 1}
+        state: {type: string, enum: [PENDING, EXPIRED, APPROVED, REFUSED, CANCELLED, SUPERSEDED]}
+        stored_state: {type: string}
+        provider_first_accepted_at_utc: {type: [string, 'null'], format: date-time}
+        provider_accepted_at_utc: {type: [string, 'null'], format: date-time}
+        delivery_state: {type: [string, 'null']}
+        provider_status: {type: [string, 'null']}
+        delivery_pending: {type: boolean}
+        expires_at_utc: {type: string, format: date-time}
+        resend_count: {type: integer, minimum: 0, maximum: 5}
+        resends_remaining: {type: integer, minimum: 0, maximum: 5}
+        next_reminder_at_utc: {type: [string, 'null'], format: date-time}
+        reminder_eligible: {type: boolean}
+        renewal_eligible: {type: boolean}
+        cancel_eligible: {type: boolean}
     TimesheetDetailTarget:
       type: object
       required: [identity_kind, id, path]
@@ -511,6 +573,55 @@ components:
         readiness_conflicts: {type: array, items: {type: object}}
         limit: {type: integer, minimum: 1, maximum: 100}
         absolute_expires_at_utc: {type: string, format: date-time}
+    TimesheetDetail:
+      type: object
+      required: [ok, week_ending_label, candidate_status_code, list_membership, available_actions, contract_week, hours, expenses, lifecycle, capabilities, manager_review, evidence, components, workflows, rejections]
+      properties:
+        ok: {const: true}
+        week_ending_label: {type: string, example: Week Ending 1 January 2025}
+        candidate_status_code: {type: string}
+        list_membership:
+          type: object
+          required: [tab_bucket, effective_current_week_ending_date, paid_current_cutoff_utc]
+          properties:
+            tab_bucket: {type: string, enum: [CURRENT, HISTORY, EXCLUDED]}
+            effective_current_week_ending_date: {type: string, format: date}
+            paid_current_cutoff_utc: {type: string, format: date-time}
+        primary_action: {oneOf: [{$ref: '#/components/schemas/TimesheetPrimaryAction'}, {type: 'null'}]}
+        available_actions: {type: array, items: {$ref: '#/components/schemas/TimesheetAvailableAction'}}
+        manager_approval: {oneOf: [{$ref: '#/components/schemas/ManagerApprovalStatus'}, {type: 'null'}]}
+        contract_week: {$ref: '#/components/schemas/JsonObject'}
+        timesheet: {oneOf: [{$ref: '#/components/schemas/JsonObject'}, {type: 'null'}]}
+        hours: {$ref: '#/components/schemas/JsonObject'}
+        expenses: {$ref: '#/components/schemas/JsonObject'}
+        lifecycle: {$ref: '#/components/schemas/JsonObject'}
+        capabilities: {$ref: '#/components/schemas/JsonObject'}
+        manager_review: {$ref: '#/components/schemas/JsonObject'}
+        evidence: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+        components: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+        workflows: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+        rejections: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+    WorkflowActionRequest:
+      type: object
+      required: [generation, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        idempotency_key: {type: string, minLength: 1, maxLength: 200}
+        payload: {$ref: '#/components/schemas/JsonObject'}
+    ReminderRequest:
+      allOf:
+        - {$ref: '#/components/schemas/WorkflowActionRequest'}
+    RenewalRequest:
+      allOf:
+        - {$ref: '#/components/schemas/WorkflowActionRequest'}
+    CancellationRequest:
+      allOf:
+        - {$ref: '#/components/schemas/WorkflowActionRequest'}
+        - type: object
+          required: [reason_note]
+          properties:
+            reason_code: {type: [string, 'null'], maxLength: 100}
+            reason_note: {type: string, minLength: 1, maxLength: 1000}
     SelectedCandidateSession:
       type: object
       required: [ok, access_token, session_id]
@@ -533,6 +644,16 @@ components:
     ComponentId: {name: componentId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
     NotificationId: {name: notificationId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
   requestBodies:
+    WorkflowActionBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - {$ref: '#/components/schemas/ReminderRequest'}
+              - {$ref: '#/components/schemas/RenewalRequest'}
+              - {$ref: '#/components/schemas/CancellationRequest'}
+              - {$ref: '#/components/schemas/WorkflowActionRequest'}
     JsonBody:
       required: true
       content: {application/json: {schema: {$ref: '#/components/schemas/JsonObject'}}}

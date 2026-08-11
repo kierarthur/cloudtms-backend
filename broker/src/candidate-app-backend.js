@@ -85,7 +85,7 @@ const COMPONENT_MEDIA_TYPES = Object.freeze({
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
   'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
   'CREATE_EMAIL_APPROVAL_REQUEST', 'PAPER_PREPARE', 'PAPER_RETURN', 'REMIND',
-  'RENEW', 'CANCEL', 'SUPERSEDE', 'CANCEL_MANAGER_HANDOFF'
+  'RENEW', 'CANCEL', 'SUPERSEDE', 'CANCEL_MANAGER_HANDOFF', 'RETRY_FINALISATION'
 ]);
 
 const ROUTE_INTERVENTION_REASONS = new Set([
@@ -1735,7 +1735,7 @@ function candidateManagerMail(request, env, token, workflowId, managerEmail, kin
   const origin = publicAppBase(request, env);
   const link = `${origin}/manager/timesheet/${encodeURIComponent(workflowId)}#token=${encodeURIComponent(token)}`;
   const reminder = kind === 'REMINDER';
-  const renewal = kind === 'RENEW';
+  const renewal = kind === 'RENEWAL';
   const subject = reminder
     ? 'Reminder: timesheet approval required'
     : renewal ? 'Renewed timesheet approval request' : 'Timesheet approval required';
@@ -2151,6 +2151,18 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
   if (!CANDIDATE_WORKFLOW_ACTIONS.has(dbAction) && dbAction !== 'COMPONENT_SUPERSEDE') {
     throw new CandidateHttpError(400, 'CANDIDATE_WORKFLOW_ACTION_INVALID');
   }
+  if (dbAction === 'RETRY_FINALISATION') {
+    const workflow = await workflowRow(env, workflowId);
+    if (workflow.account_id !== access.account_id || workflow.candidate_id !== access.selected_candidate_id) {
+      throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+    }
+    if (workflow.state !== 'RECEIVED') {
+      throw new CandidateHttpError(409, 'CANDIDATE_FINALISATION_RETRY_NOT_READY');
+    }
+    return jsonResponse(200, await finaliseWorkflow(
+      env, deps, workflowId, generation, text(body.idempotency_key) || crypto.randomUUID()
+    ));
+  }
   let payload = isObject(body.payload) ? structuredClone(body.payload) : {};
   if (dbAction === 'WORKER_SUBMIT') {
     const workflow = await workflowRow(env, workflowId);
@@ -2174,12 +2186,11 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     };
     body.__manager_handoff_token = managerToken;
   } else if (dbAction === 'CREATE_EMAIL_APPROVAL_REQUEST' || dbAction === 'RENEW' || dbAction === 'REMIND') {
-    if (dbAction === 'REMIND') dbAction = 'RENEW';
     const managerToken = randomToken(32);
-    const mailKind = upper(action.replace(/-/g, '_')) === 'REMIND' ? 'REMINDER'
-      : dbAction === 'RENEW' ? 'RENEW' : 'INITIAL';
+    const mailKind = dbAction === 'REMIND' ? 'REMINDER'
+      : dbAction === 'RENEW' ? 'RENEWAL' : 'INITIAL';
     let managerEmail = body.manager_email || payload.manager_email;
-    if (!managerEmail && dbAction === 'RENEW') {
+    if (!managerEmail && (dbAction === 'RENEW' || dbAction === 'REMIND')) {
       const approval = await restOne(env, 'candidate_approval_requests',
         `workflow_id=eq.${encodeURIComponent(workflowId)}&method=eq.EMAIL&select=manager_email_normalized&order=request_generation.desc`);
       managerEmail = approval?.manager_email_normalized;
@@ -2188,6 +2199,17 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       ...payload,
       ...candidateManagerMail(request, env, managerToken, workflowId, managerEmail, mailKind),
       approval_token_hash_hex: await sha256Hex(managerToken)
+    };
+  } else if (dbAction === 'CANCEL') {
+    const reasonNote = text(
+      body.reason_note || body.reason || payload.reason_note || payload.reason
+    ).trim();
+    if (!reasonNote) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
+    if (reasonNote.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_INVALID');
+    payload = {
+      ...payload,
+      reason_note: reasonNote,
+      reason_code: text(body.reason_code || payload.reason_code).trim().toUpperCase() || null
     };
   }
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(

@@ -88,7 +88,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 92, 'the latest-only payload must contain the closed 92-definition function inventory');
+  assert.equal(names.length, 93, 'the latest-only payload must contain the closed 93-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -279,6 +279,16 @@ test('manager approval and evidence completion are session-independent, token-bo
   assert.match(finalise, /CANDIDATE_MANAGER_FINALISATION_V1/i);
   assert.match(finalise, /p_session_id is null[\s\S]*approval_request_id[\s\S]*state='APPROVED'/i);
   assert.match(finalise, /v_candidate_id:=v_workflow\.candidate_id/i);
+});
+
+test('manager reminder renewal cancellation and detail actions use one provider-owned contract', () => {
+  const workflow = sql.workflow;
+  const reads = sql.reads;
+  assert.match(workflow, /v_action='REMIND'[\s\S]*approval_token_hash_hex[\s\S]*manager_mail\.status='SENT'[\s\S]*provider_status[\s\S]*interval '24 hours'[\s\S]*token_hash=v_token_hash[\s\S]*candidate_manager_mail_kind','REMINDER'/i);
+  assert.match(workflow, /v_action='RENEW'[\s\S]*v_approval\.state='PENDING'[\s\S]*expires_at_utc<=p_now_utc[\s\S]*state='EXPIRED'[\s\S]*v_approval\.state<>'EXPIRED'[\s\S]*candidate_manager_mail_kind','RENEWAL'/i);
+  assert.match(workflow, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*CANDIDATE_CANCELLATION_REASON_REQUIRED[\s\S]*_candidate_manager_mail_retire_v1[\s\S]*candidate_manager_mail_kind','WITHDRAWAL'[\s\S]*cancellation_reason[\s\S]*manager_withdrawal_count/i);
+  assert.match(reads, /_candidate_timesheet_action_contract_v1[\s\S]*provider_accepted_at_utc[\s\S]*SEND_MANAGER_REMINDER[\s\S]*REQUEST_APPROVAL_AGAIN[\s\S]*DOWNLOAD_PAPER_DOCUMENTS[\s\S]*RETRY_FINALISATION/i);
+  assert.doesNotMatch(reads, /'code','CONTINUE_WORKFLOW'/i);
 });
 
 test('manager-review addendum uses the existing three workflow tables and adds no eighth table', () => {

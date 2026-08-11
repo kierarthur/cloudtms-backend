@@ -1446,6 +1446,15 @@ declare
   v_provider_permit_expires_at timestamptz;
   v_manager_mail public.mail_outbox%rowtype;
   v_manager_mail_kind text;
+  v_manager_provider_accepted_at timestamptz;
+  v_manager_pending_mail_count integer:=0;
+  v_manager_request_ids uuid[]:=array[]::uuid[];
+  v_manager_withdrawal_request_id uuid;
+  v_manager_withdrawal_count integer:=0;
+  v_manager_retirement_result jsonb;
+  v_cancel_reason text;
+  v_cancel_reason_code text;
+  v_audit_reason text;
   v_unlocked_workflow_updated_at timestamptz;
   v_paper_family_key text;
   v_source_component public.candidate_submission_components%rowtype;
@@ -2770,7 +2779,7 @@ begin
       ) values (
         v_workflow.id,v_workflow.generation,v_request_generation,'EMAIL','PENDING',
         v_email_check->>'email_normalized',v_token_hash,p_now_utc+interval '7 days',
-        p_now_utc,p_now_utc,p_now_utc+interval '24 hours',
+        null,null,null,
         decode(v_manifest->>'manifest_sha256','hex'),v_component_ids,v_manifest->'required_components',
         nullif(v_manifest->>'manager_review_timesheet_component_id','')::uuid,
         case when nullif(v_manifest->>'manager_review_timesheet_sha256','') is null then null
@@ -3154,13 +3163,40 @@ begin
     if not found or v_approval.review_manifest_sha256 is distinct from v_workflow.review_manifest_sha256 then
       raise exception 'MANAGER_REMINDER_NOT_ELIGIBLE' using errcode='55000';
     end if;
+    if coalesce(v_payload->>'approval_token_hash_hex','') !~ '^[0-9a-fA-F]{64}$' then
+      raise exception 'CANDIDATE_APPROVAL_TOKEN_INVALID' using errcode='22023';
+    end if;
+    select max(manager_mail.sent_at),count(*) filter (
+      where manager_mail.status='QUEUED' and manager_mail.sent_at is null
+        and lower(coalesce(manager_mail.payment_scope_json->>'candidate_manager_mail_retired','false'))
+              in ('false','f','0','no')
+    )::integer
+    into v_manager_provider_accepted_at,v_manager_pending_mail_count
+    from public.mail_outbox manager_mail
+    where upper(coalesce(manager_mail.payment_scope_json->>'candidate_mail_authority',''))
+            ='MANAGER_APPROVAL_V1'
+      and manager_mail.payment_scope_json->>'candidate_manager_workflow_id'=v_workflow.id::text
+      and manager_mail.payment_scope_json->>'candidate_manager_workflow_generation'=v_workflow.generation::text
+      and manager_mail.payment_scope_json->>'candidate_approval_request_id'=v_approval.id::text
+      and manager_mail.payment_scope_json->>'candidate_approval_request_generation'=v_approval.request_generation::text
+      and upper(coalesce(manager_mail.payment_scope_json->>'candidate_manager_mail_kind',''))
+            in ('INITIAL','REMINDER','RENEWAL')
+      and (
+        manager_mail.status='QUEUED'
+        or (manager_mail.status='SENT' and manager_mail.sent_at is not null
+          and upper(coalesce(manager_mail.provider_status,'')) in ('ACCEPTED','SENT','SUCCESS','OK'))
+      );
     if v_approval.expires_at_utc<=p_now_utc or v_approval.resend_count>=5
-       or coalesce(v_approval.last_sent_at_utc,v_approval.initial_sent_at_utc)+interval '24 hours'>p_now_utc then
+       or v_manager_provider_accepted_at is null
+       or v_manager_provider_accepted_at+interval '24 hours'>p_now_utc
+       or v_manager_pending_mail_count>0 then
       raise exception 'MANAGER_REMINDER_NOT_ELIGIBLE' using errcode='55000';
     end if;
+    v_token_hash:=decode(v_payload->>'approval_token_hash_hex','hex');
     update public.candidate_approval_requests set
-      resend_count=resend_count+1,last_sent_at_utc=p_now_utc,
-      next_reminder_at_utc=p_now_utc+interval '24 hours',updated_at_utc=p_now_utc
+      token_hash=v_token_hash,resend_count=resend_count+1,
+      initial_sent_at_utc=null,last_sent_at_utc=null,next_reminder_at_utc=null,
+      updated_at_utc=p_now_utc
     where id=v_approval.id returning * into v_approval;
     v_mail_id:=private._candidate_queue_mail_v1(
       coalesce(v_payload->'mail','{}'::jsonb)||jsonb_build_object(
@@ -3179,7 +3215,9 @@ begin
       v_workflow.id,p_now_utc);
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,'state',v_workflow.state,
       'generation',v_workflow.generation,'approval_request_id',v_approval.id,
-      'resend_count',v_approval.resend_count,'next_reminder_at_utc',v_approval.next_reminder_at_utc,
+      'resend_count',v_approval.resend_count,
+      'previous_provider_accepted_at_utc',v_manager_provider_accepted_at,
+      'reminder_delivery_pending',true,
       'mail_outbox_id',v_mail_id);
     update public.candidate_submission_workflows set
       last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
@@ -3193,7 +3231,13 @@ begin
     select * into v_approval from public.candidate_approval_requests
     where workflow_id=v_workflow.id and method='EMAIL'
     order by request_generation desc,created_at_utc desc limit 1 for update;
-    if not found or v_approval.state not in ('PENDING','EXPIRED','SUPERSEDED') then
+    if found and v_approval.state='PENDING' and v_approval.expires_at_utc<=p_now_utc then
+      update public.candidate_approval_requests set
+        state='EXPIRED',updated_at_utc=p_now_utc
+      where id=v_approval.id returning * into v_approval;
+    end if;
+    if not found or v_approval.state<>'EXPIRED'
+       or v_approval.review_manifest_sha256 is distinct from v_workflow.review_manifest_sha256 then
       raise exception 'MANAGER_APPROVAL_NOT_RENEWABLE' using errcode='55000';
     end if;
     if coalesce(v_payload->>'approval_token_hash_hex','') !~ '^[0-9a-fA-F]{64}$' then
@@ -3210,8 +3254,8 @@ begin
       idempotency_key,created_at_utc,updated_at_utc
     ) values (
       v_workflow.id,v_workflow.generation,v_approval.request_generation+1,'EMAIL','PENDING',
-      v_approval.manager_email_normalized,v_token_hash,p_now_utc+interval '7 days',p_now_utc,p_now_utc,
-      p_now_utc+interval '24 hours',v_approval.renewal_count+1,v_approval.review_manifest_sha256,
+      v_approval.manager_email_normalized,v_token_hash,p_now_utc+interval '7 days',null,null,
+      null,v_approval.renewal_count+1,v_approval.review_manifest_sha256,
       v_approval.required_component_ids,v_approval.required_component_manifest_json,
       v_approval.manager_review_timesheet_component_id,v_approval.manager_review_timesheet_sha256,
       p_idempotency_key,p_now_utc,p_now_utc
@@ -3430,6 +3474,17 @@ begin
     if v_workflow.state in ('FINALISED','CANCELLED','REJECTED','SUPERSEDED') then
       raise exception 'CANDIDATE_WORKFLOW_NOT_CANCELLABLE' using errcode='55000';
     end if;
+    if v_action='CANCEL' then
+      v_cancel_reason:=nullif(btrim(coalesce(v_payload->>'reason_note',v_payload->>'reason','')), '');
+      v_cancel_reason_code:=nullif(upper(btrim(coalesce(v_payload->>'reason_code',''))),'');
+      if v_cancel_reason is null then
+        raise exception 'CANDIDATE_CANCELLATION_REASON_REQUIRED' using errcode='22023';
+      end if;
+      if length(v_cancel_reason)>1000 then
+        raise exception 'CANDIDATE_CANCELLATION_REASON_INVALID' using errcode='22023';
+      end if;
+      v_audit_reason:=v_cancel_reason;
+    end if;
     if v_workflow.route='PAPER'
        and v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED') then
       v_paper_retirement_result:=private._candidate_paper_delivery_retire_set_v1(
@@ -3445,11 +3500,67 @@ begin
           using errcode='40001',detail=v_paper_retirement_result::text;
       end if;
     end if;
+    select coalesce(array_agg(locked_request.id order by locked_request.id),array[]::uuid[])
+    into v_manager_request_ids
+    from (
+      select request_row.id
+      from public.candidate_approval_requests request_row
+      where request_row.workflow_id=v_workflow.id
+        and request_row.workflow_generation=v_workflow.generation
+        and request_row.method='EMAIL'
+        and request_row.state in ('PENDING','APPROVED')
+      order by request_row.id
+      for update
+    ) locked_request;
+    if cardinality(v_manager_request_ids)>0 then
+      v_manager_retirement_result:=private._candidate_manager_mail_retire_v1(
+        v_workflow.id,v_workflow.generation,v_manager_request_ids,
+        case when v_action='CANCEL' then 'WORKFLOW_CANCELLED' else 'WORKFLOW_SUPERSEDED' end,
+        p_now_utc
+      );
+    end if;
     update public.candidate_approval_requests set
       state=case when v_action='CANCEL' then 'CANCELLED' else 'SUPERSEDED' end,
       cancelled_at_utc=case when v_action='CANCEL' then p_now_utc else cancelled_at_utc end,
       superseded_at_utc=case when v_action='SUPERSEDE' then p_now_utc else superseded_at_utc end,
       updated_at_utc=p_now_utc where workflow_id=v_workflow.id and state in ('PENDING','APPROVED');
+    if v_action='CANCEL' and coalesce((v_manager_retirement_result->>'withdrawal_required')::boolean,false) then
+      for v_manager_withdrawal_request_id in
+        select value::uuid
+        from jsonb_array_elements_text(coalesce(
+          v_manager_retirement_result->'withdrawal_request_ids','[]'::jsonb
+        )) value
+      loop
+        select request_row.* into v_approval
+        from public.candidate_approval_requests request_row
+        where request_row.id=v_manager_withdrawal_request_id
+          and request_row.workflow_id=v_workflow.id
+          and request_row.workflow_generation=v_workflow.generation
+          and request_row.method='EMAIL'
+          and request_row.state='CANCELLED';
+        if found then
+          perform private._candidate_queue_mail_v1(
+            jsonb_build_object(
+              'subject','Timesheet approval request withdrawn',
+              'body_text','The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.',
+              'body_html','<p>The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.</p>',
+              'payment_scope_json',jsonb_build_object(
+                'candidate_mail_authority','MANAGER_APPROVAL_V1',
+                'candidate_manager_mail_kind','WITHDRAWAL',
+                'candidate_manager_workflow_id',v_workflow.id,
+                'candidate_manager_workflow_generation',v_workflow.generation,
+                'candidate_approval_request_id',v_approval.id,
+                'candidate_approval_request_generation',v_approval.request_generation,
+                'candidate_manager_mail_retired',false
+              )
+            ),v_approval.manager_email_normalized,
+            'CANDIDATE_MANAGER_WITHDRAWAL_V1:'||v_approval.id::text||':'||v_workflow.generation::text,
+            'candidate-manager-withdrawal:'||v_approval.id::text,v_workflow.id,p_now_utc
+          );
+          v_manager_withdrawal_count:=v_manager_withdrawal_count+1;
+        end if;
+      end loop;
+    end if;
     update public.candidate_submission_components set
       state='SUPERSEDED',superseded_at_utc=p_now_utc,
       review_render_state=case when review_render_state='NOT_REQUIRED' then review_render_state else 'SUPERSEDED' end,
@@ -3457,7 +3568,11 @@ begin
     where workflow_id=v_workflow.id and state not in ('SUPERSEDED','REJECTED');
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
       'state',v_action||case when v_action='CANCEL' then 'LED' else 'D' end,
-      'generation',v_next_generation);
+      'generation',v_next_generation,
+      'cancellation_reason',case when v_action='CANCEL' then v_cancel_reason else null end,
+      'cancellation_reason_code',case when v_action='CANCEL' then v_cancel_reason_code else null end,
+      'manager_withdrawal_count',v_manager_withdrawal_count,
+      'manager_mail_retirement',v_manager_retirement_result);
     update public.candidate_submission_workflows set
       state=case when v_action='CANCEL' then 'CANCELLED' else 'SUPERSEDED' end,
       generation=v_next_generation,cancelled_at_utc=case when v_action='CANCEL' then p_now_utc else cancelled_at_utc end,
@@ -3904,7 +4019,7 @@ begin
   perform private._candidate_audit_v1('candidate_submission_workflow',v_workflow.id::text,
     'CANDIDATE_WORKFLOW_'||v_action,
     jsonb_build_object('state',v_workflow.state,'generation',v_workflow.generation),
-    v_response,null,null,p_idempotency_key,p_now_utc);
+    v_response,v_audit_reason,null,p_idempotency_key,p_now_utc);
   return v_response;
 exception
   when unique_violation then

@@ -141,7 +141,10 @@ begin
 
   begin
     v_result:=public.candidate_workflow_transition_atomic_v1(
-      v_session,'TEST',v_workflow,upper(p_action),1,'{}'::jsonb,
+      v_session,'TEST',v_workflow,upper(p_action),1,
+      case when upper(p_action)='CANCEL'
+        then jsonb_build_object('reason_note','Test RECEIVED cancellation.')
+        else '{}'::jsonb end,
       'received-caller-action:'||v_workflow::text,v_now
     );
   exception when sqlstate '40001' then

@@ -240,7 +240,9 @@ begin
   );
   begin
     perform public.candidate_workflow_transition_atomic_v1(
-      v_session,'TEST',v_workflow,'CANCEL',2,'{}'::jsonb,'paper-cancel-during-lease',now()
+      v_session,'TEST',v_workflow,'CANCEL',2,
+      jsonb_build_object('reason_note','Test cancellation during provider lease.'),
+      'paper-cancel-during-lease',now()
     );
   exception when sqlstate '40001' then
     v_failed:=sqlerrm='CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS';

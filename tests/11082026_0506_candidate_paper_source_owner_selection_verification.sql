@@ -368,7 +368,8 @@ begin
 
   begin
     perform public.candidate_workflow_transition_atomic_v1(
-      v_session,'TEST',v_hours_workflow,'CANCEL',1,'{}'::jsonb,
+      v_session,'TEST',v_hours_workflow,'CANCEL',1,
+      jsonb_build_object('reason_note','Test shared-source cancellation.'),
       'cancel-isolation-attempt:'||v_hours_workflow::text,v_now
     );
   exception when sqlstate '40001' then
