@@ -8,6 +8,7 @@ on:
       - 'supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql'
       - 'supabase/migrations/07082026_2055_candidate_app_timesheet_evidence_integrity.sql'
       - 'supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql'
+      - 'supabase/migrations/11082026_1708_candidate_workflow_replacement_lineage.sql'
       - 'supabase/repeatable/07082026_20*_candidate_*.sql'
       - 'supabase/repeatable/07082026_21*_candidate_*.sql'
       - 'supabase/repeatable/07082026_22*_candidate_*.sql'
@@ -73,6 +74,7 @@ jobs:
             supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql
             supabase/migrations/07082026_2055_candidate_app_timesheet_evidence_integrity.sql
             supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql
+            supabase/migrations/11082026_1708_candidate_workflow_replacement_lineage.sql
             supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql
             supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql
             supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql
@@ -117,6 +119,7 @@ jobs:
             tests/11082026_1215_candidate_timesheet_current_history_verification.sql
             tests/11082026_1405_candidate_manager_action_contract_verification.sql
             tests/11082026_1428_candidate_action_hub_closure_verification.sql
+            tests/11082026_1715_candidate_resubmission_idempotency_verification.sql
           )
           for file in "${suites[@]}"; do apply_sql "$file"; done
 

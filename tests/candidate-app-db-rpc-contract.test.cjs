@@ -9,6 +9,7 @@ const files = {
   foundation: 'supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql',
   evidence: 'supabase/migrations/07082026_2055_candidate_app_timesheet_evidence_integrity.sql',
   managerReviewSchema: 'supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql',
+  replacementLineage: 'supabase/migrations/11082026_1708_candidate_workflow_replacement_lineage.sql',
   helpers: 'supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql',
   managerReviewHelpers: 'supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql',
   auth: 'supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql',
@@ -342,6 +343,30 @@ test('workflow gates manager review and finalisation on registered official docu
   assert.match(workflow, /review_manifest_sha256/);
   assert.match(workflow, /required_component_ids/);
   assert.match(workflow, /final_signed_render_state='READY'/i);
+});
+
+test('rejected resubmission is source-bound, transaction-owned and request-aware', () => {
+  const workflow = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
+  assert.match(sql.replacementLineage, /replacement_of_workflow_id uuid/i);
+  assert.match(sql.replacementLineage, /candidate_submission_workflows_replacement_of_fk/i);
+  assert.match(sql.replacementLineage, /candidate_submission_workflows_replacement_source_uq/i);
+  assert.match(sql.replacementLineage, /where replacement_of_workflow_id is not null/i);
+  assert.match(workflow, /v_action='RESUBMIT_REJECTED'/i);
+  assert.match(workflow, /candidate-workflow-idempotency\|/i);
+  assert.match(workflow, /candidate-rejected-source\|/i);
+  assert.match(workflow, /replacement_of_workflow_id=v_source_workflow\.id/i);
+  assert.match(workflow, /private\._candidate_rejection_replaced_v1\(v_source_workflow\.id\)/i);
+  assert.match(workflow, /CANDIDATE_REJECTED_WORKFLOW_ALREADY_REPLACED/i);
+  assert.match(workflow, /CANDIDATE_IDEMPOTENCY_CONFLICT/i);
+  assert.match(workflow, /'rejected_workflow_id',v_replacement_of_workflow_id/i);
+  assert.match(workflow, /'replacement_workflow_id',v_workflow\.id/i);
+  assert.match(workflow, /idempotency_key=btrim\(p_idempotency_key\)[\s\S]*for update/i);
+});
+
+test('NO_WORK_THIS_WEEK asks only for genuine user input', () => {
+  const invocation = privateDefinition(sql.reads, '_candidate_action_invocation_v1');
+  assert.match(invocation, /when 'NO_WORK_THIS_WEEK' then '\[\{"name":"idempotency_key","type":"uuid","required":true\}\]'/i);
+  assert.doesNotMatch(invocation, /when 'NO_WORK_THIS_WEEK' then '[^']*expected_row_signature/i);
 });
 
 test('candidate read contracts expose readiness metadata but never review or final storage keys', () => {

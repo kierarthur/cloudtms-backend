@@ -1375,6 +1375,8 @@ declare
   v_account_id uuid;
   v_candidate_id uuid;
   v_workflow public.candidate_submission_workflows%rowtype;
+  v_source_workflow public.candidate_submission_workflows%rowtype;
+  v_existing_workflow public.candidate_submission_workflows%rowtype;
   v_contract public.contracts%rowtype;
   v_week public.contract_weeks%rowtype;
   v_anchor_week public.contract_weeks%rowtype;
@@ -1477,6 +1479,9 @@ declare
   v_daily_context jsonb;
   v_daily_context_hash bytea;
   v_current_row_signature text;
+  v_insert_workflow_id uuid;
+  v_replacement_of_workflow_id uuid;
+  v_is_rejected_resubmission boolean:=false;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
@@ -1610,15 +1615,138 @@ begin
     if v_candidate_id is null then raise exception 'CANDIDATE_SELECTION_REQUIRED' using errcode='28000'; end if;
   end if;
 
+  if v_action='RESUBMIT_REJECTED' then
+    if nullif(btrim(coalesce(p_idempotency_key,'')),'') is null
+       or btrim(p_idempotency_key) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then
+      raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023';
+    end if;
+    if p_expected_generation is null or p_expected_generation<1 then
+      raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
+    end if;
+
+    -- One account/key lock serialises exact retries. The source lock then
+    -- serialises every key that attempts to replace the same rejected row.
+    perform pg_advisory_xact_lock(hashtextextended(
+      'candidate-workflow-idempotency|'||v_account_id::text||'|'||btrim(p_idempotency_key),0
+    ));
+    perform pg_advisory_xact_lock(hashtextextended(
+      'candidate-rejected-source|'||p_workflow_id::text,0
+    ));
+
+    select * into v_source_workflow
+    from public.candidate_submission_workflows
+    where id=p_workflow_id
+      and environment=v_environment
+      and account_id=v_account_id
+      and candidate_id=v_candidate_id
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
+    end if;
+    if v_source_workflow.generation<>p_expected_generation then
+      raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
+    end if;
+    if v_source_workflow.state<>'REJECTED' then
+      raise exception 'CANDIDATE_REJECTED_WORKFLOW_NOT_RESUBMITTABLE' using errcode='40001';
+    end if;
+
+    select * into v_existing_workflow
+    from public.candidate_submission_workflows
+    where account_id=v_account_id
+      and idempotency_key=btrim(p_idempotency_key)
+    for update;
+    if found then
+      if v_existing_workflow.replacement_of_workflow_id is distinct from v_source_workflow.id
+         or v_existing_workflow.candidate_id is distinct from v_source_workflow.candidate_id
+         or v_existing_workflow.workflow_kind is distinct from v_source_workflow.workflow_kind
+         or v_existing_workflow.scope is distinct from v_source_workflow.scope
+         or v_existing_workflow.route is distinct from v_source_workflow.route
+         or v_existing_workflow.contract_id is distinct from v_source_workflow.contract_id
+         or v_existing_workflow.contract_week_id is distinct from v_source_workflow.contract_week_id
+         or v_existing_workflow.work_date is distinct from v_source_workflow.work_date
+         or v_existing_workflow.week_ending_date is distinct from v_source_workflow.week_ending_date
+         or (
+           v_source_workflow.workflow_kind='DAILY'
+           and not exists (
+             select 1
+             from public.timesheets source_timesheet
+             join public.timesheets replacement_timesheet
+               on replacement_timesheet.booking_id=source_timesheet.booking_id
+             where source_timesheet.timesheet_id=coalesce(
+                     v_source_workflow.target_timesheet_id,v_source_workflow.anchor_timesheet_id
+                   )
+               and replacement_timesheet.timesheet_id=coalesce(
+                     v_existing_workflow.target_timesheet_id,v_existing_workflow.anchor_timesheet_id
+                   )
+               and nullif(btrim(coalesce(source_timesheet.booking_id,'')),'') is not null
+           )
+         ) then
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+      end if;
+      return jsonb_build_object(
+        'ok',true,'idempotent_replay',true,
+        'rejected_workflow_id',v_source_workflow.id,
+        'replacement_workflow_id',v_existing_workflow.id,
+        'replacement_created',false,
+        'workflow_id',v_existing_workflow.id,
+        'state',v_existing_workflow.state,
+        'generation',v_existing_workflow.generation
+      );
+    end if;
+
+    select * into v_existing_workflow
+    from public.candidate_submission_workflows
+    where replacement_of_workflow_id=v_source_workflow.id
+    for update;
+    if found or private._candidate_rejection_replaced_v1(v_source_workflow.id) then
+      raise exception 'CANDIDATE_REJECTED_WORKFLOW_ALREADY_REPLACED'
+        using errcode='40001',detail=case when v_existing_workflow.id is null then null
+          else jsonb_build_object('replacement_workflow_id',v_existing_workflow.id)::text end;
+    end if;
+
+    v_is_rejected_resubmission:=true;
+    v_replacement_of_workflow_id:=v_source_workflow.id;
+    v_insert_workflow_id:=gen_random_uuid();
+    v_payload:=jsonb_build_object(
+      'workflow_kind',v_source_workflow.workflow_kind,
+      'scope',v_source_workflow.scope,
+      'route',v_source_workflow.route
+    );
+    if v_source_workflow.workflow_kind='DAILY' then
+      select current_timesheet.* into v_daily_timesheet
+      from public.timesheets source_timesheet
+      join public.timesheets current_timesheet
+        on current_timesheet.booking_id=source_timesheet.booking_id
+       and current_timesheet.is_current=true
+       and current_timesheet.archived_at_utc is null
+       and current_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum
+      where source_timesheet.timesheet_id=coalesce(
+        v_source_workflow.target_timesheet_id,v_source_workflow.anchor_timesheet_id
+      )
+        and nullif(btrim(coalesce(source_timesheet.booking_id,'')),'') is not null;
+      if not found then
+        raise exception 'CANDIDATE_DAILY_SHIFT_NOT_FOUND' using errcode='P0002';
+      end if;
+      v_payload:=v_payload||jsonb_build_object('target_timesheet_id',v_daily_timesheet.timesheet_id);
+    else
+      v_payload:=v_payload||jsonb_build_object(
+        'contract_id',v_source_workflow.contract_id,
+        'contract_week_id',v_source_workflow.contract_week_id,
+        'week_ending_date',v_source_workflow.week_ending_date
+      );
+    end if;
+    v_action:='CREATE';
+  end if;
+
   if v_action='CREATE' then
     if nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
       raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023';
     end if;
-    select * into v_workflow from public.candidate_submission_workflows
-    where account_id=v_account_id and idempotency_key=p_idempotency_key;
-    if found then
-      return jsonb_build_object('ok',true,'idempotent_replay',true,'workflow_id',v_workflow.id,
-        'state',v_workflow.state,'generation',v_workflow.generation);
+    if not v_is_rejected_resubmission then
+      perform pg_advisory_xact_lock(hashtextextended(
+        'candidate-workflow-idempotency|'||v_account_id::text||'|'||btrim(p_idempotency_key),0
+      ));
+      v_insert_workflow_id:=p_workflow_id;
     end if;
     v_workflow_kind:=upper(coalesce(v_payload->>'workflow_kind',''));
     v_scope:=upper(coalesce(v_payload->>'scope',''));
@@ -1627,6 +1755,53 @@ begin
        or v_scope not in ('WEEKLY','DAILY')
        or v_route not in ('ELECTRONIC','PHONE','EMAIL','PAPER') then
       raise exception 'CANDIDATE_WORKFLOW_TYPE_INVALID' using errcode='22023';
+    end if;
+    if not v_is_rejected_resubmission then
+      select * into v_existing_workflow
+      from public.candidate_submission_workflows
+      where account_id=v_account_id
+        and idempotency_key=btrim(p_idempotency_key)
+      for update;
+      if found and (
+        v_existing_workflow.candidate_id is distinct from v_candidate_id
+        or v_existing_workflow.replacement_of_workflow_id is not null
+        or v_existing_workflow.workflow_kind is distinct from v_workflow_kind
+        or v_existing_workflow.scope is distinct from v_scope
+        or v_existing_workflow.route is distinct from v_route
+        or v_existing_workflow.contract_id is distinct from
+             nullif(v_payload->>'contract_id','')::uuid
+        or v_existing_workflow.contract_week_id is distinct from
+             nullif(v_payload->>'contract_week_id','')::uuid
+        or (
+          nullif(v_payload->>'work_date','') is not null
+          and v_existing_workflow.work_date is distinct from (v_payload->>'work_date')::date
+        )
+        or (
+          nullif(v_payload->>'week_ending_date','') is not null
+          and v_existing_workflow.week_ending_date is distinct from
+                (v_payload->>'week_ending_date')::date
+        )
+        or v_existing_workflow.input_snapshot_json is distinct from
+             coalesce(v_payload->'input_snapshot','{}'::jsonb)
+        or v_existing_workflow.expected_row_signature is distinct from
+             nullif(v_payload->>'expected_row_signature','')
+        or (
+          v_workflow_kind='DAILY'
+          and not exists (
+            select 1
+            from public.timesheets existing_timesheet
+            join public.timesheets requested_timesheet
+              on requested_timesheet.timesheet_id=nullif(v_payload->>'target_timesheet_id','')::uuid
+             and requested_timesheet.booking_id=existing_timesheet.booking_id
+            where existing_timesheet.timesheet_id=coalesce(
+                    v_existing_workflow.target_timesheet_id,v_existing_workflow.anchor_timesheet_id
+                  )
+              and nullif(btrim(coalesce(existing_timesheet.booking_id,'')),'') is not null
+          )
+        )
+      ) then
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+      end if;
     end if;
     if v_workflow_kind='DAILY' then
       if v_scope<>'DAILY' or v_route not in ('PHONE','EMAIL')
@@ -1791,6 +1966,57 @@ begin
         v_anchor_week:=v_week;
       end if;
     end if;
+
+    select * into v_existing_workflow
+    from public.candidate_submission_workflows
+    where account_id=v_account_id
+      and idempotency_key=btrim(p_idempotency_key)
+    for update;
+    if found then
+      if v_existing_workflow.candidate_id is distinct from v_candidate_id
+         or v_existing_workflow.replacement_of_workflow_id is distinct from v_replacement_of_workflow_id
+         or v_existing_workflow.workflow_kind is distinct from v_workflow_kind
+         or v_existing_workflow.scope is distinct from v_scope
+         or v_existing_workflow.route is distinct from v_route
+         or v_existing_workflow.contract_id is distinct from v_contract.id
+         or v_existing_workflow.contract_week_id is distinct from
+              (case when v_workflow_kind='DAILY' then null else v_week.id end)
+         or v_existing_workflow.work_date is distinct from v_canonical_work_date
+         or v_existing_workflow.week_ending_date is distinct from v_canonical_week_ending_date
+         or v_existing_workflow.input_snapshot_json is distinct from
+              coalesce(v_payload->'input_snapshot','{}'::jsonb)
+         or v_existing_workflow.expected_row_signature is distinct from
+              nullif(v_payload->>'expected_row_signature','')
+         or (
+           v_workflow_kind='DAILY'
+           and not exists (
+             select 1
+             from public.timesheets existing_timesheet
+             where existing_timesheet.timesheet_id=coalesce(
+                     v_existing_workflow.target_timesheet_id,v_existing_workflow.anchor_timesheet_id
+                   )
+               and existing_timesheet.booking_id=v_daily_timesheet.booking_id
+               and nullif(btrim(coalesce(existing_timesheet.booking_id,'')),'') is not null
+           )
+         ) then
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+      end if;
+      if v_is_rejected_resubmission then
+        return jsonb_build_object(
+          'ok',true,'idempotent_replay',true,
+          'rejected_workflow_id',v_replacement_of_workflow_id,
+          'replacement_workflow_id',v_existing_workflow.id,
+          'replacement_created',false,
+          'workflow_id',v_existing_workflow.id,
+          'state',v_existing_workflow.state,
+          'generation',v_existing_workflow.generation
+        );
+      end if;
+      return jsonb_build_object('ok',true,'idempotent_replay',true,
+        'workflow_id',v_existing_workflow.id,'state',v_existing_workflow.state,
+        'generation',v_existing_workflow.generation);
+    end if;
+
     if v_workflow_kind in ('CONTRACT_EXPENSE','CONTRACT_COMBINED') then
       perform pg_advisory_xact_lock(hashtext(
         v_candidate_id::text||'|'||v_contract.id::text||'|'||
@@ -1850,9 +2076,9 @@ begin
       id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
       contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,work_date,week_ending_date,
       policy_snapshot_json,input_snapshot_json,issue_codes,expected_row_signature,idempotency_key,
-      last_mutation_idempotency_key,created_at_utc,updated_at_utc
+      replacement_of_workflow_id,last_mutation_idempotency_key,created_at_utc,updated_at_utc
     ) values (
-      p_workflow_id,v_environment,v_account_id,v_candidate_id,v_workflow_kind,
+      v_insert_workflow_id,v_environment,v_account_id,v_candidate_id,v_workflow_kind,
       v_scope,v_route,'WORKER_DRAFT',1,v_contract.id,
       case when v_workflow_kind='DAILY' then null else v_week.id end,
       case when v_workflow_kind='DAILY' then v_daily_timesheet.timesheet_id else v_anchor_week.timesheet_id end,
@@ -1863,14 +2089,26 @@ begin
       end,
       v_canonical_work_date,v_canonical_week_ending_date,
       v_policy,coalesce(v_payload->'input_snapshot','{}'::jsonb),'[]'::jsonb,
-      nullif(v_payload->>'expected_row_signature',''),p_idempotency_key,p_idempotency_key,p_now_utc,p_now_utc
+      nullif(v_payload->>'expected_row_signature',''),btrim(p_idempotency_key),
+      v_replacement_of_workflow_id,btrim(p_idempotency_key),p_now_utc,p_now_utc
     ) returning * into v_workflow;
     perform private._candidate_audit_v1('candidate_submission_workflow',v_workflow.id::text,
       'CANDIDATE_WORKFLOW_CREATED',null,
       jsonb_build_object('kind',v_workflow.workflow_kind,'scope',v_workflow.scope,'route',v_workflow.route),
       null,null,p_idempotency_key,p_now_utc);
-    return jsonb_build_object('ok',true,'idempotent_replay',false,'workflow_id',v_workflow.id,
-      'state',v_workflow.state,'generation',v_workflow.generation,'policy',v_policy);
+    if v_is_rejected_resubmission then
+      return jsonb_build_object(
+        'ok',true,'idempotent_replay',false,
+        'rejected_workflow_id',v_replacement_of_workflow_id,
+        'replacement_workflow_id',v_workflow.id,
+        'replacement_created',true,
+        'workflow_id',v_workflow.id,'state',v_workflow.state,
+        'generation',v_workflow.generation,'policy',v_policy
+      );
+    end if;
+    return jsonb_build_object('ok',true,'idempotent_replay',false,
+      'workflow_id',v_workflow.id,'state',v_workflow.state,
+      'generation',v_workflow.generation,'policy',v_policy);
   end if;
 
   if v_workflow.id is null then
@@ -4033,6 +4271,10 @@ exception
       raise exception 'MANAGER_REVIEW_DOCUMENT_STALE' using errcode='23505';
     elsif v_constraint_name='candidate_submission_workflows_one_active_expense_uq' then
       raise exception 'CANDIDATE_EXPENSE_CLAIM_ALREADY_ACTIVE' using errcode='23505';
+    elsif v_constraint_name='candidate_submission_workflows_account_idempotency_uq' then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+    elsif v_constraint_name='candidate_submission_workflows_replacement_source_uq' then
+      raise exception 'CANDIDATE_REJECTED_WORKFLOW_ALREADY_REPLACED' using errcode='40001';
     elsif v_constraint_name='candidate_submission_components_paper_return_page_uq' then
       raise exception 'CANDIDATE_PAPER_RETURN_PAGE_DUPLICATE' using errcode='23505';
     end if;

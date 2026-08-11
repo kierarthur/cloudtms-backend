@@ -2133,80 +2133,12 @@ async function handleWorkflowCreate(request, env, deps) {
 async function handleWorkflowResubmit(request, env, deps, workflowId) {
   const access = await verifyCandidateAccess(request, env);
   const body = await readJson(request);
-  const rejected = await workflowRow(env, workflowId);
-  if (rejected.account_id !== access.account_id
-      || rejected.candidate_id !== access.selected_candidate_id) {
-    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
-  }
   const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
-  if (rejected.state !== 'REJECTED' || Number(rejected.generation) !== generation) {
-    throw new CandidateHttpError(409, 'CANDIDATE_REJECTED_WORKFLOW_NOT_RESUBMITTABLE');
-  }
   const idempotencyKey = requireUuid(body.idempotency_key, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
-  const existingReplacement = await restOne(env, 'candidate_submission_workflows',
-    `account_id=eq.${encodeURIComponent(access.account_id)}`
-    + `&idempotency_key=eq.${encodeURIComponent(idempotencyKey)}`
-    + '&select=id,candidate_id,workflow_kind,scope,route,state,generation,contract_id,contract_week_id,work_date,week_ending_date');
-  if (existingReplacement) {
-    const sameIdentity = existingReplacement.candidate_id === rejected.candidate_id
-      && upper(existingReplacement.workflow_kind) === upper(rejected.workflow_kind)
-      && upper(existingReplacement.scope) === upper(rejected.scope)
-      && upper(existingReplacement.route) === upper(rejected.route)
-      && existingReplacement.contract_id === rejected.contract_id
-      && existingReplacement.contract_week_id === rejected.contract_week_id
-      && text(existingReplacement.work_date) === text(rejected.work_date)
-      && text(existingReplacement.week_ending_date) === text(rejected.week_ending_date);
-    if (!sameIdentity) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
-    return jsonResponse(201, {
-      ok: true, idempotent_replay: true, rejected_workflow_id: rejected.id,
-      replacement_workflow_id: existingReplacement.id, replacement_created: false,
-      workflow_id: existingReplacement.id, state: existingReplacement.state,
-      generation: Number(existingReplacement.generation)
-    });
-  }
-  const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
-    p_timesheet_id: null, p_contract_week_id: null, p_workflow_id: rejected.id
-  }));
-  const actionable = Array.isArray(detail?.rejections)
-    && detail.rejections.some((item) => item?.workflow_id === rejected.id
-      && item?.rejection_actionable === true);
-  if (!actionable) throw new CandidateHttpError(409, 'CANDIDATE_REJECTED_WORKFLOW_ALREADY_REPLACED');
-  const replacementWorkflowId = crypto.randomUUID();
-  const payload = {
-    workflow_kind: upper(rejected.workflow_kind),
-    scope: upper(rejected.scope),
-    route: upper(rejected.route)
-  };
-  if (payload.workflow_kind === 'DAILY') {
-    const source = await restOne(env, 'timesheets',
-      `timesheet_id=eq.${encodeURIComponent(requireUuid(rejected.target_timesheet_id || rejected.anchor_timesheet_id))}`
-      + '&select=timesheet_id,booking_id,contract_id,week_ending_date');
-    if (!source?.booking_id) throw new CandidateHttpError(409, 'CANDIDATE_DAILY_SHIFT_IDENTITY_MISMATCH');
-    const current = await restOne(env, 'timesheets',
-      `booking_id=eq.${encodeURIComponent(source.booking_id)}&is_current=eq.true&archived_at_utc=is.null`
-      + '&sheet_scope=eq.DAILY&select=timesheet_id,week_ending_date');
-    if (!current) throw new CandidateHttpError(409, 'CANDIDATE_DAILY_SHIFT_NOT_FOUND');
-    payload.target_timesheet_id = current.timesheet_id;
-  } else {
-    const week = await restOne(env, 'contract_weeks',
-      `id=eq.${encodeURIComponent(requireUuid(rejected.contract_week_id, 'CANDIDATE_WORKFLOW_WEEK_NOT_FOUND'))}`
-      + '&select=id,contract_id,week_ending_date');
-    if (!week || week.contract_id !== rejected.contract_id) {
-      throw new CandidateHttpError(409, 'CANDIDATE_WORKFLOW_WEEK_NOT_FOUND');
-    }
-    payload.contract_id = week.contract_id;
-    payload.contract_week_id = week.id;
-    payload.week_ending_date = week.week_ending_date;
-  }
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
-    access, env, replacementWorkflowId, 'CREATE', null, payload, idempotencyKey
+    access, env, workflowId, 'RESUBMIT_REJECTED', generation, {}, idempotencyKey
   ));
-  return jsonResponse(201, {
-    ...result,
-    rejected_workflow_id: rejected.id,
-    replacement_workflow_id: result.workflow_id,
-    replacement_created: result.idempotent_replay !== true
-  });
+  return jsonResponse(201, result);
 }
 
 async function prepareImmutableSubmission(env, deps, workflow, body) {

@@ -344,9 +344,11 @@ paths:
       operationId: resubmitRejectedCandidateWorkflow
       summary: Create a new replacement workflow from immutable rejected history
       description: >-
-        The rejected workflow is never amended or revived. The server validates its exact
-        generation, derives the replacement kind, scope, route and current record identity,
-        and creates a new WORKER_DRAFT workflow using the supplied idempotency key.
+        The rejected workflow is never amended or revived. One atomic database action validates
+        its exact generation, binds the supplied idempotency key to that rejected source, derives
+        the replacement kind, scope, route and current record identity, and creates at most one
+        durable WORKER_DRAFT replacement. Exact retries return the same replacement receipt;
+        cross-source or conflicting key reuse fails closed.
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/resubmit
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
       requestBody: {$ref: '#/components/requestBodies/RejectedWorkflowResubmitBody'}

@@ -363,7 +363,7 @@ begin
       when 'DISCARD_EXPENSE_CLAIM' then '[{"name":"reason_note","type":"string","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
       when 'CANCEL_ENTIRE_CLAIM_AND_START_AGAIN' then '[{"name":"reason_note","type":"string","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
       when 'UPLOAD_SIGNED_RETURN' then '[{"name":"returned_pages","type":"array","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
-      when 'NO_WORK_THIS_WEEK' then '[{"name":"expected_row_signature","type":"string","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
+      when 'NO_WORK_THIS_WEEK' then '[{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
       else '[{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb end;
   end if;
   v_invocation:=jsonb_build_object('version',1,'kind','HTTP','method',nullif(v_method,''),

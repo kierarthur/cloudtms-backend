@@ -291,14 +291,13 @@ test('timesheet detail aliases pass one exact server identity to the shared deta
   }
 });
 
-test('rejected resubmission creates a new server-derived workflow and never amends rejected history', async () => {
+test('rejected resubmission is a thin adapter over the atomic source-bound database action', async () => {
   const sessionId = '00000000-0000-4000-8000-0000000000a1';
   const accountId = '00000000-0000-4000-8000-0000000000a2';
   const candidateId = '00000000-0000-4000-8000-0000000000a3';
   const workflowId = '00000000-0000-4000-8000-0000000000a4';
-  const contractId = '00000000-0000-4000-8000-0000000000a5';
-  const weekId = '00000000-0000-4000-8000-0000000000a6';
   const idempotencyKey = '00000000-0000-4000-8000-0000000000a7';
+  const replacementId = '00000000-0000-4000-8000-0000000000a8';
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
@@ -311,25 +310,11 @@ test('rejected resubmission creates a new server-derived workflow and never amen
     expires_at_utc: '2099-01-01T00:00:00.000Z',
     absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
   };
-  const rejected = {
-    id: workflowId, account_id: accountId, candidate_id: candidateId,
-    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'PAPER',
-    state: 'REJECTED', generation: 4, contract_id: contractId, contract_week_id: weekId,
-    work_date: null, week_ending_date: '2026-08-12'
-  };
   const token = await createAccessToken(env, session);
   const originalFetch = globalThis.fetch;
-  let replayReplacement = null;
   globalThis.fetch = async url => {
     const value = String(url);
     if (value.includes('candidate_app_sessions')) return Response.json([session]);
-    if (value.includes('candidate_submission_workflows') && value.includes('idempotency_key=eq.')) {
-      return Response.json(replayReplacement ? [replayReplacement] : []);
-    }
-    if (value.includes('candidate_submission_workflows')) return Response.json([rejected]);
-    if (value.includes('contract_weeks')) return Response.json([{
-      id: weekId, contract_id: contractId, week_ending_date: '2026-08-12'
-    }]);
     throw new Error(`unexpected fetch ${value}`);
   };
   const calls = [];
@@ -337,10 +322,12 @@ test('rejected resubmission creates a new server-derived workflow and never amen
     routeAudience: 'PRIVATE',
     async rpc(name, args) {
       calls.push({ name, args });
-      if (name === 'candidate_app_timesheet_detail_v1') {
-        return { ok: true, rejections: [{ workflow_id: workflowId, rejection_actionable: true }] };
-      }
-      return { ok: true, workflow_id: args.p_workflow_id, state: 'WORKER_DRAFT', generation: 1 };
+      return {
+        ok: true, idempotent_replay: calls.length > 1,
+        rejected_workflow_id: workflowId, replacement_workflow_id: replacementId,
+        replacement_created: calls.length === 1, workflow_id: replacementId,
+        state: 'WORKER_DRAFT', generation: 1
+      };
     }
   };
   try {
@@ -358,24 +345,15 @@ test('rejected resubmission creates a new server-derived workflow and never amen
     assert.equal(response.status, 201);
     const payload = await response.json();
     assert.equal(payload.rejected_workflow_id, workflowId);
-    assert.notEqual(payload.replacement_workflow_id, workflowId);
-    assert.equal(calls.length, 2);
-    assert.equal(calls[0].name, 'candidate_app_timesheet_detail_v1');
+    assert.equal(payload.replacement_workflow_id, replacementId);
+    assert.equal(payload.replacement_created, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, 'candidate_workflow_transition_atomic_v1');
+    assert.equal(calls[0].args.p_action, 'RESUBMIT_REJECTED');
     assert.equal(calls[0].args.p_workflow_id, workflowId);
-    assert.equal(calls[1].name, 'candidate_workflow_transition_atomic_v1');
-    assert.equal(calls[1].args.p_action, 'CREATE');
-    assert.notEqual(calls[1].args.p_workflow_id, workflowId);
-    assert.deepEqual(calls[1].args.p_payload, {
-      workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'PAPER',
-      contract_id: contractId, contract_week_id: weekId, week_ending_date: '2026-08-12'
-    });
-    assert.equal(calls[1].args.p_idempotency_key, idempotencyKey);
-    replayReplacement = {
-      id: payload.replacement_workflow_id, candidate_id: candidateId,
-      workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'PAPER',
-      state: 'WORKER_DRAFT', generation: 1, contract_id: contractId,
-      contract_week_id: weekId, work_date: null, week_ending_date: '2026-08-12'
-    };
+    assert.equal(calls[0].args.p_expected_generation, 4);
+    assert.deepEqual(calls[0].args.p_payload, {});
+    assert.equal(calls[0].args.p_idempotency_key, idempotencyKey);
     const replayResponse = await handleCandidateAppRequest(new Request(
       `https://private.test/candidate-app/v1/workflows/${workflowId}/resubmit`, {
         method: 'POST', headers: {
@@ -386,8 +364,10 @@ test('rejected resubmission creates a new server-derived workflow and never amen
     assert.equal(replayResponse.status, 201);
     const replayBody = await replayResponse.json();
     assert.equal(replayBody.idempotent_replay, true);
-    assert.equal(replayBody.replacement_workflow_id, payload.replacement_workflow_id);
+    assert.equal(replayBody.replacement_workflow_id, replacementId);
     assert.equal(calls.length, 2);
+    assert.equal(calls[1].args.p_action, 'RESUBMIT_REJECTED');
+    assert.equal(calls[1].args.p_workflow_id, workflowId);
   } finally {
     globalThis.fetch = originalFetch;
   }
