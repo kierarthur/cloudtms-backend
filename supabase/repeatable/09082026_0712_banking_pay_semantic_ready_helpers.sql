@@ -998,6 +998,7 @@ DECLARE
   v_descriptor_options jsonb := '{}'::jsonb;
   v_authority_kind text;
   v_original_source_build_run_id uuid;
+  v_replay_source_build_run_id uuid;
   v_original_source_publication_id uuid;
   v_source_publication_id uuid;
   v_publication_identity_write_enabled boolean := false;
@@ -1116,6 +1117,8 @@ BEGIN
     IF v_authority_kind='CERTIFIED_CANCELLATION_REVERSION' THEN
       IF COALESCE(v_descriptor_options->>'original_source_build_run_id','')
            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         OR COALESCE(v_descriptor_options->>'replay_source_build_run_id','')
+              !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
          OR COALESCE(v_descriptor_options->>'original_source_publication_id','')
               !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
          OR COALESCE(v_descriptor_options->>'source_session_id','') IS DISTINCT FROM p_session_id::text
@@ -1129,6 +1132,7 @@ BEGIN
       END IF;
 
       v_original_source_build_run_id := (v_descriptor_options->>'original_source_build_run_id')::uuid;
+      v_replay_source_build_run_id := (v_descriptor_options->>'replay_source_build_run_id')::uuid;
       v_original_source_publication_id := CASE
         WHEN COALESCE(v_descriptor_options->>'original_source_publication_id','')
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -1194,6 +1198,7 @@ BEGIN
         source_row.source_row_json || pg_catalog.jsonb_build_object(
           'cancellation_reversion_run_id',v_descriptor->>'source_build_run_id',
           'original_source_build_run_id',v_original_source_build_run_id::text,
+          'replayed_from_source_build_run_id',v_replay_source_build_run_id::text,
           'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
         ),
         source_row.economic_key_json,
@@ -1208,7 +1213,7 @@ BEGIN
       FROM public.banking_pay_workbench_candidate_source_lines AS source_row
       WHERE source_row.session_id=p_session_id
         AND source_row.candidate_id=v_candidate_id
-        AND source_row.source_build_run_id=v_original_source_build_run_id
+        AND source_row.source_build_run_id=v_replay_source_build_run_id
         AND source_row.source_publication_id=v_original_source_publication_id
         AND NOT EXISTS (
           SELECT 1
@@ -1840,7 +1845,11 @@ BEGIN
         'rejection_reason',source_proof.rejection_reason,
         'draft_operation_id',source_proof.draft_operation_id,
         'original_economic_build_id',source_proof.frozen_attestation->>'economic_build_id',
-        'original_source_build_run_id',source_proof.frozen_source_build_run_id,
+        'original_source_build_run_id',COALESCE(
+          source_proof.frozen_attestation->>'original_source_build_run_id',
+          source_proof.frozen_source_build_run_id
+        ),
+        'replay_source_build_run_id',source_proof.frozen_source_build_run_id,
         'original_source_publication_id',source_proof.frozen_source_publication_id,
         'original_source_change_seq',source_proof.frozen_attestation->>'source_change_seq',
         'current_source_change_seq',source_proof.live_source_change_seq,
@@ -2923,6 +2932,7 @@ BEGIN
         'source_session_id',p_session_id,
         'original_economic_build_id',admitted.value->>'original_economic_build_id',
         'original_source_build_run_id',admitted.value->>'original_source_build_run_id',
+        'replay_source_build_run_id',admitted.value->>'replay_source_build_run_id',
         'original_source_publication_id',admitted.value->>'original_source_publication_id',
         'cancellation_request_id',p_correction_request_id,
         'cancellation_operation_id',v_operation_id,

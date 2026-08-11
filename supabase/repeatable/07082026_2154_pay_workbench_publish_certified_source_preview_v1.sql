@@ -158,7 +158,7 @@ BEGIN
     'semantic_contract_version','semantic_proof_digest','original_semantic_proof_digest',
     'cancellation_request_id','cancellation_operation_id','cancellation_work_item_id',
     'pay_batch_id','cancellation_reversion_run_id','financial_reversion_digest','source_count',
-    'cancellation_route'
+    'cancellation_route','replay_source_build_run_id'
   );
 
   IF v_unknown_option_count > 0 OR v_contract_version NOT IN (1,2,3)

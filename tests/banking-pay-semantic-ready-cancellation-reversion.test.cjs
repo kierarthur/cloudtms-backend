@@ -434,6 +434,18 @@ test('untouched Draft cancellation avoids financial work items, source builds an
   assert.ok(batchTerminalWrite < certifiedPublication);
 });
 
+test('repeated certified cancellation reversion keeps physical replay identity separate from economic lineage', () => {
+  assert.match(
+    helpers,
+    /'original_source_build_run_id',COALESCE\([\s\S]{0,180}?frozen_attestation->>'original_source_build_run_id'[\s\S]{0,120}?frozen_source_build_run_id/,
+  );
+  assert.match(helpers, /'replay_source_build_run_id',source_proof\.frozen_source_build_run_id/);
+  assert.match(helpers, /v_replay_source_build_run_id := \(v_descriptor_options->>'replay_source_build_run_id'\)::uuid/);
+  assert.match(helpers, /source_row\.source_build_run_id=v_replay_source_build_run_id/);
+  assert.match(helpers, /'replayed_from_source_build_run_id',v_replay_source_build_run_id::text/);
+  assert.match(publisher, /'cancellation_route','replay_source_build_run_id'/);
+});
+
 test('Draft completion freezes the exact post-Draft authority before fast cancellation is admitted', () => {
   assert.match(operationFinish, /POST_DRAFT_LIVE_AUTHORITY_V2/);
   assert.match(operationFinish, /fast_reversion_eligible/);
