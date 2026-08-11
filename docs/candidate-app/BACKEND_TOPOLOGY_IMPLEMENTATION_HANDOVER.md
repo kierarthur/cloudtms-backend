@@ -484,7 +484,7 @@ Please verify, function by function, including the final authority seams:
 
 1. independently audit the exact runtime/evidence commits, installed TEST repeatable hashes, deployed TEST service versions and latest-only handover manifest recorded after this revision's rollout;
 2. keep Candidate feature flags false until the coordinated synthetic TEST fixtures and current CloudTMS frontend are ready;
-3. have the receiving chat produce a highly detailed CloudTMS office-frontend implementation plan from the complete current-decisions PDF and this authority contract, explicitly covering Current/History, exact week labels/order, detail navigation/action hub, incomplete-claim-to-MANUAL warnings and the shared W01–W13 renderer; implement only after that plan is reviewed and independent backend GO is issued;
+3. after independent backend GO, have the receiving chat produce a highly detailed sequenced UI implementation plan from the complete current-decisions PDF and this authority contract: the CloudTMS office-frontend phase must cover the incomplete-claim-to-MANUAL confirmation and the shared W01–W14 renderer; the later Candidate web/iOS/Android phase must cover Current/History, exact week labels/order and detail navigation/action hub. Implement the office frontend first, and do not begin Candidate clients until the office frontend is complete and separately accepted;
 4. independently verify and freeze the OpenAPI contract after frontend acceptance;
 5. build the responsive Candidate web/iOS/Android clients against that frozen contract;
 6. configure APNs/FCM/Web Push application identities, provider credentials and TEST devices, then activate broker provider delivery;

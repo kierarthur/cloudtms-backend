@@ -100,16 +100,21 @@ At minimum, independently prove:
 9. no accepted lifecycle caller, including an adjacent one not named by this handover, can bypass those central authorities;
 10. all 26 current-decisions pages are implemented or explicitly deferred exactly as recorded, with no frontend inference required for server truth.
 
-The receiving chat should issue GO only if the complete audited server contract is safe to freeze. If GO is issued, its next deliverable should be a highly detailed CloudTMS **office-frontend** implementation plan that follows the full decisions PDF without exception and explicitly includes:
+The receiving chat should issue GO only if the complete audited server contract is safe to freeze. If GO is issued, its next deliverable should be one highly detailed, correctly sequenced UI implementation plan that follows the full decisions PDF without exception.
+
+The first implementation phase is the CloudTMS **office frontend** and must include:
+
+- incomplete expense-claim warnings and explicit confirmation before office conversion to MANUAL;
+- all W01–W14 warning/modal behavior;
+- professional, uncluttered responsive modal layouts exercised through deterministic UI states with realistic data;
+- accessibility, loading, error, stale-context and retry states.
+
+The same master plan must retain, but not yet implement, the later Candidate web/iOS/Android phase:
 
 - Current/History tabs and the server-owned membership rules;
 - exact week labels and newest-first order;
 - row/card tap to the detail/review action hub;
-- incomplete expense-claim warnings and explicit confirmation before office conversion to MANUAL;
-- all W01–W13 warning/modal behavior;
-- professional, uncluttered responsive modal layouts exercised through deterministic UI states with realistic data;
-- accessibility, loading, empty, error, stale-context and retry states;
-- no Candidate web/iOS/Android or public app/broker implementation until the office frontend is complete and separately accepted.
+- no Candidate web/iOS/Android or public app-client implementation until the office frontend is complete and separately accepted.
 
 ## Safety boundary
 
