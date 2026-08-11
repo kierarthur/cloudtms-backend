@@ -68,7 +68,11 @@ DECLARE
   v_draft_overlay_pre_request_authorities jsonb := '{}'::jsonb;
   v_draft_overlay_start_admission jsonb := '{}'::jsonb;
   v_draft_overlay_start_authorities jsonb := '{}'::jsonb;
+  v_cancel_reversion_pre_request_proof jsonb := '{}'::jsonb;
+  v_cancel_reversion_pre_request_authorities_v2 jsonb := '{}'::jsonb;
+  v_cancel_reversion_start_authorities_v2 jsonb := '{}'::jsonb;
   v_source_publication_identity_enforced boolean := false;
+  v_scheduled_reversion_v2_observe_enabled boolean := false;
 BEGIN
   IF p_pay_batch_id IS NULL THEN
     RAISE EXCEPTION 'PAY_BATCH_ID_REQUIRED'
@@ -94,9 +98,12 @@ BEGIN
     SELECT settings_row.banking_pay_candidate_cancellation_enabled,
            least(coalesce(settings_row.banking_pay_correction_max_candidates, 10000), 10000),
            coalesce(settings_row.banking_pay_auto_unwind_terminal_no_money, false),
-           coalesce(settings_row.banking_pay_source_publication_identity_enforce_v1_enabled, false)
+           coalesce(settings_row.banking_pay_source_publication_identity_enforce_v1_enabled, false),
+           COALESCE((pg_catalog.to_jsonb(settings_row)
+             ->>'banking_pay_scheduled_cancellation_reversion_v2_observe_enabled')::boolean,false)
     INTO v_enabled, v_max_candidates, v_auto_unwind_enabled,
-         v_source_publication_identity_enforced
+         v_source_publication_identity_enforced,
+         v_scheduled_reversion_v2_observe_enabled
   FROM public.settings_defaults AS settings_row
   ORDER BY settings_row.id
   LIMIT 1;
@@ -585,6 +592,60 @@ BEGIN
       FROM classified;
     END IF;
 
+    -- Scheduled/executed-not-submitted cancellation has a different safe
+    -- baseline from an untouched Draft.  Prove, before the correction request
+    -- writes anything, that the current certified source differs from the
+    -- immutable Draft only by the closed unsent-payment overlay.  Explicit
+    -- pages are bounded to 100 candidates; larger/all-matching requests retain
+    -- the safe fallback until the operation's bounded page owner captures the
+    -- same proof per page.
+    IF COALESCE(v_scheduled_reversion_v2_observe_enabled,false)
+       AND v_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
+       AND v_mode='EXPLICIT'
+       AND v_requested_explicit_count BETWEEN 1 AND 100 THEN
+      v_cancel_reversion_pre_request_proof :=
+        private.pay_workbench_cancel_reversion_proof_core_v1(
+          NULL::uuid,NULL::uuid,NULL::uuid,ARRAY[]::uuid[],'PRE_REQUEST',
+          pg_catalog.jsonb_build_object(
+            'pay_batch_id',p_pay_batch_id,
+            'candidate_ids',COALESCE((
+              SELECT pg_catalog.jsonb_agg(batch_candidate.candidate_id ORDER BY batch_candidate.candidate_id)
+              FROM public.pay_batch_candidates AS batch_candidate
+              WHERE batch_candidate.pay_batch_id=p_pay_batch_id
+                AND batch_candidate.id::text IN (
+                  SELECT explicit_token.value
+                  FROM pg_catalog.jsonb_array_elements_text(v_canonical_explicit_tokens)
+                    AS explicit_token(value)
+                )
+            ),'[]'::jsonb)
+          )
+        );
+
+      SELECT COALESCE(pg_catalog.jsonb_object_agg(
+        result_row.value->>'candidate_id',
+        pg_catalog.jsonb_build_object(
+          'contract_version','CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2',
+          'candidate_id',result_row.value->>'candidate_id',
+          'pay_batch_candidate_id',result_row.value->>'pay_batch_candidate_id',
+          'source_change_seq',result_row.value->>'source_change_seq',
+          'dirty_generation',result_row.value->>'dirty_generation',
+          'original_economic_build_id',result_row.value->>'original_economic_build_id',
+          'current_economic_build_id',result_row.value->>'current_economic_build_id',
+          'original_source_publication_id',result_row.value->>'original_source_publication_id',
+          'current_source_publication_id',result_row.value->>'current_source_publication_id',
+          'invariant_economic_digest',result_row.value->>'invariant_economic_digest',
+          'pre_request_exact',COALESCE((result_row.value->>'admitted')::boolean,false),
+          'fast_reversion_eligible',COALESCE((result_row.value->>'admitted')::boolean,false),
+          'rejection_reason',result_row.value->>'rejection_reason',
+          'authority_digest',result_row.value->>'authority_digest'
+        )
+      ),'{}'::jsonb)
+      INTO v_cancel_reversion_pre_request_authorities_v2
+      FROM pg_catalog.jsonb_array_elements(
+        COALESCE(v_cancel_reversion_pre_request_proof->'candidate_results','[]'::jsonb)
+      ) AS result_row(value);
+    END IF;
+
     v_selection := p_selection_json || pg_catalog.jsonb_build_object(
       'contract_version', 1,
       'mode', v_mode,
@@ -599,6 +660,9 @@ BEGIN
       'draft_overlay_fast_pre_request_authorities',
         CASE WHEN v_action='DRAFT_CANCEL'
           THEN v_draft_overlay_pre_request_authorities ELSE '{}'::jsonb END,
+      'cancellation_reversion_pre_request_authorities_v2',
+        CASE WHEN v_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
+          THEN v_cancel_reversion_pre_request_authorities_v2 ELSE '{}'::jsonb END,
       'canonical_explicit_candidate_tokens', CASE
         WHEN v_mode = 'EXPLICIT' THEN v_canonical_explicit_tokens ELSE '[]'::jsonb END,
       'selection', coalesce(p_selection_json->'selection', '{}'::jsonb) || pg_catalog.jsonb_build_object(
@@ -620,6 +684,7 @@ BEGIN
     -- fence instead of creating a second request after request-owned dirtying.
     v_descriptor_hash := private.pay_payment_correction_sha256_v1(
       v_selection - 'command' - 'draft_overlay_fast_pre_request_authorities'
+        - 'cancellation_reversion_pre_request_authorities_v2'
     );
     v_correction_kind := CASE WHEN v_action IN ('NO_MONEY_RELEASE', 'NO_MONEY_UNWIND')
                               THEN 'NO_MONEY_UNWIND' ELSE 'PRE_BANK_CANCEL' END;
@@ -802,7 +867,13 @@ BEGIN
   -- during the user's reauthentication interval.  The result remains
   -- candidate-specific so mixed batches can safely fall back per candidate.
   IF v_command='START_PREPARED'
-     AND COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL' THEN
+     AND COALESCE(v_request.plan_json->>'requested_action','') IN (
+       'DRAFT_CANCEL','PRE_BANK_CANCEL','CANCEL_PAYMENT'
+     )
+     AND (
+       COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL'
+       OR COALESCE(v_scheduled_reversion_v2_observe_enabled,false)
+     ) THEN
     FOR v_candidate_id IN
       SELECT DISTINCT batch_candidate.candidate_id
       FROM public.pay_payment_correction_request_candidates AS request_candidate
@@ -821,8 +892,14 @@ BEGIN
 
     WITH selected_candidates AS (
       SELECT batch_candidate.candidate_id,
-             v_request.selection_json->'draft_overlay_fast_pre_request_authorities'
-               ->batch_candidate.candidate_id::text AS pre_request_authority,
+             CASE
+               WHEN COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL'
+                 THEN v_request.selection_json->'draft_overlay_fast_pre_request_authorities'
+                        ->batch_candidate.candidate_id::text
+               ELSE v_request.selection_json->'cancellation_reversion_pre_request_authorities_v2'
+                        ->batch_candidate.candidate_id::text
+             END AS pre_request_authority,
+             COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL' AS is_draft_overlay,
              COALESCE(candidate_counter.seq,0) AS live_source_change_seq,
              COALESCE(candidate_counter.scope_change_generation,0) AS live_dirty_generation,
              request_owned_dirty.job_id AS request_owned_dirty_job_id
@@ -864,16 +941,33 @@ BEGIN
                 =COALESCE(candidate_counter.seq,0)::text
           AND COALESCE((dirty_job.payload_json->>'policy_x_dirtying_only')::boolean,false)
           AND COALESCE((dirty_job.payload_json->>'economic_truth_mutation_allowed')::boolean,true) IS FALSE
-          AND pg_catalog.jsonb_typeof(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))='array'
-          AND pg_catalog.jsonb_array_length(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))>0
-          AND NOT EXISTS (
-            SELECT 1
-            FROM pg_catalog.jsonb_array_elements_text(
-              COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb)
-            ) AS dirty_reason(value)
-            WHERE pg_catalog.upper(pg_catalog.btrim(dirty_reason.value)) NOT IN (
-              'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
-              'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE'
+          AND (
+            (
+              pg_catalog.jsonb_typeof(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))='array'
+              AND pg_catalog.jsonb_array_length(COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb))>0
+              AND NOT EXISTS (
+                SELECT 1
+                FROM pg_catalog.jsonb_array_elements_text(
+                  COALESCE(dirty_job.payload_json->'reasons','[]'::jsonb)
+                ) AS dirty_reason(value)
+                WHERE pg_catalog.upper(pg_catalog.btrim(dirty_reason.value)) NOT IN (
+                  'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:INSERT',
+                  'DIRTY_TRIGGER:PAY_PAYMENT_CORRECTION_REQUESTS:UPDATE',
+                  'DIRTY_TRIGGER:PAY_BATCHES:UPDATE'
+                )
+              )
+            )
+            OR (
+              COALESCE(dirty_job.payload_json->>'correction_dirty_causal_contract_version','')
+                ='CORRECTION_OWNED_DIRTY_CAUSAL_V1'
+              AND COALESCE(dirty_job.payload_json->'correction_dirty_contexts'
+                    ->batch_candidate.candidate_id::text->>'correction_request_id','')
+                    =v_request_id::text
+              AND COALESCE(dirty_job.payload_json->'correction_dirty_contexts'
+                    ->batch_candidate.candidate_id::text->>'pay_batch_id','')
+                    =v_request.pay_batch_id::text
+              AND COALESCE(dirty_job.payload_json->>'request_owned_scope_change_tx_token','')
+                    =COALESCE(dirty_job.payload_json->>'scope_change_tx_token','')
             )
           )
         ORDER BY dirty_job.created_at_utc,dirty_job.id
@@ -883,8 +977,9 @@ BEGIN
     ), classified AS (
       SELECT selected_candidates.*,
         (
-          COALESCE(pre_request_authority->>'contract_version','')
-            ='DRAFT_OVERLAY_FAST_PRE_REQUEST_AUTHORITY_V1'
+          COALESCE(pre_request_authority->>'contract_version','')=
+            CASE WHEN is_draft_overlay THEN 'DRAFT_OVERLAY_FAST_PRE_REQUEST_AUTHORITY_V1'
+                 ELSE 'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2' END
           AND COALESCE(pre_request_authority->>'candidate_id','')=candidate_id::text
           AND COALESCE((pre_request_authority->>'pre_request_exact')::boolean,false)
           AND COALESCE(pre_request_authority->>'source_change_seq','') ~ '^[0-9]{1,18}$'
@@ -906,7 +1001,10 @@ BEGIN
         'start_exact',classified.start_exact,
         'rejection_reason',CASE WHEN classified.start_exact THEN NULL
           ELSE 'ECONOMIC_AUTHORITY_CHANGED_BEFORE_CANCELLATION_START' END,
-        'pre_request_fence_digest',classified.pre_request_authority->>'fence_digest',
+        'pre_request_fence_digest',COALESCE(
+          classified.pre_request_authority->>'fence_digest',
+          classified.pre_request_authority->>'authority_digest'
+        ),
         'request_owned_dirty_job_id',classified.request_owned_dirty_job_id,
         'request_owned_dirty_proven',classified.request_owned_dirty_job_id IS NOT NULL
       ) ORDER BY classified.candidate_id
@@ -1405,7 +1503,9 @@ BEGIN
   );
 
   IF v_command='START_PREPARED'
-     AND COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL' THEN
+     AND COALESCE(v_request.plan_json->>'requested_action','') IN (
+       'DRAFT_CANCEL','PRE_BANK_CANCEL','CANCEL_PAYMENT'
+     ) THEN
     WITH selected_candidates AS (
       SELECT batch_candidate.candidate_id,
              v_draft_overlay_start_admission->batch_candidate.candidate_id::text
@@ -1422,7 +1522,10 @@ BEGIN
     SELECT COALESCE(pg_catalog.jsonb_object_agg(
       selected_candidates.candidate_id::text,
       pg_catalog.jsonb_build_object(
-        'contract_version','DRAFT_OVERLAY_FAST_START_AUTHORITY_V1',
+        'contract_version',CASE
+          WHEN COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL'
+            THEN 'DRAFT_OVERLAY_FAST_START_AUTHORITY_V1'
+          ELSE 'CANCELLATION_REVERSION_START_AUTHORITY_V2' END,
         'correction_request_id',v_request_id,
         'operation_id',v_operation.id,
         'candidate_id',selected_candidates.candidate_id,
@@ -1444,7 +1547,9 @@ BEGIN
           COALESCE(selected_candidates.start_admission->>'request_owned_dirty_job_id','')||'|'||
           COALESCE((selected_candidates.start_admission->>'request_owned_dirty_proven')::boolean,false)::text||'|'||
           COALESCE((selected_candidates.start_admission->>'start_exact')::boolean,false)::text||
-          '|DRAFT_OVERLAY_FAST_START_AUTHORITY_V1'
+          CASE WHEN COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL'
+            THEN '|DRAFT_OVERLAY_FAST_START_AUTHORITY_V1'
+            ELSE '|CANCELLATION_REVERSION_START_AUTHORITY_V2' END
         )
       ) ORDER BY selected_candidates.candidate_id
     ),'{}'::jsonb)
@@ -1454,7 +1559,12 @@ BEGIN
     UPDATE public.banking_pay_operations AS authority_operation
     SET input_json=COALESCE(authority_operation.input_json,'{}'::jsonb)
           || pg_catalog.jsonb_build_object(
-            'draft_overlay_fast_start_authorities',v_draft_overlay_start_authorities
+            'draft_overlay_fast_start_authorities',CASE
+              WHEN COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL'
+                THEN v_draft_overlay_start_authorities ELSE '{}'::jsonb END,
+            'cancellation_reversion_start_authorities_v2',CASE
+              WHEN COALESCE(v_request.plan_json->>'requested_action','') IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
+                THEN v_draft_overlay_start_authorities ELSE '{}'::jsonb END
           ),
         updated_at_utc=pg_catalog.clock_timestamp()
     WHERE authority_operation.id=v_operation.id

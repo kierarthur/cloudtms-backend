@@ -98,6 +98,11 @@ DECLARE
   v_contention_retry_at timestamptz;
   v_cancel_reversion_observe_enabled boolean := false;
   v_cancel_reversion_publish_enabled boolean := false;
+  v_scheduled_reversion_v2_observe_enabled boolean := false;
+  v_scheduled_reversion_v2_publish_enabled boolean := false;
+  v_held_dirty_absorption_enabled boolean := false;
+  v_route_reversion_observe_enabled boolean := false;
+  v_route_reversion_publish_enabled boolean := false;
   v_refresh_work_item_ids uuid[] := ARRAY[]::uuid[];
   v_reversion_admission jsonb := '{}'::jsonb;
   v_reversion_descriptors jsonb := '[]'::jsonb;
@@ -106,6 +111,9 @@ DECLARE
   v_reversion_publication jsonb := '{}'::jsonb;
   v_reversion_admitted_count integer := 0;
   v_financial_page_result jsonb := '{}'::jsonb;
+  v_terminal_authorities_v2 jsonb := '{}'::jsonb;
+  v_held_dirty_resolution jsonb := '{}'::jsonb;
+  v_finalise_candidate_ids uuid[] := ARRAY[]::uuid[];
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
@@ -123,8 +131,16 @@ BEGIN
 
   SELECT
     COALESCE(settings_row.banking_pay_cancellation_reversion_observe_v1_enabled,false),
-    COALESCE(settings_row.banking_pay_cancellation_reversion_publish_v1_enabled,false)
-  INTO v_cancel_reversion_observe_enabled,v_cancel_reversion_publish_enabled
+    COALESCE(settings_row.banking_pay_cancellation_reversion_publish_v1_enabled,false),
+    COALESCE((pg_catalog.to_jsonb(settings_row)
+      ->>'banking_pay_scheduled_cancellation_reversion_v2_observe_enabled')::boolean,false),
+    COALESCE((pg_catalog.to_jsonb(settings_row)
+      ->>'banking_pay_scheduled_cancellation_reversion_v2_publish_enabled')::boolean,false),
+    COALESCE((pg_catalog.to_jsonb(settings_row)
+      ->>'banking_pay_correction_held_dirty_route_absorption_v1_enabled')::boolean,false)
+  INTO v_cancel_reversion_observe_enabled,v_cancel_reversion_publish_enabled,
+       v_scheduled_reversion_v2_observe_enabled,v_scheduled_reversion_v2_publish_enabled,
+       v_held_dirty_absorption_enabled
   FROM public.settings_defaults AS settings_row
   WHERE settings_row.id=1;
 
@@ -370,6 +386,18 @@ BEGIN
   v_requested_action := COALESCE(
     v_request.plan_json->>'requested_action', v_request.selection_json->>'requested_action'
   );
+  v_route_reversion_observe_enabled:=COALESCE(v_cancel_reversion_observe_enabled,false)
+    AND (
+      v_requested_action='DRAFT_CANCEL'
+      OR (v_requested_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
+          AND COALESCE(v_scheduled_reversion_v2_observe_enabled,false))
+    );
+  v_route_reversion_publish_enabled:=COALESCE(v_cancel_reversion_publish_enabled,false)
+    AND (
+      v_requested_action='DRAFT_CANCEL'
+      OR (v_requested_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
+          AND COALESCE(v_scheduled_reversion_v2_publish_enabled,false))
+    );
 
   IF v_phase = 'PREPARE_SELECTION' THEN
     v_phase_result := public.pay_payment_correction_selection_prepare_chunk_v1(
@@ -1091,6 +1119,29 @@ BEGIN
     -- All active, PAYE and transfer totals and both integrity proofs were
     -- produced by the durable candidate-page summaries above.  This reducer
     -- reads summaries only and never reconstructs the full candidate scope.
+    SELECT COALESCE(pg_catalog.array_agg(DISTINCT batch_candidate.candidate_id
+             ORDER BY batch_candidate.candidate_id),ARRAY[]::uuid[])
+    INTO v_finalise_candidate_ids
+    FROM public.pay_payment_correction_request_candidates AS request_candidate
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id=request_candidate.pay_batch_candidate_id
+    WHERE request_candidate.correction_request_id=p_correction_request_id;
+
+    -- Every FINALISE write remains ordinary dirty evidence, but it is stamped
+    -- before the first batch/request mutation as correction-owned terminal
+    -- orchestration.  The exact same held job is therefore parked until route
+    -- election rather than misclassified as a new economic change.
+    IF pg_catalog.cardinality(v_finalise_candidate_ids)>0 THEN
+      PERFORM private.pay_workbench_correction_dirty_context_set_v1(
+        p_correction_request_id,v_request.pay_batch_id,v_finalise_candidate_ids,
+        'FINANCIAL_TERMINAL','PRE_DRAFT_LIVE_TRUTH',
+        COALESCE(v_operation.input_json->'draft_overlay_fast_start_authorities','{}'::jsonb)
+          || COALESCE(v_operation.input_json->'cancellation_reversion_start_authorities_v2','{}'::jsonb),
+        v_operation.id,NULL::uuid,
+        pg_catalog.jsonb_build_object('owner','pay_payment_correction_process_chunk')
+      );
+    END IF;
+
     v_unselected_scope_hash_before := v_request.plan_json->>'unselected_scope_hash_before';
     IF v_unselected_scope_hash_before IS NULL
        OR v_unselected_scope_hash_after IS DISTINCT FROM v_unselected_scope_hash_before
@@ -1252,6 +1303,85 @@ BEGIN
       v_final_result, pg_catalog.jsonb_build_object('final_result_hash', v_final_result_hash)
     );
 
+    -- The work-item snapshot is intentionally taken before FINALISE and proves
+    -- only the financial mutation.  Capture the route-election fence now,
+    -- after every batch/request/operation/summary/signal/audit write above.
+    -- A new external mutation after this transaction will therefore reject
+    -- certified reversion rather than being mistaken for finalisation drift.
+    FOR v_work IN
+      SELECT DISTINCT applied_work.candidate_id
+      FROM public.pay_payment_correction_work_items AS applied_work
+      WHERE applied_work.correction_request_id=p_correction_request_id
+        AND applied_work.status='APPLIED'
+        AND applied_work.candidate_id IS NOT NULL
+      ORDER BY applied_work.candidate_id
+    LOOP
+      PERFORM pg_catalog.pg_advisory_xact_lock(
+        pg_catalog.hashtextextended(
+          public._pay_workbench_candidate_serial_key(v_work.candidate_id),24062027
+        )
+      );
+    END LOOP;
+
+    WITH terminal_rows AS (
+      SELECT
+        applied_work.candidate_id,
+        applied_work.id AS work_item_id,
+        COALESCE(change_counter.seq,0) AS source_change_seq,
+        COALESCE(change_counter.scope_change_generation,0) AS dirty_generation,
+        correction_operation.input_json->'cancellation_reversion_start_authorities_v2'
+          ->applied_work.candidate_id::text AS start_authority,
+        pg_catalog.md5((COALESCE(applied_work.result_json,'{}'::jsonb)
+          -'applied_at_utc'-'processed_at_utc')::text) AS financial_result_digest
+      FROM public.pay_payment_correction_work_items AS applied_work
+      JOIN public.banking_pay_operations AS correction_operation
+        ON correction_operation.id=v_operation.id
+      LEFT JOIN public.app_change_counters AS change_counter
+        ON change_counter.entity_key='pay_candidate:'||applied_work.candidate_id::text
+      WHERE applied_work.correction_request_id=p_correction_request_id
+        AND applied_work.status='APPLIED'
+        AND applied_work.candidate_id IS NOT NULL
+    )
+    SELECT COALESCE(pg_catalog.jsonb_object_agg(
+      terminal_rows.candidate_id::text,
+      pg_catalog.jsonb_build_object(
+        'contract_version','POST_FINANCIAL_TERMINAL_AUTHORITY_V2',
+        'correction_request_id',p_correction_request_id,
+        'operation_id',v_operation.id,
+        'work_item_id',terminal_rows.work_item_id,
+        'candidate_id',terminal_rows.candidate_id,
+        'source_change_seq',terminal_rows.source_change_seq,
+        'dirty_generation',terminal_rows.dirty_generation,
+        'start_authority_digest',terminal_rows.start_authority->>'fence_digest',
+        'financial_result_digest',terminal_rows.financial_result_digest,
+        'authority_digest',pg_catalog.md5(
+          p_correction_request_id::text||'|'||v_operation.id::text||'|'||
+          terminal_rows.work_item_id::text||'|'||terminal_rows.candidate_id::text||'|'||
+          terminal_rows.source_change_seq::text||'|'||terminal_rows.dirty_generation::text||'|'||
+          COALESCE(terminal_rows.start_authority->>'fence_digest','')||'|'||
+          terminal_rows.financial_result_digest||'|POST_FINANCIAL_TERMINAL_AUTHORITY_V2'
+        )
+      ) ORDER BY terminal_rows.candidate_id
+    ),'{}'::jsonb)
+    INTO v_terminal_authorities_v2
+    FROM terminal_rows;
+
+    UPDATE public.banking_pay_operations AS terminal_authority_operation
+    SET input_json=COALESCE(terminal_authority_operation.input_json,'{}'::jsonb)
+          || pg_catalog.jsonb_build_object(
+            'cancellation_reversion_post_financial_terminal_authorities_v2',
+            v_terminal_authorities_v2
+          ),
+        progress_json=COALESCE(terminal_authority_operation.progress_json,'{}'::jsonb)
+          || pg_catalog.jsonb_build_object(
+            'post_financial_terminal_authority_v2_captured',true,
+            'post_financial_terminal_authority_v2_candidate_count',
+              pg_catalog.jsonb_object_length(v_terminal_authorities_v2)
+          ),
+        updated_at_utc=pg_catalog.clock_timestamp()
+    WHERE terminal_authority_operation.id=v_operation.id
+    RETURNING terminal_authority_operation.* INTO v_operation;
+
     RETURN pg_catalog.jsonb_build_object(
       'ok', true, 'phase', 'REFRESH_WORKBENCH', 'financial_complete', true,
       'request_status', v_request_result, 'result', v_final_result,
@@ -1388,15 +1518,15 @@ BEGIN
           'code', 'REFRESH_RETRY',
           'session_id', v_session_id
         )::text;
-    ELSIF v_requested_action IN ('DRAFT_CANCEL', 'PRE_BANK_CANCEL')
-       AND COALESCE(v_cancel_reversion_observe_enabled,false) THEN
+    ELSIF v_requested_action IN ('DRAFT_CANCEL','PRE_BANK_CANCEL','CANCEL_PAYMENT')
+       AND COALESCE(v_route_reversion_observe_enabled,false) THEN
       v_reversion_admission := private.pay_workbench_cancel_reversion_admission_page_v1(
         p_correction_request_id,
         v_operation.id,
         v_session_id,
         v_refresh_work_item_ids,
         pg_catalog.jsonb_build_object('mode',CASE
-          WHEN v_cancel_reversion_publish_enabled THEN 'POST_FINANCIAL' ELSE 'OBSERVE_ONLY' END)
+          WHEN v_route_reversion_publish_enabled THEN 'POST_FINANCIAL' ELSE 'OBSERVE_ONLY' END)
       );
 
       SELECT
@@ -1416,7 +1546,7 @@ BEGIN
         COALESCE(v_reversion_admission->'candidate_results','[]'::jsonb)
       ) AS result_row(value);
 
-      IF COALESCE(v_cancel_reversion_publish_enabled,false)
+      IF COALESCE(v_route_reversion_publish_enabled,false)
          AND v_reversion_admitted_count > 0 THEN
         WITH admitted AS (
           SELECT result_row.value,
@@ -1482,7 +1612,7 @@ BEGIN
         );
       END IF;
 
-      IF COALESCE(v_cancel_reversion_publish_enabled,false)
+      IF COALESCE(v_route_reversion_publish_enabled,false)
          AND pg_catalog.jsonb_array_length(COALESCE(v_reversion_rejected_candidate_ids,'[]'::jsonb))=0 THEN
         v_refresh_result := pg_catalog.jsonb_build_object(
           'ok',true,
@@ -1501,7 +1631,7 @@ BEGIN
             'correction_request_id',p_correction_request_id,
             'correction_action',v_requested_action,
             'candidate_ids',CASE
-              WHEN v_cancel_reversion_publish_enabled THEN v_reversion_rejected_candidate_ids
+              WHEN v_route_reversion_publish_enabled THEN v_reversion_rejected_candidate_ids
               ELSE v_refresh_candidate_ids END,
             'changed_pay_batch_item_ids',v_refresh_pay_batch_item_ids,
             'maximum_candidate_count',100,
@@ -1511,7 +1641,7 @@ BEGIN
           'cancellation_reversion_observe',v_reversion_admission,
           'cancellation_reversion_publication',v_reversion_publication,
           'certified_cancellation_reversion_count',CASE
-            WHEN v_cancel_reversion_publish_enabled THEN v_reversion_admitted_count ELSE 0 END
+            WHEN v_route_reversion_publish_enabled THEN v_reversion_admitted_count ELSE 0 END
         );
       END IF;
       IF COALESCE((v_refresh_result->>'ok')::boolean,false) IS NOT TRUE THEN
@@ -1521,7 +1651,7 @@ BEGIN
             'session_id',v_session_id,'candidate_count',v_refresh_count
           )::text;
       END IF;
-    ELSIF v_requested_action IN ('DRAFT_CANCEL', 'PRE_BANK_CANCEL', 'NO_MONEY_UNWIND') THEN
+    ELSIF v_requested_action IN ('DRAFT_CANCEL','PRE_BANK_CANCEL','CANCEL_PAYMENT','NO_MONEY_UNWIND') THEN
       -- This helper's DRAFT_CANCEL operation type names the Workbench overlay
       -- reversal (not the economic cancellation mode).  Every successfully
       -- cancelled batch must retire the same active-batch reservation overlay
@@ -1663,8 +1793,32 @@ BEGIN
       'source', 'PAYMENT_CORRECTION_REFRESH_WORKBENCH'
     );
 
+    IF COALESCE(v_held_dirty_absorption_enabled,false)
+       AND v_session_id IS NOT NULL AND v_workbench_nudge_candidate_count>0 THEN
+      v_held_dirty_resolution:=private.pay_workbench_correction_held_dirty_job_resolve_v1(
+        p_correction_request_id,v_operation.id,v_session_id,
+        pg_catalog.jsonb_build_object(
+          'candidate_ids',v_workbench_nudge_candidate_ids,
+          'route_status',COALESCE(v_refresh_result->>'status',v_workbench_nudge_refresh_status),
+          'active_owner_job_ids',v_workbench_nudge_job_ids
+        ),
+        pg_catalog.jsonb_build_object('owner','pay_payment_correction_process_chunk')
+      );
+    ELSIF COALESCE(v_held_dirty_absorption_enabled,false) THEN
+      v_held_dirty_resolution:=pg_catalog.jsonb_build_object(
+        'ok',true,'status','NOT_REQUIRED','resolved_count',0
+      );
+    ELSE
+      v_held_dirty_resolution:=pg_catalog.jsonb_build_object(
+        'ok',true,'status','DISABLED','resolved_count',0
+      );
+    END IF;
+
     v_refresh_result := v_refresh_result
-      || pg_catalog.jsonb_build_object('workbench_refresh_nudge', v_workbench_refresh_nudge);
+      || pg_catalog.jsonb_build_object(
+        'workbench_refresh_nudge',v_workbench_refresh_nudge,
+        'correction_held_dirty_job_resolution',v_held_dirty_resolution
+      );
 
     INSERT INTO public.banking_pay_operation_chunks (
       operation_id, phase, chunk_type, sequence_no, status, payload_json, result_json,

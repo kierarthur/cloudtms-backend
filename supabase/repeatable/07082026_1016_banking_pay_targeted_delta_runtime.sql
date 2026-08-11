@@ -2177,7 +2177,13 @@ BEGIN
           COALESCE(delayed_job.payload_json, '{}'::jsonb),
           jsonb_build_object(
             'request_owned_dirty_classification', 'REQUEST_OWNED_POLICY_X_DIRTY',
-            'waiting_for_correction_financial_boundary', true,
+            'waiting_for_correction_financial_boundary',
+              COALESCE(v_request_owned_dirty_operation_phase,'')<>'REFRESH_WORKBENCH',
+            'waiting_for_correction_route_election',
+              COALESCE(v_request_owned_dirty_operation_phase,'')='REFRESH_WORKBENCH'
+              OR COALESCE(v_request_owned_dirty_context->>'lifecycle_phase','') IN (
+                'FINANCIAL_PAGE_APPLIED','FINANCIAL_TERMINAL'
+              ),
             'correction_request_id', v_request_owned_dirty_request_id::text,
             'correction_operation_id', v_request_owned_dirty_operation_id::text,
             'correction_operation_phase', v_request_owned_dirty_operation_phase,
@@ -2204,7 +2210,14 @@ BEGIN
       'request_boundary_delayed', true,
       'has_more', true,
       'rerun_required', true,
-      'reason', 'REQUEST_OWNED_POLICY_X_DIRTY_WAITING_FOR_FINANCIAL_BOUNDARY',
+      'reason', CASE
+        WHEN COALESCE(v_request_owned_dirty_operation_phase,'')='REFRESH_WORKBENCH'
+          OR COALESCE(v_request_owned_dirty_context->>'lifecycle_phase','') IN (
+            'FINANCIAL_PAGE_APPLIED','FINANCIAL_TERMINAL'
+          )
+          THEN 'WAITING_FOR_CORRECTION_ROUTE_ELECTION'
+        ELSE 'REQUEST_OWNED_POLICY_X_DIRTY_WAITING_FOR_FINANCIAL_BOUNDARY'
+      END,
       'correction_request_id', v_request_owned_dirty_request_id::text,
       'correction_operation_id', v_request_owned_dirty_operation_id::text,
       'correction_operation_phase', v_request_owned_dirty_operation_phase,
