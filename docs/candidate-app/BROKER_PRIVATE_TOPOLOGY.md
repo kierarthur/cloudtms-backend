@@ -146,15 +146,15 @@ Route intervention derives the live PAPER owner from the immutable current-token
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `99869508-3955-4318-916f-2c243047fdea`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `da9a8487-5623-42e8-8c33-5e1cddb960c9`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `16357aa3-598f-48c5-973c-b1466af7f49e`.
-- Broker health/readiness: 200/200.
-- Normal backend health/readiness: 200/200.
+- Public broker: `test-cloudtms-candidate-broker`, active version `0e1f7188-f341-4620-b8df-4c5c8703276a`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `e6b7d82e-1a89-4303-bfef-a6aca9c8b151`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `c25ed724-3d11-4234-b4b4-1b08f305a3d4`.
+- Broker health/readiness: 200/200; readiness proves the private service binding and signed private-health request.
+- Normal backend health: 200.
 - Direct public Candidate route on normal backend: 404.
-- Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
+- Candidate feature flags remain false; all seven Candidate business tables and Candidate-bound mail contain zero rows after deployment verification.
 
-The current Candidate runtime correction is published through backend commit `1b654d72b4529c32e019956320ff50ca451db466`. Candidate Worker source/configuration did not change; the private API, public broker and normal TEST backend were nevertheless rebuilt from that exact published source after the remote/workflow deployment gate proved no competing push or deployment. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The current Candidate runtime correction is published through backend commit `adc399455383fc60e76159042eee78dff00896a2`. GitHub workflow `31487593920` proved all 26 Candidate PostgreSQL suites on 17.6 and 18.1, and safe migration workflow `31487593931` installed the exact repeatable hashes. The private API, public broker and normal TEST backend were rebuilt from that exact published source after the remote/workflow deployment gate proved no competing push or deployment. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 

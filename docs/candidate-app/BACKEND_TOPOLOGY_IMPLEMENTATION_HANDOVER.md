@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 11 August 2026
-Status: final Candidate broker/private API pre-delivery PAPER route guard published, installed and deployed to dormant TEST for independent API-freeze audit. Candidate runtime commit: `7c087bc79a010944cefc4b605dcab6ea335b6c85`; fixture-only verifier commit: `a33a25d954df3632300a65b022f10e6c255a86b4`. This document is current through mail-independent affected-workflow discovery, immutable current-token owner selection, locked source-rotation postconditions, terminal-only source-workflow preservation, claim-level shared-source isolation, retryable `RECEIVED` caller retirement, shared route/rejection family locking, atomic provider-submit permission and the previously accepted Candidate authority closures.
+Status: Candidate DB/RPC/backend closure runtime published, installed and deployed to dormant TEST for independent API-freeze audit. Candidate runtime commit: `adc399455383fc60e76159042eee78dff00896a2`. This document is current through exact manager-approval mail ownership and provider submission permits; the server-owned Current/History timesheet partition, cursor, labels, primary actions and detail identities; mail-independent affected-workflow discovery; immutable current-token owner selection; locked source-rotation postconditions; terminal-only source-workflow preservation; claim-level shared-source isolation; retryable `RECEIVED` caller retirement; shared route/rejection family locking; atomic PAPER provider-submit permission; and all previously accepted Candidate authority closures.
 
 ## Executive result
 
@@ -23,9 +23,9 @@ The public broker has no Supabase/R2 or CloudTMS business-authority dependency. 
 
 No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version algorithm, invoice, payment, Banking Pay, Policy X, Google rota/availability or official-timesheet-renderer economics were changed in this closure. Existing Candidate workflow, route-orchestration, QR-enqueue and mail-claim repeatables were tightened only to make one PAPER generation the complete owner of its delivery authority and to retire stale authority safely.
 
-## Final runtime namespace and anchor rejection closure
+## Runtime namespace and anchor rejection closure retained
 
-Current Candidate runtime source: `7c087bc79a010944cefc4b605dcab6ea335b6c85`. Verifier-only fixture correction: `a33a25d954df3632300a65b022f10e6c255a86b4`.
+These earlier accepted controls are retained unchanged in current Candidate runtime source `adc399455383fc60e76159042eee78dff00896a2`.
 
 - Candidate PAPER retirement and canonical QR enqueue now call `extensions.digest` explicitly with UTF-8 byte conversion, matching the installed TEST pgcrypto schema and removing reliance on an unavailable public wrapper;
 - the disposable PostgreSQL fixture no longer invents `public.digest`, so clean-install verification exercises the same namespace contract as Supabase TEST;
@@ -36,7 +36,7 @@ Current Candidate runtime source: `7c087bc79a010944cefc4b605dcab6ea335b6c85`. Ve
 - each captured generation is retired by exact workflow ID and generation across PAPER mail/notification/token authority, approval request, component and workflow state;
 - the runtime suites prove finalised hours, combined, separate expense, anchor isolation, replacement submission, replay, Unauthorise-first and protected paid history, not merely source strings.
 
-Acceptance evidence is 23/23 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 119/119 focused Candidate/backend tests, 451/451 complete backend tests, safe TEST migration and read-only installed-definition verification. Candidate Worker source/configuration was unchanged and the already-active versions were reasserted rather than rebuilt. All Candidate feature flags remain false and all Candidate business tables remain empty.
+Current acceptance evidence is 26/26 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 122/122 focused Candidate/backend tests, 459/459 complete backend tests, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
 
 ## Final rejection projection and finalised PAPER delivery closure
 
@@ -384,26 +384,24 @@ This is lifecycle identity and stale-delivery closure only. It introduces no sch
 | Verification | Result |
 |---|---:|
 | Changed/new JavaScript syntax | PASS |
-| Focused Candidate/backend/broker/DB-contract/PAPER tests | 119 passed, 0 failed |
-| Complete backend test suite | 451 passed, 0 failed |
-| PostgreSQL 17.6 runtime/concurrency suites | 23 passed, 0 failed |
-| PostgreSQL 18.1 runtime/concurrency suites | 23 passed, 0 failed |
-| Candidate Worker source/configuration change | NONE; prior build evidence retained |
+| Focused Candidate/backend/broker/DB-contract/PAPER tests | 122 passed, 0 failed |
+| Complete backend test suite | 459 passed, 0 failed |
+| PostgreSQL 17.6 runtime/concurrency suites | 26 passed, 0 failed |
+| PostgreSQL 18.1 runtime/concurrency suites | 26 passed, 0 failed |
+| Candidate Worker source/configuration change | Manager provider-permit adapter and Current/History HTTP adapter updated; all three Worker dry-run builds passed |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
-| GitHub TEST database migration workflow `31469708425` | PASS |
-| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31469931675` | PASS |
+| GitHub TEST database migration workflow `31487593931` | PASS |
+| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31487593920` | PASS |
 | Public Candidate broker health/readiness | 200 / 200 |
 | Normal TEST backend health/readiness | 200 / 200 |
 | Direct public Candidate route on normal backend | 404, as required |
 
-The deployment reassertion used repository-installed Wrangler 4.120.1. Candidate Worker source/configuration was unchanged, so the already-active versions were retained at 100% instead of rebuilding an older normal backend over the other active lane. Active TEST identities are:
+The deployment used repository-installed Wrangler 4.43.0 after the remote branch and active-workflow gate proved the exact tested runtime was still current and no other push/deployment was active. Active TEST identities are:
 
-- normal TEST backend: `40b25d1c-0eaa-4932-9372-9d6313bb5bcd`;
-- private Candidate API: `d3fabe29-dd8e-4c04-b241-4c264b3e6ed4`;
-- public Candidate broker: `287591b1-73ec-4e79-a6b0-2f0bfbb7ff20`.
-
-Deployment records are normal backend `a0ffb037-2307-41a4-8d90-4a42423bddf1`, private Candidate API `3e73b76d-c75a-4257-8959-6f76a1d80185` and public Candidate broker `45c0cf26-a1dc-459b-a031-47b5ab34ebfb`.
+- normal TEST backend: `c25ed724-3d11-4234-b4b4-1b08f305a3d4`;
+- private Candidate API: `e6b7d82e-1a89-4303-bfef-a6aca9c8b151`;
+- public Candidate broker: `0e1f7188-f341-4620-b8df-4c5c8703276a`.
 
 The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
@@ -474,12 +472,19 @@ Please verify, function by function, including the final authority seams:
 61. a distinct affected pre-delivery workflow makes all four source-rotating QR actions not permitted with zero mutation;
 62. confirmation recomputes and locks the complete affected workflow set and cannot trust a stale preview owner;
 63. no successful source rotation can leave any nonterminal Candidate PAPER workflow tied exclusively to the historical source.
+64. every manager EMAIL outbox row is bound to one exact approval request, request generation, workflow, workflow generation, recipient and mail kind;
+65. cancellation, supersession, refusal, expiry and approval centrally retire queued/failed manager mail, preserve accepted history and fail before mutation while the exact provider lease is live;
+66. the manager provider handoff obtains `MANAGER_PROVIDER_SUBMIT_PERMIT` immediately before send, and an old invitation/reminder/renewal cannot be claimed or sent after authority changes;
+67. withdrawal is created only when exact provider-accepted history exists, never from a local sent timestamp alone;
+68. `CURRENT` and `HISTORY` are disjoint at one frozen snapshot: Current contains no future week, all unpaid records and paid records at or after the exact seven-day cutoff; History contains only older-paid records in each contract's effective current week plus its previous 15 weeks;
+69. Current/History cursors are view-, candidate- and snapshot-bound; ordering is newest week ending first; the server returns the exact `Week Ending 1 January 2025` label, one primary action and stable detail identity;
+70. card/detail routes expose the same current lifecycle, available actions and scoped rejection truth, and the future office frontend must use the detail screen as the action hub rather than infer an action-menu contract.
 
 ## Remaining delivery sequence after independent GO
 
 1. independently audit the exact runtime/evidence commits, installed TEST repeatable hashes, deployed TEST service versions and latest-only handover manifest recorded after this revision's rollout;
 2. keep Candidate feature flags false until the coordinated synthetic TEST fixtures and current CloudTMS frontend are ready;
-3. implement the approved CloudTMS frontend changes, including one shared W01–W13 renderer;
+3. have the receiving chat produce a highly detailed CloudTMS office-frontend implementation plan from the complete current-decisions PDF and this authority contract, explicitly covering Current/History, exact week labels/order, detail navigation/action hub, incomplete-claim-to-MANUAL warnings and the shared W01–W13 renderer; implement only after that plan is reviewed and independent backend GO is issued;
 4. independently verify and freeze the OpenAPI contract after frontend acceptance;
 5. build the responsive Candidate web/iOS/Android clients against that frozen contract;
 6. configure APNs/FCM/Web Push application identities, provider credentials and TEST devices, then activate broker provider delivery;
@@ -487,15 +492,15 @@ Please verify, function by function, including the final authority seams:
 
 ## Safety and provenance
 
-- Database mutation or migration: the explicitly authorised TEST safe-migration workflow `31469708425` installed the approved changed repeatables. The first new fixture run `31469708524` failed on a test-only invalid QR enum and made no TEST mutation; verifier commit `a33a25d...` corrected only that fixture, after which workflow `31469931675` proved all 23 suites on PostgreSQL 17.6/18.1. No Candidate business data was created or changed.
+- Database mutation or migration: explicitly authorised TEST safe-migration workflow `31487593931` installed the four approved repeatables from runtime commit `adc399455383fc60e76159042eee78dff00896a2`. Workflow `31487593920` proved all 26 Candidate suites on PostgreSQL 17.6/18.1. Installed hashes match the LF-normalised package sources. No Candidate business data was created or changed.
 - Candidate/manager workflow mutation: none.
 - R2 business document/evidence write/delete: none. Broker readiness used the designed one-use private-service nonce and the private scheduler may purge expired nonce objects; no Candidate workflow object was created.
 - Email or push sent: none.
-- Normal TEST Worker deployment record reasserted the latest active version `40b25d1c-0eaa-4932-9372-9d6313bb5bcd`, explicitly authorised; TEST only; no source rollback.
-- Private/broker Worker deployed: yes, versions `d3fabe29-dd8e-4c04-b241-4c264b3e6ed4` and `287591b1-73ec-4e79-a6b0-2f0bfbb7ff20`, explicitly authorised; TEST only.
+- Normal TEST Worker deployed: yes, version `c25ed724-3d11-4234-b4b4-1b08f305a3d4`, explicitly authorised; TEST only; exact current remote source.
+- Private/broker Workers deployed: yes, versions `e6b7d82e-1a89-4303-bfef-a6aca9c8b151` and `0e1f7188-f341-4620-b8df-4c5c8703276a`, explicitly authorised; TEST only.
 - Production accessed or deployed: no.
-- Commit/push: Candidate runtime commit `7c087bc79a010944cefc4b605dcab6ea335b6c85` and verifier commit `a33a25d954df3632300a65b022f10e6c255a86b4` were published non-forcibly directly to `origin/test` after clean lane checks. No Banking Pay file was changed by this work; later Banking Pay-only commits were preserved.
-- Deployment note: after the database gates completed and another lane's newer normal backend was detected, all three TEST deployment records reasserted their already-active versions at 100%. No Worker source was rebuilt or rolled back, and no production or unrelated Worker was deployed.
+- Commit/push: Candidate runtime commit `adc399455383fc60e76159042eee78dff00896a2` was published non-forcibly directly to `origin/test` after clean lane checks. It is based on and preserves Banking Pay-only parent `92f8b39f7870cdbaa993d40e036e97c35f2fe983`; this work changed no Banking Pay file.
+- Deployment note: immediately before deployment, `origin/test` still equalled the exact tested runtime and GitHub reported zero queued/in-progress workflows. All three TEST Workers were rebuilt from that source. No production or unrelated Worker was deployed.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.
 
