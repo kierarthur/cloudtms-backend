@@ -51,6 +51,10 @@ test('one shared proof core owns real admission and service-only route truth', (
     /REVOKE ALL ON FUNCTION public\.pay_payment_cancellation_route_diagnostic_v1[\s\S]*PUBLIC, anon, authenticated/);
   assert.match(helpers,
     /GRANT EXECUTE ON FUNCTION public\.pay_payment_cancellation_route_diagnostic_v1[\s\S]*postgres, service_role/);
+  assert.match(helpers,
+    /current_build\.id=CASE[\s\S]*certified_preview_publication_attestation_json[\s\S]*economic_build_id/);
+  assert.doesNotMatch(helpers,
+    /current_build\.source_build_run_id=current_scope\.certified_preview_publication_source_build_run_id/);
 });
 
 test('scheduled PREPARE and START capture server-owned V2 authority without changing selection identity', () => {

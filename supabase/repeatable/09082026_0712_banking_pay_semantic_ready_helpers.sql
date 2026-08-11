@@ -1541,8 +1541,14 @@ BEGIN
           THEN (draft_scope.allocation_basis_json
             #>>'{source_publication_attestation,economic_build_id}')::uuid
           ELSE NULL::uuid END
-      LEFT JOIN private.banking_pay_workbench_economic_builds AS current_build
-        ON current_build.source_build_run_id=current_scope.certified_preview_publication_source_build_run_id
+       LEFT JOIN private.banking_pay_workbench_economic_builds AS current_build
+        ON current_build.id=CASE
+          WHEN COALESCE(current_scope.certified_preview_publication_attestation_json
+            ->>'economic_build_id','')
+            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (current_scope.certified_preview_publication_attestation_json
+            ->>'economic_build_id')::uuid
+          ELSE NULL::uuid END
        AND current_build.session_id=batch_row.source_workbench_session_id
        AND current_build.candidate_id=requested_candidates.candidate_id
        AND current_build.status='COMPLETE'
