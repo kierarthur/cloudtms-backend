@@ -150,6 +150,9 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(sourceContext, /CURRENT_QR_TOKEN_OWNER_CONFLICT/i);
   assert.match(sourceContext, /MULTIPLE_NONTERMINAL_PAPER_WORKFLOWS/i);
   assert.match(sourceContext, /CURRENT_QR_TOKEN_OWNER_TERMINAL_WITH_LIVE_WORKFLOW/i);
+  assert.match(sourceContext, /affected_nonterminal_workflows/i);
+  assert.match(sourceContext, /WORKER_DRAFT[\s\S]*mail receipt/i);
+  assert.match(sourceContext, /CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT/i);
   assert.match(workflowSource, /v_action='AMEND'[\s\S]*_candidate_paper_delivery_retire_v1/);
   assert.match(workflowSource, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*state in \('AWAITING_PAPER_RETURN','RECEIVED'\)[\s\S]*_candidate_paper_delivery_retire/i);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1[\s\S]*state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)[\s\S]*_candidate_paper_delivery_retire/i);
@@ -157,7 +160,9 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(routeSource, /'paper_workflow_id',v_paper_workflow\.id/i);
   assert.match(routeSource, /_candidate_paper_source_workflow_context_v1\(\s*v_current\.timesheet_id/i);
   assert.match(routeSource, /paper_source_current_token_owner_workflow_id/i);
+  assert.match(routeSource, /paper_source_affected_nonterminal_workflow_count/i);
   assert.match(routeSource, /CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT/i);
+  assert.match(routeSource, /no live[\s\S]*PAPER workflow[\s\S]*historical/i);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1\([\s\S]*v_context->>'paper_workflow_id'/i);
   assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_set_v1/);
   assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);

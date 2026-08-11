@@ -1804,6 +1804,8 @@ begin
     'paper_source_workflow_context',v_paper_source_context,
     'paper_source_nonterminal_workflow_count',
       coalesce((v_paper_source_context->>'nonterminal_workflow_count')::integer,0),
+    'paper_source_affected_nonterminal_workflow_count',
+      coalesce((v_paper_source_context->>'affected_nonterminal_workflow_count')::integer,0),
     'paper_source_current_token_owner_workflow_id',
       nullif(v_paper_source_context->>'current_token_owner_workflow_id','')::uuid,
     'active_workflow_id',v_active_workflow.id,
@@ -2252,17 +2254,35 @@ begin
   where timesheet_id=v_current.timesheet_id for update;
   perform 1 from public.timesheets_financials
   where timesheet_id=v_current.timesheet_id and is_current=true for update;
+  -- Lock the complete booking/version-family workflow catalogue, including a
+  -- draft or submitted PAPER claim that has no mail receipt yet.  The family
+  -- advisory lock above keeps this order consistent with rejection and claim
+  -- retirement; UUID ordering keeps row acquisition deterministic.
   perform 1 from public.candidate_submission_workflows workflow
   where workflow.id=v_current.candidate_workflow_id
-     or workflow.target_timesheet_id=v_current.timesheet_id
-     or workflow.anchor_timesheet_id=v_current.timesheet_id for update;
+     or exists(
+       select 1
+       from public.timesheets binding_source
+       where binding_source.timesheet_id in (
+           workflow.target_timesheet_id,workflow.anchor_timesheet_id
+         )
+         and binding_source.booking_id=v_current.booking_id
+     )
+  order by workflow.id for update;
   perform 1 from public.candidate_approval_requests request_row
   where request_row.workflow_id in (
-    select workflow.id from public.candidate_submission_workflows workflow
+    select workflow.id
+    from public.candidate_submission_workflows workflow
     where workflow.id=v_current.candidate_workflow_id
-       or workflow.target_timesheet_id=v_current.timesheet_id
-       or workflow.anchor_timesheet_id=v_current.timesheet_id
-  ) for update;
+       or exists(
+         select 1
+         from public.timesheets binding_source
+         where binding_source.timesheet_id in (
+             workflow.target_timesheet_id,workflow.anchor_timesheet_id
+           )
+           and binding_source.booking_id=v_current.booking_id
+       )
+  ) order by request_row.id for update;
 
   v_context:=private._timesheet_route_change_context_v1(v_current.timesheet_id,v_action);
   v_current_signature:=nullif(btrim(coalesce(v_context->>'current_row_signature','')),'');
@@ -2302,6 +2322,37 @@ begin
       end,'')::uuid,v_action,
       v_retirement_reason,v_reason_note,p_actor_user_id,p_now_utc
     );
+  end if;
+  -- Last transactional invariant before any route/version rotation: no live
+  -- PAPER workflow may remain tied exclusively to the worked-row source that
+  -- is about to become historical.  This is intentionally mail-independent;
+  -- WORKER_DRAFT and approval-stage workflows have no receipt to discover.
+  if v_action in (
+      'CONVERT_QR_TO_MANUAL','DISABLE_QR','INVALIDATE_QR','REISSUE_QR'
+    ) and exists(
+      select 1
+      from public.candidate_submission_workflows workflow
+      where workflow.route='PAPER'
+        and workflow.state not in (
+          'FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+        )
+        and workflow.contract_id is not distinct from v_current.contract_id
+        and workflow.week_ending_date is not distinct from v_current.week_ending_date
+        and exists(
+          select 1
+          from public.timesheets binding_source
+          where binding_source.timesheet_id in (
+              workflow.target_timesheet_id,workflow.anchor_timesheet_id
+            )
+            and binding_source.booking_id=v_current.booking_id
+        )
+    ) then
+    raise exception 'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT'
+      using errcode='40001',detail=jsonb_build_object(
+        'code','CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT',
+        'current_timesheet_id',v_current.timesheet_id,
+        'target_action',v_action
+      )::text;
   end if;
   perform set_config('cloudtms.route_transition_confirmed','on',true);
   v_result:=public.timesheet_route_version_rotate(

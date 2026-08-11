@@ -412,8 +412,11 @@ declare
   v_current_token_hash text;
   v_source_workflow_count integer:=0;
   v_nonterminal_count integer:=0;
+  v_affected_nonterminal_count integer:=0;
   v_token_owner_count integer:=0;
   v_source_workflows jsonb:='[]'::jsonb;
+  v_affected_nonterminal_workflows jsonb:='[]'::jsonb;
+  v_affected_nonterminal_workflow_ids uuid[]:='{}'::uuid[];
   v_token_owner_workflow_id uuid;
   v_token_owner_generation integer;
   v_token_owner_state text;
@@ -545,6 +548,44 @@ begin
     v_latest_finalised_state
   from source_workflows;
 
+  -- Delivery ownership and workflow lifecycle are deliberately separate
+  -- catalogues.  WORKER_DRAFT and the approval states do not yet have an
+  -- immutable mail receipt, but rotating their worked-row source would still
+  -- make their PAPER anchor historical and leave the claim unusably active.
+  -- Resolve those workflows through the stable booking/version family rather
+  -- than requiring an exact current timesheet id or a mail_outbox row.
+  with affected_nonterminal_workflows as (
+    select workflow.id,workflow.generation,workflow.state,
+      workflow.workflow_kind,workflow.updated_at_utc,workflow.created_at_utc
+    from public.candidate_submission_workflows workflow
+    where workflow.route='PAPER'
+      and workflow.state not in (
+        'FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+      )
+      and workflow.contract_id is not distinct from v_current_source.contract_id
+      and workflow.week_ending_date is not distinct from v_current_source.week_ending_date
+      and exists(
+        select 1
+        from public.timesheets binding_source
+        where binding_source.timesheet_id in (
+            workflow.target_timesheet_id,workflow.anchor_timesheet_id
+          )
+          and (case
+            when nullif(btrim(coalesce(binding_source.booking_id,'')),'') is not null
+              then 'BOOKING:'||binding_source.booking_id
+            else 'TIMESHEET:'||binding_source.timesheet_id::text end)=v_source_key
+      )
+  )
+  select count(*)::integer,
+    coalesce(jsonb_agg(jsonb_build_object(
+      'workflow_id',id,'generation',generation,'state',state,
+      'workflow_kind',workflow_kind
+    ) order by id),'[]'::jsonb),
+    coalesce(array_agg(id order by id),'{}'::uuid[])
+  into v_affected_nonterminal_count,v_affected_nonterminal_workflows,
+    v_affected_nonterminal_workflow_ids
+  from affected_nonterminal_workflows;
+
   if v_source_workflow_count=0 then
     -- Ordinary pre-Candidate QR remains an exact legacy route family. With no
     -- Candidate delivery receipts there is no Candidate workflow to select or
@@ -578,6 +619,19 @@ begin
     v_selected_state:=v_latest_finalised_state;
   end if;
 
+  -- A source-rotating route action may proceed only when its selected delivery
+  -- owner is also the sole affected nonterminal PAPER workflow.  A distinct
+  -- draft/submitted/approval workflow has no receipt to retire yet, so the
+  -- only safe automatic outcome is a controlled zero-mutation conflict.
+  if not v_identity_conflict and v_affected_nonterminal_count>0 and (
+       v_selected_workflow_id is null
+       or v_affected_nonterminal_count>1
+       or not (v_selected_workflow_id=any(v_affected_nonterminal_workflow_ids))
+     ) then
+    v_identity_conflict:=true;
+    v_conflict_reason:='CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT';
+  end if;
+
   return jsonb_build_object(
     'contract_version','CANDIDATE_PAPER_SOURCE_WORKFLOW_CONTEXT_V1',
     'qr_source_timesheet_id',v_current_source.timesheet_id,
@@ -585,6 +639,7 @@ begin
     'current_qr_token_present',v_current_token_hash is not null,
     'source_workflow_count',v_source_workflow_count,
     'nonterminal_workflow_count',v_nonterminal_count,
+    'affected_nonterminal_workflow_count',v_affected_nonterminal_count,
     'current_token_owner_count',v_token_owner_count,
     'current_token_owner_workflow_id',v_token_owner_workflow_id,
     'current_token_owner_generation',v_token_owner_generation,
@@ -594,7 +649,8 @@ begin
     'selected_workflow_state',v_selected_state,
     'identity_conflict',v_identity_conflict,
     'conflict_reason',v_conflict_reason,
-    'source_workflows',v_source_workflows
+    'source_workflows',v_source_workflows,
+    'affected_nonterminal_workflows',v_affected_nonterminal_workflows
   );
 end;
 $function$;
