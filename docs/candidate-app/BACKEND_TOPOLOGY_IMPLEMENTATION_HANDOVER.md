@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — broker/private-backend authority closure handover
 
 Date: 11 August 2026
-Status: final Candidate broker/private API authority correction published, installed and deployed to dormant TEST for independent API-freeze audit. Runtime commit: `6b73e18d6a7bcd85b823df435bfe1f1c18e32e4f`. This document is current through retryable `RECEIVED` PAPER retirement, provider-boundary revalidation, deterministic H1/E1 rejection lock ordering, exact claim-record replacement, source-set shared-QR retirement, current-version expense-anchor continuity, scoped hours/expense recovery arrays, finalised PAPER artefact-generation retirement and mail-lease fencing, generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
+Status: final Candidate broker/private API caller-authority correction published, installed and deployed to dormant TEST for independent API-freeze audit. Runtime commit: `465924aa1d692e41a0fe3bbc204b6073571d40e5`. This document is current through retryable `RECEIVED` cancellation/supersession retirement, `RECEIVED` and finalised W09 route conversion, shared route/rejection family locking, atomic provider-submit permission, retryable `RECEIVED` rejection retirement, exact claim-record replacement, source-set shared-QR retirement, current-version expense-anchor continuity, scoped hours/expense recovery arrays, finalised PAPER artefact-generation retirement and mail-lease fencing, generation/state-safe component replay, deterministic persisted documents and recovery, exact manager methods, insert-once notification semantics, atomic complete-pack release and complete obsolete-PAPER-generation retirement.
 
 ## Executive result
 
@@ -25,7 +25,7 @@ No DAILY/WEEKLY financial algorithm, Process, Authorise, route/version algorithm
 
 ## Final runtime namespace and anchor rejection closure
 
-Current runtime source: `6b73e18d6a7bcd85b823df435bfe1f1c18e32e4f`.
+Current runtime source: `465924aa1d692e41a0fe3bbc204b6073571d40e5`.
 
 - Candidate PAPER retirement and canonical QR enqueue now call `extensions.digest` explicitly with UTF-8 byte conversion, matching the installed TEST pgcrypto schema and removing reliance on an unavailable public wrapper;
 - the disposable PostgreSQL fixture no longer invents `public.digest`, so clean-install verification exercises the same namespace contract as Supabase TEST;
@@ -36,7 +36,7 @@ Current runtime source: `6b73e18d6a7bcd85b823df435bfe1f1c18e32e4f`.
 - each captured generation is retired by exact workflow ID and generation across PAPER mail/notification/token authority, approval request, component and workflow state;
 - the runtime suites prove finalised hours, combined, separate expense, anchor isolation, replacement submission, replay, Unauthorise-first and protected paid history, not merely source strings.
 
-Acceptance evidence is 20/20 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 119/119 focused Candidate/backend tests, 451/451 complete backend tests, all three Worker dry builds, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
+Acceptance evidence is 21/21 SQL runtime/concurrency suites on PostgreSQL 17.6 and 18.1, 119/119 focused Candidate/backend tests, 451/451 complete backend tests, all three Worker dry builds, safe TEST migration and read-only installed-definition verification. All Candidate feature flags remain false and all Candidate business tables remain empty.
 
 ## Final rejection projection and finalised PAPER delivery closure
 
@@ -71,11 +71,27 @@ The previous source-set authority was correct for `AWAITING_PAPER_RETURN` and `F
 - every relevant-workflow selection, workflow/outbox lock, provider-lease check, current-token-owner lookup, mail retirement, notification retirement and preserved-workflow receipt uses the same three-state set;
 - `candidate_submission_reject_atomic_v1` adds a selected `PAPER / RECEIVED` workflow to the set-level retirement and requires the source receipt before timesheet rotation or workflow rejection;
 - a queued/unleased generation is made inert; a live lease returns `CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS` before mutation; sent mail remains immutable; `PAPER_PACK_READY` becomes dismissed/obsolete; the exact source token is invalidated or proved already invalid;
-- the provider adapter revalidates exact mail/workflow/generation/manifest/lease authority immediately before external email submission, preventing a row claimed before return/rejection from being sent afterwards;
+- the provider adapter calls the service-only `PAPER_PROVIDER_SUBMIT_PERMIT` action immediately before external email submission. The database atomically locks and proves exact mail/workflow/generation/manifest/lease authority and renews the exact lease as a submit permit;
 - a stable candidate/contract/week advisory lock is taken by rejection before target, contract-week, TSFIN or workflow row locks. The source-set helper uses the same family and deterministic row order, eliminating the H1/E1 workflow/source lock cycle;
 - the two-session PostgreSQL suite runs simultaneous hours-source and separate-expense rejection in both start orders and rejects any uncontrolled `40P01` deadlock or partial lifecycle mutation.
 
 No new schema object, Candidate table, public RPC, public route or product decision was introduced. The correction does not change DAILY/WEEKLY economics, Process, Authorise, invoice, payment, Banking Pay or Policy X.
+
+## Complete PAPER caller and provider-submit closure
+
+The remaining independent findings were caused by adjacent installed callers that still accepted PAPER `RECEIVED` or finalised delivery history without composing the shared retirement/barrier owner. Runtime `465924aa1d692e41a0fe3bbc204b6073571d40e5` closes that complete caller matrix:
+
+- `candidate_workflow_transition_atomic_v1` routes PAPER `RECEIVED` cancellation and supersession through `_candidate_paper_delivery_retire_set_v1` and requires both the durable retirement receipt and QR-invalidation proof before component/request/workflow mutation;
+- active provider permit/lease blocks cancellation/supersession with zero mutation; queued unsent mail becomes inert, `SENT` mail remains immutable and the exact readiness notification/deep link becomes obsolete;
+- route context resolves the exact linked PAPER workflow for `AWAITING_PAPER_RETURN`, `RECEIVED` and `FINALISED`, including immutable mail/version-family linkage rather than relying only on `active_workflow_id`;
+- `_timesheet_route_supersede_candidate_v1` retires the current delivery generation for `AWAITING_PAPER_RETURN`/`RECEIVED` or the preceding delivery generation for `FINALISED`. A finalised workflow and signed evidence remain immutable while stale delivery authority is retired;
+- `timesheet_route_version_confirmed_v1` and `candidate_submission_reject_atomic_v1` acquire the same candidate/contract/week family advisory lock before booking, target, TSFIN, workflow or source-row locks;
+- the two-session suite executes W09 conversion of E1 and rejection of shared source H1 in both start orders and permits only a deterministic serial result or controlled stale-context conflict, never `40P01` or partial lifecycle mutation;
+- `PAPER_PROVIDER_SUBMIT_PERMIT` is a service-only action inside the existing 14-RPC surface. It atomically locks the exact workflow and outbox row, verifies the live lease, immutable generation/manifest, complete-pack attachment and non-retired `PAPER / AWAITING_PAPER_RETURN` authority, and renews the lease as the submit permit;
+- `PAPER_RETURN` locks that exact Candidate-bound outbox row before changing the workflow to `RECEIVED` and refuses while the permit/lease is live. The same barrier is respected by cancellation, supersession, rejection and route intervention;
+- ordinary non-Candidate mail bypasses the Candidate permit and retains its existing provider behaviour.
+
+This is lifecycle/orchestration closure only. It adds no table, column, public RPC, public route, financial calculation or product-policy change and does not alter Banking Pay or Policy X.
 
 ## Final PAPER generation-retirement closure
 
@@ -319,24 +335,24 @@ This is lifecycle identity and stale-delivery closure only. It introduces no sch
 | Changed/new JavaScript syntax | PASS |
 | Focused Candidate/backend/broker/DB-contract/PAPER tests | 119 passed, 0 failed |
 | Complete backend test suite | 451 passed, 0 failed |
-| PostgreSQL 17.6 runtime/concurrency suites | 20 passed, 0 failed |
-| PostgreSQL 18.1 runtime/concurrency suites | 20 passed, 0 failed |
+| PostgreSQL 17.6 runtime/concurrency suites | 21 passed, 0 failed |
+| PostgreSQL 18.1 runtime/concurrency suites | 21 passed, 0 failed |
 | Candidate broker Wrangler dry run | PASS |
 | Private Candidate API Wrangler dry run | PASS |
 | Normal TEST backend Wrangler dry run | PASS |
 | OpenAPI 3.1 lint | PASS |
 | Git whitespace/error check | PASS |
-| GitHub TEST database migration workflow `31439931151` | PASS |
-| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31439931150` | PASS |
+| GitHub TEST database migration workflow `31444957381` | PASS |
+| GitHub exact PostgreSQL 17.6/18.1 matrix workflow `31444957385` | PASS |
 | Public Candidate broker health/readiness | 200 / 200 |
 | Normal TEST backend health/readiness | 200 / 200 |
 | Direct public Candidate route on normal backend | 404, as required |
 
 The pre-deployment dry runs and deployments used repository-installed Wrangler 4.43.0. Active TEST deployment identities for this revision are:
 
-- normal TEST backend: `fb33f186-6c7d-4595-b361-7bc1cb2990c1`;
-- private Candidate API: `0e1de209-4349-4265-b109-dbff1c8b75e0`;
-- public Candidate broker: `653a3c21-794e-4db6-a4fb-eb8be225e9c5`.
+- normal TEST backend: `bcdd36bb-0163-421e-9303-72c5fe3cc8ab`;
+- private Candidate API: `884cf0e8-1ae6-476b-a886-3dd9086754aa`;
+- public Candidate broker: `16a251ee-895b-4d75-b1d8-bd3dfc1c2731`.
 
 The private Worker secret inventory includes `SUPABASE_SERVICE_ROLE_KEY` and all four dedicated Candidate private secrets. The secret values were not displayed, logged, committed or packaged.
 
@@ -392,8 +408,13 @@ Please verify, function by function, including the final authority seams:
 46. a real `PAPER_RETURN → RECEIVED → controlled finalisation blocker → office rejection` path retires the exact queued generation, obsoletes `PAPER_PACK_READY`, invalidates the QR source and inserts only the office rejection;
 47. a live provider lease on any `AWAITING_PAPER_RETURN`, `RECEIVED` or `FINALISED` generation blocks the entire rejection before workflow, timesheet, mail, notification or token mutation;
 48. a `RECEIVED` workflow can own the current shared-source token and participates in every owner/lease/mail/notification query without a false owner conflict;
-49. provider submission revalidates the exact Candidate outbox lease and `PAPER / AWAITING_PAPER_RETURN` workflow immediately before send, refusing a row whose authority changed after claim;
-50. simultaneous rejection of hours H1 and its separate-expense carrier E1 in either start order cannot deadlock or partially commit and uses one stable rejection-family lock order.
+49. provider submission obtains one atomic exact Candidate outbox/workflow/generation/manifest/lease submit permit immediately before send;
+50. simultaneous rejection of hours H1 and its separate-expense carrier E1 in either start order cannot deadlock or partially commit and uses one stable rejection-family lock order;
+51. `CANCEL` and `SUPERSEDE` on retryable PAPER `RECEIVED` either retire the exact queued generation first or fail with zero mutation while a provider permit/lease is live;
+52. confirmed W09 conversion retires the exact `RECEIVED` or preceding finalised delivery generation before route rotation, without deleting signed/sent history;
+53. route conversion and office rejection share the same family lock and cannot form the E1-workflow/H1-source deadlock in either start order;
+54. `PAPER_RETURN` and every retirement-causing transition lock/respect the provider-submit lease barrier, so authority cannot change between the atomic permit and external send;
+55. ordinary non-Candidate mail and route conversion retain their existing behaviour.
 
 ## Remaining delivery sequence after independent GO
 
@@ -407,14 +428,14 @@ Please verify, function by function, including the final authority seams:
 
 ## Safety and provenance
 
-- Database mutation or migration: the explicitly authorised TEST safe-migration workflow `31439931151` installed the approved changed repeatables after workflow `31439931150` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
+- Database mutation or migration: the explicitly authorised TEST safe-migration workflow `31444957381` installed the approved changed repeatables after workflow `31444957385` proved clean exact-version PostgreSQL 17.6/18.1 installs; no Candidate business data was created or changed.
 - Candidate/manager workflow mutation: none.
 - R2 business document/evidence write/delete: none. Broker readiness used the designed one-use private-service nonce and the private scheduler may purge expired nonce objects; no Candidate workflow object was created.
 - Email or push sent: none.
-- Normal TEST Worker deployed: yes, version `fb33f186-6c7d-4595-b361-7bc1cb2990c1`, explicitly authorised; TEST only.
-- Private/broker Worker deployed: yes, versions `0e1de209-4349-4265-b109-dbff1c8b75e0` and `653a3c21-794e-4db6-a4fb-eb8be225e9c5`, explicitly authorised; TEST only.
+- Normal TEST Worker deployed: yes, version `bcdd36bb-0163-421e-9303-72c5fe3cc8ab`, explicitly authorised; TEST only.
+- Private/broker Worker deployed: yes, versions `884cf0e8-1ae6-476b-a886-3dd9086754aa` and `16a251ee-895b-4d75-b1d8-bd3dfc1c2731`, explicitly authorised; TEST only.
 - Production accessed or deployed: no.
-- Commit/push: runtime commit `6b73e18d6a7bcd85b823df435bfe1f1c18e32e4f` was published non-forcibly directly to `origin/test` after a clean lane check; no PR.
+- Commit/push: runtime commit `465924aa1d692e41a0fe3bbc204b6073571d40e5` was published non-forcibly directly to `origin/test` after a clean lane check and after preserving two newer Banking Pay commits without touching their files; no PR.
 - Deployment note: all three TEST Workers were deployed only after the repository safe-migration and exact PostgreSQL matrix gates completed. The normal backend deployment used the explicit `--env test` selector. No production or unrelated Worker was deployed.
 - Secrets printed or packaged: no.
 - Banking Pay/Policy X code changed by this correction: no.

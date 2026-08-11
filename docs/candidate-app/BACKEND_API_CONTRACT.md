@@ -1,6 +1,6 @@
 # CloudTMS Candidate App backend contract
 
-Status: versioned TEST implementation contract, updated 10 August 2026. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities.
+Status: versioned TEST implementation contract, updated 11 August 2026. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. PAPER delivery retirement and provider submission are coordinated by the installed service-only workflow authority across return, cancellation, supersession, office rejection and confirmed route intervention.
 
 Machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Trust and deployment contract: `BROKER_PRIVATE_TOPOLOGY.md`.
 
@@ -96,6 +96,8 @@ The Expense and Mileage Approval Summary uses configured agency branding, Candid
 
 Paper-pack selection fails closed unless exactly one active `PAPER` workflow in `AWAITING_PAPER_RETURN` targets the current timesheet. More than one produces `CANDIDATE_PAPER_WORKFLOW_CONFLICT`; no arbitrary workflow is selected.
 
+The claimed Candidate paper email is not sent on the strength of a separate read. Immediately before provider submission, the normal mail worker calls the service-only `PAPER_PROVIDER_SUBMIT_PERMIT` action. The database atomically locks and verifies the exact outbox lease, workflow ID, generation, immutable manifest, complete-pack receipt, non-retired binding and `PAPER / AWAITING_PAPER_RETURN` state. `PAPER_RETURN`, supported cancellation/supersession, office rejection and route conversion share and respect that same outbox lease/permit barrier. Ordinary non-Candidate mail does not enter this Candidate-specific permit action.
+
 ## Manager API
 
 | Method | Path | Purpose |
@@ -131,6 +133,8 @@ The initial manager email is also readiness-gated. Candidate submission first re
 | POST | `/api/candidate-app/workflows/:workflowId/actions/retry-finalisation` | Idempotently recover final rendering/finalisation without a second signature. |
 
 All office route actions will use the approved W01–W13 warning catalogue from the living implementation plan. The frontend must preview before confirmation and must not independently derive warning state.
+
+For W08/W09 PAPER intervention, confirmation resolves the exact linked delivery workflow even where it is `RECEIVED` or `FINALISED`. It retires the current delivery generation for `AWAITING_PAPER_RETURN`/`RECEIVED` or the preceding immutable delivery generation for `FINALISED`, blocks a live provider permit/lease, preserves sent mail and signed/R2 history, and requires the retirement receipt before route/version rotation. Office rejection and route confirmation use the same stable Candidate family lock before target/workflow/source row locks.
 
 ## Finalisation contract
 

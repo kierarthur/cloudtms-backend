@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 11 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST with every Candidate feature flag false. Runtime commit `6b73e18d6a7bcd85b823df435bfe1f1c18e32e4f` closes retryable PAPER `RECEIVED` retirement, makes every shared-source lease/token/mail/notification query use the same supported PAPER-state set, serialises linked hours/expense rejection before row locking, and revalidates Candidate delivery authority immediately before provider submission. Clean PostgreSQL 17.6 and 18.1 installs pass all 20 runtime/concurrency suites; 119/119 focused Candidate tests and 451/451 complete backend tests pass; all three Worker builds pass. GitHub runtime workflow `31439931150` and safe migration workflow `31439931151` passed; the exact repeatables are installed; all three TEST Workers were deployed and health/isolation checked. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
+Status: active implementation; TEST-only. Updated: 11 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented, published and deployed to TEST with every Candidate feature flag false. Runtime commit `465924aa1d692e41a0fe3bbc204b6073571d40e5` closes the remaining PAPER caller matrix: retryable `RECEIVED` cancellation and supersession retire the exact delivery authority before lifecycle mutation; W09 route conversion retires `AWAITING_PAPER_RETURN`, `RECEIVED` or the preceding finalised delivery generation; route conversion and office rejection acquire the same family lock before row locks; and provider delivery uses one service-only atomic database submit permit shared with PAPER-return and retirement transitions. Clean PostgreSQL 17.6 and 18.1 installs pass all 21 runtime/concurrency suites; 119/119 focused Candidate tests and 451/451 complete backend tests pass; all three Worker builds pass. GitHub runtime workflow `31444957385` and safe migration workflow `31444957381` passed; the exact repeatables are installed; all three TEST Workers were deployed and health/isolation checked. Independent re-audit remains the Stage 2 sign-off gate before CloudTMS frontend implementation and API freeze.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -41,7 +41,8 @@ Completed authority includes:
 - one source-set PAPER retirement plan that locks every relevant waiting/received/finalised PAPER workflow and bound outbox row for the source, fails before mutation on any active provider lease, invalidates the current token through its exact immutable owner once, retires every stale mail/notification generation including already-cleared-token cases, and preserves unrelated finalised expense workflow/economic history.
 - the source-set PAPER contract now treats `AWAITING_PAPER_RETURN`, retryable `RECEIVED` and `FINALISED` as one closed lifecycle set. `RECEIVED` uses its current workflow generation, participates in every source-owner, mail, provider-lease, token and notification query, and cannot be rejected until its obsolete delivery authority is retired or proved already inert;
 - linked hours-source and separate-expense rejection now acquire one candidate/contract/week family advisory lock before any target, workflow or financial row lock, preventing the former H1/E1 lock-order cycle while preserving transactional rollback and protected-history gates;
-- the mail provider handoff performs one final exact outbox/workflow/generation/manifest/lease check immediately before external submission. A delivery claimed before return, rejection or supersession is refused once the workflow is no longer the matching `PAPER / AWAITING_PAPER_RETURN` authority.
+- the mail provider handoff obtains `PAPER_PROVIDER_SUBMIT_PERMIT` through the existing workflow RPC. That service-only action atomically locks and proves the exact outbox lease, workflow, generation, immutable manifest, complete-pack receipt and non-retired `PAPER / AWAITING_PAPER_RETURN` authority, and renews the shared lease/permit barrier before external submission;
+- `PAPER_RETURN`, supported `CANCEL`/`SUPERSEDE`, office rejection and route conversion all respect the same mail lease and Candidate family lock before changing workflow, timesheet, notification or QR authority.
 
 DB/RPC regression gates remain PostgreSQL 17.6/18.1 install/runtime suites, concurrency suites, ACL/feature-off parity, focused Candidate tests and full backend regression.
 
@@ -156,7 +157,7 @@ Controlling guarantees:
 
 - `PAPER_PACK_RELEASE` is a service-only action inside the existing `candidate_workflow_transition_atomic_v1`; it locks the current timesheet, workflow and exact outbox row, validates the immutable pack receipt, attaches the one complete pack, releases the one held email and inserts the readiness notification in one transaction;
 - the private scheduler is a thin adapter. It validates/reuses the durable R2 receipt and calls the atomic action; it no longer PATCHes mail or inserts notifications directly;
-- `_candidate_paper_delivery_retire_v1` remains the one exact workflow-generation retirement owner used by Candidate `AMEND`, `CANCEL`, `SUPERSEDE` and canonical route/QR intervention; office whole-record rejection composes it only through `_candidate_paper_delivery_retire_set_v1`, which coordinates all workflow generations sharing the QR source before target rotation;
+- `_candidate_paper_delivery_retire_v1` remains the one exact workflow-generation retirement owner. Candidate `CANCEL`/`SUPERSEDE`, office whole-record rejection and canonical route/QR intervention compose source-aware retirement through `_candidate_paper_delivery_retire_set_v1`; that set owner coordinates all relevant workflow generations sharing the QR source before lifecycle or target rotation;
 - a non-sent retired mail keeps its audit record but loses live attachments, receives an infinite schedule and an explicit retired-generation marker. A sent mail remains immutable history;
 - a live provider lease blocks retirement with a retryable conflict before any workflow, mail, notification or QR mutation. Retirement that wins first makes the row fail the provider claimant's current-workflow fence;
 - the claim authority independently rechecks the exact workflow ID, generation, PAPER route, `AWAITING_PAPER_RETURN` state, manifest hash, target timesheet and non-retired marker before granting a delivery lease;
@@ -229,11 +230,40 @@ That state can be rejected before CloudTMS authorisation, so it now participates
 - `FINALISED` retires the preceding immutable delivery generation;
 - every selected/relevant source-workflow query, bound-mail lock, provider-lease fence, current-token-owner proof, notification retirement and preserved-workflow receipt uses this exact three-state set;
 - a live provider lease on any relevant generation blocks the whole rejection before mutation; queued mail becomes inert, sent mail remains immutable, the exact `PAPER_PACK_READY` notification/deep link becomes obsolete, and the source token is invalidated or proved already invalid;
-- provider delivery revalidates the exact Candidate-bound outbox lease and the matching `PAPER / AWAITING_PAPER_RETURN` workflow immediately before sending, closing the claim-before-return race defensively;
+- provider delivery obtains an atomic database submit permit for the exact Candidate-bound outbox lease and matching `PAPER / AWAITING_PAPER_RETURN` workflow before sending. `PAPER_RETURN` locks the same outbox row and refuses to change authority while that permit/lease is live;
 - rejection takes one stable candidate/contract/week family advisory lock before target, contract-week, TSFIN or workflow row locks. Hours H1 and its separate-expense carrier E1 therefore cannot acquire source/workflow locks in opposite order;
 - the two-session disposable PostgreSQL test runs simultaneous H1/E1 rejection in both start orders and requires success or a controlled serialization conflict, never a PostgreSQL deadlock or partial mutation.
 
 This correction changes no product policy. It completes the existing retry/rejection, obsolete-delivery and immutable-history decisions. It adds no table, column, public RPC, endpoint or economic authority and does not touch Banking Pay or Policy X.
+
+### Complete PAPER caller and provider-submit closure
+
+The full accepted caller matrix now converges on the same retirement, mail-permit and family-lock contract:
+
+```text
+PAPER_RETURN / CANCEL / SUPERSEDE / office rejection / W08-W09 route conversion
+→ acquire the stable Candidate family lock before target/workflow/source row locks
+→ lock the exact Candidate outbox lease/submit permit
+→ retire or prove inert the exact delivery generation where authority is changing
+→ preserve SENT mail and immutable signed/R2 history
+→ only then change workflow or timesheet authority
+
+provider submit
+→ service-only PAPER_PROVIDER_SUBMIT_PERMIT
+→ one atomic workflow + outbox + generation + manifest + lease proof
+→ lifecycle transitions share and respect that same database barrier
+```
+
+Controlling details:
+
+- `CANCEL` and `SUPERSEDE` may accept a retryable PAPER `RECEIVED` workflow only after source-set retirement succeeds; an active provider permit/lease blocks with zero lifecycle mutation;
+- W09 confirmed route conversion resolves the exact linked PAPER workflow independently of `active_workflow_id`, retires the current generation for `AWAITING_PAPER_RETURN`/`RECEIVED` or the preceding delivery generation for `FINALISED`, and requires a durable receipt before route rotation;
+- a finalised workflow and all signed evidence remain immutable while its obsolete delivery generation, readiness deep link and QR authority become non-current;
+- office rejection and route conversion use the same candidate/contract/week advisory-lock key before row locks, closing route-versus-rejection H1/E1 inversion in both start orders;
+- non-Candidate mail bypasses the Candidate permit without changing its existing provider path;
+- no new table, column, public RPC, endpoint or financial owner was introduced.
+
+The executable matrix covers queued/unleased, active-lease, sent and already-retired cancellation/supersession states; real preview/confirmed W09 conversion for `RECEIVED` and `FINALISED`; provider permit versus `PAPER_RETURN`; and two-session route-conversion-versus-rejection ordering.
 
 ### Candidate authentication and session boundary
 
@@ -483,9 +513,9 @@ The exact W01–W13 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATAL
 
 ## Completion gates
 
-Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. The 10 August paper-mail authority correction is published and deployed as recorded below. Its corrected repeatable SQL definitions were installed through the repository safe-migration workflow after the disposable PostgreSQL gates passed. No Candidate workflow, Candidate email, Candidate notification, R2 object or financial mutation was created.
+Backend topology closure requires source review, focused public/private boundary and upload tests, full backend regression, OpenAPI validation, builds for both Worker artefacts, exact approved commit/push, explicitly approved TEST deployment, harmless disabled-state runtime proof and independent audit. The current PAPER caller/submit-permit correction is published and deployed as recorded below. Its corrected repeatable SQL definitions were installed through the repository safe-migration workflow after the disposable PostgreSQL gates passed. No Candidate workflow, Candidate email, Candidate notification, R2 business object or financial mutation was created.
 
-Current end-to-end closure verification: runtime commit `6b73e18d6a7bcd85b823df435bfe1f1c18e32e4f` passes 119/119 focused Candidate/backend/broker/DB tests and 451/451 complete backend tests. The full Candidate install and all 20 SQL runtime/concurrency suites pass on clean disposable PostgreSQL 17.6 and PostgreSQL 18.1 locally and in GitHub workflow `31439931150`. Safe migration workflow `31439931151` installed the exact changed repeatables in TEST. Ledger SHA-256 matches the exact published Git bytes: workflow/PAPER retirement `6439491aec249c48fa1d4d658b04e6854160fd0bf406dc254bb37fd16708245e` and rejection authority `257a2bc27fc79ed859530f25401cf1a7ff084920b4625402a09441e8fcbcb23c`. Installed definition checks prove `RECEIVED` support in both retirement helpers, `RECEIVED` inclusion in rejection, the shared family lock and unchanged 14-RPC access boundary. Public broker, private Candidate API and normal backend builds pass. Deployed TEST versions are private API `0e1de209-4349-4265-b109-dbff1c8b75e0`, public broker `653a3c21-794e-4db6-a4fb-eb8be225e9c5`, and normal TEST backend `fb33f186-6c7d-4595-b361-7bc1cb2990c1`. Broker and normal-backend health/readiness are `200/200`; broker readiness proves the private service binding, and direct public Candidate routing on the normal backend is `404`. Post-deployment state remains 14/14 service-role-only Candidate RPCs, all 12 Candidate flags false, auto-authorisation false, all seven Candidate tables empty and Candidate-bound mail empty. The current-decisions PDF requires no policy amendment because this correction implements its existing retryable-`RECEIVED`, obsolete-delivery, independent-expense and immutable-history rules.
+Current end-to-end closure verification: runtime commit `465924aa1d692e41a0fe3bbc204b6073571d40e5` passes 119/119 focused Candidate/backend/broker/DB tests and 451/451 complete backend tests. The full Candidate install and all 21 SQL runtime/concurrency suites pass on clean disposable PostgreSQL 17.6 and PostgreSQL 18.1 locally and in GitHub workflow `31444957385`. Safe migration workflow `31444957381` installed the exact changed repeatables in TEST. Ledger SHA-256 matches the exact published LF-normalised source: workflow/PAPER caller and submit-permit authority `4d713d6199260e86c0397afabf2a75ce0a61081ea614c6104cd7198aa1619fa4`; route/version authority `94399b90b15509c7a34b462b17230afaab13b30bd36eecfaa60a90f03f729c79`. Installed definition checks prove `RECEIVED` cancellation/supersession retirement, exact W09 linked-workflow retirement, shared route/rejection family locking, service-only provider submit permit and the unchanged 14-RPC access boundary. Public broker, private Candidate API and normal backend builds pass. Deployed TEST versions are private API `884cf0e8-1ae6-476b-a886-3dd9086754aa`, public broker `16a251ee-895b-4d75-b1d8-bd3dfc1c2731`, and normal TEST backend `bcdd36bb-0163-421e-9303-72c5fe3cc8ab`. Broker and normal-backend health/readiness are `200/200`; broker readiness proves the private service binding. Post-deployment state remains 14/14 service-role-only Candidate RPCs, all 12 Candidate flags false, auto-authorisation false, all seven Candidate tables empty and Candidate-bound mail empty. The current-decisions PDF requires no policy amendment because this correction implements its existing retryable-`RECEIVED`, obsolete-delivery, exceptional route-intervention and immutable-history rules.
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
 

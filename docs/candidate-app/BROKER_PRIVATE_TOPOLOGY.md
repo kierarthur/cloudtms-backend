@@ -1,6 +1,6 @@
 # Candidate broker and private CloudTMS API topology
 
-Status: TEST implementation and deployed topology contract; updated through retryable `RECEIVED` PAPER retirement, provider-boundary revalidation and linked-rejection lock-order closure on 11 August 2026.
+Status: TEST implementation and deployed topology contract; updated through complete PAPER caller retirement, atomic provider-submit permission and shared route/rejection lock-order closure on 11 August 2026.
 
 ## Required trust boundary
 
@@ -130,25 +130,25 @@ The delivery contract to implement with the app identities is: deterministic not
 Candidate PAPER email uses the existing CloudTMS mail delivery authority. The database claim fence and the provider adapter are both required:
 
 - the claimant proves the current `PAPER / AWAITING_PAPER_RETURN` workflow, exact workflow generation, immutable manifest, complete-pack attachment and non-retired outbox binding;
-- after claim, immediately before provider submission, `candidate-paper-provider-authority.js` re-reads the exact outbox operation and workflow;
-- the live lease token, `QUEUED`/not-sent state, workflow ID, generation, manifest, context timesheet, complete-pack readiness and attachment must still match;
-- the workflow must still be `PAPER / AWAITING_PAPER_RETURN` for that exact generation and manifest;
-- a return to `RECEIVED`, office rejection, amendment, cancellation, supersession, retirement, lease replacement or any identity drift defers the row and clears the stale lease rather than sending it;
+- after claim, immediately before provider submission, `candidate-paper-provider-authority.js` calls service-only `PAPER_PROVIDER_SUBMIT_PERMIT` through the existing workflow RPC;
+- that action atomically locks and verifies the live lease token, `QUEUED`/not-sent state, workflow ID, generation, manifest, context timesheet, complete-pack readiness, attachment and non-retired binding;
+- the workflow must still be `PAPER / AWAITING_PAPER_RETURN` for that exact generation and manifest, and the exact lease is renewed as the provider-submit permit;
+- `PAPER_RETURN`, cancellation, supersession, office rejection and route intervention lock/respect the same outbox barrier, so authority cannot change after permit while the live permit/lease remains active;
 - ordinary non-Candidate mail retains its existing provider path.
 
-This defence complements—not replaces—the transactional retirement rule that any active provider lease blocks Candidate rejection before mutation.
+This permit and the transactional retirement rules are one database coordination boundary. An active permit/lease blocks every supported authority-changing PAPER transition before mutation.
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `653a3c21-794e-4db6-a4fb-eb8be225e9c5`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `0e1de209-4349-4265-b109-dbff1c8b75e0`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `fb33f186-6c7d-4595-b361-7bc1cb2990c1`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `16a251ee-895b-4d75-b1d8-bd3dfc1c2731`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `884cf0e8-1ae6-476b-a886-3dd9086754aa`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `bcdd36bb-0163-421e-9303-72c5fe3cc8ab`.
 - Broker health/readiness: 200/200.
 - Normal backend health/readiness: 200/200.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The current Candidate runtime correction is published through backend commit `6b73e18d6a7bcd85b823df435bfe1f1c18e32e4f`. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The current Candidate runtime correction is published through backend commit `465924aa1d692e41a0fe3bbc204b6073571d40e5`. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 
