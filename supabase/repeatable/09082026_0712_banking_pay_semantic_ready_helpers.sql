@@ -2517,6 +2517,8 @@ DECLARE
   v_resolved_count integer := 0;
   v_current_count integer := 0;
   v_active_owner_count integer := 0;
+  v_physical_currentness jsonb := '{}'::jsonb;
+  v_candidate_currentness jsonb := '{}'::jsonb;
 BEGIN
   IF p_correction_request_id IS NULL OR p_operation_id IS NULL OR p_session_id IS NULL
      OR pg_catalog.jsonb_typeof(COALESCE(p_route_results_json,'{}'::jsonb))<>'object'
@@ -2614,6 +2616,18 @@ BEGIN
      )
     WHERE scope_row.session_id=p_session_id
       AND scope_row.candidate_id=v_candidate.candidate_id;
+
+    EXECUTE 'SELECT private.pay_workbench_candidate_physical_currentness_page_v1($1,$2,$3,$4)'
+      INTO v_physical_currentness
+      USING p_session_id,ARRAY[v_candidate.candidate_id],'TERMINAL_CURRENT',
+        pg_catalog.jsonb_build_object('contract_version',1,'allow_active_owner',true);
+    v_candidate_currentness:=COALESCE(v_physical_currentness->'candidate_results'->0,'{}'::jsonb);
+    v_current_count:=CASE
+      WHEN COALESCE((v_candidate_currentness->>'terminal_current')::boolean,false) THEN 1 ELSE 0 END;
+    v_active_owner_count:=CASE
+      WHEN COALESCE((v_candidate_currentness->>'terminal_current')::boolean,false) IS NOT TRUE
+       AND COALESCE((v_candidate_currentness->>'current_or_active_owner')::boolean,false)
+      THEN 1 ELSE 0 END;
 
     IF COALESCE(v_current_count,0)<>1 AND COALESCE(v_active_owner_count,0)<>1 THEN
       RAISE EXCEPTION 'CORRECTION_HELD_DIRTY_ROUTE_NOT_ELECTED'

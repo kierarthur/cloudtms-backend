@@ -32,6 +32,8 @@ const patch = read('supabase', 'repeatable',
   '09082026_0825_pay_workbench_patch_preview_after_batch_mutation.sql');
 const cancelSafe = read('supabase', 'repeatable',
   '19072026_1816_cancel_refresh_supersede_finance_dirty.sql');
+const physicalCurrentness = read('supabase', 'repeatable',
+  '11082026_1103_pay_workbench_candidate_physical_currentness_page_v1.sql');
 const enqueue = read('supabase', 'repeatable',
   '07082026_1017_pay_workbench_enqueue_candidate_refresh.sql');
 const delta = read('supabase', 'repeatable',
@@ -522,6 +524,49 @@ test('request-owned Policy X dirty work waits for the correction financial bound
   assert.match(targetedRuntime, /attempt_count = GREATEST\(COALESCE\(delayed_job\.attempt_count, 0\) - 1, 0\)/);
 });
 
+test('terminal currentness is proved from physical source, preview, selection and V3 authority', () => {
+  assert.match(physicalCurrentness,
+    /CREATE OR REPLACE FUNCTION private\.pay_workbench_candidate_physical_currentness_page_v1/);
+  assert.match(physicalCurrentness, /p_candidate_ids uuid\[\]/);
+  assert.match(physicalCurrentness, /pg_catalog\.cardinality\(p_candidate_ids\)>100/);
+  assert.match(physicalCurrentness, /source_minus_preview_count/);
+  assert.match(physicalCurrentness, /preview_minus_source_count/);
+  assert.match(physicalCurrentness, /active_noncurrent_preview_count/);
+  assert.match(physicalCurrentness, /duplicate_active_identity_count/);
+  assert.match(physicalCurrentness, /selection_consistent/);
+  assert.match(physicalCurrentness, /CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3/);
+  assert.match(physicalCurrentness, /v_scope\.dirty IS FALSE/);
+  assert.match(physicalCurrentness, /v_state\.pending_job_id IS NULL/);
+  assert.match(physicalCurrentness, /v_active_owner_count=0/);
+  assert.match(physicalCurrentness,
+    /REVOKE ALL ON FUNCTION private\.pay_workbench_candidate_physical_currentness_page_v1[\s\S]*FROM PUBLIC,anon,authenticated,service_role/);
+  assert.match(physicalCurrentness,
+    /GRANT EXECUTE ON FUNCTION private\.pay_workbench_candidate_physical_currentness_page_v1[\s\S]*TO postgres/);
+});
+
+test('post-cancel publication cannot expose false current state or reuse a stale targeted label', () => {
+  assert.match(patch, /POST_CANCEL_RETURN_PATCH_V1/);
+  assert.match(patch, /SOURCE_BUILD_PENDING/);
+  assert.match(patch, /certified_preview_publication_parity_ok\s*=\s*false/);
+  assert.match(patch,
+    /IF NOT \(v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE\)[\s\S]*pay_workbench_delta_update_candidate_state_v1/);
+
+  assert.match(cancelSafe, /_bpay_cancel_safe_original_authority/);
+  assert.match(cancelSafe, /authority_kind'='BOUNDED_FULL_SOURCE_BUILD/);
+  assert.match(cancelSafe, /'CANDIDATE_FULL_LIVE'/);
+  assert.match(cancelSafe, /'invocation_kind','DUPLICATE_REPLAY_REPAIR'/);
+  assert.match(cancelSafe, /POST_CANCEL_EXACT_REPUBLICATION/);
+  assert.match(cancelSafe, /pay_workbench_delta_update_candidate_state_v1/);
+  assert.match(cancelSafe, /pay_workbench_candidate_physical_currentness_page_v1/);
+  assert.match(cancelSafe, /PAYMENT_CANCEL_CURRENT_OR_REPAIR_OWNER_REQUIRED/);
+  assert.match(cancelSafe, /repair_owner_count/);
+
+  assert.match(enqueue, /pay_workbench_candidate_physical_currentness_page_v1/);
+  assert.match(processChunk, /pay_workbench_candidate_physical_currentness_page_v1/);
+  assert.match(helpers,
+    /pay_workbench_correction_held_dirty_job_resolve_v1[\s\S]*pay_workbench_candidate_physical_currentness_page_v1/);
+});
+
 test('focused modern authorities are replayed after the historical omnibus', () => {
   assert.match(reassert, /\\ir 23072026_1402_disable_plpgsql_check_for_banking_cancel\.sql/);
   assert.match(reassert, /\\ir 09082026_0825_pay_workbench_patch_preview_after_batch_mutation\.sql/);
@@ -532,8 +577,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 37);
-  assert.equal(semanticManifest.functions.length, 37);
+  assert.equal(semanticManifest.function_count, 38);
+  assert.equal(semanticManifest.functions.length, 38);
   for (const identity of [
     'public._ctms_materialise_candidate_correction_residuals_v1',
     'private.pay_workbench_source_publication_identity_v1',
@@ -545,6 +590,7 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'private.pay_workbench_correction_dirty_context_set_v1',
     'private.pay_workbench_cancel_reversion_proof_core_v1',
     'private.pay_workbench_correction_held_dirty_job_resolve_v1',
+    'private.pay_workbench_candidate_physical_currentness_page_v1',
     'public.pay_payment_cancellation_route_diagnostic_v1',
     'public.pay_timesheet_summary_pay_state_refresh_trigger',
     'public.pay_batch_insert_items_from_preview',

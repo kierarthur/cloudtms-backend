@@ -66,6 +66,8 @@ DECLARE
     IN ('true','t','1','yes','y','on');
   v_draft_adoption_result jsonb := '{}'::jsonb;
   v_draft_operation_id uuid := NULL::uuid;
+  v_post_cancel_patch_digest text := NULL::text;
+  v_active_noncurrent_row_count_after_patch integer := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -646,6 +648,35 @@ BEGIN
     ADD COLUMN has_complexity boolean NOT NULL DEFAULT false,
     ADD COLUMN targeted_refresh_job_id uuid NULL;
 
+  -- Invalidate the old terminal projection before a deferred cancellation
+  -- patch changes any preview row. The cancel-safe wrapper must republish the
+  -- exact certified source or bind one canonical repair owner before commit.
+  IF v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE THEN
+    UPDATE public.banking_pay_workbench_session_scope AS invalidated_scope
+    SET status='SOURCE_BUILD_PENDING',
+        dirty=true,
+        certified_preview_publication_parity_ok=false,
+        certified_preview_publication_attestation_json=jsonb_strip_nulls(
+          COALESCE(invalidated_scope.certified_preview_publication_attestation_json,'{}'::jsonb)
+          || jsonb_build_object(
+            'superseded_by_post_cancel_patch',true,
+            'superseded_by_pay_batch_id',p_pay_batch_id::text,
+            'superseded_by_operation_type',v_operation_type,
+            'superseded_at_utc',v_now::text
+          )
+        ),
+        updated_at_utc=v_now
+    FROM pg_temp._bpay_batch_mutation_candidates AS affected_candidate
+    WHERE invalidated_scope.session_id=p_session_id
+      AND invalidated_scope.candidate_id=affected_candidate.candidate_id;
+
+    UPDATE public.banking_pay_workbench_session_candidate_state AS invalidated_state
+    SET status='PENDING',last_error_json='{}'::jsonb,updated_at_utc=v_now
+    FROM pg_temp._bpay_batch_mutation_candidates AS affected_candidate
+    WHERE invalidated_state.session_id=p_session_id
+      AND invalidated_state.candidate_id=affected_candidate.candidate_id;
+  END IF;
+
   UPDATE pg_temp._bpay_batch_mutation_candidates AS candidate_update
   SET has_complexity = COALESCE(candidate_update.has_batch_finance_case, false)
     OR EXISTS (
@@ -1072,6 +1103,29 @@ BEGIN
   INTO v_patched_row_ids_json
   FROM pg_temp._bpay_batch_mutation_current_preview_rows AS current_row;
 
+  v_post_cancel_patch_digest:=CASE WHEN v_is_cancel_delete IS TRUE THEN
+    encode(extensions.digest(convert_to(concat_ws('|',
+      'POST_CANCEL_RETURN_PATCH_V1',p_session_id::text,v_session_row.version::text,
+      p_pay_batch_id::text,v_operation_type,
+      COALESCE(v_options_json->>'correction_request_id',''),
+      COALESCE(v_affected_candidate_ids_json::text,'[]'),
+      COALESCE(v_patched_row_ids_json::text,'[]'),
+      COALESCE(v_affected_economic_keys_json::text,'[]')
+    ),'UTF8'),'sha256'),'hex') ELSE NULL::text END;
+
+  SELECT COUNT(*)::integer
+  INTO v_active_noncurrent_row_count_after_patch
+  FROM public.banking_pay_workbench_preview_rows AS noncurrent_row
+  WHERE noncurrent_row.session_id=p_session_id
+    AND noncurrent_row.session_version=v_session_row.version
+    AND noncurrent_row.candidate_id IN (
+      SELECT affected_candidate.candidate_id
+      FROM pg_temp._bpay_batch_mutation_candidates AS affected_candidate
+    )
+    AND UPPER(BTRIM(COALESCE(noncurrent_row.status,''))) IN (
+      'DIRTY','PENDING','DELTA_PENDING','RUNNING','QUEUED','ERROR','FAILED'
+    );
+
   SELECT COUNT(*) FILTER (WHERE existing_row.selected IS TRUE AND existing_row.selection_state = 'SELECTED' AND UPPER(BTRIM(COALESCE(existing_row.status, ''))) = 'READY')::integer,
          COUNT(*) FILTER (WHERE current_row.selected IS TRUE AND current_row.selection_state = 'SELECTED' AND UPPER(BTRIM(COALESCE(current_row.status, ''))) = 'READY')::integer,
          COUNT(*) FILTER (WHERE UPPER(BTRIM(COALESCE(existing_row.status, ''))) = 'READY')::integer,
@@ -1164,7 +1218,8 @@ BEGIN
     LIMIT 25
   ) AS sample_row;
 
-  IF to_regprocedure('public.pay_workbench_delta_update_candidate_state_v1(uuid,uuid,uuid,jsonb)') IS NOT NULL THEN
+  IF NOT (v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE)
+     AND to_regprocedure('public.pay_workbench_delta_update_candidate_state_v1(uuid,uuid,uuid,jsonb)') IS NOT NULL THEN
     FOR v_candidate_state_candidate_id IN
       SELECT candidate_row.candidate_id
       FROM pg_temp._bpay_batch_mutation_candidates AS candidate_row
@@ -1184,7 +1239,7 @@ BEGIN
       );
       v_candidate_state_results_json := v_candidate_state_results_json || jsonb_build_array(v_candidate_state_result);
     END LOOP;
-  ELSE
+  ELSIF NOT (v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE) THEN
     v_candidate_state_results_json := jsonb_build_array(jsonb_build_object(
       'ok', false,
       'fallback_required', true,
@@ -1194,7 +1249,9 @@ BEGIN
 
   UPDATE public.banking_pay_workbench_sessions AS session_update
   SET progress_state = CASE
-        WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0 THEN 'REFRESHING_CANDIDATES'
+        WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0
+          OR (v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE)
+          THEN 'REFRESHING_CANDIDATES'
         WHEN UPPER(BTRIM(COALESCE(session_update.progress_state, ''))) IN ('READY', 'READY_EMPTY')
           THEN CASE WHEN COALESCE(v_session_preview_row_count, 0) = 0 THEN 'READY_EMPTY' ELSE 'READY' END
         ELSE session_update.progress_state
@@ -1244,12 +1301,16 @@ BEGIN
           'section_counts', COALESCE(v_session_section_counts_json, '{}'::jsonb),
           'candidate_sample_rows_json', COALESCE(v_session_candidate_samples_json, '[]'::jsonb),
           'progress_state', CASE
-            WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0 THEN 'REFRESHING_CANDIDATES'
+            WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0
+              OR (v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE)
+              THEN 'REFRESHING_CANDIDATES'
             WHEN COALESCE(v_session_preview_row_count, 0) = 0 THEN 'READY_EMPTY'
             ELSE 'READY'
           END,
           'phase', CASE
-            WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0 THEN 'REFRESHING_CANDIDATES'
+            WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0
+              OR (v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE)
+              THEN 'REFRESHING_CANDIDATES'
             WHEN COALESCE(v_session_preview_row_count, 0) = 0 THEN 'READY_EMPTY'
             ELSE 'READY'
           END,
@@ -1257,12 +1318,16 @@ BEGIN
           'rows_available', COALESCE(v_session_preview_row_count, 0) > 0,
           'has_materialised_preview_rows', COALESCE(v_session_preview_row_count, 0) > 0,
           'status_text', CASE
-            WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0 THEN 'Preparing payment preview.'
+            WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0
+              OR (v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE)
+              THEN 'Preparing payment preview.'
             WHEN COALESCE(v_session_preview_row_count, 0) = 0 THEN 'No payable rows found.'
             ELSE 'Payment preview is ready.'
           END,
           'next_recommended_action', CASE
-            WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0 THEN 'WAIT_FOR_WORKER'
+            WHEN COALESCE(v_targeted_refresh_enqueued_count, 0) > 0
+              OR (v_is_cancel_delete IS TRUE AND v_defer_complex_enqueue IS TRUE)
+              THEN 'WAIT_FOR_WORKER'
             ELSE 'READ_PREVIEW_PAGE'
           END
         )
@@ -1304,6 +1369,10 @@ BEGIN
     'affected_economic_keys', COALESCE(v_affected_economic_keys_json, '[]'::jsonb),
     'targeted_refresh_candidate_ids', COALESCE(v_targeted_refresh_candidate_ids_json, '[]'::jsonb),
     'candidate_state_results', COALESCE(v_candidate_state_results_json, '[]'::jsonb),
+    'post_cancel_patch_digest',v_post_cancel_patch_digest,
+    'active_noncurrent_row_count_after_patch',COALESCE(v_active_noncurrent_row_count_after_patch,0),
+    'physical_currentness_checked',false,
+    'physical_currentness_proven',false,
     'shadow_compare_failed', false,
     'complex_refresh_candidate_ids', COALESCE(v_complex_refresh_candidate_ids, '[]'::jsonb),
     'missing_key_candidate_ids', COALESCE(v_missing_key_candidate_ids, '[]'::jsonb),

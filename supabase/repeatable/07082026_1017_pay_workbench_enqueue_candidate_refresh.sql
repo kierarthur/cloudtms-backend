@@ -118,6 +118,8 @@ DECLARE
   v_source_publication_baseline_required boolean := false;
   v_required_physical_publication_contract_version smallint := 0;
   v_authority_fingerprint_version smallint := 2;
+  v_physical_currentness jsonb := '{}'::jsonb;
+  v_candidate_currentness jsonb := '{}'::jsonb;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
@@ -746,6 +748,15 @@ BEGIN
         'ALL'
       )));
       IF v_owner_pay_channel_scope=UPPER(BTRIM(COALESCE(v_pay_channel_scope,'ALL'))) THEN
+        EXECUTE 'SELECT private.pay_workbench_candidate_physical_currentness_page_v1($1,$2,$3,$4)'
+          INTO v_physical_currentness
+          USING v_session_id,ARRAY[p_candidate_id],'TERMINAL_CURRENT',
+            jsonb_build_object('contract_version',1,'allow_active_owner',false);
+        v_candidate_currentness:=COALESCE(v_physical_currentness->'candidate_results'->0,'{}'::jsonb);
+        IF COALESCE((v_candidate_currentness->>'terminal_current')::boolean,false) IS NOT TRUE THEN
+          v_owner_build:=NULL;
+          v_owner_root_job:=NULL;
+        ELSE
         UPDATE public.banking_pay_workbench_jobs AS owner_job
         SET payload_json=jsonb_strip_nulls(
               COALESCE(owner_job.payload_json,'{}'::jsonb)
@@ -792,6 +803,7 @@ BEGIN
         'reason',v_reason,
         'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
         ));
+        END IF;
       END IF;
     END IF;
   END IF;
@@ -1724,7 +1736,13 @@ BEGIN
                  OR foreign_current_source.source_publication_id IS DISTINCT FROM
                       v_reversion_scope.certified_preview_publication_source_publication_id
                )
-           ) THEN
+            ) THEN
+          EXECUTE 'SELECT private.pay_workbench_candidate_physical_currentness_page_v1($1,$2,$3,$4)'
+            INTO v_physical_currentness
+            USING v_session_id,ARRAY[p_candidate_id],'TERMINAL_CURRENT',
+              jsonb_build_object('contract_version',1,'allow_active_owner',false);
+          v_candidate_currentness:=COALESCE(v_physical_currentness->'candidate_results'->0,'{}'::jsonb);
+          IF COALESCE((v_candidate_currentness->>'terminal_current')::boolean,false) THEN
           RETURN jsonb_strip_nulls(jsonb_build_object(
             'ok',true,
             'job_id',NULL,
@@ -1758,6 +1776,7 @@ BEGIN
             'reason',v_reason,
             'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
           ));
+          END IF;
         END IF;
       END IF;
     END IF;
@@ -1850,7 +1869,14 @@ BEGIN
           v_owner_covers_request :=
             v_owner_pay_channel_scope = UPPER(BTRIM(COALESCE(v_pay_channel_scope, 'ALL')));
           IF v_owner_covers_request THEN
-            v_owner_resolution := 'COMPLETE_CURRENT_AUTHORITY';
+            EXECUTE 'SELECT private.pay_workbench_candidate_physical_currentness_page_v1($1,$2,$3,$4)'
+              INTO v_physical_currentness
+              USING v_session_id,ARRAY[p_candidate_id],'TERMINAL_CURRENT',
+                jsonb_build_object('contract_version',1,'allow_active_owner',false);
+            v_candidate_currentness:=COALESCE(v_physical_currentness->'candidate_results'->0,'{}'::jsonb);
+            IF COALESCE((v_candidate_currentness->>'terminal_current')::boolean,false) THEN
+              v_owner_resolution := 'COMPLETE_CURRENT_AUTHORITY';
+            END IF;
           END IF;
         END IF;
       END IF;

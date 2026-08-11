@@ -115,6 +115,7 @@ DECLARE
   v_terminal_authority_count integer := 0;
   v_held_dirty_resolution jsonb := '{}'::jsonb;
   v_finalise_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_physical_currentness jsonb := '{}'::jsonb;
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
@@ -1764,12 +1765,39 @@ BEGIN
     INTO v_workbench_nudge_job_ids, v_workbench_nudge_job_count
     FROM active_jobs AS active_job;
 
+    IF v_session_id IS NOT NULL AND v_workbench_nudge_candidate_count>0 THEN
+      EXECUTE 'SELECT private.pay_workbench_candidate_physical_currentness_page_v1($1,$2,$3,$4)'
+        INTO v_physical_currentness
+        USING v_session_id,ARRAY(
+          SELECT candidate_value.value::uuid
+          FROM pg_catalog.jsonb_array_elements_text(v_workbench_nudge_candidate_ids)
+            AS candidate_value(value)
+          ORDER BY candidate_value.value::uuid
+        ),'TERMINAL_CURRENT',
+          pg_catalog.jsonb_build_object('contract_version',1,'allow_active_owner',true);
+
+      IF COALESCE((v_physical_currentness->>'all_current_or_active_owner')::boolean,false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_ROUTE_NOT_PHYSICALLY_CURRENT'
+          USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
+            'code','REFRESH_RETRY','reason','NO_CURRENT_OR_ACTIVE_OWNER_AFTER_PATCH',
+            'session_id',v_session_id,'candidate_count',v_workbench_nudge_candidate_count
+          )::text;
+      END IF;
+    END IF;
+
     v_workbench_nudge_refresh_status := CASE
       WHEN v_refresh_count = 0 THEN 'NOT_REQUIRED'
       WHEN v_session_id IS NULL THEN 'NOT_REQUIRED_NO_SOURCE_SESSION'
+      WHEN COALESCE((v_physical_currentness->>'all_terminal_current')::boolean,false) THEN 'CURRENT'
       WHEN v_workbench_nudge_job_count > 0 THEN 'STAGED'
       ELSE 'CURRENT'
     END;
+
+    v_refresh_result:=COALESCE(v_refresh_result,'{}'::jsonb)||pg_catalog.jsonb_build_object(
+      'physical_currentness_checked',v_session_id IS NOT NULL AND v_workbench_nudge_candidate_count>0,
+      'physical_currentness_proven',COALESCE((v_physical_currentness->>'all_terminal_current')::boolean,false),
+      'physical_currentness',v_physical_currentness
+    );
 
     v_workbench_refresh_nudge := pg_catalog.jsonb_build_object(
       'contract_version', 'PAYMENT_CORRECTION_WORKBENCH_NUDGE_V1',
