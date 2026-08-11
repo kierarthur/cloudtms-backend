@@ -112,6 +112,7 @@ DECLARE
   v_reversion_admitted_count integer := 0;
   v_financial_page_result jsonb := '{}'::jsonb;
   v_terminal_authorities_v2 jsonb := '{}'::jsonb;
+  v_post_commit_authorities_v3 jsonb := '{}'::jsonb;
   v_terminal_authority_count integer := 0;
   v_held_dirty_resolution jsonb := '{}'::jsonb;
   v_finalise_candidate_ids uuid[] := ARRAY[]::uuid[];
@@ -1305,11 +1306,11 @@ BEGIN
       v_final_result, pg_catalog.jsonb_build_object('final_result_hash', v_final_result_hash)
     );
 
-    -- The work-item snapshot is intentionally taken before FINALISE and proves
-    -- only the financial mutation.  Capture the route-election fence now,
-    -- after every batch/request/operation/summary/signal/audit write above.
-    -- A new external mutation after this transaction will therefore reject
-    -- certified reversion rather than being mistaken for finalisation drift.
+    -- FINALISE can itself stage a deferred candidate-scope generation.  Do not
+    -- claim that the pre-commit sequence/generation is terminal authority.
+    -- Persist only the immutable financial result and exact causal token.  The
+    -- first REFRESH_WORKBENCH transaction derives V3 authority after the
+    -- deferred constraint trigger has committed its generation.
     FOR v_work IN
       SELECT DISTINCT applied_work.candidate_id
       FROM public.pay_payment_correction_work_items AS applied_work
@@ -1329,8 +1330,6 @@ BEGIN
       SELECT
         applied_work.candidate_id,
         applied_work.id AS work_item_id,
-        COALESCE(change_counter.seq,0) AS source_change_seq,
-        COALESCE(change_counter.scope_change_generation,0) AS dirty_generation,
         correction_operation.input_json->'cancellation_reversion_start_authorities_v2'
           ->applied_work.candidate_id::text AS start_authority,
         pg_catalog.md5((COALESCE(applied_work.result_json,'{}'::jsonb)
@@ -1338,8 +1337,6 @@ BEGIN
       FROM public.pay_payment_correction_work_items AS applied_work
       JOIN public.banking_pay_operations AS correction_operation
         ON correction_operation.id=v_operation.id
-      LEFT JOIN public.app_change_counters AS change_counter
-        ON change_counter.entity_key='pay_candidate:'||applied_work.candidate_id::text
       WHERE applied_work.correction_request_id=p_correction_request_id
         AND applied_work.status='APPLIED'
         AND applied_work.candidate_id IS NOT NULL
@@ -1347,21 +1344,22 @@ BEGIN
     SELECT COALESCE(pg_catalog.jsonb_object_agg(
       terminal_rows.candidate_id::text,
       pg_catalog.jsonb_build_object(
-        'contract_version','POST_FINANCIAL_TERMINAL_AUTHORITY_V2',
+        'contract_version','POST_FINANCIAL_TERMINAL_AWAITING_COMMIT_V3',
         'correction_request_id',p_correction_request_id,
         'operation_id',v_operation.id,
         'work_item_id',terminal_rows.work_item_id,
         'candidate_id',terminal_rows.candidate_id,
-        'source_change_seq',terminal_rows.source_change_seq,
-        'dirty_generation',terminal_rows.dirty_generation,
+        'held_dirty_job_id',terminal_rows.start_authority->>'request_owned_dirty_job_id',
+        'scope_change_tx_token',terminal_rows.start_authority->>'request_owned_scope_change_tx_token',
         'start_authority_digest',terminal_rows.start_authority->>'fence_digest',
         'financial_result_digest',terminal_rows.financial_result_digest,
         'authority_digest',pg_catalog.md5(
           p_correction_request_id::text||'|'||v_operation.id::text||'|'||
           terminal_rows.work_item_id::text||'|'||terminal_rows.candidate_id::text||'|'||
-          terminal_rows.source_change_seq::text||'|'||terminal_rows.dirty_generation::text||'|'||
+          COALESCE(terminal_rows.start_authority->>'request_owned_dirty_job_id','')||'|'||
+          COALESCE(terminal_rows.start_authority->>'request_owned_scope_change_tx_token','')||'|'||
           COALESCE(terminal_rows.start_authority->>'fence_digest','')||'|'||
-          terminal_rows.financial_result_digest||'|POST_FINANCIAL_TERMINAL_AUTHORITY_V2'
+          terminal_rows.financial_result_digest||'|POST_FINANCIAL_TERMINAL_AWAITING_COMMIT_V3'
         )
       ) ORDER BY terminal_rows.candidate_id
     ),'{}'::jsonb)
@@ -1375,18 +1373,64 @@ BEGIN
     UPDATE public.banking_pay_operations AS terminal_authority_operation
     SET input_json=COALESCE(terminal_authority_operation.input_json,'{}'::jsonb)
           || pg_catalog.jsonb_build_object(
-            'cancellation_reversion_post_financial_terminal_authorities_v2',
+            'cancellation_reversion_post_financial_terminal_awaiting_commit_v3',
             v_terminal_authorities_v2
           ),
         progress_json=COALESCE(terminal_authority_operation.progress_json,'{}'::jsonb)
           || pg_catalog.jsonb_build_object(
-            'post_financial_terminal_authority_v2_captured',true,
-            'post_financial_terminal_authority_v2_candidate_count',
+            'post_financial_terminal_awaiting_commit_v3',true,
+            'post_financial_terminal_awaiting_commit_v3_candidate_count',
               v_terminal_authority_count
           ),
         updated_at_utc=pg_catalog.clock_timestamp()
     WHERE terminal_authority_operation.id=v_operation.id
     RETURNING terminal_authority_operation.* INTO v_operation;
+
+    -- The grouped success alert belongs to durable financial success.  It is
+    -- not delayed until Workbench publication, and one request still owns one
+    -- alert regardless of candidate count.
+    IF v_request_result IN ('APPLIED','APPLIED_WITH_BLOCKERS')
+       AND EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_work_items AS successful_work
+         WHERE successful_work.correction_request_id=p_correction_request_id
+           AND successful_work.status='APPLIED'
+       ) THEN
+      INSERT INTO public.banking_alert_success_events (
+        pay_batch_id,alert_kind,event_key,payload_json,occurred_at_utc,
+        expires_at_utc,created_at_utc,updated_at_utc
+      )
+      SELECT v_request.pay_batch_id,'BATCH_CANCELLATION_SUCCESS',
+        'CANCELLATION:'||p_correction_request_id::text,
+        pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+          'contract_version','BANKING_ALERT_CANCELLATION_SUCCESS_V2',
+          'correction_request_id',p_correction_request_id::text,
+          'operation_id',v_operation.id::text,
+          'pay_batch_id',v_request.pay_batch_id::text,
+          'cancelled_payment_count',frozen_scope.payment_count,
+          'cancelled_amount_pence',frozen_scope.amount_pence,
+          'workbench_status','PENDING',
+          'user_label',frozen_scope.payment_count::text||' payment'||
+            CASE WHEN frozen_scope.payment_count=1 THEN '' ELSE 's' END||' cancelled',
+          'user_description','Financial cancellation completed for '||
+            frozen_scope.payment_count::text||' payment'||
+            CASE WHEN frozen_scope.payment_count=1 THEN '' ELSE 's' END||
+            '. Banking Pay is updating quietly.',
+          'required_user_action',NULL,
+          'stable_issue_key',v_request.pay_batch_id::text||
+            ':BATCH_CANCELLATION_SUCCESS:'||p_correction_request_id::text,
+          'dedupe_key',v_request.pay_batch_id::text||
+            ':BATCH_CANCELLATION_SUCCESS:'||p_correction_request_id::text,
+          'policy_x_source','FROZEN_CORRECTION_REQUEST_MEMBERSHIP'
+        )),v_now,v_now+interval '365 days',v_now,v_now
+      FROM (
+        SELECT pg_catalog.count(*)::integer AS payment_count,
+          pg_catalog.round(COALESCE(pg_catalog.sum(member.active_amount),0)*100)::bigint AS amount_pence
+        FROM public.pay_payment_correction_request_candidates AS member
+        WHERE member.correction_request_id=p_correction_request_id
+      ) AS frozen_scope
+      WHERE frozen_scope.payment_count>0
+      ON CONFLICT (pay_batch_id,alert_kind,event_key) DO NOTHING;
+    END IF;
 
     RETURN pg_catalog.jsonb_build_object(
       'ok', true, 'phase', 'REFRESH_WORKBENCH', 'financial_complete', true,
@@ -1494,6 +1538,21 @@ BEGIN
       WHERE session_row.id = v_session_id
         AND pg_catalog.upper(pg_catalog.btrim(COALESCE(session_row.status, ''))) = 'OPEN'
         AND session_row.discarded_at_utc IS NULL;
+    END IF;
+
+    IF v_refresh_count>0 AND v_session_id IS NOT NULL
+       AND v_requested_action IN ('DRAFT_CANCEL','PRE_BANK_CANCEL','CANCEL_PAYMENT') THEN
+      v_post_commit_authorities_v3:=private.pay_workbench_correction_post_commit_authority_page_v1(
+        p_correction_request_id,v_operation.id,v_session_id,v_refresh_work_item_ids,
+        pg_catalog.jsonb_build_object('owner','pay_payment_correction_process_chunk')
+      );
+      IF COALESCE((v_post_commit_authorities_v3->>'ok')::boolean,false) IS NOT TRUE
+         OR COALESCE((v_post_commit_authorities_v3->>'all_finalized')::boolean,false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_NOT_FINALIZED'
+          USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
+            'code','REFRESH_RETRY','reason','POST_COMMIT_SCOPE_GENERATION_NOT_FINALIZED'
+          )::text;
+      END IF;
     END IF;
 
     IF EXISTS (
@@ -1641,7 +1700,8 @@ BEGIN
               ELSE v_refresh_candidate_ids END,
             'changed_pay_batch_item_ids',v_refresh_pay_batch_item_ids,
             'maximum_candidate_count',100,
-            'defer_complex_enqueue',true
+            'defer_complex_enqueue',true,
+            'post_commit_authorities_v3',v_post_commit_authorities_v3->'candidate_authorities'
           )
         ) || pg_catalog.jsonb_build_object(
           'cancellation_reversion_observe',v_reversion_admission,
@@ -1834,6 +1894,7 @@ BEGIN
           'candidate_ids',v_workbench_nudge_candidate_ids,
           'route_status',COALESCE(v_refresh_result->>'status',v_workbench_nudge_refresh_status),
           'active_owner_job_ids',v_workbench_nudge_job_ids
+          ,'post_commit_authorities_v3',v_post_commit_authorities_v3->'candidate_authorities'
         ),
         pg_catalog.jsonb_build_object('owner','pay_payment_correction_process_chunk')
       );
@@ -1862,67 +1923,6 @@ BEGIN
       COALESCE(v_refresh_result, '{}'::jsonb), NULL,
       v_refresh_count, v_refresh_count, 0, v_now, v_now
     ) ON CONFLICT (operation_id, phase, chunk_type, sequence_no) DO NOTHING;
-
-    -- One durable success event belongs to the correction request, never to
-    -- each candidate/work item.  Its count and amount come only from the
-    -- frozen request membership, preserving Policy X post-Draft authority.
-    IF NOT v_refresh_has_more
-       AND v_request.status IN ('APPLIED','APPLIED_WITH_BLOCKERS')
-       AND EXISTS (
-         SELECT 1
-         FROM public.pay_payment_correction_work_items AS successful_work
-         WHERE successful_work.correction_request_id = p_correction_request_id
-           AND successful_work.status = 'APPLIED'
-       ) THEN
-      INSERT INTO public.banking_alert_success_events (
-        pay_batch_id,
-        alert_kind,
-        event_key,
-        payload_json,
-        occurred_at_utc,
-        expires_at_utc,
-        created_at_utc,
-        updated_at_utc
-      )
-      SELECT
-        v_request.pay_batch_id,
-        'BATCH_CANCELLATION_SUCCESS',
-        'CANCELLATION:' || p_correction_request_id::text,
-        pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
-          'contract_version', 'BANKING_ALERT_CANCELLATION_SUCCESS_V1',
-          'correction_request_id', p_correction_request_id::text,
-          'operation_id', v_operation.id::text,
-          'pay_batch_id', v_request.pay_batch_id::text,
-          'cancelled_payment_count', frozen_scope.payment_count,
-          'cancelled_amount_pence', frozen_scope.amount_pence,
-          'user_label', frozen_scope.payment_count::text || ' payment'
-            || CASE WHEN frozen_scope.payment_count = 1 THEN '' ELSE 's' END
-            || ' cancelled',
-          'user_description', 'Cancellation completed for '
-            || frozen_scope.payment_count::text || ' payment'
-            || CASE WHEN frozen_scope.payment_count = 1 THEN '' ELSE 's' END
-            || '. Banking Pay has been updated.',
-          'required_user_action', 'Review or clear this Banking alert.',
-          'stable_issue_key', v_request.pay_batch_id::text
-            || ':BATCH_CANCELLATION_SUCCESS:' || p_correction_request_id::text,
-          'dedupe_key', v_request.pay_batch_id::text
-            || ':BATCH_CANCELLATION_SUCCESS:' || p_correction_request_id::text,
-          'policy_x_source', 'FROZEN_CORRECTION_REQUEST_MEMBERSHIP'
-        )),
-        v_now,
-        v_now + interval '365 days',
-        v_now,
-        v_now
-      FROM (
-        SELECT
-          pg_catalog.count(*)::integer AS payment_count,
-          pg_catalog.round(COALESCE(pg_catalog.sum(request_candidate.active_amount),0) * 100)::bigint AS amount_pence
-        FROM public.pay_payment_correction_request_candidates AS request_candidate
-        WHERE request_candidate.correction_request_id = p_correction_request_id
-      ) AS frozen_scope
-      WHERE frozen_scope.payment_count > 0
-      ON CONFLICT (pay_batch_id, alert_kind, event_key) DO NOTHING;
-    END IF;
 
     UPDATE public.banking_pay_operations AS refresh_operation
     SET progress_json = COALESCE(refresh_operation.progress_json, '{}'::jsonb)

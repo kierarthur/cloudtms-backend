@@ -31,7 +31,7 @@
       "schema": "public",
       "name": "pay_workbench_complete_job",
       "identity_arguments": "p_job_id uuid, p_result_json jsonb",
-      "definition_sha256": "1cf09660b984757a85b7d5f3091dfda70506095e60a5a4040d92d97c0d1be8cc",
+      "definition_sha256": "d0c294504cdf6d7cd822276cf4a1efd19d02fae61b9b40777fcd41dc24621d96",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

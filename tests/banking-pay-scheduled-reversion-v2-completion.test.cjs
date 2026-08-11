@@ -16,6 +16,13 @@ const dirtyRuntime = read('supabase', 'repeatable',
   '07082026_1016_banking_pay_targeted_delta_runtime.sql');
 const helpers = read('supabase', 'repeatable',
   '09082026_0712_banking_pay_semantic_ready_helpers.sql');
+const cancelSafe = read('supabase', 'repeatable',
+  '19072026_1816_cancel_refresh_supersede_finance_dirty.sql');
+const statusReader = read('supabase', 'repeatable',
+  '04082026_1145_pay_payment_correction_status_get_v1.sql');
+const completeJob = read('supabase', 'repeatable',
+  '04082026_1219_pay_workbench_complete_job.sql');
+const worker = read('broker', 'src', 'index.js');
 
 test('scheduled V2 and held-job absorption install inert behind independent controls', () => {
   for (const setting of [
@@ -78,23 +85,54 @@ test('financial page persists mutation proof and parks the same causal job for r
   assert.match(helpers, /held_job\.id=CASE[\s\S]*request_owned_dirty_job_id/);
 });
 
-test('terminal authority is captured after finalisation and consumed before one route commit', () => {
-  const finaliseIndex = processChunk.indexOf("'FINANCIAL_TERMINAL','PRE_DRAFT_LIVE_TRUTH'");
-  const terminalCaptureIndex = processChunk.indexOf('POST_FINANCIAL_TERMINAL_AUTHORITY_V2');
+test('post-commit V3 authority replaces the premature pre-commit terminal claim', () => {
+  const awaitingIndex = processChunk.indexOf('POST_FINANCIAL_TERMINAL_AWAITING_COMMIT_V3');
   const refreshIndex = processChunk.indexOf("v_phase = 'REFRESH_WORKBENCH'");
-  assert.ok(finaliseIndex >= 0);
-  assert.ok(terminalCaptureIndex > finaliseIndex);
-  assert.ok(refreshIndex > terminalCaptureIndex);
+  const deriveIndex = processChunk.indexOf('pay_workbench_correction_post_commit_authority_page_v1');
+  const admissionIndex = processChunk.indexOf('pay_workbench_cancel_reversion_admission_page_v1');
+  assert.ok(awaitingIndex >= 0);
+  assert.ok(refreshIndex > awaitingIndex);
+  assert.ok(deriveIndex > refreshIndex);
+  assert.ok(admissionIndex > deriveIndex);
+  assert.doesNotMatch(processChunk, /POST_FINANCIAL_TERMINAL_AUTHORITY_V2/);
   assert.match(processChunk,
-    /cancellation_reversion_post_financial_terminal_authorities_v2/);
-  assert.doesNotMatch(processChunk, /jsonb_object_length/i);
-  assert.match(processChunk,
-    /SELECT pg_catalog\.count\(\*\)::integer[\s\S]*INTO v_terminal_authority_count[\s\S]*pg_catalog\.jsonb_object_keys\(v_terminal_authorities_v2\)/);
-  assert.match(processChunk,
-    /'post_financial_terminal_authority_v2_candidate_count',\s*v_terminal_authority_count/);
+    /cancellation_reversion_post_financial_terminal_awaiting_commit_v3/);
+  assert.match(helpers,
+    /CREATE OR REPLACE FUNCTION private\.pay_workbench_correction_post_commit_authority_page_v1/);
+  assert.match(helpers, /scope_tx\.state='FINALIZED'/i);
+  assert.match(helpers, /held_job_generation IS DISTINCT FROM allocated_generation/);
+  assert.match(helpers, /ORDER BY held_job\.id[\s\S]*FOR UPDATE OF held_job/);
+  assert.match(helpers, /POST_FINANCIAL_TERMINAL_AUTHORITY_V3/);
+  assert.match(helpers, /'session_id',p_session_id/);
+  assert.match(helpers, /cancellation_reversion_post_commit_authorities_v3/);
   assert.match(processChunk,
     /pay_workbench_correction_held_dirty_job_resolve_v1[\s\S]*INSERT INTO public\.banking_pay_operation_chunks/);
   assert.match(processChunk, /FINANCIAL_COMPLETE_WORKBENCH_PENDING|workbench_refresh_nudge/);
+});
+
+test('fallback enqueue proves the exact finalized token/generation or does normal invalidation', () => {
+  assert.match(cancelSafe, /POST_FINANCIAL_TERMINAL_AUTHORITY_V3/);
+  assert.match(cancelSafe, /bounded_scope_state_precedes_job',v_preceding_scope_proven/);
+  assert.match(cancelSafe, /scope_change_tx_token'[\s\S]*scope_change_generation'/);
+  assert.doesNotMatch(cancelSafe, /'bounded_scope_state_precedes_job',true/);
+});
+
+test('status and retry authority separate financial completion from physical currentness', () => {
+  assert.match(statusReader, /pay_workbench_candidate_physical_currentness_page_v1/);
+  assert.doesNotMatch(statusReader,
+    /source_change_seq\s*>?=\s*candidate_freshness\.job_generation/);
+  assert.match(statusReader,
+    /v_financial_complete[\s\S]*v_workbench_status='FAILED'[\s\S]*RETRY_PROCESSING/);
+  assert.doesNotMatch(worker,
+    /result\.processing_retry_available\s*=\s*true/);
+  assert.match(worker,
+    /PAYMENT_CORRECTION_RETRY_NOT_AVAILABLE/);
+});
+
+test('fallback source completion emits one correction-current batch signal', () => {
+  assert.match(completeJob, /correction_terminal_current_signal_emitted/);
+  assert.match(completeJob, /PAYMENT_CORRECTION_WORKBENCH_CURRENT/);
+  assert.match(completeJob, /p_touch_alerts:=false/);
 });
 
 test('candidate dirty owner retains the same job through the route-election boundary', () => {

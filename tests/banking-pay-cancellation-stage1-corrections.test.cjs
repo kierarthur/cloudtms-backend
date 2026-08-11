@@ -91,8 +91,10 @@ test('Workbench staging is distinct from actual job and candidate freshness', ()
     }
     assert.match(source, /banking_pay_workbench_jobs/);
     assert.match(source, /banking_pay_workbench_session_candidate_state/);
-    assert.match(source, /source_change_seq >= candidate_freshness\.job_generation/);
   }
+  assert.doesNotMatch(status, /source_change_seq\s*>?=\s*candidate_freshness\.job_generation/);
+  assert.match(status, /pay_workbench_candidate_physical_currentness_page_v1/);
+  assert.match(checker, /source_change_seq >= candidate_freshness\.job_generation/);
   assert.match(processChunk, /'workbench_refresh_status', CASE/);
   assert.doesNotMatch(processChunk, /'workbench_refresh_complete', true/);
 });

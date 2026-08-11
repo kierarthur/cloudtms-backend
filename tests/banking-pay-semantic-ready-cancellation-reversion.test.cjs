@@ -577,8 +577,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 42);
-  assert.equal(semanticManifest.functions.length, 42);
+  assert.equal(semanticManifest.function_count, 43);
+  assert.equal(semanticManifest.functions.length, 43);
   for (const identity of [
     'public._ctms_materialise_candidate_correction_residuals_v1',
     'public._pay_active_settled_components',
@@ -590,6 +590,7 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'private.pay_workbench_draft_finance_item_plan_v1',
     'private.pay_workbench_financial_scope_dirty_transition_v1',
     'private.pay_workbench_correction_dirty_context_set_v1',
+    'private.pay_workbench_correction_post_commit_authority_page_v1',
     'private.pay_workbench_cancel_reversion_proof_core_v1',
     'private.pay_workbench_correction_held_dirty_job_resolve_v1',
     'private.pay_workbench_candidate_physical_currentness_page_v1',
@@ -681,9 +682,9 @@ test('Draft creation reports bounded phase and fetch timing without changing its
 
 test('completed cancellation emits one durable request-level success alert in newest-first order', () => {
   assert.match(cancellationSuccessAlertMigration, /BATCH_CANCELLATION_SUCCESS/);
-  assert.match(processChunk, /BANKING_ALERT_CANCELLATION_SUCCESS_V1/);
-  assert.match(processChunk, /'CANCELLATION:' \|\| p_correction_request_id::text/);
-  assert.match(processChunk, /ON CONFLICT \(pay_batch_id, alert_kind, event_key\) DO NOTHING/);
+  assert.match(processChunk, /BANKING_ALERT_CANCELLATION_SUCCESS_V2/);
+  assert.match(processChunk, /'CANCELLATION:'\s*\|\|\s*p_correction_request_id::text/);
+  assert.match(processChunk, /ON CONFLICT \(pay_batch_id,\s*alert_kind,\s*event_key\) DO NOTHING/);
   assert.match(processChunk, /FROZEN_CORRECTION_REQUEST_MEMBERSHIP/);
   assert.match(expand, /BANKING_ALERT_CANCELLATION_SUCCESS_V1/);
   assert.match(expand, /'CANCELLATION:' \|\| p_correction_request_id::text/);

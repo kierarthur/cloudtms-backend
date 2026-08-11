@@ -1346,6 +1346,205 @@ GRANT EXECUTE ON FUNCTION private.pay_workbench_publish_certified_source_preview
   TO postgres;
 
 
+-- Derive the exact route-election fence only after PostgreSQL's deferred scope
+-- finaliser has committed its token and generation.  This mutates no finance
+-- or Workbench output; it stores bounded authority on the existing operation.
+CREATE OR REPLACE FUNCTION private.pay_workbench_correction_post_commit_authority_page_v1(
+  p_correction_request_id uuid,p_operation_id uuid,p_session_id uuid,
+  p_work_item_ids uuid[],p_options_json jsonb DEFAULT '{}'::jsonb
+)
+RETURNS jsonb LANGUAGE plpgsql VOLATILE PARALLEL UNSAFE SECURITY DEFINER
+SET search_path TO ''
+AS $function$
+DECLARE
+  v_candidate record;
+  v_authorities jsonb := '{}'::jsonb;
+  v_candidate_count integer := 0;
+  v_finalized_count integer := 0;
+  v_now timestamptz := pg_catalog.clock_timestamp();
+BEGIN
+  IF p_correction_request_id IS NULL OR p_operation_id IS NULL OR p_session_id IS NULL
+     OR p_work_item_ids IS NULL OR pg_catalog.cardinality(p_work_item_ids)<1
+     OR pg_catalog.cardinality(p_work_item_ids)>100
+     OR pg_catalog.jsonb_typeof(COALESCE(p_options_json,'{}'::jsonb))<>'object'
+     OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_object_keys(COALESCE(p_options_json,'{}'::jsonb)) AS k(key)
+                WHERE k.key NOT IN ('owner')) THEN
+    RAISE EXCEPTION 'CORRECTION_POST_COMMIT_AUTHORITY_ARGUMENT_INVALID' USING ERRCODE='P0001';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public.banking_pay_operations AS operation_row
+    JOIN public.pay_payment_correction_requests AS request_row
+      ON request_row.id=p_correction_request_id AND request_row.pay_batch_id=operation_row.pay_batch_id
+    WHERE operation_row.id=p_operation_id AND operation_row.operation_type='PAYMENT_CORRECTION'
+      AND operation_row.input_json->>'correction_request_id'=p_correction_request_id::text
+  ) THEN
+    RAISE EXCEPTION 'CORRECTION_POST_COMMIT_OPERATION_MISMATCH' USING ERRCODE='P0001';
+  END IF;
+
+  FOR v_candidate IN
+    SELECT DISTINCT work_row.candidate_id
+    FROM pg_catalog.unnest(p_work_item_ids) AS requested(work_item_id)
+    JOIN public.pay_payment_correction_work_items AS work_row ON work_row.id=requested.work_item_id
+    WHERE work_row.correction_request_id=p_correction_request_id AND work_row.status='APPLIED'
+      AND work_row.candidate_id IS NOT NULL ORDER BY work_row.candidate_id
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      public._pay_workbench_candidate_serial_key(v_candidate.candidate_id),24062027));
+  END LOOP;
+
+  -- Candidate serialization is acquired first; now lock the exact held jobs in
+  -- deterministic UUID order so the post-commit fence and later coalescing
+  -- cannot race the ordinary dirty-job runner.
+  PERFORM 1
+  FROM public.banking_pay_workbench_jobs AS held_job
+  JOIN public.banking_pay_operations AS operation_row ON operation_row.id=p_operation_id
+  JOIN public.pay_payment_correction_work_items AS work_row
+    ON work_row.id=ANY(p_work_item_ids)
+   AND work_row.correction_request_id=p_correction_request_id
+   AND work_row.status='APPLIED'
+   AND work_row.candidate_id=held_job.candidate_id
+  WHERE held_job.id=CASE
+    WHEN COALESCE(operation_row.input_json->'cancellation_reversion_start_authorities_v2'
+      ->work_row.candidate_id::text->>'request_owned_dirty_job_id','')
+      ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    THEN (operation_row.input_json->'cancellation_reversion_start_authorities_v2'
+      ->work_row.candidate_id::text->>'request_owned_dirty_job_id')::uuid END
+  ORDER BY held_job.id
+  FOR UPDATE OF held_job;
+
+  WITH requested_work AS (
+    SELECT DISTINCT ON (work_row.candidate_id)
+      work_row.id AS work_item_id,work_row.candidate_id,work_row.result_json,
+      operation_row.input_json->'cancellation_reversion_start_authorities_v2'
+        ->work_row.candidate_id::text AS start_authority,
+      operation_row.input_json->'cancellation_reversion_post_financial_terminal_awaiting_commit_v3'
+        ->work_row.candidate_id::text AS awaiting_authority
+    FROM pg_catalog.unnest(p_work_item_ids) AS requested(work_item_id)
+    JOIN public.pay_payment_correction_work_items AS work_row ON work_row.id=requested.work_item_id
+    JOIN public.banking_pay_operations AS operation_row ON operation_row.id=p_operation_id
+    WHERE work_row.correction_request_id=p_correction_request_id AND work_row.status='APPLIED'
+      AND work_row.candidate_id IS NOT NULL ORDER BY work_row.candidate_id,work_row.id
+  ), resolved AS (
+    SELECT requested_work.*,held_job.id AS held_job_id,held_job.status AS held_job_status,
+      held_job.scope_change_generation AS held_job_generation,held_job.payload_json AS held_payload,
+      CASE WHEN COALESCE(held_job.payload_json->>'request_owned_scope_change_tx_token','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (held_job.payload_json->>'request_owned_scope_change_tx_token')::uuid END AS tx_token,
+      scope_tx.state AS tx_state,scope_tx.allocated_generation,scope_tx.finalized_at_utc,
+      COALESCE(change_counter.seq,0) AS source_change_seq,
+      COALESCE(change_counter.scope_change_generation,0) AS counter_generation,
+      registry.current_source_change_seq AS registry_source_change_seq,
+      registry.dirty_generation AS registry_generation,
+      pg_catalog.md5((COALESCE(requested_work.result_json,'{}'::jsonb)
+        -'applied_at_utc'-'processed_at_utc')::text) AS financial_result_digest
+    FROM requested_work
+    LEFT JOIN public.banking_pay_workbench_jobs AS held_job
+      ON held_job.id=CASE WHEN COALESCE(requested_work.start_authority->>'request_owned_dirty_job_id','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (requested_work.start_authority->>'request_owned_dirty_job_id')::uuid END
+     AND held_job.candidate_id=requested_work.candidate_id
+     AND held_job.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
+    LEFT JOIN public.banking_pay_scope_change_transactions AS scope_tx
+      ON scope_tx.tx_token=CASE WHEN COALESCE(held_job.payload_json->>'request_owned_scope_change_tx_token','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (held_job.payload_json->>'request_owned_scope_change_tx_token')::uuid END
+    LEFT JOIN public.app_change_counters AS change_counter
+      ON change_counter.entity_key='pay_candidate:'||requested_work.candidate_id::text
+    LEFT JOIN private.banking_pay_workbench_candidate_scope_registry AS registry
+      ON registry.candidate_id=requested_work.candidate_id
+  ), scope_proof AS (
+    SELECT resolved.*,COALESCE(timesheet_proof.required_count,0) AS required_timesheet_count,
+      COALESCE(timesheet_proof.exact_count,0) AS exact_timesheet_count
+    FROM resolved LEFT JOIN LATERAL (
+      WITH required_timesheets AS (
+        SELECT DISTINCT value::uuid AS timesheet_id
+        FROM pg_catalog.jsonb_array_elements_text(CASE
+          WHEN pg_catalog.jsonb_typeof(resolved.held_payload->'targeted_timesheet_ids')='array'
+            THEN resolved.held_payload->'targeted_timesheet_ids'
+          WHEN pg_catalog.jsonb_typeof(resolved.held_payload->'affected_timesheet_ids')='array'
+            THEN resolved.held_payload->'affected_timesheet_ids' ELSE '[]'::jsonb END) AS target(value)
+        WHERE value ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      )
+      SELECT pg_catalog.count(*)::integer AS required_count,
+        pg_catalog.count(*) FILTER (WHERE state_row.candidate_id=resolved.candidate_id
+          AND state_row.dirty_generation=resolved.allocated_generation)::integer AS exact_count
+      FROM required_timesheets LEFT JOIN private.banking_pay_workbench_timesheet_scope_state AS state_row
+        ON state_row.timesheet_id=required_timesheets.timesheet_id
+       AND state_row.candidate_id=resolved.candidate_id
+    ) AS timesheet_proof ON true
+  ), classified AS (
+    SELECT scope_proof.*,CASE
+      WHEN COALESCE(start_authority->>'contract_version','')<>'CANCELLATION_REVERSION_START_AUTHORITY_V2'
+        THEN 'START_AUTHORITY_MISSING'
+      WHEN held_job_id IS NULL THEN 'HELD_DIRTY_JOB_MISSING'
+      WHEN held_job_status IN ('FAILED','CANCELLED') THEN 'HELD_DIRTY_JOB_TERMINAL_FAILURE'
+      WHEN COALESCE(held_payload->>'correction_dirty_causal_contract_version','')
+        <>'CORRECTION_OWNED_DIRTY_CAUSAL_V1' THEN 'HELD_DIRTY_CAUSAL_MISMATCH'
+      WHEN tx_token IS NULL OR tx_state<>'FINALIZED' OR allocated_generation IS NULL
+        THEN 'SCOPE_GENERATION_NOT_FINALIZED'
+      WHEN held_job_generation IS DISTINCT FROM allocated_generation
+        OR COALESCE(held_payload->>'scope_change_generation','') IS DISTINCT FROM allocated_generation::text
+        THEN 'HELD_JOB_GENERATION_MISMATCH'
+      WHEN counter_generation IS DISTINCT FROM allocated_generation OR registry_generation IS DISTINCT FROM allocated_generation
+        THEN 'POST_COMMIT_GENERATION_MISMATCH'
+      WHEN registry_source_change_seq IS DISTINCT FROM source_change_seq
+        OR COALESCE(held_payload->>'source_change_seq','') IS DISTINCT FROM source_change_seq::text
+        THEN 'POST_COMMIT_SEQUENCE_MISMATCH'
+      WHEN required_timesheet_count<>exact_timesheet_count THEN 'POST_COMMIT_TIMESHEET_SCOPE_MISMATCH'
+      WHEN COALESCE(awaiting_authority->>'contract_version','')<>'POST_FINANCIAL_TERMINAL_AWAITING_COMMIT_V3'
+        OR COALESCE(awaiting_authority->>'financial_result_digest','') IS DISTINCT FROM financial_result_digest
+        THEN 'FINANCIAL_RESULT_AUTHORITY_MISMATCH'
+      ELSE NULL END AS rejection_reason
+    FROM scope_proof
+  ), authority_rows AS (
+    SELECT classified.*,pg_catalog.md5(
+      p_correction_request_id::text||'|'||p_operation_id::text||'|'||p_session_id::text||'|'||work_item_id::text||'|'||
+      candidate_id::text||'|'||tx_token::text||'|'||allocated_generation::text||'|'||
+      source_change_seq::text||'|'||COALESCE(start_authority->>'fence_digest','')||'|'||
+      financial_result_digest||'|POST_FINANCIAL_TERMINAL_AUTHORITY_V3') AS authority_digest
+    FROM classified
+  )
+  SELECT COALESCE(pg_catalog.jsonb_object_agg(candidate_id::text,
+    pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+      'contract_version','POST_FINANCIAL_TERMINAL_AUTHORITY_V3',
+      'correction_request_id',p_correction_request_id,'operation_id',p_operation_id,
+      'session_id',p_session_id,
+      'work_item_id',work_item_id,'candidate_id',candidate_id,'held_dirty_job_id',held_job_id,
+      'scope_change_tx_token',tx_token,'scope_change_tx_state',tx_state,
+      'dirty_generation',allocated_generation,'source_change_seq',source_change_seq,
+      'start_authority_digest',start_authority->>'fence_digest',
+      'financial_result_digest',financial_result_digest,
+      'required_timesheet_count',required_timesheet_count,'exact_timesheet_count',exact_timesheet_count,
+      'authority_digest',authority_digest,'admitted',rejection_reason IS NULL,
+      'rejection_reason',rejection_reason,'captured_at_utc',v_now
+    )) ORDER BY candidate_id),'{}'::jsonb),pg_catalog.count(*)::integer,
+    pg_catalog.count(*) FILTER (WHERE rejection_reason IS NULL)::integer
+  INTO v_authorities,v_candidate_count,v_finalized_count FROM authority_rows;
+
+  UPDATE public.banking_pay_operations AS operation_row
+  SET input_json=COALESCE(operation_row.input_json,'{}'::jsonb)||pg_catalog.jsonb_build_object(
+        'cancellation_reversion_post_commit_authorities_v3',v_authorities),
+      progress_json=COALESCE(operation_row.progress_json,'{}'::jsonb)||pg_catalog.jsonb_build_object(
+        'post_commit_authority_v3_candidate_count',v_candidate_count,
+        'post_commit_authority_v3_finalized_count',v_finalized_count),updated_at_utc=v_now
+  WHERE operation_row.id=p_operation_id;
+
+  RETURN pg_catalog.jsonb_build_object('ok',true,
+    'contract_version','CORRECTION_POST_COMMIT_AUTHORITY_PAGE_V1',
+    'candidate_count',v_candidate_count,'finalized_count',v_finalized_count,
+    'all_finalized',v_candidate_count>0 AND v_finalized_count=v_candidate_count,
+    'candidate_authorities',v_authorities);
+END;
+$function$;
+
+ALTER FUNCTION private.pay_workbench_correction_post_commit_authority_page_v1(uuid,uuid,uuid,uuid[],jsonb)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION private.pay_workbench_correction_post_commit_authority_page_v1(uuid,uuid,uuid,uuid[],jsonb)
+  FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION private.pay_workbench_correction_post_commit_authority_page_v1(uuid,uuid,uuid,uuid[],jsonb)
+  TO postgres;
+
+
 -- Read-only admission for exact untouched-Draft and post-execution/pre-provider
 -- cancellation reversion.  It never calculates pay and never changes finance
 -- or Workbench state.  The completed Draft freezes both the immutable V3
@@ -1730,9 +1929,9 @@ BEGIN
       correction_operation.input_json->'cancellation_reversion_start_authorities_v2'
         ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
         AS cancellation_start_authority_v2,
-      correction_operation.input_json->'cancellation_reversion_post_financial_terminal_authorities_v2'
+      correction_operation.input_json->'cancellation_reversion_post_commit_authorities_v3'
         ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
-        AS cancellation_terminal_authority_v2,
+        AS cancellation_terminal_authority_v3,
       batch_row.source_workbench_session_id,
       batch_row.source_session_version,
       batch_row.source_snapshot_run_id,
@@ -2112,20 +2311,48 @@ BEGIN
                  ->>'scheduled_pre_request_authority_digest','')
               IS DISTINCT FROM authority.cancellation_pre_request_authority_v2->>'authority_digest'
             OR
-            COALESCE(authority.cancellation_terminal_authority_v2->>'contract_version','')
-              <>'POST_FINANCIAL_TERMINAL_AUTHORITY_V2'
-            OR COALESCE(authority.cancellation_terminal_authority_v2->>'correction_request_id','')
+            COALESCE(authority.cancellation_terminal_authority_v3->>'contract_version','')
+              <>'POST_FINANCIAL_TERMINAL_AUTHORITY_V3'
+            OR COALESCE((authority.cancellation_terminal_authority_v3->>'admitted')::boolean,false)
+              IS NOT TRUE
+            OR COALESCE(authority.cancellation_terminal_authority_v3->>'correction_request_id','')
               IS DISTINCT FROM p_correction_request_id::text
-            OR COALESCE(authority.cancellation_terminal_authority_v2->>'operation_id','')
+            OR COALESCE(authority.cancellation_terminal_authority_v3->>'operation_id','')
               IS DISTINCT FROM p_operation_id::text
-            OR COALESCE(authority.cancellation_terminal_authority_v2->>'candidate_id','')
+            OR COALESCE(authority.cancellation_terminal_authority_v3->>'session_id','')
+              IS DISTINCT FROM p_session_id::text
+            OR COALESCE(authority.cancellation_terminal_authority_v3->>'candidate_id','')
               IS DISTINCT FROM authority.candidate_id::text
-            OR COALESCE(authority.cancellation_terminal_authority_v2->>'source_change_seq','') !~ '^[0-9]{1,18}$'
-            OR COALESCE(authority.cancellation_terminal_authority_v2->>'dirty_generation','') !~ '^[0-9]{1,18}$'
+            OR COALESCE(authority.cancellation_terminal_authority_v3->>'source_change_seq','') !~ '^[0-9]{1,18}$'
+            OR COALESCE(authority.cancellation_terminal_authority_v3->>'dirty_generation','') !~ '^[0-9]{1,18}$'
+            OR COALESCE(authority.cancellation_terminal_authority_v3->>'scope_change_tx_token','')
+              !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            OR COALESCE(authority.cancellation_terminal_authority_v3->>'held_dirty_job_id','')
+              !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             OR authority.live_source_change_seq IS DISTINCT FROM
-              (authority.cancellation_terminal_authority_v2->>'source_change_seq')::bigint
+              (authority.cancellation_terminal_authority_v3->>'source_change_seq')::bigint
             OR authority.live_dirty_generation IS DISTINCT FROM
-              (authority.cancellation_terminal_authority_v2->>'dirty_generation')::bigint
+              (authority.cancellation_terminal_authority_v3->>'dirty_generation')::bigint
+            OR NOT EXISTS (
+              SELECT 1 FROM public.banking_pay_scope_change_transactions AS scope_tx
+              WHERE scope_tx.tx_token=(authority.cancellation_terminal_authority_v3
+                ->>'scope_change_tx_token')::uuid
+                AND scope_tx.state='FINALIZED'
+                AND scope_tx.allocated_generation=(authority.cancellation_terminal_authority_v3
+                  ->>'dirty_generation')::bigint
+            )
+            OR NOT EXISTS (
+              SELECT 1 FROM public.banking_pay_workbench_jobs AS held_job
+              WHERE held_job.id=CASE
+                WHEN COALESCE(authority.cancellation_terminal_authority_v3
+                  ->>'held_dirty_job_id','')
+                  ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                THEN (authority.cancellation_terminal_authority_v3
+                  ->>'held_dirty_job_id')::uuid END
+                AND held_job.candidate_id=authority.candidate_id
+                AND held_job.scope_change_generation=(authority.cancellation_terminal_authority_v3
+                  ->>'dirty_generation')::bigint
+            )
           ) THEN 'POST_FINANCIAL_TERMINAL_AUTHORITY_CHANGED'
         WHEN v_mode IN ('POST_FINANCIAL','OBSERVE_ONLY')
           AND COALESCE(authority.cancellation_pre_request_authority_v2->>'contract_version','')
@@ -2248,7 +2475,7 @@ BEGIN
         'scheduled_cancellation_start_fence_digest',
           source_proof.cancellation_start_authority_v2->>'fence_digest',
         'post_financial_terminal_authority_digest',
-          source_proof.cancellation_terminal_authority_v2->>'authority_digest',
+          source_proof.cancellation_terminal_authority_v3->>'authority_digest',
         'request_owned_dirty_proven',source_proof.current_request_owned_dirty_job_id IS NOT NULL,
         'request_owned_dirty_job_id',source_proof.current_request_owned_dirty_job_id,
         'financial_reversion_digest',pg_catalog.md5(
@@ -2519,6 +2746,7 @@ DECLARE
   v_active_owner_count integer := 0;
   v_physical_currentness jsonb := '{}'::jsonb;
   v_candidate_currentness jsonb := '{}'::jsonb;
+  v_post_commit_authority jsonb := '{}'::jsonb;
 BEGIN
   IF p_correction_request_id IS NULL OR p_operation_id IS NULL OR p_session_id IS NULL
      OR pg_catalog.jsonb_typeof(COALESCE(p_route_results_json,'{}'::jsonb))<>'object'
@@ -2578,6 +2806,32 @@ BEGIN
       RAISE EXCEPTION 'CORRECTION_HELD_DIRTY_JOB_MISSING'
         USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
           'code','CORRECTION_HELD_DIRTY_JOB_MISSING','candidate_id',v_candidate.candidate_id
+        )::text;
+    END IF;
+
+    v_post_commit_authority:=COALESCE(
+      p_route_results_json->'post_commit_authorities_v3'->v_candidate.candidate_id::text,
+      '{}'::jsonb
+    );
+    IF COALESCE(v_post_commit_authority->>'contract_version','')
+         <>'POST_FINANCIAL_TERMINAL_AUTHORITY_V3'
+       OR COALESCE((v_post_commit_authority->>'admitted')::boolean,false) IS NOT TRUE
+       OR COALESCE(v_post_commit_authority->>'correction_request_id','')
+            IS DISTINCT FROM p_correction_request_id::text
+       OR COALESCE(v_post_commit_authority->>'operation_id','')
+            IS DISTINCT FROM p_operation_id::text
+       OR COALESCE(v_post_commit_authority->>'session_id','')
+            IS DISTINCT FROM p_session_id::text
+       OR COALESCE(v_post_commit_authority->>'candidate_id','')
+            IS DISTINCT FROM v_candidate.candidate_id::text
+       OR COALESCE(v_post_commit_authority->>'held_dirty_job_id','')
+            IS DISTINCT FROM v_job.id::text
+       OR COALESCE(v_post_commit_authority->>'dirty_generation','')
+            IS DISTINCT FROM COALESCE(v_job.scope_change_generation,0)::text THEN
+      RAISE EXCEPTION 'CORRECTION_HELD_DIRTY_POST_COMMIT_AUTHORITY_MISMATCH'
+        USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
+          'code','CORRECTION_HELD_DIRTY_POST_COMMIT_AUTHORITY_MISMATCH',
+          'candidate_id',v_candidate.candidate_id
         )::text;
     END IF;
 
@@ -3425,7 +3679,7 @@ BEGIN
           ->applied_work.candidate_id::text->>'request_owned_dirty_job_id')::uuid
       WHEN COALESCE(correction_operation.input_json->'draft_overlay_fast_start_authorities'
         ->applied_work.candidate_id::text->>'request_owned_dirty_job_id','')
-        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         THEN (correction_operation.input_json->'draft_overlay_fast_start_authorities'
           ->applied_work.candidate_id::text->>'request_owned_dirty_job_id')::uuid
       ELSE NULL::uuid END

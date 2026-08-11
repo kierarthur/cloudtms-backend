@@ -52,6 +52,8 @@ DECLARE
     v_removed_amount_pence bigint := 0;
     v_remaining_amount_pence bigint := 0;
     v_request_kind text := 'CANCEL_PAYMENT';
+    v_refresh_candidate_ids uuid[] := ARRAY[]::uuid[];
+    v_physical_currentness jsonb := '{}'::jsonb;
 BEGIN
     SELECT request_row.*
     INTO v_request
@@ -288,11 +290,38 @@ BEGIN
             ) AS latest_job ON true
         )
         SELECT pg_catalog.count(*)::integer,
-               pg_catalog.count(*) FILTER (WHERE candidate_freshness.candidate_state = 'FAILED' OR candidate_freshness.job_status IN ('FAILED', 'DEAD'))::integer,
-               pg_catalog.count(*) FILTER (WHERE candidate_freshness.candidate_state = 'READY' AND candidate_freshness.pending_job_id IS NULL AND candidate_freshness.job_status IN ('NONE', 'SUCCEEDED') AND candidate_freshness.source_change_seq >= candidate_freshness.job_generation)::integer,
-               pg_catalog.count(*) FILTER (WHERE NOT (candidate_freshness.candidate_state = 'FAILED' OR candidate_freshness.job_status IN ('FAILED', 'DEAD')) AND NOT (candidate_freshness.candidate_state = 'READY' AND candidate_freshness.pending_job_id IS NULL AND candidate_freshness.job_status IN ('NONE', 'SUCCEEDED') AND candidate_freshness.source_change_seq >= candidate_freshness.job_generation))::integer
+               0::integer,
+               0::integer,
+               pg_catalog.count(*)::integer
         INTO v_refresh_candidate_count, v_refresh_failed_count, v_refresh_ready_count, v_refresh_pending_count
         FROM candidate_freshness;
+
+        -- Source sequence and scope generation are independent domains; never
+        -- compare one to the other.  Re-derive the exact frozen request
+        -- membership and ask the shared physical-currentness authority once.
+        SELECT COALESCE(pg_catalog.array_agg(DISTINCT work_row.candidate_id ORDER BY work_row.candidate_id),ARRAY[]::uuid[]),
+               pg_catalog.count(DISTINCT work_row.candidate_id)::integer
+        INTO v_refresh_candidate_ids,v_refresh_candidate_count
+        FROM public.pay_payment_correction_request_candidates AS member_row
+        JOIN public.pay_payment_correction_work_items AS work_row
+          ON work_row.correction_request_id=member_row.correction_request_id
+         AND work_row.pay_batch_candidate_id=member_row.pay_batch_candidate_id
+        WHERE member_row.correction_request_id=p_correction_request_id
+          AND work_row.status='APPLIED' AND work_row.candidate_id IS NOT NULL;
+
+        IF v_workbench_session_id IS NOT NULL AND v_refresh_candidate_count BETWEEN 1 AND 100 THEN
+            v_physical_currentness:=private.pay_workbench_candidate_physical_currentness_page_v1(
+              v_workbench_session_id,v_refresh_candidate_ids,'TERMINAL_CURRENT',
+              pg_catalog.jsonb_build_object('contract_version',1,'allow_active_owner',true)
+            );
+            v_refresh_ready_count:=COALESCE((v_physical_currentness->>'terminal_current_count')::integer,0);
+            v_refresh_pending_count:=COALESCE((v_physical_currentness->>'current_or_active_owner_count')::integer,0)
+              -v_refresh_ready_count;
+            v_refresh_failed_count:=CASE
+              WHEN v_refresh_ready_count+v_refresh_pending_count<v_refresh_candidate_count
+                AND v_operation.status IN ('FAILED','REVIEW_REQUIRED','CANCELLED')
+              THEN v_refresh_candidate_count-v_refresh_ready_count-v_refresh_pending_count ELSE 0 END;
+        END IF;
 
         v_workbench_status := CASE
             -- The untouched-Draft fast route deliberately creates no
@@ -312,6 +341,23 @@ BEGIN
               AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,full_build_count}')::integer, 0) = 0
               AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reconciliation_count}')::integer, 0) = 0
               THEN 'CURRENT'
+            WHEN v_refresh_candidate_count<=100
+              AND COALESCE((v_physical_currentness->>'all_terminal_current')::boolean,false)
+              THEN 'CURRENT'
+            WHEN v_refresh_candidate_count<=100
+              AND COALESCE((v_physical_currentness->>'all_current_or_active_owner')::boolean,false)
+              THEN 'PENDING'
+            WHEN v_refresh_candidate_count>100 AND v_refresh_group_total>0
+              AND v_refresh_group_complete=v_refresh_group_total
+              AND NOT EXISTS (
+                SELECT 1 FROM public.banking_pay_operation_chunks AS current_chunk
+                WHERE current_chunk.operation_id=v_operation.id
+                  AND current_chunk.phase='REFRESH_WORKBENCH'
+                  AND current_chunk.chunk_type='CANDIDATE_SCOPE'
+                  AND current_chunk.status='COMPLETE'
+                  AND COALESCE((current_chunk.result_json->>'physical_currentness_proven')::boolean,false) IS NOT TRUE
+                  AND COALESCE(current_chunk.result_json->>'status','') NOT LIKE 'NOT_REQUIRED%'
+              ) THEN 'CURRENT'
             WHEN v_refresh_group_total = 0 THEN 'NOT_STAGED'
             WHEN EXISTS (
                 SELECT 1 FROM public.banking_pay_operation_chunks AS failed_chunk
@@ -327,8 +373,6 @@ BEGIN
                     AND required_chunk.phase = 'REFRESH_WORKBENCH'
                     AND COALESCE(required_chunk.result_json->>'status', '') NOT LIKE 'NOT_REQUIRED%'
               ) THEN 'CURRENT'
-            WHEN v_refresh_ready_count = v_refresh_candidate_count THEN 'CURRENT'
-            WHEN v_refresh_pending_count > 0 THEN 'PENDING'
             ELSE 'STAGED'
         END;
     END IF;
@@ -504,6 +548,17 @@ BEGIN
     v_financial_complete := v_request.status IN (
         'APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED', 'FAILED', 'REJECTED', 'CANCELLED'
     );
+
+    IF v_financial_complete
+       AND v_workbench_status='FAILED'
+       AND v_operation.status='REVIEW_REQUIRED'
+       AND v_operation.runner_state='WAITING_USER_REVIEW'
+       AND COALESCE(v_operation.requires_user_action,false)
+       AND (v_is_requester OR v_is_admin) THEN
+        v_available_actions:=ARRAY['RETRY_PROCESSING']::text[];
+        v_user_title:='Payment cancelled — Banking Pay update needs attention';
+        v_user_message:='The financial cancellation is complete. Retry only the Banking Pay update.';
+    END IF;
 
     v_progress_stage := CASE
         WHEN v_request.status = 'PLANNING' THEN 'PLANNING'

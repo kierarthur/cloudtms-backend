@@ -51,6 +51,8 @@ DECLARE
   v_repair_owner_count integer := 0;
   v_post_cancel_patch_digest text := NULL::text;
   v_progress_recompute jsonb := '{}'::jsonb;
+  v_post_commit_authority jsonb := '{}'::jsonb;
+  v_preceding_scope_proven boolean := false;
 BEGIN
   -- Preserve the last certified source authority before the generic overlay
   -- patch deliberately marks the scope non-current.  The saved authority is
@@ -418,6 +420,17 @@ BEGIN
     ORDER BY route_candidate.candidate_id
   LOOP
     v_superseded_targeted_job_chunk_count := 0;
+    v_post_commit_authority:=COALESCE(
+      p_options_json->'post_commit_authorities_v3'->v_candidate_id::text,'{}'::jsonb
+    );
+    v_preceding_scope_proven:=
+      COALESCE(v_post_commit_authority->>'contract_version','')
+        ='POST_FINANCIAL_TERMINAL_AUTHORITY_V3'
+      AND COALESCE((v_post_commit_authority->>'admitted')::boolean,false)
+      AND COALESCE(v_post_commit_authority->>'candidate_id','')=v_candidate_id::text
+      AND COALESCE(v_post_commit_authority->>'dirty_generation','') ~ '^[0-9]{1,18}$'
+      AND COALESCE(v_post_commit_authority->>'scope_change_tx_token','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 
     SELECT COALESCE(
       jsonb_agg(DISTINCT batch_item.timesheet_id::text ORDER BY batch_item.timesheet_id::text),
@@ -463,7 +476,15 @@ BEGIN
         'canonical_route_ladder_required', true,
         'source_publication_baseline_required', true,
         'required_physical_publication_contract_version', 1,
-        'bounded_scope_state_precedes_job',true,
+        'bounded_scope_state_precedes_job',v_preceding_scope_proven,
+        'scope_change_tx_token',CASE WHEN v_preceding_scope_proven
+          THEN v_post_commit_authority->>'scope_change_tx_token' ELSE NULL END,
+        'scope_change_generation',CASE WHEN v_preceding_scope_proven
+          THEN (v_post_commit_authority->>'dirty_generation')::bigint ELSE NULL END,
+        'correction_request_id',p_options_json->>'correction_request_id',
+        'correction_operation_id',v_post_commit_authority->>'operation_id',
+        'correction_held_dirty_job_id',v_post_commit_authority->>'held_dirty_job_id',
+        'post_commit_authority_digest',v_post_commit_authority->>'authority_digest',
         'post_cancel_patch_digest',v_post_cancel_patch_digest,
         'superseded_finance_dirty_job_count', v_superseded_finance_dirty_job_count,
         'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'

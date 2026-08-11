@@ -174,6 +174,9 @@ DECLARE
   v_delta_recovery_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_material_attempt_id uuid := NULL::uuid;
   v_semantic_publication_v3_enabled boolean := false;
+  v_correction_request_id uuid := NULL::uuid;
+  v_correction_pay_batch_id uuid := NULL::uuid;
+  v_correction_signal_claimed boolean := false;
 BEGIN
   IF p_job_id IS NULL THEN
     RAISE EXCEPTION 'job_id is required';
@@ -3304,6 +3307,50 @@ BEGIN
     WHERE update_job.id = p_job_id
     RETURNING update_job.*
     INTO v_job_row;
+
+    -- A correction fallback build can finish after the correction operation.
+    -- Emit one lightweight batch signal only when this exact source-build job
+    -- has made its candidate physically current.  The payload claim makes the
+    -- hook idempotent and does not create a second financial or queue owner.
+    IF v_stage_job_type='WORKBENCH_CANDIDATE_SOURCE_BUILD'
+       AND v_has_more IS NOT TRUE AND COALESCE(v_continuation_count,0)=0
+       AND COALESCE(v_current_candidate_terminal_success,false)
+       AND COALESCE(v_job_row.payload_json->>'correction_request_id','')
+         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      v_correction_request_id:=(v_job_row.payload_json->>'correction_request_id')::uuid;
+      SELECT request_row.pay_batch_id
+      INTO v_correction_pay_batch_id
+      FROM public.pay_payment_correction_requests AS request_row
+      WHERE request_row.id=v_correction_request_id
+        AND request_row.status IN ('APPLIED','APPLIED_WITH_BLOCKERS','BLOCKED');
+
+      IF v_correction_pay_batch_id IS NOT NULL THEN
+        UPDATE public.banking_pay_workbench_jobs AS signal_job
+        SET payload_json=COALESCE(signal_job.payload_json,'{}'::jsonb)||pg_catalog.jsonb_build_object(
+              'correction_terminal_current_signal_emitted',true,
+              'correction_terminal_current_signal_emitted_at_utc',v_now
+            ),updated_at_utc=v_now
+        WHERE signal_job.id=p_job_id
+          AND COALESCE((signal_job.payload_json->>'correction_terminal_current_signal_emitted')::boolean,false)
+            IS NOT TRUE
+        RETURNING true INTO v_correction_signal_claimed;
+
+        IF COALESCE(v_correction_signal_claimed,false) THEN
+          PERFORM public.banking_pay_batch_signal_touch(
+            p_pay_batch_id:=v_correction_pay_batch_id,
+            p_change_reason:='PAYMENT_CORRECTION_WORKBENCH_CURRENT',
+            p_change_source:='pay_workbench_complete_job',
+            p_change_scope_json:=pg_catalog.jsonb_build_object(
+              'correction_request_id',v_correction_request_id,
+              'job_id',p_job_id,'candidate_id',v_job_row.candidate_id,
+              'workbench_status','CURRENT'
+            ),
+            p_touch_payment_status:=true,p_touch_correction_progress:=true,
+            p_touch_alerts:=false,p_touch_overview:=true
+          );
+        END IF;
+      END IF;
+    END IF;
 
     PERFORM public._audit_insert(
       'banking_pay_workbench_job',

@@ -50380,58 +50380,9 @@ async function handleBankingPayCorrectionStatusV1(env, req, user, correctionRequ
         // enrichment is temporarily unavailable.
       }
     }
-    if (['AUTHORISED', 'AUTHORIZED', 'PROCESSING', 'APPLIED'].includes(requestStatus) && progressRequiresAction && result?.pay_batch_id) {
-      try {
-        const { rows } = await sbFetch(
-          env,
-          `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?pay_batch_id=eq.${encodeURIComponent(result.pay_batch_id)}&operation_type=eq.PAYMENT_CORRECTION&select=id,status,phase,runner_state,requires_user_action,input_json,error_json,progress_json,created_at_utc&order=created_at_utc.desc&limit=10`,
-          false
-        );
-        const retryOperation = (Array.isArray(rows) ? rows : []).find((operationRow) => {
-          const input = operationRow?.input_json && typeof operationRow.input_json === 'object' && !Array.isArray(operationRow.input_json)
-            ? operationRow.input_json
-            : {};
-          const error = operationRow?.error_json && typeof operationRow.error_json === 'object' && !Array.isArray(operationRow.error_json)
-            ? operationRow.error_json
-            : {};
-          const progress = operationRow?.progress_json && typeof operationRow.progress_json === 'object' && !Array.isArray(operationRow.progress_json)
-            ? operationRow.progress_json
-            : {};
-          const retryCount = Number(progress.processing_retry_count || 0);
-          const phase = String(operationRow.phase || '').trim().toUpperCase();
-          const draftExpandRetry = ['AUTHORISED', 'AUTHORIZED'].includes(requestStatus) && phase === 'EXPAND_WORK';
-          const postFinancialRetry = ['PROCESSING', 'APPLIED'].includes(requestStatus)
-            && ['FINALISE', 'REFRESH_WORKBENCH'].includes(phase)
-            && (requestStatus === 'PROCESSING' || phase === 'REFRESH_WORKBENCH');
-          return String(input.correction_request_id || '').toLowerCase() === String(correctionRequestId).toLowerCase()
-            && String(operationRow.status || '').trim().toUpperCase() === 'REVIEW_REQUIRED'
-            && (draftExpandRetry || postFinancialRetry)
-            && String(operationRow.runner_state || '').trim().toUpperCase() === 'WAITING_USER_REVIEW'
-            && operationRow.requires_user_action === true
-            && String(error.code || error.error_code || '').trim().toUpperCase() === 'BANKING_PAY_OPERATION_ADVANCE_FAILED'
-            && Number.isFinite(retryCount)
-            && retryCount < 3;
-        });
-        if (retryOperation) {
-          result.processing_retry_available = true;
-          result.available_actions = Array.from(new Set([
-            'RETRY_PROCESSING',
-            ...(Array.isArray(result.available_actions) ? result.available_actions : [])
-          ]));
-          const retryPhase = String(retryOperation.phase || '').trim().toUpperCase();
-          const postFinancialRetry = ['FINALISE', 'REFRESH_WORKBENCH'].includes(retryPhase);
-          result.user_title = postFinancialRetry
-            ? 'Payment cancelled — Banking Pay needs to finish updating'
-            : 'Cancellation processing needs attention';
-          result.user_message = postFinancialRetry
-            ? 'The payment cancellation was applied. Continue this same request to finish updating Banking Pay.'
-            : 'No cancellation work was committed. Continue this same cancellation request safely.';
-        }
-      } catch {
-        // The service-only retry RPC rechecks all durable evidence.  Status
-        // remains read-only and conservative if this optional enrichment fails.
-      }
-    }
+    // Processing retry is database-owned.  Never manufacture RETRY_PROCESSING
+    // from an older REVIEW_REQUIRED operation after financial success/current
+    // Workbench authority has become durable.
     return bankingPayCancellationResponse(env, req, bankingPayCorrectionRpcHttpStatus(result, 200), result);
   } catch (error) { return bankingPayCancellationError(env, req, error, 'PAYMENT_CORRECTION_STATUS_FAILED'); }
 }
@@ -50586,6 +50537,25 @@ async function handleBankingPayCorrectionAuthActionV1(env, req, user, correction
       return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'REQUEST_OWNER_OR_ADMIN_REQUIRED', message: 'Only the request owner or a Banking Pay administrator may take this action.' });
     }
     if (action === 'RETRY_PLANNING' || action === 'RETRY_PROCESSING') {
+      const status = action === 'RETRY_PROCESSING'
+        ? unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_status_get_v1', {
+          p_correction_request_id: correctionRequestId,
+          p_actor_user_id: actor.actorUserId
+        }), 'pay_payment_correction_status_get_v1')
+        : null;
+      const actions = Array.isArray(status?.available_actions)
+        ? status.available_actions.map((value) => String(value || '').trim().toUpperCase())
+        : [];
+      if (action === 'RETRY_PROCESSING' && !actions.includes(action)) {
+        return bankingPayCancellationResponse(env, req, 409, {
+          ok: false,
+          code: 'PAYMENT_CORRECTION_RETRY_NOT_AVAILABLE',
+          message: 'Banking Pay does not currently require this retry action.',
+          correction_request_id: correctionRequestId,
+          financial_complete: status?.financial_complete === true,
+          workbench_refresh: status?.workbench_refresh || {}
+        });
+      }
       const result = unwrapBankingPayCancellationRpc(await sbRpc(env, 'pay_payment_correction_retry_planning_v1', {
         p_correction_request_id: correctionRequestId,
         p_actor_user_id: actor.actorUserId

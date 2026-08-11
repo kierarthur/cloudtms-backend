@@ -47,9 +47,9 @@ test('post-financial scheduled retry resumes only idempotent terminal routing wi
   assert.match(retrySql, /unfinished_work\.status NOT IN \('APPLIED', 'BLOCKED', 'CANCELLED', 'FAILED'\)/);
   assert.match(retrySql, /PAYMENT_CORRECTION_POST_FINANCIAL_RETRY_EVIDENCE_INVALID/);
   assert.match(retrySql, /never rewinds to PROCESS_CHUNKS and never repeats financial DML/i);
-  assert.match(worker, /'AUTHORISED', 'AUTHORIZED', 'PROCESSING', 'APPLIED'/);
-  assert.match(worker, /\['FINALISE', 'REFRESH_WORKBENCH'\]\.includes\(phase\)/);
-  assert.match(worker, /The payment cancellation was applied\. Continue this same request to finish updating Banking Pay\./);
+  assert.doesNotMatch(worker, /result\.processing_retry_available\s*=\s*true/);
+  assert.match(worker, /pay_payment_correction_status_get_v1/);
+  assert.match(worker, /PAYMENT_CORRECTION_RETRY_NOT_AVAILABLE/);
 });
 
 test('planning retry refuses any durable work or provider evidence before making the same operation runnable', () => {
@@ -68,13 +68,15 @@ test('planning retry refuses any durable work or provider evidence before making
   assert.match(retrySql, /'operation_id', v_operation\.id[\s\S]*'successor_relation', 'SELF'/);
 });
 
-test('Worker exposes and executes the typed safe planning and processing retry actions', () => {
+test('Worker exposes planning retry locally but leaves processing retry eligibility to current database authority', () => {
   assert.match(worker, /result\.planning_retry_available = true/);
-  assert.match(worker, /result\.processing_retry_available = true/);
+  assert.doesNotMatch(worker, /result\.processing_retry_available\s*=\s*true/);
   assert.match(worker, /result\.available_actions = Array\.from\(new Set\(\[[\s\S]*'RETRY_PLANNING'/);
   assert.match(worker, /'RETRY_PROCESSING'/);
   assert.match(worker, /\['AUTHORISE','USE_GOLDEN_KEY','REJECT','CANCEL','RETRY_PLANNING','RETRY_PROCESSING'\]/);
   assert.match(worker, /sbRpc\(env, 'pay_payment_correction_retry_planning_v1'/);
+  assert.match(worker, /sbRpc\(env, 'pay_payment_correction_status_get_v1'/);
+  assert.match(worker, /PAYMENT_CORRECTION_RETRY_NOT_AVAILABLE/);
   assert.match(worker, /PAYMENT_CORRECTION_RETRY_PLANNING/);
   assert.match(worker, /PAYMENT_CORRECTION_RETRY_PROCESSING/);
 });
