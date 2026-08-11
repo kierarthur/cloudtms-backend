@@ -84,7 +84,7 @@
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_allocation_rows_seed",
       "identity_arguments": "p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "ac41dd5fb713706b449c8f45973c12824aa495195e364e8bbca67fc0b7942f7f",
+      "definition_sha256": "ffe1c3815d078c2d03eb3875e98a7672b03b993e0b01709ac6eee855431d3924",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -321,7 +321,7 @@
     {
       "schema": "public", "name": "pay_batch_apply_finance_adjustments",
       "identity_arguments": "p_pay_batch_id uuid, p_pay_channel_scope text, p_actor_user_id uuid, p_vat_rate_pct numeric, p_week_start date, p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "bbbd5143ab77a76bef8103b2d0c36af313cb811b833a955d2888797f4ba47f75",
+      "definition_sha256": "b31193295ed0e9dfcd430156a7cccccce7cdf886b52755a4281baa358aed7001",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -399,7 +399,7 @@
     {
       "schema": "private", "name": "pay_workbench_draft_finance_item_plan_v1",
       "identity_arguments": "p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "55af91d09759b610ca3c5e72468ca3b81cefd8e73f1164c7571728527efa566f",
+      "definition_sha256": "5ef2b679bcc13b13598745a21467621d6966f7bcaf51308e87e72f91c25c3b4e",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/11082026_1535_pay_workbench_draft_finance_item_plan_v1.sql"]
@@ -407,7 +407,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_clear_all_decisions",
       "identity_arguments": "p_session_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "266b30520b1c65e76572282dd3a368a3216007cff60a9dffa66755cecbb529ad",
+      "definition_sha256": "99cd0ec76485edb940af1268a11509f94f41b04a8251c651ed2876210415af5b",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public", "plpgsql_check.mode=disabled"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -418,7 +418,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_refresh_current_authority_v1",
       "identity_arguments": "p_session_id uuid, p_actor_user_id uuid, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "bc764e46b79ac3510022e7e76795d6c5f571460f14a8092f8d8f0332d75dd585",
+      "definition_sha256": "bce0e45e9fa2c01fc9b1d207e4fe92725e64eb34a299bc213ec8868a1eb8645f",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\"", "plpgsql_check.mode=disabled"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

@@ -261,7 +261,7 @@
       "schema": "public",
       "name": "pay_batch_auth_start",
       "identity_arguments": "p_pay_batch_id uuid, p_schedule_kind text, p_scheduled_at_utc timestamp with time zone, p_funding_account_ref text, p_warning_hours_json jsonb, p_actor_user_id uuid, p_actor_intent text, p_execution_mode text, p_payment_date date, p_pay_channel_scope text, p_suppress_remittances boolean, p_suppress_remittances_confirmed boolean, p_csv_uploaded_confirmed boolean, p_csv_bank_confirm_ref text, p_external_settlement_comment text, p_operation_id uuid, p_idempotency_key text, p_freshness_result_hash text",
-      "definition_sha256": "fd580b626825574886fc6bfc8ea94d2b5573f90b08bedce6021e6b63909e5314",
+      "definition_sha256": "985fc3305985825c3d815c2b67d4429dd394df0956c5ca2c2495a0bf731e86d4",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "1698c3cb471d937436475c8ac9681d580175457922adbe9e1fb6ea399f342740",
+      "definition_sha256": "bfa938f1a94b0975b56e4c4d05ca47f60e517b161f04df11b26c2a7de98aed09",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
