@@ -206,7 +206,7 @@
     {
       "schema": "private", "name": "pay_workbench_cancel_reversion_admission_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_work_item_ids uuid[], p_options_json jsonb",
-      "definition_sha256": "9b29eb57cad421c8d53e84c6739d85b51b76f091c1cea5ac5b1d3d5be8f61144",
+      "definition_sha256": "96585afc834762fa9673ba94788823613b6be1ad09a677da415cf82d417dace7",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -230,7 +230,7 @@
     {
       "schema": "private", "name": "pay_workbench_draft_overlay_remove_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_pay_batch_id uuid, p_session_id uuid, p_after_candidate_id uuid, p_candidate_limit integer, p_finance_row_limit integer, p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "b90a6106e6daf2173fb83750b8d52282704b240e4655ba1d399e330ccf9e1e98",
+      "definition_sha256": "471575f3cff3383c72224f6bfdcc50a11bccfc579490f6dfafa3f4d318b7b8f1",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
