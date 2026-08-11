@@ -1,6 +1,6 @@
 # CloudTMS route-conversion warning catalogue
 
-Status: controlling future CloudTMS frontend wording. Approved 9 August 2026. Simple Timesheet, Bulk Process and Bulk Authorise must consume one server preflight and one shared warning renderer keyed by `warning_code`. A route mutation must never run on the first click.
+Status: controlling future CloudTMS frontend wording. Updated and approved 11 August 2026. Simple Timesheet, Bulk Process and Bulk Authorise must consume one server preflight and one shared warning renderer keyed by `warning_code`. A route mutation must never run on the first click.
 
 ## W01 — ELECTRONIC, nobody signed
 
@@ -292,6 +292,29 @@ Buttons:
 - **Restore exact electronic version**
 
 Where exact proof fails, use W10 and create a fresh ELECTRONIC generation.
+
+## W14 — remove one incomplete expense claim and continue to MANUAL
+
+Warning code: `CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVE_CONFIRM`
+
+This warning is used only when an ELECTRONIC or QR/PAPER timesheet is being switched to MANUAL and exactly one separate, incomplete expense claim would otherwise be left active against the outgoing timesheet version. It includes amendable `REFUSED`.
+
+Title:
+
+> **Remove the incomplete expense claim?**
+
+Body:
+
+> The candidate has started an expense claim but has not completed it. Do you want to remove the incomplete claim and continue?
+
+Buttons:
+
+- **No**
+- **Yes — remove claim and continue**
+
+**No** closes the modal and performs no mutation. **Yes** submits the exact preview context and required intervention reason. CloudTMS must atomically supersede the incomplete claim and mutable approval/component lineage, retire obsolete PAPER/QR delivery authority where applicable, retain immutable sent/signed/refusal history, and only then rotate the timesheet to MANUAL. More than one affected workflow, ambiguous identity, unrelated claims, protected financial history or a live provider handoff remains fail-closed.
+
+The office frontend must render W14 using the established styled `uiConfirmModal` family. Native browser or Windows alerts are prohibited. The modal must be visually verified with realistic populated data at desktop and narrow widths.
 
 ## Confirmed transition contract
 

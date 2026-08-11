@@ -1,6 +1,6 @@
 # Candidate broker and private CloudTMS API topology
 
-Status: TEST implementation and deployed topology contract; updated through mail-independent pre-delivery PAPER source guarding, PAPER source-owner/claim-isolation closure, complete caller retirement, atomic provider-submit permission and shared route/rejection lock order on 11 August 2026.
+Status: TEST implementation and deployed topology contract; updated through incomplete-expense switch-to-MANUAL confirmation/removal, amendable `REFUSED` source protection, mail-independent PAPER source guarding, source-owner/claim isolation, complete caller retirement, atomic provider-submit permission and shared route/rejection lock order on 11 August 2026.
 
 ## Required trust boundary
 
@@ -142,15 +142,15 @@ Route intervention derives the live PAPER owner from the immutable current-token
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `287591b1-73ec-4e79-a6b0-2f0bfbb7ff20`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `d3fabe29-dd8e-4c04-b241-4c264b3e6ed4`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `40b25d1c-0eaa-4932-9372-9d6313bb5bcd`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `99869508-3955-4318-916f-2c243047fdea`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `da9a8487-5623-42e8-8c33-5e1cddb960c9`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `16357aa3-598f-48c5-973c-b1466af7f49e`.
 - Broker health/readiness: 200/200.
 - Normal backend health/readiness: 200/200.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false and no Candidate accounts or workflow data were created for deployment verification.
 
-The current Candidate runtime correction is published through backend commit `7c087bc79a010944cefc4b605dcab6ea335b6c85`, with fixture-only verifier commit `a33a25d954df3632300a65b022f10e6c255a86b4`. Candidate Worker source/configuration did not change; deployment records `3e73b76d-c75a-4257-8959-6f76a1d80185`, `45c0cf26-a1dc-459b-a031-47b5ab34ebfb` and `a0ffb037-2307-41a4-8d90-4a42423bddf1` safely reasserted the already-active private, broker and latest normal TEST versions at 100%. TEST and production remain strictly separate; no production resource was accessed or deployed.
+The current Candidate runtime correction is published through backend commit `1b654d72b4529c32e019956320ff50ca451db466`. Candidate Worker source/configuration did not change; the private API, public broker and normal TEST backend were nevertheless rebuilt from that exact published source after the remote/workflow deployment gate proved no competing push or deployment. TEST and production remain strictly separate; no production resource was accessed or deployed.
 
 ## Deployment and verification gate
 
