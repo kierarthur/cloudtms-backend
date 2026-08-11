@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: TEST broker/private-backend authority map, updated 11 August 2026 through the manager action, provider-timing, cancellation and timesheet-detail action-hub closure. Candidate features remain disabled pending independent approval.
+Status: TEST broker/private-backend authority map, updated 11 August 2026 through immutable rejected-workflow replacement, exact card/detail membership, durable PAPER readiness and the typed timesheet-detail action contract. Candidate features remain disabled pending independent approval.
 
 ## Canonical owner graph
 
@@ -34,8 +34,8 @@ Neither Worker alters the existing financial algorithms. The broker cannot acces
 | `candidate_auth_challenge_transition_v1` | activation/reset/recovery challenge start, resend and verify |
 | `candidate_app_bootstrap_v1` | `GET /candidate-app/v1/bootstrap` |
 | `candidate_app_timesheet_page_v1` | `GET /candidate-app/v1/timesheets?view=current|history`; owns the frozen-snapshot, non-overlapping Current/History partition, v2 cursor, newest-first order, exact week-ending label, one primary action and stable detail target while preserving exact anchor/rejection projection |
-| `private._candidate_timesheet_action_contract_v1` | Private detail action/status authority; returns the closed available-action catalogue and provider-owned manager-approval timing/eligibility without adding a public RPC |
-| `candidate_app_timesheet_detail_v1` | `GET /candidate-app/v1/timesheets/:id`, `/candidate-app/v1/contract-weeks/:id/detail` or `/candidate-app/v1/workflows/:id/timesheet-detail`; resolves one exact identity and returns current/history membership, primary/available actions and the same scoped rejection truth |
+| `private._candidate_timesheet_action_contract_v1` | Private detail action/status authority; returns the closed typed invocation catalogue, exact PAPER readiness and provider-owned manager-approval timing/eligibility without adding a public RPC |
+| `candidate_app_timesheet_detail_v1` | `GET /candidate-app/v1/timesheets/:id`, `/candidate-app/v1/contract-weeks/:id/detail` or `/candidate-app/v1/workflows/:id/timesheet-detail`; resolves one exact card/version-family identity and returns current/history membership, plural scoped rejection truth, typed actions and PAPER readiness |
 | `candidate_missing_week_options_v1` | `GET /candidate-app/v1/contracts/:id/missing-weeks` |
 | `candidate_contract_week_add_missing_atomic_v1` | `POST /candidate-app/v1/contracts/:id/missing-weeks` |
 | `expense_placement_resolve_v1` | `POST /candidate-app/v1/timesheets/:id/expense-placement` |
@@ -92,7 +92,9 @@ Manager EMAIL delivery has the same exact-authority discipline. `MANAGER_APPROVA
 
 Manager action meaning is closed. `REMIND` remains on the same pending request and rotates its token after the exact 24-hour provider-acceptance boundary, subject to five resends and no pending exact delivery. `RENEW` is permitted only for an expired unchanged request and creates a new request generation. `CANCEL` requires a recorded plain-English reason and queues one deterministic withdrawal only for provider-accepted request history. Enqueue timestamps never become send truth.
 
-The timesheet detail authority, not the client, decides `primary_action`, `available_actions` and `manager_approval`. The action object carries exact method/path and workflow/request identity, confirmation, enabled state and disabled reason. Public retry-finalisation is restricted to a retryable `RECEIVED` workflow and composes the existing service finalisation owner; general public `FINALISE` remains absent.
+The timesheet detail authority, not the client, decides `primary_action`, `available_actions`, `manager_approval` and `paper_pack`. The action object carries typed invocation version 1: exact method/path or client editor destination, immutable fixed body, required user inputs, idempotency requirement, workflow/request identity, confirmation, enabled state and disabled reason. `ENTER_TIMESHEET` and `ADD_EXPENSES` carry complete server-owned create context. `CONTINUE_*` opens the declared editor. `REFUSED` invokes supported `AMEND`; `REJECTED` remains immutable and `POST /candidate-app/v1/workflows/:id/resubmit` creates a new server-derived workflow through the existing `CREATE` owner. Public retry-finalisation is restricted to a retryable `RECEIVED` workflow and composes the existing service finalisation owner; general public `FINALISE` remains absent.
+
+Detail workflow/component/document membership is bounded by the exact card/version family, including historical-to-current expense-anchor resolution. Another `additional_seq` record or unrelated same-date claim cannot leak into the opened action hub. PAPER readiness is derived from the exact workflow generation, manifest, outbox and attachment receipt; download and signed-return upload remain disabled until `READY`, and the private backend separately proves the immutable R2 receipt.
 
 The Timesheets list is server-partitioned. Current is the default: no future weeks, all unpaid rows regardless of age, and paid rows whose `paid_at_utc` is exactly seven days old or newer. History contains only older-paid rows inside the contract-specific 16-week window. A frozen snapshot and view/candidate-bound v2 cursor make the sets disjoint across pagination. Clients display the returned `week_ending_label`, follow `detail_target`, and render at most the returned `primary_action`; they do not recalculate membership or status.
 
