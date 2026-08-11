@@ -31,7 +31,7 @@ Completed authority includes:
 - complete workflow/QR-bound paper return manifest;
 - stale-safe DAILY save/recalculate composition through the one financial authority;
 - server-owned issue and auto-authorisation blocker derivation;
-- route preview/confirmation context, W01–W13 warning codes, intervention reasons, workflow/request retirement, fresh resubmission notification and QR state separation;
+- route preview/confirmation context, W01–W14 warning codes, intervention reasons, workflow/request retirement, fresh resubmission notification and QR state separation;
 - exact feature-off legacy route/restore wrappers and ACL compatibility;
 - W13 proof against the immutable manager-approved required-component manifest.
 - version-aware rejected-workflow projection through the replacement current contract-week row, with distinct hours/combined/expense recovery actions, monotonic same-family replacement precedence through `FINALISED`/`REFUSED`, and a plural scoped-rejection contract;

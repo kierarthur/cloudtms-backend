@@ -355,7 +355,7 @@ Implemented:
 - `docs/candidate-app/AUTHORITY_MAP.md`
 - `docs/candidate-app/BROKER_PRIVATE_TOPOLOGY.md`
 - `docs/candidate-app/CANDIDATE_API_OPENAPI_V1.yaml`
-- `docs/candidate-app/ROUTE_WARNING_CATALOGUE.md` — unchanged controlling W01–W13 copy
+- `docs/candidate-app/ROUTE_WARNING_CATALOGUE.md` — controlling W01–W14 copy
 
 ## Final Candidate PAPER acceptance and mail-authority closure
 
