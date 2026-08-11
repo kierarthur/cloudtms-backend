@@ -167,11 +167,15 @@ begin
   v_context:=public.timesheet_route_version_preview_v1(
     v_timesheet,'CONVERT_QR_TO_MANUAL'
   );
-  if v_context->>'warning_code'<>(case when p_expense_state='RECEIVED'
-       then 'QR_SIGNED_TO_MANUAL' else 'QR_ISSUED_TO_MANUAL' end)
+  if v_context->>'warning_code'<>
+       'CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVE_CONFIRM'
      or v_context->>'paper_workflow_id'<>v_expense_workflow::text
      or v_context->>'paper_source_current_token_owner_workflow_id'<>
        v_expense_workflow::text
+     or not coalesce(
+       (v_context->>'incomplete_expense_claim_removal_required')::boolean,false
+     )
+     or v_context->>'incomplete_expense_workflow_id'<>v_expense_workflow::text
      or not coalesce((v_context->>'permitted_action')::boolean,false) then
     raise exception 'Route preview did not select the live expense PAPER owner: %',v_context;
   end if;
@@ -189,6 +193,9 @@ begin
          where id=v_hours_workflow)<>2
      or (select state from public.candidate_submission_workflows
          where id=v_expense_workflow)<>'SUPERSEDED'
+     or not coalesce(
+       (v_result#>>'{workflow_retirement,incomplete_expense_claim_removed}')::boolean,false
+     )
      or exists(
        select 1 from public.candidate_submission_workflows workflow
        where workflow.id=v_expense_workflow

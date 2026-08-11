@@ -164,6 +164,12 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(routeSource, /CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT/i);
   assert.match(routeSource, /no live[\s\S]*PAPER workflow[\s\S]*historical/i);
   assert.match(routeSource, /_timesheet_route_supersede_candidate_v1\([\s\S]*v_context->>'paper_workflow_id'/i);
+  assert.match(routeSource, /CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVE_CONFIRM/i);
+  assert.match(routeSource, /The candidate has started an expense claim but has not completed it\. Do you want to remove the incomplete claim and continue\?/i);
+  assert.match(routeSource, /incomplete_expense_claim_removal_required[\s\S]*incomplete_expense_claim_removed/i);
+  assert.match(routeSource, /v_incomplete_expense_workflow_id[\s\S]*_timesheet_route_supersede_candidate_v1/i);
+  assert.match(routeSource, /REFUSED remains recoverable[\s\S]*workflow\.state not in \('FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'\)/i);
+  assert.match(routeSource, /Equivalent mail-independent invariant for ELECTRONIC source rotation[\s\S]*CANDIDATE_ROUTE_ACTIVE_WORKFLOW_CONFLICT/i);
   assert.match(rejectSource, /candidate_submission_reject_atomic_v1[\s\S]*_candidate_paper_delivery_retire_set_v1/);
   assert.match(rejectSource, /v_workflow\.route='PAPER'[\s\S]*v_workflow\.state in \('AWAITING_PAPER_RETURN','RECEIVED','FINALISED'\)/i);
   assert.match(rejectSource, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_rejection_family_key,0\)\)[\s\S]*timesheet_id=p_timesheet_id for update/i);

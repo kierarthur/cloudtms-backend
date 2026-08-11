@@ -549,9 +549,9 @@ begin
   from source_workflows;
 
   -- Delivery ownership and workflow lifecycle are deliberately separate
-  -- catalogues.  WORKER_DRAFT and the approval states do not yet have an
-  -- immutable mail receipt, but rotating their worked-row source would still
-  -- make their PAPER anchor historical and leave the claim unusably active.
+  -- catalogues.  WORKER_DRAFT, approval states and amendable REFUSED do not
+  -- necessarily have a current immutable mail receipt, but rotating their
+  -- worked-row source would still make their recovery anchor historical.
   -- Resolve those workflows through the stable booking/version family rather
   -- than requiring an exact current timesheet id or a mail_outbox row.
   with affected_nonterminal_workflows as (
@@ -560,7 +560,7 @@ begin
     from public.candidate_submission_workflows workflow
     where workflow.route='PAPER'
       and workflow.state not in (
-        'FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+        'FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
       )
       and workflow.contract_id is not distinct from v_current_source.contract_id
       and workflow.week_ending_date is not distinct from v_current_source.week_ending_date
@@ -619,10 +619,11 @@ begin
     v_selected_state:=v_latest_finalised_state;
   end if;
 
-  -- A source-rotating route action may proceed only when its selected delivery
-  -- owner is also the sole affected nonterminal PAPER workflow.  A distinct
-  -- draft/submitted/approval workflow has no receipt to retire yet, so the
-  -- only safe automatic outcome is a controlled zero-mutation conflict.
+  -- A source-rotating route caller must make an explicit lifecycle decision
+  -- where its selected delivery owner differs from an affected recoverable
+  -- workflow.  The context reports that conflict; a confirmed office route
+  -- intervention may resolve one standalone incomplete expense claim, while
+  -- claim-level cancellation and ambiguous/multiple cases still fail closed.
   if not v_identity_conflict and v_affected_nonterminal_count>0 and (
        v_selected_workflow_id is null
        or v_affected_nonterminal_count>1

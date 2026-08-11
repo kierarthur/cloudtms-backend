@@ -37,8 +37,9 @@ declare
   v_hours_manifest_hash text;
   v_source_context jsonb;
   v_context jsonb;
+  v_result jsonb;
+  v_manual uuid;
   v_action text;
-  v_confirm_blocked boolean:=false;
 begin
   if p_expense_state not in ('WORKER_DRAFT','WORKER_SUBMITTED') then
     raise exception 'Invalid pre-delivery route fixture state';
@@ -146,8 +147,11 @@ begin
       v_source_context;
   end if;
 
+  -- Only actions that retain/reissue QR remain blocked.  A switch to MANUAL is
+  -- allowed after the office explicitly confirms removal of the incomplete
+  -- standalone expense claim.
   foreach v_action in array array[
-    'CONVERT_QR_TO_MANUAL','DISABLE_QR','INVALIDATE_QR','REISSUE_QR'
+    'INVALIDATE_QR','REISSUE_QR'
   ] loop
     v_context:=public.timesheet_route_version_preview_v1(v_timesheet,v_action);
     if v_context->>'warning_code'<>'ROUTE_CHANGE_WORKFLOW_CONFLICT'
@@ -161,38 +165,54 @@ begin
     end if;
   end loop;
 
-  v_context:=public.timesheet_route_version_preview_v1(
-    v_timesheet,'CONVERT_QR_TO_MANUAL'
-  );
-  begin
-    perform public.timesheet_route_version_confirmed_v1(
-      v_timesheet,v_timesheet,v_context->>'row_signature',
-      v_context->>'context_sha256','CONVERT_QR_TO_MANUAL',v_actor,
-      'CANDIDATE_SUPPLIED_MANUAL_TIMESHEET',null,
-      'predelivery-route-confirm:'||v_expense_workflow::text,false,v_now
-    );
-  exception when sqlstate '55000' then
-    if sqlerrm<>'ROUTE_CHANGE_NOT_PERMITTED' then raise; end if;
-    v_confirm_blocked:=true;
-  end;
+  foreach v_action in array array['CONVERT_QR_TO_MANUAL','DISABLE_QR'] loop
+    v_context:=public.timesheet_route_version_preview_v1(v_timesheet,v_action);
+    if v_context->>'warning_code'<>
+         'CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVE_CONFIRM'
+       or not coalesce((v_context->>'permitted_action')::boolean,false)
+       or not coalesce(
+         (v_context->>'incomplete_expense_claim_removal_required')::boolean,false
+       )
+       or v_context->>'incomplete_expense_workflow_id'<>v_expense_workflow::text then
+      raise exception 'MANUAL action did not request incomplete claim removal for % / %: %',
+        p_expense_state,v_action,v_context;
+    end if;
+  end loop;
 
-  if not v_confirm_blocked
+  v_context:=public.timesheet_route_version_preview_v1(v_timesheet,'CONVERT_QR_TO_MANUAL');
+  v_result:=public.timesheet_route_version_confirmed_v1(
+    v_timesheet,v_timesheet,v_context->>'row_signature',
+    v_context->>'context_sha256','CONVERT_QR_TO_MANUAL',v_actor,
+    'CANDIDATE_SUPPLIED_MANUAL_TIMESHEET',null,
+    'predelivery-route-confirm:'||v_expense_workflow::text,false,v_now
+  );
+  v_manual:=nullif(v_result->>'new_timesheet_id','')::uuid;
+
+  if v_manual is null
      or (select state from public.candidate_submission_workflows
          where id=v_hours_workflow)<>'FINALISED'
      or (select state from public.candidate_submission_workflows
-         where id=v_expense_workflow)<>p_expense_state
+         where id=v_expense_workflow)<>'SUPERSEDED'
      or (select anchor_timesheet_id from public.candidate_submission_workflows
          where id=v_expense_workflow)<>v_timesheet
-     or (select qr_token from public.timesheets where timesheet_id=v_timesheet)<>
-       v_current_token
-     or not (select is_current from public.timesheets where timesheet_id=v_timesheet)
+     or (select qr_token from public.timesheets where timesheet_id=v_timesheet) is not null
+     or (select is_current from public.timesheets where timesheet_id=v_timesheet)
+     or not (select is_current from public.timesheets where timesheet_id=v_manual)
      or (select count(*) from public.timesheets
-         where booking_id=(select booking_id from public.timesheets
-           where timesheet_id=v_timesheet))<>1
+          where booking_id=(select booking_id from public.timesheets
+            where timesheet_id=v_timesheet))<>2
+     or (select status from public.mail_outbox where id=v_hours_mail)<>'SENT'
      or coalesce((select
-       (payment_scope_json->>'candidate_paper_generation_retired')::boolean
-       from public.mail_outbox where id=v_hours_mail),false) then
-    raise exception 'Failed pre-delivery route guard mutated workflow/source truth';
+        (payment_scope_json->>'candidate_paper_generation_retired')::boolean
+        from public.mail_outbox where id=v_hours_mail),false)
+     or not coalesce(
+       (v_result#>>'{workflow_retirement,primary_workflow_retirement,paper_delivery_retirement,qr_invalidation_proven}')::boolean,
+       false
+     )
+     or not coalesce(
+       (v_result#>>'{workflow_retirement,incomplete_expense_claim_removed}')::boolean,false
+     ) then
+    raise exception 'Confirmed QR incomplete-claim removal was incomplete: %',v_result;
   end if;
 end;
 $function$;

@@ -735,6 +735,12 @@ test('final route conversion is signed-state aware, stale-safe, reasoned, retent
   assert.match(route, /CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT/i);
   assert.match(route, /no live[\s\S]*PAPER workflow[\s\S]*historical/i);
   assert.match(route, /_timesheet_route_supersede_candidate_v1\([\s\S]*v_context->>'paper_workflow_id'/i);
+  assert.match(route, /CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVE_CONFIRM/i);
+  assert.match(route, /The candidate has started an expense claim but has not completed it\. Do you want to remove the incomplete claim and continue\?/i);
+  assert.match(route, /incomplete_expense_claim_removal_required[\s\S]*incomplete_expense_claim_removed/i);
+  assert.match(route, /v_incomplete_expense_workflow_id[\s\S]*_timesheet_route_supersede_candidate_v1/i);
+  assert.match(route, /REFUSED remains recoverable[\s\S]*workflow\.state not in \('FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'\)/i);
+  assert.match(route, /Equivalent mail-independent invariant for ELECTRONIC source rotation[\s\S]*CANDIDATE_ROUTE_ACTIVE_WORKFLOW_CONFLICT/i);
   assert.match(route, /ALLOW_QR_AGAIN_REQUIRES_PRIOR_LINEAGE_OR_PAPER_PERMISSION/i);
   assert.match(route, /_timesheet_route_version_legacy_v1/i);
   assert.match(route, /legacy_route_version_legacy_v1|_timesheet_route_version_legacy_v1/i);

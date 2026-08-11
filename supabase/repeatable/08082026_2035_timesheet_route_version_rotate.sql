@@ -1390,6 +1390,8 @@ declare
   v_reason_required boolean:=false;
   v_confirmation_required boolean:=false;
   v_active_workflow_count integer:=0;
+  v_incomplete_expense_removal_required boolean:=false;
+  v_resolvable_paper_context_conflict boolean:=false;
   v_contract_week_authorised boolean:=false;
   v_protected_history boolean:=false;
   v_scope text;
@@ -1579,7 +1581,9 @@ begin
   where (workflow.id=v_current.candidate_workflow_id
       or workflow.target_timesheet_id=v_current.timesheet_id
       or workflow.anchor_timesheet_id=v_current.timesheet_id)
-    and workflow.state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')
+    -- REFUSED remains recoverable because candidate workflow AMEND expressly
+    -- accepts it.  A route version must not make that recovery anchor historic.
+    and workflow.state not in ('FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED')
   order by (workflow.id=v_current.candidate_workflow_id) desc,
     workflow.updated_at_utc desc,workflow.created_at_utc desc
   limit 1;
@@ -1588,7 +1592,38 @@ begin
   where (workflow.id=v_current.candidate_workflow_id
       or workflow.target_timesheet_id=v_current.timesheet_id
       or workflow.anchor_timesheet_id=v_current.timesheet_id)
-    and workflow.state not in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED');
+    and workflow.state not in ('FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED');
+
+  -- A source-to-MANUAL intervention may explicitly remove one standalone
+  -- incomplete expense claim.  This includes REFUSED because AMEND still owns
+  -- a valid recovery path until the office confirms that the claim is removed.
+  v_incomplete_expense_removal_required:=v_action in (
+      'SWITCH_TO_MANUAL','SWITCH_DAILY_TO_MANUAL',
+      'CONVERT_QR_TO_MANUAL','DISABLE_QR'
+    )
+    and v_active_workflow.id is not null
+    and v_active_workflow.workflow_kind='CONTRACT_EXPENSE'
+    and v_active_workflow.state not in (
+      'FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+    );
+  v_resolvable_paper_context_conflict:=v_incomplete_expense_removal_required
+    and v_route_family='QR'
+    and v_active_workflow_count=1
+    and coalesce((v_paper_source_context->>'identity_conflict')::boolean,false)
+    and v_paper_source_context->>'conflict_reason' in (
+      'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT',
+      'CURRENT_QR_TOKEN_OWNER_TERMINAL_WITH_LIVE_WORKFLOW'
+    )
+    and coalesce(
+      (v_paper_source_context->>'affected_nonterminal_workflow_count')::integer,0
+    )=1
+    and exists(
+      select 1
+      from jsonb_array_elements(
+        coalesce(v_paper_source_context->'affected_nonterminal_workflows','[]'::jsonb)
+      ) affected
+      where affected->>'workflow_id'=v_active_workflow.id::text
+    );
 
   if v_linked_workflow.id is not null then
     v_candidate_signed:=v_candidate_signed
@@ -1682,12 +1717,25 @@ begin
   elsif v_office_authorised then
     v_warning_code:='ROUTE_CHANGE_REQUIRES_UNAUTHORISE';
     v_block_reason:='AUTHORISED';
-  elsif coalesce((v_paper_source_context->>'identity_conflict')::boolean,false) then
+  elsif coalesce((v_paper_source_context->>'identity_conflict')::boolean,false)
+        and not v_resolvable_paper_context_conflict then
     v_warning_code:='ROUTE_CHANGE_WORKFLOW_CONFLICT';
     v_block_reason:=coalesce(
       v_paper_source_context->>'conflict_reason',
       'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT'
     );
+  -- A distinct active workflow must ordinarily fail closed.  The one approved
+  -- exception is an explicitly confirmed standalone incomplete expense claim,
+  -- which confirmation supersedes before the route source is rotated.
+  elsif v_action in ('SWITCH_TO_MANUAL','SWITCH_DAILY_TO_MANUAL')
+        and v_active_workflow.id is not null
+        and not v_incomplete_expense_removal_required
+        and (
+          v_active_workflow.id is distinct from v_linked_workflow.id
+          or v_active_workflow.state='REFUSED'
+        ) then
+    v_warning_code:='ROUTE_CHANGE_WORKFLOW_CONFLICT';
+    v_block_reason:='CANDIDATE_ROUTE_ACTIVE_WORKFLOW_CONFLICT';
   elsif v_active_workflow_count>1 then
     v_warning_code:='ROUTE_CHANGE_WORKFLOW_CONFLICT';
     v_block_reason:='MULTIPLE_ACTIVE_WORKFLOWS';
@@ -1701,6 +1749,8 @@ begin
     v_permitted:=true;
     v_reason_required:=true;
     v_warning_code:=case
+      when v_incomplete_expense_removal_required
+        then 'CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVE_CONFIRM'
       when v_manager_approved or v_final_signed_ready then 'MANAGER_APPROVED_TO_MANUAL'
       when v_candidate_signed or v_manager_pending then 'CANDIDATE_SIGNED_MANAGER_PENDING_TO_MANUAL'
       else 'ELECTRONIC_UNSIGNED_TO_MANUAL' end;
@@ -1711,13 +1761,19 @@ begin
     v_permitted:=true;
     v_reason_required:=true;
     v_warning_code:=case
+      when v_incomplete_expense_removal_required
+        then 'CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVE_CONFIRM'
       when v_manager_approved or v_final_signed_ready then 'MANAGER_APPROVED_TO_MANUAL'
       when v_candidate_signed or v_manager_pending then 'CANDIDATE_SIGNED_MANAGER_PENDING_TO_MANUAL'
       else 'ELECTRONIC_UNSIGNED_TO_MANUAL' end;
   elsif v_action in ('CONVERT_QR_TO_MANUAL','DISABLE_QR') and v_route_family='QR'
         and v_actual_qr_backing and v_fin.id is not null
         and not coalesce(v_current.is_adjustment,false) then
-    if v_qr_signed then
+    if v_incomplete_expense_removal_required then
+      v_permitted:=true;
+      v_reason_required:=true;
+      v_warning_code:='CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVE_CONFIRM';
+    elsif v_qr_signed then
       v_permitted:=true;
       v_reason_required:=true;
       v_warning_code:='QR_SIGNED_TO_MANUAL';
@@ -1811,6 +1867,16 @@ begin
     'active_workflow_id',v_active_workflow.id,
     'active_workflow_count',v_active_workflow_count,
     'active_workflow_generation',v_active_workflow.generation,
+    'incomplete_expense_claim_removal_required',
+      v_incomplete_expense_removal_required,
+    'incomplete_expense_workflow_id',case
+      when v_incomplete_expense_removal_required then v_active_workflow.id else null end,
+    'incomplete_expense_workflow_state',case
+      when v_incomplete_expense_removal_required then v_active_workflow.state else null end,
+    'incomplete_expense_confirmation_message',case
+      when v_incomplete_expense_removal_required then
+        'The candidate has started an expense claim but has not completed it. Do you want to remove the incomplete claim and continue?'
+      else null end,
     'active_approval_request_id',v_request.id,
     'active_approval_request_state',v_request.state,
     'active_approval_request_updated_at_utc',v_request.updated_at_utc,
@@ -1905,7 +1971,10 @@ begin
     end if;
   end if;
 
-  if v_workflow.state in ('FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED') then
+  -- REFUSED remains amendable in the Candidate workflow contract.  An office
+  -- route intervention that has explicitly confirmed removal may therefore
+  -- supersede it while retaining refusal reason/timestamps and audit history.
+  if v_workflow.state in ('FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED') then
     return jsonb_build_object('workflow_changed',false,'workflow_id',p_workflow_id,
       'paper_delivery_retired',false,
       'manager_request_cancelled',false,'manager_cancellation_email_queued',false,
@@ -2201,6 +2270,10 @@ declare
   v_context jsonb;
   v_result jsonb;
   v_workflow_result jsonb:='{}'::jsonb;
+  v_primary_workflow_result jsonb:='{}'::jsonb;
+  v_incomplete_workflow_result jsonb:='{}'::jsonb;
+  v_primary_workflow_id uuid;
+  v_incomplete_expense_workflow_id uuid;
   v_notification_result jsonb:=jsonb_build_object(
     'notification_required',false,'notification_created',false,
     'notification_recipient_unavailable',false,'notification_dedupe_keys','[]'::jsonb
@@ -2314,13 +2387,70 @@ begin
   v_retirement_reason:=case when v_action in ('INVALIDATE_QR','REISSUE_QR')
     then 'QR_REPLACED_BY_OFFICE' else v_reason_code end;
   if v_retire_workflow then
-    v_workflow_result:=private._timesheet_route_supersede_candidate_v1(
-      nullif(case
+    v_primary_workflow_id:=nullif(case
         when v_action in ('CONVERT_QR_TO_MANUAL','DISABLE_QR','INVALIDATE_QR','REISSUE_QR')
           then coalesce(v_context->>'paper_workflow_id',v_context->>'linked_workflow_id')
         else v_context->>'linked_workflow_id'
-      end,'')::uuid,v_action,
+      end,'')::uuid;
+    v_primary_workflow_result:=private._timesheet_route_supersede_candidate_v1(
+      v_primary_workflow_id,v_action,
       v_retirement_reason,v_reason_note,p_actor_user_id,p_now_utc
+    );
+    v_workflow_result:=v_primary_workflow_result;
+  end if;
+  if coalesce(
+      (v_context->>'incomplete_expense_claim_removal_required')::boolean,false
+    ) then
+    v_incomplete_expense_workflow_id:=nullif(
+      v_context->>'incomplete_expense_workflow_id',''
+    )::uuid;
+    if v_incomplete_expense_workflow_id is null then
+      raise exception 'CANDIDATE_INCOMPLETE_EXPENSE_WORKFLOW_CONTEXT_CHANGED'
+        using errcode='40001';
+    end if;
+    if v_incomplete_expense_workflow_id is not distinct from v_primary_workflow_id then
+      v_incomplete_workflow_result:=v_primary_workflow_result;
+    else
+      v_incomplete_workflow_result:=private._timesheet_route_supersede_candidate_v1(
+        v_incomplete_expense_workflow_id,v_action,
+        v_retirement_reason,v_reason_note,p_actor_user_id,p_now_utc
+      );
+    end if;
+    if not coalesce(
+      (v_incomplete_workflow_result->>'workflow_changed')::boolean,false
+    ) then
+      raise exception 'CANDIDATE_INCOMPLETE_EXPENSE_CLAIM_REMOVAL_NOT_PROVEN'
+        using errcode='40001',detail=v_incomplete_workflow_result::text;
+    end if;
+    v_workflow_result:=v_primary_workflow_result||jsonb_build_object(
+      'workflow_changed',coalesce(
+          (v_primary_workflow_result->>'workflow_changed')::boolean,false
+        ) or coalesce(
+          (v_incomplete_workflow_result->>'workflow_changed')::boolean,false
+        ),
+      'manager_request_cancelled',coalesce(
+          (v_primary_workflow_result->>'manager_request_cancelled')::boolean,false
+        ) or coalesce(
+          (v_incomplete_workflow_result->>'manager_request_cancelled')::boolean,false
+        ),
+      'manager_cancellation_email_queued',coalesce(
+          (v_primary_workflow_result->>'manager_cancellation_email_queued')::boolean,false
+        ) or coalesce(
+          (v_incomplete_workflow_result->>'manager_cancellation_email_queued')::boolean,false
+        ),
+      'manager_cancellation_mail_ids',
+        coalesce(v_primary_workflow_result->'manager_cancellation_mail_ids','[]'::jsonb)
+        ||case
+          when v_incomplete_expense_workflow_id is distinct from v_primary_workflow_id
+            then coalesce(
+              v_incomplete_workflow_result->'manager_cancellation_mail_ids','[]'::jsonb
+            )
+          else '[]'::jsonb
+        end,
+      'incomplete_expense_claim_removed',true,
+      'incomplete_expense_workflow_id',v_incomplete_expense_workflow_id,
+      'primary_workflow_retirement',v_primary_workflow_result,
+      'incomplete_expense_workflow_retirement',v_incomplete_workflow_result
     );
   end if;
   -- Last transactional invariant before any route/version rotation: no live
@@ -2334,7 +2464,7 @@ begin
       from public.candidate_submission_workflows workflow
       where workflow.route='PAPER'
         and workflow.state not in (
-          'FINALISED','REFUSED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+          'FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
         )
         and workflow.contract_id is not distinct from v_current.contract_id
         and workflow.week_ending_date is not distinct from v_current.week_ending_date
@@ -2350,6 +2480,33 @@ begin
     raise exception 'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT'
       using errcode='40001',detail=jsonb_build_object(
         'code','CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT',
+        'current_timesheet_id',v_current.timesheet_id,
+        'target_action',v_action
+      )::text;
+  end if;
+  -- Equivalent mail-independent invariant for ELECTRONIC source rotation.
+  -- The selected mutable workflow is superseded above.  Historical FINALISED
+  -- truth may remain, but no active or amendable Candidate workflow may still
+  -- resolve only through the booking/version family about to become historic.
+  if v_action in ('SWITCH_TO_MANUAL','SWITCH_DAILY_TO_MANUAL') and exists(
+      select 1
+      from public.candidate_submission_workflows workflow
+      where workflow.state not in (
+          'FINALISED','REJECTED','CANCELLED','EXPIRED','SUPERSEDED'
+        )
+        and workflow.contract_id is not distinct from v_current.contract_id
+        and exists(
+          select 1
+          from public.timesheets binding_source
+          where binding_source.timesheet_id in (
+              workflow.target_timesheet_id,workflow.anchor_timesheet_id
+            )
+            and binding_source.booking_id=v_current.booking_id
+        )
+    ) then
+    raise exception 'CANDIDATE_ROUTE_ACTIVE_WORKFLOW_CONFLICT'
+      using errcode='40001',detail=jsonb_build_object(
+        'code','CANDIDATE_ROUTE_ACTIVE_WORKFLOW_CONFLICT',
         'current_timesheet_id',v_current.timesheet_id,
         'target_action',v_action
       )::text;
