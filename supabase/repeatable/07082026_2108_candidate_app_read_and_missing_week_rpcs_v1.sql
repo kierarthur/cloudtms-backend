@@ -178,6 +178,201 @@ as $function$
     ||' '||extract(year from p_date)::integer::text end
 $function$;
 
+create or replace function private._candidate_workflow_maps_to_card_v1(
+  p_workflow_id uuid,
+  p_timesheet_id uuid,
+  p_contract_week_id uuid
+)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_card_timesheet public.timesheets%rowtype;
+  v_anchor public.timesheets%rowtype;
+  v_target public.timesheets%rowtype;
+  v_parent public.timesheets%rowtype;
+begin
+  if p_workflow_id is null or p_contract_week_id is null then return false; end if;
+  select * into v_workflow from public.candidate_submission_workflows where id=p_workflow_id;
+  if not found then return false; end if;
+  if v_workflow.contract_week_id=p_contract_week_id then return true; end if;
+  if p_timesheet_id is null
+     or not (v_workflow.workflow_kind='CONTRACT_EXPENSE'
+       or v_workflow.rejection_scope='COMPLETE_EXPENSE_CLAIM') then return false; end if;
+  select * into v_card_timesheet from public.timesheets where timesheet_id=p_timesheet_id;
+  if not found then return false; end if;
+  if v_workflow.anchor_timesheet_id is not null then
+    select * into v_anchor from public.timesheets where timesheet_id=v_workflow.anchor_timesheet_id;
+    if found and (
+      v_anchor.timesheet_id=v_card_timesheet.timesheet_id
+      or (nullif(btrim(coalesce(v_anchor.booking_id,'')),'') is not null
+        and v_anchor.booking_id=v_card_timesheet.booking_id
+        and v_anchor.contract_id is not distinct from v_card_timesheet.contract_id
+        and v_anchor.week_ending_date is not distinct from v_card_timesheet.week_ending_date)
+    ) then return true; end if;
+  end if;
+  if v_workflow.target_timesheet_id is not null then
+    select * into v_target from public.timesheets where timesheet_id=v_workflow.target_timesheet_id;
+    if found and v_target.parent_timesheet_id is not null then
+      select * into v_parent from public.timesheets where timesheet_id=v_target.parent_timesheet_id;
+      if found and (
+        v_parent.timesheet_id=v_card_timesheet.timesheet_id
+        or (nullif(btrim(coalesce(v_parent.booking_id,'')),'') is not null
+          and v_parent.booking_id=v_card_timesheet.booking_id
+          and v_parent.contract_id is not distinct from v_card_timesheet.contract_id
+          and v_parent.week_ending_date is not distinct from v_card_timesheet.week_ending_date)
+      ) then return true; end if;
+    end if;
+  end if;
+  return false;
+end;
+$function$;
+
+create or replace function private._candidate_paper_pack_readiness_v1(
+  p_workflow_id uuid,
+  p_expected_generation integer
+)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_mail public.mail_outbox%rowtype;
+  v_count integer:=0;
+  v_manifest text;
+  v_scope jsonb;
+  v_attachment jsonb;
+  v_state text:='PREPARING';
+  v_reason text:='CANDIDATE_PAPER_PACK_PREPARING';
+  v_ready boolean:=false;
+begin
+  select * into v_workflow from public.candidate_submission_workflows
+  where id=p_workflow_id and generation=p_expected_generation;
+  if not found or v_workflow.route<>'PAPER' then
+    return jsonb_build_object('state','NOT_APPLICABLE','download_available',false,
+      'upload_available',false,'page_count',null,'reason_code','CANDIDATE_PAPER_PACK_NOT_APPLICABLE');
+  end if;
+  if v_workflow.state<>'AWAITING_PAPER_RETURN' then
+    return jsonb_build_object('state',case when v_workflow.state='RECEIVED' then 'RETURN_RECEIVED' else 'NOT_APPLICABLE' end,
+      'download_available',false,'upload_available',false,'page_count',null,
+      'reason_code',case when v_workflow.state='RECEIVED' then 'CANDIDATE_PAPER_RETURN_RECEIVED'
+        else 'CANDIDATE_PAPER_PACK_NOT_APPLICABLE' end);
+  end if;
+  v_manifest:=case when v_workflow.paper_return_manifest_sha256 is null then null
+    else encode(v_workflow.paper_return_manifest_sha256,'hex') end;
+  if v_manifest is null then
+    return jsonb_build_object('state',v_state,'download_available',false,'upload_available',false,
+      'page_count',null,'reason_code',v_reason);
+  end if;
+  select count(*)::integer into v_count
+  from public.mail_outbox mail
+  where mail.type='TIMESHEET_QR' and mail.context_kind='timesheets'
+    and mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+    and mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+    and lower(coalesce(mail.payment_scope_json->>'paper_return_manifest_sha256',''))=v_manifest;
+  if v_count>1 then
+    return jsonb_build_object('state','STALE','download_available',false,'upload_available',false,
+      'page_count',null,'reason_code','CANDIDATE_PAPER_OUTBOX_CONFLICT');
+  elsif v_count=0 then
+    return jsonb_build_object('state',v_state,'download_available',false,'upload_available',false,
+      'page_count',null,'reason_code',v_reason);
+  end if;
+  select mail.* into v_mail from public.mail_outbox mail
+  where mail.type='TIMESHEET_QR' and mail.context_kind='timesheets'
+    and mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+    and mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+    and lower(coalesce(mail.payment_scope_json->>'paper_return_manifest_sha256',''))=v_manifest;
+  v_scope:=coalesce(v_mail.payment_scope_json,'{}'::jsonb);
+  if lower(coalesce(v_scope->>'candidate_paper_generation_retired','false')) in ('true','t','1','yes') then
+    v_state:='RETIRED'; v_reason:='CANDIDATE_PAPER_GENERATION_RETIRED';
+  elsif v_mail.status='FAILED' then
+    v_state:='FAILED'; v_reason:='CANDIDATE_PAPER_OUTBOX_FAILED';
+  elsif jsonb_typeof(v_mail.attachments)='array' and jsonb_array_length(v_mail.attachments)=1 then
+    v_attachment:=v_mail.attachments->0;
+    v_ready:=v_mail.status in ('QUEUED','SENT')
+      and lower(coalesce(v_scope->>'candidate_paper_pack_ready','false')) in ('true','t','1','yes')
+      and lower(coalesce(v_scope->>'mail_held_until_pdf_rendered','false')) in ('false','f','0','no')
+      and nullif(btrim(coalesce(v_scope->>'mail_hold_reason','')),'') is null
+      and v_attachment->>'r2_key'=v_scope->>'candidate_complete_pack_storage_key'
+      and lower(coalesce(v_attachment->>'sha256',''))=lower(coalesce(v_scope->>'candidate_complete_pack_sha256',''))
+      and v_attachment->>'size_bytes'=v_scope->>'candidate_complete_pack_size_bytes'
+      and v_attachment->>'page_count'=v_scope->>'candidate_complete_pack_page_count'
+      and lower(coalesce(v_attachment->>'content_type',''))='application/pdf'
+      and v_attachment->>'candidate_workflow_id'=v_workflow.id::text
+      and v_attachment->>'candidate_workflow_generation'=v_workflow.generation::text
+      and lower(coalesce(v_attachment->>'paper_return_manifest_sha256',''))=v_manifest;
+    if v_ready then v_state:='READY'; v_reason:=null; end if;
+  end if;
+  return jsonb_build_object('state',v_state,'download_available',v_ready,'upload_available',v_ready,
+    'page_count',case when v_ready then nullif(v_scope->>'candidate_complete_pack_page_count','')::integer else null end,
+    'reason_code',v_reason);
+end;
+$function$;
+
+create or replace function private._candidate_action_invocation_v1(p_action jsonb)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_code text:=upper(coalesce(p_action->>'code',''));
+  v_method text:=upper(coalesce(p_action->>'method',''));
+  v_week public.contract_weeks%rowtype;
+  v_route_family text;
+  v_fixed jsonb:='{}'::jsonb;
+  v_inputs jsonb:='[]'::jsonb;
+  v_invocation jsonb;
+begin
+  if v_code in ('CONTINUE_TIMESHEET','CONTINUE_EXPENSE_CLAIM') then
+    v_invocation:=jsonb_build_object('version',1,'kind','CLIENT_DESTINATION',
+      'destination',case when v_code='CONTINUE_EXPENSE_CLAIM' then 'EXPENSE_CLAIM_EDITOR' else 'TIMESHEET_EDITOR' end,
+      'context',jsonb_build_object('workflow_id',p_action->'workflow_id',
+        'workflow_generation',p_action->'workflow_generation'));
+    return (p_action-'method'-'path')||jsonb_build_object('method',null,'path',null,'invocation',v_invocation);
+  end if;
+  if v_code in ('ENTER_TIMESHEET','ADD_EXPENSES') then
+    select * into v_week from public.contract_weeks where id=nullif(p_action->>'contract_week_id','')::uuid;
+    if not found then return p_action||jsonb_build_object('enabled',false,
+      'disabled_reason','CANDIDATE_ACTION_CONTEXT_STALE'); end if;
+    v_route_family:=private._candidate_route_family_v1(v_week.timesheet_id,v_week.id)->>'route_family';
+    v_fixed:=jsonb_build_object('workflow',jsonb_strip_nulls(jsonb_build_object(
+      'workflow_kind',case when v_code='ADD_EXPENSES' then 'CONTRACT_EXPENSE' else 'CONTRACT_HOURS' end,
+      'scope','WEEKLY','route',case when v_route_family='QR' then 'PAPER' else 'ELECTRONIC' end,
+      'contract_id',v_week.contract_id,'contract_week_id',v_week.id,
+      'week_ending_date',v_week.week_ending_date,
+      'anchor_timesheet_id',case when v_code='ADD_EXPENSES' then p_action->'timesheet_id' else null end
+    )));
+    v_inputs:='[{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb;
+  elsif v_code in ('RESUBMIT_TIMESHEET','RESUBMIT_TIMESHEET_AND_EXPENSES','RESUBMIT_EXPENSE_CLAIM','REVIEW_AND_RESUBMIT') then
+    v_fixed:=jsonb_build_object('generation',p_action->'workflow_generation');
+    v_inputs:='[{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb;
+  elsif v_method='POST' then
+    if p_action ? 'workflow_generation' then
+      v_fixed:=jsonb_build_object('generation',p_action->'workflow_generation');
+    end if;
+    v_inputs:=case v_code
+      when 'DISCARD_EXPENSE_CLAIM' then '[{"name":"reason_note","type":"string","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
+      when 'CANCEL_ENTIRE_CLAIM_AND_START_AGAIN' then '[{"name":"reason_note","type":"string","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
+      when 'UPLOAD_SIGNED_RETURN' then '[{"name":"returned_pages","type":"array","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
+      when 'NO_WORK_THIS_WEEK' then '[{"name":"expected_row_signature","type":"string","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb
+      else '[{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb end;
+  end if;
+  v_invocation:=jsonb_build_object('version',1,'kind','HTTP','method',nullif(v_method,''),
+    'path',p_action->>'path','fixed_body',v_fixed,'required_user_inputs',v_inputs,
+    'idempotency',case when v_method='POST' then 'REQUIRED' else 'NOT_REQUIRED' end);
+  return p_action||jsonb_build_object('invocation',v_invocation);
+end;
+$function$;
+
 create or replace function private._candidate_timesheet_primary_action_v1(
   p_candidate_status_code text,
   p_workflows jsonb,
@@ -202,7 +397,8 @@ begin
   where item->>'state'='REJECTED'
     and coalesce((item->>'rejection_actionable')::boolean,false)
     and nullif(item->>'required_resubmission_action','') is not null
-  order by item->>'updated_at_utc' desc,item->>'workflow_id'
+  order by coalesce((item->>'detail_action_owner')::boolean,false) desc,
+    item->>'updated_at_utc' desc,item->>'workflow_id'
   limit 1;
   if v_workflow is not null then
     v_action:=v_workflow->>'required_resubmission_action';
@@ -213,7 +409,7 @@ begin
         when 'RESUBMIT_TIMESHEET_AND_EXPENSES' then 'Resubmit Timesheet and Expenses'
         else 'Resubmit Timesheet' end,
       'method','POST',
-      'path','/candidate-app/v1/workflows/'||(v_workflow->>'workflow_id')||'/actions/amend',
+      'path','/candidate-app/v1/workflows/'||(v_workflow->>'workflow_id')||'/resubmit',
       'requires_confirmation',false,'requires_reason',false,
       'enabled',true,'disabled_reason',null,
       'workflow_id',v_workflow->>'workflow_id',
@@ -229,7 +425,8 @@ begin
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
     'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
   )
-  order by item->>'updated_at_utc' desc,item->>'workflow_id'
+  order by coalesce((item->>'detail_action_owner')::boolean,false) desc,
+    item->>'updated_at_utc' desc,item->>'workflow_id'
   limit 1;
   if v_workflow is not null then
     v_action:=case
@@ -242,8 +439,10 @@ begin
         when 'REVIEW_AND_RESUBMIT' then 'Review and Resubmit'
         when 'CONTINUE_EXPENSE_CLAIM' then 'Continue Expense Claim'
         else 'Continue Timesheet' end,
-      'method','GET',
-      'path','/candidate-app/v1/workflows/'||(v_workflow->>'workflow_id')||'/timesheet-detail',
+      'method',case when v_action='REVIEW_AND_RESUBMIT' then 'POST' else 'GET' end,
+      'path',case when v_action='REVIEW_AND_RESUBMIT'
+        then '/candidate-app/v1/workflows/'||(v_workflow->>'workflow_id')||'/actions/amend'
+        else '/candidate-app/v1/workflows/'||(v_workflow->>'workflow_id')||'/timesheet-detail' end,
       'requires_confirmation',false,'enabled',true,'disabled_reason',null,
       'workflow_id',v_workflow->>'workflow_id',
       'workflow_generation',nullif(v_workflow->>'generation','')::integer
@@ -305,11 +504,44 @@ declare
   v_disabled_reason text;
   v_action jsonb;
   v_cancel_code text;
+  v_rejection jsonb;
+  v_paper_pack jsonb;
 begin
   v_primary:=private._candidate_timesheet_primary_action_v1(
     p_candidate_status_code,p_workflows,p_capabilities,p_timesheet_id,p_contract_week_id
   );
   if v_primary is not null then v_actions:=jsonb_build_array(v_primary); end if;
+
+  for v_rejection in
+    select item
+    from jsonb_array_elements(coalesce(p_workflows,'[]'::jsonb)) item
+    where item->>'state'='REJECTED'
+      and coalesce((item->>'rejection_actionable')::boolean,false)
+      and nullif(item->>'required_resubmission_action','') is not null
+    order by coalesce((item->>'detail_action_owner')::boolean,false) desc,
+      item->>'updated_at_utc' desc,item->>'workflow_id'
+  loop
+    if not exists(
+      select 1 from jsonb_array_elements(v_actions) existing
+      where existing->>'workflow_id'=v_rejection->>'workflow_id'
+        and existing->>'code'=v_rejection->>'required_resubmission_action'
+    ) then
+      v_action:=jsonb_build_object(
+        'code',v_rejection->>'required_resubmission_action',
+        'label',case v_rejection->>'required_resubmission_action'
+          when 'RESUBMIT_EXPENSE_CLAIM' then 'Resubmit Expense Claim'
+          when 'RESUBMIT_TIMESHEET_AND_EXPENSES' then 'Resubmit Timesheet and Expenses'
+          else 'Resubmit Timesheet' end,
+        'method','POST','path','/candidate-app/v1/workflows/'
+          ||(v_rejection->>'workflow_id')||'/resubmit',
+        'requires_confirmation',false,'requires_reason',false,'enabled',true,
+        'disabled_reason',null,'workflow_id',v_rejection->>'workflow_id',
+        'workflow_generation',nullif(v_rejection->>'generation','')::integer,
+        'claim_family',v_rejection->>'claim_family'
+      );
+      v_actions:=v_actions||jsonb_build_array(v_action);
+    end if;
+  end loop;
 
   select item into v_workflow_json
   from jsonb_array_elements(coalesce(p_workflows,'[]'::jsonb)) item
@@ -320,7 +552,8 @@ begin
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
     'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
   )
-  order by item->>'updated_at_utc' desc,item->>'workflow_id'
+  order by coalesce((item->>'detail_action_owner')::boolean,false) desc,
+    item->>'updated_at_utc' desc,item->>'workflow_id'
   limit 1;
 
   if v_workflow_json is not null then
@@ -446,20 +679,25 @@ begin
     end if;
 
     if v_workflow.route='PAPER' and v_workflow.state='AWAITING_PAPER_RETURN' then
+      v_paper_pack:=private._candidate_paper_pack_readiness_v1(v_workflow.id,v_workflow.generation);
       v_actions:=v_actions||jsonb_build_array(
         jsonb_build_object(
           'code','DOWNLOAD_PAPER_DOCUMENTS','label','Download Documents','method','GET',
           'path','/candidate-app/v1/timesheets/'||coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)::text||'/paper-pack',
           'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation,
           'approval_request_id',null,'requires_confirmation',false,'requires_reason',false,
-          'enabled',true,'disabled_reason',null
+          'enabled',coalesce((v_paper_pack->>'download_available')::boolean,false),
+          'disabled_reason',case when coalesce((v_paper_pack->>'download_available')::boolean,false)
+            then null else v_paper_pack->>'reason_code' end
         ),
         jsonb_build_object(
           'code','UPLOAD_SIGNED_RETURN','label','Upload Signed Return','method','POST',
           'path','/candidate-app/v1/workflows/'||v_workflow.id::text||'/actions/paper-return',
           'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation,
           'approval_request_id',null,'requires_confirmation',true,'requires_reason',false,
-          'enabled',true,'disabled_reason',null
+          'enabled',coalesce((v_paper_pack->>'upload_available')::boolean,false),
+          'disabled_reason',case when coalesce((v_paper_pack->>'upload_available')::boolean,false)
+            then null else v_paper_pack->>'reason_code' end
         )
       );
     elsif v_workflow.route='PAPER' and v_workflow.state='RECEIVED' then
@@ -490,10 +728,18 @@ begin
       'requires_reason',false,'enabled',true,'disabled_reason',null
     ));
   end if;
+  select coalesce(jsonb_agg(private._candidate_action_invocation_v1(item)
+    order by ordinal),'[]'::jsonb)
+  into v_actions
+  from jsonb_array_elements(v_actions) with ordinality action_item(item,ordinal);
+  if v_primary is not null then
+    v_primary:=private._candidate_action_invocation_v1(v_primary);
+  end if;
   return jsonb_build_object(
     'primary_action',v_primary,
     'available_actions',v_actions,
-    'manager_approval',v_manager_approval
+    'manager_approval',v_manager_approval,
+    'paper_pack',v_paper_pack
   );
 end;
 $function$;
@@ -976,7 +1222,7 @@ begin
           'scope',d.rejected_workflow->'rejection_scope',
           'required_action',d.rejected_workflow->'required_resubmission_action'
         ) end,
-      'primary_action',private._candidate_timesheet_primary_action_v1(
+      'primary_action',private._candidate_action_invocation_v1(private._candidate_timesheet_primary_action_v1(
         case
           when d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc then 'PAID'
           when d.authorised_at_utc is not null then 'AUTHORISED'
@@ -987,7 +1233,7 @@ begin
           when d.processing_status is not null then d.processing_status::text
           else d.status::text end,
         d.workflows,d.capabilities,d.timesheet_id,d.id
-      ),
+      )),
       'detail_target',case
         when d.rejected_workflow is not null then jsonb_build_object(
           'identity_kind','WORKFLOW','id',d.rejected_workflow->>'workflow_id',
@@ -1081,6 +1327,7 @@ declare
   v_rejected_workflow jsonb;
   v_primary_action jsonb;
   v_action_contract jsonb;
+  v_detail_source_timesheet_id uuid;
 begin
   perform private._candidate_require_feature_v1(p_environment,'candidate_app_reads');
   if num_nonnulls(p_timesheet_id,p_contract_week_id,p_workflow_id)<>1 then
@@ -1093,9 +1340,38 @@ begin
   if p_workflow_id is not null then
     select * into v_workflow from public.candidate_submission_workflows where id=p_workflow_id and candidate_id=v_candidate_id;
     if not found then raise exception 'CANDIDATE_DETAIL_NOT_FOUND' using errcode='P0002'; end if;
-    p_contract_week_id:=v_workflow.contract_week_id;
-    p_timesheet_id:=case when v_workflow.state='REJECTED'
-      then null else v_workflow.target_timesheet_id end;
+    v_detail_source_timesheet_id:=case
+      when v_workflow.workflow_kind='CONTRACT_EXPENSE'
+        or v_workflow.rejection_scope='COMPLETE_EXPENSE_CLAIM'
+        then coalesce(v_workflow.anchor_timesheet_id,v_workflow.target_timesheet_id)
+      else coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id) end;
+    if v_detail_source_timesheet_id is not null then
+      select current_version.timesheet_id into p_timesheet_id
+      from public.timesheets source_version
+      join public.timesheets current_version on current_version.is_current=true
+        and current_version.archived_at_utc is null
+        and (
+          (nullif(btrim(coalesce(source_version.booking_id,'')),'') is not null
+            and current_version.booking_id=source_version.booking_id
+            and current_version.contract_id is not distinct from source_version.contract_id
+            and current_version.week_ending_date is not distinct from source_version.week_ending_date)
+          or (nullif(btrim(coalesce(source_version.booking_id,'')),'') is null
+            and current_version.timesheet_id=source_version.timesheet_id)
+        )
+      where source_version.timesheet_id=v_detail_source_timesheet_id
+        and upper(coalesce(current_version.line_type::text,'')) not in ('EXPENSES','MILEAGE')
+      order by current_version.version desc,current_version.timesheet_id
+      limit 1;
+    end if;
+    if p_timesheet_id is not null then
+      select week_row.id into p_contract_week_id
+      from public.contract_weeks week_row
+      where week_row.timesheet_id=p_timesheet_id
+        and week_row.contract_id=v_workflow.contract_id
+        and week_row.week_ending_date=v_workflow.week_ending_date
+      order by week_row.updated_at desc,week_row.id desc limit 1;
+    end if;
+    if p_contract_week_id is null then p_contract_week_id:=v_workflow.contract_week_id; end if;
   end if;
   if p_contract_week_id is not null then
     select * into v_week from public.contract_weeks where id=p_contract_week_id;
@@ -1155,11 +1431,13 @@ begin
   ) order by c.created_at_utc,c.component_no),'[]'::jsonb)
   into v_components from public.candidate_submission_components c
   join public.candidate_submission_workflows w on w.id=c.workflow_id
-  where w.candidate_id=v_candidate_id and (w.id=p_workflow_id or w.contract_week_id=v_week.id)
+  where w.candidate_id=v_candidate_id
+    and private._candidate_workflow_maps_to_card_v1(w.id,p_timesheet_id,v_week.id)
     and c.state<>'SUPERSEDED';
 
   select coalesce(jsonb_agg(jsonb_build_object(
     'workflow_id',w.id,'workflow_kind',w.workflow_kind,'state',w.state,'generation',w.generation,
+    'detail_action_owner',w.id=p_workflow_id,
     'claim_family',rejection_policy.claim_family,
     'route',w.route,'target_timesheet_id',w.target_timesheet_id,
     'anchor_timesheet_id',w.anchor_timesheet_id,'issue_codes',w.issue_codes,
@@ -1207,7 +1485,8 @@ begin
       end as rejection_actionable
   ) rejection_policy
   where w.candidate_id=v_candidate_id and w.contract_id=v_contract.id
-    and w.week_ending_date=v_week.week_ending_date and w.state<>'SUPERSEDED';
+    and w.week_ending_date=v_week.week_ending_date and w.state<>'SUPERSEDED'
+    and private._candidate_workflow_maps_to_card_v1(w.id,p_timesheet_id,v_week.id);
 
   select jsonb_build_object(
     'workflow_id',document_workflow.id,
@@ -1243,7 +1522,9 @@ begin
     order by approval.request_generation desc,approval.created_at_utc desc limit 1
   ) latest_approval on true
   where document_workflow.candidate_id=v_candidate_id
-    and (document_workflow.id=p_workflow_id or document_workflow.contract_week_id=v_week.id)
+    and private._candidate_workflow_maps_to_card_v1(
+      document_workflow.id,p_timesheet_id,v_week.id
+    )
     and document_workflow.state<>'SUPERSEDED'
   order by (document_workflow.id=p_workflow_id) desc,document_workflow.updated_at_utc desc
   limit 1;
@@ -1257,13 +1538,15 @@ begin
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
     'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
   )
-  order by workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
+  order by coalesce((workflow_item->>'detail_action_owner')::boolean,false) desc,
+    workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
   limit 1;
   select workflow_item into v_rejected_workflow
   from jsonb_array_elements(coalesce(v_claims,'[]'::jsonb)) workflow_item
   where workflow_item->>'state'='REJECTED'
     and coalesce((workflow_item->>'rejection_actionable')::boolean,false)
-  order by workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
+  order by coalesce((workflow_item->>'detail_action_owner')::boolean,false) desc,
+    workflow_item->>'updated_at_utc' desc,workflow_item->>'workflow_id'
   limit 1;
   v_candidate_status_code:=case
     when v_fin.paid_at_utc is not null then 'PAID'
@@ -1289,6 +1572,14 @@ begin
     v_candidate_status_code,v_claims,v_capabilities,p_timesheet_id,v_week.id,p_now_utc
   );
   v_primary_action:=v_action_contract->'primary_action';
+  if v_active_workflow_state='AWAITING_PAPER_RETURN' then
+    v_candidate_status_code:=case v_action_contract->'paper_pack'->>'state'
+      when 'READY' then 'AWAITING_SIGNED_DOCUMENTS'
+      when 'FAILED' then 'DOCUMENT_PREPARATION_FAILED'
+      when 'RETIRED' then 'PAPER_DELIVERY_RETIRED'
+      when 'STALE' then 'PAPER_DELIVERY_STALE'
+      else 'PREPARING_DOCUMENTS' end;
+  end if;
 
   return jsonb_build_object(
     'ok',true,
@@ -1302,6 +1593,7 @@ begin
     'primary_action',v_primary_action,
     'available_actions',coalesce(v_action_contract->'available_actions','[]'::jsonb),
     'manager_approval',v_action_contract->'manager_approval',
+    'paper_pack',v_action_contract->'paper_pack',
     'contract_week',jsonb_build_object(
       'id',v_week.id,'contract_id',v_contract.id,'week_ending_date',v_week.week_ending_date,
       'week_ending_weekday',btrim(to_char(v_week.week_ending_date,'FMDay')),
@@ -1488,6 +1780,12 @@ $function$;
 revoke all on function public.candidate_app_bootstrap_v1(uuid,text,integer,timestamptz) from public,anon,authenticated;
 revoke all on function private._candidate_rejection_replaced_v1(uuid) from public,anon,authenticated;
 revoke all on function private._candidate_week_ending_label_v1(date)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_workflow_maps_to_card_v1(uuid,uuid,uuid)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_paper_pack_readiness_v1(uuid,integer)
+  from public,anon,authenticated,service_role;
+revoke all on function private._candidate_action_invocation_v1(jsonb)
   from public,anon,authenticated,service_role;
 revoke all on function private._candidate_timesheet_primary_action_v1(text,jsonb,jsonb,uuid,uuid)
   from public,anon,authenticated,service_role;

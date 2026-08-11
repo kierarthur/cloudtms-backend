@@ -338,6 +338,19 @@ paths:
         - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede, retry-finalisation]}}
       requestBody: {$ref: '#/components/requestBodies/WorkflowActionBody'}
       responses: *standardResponses
+  /candidate-app/v1/workflows/{workflowId}/resubmit:
+    post:
+      tags: [Workflow]
+      operationId: resubmitRejectedCandidateWorkflow
+      summary: Create a new replacement workflow from immutable rejected history
+      description: >-
+        The rejected workflow is never amended or revived. The server validates its exact
+        generation, derives the replacement kind, scope, route and current record identity,
+        and creates a new WORKER_DRAFT workflow using the supplied idempotency key.
+      x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/resubmit
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      requestBody: {$ref: '#/components/requestBodies/RejectedWorkflowResubmitBody'}
+      responses: *standardResponses
   /candidate-app/v1/workflows/{workflowId}/components/prepare:
     post:
       tags: [Workflow]
@@ -488,7 +501,7 @@ components:
         - RETRY_FINALISATION
     TimesheetAvailableAction:
       type: object
-      required: [code, label, requires_confirmation, enabled]
+      required: [code, label, requires_confirmation, enabled, invocation]
       properties:
         code: {$ref: '#/components/schemas/TimesheetActionCode'}
         label: {type: string}
@@ -503,6 +516,28 @@ components:
         approval_request_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
         timesheet_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
         contract_week_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        invocation: {$ref: '#/components/schemas/TimesheetActionInvocation'}
+    TimesheetActionInvocation:
+      type: object
+      required: [version, kind]
+      properties:
+        version: {const: 1}
+        kind: {type: string, enum: [HTTP, CLIENT_DESTINATION]}
+        method: {type: [string, 'null'], enum: [GET, POST, null]}
+        path: {type: [string, 'null']}
+        destination: {type: [string, 'null'], enum: [TIMESHEET_EDITOR, EXPENSE_CLAIM_EDITOR, null]}
+        fixed_body: {$ref: '#/components/schemas/JsonObject'}
+        required_user_inputs:
+          type: array
+          items:
+            type: object
+            required: [name, type, required]
+            properties:
+              name: {type: string}
+              type: {type: string}
+              required: {type: boolean}
+        idempotency: {type: [string, 'null'], enum: [REQUIRED, NOT_REQUIRED, null]}
+        context: {$ref: '#/components/schemas/JsonObject'}
     TimesheetPrimaryAction:
       allOf:
         - {$ref: '#/components/schemas/TimesheetAvailableAction'}
@@ -590,6 +625,7 @@ components:
         primary_action: {oneOf: [{$ref: '#/components/schemas/TimesheetPrimaryAction'}, {type: 'null'}]}
         available_actions: {type: array, items: {$ref: '#/components/schemas/TimesheetAvailableAction'}}
         manager_approval: {oneOf: [{$ref: '#/components/schemas/ManagerApprovalStatus'}, {type: 'null'}]}
+        paper_pack: {oneOf: [{$ref: '#/components/schemas/PaperPackReadiness'}, {type: 'null'}]}
         contract_week: {$ref: '#/components/schemas/JsonObject'}
         timesheet: {oneOf: [{$ref: '#/components/schemas/JsonObject'}, {type: 'null'}]}
         hours: {$ref: '#/components/schemas/JsonObject'}
@@ -601,6 +637,15 @@ components:
         components: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
         workflows: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
         rejections: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+    PaperPackReadiness:
+      type: object
+      required: [state, download_available, upload_available]
+      properties:
+        state: {type: string, enum: [NOT_APPLICABLE, PREPARING, READY, FAILED, RETIRED, STALE, RETURN_RECEIVED]}
+        download_available: {type: boolean}
+        upload_available: {type: boolean}
+        page_count: {type: [integer, 'null'], minimum: 1}
+        reason_code: {type: [string, 'null']}
     WorkflowActionRequest:
       type: object
       required: [generation, idempotency_key]
@@ -622,6 +667,13 @@ components:
           properties:
             reason_code: {type: [string, 'null'], maxLength: 100}
             reason_note: {type: string, minLength: 1, maxLength: 1000}
+    RejectedWorkflowResubmitRequest:
+      type: object
+      required: [generation, idempotency_key]
+      additionalProperties: false
+      properties:
+        generation: {type: integer, minimum: 1}
+        idempotency_key: {type: string, format: uuid}
     SelectedCandidateSession:
       type: object
       required: [ok, access_token, session_id]
@@ -654,6 +706,11 @@ components:
               - {$ref: '#/components/schemas/RenewalRequest'}
               - {$ref: '#/components/schemas/CancellationRequest'}
               - {$ref: '#/components/schemas/WorkflowActionRequest'}
+    RejectedWorkflowResubmitBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RejectedWorkflowResubmitRequest'}
     JsonBody:
       required: true
       content: {application/json: {schema: {$ref: '#/components/schemas/JsonObject'}}}

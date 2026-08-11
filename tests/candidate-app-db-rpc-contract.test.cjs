@@ -88,7 +88,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 93, 'the latest-only payload must contain the closed 93-definition function inventory');
+  assert.equal(names.length, 96, 'the latest-only payload must contain the closed 96-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -553,10 +553,13 @@ test('rejected workflows project through the replacement current version with se
   assert.match(page, /d\.rejected_workflow is not null then 'REJECTED'/i);
   assert.match(page, /'rejection',case[\s\S]*'required_action'/i);
   assert.doesNotMatch(page, /or d\.active_workflow_state is not null then null/i);
-  assert.match(detail, /v_workflow\.state='REJECTED'[\s\S]*then null else v_workflow\.target_timesheet_id/i);
+  assert.match(detail, /v_detail_source_timesheet_id:=case[\s\S]*CONTRACT_EXPENSE[\s\S]*anchor_timesheet_id[\s\S]*source_version[\s\S]*current_version\.booking_id=source_version\.booking_id/i);
+  assert.match(detail, /_candidate_workflow_maps_to_card_v1\(w\.id,p_timesheet_id,v_week\.id\)/i);
   assert.match(detail, /'required_resubmission_action'[\s\S]*RESUBMIT_EXPENSE_CLAIM/i);
   assert.match(detail, /'rejections',[\s\S]*rejection_actionable/i);
   assert.match(detail, /_candidate_rejection_replaced_v1\(w\.id\)/i);
+  assert.match(sql.reads, /_candidate_paper_pack_readiness_v1[\s\S]*candidate_paper_pack_ready[\s\S]*candidate_complete_pack_storage_key/i);
+  assert.match(sql.reads, /\/resubmit[\s\S]*_candidate_action_invocation_v1/i);
 });
 
 test('PAPER rejection retires a shared QR source as one locked set before record rotation', () => {

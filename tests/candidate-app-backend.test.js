@@ -291,6 +291,108 @@ test('timesheet detail aliases pass one exact server identity to the shared deta
   }
 });
 
+test('rejected resubmission creates a new server-derived workflow and never amends rejected history', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000000a1';
+  const accountId = '00000000-0000-4000-8000-0000000000a2';
+  const candidateId = '00000000-0000-4000-8000-0000000000a3';
+  const workflowId = '00000000-0000-4000-8000-0000000000a4';
+  const contractId = '00000000-0000-4000-8000-0000000000a5';
+  const weekId = '00000000-0000-4000-8000-0000000000a6';
+  const idempotencyKey = '00000000-0000-4000-8000-0000000000a7';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const rejected = {
+    id: workflowId, account_id: accountId, candidate_id: candidateId,
+    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'PAPER',
+    state: 'REJECTED', generation: 4, contract_id: contractId, contract_week_id: weekId,
+    work_date: null, week_ending_date: '2026-08-12'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  let replayReplacement = null;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    if (value.includes('candidate_submission_workflows') && value.includes('idempotency_key=eq.')) {
+      return Response.json(replayReplacement ? [replayReplacement] : []);
+    }
+    if (value.includes('candidate_submission_workflows')) return Response.json([rejected]);
+    if (value.includes('contract_weeks')) return Response.json([{
+      id: weekId, contract_id: contractId, week_ending_date: '2026-08-12'
+    }]);
+    throw new Error(`unexpected fetch ${value}`);
+  };
+  const calls = [];
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      calls.push({ name, args });
+      if (name === 'candidate_app_timesheet_detail_v1') {
+        return { ok: true, rejections: [{ workflow_id: workflowId, rejection_actionable: true }] };
+      }
+      return { ok: true, workflow_id: args.p_workflow_id, state: 'WORKER_DRAFT', generation: 1 };
+    }
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/resubmit`, {
+        method: 'POST', headers: {
+          authorization: `Bearer ${token}`, 'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          generation: 4, idempotency_key: idempotencyKey,
+          workflow: { workflow_kind: 'CONTRACT_HOURS', route: 'ELECTRONIC' }
+        })
+      }
+    ), env, {}, deps);
+    assert.equal(response.status, 201);
+    const payload = await response.json();
+    assert.equal(payload.rejected_workflow_id, workflowId);
+    assert.notEqual(payload.replacement_workflow_id, workflowId);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0].name, 'candidate_app_timesheet_detail_v1');
+    assert.equal(calls[0].args.p_workflow_id, workflowId);
+    assert.equal(calls[1].name, 'candidate_workflow_transition_atomic_v1');
+    assert.equal(calls[1].args.p_action, 'CREATE');
+    assert.notEqual(calls[1].args.p_workflow_id, workflowId);
+    assert.deepEqual(calls[1].args.p_payload, {
+      workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'PAPER',
+      contract_id: contractId, contract_week_id: weekId, week_ending_date: '2026-08-12'
+    });
+    assert.equal(calls[1].args.p_idempotency_key, idempotencyKey);
+    replayReplacement = {
+      id: payload.replacement_workflow_id, candidate_id: candidateId,
+      workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'PAPER',
+      state: 'WORKER_DRAFT', generation: 1, contract_id: contractId,
+      contract_week_id: weekId, work_date: null, week_ending_date: '2026-08-12'
+    };
+    const replayResponse = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/resubmit`, {
+        method: 'POST', headers: {
+          authorization: `Bearer ${token}`, 'content-type': 'application/json'
+        }, body: JSON.stringify({ generation: 4, idempotency_key: idempotencyKey })
+      }
+    ), env, {}, deps);
+    assert.equal(replayResponse.status, 201);
+    const replayBody = await replayResponse.json();
+    assert.equal(replayBody.idempotent_replay, true);
+    assert.equal(replayBody.replacement_workflow_id, payload.replacement_workflow_id);
+    assert.equal(calls.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('public reminder stays REMIND and cancellation requires and forwards a reason', async () => {
   const sessionId = '00000000-0000-4000-8000-000000000091';
   const accountId = '00000000-0000-4000-8000-000000000092';

@@ -116,6 +116,7 @@ jobs:
             tests/11082026_1214_candidate_manager_mail_lifecycle_verification.sql
             tests/11082026_1215_candidate_timesheet_current_history_verification.sql
             tests/11082026_1405_candidate_manager_action_contract_verification.sql
+            tests/11082026_1428_candidate_action_hub_closure_verification.sql
           )
           for file in "${suites[@]}"; do apply_sql "$file"; done
 
