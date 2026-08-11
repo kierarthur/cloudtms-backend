@@ -28,6 +28,7 @@ test('the operation finance-item plan is deterministic, bounded and owner-only',
   assert.match(planSql, /'DRAFT_FINANCE_ITEM_V1:' \|\| private\.pay_payment_correction_sha256_v1/);
   assert.match(planSql, /scoped_row\.effective_item_type = 'OVERPAYMENT_RECOVERY'/);
   assert.match(planSql, /allocation_basis_json, '\{\}'::jsonb\) - 'draft_finance_item_plan'/);
+  assert.doesNotMatch(planSql, /pg_catalog\.coalesce\s*\(/i);
   assert.match(planSql, /SECURITY DEFINER\s+SET search_path TO ''/);
   assert.match(planSql, /REVOKE ALL ON FUNCTION private\.pay_workbench_draft_finance_item_plan_v1\(uuid,jsonb\) FROM PUBLIC, anon, authenticated, service_role/);
 });

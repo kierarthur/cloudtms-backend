@@ -399,7 +399,7 @@
     {
       "schema": "private", "name": "pay_workbench_draft_finance_item_plan_v1",
       "identity_arguments": "p_operation_id uuid, p_candidate_scope_ids jsonb",
-      "definition_sha256": "5ef2b679bcc13b13598745a21467621d6966f7bcaf51308e87e72f91c25c3b4e",
+      "definition_sha256": "0410c197cc9e9226dde2f7bbff76d1c811e16f80bc2176373451edf9b5d3236a",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/11082026_1535_pay_workbench_draft_finance_item_plan_v1.sql"]

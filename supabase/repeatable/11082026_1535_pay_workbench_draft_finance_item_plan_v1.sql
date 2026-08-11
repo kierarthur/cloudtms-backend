@@ -51,7 +51,7 @@ BEGIN
   RETURN QUERY
   WITH scoped_rows AS (
     SELECT allocation_row.*,
-           CASE pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(allocation_row.allocation_type, '')))
+           CASE pg_catalog.upper(pg_catalog.btrim(COALESCE(allocation_row.allocation_type, '')))
              WHEN 'OVERPAYMENT_RECOVERY' THEN 'OVERPAYMENT_RECOVERY'
              WHEN 'UNDERPAYMENT_PAYMENT' THEN 'UNDERPAYMENT_PAYMENT'
              WHEN 'MANUAL_DEBT_RECOVERY' THEN 'MANUAL_DEBT_RECOVERY'
@@ -78,24 +78,24 @@ BEGIN
                'candidate_scope_id', scoped_row.candidate_scope_id::text,
                'pay_batch_id', CASE WHEN scoped_row.pay_batch_id IS NULL THEN NULL ELSE scoped_row.pay_batch_id::text END,
                'candidate_id', scoped_row.candidate_id::text,
-               'pay_channel', pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(scoped_row.pay_channel, ''))),
+               'pay_channel', pg_catalog.upper(pg_catalog.btrim(COALESCE(scoped_row.pay_channel, ''))),
                'planned_item_type', scoped_row.effective_item_type,
                'finance_case_id', scoped_row.finance_case_id::text,
                'finance_component_id', CASE WHEN scoped_row.finance_component_id IS NULL THEN NULL ELSE scoped_row.finance_component_id::text END,
-               'direction', CASE WHEN pg_catalog.round(pg_catalog.coalesce(scoped_row.allocated_amount, 0), 2) < 0 THEN 'DEDUCTION' ELSE 'PAYMENT' END,
+               'direction', CASE WHEN pg_catalog.round(COALESCE(scoped_row.allocated_amount, 0), 2) < 0 THEN 'DEDUCTION' ELSE 'PAYMENT' END,
                'allocation_source_key', scoped_row.operation_source_key
              )
            ) AS effective_planned_item_key
     FROM scoped_rows AS scoped_row
     WHERE scoped_row.effective_item_type = 'OVERPAYMENT_RECOVERY'
-      AND pg_catalog.round(pg_catalog.coalesce(scoped_row.allocated_amount, 0), 2) <> 0
+      AND pg_catalog.round(COALESCE(scoped_row.allocated_amount, 0), 2) <> 0
   )
   SELECT
     keyed_row.operation_id,
     keyed_row.candidate_scope_id,
     keyed_row.pay_batch_id,
     keyed_row.candidate_id,
-    pg_catalog.upper(pg_catalog.btrim(pg_catalog.coalesce(keyed_row.pay_channel, ''))) AS pay_channel,
+    pg_catalog.upper(pg_catalog.btrim(COALESCE(keyed_row.pay_channel, ''))) AS pay_channel,
     keyed_row.operation_source_key AS allocation_source_key,
     keyed_row.effective_planned_item_key AS planned_item_key,
     keyed_row.effective_item_type AS planned_item_type,
@@ -111,10 +111,10 @@ BEGIN
         'planned_item_type', keyed_row.effective_item_type,
         'contribution_amount', pg_catalog.round(keyed_row.allocated_amount, 2),
         'allocation_source_key', keyed_row.operation_source_key,
-        'allocation_basis_json', pg_catalog.coalesce(keyed_row.allocation_basis_json, '{}'::jsonb) - 'draft_finance_item_plan'
+        'allocation_basis_json', COALESCE(keyed_row.allocation_basis_json, '{}'::jsonb) - 'draft_finance_item_plan'
       )
     ) AS plan_digest,
-    pg_catalog.coalesce(keyed_row.allocation_basis_json, '{}'::jsonb) - 'draft_finance_item_plan' AS plan_basis_json
+    COALESCE(keyed_row.allocation_basis_json, '{}'::jsonb) - 'draft_finance_item_plan' AS plan_basis_json
   FROM keyed_rows AS keyed_row
   ORDER BY keyed_row.candidate_id, keyed_row.pay_channel, keyed_row.operation_source_key;
 END;
