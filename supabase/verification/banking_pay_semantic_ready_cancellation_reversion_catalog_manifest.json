@@ -120,7 +120,7 @@
     {
       "schema": "public", "name": "pay_workbench_patch_preview_after_batch_mutation_cancel_safe_v1",
       "identity_arguments": "p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "f4a3537ebf4efc1d037c410c4c3301762459cef8b43b4c1b20aaa63511a995c2",
+      "definition_sha256": "8308ceb4c35e1020a221b91e8e73f026dff4fb33bd61c6f88c885e09bf7923d3",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -234,7 +234,7 @@
     {
       "schema": "private", "name": "pay_workbench_cancel_reversion_proof_core_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_work_item_ids uuid[], p_mode text, p_options_json jsonb",
-      "definition_sha256": "4841a141f36e715628bec7090b1c54b3a1f642a258a8eefa00a6a8ee55ff914c",
+      "definition_sha256": "825a21fa2e526e04c421416ec248472cc2417e4917f43f27265862d39764f9de",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -242,7 +242,7 @@
     {
       "schema": "private", "name": "pay_workbench_correction_held_dirty_job_resolve_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_route_results_json jsonb, p_options_json jsonb",
-      "definition_sha256": "3c3c0b6ac944705de30c38a9b06bca9b551a489e002da8b9cf43ebb66913b89d",
+      "definition_sha256": "ba11e89120decf5cfabca5ec2cfdfdc2a416cb9fb2c426548e25d6e4adbd6337",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -278,7 +278,7 @@
     {
       "schema": "private", "name": "pay_pre_bank_cancel_apply_work_page_v1",
       "identity_arguments": "p_correction_request_id uuid, p_work_item_ids uuid[], p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "c042900d723dc1592652e00fd253337f88f410277c728e8453ee5e7158f8cc2e",
+      "definition_sha256": "ede8dfe93aca76d294b59f4ab59211020fec2ac139d6f753a4c9ce1759eb4b46",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
