@@ -36,6 +36,22 @@ test('whole-Draft expand retry reuses the same authorised operation only before 
   assert.match(retrySql, /PAYMENT_CORRECTION_PROCESSING_RETRY_QUEUED/);
 });
 
+test('post-financial scheduled retry resumes only idempotent terminal routing without repeating finance', () => {
+  assert.match(retrySql, /v_retry_mode := 'POST_FINANCIAL'/);
+  assert.match(retrySql, /v_request\.status[\s\S]*'PROCESSING'[\s\S]*'APPLIED'/);
+  assert.match(retrySql, /v_operation\.phase[\s\S]*'FINALISE'[\s\S]*'REFRESH_WORKBENCH'/);
+  assert.match(retrySql,
+    /v_request\.status[\s\S]*= 'PROCESSING'[\s\S]*v_operation\.phase[\s\S]*= 'REFRESH_WORKBENCH'/);
+  assert.match(retrySql, /requested_action'[\s\S]*'PRE_BANK_CANCEL'/);
+  assert.match(retrySql, /applied_work\.status = 'APPLIED'/);
+  assert.match(retrySql, /unfinished_work\.status NOT IN \('APPLIED', 'BLOCKED', 'CANCELLED', 'FAILED'\)/);
+  assert.match(retrySql, /PAYMENT_CORRECTION_POST_FINANCIAL_RETRY_EVIDENCE_INVALID/);
+  assert.match(retrySql, /never rewinds to PROCESS_CHUNKS and never repeats financial DML/i);
+  assert.match(worker, /'AUTHORISED', 'AUTHORIZED', 'PROCESSING', 'APPLIED'/);
+  assert.match(worker, /\['FINALISE', 'REFRESH_WORKBENCH'\]\.includes\(phase\)/);
+  assert.match(worker, /The payment cancellation was applied\. Continue this same request to finish updating Banking Pay\./);
+});
+
 test('planning retry refuses any durable work or provider evidence before making the same operation runnable', () => {
   for (const relation of [
     'banking_pay_operation_chunks',

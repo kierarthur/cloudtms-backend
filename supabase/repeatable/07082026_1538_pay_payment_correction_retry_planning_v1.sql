@@ -127,6 +127,16 @@ BEGIN
     v_retry_mode := 'DRAFT_EXPAND';
     v_retry_reason := 'EXPLICIT_SAFE_DRAFT_EXPAND_RETRY';
     v_retry_counter_key := 'processing_retry_count';
+  ELSIF pg_catalog.upper(COALESCE(v_request.status, '')) IN ('PROCESSING', 'APPLIED')
+     AND pg_catalog.upper(COALESCE(v_operation.phase, '')) IN ('FINALISE', 'REFRESH_WORKBENCH')
+     AND (
+       pg_catalog.upper(COALESCE(v_request.status, '')) = 'PROCESSING'
+       OR pg_catalog.upper(COALESCE(v_operation.phase, '')) = 'REFRESH_WORKBENCH'
+     )
+     AND pg_catalog.upper(COALESCE(v_request.plan_json ->> 'requested_action', '')) = 'PRE_BANK_CANCEL' THEN
+    v_retry_mode := 'POST_FINANCIAL';
+    v_retry_reason := 'EXPLICIT_SAFE_POST_FINANCIAL_RETRY';
+    v_retry_counter_key := 'processing_retry_count';
   END IF;
 
   v_retry_count := CASE
@@ -183,7 +193,7 @@ BEGIN
           'code', 'PAYMENT_CORRECTION_PLANNING_RETRY_EVIDENCE_EXISTS'
         )::text;
     END IF;
-  ELSE
+  ELSIF v_retry_mode = 'DRAFT_EXPAND' THEN
     -- EXPAND_WORK is one PostgreSQL transaction.  A failure before these
     -- durable owners exist therefore leaves no financial work to repeat.
     IF EXISTS (
@@ -206,6 +216,31 @@ BEGIN
       RAISE EXCEPTION 'PAYMENT_CORRECTION_DRAFT_EXPAND_RETRY_EVIDENCE_EXISTS'
         USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
           'code', 'PAYMENT_CORRECTION_DRAFT_EXPAND_RETRY_EVIDENCE_EXISTS'
+        )::text;
+    END IF;
+  ELSE
+    -- FINALISE and REFRESH_WORKBENCH are post-financial, idempotent route
+    -- phases.  Resume only the same pre-bank request after at least one exact
+    -- financial work item was applied and every work item is already terminal.
+    -- The retry never rewinds to PROCESS_CHUNKS and never repeats financial DML.
+    IF NOT EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_work_items AS applied_work
+         WHERE applied_work.correction_request_id = p_correction_request_id
+           AND applied_work.status = 'APPLIED'
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.pay_payment_correction_work_items AS unfinished_work
+         WHERE unfinished_work.correction_request_id = p_correction_request_id
+           AND unfinished_work.status NOT IN ('APPLIED', 'BLOCKED', 'CANCELLED', 'FAILED')
+       )
+       OR EXISTS (
+         SELECT 1 FROM public.banking_pay_operation_provider_attempts AS provider_attempt
+         WHERE provider_attempt.operation_id = v_operation.id
+            OR provider_attempt.pay_batch_id = v_request.pay_batch_id
+       ) THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_POST_FINANCIAL_RETRY_EVIDENCE_INVALID'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'PAYMENT_CORRECTION_POST_FINANCIAL_RETRY_EVIDENCE_INVALID'
         )::text;
     END IF;
   END IF;

@@ -222,7 +222,7 @@
     {
       "schema": "private", "name": "pay_workbench_correction_held_dirty_job_resolve_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_route_results_json jsonb, p_options_json jsonb",
-      "definition_sha256": "b506f71536968ca059aa912252d9240f2ad6dc21638b8f48456fbe36f77ee696",
+      "definition_sha256": "fddccb8a0a4a265ecb21ce69a829b0d00f36100ce3e5dbe6c9fe47bc7cf0b7ef",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]

@@ -113,6 +113,9 @@ test('held-job resolver validates current or one active owner and reuses generic
   assert.match(helpers, /MATERIALISED','READY','COMPLETE/);
   assert.match(helpers, /CORRECTION_HELD_DIRTY_ROUTE_NOT_ELECTED/);
   assert.match(helpers, /public\.pay_workbench_complete_job/);
+  assert.doesNotMatch(helpers, /v_job\.result_json/);
+  assert.match(helpers,
+    /v_completion:=public\.pay_workbench_complete_job\([\s\S]*'COALESCED_TO_CORRECTION_ROUTE_ELECTION'/);
   assert.doesNotMatch(helpers,
     /pay_workbench_correction_held_dirty_job_resolve_v1[\s\S]*SET status='SUCCEEDED'/);
 });

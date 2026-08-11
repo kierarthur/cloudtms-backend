@@ -2623,23 +2623,24 @@ BEGIN
         )::text;
     END IF;
 
-    IF v_job.status='SUCCEEDED' THEN
-      v_completion:=COALESCE(v_job.result_json,'{}'::jsonb);
-    ELSE
-      v_completion:=public.pay_workbench_complete_job(
-        v_job.id,
-        pg_catalog.jsonb_build_object(
-          'ok',true,'status','COALESCED_TO_CORRECTION_ROUTE_ELECTION',
-          'correction_request_id',p_correction_request_id,'operation_id',p_operation_id,
-          'candidate_id',v_candidate.candidate_id,
-          'coalesced_to_current_refresh_authority',true,
-          'coalesced_owner_resolution',CASE WHEN v_current_count=1
-            THEN 'COMPLETE_CURRENT_AUTHORITY' ELSE 'ACTIVE_CURRENT_OWNER' END,
-          'actual_refresh_scope_status',CASE WHEN v_current_count=1
-            THEN 'MATERIALISED' ELSE 'STAGED' END
-        )
-      );
-    END IF;
+    -- The generic completion authority is intentionally idempotent.  A lost
+    -- route-election response can therefore replay this call even when the
+    -- held job is already SUCCEEDED; the owner reads its durable completion
+    -- from payload_json and returns duplicate_completion=true.  Do not read a
+    -- separate result column from the job row: no such column exists.
+    v_completion:=public.pay_workbench_complete_job(
+      v_job.id,
+      pg_catalog.jsonb_build_object(
+        'ok',true,'status','COALESCED_TO_CORRECTION_ROUTE_ELECTION',
+        'correction_request_id',p_correction_request_id,'operation_id',p_operation_id,
+        'candidate_id',v_candidate.candidate_id,
+        'coalesced_to_current_refresh_authority',true,
+        'coalesced_owner_resolution',CASE WHEN v_current_count=1
+          THEN 'COMPLETE_CURRENT_AUTHORITY' ELSE 'ACTIVE_CURRENT_OWNER' END,
+        'actual_refresh_scope_status',CASE WHEN v_current_count=1
+          THEN 'MATERIALISED' ELSE 'STAGED' END
+      )
+    );
 
     v_resolved_count:=v_resolved_count+1;
     v_results:=v_results||pg_catalog.jsonb_build_array(pg_catalog.jsonb_build_object(

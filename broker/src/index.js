@@ -50333,7 +50333,7 @@ async function handleBankingPayCorrectionStatusV1(env, req, user, correctionRequ
         // enrichment is temporarily unavailable.
       }
     }
-    if (['AUTHORISED', 'AUTHORIZED'].includes(requestStatus) && progressRequiresAction && result?.pay_batch_id) {
+    if (['AUTHORISED', 'AUTHORIZED', 'PROCESSING', 'APPLIED'].includes(requestStatus) && progressRequiresAction && result?.pay_batch_id) {
       try {
         const { rows } = await sbFetch(
           env,
@@ -50351,9 +50351,14 @@ async function handleBankingPayCorrectionStatusV1(env, req, user, correctionRequ
             ? operationRow.progress_json
             : {};
           const retryCount = Number(progress.processing_retry_count || 0);
+          const phase = String(operationRow.phase || '').trim().toUpperCase();
+          const draftExpandRetry = ['AUTHORISED', 'AUTHORIZED'].includes(requestStatus) && phase === 'EXPAND_WORK';
+          const postFinancialRetry = ['PROCESSING', 'APPLIED'].includes(requestStatus)
+            && ['FINALISE', 'REFRESH_WORKBENCH'].includes(phase)
+            && (requestStatus === 'PROCESSING' || phase === 'REFRESH_WORKBENCH');
           return String(input.correction_request_id || '').toLowerCase() === String(correctionRequestId).toLowerCase()
             && String(operationRow.status || '').trim().toUpperCase() === 'REVIEW_REQUIRED'
-            && String(operationRow.phase || '').trim().toUpperCase() === 'EXPAND_WORK'
+            && (draftExpandRetry || postFinancialRetry)
             && String(operationRow.runner_state || '').trim().toUpperCase() === 'WAITING_USER_REVIEW'
             && operationRow.requires_user_action === true
             && String(error.code || error.error_code || '').trim().toUpperCase() === 'BANKING_PAY_OPERATION_ADVANCE_FAILED'
@@ -50366,8 +50371,14 @@ async function handleBankingPayCorrectionStatusV1(env, req, user, correctionRequ
             'RETRY_PROCESSING',
             ...(Array.isArray(result.available_actions) ? result.available_actions : [])
           ]));
-          result.user_title = 'Cancellation processing needs attention';
-          result.user_message = 'No cancellation work was committed. Continue this same cancellation request safely.';
+          const retryPhase = String(retryOperation.phase || '').trim().toUpperCase();
+          const postFinancialRetry = ['FINALISE', 'REFRESH_WORKBENCH'].includes(retryPhase);
+          result.user_title = postFinancialRetry
+            ? 'Payment cancelled — Banking Pay needs to finish updating'
+            : 'Cancellation processing needs attention';
+          result.user_message = postFinancialRetry
+            ? 'The payment cancellation was applied. Continue this same request to finish updating Banking Pay.'
+            : 'No cancellation work was committed. Continue this same cancellation request safely.';
         }
       } catch {
         // The service-only retry RPC rechecks all durable evidence.  Status
