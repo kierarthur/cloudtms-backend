@@ -1166,7 +1166,12 @@ BEGIN
       v_final_result_hash := private.pay_payment_correction_sha256_v1(v_final_result);
 
       UPDATE public.pay_batches AS integrity_batch
-      SET status = CASE WHEN v_active_item_count = 0 THEN 'CANCELLED' ELSE 'AWAITING_AUTHORISATION' END,
+      -- AWAITING_AUTHORISATION is the in-flight correction fence.  Once the
+      -- correction is financially terminal, any intact remainder must return
+      -- to the existing reviewable DRAFT execution contract.  Leaving a
+      -- terminal remainder in AWAITING_AUTHORISATION creates a dead-end because
+      -- operation-scoped prepare/auth deliberately accepts DRAFT only.
+      SET status = CASE WHEN v_active_item_count = 0 THEN 'CANCELLED' ELSE 'DRAFT' END,
           total_bank_out = v_active_net_bank_amount,
           schedule_kind = NULL, scheduled_at_utc = NULL, scheduled_by_user_id = NULL,
           funding_account_ref = NULL, funds_warning_hours_json = NULL
@@ -1227,8 +1232,7 @@ BEGIN
     UPDATE public.pay_batches AS reconciled_batch
     SET status = CASE
           WHEN v_active_item_count = 0 THEN 'CANCELLED'
-          WHEN v_requested_action = 'DRAFT_CANCEL' THEN 'DRAFT'
-          ELSE 'AWAITING_AUTHORISATION'
+          ELSE 'DRAFT'
         END,
         cancelled_at_utc = CASE WHEN v_active_item_count = 0 THEN COALESCE(reconciled_batch.cancelled_at_utc, v_now) ELSE reconciled_batch.cancelled_at_utc END,
         cancelled_by_user_id = CASE WHEN v_active_item_count = 0 THEN COALESCE(reconciled_batch.cancelled_by_user_id, p_actor_user_id) ELSE reconciled_batch.cancelled_by_user_id END,

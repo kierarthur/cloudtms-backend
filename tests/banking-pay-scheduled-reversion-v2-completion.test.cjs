@@ -112,6 +112,20 @@ test('post-commit V3 authority replaces the premature pre-commit terminal claim'
   assert.match(processChunk, /FINANCIAL_COMPLETE_WORKBENCH_PENDING|workbench_refresh_nudge/);
 });
 
+test('terminal correction remainder returns to the existing guarded Draft reauthorisation path', () => {
+  const finaliseStart = processChunk.indexOf("IF v_phase = 'FINALISE' THEN");
+  const refreshStart = processChunk.indexOf("IF v_phase = 'REFRESH_WORKBENCH' THEN");
+  assert.ok(finaliseStart >= 0 && refreshStart > finaliseStart);
+  const finaliseBody = processChunk.slice(finaliseStart, refreshStart);
+  assert.match(finaliseBody,
+    /SET status = CASE WHEN v_active_item_count = 0 THEN 'CANCELLED' ELSE 'DRAFT' END/);
+  assert.match(finaliseBody,
+    /WHEN v_active_item_count = 0 THEN 'CANCELLED'\s+ELSE 'DRAFT'/);
+  assert.doesNotMatch(finaliseBody,
+    /WHEN v_requested_action = 'DRAFT_CANCEL' THEN 'DRAFT'\s+ELSE 'AWAITING_AUTHORISATION'/);
+  assert.match(finaliseBody, /'reauthorisation_required', v_active_item_count > 0/);
+});
+
 test('fallback enqueue proves the exact finalized token/generation or does normal invalidation', () => {
   assert.match(cancelSafe, /POST_FINANCIAL_TERMINAL_AUTHORITY_V3/);
   assert.match(cancelSafe, /bounded_scope_state_precedes_job',v_preceding_scope_proven/);

@@ -61198,7 +61198,8 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
   const status = String(result.operation_status || result.status || 'RUNNING').trim().toUpperCase();
   const phase = String(result.phase || result.operation_phase || row.phase || '').trim().toUpperCase();
   const terminal = ['COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED'].includes(status) || phase === 'COMPLETE';
-  const waitingUser = ['AWAITING_REAUTHENTICATION', 'AWAITING_AUTHORISATION'].includes(phase) || result.requires_user_action === true;
+  const resultRequestsUserAction = ['AWAITING_REAUTHENTICATION', 'AWAITING_AUTHORISATION'].includes(phase)
+    || result.requires_user_action === true;
   const sqlContinuationSource = result.continuation && typeof result.continuation === 'object' && !Array.isArray(result.continuation)
     ? { ...result.continuation }
     : null;
@@ -61232,19 +61233,27 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
     };
   } else {
     continuation = {
-      required: !terminal && !waitingUser,
+      required: !terminal && !resultRequestsUserAction,
       operation_id: operationId,
       operation_type: 'PAYMENT_CORRECTION',
       pay_batch_id: result.pay_batch_id || row.pay_batch_id || null,
       root_operation_id: row.root_operation_id || null,
-      successor_relation: !terminal && !waitingUser ? 'SELF' : 'NONE',
+      successor_relation: !terminal && !resultRequestsUserAction ? 'SELF' : 'NONE',
       phase,
       run_after_utc: null,
-      reason: !terminal && !waitingUser ? 'PAYMENT_CORRECTION_MORE_WORK' : (waitingUser ? 'PAYMENT_CORRECTION_USER_WAIT' : 'PAYMENT_CORRECTION_TERMINAL'),
-      requires_user_action: waitingUser || status === 'REVIEW_REQUIRED',
+      reason: !terminal && !resultRequestsUserAction ? 'PAYMENT_CORRECTION_MORE_WORK' : (resultRequestsUserAction ? 'PAYMENT_CORRECTION_USER_WAIT' : 'PAYMENT_CORRECTION_TERMINAL'),
+      requires_user_action: resultRequestsUserAction || status === 'REVIEW_REQUIRED',
       terminal
     };
   }
+  // The database-owned continuation is the scheduling authority.  A
+  // financially terminal result may still contain blocker/review information
+  // for the user while explicitly requiring a background REFRESH_WORKBENCH
+  // continuation.  Treating that informational result as an immediate user
+  // wait strands the same correction operation before route election.
+  const waitingUser = sqlContinuationSource
+    ? continuation.requires_user_action === true
+    : resultRequestsUserAction;
   const parsedWorkbenchNudge = parsePaymentCorrectionWorkbenchNudgeEnvelope(result, {
     operationId,
     correctionRequestId

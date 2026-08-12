@@ -109,6 +109,12 @@ test('payment correction dispatcher preserves the exact SQL retry descriptor', (
   assert.match(body, /parsePaymentCorrectionWorkbenchNudgeEnvelope/);
   assert.match(body, /schedulePaymentCorrectionWorkbenchNudge/);
   assert.match(body, /workbench_refresh_nudge_scheduled/);
+  assert.match(body, /const waitingUser = sqlContinuationSource/);
+  assert.match(body, /continuation\.requires_user_action === true/);
+  assert.match(body, /resultRequestsUserAction/);
+  const waitingDeclaration = body.indexOf('const waitingUser = sqlContinuationSource');
+  assert.ok(waitingDeclaration > 0);
+  assert.doesNotMatch(body.slice(0, waitingDeclaration), /\bwaitingUser\b/);
 });
 
 test('terminal correction refresh hands one database-owned session to a durable Workbench nudge', () => {
