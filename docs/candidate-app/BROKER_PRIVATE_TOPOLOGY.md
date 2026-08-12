@@ -150,15 +150,17 @@ Route intervention derives the live PAPER owner from the immutable current-token
 
 ## Current TEST deployment
 
-- Public broker: `test-cloudtms-candidate-broker`, active version `0e1f7188-f341-4620-b8df-4c5c8703276a`.
-- Private API: `test-cloudtms-candidate-private-api`, active version `e6b7d82e-1a89-4303-bfef-a6aca9c8b151`, with `workers_dev = false` and service-binding access only.
-- Normal backend: `test-cloudtms-backend`, active version `c25ed724-3d11-4234-b4b4-1b08f305a3d4`.
+- Public broker: `test-cloudtms-candidate-broker`, active version `9967b17a-6e28-49ef-8669-2bf9601780ed`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `1ffecd48-3598-4b15-a73c-de18cbe3f45f`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `3a57a8b7-8ac3-4c77-b019-4f2490ad9f03`.
 - Broker health/readiness: 200/200; readiness proves the private service binding and signed private-health request.
 - Normal backend health: 200.
 - Direct public Candidate route on normal backend: 404.
 - Candidate feature flags remain false; all seven Candidate business tables and Candidate-bound mail contain zero rows after deployment verification.
 
 The preceding public-authentication runtime correction was published through backend commit `1df31d2f041bb2e6b9381f39dd97a0f63ae7bcd4`. GitHub workflow `31628119602` proved all 35 Candidate PostgreSQL suites on 17.6 and 18.1, and safe migration workflow `31628119591` installed exact repeatable hashes `ac1f99582254f661fec65d3d69624af0648b0618265cd1b2854c046c550623e7` (authentication) and `0ca52de3d26c069846caa7717a88cc75c6c861bf35e3279a9fd8f4752510bb35` (workflow). Its private Candidate version was `ab5ea859-f68a-41fd-98a0-4c20ed6dac2e`, normal TEST backend version `463e8856-4e78-493e-8d96-742a69963bc1` and public broker version `0f358ca2-4631-42b8-b18b-820fe82f0e69`. That record is retained only as prior rollout history; the later v4 final-correction rollout and its independently reproducible evidence supersede it as current authority. TEST and production remain strictly separate; no production resource is part of this authority.
+
+The current v4 public-authentication authority is runtime commit `febe2ba382521947395257e31b49f766a29d9272`, followed only by dependency-setup and adversarial-test evidence commits `ad13a7b73ab1f1c6ea29515da9065a438873971f` and `80fd7be5d63354b6cfc70e886a34632b3365e9e7`. GitHub workflow `31642862805` passed 37 Candidate PostgreSQL suites plus the real public/private/database chain on PostgreSQL 17.6 and 18.1. Safe migration workflow `31641791996` installed authentication repeatable hash `b0ecd116072074c93cd22020ff125fd7b0db405bc079d10c15f57745fbbae9f3`. The complete backend JavaScript suite passed 514 tests; focused Candidate/Office/provider tests passed 139 tests; both OpenAPI files and all three Worker dry builds passed. The TEST rollout kept all Candidate feature flags false and all Candidate business tables and Candidate-bound mail empty. Production was not accessed or changed.
 
 ## Deployment and verification gate
 
