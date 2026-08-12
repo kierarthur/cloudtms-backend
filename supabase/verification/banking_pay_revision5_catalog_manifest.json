@@ -410,7 +410,7 @@
       "schema": "public",
       "name": "pay_no_money_unwind_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "63479ca769f13bb3785ca665a4b86f0d8429440316c909454d8646e4942aeeb2",
+      "definition_sha256": "04f5eae4f27f08f9eee587bb7dc1d86826cda4ce43a5bc6b63ac771cf5e40663",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -827,7 +827,7 @@
       "schema": "public",
       "name": "pay_pre_bank_cancel_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "0cbc5cc00f8eb7fab4745dfb8af6a284d57912db40c0b7b93be4a5a5299bef04",
+      "definition_sha256": "8c66e65f5c4b8692a85a66fe86f371521fbc463d32a2b41e5aa3966c6f547fb4",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

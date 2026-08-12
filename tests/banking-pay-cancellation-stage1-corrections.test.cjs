@@ -62,6 +62,25 @@ test('planning and both candidate helpers bind and revalidate the complete 512-r
   }
 });
 
+test('selection preparation and both financial rechecks hash the same cancellation-reversion authority digest', () => {
+  const digestField = /'cancellation_reversion_pre_request_authority_digest'/g;
+  assert.equal((selection.match(digestField) || []).length, 1);
+  for (const source of [preBank, noMoney]) {
+    assert.equal((source.match(digestField) || []).length, 1);
+    assert.match(
+      source,
+      /v_work_item\.selection_json->'cancellation_reversion_pre_request_authority'->>'authority_digest'/
+    );
+    const digestPosition = source.indexOf("'cancellation_reversion_pre_request_authority_digest'");
+    const hashPosition = source.indexOf('INTO v_current_candidate_scope_hash', digestPosition);
+    const comparisonPosition = source.indexOf(
+      'v_current_candidate_scope_hash IS DISTINCT FROM v_membership.candidate_scope_hash',
+      hashPosition
+    );
+    assert.ok(digestPosition > 0 && hashPosition > digestPosition && comparisonPosition > hashPosition);
+  }
+});
+
 test('finalisation and checker reconcile Overview with candidate net-bank amounts', () => {
   assert.match(processChunk, /sum\(pg_catalog\.round\(COALESCE\(fact_row\.net_bank_amount, 0\) \* 100\)::bigint\)/i);
   assert.match(processChunk, /result_json->>'active_net_amount_pence'/i);
