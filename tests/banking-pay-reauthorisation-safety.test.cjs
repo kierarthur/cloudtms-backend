@@ -29,6 +29,10 @@ test('freshness presentation reuses exact scope-unit decisions and identifies af
   assert.match(freshnessSql, /pay_batch_timesheet_snapshots/);
   assert.match(freshnessSql, /target_snapshot_json->>'client_name'/);
   assert.match(freshnessSql, /target_snapshot_json->>'week_ending_date'/);
+  assert.match(freshnessSql, /current_timesheet\.week_ending_date/);
+  assert.match(freshnessSql, /LEFT JOIN public\.contracts AS current_contract/);
+  assert.match(freshnessSql, /LEFT JOIN public\.clients AS current_client/);
+  assert.match(freshnessSql, /COALESCE\([\s\S]*frozen_timesheet[\s\S]*current_client\.name/);
   assert.match(freshnessSql, /member_row\.active_amount/);
   assert.match(freshnessSql, /pay_batch_paye_net_inputs/);
   assert.match(freshnessSql, /payment_amount_pence/);

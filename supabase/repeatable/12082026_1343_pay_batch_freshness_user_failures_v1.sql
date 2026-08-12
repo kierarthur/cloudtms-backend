@@ -135,12 +135,33 @@ BEGIN
      AND batch_candidate.pay_batch_id = p_pay_batch_id
     LEFT JOIN LATERAL (
       SELECT
-        NULLIF(pg_catalog.btrim(COALESCE(timesheet_snapshot.target_snapshot_json->>'client_name', '')), '') AS client_name,
-        NULLIF(pg_catalog.btrim(COALESCE(timesheet_snapshot.target_snapshot_json->>'week_ending_date', '')), '') AS week_ending_date
-      FROM public.pay_batch_timesheet_snapshots AS timesheet_snapshot
-      WHERE timesheet_snapshot.pay_batch_id = p_pay_batch_id
-        AND timesheet_snapshot.timesheet_id = failed_unit.timesheet_id
-      ORDER BY timesheet_snapshot.created_at_utc DESC, timesheet_snapshot.id DESC
+        COALESCE(
+          NULLIF(pg_catalog.btrim(COALESCE(frozen_timesheet.target_snapshot_json->>'client_name', '')), ''),
+          NULLIF(pg_catalog.btrim(COALESCE(current_client.name, '')), '')
+        ) AS client_name,
+        COALESCE(
+          NULLIF(pg_catalog.btrim(COALESCE(frozen_timesheet.target_snapshot_json->>'week_ending_date', '')), ''),
+          CASE
+            WHEN current_timesheet.week_ending_date IS NOT NULL
+              THEN pg_catalog.to_char(current_timesheet.week_ending_date, 'YYYY-MM-DD')
+            ELSE NULL::text
+          END
+        ) AS week_ending_date
+      FROM (SELECT 1 AS display_seed) AS display_seed
+      LEFT JOIN LATERAL (
+        SELECT timesheet_snapshot.target_snapshot_json
+        FROM public.pay_batch_timesheet_snapshots AS timesheet_snapshot
+        WHERE timesheet_snapshot.pay_batch_id = p_pay_batch_id
+          AND timesheet_snapshot.timesheet_id = failed_unit.timesheet_id
+        ORDER BY timesheet_snapshot.created_at_utc DESC, timesheet_snapshot.id DESC
+        LIMIT 1
+      ) AS frozen_timesheet ON true
+      LEFT JOIN public.timesheets AS current_timesheet
+        ON current_timesheet.timesheet_id = failed_unit.timesheet_id
+      LEFT JOIN public.contracts AS current_contract
+        ON current_contract.id = current_timesheet.contract_id
+      LEFT JOIN public.clients AS current_client
+        ON current_client.id = current_contract.client_id
       LIMIT 1
     ) AS timesheet_display ON true
     LEFT JOIN LATERAL (
