@@ -37,13 +37,13 @@ test('every Revision 5 amended function has one repeatable source authority', ()
   }
 });
 
-test('all thirty-one manifest functions have exactly one canonical repeatable body', () => {
+test('all thirty-three manifest functions have exactly one canonical repeatable body', () => {
   const manifest = JSON.parse(fs.readFileSync(
     path.join(root, 'supabase', 'verification', 'banking_pay_revision5_catalog_manifest.json'),
     'utf8'
   ));
-  assert.equal(manifest.function_count, 31);
-  assert.equal(manifest.functions.length, 31);
+  assert.equal(manifest.function_count, 33);
+  assert.equal(manifest.functions.length, 33);
   for (const item of manifest.functions) {
     const sourceIdentity = item.name === 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refr'
       ? 'pay_payment_cancel_not_sent_and_recalculate_with_workbench_refresh'

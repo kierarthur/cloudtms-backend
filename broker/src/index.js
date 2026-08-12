@@ -38057,7 +38057,36 @@ async function advanceBankingPayExecuteOperation(env, operationRow, user, option
         });
       }
       if (freshness.is_stale === true || freshness.stale === true || numberValue(freshness.stale_count, 0) > 0 || ['STALE', 'FAILED', 'ERROR'].includes(freshnessStatus)) {
-        return reviewRequired(currentPhase, 'BATCH_STALE', 'Payment batch freshness validation did not pass.', { freshness_result: freshness });
+        let stalePaymentFailures = null;
+        try {
+          const failurePayload = await rpc('pay_batch_freshness_user_failures_v1', {
+            p_operation_id: operationId,
+            p_pay_batch_id: payBatchId,
+            p_actor_user_id: actorUserId || null,
+            p_limit: 50
+          }, 'pay_batch_freshness_user_failures_v1');
+          if (failurePayload && typeof failurePayload === 'object' && !Array.isArray(failurePayload)) {
+            stalePaymentFailures = failurePayload;
+          }
+        } catch (failureReadError) {
+          console.warn('[BANKING_PAY_FRESHNESS_FAILURE_PRESENTATION_READ_FAILED]', {
+            operation_id: operationId,
+            pay_batch_id: payBatchId,
+            code: upper(failureReadError && (failureReadError.code || failureReadError.error_code || '')) || 'READ_FAILED'
+          });
+        }
+        return reviewRequired(
+          currentPhase,
+          'BATCH_STALE',
+          'Reauthorisation is blocked because one or more payments changed after this batch was created.',
+          {
+            freshness_result: freshness,
+            stale_payment_failures: stalePaymentFailures,
+            user_instruction: stalePaymentFailures && stalePaymentFailures.instruction
+              ? stalePaymentFailures.instruction
+              : 'Remove or resolve every stale payment, then reauthorise the remaining batch.'
+          }
+        );
       }
       return moreWork('TRANSFER_SCOPE_SEED', {
         status_text: 'Freshness proof passed.',
@@ -61197,6 +61226,41 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
   result = result && typeof result === 'object' && !Array.isArray(result) ? result : {};
   const status = String(result.operation_status || result.status || 'RUNNING').trim().toUpperCase();
   const phase = String(result.phase || result.operation_phase || row.phase || '').trim().toUpperCase();
+  const financialResult = result.result && typeof result.result === 'object' && !Array.isArray(result.result)
+    ? result.result
+    : (result.totals && typeof result.totals === 'object' && !Array.isArray(result.totals) ? result.totals : {});
+  let reauthorisationOverlayReset = null;
+  if (phase === 'REFRESH_WORKBENCH'
+    && result.financial_complete === true
+    && financialResult.reauthorisation_required === true) {
+    const overlayRaw = await sbRpc(env, 'pay_payment_correction_reauthorisation_overlay_reset_v1', {
+      p_correction_request_id: correctionRequestId,
+      p_operation_id: operationId,
+      p_pay_batch_id: result.pay_batch_id || row.pay_batch_id || null,
+      p_actor_user_id: actorUserId || null,
+      p_dry_run: false
+    }, {
+      routeClass: 'OPERATION_WORKER_ADVANCE',
+      purpose: 'PAYMENT_CORRECTION_REAUTHORISATION_OVERLAY_RESET',
+      timeoutMs: 6000
+    });
+    reauthorisationOverlayReset = overlayRaw;
+    if (Array.isArray(reauthorisationOverlayReset) && reauthorisationOverlayReset.length === 1) {
+      reauthorisationOverlayReset = reauthorisationOverlayReset[0];
+    }
+    if (reauthorisationOverlayReset
+      && typeof reauthorisationOverlayReset === 'object'
+      && reauthorisationOverlayReset.pay_payment_correction_reauthorisation_overlay_reset_v1) {
+      reauthorisationOverlayReset = reauthorisationOverlayReset.pay_payment_correction_reauthorisation_overlay_reset_v1;
+    }
+    if (!reauthorisationOverlayReset
+      || typeof reauthorisationOverlayReset !== 'object'
+      || reauthorisationOverlayReset.ok === false) {
+      throw Object.assign(new Error('PAYMENT_CORRECTION_REAUTHORISATION_OVERLAY_RESET_FAILED'), {
+        code: 'PAYMENT_CORRECTION_REAUTHORISATION_OVERLAY_RESET_FAILED'
+      });
+    }
+  }
   const terminal = ['COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED'].includes(status) || phase === 'COMPLETE';
   const resultRequestsUserAction = ['AWAITING_REAUTHENTICATION', 'AWAITING_AUTHORISATION'].includes(phase)
     || result.requires_user_action === true;
@@ -61285,6 +61349,7 @@ async function advancePaymentCorrectionOperation(env, operationRow, user, option
     requires_user_action: waitingUser || status === 'REVIEW_REQUIRED',
     terminal,
     continuation,
+    reauthorisation_overlay_reset: reauthorisationOverlayReset,
     workbench_refresh_nudge: workbenchRefreshNudge,
     workbench_refresh_nudge_scheduled: workbenchRefreshNudge.scheduled === true
   });
