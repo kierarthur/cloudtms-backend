@@ -247,8 +247,6 @@ BEGIN
        WHERE execution_scope.pay_bank_transfer_id = transfer_row.id
          AND (
            COALESCE(execution_scope.provider_submit_attempt_count, 0) > 0
-           OR NULLIF(pg_catalog.btrim(COALESCE(execution_scope.provider_idempotency_key, '')), '') IS NOT NULL
-           OR NULLIF(pg_catalog.btrim(COALESCE(execution_scope.provider_request_id, '')), '') IS NOT NULL
            OR NULLIF(pg_catalog.btrim(COALESCE(execution_scope.provider_transaction_id, '')), '') IS NOT NULL
            OR execution_scope.provider_request_sending_at_utc IS NOT NULL
            OR execution_scope.provider_request_sent_at_utc IS NOT NULL

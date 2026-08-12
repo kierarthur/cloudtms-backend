@@ -916,7 +916,7 @@
       "schema": "public",
       "name": "pay_payment_correction_reauthorisation_overlay_reset_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_pay_batch_id uuid, p_actor_user_id uuid, p_dry_run boolean",
-      "definition_sha256": "fb8d65d2cd7dbb10d964007ead81c544925380b2e4f4b070e174c38579fad9ee",
+      "definition_sha256": "0b73ed00e40d0413271e0f6e5947658e38f954b1276c2e788a4d4b9adcfdebc5",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

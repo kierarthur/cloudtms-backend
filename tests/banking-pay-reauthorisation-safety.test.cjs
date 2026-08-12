@@ -16,6 +16,12 @@ test('financially complete correction retires only a proven local reauthorisatio
   assert.match(overlaySql, /transfer_row\.rail_tx_id/);
   assert.match(overlaySql, /pay_bank_transfer_events/);
   assert.match(overlaySql, /banking_pay_operation_provider_attempts/);
+  assert.match(overlaySql, /provider_submit_attempt_count/);
+  assert.match(overlaySql, /provider_request_sending_at_utc/);
+  assert.match(overlaySql, /provider_request_sent_at_utc/);
+  assert.match(overlaySql, /provider_response_at_utc/);
+  assert.doesNotMatch(overlaySql, /NULLIF\(pg_catalog\.btrim\(COALESCE\(execution_scope\.provider_idempotency_key/);
+  assert.doesNotMatch(overlaySql, /NULLIF\(pg_catalog\.btrim\(COALESCE\(execution_scope\.provider_request_id/);
   assert.match(overlaySql, /SET pay_bank_transfer_id = NULL::uuid/);
   assert.match(overlaySql, /status = 'VOIDED'/);
   assert.match(overlaySql, /policy_x_economics_changed/);
