@@ -26,9 +26,14 @@ test('freshness presentation reuses exact scope-unit decisions and identifies af
   assert.match(freshnessSql, /banking_pay_operation_scope_units/);
   assert.match(freshnessSql, /unit_payload_json->>'pay_batch_item_id'/);
   assert.match(freshnessSql, /candidate_display_name/);
+  assert.match(freshnessSql, /pay_batch_timesheet_snapshots/);
+  assert.match(freshnessSql, /target_snapshot_json->>'client_name'/);
+  assert.match(freshnessSql, /target_snapshot_json->>'week_ending_date'/);
+  assert.match(freshnessSql, /member_row\.active_amount/);
+  assert.match(freshnessSql, /pay_batch_paye_net_inputs/);
+  assert.match(freshnessSql, /payment_amount_pence/);
   assert.match(freshnessSql, /reason_codes/);
   assert.match(freshnessSql, /Remove or resolve every payment listed, then reauthorise the remaining batch/);
   assert.match(worker, /pay_batch_freshness_user_failures_v1/);
   assert.match(worker, /stale_payment_failures/);
 });
-

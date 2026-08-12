@@ -86,7 +86,13 @@ BEGIN
              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN (failed_unit.unit_payload_json->>'pay_batch_candidate_id')::uuid
         ELSE NULL::uuid
-      END AS pay_batch_candidate_id
+      END AS pay_batch_candidate_id,
+      CASE
+        WHEN COALESCE(failed_unit.unit_payload_json->>'timesheet_id', '')
+             ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (failed_unit.unit_payload_json->>'timesheet_id')::uuid
+        ELSE NULL::uuid
+      END AS timesheet_id
     FROM public.banking_pay_operation_scope_units AS failed_unit
     WHERE failed_unit.operation_id = p_operation_id
       AND failed_unit.pay_batch_id = p_pay_batch_id
@@ -104,6 +110,11 @@ BEGIN
         'candidate_id', failed_unit.unit_payload_json->>'candidate_id',
         'candidate_tms_ref', batch_candidate.candidate_tms_ref,
         'candidate_display_name', batch_candidate.candidate_display_name,
+        'client_name', timesheet_display.client_name,
+        'week_ending_date', timesheet_display.week_ending_date,
+        'payment_amount', payment_display.payment_amount,
+        'payment_amount_pence', pg_catalog.round(payment_display.payment_amount * 100)::bigint,
+        'currency', 'GBP',
         'pay_batch_candidate_id', failed_unit.unit_payload_json->>'pay_batch_candidate_id',
         'pay_batch_item_id', failed_unit.unit_payload_json->>'pay_batch_item_id',
         'timesheet_id', failed_unit.unit_payload_json->>'timesheet_id',
@@ -122,6 +133,58 @@ BEGIN
     LEFT JOIN public.pay_batch_candidates AS batch_candidate
       ON batch_candidate.id = failed_unit.pay_batch_candidate_id
      AND batch_candidate.pay_batch_id = p_pay_batch_id
+    LEFT JOIN LATERAL (
+      SELECT
+        NULLIF(pg_catalog.btrim(COALESCE(timesheet_snapshot.target_snapshot_json->>'client_name', '')), '') AS client_name,
+        NULLIF(pg_catalog.btrim(COALESCE(timesheet_snapshot.target_snapshot_json->>'week_ending_date', '')), '') AS week_ending_date
+      FROM public.pay_batch_timesheet_snapshots AS timesheet_snapshot
+      WHERE timesheet_snapshot.pay_batch_id = p_pay_batch_id
+        AND timesheet_snapshot.timesheet_id = failed_unit.timesheet_id
+      ORDER BY timesheet_snapshot.created_at_utc DESC, timesheet_snapshot.id DESC
+      LIMIT 1
+    ) AS timesheet_display ON true
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(
+        (
+          SELECT member_row.active_amount
+          FROM public.pay_payment_correction_request_candidates AS member_row
+          JOIN public.pay_payment_correction_requests AS member_request
+            ON member_request.id = member_row.correction_request_id
+          WHERE member_request.pay_batch_id = p_pay_batch_id
+            AND member_row.pay_batch_candidate_id = batch_candidate.id
+          ORDER BY
+            CASE WHEN member_request.status IN ('APPLIED', 'APPLIED_WITH_BLOCKERS') THEN 0 ELSE 1 END,
+            member_request.updated_at_utc DESC,
+            member_request.id DESC
+          LIMIT 1
+        ),
+        CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM public.pay_batch_items AS active_paye_item
+            WHERE active_paye_item.pay_batch_candidate_id = batch_candidate.id
+              AND COALESCE(active_paye_item.is_voided, false) IS NOT TRUE
+              AND pg_catalog.upper(pg_catalog.btrim(COALESCE(active_paye_item.pay_channel, ''))) = 'PAYE'
+          ) THEN
+            COALESCE((
+              SELECT paye_input.net_amount
+              FROM public.pay_batch_paye_net_inputs AS paye_input
+              WHERE paye_input.pay_batch_candidate_id = batch_candidate.id
+              ORDER BY paye_input.imported_at_utc DESC, paye_input.id DESC
+              LIMIT 1
+            ), 0)
+            + COALESCE((
+              SELECT pg_catalog.sum(active_umbrella_item.amount_inc_vat)
+              FROM public.pay_batch_items AS active_umbrella_item
+              WHERE active_umbrella_item.pay_batch_candidate_id = batch_candidate.id
+                AND COALESCE(active_umbrella_item.is_voided, false) IS NOT TRUE
+                AND pg_catalog.upper(pg_catalog.btrim(COALESCE(active_umbrella_item.pay_channel, ''))) = 'UMBRELLA'
+            ), 0)
+          ELSE batch_candidate.net_bank_amount
+        END,
+        0
+      )::numeric(14,2) AS payment_amount
+    ) AS payment_display ON true
     LEFT JOIN LATERAL (
       SELECT COALESCE(pg_catalog.jsonb_agg(
         reason_set.reason_code ORDER BY reason_set.reason_code
