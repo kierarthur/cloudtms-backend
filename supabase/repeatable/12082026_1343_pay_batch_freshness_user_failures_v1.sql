@@ -88,6 +88,12 @@ BEGIN
         ELSE NULL::uuid
       END AS pay_batch_candidate_id,
       CASE
+        WHEN COALESCE(failed_unit.unit_payload_json->>'pay_batch_item_id', '')
+             ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (failed_unit.unit_payload_json->>'pay_batch_item_id')::uuid
+        ELSE NULL::uuid
+      END AS pay_batch_item_id,
+      CASE
         WHEN COALESCE(failed_unit.unit_payload_json->>'timesheet_id', '')
              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN (failed_unit.unit_payload_json->>'timesheet_id')::uuid
@@ -133,6 +139,9 @@ BEGIN
     LEFT JOIN public.pay_batch_candidates AS batch_candidate
       ON batch_candidate.id = failed_unit.pay_batch_candidate_id
      AND batch_candidate.pay_batch_id = p_pay_batch_id
+    LEFT JOIN public.pay_batch_items AS frozen_batch_item
+      ON frozen_batch_item.id = failed_unit.pay_batch_item_id
+     AND frozen_batch_item.pay_batch_candidate_id = batch_candidate.id
     LEFT JOIN LATERAL (
       SELECT
         COALESCE(
@@ -152,12 +161,12 @@ BEGIN
         SELECT timesheet_snapshot.target_snapshot_json
         FROM public.pay_batch_timesheet_snapshots AS timesheet_snapshot
         WHERE timesheet_snapshot.pay_batch_id = p_pay_batch_id
-          AND timesheet_snapshot.timesheet_id = failed_unit.timesheet_id
+          AND timesheet_snapshot.timesheet_id = COALESCE(failed_unit.timesheet_id, frozen_batch_item.timesheet_id)
         ORDER BY timesheet_snapshot.created_at_utc DESC, timesheet_snapshot.id DESC
         LIMIT 1
       ) AS frozen_timesheet ON true
       LEFT JOIN public.timesheets AS current_timesheet
-        ON current_timesheet.timesheet_id = failed_unit.timesheet_id
+        ON current_timesheet.timesheet_id = COALESCE(failed_unit.timesheet_id, frozen_batch_item.timesheet_id)
       LEFT JOIN public.contracts AS current_contract
         ON current_contract.id = current_timesheet.contract_id
       LEFT JOIN public.clients AS current_client
