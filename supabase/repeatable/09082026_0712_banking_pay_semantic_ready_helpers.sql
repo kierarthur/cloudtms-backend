@@ -3855,10 +3855,23 @@ BEGIN
            'QUEUED','RUNNING','PROCESSING','CLAIMED','IN_PROGRESS','COMPLETE','COMPLETED','SUCCEEDED'
          )
      ) THEN
-    RAISE EXCEPTION 'DRAFT_OVERLAY_FAST_NOT_UNTOUCHED'
-      USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
-        'code','DRAFT_OVERLAY_FAST_NOT_UNTOUCHED','pay_batch_id',p_pay_batch_id
-      )::text;
+    -- Admission is deliberately before every Draft mutation.  A batch that is
+    -- no longer untouched is not a failed cancellation: it must return a typed
+    -- fast-route rejection so pay_payment_correction_expand_work can fall
+    -- through to the existing frozen financial correction owner.  Provider,
+    -- rail, settlement and Policy X checks remain with that safe fallback.
+    RETURN pg_catalog.jsonb_build_object(
+      'ok',true,
+      'status','DRAFT_OVERLAY_FAST_REJECTED',
+      'code','DRAFT_OVERLAY_FAST_NOT_UNTOUCHED',
+      'pay_batch_id',p_pay_batch_id,
+      'fast_route_eligible',false,
+      'mutation_applied',false,
+      'financial_work_item_count',0,
+      'full_build_count',0,
+      'reconciliation_count',0,
+      'policy_x_authority_scope','POST_DRAFT_FROZEN_FINANCIAL_FALLBACK_REQUIRED'
+    );
   END IF;
 
   SELECT operation_row.id
