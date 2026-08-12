@@ -8,6 +8,8 @@
   "vars": {
     "CANDIDATE_APP_ENVIRONMENT": "TEST",
     "CANDIDATE_APP_PUBLIC_URL": "https://testmode.arthur-rai.co.uk",
+    "CANDIDATE_AUTH_REPLAY_KEY_VERSION": "1",
+    "CANDIDATE_AUTH_REPLAY_READ_KEY_VERSIONS": "1",
     "CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION": "1",
     "CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS": "1",
     "SUPABASE_URL": "https://yakevhtttcsljosbdpov.supabase.co",

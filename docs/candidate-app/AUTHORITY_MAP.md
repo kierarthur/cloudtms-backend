@@ -145,3 +145,9 @@ It must not own rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN,
 - Candidate broker consumes only the versioned private CloudTMS service API.
 - Candidate app/web sends factual inputs and renders server truth.
 - Google Availability/rota remains unchanged and is mediated rather than moved.
+
+## 13 August 2026 mixed-version authentication authority
+
+- Challenge START/RESEND delivery always reconstructs from the token hash and issuing version returned by the database-winning result after the canonical RPC. A losing Worker proposal is never allowed to supply the create-only mail row.
+- Every authentication/account operation reserves one request-HMAC key version under the existing environment/idempotency-key lock before it creates a password/refresh proof or factual request hash. Overlapping Workers use that frozen version; a changed action conflicts and a retired reader fails closed.
+- The reservation and completed outcome are one durable `audit_events` receipt lifecycle. No Candidate business table or public Candidate RPC is added.

@@ -178,3 +178,9 @@ The following gate was applied to the current authorised TEST deployment and rem
 10. enable one synthetic TEST capability at a time only with explicit approval.
 
 No production deployment is authorised by this document.
+
+## Mixed private-Worker writer overlap
+
+Rolling private deployments may temporarily run two approved writer versions. For challenge START/RESEND, locally generated material is only a proposal to the database. The canonical result always returns its frozen token hash/version; every handler reconstructs and verifies that winner before writing mail. The deterministic create-only outbox key therefore preserves winner content regardless of RPC-winner or mail-arrival order.
+
+For authentication/account operations, a preliminary service RPC reserves the first proposed request-HMAC version while holding the same global environment/key lock used by the final receipt. Only after that reservation returns may a Worker calculate secret proofs, the factual request HMAC, deterministic refresh output or push semantic selection. The reservation row is completed by the canonical mutation; it is not a second receipt or public RPC. Overlapping writer 1/2 requests with identical facts therefore hash identically and return one usable result rather than a false idempotency conflict.

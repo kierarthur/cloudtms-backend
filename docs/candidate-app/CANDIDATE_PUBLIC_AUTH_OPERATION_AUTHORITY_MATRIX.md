@@ -76,3 +76,9 @@ The independent audit must inspect one layer beyond each reported seam. It shoul
 ## No-change boundary
 
 This authority does not alter DAILY/WEEKLY calculations, rates, pay, charge, VAT, ERNI, margin, TSFIN, Process, Authorise, invoice grouping/generation/issue, payments, Banking Pay, Policy X, settlement, remittances, Office modal behaviour, Candidate timesheet Current/History rules or production.
+
+## Mixed-version concurrency addendum
+
+- Database-winning challenge metadata owns mail content. START and RESEND return the frozen internal token hash/version, and every private handler reconstructs and verifies that winner before a create-only mail attempt.
+- One pre-hash database reservation freezes the first proposed authentication request-HMAC version. The complete account/authentication family uses it for secret proofs and request identity; local writer configuration is only a proposal.
+- Required adversarial proof combines concurrency and rotation: either challenge database winner, either mail arrival order, request-HMAC writer 1/2 overlap, changed factual input/action, retained-reader rollback and deliberate reader retirement.

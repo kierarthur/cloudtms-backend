@@ -177,3 +177,9 @@ There are no environment or general-session-secret fallbacks. TEST and LIVE secr
 CloudTMS owns canonical notification events and preferences. The Candidate broker owns provider device material and eventual APNs/FCM/Web Push delivery. Provider credentials and app identities are a coordinated broker/app activation gate; in-app notification feed and app-resume refresh remain authoritative where external push is unavailable.
 
 No endpoint in this contract executes Banking Pay, settlement, remittance or a production action.
+
+## Mixed private-Worker writer overlap
+
+After every successful or replayed challenge START/RESEND RPC, the private backend discards local proposal authority and reconstructs the delivery token from the database-winning token hash and issuing version returned by that result. It verifies the reconstructed hash before it attempts the create-only mail-outbox identity. A losing Worker can therefore repair missing mail but cannot persist its losing token, even when old/new challenge writers overlap and its mail attempt arrives first.
+
+Before any password, refresh-token or account-action proof is calculated, the private backend reserves one authentication request-HMAC version under the durable environment/idempotency-key authority. The first caller freezes the version; concurrent or later Workers proposing another current writer receive and use it. Same key plus another action conflicts, a main execution cannot replace the reserved version, and deliberate reader retirement returns `CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE` before mutable preconditions. This applies to activation/password completion, login success/failure, refresh, logout, TEST Candidate selection, notification preferences/read, push-token registration and password change.

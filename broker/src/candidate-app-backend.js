@@ -359,7 +359,23 @@ function authReplayKeyVersion(env) {
   return configuredKeyVersion(env, 'CANDIDATE_AUTH_REPLAY_KEY_VERSION');
 }
 
+function authReplayReadVersions(env) {
+  const values = new Set([authReplayKeyVersion(env)]);
+  for (const raw of text(env.CANDIDATE_AUTH_REPLAY_READ_KEY_VERSIONS).split(',')) {
+    if (!raw) continue;
+    const parsed = Number(raw);
+    if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 32) {
+      throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID');
+    }
+    values.add(parsed);
+  }
+  return Array.from(values);
+}
+
 function authReplaySecret(env, version) {
+  if (!authReplayReadVersions(env).includes(Number(version))) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+  }
   return versionedSecret(env, 'CANDIDATE_AUTH_REPLAY_SECRET', version,
     env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET);
 }
@@ -828,18 +844,37 @@ async function queueChallengeMail(env, request, result, purpose, email, token) {
   }, 'resolution=ignore-duplicates,return=representation');
 }
 
-async function candidateAuthReceiptMetadata(deps, env, action, idempotencyKey, identities = {}) {
-  return rpcCall(deps, 'candidate_auth_account_transition_v1', {
+async function candidateAuthReceiptMetadata(
+  deps, env, action, idempotencyKey, identities = {}, reservationMetadata = {}
+) {
+  const proposedKeyVersion = authReplayKeyVersion(env);
+  const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
     p_action: action,
     p_environment: environmentName(env),
     p_account_id: identities.account_id || null,
     p_email_normalized: identities.email_normalized || null,
     p_session_id: identities.session_id || null,
     p_selected_candidate_id: identities.selected_candidate_id || null,
-    p_payload: { replay_probe_only: true },
+    p_payload: {
+      replay_probe_only: true,
+      reserve_request_key_version: true,
+      idempotency_key_version: proposedKeyVersion,
+      ...reservationMetadata
+    },
     p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   });
+  if (result?.request_version_reserved !== true) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  const keyVersion = requireInteger(
+    result?.request_key_version || proposedKeyVersion,
+    'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+  );
+  // A reservation remains usable during a rolling writer change only while
+  // its exact version is intentionally retained by the private Worker.
+  authReplaySecret(env, keyVersion);
+  return { ...result, request_key_version: keyVersion };
 }
 
 async function candidateAuthExactReplay(
@@ -970,8 +1005,16 @@ async function handleChallengeStart(request, env, deps, isResend = false) {
   // the create-only deterministic outbox key makes this safe to retry after a
   // prior mail-insert failure without resetting queued or sent delivery truth.
   if (result?.challenge_id && result?.expires_at_utc) {
-    const deliveryToken = challengeToken || await challengeTokenForReceipt(
-      env, purpose, email, challengeId, idempotencyKey, tokenHashHex, tokenKeyVersion
+    const winningTokenHash = text(result.token_hash_hex).toLowerCase();
+    if (!SHA256_RE.test(winningTokenHash)) {
+      throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+    }
+    const winningTokenKeyVersion = requireInteger(
+      result.token_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+    );
+    const deliveryToken = await challengeTokenForReceipt(
+      env, purpose, email, challengeId, idempotencyKey,
+      winningTokenHash, winningTokenKeyVersion
     );
     await queueChallengeMail(env, request, result, purpose, email, deliveryToken);
   }
@@ -1011,9 +1054,7 @@ async function handlePasswordComplete(request, env, deps) {
     deps, env, 'ACTIVATE_PASSWORD', idempotencyKey,
     { selected_candidate_id: selectedCandidateId }
   );
-  const keyVersion = metadata?.replay_receipt_found === true
-    ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
-    : authReplayKeyVersion(env);
+  const keyVersion = metadata.request_key_version;
   const requestSha256 = await authRequestSha256(env, keyVersion, 'ACTIVATE_PASSWORD', {
     challenge_id: challengeId,
     selected_candidate_id: selectedCandidateId,
@@ -1078,9 +1119,7 @@ async function handleLogin(request, env, deps) {
     deps, env, 'LOGIN_SUCCESS', idempotencyKey,
     { email_normalized: email, selected_candidate_id: selectedCandidateId }
   );
-  const keyVersion = metadata?.replay_receipt_found === true
-    ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
-    : authReplayKeyVersion(env);
+  const keyVersion = metadata.request_key_version;
   const requestSha256 = await authRequestSha256(env, keyVersion, 'LOGIN_SUCCESS', {
     email_normalized: email,
     selected_candidate_id: selectedCandidateId,
@@ -1167,9 +1206,7 @@ async function handleRefresh(request, env, deps) {
   const metadata = await candidateAuthReceiptMetadata(
     deps, env, 'REFRESH_SESSION', idempotencyKey, { session_id: oldSessionId }
   );
-  const keyVersion = metadata?.replay_receipt_found === true
-    ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
-    : authReplayKeyVersion(env);
+  const keyVersion = metadata.request_key_version;
   const requestSha256 = await authRequestSha256(env, keyVersion, 'REFRESH_SESSION', {
     session_id: oldSessionId,
     presented_refresh_token_proof: await authSecretProof(
@@ -1266,15 +1303,16 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
   }
   const metadata = await candidateAuthReceiptMetadata(
     deps, env, action, idempotencyKey,
-    { session_id: claims.sid, selected_candidate_id: selectedCandidateId }
+    { session_id: claims.sid, selected_candidate_id: selectedCandidateId },
+    action === 'REGISTER_PUSH_TOKEN'
+      ? { push_token_identity_key_version: pushIdentityKeyVersion }
+      : {}
   );
-  const keyVersion = metadata?.replay_receipt_found === true
-    ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
-    : authReplayKeyVersion(env);
+  const keyVersion = metadata.request_key_version;
   if (action === 'REGISTER_PUSH_TOKEN') {
-    const semanticIdentityVersion = metadata?.replay_receipt_found === true
-      ? Number(metadata.push_token_identity_key_version)
-      : pushIdentityKeyVersion;
+    const semanticIdentityVersion = Number(
+      metadata.push_token_identity_key_version || pushIdentityKeyVersion
+    );
     const semanticIdentity = pushIdentityProofCatalog.find(
       proof => proof.key_version === semanticIdentityVersion
     );

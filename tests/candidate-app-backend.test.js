@@ -182,7 +182,9 @@ test('challenge replay reads its recorded token version across writer rollback a
       return {
         ok: true, accepted: true, deliver_email: false, idempotent_replay: true,
         challenge_id: '00000000-0000-4000-8000-000000000043',
-        expires_at_utc: '2099-01-01T00:00:00.000Z'
+        expires_at_utc: '2099-01-01T00:00:00.000Z',
+        token_hash_hex: tokenHash,
+        token_key_version: 2
       };
     }
   };
@@ -2233,8 +2235,8 @@ test('failed login lost-response replay does not advance the lockout counter twi
       if (args.p_payload.replay_probe_only === true
           && !args.p_payload.idempotency_request_sha256) {
         return receipt
-          ? { replay_receipt_found: true, request_key_version: 1 }
-          : { replay_receipt_found: false, request_key_version: 1 };
+          ? { replay_receipt_found: true, request_version_reserved: true, request_key_version: 1 }
+          : { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
       }
       if (args.p_payload.replay_probe_only === true) {
         return { ...receipt, idempotent_replay: true };
@@ -2293,8 +2295,8 @@ test('unknown-account login owns a durable generic failure receipt and changed e
       if (args.p_payload.replay_probe_only === true
           && !args.p_payload.idempotency_request_sha256) {
         return receipt
-          ? { replay_receipt_found: true, request_key_version: 1 }
-          : { replay_receipt_found: false, request_key_version: 1 };
+          ? { replay_receipt_found: true, request_version_reserved: true, request_key_version: 1 }
+          : { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
       }
       if (args.p_payload.replay_probe_only === true) {
         if (args.p_payload.idempotency_request_sha256 !== receipt.request_sha256) {
@@ -2386,7 +2388,7 @@ test('concurrent activation, login and refresh return the database winner refres
           metadataCalls += 1;
           if (metadataCalls === 2) releaseMetadata();
           await bothMetadataCalls;
-          return { replay_receipt_found: false, request_key_version: 1 };
+          return { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
         }
         mutationCalls += 1;
         if (!winner) {
@@ -2509,7 +2511,7 @@ test('concurrent logout and password change recover the durable result after mut
           metadataCalls += 1;
           if (metadataCalls === 2) releaseMetadata();
           await metadataBarrier;
-          return { replay_receipt_found: false, request_key_version: 1 };
+          return { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
         }
         if (args.p_payload.replay_probe_only === true) {
           assert.equal(args.p_payload.idempotency_request_sha256, receipt.request_sha256);
@@ -2576,7 +2578,7 @@ test('selected-candidate precondition recovery returns the same frozen access cr
       assert.equal(args.p_action, 'SELECT_TEST_CANDIDATE');
       assert.equal(args.p_payload.replay_probe_only, true);
       if (!args.p_payload.idempotency_request_sha256) {
-        return { replay_receipt_found: false, request_key_version: 1 };
+        return { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
       }
       exactReplayReads += 1;
       return {
@@ -2655,10 +2657,10 @@ test('push registration replay hashes semantic token identity rather than random
           && !args.p_payload.idempotency_request_sha256) {
         return receipt
           ? {
-              replay_receipt_found: true, request_key_version: 1,
+              replay_receipt_found: true, request_version_reserved: true, request_key_version: 1,
               push_token_identity_key_version: receipt.push_token_identity_key_version
             }
-          : { replay_receipt_found: false, request_key_version: 1 };
+          : { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
       }
       if (args.p_payload.replay_probe_only === true) {
         if (args.p_payload.idempotency_request_sha256 !== receipt.request_sha256) {
@@ -2772,8 +2774,8 @@ test('notification read acknowledgement has one durable timestamped result and c
       if (args.p_payload.replay_probe_only === true
           && !args.p_payload.idempotency_request_sha256) {
         return receipt
-          ? { replay_receipt_found: true, request_key_version: 1 }
-          : { replay_receipt_found: false, request_key_version: 1 };
+          ? { replay_receipt_found: true, request_version_reserved: true, request_key_version: 1 }
+          : { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
       }
       if (args.p_payload.replay_probe_only === true) {
         if (args.p_payload.idempotency_request_sha256 !== receipt.request_sha256) {
@@ -2828,9 +2830,9 @@ test('refresh lost-response replay returns the same successor token and a new ke
       if (args.p_payload.replay_probe_only === true
           && !args.p_payload.idempotency_request_sha256) {
         if (args.p_idempotency_key === idempotencyKey && receipt) {
-          return { replay_receipt_found: true, request_key_version: 1 };
+          return { replay_receipt_found: true, request_version_reserved: true, request_key_version: 1 };
         }
-        return { replay_receipt_found: false, request_key_version: 1 };
+        return { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
       }
       if (args.p_payload.replay_probe_only === true) {
         assert.equal(args.p_payload.idempotency_request_sha256, firstRequestSha);

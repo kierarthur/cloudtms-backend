@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import test from 'node:test';
 
 import {
@@ -36,6 +37,28 @@ function psql(sql, payload = null) {
     throw new Error(`${result.stderr || ''}\n${result.stdout || ''}`.trim());
   }
   return String(result.stdout || '').trim();
+}
+
+function psqlAsync(sql, payload = null) {
+  const renderedSql = payload == null ? sql : sql.replaceAll(
+    ":'payload_b64'", `'${Buffer.from(JSON.stringify(payload)).toString('base64')}'`
+  );
+  const container = String(process.env.CANDIDATE_AUTH_PG_CONTAINER || '').trim();
+  const command = container ? 'docker' : 'psql';
+  const args = container
+    ? ['exec', container, 'psql', ...psqlArguments(renderedSql)]
+    : psqlArguments(renderedSql);
+  return new Promise((resolve, reject) => {
+    execFile(command, args, {
+      encoding: 'utf8', env: process.env, maxBuffer: 4 * 1024 * 1024
+    }, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(`${stderr || ''}\n${stdout || ''}`.trim()));
+        return;
+      }
+      resolve(String(stdout || '').trim());
+    });
+  });
 }
 
 function rpcSql(name) {
@@ -224,6 +247,126 @@ test('public broker, signed private backend and PostgreSQL share durable auth ou
     assert.equal((await changedUnknown.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
     assert.equal(psql(`select count(*) from public.candidate_app_accounts
       where email_normalized like '%postgres-chain@example.test'`), '0');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('real private handlers and PostgreSQL keep one winner across mixed auth writer versions', {
+  skip: !enabled
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const challengeEmail = 'mixed-postgres-chain@example.test';
+  const challengeKey = 'mixed-postgres-chain-start-key';
+  const loginKey = 'mixed-postgres-chain-login-key';
+  const challengeMailTokens = [];
+
+  psql(`
+    update public.settings_defaults
+    set candidate_app_feature_flags_json=candidate_app_feature_flags_json||
+      jsonb_build_object('candidate_account_registration',true)
+    where id=1;
+    insert into public.candidates(id,email,active,key_norm)
+    values('ca130826-0002-4000-8000-000000000001',
+      '${challengeEmail}',true,'MIXED-POSTGRES-CHAIN')
+    on conflict (id) do nothing;
+  `);
+
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      return JSON.parse(await psqlAsync(rpcSql(name), args));
+    }
+  };
+  const envFor = version => ({
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_APP_PUBLIC_URL: origin,
+    CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION: String(version),
+    CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS: '1,2',
+    CANDIDATE_CHALLENGE_TOKEN_SECRET_V1: 'postgres-mixed-challenge-v1-not-live',
+    CANDIDATE_CHALLENGE_TOKEN_SECRET_V2: 'postgres-mixed-challenge-v2-not-live',
+    CANDIDATE_AUTH_REPLAY_KEY_VERSION: String(version),
+    CANDIDATE_AUTH_REPLAY_READ_KEY_VERSIONS: '1,2',
+    CANDIDATE_AUTH_REPLAY_SECRET_V1: 'postgres-mixed-auth-v1-not-live',
+    CANDIDATE_AUTH_REPLAY_SECRET_V2: 'postgres-mixed-auth-v2-not-live',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'postgres-mixed-session-not-live',
+    SUPABASE_URL: `https://postgres-mixed-v${version}.invalid`,
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  });
+  const challengeRequest = () => new Request(
+    'https://private.test/candidate-app/v1/auth/challenge/start', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: challengeEmail, purpose: 'ACTIVATE', idempotency_key: challengeKey
+      })
+    }
+  );
+  const loginRequest = email => new Request(
+    'https://private.test/candidate-app/v1/auth/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email, password: 'same-mixed-postgres-password', idempotency_key: loginKey
+      })
+    }
+  );
+
+  globalThis.fetch = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_app_accounts')) return Response.json([]);
+    if (path.endsWith('/mail_outbox') && init.method === 'POST') {
+      const body = JSON.parse(init.body);
+      const match = String(body.body_text).match(/#token=([^\s]+)/);
+      assert.ok(match, 'real-chain challenge mail omitted its token');
+      challengeMailTokens.push(decodeURIComponent(match[1]));
+      return Response.json(challengeMailTokens.length === 1 ? [{}] : []);
+    }
+    throw new Error(`unexpected mixed-version REST operation ${path}`);
+  };
+
+  try {
+    const challengeResults = await Promise.all([1, 2].map(version =>
+      handleCandidateAppRequest(challengeRequest(), envFor(version), {}, deps)
+    ));
+    assert.deepEqual(challengeResults.map(response => response.status), [202, 202]);
+    assert.equal(challengeMailTokens.length, 2);
+    const winningChallengeHash = psql(`
+      select encode(token_hash,'hex')
+      from public.candidate_auth_challenges
+      where deterministic_outbox_key='${challengeKey}'
+    `);
+    assert.match(winningChallengeHash, /^[0-9a-f]{64}$/);
+    for (const token of challengeMailTokens) {
+      assert.equal(createHash('sha256').update(token).digest('hex'), winningChallengeHash);
+    }
+
+    const loginResults = await Promise.all([1, 2].map(version =>
+      handleCandidateAppRequest(
+        loginRequest('unknown-mixed-postgres@example.test'), envFor(version), {}, deps
+      )
+    ));
+    assert.deepEqual(loginResults.map(response => response.status), [401, 401]);
+    const receipt = JSON.parse(psql(`
+      select jsonb_build_object(
+        'count',count(*),
+        'key_versions',jsonb_agg(before_json#>>'{metadata,request_key_version}'),
+        'request_hashes',jsonb_agg(before_json->>'request_sha256'),
+        'response_recorded',bool_and(after_json is not null)
+      )::text
+      from public.audit_events
+      where object_type='candidate_auth_mutation_receipt'
+        and object_id_text='TEST'
+        and correlation_id='${loginKey}'
+    `));
+    assert.equal(receipt.count, 1);
+    assert.equal(receipt.key_versions.length, 1);
+    assert.match(receipt.request_hashes[0], /^[0-9a-f]{64}$/);
+    assert.equal(receipt.response_recorded, true);
+
+    const changed = await handleCandidateAppRequest(
+      loginRequest('changed-mixed-postgres@example.test'), envFor(2), {}, deps
+    );
+    assert.equal(changed.status, 409);
+    assert.equal((await changed.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
   } finally {
     globalThis.fetch = originalFetch;
   }

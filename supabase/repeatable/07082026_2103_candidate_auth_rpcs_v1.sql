@@ -23,8 +23,16 @@ declare
   v_environment text:=private._candidate_assert_environment(p_environment);
   v_key text:=nullif(btrim(coalesce(p_idempotency_key,'')),'');
   v_action text:=upper(btrim(coalesce(p_action,'')));
+  v_receipt_id uuid;
   v_before jsonb;
   v_after jsonb;
+  v_metadata jsonb:=coalesce(p_metadata,'{}'::jsonb)-'reserve_request_key_version';
+  v_reserve_request_key_version boolean:=coalesce(
+    (coalesce(p_metadata,'{}'::jsonb)->>'reserve_request_key_version')::boolean,false
+  );
+  v_recorded_sha256 text;
+  v_recorded_key_version integer;
+  v_proposed_key_version integer;
 begin
   if v_key is null or length(v_key)>200 or v_action=''
      or (p_request_sha256 is not null and lower(p_request_sha256) !~ '^[0-9a-f]{64}$')
@@ -36,17 +44,24 @@ begin
     hashtext('CANDIDATE_AUTH_MUTATION_RECEIPT_V1'),
     hashtext(v_environment||'|'||v_key)
   );
-  select ae.before_json,ae.after_json into v_before,v_after
+  if v_reserve_request_key_version then
+    v_proposed_key_version:=nullif(v_metadata->>'request_key_version','')::integer;
+    if v_proposed_key_version is null
+       or v_proposed_key_version<1 or v_proposed_key_version>32 then
+      raise exception 'CANDIDATE_IDEMPOTENCY_RECEIPT_INVALID' using errcode='22023';
+    end if;
+  end if;
+
+  select ae.id,ae.before_json,ae.after_json into v_receipt_id,v_before,v_after
   from public.audit_events ae
   where ae.object_type='candidate_auth_mutation_receipt'
     and ae.object_id_text=v_environment
     and ae.correlation_id=v_key
   order by ae.ts_utc desc,ae.id desc
-  limit 1;
+  limit 1
+  for update;
   if found then
-    if upper(coalesce(v_before->>'auth_action',''))<>v_action
-       or (p_request_sha256 is not null
-         and v_before->>'request_sha256' is distinct from lower(p_request_sha256)) then
+    if upper(coalesce(v_before->>'auth_action',''))<>v_action then
       raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
         using errcode='40001',detail=jsonb_build_object(
           'code','CANDIDATE_IDEMPOTENCY_CONFLICT',
@@ -54,12 +69,107 @@ begin
           'action',v_action
         )::text;
     end if;
+    v_recorded_sha256:=nullif(lower(v_before->>'request_sha256'),'');
+    v_recorded_key_version:=nullif(v_before#>>'{metadata,request_key_version}','')::integer;
+    if v_reserve_request_key_version
+       and nullif(v_before#>>'{metadata,reservation_identity_sha256}','')
+           is distinct from nullif(v_metadata->>'reservation_identity_sha256','') then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_IDEMPOTENCY_CONFLICT',
+          'idempotency_key',v_key,
+          'action',v_action
+        )::text;
+    end if;
+    if v_recorded_key_version is not null then
+      if p_request_sha256 is not null
+         and nullif(v_metadata->>'request_key_version','')::integer
+             is distinct from v_recorded_key_version then
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+          using errcode='40001',detail=jsonb_build_object(
+            'code','CANDIDATE_IDEMPOTENCY_CONFLICT',
+            'idempotency_key',v_key,
+            'action',v_action
+          )::text;
+      end if;
+      -- The first caller owns the operation's request-key version.  A later
+      -- Worker may propose another current writer during a rolling deploy,
+      -- but must receive and use the already frozen version.
+      v_metadata:=jsonb_set(
+        v_metadata,'{request_key_version}',to_jsonb(v_recorded_key_version),true
+      );
+    end if;
+    if p_request_sha256 is not null and v_recorded_sha256 is not null
+       and v_recorded_sha256<>lower(p_request_sha256) then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_IDEMPOTENCY_CONFLICT',
+          'idempotency_key',v_key,
+          'action',v_action
+        )::text;
+    end if;
+    if p_request_sha256 is not null and v_recorded_sha256 is null then
+      update public.audit_events ae set before_json=jsonb_set(
+        jsonb_set(
+          coalesce(ae.before_json,'{}'::jsonb),
+          '{request_sha256}',to_jsonb(lower(p_request_sha256)),true
+        ),
+        '{metadata}',coalesce(ae.before_json->'metadata','{}'::jsonb)||v_metadata,true
+      ) where ae.id=v_receipt_id
+      returning ae.before_json into v_before;
+      v_recorded_sha256:=lower(p_request_sha256);
+    end if;
+    if p_response is not null and v_after is null then
+      update public.audit_events ae set
+        before_json=jsonb_set(
+          coalesce(ae.before_json,'{}'::jsonb),
+          '{metadata}',coalesce(ae.before_json->'metadata','{}'::jsonb)||v_metadata,true
+        ),
+        after_json=p_response
+      where ae.id=v_receipt_id
+      returning ae.before_json,ae.after_json into v_before,v_after;
+      return jsonb_build_object(
+        'found',false,'recorded',true,'reserved',true,
+        'request_sha256',v_before->>'request_sha256',
+        'metadata',coalesce(v_before->'metadata','{}'::jsonb),
+        'response_recorded',true
+      );
+    end if;
+    if p_response is null and p_request_sha256 is not null and v_after is null then
+      return jsonb_build_object(
+        'found',false,'reserved',true,'claimed',true,
+        'request_sha256',v_before->>'request_sha256',
+        'metadata',coalesce(v_before->'metadata','{}'::jsonb),
+        'response_recorded',false
+      );
+    end if;
     return jsonb_build_object(
       'found',true,
       'request_sha256',v_before->>'request_sha256',
       'metadata',coalesce(v_before->'metadata','{}'::jsonb),
+      'response_recorded',v_after is not null,
       'response',case when p_request_sha256 is null then null
         else coalesce(v_after,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true) end
+    );
+  end if;
+  if p_response is null and p_request_sha256 is null
+     and v_reserve_request_key_version then
+    insert into public.audit_events(
+      actor_user_id,object_type,object_id_text,action,before_json,after_json,
+      reason,correlation_id,ts_utc
+    ) values (
+      null,'candidate_auth_mutation_receipt',v_environment,
+      'CANDIDATE_AUTH_MUTATION_RECEIPT',jsonb_build_object(
+        'contract_version','CANDIDATE_AUTH_MUTATION_RECEIPT_V2',
+        'request_sha256',null,
+        'auth_action',v_action,
+        'metadata',v_metadata
+      ),null,'Reserved Candidate auth request-key version',v_key,
+      coalesce(p_now_utc,now())
+    );
+    return jsonb_build_object(
+      'found',false,'reserved',true,'response_recorded',false,
+      'metadata',v_metadata
     );
   end if;
   if p_response is null then
@@ -74,10 +184,10 @@ begin
   ) values (
     null,'candidate_auth_mutation_receipt',v_environment,
     'CANDIDATE_AUTH_MUTATION_RECEIPT',jsonb_build_object(
-      'contract_version','CANDIDATE_AUTH_MUTATION_RECEIPT_V1',
+      'contract_version','CANDIDATE_AUTH_MUTATION_RECEIPT_V2',
       'request_sha256',lower(p_request_sha256),
       'auth_action',v_action,
-      'metadata',coalesce(p_metadata,'{}'::jsonb)
+      'metadata',v_metadata
     ),p_response,'Durable Candidate auth/account mutation result',v_key,
     coalesce(p_now_utc,now())
   );
@@ -127,8 +237,10 @@ declare
   v_audit_action text;
   v_idempotent_action boolean:=false;
   v_replay_probe_only boolean:=false;
+  v_reserve_request_key_version boolean:=false;
   v_request_sha256 text;
   v_request_key_version integer;
+  v_reservation_identity_sha256 text;
   v_public_credential_versions jsonb;
   v_receipt_metadata jsonb:='{}'::jsonb;
   v_receipt jsonb;
@@ -168,6 +280,9 @@ begin
       raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023';
     end if;
     v_replay_probe_only:=coalesce((v_payload->>'replay_probe_only')::boolean,false);
+    v_reserve_request_key_version:=coalesce(
+      (v_payload->>'reserve_request_key_version')::boolean,false
+    );
     v_request_sha256:=nullif(lower(btrim(coalesce(v_payload->>'idempotency_request_sha256',''))),'');
     if v_request_sha256 is not null and v_request_sha256 !~ '^[0-9a-f]{64}$' then
       raise exception 'CANDIDATE_IDEMPOTENCY_RECEIPT_INVALID' using errcode='22023';
@@ -177,6 +292,22 @@ begin
       raise exception 'CANDIDATE_IDEMPOTENCY_RECEIPT_INVALID' using errcode='22023';
     end if;
     v_receipt_metadata:=jsonb_build_object('request_key_version',v_request_key_version);
+    if v_replay_probe_only and v_request_sha256 is null
+       and v_reserve_request_key_version then
+      v_reservation_identity_sha256:=encode(extensions.digest(convert_to(
+        jsonb_build_object(
+          'contract_version','CANDIDATE_AUTH_REQUEST_VERSION_RESERVATION_V1',
+          'action',v_action,
+          'environment',v_environment,
+          'account_id',p_account_id,
+          'email_normalized',lower(nullif(btrim(coalesce(p_email_normalized,'')),'')),
+          'session_id',p_session_id,
+          'selected_candidate_id',p_selected_candidate_id
+        )::text,'UTF8'),'sha256'),'hex');
+      v_receipt_metadata:=v_receipt_metadata||jsonb_build_object(
+        'reservation_identity_sha256',v_reservation_identity_sha256
+      );
+    end if;
     if v_action='REGISTER_PUSH_TOKEN'
        and coalesce(v_payload->>'push_token_identity_key_version','') ~ '^[1-9][0-9]{0,4}$'
        and (v_payload->>'push_token_identity_key_version')::integer<=65535 then
@@ -187,12 +318,21 @@ begin
     end if;
     v_receipt:=private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,null,
-      v_receipt_metadata,p_now_utc
+      v_receipt_metadata||case
+        when v_replay_probe_only and v_request_sha256 is null
+          and v_reserve_request_key_version
+        then jsonb_build_object('reserve_request_key_version',true)
+        else '{}'::jsonb end,
+      p_now_utc
     );
     if coalesce((v_receipt->>'found')::boolean,false) then
       if v_request_sha256 is null then
         return jsonb_strip_nulls(jsonb_build_object(
-          'ok',true,'replay_receipt_found',true,
+          'ok',true,
+          'replay_receipt_found',coalesce(
+            (v_receipt->>'response_recorded')::boolean,false
+          ),
+          'request_version_reserved',true,
           'request_key_version',coalesce(
             nullif(v_receipt#>>'{metadata,request_key_version}','')::integer,1
           ),
@@ -203,10 +343,18 @@ begin
       return coalesce(v_receipt->'response','{}'::jsonb);
     end if;
     if v_replay_probe_only then
-      return jsonb_build_object(
+      return jsonb_strip_nulls(jsonb_build_object(
         'ok',true,'replay_receipt_found',false,
-        'request_key_version',v_request_key_version
-      );
+        'request_version_reserved',coalesce((v_receipt->>'reserved')::boolean,false),
+        'request_key_version',coalesce(
+          nullif(v_receipt#>>'{metadata,request_key_version}','')::integer,
+          v_request_key_version
+        ),
+        'push_token_identity_key_version',coalesce(
+          nullif(v_receipt#>>'{metadata,push_token_identity_key_version}','')::integer,
+          nullif(v_receipt_metadata->>'push_token_identity_key_version','')::integer
+        )
+      ));
     end if;
     if v_request_sha256 is null then
       raise exception 'CANDIDATE_IDEMPOTENCY_RECEIPT_INVALID' using errcode='22023';
@@ -719,7 +867,8 @@ begin
       v_response:=jsonb_build_object(
         'ok',true,'accepted',true,'deliver_email',false,'idempotent_replay',true,
         'challenge_id',v_new.id,'expires_at_utc',v_new.expires_at_utc,
-        'resend_count',v_new.resend_count,'deterministic_outbox_key',v_new.deterministic_outbox_key
+        'resend_count',v_new.resend_count,'deterministic_outbox_key',v_new.deterministic_outbox_key,
+        'token_hash_hex',encode(p_token_hash,'hex'),'token_key_version',p_token_key_version
       );
       perform private._candidate_auth_mutation_receipt_v1(
         v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
@@ -759,7 +908,8 @@ begin
     ) returning * into v_new;
     v_response:=jsonb_build_object('ok',true,'accepted',true,'deliver_email',true,'idempotent_replay',false,
       'challenge_id',v_new.id,'expires_at_utc',v_new.expires_at_utc,
-      'deterministic_outbox_key',v_new.deterministic_outbox_key);
+      'deterministic_outbox_key',v_new.deterministic_outbox_key,
+      'token_hash_hex',encode(p_token_hash,'hex'),'token_key_version',p_token_key_version);
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
       v_receipt_metadata,p_now_utc
@@ -860,7 +1010,8 @@ begin
     update public.candidate_auth_challenges set superseded_by_id=v_new.id where id=v_challenge.id;
     v_response:=jsonb_build_object('ok',true,'accepted',true,'deliver_email',true,'idempotent_replay',false,
       'challenge_id',v_new.id,'expires_at_utc',v_new.expires_at_utc,'resend_count',v_new.resend_count,
-      'deterministic_outbox_key',v_new.deterministic_outbox_key);
+      'deterministic_outbox_key',v_new.deterministic_outbox_key,
+      'token_hash_hex',encode(p_token_hash,'hex'),'token_key_version',p_token_key_version);
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
       v_receipt_metadata,p_now_utc

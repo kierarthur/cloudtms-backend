@@ -481,8 +481,8 @@ test('public logout unwraps the private bearer and replays one durable private m
       if (args.p_payload.replay_probe_only === true
           && !args.p_payload.idempotency_request_sha256) {
         return receipt
-          ? { replay_receipt_found: true, request_key_version: 1 }
-          : { replay_receipt_found: false, request_key_version: 1 };
+          ? { replay_receipt_found: true, request_version_reserved: true, request_key_version: 1 }
+          : { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
       }
       if (args.p_payload.replay_probe_only === true) {
         if (args.p_payload.idempotency_request_sha256 !== receipt.request_sha256) {
@@ -681,8 +681,8 @@ test('real public broker and private API replay one durable login, activation an
         if (args.p_payload.replay_probe_only === true
             && !args.p_payload.idempotency_request_sha256) {
           return receipt
-            ? { replay_receipt_found: true, request_key_version: 1 }
-            : { replay_receipt_found: false, request_key_version: 1 };
+            ? { replay_receipt_found: true, request_version_reserved: true, request_key_version: 1 }
+            : { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
         }
         if (args.p_payload.replay_probe_only === true) {
           return { ...receipt, idempotent_replay: true };
@@ -1202,10 +1202,10 @@ test('full public push replay accepts the same raw token and conflicts on a chan
           && !args.p_payload.idempotency_request_sha256) {
         return receipt
           ? {
-              replay_receipt_found: true, request_key_version: 1,
+              replay_receipt_found: true, request_version_reserved: true, request_key_version: 1,
               push_token_identity_key_version: receipt.push_token_identity_key_version
             }
-          : { replay_receipt_found: false, request_key_version: 1 };
+          : { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
       }
       if (args.p_payload.replay_probe_only === true) {
         if (args.p_payload.idempotency_request_sha256 !== receipt.request_sha256) {
