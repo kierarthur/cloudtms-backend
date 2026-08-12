@@ -624,7 +624,8 @@ BEGIN
       SELECT COALESCE(pg_catalog.jsonb_object_agg(
         result_row.value->>'candidate_id',
         pg_catalog.jsonb_build_object(
-          'contract_version','CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2',
+          'contract_version',COALESCE(result_row.value->>'contract_version',
+            'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3'),
           'candidate_id',result_row.value->>'candidate_id',
           'pay_batch_candidate_id',result_row.value->>'pay_batch_candidate_id',
           'source_change_seq',result_row.value->>'source_change_seq',
@@ -634,6 +635,8 @@ BEGIN
           'original_source_publication_id',result_row.value->>'original_source_publication_id',
           'current_source_publication_id',result_row.value->>'current_source_publication_id',
           'invariant_economic_digest',result_row.value->>'invariant_economic_digest',
+          'currentness_basis',result_row.value->>'currentness_basis',
+          'execution_overlay_authority',result_row.value->'execution_overlay_authority',
           'pre_request_exact',COALESCE((result_row.value->>'admitted')::boolean,false),
           'fast_reversion_eligible',COALESCE((result_row.value->>'admitted')::boolean,false),
           'rejection_reason',result_row.value->>'rejection_reason',
@@ -663,6 +666,9 @@ BEGIN
       'cancellation_reversion_pre_request_authorities_v2',
         CASE WHEN v_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
           THEN v_cancel_reversion_pre_request_authorities_v2 ELSE '{}'::jsonb END,
+      'cancellation_reversion_pre_request_authorities_v3',
+        CASE WHEN v_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
+          THEN v_cancel_reversion_pre_request_authorities_v2 ELSE '{}'::jsonb END,
       'canonical_explicit_candidate_tokens', CASE
         WHEN v_mode = 'EXPLICIT' THEN v_canonical_explicit_tokens ELSE '[]'::jsonb END,
       'selection', coalesce(p_selection_json->'selection', '{}'::jsonb) || pg_catalog.jsonb_build_object(
@@ -685,6 +691,7 @@ BEGIN
     v_descriptor_hash := private.pay_payment_correction_sha256_v1(
       v_selection - 'command' - 'draft_overlay_fast_pre_request_authorities'
         - 'cancellation_reversion_pre_request_authorities_v2'
+        - 'cancellation_reversion_pre_request_authorities_v3'
     );
     v_correction_kind := CASE WHEN v_action IN ('NO_MONEY_RELEASE', 'NO_MONEY_UNWIND')
                               THEN 'NO_MONEY_UNWIND' ELSE 'PRE_BANK_CANCEL' END;
@@ -896,8 +903,12 @@ BEGIN
                WHEN COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL'
                  THEN v_request.selection_json->'draft_overlay_fast_pre_request_authorities'
                         ->batch_candidate.candidate_id::text
-               ELSE v_request.selection_json->'cancellation_reversion_pre_request_authorities_v2'
-                        ->batch_candidate.candidate_id::text
+                ELSE COALESCE(
+                  v_request.selection_json->'cancellation_reversion_pre_request_authorities_v3'
+                    ->batch_candidate.candidate_id::text,
+                  v_request.selection_json->'cancellation_reversion_pre_request_authorities_v2'
+                    ->batch_candidate.candidate_id::text
+                )
              END AS pre_request_authority,
              COALESCE(v_request.plan_json->>'requested_action','')='DRAFT_CANCEL' AS is_draft_overlay,
              COALESCE(candidate_counter.seq,0) AS live_source_change_seq,
@@ -983,9 +994,11 @@ BEGIN
     ), classified AS (
       SELECT selected_candidates.*,
         (
-          COALESCE(pre_request_authority->>'contract_version','')=
-            CASE WHEN is_draft_overlay THEN 'DRAFT_OVERLAY_FAST_PRE_REQUEST_AUTHORITY_V1'
-                 ELSE 'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2' END
+          CASE WHEN is_draft_overlay THEN
+            COALESCE(pre_request_authority->>'contract_version','')='DRAFT_OVERLAY_FAST_PRE_REQUEST_AUTHORITY_V1'
+          ELSE COALESCE(pre_request_authority->>'contract_version','') IN (
+            'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2',
+            'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3') END
           AND COALESCE(pre_request_authority->>'candidate_id','')=candidate_id::text
           AND COALESCE((pre_request_authority->>'pre_request_exact')::boolean,false)
           AND COALESCE(pre_request_authority->>'source_change_seq','') ~ '^[0-9]{1,18}$'

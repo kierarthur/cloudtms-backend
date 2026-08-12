@@ -72,6 +72,12 @@ const broker = read('broker', 'src', 'index.js');
 const legacyFunctions = read('supabase', 'repeatable', '26052026_2100HRS_NEW_FUNCTIONS.sql');
 const cancellationSuccessAlertMigration = read('supabase', 'migrations',
   '10082026_2103_banking_alert_cancellation_success_kind.sql');
+const unsentExecutionOverlayProof = read('supabase', 'repeatable',
+  '12082026_0915_pay_workbench_unsent_execution_overlay_proof_page_v1.sql');
+const financialScopeDirtyTransition = read('supabase', 'repeatable',
+  '04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql');
+const correctionSelectionPrepare = read('supabase', 'repeatable',
+  '04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql');
 
 test('semantic V3 and cancellation controls install disabled with a fail-closed dependency', () => {
   for (const setting of [
@@ -90,6 +96,33 @@ test('semantic V3 and cancellation controls install disabled with a fail-closed 
   assert.match(migration, /CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3/);
   assert.match(migration, /READY_TO_PAY_SEMANTIC_V2/);
   assert.match(migration, /CERTIFIED_CANCELLATION_REVERSION/);
+});
+
+test('executed-not-paid reversion proves an exact unsent execution overlay without weakening Policy X', () => {
+  assert.match(legacyFunctions,
+    /_bpay_wb_unsent_execution_overlay_context_v1[\s\S]*EXECUTION_UNSENT_OVERLAY_CONTEXT_V1/);
+  assert.match(financialScopeDirtyTransition,
+    /EXECUTION_UNSENT_OVERLAY_CAUSAL_V1/);
+  assert.match(financialScopeDirtyTransition,
+    /to_jsonb\(new_row\)-'pay_bank_transfer_id'-'updated_at'[\s\S]*to_jsonb\(old_row\)-'pay_bank_transfer_id'-'updated_at'/);
+
+  assert.match(unsentExecutionOverlayProof, /cardinality\(p_candidate_ids\)>100/);
+  assert.match(unsentExecutionOverlayProof,
+    /execution_commit_state<>'NOT_SUBMITTED'[\s\S]*provider_attempt_count<>0/);
+  assert.match(unsentExecutionOverlayProof,
+    /unsafe_transfer_count<>0[\s\S]*settled_at_utc IS NOT NULL[\s\S]*remittance_sent_at_utc IS NOT NULL/);
+  assert.match(unsentExecutionOverlayProof,
+    /POST_DRAFT_FROZEN_PAYMENT_PROOF_PLUS_EXACT_UNSENT_EXECUTION_OVERLAY/);
+  assert.doesNotMatch(unsentExecutionOverlayProof,
+    /UPDATE\s+public\.|INSERT\s+INTO\s+public\.|DELETE\s+FROM\s+public\./i);
+
+  assert.match(helpers,
+    /pay_workbench_unsent_execution_overlay_proof_page_v1[\s\S]*CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3/);
+  assert.match(correctionStart, /cancellation_reversion_pre_request_authorities_v3/);
+  assert.match(correctionSelectionPrepare,
+    /overlay_proof_mode','REQUEST_OWNED_CONTINUITY'[\s\S]*cancellation_reversion_pre_request_authorities_v3/);
+  assert.match(expand,
+    /cancellation_reversion_pre_request_authority'[\s\S]*cancellation_reversion_start_authority_v2/);
 });
 
 test('canonical rows split presentation parents from exact positive allocation components only under V3', () => {
@@ -577,8 +610,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 43);
-  assert.equal(semanticManifest.functions.length, 43);
+  assert.equal(semanticManifest.function_count, 44);
+  assert.equal(semanticManifest.functions.length, 44);
   for (const identity of [
     'public._ctms_materialise_candidate_correction_residuals_v1',
     'public._pay_active_settled_components',
@@ -592,6 +625,7 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'private.pay_workbench_correction_dirty_context_set_v1',
     'private.pay_workbench_correction_post_commit_authority_page_v1',
     'private.pay_workbench_cancel_reversion_proof_core_v1',
+    'private.pay_workbench_unsent_execution_overlay_proof_page_v1',
     'private.pay_workbench_correction_held_dirty_job_resolve_v1',
     'private.pay_workbench_candidate_physical_currentness_page_v1',
     'public.pay_payment_cancellation_route_diagnostic_v1',

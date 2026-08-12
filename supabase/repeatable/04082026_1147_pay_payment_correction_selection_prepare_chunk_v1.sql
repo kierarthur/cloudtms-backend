@@ -91,6 +91,10 @@ DECLARE
     v_explicit_missing_count integer := 0;
     v_explicit_extra_count integer := 0;
     v_page_chain_mismatch_count integer := 0;
+    v_cancel_reversion_page_proof jsonb := '{}'::jsonb;
+    v_cancel_reversion_page_authorities_v3 jsonb := '{}'::jsonb;
+    v_cancel_reversion_page_authority_hash text;
+    v_candidate_pre_request_authority jsonb := '{}'::jsonb;
 BEGIN
     IF p_correction_request_id IS NULL OR p_operation_id IS NULL THEN
         RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_IDENTIFIERS_REQUIRED'
@@ -551,6 +555,38 @@ BEGIN
     ) AS scan_row;
     v_scanned_candidate_count := v_scan_candidate_count;
 
+    IF v_requested_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
+       AND v_scan_candidate_count>0 THEN
+      v_cancel_reversion_page_proof:=private.pay_workbench_cancel_reversion_proof_core_v1(
+        v_request.id,NULL::uuid,NULL::uuid,ARRAY[]::uuid[],'PRE_REQUEST',
+        pg_catalog.jsonb_build_object(
+          'pay_batch_id',v_batch.id,
+          'overlay_proof_mode','REQUEST_OWNED_CONTINUITY',
+          'candidate_ids',COALESCE((
+            SELECT pg_catalog.jsonb_agg(candidate_row.candidate_id ORDER BY candidate_row.id)
+            FROM public.pay_batch_candidates AS candidate_row
+            WHERE candidate_row.pay_batch_id=v_batch.id
+              AND candidate_row.id::text IN (
+                SELECT scan_token.value
+                FROM pg_catalog.jsonb_array_elements_text(v_scan_candidate_tokens) AS scan_token(value)
+              )
+          ),'[]'::jsonb)
+        )
+      );
+      SELECT COALESCE(pg_catalog.jsonb_object_agg(
+               proof_row.value->>'candidate_id',proof_row.value
+               ORDER BY proof_row.value->>'candidate_id'),'{}'::jsonb)
+      INTO v_cancel_reversion_page_authorities_v3
+      FROM pg_catalog.jsonb_array_elements(
+        COALESCE(v_cancel_reversion_page_proof->'candidate_results','[]'::jsonb)
+      ) AS proof_row(value);
+      v_cancel_reversion_page_authority_hash:=private.pay_payment_correction_sha256_v1(
+        v_cancel_reversion_page_authorities_v3);
+    ELSE
+      v_cancel_reversion_page_authorities_v3:='{}'::jsonb;
+      v_cancel_reversion_page_authority_hash:=private.pay_payment_correction_sha256_v1('{}'::jsonb);
+    END IF;
+
     FOR v_candidate IN
         SELECT candidate_row.id AS pay_batch_candidate_id,
                candidate_row.candidate_id,
@@ -574,6 +610,9 @@ BEGIN
         ORDER BY candidate_row.id
     LOOP
         v_last_candidate_id := v_candidate.pay_batch_candidate_id;
+        v_candidate_pre_request_authority:=COALESCE(
+          v_cancel_reversion_page_authorities_v3->v_candidate.candidate_id::text,
+          '{}'::jsonb);
         SELECT
             pg_catalog.array_agg(item_row.id ORDER BY item_row.id),
             pg_catalog.count(*)::integer,
@@ -886,7 +925,9 @@ BEGIN
                     WHERE item_row.id = ANY(v_item_ids)
                 ),
                 'shared_instruction_scope_hash', v_shared_instruction_scope_hash,
-                'eligibility_code', v_eligibility_code
+                'eligibility_code', v_eligibility_code,
+                'cancellation_reversion_pre_request_authority_digest',
+                  v_candidate_pre_request_authority->>'authority_digest'
             )
         );
 
@@ -1068,6 +1109,7 @@ BEGIN
             'selected_chain_hash', v_selected_chain_hash,
             'unselected_chain_hash', v_unselected_chain_hash,
             'explicit_id_chain_hash', v_explicit_id_chain_hash,
+            'cancellation_reversion_page_authority_hash',v_cancel_reversion_page_authority_hash,
             'page_members', (
                 SELECT pg_catalog.jsonb_agg(
                     pg_catalog.jsonb_build_array(
@@ -1133,6 +1175,10 @@ BEGIN
             'selected_chain_hash', v_selected_chain_hash,
             'unselected_chain_hash', v_unselected_chain_hash,
             'explicit_id_chain_hash', v_explicit_id_chain_hash,
+            'cancellation_reversion_pre_request_authorities_v3',
+              v_cancel_reversion_page_authorities_v3,
+            'cancellation_reversion_page_authority_hash',
+              v_cancel_reversion_page_authority_hash,
             'page_hash', v_page_hash,
             'last_pay_batch_candidate_id', v_scan_last_candidate_id
         ),

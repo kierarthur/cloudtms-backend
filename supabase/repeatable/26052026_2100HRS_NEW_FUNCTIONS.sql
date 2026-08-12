@@ -70009,6 +70009,64 @@ BEGIN
        v_item_transfer_reused_count
   FROM pg_temp.tmp_prepare_item_transfer_link AS link_row;
 
+  -- Preserve the exact cause of the following pay_batch_items statement.  The
+  -- normal financial-scope trigger must still dirty the candidate; this
+  -- transaction-local envelope lets that trigger prove that the only change
+  -- was the execution owner's provider-unsubmitted transfer link.
+  DROP TABLE IF EXISTS pg_temp._bpay_wb_unsent_execution_overlay_context_v1;
+  CREATE TEMPORARY TABLE pg_temp._bpay_wb_unsent_execution_overlay_context_v1 (
+    contract_version text NOT NULL,
+    execution_operation_id uuid NOT NULL,
+    pay_batch_id uuid NOT NULL,
+    pay_batch_candidate_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    timesheet_id uuid,
+    pay_batch_item_id uuid NOT NULL,
+    pay_bank_transfer_id uuid NOT NULL,
+    transfer_scope_id uuid NOT NULL,
+    source_workbench_session_id uuid,
+    source_snapshot_run_id uuid,
+    source_session_version bigint,
+    row_context_digest text NOT NULL,
+    created_at_utc timestamptz NOT NULL
+  ) ON COMMIT DROP;
+
+  INSERT INTO pg_temp._bpay_wb_unsent_execution_overlay_context_v1 (
+    contract_version,execution_operation_id,pay_batch_id,pay_batch_candidate_id,
+    candidate_id,timesheet_id,pay_batch_item_id,pay_bank_transfer_id,
+    transfer_scope_id,source_workbench_session_id,source_snapshot_run_id,
+    source_session_version,row_context_digest,created_at_utc
+  )
+  SELECT
+    'EXECUTION_UNSENT_OVERLAY_CONTEXT_V1',p_operation_id,p_pay_batch_id,
+    batch_item.pay_batch_candidate_id,batch_candidate.candidate_id,
+    batch_item.timesheet_id,link_row.pay_batch_item_id,link_row.pay_bank_transfer_id,
+    link_row.transfer_scope_id,v_batch_row.source_workbench_session_id,
+    v_batch_row.source_snapshot_run_id,v_batch_row.source_session_version,
+    md5(
+      p_operation_id::text||'|'||p_pay_batch_id::text||'|'||
+      batch_candidate.candidate_id::text||'|'||batch_item.pay_batch_candidate_id::text||'|'||
+      link_row.pay_batch_item_id::text||'|'||COALESCE(batch_item.timesheet_id::text,'')||'|'||
+      link_row.transfer_scope_id::text||'|'||link_row.pay_bank_transfer_id::text||'|'||
+      COALESCE(v_batch_row.source_workbench_session_id::text,'')||'|'||
+      COALESCE(v_batch_row.source_snapshot_run_id::text,'')||'|'||
+      COALESCE(v_batch_row.source_session_version::text,'')||
+      '|EXECUTION_UNSENT_OVERLAY_CONTEXT_V1'
+    ),v_now
+  FROM pg_temp.tmp_prepare_item_transfer_link AS link_row
+  JOIN public.pay_batch_items AS batch_item ON batch_item.id=link_row.pay_batch_item_id
+  JOIN public.pay_batch_candidates AS batch_candidate
+    ON batch_candidate.id=batch_item.pay_batch_candidate_id
+   AND batch_candidate.pay_batch_id=p_pay_batch_id
+  WHERE batch_item.pay_bank_transfer_id IS NULL
+    AND link_row.pay_bank_transfer_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM pg_temp.tmp_prepare_item_transfer_link AS conflict_row
+      WHERE conflict_row.pay_batch_item_id=link_row.pay_batch_item_id
+        AND conflict_row.existing_pay_bank_transfer_id IS NOT NULL
+        AND conflict_row.existing_pay_bank_transfer_id<>conflict_row.pay_bank_transfer_id
+    );
+
   WITH linked_batch_items AS (
     UPDATE public.pay_batch_items AS batch_item_update
     SET pay_bank_transfer_id = link_row.pay_bank_transfer_id,

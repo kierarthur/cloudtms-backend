@@ -32,6 +32,7 @@ DECLARE
   v_fast_draft_enabled boolean := false;
   v_fast_draft_result jsonb := '{}'::jsonb;
   v_fast_draft_after_candidate_id uuid := NULL::uuid;
+  v_candidate_id uuid;
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
@@ -255,6 +256,19 @@ BEGIN
     END IF;
   END IF;
 
+  FOR v_candidate_id IN
+    SELECT candidate_row.candidate_id
+    FROM public.pay_payment_correction_request_candidates AS member_row
+    JOIN public.pay_batch_candidates AS candidate_row ON candidate_row.id=member_row.pay_batch_candidate_id
+    WHERE member_row.correction_request_id=p_correction_request_id
+      AND member_row.selection_ordinal>v_last_ordinal
+    ORDER BY member_row.selection_ordinal
+    LIMIT 100
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      public._pay_workbench_candidate_serial_key(v_candidate_id),24062027));
+  END LOOP;
+
   WITH page AS (
     SELECT member_row.*
     FROM public.pay_payment_correction_request_candidates AS member_row
@@ -262,6 +276,89 @@ BEGIN
       AND member_row.selection_ordinal > v_last_ordinal
     ORDER BY member_row.selection_ordinal
     LIMIT 100
+  ), resolved AS (
+    SELECT page.*,candidate_row.candidate_id,
+      COALESCE(
+        v_request.selection_json->'cancellation_reversion_pre_request_authorities_v3'
+          ->candidate_row.candidate_id::text,
+        v_request.selection_json->'cancellation_reversion_pre_request_authorities_v2'
+          ->candidate_row.candidate_id::text,
+        page_authority.pre_request_authority
+      ) AS pre_request_authority,
+      COALESCE(
+        v_operation.input_json->'cancellation_reversion_start_authorities_v2'
+          ->candidate_row.candidate_id::text,
+        pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+          'contract_version','CANCELLATION_REVERSION_START_AUTHORITY_V2',
+          'correction_request_id',p_correction_request_id,
+          'operation_id',v_operation.id,
+          'candidate_id',candidate_row.candidate_id,
+          'source_change_seq',COALESCE(candidate_counter.seq,0),
+          'dirty_generation',COALESCE(candidate_counter.scope_change_generation,0),
+          'start_exact',COALESCE((page_authority.pre_request_authority->>'pre_request_exact')::boolean,false)
+            AND (
+              (page_authority.pre_request_authority->>'source_change_seq')::bigint=COALESCE(candidate_counter.seq,0)
+              AND (page_authority.pre_request_authority->>'dirty_generation')::bigint=COALESCE(candidate_counter.scope_change_generation,0)
+              OR request_dirty.job_id IS NOT NULL
+            ),
+          'rejection_reason',CASE WHEN COALESCE((page_authority.pre_request_authority->>'pre_request_exact')::boolean,false)
+            AND (((page_authority.pre_request_authority->>'source_change_seq')::bigint=COALESCE(candidate_counter.seq,0)
+              AND (page_authority.pre_request_authority->>'dirty_generation')::bigint=COALESCE(candidate_counter.scope_change_generation,0))
+              OR request_dirty.job_id IS NOT NULL) THEN NULL
+            ELSE 'ECONOMIC_AUTHORITY_CHANGED_BEFORE_CANCELLATION_START' END,
+          'pre_request_fence_digest',page_authority.pre_request_authority->>'authority_digest',
+          'request_owned_dirty_job_id',request_dirty.job_id,
+          'request_owned_dirty_proven',request_dirty.job_id IS NOT NULL,
+          'fence_digest',pg_catalog.md5(
+            p_correction_request_id::text||'|'||v_operation.id::text||'|'||candidate_row.candidate_id::text||'|'||
+            COALESCE(candidate_counter.seq,0)::text||'|'||COALESCE(candidate_counter.scope_change_generation,0)::text||'|'||
+            COALESCE(page_authority.pre_request_authority->>'authority_digest','')||'|'||
+            COALESCE(request_dirty.job_id::text,'')||'|'||(request_dirty.job_id IS NOT NULL)::text||'|'||
+            (COALESCE((page_authority.pre_request_authority->>'pre_request_exact')::boolean,false)
+              AND (((page_authority.pre_request_authority->>'source_change_seq')::bigint=COALESCE(candidate_counter.seq,0)
+                AND (page_authority.pre_request_authority->>'dirty_generation')::bigint=COALESCE(candidate_counter.scope_change_generation,0))
+                OR request_dirty.job_id IS NOT NULL))::text||'|CANCELLATION_REVERSION_START_AUTHORITY_V2'
+          )
+        ))
+      ) AS start_authority
+    FROM page
+    JOIN public.pay_batch_candidates AS candidate_row
+      ON candidate_row.id=page.pay_batch_candidate_id
+     AND candidate_row.pay_batch_id=v_request.pay_batch_id
+    LEFT JOIN public.app_change_counters AS candidate_counter
+      ON candidate_counter.entity_key='pay_candidate:'||candidate_row.candidate_id::text
+    LEFT JOIN LATERAL (
+      SELECT page_chunk.result_json->'cancellation_reversion_pre_request_authorities_v3'
+               ->candidate_row.candidate_id::text AS pre_request_authority
+      FROM public.banking_pay_operation_chunks AS page_chunk
+      WHERE page_chunk.operation_id=v_operation.id
+        AND page_chunk.phase='PREPARE_SELECTION'
+        AND page_chunk.chunk_type='CANDIDATE_SCOPE'
+        AND page_chunk.status='COMPLETE'
+        AND page_chunk.result_json->'cancellation_reversion_pre_request_authorities_v3'
+              ? candidate_row.candidate_id::text
+      ORDER BY page_chunk.sequence_no
+      LIMIT 1
+    ) AS page_authority ON true
+    LEFT JOIN LATERAL (
+      SELECT dirty_job.id AS job_id
+      FROM public.banking_pay_workbench_jobs AS dirty_job
+      WHERE dirty_job.candidate_id=candidate_row.candidate_id
+        AND dirty_job.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
+        AND dirty_job.status IN ('QUEUED','RUNNING','SUCCEEDED')
+        AND dirty_job.scope_change_generation=COALESCE(candidate_counter.scope_change_generation,0)
+        AND COALESCE(dirty_job.payload_json->>'source_change_seq','')=COALESCE(candidate_counter.seq,0)::text
+        AND COALESCE(dirty_job.payload_json->>'correction_dirty_causal_contract_version','')
+              ='CORRECTION_OWNED_DIRTY_CAUSAL_V1'
+        AND COALESCE(dirty_job.payload_json->'correction_dirty_contexts'
+              ->candidate_row.candidate_id::text->>'correction_request_id','')=p_correction_request_id::text
+        AND COALESCE(dirty_job.payload_json->'correction_dirty_contexts'
+              ->candidate_row.candidate_id::text->>'correction_operation_id','')=v_operation.id::text
+        AND COALESCE(dirty_job.payload_json->>'request_owned_scope_change_tx_token','')
+              =COALESCE(dirty_job.payload_json->>'scope_change_tx_token','')
+      ORDER BY dirty_job.updated_at_utc DESC NULLS LAST,dirty_job.created_at_utc DESC,dirty_job.id DESC
+      LIMIT 1
+    ) AS request_dirty ON true
   ), inserted AS (
     INSERT INTO public.pay_payment_correction_work_items (
       correction_request_id, pay_batch_id, pay_batch_candidate_id,
@@ -272,20 +369,20 @@ BEGIN
     SELECT
       p_correction_request_id,
       v_request.pay_batch_id,
-      page.pay_batch_candidate_id,
+       resolved.pay_batch_candidate_id,
       (
         SELECT item_row.pay_bank_transfer_id
         FROM public.pay_batch_items AS item_row
-        WHERE item_row.id = ANY(page.pay_batch_item_ids)
+         WHERE item_row.id = ANY(resolved.pay_batch_item_ids)
           AND item_row.pay_bank_transfer_id IS NOT NULL
         ORDER BY item_row.pay_bank_transfer_id
         LIMIT 1
       ),
-      candidate_row.candidate_id,
+      resolved.candidate_id,
       (
         SELECT item_row.umbrella_id
         FROM public.pay_batch_items AS item_row
-        WHERE item_row.id = ANY(page.pay_batch_item_ids)
+         WHERE item_row.id = ANY(resolved.pay_batch_item_ids)
           AND item_row.umbrella_id IS NOT NULL
         ORDER BY item_row.umbrella_id
         LIMIT 1
@@ -296,28 +393,27 @@ BEGIN
         'scope_type', 'CANDIDATES',
         'work_unit', 'CANDIDATE',
         'requested_action', v_requested_action,
-        'selection_ordinal', page.selection_ordinal,
-        'pay_batch_candidate_ids', pg_catalog.jsonb_build_array(page.pay_batch_candidate_id),
-        'pay_batch_item_ids', pg_catalog.to_jsonb(page.pay_batch_item_ids),
-        'expected_pay_batch_item_ids', pg_catalog.to_jsonb(page.pay_batch_item_ids),
-        'expected_item_count', page.active_item_count,
-        'source_row_count', page.source_row_count,
-        'amount_inc_vat', page.active_amount,
-        'shared_instruction_scope_hash', page.shared_instruction_scope_hash,
-        'eligibility_code_at_plan', page.eligibility_code_at_plan,
-        'source_correction_request_id', p_correction_request_id
+        'selection_ordinal', resolved.selection_ordinal,
+        'pay_batch_candidate_ids', pg_catalog.jsonb_build_array(resolved.pay_batch_candidate_id),
+        'pay_batch_item_ids', pg_catalog.to_jsonb(resolved.pay_batch_item_ids),
+        'expected_pay_batch_item_ids', pg_catalog.to_jsonb(resolved.pay_batch_item_ids),
+        'expected_item_count', resolved.active_item_count,
+        'source_row_count', resolved.source_row_count,
+        'amount_inc_vat', resolved.active_amount,
+        'shared_instruction_scope_hash', resolved.shared_instruction_scope_hash,
+        'eligibility_code_at_plan', resolved.eligibility_code_at_plan,
+        'source_correction_request_id', p_correction_request_id,
+        'cancellation_reversion_pre_request_authority',resolved.pre_request_authority,
+        'cancellation_reversion_start_authority_v2',resolved.start_authority
       ),
-      page.candidate_scope_hash,
+      resolved.candidate_scope_hash,
       'PENDING', 0, NULL, NULL, NULL, v_now, NULL,
       pg_catalog.jsonb_build_object(
         'created_by', 'pay_payment_correction_expand_work',
-        'selection_ordinal', page.selection_ordinal,
-        'candidate_scope_hash', page.candidate_scope_hash
+         'selection_ordinal', resolved.selection_ordinal,
+         'candidate_scope_hash', resolved.candidate_scope_hash
       )
-    FROM page
-    JOIN public.pay_batch_candidates AS candidate_row
-      ON candidate_row.id = page.pay_batch_candidate_id
-     AND candidate_row.pay_batch_id = v_request.pay_batch_id
+    FROM resolved
     ON CONFLICT (correction_request_id, work_kind, selection_hash) DO NOTHING
     RETURNING id
   )

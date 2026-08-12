@@ -30,6 +30,11 @@ DECLARE
   v_draft_context_token text:=NULL::text;
   v_correction_dirty_contexts jsonb:='{}'::jsonb;
   v_correction_context_count integer:=0;
+  v_execution_overlay_context regclass:=pg_catalog.to_regclass(
+    'pg_temp._bpay_wb_unsent_execution_overlay_context_v1');
+  v_execution_overlay_contexts jsonb:='{}'::jsonb;
+  v_execution_overlay_context_count integer:=0;
+  v_execution_overlay_exact boolean:=false;
   v_impacted_candidate_count integer:=0;
   v_scope_change_tx_token uuid:=NULL::uuid;
 BEGIN
@@ -681,6 +686,132 @@ BEGIN
     INTO v_impacted_candidate_count
     FROM pg_temp._bpay_wb_transition_impacts_v1;
 
+    -- The execution owner deliberately links otherwise frozen batch items to
+    -- newly prepared local transfer rows.  Preserve normal invalidation, but
+    -- stamp it only when the complete UPDATE statement is exactly represented
+    -- by the owner-created transaction-local context and no other column moved.
+    IF TG_TABLE_NAME='pay_batch_items' AND TG_OP='UPDATE'
+       AND v_execution_overlay_context IS NOT NULL THEN
+      SELECT relation.relowner
+      INTO v_relation_owner
+      FROM pg_catalog.pg_class AS relation
+      WHERE relation.oid=v_execution_overlay_context;
+
+      IF v_relation_owner=current_user::regrole::oid
+         AND EXISTS (
+           SELECT 1 FROM pg_catalog.pg_class AS relation
+           WHERE relation.oid=v_execution_overlay_context
+             AND relation.relpersistence='t'
+             AND relation.relnamespace=pg_catalog.pg_my_temp_schema()
+         )
+         AND (SELECT pg_catalog.array_agg(
+                attribute.attname||':'||pg_catalog.format_type(attribute.atttypid,attribute.atttypmod)
+                ORDER BY attribute.attnum)
+              FROM pg_catalog.pg_attribute AS attribute
+              WHERE attribute.attrelid=v_execution_overlay_context
+                AND attribute.attnum>0 AND NOT attribute.attisdropped)
+             =ARRAY[
+               'contract_version:text','execution_operation_id:uuid','pay_batch_id:uuid',
+               'pay_batch_candidate_id:uuid','candidate_id:uuid','timesheet_id:uuid',
+               'pay_batch_item_id:uuid','pay_bank_transfer_id:uuid','transfer_scope_id:uuid',
+               'source_workbench_session_id:uuid','source_snapshot_run_id:uuid',
+               'source_session_version:bigint','row_context_digest:text',
+               'created_at_utc:timestamp with time zone'
+             ] THEN
+        SELECT
+          NOT EXISTS (
+            SELECT 1
+            FROM new_rows AS new_row
+            JOIN old_rows AS old_row ON old_row.id=new_row.id
+            LEFT JOIN pg_temp._bpay_wb_unsent_execution_overlay_context_v1 AS context_row
+              ON context_row.pay_batch_item_id=new_row.id
+             AND context_row.pay_batch_candidate_id=new_row.pay_batch_candidate_id
+             AND context_row.timesheet_id IS NOT DISTINCT FROM new_row.timesheet_id
+             AND context_row.pay_bank_transfer_id=new_row.pay_bank_transfer_id
+            WHERE old_row.pay_bank_transfer_id IS NOT NULL
+               OR new_row.pay_bank_transfer_id IS NULL
+               OR context_row.pay_batch_item_id IS NULL
+               OR (pg_catalog.to_jsonb(new_row)-'pay_bank_transfer_id'-'updated_at')
+                    IS DISTINCT FROM
+                  (pg_catalog.to_jsonb(old_row)-'pay_bank_transfer_id'-'updated_at')
+          )
+          AND (SELECT pg_catalog.count(*) FROM new_rows)
+              =(SELECT pg_catalog.count(*)
+                FROM pg_temp._bpay_wb_unsent_execution_overlay_context_v1),
+          (SELECT pg_catalog.count(*)::integer
+           FROM pg_temp._bpay_wb_unsent_execution_overlay_context_v1)
+        INTO v_execution_overlay_exact,v_execution_overlay_context_count;
+
+        IF v_execution_overlay_exact AND v_execution_overlay_context_count>0 THEN
+          SELECT COALESCE(pg_catalog.jsonb_object_agg(
+                   candidate_group.candidate_id::text,
+                   pg_catalog.jsonb_build_object(
+                     'contract_version','EXECUTION_UNSENT_OVERLAY_CONTEXT_V1',
+                     'execution_operation_id',candidate_group.execution_operation_id,
+                     'pay_batch_id',candidate_group.pay_batch_id,
+                     'candidate_id',candidate_group.candidate_id,
+                     'pay_batch_candidate_ids',candidate_group.pay_batch_candidate_ids,
+                     'pay_batch_item_ids',candidate_group.pay_batch_item_ids,
+                     'timesheet_ids',candidate_group.timesheet_ids,
+                     'transfer_scope_ids',candidate_group.transfer_scope_ids,
+                     'pay_bank_transfer_ids',candidate_group.pay_bank_transfer_ids,
+                     'source_workbench_session_id',candidate_group.source_workbench_session_id,
+                     'source_snapshot_run_id',candidate_group.source_snapshot_run_id,
+                     'source_session_version',candidate_group.source_session_version,
+                     'context_digest',pg_catalog.md5(
+                       candidate_group.execution_operation_id::text||'|'||
+                       candidate_group.pay_batch_id::text||'|'||candidate_group.candidate_id::text||'|'||
+                       candidate_group.pay_batch_candidate_ids::text||'|'||
+                       candidate_group.pay_batch_item_ids::text||'|'||candidate_group.timesheet_ids::text||'|'||
+                       candidate_group.transfer_scope_ids::text||'|'||
+                       candidate_group.pay_bank_transfer_ids::text||'|'||
+                       COALESCE(candidate_group.source_workbench_session_id::text,'')||'|'||
+                       COALESCE(candidate_group.source_snapshot_run_id::text,'')||'|'||
+                       COALESCE(candidate_group.source_session_version::text,'')||
+                       '|EXECUTION_UNSENT_OVERLAY_CONTEXT_V1'
+                     )
+                   ) ORDER BY candidate_group.candidate_id
+                 ),'{}'::jsonb)
+          INTO v_execution_overlay_contexts
+          FROM (
+            SELECT context_row.candidate_id,
+              pg_catalog.min(context_row.execution_operation_id) AS execution_operation_id,
+              pg_catalog.min(context_row.pay_batch_id) AS pay_batch_id,
+              pg_catalog.jsonb_agg(DISTINCT context_row.pay_batch_candidate_id::text
+                ORDER BY context_row.pay_batch_candidate_id::text) AS pay_batch_candidate_ids,
+              pg_catalog.jsonb_agg(DISTINCT context_row.pay_batch_item_id::text
+                ORDER BY context_row.pay_batch_item_id::text) AS pay_batch_item_ids,
+              COALESCE(pg_catalog.jsonb_agg(DISTINCT context_row.timesheet_id::text
+                ORDER BY context_row.timesheet_id::text)
+                FILTER (WHERE context_row.timesheet_id IS NOT NULL),'[]'::jsonb) AS timesheet_ids,
+              pg_catalog.jsonb_agg(DISTINCT context_row.transfer_scope_id::text
+                ORDER BY context_row.transfer_scope_id::text) AS transfer_scope_ids,
+              pg_catalog.jsonb_agg(DISTINCT context_row.pay_bank_transfer_id::text
+                ORDER BY context_row.pay_bank_transfer_id::text) AS pay_bank_transfer_ids,
+              pg_catalog.min(context_row.source_workbench_session_id) AS source_workbench_session_id,
+              pg_catalog.min(context_row.source_snapshot_run_id) AS source_snapshot_run_id,
+              pg_catalog.min(context_row.source_session_version) AS source_session_version
+            FROM pg_temp._bpay_wb_unsent_execution_overlay_context_v1 AS context_row
+            GROUP BY context_row.candidate_id
+            HAVING pg_catalog.count(DISTINCT context_row.execution_operation_id)=1
+               AND pg_catalog.count(DISTINCT context_row.pay_batch_id)=1
+               AND pg_catalog.count(DISTINCT context_row.source_workbench_session_id)<=1
+               AND pg_catalog.count(DISTINCT context_row.source_snapshot_run_id)<=1
+               AND pg_catalog.count(DISTINCT context_row.source_session_version)<=1
+          ) AS candidate_group;
+
+          IF (SELECT pg_catalog.count(*)
+                FROM pg_catalog.jsonb_object_keys(v_execution_overlay_contexts))
+               <>v_impacted_candidate_count THEN
+            v_execution_overlay_exact:=false;
+            v_execution_overlay_contexts:='{}'::jsonb;
+          ELSE
+            v_scope_change_tx_token:=public.pay_workbench_scope_change_tx_token_v1();
+          END IF;
+        END IF;
+      END IF;
+    END IF;
+
     -- Financial DML performed by the correction page remains genuine audit
     -- evidence.  Where every impacted candidate belongs to the exact
     -- transaction-local correction context, stamp (never suppress) that
@@ -704,7 +835,8 @@ BEGIN
 
       IF v_correction_context_count=v_impacted_candidate_count
          AND v_correction_context_count>0 THEN
-        v_scope_change_tx_token:=public.pay_workbench_scope_change_tx_token_v1();
+        v_scope_change_tx_token:=COALESCE(
+          v_scope_change_tx_token,public.pay_workbench_scope_change_tx_token_v1());
       ELSE
         v_correction_dirty_contexts:='{}'::jsonb;
         v_scope_change_tx_token:=NULL::uuid;
@@ -726,7 +858,14 @@ BEGIN
             THEN v_scope_change_tx_token ELSE NULL::uuid END,
         'correction_dirty_causal_contract_version',CASE
           WHEN v_correction_dirty_contexts<>'{}'::jsonb
-            THEN 'CORRECTION_OWNED_DIRTY_CAUSAL_V1' ELSE NULL::text END
+            THEN 'CORRECTION_OWNED_DIRTY_CAUSAL_V1' ELSE NULL::text END,
+        'execution_overlay_contexts',CASE
+          WHEN v_execution_overlay_exact THEN v_execution_overlay_contexts ELSE NULL::jsonb END,
+        'execution_overlay_scope_change_tx_token',CASE
+          WHEN v_execution_overlay_exact THEN v_scope_change_tx_token ELSE NULL::uuid END,
+        'execution_overlay_causal_contract_version',CASE
+          WHEN v_execution_overlay_exact THEN 'EXECUTION_UNSENT_OVERLAY_CAUSAL_V1'
+          ELSE NULL::text END
       ))
     );
   END IF;

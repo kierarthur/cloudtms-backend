@@ -1,4 +1,7 @@
 -- Banking Pay semantic Ready-to-Pay contract helpers.
+-- Clean installs reach this file before the later execution-overlay helper.
+-- Install that read-only dependency now; its later repeatable remains idempotent.
+\ir 12082026_0915_pay_workbench_unsent_execution_overlay_proof_page_v1.sql
 --
 -- This helper deliberately evaluates the public READY projection rather than
 -- inventing another economic-key or payment-formula owner.  It composes the
@@ -1404,19 +1407,26 @@ BEGIN
    AND work_row.status='APPLIED'
    AND work_row.candidate_id=held_job.candidate_id
   WHERE held_job.id=CASE
-    WHEN COALESCE(operation_row.input_json->'cancellation_reversion_start_authorities_v2'
-      ->work_row.candidate_id::text->>'request_owned_dirty_job_id','')
+    WHEN COALESCE(COALESCE(
+      work_row.selection_json->'cancellation_reversion_start_authority_v2',
+      operation_row.input_json->'cancellation_reversion_start_authorities_v2'
+        ->work_row.candidate_id::text)->>'request_owned_dirty_job_id','')
       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-    THEN (operation_row.input_json->'cancellation_reversion_start_authorities_v2'
-      ->work_row.candidate_id::text->>'request_owned_dirty_job_id')::uuid END
+    THEN (COALESCE(
+      work_row.selection_json->'cancellation_reversion_start_authority_v2',
+      operation_row.input_json->'cancellation_reversion_start_authorities_v2'
+        ->work_row.candidate_id::text)->>'request_owned_dirty_job_id')::uuid END
   ORDER BY held_job.id
   FOR UPDATE OF held_job;
 
   WITH requested_work AS (
     SELECT DISTINCT ON (work_row.candidate_id)
       work_row.id AS work_item_id,work_row.candidate_id,work_row.result_json,
-      operation_row.input_json->'cancellation_reversion_start_authorities_v2'
-        ->work_row.candidate_id::text AS start_authority,
+      COALESCE(
+        work_row.selection_json->'cancellation_reversion_start_authority_v2',
+        operation_row.input_json->'cancellation_reversion_start_authorities_v2'
+          ->work_row.candidate_id::text
+      ) AS start_authority,
       operation_row.input_json->'cancellation_reversion_post_financial_terminal_awaiting_commit_v3'
         ->work_row.candidate_id::text AS awaiting_authority
     FROM pg_catalog.unnest(p_work_item_ids) AS requested(work_item_id)
@@ -1571,6 +1581,7 @@ DECLARE
   v_publication_identity_enforce_enabled boolean := false;
   v_mode text := pg_catalog.upper(pg_catalog.btrim(COALESCE(p_mode,'POST_FINANCIAL')));
   v_pre_request_status_page jsonb := '{}'::jsonb;
+  v_unsent_overlay_proof jsonb := '{}'::jsonb;
 BEGIN
   SELECT COALESCE(setting.banking_pay_source_publication_identity_enforce_v1_enabled,false)
   INTO v_publication_identity_enforce_enabled
@@ -1588,11 +1599,17 @@ BEGIN
 
   IF EXISTS (
     SELECT 1 FROM pg_catalog.jsonb_object_keys(COALESCE(p_options_json,'{}'::jsonb)) AS option_key(key)
-    WHERE option_key.key NOT IN ('candidate_ids','pay_batch_id')
+    WHERE option_key.key NOT IN ('candidate_ids','pay_batch_id','overlay_proof_mode')
   ) OR (
     v_mode='PRE_REQUEST'
     AND (
-      p_correction_request_id IS NOT NULL OR p_operation_id IS NOT NULL
+      p_operation_id IS NOT NULL
+      OR COALESCE(p_options_json->>'overlay_proof_mode','PRE_REQUEST')
+           NOT IN ('PRE_REQUEST','REQUEST_OWNED_CONTINUITY')
+      OR (COALESCE(p_options_json->>'overlay_proof_mode','PRE_REQUEST')='PRE_REQUEST'
+          AND p_correction_request_id IS NOT NULL)
+      OR (COALESCE(p_options_json->>'overlay_proof_mode','PRE_REQUEST')='REQUEST_OWNED_CONTINUITY'
+          AND p_correction_request_id IS NULL)
       OR COALESCE(p_options_json->>'pay_batch_id','')
            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
       OR pg_catalog.jsonb_typeof(COALESCE(p_options_json->'candidate_ids','[]'::jsonb))<>'array'
@@ -1651,6 +1668,19 @@ BEGIN
       ),'STATUS','ASC',100,NULL::jsonb
     );
 
+    v_unsent_overlay_proof:=private.pay_workbench_unsent_execution_overlay_proof_page_v1(
+      (p_options_json->>'pay_batch_id')::uuid,
+      ARRAY(
+        SELECT candidate_value.value::uuid
+        FROM pg_catalog.jsonb_array_elements_text(p_options_json->'candidate_ids')
+          WITH ORDINALITY AS candidate_value(value,ordinality)
+        WHERE candidate_value.value
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ORDER BY candidate_value.ordinality
+      ),COALESCE(p_options_json->>'overlay_proof_mode','PRE_REQUEST'),
+      p_correction_request_id,'{}'::jsonb
+    );
+
     WITH requested_candidates AS (
       SELECT candidate_value.value::uuid AS candidate_id,candidate_value.ordinality
       FROM pg_catalog.jsonb_array_elements_text(p_options_json->'candidate_ids')
@@ -1691,7 +1721,9 @@ BEGIN
         COALESCE((cancelability_row.value->>'pre_provider_cancel_eligible')::boolean,false)
           AS pre_provider_cancel_eligible,
         COALESCE(cancelability_row.value->'available_actions','[]'::jsonb)
-          AS current_available_actions
+          AS current_available_actions,
+        COALESCE((overlay_row.value->>'admitted')::boolean,false) AS exact_unsent_overlay,
+        overlay_row.value AS unsent_overlay_authority
       FROM requested_candidates
       JOIN public.pay_batches AS batch_row
         ON batch_row.id=(p_options_json->>'pay_batch_id')::uuid
@@ -1759,6 +1791,14 @@ BEGIN
         WHERE status_row.value->>'candidate_id'=requested_candidates.candidate_id::text
         LIMIT 1
       ) AS cancelability_row ON true
+      LEFT JOIN LATERAL (
+        SELECT overlay_result.value
+        FROM pg_catalog.jsonb_array_elements(
+          COALESCE(v_unsent_overlay_proof->'candidate_results','[]'::jsonb)
+        ) AS overlay_result(value)
+        WHERE overlay_result.value->>'candidate_id'=requested_candidates.candidate_id::text
+        LIMIT 1
+      ) AS overlay_row ON true
     ), family_proof AS (
       SELECT
         authority.*,
@@ -1840,7 +1880,8 @@ BEGIN
             OR registry_dirty_generation IS DISTINCT FROM live_dirty_generation
             OR candidate_state_source_change_seq IS DISTINCT FROM live_source_change_seq
             OR candidate_state_session_version IS DISTINCT FROM session_version
-            THEN 'WORKBENCH_AUTHORITY_NOT_CURRENT'
+            THEN CASE WHEN exact_unsent_overlay THEN NULL ELSE
+              COALESCE(unsent_overlay_authority->>'rejection_reason','WORKBENCH_AUTHORITY_NOT_CURRENT') END
           WHEN invariant_family_count<>8 OR invariant_family_mismatch_count<>0
             THEN 'CURRENT_ECONOMIC_AUTHORITY_CHANGED'
           ELSE NULL
@@ -1862,6 +1903,11 @@ BEGIN
       'invariant_economic_digest',classified.invariant_economic_digest,
       'invariant_family_count',classified.invariant_family_count,
       'invariant_family_mismatch_count',classified.invariant_family_mismatch_count,
+      'contract_version','CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3',
+      'pre_request_exact',classified.rejection_reason IS NULL,
+      'currentness_basis',CASE WHEN classified.exact_unsent_overlay
+        THEN 'EXACT_UNSENT_EXECUTION_OVERLAY' ELSE 'CERTIFIED_CURRENT_PUBLICATION' END,
+      'execution_overlay_authority',classified.unsent_overlay_authority,
       'authority_digest',pg_catalog.md5(
         classified.pay_batch_id::text||'|'||classified.candidate_id::text||'|'||
         COALESCE(classified.draft_operation_id::text,'')||'|'||
@@ -1869,7 +1915,10 @@ BEGIN
         COALESCE(classified.current_economic_build_id::text,'')||'|'||
         classified.live_source_change_seq::text||'|'||classified.live_dirty_generation::text||'|'||
         COALESCE(classified.invariant_economic_digest,'')||'|'||
-        (classified.rejection_reason IS NULL)::text||'|CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2'
+        CASE WHEN classified.exact_unsent_overlay THEN 'EXACT_UNSENT_EXECUTION_OVERLAY'
+          ELSE 'CERTIFIED_CURRENT_PUBLICATION' END||'|'||
+        COALESCE(classified.unsent_overlay_authority->>'authority_digest','')||'|'||
+        (classified.rejection_reason IS NULL)::text||'|CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3'
       )
     )) ORDER BY classified.ordinality),'[]'::jsonb),pg_catalog.count(*)::integer
     INTO v_results,v_count
@@ -1920,14 +1969,22 @@ BEGIN
       request_row.selection_json->'draft_overlay_fast_pre_request_authorities'
         ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
         AS draft_overlay_pre_request_authority,
-      request_row.selection_json->'cancellation_reversion_pre_request_authorities_v2'
-        ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+      COALESCE(
+        work_row.selection_json->'cancellation_reversion_pre_request_authority',
+        request_row.selection_json->'cancellation_reversion_pre_request_authorities_v3'
+          ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text,
+        request_row.selection_json->'cancellation_reversion_pre_request_authorities_v2'
+          ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+      )
         AS cancellation_pre_request_authority_v2,
       correction_operation.input_json->'draft_overlay_fast_start_authorities'
         ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
         AS draft_overlay_start_authority,
-      correction_operation.input_json->'cancellation_reversion_start_authorities_v2'
-        ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+      COALESCE(
+        work_row.selection_json->'cancellation_reversion_start_authority_v2',
+        correction_operation.input_json->'cancellation_reversion_start_authorities_v2'
+          ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
+      )
         AS cancellation_start_authority_v2,
       correction_operation.input_json->'cancellation_reversion_post_commit_authorities_v3'
         ->COALESCE(work_row.candidate_id,batch_candidate.candidate_id)::text
@@ -2256,7 +2313,8 @@ BEGIN
           THEN 'CURRENT_ECONOMIC_AUTHORITY_CHANGED'
         WHEN v_mode='PRE_FINANCIAL'
           AND COALESCE(authority.cancellation_pre_request_authority_v2->>'contract_version','')
-                ='CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2'
+                IN ('CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2',
+                    'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3')
           AND (
             COALESCE((authority.cancellation_pre_request_authority_v2->>'pre_request_exact')::boolean,false)
               IS NOT TRUE
@@ -2298,7 +2356,8 @@ BEGIN
           ) THEN 'CANCELLATION_START_AUTHORITY_MISSING_OR_MISMATCH'
         WHEN v_mode='PRE_FINANCIAL'
           AND COALESCE(authority.cancellation_pre_request_authority_v2->>'contract_version','')
-                <>'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2'
+                NOT IN ('CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2',
+                        'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3')
           AND (
             COALESCE(authority.post_draft_authority->>'source_change_seq','') !~ '^[0-9]{1,18}$'
             OR COALESCE(authority.post_draft_authority->>'dirty_generation','') !~ '^[0-9]{1,18}$'
@@ -2309,7 +2368,8 @@ BEGIN
           ) THEN 'CURRENT_ECONOMIC_AUTHORITY_CHANGED'
         WHEN v_mode IN ('POST_FINANCIAL','OBSERVE_ONLY')
           AND COALESCE(authority.cancellation_pre_request_authority_v2->>'contract_version','')
-                ='CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2'
+                IN ('CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2',
+                    'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3')
           AND (
             COALESCE(authority.work_result->'cancellation_reversion_preflight'->>'admitted','false')::boolean
               IS NOT TRUE
@@ -2362,7 +2422,8 @@ BEGIN
           ) THEN 'POST_FINANCIAL_TERMINAL_AUTHORITY_CHANGED'
         WHEN v_mode IN ('POST_FINANCIAL','OBSERVE_ONLY')
           AND COALESCE(authority.cancellation_pre_request_authority_v2->>'contract_version','')
-                <>'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2'
+                NOT IN ('CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2',
+                        'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3')
           AND (
             COALESCE(authority.work_result->'cancellation_reversion_preflight'->>'admitted','false')::boolean IS NOT TRUE
             OR COALESCE(authority.work_result->'cancellation_reversion_preflight'->>'post_draft_authority_digest','')
@@ -2404,7 +2465,8 @@ BEGIN
           OR authority.candidate_state_session_version IS DISTINCT FROM authority.source_session_version)
           AND NOT (
             COALESCE(authority.cancellation_pre_request_authority_v2->>'contract_version','')
-              ='CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2'
+              IN ('CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V2',
+                  'CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3')
             AND authority.current_request_owned_dirty_job_id IS NOT NULL
           )
           THEN 'WORKBENCH_AUTHORITY_NOT_CURRENT'
