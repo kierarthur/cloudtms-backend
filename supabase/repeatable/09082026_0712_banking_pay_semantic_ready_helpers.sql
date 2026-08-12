@@ -2045,7 +2045,13 @@ BEGIN
                   ='MATERIALISED'
           )
         )
-        AND dirty_job.created_at_utc>=request_row.created_at_utc
+        -- A request-owned transition can be merged into an older deduplicated
+        -- dirty job.  Its updated_at is the durable receipt boundary; the exact
+        -- job id, request authority and causal fields remain mandatory.
+        AND GREATEST(
+              dirty_job.created_at_utc,
+              COALESCE(dirty_job.updated_at_utc,dirty_job.created_at_utc)
+            )>=request_row.created_at_utc
         AND dirty_job.scope_change_generation=COALESCE(change_counter.scope_change_generation,0)
         AND COALESCE(dirty_job.payload_json->>'source_change_seq','')
               =COALESCE(change_counter.seq,0)::text

@@ -1650,6 +1650,7 @@ BEGIN
               'source_session_id',v_session_id,
               'original_economic_build_id',admitted.value->>'original_economic_build_id',
               'original_source_build_run_id',admitted.value->>'original_source_build_run_id',
+              'replay_source_build_run_id',admitted.value->>'replay_source_build_run_id',
               'original_source_publication_id',admitted.value->>'original_source_publication_id',
               'cancellation_request_id',p_correction_request_id,
               'cancellation_operation_id',v_operation.id,

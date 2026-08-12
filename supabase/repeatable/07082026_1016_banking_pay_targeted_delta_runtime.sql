@@ -2097,7 +2097,15 @@ BEGIN
         AND correction_operation.status IN ('QUEUED','RUNNING','WAITING_AUTHORISATION')
         AND correction_operation.phase<>'COMPLETE'
         AND request_row.status NOT IN ('CANCELLED','FAILED','REJECTED')
-        AND request_row.created_at_utc<=v_job.created_at_utc
+        -- Candidate dirty jobs are deliberately deduplicated and may be reused.
+        -- Their immutable created_at can therefore predate the correction even
+        -- when the exact request-owned event was merged later.  The causal
+        -- digest and transaction token above prove ownership; updated_at proves
+        -- that this durable job received the request event after it existed.
+        AND request_row.created_at_utc<=GREATEST(
+          v_job.created_at_utc,
+          COALESCE(v_job.updated_at_utc,v_job.created_at_utc)
+        )
         AND (
           COALESCE(v_request_owned_dirty_context->>'correction_operation_id','')=''
           OR correction_operation.id::text
@@ -2160,7 +2168,10 @@ BEGIN
         AND request_row.status IN (
           'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING'
         )
-        AND request_row.created_at_utc<=v_job.created_at_utc
+        AND request_row.created_at_utc<=GREATEST(
+          v_job.created_at_utc,
+          COALESCE(v_job.updated_at_utc,v_job.created_at_utc)
+        )
       ORDER BY request_row.created_at_utc DESC,correction_operation.created_at_utc DESC
       LIMIT 1;
     END IF;

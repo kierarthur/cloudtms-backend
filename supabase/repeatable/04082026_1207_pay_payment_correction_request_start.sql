@@ -935,7 +935,13 @@ BEGIN
                     ='MATERIALISED'
             )
           )
-          AND dirty_job.created_at_utc>=v_request.created_at_utc
+          -- The canonical dirty job can be reused across merged invalidations.
+          -- Use the time it last received durable payload, not only its original
+          -- creation time, after the exact causal request/token proof below.
+          AND GREATEST(
+                dirty_job.created_at_utc,
+                COALESCE(dirty_job.updated_at_utc,dirty_job.created_at_utc)
+              )>=v_request.created_at_utc
           AND dirty_job.scope_change_generation=COALESCE(candidate_counter.scope_change_generation,0)
           AND COALESCE(dirty_job.payload_json->>'source_change_seq','')
                 =COALESCE(candidate_counter.seq,0)::text

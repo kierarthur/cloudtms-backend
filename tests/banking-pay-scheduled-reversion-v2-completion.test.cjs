@@ -107,6 +107,8 @@ test('post-commit V3 authority replaces the premature pre-commit terminal claim'
   assert.match(helpers, /cancellation_reversion_post_commit_authorities_v3/);
   assert.match(processChunk,
     /pay_workbench_correction_held_dirty_job_resolve_v1[\s\S]*INSERT INTO public\.banking_pay_operation_chunks/);
+  assert.match(processChunk,
+    /'original_source_build_run_id',admitted\.value->>'original_source_build_run_id'[\s\S]{0,180}'replay_source_build_run_id',admitted\.value->>'replay_source_build_run_id'/);
   assert.match(processChunk, /FINANCIAL_COMPLETE_WORKBENCH_PENDING|workbench_refresh_nudge/);
 });
 

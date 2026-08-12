@@ -18,6 +18,8 @@ const dirtyRuntime = read('supabase', 'repeatable',
   '07082026_1016_banking_pay_targeted_delta_runtime.sql');
 const semanticHelpers = read('supabase', 'repeatable',
   '09082026_0712_banking_pay_semantic_ready_helpers.sql');
+const requestStart = read('supabase', 'repeatable',
+  '04082026_1207_pay_payment_correction_request_start.sql');
 
 test('clean repeatable order installs causal context before legacy callers', () => {
   assert.match(
@@ -68,6 +70,21 @@ test('candidate dirty owner defers only the latest exactly correlated token', ()
   assert.match(dirtyRuntime, /WAITING_AUTHORISATION[\s\S]*interval '30 seconds'/s);
   assert.match(dirtyRuntime, /REQUEST_OWNED_POLICY_X_DIRTY_WAITING_FOR_FINANCIAL_BOUNDARY/);
   assert.match(dirtyRuntime, /source_build_enqueue_skipped_by_request_boundary', true/);
+});
+
+test('request-owned proof follows a causal event merged into an older deduplicated job', () => {
+  assert.match(
+    dirtyRuntime,
+    /request_row\.created_at_utc<=GREATEST\([\s\S]*v_job\.created_at_utc[\s\S]*v_job\.updated_at_utc/,
+  );
+  assert.match(
+    requestStart,
+    /GREATEST\([\s\S]*dirty_job\.created_at_utc[\s\S]*dirty_job\.updated_at_utc[\s\S]*>=v_request\.created_at_utc/,
+  );
+  assert.match(
+    semanticHelpers,
+    /GREATEST\([\s\S]*dirty_job\.created_at_utc[\s\S]*dirty_job\.updated_at_utc[\s\S]*>=request_row\.created_at_utc/,
+  );
 });
 
 test('financial page establishes context in the exact mutation transaction', () => {
