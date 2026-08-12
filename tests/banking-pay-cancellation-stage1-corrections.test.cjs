@@ -8,6 +8,7 @@ const read = (name) => fs.readFileSync(path.join(root, 'supabase', 'repeatable',
 
 const selection = read('04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql');
 const processChunk = read('04082026_1209_pay_payment_correction_process_chunk.sql');
+const expandWork = read('04082026_1208_pay_payment_correction_expand_work.sql');
 const preBank = read('04082026_1158_pay_pre_bank_cancel_apply_work_item.sql');
 const noMoney = read('04082026_1158_pay_no_money_unwind_apply_work_item.sql');
 const checker = read('04082026_1148_pay_payment_correction_integrity_check_v1.sql');
@@ -62,14 +63,22 @@ test('planning and both candidate helpers bind and revalidate the complete 512-r
   }
 });
 
-test('selection preparation and both financial rechecks hash the same cancellation-reversion authority digest', () => {
+test('work expansion preserves the exact page authority digest used by the frozen candidate-scope hash', () => {
   const digestField = /'cancellation_reversion_pre_request_authority_digest'/g;
   assert.equal((selection.match(digestField) || []).length, 1);
+  assert.match(
+    expandWork,
+    /page_authority\.pre_request_authority->>'authority_digest'[\s\S]{0,700}AS candidate_scope_hash_pre_request_authority_digest/
+  );
+  assert.match(
+    expandWork,
+    /'candidate_scope_hash_pre_request_authority_digest',[\s\S]{0,120}resolved\.candidate_scope_hash_pre_request_authority_digest/
+  );
   for (const source of [preBank, noMoney]) {
     assert.equal((source.match(digestField) || []).length, 1);
     assert.match(
       source,
-      /v_work_item\.selection_json->'cancellation_reversion_pre_request_authority'->>'authority_digest'/
+      /v_work_item\.selection_json->>'candidate_scope_hash_pre_request_authority_digest'[\s\S]{0,220}v_work_item\.selection_json->'cancellation_reversion_pre_request_authority'->>'authority_digest'/
     );
     const digestPosition = source.indexOf("'cancellation_reversion_pre_request_authority_digest'");
     const hashPosition = source.indexOf('INTO v_current_candidate_scope_hash', digestPosition);

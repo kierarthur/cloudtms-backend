@@ -775,7 +775,10 @@ END IF;
       'shared_instruction_scope_hash', v_membership.shared_instruction_scope_hash,
       'eligibility_code', v_membership.eligibility_code_at_plan,
       'cancellation_reversion_pre_request_authority_digest',
-        v_work_item.selection_json->'cancellation_reversion_pre_request_authority'->>'authority_digest'
+        COALESCE(
+          v_work_item.selection_json->>'candidate_scope_hash_pre_request_authority_digest',
+          v_work_item.selection_json->'cancellation_reversion_pre_request_authority'->>'authority_digest'
+        )
     )
   ) INTO v_current_candidate_scope_hash
   FROM public.pay_batch_candidates AS candidate_scope

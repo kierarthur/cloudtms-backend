@@ -410,7 +410,7 @@
       "schema": "public",
       "name": "pay_no_money_unwind_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "04f5eae4f27f08f9eee587bb7dc1d86826cda4ce43a5bc6b63ac771cf5e40663",
+      "definition_sha256": "df2211b55afa350653acea66a450399c93d0aa9a79be9177c19effe077a36dc6",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -559,7 +559,7 @@
       "schema": "public",
       "name": "pay_payment_correction_expand_work",
       "identity_arguments": "p_correction_request_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "fedbca69dd3a416b73857471e0c31407064789e4d0725cfa5d23eead2673585a",
+      "definition_sha256": "3c89cc8df7a41cf7714b76674a2ccb6d314c4b265d8dd33d9d4e5c010c9d1bc1",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -827,7 +827,7 @@
       "schema": "public",
       "name": "pay_pre_bank_cancel_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "8c66e65f5c4b8692a85a66fe86f371521fbc463d32a2b41e5aa3966c6f547fb4",
+      "definition_sha256": "e718779c0084f8cc5273f66352f3763c8af74af299250e1def6ca25bd29b0cae",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

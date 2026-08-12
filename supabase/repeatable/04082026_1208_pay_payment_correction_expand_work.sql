@@ -286,6 +286,13 @@ BEGIN
         page_authority.pre_request_authority
       ) AS pre_request_authority,
       COALESCE(
+        page_authority.pre_request_authority->>'authority_digest',
+        v_request.selection_json->'cancellation_reversion_pre_request_authorities_v3'
+          ->candidate_row.candidate_id::text->>'authority_digest',
+        v_request.selection_json->'cancellation_reversion_pre_request_authorities_v2'
+          ->candidate_row.candidate_id::text->>'authority_digest'
+      ) AS candidate_scope_hash_pre_request_authority_digest,
+      COALESCE(
         v_operation.input_json->'cancellation_reversion_start_authorities_v2'
           ->candidate_row.candidate_id::text,
         pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
@@ -404,6 +411,8 @@ BEGIN
         'eligibility_code_at_plan', resolved.eligibility_code_at_plan,
         'source_correction_request_id', p_correction_request_id,
         'cancellation_reversion_pre_request_authority',resolved.pre_request_authority,
+        'candidate_scope_hash_pre_request_authority_digest',
+          resolved.candidate_scope_hash_pre_request_authority_digest,
         'cancellation_reversion_start_authority_v2',resolved.start_authority
       ),
       resolved.candidate_scope_hash,
