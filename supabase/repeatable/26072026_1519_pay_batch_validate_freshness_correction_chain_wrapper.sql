@@ -990,6 +990,292 @@ BEGIN
   INTO v_fresh_chain_components
   FROM fresh_linked_resolution_components AS linked_component;
 
+  /*
+   * A completed semantic-V3 source can retain a settled entitlement baseline
+   * that the legacy live helper no longer exposes.  In that exact case the
+   * base validator compares the frozen source amount with live truth alone
+   * and mistakes this batch's own reservation for external drift.
+   *
+   * Recover the baseline only from the one current, parity-complete V3
+   * publication that is fenced to the candidate registry's current sequence
+   * and generation.  Live truth must still equal the certified build truth,
+   * all other reservations are read live with this batch excluded, and the
+   * complete frozen source/target evidence must reconcile exactly.  Any
+   * missing, mixed or stale authority leaves the base stale result untouched.
+   */
+  WITH frozen_ordinary_items AS (
+    SELECT
+      pay_batch_item.id AS pay_batch_item_id,
+      pay_batch_candidate.candidate_id,
+      pay_batch_item.timesheet_id,
+      UPPER(BTRIM(pay_batch_item.frozen_component_key_type)) AS key_type,
+      BTRIM(pay_batch_item.frozen_component_key_value) AS key_value,
+      ROUND(pay_batch_item.frozen_source_amount, 2)::numeric(12,2)
+        AS frozen_source_ex,
+      ROUND(pay_batch_item.frozen_target_amount_ex_vat, 2)::numeric(12,2)
+        AS frozen_target_ex,
+      ROUND(pay_batch_item.amount_ex_vat, 2)::numeric(12,2)
+        AS physical_target_ex
+    FROM public.pay_batch_items AS pay_batch_item
+    JOIN public.pay_batch_candidates AS pay_batch_candidate
+      ON pay_batch_candidate.id = pay_batch_item.pay_batch_candidate_id
+    WHERE pay_batch_candidate.pay_batch_id = p_pay_batch_id
+      AND COALESCE(pay_batch_item.is_voided, false) = false
+      AND pay_batch_item.timesheet_id IS NOT NULL
+      AND UPPER(BTRIM(COALESCE(pay_batch_item.item_type, ''))) IN (
+        'SEGMENT_DELTA',
+        'ADJUSTMENT_DELTA',
+        'MILEAGE_DELTA'
+      )
+      AND UPPER(BTRIM(COALESCE(
+        pay_batch_item.frozen_component_key_type,
+        ''
+      ))) IN (
+        'TS_DAY',
+        'TS_TOTAL',
+        'ADDITIONAL_CODE',
+        'ADJUSTMENT_CODE',
+        'EXPENSE_CODE'
+      )
+      AND BTRIM(COALESCE(
+        pay_batch_item.frozen_component_key_value,
+        ''
+      )) <> ''
+      AND pay_batch_item.frozen_source_amount IS NOT NULL
+      AND pay_batch_item.frozen_target_amount_ex_vat IS NOT NULL
+      AND ABS(
+        ROUND(pay_batch_item.frozen_target_amount_ex_vat, 2)
+        - ROUND(pay_batch_item.amount_ex_vat, 2)
+      ) <= 0.01
+      AND COALESCE(
+        pay_batch_item.frozen_source_basis_json->>'source_family_key',
+        pay_batch_item.frozen_component_snapshot_json->>'source_family_key',
+        ''
+      ) NOT LIKE 'correction-chain:%'
+      AND jsonb_typeof(
+        pay_batch_item.frozen_resolution_payload_json
+          ->'case_resolution_summary'
+      ) IS DISTINCT FROM 'object'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_items AS correction_item_exclusion
+        WHERE correction_item_exclusion.pay_batch_item_id = pay_batch_item.id
+          AND correction_item_exclusion.status = 'APPLIED'
+          AND correction_item_exclusion.correction_item_kind IN (
+            'PRE_BANK_CANCEL',
+            'NO_MONEY_UNWIND',
+            'SETTLED_REVERSAL'
+          )
+      )
+  ), certified_authority_candidates AS (
+    SELECT
+      registry.candidate_id,
+      scope_row.session_id,
+      scope_row.certified_preview_publication_source_build_run_id
+        AS source_build_run_id,
+      scope_row.certified_preview_publication_source_publication_id
+        AS source_publication_id,
+      economic_build.id AS build_id,
+      registry.current_source_change_seq,
+      registry.dirty_generation
+    FROM private.banking_pay_workbench_candidate_scope_registry AS registry
+    JOIN public.banking_pay_workbench_session_scope AS scope_row
+      ON scope_row.candidate_id = registry.candidate_id
+     AND scope_row.status = 'MATERIALISED'
+     AND COALESCE(scope_row.dirty, false) = false
+     AND COALESCE(
+           scope_row.certified_preview_publication_required,
+           false
+         )
+     AND COALESCE(
+           scope_row.certified_preview_publication_parity_ok,
+           false
+         )
+     AND scope_row.certified_preview_publication_source_change_seq
+           = registry.current_source_change_seq
+     AND scope_row.certified_preview_publication_source_build_run_id
+           IS NOT NULL
+     AND scope_row.certified_preview_publication_source_publication_id
+           IS NOT NULL
+    JOIN private.banking_pay_workbench_economic_builds AS economic_build
+      ON economic_build.id = CASE
+           WHEN COALESCE(
+                  scope_row.certified_preview_publication_attestation_json
+                    ->>'economic_build_id',
+                  ''
+                ) ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+             THEN (
+               scope_row.certified_preview_publication_attestation_json
+                 ->>'economic_build_id'
+             )::uuid
+           ELSE NULL::uuid
+         END
+     AND economic_build.candidate_id = registry.candidate_id
+     AND economic_build.session_id = scope_row.session_id
+     AND economic_build.source_build_run_id
+           = scope_row.certified_preview_publication_source_build_run_id
+     AND economic_build.source_change_seq
+           = registry.current_source_change_seq
+     AND economic_build.captured_candidate_generation
+           = registry.evaluated_generation
+     AND economic_build.status = 'COMPLETE'
+    WHERE registry.dirty_generation = registry.evaluated_generation
+      AND scope_row.certified_preview_publication_attestation_json
+            ->>'attestation_version'
+          = 'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+      AND LOWER(BTRIM(COALESCE(
+            scope_row.certified_preview_publication_attestation_json
+              ->>'parity_complete',
+            'false'
+          ))) IN ('true','t','1','yes','y','on')
+      AND LOWER(BTRIM(COALESCE(
+            scope_row.certified_preview_publication_attestation_json
+              ->>'semantic_ready',
+            'false'
+          ))) IN ('true','t','1','yes','y','on')
+      AND COALESCE(
+            scope_row.certified_preview_publication_attestation_json
+              ->>'invalid_selectable_row_count',
+            ''
+          ) ~ '^[0-9]+$'
+      AND (
+            scope_row.certified_preview_publication_attestation_json
+              ->>'invalid_selectable_row_count'
+          )::integer = 0
+      AND scope_row.certified_preview_publication_attestation_json
+            ->>'source_build_run_id'
+          = scope_row.certified_preview_publication_source_build_run_id::text
+      AND scope_row.certified_preview_publication_attestation_json
+            ->>'source_publication_id'
+          = scope_row.certified_preview_publication_source_publication_id::text
+      AND COALESCE(
+            scope_row.certified_preview_publication_attestation_json
+              ->>'source_row_count',
+            ''
+          ) ~ '^[0-9]+$'
+      AND (
+        SELECT COUNT(*)::integer
+        FROM public.banking_pay_workbench_candidate_source_lines
+          AS current_source
+        WHERE current_source.session_id = scope_row.session_id
+          AND current_source.candidate_id = registry.candidate_id
+          AND current_source.session_version
+                = scope_row.certified_preview_publication_session_version
+          AND current_source.source_change_seq
+                = registry.current_source_change_seq
+          AND current_source.source_build_run_id
+                = scope_row.certified_preview_publication_source_build_run_id
+          AND current_source.source_publication_id
+                = scope_row.certified_preview_publication_source_publication_id
+          AND current_source.status = 'CURRENT'
+      ) = (
+        scope_row.certified_preview_publication_attestation_json
+          ->>'source_row_count'
+      )::integer
+      AND NOT EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_candidate_source_lines
+          AS conflicting_source
+        WHERE conflicting_source.session_id = scope_row.session_id
+          AND conflicting_source.candidate_id = registry.candidate_id
+          AND conflicting_source.status = 'CURRENT'
+          AND (
+            conflicting_source.session_version
+              IS DISTINCT FROM
+                scope_row.certified_preview_publication_session_version
+            OR conflicting_source.source_change_seq
+              IS DISTINCT FROM registry.current_source_change_seq
+            OR conflicting_source.source_build_run_id
+              IS DISTINCT FROM
+                scope_row.certified_preview_publication_source_build_run_id
+            OR conflicting_source.source_publication_id
+              IS DISTINCT FROM
+                scope_row.certified_preview_publication_source_publication_id
+          )
+      )
+  ), certified_current_authorities AS (
+    SELECT authority.*
+    FROM certified_authority_candidates AS authority
+    WHERE 1 = (
+      SELECT COUNT(*)
+      FROM certified_authority_candidates AS candidate_authority
+      WHERE candidate_authority.candidate_id = authority.candidate_id
+    )
+  ), certified_fresh_components AS (
+    SELECT
+      frozen_item.timesheet_id,
+      frozen_item.key_type,
+      frozen_item.key_value,
+      frozen_item.frozen_source_ex AS expected_ex
+    FROM frozen_ordinary_items AS frozen_item
+    JOIN certified_current_authorities AS certified_authority
+      ON certified_authority.candidate_id = frozen_item.candidate_id
+    JOIN private.pay_current_timesheet_entitlement_components_from_build_v1(
+      certified_authority.build_id,
+      NULL::text
+    ) AS certified_component
+      ON certified_component.timesheet_id = frozen_item.timesheet_id
+     AND UPPER(BTRIM(certified_component.key_type))
+           = frozen_item.key_type
+     AND BTRIM(certified_component.key_value) = frozen_item.key_value
+    JOIN public._pay_current_timesheet_entitlement_components(
+      ARRAY[frozen_item.timesheet_id]::uuid[]
+    ) AS live_truth_component
+      ON live_truth_component.timesheet_id = frozen_item.timesheet_id
+     AND UPPER(BTRIM(live_truth_component.key_type))
+           = frozen_item.key_type
+     AND BTRIM(live_truth_component.key_value) = frozen_item.key_value
+    JOIN LATERAL public._pay_outstanding_components(
+      ARRAY[frozen_item.timesheet_id]::uuid[],
+      p_pay_batch_id
+    ) AS live_component
+      ON live_component.timesheet_id = frozen_item.timesheet_id
+     AND UPPER(BTRIM(live_component.key_type)) = frozen_item.key_type
+     AND BTRIM(live_component.key_value) = frozen_item.key_value
+    WHERE ABS(
+        ROUND(COALESCE(live_truth_component.truth_ex_vat, 0), 2)
+        - ROUND(COALESCE(certified_component.truth_ex_vat, 0), 2)
+      ) <= 0.01
+      AND ABS(
+        ROUND(COALESCE(live_truth_component.baseline_ex_vat, 0), 2)
+        - ROUND(COALESCE(certified_component.baseline_ex_vat, 0), 2)
+      ) > 0.01
+      AND ABS(
+        ROUND(COALESCE(certified_component.baseline_ex_vat, 0), 2)
+      ) > 0.01
+      AND ABS(
+        ROUND(
+          COALESCE(certified_component.truth_ex_vat, 0)
+          - COALESCE(certified_component.baseline_ex_vat, 0)
+          - COALESCE(live_component.reserved_ex_vat, 0),
+          2
+        )
+        - frozen_item.frozen_source_ex
+      ) <= 0.01
+      AND ABS(
+        frozen_item.frozen_target_ex - frozen_item.physical_target_ex
+      ) <= 0.01
+  )
+  SELECT
+    v_fresh_chain_components
+    || COALESCE(
+      jsonb_agg(
+        jsonb_build_object(
+          'timesheet_id', certified_component.timesheet_id::text,
+          'key_type', certified_component.key_type,
+          'key_value', certified_component.key_value,
+          'expected_ex', certified_component.expected_ex
+        )
+        ORDER BY
+          certified_component.timesheet_id,
+          certified_component.key_type,
+          certified_component.key_value
+      ),
+      '[]'::jsonb
+    )
+  INTO v_fresh_chain_components
+  FROM certified_fresh_components AS certified_component;
+
   SELECT COALESCE(
     MAX(
       CASE
