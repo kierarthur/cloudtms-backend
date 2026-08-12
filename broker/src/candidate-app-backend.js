@@ -368,6 +368,19 @@ function challengeKeyVersion(env) {
   return configuredKeyVersion(env, 'CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION');
 }
 
+function challengeReadVersions(env) {
+  const values = new Set([challengeKeyVersion(env)]);
+  for (const raw of text(env.CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS).split(',')) {
+    if (!raw) continue;
+    const parsed = Number(raw);
+    if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > 32) {
+      throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID');
+    }
+    values.add(parsed);
+  }
+  return Array.from(values);
+}
+
 function challengeSecretForVersion(env, version) {
   return versionedSecret(env, 'CANDIDATE_CHALLENGE_TOKEN_SECRET', version,
     env.CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET);
@@ -612,7 +625,13 @@ function errorResponse(error, correlationId, office = false) {
     request_id: correlationId
   };
   if (error instanceof CandidateHttpError && error.details != null) body.details = error.details;
-  return jsonResponse(status, body);
+  const headers = {};
+  const retryAfterSeconds = Number(error instanceof CandidateHttpError
+    ? error.details?.retry_after_seconds : 0);
+  if (status === 429 && Number.isSafeInteger(retryAfterSeconds) && retryAfterSeconds > 0) {
+    headers['retry-after'] = String(retryAfterSeconds);
+  }
+  return jsonResponse(status, body, headers);
 }
 
 async function createAccessToken(env, session) {
@@ -871,24 +890,22 @@ async function refreshTokenForSessionResult(env, fallbackKeyVersion, action, res
 }
 
 async function challengeTokenForReceipt(
-  env, purpose, email, challengeId, idempotencyKey, expectedHashHex
+  env, purpose, email, challengeId, idempotencyKey, expectedHashHex, recordedKeyVersion
 ) {
-  const currentVersion = challengeKeyVersion(env);
-  for (let version = 1; version <= currentVersion; version += 1) {
-    let secret;
-    try {
-      secret = challengeSecretForVersion(env, version);
-    } catch (error) {
-      if (knownErrorCode(error) === 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE') continue;
-      throw error;
-    }
-    const token = await deterministicOpaqueToken(
-      secret, 'candidate-auth-challenge-v1', environmentName(env), purpose, email,
-      challengeId || '', idempotencyKey
-    );
-    if (await sha256Hex(token) === expectedHashHex) return token;
+  const keyVersion = requireInteger(
+    recordedKeyVersion, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+  );
+  if (!challengeReadVersions(env).includes(keyVersion)) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
   }
-  throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+  const token = await deterministicOpaqueToken(
+    challengeSecretForVersion(env, keyVersion), 'candidate-auth-challenge-v1',
+    environmentName(env), purpose, email, challengeId || '', idempotencyKey
+  );
+  if (await sha256Hex(token) !== expectedHashHex) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  return token;
 }
 
 async function handleChallengeStart(request, env, deps, isResend = false) {
@@ -906,6 +923,7 @@ async function handleChallengeStart(request, env, deps, isResend = false) {
     p_purpose: purpose,
     p_challenge_id: challengeId,
     p_token_hash: null,
+    p_token_key_version: null,
     p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   });
@@ -914,10 +932,14 @@ async function handleChallengeStart(request, env, deps, isResend = false) {
   if (receipt?.replay_receipt_found === true && !SHA256_RE.test(replayTokenHash)) {
     throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
   }
+  const replayTokenKeyVersion = receipt?.replay_receipt_found === true
+    ? requireInteger(receipt.token_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
+    : null;
+  const tokenKeyVersion = replayTokenKeyVersion || challengeKeyVersion(env);
   const challengeToken = receipt?.replay_receipt_found === true
     ? null
     : await deterministicOpaqueToken(
-      challengeSecretForVersion(env, challengeKeyVersion(env)),
+      challengeSecretForVersion(env, tokenKeyVersion),
       'candidate-auth-challenge-v1',
       environmentName(env), purpose, email, challengeId || '', idempotencyKey
     );
@@ -927,17 +949,30 @@ async function handleChallengeStart(request, env, deps, isResend = false) {
     p_email_normalized: email, p_purpose: purpose,
     p_challenge_id: challengeId,
     p_token_hash: `\\x${tokenHashHex}`, p_idempotency_key: idempotencyKey,
+    p_token_key_version: tokenKeyVersion,
     p_now_utc: new Date().toISOString()
   };
   const result = await rpcCall(deps, 'candidate_auth_challenge_transition_v1', args);
-  const deliveryToken = challengeToken || await challengeTokenForReceipt(
-    env, purpose, email, challengeId, idempotencyKey, tokenHashHex
-  );
+  if (result?.ok !== true) {
+    const code = text(result?.error_code) || 'CANDIDATE_CHALLENGE_INVALID';
+    if (['CANDIDATE_CHALLENGE_RESEND_TOO_SOON', 'CANDIDATE_CHALLENGE_RESEND_LIMIT'].includes(code)) {
+      const retryAfter = Number(result?.retry_after_seconds || 0);
+      throw new CandidateHttpError(429, code, code, {
+        ...(Number.isSafeInteger(retryAfter) && retryAfter > 0
+          ? { retry_after_seconds: retryAfter } : {}),
+        terminal: result?.terminal === true
+      });
+    }
+    throw new CandidateHttpError(400, code);
+  }
   // The database transition and mail insert are deliberately separate durable authorities.
   // On a retry, the challenge RPC returns the same challenge with deliver_email=false;
   // the create-only deterministic outbox key makes this safe to retry after a
   // prior mail-insert failure without resetting queued or sent delivery truth.
   if (result?.challenge_id && result?.expires_at_utc) {
+    const deliveryToken = challengeToken || await challengeTokenForReceipt(
+      env, purpose, email, challengeId, idempotencyKey, tokenHashHex, tokenKeyVersion
+    );
     await queueChallengeMail(env, request, result, purpose, email, deliveryToken);
   }
   return jsonResponse(202, { ok: true, accepted: true });
@@ -954,6 +989,7 @@ async function handleChallengeVerify(request, env, deps) {
     p_email_normalized: normaliseEmail(body.email), p_purpose: purpose,
     p_challenge_id: body.challenge_id ? requireUuid(body.challenge_id) : null,
     p_token_hash: `\\x${await sha256Hex(token)}`, p_idempotency_key: idempotencyKey,
+    p_token_key_version: null,
     p_now_utc: new Date().toISOString()
   });
   if (result?.ok !== true) throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_CHALLENGE_INVALID');
@@ -1079,20 +1115,18 @@ async function handleLogin(request, env, deps) {
     password_params_json: { hash: 'SHA-256', iterations: PASSWORD_ITERATIONS, length_bytes: 32 }
   });
   if (!passwordOk) {
-    if (account?.id) {
-      const failed = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
-        p_action: 'LOGIN_SUCCESS', p_environment: environmentName(env), p_account_id: account.id,
-        p_email_normalized: email, p_session_id: null, p_selected_candidate_id: null,
-        p_payload: {
-          login_failed: true,
-          ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
-          idempotency_request_sha256: requestSha256,
-          idempotency_key_version: keyVersion
-        }, p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
-      });
-      if (failed?.ok !== false) {
-        throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
-      }
+    const failed = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+      p_action: 'LOGIN_SUCCESS', p_environment: environmentName(env), p_account_id: account?.id || null,
+      p_email_normalized: email, p_session_id: null, p_selected_candidate_id: null,
+      p_payload: {
+        login_failed: true,
+        ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
+        idempotency_request_sha256: requestSha256,
+        idempotency_key_version: keyVersion
+      }, p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
+    });
+    if (failed?.ok !== false) {
+      throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
     }
     throw new CandidateHttpError(401, 'CANDIDATE_LOGIN_INVALID');
   }

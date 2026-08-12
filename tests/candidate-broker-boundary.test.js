@@ -201,7 +201,7 @@ test('deterministic v2 broker envelopes retain v1 read compatibility and reject 
   assert.deepEqual(await candidateBrokerInternals.openEnvelope(secret, purpose, v1), payload);
 });
 
-test('versioned public credentials retain v1/v2/v3 readers and replay the first recorded key versions', async () => {
+test('versioned public credentials write v4, retain v1/v2/v3 readers and authenticate their key version', async () => {
   const envV1 = brokerEnvironment(async () => Response.json({ ok: true }));
   const envV2 = {
     ...envV1,
@@ -224,6 +224,9 @@ test('versioned public credentials retain v1/v2/v3 readers and replay the first 
   const legacyV2 = await candidateBrokerInternals.sealEnvelope(
     envV1.CANDIDATE_BROKER_ACCESS_TOKEN_SECRET, purpose, payload
   );
+  const legacyV3 = await candidateBrokerInternals.sealEnvelope(
+    envV1.CANDIDATE_BROKER_ACCESS_TOKEN_SECRET, purpose, payload, 1
+  );
   const versionedV1 = await candidateBrokerInternals.sealVersionedEnvelope(
     envV1, candidateBrokerInternals.credentialAuthorities.access, purpose, payload, 1
   );
@@ -233,6 +236,9 @@ test('versioned public credentials retain v1/v2/v3 readers and replay the first 
   assert.equal((await candidateBrokerInternals.openVersionedEnvelope(
     envV2, candidateBrokerInternals.credentialAuthorities.access, purpose, legacyV2
   )).key_version, 1);
+  assert.equal((await candidateBrokerInternals.openVersionedEnvelope(
+    envV2, candidateBrokerInternals.credentialAuthorities.access, purpose, legacyV3
+  )).envelope_version, 'v3');
   assert.equal((await candidateBrokerInternals.openVersionedEnvelope(
     envV2, candidateBrokerInternals.credentialAuthorities.access, purpose, versionedV1
   )).key_version, 1);
@@ -267,7 +273,7 @@ test('versioned public credentials retain v1/v2/v3 readers and replay the first 
   assert.equal(firstBody.session_id, replayBody.session_id);
   assert.equal(firstBody.access_token, replayBody.access_token);
   assert.equal(firstBody.refresh_token, replayBody.refresh_token);
-  assert.match(firstBody.access_token, /^v3\.1\./);
+  assert.match(firstBody.access_token, /^v4\.1\./);
 
   const rollbackReader = { ...envV2, CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION: '1' };
   assert.deepEqual((await candidateBrokerInternals.openVersionedEnvelope(
@@ -279,6 +285,53 @@ test('versioned public credentials retain v1/v2/v3 readers and replay the first 
   };
   assert.equal(await candidateBrokerInternals.openVersionedEnvelope(
     retiredV2Reader, candidateBrokerInternals.credentialAuthorities.access, purpose, versionedV2
+  ), null);
+
+  const aliasedSecrets = {
+    ...envV1,
+    CANDIDATE_BROKER_ACCESS_TOKEN_SECRET_V1: 'deliberately-aliased-version-secret',
+    CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION: '1',
+    CANDIDATE_BROKER_ACCESS_TOKEN_READ_KEY_VERSIONS: '1'
+  };
+  const issuedUnderOne = await candidateBrokerInternals.sealVersionedEnvelope(
+    aliasedSecrets, candidateBrokerInternals.credentialAuthorities.access, purpose, payload, 1
+  );
+  const onlyVersionTwoReadable = {
+    ...envV1,
+    CANDIDATE_BROKER_ACCESS_TOKEN_SECRET_V2: 'deliberately-aliased-version-secret',
+    CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION: '2',
+    CANDIDATE_BROKER_ACCESS_TOKEN_READ_KEY_VERSIONS: '2'
+  };
+  delete onlyVersionTwoReadable.CANDIDATE_BROKER_ACCESS_TOKEN_SECRET;
+  delete onlyVersionTwoReadable.CANDIDATE_BROKER_ACCESS_TOKEN_SECRET_V1;
+  const relabelledAsTwo = issuedUnderOne.replace(/^v4\.1\./, 'v4.2.');
+  assert.equal(await candidateBrokerInternals.openVersionedEnvelope(
+    onlyVersionTwoReadable, candidateBrokerInternals.credentialAuthorities.access,
+    purpose, issuedUnderOne
+  ), null);
+  assert.equal(await candidateBrokerInternals.openVersionedEnvelope(
+    onlyVersionTwoReadable, candidateBrokerInternals.credentialAuthorities.access,
+    purpose, relabelledAsTwo
+  ), null);
+
+  const invalidAliasedConfiguration = {
+    ...aliasedSecrets,
+    CANDIDATE_BROKER_ACCESS_TOKEN_SECRET_V2: 'deliberately-aliased-version-secret',
+    CANDIDATE_BROKER_ACCESS_TOKEN_READ_KEY_VERSIONS: '1,2'
+  };
+  await assert.rejects(
+    candidateBrokerInternals.sealVersionedEnvelope(
+      invalidAliasedConfiguration, candidateBrokerInternals.credentialAuthorities.access,
+      purpose, payload, 1
+    ),
+    error => error?.code === 'CANDIDATE_BROKER_KEY_VERSION_UNAVAILABLE'
+  );
+  const legacyV3Relabelled = (await candidateBrokerInternals.sealEnvelope(
+    'deliberately-aliased-version-secret', purpose, payload, 1
+  )).replace(/^v3\.1\./, 'v3.2.');
+  assert.equal(await candidateBrokerInternals.openVersionedEnvelope(
+    invalidAliasedConfiguration, candidateBrokerInternals.credentialAuthorities.access,
+    purpose, legacyV3Relabelled
   ), null);
 });
 
@@ -376,6 +429,38 @@ test('public challenge contract rejects invalid keys, preserves conflicts, and m
   ), outageEnv);
   assert.equal(outage.status, 502);
   assert.equal((await outage.json()).error_code, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');
+});
+
+test('public challenge resend exposes durable private throttles and preserves retry timing', async () => {
+  for (const [errorCode, retryAfter, terminal] of [
+    ['CANDIDATE_CHALLENGE_RESEND_TOO_SOON', 37, false],
+    ['CANDIDATE_CHALLENGE_RESEND_LIMIT', null, true]
+  ]) {
+    const env = brokerEnvironment(async request => {
+      assert.equal(await verifyCandidatePrivateRequest(request.clone(), env), true);
+      return Response.json({
+        ok: false, error_code: errorCode,
+        details: { ...(retryAfter ? { retry_after_seconds: retryAfter } : {}), terminal }
+      }, {
+        status: 429,
+        headers: retryAfter ? { 'retry-after': String(retryAfter) } : {}
+      });
+    });
+    const response = await handleCandidateBrokerRequest(browserRequest(
+      '/candidate-app/v1/auth/challenge/resend', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'candidate@example.test', purpose: 'ACTIVATE',
+          challenge_id: '00000000-0000-4000-8000-000000000041',
+          idempotency_key: `public-throttle-${errorCode}`
+        })
+      }
+    ), env);
+    assert.equal(response.status, 429);
+    assert.equal((await response.clone().json()).error_code, errorCode);
+    assert.equal(response.headers.get('retry-after'), retryAfter ? String(retryAfter) : null);
+    assert.equal((await response.json()).details.terminal, terminal);
+  }
 });
 
 test('public logout unwraps the private bearer and replays one durable private mutation', async () => {
@@ -516,12 +601,11 @@ test('public broker wraps private Candidate tokens and signs the service-bound r
   assert.notEqual(body.refresh_token, 'private-refresh-token');
   assert.equal(JSON.stringify(body).includes('private-access-token'), false);
   assert.equal(JSON.stringify(body).includes('private-refresh-token'), false);
-  const access = await candidateBrokerInternals.openEnvelope(
-    env.CANDIDATE_BROKER_ACCESS_TOKEN_SECRET,
-    'candidate-broker-access-v1',
-    body.access_token
+  const access = await candidateBrokerInternals.openVersionedEnvelope(
+    env, candidateBrokerInternals.credentialAuthorities.access,
+    'candidate-broker-access-v1', body.access_token
   );
-  assert.equal(access.internal_access_token, 'private-access-token');
+  assert.equal(access.payload.internal_access_token, 'private-access-token');
   assert.ok(captured.headers.get('x-cloudtms-service-signature'));
 });
 
@@ -570,8 +654,8 @@ test('public login and password completion return byte-stable credentials after 
       assert.equal(firstBody.issued_at_utc, replayBody.issued_at_utc, path);
       assert.equal(firstBody.expires_at_utc, replayBody.expires_at_utc, path);
       assert.equal(firstBody.absolute_expires_at_utc, replayBody.absolute_expires_at_utc, path);
-      assert.match(firstBody.access_token, /^v3\.1\./, path);
-      assert.match(firstBody.refresh_token, /^v3\.1\./, path);
+      assert.match(firstBody.access_token, /^v4\.1\./, path);
+      assert.match(firstBody.refresh_token, /^v4\.1\./, path);
     }
   } finally {
     Date.now = originalNow;
@@ -666,10 +750,10 @@ test('real public broker and private API replay one durable login, activation an
     assert.equal(firstBody.refresh_token, replayBody.refresh_token, action);
     assert.equal(firstBody.access_expires_in_seconds, replayBody.access_expires_in_seconds, action);
     assert.equal(mutationCalls, 1, action);
-    const internalRefresh = await candidateBrokerInternals.openEnvelope(
-      env.CANDIDATE_BROKER_REFRESH_TOKEN_SECRET,
+    const internalRefresh = (await candidateBrokerInternals.openVersionedEnvelope(
+      env, candidateBrokerInternals.credentialAuthorities.refresh,
       'candidate-broker-refresh-v1', firstBody.refresh_token
-    );
+    )).payload;
     const digest = await crypto.subtle.digest(
       'SHA-256', new TextEncoder().encode(internalRefresh.internal_refresh_token)
     );

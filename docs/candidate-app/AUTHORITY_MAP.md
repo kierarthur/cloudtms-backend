@@ -103,10 +103,11 @@ The Timesheets list is server-partitioned. Current is the default: no future wee
 - versioned private Candidate/manager and authenticated office routing, explicitly separated by route audience;
 - private Candidate session/password boundary behind the broker;
 - database-result-owned refresh-token reconstruction for activation, login and refresh, including concurrent same-key winner/loser responses;
-- stable opaque public session identity plus deterministic authenticated v3 broker access/refresh/PHONE envelopes with embedded key versions, frozen issue/expiry facts, explicit reader catalogues and retained v1/v2 read compatibility;
+- stable opaque public session identity plus deterministic authenticated v4 broker access/refresh/PHONE envelopes whose key version is bound into HMAC, key derivation and AES-GCM authenticated data, with frozen issue/expiry facts, explicit reader catalogues and retained v1/v2/v3 read compatibility;
 - randomized versioned push-token storage encryption separated from the versioned provider/session/token HMAC used by semantic idempotency; overlapping identity proofs preserve exact replay during an approved identity-key rotation;
 - a closed unauthenticated authentication-route catalogue: logout always unwraps the public access credential and forwards the exact private bearer;
-- challenge start/resend preserve caller-key validation and idempotency conflicts while masking only Candidate eligibility/account state;
+- challenge start/resend preserve caller-key validation and idempotency conflicts while masking only Candidate eligibility/account state; resend timing/allowance throttles are durable public 429 results, and each receipt freezes the exact challenge-token issuing key version for retained-reader replay;
+- generic unknown-account login failures are durable, mutate no account counter and conflict if their key is reused with changed factual input;
 - PHONE mutation receipts bind the initiating public session and optional supplied device before any token is generated;
 - post-precondition exact-receipt recovery for concurrent logout and password change;
 - dedicated session, challenge and upload secrets with no general-secret fallback;

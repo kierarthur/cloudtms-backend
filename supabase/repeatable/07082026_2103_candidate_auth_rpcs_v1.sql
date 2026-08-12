@@ -624,6 +624,10 @@ begin
 end;
 $function$;
 
+drop function if exists public.candidate_auth_challenge_transition_v1(
+  text,text,text,text,uuid,bytea,text,timestamptz
+);
+
 create or replace function public.candidate_auth_challenge_transition_v1(
   p_action text,
   p_environment text,
@@ -632,7 +636,8 @@ create or replace function public.candidate_auth_challenge_transition_v1(
   p_challenge_id uuid default null,
   p_token_hash bytea default null,
   p_idempotency_key text default null,
-  p_now_utc timestamptz default now()
+  p_now_utc timestamptz default now(),
+  p_token_key_version integer default null
 )
 returns jsonb
 language plpgsql
@@ -654,6 +659,7 @@ declare
   v_request_sha256 text;
   v_receipt jsonb;
   v_response jsonb;
+  v_receipt_metadata jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   perform private._candidate_require_feature_v1(v_environment,'candidate_account_registration');
@@ -670,25 +676,37 @@ begin
     if coalesce((v_receipt->>'found')::boolean,false) then
       return jsonb_build_object(
         'ok',true,'replay_receipt_found',true,
-        'token_hash_hex',v_receipt#>>'{metadata,token_hash_hex}'
+        'token_hash_hex',v_receipt#>>'{metadata,token_hash_hex}',
+        'token_key_version',v_receipt#>>'{metadata,token_key_version}'
       );
     end if;
     return jsonb_build_object('ok',true,'replay_receipt_found',false);
   end if;
   if v_action in ('START','RESEND','VERIFY') then
-    v_request_sha256:=encode(extensions.digest(convert_to(jsonb_build_object(
-      'contract_version','CANDIDATE_AUTH_CHALLENGE_MUTATION_REQUEST_V1',
-      'action',v_action,'environment',v_environment,'email',v_email,
-      'purpose',v_purpose,'challenge_id',p_challenge_id,
-      'token_hash_hex',encode(p_token_hash,'hex')
-    )::text,'UTF8'),'sha256'),'hex');
+    v_request_sha256:=encode(extensions.digest(convert_to(
+      (jsonb_build_object(
+        'contract_version','CANDIDATE_AUTH_CHALLENGE_MUTATION_REQUEST_V2',
+        'action',v_action,'environment',v_environment,'email',v_email,
+        'purpose',v_purpose,'challenge_id',p_challenge_id
+      ) || case when v_action='VERIFY'
+        then jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex'))
+        else '{}'::jsonb end)::text,
+      'UTF8'),'sha256'),'hex');
+    v_receipt_metadata:=jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex'))
+      || case when v_action in ('START','RESEND')
+        then jsonb_build_object('token_key_version',p_token_key_version)
+        else '{}'::jsonb end;
     v_receipt:=private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,null,
-      jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex')),p_now_utc
+      v_receipt_metadata,p_now_utc
     );
     if coalesce((v_receipt->>'found')::boolean,false) then
       return coalesce(v_receipt->'response','{}'::jsonb);
     end if;
+  end if;
+  if v_action in ('START','RESEND')
+     and (p_token_key_version is null or p_token_key_version<1 or p_token_key_version>32) then
+    raise exception 'CANDIDATE_REPLAY_KEY_VERSION_INVALID' using errcode='22023';
   end if;
   if v_action in ('START','RESEND') then
     select * into v_new from public.candidate_auth_challenges
@@ -705,7 +723,7 @@ begin
       );
       perform private._candidate_auth_mutation_receipt_v1(
         v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
-        jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex')),p_now_utc
+        v_receipt_metadata,p_now_utc
       );
       return v_response;
     end if;
@@ -723,7 +741,7 @@ begin
       v_response:=jsonb_build_object('ok',true,'accepted',true,'deliver_email',false);
       perform private._candidate_auth_mutation_receipt_v1(
         v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
-        jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex')),p_now_utc
+        v_receipt_metadata,p_now_utc
       );
       return v_response;
     end if;
@@ -744,7 +762,7 @@ begin
       'deterministic_outbox_key',v_new.deterministic_outbox_key);
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
-      jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex')),p_now_utc
+      v_receipt_metadata,p_now_utc
     );
     return v_response;
   end if;
@@ -772,7 +790,7 @@ begin
       );
       perform private._candidate_auth_mutation_receipt_v1(
         v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
-        jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex')),p_now_utc
+        v_receipt_metadata,p_now_utc
       );
       return v_response;
     end if;
@@ -782,7 +800,7 @@ begin
       v_response:=jsonb_build_object('ok',false,'error_code','CANDIDATE_CHALLENGE_EXPIRED','terminal',true);
       perform private._candidate_auth_mutation_receipt_v1(
         v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
-        jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex')),p_now_utc
+        v_receipt_metadata,p_now_utc
       );
       return v_response;
     end if;
@@ -792,7 +810,7 @@ begin
       'purpose',v_challenge.purpose,'expires_at_utc',v_challenge.expires_at_utc);
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
-      jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex')),p_now_utc
+      v_receipt_metadata,p_now_utc
     );
     return v_response;
   elsif v_action='CONSUME' then
@@ -805,9 +823,27 @@ begin
     if v_challenge.state not in ('PENDING','VERIFIED') or v_challenge.expires_at_utc<=p_now_utc then
       raise exception 'CANDIDATE_CHALLENGE_NOT_RESENDABLE' using errcode='55000';
     end if;
-    if v_challenge.resend_count>=5 then raise exception 'CANDIDATE_CHALLENGE_RESEND_LIMIT' using errcode='55000'; end if;
+    if v_challenge.resend_count>=5 then
+      v_response:=jsonb_build_object(
+        'ok',false,'error_code','CANDIDATE_CHALLENGE_RESEND_LIMIT','terminal',true
+      );
+      perform private._candidate_auth_mutation_receipt_v1(
+        v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
+        v_receipt_metadata,p_now_utc
+      );
+      return v_response;
+    end if;
     if v_challenge.last_sent_at_utc is not null and v_challenge.last_sent_at_utc+interval '60 seconds'>p_now_utc then
-      raise exception 'CANDIDATE_CHALLENGE_RESEND_TOO_SOON' using errcode='55000';
+      v_response:=jsonb_build_object(
+        'ok',false,'error_code','CANDIDATE_CHALLENGE_RESEND_TOO_SOON','terminal',false,
+        'retry_after_seconds',greatest(1,ceil(extract(epoch from
+          (v_challenge.last_sent_at_utc+interval '60 seconds'-p_now_utc)))::integer)
+      );
+      perform private._candidate_auth_mutation_receipt_v1(
+        v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
+        v_receipt_metadata,p_now_utc
+      );
+      return v_response;
     end if;
     if p_token_hash is null or octet_length(p_token_hash)<>32 then raise exception 'CANDIDATE_CHALLENGE_TOKEN_HASH_INVALID' using errcode='22023'; end if;
     update public.candidate_auth_challenges set state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
@@ -827,7 +863,7 @@ begin
       'deterministic_outbox_key',v_new.deterministic_outbox_key);
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
-      jsonb_build_object('token_hash_hex',encode(p_token_hash,'hex')),p_now_utc
+      v_receipt_metadata,p_now_utc
     );
     return v_response;
   elsif v_action in ('EXPIRE','SUPERSEDE') then
@@ -843,13 +879,13 @@ $function$;
 
 comment on function public.candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamptz) is
   'Service-role-only clean Candidate App account/session transition authority. Accepts hashes/verifiers only; no Google or plaintext password path.';
-comment on function public.candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamptz) is
-  'Service-role-only single-use activation/reset/recovery challenge state authority. Public enumeration masking remains a backend responsibility.';
+comment on function public.candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamptz,integer) is
+  'Service-role-only single-use activation/reset/recovery challenge authority. Durable receipts freeze resend throttles and the exact challenge-token issuing key version.';
 comment on function private._candidate_auth_mutation_receipt_v1(text,text,text,text,jsonb,jsonb,timestamptz) is
   'Private durable auth/account mutation idempotency receipt. Stores request digests and non-secret reconstruction metadata only.';
 
 revoke all on function private._candidate_auth_mutation_receipt_v1(text,text,text,text,jsonb,jsonb,timestamptz) from public,anon,authenticated,service_role;
 revoke all on function public.candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamptz) from public,anon,authenticated;
-revoke all on function public.candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamptz) from public,anon,authenticated;
+revoke all on function public.candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamptz,integer) from public,anon,authenticated;
 grant execute on function public.candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamptz) to service_role;
-grant execute on function public.candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamptz) to service_role;
+grant execute on function public.candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamptz,integer) to service_role;

@@ -8,6 +8,8 @@
   "vars": {
     "CANDIDATE_APP_ENVIRONMENT": "TEST",
     "CANDIDATE_APP_PUBLIC_URL": "https://testmode.arthur-rai.co.uk",
+    "CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION": "1",
+    "CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS": "1",
     "SUPABASE_URL": "https://yakevhtttcsljosbdpov.supabase.co",
     "CANDIDATE_MAX_UPLOAD_BYTES": "15728640",
     "CANDIDATE_MAX_IMAGE_DIMENSION": "12000",

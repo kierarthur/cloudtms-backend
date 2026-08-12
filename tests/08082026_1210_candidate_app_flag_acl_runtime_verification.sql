@@ -54,7 +54,7 @@ declare
 begin
   foreach v_candidate_rpc in array array[
     'candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamp with time zone)',
-    'candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamp with time zone)',
+    'candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamp with time zone,integer)',
     'candidate_app_bootstrap_v1(uuid,text,integer,timestamp with time zone)',
     'candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamp with time zone)',
     'candidate_app_timesheet_detail_v1(uuid,text,uuid,uuid,uuid,timestamp with time zone)',

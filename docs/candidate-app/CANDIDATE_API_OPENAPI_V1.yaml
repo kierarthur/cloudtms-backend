@@ -94,6 +94,12 @@ paths:
       security: []
       operationId: resendCandidateChallenge
       summary: Resend candidate challenge
+      description: >-
+        A successful 202 means the resend operation was durably accepted. A resend attempted
+        before the 60-second boundary returns CANDIDATE_CHALLENGE_RESEND_TOO_SOON as 429 with
+        Retry-After. Exhausted resend allowance returns CANDIDATE_CHALLENGE_RESEND_LIMIT as a
+        terminal 429. Either throttle consumes its idempotency key; an exact replay returns the
+        same throttle and a later attempt requires a new key.
       x-cloudtms-private-path: /private/candidate-app/v1/auth/challenge/resend
       requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *acceptedResponses
@@ -474,6 +480,10 @@ components:
         ok: {const: false}
         error_code: {type: string}
         request_id: {type: string}
+        details:
+          type: object
+          description: Public-safe structured details; challenge throttles may include retry_after_seconds and terminal.
+          additionalProperties: true
     Session:
       type: object
       required: [ok, access_token, refresh_token, session_id, access_expires_in_seconds, issued_at_utc, expires_at_utc, absolute_expires_at_utc]
@@ -776,6 +786,10 @@ components:
   responses:
     Error:
       description: Stable public-safe failure.
+      headers:
+        Retry-After:
+          description: Whole seconds before a new challenge resend may be attempted, when applicable.
+          schema: {type: integer, minimum: 1}
       content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
     Success:
       description: Successful canonical response.

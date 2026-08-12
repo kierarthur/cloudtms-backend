@@ -151,15 +151,146 @@ test('challenge replay validates changed factual input before reconstructing its
     async rpc(_name, args) {
       calls += 1;
       if (args.p_token_hash == null) {
-        return { replay_receipt_found: true, token_hash_hex: tokenHash };
+        return { replay_receipt_found: true, token_hash_hex: tokenHash, token_key_version: 1 };
       }
       assert.equal(args.p_token_hash, `\\x${tokenHash}`);
+      assert.equal(args.p_token_key_version, 1);
       throw new Error('CANDIDATE_IDEMPOTENCY_CONFLICT');
     }
   });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
   assert.equal(calls, 2);
+});
+
+test('challenge replay reads its recorded token version across writer rollback and honours reader retirement', async () => {
+  const originalFetch = globalThis.fetch;
+  const key = 'challenge-version-rollback-key';
+  const email = 'rollback@example.test';
+  const versionTwoSecret = 'challenge-version-two-secret';
+  const token = await deterministicOpaqueToken(
+    versionTwoSecret, 'candidate-auth-challenge-v1', 'TEST', 'ACTIVATE', email, '', key
+  );
+  const tokenHash = createHash('sha256').update(token).digest('hex');
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(_name, args) {
+      if (args.p_token_hash == null) {
+        return { replay_receipt_found: true, token_hash_hex: tokenHash, token_key_version: 2 };
+      }
+      assert.equal(args.p_token_key_version, 2);
+      return {
+        ok: true, accepted: true, deliver_email: false, idempotent_replay: true,
+        challenge_id: '00000000-0000-4000-8000-000000000043',
+        expires_at_utc: '2099-01-01T00:00:00.000Z'
+      };
+    }
+  };
+  const request = () => new Request('https://private.test/candidate-app/v1/auth/challenge/start', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, purpose: 'ACTIVATE', idempotency_key: key })
+  });
+  const rolledBackEnv = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION: '1',
+    CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS: '1,2',
+    CANDIDATE_CHALLENGE_TOKEN_SECRET_V1: 'challenge-version-one-secret',
+    CANDIDATE_CHALLENGE_TOKEN_SECRET_V2: versionTwoSecret,
+    CANDIDATE_APP_PUBLIC_URL: 'https://candidate.test.example',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  globalThis.fetch = async () => Response.json([{}]);
+  try {
+    const readable = await handleCandidateAppRequest(request(), rolledBackEnv, {}, deps);
+    assert.equal(readable.status, 202, JSON.stringify(await readable.clone().json()));
+
+    const retired = await handleCandidateAppRequest(request(), {
+      ...rolledBackEnv, CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS: '1'
+    }, {}, deps);
+    assert.equal(retired.status, 503);
+    assert.equal((await retired.json()).error_code, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('an enumeration-masked challenge result replays without requiring retired token material', async () => {
+  const response = await handleCandidateAppRequest(new Request(
+    'https://private.test/candidate-app/v1/auth/challenge/start', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'ineligible@example.test', purpose: 'RESET',
+        idempotency_key: 'ineligible-retired-token-key'
+      })
+    }
+  ), {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION: '1',
+    CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS: '1',
+    CANDIDATE_CHALLENGE_TOKEN_SECRET_V1: 'current-reader-secret'
+  }, {}, {
+    routeAudience: 'PRIVATE',
+    async rpc(_name, args) {
+      if (args.p_token_hash == null) {
+        return {
+          replay_receipt_found: true, token_hash_hex: 'ab'.repeat(32), token_key_version: 2
+        };
+      }
+      return { ok: true, accepted: true, deliver_email: false, idempotent_replay: true };
+    }
+  });
+  assert.equal(response.status, 202);
+});
+
+test('private challenge resend exposes durable throttle receipts as HTTP 429', async () => {
+  let writes = 0;
+  let receipt = null;
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(_name, args) {
+      if (args.p_token_hash == null) {
+        return receipt
+          ? { replay_receipt_found: true, token_hash_hex: receipt.token_hash_hex, token_key_version: 1 }
+          : { replay_receipt_found: false };
+      }
+      if (!receipt) {
+        writes += 1;
+        receipt = {
+          token_hash_hex: String(args.p_token_hash).slice(2),
+          response: {
+            ok: false, error_code: 'CANDIDATE_CHALLENGE_RESEND_TOO_SOON',
+            terminal: false, retry_after_seconds: 41
+          }
+        };
+      }
+      return receipt.response;
+    }
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET: 'private-throttle-secret',
+    CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION: '1',
+    CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS: '1'
+  };
+  const invoke = () => handleCandidateAppRequest(new Request(
+    'https://private.test/candidate-app/v1/auth/challenge/resend', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'candidate@example.test', purpose: 'ACTIVATE',
+        challenge_id: '00000000-0000-4000-8000-000000000042',
+        idempotency_key: 'private-durable-throttle-key'
+      })
+    }
+  ), env, {}, deps);
+  const first = await invoke();
+  const replay = await invoke();
+  assert.equal(first.status, 429);
+  assert.equal(replay.status, 429);
+  assert.equal(first.headers.get('retry-after'), '41');
+  assert.equal((await first.json()).details.retry_after_seconds, 41);
+  assert.equal((await replay.json()).error_code, 'CANDIDATE_CHALLENGE_RESEND_TOO_SOON');
+  assert.equal(writes, 1);
 });
 
 test('Candidate payload validation rejects canonical financial truth but accepts factual claim amounts', () => {
@@ -2150,6 +2281,73 @@ test('failed login lost-response replay does not advance the lockout counter twi
   }
 });
 
+test('unknown-account login owns a durable generic failure receipt and changed email conflicts', async () => {
+  const originalFetch = globalThis.fetch;
+  let receipt = null;
+  let writes = 0;
+  let accountReads = 0;
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_auth_account_transition_v1');
+      if (args.p_payload.replay_probe_only === true
+          && !args.p_payload.idempotency_request_sha256) {
+        return receipt
+          ? { replay_receipt_found: true, request_key_version: 1 }
+          : { replay_receipt_found: false, request_key_version: 1 };
+      }
+      if (args.p_payload.replay_probe_only === true) {
+        if (args.p_payload.idempotency_request_sha256 !== receipt.request_sha256) {
+          throw new Error('CANDIDATE_IDEMPOTENCY_CONFLICT');
+        }
+        return { ...receipt.response, idempotent_replay: true };
+      }
+      assert.equal(args.p_account_id, null);
+      assert.equal(args.p_payload.login_failed, true);
+      writes += 1;
+      receipt = {
+        request_sha256: args.p_payload.idempotency_request_sha256,
+        response: {
+          ok: false, error_code: 'CANDIDATE_LOGIN_INVALID', failed_login_recorded: false
+        }
+      };
+      return receipt.response;
+    }
+  };
+  globalThis.fetch = async () => {
+    accountReads += 1;
+    return Response.json([]);
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'unknown-account-receipt-secret',
+    CANDIDATE_AUTH_REPLAY_SECRET_V1: 'unknown-account-request-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const invoke = email => handleCandidateAppRequest(new Request(
+    'https://private.test/candidate-app/v1/auth/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email, password: 'unknown-account-password',
+        idempotency_key: 'unknown-account-durable-key'
+      })
+    }
+  ), env, {}, deps);
+  try {
+    const first = await invoke('unknown-one@example.test');
+    const replay = await invoke('unknown-one@example.test');
+    const conflict = await invoke('unknown-two@example.test');
+    assert.equal(first.status, 401);
+    assert.equal(replay.status, 401);
+    assert.equal(conflict.status, 409);
+    assert.equal((await conflict.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    assert.equal(writes, 1);
+    assert.equal(accountReads, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('concurrent activation, login and refresh return the database winner refresh token', async () => {
   const originalFetch = globalThis.fetch;
   const verifier = await derivePasswordVerifier('correct-concurrent-password');
@@ -2534,6 +2732,9 @@ test('Candidate OpenAPI requires caller idempotency for every auth and account m
   }
   assert.match(openapi, /RefreshBody:[\s\S]*required: \[refresh_token, session_id, idempotency_key\]/);
   assert.match(openapi, /PushTokenBody:[\s\S]*required: \[push_provider, push_token, idempotency_key\]/);
+  assert.match(openapi, /CANDIDATE_CHALLENGE_RESEND_TOO_SOON[\s\S]*Retry-After/);
+  assert.match(openapi, /Either throttle consumes its idempotency key/);
+  assert.match(openapi, /details:[\s\S]*retry_after_seconds and terminal/);
 });
 
 test('notification read acknowledgement has one durable timestamped result and conflicts on changed identity', async () => {

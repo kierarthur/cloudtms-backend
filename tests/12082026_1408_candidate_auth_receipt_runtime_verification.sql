@@ -291,14 +291,14 @@ begin
 
   v_result:=public.candidate_auth_challenge_transition_v1(
     'START','TEST','candidate-auth-receipt@example.test','RESET',null,
-    decode(repeat('61',32),'hex'),'auth-challenge-start-v1',v_now
+    decode(repeat('61',32),'hex'),'auth-challenge-start-v1',v_now,1
   );
   v_challenge:=(v_result->>'challenge_id')::uuid;
   v_failed:=false;
   begin
     perform public.candidate_auth_challenge_transition_v1(
       'START','TEST','different-auth-receipt@example.test','RESET',null,
-      decode(repeat('61',32),'hex'),'auth-challenge-start-v1',v_now+interval '1 second'
+      decode(repeat('61',32),'hex'),'auth-challenge-start-v1',v_now+interval '1 second',1
     );
   exception when sqlstate '40001' then
     v_failed:=position('CANDIDATE_IDEMPOTENCY_CONFLICT' in sqlerrm)>0;
@@ -306,12 +306,12 @@ begin
   if not v_failed then raise exception 'challenge key accepted a changed email'; end if;
   v_result:=public.candidate_auth_challenge_transition_v1(
     'RESEND','TEST','candidate-auth-receipt@example.test','RESET',v_challenge,
-    decode(repeat('62',32),'hex'),'auth-challenge-resend-v1',v_now+interval '61 seconds'
+    decode(repeat('62',32),'hex'),'auth-challenge-resend-v1',v_now+interval '61 seconds',1
   );
   v_resend:=(v_result->>'challenge_id')::uuid;
   v_result:=public.candidate_auth_challenge_transition_v1(
     'RESEND','TEST','candidate-auth-receipt@example.test','RESET',v_challenge,
-    decode(repeat('62',32),'hex'),'auth-challenge-resend-v1',v_now+interval '62 seconds'
+    decode(repeat('62',32),'hex'),'auth-challenge-resend-v1',v_now+interval '62 seconds',1
   );
   if (v_result->>'challenge_id')::uuid<>v_resend
      or not coalesce((v_result->>'idempotent_replay')::boolean,false) then

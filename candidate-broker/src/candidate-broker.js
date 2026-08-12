@@ -277,6 +277,34 @@ function authoritySecretForVersion(env, authority, version) {
   throw new CandidateBrokerError(503, 'CANDIDATE_BROKER_KEY_VERSION_UNAVAILABLE');
 }
 
+function authorityHasAliasedSecrets(env, authority) {
+  const effective = new Map();
+  const versionOne = text(env[`${authority.secret}_V1`]) || text(env[authority.secret]);
+  if (versionOne) effective.set(1, versionOne);
+  const prefix = `${authority.secret}_V`;
+  for (const name of Object.keys(env || {})) {
+    if (!name.startsWith(prefix)) continue;
+    const rawVersion = name.slice(prefix.length);
+    if (!/^[1-9][0-9]{0,4}$/.test(rawVersion)) continue;
+    const version = Number(rawVersion);
+    if (version > Number(authority.maximumVersion || 65535)) continue;
+    const secret = text(env[name]);
+    if (secret) effective.set(version, secret);
+  }
+  const observed = new Set();
+  for (const secret of effective.values()) {
+    if (observed.has(secret)) return true;
+    observed.add(secret);
+  }
+  return false;
+}
+
+function assertAuthoritySecretSeparation(env, authority) {
+  if (authorityHasAliasedSecrets(env, authority)) {
+    throw new CandidateBrokerError(503, 'CANDIDATE_BROKER_KEY_VERSION_UNAVAILABLE');
+  }
+}
+
 function authorityReadVersions(env, authority) {
   const values = new Set([configuredKeyVersion(env, authority)]);
   const maximumVersion = Number(authority.maximumVersion || 65535);
@@ -301,6 +329,9 @@ function currentPublicCredentialVersions(env) {
 }
 
 function assertPublicCredentialSecrets(env, versions) {
+  assertAuthoritySecretSeparation(env, CREDENTIAL_AUTHORITIES.access);
+  assertAuthoritySecretSeparation(env, CREDENTIAL_AUTHORITIES.refresh);
+  assertAuthoritySecretSeparation(env, CREDENTIAL_AUTHORITIES.publicSession);
   authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.access, versions.access_key_version);
   authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.refresh, versions.refresh_key_version);
   authoritySecretForVersion(
@@ -400,28 +431,72 @@ async function openEnvelope(secret, purpose, token) {
 }
 
 async function sealVersionedEnvelope(env, authority, purpose, payload, requestedVersion = null) {
+  assertAuthoritySecretSeparation(env, authority);
   const keyVersion = requestedVersion == null
     ? configuredKeyVersion(env, authority) : Number(requestedVersion);
   const secret = authoritySecretForVersion(env, authority, keyVersion);
   const plaintext = encoder.encode(canonicalJson(payload));
   const identity = await hmacSha256Bytes(
-    secret, `candidate-broker-envelope-v3-identity:${purpose}`, plaintext
+    secret, `candidate-broker-envelope-v4-identity:${keyVersion}:${purpose}`, plaintext
   );
   const identityEncoded = base64UrlEncode(identity);
   const iv = new Uint8Array(12);
   const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
     {
       name: 'AES-GCM', iv,
-      additionalData: encoder.encode(`candidate-broker-envelope-v3:${purpose}:${identityEncoded}`)
+      additionalData: encoder.encode(
+        `candidate-broker-envelope-v4:${keyVersion}:${purpose}:${identityEncoded}`
+      )
     },
-    await deterministicEnvelopeKey(secret, `${purpose}:v3`, identity),
+    await deterministicEnvelopeKey(secret, `${purpose}:v4:key-version:${keyVersion}`, identity),
     plaintext
   ));
-  return `v3.${keyVersion}.${identityEncoded}.${base64UrlEncode(ciphertext)}`;
+  return `v4.${keyVersion}.${identityEncoded}.${base64UrlEncode(ciphertext)}`;
 }
 
 async function openVersionedEnvelope(env, authority, purpose, token) {
+  if (authorityHasAliasedSecrets(env, authority)) return null;
   const parts = text(token).split('.');
+  if (parts[0] === 'v4') {
+    if (parts.length !== 4 || !/^[1-9][0-9]{0,4}$/.test(parts[1])) return null;
+    const keyVersion = Number(parts[1]);
+    if (keyVersion > 65535 || !authorityReadVersions(env, authority).includes(keyVersion)) return null;
+    let secret;
+    try {
+      secret = authoritySecretForVersion(env, authority, keyVersion);
+    } catch {
+      return null;
+    }
+    const identityEncoded = parts[2];
+    const ciphertextEncoded = parts[3];
+    try {
+      const identity = base64UrlDecode(identityEncoded);
+      if (identity.length !== 32 || !ciphertextEncoded) return null;
+      const plaintext = await crypto.subtle.decrypt(
+        {
+          name: 'AES-GCM', iv: new Uint8Array(12),
+          additionalData: encoder.encode(
+            `candidate-broker-envelope-v4:${keyVersion}:${purpose}:${identityEncoded}`
+          )
+        },
+        await deterministicEnvelopeKey(
+          secret, `${purpose}:v4:key-version:${keyVersion}`, identity
+        ),
+        base64UrlDecode(ciphertextEncoded)
+      );
+      const expectedIdentity = await hmacSha256Bytes(
+        secret, `candidate-broker-envelope-v4-identity:${keyVersion}:${purpose}`,
+        new Uint8Array(plaintext)
+      );
+      if (base64UrlEncode(expectedIdentity) !== identityEncoded) return null;
+      const payload = JSON.parse(decoder.decode(plaintext));
+      return isObject(payload)
+        ? { payload, key_version: keyVersion, envelope_version: 'v4' }
+        : null;
+    } catch {
+      return null;
+    }
+  }
   if (parts[0] === 'v3') {
     if (parts.length !== 4 || !/^[1-9][0-9]{0,4}$/.test(parts[1])) return null;
     const keyVersion = Number(parts[1]);
@@ -631,13 +706,27 @@ async function publicSafePrivateResponse(response) {
     source = {};
   }
   const status = response.status >= 500 ? 502 : response.status;
-  return jsonResponse(status, {
+  const headers = {};
+  const retryAfter = response.headers.get('retry-after');
+  if (retryAfter && /^\d{1,9}$/.test(retryAfter)) headers['retry-after'] = retryAfter;
+  const errorCode = response.status >= 500
+    ? 'CANDIDATE_PRIVATE_API_UNAVAILABLE'
+    : text(source.error_code) || 'CANDIDATE_REQUEST_FAILED';
+  const body = {
     ok: false,
-    error_code: response.status >= 500
-      ? 'CANDIDATE_PRIVATE_API_UNAVAILABLE'
-      : text(source.error_code) || 'CANDIDATE_REQUEST_FAILED',
+    error_code: errorCode,
     request_id: text(source.request_id) || undefined
-  });
+  };
+  if (['CANDIDATE_CHALLENGE_RESEND_TOO_SOON', 'CANDIDATE_CHALLENGE_RESEND_LIMIT'].includes(errorCode)
+      && isObject(source.details)) {
+    const retryAfterSeconds = Number(source.details.retry_after_seconds || 0);
+    body.details = {
+      ...(Number.isSafeInteger(retryAfterSeconds) && retryAfterSeconds > 0
+        ? { retry_after_seconds: retryAfterSeconds } : {}),
+      terminal: source.details.terminal === true
+    };
+  }
+  return jsonResponse(status, body, headers);
 }
 
 async function wrapPrivateSession(response, env, publicSessionId = null) {

@@ -207,7 +207,7 @@ begin
   values(v_candidate,'auth@example.test',true,null);
 
   v_response:=public.candidate_auth_challenge_transition_v1(
-    'START','TEST','auth@example.test','ACTIVATE',null,v_token,'auth-start-v1',now()
+    'START','TEST','auth@example.test','ACTIVATE',null,v_token,'auth-start-v1',now(),1
   );
   if coalesce((v_response->>'ok')::boolean,false)=false
      or coalesce((v_response->>'deliver_email')::boolean,false)=false then
@@ -216,7 +216,7 @@ begin
   v_challenge:=(v_response->>'challenge_id')::uuid;
 
   v_response:=public.candidate_auth_challenge_transition_v1(
-    'START','TEST','auth@example.test','ACTIVATE',null,v_token,'auth-start-v1',now()
+    'START','TEST','auth@example.test','ACTIVATE',null,v_token,'auth-start-v1',now(),1
   );
   if coalesce((v_response->>'idempotent_replay')::boolean,false)=false
      or coalesce((v_response->>'deliver_email')::boolean,false)=false then
