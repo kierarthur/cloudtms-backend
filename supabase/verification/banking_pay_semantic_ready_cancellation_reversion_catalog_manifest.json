@@ -318,7 +318,7 @@
     {
       "schema": "private", "name": "pay_workbench_financial_scope_dirty_transition_v1",
       "identity_arguments": "",
-      "definition_sha256": "3833018cbe7e2bbdb714e06c4dc6578ec1ba5855e1431b314839f31e4b7fc802",
+      "definition_sha256": "3623a91f721affdecd6524195f128a144e61bdb77a37441e77697d6187ef2ab5",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql"]

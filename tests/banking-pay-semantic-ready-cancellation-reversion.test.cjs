@@ -105,6 +105,16 @@ test('executed-not-paid reversion proves an exact unsent execution overlay witho
     /EXECUTION_UNSENT_OVERLAY_CAUSAL_V1/);
   assert.match(financialScopeDirtyTransition,
     /to_jsonb\(new_row\)-'pay_bank_transfer_id'-'updated_at'[\s\S]*to_jsonb\(old_row\)-'pay_bank_transfer_id'-'updated_at'/);
+  assert.match(financialScopeDirtyTransition,
+    /min\(context_row\.execution_operation_id::text\)::uuid/);
+  assert.match(financialScopeDirtyTransition,
+    /min\(context_row\.pay_batch_id::text\)::uuid/);
+  assert.match(financialScopeDirtyTransition,
+    /min\(context_row\.source_workbench_session_id::text\)::uuid/);
+  assert.match(financialScopeDirtyTransition,
+    /min\(context_row\.source_snapshot_run_id::text\)::uuid/);
+  assert.doesNotMatch(financialScopeDirtyTransition,
+    /min\(context_row\.(?:execution_operation_id|pay_batch_id|source_workbench_session_id|source_snapshot_run_id)\)/);
 
   assert.match(unsentExecutionOverlayProof, /cardinality\(p_candidate_ids\)>100/);
   assert.match(unsentExecutionOverlayProof,

@@ -775,8 +775,8 @@ BEGIN
           INTO v_execution_overlay_contexts
           FROM (
             SELECT context_row.candidate_id,
-              pg_catalog.min(context_row.execution_operation_id) AS execution_operation_id,
-              pg_catalog.min(context_row.pay_batch_id) AS pay_batch_id,
+              pg_catalog.min(context_row.execution_operation_id::text)::uuid AS execution_operation_id,
+              pg_catalog.min(context_row.pay_batch_id::text)::uuid AS pay_batch_id,
               pg_catalog.jsonb_agg(DISTINCT context_row.pay_batch_candidate_id::text
                 ORDER BY context_row.pay_batch_candidate_id::text) AS pay_batch_candidate_ids,
               pg_catalog.jsonb_agg(DISTINCT context_row.pay_batch_item_id::text
@@ -788,8 +788,8 @@ BEGIN
                 ORDER BY context_row.transfer_scope_id::text) AS transfer_scope_ids,
               pg_catalog.jsonb_agg(DISTINCT context_row.pay_bank_transfer_id::text
                 ORDER BY context_row.pay_bank_transfer_id::text) AS pay_bank_transfer_ids,
-              pg_catalog.min(context_row.source_workbench_session_id) AS source_workbench_session_id,
-              pg_catalog.min(context_row.source_snapshot_run_id) AS source_snapshot_run_id,
+              pg_catalog.min(context_row.source_workbench_session_id::text)::uuid AS source_workbench_session_id,
+              pg_catalog.min(context_row.source_snapshot_run_id::text)::uuid AS source_snapshot_run_id,
               pg_catalog.min(context_row.source_session_version) AS source_session_version
             FROM pg_temp._bpay_wb_unsent_execution_overlay_context_v1 AS context_row
             GROUP BY context_row.candidate_id
