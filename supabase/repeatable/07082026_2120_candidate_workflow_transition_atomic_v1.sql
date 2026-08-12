@@ -1510,6 +1510,8 @@ as $function$
 declare
   v_before jsonb;
   v_after jsonb;
+  v_receipt_workflow_id text;
+  v_environment text;
   v_actor_user_id uuid;
 begin
   if p_workflow_id is null
@@ -1520,19 +1522,32 @@ begin
     raise exception 'CANDIDATE_IDEMPOTENCY_RECEIPT_INVALID' using errcode='22023';
   end if;
 
-  select ae.before_json,ae.after_json into v_before,v_after
+  select w.environment into v_environment
+  from public.candidate_submission_workflows w where w.id=p_workflow_id;
+  if v_environment is null then
+    raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
+  end if;
+  perform pg_advisory_xact_lock(hashtextextended(
+    'candidate-workflow-mutation-key:'||v_environment||':'||btrim(p_idempotency_key),0
+  ));
+
+  select ae.object_id_text,ae.before_json,ae.after_json
+  into v_receipt_workflow_id,v_before,v_after
   from public.audit_events ae
+  join public.candidate_submission_workflows rw
+    on rw.id::text=ae.object_id_text and rw.environment=v_environment
   where ae.object_type='candidate_workflow_mutation_receipt'
-    and ae.object_id_text=p_workflow_id::text
     and ae.correlation_id=btrim(p_idempotency_key)
   order by ae.ts_utc desc,ae.id desc
   limit 1;
   if found then
-    if v_before->>'request_sha256' is distinct from p_request_sha256 then
+    if v_receipt_workflow_id is distinct from p_workflow_id::text
+       or v_before->>'request_sha256' is distinct from p_request_sha256 then
       raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
         using errcode='40001',detail=jsonb_build_object(
           'code','CANDIDATE_IDEMPOTENCY_CONFLICT',
           'workflow_id',p_workflow_id,
+          'receipt_workflow_id',v_receipt_workflow_id,
           'idempotency_key',btrim(p_idempotency_key)
         )::text;
     end if;
@@ -2596,7 +2611,7 @@ begin
         v_payload-'service_office_action'-'actor_user_id'-'storage_key'
       when v_action='SELECT_PHONE_APPROVAL' then
         v_payload-'service_office_action'-'actor_user_id'-'expires_at_utc'
-          -'approval_token_hash_hex'-'handoff_token_key_version'
+          -'approval_token_hash_hex'-'handoff_token_key_version'-'broker_handoff_key_version'
       when v_action='WORKER_SUBMIT' then
         case when jsonb_typeof(v_payload->'submission_request_identity')='object'
           then jsonb_build_object(
@@ -3566,14 +3581,30 @@ begin
       'state','AWAITING_MANAGER_APPROVAL','generation',v_workflow.generation,
       'approval_request_id',v_approval.id,'method',v_approval.method,
       'review_manifest_sha256',encode(v_approval.review_manifest_sha256,'hex'),
+      'issued_at_utc',v_approval.created_at_utc,
       'expires_at_utc',v_approval.expires_at_utc,'mail_outbox_id',v_mail_id);
     if v_action='SELECT_PHONE_APPROVAL' then
       if coalesce(v_payload->>'handoff_token_key_version','') !~ '^[1-9][0-9]{0,2}$'
          or (v_payload->>'handoff_token_key_version')::integer>32 then
         raise exception 'CANDIDATE_REPLAY_KEY_VERSION_INVALID' using errcode='22023';
       end if;
+      if jsonb_typeof(v_payload->'public_broker_binding')<>'object'
+         or coalesce(v_payload#>>'{public_broker_binding,contract_version}','')
+              <>'CANDIDATE_PUBLIC_PHONE_BINDING_V1'
+         or coalesce(v_payload#>>'{public_broker_binding,public_session_binding_sha256}','')
+              !~ '^[0-9a-f]{64}$'
+         or (v_payload#>'{public_broker_binding,device_binding_sha256}') is not null
+            and jsonb_typeof(v_payload#>'{public_broker_binding,device_binding_sha256}')<>'null'
+            and coalesce(v_payload#>>'{public_broker_binding,device_binding_sha256}','')
+                  !~ '^[0-9a-f]{64}$'
+         or coalesce(v_payload->>'broker_handoff_key_version','') !~ '^[1-9][0-9]{0,4}$'
+         or (v_payload->>'broker_handoff_key_version')::integer>65535 then
+        raise exception 'CANDIDATE_PHONE_HANDOFF_BINDING_INVALID' using errcode='22023';
+      end if;
       v_response:=v_response||jsonb_build_object(
-        'handoff_token_key_version',(v_payload->>'handoff_token_key_version')::integer
+        'handoff_token_key_version',(v_payload->>'handoff_token_key_version')::integer,
+        'public_broker_binding',v_payload->'public_broker_binding',
+        'broker_handoff_key_version',(v_payload->>'broker_handoff_key_version')::integer
       );
     end if;
     update public.candidate_submission_workflows set

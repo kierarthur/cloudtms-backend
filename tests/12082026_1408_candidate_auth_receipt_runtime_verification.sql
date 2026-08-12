@@ -200,13 +200,38 @@ begin
   end;
   if not v_failed then raise exception 'notification read key accepted a different notification'; end if;
 
+  v_failed:=false;
+  begin
+    perform public.candidate_auth_account_transition_v1(
+      'REGISTER_PUSH_TOKEN','TEST',v_account,null,v_session,null,jsonb_build_object(
+        'push_provider','WEB_PUSH','push_token_ciphertext_hex',repeat('55',32),
+        'push_key_version',32768,'push_token_identity_hmac',repeat('54',32),
+        'push_token_identity_key_version',1,'idempotency_request_sha256',repeat('b8',32),
+        'idempotency_key_version',1
+      ),'auth-push-version-overflow-v1',v_now+interval '9 seconds'
+    );
+  exception when sqlstate '22023' then
+    v_failed:=position('CANDIDATE_PUSH_TOKEN_INVALID' in sqlerrm)>0;
+  end;
+  if not v_failed then raise exception 'push encryption key version exceeded database-safe range'; end if;
+
   v_result:=public.candidate_auth_account_transition_v1(
     'REGISTER_PUSH_TOKEN','TEST',v_account,null,v_session,null,jsonb_build_object(
       'push_provider','WEB_PUSH','push_token_ciphertext_hex',repeat('55',32),
-      'push_key_version',1,'idempotency_request_sha256',repeat('b3',32),
+      'push_key_version',1,'push_token_identity_hmac',repeat('54',32),
+      'push_token_identity_key_version',1,'idempotency_request_sha256',repeat('b3',32),
       'idempotency_key_version',1
     ),'auth-push-receipt-v1',v_now+interval '10 seconds'
   );
+  v_result:=public.candidate_auth_account_transition_v1(
+    'REGISTER_PUSH_TOKEN','TEST',v_account,null,v_session,null,jsonb_build_object(
+      'replay_probe_only',true
+    ),'auth-push-receipt-v1',v_now+interval '10.5 seconds'
+  );
+  if not coalesce((v_result->>'replay_receipt_found')::boolean,false)
+     or v_result->>'push_token_identity_key_version'<>'1' then
+    raise exception 'push semantic identity version was not frozen: %',v_result;
+  end if;
   v_result:=public.candidate_auth_account_transition_v1(
     'REGISTER_PUSH_TOKEN','TEST',v_account,null,v_session,null,jsonb_build_object(
       'idempotency_request_sha256',repeat('b3',32),'idempotency_key_version',1,

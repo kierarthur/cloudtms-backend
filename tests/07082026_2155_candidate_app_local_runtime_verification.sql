@@ -519,13 +519,20 @@ begin
     v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
     jsonb_build_object(
       'approval_token_hash_hex',encode(extensions.digest(v_workflow::text||':phone','sha256'),'hex'),
-      'expires_at_utc',now()+interval '30 minutes','handoff_token_key_version',1
+      'expires_at_utc',now()+interval '30 minutes','handoff_token_key_version',1,
+      'public_broker_binding',jsonb_build_object(
+        'contract_version','CANDIDATE_PUBLIC_PHONE_BINDING_V1',
+        'public_session_binding_sha256',repeat('ab',32),
+        'device_binding_sha256',repeat('cd',32)
+      ),'broker_handoff_key_version',1
     ),
     'workflow-select-phone-v1',now()
   );
   v_manifest_hash:=v_response->>'review_manifest_sha256';
   v_approval_request:=(v_response->>'approval_request_id')::uuid;
-  if v_response->>'state'<>'AWAITING_MANAGER_APPROVAL' then
+  if v_response->>'state'<>'AWAITING_MANAGER_APPROVAL'
+     or nullif(v_response->>'issued_at_utc','') is null
+     or (v_response->>'issued_at_utc')::timestamptz>now() then
     raise exception 'phone approval selection failed: %',v_response;
   end if;
 
@@ -825,7 +832,12 @@ begin
     v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
     jsonb_build_object(
       'approval_token_hash_hex',encode(extensions.digest(v_workflow::text||':daily-phone','sha256'),'hex'),
-      'expires_at_utc',now()+interval '30 minutes','handoff_token_key_version',1
+      'expires_at_utc',now()+interval '30 minutes','handoff_token_key_version',1,
+      'public_broker_binding',jsonb_build_object(
+        'contract_version','CANDIDATE_PUBLIC_PHONE_BINDING_V1',
+        'public_session_binding_sha256',repeat('ab',32),
+        'device_binding_sha256',repeat('cd',32)
+      ),'broker_handoff_key_version',1
     ),
     'daily-select-phone-v1',now()
   );

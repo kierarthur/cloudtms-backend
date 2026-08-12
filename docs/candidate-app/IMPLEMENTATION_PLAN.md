@@ -93,11 +93,11 @@ Implement and verify one versioned private CloudTMS-owned HTTP boundary. The pub
 - `candidate-broker/src/index.js` is the only Candidate/manager internet-facing entry point;
 - `broker/src/candidate-private-worker.js` accepts only private-prefixed service-bound routes and has no public Worker route in its TEST manifest;
 - the broker enforces exact browser origins, declared iOS/Android native clients, preflight policy, four fail-closed rate-limit bindings, public-safe errors and bounded request bodies;
-- public access/refresh values are broker-encrypted audience/environment-bound envelopes; internal Candidate tokens are never returned to the client;
+- public access/refresh values are broker-encrypted audience/environment-bound envelopes; exact private login, activation and refresh receipts are represented by stable opaque public session IDs and byte-stable deterministic v3 public credentials carrying their frozen issuing-key versions, while explicitly retained v1/v2 readers support the bounded rollout; the broker proves every selected wrapping secret before allowing the private session mutation to start, and internal Candidate tokens are never returned to the client;
 - broker-to-private calls use a Cloudflare service binding plus an environment/method/path/body/authorisation-bound HMAC;
 - the normal CloudTMS Worker uses the `OFFICE` route audience and cannot dispatch public Candidate or manager routes;
 - the private API uses separate service, session, challenge and upload secrets with no fallback to the general CloudTMS session secret;
-- the broker validates/encrypts raw APNs/FCM/Web Push device tokens before private persistence;
+- the broker validates/encrypts raw APNs/FCM/Web Push device tokens before private persistence and supplies a separate stable versioned provider/session/token HMAC for semantic idempotency, so randomized storage ciphertext is never used as request identity;
 - private upload completion validates actual PNG/JPEG/PDF bytes, rejects malformed/encrypted PDFs, enforces one evidence page per PDF, bounds dimensions/pixels and calculates SHA-256 before immutable completion;
 - the public/private route contract is frozen for audit in `CANDIDATE_API_OPENAPI_V1.yaml`; deployment/security ownership is in `BROKER_PRIVATE_TOPOLOGY.md`.
 
@@ -106,9 +106,9 @@ This closure does not alter Candidate DB/RPC functions, DAILY/WEEKLY economics, 
 ### End-to-end authority closure implemented after topology audit
 
 - manager EMAIL approval, CloudTMS office PHONE approval and PAPER receipt finalise from an exact approved workflow/request/manifest service context and do not depend on a still-active Candidate login session;
-- the real same-phone manager journey creates a short-lived one-use PHONE approval request, which the broker seals to the initiating public Candidate session and device before handing the phone to the manager;
+- the real same-phone manager journey creates a short-lived one-use PHONE approval request, which the broker seals to the initiating public Candidate session, device and frozen request timing before handing the phone to the manager; exact replay returns the same public handoff token;
 - the Candidate may cancel an unfinished same-phone handoff without cancelling the submitted workflow; the PHONE request and signature component are retired and the workflow returns to approval-route choice;
-- TEST Candidate selection preserves the public broker session identity and never exposes or substitutes the internal database session UUID, so the existing refresh envelope remains valid;
+- TEST Candidate selection preserves the public broker session identity and frozen access issue time, returns the same public access token on exact replay and never exposes or substitutes the internal database session UUID, so the existing refresh envelope remains valid;
 - service HMAC nonces are accepted once, recorded with an atomic R2 create-only write and expired by the private Worker scheduler;
 - source/signature uploads and generated official derivatives use one conditional create-only immutable write; exact same-digest replay is accepted and competing different bytes fail without deleting the winner;
 - HTTP and SQL now agree that a valid one-page PDF is acceptable category-bound expense evidence;
@@ -594,6 +594,8 @@ The final-freeze correction requires caller-owned mutation keys at every factual
 Every factual Candidate authentication, account and session mutation requires one caller-owned bounded `idempotency_key`: challenge start/resend/verify, password activation/reset completion, login (including failed-login lockout mutation), refresh, logout, TEST candidate selection, notification preferences, notification read acknowledgement, push-token registration and password change. The backend never substitutes a random operation key. The Candidate OpenAPI requires that key on every listed request.
 
 One durable, request-aware receipt binds environment, action, factual canonical request and key. Same key plus the same factual request returns the same durable result; the same key with another action, email/purpose, token identity or payload fails with `CANDIDATE_IDEMPOTENCY_CONFLICT`. Passwords, raw refresh tokens, raw challenge tokens and push-token ciphertext are not stored in ordinary audit receipts. Generated refresh, challenge and phone handoff material uses retained versioned key authority so an exact replay remains usable across an approved key rotation.
+
+The public boundary uses a closed unauthenticated-route catalogue; logout always unwraps the public access token and calls the private receipt owner with the exact internal bearer. Challenge start/resend validates the caller key and preserves idempotency 400/409 results while enumeration-masking only eligibility. Access, refresh and PHONE credentials use key-versioned v3 envelopes with explicit reader catalogues and private-result-frozen writer versions. Refresh retains the initiating public-session mapping version. Push storage encryption and semantic identity are independently versioned, and overlapping identity proofs let the private receipt select its originally frozen semantic version after key rotation. Approved rollback means the same version-aware broker build with the former writer versions restored and all newly issued versions still readable; a pre-v3 broker is not an approved rollback.
 
 Refresh lost-response recovery is explicit: repeating the old session/token with the original key returns the same successor session and refresh token without revoking the token family. Reusing the rotated token under a different key remains a security event. A failed login is also a factual mutation: its first request may advance the lockout counter once, but an exact lost-response replay returns the same rejection and cannot increment that counter again.
 

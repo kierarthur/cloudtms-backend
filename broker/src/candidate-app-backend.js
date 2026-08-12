@@ -191,6 +191,65 @@ function requireCandidateIdempotency(value) {
   return key;
 }
 
+function publicCredentialVersions(value) {
+  if (!isObject(value)) return null;
+  const contractVersion = text(value.contract_version);
+  const output = {
+    contract_version: contractVersion,
+    access_key_version: Number(value.access_key_version),
+    refresh_key_version: Number(value.refresh_key_version),
+    public_session_key_version: Number(value.public_session_key_version)
+  };
+  if (contractVersion !== 'CANDIDATE_PUBLIC_CREDENTIAL_VERSIONS_V1'
+      || [output.access_key_version, output.refresh_key_version, output.public_session_key_version]
+        .some(version => !Number.isSafeInteger(version) || version < 1 || version > 65535)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_BROKER_CREDENTIAL_VERSION_INVALID');
+  }
+  return output;
+}
+
+function publicPhoneBinding(value) {
+  if (!isObject(value)
+      || text(value.contract_version) !== 'CANDIDATE_PUBLIC_PHONE_BINDING_V1'
+      || !SHA256_RE.test(text(value.public_session_binding_sha256))
+      || (value.device_binding_sha256 != null
+        && !SHA256_RE.test(text(value.device_binding_sha256)))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PHONE_HANDOFF_BINDING_INVALID');
+  }
+  return {
+    contract_version: 'CANDIDATE_PUBLIC_PHONE_BINDING_V1',
+    public_session_binding_sha256: text(value.public_session_binding_sha256).toLowerCase(),
+    device_binding_sha256: value.device_binding_sha256 == null
+      ? null : text(value.device_binding_sha256).toLowerCase()
+  };
+}
+
+function publicPushIdentityProofs(value, currentHmac, currentVersion) {
+  const source = Array.isArray(value) && value.length
+    ? value
+    : [{ key_version: currentVersion, identity_hmac: currentHmac }];
+  if (source.length > 32) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+  }
+  const seen = new Set();
+  const proofs = source.map((proof) => {
+    const keyVersion = Number(proof?.key_version);
+    const identityHmac = text(proof?.identity_hmac).toLowerCase();
+    if (!Number.isSafeInteger(keyVersion) || keyVersion < 1 || keyVersion > 65535
+        || !SHA256_RE.test(identityHmac) || seen.has(keyVersion)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+    }
+    seen.add(keyVersion);
+    return { key_version: keyVersion, identity_hmac: identityHmac };
+  });
+  if (!proofs.some(proof => (
+    proof.key_version === currentVersion && proof.identity_hmac === currentHmac
+  ))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+  }
+  return proofs;
+}
+
 function requireInteger(value, code = 'INVALID_INTEGER', minimum = 0) {
   const out = Number(value);
   if (!Number.isSafeInteger(out) || out < minimum) throw new CandidateHttpError(400, code);
@@ -653,8 +712,26 @@ function safeSessionResponse(sessionResult, accessToken, refreshToken) {
     selected_candidate_id: sessionResult.selected_candidate_id || null,
     selection_required: sessionResult.selection_required === true,
     candidate_ids: Array.isArray(sessionResult.candidate_ids) ? sessionResult.candidate_ids : undefined,
+    issued_at_utc: sessionResult.issued_at_utc,
     expires_at_utc: sessionResult.expires_at_utc,
-    absolute_expires_at_utc: sessionResult.absolute_expires_at_utc
+    absolute_expires_at_utc: sessionResult.absolute_expires_at_utc,
+    public_credential_versions: isObject(sessionResult.public_credential_versions)
+      ? sessionResult.public_credential_versions : undefined
+  };
+}
+
+async function selectedCandidateSessionResponse(env, claims, sessionId, rotation, result) {
+  const issuedAtUtc = new Date(Number(claims.iat) * 1000).toISOString();
+  const accessToken = await createAccessToken(env, {
+    session_id: sessionId,
+    rotation: Number(rotation || 0),
+    issued_at_utc: issuedAtUtc
+  });
+  return {
+    ...result,
+    access_token: accessToken,
+    access_expires_in_seconds: ACCESS_TTL_SECONDS,
+    issued_at_utc: issuedAtUtc
   };
 }
 
@@ -767,6 +844,32 @@ async function candidateAuthExactReplay(
   return result?.idempotent_replay === true ? result : null;
 }
 
+async function candidateAuthReplayAfterPreconditionFailure(
+  deps, env, action, idempotencyKey, requestSha256, keyVersion, identities, error
+) {
+  const errorCode = knownErrorCode(error);
+  if (![
+    'CANDIDATE_SESSION_INVALID', 'CANDIDATE_SESSION_EXPIRED',
+    'CANDIDATE_ACCESS_TOKEN_INVALID', 'CANDIDATE_ACCESS_TOKEN_EXPIRED',
+    'CANDIDATE_LOGIN_INVALID'
+  ].includes(errorCode)) throw error;
+  const replay = await candidateAuthExactReplay(
+    deps, env, action, idempotencyKey, requestSha256, keyVersion, identities
+  );
+  if (replay) return replay;
+  throw error;
+}
+
+async function refreshTokenForSessionResult(env, fallbackKeyVersion, action, result, idempotencyKey) {
+  const resultKeyVersion = requireInteger(
+    result?.token_key_version || fallbackKeyVersion,
+    'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+  );
+  return deterministicRefreshToken(
+    env, resultKeyVersion, action, result?.session_id, idempotencyKey
+  );
+}
+
 async function challengeTokenForReceipt(
   env, purpose, email, challengeId, idempotencyKey, expectedHashHex
 ) {
@@ -862,6 +965,7 @@ async function handleChallengeVerify(request, env, deps) {
 
 async function handlePasswordComplete(request, env, deps) {
   const body = await readJson(request);
+  const credentialVersions = publicCredentialVersions(body.public_credential_versions);
   const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
   const challengeId = requireUuid(body.challenge_id, 'CANDIDATE_VERIFIED_CHALLENGE_REQUIRED');
   const selectedCandidateId = body.selected_candidate_id
@@ -913,17 +1017,22 @@ async function handlePasswordComplete(request, env, deps) {
       password_params: verifier.params, refresh_token_hash_hex: refreshHash,
       ...expiries, ...(deviceHash ? { device_id_hash_hex: deviceHash } : {}),
       platform: text(body.platform).slice(0, 80) || null,
+      ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
       idempotency_request_sha256: requestSha256,
       idempotency_key_version: keyVersion
     },
     p_idempotency_key: idempotencyKey, p_now_utc: now.toISOString()
   });
+  const winningRefreshToken = await refreshTokenForSessionResult(
+    env, keyVersion, 'ACTIVATE_PASSWORD', result, idempotencyKey
+  );
   const accessToken = await createAccessToken(env, result);
-  return jsonResponse(200, safeSessionResponse(result, accessToken, refreshToken));
+  return jsonResponse(200, safeSessionResponse(result, accessToken, winningRefreshToken));
 }
 
 async function handleLogin(request, env, deps) {
   const body = await readJson(request);
+  const credentialVersions = publicCredentialVersions(body.public_credential_versions);
   const email = normaliseEmail(body.email);
   const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
   const selectedCandidateId = body.selected_candidate_id
@@ -976,6 +1085,7 @@ async function handleLogin(request, env, deps) {
         p_email_normalized: email, p_session_id: null, p_selected_candidate_id: null,
         p_payload: {
           login_failed: true,
+          ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
           idempotency_request_sha256: requestSha256,
           idempotency_key_version: keyVersion
         }, p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
@@ -999,16 +1109,23 @@ async function handleLogin(request, env, deps) {
       refresh_token_hash_hex: await sha256Hex(refreshToken), ...sessionExpiries(now),
       ...(deviceHash ? { device_id_hash_hex: deviceHash } : {}),
       platform: text(body.platform).slice(0, 80) || null,
+      ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
       idempotency_request_sha256: requestSha256,
       idempotency_key_version: keyVersion
     },
     p_idempotency_key: idempotencyKey, p_now_utc: now.toISOString()
   });
-  return jsonResponse(200, safeSessionResponse(result, await createAccessToken(env, result), refreshToken));
+  const winningRefreshToken = await refreshTokenForSessionResult(
+    env, keyVersion, 'LOGIN_SUCCESS', result, idempotencyKey
+  );
+  return jsonResponse(200, safeSessionResponse(
+    result, await createAccessToken(env, result), winningRefreshToken
+  ));
 }
 
 async function handleRefresh(request, env, deps) {
   const body = await readJson(request);
+  const credentialVersions = publicCredentialVersions(body.public_credential_versions);
   const oldRefresh = text(body.refresh_token);
   if (!oldRefresh) throw new CandidateHttpError(401, 'CANDIDATE_SESSION_INVALID');
   const oldSessionId = requireUuid(body.session_id, 'CANDIDATE_SESSION_INVALID');
@@ -1049,13 +1166,19 @@ async function handleRefresh(request, env, deps) {
     p_payload: {
       presented_refresh_token_hash_hex: await sha256Hex(oldRefresh),
       new_refresh_token_hash_hex: await sha256Hex(newRefresh), new_session_id: newSessionId,
+      ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
       idempotency_request_sha256: requestSha256,
       idempotency_key_version: keyVersion
     }, p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   });
   if (result?.ok !== true) throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_SESSION_INVALID');
-  return jsonResponse(200, safeSessionResponse(result, await createAccessToken(env, result), newRefresh));
+  const winningRefreshToken = await refreshTokenForSessionResult(
+    env, keyVersion, 'REFRESH_SESSION', result, idempotencyKey
+  );
+  return jsonResponse(200, safeSessionResponse(
+    result, await createAccessToken(env, result), winningRefreshToken
+  ));
 }
 
 async function handleAccountAction(request, env, deps, action, routeIdentity = {}) {
@@ -1064,6 +1187,10 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
   const claims = await candidateAccessClaims(request, env);
   let payload = {};
   let selectedCandidateId = null;
+  let pushTokenCiphertext = null;
+  let pushEncryptionKeyVersion = null;
+  let pushIdentityKeyVersion = null;
+  let pushIdentityProofCatalog = null;
   let requestIdentity = { session_id: claims.sid };
   if (action === 'SELECT_TEST_CANDIDATE') {
     selectedCandidateId = requireUuid(body.selected_candidate_id, 'CANDIDATE_SELECTION_NOT_ALLOWED');
@@ -1079,18 +1206,26 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
     requestIdentity = { ...requestIdentity, notification_id: notificationId };
   } else if (action === 'REGISTER_PUSH_TOKEN') {
     const ciphertext = text(body.push_token_ciphertext_hex);
+    const tokenIdentityHmac = text(body.push_token_identity_hmac).toLowerCase();
+    const tokenIdentityKeyVersion = Number(body.push_token_identity_key_version);
     const provider = upper(body.push_provider);
     const keyVersion = Number(body.push_key_version);
     if (!/^[0-9a-f]{58,32768}$/i.test(ciphertext) || ciphertext.length % 2 !== 0
+        || !SHA256_RE.test(tokenIdentityHmac)
+        || !Number.isSafeInteger(tokenIdentityKeyVersion) || tokenIdentityKeyVersion < 1
         || !['APNS', 'FCM', 'WEB_PUSH'].includes(provider)
-        || !Number.isSafeInteger(keyVersion) || keyVersion < 1) {
+        || !Number.isSafeInteger(keyVersion) || keyVersion < 1 || keyVersion > 32767) {
       throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
     }
+    pushTokenCiphertext = ciphertext;
+    pushEncryptionKeyVersion = keyVersion;
+    pushIdentityKeyVersion = tokenIdentityKeyVersion;
+    pushIdentityProofCatalog = publicPushIdentityProofs(
+      body.push_token_identity_proofs, tokenIdentityHmac, tokenIdentityKeyVersion
+    );
     requestIdentity = {
       ...requestIdentity,
-      push_provider: provider,
-      push_token_ciphertext_hex: ciphertext,
-      push_key_version: keyVersion
+      push_provider: provider
     };
   } else if (action === 'CHANGE_PASSWORD') {
     requestIdentity = { ...requestIdentity, password_change: true };
@@ -1102,6 +1237,22 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
   const keyVersion = metadata?.replay_receipt_found === true
     ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
     : authReplayKeyVersion(env);
+  if (action === 'REGISTER_PUSH_TOKEN') {
+    const semanticIdentityVersion = metadata?.replay_receipt_found === true
+      ? Number(metadata.push_token_identity_key_version)
+      : pushIdentityKeyVersion;
+    const semanticIdentity = pushIdentityProofCatalog.find(
+      proof => proof.key_version === semanticIdentityVersion
+    );
+    if (!semanticIdentity) {
+      throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+    }
+    requestIdentity = {
+      ...requestIdentity,
+      push_token_identity_hmac: semanticIdentity.identity_hmac,
+      push_token_identity_key_version: semanticIdentity.key_version
+    };
+  }
   if (action === 'CHANGE_PASSWORD') {
     requestIdentity = {
       ...requestIdentity,
@@ -1121,17 +1272,28 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
     );
     if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
     if (action === 'SELECT_TEST_CANDIDATE') {
-      const nextAccess = await createAccessToken(env, {
-        session_id: claims.sid, rotation: Number(claims.rot || 0)
-      });
-      return jsonResponse(200, {
-        ...replay, access_token: nextAccess, access_expires_in_seconds: ACCESS_TTL_SECONDS
-      });
+      return jsonResponse(200, await selectedCandidateSessionResponse(
+        env, claims, claims.sid, claims.rot, replay
+      ));
     }
     return jsonResponse(200, replay);
   }
 
-  const access = await verifyCandidateAccess(request, env);
+  let access;
+  try {
+    access = await verifyCandidateAccess(request, env);
+  } catch (error) {
+    const replay = await candidateAuthReplayAfterPreconditionFailure(
+      deps, env, action, idempotencyKey, requestSha256, keyVersion,
+      { session_id: claims.sid, selected_candidate_id: selectedCandidateId }, error
+    );
+    if (action === 'SELECT_TEST_CANDIDATE') {
+      return jsonResponse(200, await selectedCandidateSessionResponse(
+        env, claims, claims.sid, claims.rot, replay
+      ));
+    }
+    return jsonResponse(200, replay);
+  }
   if (action === 'SET_NOTIFICATION_PREFERENCES') {
     payload = { notification_preferences: body.notification_preferences };
   } else if (action === 'MARK_NOTIFICATION_READ') {
@@ -1139,15 +1301,22 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
   } else if (action === 'REGISTER_PUSH_TOKEN') {
     payload = {
       push_provider: requestIdentity.push_provider,
-      push_token_ciphertext_hex: requestIdentity.push_token_ciphertext_hex,
-      push_key_version: requestIdentity.push_key_version
+      push_token_ciphertext_hex: pushTokenCiphertext,
+      push_key_version: pushEncryptionKeyVersion,
+      push_token_identity_hmac: requestIdentity.push_token_identity_hmac,
+      push_token_identity_key_version: requestIdentity.push_token_identity_key_version
     };
   } else if (action === 'CHANGE_PASSWORD') {
     const account = await restOne(env, 'candidate_app_accounts',
       `id=eq.${encodeURIComponent(access.account_id)}` +
       '&select=id,password_scheme,password_scheme_version,password_salt,password_digest,password_params_json');
     if (!account || !await verifyPassword(body.current_password, account)) {
-      throw new CandidateHttpError(401, 'CANDIDATE_LOGIN_INVALID');
+      const error = new CandidateHttpError(401, 'CANDIDATE_LOGIN_INVALID');
+      const replay = await candidateAuthReplayAfterPreconditionFailure(
+        deps, env, action, idempotencyKey, requestSha256, keyVersion,
+        { session_id: claims.sid, selected_candidate_id: selectedCandidateId }, error
+      );
+      return jsonResponse(200, replay);
     }
     const verifier = await derivePasswordVerifier(body.password);
     payload = {
@@ -1169,10 +1338,9 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
     p_now_utc: new Date().toISOString()
   });
   if (action === 'SELECT_TEST_CANDIDATE') {
-    const nextAccess = await createAccessToken(env, {
-      session_id: access.session_id, rotation: access.rotation
-    });
-    return jsonResponse(200, { ...result, access_token: nextAccess, access_expires_in_seconds: ACCESS_TTL_SECONDS });
+    return jsonResponse(200, await selectedCandidateSessionResponse(
+      env, claims, access.session_id, access.rotation, result
+    ));
   }
   return jsonResponse(200, result);
 }
@@ -2800,10 +2968,24 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       renderer_contract_version: RENDERER_CONTRACT_VERSION
     };
   } else if (dbAction === 'SELECT_PHONE_APPROVAL') {
+    const brokerBinding = publicPhoneBinding(payload.public_broker_binding);
+    const brokerHandoffKeyVersion = requireInteger(
+      payload.broker_handoff_key_version,
+      'CANDIDATE_BROKER_CREDENTIAL_VERSION_INVALID', 1
+    );
+    if (brokerHandoffKeyVersion > 65535) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BROKER_CREDENTIAL_VERSION_INVALID');
+    }
+    payload = {
+      ...payload,
+      public_broker_binding: brokerBinding,
+      broker_handoff_key_version: brokerHandoffKeyVersion
+    };
     const replaySemanticPayload = { ...payload };
     delete replaySemanticPayload.approval_token_hash_hex;
     delete replaySemanticPayload.expires_at_utc;
     delete replaySemanticPayload.handoff_token_key_version;
+    delete replaySemanticPayload.broker_handoff_key_version;
     const replay = await probeWorkflowMutationReplay(
       env, deps, access, workflowId, dbAction, generation, mutationKey,
       replaySemanticPayload
@@ -2828,7 +3010,9 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       ...payload,
       approval_token_hash_hex: await sha256Hex(managerToken),
       expires_at_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      handoff_token_key_version: handoffTokenKeyVersion
+      handoff_token_key_version: handoffTokenKeyVersion,
+      public_broker_binding: brokerBinding,
+      broker_handoff_key_version: brokerHandoffKeyVersion
     };
     body.__manager_handoff_token = managerToken;
   } else if (dbAction === 'CREATE_EMAIL_APPROVAL_REQUEST' || dbAction === 'RENEW' || dbAction === 'REMIND') {

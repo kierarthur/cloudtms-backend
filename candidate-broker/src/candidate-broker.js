@@ -6,6 +6,14 @@ const PUBLIC_CANDIDATE_PREFIX = '/candidate-app/v1';
 const PUBLIC_MANAGER_PREFIX = '/candidate-manager/v1';
 const PRIVATE_CANDIDATE_PREFIX = '/private/candidate-app/v1';
 const PRIVATE_MANAGER_PREFIX = '/private/candidate-manager/v1';
+const UNAUTHENTICATED_PUBLIC_AUTH_PATHS = new Set([
+  `${PUBLIC_CANDIDATE_PREFIX}/auth/challenge/start`,
+  `${PUBLIC_CANDIDATE_PREFIX}/auth/challenge/resend`,
+  `${PUBLIC_CANDIDATE_PREFIX}/auth/challenge/verify`,
+  `${PUBLIC_CANDIDATE_PREFIX}/auth/password/complete`,
+  `${PUBLIC_CANDIDATE_PREFIX}/auth/login`,
+  `${PUBLIC_CANDIDATE_PREFIX}/auth/refresh`
+]);
 const MANAGER_ACTION_METHODS = Object.freeze({
   start: 'GET',
   progress: 'POST',
@@ -18,6 +26,44 @@ const PUBLIC_ERROR_BYTES = 64 * 1024;
 const ENUMERATION_SAFE_MINIMUM_MS = 250;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256_RE = /^[0-9a-f]{64}$/i;
+const MAX_IDEMPOTENCY_KEY_BYTES = 200;
+const PUBLIC_CREDENTIAL_VERSION_CONTRACT = 'CANDIDATE_PUBLIC_CREDENTIAL_VERSIONS_V1';
+const PUBLIC_PHONE_BINDING_CONTRACT = 'CANDIDATE_PUBLIC_PHONE_BINDING_V1';
+const DEVICE_CIPHERTEXT_MAGIC = new Uint8Array([0x43, 0x54, 0x50]);
+const CREDENTIAL_AUTHORITIES = Object.freeze({
+  access: Object.freeze({
+    secret: 'CANDIDATE_BROKER_ACCESS_TOKEN_SECRET',
+    version: 'CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION',
+    readers: 'CANDIDATE_BROKER_ACCESS_TOKEN_READ_KEY_VERSIONS'
+  }),
+  refresh: Object.freeze({
+    secret: 'CANDIDATE_BROKER_REFRESH_TOKEN_SECRET',
+    version: 'CANDIDATE_BROKER_REFRESH_TOKEN_KEY_VERSION',
+    readers: 'CANDIDATE_BROKER_REFRESH_TOKEN_READ_KEY_VERSIONS'
+  }),
+  manager: Object.freeze({
+    secret: 'CANDIDATE_BROKER_MANAGER_HANDOFF_SECRET',
+    version: 'CANDIDATE_BROKER_MANAGER_HANDOFF_KEY_VERSION',
+    readers: 'CANDIDATE_BROKER_MANAGER_HANDOFF_READ_KEY_VERSIONS'
+  }),
+  publicSession: Object.freeze({
+    secret: 'CANDIDATE_BROKER_PUBLIC_SESSION_ID_SECRET',
+    version: 'CANDIDATE_BROKER_PUBLIC_SESSION_ID_KEY_VERSION',
+    readers: 'CANDIDATE_BROKER_PUBLIC_SESSION_ID_READ_KEY_VERSIONS'
+  }),
+  deviceEncryption: Object.freeze({
+    secret: 'CANDIDATE_BROKER_DEVICE_TOKEN_SECRET',
+    version: 'CANDIDATE_BROKER_DEVICE_TOKEN_ENCRYPTION_KEY_VERSION',
+    readers: 'CANDIDATE_BROKER_DEVICE_TOKEN_ENCRYPTION_READ_KEY_VERSIONS',
+    maximumVersion: 32767
+  }),
+  deviceIdentity: Object.freeze({
+    secret: 'CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_SECRET',
+    version: 'CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_KEY_VERSION',
+    readers: 'CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_READ_KEY_VERSIONS'
+  })
+});
 
 class CandidateBrokerError extends Error {
   constructor(status, code) {
@@ -37,6 +83,16 @@ function upper(value) {
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (isObject(value)) {
+    return `{${Object.keys(value).sort().map((key) => (
+      `${JSON.stringify(key)}:${canonicalJson(value[key])}`
+    )).join(',')}}`;
+  }
+  return JSON.stringify(value === undefined ? null : value);
 }
 
 function environmentName(env) {
@@ -190,30 +246,229 @@ async function envelopeKey(secret, purpose) {
   );
 }
 
-async function sealEnvelope(secret, purpose, payload) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+async function hmacSha256Bytes(secret, purpose, value) {
+  if (!text(secret)) throw new CandidateBrokerError(503, 'CANDIDATE_BROKER_TOKEN_SECRET_UNAVAILABLE');
+  const material = await sha256Bytes(`${purpose}:${secret}`);
+  const key = await crypto.subtle.importKey(
+    'raw', material, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']
+  );
+  const bytes = value instanceof Uint8Array ? value : encoder.encode(String(value == null ? '' : value));
+  return new Uint8Array(await crypto.subtle.sign('HMAC', key, bytes));
+}
+
+function configuredKeyVersion(env, authority) {
+  const value = Number(env[authority.version] == null ? 1 : env[authority.version]);
+  const maximumVersion = Number(authority.maximumVersion || 65535);
+  if (!Number.isSafeInteger(value) || value < 1 || value > maximumVersion) {
+    throw new CandidateBrokerError(503, 'CANDIDATE_BROKER_KEY_VERSION_UNAVAILABLE');
+  }
+  return value;
+}
+
+function authoritySecretForVersion(env, authority, version) {
+  const keyVersion = Number(version);
+  const maximumVersion = Number(authority.maximumVersion || 65535);
+  if (!Number.isSafeInteger(keyVersion) || keyVersion < 1 || keyVersion > maximumVersion) {
+    throw new CandidateBrokerError(503, 'CANDIDATE_BROKER_KEY_VERSION_UNAVAILABLE');
+  }
+  const versioned = text(env[`${authority.secret}_V${keyVersion}`]);
+  if (versioned) return versioned;
+  if (keyVersion === 1 && text(env[authority.secret])) return text(env[authority.secret]);
+  throw new CandidateBrokerError(503, 'CANDIDATE_BROKER_KEY_VERSION_UNAVAILABLE');
+}
+
+function authorityReadVersions(env, authority) {
+  const values = new Set([configuredKeyVersion(env, authority)]);
+  const maximumVersion = Number(authority.maximumVersion || 65535);
+  for (const raw of text(env[authority.readers]).split(',')) {
+    if (!raw) continue;
+    const parsed = Number(raw);
+    if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximumVersion) {
+      throw new CandidateBrokerError(503, 'CANDIDATE_BROKER_KEY_VERSION_UNAVAILABLE');
+    }
+    values.add(parsed);
+  }
+  return Array.from(values);
+}
+
+function currentPublicCredentialVersions(env) {
+  return {
+    contract_version: PUBLIC_CREDENTIAL_VERSION_CONTRACT,
+    access_key_version: configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.access),
+    refresh_key_version: configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.refresh),
+    public_session_key_version: configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.publicSession)
+  };
+}
+
+function assertPublicCredentialSecrets(env, versions) {
+  authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.access, versions.access_key_version);
+  authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.refresh, versions.refresh_key_version);
+  authoritySecretForVersion(
+    env, CREDENTIAL_AUTHORITIES.publicSession, versions.public_session_key_version
+  );
+  return versions;
+}
+
+function publicCredentialVersions(value, env) {
+  const source = isObject(value) ? value : currentPublicCredentialVersions(env);
+  const contract = text(source.contract_version || PUBLIC_CREDENTIAL_VERSION_CONTRACT);
+  const output = {
+    contract_version: contract,
+    access_key_version: Number(source.access_key_version),
+    refresh_key_version: Number(source.refresh_key_version),
+    public_session_key_version: Number(source.public_session_key_version)
+  };
+  if (contract !== PUBLIC_CREDENTIAL_VERSION_CONTRACT
+      || [output.access_key_version, output.refresh_key_version, output.public_session_key_version]
+        .some(version => !Number.isSafeInteger(version) || version < 1 || version > 65535)) {
+    throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_CREDENTIAL_VERSION_INVALID');
+  }
+  return output;
+}
+
+async function deterministicEnvelopeKey(secret, purpose, identity) {
+  const material = await hmacSha256Bytes(
+    secret, `candidate-broker-envelope-v2-key:${purpose}`, identity
+  );
+  return crypto.subtle.importKey('raw', material, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+}
+
+async function sealEnvelope(secret, purpose, payload, keyVersion = null) {
+  const plaintext = encoder.encode(canonicalJson(payload));
+  const envelopeVersion = keyVersion == null ? 'v2' : 'v3';
+  const identityPurpose = `candidate-broker-envelope-${envelopeVersion}-identity:${purpose}`;
+  const identity = await hmacSha256Bytes(secret, identityPurpose, plaintext);
+  const identityEncoded = base64UrlEncode(identity);
+  // V2 derives a separate AES key for every HMAC-identified canonical plaintext.
+  // The all-zero IV therefore never encrypts distinct inputs under one key;
+  // an exact replay intentionally recomputes the identical authenticated result.
+  // V1 random-IV envelopes remain readable in openEnvelope during rollout.
+  const iv = new Uint8Array(12);
+  const additionalData = encoder.encode(`candidate-broker-envelope-${envelopeVersion}:${purpose}:${identityEncoded}`);
   const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: encoder.encode(purpose) },
-    await envelopeKey(secret, purpose),
-    encoder.encode(JSON.stringify(payload))
+    { name: 'AES-GCM', iv, additionalData },
+    await deterministicEnvelopeKey(secret, keyVersion == null ? purpose : `${purpose}:v3`, identity),
+    plaintext
   ));
-  return `v1.${base64UrlEncode(iv)}.${base64UrlEncode(ciphertext)}`;
+  const ciphertextEncoded = base64UrlEncode(ciphertext);
+  return keyVersion == null
+    ? `v2.${identityEncoded}.${ciphertextEncoded}`
+    : `v3.${Number(keyVersion)}.${identityEncoded}.${ciphertextEncoded}`;
 }
 
 async function openEnvelope(secret, purpose, token) {
-  const [version, ivValue, ciphertextValue] = text(token).split('.');
-  if (version !== 'v1' || !ivValue || !ciphertextValue) return null;
+  const parts = text(token).split('.');
+  if (parts.length !== 3 && parts.length !== 4) return null;
+  const version = parts[0];
+  const versioned = version === 'v3';
+  if (!['v1', 'v2', 'v3'].includes(version)) return null;
+  if ((versioned && parts.length !== 4) || (!versioned && parts.length !== 3)) return null;
+  const identityOrIvValue = parts[versioned ? 2 : 1];
+  const ciphertextValue = parts[versioned ? 3 : 2];
+  if (versioned && (!/^[1-9][0-9]{0,4}$/.test(parts[1]) || Number(parts[1]) > 65535)) return null;
+  if (!identityOrIvValue || !ciphertextValue) return null;
   try {
+    if (version === 'v1') {
+      const plaintext = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv: base64UrlDecode(identityOrIvValue), additionalData: encoder.encode(purpose) },
+        await envelopeKey(secret, purpose),
+        base64UrlDecode(ciphertextValue)
+      );
+      const payload = JSON.parse(decoder.decode(plaintext));
+      return isObject(payload) ? payload : null;
+    }
+    const identity = base64UrlDecode(identityOrIvValue);
+    if (identity.length !== 32) return null;
+    const envelopeVersion = versioned ? 'v3' : 'v2';
     const plaintext = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: base64UrlDecode(ivValue), additionalData: encoder.encode(purpose) },
-      await envelopeKey(secret, purpose),
+      {
+        name: 'AES-GCM', iv: new Uint8Array(12),
+        additionalData: encoder.encode(`candidate-broker-envelope-${envelopeVersion}:${purpose}:${identityOrIvValue}`)
+      },
+      await deterministicEnvelopeKey(secret, versioned ? `${purpose}:v3` : purpose, identity),
       base64UrlDecode(ciphertextValue)
     );
+    const expectedIdentity = await hmacSha256Bytes(
+      secret, `candidate-broker-envelope-${envelopeVersion}-identity:${purpose}`, new Uint8Array(plaintext)
+    );
+    if (base64UrlEncode(expectedIdentity) !== identityOrIvValue) return null;
     const payload = JSON.parse(decoder.decode(plaintext));
     return isObject(payload) ? payload : null;
   } catch {
     return null;
   }
+}
+
+async function sealVersionedEnvelope(env, authority, purpose, payload, requestedVersion = null) {
+  const keyVersion = requestedVersion == null
+    ? configuredKeyVersion(env, authority) : Number(requestedVersion);
+  const secret = authoritySecretForVersion(env, authority, keyVersion);
+  const plaintext = encoder.encode(canonicalJson(payload));
+  const identity = await hmacSha256Bytes(
+    secret, `candidate-broker-envelope-v3-identity:${purpose}`, plaintext
+  );
+  const identityEncoded = base64UrlEncode(identity);
+  const iv = new Uint8Array(12);
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM', iv,
+      additionalData: encoder.encode(`candidate-broker-envelope-v3:${purpose}:${identityEncoded}`)
+    },
+    await deterministicEnvelopeKey(secret, `${purpose}:v3`, identity),
+    plaintext
+  ));
+  return `v3.${keyVersion}.${identityEncoded}.${base64UrlEncode(ciphertext)}`;
+}
+
+async function openVersionedEnvelope(env, authority, purpose, token) {
+  const parts = text(token).split('.');
+  if (parts[0] === 'v3') {
+    if (parts.length !== 4 || !/^[1-9][0-9]{0,4}$/.test(parts[1])) return null;
+    const keyVersion = Number(parts[1]);
+    if (keyVersion > 65535) return null;
+    if (!authorityReadVersions(env, authority).includes(keyVersion)) return null;
+    let secret;
+    try {
+      secret = authoritySecretForVersion(env, authority, keyVersion);
+    } catch {
+      return null;
+    }
+    const payload = await openEnvelope(secret, purpose, token);
+    return payload ? { payload, key_version: keyVersion, envelope_version: 'v3' } : null;
+  }
+  if (!['v1', 'v2'].includes(parts[0]) || parts.length !== 3) return null;
+  for (const keyVersion of authorityReadVersions(env, authority)) {
+    let secret;
+    try {
+      secret = authoritySecretForVersion(env, authority, keyVersion);
+    } catch {
+      continue;
+    }
+    const payload = await openEnvelope(secret, purpose, token);
+    if (payload) return { payload, key_version: keyVersion, envelope_version: parts[0] };
+  }
+  return null;
+}
+
+function uuidFromBytes(source) {
+  const bytes = new Uint8Array(source.slice(0, 16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const value = bytesToHex(bytes);
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
+async function publicSessionIdForPrivate(env, internalSessionId, keyVersion = null) {
+  if (!UUID_RE.test(text(internalSessionId))) {
+    throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_SESSION_INVALID');
+  }
+  const version = keyVersion == null
+    ? configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.publicSession) : Number(keyVersion);
+  return uuidFromBytes(await hmacSha256Bytes(
+    authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.publicSession, version),
+    `candidate-broker-public-session-id-v1:key-${version}`,
+    `${environmentName(env)}:${text(internalSessionId).toLowerCase()}`
+  ));
 }
 
 function bearerToken(request) {
@@ -226,26 +481,28 @@ async function openPublicAccess(request, env) {
 }
 
 async function openPublicAccessToken(token, env) {
-  const payload = await openEnvelope(
-    env.CANDIDATE_BROKER_ACCESS_TOKEN_SECRET,
+  const opened = await openVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.access,
     'candidate-broker-access-v1',
     token
   );
+  const payload = opened?.payload;
   const now = Math.floor(Date.now() / 1000);
   if (!payload || payload.typ !== 'candidate_broker_access' || payload.aud !== 'cloudtms-candidate-public'
       || payload.env !== environmentName(env) || Number(payload.exp) <= now
       || !text(payload.internal_access_token) || !text(payload.public_session_id)) {
     throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
   }
-  return payload;
+  return { ...payload, _broker_access_key_version: opened.key_version };
 }
 
 async function openPublicRefresh(body, env) {
-  const payload = await openEnvelope(
-    env.CANDIDATE_BROKER_REFRESH_TOKEN_SECRET,
+  const opened = await openVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.refresh,
     'candidate-broker-refresh-v1',
     text(body.refresh_token)
   );
+  const payload = opened?.payload;
   const now = Math.floor(Date.now() / 1000);
   if (!payload || payload.typ !== 'candidate_broker_refresh' || payload.aud !== 'cloudtms-candidate-refresh'
       || payload.env !== environmentName(env) || Number(payload.exp) <= now
@@ -254,7 +511,7 @@ async function openPublicRefresh(body, env) {
       || (body.session_id && text(body.session_id) !== payload.public_session_id)) {
     throw new CandidateBrokerError(401, 'CANDIDATE_SESSION_INVALID');
   }
-  return payload;
+  return { ...payload, _broker_refresh_key_version: opened.key_version };
 }
 
 async function boundedJson(request, maximumBytes = MAX_PUBLIC_JSON_BYTES) {
@@ -383,59 +640,86 @@ async function publicSafePrivateResponse(response) {
   });
 }
 
-async function wrapPrivateSession(response, env, publicSessionId = crypto.randomUUID()) {
+async function wrapPrivateSession(response, env, publicSessionId = null) {
   if (!response.ok) return publicSafePrivateResponse(response);
   const source = await responseJson(response);
-  const now = Math.floor(Date.now() / 1000);
+  const issuedAt = Date.parse(source.issued_at_utc || '');
   const accessSeconds = Number(source.access_expires_in_seconds || 900);
+  const sessionExpiry = Date.parse(source.expires_at_utc || '');
   const absoluteExpiry = Date.parse(source.absolute_expires_at_utc || '');
   if (!text(source.access_token) || !text(source.refresh_token) || !text(source.session_id)
       || !Number.isFinite(accessSeconds) || accessSeconds < 60
-      || !Number.isFinite(absoluteExpiry) || absoluteExpiry <= Date.now()) {
+      || !Number.isFinite(issuedAt)
+      || !Number.isFinite(sessionExpiry) || sessionExpiry <= issuedAt
+      || !Number.isFinite(absoluteExpiry) || absoluteExpiry < sessionExpiry
+      || absoluteExpiry <= Date.now()) {
     throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_SESSION_INVALID');
   }
-  const accessToken = await sealEnvelope(
-    env.CANDIDATE_BROKER_ACCESS_TOKEN_SECRET,
+  const versions = publicCredentialVersions(source.public_credential_versions, env);
+  assertPublicCredentialSecrets(env, versions);
+  const stablePublicSessionId = publicSessionId
+    ? text(publicSessionId)
+    : await publicSessionIdForPrivate(env, source.session_id, versions.public_session_key_version);
+  if (!UUID_RE.test(stablePublicSessionId)) {
+    throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_SESSION_INVALID');
+  }
+  const issuedAtSeconds = Math.floor(issuedAt / 1000);
+  const accessToken = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.access,
     'candidate-broker-access-v1',
     {
       typ: 'candidate_broker_access', aud: 'cloudtms-candidate-public', env: environmentName(env),
-      public_session_id: publicSessionId, internal_access_token: source.access_token,
-      iat: now, exp: now + accessSeconds
-    }
+      public_session_id: stablePublicSessionId, internal_access_token: source.access_token,
+      public_session_key_version: versions.public_session_key_version,
+      iat: issuedAtSeconds, exp: issuedAtSeconds + accessSeconds
+    },
+    versions.access_key_version
   );
-  const refreshToken = await sealEnvelope(
-    env.CANDIDATE_BROKER_REFRESH_TOKEN_SECRET,
+  const refreshToken = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.refresh,
     'candidate-broker-refresh-v1',
     {
       typ: 'candidate_broker_refresh', aud: 'cloudtms-candidate-refresh', env: environmentName(env),
-      public_session_id: publicSessionId, internal_session_id: source.session_id,
+      public_session_id: stablePublicSessionId, internal_session_id: source.session_id,
       internal_refresh_token: source.refresh_token,
-      iat: now, exp: Math.floor(absoluteExpiry / 1000)
-    }
+      public_session_key_version: versions.public_session_key_version,
+      iat: issuedAtSeconds, exp: Math.floor(absoluteExpiry / 1000)
+    },
+    versions.refresh_key_version
   );
-  return jsonResponse(response.status, {
+  const safe = {
     ...source,
     access_token: accessToken,
     refresh_token: refreshToken,
-    session_id: publicSessionId
-  });
+    session_id: stablePublicSessionId
+  };
+  delete safe.public_credential_versions;
+  return jsonResponse(response.status, safe);
 }
 
 async function wrapSelectedCandidateAccess(response, env, existingAccess) {
   if (!response.ok) return publicSafePrivateResponse(response);
   const source = await responseJson(response);
   if (!text(source.access_token)) throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_SESSION_INVALID');
-  const now = Math.floor(Date.now() / 1000);
+  const issuedAt = Date.parse(source.issued_at_utc || '');
   const seconds = Number(source.access_expires_in_seconds || 900);
-  const accessToken = await sealEnvelope(
-    env.CANDIDATE_BROKER_ACCESS_TOKEN_SECRET,
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(seconds) || seconds < 60) {
+    throw new CandidateBrokerError(502, 'CANDIDATE_PRIVATE_SESSION_INVALID');
+  }
+  const issuedAtSeconds = Math.floor(issuedAt / 1000);
+  const accessKeyVersion = Number(existingAccess._broker_access_key_version)
+    || configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.access);
+  const accessToken = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.access,
     'candidate-broker-access-v1',
     {
       typ: 'candidate_broker_access', aud: 'cloudtms-candidate-public', env: environmentName(env),
       public_session_id: existingAccess.public_session_id,
       internal_access_token: source.access_token,
-      iat: now, exp: now + seconds
-    }
+      public_session_key_version: Number(existingAccess.public_session_key_version) || 1,
+      iat: issuedAtSeconds, exp: issuedAtSeconds + seconds
+    },
+    accessKeyVersion
   );
   const safe = { ...source, access_token: accessToken, session_id: existingAccess.public_session_id };
   delete safe.internal_session_id;
@@ -443,42 +727,74 @@ async function wrapSelectedCandidateAccess(response, env, existingAccess) {
   return jsonResponse(response.status, safe);
 }
 
-async function wrapPhoneHandoff(response, env, access, request) {
+async function publicPhoneBinding(env, access, request) {
+  const deviceId = text(request.headers.get('x-candidate-device-id'));
+  return {
+    contract_version: PUBLIC_PHONE_BINDING_CONTRACT,
+    public_session_binding_sha256: await sha256Hex(canonicalJson({
+      environment: environmentName(env), public_session_id: access.public_session_id
+    })),
+    device_binding_sha256: deviceId ? await sha256Hex(canonicalJson({
+      environment: environmentName(env), device_id: deviceId
+    })) : null
+  };
+}
+
+function samePublicPhoneBinding(left, right) {
+  return isObject(left) && isObject(right)
+    && left.contract_version === PUBLIC_PHONE_BINDING_CONTRACT
+    && right.contract_version === PUBLIC_PHONE_BINDING_CONTRACT
+    && text(left.public_session_binding_sha256) === text(right.public_session_binding_sha256)
+    && (left.device_binding_sha256 == null ? null : text(left.device_binding_sha256))
+      === (right.device_binding_sha256 == null ? null : text(right.device_binding_sha256));
+}
+
+async function wrapPhoneHandoff(response, env, access, request, expectedBinding = null) {
   if (!response.ok) return publicSafePrivateResponse(response);
   const source = await responseJson(response);
   const internalToken = text(source.manager_handoff_token);
   if (!internalToken || !text(source.workflow_id) || !text(source.approval_request_id)) {
     throw new CandidateBrokerError(502, 'CANDIDATE_PHONE_HANDOFF_INVALID');
   }
-  const now = Math.floor(Date.now() / 1000);
+  const issuedAt = Date.parse(source.issued_at_utc || '');
   const expiresAt = Date.parse(source.expires_at_utc || '');
-  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+  if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)
+      || expiresAt <= issuedAt || expiresAt <= Date.now()) {
     throw new CandidateBrokerError(502, 'CANDIDATE_PHONE_HANDOFF_INVALID');
   }
-  const deviceId = text(request.headers.get('x-candidate-device-id'));
-  const token = await sealEnvelope(
-    env.CANDIDATE_BROKER_MANAGER_HANDOFF_SECRET,
+  const binding = expectedBinding || await publicPhoneBinding(env, access, request);
+  if (!samePublicPhoneBinding(source.public_broker_binding, binding)) {
+    throw new CandidateBrokerError(502, 'CANDIDATE_PHONE_HANDOFF_BINDING_INVALID');
+  }
+  const handoffKeyVersion = Number(source.broker_handoff_key_version)
+    || configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.manager);
+  const token = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.manager,
     'candidate-broker-phone-handoff-v1',
     {
       typ: 'candidate_phone_handoff', aud: 'cloudtms-manager-phone', env: environmentName(env),
       workflow_id: source.workflow_id, approval_request_id: source.approval_request_id,
       public_session_id: access.public_session_id,
-      device_id_sha256: deviceId ? await sha256Hex(deviceId) : null,
+      device_id_sha256: binding.device_binding_sha256,
       internal_manager_token: internalToken,
-      iat: now, exp: Math.floor(expiresAt / 1000)
-    }
+      iat: Math.floor(issuedAt / 1000), exp: Math.floor(expiresAt / 1000)
+    },
+    handoffKeyVersion
   );
   const safe = { ...source, manager_handoff_token: token };
+  delete safe.public_broker_binding;
+  delete safe.broker_handoff_key_version;
   return jsonResponse(response.status, safe);
 }
 
 async function managerAuthorization(request, env) {
   const supplied = bearerToken(request);
-  const handoff = await openEnvelope(
-    env.CANDIDATE_BROKER_MANAGER_HANDOFF_SECRET,
+  const opened = await openVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.manager,
     'candidate-broker-phone-handoff-v1',
     supplied
   );
+  const handoff = opened?.payload;
   if (!handoff) return `Bearer ${supplied}`;
   const now = Math.floor(Date.now() / 1000);
   if (handoff.typ !== 'candidate_phone_handoff' || handoff.aud !== 'cloudtms-manager-phone'
@@ -492,7 +808,10 @@ async function managerAuthorization(request, env) {
   }
   const expectedDevice = text(handoff.device_id_sha256);
   const deviceId = text(request.headers.get('x-candidate-device-id'));
-  if (expectedDevice && (!deviceId || await sha256Hex(deviceId) !== expectedDevice)) {
+  const actualDevice = deviceId ? await sha256Hex(canonicalJson({
+    environment: environmentName(env), device_id: deviceId
+  })) : '';
+  if (expectedDevice && (!actualDevice || actualDevice !== expectedDevice)) {
     throw new CandidateBrokerError(401, 'MANAGER_PHONE_HANDOFF_DEVICE_MISMATCH');
   }
   return `Bearer ${handoff.internal_manager_token}`;
@@ -502,32 +821,78 @@ async function encryptDeviceToken(env, value) {
   const token = text(value);
   if (!token || token.length > 8192) throw new CandidateBrokerError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
   const purpose = 'candidate-broker-device-token-v1';
+  const keyVersion = configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.deviceEncryption);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = new Uint8Array(await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv, additionalData: encoder.encode(purpose) },
-    await envelopeKey(env.CANDIDATE_BROKER_DEVICE_TOKEN_SECRET, purpose),
+    await envelopeKey(
+      authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.deviceEncryption, keyVersion), purpose
+    ),
     encoder.encode(token)
   ));
-  const packed = new Uint8Array(iv.length + encrypted.length);
-  packed.set(iv, 0);
-  packed.set(encrypted, iv.length);
+  const packed = new Uint8Array(DEVICE_CIPHERTEXT_MAGIC.length + 2 + iv.length + encrypted.length);
+  packed.set(DEVICE_CIPHERTEXT_MAGIC, 0);
+  packed[3] = (keyVersion >> 8) & 0xff;
+  packed[4] = keyVersion & 0xff;
+  packed.set(iv, 5);
+  packed.set(encrypted, 17);
   return bytesToHex(packed);
 }
 
-async function decryptDeviceToken(env, ciphertextHex) {
+async function deviceTokenIdentity(
+  env, provider, value, publicSessionId = '', requestedVersion = null
+) {
+  const token = text(value);
+  if (!token || token.length > 8192) throw new CandidateBrokerError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+  const keyVersion = requestedVersion == null
+    ? configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.deviceIdentity)
+    : Number(requestedVersion);
+  return bytesToHex(await hmacSha256Bytes(
+    authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.deviceIdentity, keyVersion),
+    `candidate-broker-device-token-identity-v1:key-${keyVersion}`,
+    canonicalJson({
+      environment: environmentName(env), provider: upper(provider),
+      public_session_id: text(publicSessionId), token
+    })
+  ));
+}
+
+async function deviceTokenIdentityProofs(env, provider, value, publicSessionId = '') {
+  const versions = authorityReadVersions(env, CREDENTIAL_AUTHORITIES.deviceIdentity);
+  const proofs = [];
+  for (const keyVersion of versions) {
+    proofs.push({
+      key_version: keyVersion,
+      identity_hmac: await deviceTokenIdentity(
+        env, provider, value, publicSessionId, keyVersion
+      )
+    });
+  }
+  return proofs;
+}
+
+async function decryptDeviceToken(env, ciphertextHex, recordedKeyVersion = null) {
   const packed = hexToBytes(ciphertextHex);
   if (!packed || packed.length <= 28) throw new CandidateBrokerError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+  const versioned = packed.length > 33
+    && DEVICE_CIPHERTEXT_MAGIC.every((value, index) => packed[index] === value);
+  const keyVersion = versioned ? (packed[3] << 8) + packed[4] : 1;
+  if (recordedKeyVersion != null && Number(recordedKeyVersion) !== keyVersion) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
+  }
+  const ivOffset = versioned ? 5 : 0;
+  const ciphertextOffset = ivOffset + 12;
   try {
     const plaintext = await crypto.subtle.decrypt(
       {
-        name: 'AES-GCM', iv: packed.slice(0, 12),
+        name: 'AES-GCM', iv: packed.slice(ivOffset, ciphertextOffset),
         additionalData: encoder.encode('candidate-broker-device-token-v1')
       },
       await envelopeKey(
-        env.CANDIDATE_BROKER_DEVICE_TOKEN_SECRET,
+        authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.deviceEncryption, keyVersion),
         'candidate-broker-device-token-v1'
       ),
-      packed.slice(12)
+      packed.slice(ciphertextOffset)
     );
     return decoder.decode(plaintext);
   } catch {
@@ -580,19 +945,43 @@ async function enumerationSafeChallenge(request, env, path) {
   const body = await boundedJson(request.clone());
   const email = text(body.email).toLowerCase();
   const purpose = upper(body.purpose || 'ACTIVATE');
+  const idempotencyKey = text(body.idempotency_key);
   if (!EMAIL_RE.test(email) || !['ACTIVATE', 'RESET', 'RECOVERY'].includes(purpose)
       || (path.endsWith('/resend') && !UUID_RE.test(text(body.challenge_id)))) {
     throw new CandidateBrokerError(400, 'CANDIDATE_CHALLENGE_REQUEST_INVALID');
   }
-  const response = await forwardPrivate(request, env, { body: { ...body, email, purpose } });
-  if (response.status >= 500 || response.status === 429) return publicSafePrivateResponse(response);
-  const remaining = ENUMERATION_SAFE_MINIMUM_MS - (Date.now() - started);
-  if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+  if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  const response = await forwardPrivate(request, env, {
+    body: { ...body, email, purpose, idempotency_key: idempotencyKey }
+  });
+  const delay = async () => {
+    const remaining = ENUMERATION_SAFE_MINIMUM_MS - (Date.now() - started);
+    if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+  };
+  if (response.status >= 500 || response.status === 429) {
+    await delay();
+    return publicSafePrivateResponse(response);
+  }
+  if (response.status >= 400) {
+    let errorCode = '';
+    try {
+      errorCode = text((await response.clone().json()).error_code);
+    } catch {
+      errorCode = '';
+    }
+    if (['CANDIDATE_IDEMPOTENCY_KEY_REQUIRED', 'CANDIDATE_IDEMPOTENCY_CONFLICT'].includes(errorCode)) {
+      await delay();
+      return publicSafePrivateResponse(response);
+    }
+  }
+  await delay();
   return jsonResponse(202, { ok: true, accepted: true });
 }
 
-function isPublicAuthPath(path) {
-  return path.startsWith(`${PUBLIC_CANDIDATE_PREFIX}/auth/`);
+function isUnauthenticatedPublicAuthPath(path) {
+  return UNAUTHENTICATED_PUBLIC_AUTH_PATHS.has(path);
 }
 
 export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
@@ -637,21 +1026,33 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
     if (candidateRoute && path === `${PUBLIC_CANDIDATE_PREFIX}/auth/refresh`) {
       const body = await boundedJson(request.clone());
       const refresh = await openPublicRefresh(body, env);
+      const credentialVersions = currentPublicCredentialVersions(env);
+      credentialVersions.public_session_key_version = Number(
+        refresh.public_session_key_version || credentialVersions.public_session_key_version
+      );
+      assertPublicCredentialSecrets(env, credentialVersions);
       const response = await forwardPrivate(request, env, {
         body: {
           ...body,
           refresh_token: refresh.internal_refresh_token,
-          session_id: refresh.internal_session_id
+          session_id: refresh.internal_session_id,
+          public_credential_versions: credentialVersions
         }
       });
       return withCors(await wrapPrivateSession(response, env, refresh.public_session_id), origin);
     }
 
     if (candidateRoute && isSessionCreationPath(path)) {
-      return withCors(await wrapPrivateSession(await forwardPrivate(request, env), env), origin);
+      const body = await boundedJson(request.clone());
+      const credentialVersions = assertPublicCredentialSecrets(
+        env, currentPublicCredentialVersions(env)
+      );
+      return withCors(await wrapPrivateSession(await forwardPrivate(request, env, {
+        body: { ...body, public_credential_versions: credentialVersions }
+      }), env), origin);
     }
 
-    if (candidateRoute && isPublicAuthPath(path)) {
+    if (candidateRoute && isUnauthenticatedPublicAuthPath(path)) {
       return withCors(await publicSafePrivateResponse(await forwardPrivate(request, env)), origin);
     }
 
@@ -678,25 +1079,66 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       if (!['APNS', 'FCM', 'WEB_PUSH'].includes(provider)) {
         throw new CandidateBrokerError(400, 'CANDIDATE_PUSH_PROVIDER_INVALID');
       }
+      const pushEncryptionKeyVersion = configuredKeyVersion(
+        env, CREDENTIAL_AUTHORITIES.deviceEncryption
+      );
+      const pushIdentityKeyVersion = configuredKeyVersion(
+        env, CREDENTIAL_AUTHORITIES.deviceIdentity
+      );
+      const pushIdentityProofs = await deviceTokenIdentityProofs(
+        env, provider, body.push_token, access.public_session_id
+      );
+      const currentIdentityProof = pushIdentityProofs.find(
+        proof => proof.key_version === pushIdentityKeyVersion
+      );
+      if (!currentIdentityProof) {
+        throw new CandidateBrokerError(503, 'CANDIDATE_BROKER_KEY_VERSION_UNAVAILABLE');
+      }
       const response = await forwardPrivate(request, env, {
         authorization,
         body: {
           ...body,
           push_provider: provider,
           push_token_ciphertext_hex: await encryptDeviceToken(env, body.push_token),
-          push_key_version: 1,
+          push_key_version: pushEncryptionKeyVersion,
+          push_token_identity_hmac: currentIdentityProof.identity_hmac,
+          push_token_identity_key_version: pushIdentityKeyVersion,
+          push_token_identity_proofs: pushIdentityProofs,
           push_token: undefined
         }
       });
       return withCors(await publicSafePrivateResponse(response), origin);
     }
 
-    const response = await forwardPrivate(request, env, { authorization });
+    const phoneAction = /\/workflows\/[0-9a-f-]+\/actions\/select-phone-approval$/i.test(path);
+    let phoneBinding = null;
+    let response;
+    if (phoneAction) {
+      const body = await boundedJson(request.clone());
+      phoneBinding = await publicPhoneBinding(env, access, request);
+      const brokerHandoffKeyVersion = configuredKeyVersion(
+        env, CREDENTIAL_AUTHORITIES.manager
+      );
+      authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.manager, brokerHandoffKeyVersion);
+      response = await forwardPrivate(request, env, {
+        authorization,
+        body: {
+          ...body,
+          payload: {
+            ...(isObject(body.payload) ? body.payload : {}),
+            public_broker_binding: phoneBinding,
+            broker_handoff_key_version: brokerHandoffKeyVersion
+          }
+        }
+      });
+    } else {
+      response = await forwardPrivate(request, env, { authorization });
+    }
     if (path === `${PUBLIC_CANDIDATE_PREFIX}/account/select-candidate`) {
       return withCors(await wrapSelectedCandidateAccess(response, env, access), origin);
     }
-    if (/\/workflows\/[0-9a-f-]+\/actions\/select-phone-approval$/i.test(path)) {
-      return withCors(await wrapPhoneHandoff(response, env, access, request), origin);
+    if (phoneAction) {
+      return withCors(await wrapPhoneHandoff(response, env, access, request, phoneBinding), origin);
     }
     return withCors(await publicSafePrivateResponse(response), origin);
   } catch (error) {
@@ -708,19 +1150,29 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
 
 export const candidateBrokerInternals = Object.freeze({
   allowedOrigins,
+  assertPublicCredentialSecrets,
+  authorityReadVersions,
+  authoritySecretForVersion,
   boundedBodyBytes,
+  credentialAuthorities: CREDENTIAL_AUTHORITIES,
+  currentPublicCredentialVersions,
   decryptDeviceToken,
+  deviceTokenIdentity,
+  deviceTokenIdentityProofs,
   encryptDeviceToken,
   environmentName,
   enforceManagerMethod,
   managerActionMethods: MANAGER_ACTION_METHODS,
   enumerationSafeChallenge,
   openEnvelope,
+  openVersionedEnvelope,
   openPublicAccess,
   openPublicRefresh,
+  publicSessionIdForPrivate,
   privatePath,
   requestOriginContext,
   sealEnvelope,
+  sealVersionedEnvelope,
   sha256Hex,
   wrapPrivateSession
 });

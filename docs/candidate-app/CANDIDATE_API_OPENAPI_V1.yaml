@@ -51,6 +51,7 @@ x-standard-responses: &standardResponses
 x-accepted-responses: &acceptedResponses
   '202': {$ref: '#/components/responses/Accepted'}
   '400': {$ref: '#/components/responses/Error'}
+  '409': {$ref: '#/components/responses/Error'}
   '429': {$ref: '#/components/responses/Error'}
 x-session-responses: &sessionResponses
   '200': {$ref: '#/components/responses/Session'}
@@ -475,13 +476,16 @@ components:
         request_id: {type: string}
     Session:
       type: object
-      required: [ok, access_token, refresh_token, session_id]
+      required: [ok, access_token, refresh_token, session_id, access_expires_in_seconds, issued_at_utc, expires_at_utc, absolute_expires_at_utc]
       properties:
         ok: {const: true}
         access_token: {type: string, description: Broker-sealed access envelope; never a CloudTMS private token.}
         refresh_token: {type: string, description: Broker-sealed refresh envelope; never a CloudTMS private token.}
         session_id: {type: string, description: Public broker session identity.}
         access_expires_in_seconds: {type: integer}
+        issued_at_utc: {type: string, format: date-time, description: Frozen private session issue time used for exact public replay.}
+        expires_at_utc: {type: string, format: date-time}
+        absolute_expires_at_utc: {type: string, format: date-time}
     TimesheetActionCode:
       type: string
       enum:
@@ -698,13 +702,14 @@ components:
         idempotency_key: {type: string, format: uuid}
     SelectedCandidateSession:
       type: object
-      required: [ok, access_token, session_id]
+      required: [ok, access_token, session_id, access_expires_in_seconds, issued_at_utc]
       properties:
         ok: {const: true}
         access_token: {type: string, description: Replacement broker-sealed access envelope.}
         session_id: {type: string, description: Unchanged public broker session identity; the private database session ID is never returned.}
         selected_candidate_id: {$ref: '#/components/schemas/Uuid'}
         access_expires_in_seconds: {type: integer}
+        issued_at_utc: {type: string, format: date-time, description: Frozen access-token issue time preserved on exact selection replay.}
   parameters:
     TimesheetView: {name: view, in: query, required: false, schema: {type: string, enum: [current, history], default: current}}
     Cursor: {name: cursor, in: query, required: false, schema: {type: string}}

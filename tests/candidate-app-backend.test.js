@@ -2150,6 +2150,372 @@ test('failed login lost-response replay does not advance the lockout counter twi
   }
 });
 
+test('concurrent activation, login and refresh return the database winner refresh token', async () => {
+  const originalFetch = globalThis.fetch;
+  const verifier = await derivePasswordVerifier('correct-concurrent-password');
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'concurrent-session-signing-secret',
+    CANDIDATE_AUTH_REPLAY_SECRET_V1: 'concurrent-auth-replay-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_app_accounts')) return Response.json([{
+      id: '00000000-0000-4000-8000-000000000181', environment: 'TEST', status: 'ACTIVE',
+      password_scheme: verifier.scheme, password_scheme_version: verifier.scheme_version,
+      password_salt: verifier.salt_hex, password_digest: verifier.digest_hex,
+      password_params_json: verifier.params, locked_until_utc: null
+    }]);
+    throw new Error(`unexpected REST operation ${path}`);
+  };
+
+  async function runRace(action, path, requestBody) {
+    let metadataCalls = 0;
+    let releaseMetadata;
+    const bothMetadataCalls = new Promise(resolve => { releaseMetadata = resolve; });
+    let winner = null;
+    let winnerRefreshHash = null;
+    let mutationCalls = 0;
+    const deps = {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        assert.equal(name, 'candidate_auth_account_transition_v1');
+        assert.equal(args.p_action, action);
+        if (args.p_payload.replay_probe_only === true
+            && !args.p_payload.idempotency_request_sha256) {
+          metadataCalls += 1;
+          if (metadataCalls === 2) releaseMetadata();
+          await bothMetadataCalls;
+          return { replay_receipt_found: false, request_key_version: 1 };
+        }
+        mutationCalls += 1;
+        if (!winner) {
+          const sessionId = action === 'REFRESH_SESSION'
+            ? args.p_payload.new_session_id : args.p_session_id;
+          winnerRefreshHash = action === 'REFRESH_SESSION'
+            ? args.p_payload.new_refresh_token_hash_hex : args.p_payload.refresh_token_hash_hex;
+          winner = {
+            ok: true, session_id: sessionId,
+            rotation: action === 'REFRESH_SESSION' ? 1 : 0,
+            issued_at_utc: new Date(Date.now() - 1000).toISOString(),
+            expires_at_utc: new Date(Date.now() + 30 * 86_400_000).toISOString(),
+            absolute_expires_at_utc: new Date(Date.now() + 90 * 86_400_000).toISOString(),
+            selected_candidate_id: null, selection_required: false,
+            token_key_version: 1
+          };
+          return winner;
+        }
+        return { ...winner, idempotent_replay: true };
+      }
+    };
+    const invoke = () => handleCandidateAppRequest(new Request(`https://private.test${path}`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(requestBody)
+    }), env, {}, deps);
+    const responses = await Promise.all([invoke(), invoke()]);
+    const bodies = await Promise.all(responses.map(response => response.json()));
+    assert.deepEqual(responses.map(response => response.status), [200, 200], action);
+    assert.equal(metadataCalls, 2, action);
+    assert.equal(mutationCalls, 2, action);
+    assert.equal(bodies[0].session_id, bodies[1].session_id, action);
+    assert.equal(bodies[0].access_token, bodies[1].access_token, action);
+    assert.equal(bodies[0].refresh_token, bodies[1].refresh_token, action);
+    assert.equal(
+      createHash('sha256').update(bodies[0].refresh_token).digest('hex'),
+      winnerRefreshHash,
+      `${action} must return the token whose hash the winning transaction stored`
+    );
+  }
+
+  try {
+    await runRace('ACTIVATE_PASSWORD', '/candidate-app/v1/auth/password/complete', {
+      challenge_id: '00000000-0000-4000-8000-000000000182',
+      password: 'correct-concurrent-password', idempotency_key: 'concurrent-activation'
+    });
+    await runRace('LOGIN_SUCCESS', '/candidate-app/v1/auth/login', {
+      email: 'candidate@example.test', password: 'correct-concurrent-password',
+      idempotency_key: 'concurrent-login'
+    });
+    await runRace('REFRESH_SESSION', '/candidate-app/v1/auth/refresh', {
+      session_id: '00000000-0000-4000-8000-000000000183',
+      refresh_token: 'concurrent-original-refresh', idempotency_key: 'concurrent-refresh'
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('concurrent logout and password change recover the durable result after mutable preconditions move', async () => {
+  const originalFetch = globalThis.fetch;
+  const sessionId = '00000000-0000-4000-8000-000000000191';
+  const accountId = '00000000-0000-4000-8000-000000000192';
+  const candidateId = '00000000-0000-4000-8000-000000000193';
+  const oldVerifier = await derivePasswordVerifier('old-concurrent-password');
+  const newVerifier = await derivePasswordVerifier('new-concurrent-password');
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'precondition-session-secret',
+    CANDIDATE_AUTH_REPLAY_SECRET_V1: 'precondition-replay-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const accessToken = await createAccessToken(env, { session_id: sessionId, rotation: 0 });
+
+  async function runRace(action, path, body, mode) {
+    let metadataCalls = 0;
+    let releaseMetadata;
+    const metadataBarrier = new Promise(resolve => { releaseMetadata = resolve; });
+    let resolveCommitted;
+    const committed = new Promise(resolve => { resolveCommitted = resolve; });
+    let receipt = null;
+    let mutationCalls = 0;
+    let sessionReads = 0;
+    let accountReads = 0;
+    globalThis.fetch = async (url) => {
+      const restPath = new URL(url).pathname;
+      if (restPath.endsWith('/candidate_app_sessions')) {
+        sessionReads += 1;
+        if (mode === 'LOGOUT' && sessionReads === 2) {
+          await committed;
+          return Response.json([]);
+        }
+        return Response.json([{
+          id: sessionId, account_id: accountId, environment: 'TEST',
+          selected_candidate_id: candidateId, status: 'ACTIVE', rotation: 0,
+          expires_at_utc: '2099-01-01T00:00:00.000Z',
+          absolute_expires_at_utc: '2099-01-01T00:00:00.000Z'
+        }]);
+      }
+      if (restPath.endsWith('/candidate_app_accounts')) {
+        accountReads += 1;
+        if (accountReads === 2) await committed;
+        const source = accountReads === 1 ? oldVerifier : newVerifier;
+        return Response.json([{
+          id: accountId, password_scheme: source.scheme,
+          password_scheme_version: source.scheme_version,
+          password_salt: source.salt_hex, password_digest: source.digest_hex,
+          password_params_json: source.params
+        }]);
+      }
+      throw new Error(`unexpected REST operation ${restPath}`);
+    };
+    const deps = {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        assert.equal(name, 'candidate_auth_account_transition_v1');
+        assert.equal(args.p_action, action);
+        if (args.p_payload.replay_probe_only === true
+            && !args.p_payload.idempotency_request_sha256) {
+          metadataCalls += 1;
+          if (metadataCalls === 2) releaseMetadata();
+          await metadataBarrier;
+          return { replay_receipt_found: false, request_key_version: 1 };
+        }
+        if (args.p_payload.replay_probe_only === true) {
+          assert.equal(args.p_payload.idempotency_request_sha256, receipt.request_sha256);
+          return { ...receipt.response, idempotent_replay: true };
+        }
+        mutationCalls += 1;
+        receipt = {
+          request_sha256: args.p_payload.idempotency_request_sha256,
+          response: action === 'LOGOUT'
+            ? { ok: true, session_id: sessionId, status: 'REVOKED' }
+            : { ok: true, account_id: accountId, session_version: 2 }
+        };
+        resolveCommitted();
+        return receipt.response;
+      }
+    };
+    const invoke = () => handleCandidateAppRequest(new Request(`https://private.test${path}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(body)
+    }), env, {}, deps);
+    const responses = await Promise.all([invoke(), invoke()]);
+    const bodies = await Promise.all(responses.map(response => response.json()));
+    assert.deepEqual(responses.map(response => response.status), [200, 200], action);
+    assert.equal(metadataCalls, 2, action);
+    assert.equal(mutationCalls, 1, action);
+    assert.equal(bodies[0].ok, true, action);
+    assert.equal(bodies[1].ok, true, action);
+  }
+
+  try {
+    await runRace('LOGOUT', '/candidate-app/v1/auth/logout', {
+      idempotency_key: 'concurrent-logout'
+    }, 'LOGOUT');
+    await runRace('CHANGE_PASSWORD', '/candidate-app/v1/account/password', {
+      current_password: 'old-concurrent-password', password: 'new-concurrent-password',
+      idempotency_key: 'concurrent-password-change'
+    }, 'CHANGE_PASSWORD');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('selected-candidate precondition recovery returns the same frozen access credential', async () => {
+  const originalFetch = globalThis.fetch;
+  const sessionId = '00000000-0000-4000-8000-000000000281';
+  const candidateId = '00000000-0000-4000-8000-000000000282';
+  const issuedAtUtc = new Date(Math.floor((Date.now() - 1000) / 1000) * 1000).toISOString();
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'selected-recovery-access-secret',
+    CANDIDATE_AUTH_REPLAY_SECRET_V1: 'selected-recovery-replay-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const accessToken = await createAccessToken(env, {
+    session_id: sessionId, rotation: 3, issued_at_utc: issuedAtUtc
+  });
+  let exactReplayReads = 0;
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_auth_account_transition_v1');
+      assert.equal(args.p_action, 'SELECT_TEST_CANDIDATE');
+      assert.equal(args.p_payload.replay_probe_only, true);
+      if (!args.p_payload.idempotency_request_sha256) {
+        return { replay_receipt_found: false, request_key_version: 1 };
+      }
+      exactReplayReads += 1;
+      return {
+        ok: true,
+        session_id: sessionId,
+        selected_candidate_id: candidateId,
+        idempotent_replay: true
+      };
+    }
+  };
+  globalThis.fetch = async (url) => {
+    assert.match(new URL(url).pathname, /candidate_app_sessions$/);
+    return Response.json([]);
+  };
+  const invoke = () => handleCandidateAppRequest(new Request(
+    'https://private.test/candidate-app/v1/account/select-candidate', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        selected_candidate_id: candidateId,
+        idempotency_key: 'selected-candidate-precondition-recovery'
+      })
+    }
+  ), env, {}, deps);
+  try {
+    const first = await invoke();
+    const replay = await invoke();
+    assert.equal(first.status, 200);
+    assert.equal(replay.status, 200);
+    const firstBody = await first.json();
+    const replayBody = await replay.json();
+    assert.equal(firstBody.selected_candidate_id, candidateId);
+    assert.equal(firstBody.access_token, replayBody.access_token);
+    assert.equal(firstBody.issued_at_utc, issuedAtUtc);
+    assert.equal(replayBody.issued_at_utc, issuedAtUtc);
+    assert.equal(exactReplayReads, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('push registration replay hashes semantic token identity rather than randomized ciphertext', async () => {
+  const originalFetch = globalThis.fetch;
+  const sessionId = '00000000-0000-4000-8000-0000000001a1';
+  const accountId = '00000000-0000-4000-8000-0000000001a2';
+  const candidateId = '00000000-0000-4000-8000-0000000001a3';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'push-session-secret',
+    CANDIDATE_AUTH_REPLAY_SECRET_V1: 'push-replay-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const accessToken = await createAccessToken(env, { session_id: sessionId, rotation: 0 });
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_app_sessions')) return Response.json([{
+      id: sessionId, account_id: accountId, environment: 'TEST',
+      selected_candidate_id: candidateId, status: 'ACTIVE', rotation: 0,
+      expires_at_utc: '2099-01-01T00:00:00.000Z',
+      absolute_expires_at_utc: '2099-01-01T00:00:00.000Z'
+    }]);
+    throw new Error(`unexpected REST operation ${path}`);
+  };
+  let receipt = null;
+  let writes = 0;
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_auth_account_transition_v1');
+      assert.equal(args.p_action, 'REGISTER_PUSH_TOKEN');
+      if (args.p_payload.replay_probe_only === true
+          && !args.p_payload.idempotency_request_sha256) {
+        return receipt
+          ? {
+              replay_receipt_found: true, request_key_version: 1,
+              push_token_identity_key_version: receipt.push_token_identity_key_version
+            }
+          : { replay_receipt_found: false, request_key_version: 1 };
+      }
+      if (args.p_payload.replay_probe_only === true) {
+        if (args.p_payload.idempotency_request_sha256 !== receipt.request_sha256) {
+          throw new Error('CANDIDATE_IDEMPOTENCY_CONFLICT');
+        }
+        return { ...receipt.response, idempotent_replay: true };
+      }
+      writes += 1;
+      receipt = {
+        request_sha256: args.p_payload.idempotency_request_sha256,
+        push_token_identity_key_version: args.p_payload.push_token_identity_key_version,
+        response: { ok: true, session_id: sessionId, push_registered: true }
+      };
+      return receipt.response;
+    }
+  };
+  const invoke = (ciphertext, identity, identityVersion = 1, proofs = null) => handleCandidateAppRequest(new Request(
+    'https://private.test/candidate-app/v1/account/push-token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({
+        push_provider: 'FCM', push_token_ciphertext_hex: ciphertext, push_key_version: 1,
+        push_token_identity_hmac: identity, push_token_identity_key_version: identityVersion,
+        push_token_identity_proofs: proofs || [{ key_version: identityVersion, identity_hmac: identity }],
+        idempotency_key: 'push-semantic-replay'
+      })
+    }
+  ), env, {}, deps);
+  try {
+    const first = await invoke('aa'.repeat(32), '1'.repeat(64));
+    const replay = await invoke('bb'.repeat(32), '1'.repeat(64));
+    const replayAfterIdentityRotation = await invoke(
+      'cc'.repeat(32), '2'.repeat(64), 2,
+      [
+        { key_version: 1, identity_hmac: '1'.repeat(64) },
+        { key_version: 2, identity_hmac: '2'.repeat(64) }
+      ]
+    );
+    const conflict = await invoke('dd'.repeat(32), '3'.repeat(64), 2, [
+      { key_version: 1, identity_hmac: '3'.repeat(64) },
+      { key_version: 2, identity_hmac: '3'.repeat(64) }
+    ]);
+    assert.equal(first.status, 200);
+    assert.equal(replay.status, 200);
+    assert.equal((await replay.json()).push_registered, true);
+    assert.equal(replayAfterIdentityRotation.status, 200);
+    assert.equal((await replayAfterIdentityRotation.json()).push_registered, true);
+    assert.equal(conflict.status, 409);
+    assert.equal((await conflict.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    assert.equal(writes, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('Candidate OpenAPI requires caller idempotency for every auth and account mutation', async () => {
   const openapi = await readFile(new URL('../docs/candidate-app/CANDIDATE_API_OPENAPI_V1.yaml', import.meta.url), 'utf8');
   for (const path of [
@@ -2310,7 +2676,7 @@ test('refresh lost-response replay returns the same successor token and a new ke
   assert.equal((await theft.json()).error_code, 'CANDIDATE_REFRESH_TOKEN_REUSE');
 });
 
-test('phone handoff replay uses the retained token key version after rotation', async () => {
+test('phone handoff replay freezes key versions and conflicts on changed public session, device, or generation', async () => {
   const originalFetch = globalThis.fetch;
   const sessionId = '00000000-0000-4000-8000-0000000000a1';
   const accountId = '00000000-0000-4000-8000-0000000000a2';
@@ -2326,6 +2692,11 @@ test('phone handoff replay uses the retained token key version after rotation', 
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
   };
+  const binding = {
+    contract_version: 'CANDIDATE_PUBLIC_PHONE_BINDING_V1',
+    public_session_binding_sha256: '11'.repeat(32),
+    device_binding_sha256: '22'.repeat(32)
+  };
   const accessToken = await createAccessToken(baseEnv, { session_id: sessionId, rotation: 0 });
   globalThis.fetch = async (url) => {
     const path = new URL(url).pathname;
@@ -2338,39 +2709,74 @@ test('phone handoff replay uses the retained token key version after rotation', 
     throw new Error(`unexpected REST read ${path}`);
   };
   let durable = null;
+  let durableIdentity = null;
   const deps = {
     routeAudience: 'PRIVATE',
     async rpc(name, args) {
       assert.equal(name, 'candidate_workflow_transition_atomic_v1');
       if (args.p_payload.mutation_replay_probe_only === true) {
+        if (durable && JSON.stringify({
+          generation: args.p_expected_generation,
+          binding: args.p_payload.mutation_replay_semantic_payload.public_broker_binding
+        }) !== JSON.stringify(durableIdentity)) {
+          throw new Error('CANDIDATE_IDEMPOTENCY_CONFLICT');
+        }
         return durable ? { ...durable, idempotent_replay: true } : { replay_found: false };
       }
+      durableIdentity = {
+        generation: args.p_expected_generation,
+        binding: args.p_payload.public_broker_binding
+      };
       durable = {
         ok: true, workflow_id: workflowId, generation: 1,
         state: 'AWAITING_MANAGER_APPROVAL',
         approval_request_id: '00000000-0000-4000-8000-0000000000a5',
-        method: 'PHONE', handoff_token_key_version: args.p_payload.handoff_token_key_version
+        method: 'PHONE', handoff_token_key_version: args.p_payload.handoff_token_key_version,
+        public_broker_binding: args.p_payload.public_broker_binding,
+        broker_handoff_key_version: args.p_payload.broker_handoff_key_version
       };
       return durable;
     }
   };
-  const invoke = (env) => handleCandidateAppRequest(new Request(
+  const invoke = (env, publicBinding = binding, generation = 1, brokerKeyVersion = 1) => handleCandidateAppRequest(new Request(
     `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/select-phone-approval`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ generation: 1, idempotency_key: operationKey })
+      body: JSON.stringify({
+        generation, idempotency_key: operationKey,
+        payload: {
+          public_broker_binding: publicBinding,
+          broker_handoff_key_version: brokerKeyVersion
+        }
+      })
     }
   ), env, {}, deps);
   try {
     const first = await invoke(baseEnv);
     const firstBody = await first.json();
-    const replay = await invoke({ ...baseEnv, CANDIDATE_MANAGER_TOKEN_KEY_VERSION: '2' });
+    const replay = await invoke(
+      { ...baseEnv, CANDIDATE_MANAGER_TOKEN_KEY_VERSION: '2' }, binding, 1, 2
+    );
     const replayBody = await replay.json();
     assert.equal(first.status, 201);
     assert.equal(replay.status, 201);
     assert.equal(firstBody.handoff_token_key_version, 1);
     assert.equal(replayBody.handoff_token_key_version, 1);
     assert.equal(replayBody.manager_handoff_token, firstBody.manager_handoff_token);
+    assert.equal(replayBody.broker_handoff_key_version, 1);
+    const changedDevice = await invoke(baseEnv, {
+      ...binding, device_binding_sha256: '33'.repeat(32)
+    });
+    const changedSession = await invoke(baseEnv, {
+      ...binding, public_session_binding_sha256: '44'.repeat(32)
+    });
+    const changedGeneration = await invoke(baseEnv, binding, 2);
+    assert.equal(changedDevice.status, 409);
+    assert.equal(changedSession.status, 409);
+    assert.equal(changedGeneration.status, 409);
+    assert.equal((await changedDevice.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    assert.equal((await changedSession.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    assert.equal((await changedGeneration.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
   } finally {
     globalThis.fetch = originalFetch;
   }

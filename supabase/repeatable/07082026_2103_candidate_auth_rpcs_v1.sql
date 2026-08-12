@@ -129,6 +129,8 @@ declare
   v_replay_probe_only boolean:=false;
   v_request_sha256 text;
   v_request_key_version integer;
+  v_public_credential_versions jsonb;
+  v_receipt_metadata jsonb:='{}'::jsonb;
   v_receipt jsonb;
   v_response jsonb;
 begin
@@ -139,6 +141,20 @@ begin
   end if;
   if v_payload ?| array['password','plaintext_password','refresh_token','token'] then
     raise exception 'CANDIDATE_AUTH_PLAINTEXT_SECRET_FORBIDDEN' using errcode='22023';
+  end if;
+  if v_payload ? 'public_credential_versions' then
+    v_public_credential_versions:=v_payload->'public_credential_versions';
+    if jsonb_typeof(v_public_credential_versions)<>'object'
+       or coalesce(v_public_credential_versions->>'contract_version','')
+            <>'CANDIDATE_PUBLIC_CREDENTIAL_VERSIONS_V1'
+       or coalesce(v_public_credential_versions->>'access_key_version','') !~ '^[1-9][0-9]{0,4}$'
+       or coalesce(v_public_credential_versions->>'refresh_key_version','') !~ '^[1-9][0-9]{0,4}$'
+       or coalesce(v_public_credential_versions->>'public_session_key_version','') !~ '^[1-9][0-9]{0,4}$'
+       or (v_public_credential_versions->>'access_key_version')::integer>65535
+       or (v_public_credential_versions->>'refresh_key_version')::integer>65535
+       or (v_public_credential_versions->>'public_session_key_version')::integer>65535 then
+      raise exception 'CANDIDATE_BROKER_CREDENTIAL_VERSION_INVALID' using errcode='22023';
+    end if;
   end if;
 
   v_idempotent_action:=v_action in (
@@ -160,18 +176,29 @@ begin
     if v_request_key_version<1 or v_request_key_version>32 then
       raise exception 'CANDIDATE_IDEMPOTENCY_RECEIPT_INVALID' using errcode='22023';
     end if;
+    v_receipt_metadata:=jsonb_build_object('request_key_version',v_request_key_version);
+    if v_action='REGISTER_PUSH_TOKEN'
+       and coalesce(v_payload->>'push_token_identity_key_version','') ~ '^[1-9][0-9]{0,4}$'
+       and (v_payload->>'push_token_identity_key_version')::integer<=65535 then
+      v_receipt_metadata:=v_receipt_metadata||jsonb_build_object(
+        'push_token_identity_key_version',
+        (v_payload->>'push_token_identity_key_version')::integer
+      );
+    end if;
     v_receipt:=private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,null,
-      jsonb_build_object('request_key_version',v_request_key_version),p_now_utc
+      v_receipt_metadata,p_now_utc
     );
     if coalesce((v_receipt->>'found')::boolean,false) then
       if v_request_sha256 is null then
-        return jsonb_build_object(
+        return jsonb_strip_nulls(jsonb_build_object(
           'ok',true,'replay_receipt_found',true,
           'request_key_version',coalesce(
             nullif(v_receipt#>>'{metadata,request_key_version}','')::integer,1
-          )
-        );
+          ),
+          'push_token_identity_key_version',
+            nullif(v_receipt#>>'{metadata,push_token_identity_key_version}','')::integer
+        ));
       end if;
       return coalesce(v_receipt->'response','{}'::jsonb);
     end if;
@@ -301,6 +328,11 @@ begin
       'absolute_expires_at_utc',v_new_session.absolute_expires_at_utc,
       'token_key_version',v_request_key_version
     );
+    if v_public_credential_versions is not null then
+      v_response:=v_response||jsonb_build_object(
+        'public_credential_versions',v_public_credential_versions
+      );
+    end if;
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
       jsonb_build_object('request_key_version',v_request_key_version),p_now_utc
@@ -408,6 +440,11 @@ begin
       'absolute_expires_at_utc',v_absolute,'issued_at_utc',v_new_session.issued_at_utc,
       'session_version',v_account.session_version,'token_key_version',v_request_key_version
     );
+    if v_public_credential_versions is not null then
+      v_response:=v_response||jsonb_build_object(
+        'public_credential_versions',v_public_credential_versions
+      );
+    end if;
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
       jsonb_build_object('request_key_version',v_request_key_version),p_now_utc
@@ -461,6 +498,11 @@ begin
       'issued_at_utc',v_new_session.issued_at_utc,
       'expires_at_utc',v_new_session.expires_at_utc,'absolute_expires_at_utc',v_new_session.absolute_expires_at_utc,
       'selected_candidate_id',v_new_session.selected_candidate_id,'token_key_version',v_request_key_version);
+    if v_public_credential_versions is not null then
+      v_response:=v_response||jsonb_build_object(
+        'public_credential_versions',v_public_credential_versions
+      );
+    end if;
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
       jsonb_build_object('request_key_version',v_request_key_version),p_now_utc
@@ -499,7 +541,11 @@ begin
   elsif v_action='REGISTER_PUSH_TOKEN' then
     if coalesce(v_payload->>'push_token_ciphertext_hex','') !~ '^[0-9a-fA-F]+$'
        or length(v_payload->>'push_token_ciphertext_hex')%2<>0
-       or coalesce(v_payload->>'push_key_version','') !~ '^[1-9][0-9]{0,4}$' then
+       or coalesce(v_payload->>'push_key_version','') !~ '^[1-9][0-9]{0,4}$'
+       or (v_payload->>'push_key_version')::integer>32767
+       or coalesce(v_payload->>'push_token_identity_hmac','') !~ '^[0-9a-f]{64}$'
+       or coalesce(v_payload->>'push_token_identity_key_version','') !~ '^[1-9][0-9]{0,4}$'
+       or (v_payload->>'push_token_identity_key_version')::integer>65535 then
       raise exception 'CANDIDATE_PUSH_TOKEN_INVALID' using errcode='22023';
     end if;
     update public.candidate_app_sessions set
@@ -550,7 +596,7 @@ begin
   if v_idempotent_action and v_response is not null then
     perform private._candidate_auth_mutation_receipt_v1(
       v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
-      jsonb_build_object('request_key_version',v_request_key_version),p_now_utc
+      v_receipt_metadata,p_now_utc
     );
     return v_response;
   end if;
