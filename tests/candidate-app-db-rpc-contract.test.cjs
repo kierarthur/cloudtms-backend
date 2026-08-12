@@ -90,7 +90,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 103, 'the latest-only payload must contain the closed 103-definition function inventory');
+  assert.equal(names.length, 104, 'the latest-only payload must contain the closed 104-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -161,7 +161,7 @@ test('new authentication is clean registration only and stores versioned verifie
   assert.match(sql.auth, /CANDIDATE_PASSWORD_RESET/);
   assert.match(sql.auth, /CANDIDATE_IDEMPOTENCY_KEY_REQUIRED/);
   assert.match(sql.auth, /deterministic_outbox_key=btrim\(p_idempotency_key\)/i);
-  assert.match(sql.auth, /attempt_count=least\(attempt_count\+1,5\)[\s\S]*return jsonb_build_object\([\s\S]*CANDIDATE_CHALLENGE_INVALID/i);
+  assert.match(sql.auth, /attempt_count=least\(attempt_count\+1,5\)[\s\S]*v_response:=jsonb_build_object\([\s\S]*CANDIDATE_CHALLENGE_INVALID[\s\S]*_candidate_auth_mutation_receipt_v1\([\s\S]*return v_response/i);
   assert.doesNotMatch(sql.auth, /attempt_count=least\(attempt_count\+1,5\)[\s\S]{0,500}raise exception 'CANDIDATE_CHALLENGE_INVALID'/i);
   assert.doesNotMatch(codeOnly, /GOOGLE_LEGACY|legacy_password|_deriveKeyHmacSha256|passwordhash|passwordsalt/i);
 });
