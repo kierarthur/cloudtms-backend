@@ -1536,6 +1536,12 @@ begin
           'idempotency_key',btrim(p_idempotency_key)
         )::text;
     end if;
+    if upper(btrim(p_action))='PAPER_PACK_ATTEMPT_CLAIM' then
+      v_after:=coalesce(v_after,'{}'::jsonb)||jsonb_build_object(
+        'claim_acquired_new',false,
+        'idempotent_replay',true
+      );
+    end if;
     return jsonb_build_object(
       'found',true,
       'response',coalesce(v_after,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true)
@@ -1718,6 +1724,7 @@ declare
   v_mutation_semantic_payload jsonb;
   v_mutation_request_sha256 text;
   v_mutation_receipt jsonb;
+  v_mutation_replay_probe_only boolean:=false;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   if p_workflow_id is null or jsonb_typeof(v_payload)<>'object' then
@@ -1740,6 +1747,12 @@ begin
     v_action:='BEGIN_MANAGER_REVIEW';
   elsif v_action='REGISTER_MANAGER_REVIEW_DOCUMENT' then
     v_action:='REGISTER_REVIEW_COMPONENT';
+  end if;
+  v_mutation_replay_probe_only:=p_session_id is not null
+    and coalesce((v_payload->>'mutation_replay_probe_only')::boolean,false);
+  if v_mutation_replay_probe_only
+     and jsonb_typeof(v_payload->'mutation_replay_semantic_payload') is distinct from 'object' then
+    raise exception 'CANDIDATE_IDEMPOTENCY_RECEIPT_INVALID' using errcode='22023';
   end if;
 
   if coalesce(v_payload->>'actor_user_id','')
@@ -2577,6 +2590,8 @@ begin
       else 'ACCOUNT:'||coalesce(v_account_id::text,'UNKNOWN')
         ||':CANDIDATE:'||coalesce(v_candidate_id::text,'UNKNOWN') end;
     v_mutation_semantic_payload:=case
+      when v_mutation_replay_probe_only then
+        v_payload->'mutation_replay_semantic_payload'
       when v_action='COMPONENT_PREPARE' then
         v_payload-'service_office_action'-'actor_user_id'-'storage_key'
       when v_action='SELECT_PHONE_APPROVAL' then
@@ -2591,6 +2606,10 @@ begin
               'immutable_submission',coalesce(v_payload->'immutable_submission','{}'::jsonb)-'official_presentation'
             )
         end
+      when v_action='CREATE_EMAIL_APPROVAL_REQUEST' then
+        v_payload-'service_office_action'-'actor_user_id'-'mail'-'approval_token_hash_hex'
+      when v_action in ('REMIND','RENEW') then
+        v_payload-'service_office_action'-'actor_user_id'-'mail'-'approval_token_hash_hex'-'manager_email'
       else v_payload-'service_office_action'-'actor_user_id'
     end;
     v_mutation_request_sha256:=encode(extensions.digest(convert_to(jsonb_build_object(
@@ -2608,6 +2627,12 @@ begin
     );
     if coalesce((v_mutation_receipt->>'found')::boolean,false) then
       return v_mutation_receipt->'response';
+    end if;
+    if v_mutation_replay_probe_only then
+      return jsonb_build_object(
+        'ok',true,'replay_found',false,'workflow_id',v_workflow.id,
+        'expected_generation',p_expected_generation
+      );
     end if;
   end if;
   if p_expected_generation is not null and v_workflow.generation<>p_expected_generation then
@@ -4634,7 +4659,7 @@ begin
       v_paper_pack_next_retry_at:=nullif(
         v_paper_mail.payment_scope_json->>'candidate_paper_pack_next_retry_at_utc',''
       )::timestamptz;
-      if v_paper_failure_class='RETRYABLE' and not v_is_office_service_action
+      if v_paper_failure_class='RETRYABLE'
          and v_paper_pack_next_retry_at is not null and v_paper_pack_next_retry_at>p_now_utc then
         raise exception 'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE'
           using errcode='55000',detail=jsonb_build_object(

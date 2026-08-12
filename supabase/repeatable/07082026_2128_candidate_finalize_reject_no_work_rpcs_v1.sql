@@ -497,6 +497,10 @@ declare
   v_mutation_receipt jsonb;
   v_prior_receipt_before jsonb;
   v_prior_receipt_after jsonb;
+  v_finalisation_identity jsonb;
+  v_finalisation_identity_hash text;
+  v_completion_before jsonb;
+  v_completion_after jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   v_service_finalisation:=coalesce(p_daily_materialisation_json->'service_finalisation','{}'::jsonb);
@@ -537,14 +541,91 @@ begin
     when p_session_id is null then 'SERVICE' else 'CANDIDATE_CLIENT' end;
   v_mutation_actor_identity:=case when v_is_office_service
     then v_service_finalisation->>'actor_user_id' else coalesce(p_session_id::text,'SERVICE') end;
+  -- Candidate-session calls retain their established lifecycle errors before
+  -- an immutable approval identity exists. Service replay/finalisation calls
+  -- continue through the receipt path below before mutable lifecycle checks.
+  if p_session_id is not null then
+    if v_workflow.route='PAPER' and v_workflow.state<>'RECEIVED' then
+      raise exception 'CANDIDATE_PAPER_RETURN_INCOMPLETE' using errcode='55000';
+    elsif v_workflow.route<>'PAPER' and v_workflow.state<>'READY_TO_FINALISE' then
+      raise exception 'FINAL_SIGNED_DOCUMENT_NOT_READY' using errcode='55000';
+    end if;
+  end if;
+  v_finalisation_identity:=v_service_finalisation->'finalisation_identity';
+  if jsonb_typeof(v_finalisation_identity) is distinct from 'object' then
+    if v_workflow.route='PAPER' then
+      v_finalisation_identity:=jsonb_build_object(
+        'contract_version','CANDIDATE_FINALISATION_IDENTITY_V1',
+        'workflow_id',v_workflow.id,'workflow_generation',p_expected_generation,
+        'approval_method','PAPER','approval_request_id',null,
+        'approval_request_generation',null,'review_manifest_sha256_hex',null,
+        'paper_return_manifest_sha256_hex',case when v_workflow.paper_return_manifest_sha256 is null
+          then null else encode(v_workflow.paper_return_manifest_sha256,'hex') end
+      );
+    else
+      select approved.* into v_approved_request
+      from public.candidate_approval_requests approved
+      where approved.workflow_id=v_workflow.id
+        and approved.workflow_generation=p_expected_generation
+        and approved.state='APPROVED'
+        and (nullif(v_service_finalisation->>'approval_request_id','') is null
+          or approved.id=(v_service_finalisation->>'approval_request_id')::uuid)
+      order by approved.approved_at_utc desc,approved.id desc
+      limit 1;
+      v_finalisation_identity:=jsonb_build_object(
+        'contract_version','CANDIDATE_FINALISATION_IDENTITY_V1',
+        'workflow_id',v_workflow.id,'workflow_generation',p_expected_generation,
+        'approval_method',coalesce(v_approved_request.method,v_service_finalisation->>'approval_method'),
+        'approval_request_id',coalesce(v_approved_request.id,
+          nullif(v_service_finalisation->>'approval_request_id','')::uuid),
+        'approval_request_generation',v_approved_request.request_generation,
+        'review_manifest_sha256_hex',case when v_approved_request.review_manifest_sha256 is null
+          then null else encode(v_approved_request.review_manifest_sha256,'hex') end,
+        'paper_return_manifest_sha256_hex',null
+      );
+    end if;
+    v_service_finalisation:=v_service_finalisation||jsonb_build_object(
+      'contract_version','CANDIDATE_MANAGER_FINALISATION_V1',
+      'workflow_generation',p_expected_generation,
+      'approval_method',v_finalisation_identity->>'approval_method',
+      'approval_request_id',v_finalisation_identity->'approval_request_id',
+      'approval_request_generation',v_finalisation_identity->'approval_request_generation',
+      'review_manifest_sha256_hex',coalesce(v_finalisation_identity->>'review_manifest_sha256_hex',''),
+      'paper_return_manifest_sha256_hex',coalesce(v_finalisation_identity->>'paper_return_manifest_sha256_hex',''),
+      'finalisation_identity',v_finalisation_identity
+    );
+  end if;
+  if jsonb_typeof(v_finalisation_identity) is distinct from 'object'
+     or coalesce(v_finalisation_identity->>'contract_version','')
+          <>'CANDIDATE_FINALISATION_IDENTITY_V1'
+     or nullif(v_finalisation_identity->>'workflow_id','')::uuid is distinct from v_workflow.id
+     or coalesce((v_finalisation_identity->>'workflow_generation')::integer,0)
+          <>p_expected_generation
+     or upper(coalesce(v_finalisation_identity->>'approval_method','')) not in ('EMAIL','PHONE','PAPER') then
+    raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID'
+      using errcode='28000',detail=jsonb_build_object('stage','IDENTITY')::text;
+  end if;
+  v_finalisation_identity_hash:=encode(extensions.digest(convert_to(
+    v_finalisation_identity::text,'UTF8'
+  ),'sha256'),'hex');
+  v_mutation_request_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
+    'contract_version','CANDIDATE_FINALISATION_MUTATION_REQUEST_V3',
+    'workflow_id',v_workflow.id,
+    'action','RETRY_FINALISATION',
+    'expected_generation',p_expected_generation,
+    'service_finalisation',v_service_finalisation-'replay_probe_only',
+    'channel',v_mutation_channel,
+    'actor_identity',v_mutation_actor_identity
+  )::text,'UTF8'),'sha256'),'hex');
   if v_replay_probe_only then
     if p_session_id is null and (
       coalesce(v_service_finalisation->>'contract_version','')
         <>'CANDIDATE_MANAGER_FINALISATION_V1'
-      or coalesce((v_service_finalisation->>'workflow_generation')::integer,0)
-        <>p_expected_generation
+       or coalesce((v_service_finalisation->>'workflow_generation')::integer,0)
+         <>p_expected_generation
     ) then
-      raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
+      raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID'
+        using errcode='28000',detail=jsonb_build_object('stage','REPLAY_ENVELOPE')::text;
     end if;
     select ae.before_json,ae.after_json
     into v_prior_receipt_before,v_prior_receipt_after
@@ -555,7 +636,8 @@ begin
     order by ae.ts_utc desc,ae.id desc
     limit 1;
     if found then
-      if upper(coalesce(v_prior_receipt_before->>'workflow_action',''))<>'RETRY_FINALISATION'
+      if v_prior_receipt_before->>'request_sha256' is distinct from v_mutation_request_hash
+         or upper(coalesce(v_prior_receipt_before->>'workflow_action',''))<>'RETRY_FINALISATION'
          or upper(coalesce(v_prior_receipt_before->>'channel',''))<>v_mutation_channel
          or coalesce(v_prior_receipt_before->>'actor_identity','')
               is distinct from coalesce(v_mutation_actor_identity,'')
@@ -570,18 +652,27 @@ begin
       return coalesce(v_prior_receipt_after,'{}'::jsonb)
         ||jsonb_build_object('idempotent_replay',true);
     end if;
+    select ae.before_json,ae.after_json
+    into v_completion_before,v_completion_after
+    from public.audit_events ae
+    where ae.object_type='candidate_workflow_finalisation_completion'
+      and ae.object_id_text=v_workflow.id::text
+      and ae.correlation_id=p_expected_generation::text||':'||v_finalisation_identity_hash
+    order by ae.ts_utc desc,ae.id desc
+    limit 1;
+    if found then
+      if v_completion_before->>'finalisation_identity_sha256'
+           is distinct from v_finalisation_identity_hash
+         or nullif(v_completion_after->>'generation','')::integer
+           is distinct from p_expected_generation+1 then
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+      end if;
+      return coalesce(v_completion_after,'{}'::jsonb)
+        ||jsonb_build_object('idempotent_replay',true);
+    end if;
     return jsonb_build_object('ok',true,'replay_found',false,'workflow_id',v_workflow.id,
       'expected_generation',p_expected_generation);
   end if;
-  v_mutation_request_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
-    'contract_version','CANDIDATE_FINALISATION_MUTATION_REQUEST_V2',
-    'workflow_id',v_workflow.id,
-    'action','RETRY_FINALISATION',
-    'expected_generation',p_expected_generation,
-    'service_finalisation',v_service_finalisation-'replay_probe_only',
-    'channel',v_mutation_channel,
-    'actor_identity',v_mutation_actor_identity
-  )::text,'UTF8'),'sha256'),'hex');
   v_mutation_receipt:=private._candidate_workflow_mutation_receipt_v1(
     v_workflow.id,p_idempotency_key,v_mutation_request_hash,'RETRY_FINALISATION',
     v_mutation_channel,v_mutation_actor_identity,
@@ -590,15 +681,33 @@ begin
   if coalesce((v_mutation_receipt->>'found')::boolean,false) then
     return coalesce(v_mutation_receipt->'response','{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
   end if;
+  select ae.before_json,ae.after_json
+  into v_completion_before,v_completion_after
+  from public.audit_events ae
+  where ae.object_type='candidate_workflow_finalisation_completion'
+    and ae.object_id_text=v_workflow.id::text
+    and ae.correlation_id=p_expected_generation::text||':'||v_finalisation_identity_hash
+  order by ae.ts_utc desc,ae.id desc
+  limit 1;
+  if found then
+    return coalesce(v_completion_after,'{}'::jsonb)
+      ||jsonb_build_object('idempotent_replay',true);
+  end if;
   if p_session_id is null then
     if coalesce(v_service_finalisation->>'contract_version','')<>'CANDIDATE_MANAGER_FINALISATION_V1'
        or coalesce((v_service_finalisation->>'workflow_generation')::integer,0)<>v_workflow.generation
        or upper(coalesce(v_service_finalisation->>'approval_method',''))<>v_workflow.route then
-      raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
+      raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID'
+        using errcode='28000',detail=jsonb_build_object('stage','SERVICE_ENVELOPE')::text;
     end if;
     if v_workflow.route='PAPER' then
-      if nullif(v_service_finalisation->>'approval_request_id','') is not null then
-        raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
+      if nullif(v_service_finalisation->>'approval_request_id','') is not null
+         or nullif(v_finalisation_identity->>'approval_request_id','') is not null
+         or upper(v_finalisation_identity->>'approval_method')<>'PAPER'
+         or lower(coalesce(v_finalisation_identity->>'paper_return_manifest_sha256_hex',''))
+              <>encode(v_workflow.paper_return_manifest_sha256,'hex') then
+        raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID'
+          using errcode='28000',detail=jsonb_build_object('stage','PAPER_IDENTITY')::text;
       end if;
     else
       select * into v_approved_request
@@ -606,11 +715,22 @@ begin
       where a.id=nullif(v_service_finalisation->>'approval_request_id','')::uuid
         and a.workflow_id=v_workflow.id
         and a.workflow_generation=p_expected_generation
+        and a.request_generation=coalesce(
+          nullif(v_service_finalisation->>'approval_request_generation','')::integer,0
+        )
         and a.method=upper(coalesce(v_service_finalisation->>'approval_method',''))
         and a.state='APPROVED'
         and encode(a.review_manifest_sha256,'hex')=lower(coalesce(v_service_finalisation->>'review_manifest_sha256_hex',''))
+        and v_finalisation_identity->>'approval_request_id'=a.id::text
+        and coalesce((v_finalisation_identity->>'approval_request_generation')::integer,0)=a.request_generation
+        and upper(v_finalisation_identity->>'approval_method')=a.method
+        and lower(coalesce(v_finalisation_identity->>'review_manifest_sha256_hex',''))
+              =encode(a.review_manifest_sha256,'hex')
       for update;
-      if not found then raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000'; end if;
+      if not found then
+        raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID'
+          using errcode='28000',detail=jsonb_build_object('stage','APPROVAL_IDENTITY')::text;
+      end if;
     end if;
   end if;
   if v_workflow.generation<>p_expected_generation then
@@ -1161,6 +1281,21 @@ begin
     jsonb_build_object('state',v_workflow.state,'generation',v_workflow.generation),
     jsonb_build_object('state','FINALISED','generation',v_workflow.generation+1,'timesheet_id',v_target_timesheet_id,
       'auto_authorised',v_auto_requested and not v_auto_blocked),null,v_system_actor,p_idempotency_key,p_now_utc);
+  insert into public.audit_events(
+    actor_user_id,object_type,object_id_text,action,before_json,after_json,
+    reason,correlation_id,ts_utc
+  ) values (
+    case when v_is_office_service then nullif(v_service_finalisation->>'actor_user_id','')::uuid
+      else null end,
+    'candidate_workflow_finalisation_completion',v_workflow.id::text,
+    'CANDIDATE_WORKFLOW_FINALISATION_COMPLETED',jsonb_build_object(
+      'contract_version','CANDIDATE_FINALISATION_COMPLETION_V1',
+      'workflow_generation',p_expected_generation,
+      'finalisation_identity_sha256',v_finalisation_identity_hash,
+      'finalisation_identity',v_finalisation_identity
+    ),v_response,'Canonical finalisation completion receipt',
+    p_expected_generation::text||':'||v_finalisation_identity_hash,p_now_utc
+  );
   perform private._candidate_workflow_mutation_receipt_v1(
     v_workflow.id,p_idempotency_key,v_mutation_request_hash,'RETRY_FINALISATION',
     case when v_is_office_service then 'OFFICE' when p_session_id is null then 'SERVICE' else 'CANDIDATE_CLIENT' end,

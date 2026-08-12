@@ -268,8 +268,10 @@ declare
   v_page jsonb;
   v_manifest jsonb;
   v_manifest_hash text;
+  v_service jsonb;
   v_mail uuid;
   v_row_signature text;
+  v_failed boolean:=false;
   v_counter integer:=0;
 begin
   insert into public.tms_users(id) values(v_actor);
@@ -572,8 +574,61 @@ begin
   end if;
 
   v_row_signature:=public.timesheet_lifecycle_guard_signature_v1(v_timesheet,v_week,false)->>'row_signature';
-  v_response:=public.candidate_submission_finalize_atomic_v1(
-    v_session,'TEST',v_workflow,2,v_row_signature,'paper:finalise',now());
+  v_service:=jsonb_build_object(
+    'contract_version','CANDIDATE_MANAGER_FINALISATION_V1',
+    'workflow_generation',2,
+    'approval_method','PAPER',
+    'approval_request_id',null,
+    'approval_request_generation',null,
+    'review_manifest_sha256_hex','',
+    'paper_return_manifest_sha256_hex',v_manifest_hash,
+    'finalisation_identity',jsonb_build_object(
+      'contract_version','CANDIDATE_FINALISATION_IDENTITY_V1',
+      'workflow_id',v_workflow,
+      'workflow_generation',2,
+      'approval_method','PAPER',
+      'approval_request_id',null,
+      'approval_request_generation',null,
+      'review_manifest_sha256_hex',null,
+      'paper_return_manifest_sha256_hex',v_manifest_hash
+    )
+  );
+  begin
+    perform public.cloudtms_office_candidate_adapter_v1(
+      'FINALISE_EXECUTE',v_actor,'TEST',jsonb_build_object(
+        'workflow_id',v_workflow,
+        'generation',2,
+        'expected_row_signature',repeat('0',64),
+        'idempotency_key','paper:finalise:initial',
+        'daily_materialisation_json',jsonb_build_object('service_finalisation',v_service)
+      ),now()
+    );
+    raise exception 'stale initial PAPER finalisation unexpectedly succeeded';
+  exception when others then
+    if sqlerrm='ROW_SIGNATURE_MISMATCH' then
+      v_failed:=true;
+    else
+      raise;
+    end if;
+  end;
+  if not v_failed
+     or (select state from public.candidate_submission_workflows where id=v_workflow)<>'RECEIVED'
+     or exists(
+       select 1 from public.audit_events ae
+       where ae.object_type='candidate_workflow_finalisation_completion'
+         and ae.object_id_text=v_workflow::text
+     ) then
+    raise exception 'failed initial PAPER finalisation left lifecycle or completion residue';
+  end if;
+  v_response:=public.cloudtms_office_candidate_adapter_v1(
+    'FINALISE_EXECUTE',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_workflow,
+      'generation',2,
+      'expected_row_signature',v_row_signature,
+      'idempotency_key','paper:finalise:retry',
+      'daily_materialisation_json',jsonb_build_object('service_finalisation',v_service)
+    ),now()
+  );
   if v_response->>'state'<>'FINALISED'
      or not exists(select 1 from public.timesheets
        where timesheet_id=v_timesheet and submission_mode='MANUAL'
@@ -584,6 +639,20 @@ begin
      or not exists(select 1 from public.timesheet_evidence
        where timesheet_id=v_timesheet and kind='TIMESHEET' and document_role='SIGNED_TIMESHEET') then
     raise exception 'complete paper pack did not materialise atomically: %',v_response;
+  end if;
+  v_response:=public.cloudtms_office_candidate_adapter_v1(
+    'FINALISE_REPLAY_LOOKUP',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_workflow,
+      'generation',2,
+      'expected_row_signature',repeat('0',64),
+      'idempotency_key','paper:finalise:initial',
+      'daily_materialisation_json',jsonb_build_object('service_finalisation',v_service)
+    ),now()
+  );
+  if v_response->>'state'<>'FINALISED'
+     or v_response->>'generation'<>'3'
+     or not coalesce((v_response->>'idempotent_replay')::boolean,false) then
+    raise exception 'failed trigger key did not find the later canonical PAPER completion: %',v_response;
   end if;
 end;
 $paper_complete_pack$;

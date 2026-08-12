@@ -539,6 +539,24 @@ begin
     raise exception 'runtime PAPER failure owner did not persist deterministic backoff: %',v_result;
   end if;
   v_paper_attempt_token:=repeat('9a',32);
+  begin
+    perform public.cloudtms_office_candidate_adapter_v1(
+      'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
+        'workflow_id',v_workflow,'generation',1,
+        'workflow_action','PAPER_PACK_ATTEMPT_CLAIM',
+        'idempotency_key','ad510000-0000-4000-8000-000000000018',
+        'payload',jsonb_build_object(
+          'service_paper_pack_attempt',true,
+          'mail_outbox_id','ad510000-0000-4000-8000-000000000015',
+          'paper_return_manifest_sha256',v_paper_manifest_hash,
+          'paper_pack_attempt_token',repeat('99',32)
+        )
+      ),v_now+interval '1 second'
+    );
+    raise exception 'Office PAPER retry bypassed its durable backoff';
+  exception when sqlstate '55000' then
+    if position('CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE' in sqlerrm)=0 then raise; end if;
+  end;
   v_result:=public.cloudtms_office_candidate_adapter_v1(
     'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
       'workflow_id',v_workflow,'generation',1,
@@ -550,7 +568,7 @@ begin
         'paper_return_manifest_sha256',v_paper_manifest_hash,
         'paper_pack_attempt_token',v_paper_attempt_token
       )
-    ),v_now+interval '1 second'
+    ),v_now+interval '2 minutes'
   );
   if v_result->>'paper_pack_attempt_state'<>'CLAIMED'
      or (v_result->>'paper_pack_attempt_count')::integer<>1 then
@@ -567,10 +585,11 @@ begin
         'paper_return_manifest_sha256',v_paper_manifest_hash,
         'paper_pack_attempt_token',v_paper_attempt_token
       )
-    ),v_now+interval '2 seconds'
+    ),v_now+interval '2 minutes 1 second'
   );
-  if not coalesce((v_result->>'idempotent_replay')::boolean,false) then
-    raise exception 'Office PAPER retry claim did not replay its durable receipt: %',v_result;
+  if not coalesce((v_result->>'idempotent_replay')::boolean,false)
+     or coalesce((v_result->>'claim_acquired_new')::boolean,true) then
+    raise exception 'Office PAPER claim replay incorrectly re-acquired executor authority: %',v_result;
   end if;
   v_result:=public.cloudtms_office_candidate_adapter_v1(
     'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
@@ -584,21 +603,41 @@ begin
         'paper_pack_attempt_token',v_paper_attempt_token,
         'error_code','CANDIDATE_PAPER_R2_WRITE_TRANSIENT'
       )
-    ),v_now+interval '3 seconds'
+    ),v_now+interval '2 minutes 2 seconds'
   );
   if v_result->>'paper_pack_state'<>'FAILED_RETRYABLE'
      or (v_result->>'paper_pack_attempt_count')::integer<>1 then
     raise exception 'Office PAPER retry failure did not close the attempt lease: %',v_result;
   end if;
+  update public.mail_outbox
+  set payment_scope_json=payment_scope_json||jsonb_build_object(
+    'candidate_paper_pack_next_retry_at_utc',clock_timestamp()+interval '5 minutes'
+  )
+  where id='ad510000-0000-4000-8000-000000000015';
   v_projection:=public.cloudtms_office_candidate_adapter_v1(
     'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now
+  );
+  if v_projection#>>'{paper_pack,state}'<>'BACKOFF'
+     or v_projection#>>'{paper_pack,retryable}'<>'false'
+     or (v_projection->'available_actions' @> jsonb_build_array(
+       jsonb_build_object('code','RETRY_PAPER_PREPARATION','enabled',true)
+      )) then
+    raise exception 'durable PAPER backoff did not disable retry: %',v_projection;
+  end if;
+  update public.mail_outbox
+  set payment_scope_json=payment_scope_json||jsonb_build_object(
+    'candidate_paper_pack_next_retry_at_utc',clock_timestamp()-interval '1 second'
+  )
+  where id='ad510000-0000-4000-8000-000000000015';
+  v_projection:=public.cloudtms_office_candidate_adapter_v1(
+    'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now+interval '10 minutes'
   );
   if v_projection#>>'{paper_pack,state}'<>'FAILED_RETRYABLE'
      or v_projection#>>'{paper_pack,retryable}'<>'true'
      or not (v_projection->'available_actions' @> jsonb_build_array(
        jsonb_build_object('code','RETRY_PAPER_PREPARATION','enabled',true)
-     )) then
-    raise exception 'durable PAPER retry receipt did not enable retry: %',v_projection;
+      )) then
+    raise exception 'expired PAPER backoff did not enable retry: %',v_projection;
   end if;
   update public.candidate_submission_workflows
   set state='FINALISED',finalised_at_utc=v_now,updated_at_utc=v_now+interval '5 minutes'

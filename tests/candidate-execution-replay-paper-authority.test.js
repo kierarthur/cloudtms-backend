@@ -23,7 +23,9 @@ test('Candidate HTTP enrichment is stable and signing time is an explicit factua
 
 test('finalisation probes the durable receipt before mutable lifecycle validation', () => {
   assert.match(backend, /probeFinalisationReplay[\s\S]*replay_probe_only: true/);
-  assert.match(finalise, /CANDIDATE_FINALISATION_MUTATION_REQUEST_V2/);
+  assert.match(finalise, /CANDIDATE_FINALISATION_MUTATION_REQUEST_V3/);
+  assert.match(finalise, /candidate_workflow_finalisation_completion/);
+  assert.match(finalise, /finalisation_identity/);
   const receipt = finalise.indexOf("v_mutation_receipt:=private._candidate_workflow_mutation_receipt_v1");
   const generation = finalise.indexOf('if v_workflow.generation<>p_expected_generation');
   const serviceValidation = finalise.indexOf("if p_session_id is null then", receipt + 1);
@@ -37,6 +39,8 @@ test('PAPER execution has one database-owned attempt lease, backoff and terminal
   assert.match(workflow, /candidate_paper_pack_next_retry_at_utc/);
   assert.match(workflow, /CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE/);
   assert.match(workflow, /CANDIDATE_PAPER_PACK_FAILED_TERMINAL/);
+  assert.match(workflow, /'claim_acquired_new',false/);
+  assert.doesNotMatch(workflow, /and not v_is_office_service_action/);
   assert.match(backend, /execution_state: 'FAILED_TERMINAL'/);
   assert.match(backend, /execution_state: 'BACKOFF'/);
   assert.match(backend, /claimCandidatePaperPackAttempt/);
@@ -54,6 +58,24 @@ test('PAPER preparation owns an enforceable deadline and pre-outbox failure rece
   assert.match(backend, /CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT/);
   assert.match(workflow, /'failure_scope','WORKFLOW'/);
   assert.match(workflow, /'mail_outbox_id',null/);
+  assert.match(office, /'retryable',v_paper_state='FAILED_RETRYABLE'/);
+});
+
+test('Candidate mutations require caller-owned keys and replay probes precede mutable enrichment', () => {
+  assert.match(backend, /function requireCandidateIdempotency/);
+  assert.match(backend, /CANDIDATE_IDEMPOTENCY_KEY_REQUIRED/);
+  assert.match(backend, /mutation_replay_probe_only: true/);
+  const submitProbe = backend.indexOf("if (dbAction === 'WORKER_SUBMIT')");
+  const submitRead = backend.indexOf('const workflow = await workflowRow', submitProbe);
+  const submitReplay = backend.indexOf('probeWorkflowMutationReplay', submitProbe);
+  assert.ok(submitProbe > -1 && submitReplay > submitProbe && submitRead > submitReplay);
+  assert.match(workflow, /v_mutation_replay_probe_only/);
+  assert.match(workflow, /mutation_replay_semantic_payload/);
+});
+
+test('manager mutation identity excludes generated delivery values', () => {
+  assert.match(workflow, /when v_action='CREATE_EMAIL_APPROVAL_REQUEST' then[\s\S]*-'mail'-'approval_token_hash_hex'/);
+  assert.match(workflow, /when v_action in \('REMIND','RENEW'\) then[\s\S]*-'mail'-'approval_token_hash_hex'-'manager_email'/);
 });
 
 test('canonical rejection replay is bound to the complete request after a key lock', () => {

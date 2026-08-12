@@ -29,6 +29,7 @@ declare
   v_manifest_hash text;
   v_service jsonb;
   v_hash text;
+  v_identity_hash text;
   v_result jsonb;
   v_failed boolean;
 begin
@@ -59,13 +60,23 @@ begin
   v_service:=jsonb_build_object(
     'contract_version','CANDIDATE_MANAGER_FINALISATION_V1',
     'approval_request_id',null,'approval_method','PAPER','workflow_generation',1,
-    'review_manifest_sha256_hex','','actor_user_id',null
+    'review_manifest_sha256_hex','','paper_return_manifest_sha256_hex','',
+    'actor_user_id',null,'finalisation_identity',jsonb_build_object(
+      'contract_version','CANDIDATE_FINALISATION_IDENTITY_V1',
+      'workflow_id',v_finalised,'workflow_generation',1,
+      'approval_method','PAPER','approval_request_id',null,
+      'approval_request_generation',null,'review_manifest_sha256_hex',null,
+      'paper_return_manifest_sha256_hex',null
+    )
   );
   v_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
-    'contract_version','CANDIDATE_FINALISATION_MUTATION_REQUEST_V2',
+    'contract_version','CANDIDATE_FINALISATION_MUTATION_REQUEST_V3',
     'workflow_id',v_finalised,'action','RETRY_FINALISATION','expected_generation',1,
     'service_finalisation',v_service,'channel','SERVICE','actor_identity','SERVICE'
   )::text,'UTF8'),'sha256'),'hex');
+  v_identity_hash:=encode(extensions.digest(convert_to(
+    (v_service->'finalisation_identity')::text,'UTF8'
+  ),'sha256'),'hex');
   perform private._candidate_workflow_mutation_receipt_v1(
     v_finalised,v_finalise_key,v_hash,'RETRY_FINALISATION','SERVICE','SERVICE',
     jsonb_build_object('ok',true,'workflow_id',v_finalised,'state','FINALISED','generation',2),v_now
@@ -78,12 +89,52 @@ begin
      or not coalesce((v_result->>'idempotent_replay')::boolean,false) then
     raise exception 'finalisation did not replay before current-generation/state validation: %',v_result;
   end if;
+  insert into public.audit_events(
+    actor_user_id,object_type,object_id_text,action,before_json,after_json,
+    reason,correlation_id,ts_utc
+  ) values (
+    null,'candidate_workflow_finalisation_completion',v_finalised::text,
+    'CANDIDATE_WORKFLOW_FINALISATION_COMPLETED',jsonb_build_object(
+      'contract_version','CANDIDATE_FINALISATION_COMPLETION_V1',
+      'workflow_generation',1,'finalisation_identity_sha256',v_identity_hash,
+      'finalisation_identity',v_service->'finalisation_identity'
+    ),jsonb_build_object(
+      'ok',true,'workflow_id',v_finalised,'state','FINALISED','generation',2
+    ),'Canonical finalisation completion receipt','1:'||v_identity_hash,v_now
+  );
+  v_result:=public.candidate_submission_finalize_atomic_v1(
+    null,'TEST',v_finalised,1,null,'different-finalisation-trigger-key',v_now+interval '1 minute',
+    jsonb_build_object('service_finalisation',v_service||jsonb_build_object('replay_probe_only',true))
+  );
+  if v_result->>'state'<>'FINALISED'
+     or not coalesce((v_result->>'idempotent_replay')::boolean,false) then
+    raise exception 'canonical completion was not found independently of trigger key: %',v_result;
+  end if;
+  v_failed:=false;
+  begin
+    perform public.candidate_submission_finalize_atomic_v1(
+      null,'TEST',v_finalised,1,null,v_finalise_key,v_now+interval '1 minute 1 second',
+      jsonb_build_object('service_finalisation',v_service||jsonb_build_object(
+        'replay_probe_only',true,'finalisation_identity',
+        (v_service->'finalisation_identity')||jsonb_build_object(
+          'paper_return_manifest_sha256_hex',repeat('ff',32)
+        )
+      ))
+    );
+  exception when sqlstate '40001' then
+    v_failed:=position('CANDIDATE_IDEMPOTENCY_CONFLICT' in sqlerrm)>0;
+  end;
+  if not v_failed then
+    raise exception 'finalisation replay accepted a different immutable approval identity';
+  end if;
   v_failed:=false;
   begin
     perform public.candidate_submission_finalize_atomic_v1(
       null,'TEST',v_finalised,2,null,v_finalise_key,v_now+interval '1 minute 1 second',
       jsonb_build_object('service_finalisation',v_service||jsonb_build_object(
-        'workflow_generation',2,'replay_probe_only',true
+        'workflow_generation',2,'replay_probe_only',true,
+        'finalisation_identity',(v_service->'finalisation_identity')
+          ||jsonb_build_object('workflow_generation',2)
       ))
     );
   exception when sqlstate '40001' then

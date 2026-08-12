@@ -279,7 +279,7 @@ paths:
       summary: Resolve or create candidate expense carrier
       x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}/expense-carrier
       parameters: [{$ref: '#/components/parameters/TimesheetId'}]
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/contracts/{contractId}/missing-weeks:
     get:
@@ -298,7 +298,7 @@ paths:
       summary: Add candidate missing week
       x-cloudtms-private-path: /private/candidate-app/v1/contracts/{contractId}/missing-weeks
       parameters: [{$ref: '#/components/parameters/ContractId'}]
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/notifications:
     get:
@@ -325,7 +325,7 @@ paths:
       operationId: createCandidateWorkflow
       summary: Create candidate workflow
       x-cloudtms-private-path: /private/candidate-app/v1/workflows
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/workflows/{workflowId}/actions/{action}:
     post:
@@ -361,7 +361,7 @@ paths:
       description: Idempotent preparation. A same-generation replay returns a ticket for the original database-owned component/object identity only while that component is PENDING or IMMUTABLE. Cross-generation reuse, terminal-state reuse, or conflicting media, size, role or category fails before a ticket is issued.
       x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/components/prepare
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/uploads/{ticket}:
     put:
@@ -396,7 +396,7 @@ paths:
       x-cloudtms-private-path: /private/candidate-app/v1/contract-weeks/{contractWeekId}/no-work
       parameters:
         - {name: contractWeekId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-manager/v1/workflows/{workflowId}/start:
     get:
@@ -416,7 +416,7 @@ paths:
       summary: Record manager review progress
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/progress
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-manager/v1/workflows/{workflowId}/signature/prepare:
     post:
@@ -426,7 +426,7 @@ paths:
       summary: Prepare manager signature
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/signature/prepare
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-manager/v1/workflows/{workflowId}/approve:
     post:
@@ -436,7 +436,7 @@ paths:
       summary: Approve manager review
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/approve
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-manager/v1/workflows/{workflowId}/refuse:
     post:
@@ -446,7 +446,7 @@ paths:
       summary: Refuse manager review
       x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/refuse
       parameters: [{$ref: '#/components/parameters/WorkflowId'}]
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-manager/v1/workflows/{workflowId}/components/{componentId}/document:
     get:
@@ -736,6 +736,16 @@ components:
     JsonBody:
       required: true
       content: {application/json: {schema: {$ref: '#/components/schemas/JsonObject'}}}
+    IdempotentJsonBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [idempotency_key]
+            properties:
+              idempotency_key: {type: string, minLength: 1, maxLength: 200}
+            additionalProperties: true
     RefreshBody:
       required: true
       content:

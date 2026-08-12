@@ -792,7 +792,7 @@ begin
         when v_paper_state='STALE' then 'CANDIDATE_PAPER_PACK_STALE' else null end,
       'failure_scope',coalesce(v_paper_pack->>'failure_scope',
         case when v_paper_outbox.id is not null then 'OUTBOX' else null end),
-      'retryable',v_paper_state in ('FAILED_RETRYABLE','BACKOFF'),
+      'retryable',v_paper_state='FAILED_RETRYABLE',
       'attempt_count',coalesce((v_paper_pack->>'attempt_count')::integer,
         case when coalesce(v_paper_outbox.payment_scope_json,'{}'::jsonb)
           ->>'candidate_paper_pack_attempt_count'~'^[0-9]+$'
@@ -1126,7 +1126,11 @@ begin
       if v_existing_before->>'request_sha256' is distinct from v_request_hash then
         raise exception 'IDEMPOTENCY_CONFLICT' using errcode='23505';
       end if;
-      return coalesce(v_existing_after,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
+      v_result:=coalesce(v_existing_after,'{}'::jsonb);
+      if v_workflow_action='PAPER_PACK_ATTEMPT_CLAIM' then
+        v_result:=v_result||jsonb_build_object('claim_acquired_new',false);
+      end if;
+      return v_result||jsonb_build_object('idempotent_replay',true);
     end if;
     v_approval_id:=nullif(v_payload->>'approval_request_id','')::uuid;
     v_approval_generation:=nullif(v_payload->>'approval_request_generation','')::integer;

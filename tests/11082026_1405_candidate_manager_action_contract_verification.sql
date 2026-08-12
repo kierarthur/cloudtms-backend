@@ -30,6 +30,7 @@ declare
   v_initial_token_hash bytea:=extensions.digest('initial-manager-token','sha256');
   v_reminder_token_hash bytea:=extensions.digest('reminder-manager-token','sha256');
   v_count integer;
+  v_mail_count integer;
 begin
   insert into public.clients(id,name) values(v_client,'Manager action contract client');
   insert into public.client_settings(
@@ -109,6 +110,30 @@ begin
      or (select payment_scope_json->>'candidate_manager_mail_kind'
          from public.mail_outbox where id=v_reminder_mail)<>'REMINDER' then
     raise exception 'REMIND did not preserve and rotate the current request: %',v_result;
+  end if;
+  select count(*) into v_mail_count
+  from public.mail_outbox mail
+  where mail.context_kind='CANDIDATE_WORKFLOW' and mail.context_id=v_workflow;
+  v_result:=public.candidate_workflow_transition_atomic_v1(
+    v_session,'TEST',v_workflow,'REMIND',1,
+    jsonb_build_object(
+      'approval_request_id',v_request,
+      'approval_request_generation',1,
+      'approval_token_hash_hex',repeat('fe',32),
+      'mail',jsonb_build_object(
+        'subject','A newly generated subject for a lost-response retry',
+        'body_text','A newly generated body must not change the semantic request.'
+      )
+    ),'manager-action-remind',v_now+interval '1 second'
+  );
+  if not coalesce((v_result->>'idempotent_replay')::boolean,false)
+     or (v_result->>'mail_outbox_id')::uuid<>v_reminder_mail
+     or (v_result->>'resend_count')::integer<>1
+     or (select token_hash from public.candidate_approval_requests where id=v_request)
+          is distinct from v_reminder_token_hash
+     or (select count(*) from public.mail_outbox mail
+         where mail.context_kind='CANDIDATE_WORKFLOW' and mail.context_id=v_workflow)<>v_mail_count then
+    raise exception 'REMIND semantic replay depended on generated token or mail content: %',v_result;
   end if;
   begin
     perform public.candidate_workflow_transition_atomic_v1(

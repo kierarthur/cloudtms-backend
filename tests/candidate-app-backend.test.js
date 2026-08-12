@@ -429,22 +429,101 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
     assert.equal(reminder.status, 200);
     assert.equal(calls[0].name, 'candidate_workflow_transition_atomic_v1');
     assert.equal(calls[0].args.p_action, 'REMIND');
-    assert.match(calls[0].args.p_payload.mail.subject, /^Reminder:/);
-    assert.match(calls[0].args.p_payload.approval_token_hash_hex, /^[0-9a-f]{64}$/);
+    assert.equal(calls[0].args.p_payload.mutation_replay_probe_only, true);
+    assert.equal(calls[0].args.p_payload.mutation_replay_semantic_payload.mail, undefined);
+    assert.equal(calls[0].args.p_payload.mutation_replay_semantic_payload.approval_token_hash_hex, undefined);
+    assert.equal(calls[1].args.p_action, 'REMIND');
+    assert.match(calls[1].args.p_payload.mail.subject, /^Reminder:/);
+    assert.match(calls[1].args.p_payload.approval_token_hash_hex, /^[0-9a-f]{64}$/);
 
     const missingReason = await handleCandidateAppRequest(request('cancel', {
       generation: 3, idempotency_key: 'cancel-1'
     }), env, {}, deps);
     assert.equal(missingReason.status, 400);
     assert.equal((await missingReason.json()).error_code, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
-    assert.equal(calls.length, 1);
+    assert.equal(calls.length, 2);
 
     const cancelled = await handleCandidateAppRequest(request('cancel', {
       generation: 3, idempotency_key: 'cancel-2', reason_note: 'I entered the wrong week.'
     }), env, {}, deps);
     assert.equal(cancelled.status, 200);
-    assert.equal(calls[1].args.p_action, 'CANCEL');
-    assert.equal(calls[1].args.p_payload.reason_note, 'I entered the wrong week.');
+    assert.equal(calls[2].args.p_action, 'CANCEL');
+    assert.equal(calls[2].args.p_payload.reason_note, 'I entered the wrong week.');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate workflow mutation requires a caller key and an exact WORKER_SUBMIT replay skips mutable enrichment', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000000a1';
+  const accountId = '00000000-0000-4000-8000-0000000000a2';
+  const candidateId = '00000000-0000-4000-8000-0000000000a3';
+  const workflowId = '00000000-0000-4000-8000-0000000000a4';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  let sessionReads = 0;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('candidate_app_sessions')) {
+      sessionReads += 1;
+      return Response.json([session]);
+    }
+    throw new Error(`mutable enrichment ran before replay: ${value}`);
+  };
+  const calls = [];
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return {
+        ok: true, idempotent_replay: true, state: 'WORKER_SUBMITTED',
+        workflow_id: workflowId, generation: 2
+      };
+    }
+  };
+  try {
+    const missingKey = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/cancel`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ generation: 1, reason_note: 'Wrong week.' })
+      }
+    ), env, {}, deps);
+    assert.equal(missingKey.status, 400);
+    assert.equal((await missingKey.json()).error_code, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+    assert.equal(calls.length, 0);
+
+    const replay = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/worker-submit`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 1,
+          idempotency_key: 'worker-submit-exact-replay',
+          candidate_signed_at_utc: '2026-08-12T10:00:00.000Z',
+          immutable_submission: { worked_minutes: 480 }
+        })
+      }
+    ), env, {}, deps);
+    assert.equal(replay.status, 200);
+    assert.equal((await replay.json()).idempotent_replay, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].args.p_payload.mutation_replay_probe_only, true);
+    assert.equal(calls[0].args.p_payload.mutation_replay_semantic_payload
+      .submission_request_identity.factual_submission.worked_minutes, 480);
+    assert.equal(sessionReads, 2);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -1926,6 +2005,111 @@ test('paper-pack scheduler durably records a classified retryable storage failur
     assert.equal(failureRpc.args.p_action, 'PAPER_PACK_MARK_FAILURE');
     assert.equal(failureRpc.args.p_payload.mail_outbox_id, outboxId);
     assert.equal(failureRpc.args.p_payload.error_code, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Office PAPER retry recovers an expired executor lease with a new inner attempt key', async () => {
+  const originalFetch = globalThis.fetch;
+  const workflowId = '00000000-0000-4000-8000-000000000080';
+  const timesheetId = '00000000-0000-4000-8000-000000000081';
+  const versionId = '00000000-0000-4000-8000-000000000082';
+  const outboxId = '00000000-0000-4000-8000-000000000083';
+  const operationId = '00000000-0000-4000-8000-000000000084';
+  const actorId = '00000000-0000-4000-8000-000000000085';
+  const manifestHash = 'a'.repeat(64);
+  const workflow = {
+    id: workflowId, generation: 1, route: 'PAPER', state: 'AWAITING_PAPER_RETURN',
+    target_timesheet_id: timesheetId, anchor_timesheet_id: timesheetId,
+    paper_return_manifest_sha256: manifestHash,
+    paper_return_manifest_json: {
+      pages: [{ page_key: 'hours:1', component_kind: 'HOURS_TIMESHEET' }]
+    }
+  };
+  const outbox = {
+    id: outboxId, type: 'TIMESHEET_QR', context_kind: 'timesheets', context_id: timesheetId,
+    status: 'QUEUED', attachments: [], attempt_lease_token: null,
+    attempt_lease_expires_at_utc: null,
+    payment_scope_json: {
+      candidate_mail_authority: 'CANDIDATE_PAPER_V1',
+      candidate_workflow_id: workflowId,
+      candidate_workflow_generation: 1,
+      paper_return_manifest_sha256: manifestHash,
+      candidate_paper_pack_ready: false,
+      mail_held_until_pdf_rendered: true,
+      mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING',
+      candidate_paper_pack_retryable: true,
+      candidate_paper_pack_next_retry_at_utc: '2000-01-01T00:00:00.000Z',
+      candidate_paper_pack_attempt_count: 3,
+      candidate_paper_pack_operation_id: operationId,
+      candidate_paper_pack_operation_state: 'CLAIMED',
+      candidate_paper_pack_attempt_expires_at_utc: '2000-01-01T00:10:00.000Z'
+    }
+  };
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (path.endsWith('/mail_outbox')) return Response.json([outbox]);
+    if (path.endsWith('/timesheets')) return Response.json([{
+      timesheet_id: timesheetId, version: 1, sheet_scope: 'WEEKLY', submission_mode: 'MANUAL',
+      qr_status: 'PENDING', qr_token: 'paper-token', document_state: 'READY',
+      current_document_version_id: versionId, is_current: true, archived_at_utc: null
+    }]);
+    if (path.endsWith('/invoice_document_versions')) return Response.json([{
+      id: versionId, entity_type: 'TIMESHEET', entity_id: timesheetId,
+      purpose: 'TIMESHEET', status: 'READY', r2_key: 'candidate/base.pdf', sha256: 'b'.repeat(64)
+    }]);
+    throw new Error(`unexpected request ${path}`);
+  };
+  let claimEnvelope = null;
+  let failureEnvelope = null;
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId, role: 'admin' }; },
+    async rpc(name, args) {
+      assert.equal(name, 'cloudtms_office_candidate_adapter_v1');
+      if (args.p_action === 'PAPER_RETRY_REPLAY') return { found: false };
+      if (args.p_action === 'PAPER_RETRY_RECORD') {
+        return { http_status: args.p_payload.http_status, result: args.p_payload.result };
+      }
+      if (args.p_action === 'WORKFLOW_ACTION_EXECUTE'
+          && args.p_payload.workflow_action === 'PAPER_PACK_ATTEMPT_CLAIM') {
+        claimEnvelope = args.p_payload;
+        return {
+          ok: true, paper_pack_attempt_state: 'CLAIMED', paper_pack_attempt_count: 4,
+          claim_acquired_new: true, idempotent_replay: false
+        };
+      }
+      if (args.p_action === 'WORKFLOW_ACTION_EXECUTE'
+          && args.p_payload.workflow_action === 'PAPER_PACK_MARK_FAILURE') {
+        failureEnvelope = args.p_payload;
+        return {
+          ok: true, paper_pack_state: 'FAILED_RETRYABLE',
+          failure_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+          next_retry_at_utc: '2099-01-01T00:00:00.000Z'
+        };
+      }
+      throw new Error(`unexpected RPC ${args.p_action}:${args.p_payload?.workflow_action || ''}`);
+    }
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://office.test/api/candidate-app/workflows/${workflowId}/actions/retry-paper-preparation`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ generation: 1, idempotency_key: operationId })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+      R2: { async get() { throw new Error('simulated expired-lease recovery read failure'); } }
+    }, {}, deps);
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).paper_pack_state, 'FAILED_RETRYABLE');
+    assert.equal(claimEnvelope.idempotency_key, `${operationId}:attempt:4`);
+    assert.equal(claimEnvelope.payload.paper_pack_operation_id, operationId);
+    assert.equal(failureEnvelope.payload.paper_pack_operation_id, operationId);
   } finally {
     globalThis.fetch = originalFetch;
   }

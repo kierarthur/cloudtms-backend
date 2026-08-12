@@ -22,8 +22,12 @@ declare
   v_mail uuid:='ce592200-0000-4000-8000-000000000010';
   v_attempt_one text:=repeat('91',32);
   v_attempt_two text:=repeat('92',32);
+  v_attempt_three text:=repeat('93',32);
+  v_attempt_four text:=repeat('94',32);
   v_operation_one text:='paper-operation-boundary-1';
   v_operation_two text:='paper-operation-boundary-2';
+  v_operation_three text:='paper-operation-boundary-3';
+  v_operation_four text:='paper-operation-boundary-4';
   v_manifest jsonb:=jsonb_build_object('pages',jsonb_build_array(
     jsonb_build_object('page_key','hours:1','component_kind','HOURS_TIMESHEET')
   ));
@@ -95,8 +99,9 @@ begin
       'paper_pack_operation_id',v_operation_one
     ),v_operation_one,v_now+interval '1 second'
   );
-  if not coalesce((v_result->>'idempotent_replay')::boolean,false) then
-    raise exception 'exact PAPER claim retry did not return its durable receipt: %',v_result;
+  if not coalesce((v_result->>'idempotent_replay')::boolean,false)
+     or coalesce((v_result->>'claim_acquired_new')::boolean,true) then
+    raise exception 'exact PAPER claim retry incorrectly re-acquired executor authority: %',v_result;
   end if;
 
   v_failed:=false;
@@ -129,6 +134,28 @@ begin
      or (v_result->>'paper_pack_attempt_count')::integer<>1
      or v_result->>'paper_pack_operation_id'<>v_operation_one then
     raise exception 'first PAPER failure did not own count/backoff/result: %',v_result;
+  end if;
+
+  v_failed:=false;
+  begin
+    perform public.cloudtms_office_candidate_adapter_v1(
+      'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
+        'workflow_id',v_paper,'generation',1,
+        'workflow_action','PAPER_PACK_ATTEMPT_CLAIM',
+        'idempotency_key','office-paper-attempt-before-due',
+        'payload',jsonb_build_object(
+          'service_paper_pack_attempt',true,'mail_outbox_id',v_mail,
+          'paper_return_manifest_sha256',v_manifest_hash,
+          'paper_pack_attempt_token',repeat('9a',32),
+          'paper_pack_operation_id','office-paper-operation-before-due'
+        )
+      ),v_now+interval '4 seconds'
+    );
+  exception when sqlstate '55000' then
+    v_failed:=position('CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE' in sqlerrm)>0;
+  end;
+  if not v_failed then
+    raise exception 'Office PAPER attempt bypassed the durable retry backoff';
   end if;
 
   v_result:=public.candidate_workflow_transition_atomic_v1(
@@ -164,10 +191,50 @@ begin
     raise exception 'Candidate shared PAPER read did not expose durable failure truth: %',v_readiness;
   end if;
 
+  -- A worker crash after claim leaves the exact lease in place. Once that
+  -- lease expires, a new attempt key and token must recover the operation.
+  v_result:=public.candidate_workflow_transition_atomic_v1(
+    null,'TEST',v_paper,'PAPER_PACK_ATTEMPT_CLAIM',1,jsonb_build_object(
+      'service_paper_pack_attempt',true,'mail_outbox_id',v_mail,
+      'paper_return_manifest_sha256',v_manifest_hash,
+      'paper_pack_attempt_token',v_attempt_three,
+      'paper_pack_operation_id',v_operation_three
+    ),v_operation_three,v_now+interval '8 minutes'
+  );
+  if not coalesce((v_result->>'claim_acquired_new')::boolean,false)
+     or (v_result->>'paper_pack_attempt_count')::integer<>3 then
+    raise exception 'third PAPER attempt did not acquire its crash-recovery lease: %',v_result;
+  end if;
+  v_result:=public.candidate_workflow_transition_atomic_v1(
+    null,'TEST',v_paper,'PAPER_PACK_ATTEMPT_CLAIM',1,jsonb_build_object(
+      'service_paper_pack_attempt',true,'mail_outbox_id',v_mail,
+      'paper_return_manifest_sha256',v_manifest_hash,
+      'paper_pack_attempt_token',v_attempt_four,
+      'paper_pack_operation_id',v_operation_four
+    ),v_operation_four,v_now+interval '18 minutes 1 second'
+  );
+  if not coalesce((v_result->>'claim_acquired_new')::boolean,false)
+     or (v_result->>'paper_pack_attempt_count')::integer<>4
+     or v_result->>'paper_pack_operation_id'<>v_operation_four then
+    raise exception 'expired PAPER executor lease did not recover with a new attempt: %',v_result;
+  end if;
+
   -- The shared reader must also expose a failure which happened before an
   -- outbox row could be created. Reuse the same workflow after removing the
   -- synthetic outbox so this fixture does not create a second active claim.
   delete from public.mail_outbox where id=v_mail;
+  update public.candidate_submission_workflows
+  set last_mutation_response_json=jsonb_build_object(
+      'ok',true,'failure_scope','WORKFLOW','paper_pack_state','FAILED_RETRYABLE',
+      'retryable',true,'failure_code','CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT',
+      'paper_pack_operation_id','paper-document-pending-operation'
+    )
+  where id=v_paper;
+  v_readiness:=private._candidate_paper_pack_readiness_v1(v_paper,1);
+  if v_readiness->>'state'<>'PREPARING'
+     or coalesce((v_readiness->>'retryable')::boolean,false) then
+    raise exception 'document-pending timeout incorrectly exposed a pack retry: %',v_readiness;
+  end if;
   update public.candidate_submission_workflows
   set last_mutation_response_json=jsonb_build_object(
       'ok',true,'failure_scope','WORKFLOW','paper_pack_state','FAILED_TERMINAL',
