@@ -89,11 +89,14 @@ test('post-commit V3 authority replaces the premature pre-commit terminal claim'
   const awaitingIndex = processChunk.indexOf('POST_FINANCIAL_TERMINAL_AWAITING_COMMIT_V3');
   const refreshIndex = processChunk.indexOf("v_phase = 'REFRESH_WORKBENCH'");
   const deriveIndex = processChunk.indexOf('pay_workbench_correction_post_commit_authority_page_v1');
+  const captureIndex = processChunk.indexOf('PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_CAPTURED');
   const admissionIndex = processChunk.indexOf('pay_workbench_cancel_reversion_admission_page_v1');
   assert.ok(awaitingIndex >= 0);
   assert.ok(refreshIndex > awaitingIndex);
   assert.ok(deriveIndex > refreshIndex);
+  assert.ok(captureIndex > deriveIndex);
   assert.ok(admissionIndex > deriveIndex);
+  assert.ok(admissionIndex > captureIndex);
   assert.doesNotMatch(processChunk, /POST_FINANCIAL_TERMINAL_AUTHORITY_V2/);
   assert.match(processChunk,
     /cancellation_reversion_post_financial_terminal_awaiting_commit_v3/);
@@ -110,6 +113,24 @@ test('post-commit V3 authority replaces the premature pre-commit terminal claim'
   assert.match(processChunk,
     /'original_source_build_run_id',admitted\.value->>'original_source_build_run_id'[\s\S]{0,180}'replay_source_build_run_id',admitted\.value->>'replay_source_build_run_id'/);
   assert.match(processChunk, /FINANCIAL_COMPLETE_WORKBENCH_PENDING|workbench_refresh_nudge/);
+});
+
+test('route election is committed-input bound and stale completed chunks cannot be silently replayed', () => {
+  assert.match(processChunk, /'contract_version','CANCELLATION_ROUTE_INPUT_V1'/);
+  assert.match(processChunk,
+    /authority_entry\.value-'captured_at_utc'/);
+  assert.match(processChunk,
+    /v_route_input_digest:=private\.pay_payment_correction_sha256_v1\(v_route_input\)/);
+  assert.match(processChunk,
+    /cancellation_route_inputs_v1[\s\S]*PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_CAPTURED/);
+  assert.match(processChunk,
+    /v_committed_route_input_digest IS DISTINCT FROM v_route_input_digest[\s\S]*RETURN pg_catalog\.jsonb_build_object/);
+  assert.match(processChunk,
+    /v_existing_refresh_result->>'route_input_digest'[\s\S]*IS DISTINCT FROM v_route_input_digest[\s\S]*PAYMENT_CORRECTION_ROUTE_RESULT_AUTHORITY_MISMATCH/);
+  assert.match(processChunk,
+    /'route_input_contract_version','CANCELLATION_ROUTE_INPUT_V1'[\s\S]*'route_input_digest',v_route_input_digest/);
+  assert.doesNotMatch(processChunk,
+    /IF EXISTS \([\s\S]{0,500}existing_refresh[\s\S]{0,500}THEN\s+SELECT existing_refresh\.result_json INTO v_refresh_result/);
 });
 
 test('terminal correction remainder returns to the existing guarded Draft reauthorisation path', () => {

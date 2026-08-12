@@ -62,6 +62,7 @@ DECLARE
   v_refresh_result jsonb := '{}'::jsonb;
   v_refresh_sequence integer := 0;
   v_session_id uuid;
+  v_session_version bigint;
   v_refresh_actor_user_id uuid;
   v_workbench_refresh_nudge jsonb := '{}'::jsonb;
   v_workbench_nudge_candidate_ids jsonb := '[]'::jsonb;
@@ -117,6 +118,15 @@ DECLARE
   v_held_dirty_resolution jsonb := '{}'::jsonb;
   v_finalise_candidate_ids uuid[] := ARRAY[]::uuid[];
   v_physical_currentness jsonb := '{}'::jsonb;
+  v_route_candidate_ids jsonb := '[]'::jsonb;
+  v_route_work_item_ids jsonb := '[]'::jsonb;
+  v_route_authorities_v3 jsonb := '{}'::jsonb;
+  v_route_input jsonb := '{}'::jsonb;
+  v_route_input_digest text;
+  v_committed_route_input jsonb := '{}'::jsonb;
+  v_committed_route_input_digest text;
+  v_existing_refresh_result jsonb := '{}'::jsonb;
+  v_existing_refresh_found boolean := false;
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
@@ -1536,8 +1546,8 @@ BEGIN
     v_refresh_sequence := (v_refresh_cursor / 100)::integer + 1;
     v_session_id := v_batch.source_workbench_session_id;
     IF v_session_id IS NOT NULL THEN
-      SELECT session_row.actor_user_id
-      INTO v_refresh_actor_user_id
+      SELECT session_row.actor_user_id,session_row.version
+      INTO v_refresh_actor_user_id,v_session_version
       FROM public.banking_pay_workbench_sessions AS session_row
       WHERE session_row.id = v_session_id
         AND pg_catalog.upper(pg_catalog.btrim(COALESCE(session_row.status, ''))) = 'OPEN'
@@ -1554,25 +1564,153 @@ BEGIN
          OR COALESCE((v_post_commit_authorities_v3->>'all_finalized')::boolean,false) IS NOT TRUE THEN
         RAISE EXCEPTION 'PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_NOT_FINALIZED'
           USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
-            'code','REFRESH_RETRY','reason','POST_COMMIT_SCOPE_GENERATION_NOT_FINALIZED'
+           'code','REFRESH_RETRY','reason','POST_COMMIT_SCOPE_GENERATION_NOT_FINALIZED'
           )::text;
       END IF;
+
+      -- Route election must consume authority that was committed by an earlier
+      -- invocation.  The helper above re-reads the finalized scope under the
+      -- candidate/held-job locks, but a PostgreSQL function cannot commit an
+      -- internal transaction.  Persist a stable, timestamp-free route-input
+      -- digest and return one bounded continuation before any publication or
+      -- fallback owner can be elected.  The next invocation must reproduce the
+      -- same digest before it may continue.
+      SELECT COALESCE(
+        pg_catalog.jsonb_object_agg(
+          authority_entry.key,
+          authority_entry.value-'captured_at_utc'
+          ORDER BY authority_entry.key
+        ),
+        '{}'::jsonb
+      )
+      INTO v_route_authorities_v3
+      FROM pg_catalog.jsonb_each(
+        COALESCE(v_post_commit_authorities_v3->'candidate_authorities','{}'::jsonb)
+      ) AS authority_entry(key,value);
+
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(candidate_value.value ORDER BY candidate_value.value),
+        '[]'::jsonb
+      )
+      INTO v_route_candidate_ids
+      FROM pg_catalog.jsonb_array_elements_text(v_refresh_candidate_ids)
+        AS candidate_value(value);
+
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(requested_work_item.work_item_id::text
+          ORDER BY requested_work_item.work_item_id),
+        '[]'::jsonb
+      )
+      INTO v_route_work_item_ids
+      FROM pg_catalog.unnest(v_refresh_work_item_ids)
+        AS requested_work_item(work_item_id);
+
+      v_route_input:=pg_catalog.jsonb_build_object(
+        'contract_version','CANCELLATION_ROUTE_INPUT_V1',
+        'correction_request_id',p_correction_request_id,
+        'operation_id',v_operation.id,
+        'pay_batch_id',v_request.pay_batch_id,
+        'requested_action',v_requested_action,
+        'session_id',v_session_id,
+        'session_version',v_session_version,
+        'refresh_sequence_no',v_refresh_sequence,
+        'candidate_ids',v_route_candidate_ids,
+        'work_item_ids',v_route_work_item_ids,
+        'post_commit_authorities_v3',v_route_authorities_v3,
+        'route_observe_enabled',v_route_reversion_observe_enabled,
+        'route_publish_enabled',v_route_reversion_publish_enabled,
+        'held_dirty_absorption_enabled',v_held_dirty_absorption_enabled,
+        'physical_currentness_contract_version','PAY_WORKBENCH_CANDIDATE_PHYSICAL_CURRENTNESS_V1',
+        'semantic_contract_version','READY_TO_PAY_SEMANTIC_V2'
+      );
+      v_route_input_digest:=private.pay_payment_correction_sha256_v1(v_route_input);
+      v_route_input:=v_route_input||pg_catalog.jsonb_build_object(
+        'route_input_digest',v_route_input_digest,
+        'captured_at_utc',pg_catalog.clock_timestamp()
+      );
+      v_committed_route_input:=COALESCE(
+        v_operation.input_json->'cancellation_route_inputs_v1'->v_refresh_sequence::text,
+        '{}'::jsonb
+      );
+      v_committed_route_input_digest:=NULLIF(
+        v_committed_route_input->>'route_input_digest',''
+      );
     END IF;
 
-    IF EXISTS (
-      SELECT 1 FROM public.banking_pay_operation_chunks AS existing_refresh
-      WHERE existing_refresh.operation_id = v_operation.id
-        AND existing_refresh.phase = 'REFRESH_WORKBENCH'
-        AND existing_refresh.chunk_type = 'CANDIDATE_SCOPE'
-        AND existing_refresh.sequence_no = v_refresh_sequence
-        AND existing_refresh.status = 'COMPLETE'
-    ) THEN
-      SELECT existing_refresh.result_json INTO v_refresh_result
-      FROM public.banking_pay_operation_chunks AS existing_refresh
-      WHERE existing_refresh.operation_id = v_operation.id
-        AND existing_refresh.phase = 'REFRESH_WORKBENCH'
-        AND existing_refresh.chunk_type = 'CANDIDATE_SCOPE'
-        AND existing_refresh.sequence_no = v_refresh_sequence;
+    SELECT existing_refresh.result_json
+    INTO v_existing_refresh_result
+    FROM public.banking_pay_operation_chunks AS existing_refresh
+    WHERE existing_refresh.operation_id = v_operation.id
+      AND existing_refresh.phase = 'REFRESH_WORKBENCH'
+      AND existing_refresh.chunk_type = 'CANDIDATE_SCOPE'
+      AND existing_refresh.sequence_no = v_refresh_sequence
+      AND existing_refresh.status = 'COMPLETE';
+    v_existing_refresh_found:=FOUND;
+
+    IF v_existing_refresh_found THEN
+      IF v_refresh_count>0 AND v_session_id IS NOT NULL
+         AND v_requested_action IN ('DRAFT_CANCEL','PRE_BANK_CANCEL','CANCEL_PAYMENT')
+         AND (
+           NULLIF(v_existing_refresh_result->>'route_input_digest','') IS NULL
+           OR NULLIF(v_existing_refresh_result->>'route_input_digest','')
+                IS DISTINCT FROM v_route_input_digest
+         ) THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_ROUTE_RESULT_AUTHORITY_MISMATCH'
+          USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
+            'code','PAYMENT_CORRECTION_ROUTE_RESULT_AUTHORITY_MISMATCH',
+            'refresh_sequence_no',v_refresh_sequence,
+            'existing_route_input_digest',v_existing_refresh_result->>'route_input_digest',
+            'current_route_input_digest',v_route_input_digest,
+            'safe_historical_result_preserved',true
+          )::text;
+      END IF;
+      v_refresh_result:=v_existing_refresh_result;
+    ELSIF v_refresh_count>0 AND v_session_id IS NOT NULL
+       AND v_requested_action IN ('DRAFT_CANCEL','PRE_BANK_CANCEL','CANCEL_PAYMENT')
+       AND v_committed_route_input_digest IS DISTINCT FROM v_route_input_digest THEN
+      UPDATE public.banking_pay_operations AS authority_capture_operation
+      SET input_json=pg_catalog.jsonb_set(
+            COALESCE(authority_capture_operation.input_json,'{}'::jsonb),
+            '{cancellation_route_inputs_v1}',
+            COALESCE(
+              authority_capture_operation.input_json->'cancellation_route_inputs_v1',
+              '{}'::jsonb
+            )||pg_catalog.jsonb_build_object(v_refresh_sequence::text,v_route_input),
+            true
+          ),
+          progress_json=COALESCE(authority_capture_operation.progress_json,'{}'::jsonb)
+            ||pg_catalog.jsonb_build_object(
+              'post_commit_authority_capture_complete',true,
+              'post_commit_authority_capture_sequence_no',v_refresh_sequence,
+              'post_commit_authority_capture_digest',v_route_input_digest,
+              'post_commit_authority_capture_completed_at_utc',pg_catalog.clock_timestamp()
+            ),
+          phase='REFRESH_WORKBENCH',status='RUNNING',runner_state='RUNNABLE',
+          run_after_utc=pg_catalog.clock_timestamp(),updated_at_utc=pg_catalog.clock_timestamp()
+      WHERE authority_capture_operation.id=v_operation.id
+      RETURNING authority_capture_operation.* INTO v_operation;
+
+      RETURN pg_catalog.jsonb_build_object(
+        'ok',true,
+        'phase','REFRESH_WORKBENCH',
+        'financial_complete',true,
+        'post_commit_authority_capture_complete',true,
+        'route_election_pending',true,
+        'route_input_contract_version','CANCELLATION_ROUTE_INPUT_V1',
+        'route_input_digest',v_route_input_digest,
+        'candidate_count',v_refresh_count,
+        'complete',false,
+        'processing_continues',true,
+        'continuation',pg_catalog.jsonb_build_object(
+          'required',true,'operation_id',v_operation.id,
+          'operation_type','PAYMENT_CORRECTION','pay_batch_id',v_request.pay_batch_id,
+          'root_operation_id',v_operation.root_operation_id,
+          'phase','REFRESH_WORKBENCH','run_after_utc',pg_catalog.clock_timestamp(),
+          'reason','PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_CAPTURED',
+          'successor_relation','SELF','requires_user_action',false,'terminal',false
+        ),
+        'code','PAYMENT_CORRECTION_POST_COMMIT_AUTHORITY_CAPTURED'
+      );
     ELSIF v_refresh_count = 0 THEN
       v_refresh_result := pg_catalog.jsonb_build_object('status', 'NOT_REQUIRED', 'candidate_count', 0);
     ELSIF v_session_id IS NULL THEN
@@ -1751,6 +1889,16 @@ BEGIN
       v_refresh_result := public.pay_workbench_enqueue_candidate_refresh_many(
         v_session_id, v_refresh_candidate_ids, 'PAYMENT_CORRECTION_FINALISED', v_refresh_actor_user_id
       );
+    END IF;
+
+    IF v_route_input_digest IS NOT NULL THEN
+      v_refresh_result:=COALESCE(v_refresh_result,'{}'::jsonb)
+        ||pg_catalog.jsonb_build_object(
+          'route_input_contract_version','CANCELLATION_ROUTE_INPUT_V1',
+          'route_input_digest',v_route_input_digest,
+          'post_commit_authority_set_digest',
+            private.pay_payment_correction_sha256_v1(v_route_authorities_v3)
+        );
     END IF;
 
     -- Normalize one database-owned, page-scoped Workbench wake contract.  The

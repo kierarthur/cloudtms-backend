@@ -648,7 +648,7 @@
       "schema": "public",
       "name": "pay_payment_correction_process_chunk",
       "identity_arguments": "p_correction_request_id uuid, p_limit integer, p_worker_id text, p_actor_user_id uuid",
-      "definition_sha256": "4d2c22586f91a7bb442da40a602d40c94b3277eb999a384e9b6a7dbb16f588d5",
+      "definition_sha256": "934fa9b2fe83a3f2e91e30c8bc8f97958b42cd2dc8b92194c907a63cf7e640bf",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
