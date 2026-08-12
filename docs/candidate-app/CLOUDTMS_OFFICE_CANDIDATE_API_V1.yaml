@@ -135,6 +135,9 @@ paths:
         The cancel action cancels only the exact current manager approval
         request and link. It does not cancel the Candidate claim. Immutable sent
         mail remains history and a provider handoff in progress blocks mutation.
+        PAPER retry uses the caller UUID as the durable execution identity. An
+        exact lost-response replay returns READY or RETRY_IN_PROGRESS without
+        assembling the pack twice.
       parameters:
         - {$ref: '#/components/parameters/WorkflowId'}
         - name: action
@@ -403,6 +406,8 @@ components:
         page_count: {type: [integer, 'null'], minimum: 1}
         reason_code: {type: [string, 'null']}
         retryable: {type: boolean}
+        attempt_count: {type: integer, minimum: 0}
+        next_retry_at_utc: {type: [string, 'null'], format: date-time}
         issued_at_utc: {type: [string, 'null'], format: date-time}
         returned_at_utc: {type: [string, 'null'], format: date-time}
     WorkflowProjection:

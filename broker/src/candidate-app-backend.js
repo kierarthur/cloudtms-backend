@@ -2115,6 +2115,34 @@ async function lifecycleSignature(deps, workflow) {
   return text(result?.backend_row_signature || result?.mutation_row_signature || result?.row_signature || result?.expected_row_signature);
 }
 
+async function probeFinalisationReplay(
+  env, deps, workflow, generation, idempotencyKey, serviceFinalisation, officeActorId = null
+) {
+  const finalisationKey = workflow.workflow_kind === 'DAILY'
+    ? `${idempotencyKey}:finalise` : idempotencyKey;
+  const dailyMaterialisationJson = {
+    service_finalisation: { ...serviceFinalisation, replay_probe_only: true }
+  };
+  const result = officeActorId
+    ? await officeAdapter(deps, env, officeActorId, 'FINALISE_REPLAY_LOOKUP', {
+      workflow_id: workflow.id,
+      generation,
+      idempotency_key: finalisationKey,
+      daily_materialisation_json: dailyMaterialisationJson
+    })
+    : await rpcCall(deps, 'candidate_submission_finalize_atomic_v1', {
+      p_session_id: null,
+      p_environment: environmentName(env),
+      p_workflow_id: workflow.id,
+      p_expected_generation: generation,
+      p_expected_row_signature: null,
+      p_idempotency_key: finalisationKey,
+      p_now_utc: new Date().toISOString(),
+      p_daily_materialisation_json: dailyMaterialisationJson
+    });
+  return result?.idempotent_replay === true ? safeFinalisationResult(result) : null;
+}
+
 async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKey, officeActorId = null) {
   const workflow = await workflowRow(env, workflowId);
   const approved = upper(workflow.route) === 'PAPER' ? null : await restOne(env, 'candidate_approval_requests',
@@ -2131,6 +2159,10 @@ async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKe
     review_manifest_sha256_hex: text(approved?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase(),
     actor_user_id: officeActorId || null
   };
+  const replay = await probeFinalisationReplay(
+    env, deps, workflow, generation, idempotencyKey, serviceFinalisation, officeActorId
+  );
+  if (replay) return replay;
   if (workflow.workflow_kind === 'DAILY') {
     return safeFinalisationResult(await deps.finaliseDaily({
       sessionId: null,
@@ -2288,6 +2320,8 @@ async function prepareImmutableSubmission(env, deps, workflow, body) {
 async function handleWorkflowAction(request, env, deps, workflowId, action, ctx) {
   const access = await verifyCandidateAccess(request, env);
   const body = await readJson(request);
+  const mutationKey = text(body.idempotency_key).trim() || crypto.randomUUID();
+  body.idempotency_key = mutationKey;
   const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
   let dbAction = upper(action.replace(/-/g, '_'));
   if (!CANDIDATE_WORKFLOW_ACTIONS.has(dbAction) && dbAction !== 'COMPONENT_SUPERSEDE') {
@@ -2298,28 +2332,32 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     if (workflow.account_id !== access.account_id || workflow.candidate_id !== access.selected_candidate_id) {
       throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
     }
-    if (workflow.state !== 'RECEIVED') {
+    if (!['RECEIVED', 'FINALISED'].includes(workflow.state)) {
       throw new CandidateHttpError(409, 'CANDIDATE_FINALISATION_RETRY_NOT_READY');
     }
     return jsonResponse(200, await finaliseWorkflow(
-      env, deps, workflowId, generation, text(body.idempotency_key) || crypto.randomUUID()
+      env, deps, workflowId, generation, mutationKey
     ));
   }
   let payload = isObject(body.payload) ? structuredClone(body.payload) : {};
   if (dbAction === 'WORKER_SUBMIT') {
     const workflow = await workflowRow(env, workflowId);
+    const candidateSignedAtUtc = text(body.candidate_signed_at_utc || payload.candidate_signed_at_utc).trim();
+    if (!candidateSignedAtUtc || !Number.isFinite(Date.parse(candidateSignedAtUtc))) {
+      throw new CandidateHttpError(400, 'CANDIDATE_SIGNATURE_TIMESTAMP_REQUIRED');
+    }
     payload = {
       ...payload,
       immutable_submission: await prepareImmutableSubmission(env, deps, workflow, body),
       candidate_signature_component_id: body.candidate_signature_component_id || payload.candidate_signature_component_id || null,
-      candidate_signed_at_utc: body.candidate_signed_at_utc || new Date().toISOString(),
+      candidate_signed_at_utc: new Date(candidateSignedAtUtc).toISOString(),
       approval_route: upper(body.approval_route || payload.approval_route || workflow.route),
       renderer_contract_version: RENDERER_CONTRACT_VERSION
     };
   } else if (dbAction === 'SELECT_PHONE_APPROVAL') {
     const managerToken = await deterministicOpaqueToken(
       env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
-      'candidate-phone-handoff-v1', workflowId, generation, text(body.idempotency_key)
+      'candidate-phone-handoff-v1', workflowId, generation, mutationKey
     );
     payload = {
       ...payload,
@@ -2328,18 +2366,26 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     };
     body.__manager_handoff_token = managerToken;
   } else if (dbAction === 'CREATE_EMAIL_APPROVAL_REQUEST' || dbAction === 'RENEW' || dbAction === 'REMIND') {
-    const managerToken = randomToken(32);
     const mailKind = dbAction === 'REMIND' ? 'REMINDER'
       : dbAction === 'RENEW' ? 'RENEWAL' : 'INITIAL';
     let managerEmail = body.manager_email || payload.manager_email;
+    let approvalIdentity = 'INITIAL';
     if (!managerEmail && (dbAction === 'RENEW' || dbAction === 'REMIND')) {
       const approval = await restOne(env, 'candidate_approval_requests',
-        `workflow_id=eq.${encodeURIComponent(workflowId)}&method=eq.EMAIL&select=manager_email_normalized&order=request_generation.desc`);
+        `workflow_id=eq.${encodeURIComponent(workflowId)}&method=eq.EMAIL`
+        + '&select=id,request_generation,manager_email_normalized&order=request_generation.desc');
       managerEmail = approval?.manager_email_normalized;
+      approvalIdentity = `${approval?.id || 'MISSING'}:${Number(approval?.request_generation || 0)}`;
     }
+    const normalisedManagerEmail = normaliseEmail(managerEmail);
+    const managerToken = await deterministicOpaqueToken(
+      env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
+      'candidate-email-handoff-v1', workflowId, generation, dbAction, mutationKey,
+      normalisedManagerEmail, approvalIdentity
+    );
     payload = {
       ...payload,
-      ...candidateManagerMail(request, env, managerToken, workflowId, managerEmail, mailKind),
+      ...candidateManagerMail(request, env, managerToken, workflowId, normalisedManagerEmail, mailKind),
       approval_token_hash_hex: await sha256Hex(managerToken)
     };
   } else if (dbAction === 'CANCEL') {
@@ -2355,7 +2401,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     };
   }
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
-    access, env, workflowId, dbAction, generation, payload, body.idempotency_key
+    access, env, workflowId, dbAction, generation, payload, mutationKey
   ));
   if (dbAction === 'SELECT_PHONE_APPROVAL') {
     return jsonResponse(201, { ...result, manager_handoff_token: body.__manager_handoff_token });
@@ -2387,7 +2433,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
         deps,
         workflowId,
         generation,
-        `${body.idempotency_key || crypto.randomUUID()}:paper-finalise`
+        `${mutationKey}:paper-finalise`
       ));
     return jsonResponse(completion.status, completion.body);
   }
@@ -2822,8 +2868,43 @@ async function requireCandidatePaperOutbox(env, workflow, timesheet) {
   return row;
 }
 
+async function claimCandidatePaperPackAttempt(
+  env, deps, workflow, outbox, idempotencyKey, officeActorId = null
+) {
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const attemptToken = await sha256Hex(
+    `candidate-paper-pack-attempt-v1:${workflow.id}:${workflow.generation}:${idempotencyKey}`
+  );
+  const payload = {
+    service_paper_pack_attempt: true,
+    mail_outbox_id: outbox.id,
+    paper_return_manifest_sha256: manifestHash,
+    paper_pack_attempt_token: attemptToken
+  };
+  const result = officeActorId
+    ? await officeAdapter(deps, env, officeActorId, 'WORKFLOW_ACTION_EXECUTE', {
+      workflow_id: workflow.id,
+      generation: Number(workflow.generation),
+      workflow_action: 'PAPER_PACK_ATTEMPT_CLAIM',
+      idempotency_key: idempotencyKey,
+      payload
+    })
+    : await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+      p_session_id: null,
+      p_environment: environmentName(env),
+      p_workflow_id: workflow.id,
+      p_action: 'PAPER_PACK_ATTEMPT_CLAIM',
+      p_expected_generation: Number(workflow.generation),
+      p_payload: payload,
+      p_idempotency_key: idempotencyKey,
+      p_now_utc: new Date().toISOString()
+    });
+  return { ...result, attempt_token: attemptToken };
+}
+
 async function releaseCandidatePaperPack(
-  env, deps, workflow, timesheet, complete, outbox = null, officeActorId = null
+  env, deps, workflow, timesheet, complete, outbox = null, officeActorId = null,
+  paperPackAttemptToken = null
 ) {
   const row = outbox || await requireCandidatePaperOutbox(env, workflow, timesheet);
   if (!UUID_RE.test(text(row?.id))) {
@@ -2853,7 +2934,8 @@ async function releaseCandidatePaperPack(
       complete_pack_media_type: 'application/pdf',
       base_document_sha256: text(complete.base_hash).toLowerCase(),
       branding_contract_sha256: text(complete.branding_hash).toLowerCase(),
-      renderer_contract_version: complete.renderer_contract_version
+      renderer_contract_version: complete.renderer_contract_version,
+      paper_pack_attempt_token: paperPackAttemptToken
     };
   const releaseKey = `paper-pack-release:${workflow.id}:${workflow.generation}:${complete.manifest_hash}:${complete.sha256}`;
   if (officeActorId) {
@@ -3045,6 +3127,8 @@ const TERMINAL_PAPER_PACK_FAILURES = new Set([
   'CANDIDATE_PAPER_PACK_INCOMPLETE',
   'CANDIDATE_PAPER_PACK_IDENTITY_INVALID',
   'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT',
+  'CANDIDATE_PAPER_DOCUMENT_FAILED',
+  'CANDIDATE_PAPER_OUTBOX_NOT_READY',
   'CANDIDATE_PAPER_OUTBOX_CONFLICT',
   'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
 ]);
@@ -3062,6 +3146,41 @@ function canonicalPaperPackFailureCode(error) {
   return 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED';
 }
 
+async function recordCandidatePaperPackFailure(
+  env, deps, workflow, outbox, failureCode, attemptToken = null, officeActorId = null,
+  idempotencyKey = null
+) {
+  const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const failureKey = idempotencyKey || `paper-pack-failure:${workflow.id}:${workflow.generation}`
+    + `:${outbox?.id || 'pre-outbox'}:${attemptToken || 'no-attempt'}:${failureCode}`;
+  const payload = {
+    service_paper_pack_failure: true,
+    mail_outbox_id: outbox?.id || null,
+    paper_return_manifest_sha256: manifestHash,
+    paper_pack_attempt_token: attemptToken,
+    error_code: failureCode
+  };
+  if (officeActorId) {
+    return officeAdapter(deps, env, officeActorId, 'WORKFLOW_ACTION_EXECUTE', {
+      workflow_id: workflow.id,
+      generation: Number(workflow.generation),
+      workflow_action: 'PAPER_PACK_MARK_FAILURE',
+      idempotency_key: failureKey,
+      payload
+    });
+  }
+  return rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+    p_session_id: null,
+    p_environment: environmentName(env),
+    p_workflow_id: workflow.id,
+    p_action: 'PAPER_PACK_MARK_FAILURE',
+    p_expected_generation: Number(workflow.generation),
+    p_payload: payload,
+    p_idempotency_key: failureKey,
+    p_now_utc: new Date().toISOString()
+  });
+}
+
 export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
   const workflows = await restRows(env, 'candidate_submission_workflows',
     `environment=eq.${encodeURIComponent(environmentName(env))}&route=eq.PAPER&state=eq.AWAITING_PAPER_RETURN`
@@ -3071,6 +3190,7 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
     const id = text(workflow.target_timesheet_id || workflow.anchor_timesheet_id);
     if (!UUID_RE.test(id)) continue;
     let outbox = null;
+    let attemptToken = null;
     try {
       const matchingWorkflows = await activePaperWorkflowsForTimesheet(env, id);
       if (matchingWorkflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
@@ -3079,43 +3199,73 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
         `timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`
         + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
         + 'document_state,current_document_version_id,manual_pdf_r2_key');
-      if (!timesheet || upper(timesheet.document_state) !== 'READY'
-          || !UUID_RE.test(text(timesheet.current_document_version_id))) continue;
+      if (!timesheet) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+      outbox = await requireCandidatePaperOutbox(env, workflow, timesheet);
+      const scope = parseJson(outbox.payment_scope_json, {}) || {};
+      if (upper(scope.candidate_paper_pack_failure_class) === 'TERMINAL') {
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false, execution_state: 'FAILED_TERMINAL',
+          error_code: text(scope.candidate_paper_pack_failure_code) || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+        });
+        continue;
+      }
+      const nextRetryAt = Date.parse(text(scope.candidate_paper_pack_next_retry_at_utc));
+      if (scope.candidate_paper_pack_retryable === true && Number.isFinite(nextRetryAt)
+          && nextRetryAt > Date.now()) {
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false, execution_state: 'BACKOFF',
+          error_code: 'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE',
+          next_retry_at_utc: new Date(nextRetryAt).toISOString()
+        });
+        continue;
+      }
+      if (upper(timesheet.document_state) !== 'READY'
+          || !UUID_RE.test(text(timesheet.current_document_version_id))) {
+        const deadline = Date.parse(text(scope.candidate_paper_pack_preparation_deadline_at_utc));
+        if (upper(timesheet.document_state) === 'FAILED') {
+          throw new CandidateHttpError(409, 'CANDIDATE_PAPER_DOCUMENT_FAILED');
+        }
+        if (Number.isFinite(deadline) && deadline <= Date.now()) {
+          throw new CandidateHttpError(503, 'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT');
+        }
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false,
+          execution_state: 'PREPARING', error_code: 'CANDIDATE_PAPER_DOCUMENT_PENDING'
+        });
+        continue;
+      }
       const version = await restOne(env, 'invoice_document_versions',
         `id=eq.${encodeURIComponent(timesheet.current_document_version_id)}`
         + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
         + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
-      if (!version?.r2_key) continue;
-      outbox = await requireCandidatePaperOutbox(env, workflow, timesheet);
+      if (!version?.r2_key) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_DOCUMENT_FAILED');
+      const nextAttempt = Number(scope.candidate_paper_pack_attempt_count || 0) + 1;
+      const attemptKey = `paper-pack-attempt:${workflow.id}:${workflow.generation}:${nextAttempt}`;
+      const claim = await claimCandidatePaperPackAttempt(
+        env, deps, workflow, outbox, attemptKey
+      );
+      if (claim.paper_pack_attempt_state === 'READY') {
+        results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, already_ready: true });
+        continue;
+      }
+      attemptToken = claim.attempt_token;
       let complete = await readyPaperPackReceipt(env, workflow, timesheet, version);
       if (!complete.ready) complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
-      await releaseCandidatePaperPack(env, deps, workflow, timesheet, complete, outbox);
+      await releaseCandidatePaperPack(env, deps, workflow, timesheet, complete, outbox, null, attemptToken);
       results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, page_count: complete.page_count });
     } catch (error) {
       const observedErrorCode = knownErrorCode(error);
       const failureCode = canonicalPaperPackFailureCode(error);
       let failureReceipt = null;
       let failureReceiptError = null;
-      if (UUID_RE.test(text(outbox?.id)) && SHA256_RE.test(
-        text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase()
-      )) {
+      if (!['CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS',
+        'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE',
+        'CANDIDATE_PAPER_PACK_FAILED_TERMINAL'].includes(observedErrorCode)
+          && SHA256_RE.test(text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase())) {
         try {
-          const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
-          failureReceipt = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
-            p_session_id: null,
-            p_environment: environmentName(env),
-            p_workflow_id: workflow.id,
-            p_action: 'PAPER_PACK_MARK_FAILURE',
-            p_expected_generation: Number(workflow.generation),
-            p_payload: {
-              service_paper_pack_failure: true,
-              mail_outbox_id: outbox.id,
-              paper_return_manifest_sha256: manifestHash,
-              error_code: failureCode
-            },
-            p_idempotency_key: `paper-pack-failure:${workflow.id}:${workflow.generation}:${outbox.id}:${failureCode}`,
-            p_now_utc: new Date().toISOString()
-          });
+          failureReceipt = await recordCandidatePaperPackFailure(
+            env, deps, workflow, outbox, failureCode, attemptToken
+          );
         } catch (receiptError) {
           failureReceiptError = knownErrorCode(receiptError);
         }
@@ -3683,27 +3833,93 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
   const context = await officePaperContext(request, env, deps, workflowId, body.generation);
   const retryScope = parseJson(context.outbox?.payment_scope_json, {}) || {};
   if (upper(context.workflow.state) !== 'AWAITING_PAPER_RETURN'
-      || !context.live_preparation || !context.version?.r2_key
-      || retryScope.candidate_paper_pack_retryable !== true) {
+      || !context.live_preparation || !context.version?.r2_key) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_RETRY_NOT_READY');
   }
   const outbox = await requireCandidatePaperOutbox(env, context.workflow, context.timesheet);
-  let complete = context.complete;
-  if (!complete?.ready) {
-    complete = await assembleCandidatePaperPack(env, context.workflow, context.timesheet, context.version);
+  if (!context.complete?.ready && retryScope.candidate_paper_pack_retryable !== true) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_RETRY_NOT_READY');
   }
-  const release = await releaseCandidatePaperPack(
-    env, deps, context.workflow, context.timesheet, complete, outbox, context.office_actor_id
+  const claim = await claimCandidatePaperPackAttempt(
+    env, deps, context.workflow, outbox, idempotencyKey, context.office_actor_id
   );
-  return jsonResponse(200, {
-    ok: true,
-    contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V1',
-    idempotency_key: idempotencyKey,
-    workflow_id: context.workflow.id,
-    generation: Number(context.workflow.generation),
-    paper_pack_state: 'READY',
-    release
-  });
+  if (claim.paper_pack_attempt_state === 'READY') {
+    return jsonResponse(200, {
+      ok: true,
+      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2',
+      idempotency_key: idempotencyKey,
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      paper_pack_state: 'READY',
+      idempotent_replay: claim.idempotent_replay === true,
+      page_count: Number(context.complete?.page_count || 0)
+    });
+  }
+  if (claim.idempotent_replay === true) {
+    const replayContext = await officePaperContext(request, env, deps, workflowId, body.generation);
+    if (!replayContext.complete?.ready) {
+      return jsonResponse(202, {
+        ok: true,
+        contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2',
+        idempotency_key: idempotencyKey,
+        workflow_id: replayContext.workflow.id,
+        generation: Number(replayContext.workflow.generation),
+        paper_pack_state: 'RETRY_IN_PROGRESS',
+        idempotent_replay: true
+      });
+    }
+    return jsonResponse(200, {
+      ok: true,
+      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2',
+      idempotency_key: idempotencyKey,
+      workflow_id: replayContext.workflow.id,
+      generation: Number(replayContext.workflow.generation),
+      paper_pack_state: 'READY',
+      idempotent_replay: true,
+      page_count: Number(replayContext.complete?.page_count || 0)
+    });
+  }
+  let complete = context.complete;
+  try {
+    if (!complete?.ready) {
+      complete = await assembleCandidatePaperPack(env, context.workflow, context.timesheet, context.version);
+    }
+    const release = await releaseCandidatePaperPack(
+      env, deps, context.workflow, context.timesheet, complete, outbox, context.office_actor_id,
+      claim.attempt_token
+    );
+    return jsonResponse(200, {
+      ok: true,
+      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2',
+      idempotency_key: idempotencyKey,
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      paper_pack_state: 'READY',
+      idempotent_replay: false,
+      release: {
+        ok: release?.ok === true,
+        workflow_id: release?.workflow_id || context.workflow.id,
+        generation: Number(release?.generation || context.workflow.generation),
+        state: release?.state || context.workflow.state,
+        timesheet_id: release?.timesheet_id || context.timesheet.timesheet_id,
+        mail_outbox_id: release?.mail_outbox_id || null,
+        notification_id: release?.notification_id || null,
+        complete_pack_page_count: Number(release?.complete_pack_page_count || complete?.page_count || 0),
+        idempotent_replay: release?.idempotent_replay === true
+      }
+    });
+  } catch (error) {
+    const failureCode = canonicalPaperPackFailureCode(error);
+    try {
+      await recordCandidatePaperPackFailure(
+        env, deps, context.workflow, outbox, failureCode, claim.attempt_token,
+        context.office_actor_id, `${idempotencyKey}:failure:${failureCode}`
+      );
+    } catch {
+      // Preserve the canonical execution error; the scheduler can reconcile an expired attempt lease.
+    }
+    throw error;
+  }
 }
 
 function routeMatch(path, pattern) {

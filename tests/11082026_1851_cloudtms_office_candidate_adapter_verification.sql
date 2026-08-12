@@ -45,6 +45,7 @@ declare
     jsonb_build_object('page_key','hours:1','component_kind','HOURS_TIMESHEET')
   ));
   v_paper_manifest_hash text;
+  v_paper_attempt_token text;
 begin
   if has_function_privilege('anon','public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz)','execute')
      or has_function_privilege('authenticated','public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz)','execute')
@@ -532,6 +533,62 @@ begin
   );
   if v_result->>'paper_pack_state'<>'FAILED_RETRYABLE' then
     raise exception 'runtime PAPER failure owner did not classify the transient failure: %',v_result;
+  end if;
+  if v_result->>'failure_contract_version'<>'CANDIDATE_PAPER_PACK_FAILURE_V2'
+     or nullif(v_result->>'next_retry_at_utc','') is null then
+    raise exception 'runtime PAPER failure owner did not persist deterministic backoff: %',v_result;
+  end if;
+  v_paper_attempt_token:=repeat('9a',32);
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_workflow,'generation',1,
+      'workflow_action','PAPER_PACK_ATTEMPT_CLAIM',
+      'idempotency_key','ad510000-0000-4000-8000-000000000019',
+      'payload',jsonb_build_object(
+        'service_paper_pack_attempt',true,
+        'mail_outbox_id','ad510000-0000-4000-8000-000000000015',
+        'paper_return_manifest_sha256',v_paper_manifest_hash,
+        'paper_pack_attempt_token',v_paper_attempt_token
+      )
+    ),v_now+interval '1 second'
+  );
+  if v_result->>'paper_pack_attempt_state'<>'CLAIMED'
+     or (v_result->>'paper_pack_attempt_count')::integer<>1 then
+    raise exception 'Office PAPER retry did not acquire the database-owned attempt lease: %',v_result;
+  end if;
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_workflow,'generation',1,
+      'workflow_action','PAPER_PACK_ATTEMPT_CLAIM',
+      'idempotency_key','ad510000-0000-4000-8000-000000000019',
+      'payload',jsonb_build_object(
+        'service_paper_pack_attempt',true,
+        'mail_outbox_id','ad510000-0000-4000-8000-000000000015',
+        'paper_return_manifest_sha256',v_paper_manifest_hash,
+        'paper_pack_attempt_token',v_paper_attempt_token
+      )
+    ),v_now+interval '2 seconds'
+  );
+  if not coalesce((v_result->>'idempotent_replay')::boolean,false) then
+    raise exception 'Office PAPER retry claim did not replay its durable receipt: %',v_result;
+  end if;
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'WORKFLOW_ACTION_EXECUTE',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_workflow,'generation',1,
+      'workflow_action','PAPER_PACK_MARK_FAILURE',
+      'idempotency_key','ad510000-0000-4000-8000-000000000020',
+      'payload',jsonb_build_object(
+        'service_paper_pack_failure',true,
+        'mail_outbox_id','ad510000-0000-4000-8000-000000000015',
+        'paper_return_manifest_sha256',v_paper_manifest_hash,
+        'paper_pack_attempt_token',v_paper_attempt_token,
+        'error_code','CANDIDATE_PAPER_R2_WRITE_TRANSIENT'
+      )
+    ),v_now+interval '3 seconds'
+  );
+  if v_result->>'paper_pack_state'<>'FAILED_RETRYABLE'
+     or (v_result->>'paper_pack_attempt_count')::integer<>1 then
+    raise exception 'Office PAPER retry failure did not close the attempt lease: %',v_result;
   end if;
   v_projection:=public.cloudtms_office_candidate_adapter_v1(
     'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_timesheet),v_now

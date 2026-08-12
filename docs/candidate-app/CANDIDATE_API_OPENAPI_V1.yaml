@@ -654,6 +654,10 @@ components:
       properties:
         generation: {type: integer, minimum: 1}
         idempotency_key: {type: string, minLength: 1, maxLength: 200}
+        candidate_signed_at_utc:
+          type: string
+          format: date-time
+          description: Required factual signature timestamp for WORKER_SUBMIT. The server never substitutes a fresh timestamp during replay.
         payload: {$ref: '#/components/schemas/JsonObject'}
     ReminderRequest:
       allOf:

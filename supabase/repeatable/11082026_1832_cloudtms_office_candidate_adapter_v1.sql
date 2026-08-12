@@ -782,6 +782,12 @@ begin
           'CANDIDATE_PAPER_PACK_'||v_paper_state)
         when v_paper_state='STALE' then 'CANDIDATE_PAPER_PACK_STALE' else null end,
       'retryable',v_paper_state='FAILED_RETRYABLE',
+      'attempt_count',case when coalesce(v_paper_outbox.payment_scope_json,'{}'::jsonb)
+          ->>'candidate_paper_pack_attempt_count'~'^[0-9]+$'
+        then (v_paper_outbox.payment_scope_json->>'candidate_paper_pack_attempt_count')::integer else 0 end,
+      'next_retry_at_utc',nullif(
+        v_paper_outbox.payment_scope_json->>'candidate_paper_pack_next_retry_at_utc',''
+      )::timestamptz,
       'issued_at_utc',v_paper_outbox.sent_at,
       'returned_at_utc',case when v_workflow.state='RECEIVED' then v_workflow.updated_at_utc else null end
     ),
@@ -987,7 +993,7 @@ begin
     )||jsonb_build_object('contract_version','OFFICE_CANDIDATE_MUTATION_RESULT_V1');
     perform private._candidate_office_service_context_close_v1();
     return v_result;
-  elsif v_action='FINALISE_EXECUTE' then
+  elsif v_action in ('FINALISE_EXECUTE','FINALISE_REPLAY_LOOKUP') then
     v_workflow_id:=nullif(v_payload->>'workflow_id','')::uuid;
     v_generation:=nullif(v_payload->>'generation','')::integer;
     v_idempotency_key:=nullif(btrim(coalesce(v_payload->>'idempotency_key','')),'');
@@ -1004,7 +1010,10 @@ begin
       coalesce(v_payload->'daily_materialisation_json','{}'::jsonb)||jsonb_build_object(
         'service_finalisation',
         coalesce(v_payload->'daily_materialisation_json'->'service_finalisation','{}'::jsonb)
-          ||jsonb_build_object('actor_user_id',p_actor_user_id)
+          ||jsonb_build_object(
+            'actor_user_id',p_actor_user_id,
+            'replay_probe_only',v_action='FINALISE_REPLAY_LOOKUP'
+          )
       )
     )||jsonb_build_object('contract_version','OFFICE_CANDIDATE_MUTATION_RESULT_V1');
     perform private._candidate_office_service_context_close_v1();
@@ -1014,7 +1023,7 @@ begin
     if v_workflow_action not in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
         'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
         'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE',
-        'PAPER_PACK_RELEASE') then
+        'PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM','PAPER_PACK_MARK_FAILURE') then
       raise exception 'CANDIDATE_WORKFLOW_ACTION_INVALID' using errcode='22023';
     end if;
     v_workflow_id:=nullif(v_payload->>'workflow_id','')::uuid;
@@ -1056,7 +1065,8 @@ begin
         then 'manage_phone_approval'
       when v_workflow_action in ('REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE')
         then 'retry_finalisation'
-      when v_workflow_action='PAPER_PACK_RELEASE' then 'manage_paper'
+      when v_workflow_action in ('PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM','PAPER_PACK_MARK_FAILURE')
+        then 'manage_paper'
       else null end;
     perform private._candidate_office_service_context_open_v1(
       v_environment,p_actor_user_id,v_office_permission,v_workflow_action,v_observed

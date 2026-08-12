@@ -1432,7 +1432,8 @@ begin
        'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE',
        'MANAGER_REFUSE','REGISTER_REVIEW_COMPONENT',
        'REGISTER_FINAL_SIGNED_DOCUMENT','BEGIN_CANONICAL_DAILY_SAVE',
-       'PAPER_PACK_RELEASE','RETRY_FINALISATION'
+       'PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM','PAPER_PACK_MARK_FAILURE',
+       'RETRY_FINALISATION'
      ) then
     raise exception 'CANDIDATE_OFFICE_SERVICE_CONTEXT_INVALID' using errcode='28000';
   end if;
@@ -1704,11 +1705,16 @@ declare
   v_paper_failure_code text;
   v_paper_failure_class text;
   v_paper_failure_retryable boolean:=false;
+  v_paper_pack_attempt_token text;
+  v_paper_pack_attempt_count integer:=0;
+  v_paper_pack_attempt_expires_at timestamptz;
+  v_paper_pack_next_retry_at timestamptz;
   v_office_actor_user_id uuid;
   v_is_office_service_action boolean:=false;
   v_is_internal_paper_service_action boolean:=false;
   v_mutation_channel text;
   v_mutation_actor_identity text;
+  v_mutation_semantic_payload jsonb;
   v_mutation_request_sha256 text;
   v_mutation_receipt jsonb;
 begin
@@ -1751,6 +1757,8 @@ begin
       and coalesce((v_payload->>'service_paper_provider_submit_permit')::boolean,false))
     or (v_action='PAPER_PACK_MARK_FAILURE'
       and coalesce((v_payload->>'service_paper_pack_failure')::boolean,false))
+    or (v_action='PAPER_PACK_ATTEMPT_CLAIM'
+      and coalesce((v_payload->>'service_paper_pack_attempt')::boolean,false))
   );
   if not v_is_office_service_action and not v_is_internal_paper_service_action then
     perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
@@ -1774,7 +1782,7 @@ begin
   end if;
   if v_action in (
     'PAPER_PREPARE','PAPER_RETURN','PAPER_PACK_RELEASE',
-    'PAPER_PROVIDER_SUBMIT_PERMIT','PAPER_PACK_MARK_FAILURE'
+    'PAPER_PROVIDER_SUBMIT_PERMIT','PAPER_PACK_MARK_FAILURE','PAPER_PACK_ATTEMPT_CLAIM'
   ) then
     if not v_is_office_service_action and not v_is_internal_paper_service_action then
     perform private._candidate_require_feature_v1(v_environment,'candidate_paper_qr');
@@ -1797,6 +1805,9 @@ begin
     and v_action='PAPER_PACK_MARK_FAILURE'
     and coalesce((v_payload->>'service_paper_pack_failure')::boolean,false)
   ) or (p_session_id is null
+    and v_action='PAPER_PACK_ATTEMPT_CLAIM'
+    and coalesce((v_payload->>'service_paper_pack_attempt')::boolean,false)
+  ) or (p_session_id is null
     and v_action='MANAGER_PROVIDER_SUBMIT_PERMIT'
     and coalesce((v_payload->>'service_manager_provider_submit_permit')::boolean,false)
   ) or (p_session_id is null
@@ -1807,7 +1818,8 @@ begin
     and v_action in ('REMIND','RENEW','MANAGER_REQUEST_CANCEL','CANCEL_MANAGER_HANDOFF',
       'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','MANAGER_REFUSE',
       'REGISTER_REVIEW_COMPONENT','REGISTER_FINAL_SIGNED_DOCUMENT',
-      'BEGIN_CANONICAL_DAILY_SAVE','PAPER_PACK_RELEASE'));
+      'BEGIN_CANONICAL_DAILY_SAVE','PAPER_PACK_RELEASE','PAPER_PACK_ATTEMPT_CLAIM',
+      'PAPER_PACK_MARK_FAILURE'));
   v_is_public_manager_action:=not v_is_service_action and p_session_id is null and v_action in (
     'BEGIN_MANAGER_REVIEW','RECORD_REVIEW_PROGRESS','PHONE_APPROVE','EMAIL_APPROVE','MANAGER_REFUSE',
     'COMPONENT_PREPARE','COMPONENT_COMPLETE'
@@ -2563,14 +2575,24 @@ begin
       when v_is_service_action then 'SERVICE:'||v_action
       else 'ACCOUNT:'||coalesce(v_account_id::text,'UNKNOWN')
         ||':CANDIDATE:'||coalesce(v_candidate_id::text,'UNKNOWN') end;
+    v_mutation_semantic_payload:=case
+      when v_action='COMPONENT_PREPARE' then
+        v_payload-'service_office_action'-'actor_user_id'-'storage_key'
+      when v_action='SELECT_PHONE_APPROVAL' then
+        v_payload-'service_office_action'-'actor_user_id'-'expires_at_utc'
+      when v_action='WORKER_SUBMIT' then
+        (v_payload-'service_office_action'-'actor_user_id'-'renderer_contract_version'-'immutable_submission')
+        ||jsonb_build_object(
+          'immutable_submission',coalesce(v_payload->'immutable_submission','{}'::jsonb)-'official_presentation'
+        )
+      else v_payload-'service_office_action'-'actor_user_id'
+    end;
     v_mutation_request_sha256:=encode(extensions.digest(convert_to(jsonb_build_object(
       'contract_version','CANDIDATE_WORKFLOW_MUTATION_REQUEST_V1',
       'workflow_id',v_workflow.id,
       'action',v_action,
       'expected_generation',p_expected_generation,
-      'payload',case when v_action='COMPONENT_PREPARE'
-        then v_payload-'service_office_action'-'actor_user_id'-'storage_key'
-        else v_payload-'service_office_action'-'actor_user_id' end,
+      'payload',v_mutation_semantic_payload,
       'channel',v_mutation_channel,
       'actor_identity',v_mutation_actor_identity
     )::text,'UTF8'),'sha256'),'hex');
@@ -4538,6 +4560,95 @@ begin
       updated_at_utc=p_now_utc
     where id=v_workflow.id returning * into v_workflow;
 
+  elsif v_action='PAPER_PACK_ATTEMPT_CLAIM' then
+    if not v_is_service_action or p_session_id is not null
+       or not coalesce((v_payload->>'service_paper_pack_attempt')::boolean,false) then
+      raise exception 'CANDIDATE_PAPER_PACK_ATTEMPT_SERVICE_REQUIRED' using errcode='28000';
+    end if;
+    if v_workflow.state<>'AWAITING_PAPER_RETURN' or v_workflow.route<>'PAPER'
+       or v_workflow.paper_return_manifest_sha256 is null then
+      raise exception 'CANDIDATE_PAPER_WORKFLOW_STALE' using errcode='40001';
+    end if;
+    v_paper_mail_id:=nullif(btrim(coalesce(v_payload->>'mail_outbox_id','')),'')::uuid;
+    v_paper_manifest_sha256:=lower(btrim(coalesce(v_payload->>'paper_return_manifest_sha256','')));
+    v_paper_pack_attempt_token:=lower(btrim(coalesce(v_payload->>'paper_pack_attempt_token','')));
+    if v_paper_mail_id is null
+       or v_paper_manifest_sha256 !~ '^[0-9a-f]{64}$'
+       or v_paper_manifest_sha256<>encode(v_workflow.paper_return_manifest_sha256,'hex')
+       or v_paper_pack_attempt_token !~ '^[0-9a-f]{64}$' then
+      raise exception 'CANDIDATE_PAPER_PACK_ATTEMPT_RECEIPT_INVALID' using errcode='22023';
+    end if;
+    select * into v_paper_mail
+    from public.mail_outbox candidate_paper_mail
+    where candidate_paper_mail.id=v_paper_mail_id
+      and candidate_paper_mail.type='TIMESHEET_QR'
+      and candidate_paper_mail.context_kind='timesheets'
+      and candidate_paper_mail.payment_scope_json->>'candidate_mail_authority'='CANDIDATE_PAPER_V1'
+      and candidate_paper_mail.payment_scope_json->>'candidate_workflow_id'=v_workflow.id::text
+      and candidate_paper_mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
+      and lower(coalesce(candidate_paper_mail.payment_scope_json->>'paper_return_manifest_sha256',''))
+            =v_paper_manifest_sha256
+    for update;
+    if not found then
+      raise exception 'CANDIDATE_PAPER_OUTBOX_NOT_READY' using errcode='40001';
+    end if;
+    if lower(coalesce(v_paper_mail.payment_scope_json->>'candidate_paper_generation_retired','false'))
+         in ('true','t','1','yes') then
+      raise exception 'CANDIDATE_PAPER_WORKFLOW_STALE' using errcode='40001';
+    end if;
+    if lower(coalesce(v_paper_mail.payment_scope_json->>'candidate_paper_pack_ready','false'))
+         in ('true','t','1','yes') then
+      v_response:=jsonb_build_object(
+        'ok',true,'workflow_id',v_workflow.id,'generation',v_workflow.generation,
+        'mail_outbox_id',v_paper_mail.id,'paper_pack_attempt_state','READY',
+        'paper_pack_attempt_count',coalesce(
+          nullif(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_count','')::integer,0
+        )
+      );
+    else
+      v_paper_failure_class:=upper(coalesce(
+        v_paper_mail.payment_scope_json->>'candidate_paper_pack_failure_class',''
+      ));
+      if v_paper_failure_class='TERMINAL' then
+        raise exception 'CANDIDATE_PAPER_PACK_FAILED_TERMINAL' using errcode='55000';
+      end if;
+      v_paper_pack_next_retry_at:=nullif(
+        v_paper_mail.payment_scope_json->>'candidate_paper_pack_next_retry_at_utc',''
+      )::timestamptz;
+      if v_paper_failure_class='RETRYABLE' and not v_is_office_service_action
+         and v_paper_pack_next_retry_at is not null and v_paper_pack_next_retry_at>p_now_utc then
+        raise exception 'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE'
+          using errcode='55000',detail=jsonb_build_object(
+            'code','CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE',
+            'next_retry_at_utc',v_paper_pack_next_retry_at
+          )::text;
+      end if;
+      if nullif(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_token','') is not null
+         and nullif(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_expires_at_utc','')::timestamptz
+               >p_now_utc then
+        raise exception 'CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS' using errcode='40001';
+      end if;
+      v_paper_pack_attempt_count:=coalesce(
+        nullif(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_count','')::integer,0
+      )+1;
+      v_paper_pack_attempt_expires_at:=p_now_utc+interval '10 minutes';
+      update public.mail_outbox candidate_paper_mail
+      set payment_scope_json=candidate_paper_mail.payment_scope_json||jsonb_build_object(
+        'candidate_paper_pack_attempt_token',v_paper_pack_attempt_token,
+        'candidate_paper_pack_attempt_expires_at_utc',v_paper_pack_attempt_expires_at,
+        'candidate_paper_pack_attempt_count',v_paper_pack_attempt_count,
+        'candidate_paper_pack_last_attempted_at_utc',p_now_utc
+      )
+      where candidate_paper_mail.id=v_paper_mail.id;
+      v_response:=jsonb_build_object(
+        'ok',true,'workflow_id',v_workflow.id,'generation',v_workflow.generation,
+        'mail_outbox_id',v_paper_mail.id,'paper_pack_attempt_state','CLAIMED',
+        'paper_pack_attempt_token',v_paper_pack_attempt_token,
+        'paper_pack_attempt_count',v_paper_pack_attempt_count,
+        'paper_pack_attempt_expires_at_utc',v_paper_pack_attempt_expires_at
+      );
+    end if;
+
   elsif v_action='PAPER_PACK_MARK_FAILURE' then
     if not v_is_service_action or p_session_id is not null
        or not coalesce((v_payload->>'service_paper_pack_failure')::boolean,false) then
@@ -4550,8 +4661,7 @@ begin
     v_paper_mail_id:=nullif(btrim(coalesce(v_payload->>'mail_outbox_id','')),'')::uuid;
     v_paper_manifest_sha256:=lower(btrim(coalesce(v_payload->>'paper_return_manifest_sha256','')));
     v_paper_failure_code:=upper(btrim(coalesce(v_payload->>'error_code','')));
-    if v_paper_mail_id is null
-       or v_paper_manifest_sha256 !~ '^[0-9a-f]{64}$'
+    if v_paper_manifest_sha256 !~ '^[0-9a-f]{64}$'
        or v_paper_manifest_sha256<>encode(v_workflow.paper_return_manifest_sha256,'hex')
        or v_paper_failure_code='' then
       raise exception 'CANDIDATE_PAPER_PACK_FAILURE_RECEIPT_INVALID' using errcode='22023';
@@ -4561,6 +4671,8 @@ begin
       'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
       'CANDIDATE_PAPER_R2_WRITE_TRANSIENT',
       'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT',
+      'CANDIDATE_PAPER_DOCUMENT_FAILED',
+      'CANDIDATE_PAPER_OUTBOX_NOT_READY',
       'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
       'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID',
       'CANDIDATE_PAPER_PACK_COMPONENT_MISSING',
@@ -4581,6 +4693,8 @@ begin
       ) then 'RETRYABLE'
       when v_paper_failure_code in (
         'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
+        'CANDIDATE_PAPER_DOCUMENT_FAILED',
+        'CANDIDATE_PAPER_OUTBOX_NOT_READY',
         'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID',
         'CANDIDATE_PAPER_PACK_COMPONENT_MISSING',
         'CANDIDATE_PAPER_PACK_INCOMPLETE',
@@ -4591,6 +4705,16 @@ begin
       ) then 'TERMINAL'
       else 'TERMINAL' end;
     v_paper_failure_retryable:=v_paper_failure_class='RETRYABLE';
+    v_paper_pack_attempt_token:=lower(btrim(coalesce(v_payload->>'paper_pack_attempt_token','')));
+    if v_paper_mail_id is null then
+      v_response:=jsonb_build_object(
+        'ok',true,'workflow_id',v_workflow.id,'generation',v_workflow.generation,
+        'mail_outbox_id',null,'paper_pack_state','FAILED_TERMINAL',
+        'failure_scope','WORKFLOW','failure_class','TERMINAL',
+        'failure_code',v_paper_failure_code,'retryable',false,
+        'failure_contract_version','CANDIDATE_PAPER_PACK_FAILURE_V2'
+      );
+    else
     select * into v_paper_mail
     from public.mail_outbox candidate_paper_mail
     where candidate_paper_mail.id=v_paper_mail_id
@@ -4613,14 +4737,30 @@ begin
          in ('true','t','1','yes') then
       raise exception 'CANDIDATE_PAPER_WORKFLOW_STALE' using errcode='40001';
     end if;
+    if nullif(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_token','') is not null
+       and lower(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_token')
+             is distinct from nullif(v_paper_pack_attempt_token,'') then
+      raise exception 'CANDIDATE_PAPER_PACK_ATTEMPT_STALE' using errcode='40001';
+    end if;
+    v_paper_pack_attempt_count:=coalesce(
+      nullif(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_count','')::integer,0
+    );
+    v_paper_pack_next_retry_at:=case when v_paper_failure_retryable then p_now_utc+case
+      when v_paper_pack_attempt_count<=1 then interval '1 minute'
+      when v_paper_pack_attempt_count=2 then interval '5 minutes'
+      when v_paper_pack_attempt_count=3 then interval '15 minutes'
+      else interval '30 minutes' end else null end;
     update public.mail_outbox candidate_paper_mail
     set payment_scope_json=candidate_paper_mail.payment_scope_json||jsonb_build_object(
       'candidate_paper_pack_ready',false,
       'candidate_paper_pack_retryable',v_paper_failure_retryable,
       'candidate_paper_pack_failure_class',v_paper_failure_class,
       'candidate_paper_pack_failure_code',v_paper_failure_code,
-      'candidate_paper_pack_failure_contract_version','CANDIDATE_PAPER_PACK_FAILURE_V1',
-      'candidate_paper_pack_failed_at_utc',p_now_utc
+      'candidate_paper_pack_failure_contract_version','CANDIDATE_PAPER_PACK_FAILURE_V2',
+      'candidate_paper_pack_failed_at_utc',p_now_utc,
+      'candidate_paper_pack_next_retry_at_utc',v_paper_pack_next_retry_at,
+      'candidate_paper_pack_attempt_token',null,
+      'candidate_paper_pack_attempt_expires_at_utc',null
     )
     where candidate_paper_mail.id=v_paper_mail.id;
     v_response:=jsonb_build_object(
@@ -4629,8 +4769,11 @@ begin
         case when v_paper_failure_retryable then 'FAILED_RETRYABLE' else 'FAILED_TERMINAL' end,
       'failure_class',v_paper_failure_class,'failure_code',v_paper_failure_code,
       'retryable',v_paper_failure_retryable,
-      'failure_contract_version','CANDIDATE_PAPER_PACK_FAILURE_V1'
+      'failure_contract_version','CANDIDATE_PAPER_PACK_FAILURE_V2',
+      'paper_pack_attempt_count',v_paper_pack_attempt_count,
+      'next_retry_at_utc',v_paper_pack_next_retry_at
     );
+    end if;
     update public.candidate_submission_workflows
     set last_mutation_idempotency_key=p_idempotency_key,
         last_mutation_response_json=v_response,updated_at_utc=p_now_utc
@@ -4658,6 +4801,7 @@ begin
     v_paper_base_document_sha256:=lower(btrim(coalesce(v_payload->>'base_document_sha256','')));
     v_paper_branding_contract_sha256:=lower(btrim(coalesce(v_payload->>'branding_contract_sha256','')));
     v_paper_renderer_contract_version:=btrim(coalesce(v_payload->>'renderer_contract_version',''));
+    v_paper_pack_attempt_token:=lower(btrim(coalesce(v_payload->>'paper_pack_attempt_token','')));
     begin
       v_paper_pack_byte_size:=(v_payload->>'complete_pack_byte_size')::bigint;
       v_paper_pack_page_count:=(v_payload->>'complete_pack_page_count')::integer;
@@ -4730,6 +4874,11 @@ begin
     if nullif(btrim(coalesce(v_paper_mail.attempt_lease_token,'')),'') is not null then
       raise exception 'CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS' using errcode='40001';
     end if;
+    if nullif(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_token','') is not null
+       and lower(v_paper_mail.payment_scope_json->>'candidate_paper_pack_attempt_token')
+             is distinct from nullif(v_paper_pack_attempt_token,'') then
+      raise exception 'CANDIDATE_PAPER_PACK_ATTEMPT_STALE' using errcode='40001';
+    end if;
     if lower(coalesce(v_paper_mail.payment_scope_json->>'candidate_paper_generation_retired','false'))
          in ('true','t','1','yes') then
       raise exception 'CANDIDATE_PAPER_WORKFLOW_STALE' using errcode='40001';
@@ -4777,6 +4926,9 @@ begin
             'candidate_paper_pack_failure_code',null,
             'candidate_paper_pack_failure_contract_version',null,
             'candidate_paper_pack_failed_at_utc',null,
+            'candidate_paper_pack_next_retry_at_utc',null,
+            'candidate_paper_pack_attempt_token',null,
+            'candidate_paper_pack_attempt_expires_at_utc',null,
             'mail_held_until_pdf_rendered',false,
             'mail_delayed_for_pdf_render',false,
             'mail_hold_reason',null,

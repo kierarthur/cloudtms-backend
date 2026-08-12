@@ -14862,7 +14862,13 @@ BEGIN
       'candidate_paper_pack_failure_class', NULL,
       'candidate_paper_pack_failure_code', NULL,
       'candidate_paper_pack_failure_contract_version', NULL,
-      'candidate_paper_pack_failed_at_utc', NULL
+      'candidate_paper_pack_failed_at_utc', NULL,
+      'candidate_paper_pack_preparation_started_at_utc', p_now_utc,
+      'candidate_paper_pack_preparation_deadline_at_utc', p_now_utc + interval '15 minutes',
+      'candidate_paper_pack_attempt_count', 0,
+      'candidate_paper_pack_attempt_token', NULL,
+      'candidate_paper_pack_attempt_expires_at_utc', NULL,
+      'candidate_paper_pack_next_retry_at_utc', NULL
     );
   END IF;
 

@@ -490,6 +490,9 @@ declare
   v_canonical_financial_sha256 bytea;
   v_service_finalisation jsonb;
   v_is_office_service boolean:=false;
+  v_replay_probe_only boolean:=false;
+  v_mutation_channel text;
+  v_mutation_actor_identity text;
   v_mutation_request_hash text;
   v_mutation_receipt jsonb;
 begin
@@ -499,6 +502,8 @@ begin
     and private._candidate_office_service_context_valid_v1(
       v_environment,nullif(v_service_finalisation->>'actor_user_id','')::uuid,'RETRY_FINALISATION'
     );
+  v_replay_probe_only:=p_session_id is null
+    and coalesce((v_service_finalisation->>'replay_probe_only')::boolean,false);
   if not v_is_office_service then
     perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
   end if;
@@ -509,28 +514,6 @@ begin
     raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
   end if;
   if p_session_id is null then
-    if coalesce(v_service_finalisation->>'contract_version','')<>'CANDIDATE_MANAGER_FINALISATION_V1'
-       or coalesce((v_service_finalisation->>'workflow_generation')::integer,0)<>v_workflow.generation
-       or upper(coalesce(v_service_finalisation->>'approval_method',''))<>v_workflow.route then
-      raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
-    end if;
-    if v_workflow.route='PAPER' then
-      if nullif(v_service_finalisation->>'approval_request_id','') is not null then
-        raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
-      end if;
-    else
-      select * into v_approved_request
-      from public.candidate_approval_requests a
-      where a.id=nullif(v_service_finalisation->>'approval_request_id','')::uuid
-        and a.workflow_id=v_workflow.id
-        and a.workflow_generation=v_workflow.generation
-        and a.method=v_workflow.route
-        and a.state='APPROVED'
-        and a.review_manifest_sha256=v_workflow.review_manifest_sha256
-        and encode(a.review_manifest_sha256,'hex')=lower(coalesce(v_service_finalisation->>'review_manifest_sha256_hex',''))
-      for update;
-      if not found then raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000'; end if;
-    end if;
     v_candidate_id:=v_workflow.candidate_id;
   else
     v_context:=private._candidate_session_context_v1(p_session_id,v_environment,null,p_now_utc,true);
@@ -548,24 +531,53 @@ begin
         'reason','CREATION_KEY_REUSED_FOR_MUTATION'
       )::text;
   end if;
+  v_mutation_channel:=case when v_is_office_service then 'OFFICE'
+    when p_session_id is null then 'SERVICE' else 'CANDIDATE_CLIENT' end;
+  v_mutation_actor_identity:=case when v_is_office_service
+    then v_service_finalisation->>'actor_user_id' else coalesce(p_session_id::text,'SERVICE') end;
   v_mutation_request_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
-    'contract_version','CANDIDATE_WORKFLOW_MUTATION_REQUEST_V1',
+    'contract_version','CANDIDATE_FINALISATION_MUTATION_REQUEST_V2',
     'workflow_id',v_workflow.id,
     'action','RETRY_FINALISATION',
     'expected_generation',p_expected_generation,
-    'expected_row_signature',nullif(btrim(coalesce(p_expected_row_signature,'')),''),
-    'daily_materialisation_json',coalesce(p_daily_materialisation_json,'{}'::jsonb),
-    'channel',case when v_is_office_service then 'OFFICE' when p_session_id is null then 'SERVICE' else 'CANDIDATE_CLIENT' end,
-    'actor_identity',case when v_is_office_service then v_service_finalisation->>'actor_user_id' else coalesce(p_session_id::text,'SERVICE') end
+    'service_finalisation',v_service_finalisation-'replay_probe_only',
+    'channel',v_mutation_channel,
+    'actor_identity',v_mutation_actor_identity
   )::text,'UTF8'),'sha256'),'hex');
   v_mutation_receipt:=private._candidate_workflow_mutation_receipt_v1(
     v_workflow.id,p_idempotency_key,v_mutation_request_hash,'RETRY_FINALISATION',
-    case when v_is_office_service then 'OFFICE' when p_session_id is null then 'SERVICE' else 'CANDIDATE_CLIENT' end,
-    case when v_is_office_service then v_service_finalisation->>'actor_user_id' else coalesce(p_session_id::text,'SERVICE') end,
+    v_mutation_channel,v_mutation_actor_identity,
     null,p_now_utc
   );
   if coalesce((v_mutation_receipt->>'found')::boolean,false) then
     return coalesce(v_mutation_receipt->'response','{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
+  end if;
+  if v_replay_probe_only then
+    return jsonb_build_object('ok',true,'replay_found',false,'workflow_id',v_workflow.id,
+      'expected_generation',p_expected_generation);
+  end if;
+  if p_session_id is null then
+    if coalesce(v_service_finalisation->>'contract_version','')<>'CANDIDATE_MANAGER_FINALISATION_V1'
+       or coalesce((v_service_finalisation->>'workflow_generation')::integer,0)<>v_workflow.generation
+       or upper(coalesce(v_service_finalisation->>'approval_method',''))<>v_workflow.route then
+      raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
+    end if;
+    if v_workflow.route='PAPER' then
+      if nullif(v_service_finalisation->>'approval_request_id','') is not null then
+        raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
+      end if;
+    else
+      select * into v_approved_request
+      from public.candidate_approval_requests a
+      where a.id=nullif(v_service_finalisation->>'approval_request_id','')::uuid
+        and a.workflow_id=v_workflow.id
+        and a.workflow_generation=p_expected_generation
+        and a.method=upper(coalesce(v_service_finalisation->>'approval_method',''))
+        and a.state='APPROVED'
+        and encode(a.review_manifest_sha256,'hex')=lower(coalesce(v_service_finalisation->>'review_manifest_sha256_hex',''))
+      for update;
+      if not found then raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000'; end if;
+    end if;
   end if;
   if v_workflow.generation<>p_expected_generation then
     raise exception 'WORKFLOW_VERSION_MISMATCH'
@@ -1248,6 +1260,8 @@ declare
   v_rejection_family_contract_id uuid;
   v_rejection_family_week_ending_date date;
   v_rejection_family_key text;
+  v_rejection_request_hash text;
+  v_rejection_receipt_before jsonb;
   v_response jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
@@ -1262,17 +1276,9 @@ begin
      or nullif(btrim(coalesce(p_idempotency_key,'')),'') is null then
     raise exception 'CANDIDATE_REJECT_PAYLOAD_INVALID' using errcode='22023';
   end if;
-  select ae.after_json into v_response
-  from public.audit_events ae
-  where ae.action='CANDIDATE_SUBMISSION_REJECTED'
-    and ae.actor_user_id=p_actor_user_id
-    and ae.correlation_id=p_idempotency_key
-  order by ae.ts_utc desc,ae.id desc
-  limit 1;
-  if found then
-    return coalesce(v_response,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
-  end if;
-
+  perform pg_advisory_xact_lock(hashtextextended(
+    'CANDIDATE_REJECTION_IDEMPOTENCY:'||p_actor_user_id::text||':'||p_idempotency_key,0
+  ));
   -- Serialise every Candidate rejection for the same contract/week before
   -- locking either the hours row or a separate expense carrier. This prevents
   -- the inverse target/workflow/source lock order that can deadlock H1/E1.
@@ -1287,6 +1293,32 @@ begin
     ||coalesce(v_rejection_family_contract_id::text,'-')||':'
     ||coalesce(v_rejection_family_week_ending_date::text,'-');
   perform pg_advisory_xact_lock(hashtextextended(v_rejection_family_key,0));
+
+  v_rejection_request_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
+    'contract_version','CANDIDATE_REJECTION_REQUEST_V2',
+    'environment',v_environment,
+    'actor_user_id',p_actor_user_id,
+    'timesheet_id',p_timesheet_id,
+    'expected_timesheet_id',p_expected_timesheet_id,
+    'expected_row_signature',btrim(p_expected_row_signature),
+    'reason',btrim(p_reason)
+  )::text,'UTF8'),'sha256'),'hex');
+  select ae.before_json,ae.after_json into v_rejection_receipt_before,v_response
+  from public.audit_events ae
+  where ae.object_type='candidate_submission_rejection_receipt'
+    and ae.actor_user_id=p_actor_user_id
+    and ae.correlation_id=p_idempotency_key
+  order by ae.ts_utc desc,ae.id desc
+  limit 1;
+  if found then
+    if v_rejection_receipt_before->>'request_sha256' is distinct from v_rejection_request_hash then
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+        using errcode='40001',detail=jsonb_build_object(
+          'code','CANDIDATE_IDEMPOTENCY_CONFLICT','idempotency_key',p_idempotency_key
+        )::text;
+    end if;
+    return coalesce(v_response,'{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
+  end if;
 
   select * into v_timesheet from public.timesheets where timesheet_id=p_timesheet_id for update;
   if not found then raise exception 'CANDIDATE_REJECT_TARGET_NOT_FOUND' using errcode='P0002'; end if;
@@ -1443,6 +1475,15 @@ begin
   perform private._candidate_audit_v1('timesheet',v_new_timesheet_id::text,'CANDIDATE_SUBMISSION_REJECTED',
     jsonb_build_object('old_timesheet_id',v_timesheet.timesheet_id),v_response,btrim(p_reason),
     p_actor_user_id,p_idempotency_key,p_now_utc);
+  insert into public.audit_events(
+    actor_user_id,object_type,object_id_text,action,before_json,after_json,
+    reason,correlation_id,ts_utc
+  ) values (
+    p_actor_user_id,'candidate_submission_rejection_receipt',p_timesheet_id::text,
+    'CANDIDATE_SUBMISSION_REJECTION_RECEIPT',jsonb_build_object(
+      'request_sha256',v_rejection_request_hash,'contract_version','CANDIDATE_REJECTION_REQUEST_V2'
+    ),v_response,btrim(p_reason),p_idempotency_key,p_now_utc
+  );
   return v_response;
 end;
 $function$;
