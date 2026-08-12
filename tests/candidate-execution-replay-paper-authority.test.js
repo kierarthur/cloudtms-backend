@@ -52,10 +52,12 @@ test('PAPER execution has one database-owned attempt lease, backoff and terminal
   assert.match(office, /OFFICE_CANDIDATE_PAPER_RETRY_RECEIPT_V1/);
 });
 
-test('PAPER preparation owns an enforceable deadline and pre-outbox failure receipt', () => {
+test('PAPER preparation records an observation deadline without claiming an execution attempt', () => {
   assert.match(qr, /candidate_paper_pack_preparation_started_at_utc/);
   assert.match(qr, /candidate_paper_pack_preparation_deadline_at_utc/);
-  assert.match(backend, /CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT/);
+  assert.doesNotMatch(backend, /CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT/);
+  assert.doesNotMatch(workflow, /CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT/);
+  assert.match(backend, /execution_state: 'PREPARING', error_code: 'CANDIDATE_PAPER_DOCUMENT_PENDING'/);
   assert.match(workflow, /'failure_scope','WORKFLOW'/);
   assert.match(workflow, /'mail_outbox_id',null/);
   assert.match(office, /'retryable',v_paper_state='FAILED_RETRYABLE'/);

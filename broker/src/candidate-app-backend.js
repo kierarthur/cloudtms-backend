@@ -273,6 +273,85 @@ async function deterministicOpaqueToken(secret, namespace, ...parts) {
   return base64UrlEncode(signature);
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (isObject(value)) {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+function configuredKeyVersion(env, name) {
+  const version = Number(env[name] || 1);
+  if (!Number.isSafeInteger(version) || version < 1 || version > 32) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID');
+  }
+  return version;
+}
+
+function versionedSecret(env, prefix, version, fallback) {
+  const configured = text(env[`${prefix}_V${version}`]);
+  if (configured) return configured;
+  if (Number(version) === 1 && text(fallback)) return text(fallback);
+  throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
+}
+
+function authReplayKeyVersion(env) {
+  return configuredKeyVersion(env, 'CANDIDATE_AUTH_REPLAY_KEY_VERSION');
+}
+
+function authReplaySecret(env, version) {
+  return versionedSecret(env, 'CANDIDATE_AUTH_REPLAY_SECRET', version,
+    env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET);
+}
+
+function challengeKeyVersion(env) {
+  return configuredKeyVersion(env, 'CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION');
+}
+
+function challengeSecretForVersion(env, version) {
+  return versionedSecret(env, 'CANDIDATE_CHALLENGE_TOKEN_SECRET', version,
+    env.CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET);
+}
+
+function managerTokenKeyVersion(env) {
+  return configuredKeyVersion(env, 'CANDIDATE_MANAGER_TOKEN_KEY_VERSION');
+}
+
+function managerTokenSecret(env, version) {
+  return versionedSecret(env, 'CANDIDATE_MANAGER_TOKEN_SECRET', version,
+    env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET);
+}
+
+async function requestHmacSha256(secret, namespace, value) {
+  const signature = await crypto.subtle.sign(
+    'HMAC', await importHmacKey(secret),
+    encoder.encode(`${namespace}\u001f${canonicalJson(value)}`)
+  );
+  return hex(signature);
+}
+
+async function authSecretProof(env, version, purpose, secretValue) {
+  return requestHmacSha256(
+    authReplaySecret(env, version), `candidate-auth-secret-proof-v1:${purpose}`,
+    String(secretValue == null ? '' : secretValue)
+  );
+}
+
+async function authRequestSha256(env, version, action, identity) {
+  return requestHmacSha256(
+    authReplaySecret(env, version), 'candidate-auth-mutation-request-v1',
+    { contract_version: 'CANDIDATE_AUTH_MUTATION_REQUEST_V1', action: upper(action), ...identity }
+  );
+}
+
+async function deterministicRefreshToken(env, version, action, sessionId, idempotencyKey) {
+  return deterministicOpaqueToken(
+    authReplaySecret(env, version), 'candidate-refresh-token-v1',
+    environmentName(env), upper(action), requireUuid(sessionId), idempotencyKey
+  );
+}
+
 async function verifyCompact(secret, token) {
   const [encoded, signature] = text(token).split('.');
   if (!encoded || !signature) return null;
@@ -478,7 +557,9 @@ function errorResponse(error, correlationId, office = false) {
 }
 
 async function createAccessToken(env, session) {
-  const now = Math.floor(Date.now() / 1000);
+  const issuedAt = Date.parse(text(session?.issued_at_utc));
+  const now = Number.isFinite(issuedAt)
+    ? Math.floor(issuedAt / 1000) : Math.floor(Date.now() / 1000);
   return signCompact(tokenSecret(env), {
     typ: 'candidate_access', aud: 'cloudtms-candidate-app',
     env: environmentName(env), sid: session.session_id, rot: Number(session.rotation || 0),
@@ -491,7 +572,7 @@ function bearerToken(request) {
   return match ? text(match[1]) : '';
 }
 
-async function verifyCandidateAccess(request, env) {
+async function candidateAccessClaims(request, env) {
   const payload = await verifyCompact(tokenSecret(env), bearerToken(request));
   const now = Math.floor(Date.now() / 1000);
   if (!payload || payload.typ !== 'candidate_access' || payload.aud !== 'cloudtms-candidate-app'
@@ -501,6 +582,11 @@ async function verifyCandidateAccess(request, env) {
   if (!Number.isFinite(Number(payload.exp)) || Number(payload.exp) <= now) {
     throw new CandidateHttpError(401, 'CANDIDATE_ACCESS_TOKEN_EXPIRED');
   }
+  return payload;
+}
+
+async function verifyCandidateAccess(request, env) {
+  const payload = await candidateAccessClaims(request, env);
   const session = await restOne(env, 'candidate_app_sessions',
     `id=eq.${encodeURIComponent(payload.sid)}&select=id,account_id,environment,selected_candidate_id,status,rotation,expires_at_utc,absolute_expires_at_utc`);
   if (!session || session.environment !== payload.env || session.status !== 'ACTIVE'
@@ -643,7 +729,63 @@ async function queueChallengeMail(env, request, result, purpose, email, token) {
     email_type: 'CANDIDATE_APP_TRANSACTIONAL', scheduled_for_utc: new Date().toISOString(),
     next_attempt_at_utc: new Date().toISOString(), deterministic_outbox_key: deterministicKey,
     payment_scope_json: {}
-  }, 'resolution=merge-duplicates,return=representation');
+  }, 'resolution=ignore-duplicates,return=representation');
+}
+
+async function candidateAuthReceiptMetadata(deps, env, action, idempotencyKey, identities = {}) {
+  return rpcCall(deps, 'candidate_auth_account_transition_v1', {
+    p_action: action,
+    p_environment: environmentName(env),
+    p_account_id: identities.account_id || null,
+    p_email_normalized: identities.email_normalized || null,
+    p_session_id: identities.session_id || null,
+    p_selected_candidate_id: identities.selected_candidate_id || null,
+    p_payload: { replay_probe_only: true },
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+async function candidateAuthExactReplay(
+  deps, env, action, idempotencyKey, requestSha256, keyVersion, identities = {}
+) {
+  const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+    p_action: action,
+    p_environment: environmentName(env),
+    p_account_id: identities.account_id || null,
+    p_email_normalized: identities.email_normalized || null,
+    p_session_id: identities.session_id || null,
+    p_selected_candidate_id: identities.selected_candidate_id || null,
+    p_payload: {
+      replay_probe_only: true,
+      idempotency_request_sha256: requestSha256,
+      idempotency_key_version: keyVersion
+    },
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  return result?.idempotent_replay === true ? result : null;
+}
+
+async function challengeTokenForReceipt(
+  env, purpose, email, challengeId, idempotencyKey, expectedHashHex
+) {
+  const currentVersion = challengeKeyVersion(env);
+  for (let version = 1; version <= currentVersion; version += 1) {
+    let secret;
+    try {
+      secret = challengeSecretForVersion(env, version);
+    } catch (error) {
+      if (knownErrorCode(error) === 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE') continue;
+      throw error;
+    }
+    const token = await deterministicOpaqueToken(
+      secret, 'candidate-auth-challenge-v1', environmentName(env), purpose, email,
+      challengeId || '', idempotencyKey
+    );
+    if (await sha256Hex(token) === expectedHashHex) return token;
+  }
+  throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_SECRET_VERSION_UNAVAILABLE');
 }
 
 async function handleChallengeStart(request, env, deps, isResend = false) {
@@ -651,26 +793,49 @@ async function handleChallengeStart(request, env, deps, isResend = false) {
   const email = normaliseEmail(body.email);
   const purpose = upper(body.purpose || 'ACTIVATE');
   if (!['ACTIVATE', 'RESET', 'RECOVERY'].includes(purpose)) throw new CandidateHttpError(400, 'CANDIDATE_CHALLENGE_PURPOSE_INVALID');
-  const idempotencyKey = text(body.idempotency_key) || crypto.randomUUID();
-  const challengeToken = await deterministicOpaqueToken(
-    challengeTokenSecret(env),
-    'candidate-auth-challenge-v1',
-    environmentName(env), purpose, email, isResend ? text(body.challenge_id) : '', idempotencyKey
-  );
-  const tokenHash = await sha256Bytes(challengeToken);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const challengeId = isResend
+    ? requireUuid(body.challenge_id, 'CANDIDATE_CHALLENGE_INVALID') : null;
+  const receipt = await rpcCall(deps, 'candidate_auth_challenge_transition_v1', {
+    p_action: isResend ? 'RESEND' : 'START',
+    p_environment: environmentName(env),
+    p_email_normalized: email,
+    p_purpose: purpose,
+    p_challenge_id: challengeId,
+    p_token_hash: null,
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+  const replayTokenHash = receipt?.replay_receipt_found === true
+    ? text(receipt.token_hash_hex).toLowerCase() : '';
+  if (receipt?.replay_receipt_found === true && !SHA256_RE.test(replayTokenHash)) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  const challengeToken = receipt?.replay_receipt_found === true
+    ? null
+    : await deterministicOpaqueToken(
+      challengeSecretForVersion(env, challengeKeyVersion(env)),
+      'candidate-auth-challenge-v1',
+      environmentName(env), purpose, email, challengeId || '', idempotencyKey
+    );
+  const tokenHashHex = replayTokenHash || hex(await sha256Bytes(challengeToken));
   const args = {
     p_action: isResend ? 'RESEND' : 'START', p_environment: environmentName(env),
     p_email_normalized: email, p_purpose: purpose,
-    p_challenge_id: isResend ? requireUuid(body.challenge_id, 'CANDIDATE_CHALLENGE_INVALID') : null,
-    p_token_hash: `\\x${hex(tokenHash)}`, p_idempotency_key: idempotencyKey,
+    p_challenge_id: challengeId,
+    p_token_hash: `\\x${tokenHashHex}`, p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   };
   const result = await rpcCall(deps, 'candidate_auth_challenge_transition_v1', args);
+  const deliveryToken = challengeToken || await challengeTokenForReceipt(
+    env, purpose, email, challengeId, idempotencyKey, tokenHashHex
+  );
   // The database transition and mail insert are deliberately separate durable authorities.
   // On a retry, the challenge RPC returns the same challenge with deliver_email=false;
-  // the deterministic outbox key makes this safe to retry after a prior mail-insert failure.
+  // the create-only deterministic outbox key makes this safe to retry after a
+  // prior mail-insert failure without resetting queued or sent delivery truth.
   if (result?.challenge_id && result?.expires_at_utc) {
-    await queueChallengeMail(env, request, result, purpose, email, challengeToken);
+    await queueChallengeMail(env, request, result, purpose, email, deliveryToken);
   }
   return jsonResponse(202, { ok: true, accepted: true });
 }
@@ -680,11 +845,12 @@ async function handleChallengeVerify(request, env, deps) {
   const purpose = upper(body.purpose || 'ACTIVATE');
   const token = text(body.token);
   if (!token) throw new CandidateHttpError(400, 'CANDIDATE_CHALLENGE_INVALID');
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
   const result = await rpcCall(deps, 'candidate_auth_challenge_transition_v1', {
     p_action: 'VERIFY', p_environment: environmentName(env),
     p_email_normalized: normaliseEmail(body.email), p_purpose: purpose,
     p_challenge_id: body.challenge_id ? requireUuid(body.challenge_id) : null,
-    p_token_hash: `\\x${await sha256Hex(token)}`, p_idempotency_key: null,
+    p_token_hash: `\\x${await sha256Hex(token)}`, p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   });
   if (result?.ok !== true) throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_CHALLENGE_INVALID');
@@ -696,26 +862,61 @@ async function handleChallengeVerify(request, env, deps) {
 
 async function handlePasswordComplete(request, env, deps) {
   const body = await readJson(request);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const challengeId = requireUuid(body.challenge_id, 'CANDIDATE_VERIFIED_CHALLENGE_REQUIRED');
+  const selectedCandidateId = body.selected_candidate_id
+    ? requireUuid(body.selected_candidate_id) : null;
+  const deviceHash = body.device_id ? await sha256Hex(text(body.device_id)) : null;
+  const metadata = await candidateAuthReceiptMetadata(
+    deps, env, 'ACTIVATE_PASSWORD', idempotencyKey,
+    { selected_candidate_id: selectedCandidateId }
+  );
+  const keyVersion = metadata?.replay_receipt_found === true
+    ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
+    : authReplayKeyVersion(env);
+  const requestSha256 = await authRequestSha256(env, keyVersion, 'ACTIVATE_PASSWORD', {
+    challenge_id: challengeId,
+    selected_candidate_id: selectedCandidateId,
+    password_proof: await authSecretProof(env, keyVersion, 'new-password', body.password),
+    device_id_hash_hex: deviceHash,
+    platform: text(body.platform).slice(0, 80) || null
+  });
+  if (metadata?.replay_receipt_found === true) {
+    const replay = await candidateAuthExactReplay(
+      deps, env, 'ACTIVATE_PASSWORD', idempotencyKey, requestSha256, keyVersion,
+      { selected_candidate_id: selectedCandidateId }
+    );
+    if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    const refreshToken = await deterministicRefreshToken(
+      env, keyVersion, 'ACTIVATE_PASSWORD', replay.session_id, idempotencyKey
+    );
+    return jsonResponse(200, safeSessionResponse(
+      replay, await createAccessToken(env, replay), refreshToken
+    ));
+  }
   const verifier = await derivePasswordVerifier(body.password);
-  const refreshToken = randomToken(32);
-  const refreshHash = await sha256Hex(refreshToken);
   const sessionId = crypto.randomUUID();
+  const refreshToken = await deterministicRefreshToken(
+    env, keyVersion, 'ACTIVATE_PASSWORD', sessionId, idempotencyKey
+  );
+  const refreshHash = await sha256Hex(refreshToken);
   const now = new Date();
   const expiries = sessionExpiries(now);
-  const deviceHash = body.device_id ? await sha256Hex(text(body.device_id)) : null;
   const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
     p_action: 'ACTIVATE_PASSWORD', p_environment: environmentName(env),
     p_account_id: null, p_email_normalized: null, p_session_id: sessionId,
-    p_selected_candidate_id: body.selected_candidate_id ? requireUuid(body.selected_candidate_id) : null,
+    p_selected_candidate_id: selectedCandidateId,
     p_payload: {
-      challenge_id: requireUuid(body.challenge_id, 'CANDIDATE_VERIFIED_CHALLENGE_REQUIRED'),
+      challenge_id: challengeId,
       password_scheme: verifier.scheme, password_scheme_version: verifier.scheme_version,
       password_salt_hex: verifier.salt_hex, password_digest_hex: verifier.digest_hex,
       password_params: verifier.params, refresh_token_hash_hex: refreshHash,
       ...expiries, ...(deviceHash ? { device_id_hash_hex: deviceHash } : {}),
-      platform: text(body.platform).slice(0, 80) || null
+      platform: text(body.platform).slice(0, 80) || null,
+      idempotency_request_sha256: requestSha256,
+      idempotency_key_version: keyVersion
     },
-    p_idempotency_key: text(body.idempotency_key) || crypto.randomUUID(), p_now_utc: now.toISOString()
+    p_idempotency_key: idempotencyKey, p_now_utc: now.toISOString()
   });
   const accessToken = await createAccessToken(env, result);
   return jsonResponse(200, safeSessionResponse(result, accessToken, refreshToken));
@@ -724,6 +925,40 @@ async function handlePasswordComplete(request, env, deps) {
 async function handleLogin(request, env, deps) {
   const body = await readJson(request);
   const email = normaliseEmail(body.email);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const selectedCandidateId = body.selected_candidate_id
+    ? requireUuid(body.selected_candidate_id) : null;
+  const deviceHash = body.device_id ? await sha256Hex(text(body.device_id)) : null;
+  const metadata = await candidateAuthReceiptMetadata(
+    deps, env, 'LOGIN_SUCCESS', idempotencyKey,
+    { email_normalized: email, selected_candidate_id: selectedCandidateId }
+  );
+  const keyVersion = metadata?.replay_receipt_found === true
+    ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
+    : authReplayKeyVersion(env);
+  const requestSha256 = await authRequestSha256(env, keyVersion, 'LOGIN_SUCCESS', {
+    email_normalized: email,
+    selected_candidate_id: selectedCandidateId,
+    password_proof: await authSecretProof(env, keyVersion, 'login-password', body.password),
+    device_id_hash_hex: deviceHash,
+    platform: text(body.platform).slice(0, 80) || null
+  });
+  if (metadata?.replay_receipt_found === true) {
+    const replay = await candidateAuthExactReplay(
+      deps, env, 'LOGIN_SUCCESS', idempotencyKey, requestSha256, keyVersion,
+      { email_normalized: email, selected_candidate_id: selectedCandidateId }
+    );
+    if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    if (replay.ok !== true) {
+      throw new CandidateHttpError(401, replay.error_code || 'CANDIDATE_LOGIN_INVALID');
+    }
+    const refreshToken = await deterministicRefreshToken(
+      env, keyVersion, 'LOGIN_SUCCESS', replay.session_id, idempotencyKey
+    );
+    return jsonResponse(200, safeSessionResponse(
+      replay, await createAccessToken(env, replay), refreshToken
+    ));
+  }
   const account = await restOne(env, 'candidate_app_accounts',
     `environment=eq.${encodeURIComponent(environmentName(env))}&email_normalized=eq.${encodeURIComponent(email)}` +
     '&select=id,environment,status,password_scheme,password_scheme_version,password_salt,password_digest,password_params_json,locked_until_utc');
@@ -736,27 +971,38 @@ async function handleLogin(request, env, deps) {
   });
   if (!passwordOk) {
     if (account?.id) {
-      await rpcCall(deps, 'candidate_auth_account_transition_v1', {
-        p_action: 'LOGIN_FAILURE', p_environment: environmentName(env), p_account_id: account.id,
+      const failed = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
+        p_action: 'LOGIN_SUCCESS', p_environment: environmentName(env), p_account_id: account.id,
         p_email_normalized: email, p_session_id: null, p_selected_candidate_id: null,
-        p_payload: {}, p_idempotency_key: null, p_now_utc: new Date().toISOString()
-      }).catch(() => null);
+        p_payload: {
+          login_failed: true,
+          idempotency_request_sha256: requestSha256,
+          idempotency_key_version: keyVersion
+        }, p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
+      });
+      if (failed?.ok !== false) {
+        throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+      }
     }
     throw new CandidateHttpError(401, 'CANDIDATE_LOGIN_INVALID');
   }
-  const refreshToken = randomToken(32);
   const sessionId = crypto.randomUUID();
+  const refreshToken = await deterministicRefreshToken(
+    env, keyVersion, 'LOGIN_SUCCESS', sessionId, idempotencyKey
+  );
   const now = new Date();
-  const deviceHash = body.device_id ? await sha256Hex(text(body.device_id)) : null;
   const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
     p_action: 'LOGIN_SUCCESS', p_environment: environmentName(env), p_account_id: account.id,
     p_email_normalized: email, p_session_id: sessionId,
-    p_selected_candidate_id: body.selected_candidate_id ? requireUuid(body.selected_candidate_id) : null,
+    p_selected_candidate_id: selectedCandidateId,
     p_payload: {
       refresh_token_hash_hex: await sha256Hex(refreshToken), ...sessionExpiries(now),
-      ...(deviceHash ? { device_id_hash_hex: deviceHash } : {}), platform: text(body.platform).slice(0, 80) || null
+      ...(deviceHash ? { device_id_hash_hex: deviceHash } : {}),
+      platform: text(body.platform).slice(0, 80) || null,
+      idempotency_request_sha256: requestSha256,
+      idempotency_key_version: keyVersion
     },
-    p_idempotency_key: text(body.idempotency_key) || crypto.randomUUID(), p_now_utc: now.toISOString()
+    p_idempotency_key: idempotencyKey, p_now_utc: now.toISOString()
   });
   return jsonResponse(200, safeSessionResponse(result, await createAccessToken(env, result), refreshToken));
 }
@@ -765,31 +1011,72 @@ async function handleRefresh(request, env, deps) {
   const body = await readJson(request);
   const oldRefresh = text(body.refresh_token);
   if (!oldRefresh) throw new CandidateHttpError(401, 'CANDIDATE_SESSION_INVALID');
-  const newRefresh = randomToken(32);
+  const oldSessionId = requireUuid(body.session_id, 'CANDIDATE_SESSION_INVALID');
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const metadata = await candidateAuthReceiptMetadata(
+    deps, env, 'REFRESH_SESSION', idempotencyKey, { session_id: oldSessionId }
+  );
+  const keyVersion = metadata?.replay_receipt_found === true
+    ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
+    : authReplayKeyVersion(env);
+  const requestSha256 = await authRequestSha256(env, keyVersion, 'REFRESH_SESSION', {
+    session_id: oldSessionId,
+    presented_refresh_token_proof: await authSecretProof(
+      env, keyVersion, 'presented-refresh-token', oldRefresh
+    )
+  });
+  if (metadata?.replay_receipt_found === true) {
+    const replay = await candidateAuthExactReplay(
+      deps, env, 'REFRESH_SESSION', idempotencyKey, requestSha256, keyVersion,
+      { session_id: oldSessionId }
+    );
+    if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    const replayRefresh = await deterministicRefreshToken(
+      env, keyVersion, 'REFRESH_SESSION', replay.session_id, idempotencyKey
+    );
+    return jsonResponse(200, safeSessionResponse(
+      replay, await createAccessToken(env, replay), replayRefresh
+    ));
+  }
+  const newSessionId = crypto.randomUUID();
+  const newRefresh = await deterministicRefreshToken(
+    env, keyVersion, 'REFRESH_SESSION', newSessionId, idempotencyKey
+  );
   const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
     p_action: 'REFRESH_SESSION', p_environment: environmentName(env),
     p_account_id: null, p_email_normalized: null,
-    p_session_id: requireUuid(body.session_id, 'CANDIDATE_SESSION_INVALID'), p_selected_candidate_id: null,
+    p_session_id: oldSessionId, p_selected_candidate_id: null,
     p_payload: {
       presented_refresh_token_hash_hex: await sha256Hex(oldRefresh),
-      new_refresh_token_hash_hex: await sha256Hex(newRefresh), new_session_id: crypto.randomUUID()
-    }, p_idempotency_key: text(body.idempotency_key) || crypto.randomUUID(),
+      new_refresh_token_hash_hex: await sha256Hex(newRefresh), new_session_id: newSessionId,
+      idempotency_request_sha256: requestSha256,
+      idempotency_key_version: keyVersion
+    }, p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   });
   if (result?.ok !== true) throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_SESSION_INVALID');
   return jsonResponse(200, safeSessionResponse(result, await createAccessToken(env, result), newRefresh));
 }
 
-async function handleAccountAction(request, env, deps, action) {
-  const access = await verifyCandidateAccess(request, env);
+async function handleAccountAction(request, env, deps, action, routeIdentity = {}) {
   const body = request.method === 'GET' ? {} : await readJson(request);
+  const idempotencyKey = requireCandidateIdempotency(body.idempotency_key);
+  const claims = await candidateAccessClaims(request, env);
   let payload = {};
   let selectedCandidateId = null;
+  let requestIdentity = { session_id: claims.sid };
   if (action === 'SELECT_TEST_CANDIDATE') {
     selectedCandidateId = requireUuid(body.selected_candidate_id, 'CANDIDATE_SELECTION_NOT_ALLOWED');
+    requestIdentity = { ...requestIdentity, selected_candidate_id: selectedCandidateId };
   } else if (action === 'SET_NOTIFICATION_PREFERENCES') {
     if (!isObject(body.notification_preferences)) throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_PREFERENCES_INVALID');
-    payload = { notification_preferences: body.notification_preferences };
+    requestIdentity = { ...requestIdentity, notification_preferences: body.notification_preferences };
+  } else if (action === 'MARK_NOTIFICATION_READ') {
+    const notificationId = requireUuid(
+      routeIdentity.notification_id,
+      'CANDIDATE_NOTIFICATION_NOT_FOUND'
+    );
+    requestIdentity = { ...requestIdentity, notification_id: notificationId };
   } else if (action === 'REGISTER_PUSH_TOKEN') {
     const ciphertext = text(body.push_token_ciphertext_hex);
     const provider = upper(body.push_provider);
@@ -799,10 +1086,61 @@ async function handleAccountAction(request, env, deps, action) {
         || !Number.isSafeInteger(keyVersion) || keyVersion < 1) {
       throw new CandidateHttpError(400, 'CANDIDATE_PUSH_TOKEN_INVALID');
     }
-    payload = {
+    requestIdentity = {
+      ...requestIdentity,
       push_provider: provider,
       push_token_ciphertext_hex: ciphertext,
       push_key_version: keyVersion
+    };
+  } else if (action === 'CHANGE_PASSWORD') {
+    requestIdentity = { ...requestIdentity, password_change: true };
+  }
+  const metadata = await candidateAuthReceiptMetadata(
+    deps, env, action, idempotencyKey,
+    { session_id: claims.sid, selected_candidate_id: selectedCandidateId }
+  );
+  const keyVersion = metadata?.replay_receipt_found === true
+    ? requireInteger(metadata.request_key_version, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1)
+    : authReplayKeyVersion(env);
+  if (action === 'CHANGE_PASSWORD') {
+    requestIdentity = {
+      ...requestIdentity,
+      current_password_proof: await authSecretProof(
+        env, keyVersion, 'current-password', body.current_password
+      ),
+      new_password_proof: await authSecretProof(
+        env, keyVersion, 'new-password', body.password
+      )
+    };
+  }
+  const requestSha256 = await authRequestSha256(env, keyVersion, action, requestIdentity);
+  if (metadata?.replay_receipt_found === true) {
+    const replay = await candidateAuthExactReplay(
+      deps, env, action, idempotencyKey, requestSha256, keyVersion,
+      { session_id: claims.sid, selected_candidate_id: selectedCandidateId }
+    );
+    if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    if (action === 'SELECT_TEST_CANDIDATE') {
+      const nextAccess = await createAccessToken(env, {
+        session_id: claims.sid, rotation: Number(claims.rot || 0)
+      });
+      return jsonResponse(200, {
+        ...replay, access_token: nextAccess, access_expires_in_seconds: ACCESS_TTL_SECONDS
+      });
+    }
+    return jsonResponse(200, replay);
+  }
+
+  const access = await verifyCandidateAccess(request, env);
+  if (action === 'SET_NOTIFICATION_PREFERENCES') {
+    payload = { notification_preferences: body.notification_preferences };
+  } else if (action === 'MARK_NOTIFICATION_READ') {
+    payload = { notification_id: requestIdentity.notification_id };
+  } else if (action === 'REGISTER_PUSH_TOKEN') {
+    payload = {
+      push_provider: requestIdentity.push_provider,
+      push_token_ciphertext_hex: requestIdentity.push_token_ciphertext_hex,
+      push_key_version: requestIdentity.push_key_version
     };
   } else if (action === 'CHANGE_PASSWORD') {
     const account = await restOne(env, 'candidate_app_accounts',
@@ -818,11 +1156,16 @@ async function handleAccountAction(request, env, deps, action) {
       password_params: verifier.params
     };
   }
+  payload = {
+    ...payload,
+    idempotency_request_sha256: requestSha256,
+    idempotency_key_version: keyVersion
+  };
   const result = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
     p_action: action, p_environment: access.environment, p_account_id: access.account_id,
     p_email_normalized: null, p_session_id: access.session_id,
     p_selected_candidate_id: selectedCandidateId, p_payload: payload,
-    p_idempotency_key: text(body.idempotency_key) || crypto.randomUUID(),
+    p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   });
   if (action === 'SELECT_TEST_CANDIDATE') {
@@ -2163,9 +2506,44 @@ async function probeFinalisationReplay(
   return result?.idempotent_replay === true ? safeFinalisationResult(result) : null;
 }
 
+async function probeFinalisationReplayByKey(
+  env, deps, workflow, generation, idempotencyKey, officeActorId = null
+) {
+  const finalisationKey = workflow.workflow_kind === 'DAILY'
+    ? `${idempotencyKey}:finalise` : idempotencyKey;
+  const result = officeActorId
+    ? await officeAdapter(deps, env, officeActorId, 'FINALISE_REPLAY_LOOKUP', {
+      workflow_id: workflow.id,
+      generation,
+      idempotency_key: finalisationKey,
+      replay_key_probe_only: true
+    })
+    : await rpcCall(deps, 'candidate_submission_finalize_atomic_v1', {
+      p_session_id: null,
+      p_environment: environmentName(env),
+      p_workflow_id: workflow.id,
+      p_expected_generation: generation,
+      p_expected_row_signature: null,
+      p_idempotency_key: finalisationKey,
+      p_now_utc: new Date().toISOString(),
+      p_daily_materialisation_json: {
+        service_finalisation: {
+          contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
+          workflow_generation: generation,
+          replay_key_probe_only: true
+        }
+      }
+    });
+  return result?.idempotent_replay === true ? safeFinalisationResult(result) : null;
+}
+
 async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKey, officeActorId = null) {
   idempotencyKey = requireCandidateIdempotency(idempotencyKey);
   const workflow = await workflowRow(env, workflowId);
+  const receiptReplay = await probeFinalisationReplayByKey(
+    env, deps, workflow, generation, idempotencyKey, officeActorId
+  );
+  if (receiptReplay) return receiptReplay;
   const approved = upper(workflow.route) === 'PAPER' ? null : await restOne(env, 'candidate_approval_requests',
     `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(generation)}`
     + '&state=eq.APPROVED&select=id,request_generation,method,review_manifest_sha256,approved_at_utc&order=approved_at_utc.desc');
@@ -2422,14 +2800,35 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       renderer_contract_version: RENDERER_CONTRACT_VERSION
     };
   } else if (dbAction === 'SELECT_PHONE_APPROVAL') {
+    const replaySemanticPayload = { ...payload };
+    delete replaySemanticPayload.approval_token_hash_hex;
+    delete replaySemanticPayload.expires_at_utc;
+    delete replaySemanticPayload.handoff_token_key_version;
+    const replay = await probeWorkflowMutationReplay(
+      env, deps, access, workflowId, dbAction, generation, mutationKey,
+      replaySemanticPayload
+    );
+    if (replay) {
+      const replayKeyVersion = requireInteger(
+        replay.handoff_token_key_version || 1,
+        'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+      );
+      const managerToken = await deterministicOpaqueToken(
+        managerTokenSecret(env, replayKeyVersion),
+        'candidate-phone-handoff-v1', workflowId, generation, mutationKey
+      );
+      return jsonResponse(201, { ...replay, manager_handoff_token: managerToken });
+    }
+    const handoffTokenKeyVersion = managerTokenKeyVersion(env);
     const managerToken = await deterministicOpaqueToken(
-      env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
+      managerTokenSecret(env, handoffTokenKeyVersion),
       'candidate-phone-handoff-v1', workflowId, generation, mutationKey
     );
     payload = {
       ...payload,
       approval_token_hash_hex: await sha256Hex(managerToken),
-      expires_at_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString()
+      expires_at_utc: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      handoff_token_key_version: handoffTokenKeyVersion
     };
     body.__manager_handoff_token = managerToken;
   } else if (dbAction === 'CREATE_EMAIL_APPROVAL_REQUEST' || dbAction === 'RENEW' || dbAction === 'REMIND') {
@@ -3301,8 +3700,7 @@ const TERMINAL_PAPER_PACK_FAILURES = new Set([
 const RETRYABLE_PAPER_PACK_FAILURES = new Set([
   'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
   'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
-  'CANDIDATE_PAPER_R2_WRITE_TRANSIENT',
-  'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT'
+  'CANDIDATE_PAPER_R2_WRITE_TRANSIENT'
 ]);
 
 function canonicalPaperPackFailureCode(error) {
@@ -3399,28 +3797,8 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
       }
       if (upper(timesheet.document_state) !== 'READY'
           || !UUID_RE.test(text(timesheet.current_document_version_id))) {
-        const deadline = Date.parse(text(scope.candidate_paper_pack_preparation_deadline_at_utc));
         if (upper(timesheet.document_state) === 'FAILED') {
           throw new CandidateHttpError(409, 'CANDIDATE_PAPER_DOCUMENT_FAILED');
-        }
-        if (Number.isFinite(deadline) && deadline <= Date.now()) {
-          operationId = `paper-pack-scheduler:${workflow.id}:${workflow.generation}:${crypto.randomUUID()}`;
-          const timeoutClaim = await claimCandidatePaperPackAttempt(
-            env, deps, workflow, outbox, operationId
-          );
-          if (timeoutClaim.paper_pack_attempt_state === 'READY') {
-            results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, already_ready: true });
-            continue;
-          }
-          if (timeoutClaim.claim_acquired_new !== true) {
-            results.push({
-              workflow_id: workflow.id, timesheet_id: id, ok: false,
-              execution_state: 'IN_PROGRESS', error_code: 'CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS'
-            });
-            continue;
-          }
-          attemptToken = timeoutClaim.attempt_token;
-          throw new CandidateHttpError(503, 'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT');
         }
         results.push({
           workflow_id: workflow.id, timesheet_id: id, ok: false,
@@ -3497,45 +3875,28 @@ async function handleCandidateNoWork(request, env, deps, contractWeekId) {
   })));
 }
 
-async function handleNotifications(request, env, deps, notificationId = null) {
+async function handleNotifications(request, env, deps) {
   const access = await verifyCandidateAccess(request, env);
-  if (request.method === 'GET') {
-    const url = new URL(request.url);
-    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 50)));
-    const cursor = text(url.searchParams.get('cursor'));
-    let cursorFilter = '';
-    if (cursor) {
-      const [createdAt, id] = cursor.split('|');
-      if (!createdAt || !UUID_RE.test(text(id)) || Number.isNaN(Date.parse(createdAt))) {
-        throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_CURSOR_INVALID');
-      }
-      cursorFilter = `&or=(created_at_utc.lt.${encodeURIComponent(createdAt)},and(created_at_utc.eq.${encodeURIComponent(createdAt)},id.lt.${encodeURIComponent(id)}))`;
+  const url = new URL(request.url);
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 50)));
+  const cursor = text(url.searchParams.get('cursor'));
+  let cursorFilter = '';
+  if (cursor) {
+    const [createdAt, id] = cursor.split('|');
+    if (!createdAt || !UUID_RE.test(text(id)) || Number.isNaN(Date.parse(createdAt))) {
+      throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_CURSOR_INVALID');
     }
-    const rows = await restRows(env, 'candidate_notifications',
-      `account_id=eq.${encodeURIComponent(access.account_id)}${cursorFilter}`
-      + `&select=id,event_type,template_key,payload_json,deep_link_json,state,created_at_utc,read_at_utc&order=created_at_utc.desc,id.desc&limit=${limit + 1}`);
-    const hasMore = rows.length > limit;
-    const page = rows.slice(0, limit);
-    const tail = page[page.length - 1];
-    return jsonResponse(200, {
-      ok: true, notifications: page,
-      next_cursor: hasMore && tail ? `${tail.created_at_utc}|${tail.id}` : null
-    });
+    cursorFilter = `&or=(created_at_utc.lt.${encodeURIComponent(createdAt)},and(created_at_utc.eq.${encodeURIComponent(createdAt)},id.lt.${encodeURIComponent(id)}))`;
   }
-  const id = requireUuid(notificationId);
-  const updated = await restWrite(
-    env,
-    'candidate_notifications',
-    'PATCH',
-    `id=eq.${encodeURIComponent(id)}&account_id=eq.${encodeURIComponent(access.account_id)}&state=eq.UNREAD`,
-    { state: 'READ', read_at_utc: new Date().toISOString() },
-    'return=representation'
-  );
+  const rows = await restRows(env, 'candidate_notifications',
+    `account_id=eq.${encodeURIComponent(access.account_id)}${cursorFilter}`
+    + `&select=id,event_type,template_key,payload_json,deep_link_json,state,created_at_utc,read_at_utc&order=created_at_utc.desc,id.desc&limit=${limit + 1}`);
+  const hasMore = rows.length > limit;
+  const page = rows.slice(0, limit);
+  const tail = page[page.length - 1];
   return jsonResponse(200, {
-    ok: true,
-    notification_id: id,
-    state: updated?.state || 'READ',
-    idempotent_replay: !updated
+    ok: true, notifications: page,
+    next_cursor: hasMore && tail ? `${tail.created_at_utc}|${tail.id}` : null
   });
 }
 
@@ -4181,25 +4542,13 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
       env, deps, context.workflow, context.timesheet, complete, outbox, context.office_actor_id,
       claim.attempt_token, idempotencyKey
     );
-    return durableResult(200, {
-      ok: true,
-      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
-      idempotency_key: idempotencyKey,
-      workflow_id: context.workflow.id,
-      generation: Number(context.workflow.generation),
-      paper_pack_state: 'READY',
-      idempotent_replay: false,
-      release: {
-        ok: release?.ok === true,
-        workflow_id: release?.workflow_id || context.workflow.id,
-        generation: Number(release?.generation || context.workflow.generation),
-        state: release?.state || context.workflow.state,
-        timesheet_id: release?.timesheet_id || context.timesheet.timesheet_id,
-        mail_outbox_id: release?.mail_outbox_id || null,
-        notification_id: release?.notification_id || null,
-        complete_pack_page_count: Number(release?.complete_pack_page_count || complete?.page_count || 0),
-        idempotent_replay: release?.idempotent_replay === true
-      }
+    const atomicReceipt = release?.office_paper_retry_receipt;
+    if (atomicReceipt?.found !== true || !isObject(atomicReceipt.result)) {
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_RETRY_RECEIPT_MISSING');
+    }
+    return jsonResponse(Number(atomicReceipt.http_status || 200), {
+      ...atomicReceipt.result,
+      idempotent_replay: atomicReceipt.idempotent_replay === true
     });
   } catch (error) {
     const failureCode = canonicalPaperPackFailureCode(error);
@@ -4213,19 +4562,13 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
       // Preserve the canonical execution error; the scheduler can reconcile an expired attempt lease.
     }
     if (!failureReceipt?.ok) throw error;
-    const paperPackState = failureReceipt.paper_pack_state
-      || (RETRYABLE_PAPER_PACK_FAILURES.has(failureCode) ? 'FAILED_RETRYABLE' : 'FAILED_TERMINAL');
-    return durableResult(paperPackState === 'FAILED_RETRYABLE' ? 503 : 409, {
-      ok: false,
-      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
-      idempotency_key: idempotencyKey,
-      workflow_id: context.workflow.id,
-      generation: Number(context.workflow.generation),
-      paper_pack_state: paperPackState,
-      retryable: paperPackState === 'FAILED_RETRYABLE',
-      error_code: failureReceipt.failure_code || failureCode,
-      next_retry_at_utc: failureReceipt.next_retry_at_utc || null,
-      idempotent_replay: false
+    const atomicReceipt = failureReceipt.office_paper_retry_receipt;
+    if (atomicReceipt?.found !== true || !isObject(atomicReceipt.result)) {
+      throw new CandidateHttpError(503, 'CANDIDATE_PAPER_RETRY_RECEIPT_MISSING');
+    }
+    return jsonResponse(Number(atomicReceipt.http_status || 503), {
+      ...atomicReceipt.result,
+      idempotent_replay: atomicReceipt.idempotent_replay === true
     });
   }
 }
@@ -4298,7 +4641,11 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     match = routeMatch(path, `${CANDIDATE_PREFIX}/contract-weeks/:contractWeekId/no-work`);
     if (match && request.method === 'POST') return await handleCandidateNoWork(request, env, deps, match.contractWeekId);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/notifications/:notificationId/read`);
-    if (match && request.method === 'POST') return await handleNotifications(request, env, deps, match.notificationId);
+    if (match && request.method === 'POST') {
+      return await handleAccountAction(request, env, deps, 'MARK_NOTIFICATION_READ', {
+        notification_id: match.notificationId
+      });
+    }
 
     match = routeMatch(path, `${MANAGER_PREFIX}/workflows/:workflowId/:action`);
     if (match) {

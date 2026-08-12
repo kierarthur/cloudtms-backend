@@ -183,6 +183,33 @@ begin
        is distinct from v_now+interval '7 minutes 1 second' then
     raise exception 'second PAPER failure did not advance to five-minute backoff: %',v_result;
   end if;
+  -- Simulate a Worker crash after the canonical inner failure committed but
+  -- before the HTTP handler could record its outer Office replay receipt. The
+  -- replay owner must reconstruct the exact durable result from the mail row.
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'PAPER_RETRY_REPLAY',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_paper,'generation',1,'idempotency_key',v_operation_two
+    ),v_now+interval '2 minutes 2 seconds'
+  );
+  if not coalesce((v_result->>'found')::boolean,false)
+     or coalesce((v_result->>'idempotent_replay')::boolean,true)
+     or not coalesce((v_result#>>'{result,reconstructed_from_inner_receipt}')::boolean,false)
+     or v_result#>>'{result,paper_pack_state}'<>'FAILED_RETRYABLE'
+     or v_result#>>'{result,error_code}'<>'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT'
+     or (v_result->>'http_status')::integer<>503 then
+    raise exception 'Office retry crash-window result was not reconstructed: %',v_result;
+  end if;
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'PAPER_RETRY_REPLAY',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_paper,'generation',1,'idempotency_key',v_operation_two
+    ),v_now+interval '2 minutes 3 seconds'
+  );
+  if not coalesce((v_result->>'found')::boolean,false)
+     or not coalesce((v_result->>'idempotent_replay')::boolean,false)
+     or v_result#>>'{result,paper_pack_state}'<>'FAILED_RETRYABLE'
+     or v_result#>>'{result,error_code}'<>'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT' then
+    raise exception 'reconstructed Office retry receipt did not replay exactly: %',v_result;
+  end if;
   v_readiness:=private._candidate_paper_pack_readiness_v1(v_paper,1);
   if v_readiness->>'state'<>'BACKOFF'
      or v_readiness->>'failure_scope'<>'OUTBOX'

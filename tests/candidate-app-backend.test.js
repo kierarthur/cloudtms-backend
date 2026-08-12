@@ -127,6 +127,41 @@ test('challenge delivery tokens are stable for an idempotent replay and scoped t
   assert.equal(first.includes('='), false);
 });
 
+test('challenge replay validates changed factual input before reconstructing its token', async () => {
+  const secret = 'challenge-replay-secret';
+  const key = 'challenge-changed-email-key';
+  const originalToken = await deterministicOpaqueToken(
+    secret, 'candidate-auth-challenge-v1', 'TEST', 'ACTIVATE',
+    'original@example.test', '', key
+  );
+  const tokenHash = createHash('sha256').update(originalToken).digest('hex');
+  let calls = 0;
+  const response = await handleCandidateAppRequest(new Request(
+    'https://private.test/candidate-app/v1/auth/challenge/start', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'changed@example.test', purpose: 'ACTIVATE', idempotency_key: key
+      })
+    }
+  ), {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET: secret
+  }, {}, {
+    routeAudience: 'PRIVATE',
+    async rpc(_name, args) {
+      calls += 1;
+      if (args.p_token_hash == null) {
+        return { replay_receipt_found: true, token_hash_hex: tokenHash };
+      }
+      assert.equal(args.p_token_hash, `\\x${tokenHash}`);
+      throw new Error('CANDIDATE_IDEMPOTENCY_CONFLICT');
+    }
+  });
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+  assert.equal(calls, 2);
+});
+
 test('Candidate payload validation rejects canonical financial truth but accepts factual claim amounts', () => {
   assert.deepEqual(forbiddenFinancialKeys({
     canonical_tsfin_snapshot: { total_pay_ex_vat: 100 },
@@ -2010,6 +2045,445 @@ test('paper-pack scheduler durably records a classified retryable storage failur
   }
 });
 
+test('Candidate auth/account mutation routes reject a missing caller idempotency key before work', async () => {
+  const cases = [
+    ['/candidate-app/v1/auth/challenge/start', { email: 'candidate@example.test', purpose: 'ACTIVATE' }],
+    ['/candidate-app/v1/auth/challenge/resend', {
+      email: 'candidate@example.test', purpose: 'ACTIVATE',
+      challenge_id: '00000000-0000-4000-8000-000000000001'
+    }],
+    ['/candidate-app/v1/auth/challenge/verify', {
+      email: 'candidate@example.test', purpose: 'ACTIVATE', token: 'token'
+    }],
+    ['/candidate-app/v1/auth/password/complete', {
+      challenge_id: '00000000-0000-4000-8000-000000000001', password: 'long-enough-password'
+    }],
+    ['/candidate-app/v1/auth/login', { email: 'candidate@example.test', password: 'password' }],
+    ['/candidate-app/v1/auth/refresh', {
+      session_id: '00000000-0000-4000-8000-000000000001', refresh_token: 'refresh'
+    }],
+    ['/candidate-app/v1/auth/logout', {}],
+    ['/candidate-app/v1/account/select-candidate', {
+      selected_candidate_id: '00000000-0000-4000-8000-000000000002'
+    }],
+    ['/candidate-app/v1/account/preferences', { notification_preferences: { email: true } }],
+    ['/candidate-app/v1/account/push-token', {
+      push_provider: 'WEB_PUSH', push_token_ciphertext_hex: 'aa'.repeat(32), push_key_version: 1
+    }],
+    ['/candidate-app/v1/account/password', {
+      current_password: 'old-password-value', password: 'new-password-value'
+    }],
+    ['/candidate-app/v1/notifications/00000000-0000-4000-8000-000000000003/read', {}]
+  ];
+  for (const [path, body] of cases) {
+    const response = await handleCandidateAppRequest(new Request(`https://private.test${path}`, {
+      method: path.endsWith('/preferences') ? 'PATCH' : 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    }), { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { throw new Error('mutation RPC must not run'); }
+    });
+    assert.equal(response.status, 400, path);
+    assert.equal((await response.json()).error_code, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED', path);
+  }
+});
+
+test('failed login lost-response replay does not advance the lockout counter twice', async () => {
+  const verifier = await derivePasswordVerifier('correct-login-password');
+  const originalFetch = globalThis.fetch;
+  let receipt = null;
+  let failureWrites = 0;
+  let accountReads = 0;
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_auth_account_transition_v1');
+      if (args.p_payload.replay_probe_only === true
+          && !args.p_payload.idempotency_request_sha256) {
+        return receipt
+          ? { replay_receipt_found: true, request_key_version: 1 }
+          : { replay_receipt_found: false, request_key_version: 1 };
+      }
+      if (args.p_payload.replay_probe_only === true) {
+        return { ...receipt, idempotent_replay: true };
+      }
+      assert.equal(args.p_action, 'LOGIN_SUCCESS');
+      assert.equal(args.p_payload.login_failed, true);
+      failureWrites += 1;
+      receipt = { ok: false, error_code: 'CANDIDATE_LOGIN_INVALID', failed_login_recorded: true };
+      return receipt;
+    }
+  };
+  globalThis.fetch = async () => {
+    accountReads += 1;
+    return Response.json([{
+      id: '00000000-0000-4000-8000-000000000081', environment: 'TEST', status: 'ACTIVE',
+      password_scheme: verifier.scheme, password_scheme_version: verifier.scheme_version,
+      password_salt: verifier.salt_hex, password_digest: verifier.digest_hex,
+      password_params_json: verifier.params, locked_until_utc: null
+    }]);
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'candidate-auth-test-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const makeRequest = () => new Request('https://private.test/candidate-app/v1/auth/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'candidate@example.test', password: 'wrong-login-password',
+      idempotency_key: 'failed-login-lost-response-key'
+    })
+  });
+  try {
+    const first = await handleCandidateAppRequest(makeRequest(), env, {}, deps);
+    const replay = await handleCandidateAppRequest(makeRequest(), env, {}, deps);
+    assert.equal(first.status, 401, JSON.stringify(await first.clone().json()));
+    assert.equal(replay.status, 401, JSON.stringify(await replay.clone().json()));
+    assert.equal((await first.json()).error_code, 'CANDIDATE_LOGIN_INVALID');
+    assert.equal((await replay.json()).error_code, 'CANDIDATE_LOGIN_INVALID');
+    assert.equal(failureWrites, 1);
+    assert.equal(accountReads, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate OpenAPI requires caller idempotency for every auth and account mutation', async () => {
+  const openapi = await readFile(new URL('../docs/candidate-app/CANDIDATE_API_OPENAPI_V1.yaml', import.meta.url), 'utf8');
+  for (const path of [
+    '/candidate-app/v1/auth/challenge/start', '/candidate-app/v1/auth/challenge/resend',
+    '/candidate-app/v1/auth/challenge/verify', '/candidate-app/v1/auth/password/complete',
+    '/candidate-app/v1/auth/login', '/candidate-app/v1/auth/logout',
+    '/candidate-app/v1/account/select-candidate', '/candidate-app/v1/account/preferences',
+    '/candidate-app/v1/account/password',
+    '/candidate-app/v1/notifications/{notificationId}/read'
+  ]) {
+    const start = openapi.indexOf(`  ${path}:`);
+    const next = openapi.indexOf('\n  /', start + 4);
+    const operation = openapi.slice(start, next < 0 ? undefined : next);
+    assert.ok(start >= 0, path);
+    assert.match(operation, /requestBodies\/IdempotentJsonBody/, path);
+  }
+  assert.match(openapi, /RefreshBody:[\s\S]*required: \[refresh_token, session_id, idempotency_key\]/);
+  assert.match(openapi, /PushTokenBody:[\s\S]*required: \[push_provider, push_token, idempotency_key\]/);
+});
+
+test('notification read acknowledgement has one durable timestamped result and conflicts on changed identity', async () => {
+  const originalFetch = globalThis.fetch;
+  const sessionId = '00000000-0000-4000-8000-000000000071';
+  const accountId = '00000000-0000-4000-8000-000000000072';
+  const candidateId = '00000000-0000-4000-8000-000000000073';
+  const notificationId = '00000000-0000-4000-8000-000000000074';
+  const otherNotificationId = '00000000-0000-4000-8000-000000000075';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'notification-access-signing-secret',
+    CANDIDATE_AUTH_REPLAY_SECRET_V1: 'notification-replay-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const accessToken = await createAccessToken(env, { session_id: sessionId, rotation: 0 });
+  let receipt = null;
+  let writes = 0;
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_app_sessions')) return Response.json([{
+      id: sessionId, account_id: accountId, environment: 'TEST',
+      selected_candidate_id: candidateId, status: 'ACTIVE', rotation: 0,
+      expires_at_utc: '2099-01-01T00:00:00.000Z',
+      absolute_expires_at_utc: '2099-01-01T00:00:00.000Z'
+    }]);
+    throw new Error(`unexpected REST operation ${path}`);
+  };
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_auth_account_transition_v1');
+      assert.equal(args.p_action, 'MARK_NOTIFICATION_READ');
+      if (args.p_payload.replay_probe_only === true
+          && !args.p_payload.idempotency_request_sha256) {
+        return receipt
+          ? { replay_receipt_found: true, request_key_version: 1 }
+          : { replay_receipt_found: false, request_key_version: 1 };
+      }
+      if (args.p_payload.replay_probe_only === true) {
+        if (args.p_payload.idempotency_request_sha256 !== receipt.request_sha256) {
+          throw new Error('CANDIDATE_IDEMPOTENCY_CONFLICT');
+        }
+        return { ...receipt.response, idempotent_replay: true };
+      }
+      writes += 1;
+      receipt = {
+        request_sha256: args.p_payload.idempotency_request_sha256,
+        response: {
+          ok: true, notification_id: args.p_payload.notification_id,
+          state: 'READ', read_at_utc: '2026-08-12T14:30:00.000Z'
+        }
+      };
+      return receipt.response;
+    }
+  };
+  const invoke = (id) => handleCandidateAppRequest(new Request(
+    `https://private.test/candidate-app/v1/notifications/${id}/read`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ idempotency_key: 'notification-read-lost-response-key' })
+    }
+  ), env, {}, deps);
+  try {
+    const first = await invoke(notificationId);
+    const replay = await invoke(notificationId);
+    const conflict = await invoke(otherNotificationId);
+    assert.equal(first.status, 200);
+    assert.equal(replay.status, 200);
+    assert.equal((await first.json()).read_at_utc, '2026-08-12T14:30:00.000Z');
+    assert.equal((await replay.json()).read_at_utc, '2026-08-12T14:30:00.000Z');
+    assert.equal(conflict.status, 409);
+    assert.equal((await conflict.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    assert.equal(writes, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('refresh lost-response replay returns the same successor token and a new key retains theft detection', async () => {
+  const sessionId = '00000000-0000-4000-8000-000000000091';
+  let successorId = null;
+  const idempotencyKey = 'refresh-lost-response-key';
+  let receipt = null;
+  let firstRequestSha = null;
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_auth_account_transition_v1');
+      if (args.p_payload.replay_probe_only === true
+          && !args.p_payload.idempotency_request_sha256) {
+        if (args.p_idempotency_key === idempotencyKey && receipt) {
+          return { replay_receipt_found: true, request_key_version: 1 };
+        }
+        return { replay_receipt_found: false, request_key_version: 1 };
+      }
+      if (args.p_payload.replay_probe_only === true) {
+        assert.equal(args.p_payload.idempotency_request_sha256, firstRequestSha);
+        return { ...receipt, idempotent_replay: true };
+      }
+      if (!receipt) {
+        firstRequestSha = args.p_payload.idempotency_request_sha256;
+        successorId = args.p_payload.new_session_id;
+        receipt = {
+          ok: true, session_id: successorId, rotation: 1,
+          issued_at_utc: '2026-08-12T12:00:00.000Z',
+          expires_at_utc: '2026-09-11T12:00:00.000Z',
+          absolute_expires_at_utc: '2026-11-10T12:00:00.000Z',
+          selected_candidate_id: null, token_key_version: 1
+        };
+        return receipt;
+      }
+      return { ok: false, error_code: 'CANDIDATE_REFRESH_TOKEN_REUSE', family_revoked: true };
+    }
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'stable-private-session-secret'
+  };
+  const invoke = (key) => handleCandidateAppRequest(new Request(
+    'https://private.test/candidate-app/v1/auth/refresh', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId, refresh_token: 'original-refresh-token', idempotency_key: key
+      })
+    }
+  ), env, {}, deps);
+  const first = await invoke(idempotencyKey);
+  const firstBody = await first.json();
+  const replay = await invoke(idempotencyKey);
+  const replayBody = await replay.json();
+  assert.equal(first.status, 200);
+  assert.equal(replay.status, 200);
+  assert.equal(replayBody.session_id, successorId);
+  assert.equal(replayBody.refresh_token, firstBody.refresh_token);
+  assert.equal(replayBody.access_token, firstBody.access_token);
+  const theft = await invoke('different-refresh-key');
+  assert.equal(theft.status, 401);
+  assert.equal((await theft.json()).error_code, 'CANDIDATE_REFRESH_TOKEN_REUSE');
+});
+
+test('phone handoff replay uses the retained token key version after rotation', async () => {
+  const originalFetch = globalThis.fetch;
+  const sessionId = '00000000-0000-4000-8000-0000000000a1';
+  const accountId = '00000000-0000-4000-8000-0000000000a2';
+  const candidateId = '00000000-0000-4000-8000-0000000000a3';
+  const workflowId = '00000000-0000-4000-8000-0000000000a4';
+  const operationKey = 'phone-handoff-replay-key';
+  const baseEnv = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'access-signing-secret',
+    CANDIDATE_MANAGER_TOKEN_SECRET_V1: 'retained-manager-v1-secret',
+    CANDIDATE_MANAGER_TOKEN_SECRET_V2: 'new-manager-v2-secret',
+    CANDIDATE_MANAGER_TOKEN_KEY_VERSION: '1',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const accessToken = await createAccessToken(baseEnv, { session_id: sessionId, rotation: 0 });
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_app_sessions')) return Response.json([{
+      id: sessionId, account_id: accountId, environment: 'TEST',
+      selected_candidate_id: candidateId, status: 'ACTIVE', rotation: 0,
+      expires_at_utc: '2099-01-01T00:00:00.000Z',
+      absolute_expires_at_utc: '2099-01-01T00:00:00.000Z'
+    }]);
+    throw new Error(`unexpected REST read ${path}`);
+  };
+  let durable = null;
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_workflow_transition_atomic_v1');
+      if (args.p_payload.mutation_replay_probe_only === true) {
+        return durable ? { ...durable, idempotent_replay: true } : { replay_found: false };
+      }
+      durable = {
+        ok: true, workflow_id: workflowId, generation: 1,
+        state: 'AWAITING_MANAGER_APPROVAL',
+        approval_request_id: '00000000-0000-4000-8000-0000000000a5',
+        method: 'PHONE', handoff_token_key_version: args.p_payload.handoff_token_key_version
+      };
+      return durable;
+    }
+  };
+  const invoke = (env) => handleCandidateAppRequest(new Request(
+    `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/select-phone-approval`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ generation: 1, idempotency_key: operationKey })
+    }
+  ), env, {}, deps);
+  try {
+    const first = await invoke(baseEnv);
+    const firstBody = await first.json();
+    const replay = await invoke({ ...baseEnv, CANDIDATE_MANAGER_TOKEN_KEY_VERSION: '2' });
+    const replayBody = await replay.json();
+    assert.equal(first.status, 201);
+    assert.equal(replay.status, 201);
+    assert.equal(firstBody.handoff_token_key_version, 1);
+    assert.equal(replayBody.handoff_token_key_version, 1);
+    assert.equal(replayBody.manager_handoff_token, firstBody.manager_handoff_token);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('finalisation probes its durable key receipt before current approval history', async () => {
+  const originalFetch = globalThis.fetch;
+  const sessionId = '00000000-0000-4000-8000-0000000000b1';
+  const accountId = '00000000-0000-4000-8000-0000000000b2';
+  const candidateId = '00000000-0000-4000-8000-0000000000b3';
+  const workflowId = '00000000-0000-4000-8000-0000000000b4';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'finalisation-access-secret',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const accessToken = await createAccessToken(env, { session_id: sessionId, rotation: 0 });
+  let approvalRead = false;
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_app_sessions')) return Response.json([{
+      id: sessionId, account_id: accountId, environment: 'TEST',
+      selected_candidate_id: candidateId, status: 'ACTIVE', rotation: 0,
+      expires_at_utc: '2099-01-01T00:00:00.000Z',
+      absolute_expires_at_utc: '2099-01-01T00:00:00.000Z'
+    }]);
+    if (path.endsWith('/candidate_submission_workflows')) return Response.json([{
+      id: workflowId, account_id: accountId, candidate_id: candidateId,
+      environment: 'TEST', workflow_kind: 'CONTRACT_HOURS', route: 'PHONE',
+      state: 'FINALISED', generation: 3
+    }]);
+    if (path.endsWith('/candidate_approval_requests')) {
+      approvalRead = true;
+      return Response.json([]);
+    }
+    throw new Error(`unexpected REST read ${path}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/retry-finalisation`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ generation: 2, idempotency_key: 'finalisation-lost-response-key' })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        assert.equal(name, 'candidate_submission_finalize_atomic_v1');
+        assert.equal(args.p_daily_materialisation_json.service_finalisation.replay_key_probe_only, true);
+        return {
+          ok: true, workflow_id: workflowId, generation: 3,
+          state: 'FINALISED', idempotent_replay: true
+        };
+      }
+    });
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).state, 'FINALISED');
+    assert.equal(approvalRead, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a pending source document remains PREPARING after its observation deadline without claiming an attempt', async () => {
+  const originalFetch = globalThis.fetch;
+  const workflowId = '00000000-0000-4000-8000-0000000000c1';
+  const timesheetId = '00000000-0000-4000-8000-0000000000c2';
+  const outboxId = '00000000-0000-4000-8000-0000000000c3';
+  const workflow = {
+    id: workflowId, generation: 1, route: 'PAPER', state: 'AWAITING_PAPER_RETURN',
+    target_timesheet_id: timesheetId, anchor_timesheet_id: timesheetId,
+    paper_return_manifest_sha256: 'd'.repeat(64)
+  };
+  globalThis.fetch = async (url) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (path.endsWith('/timesheets')) return Response.json([{
+      timesheet_id: timesheetId, document_state: 'PENDING', current_document_version_id: null
+    }]);
+    if (path.endsWith('/mail_outbox')) return Response.json([{
+      id: outboxId, status: 'QUEUED', attachments: [],
+      attempt_lease_token: null, attempt_lease_expires_at_utc: null,
+      payment_scope_json: {
+        candidate_mail_authority: 'CANDIDATE_PAPER_V1',
+        candidate_workflow_id: workflowId, candidate_workflow_generation: 1,
+        paper_return_manifest_sha256: 'd'.repeat(64),
+        candidate_paper_pack_ready: false, candidate_paper_pack_retryable: false,
+        candidate_paper_pack_attempt_count: 0,
+        candidate_paper_pack_preparation_deadline_at_utc: '2000-01-01T00:00:00.000Z',
+        mail_held_until_pdf_rendered: true,
+        mail_hold_reason: 'CANDIDATE_PAPER_PACK_PENDING'
+      }
+    }]);
+    throw new Error(`unexpected REST read ${path}`);
+  };
+  try {
+    let rpcCalls = 0;
+    const result = await processPendingCandidatePaperPacks({
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      async rpc() { rpcCalls += 1; throw new Error('pending source must not claim'); }
+    }, 1);
+    assert.equal(result.results[0].execution_state, 'PREPARING');
+    assert.equal(result.results[0].error_code, 'CANDIDATE_PAPER_DOCUMENT_PENDING');
+    assert.equal(rpcCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('Office PAPER retry recovers an expired executor lease with a new inner attempt key', async () => {
   const originalFetch = globalThis.fetch;
   const workflowId = '00000000-0000-4000-8000-000000000080';
@@ -2070,9 +2544,6 @@ test('Office PAPER retry recovers an expired executor lease with a new inner att
     async rpc(name, args) {
       assert.equal(name, 'cloudtms_office_candidate_adapter_v1');
       if (args.p_action === 'PAPER_RETRY_REPLAY') return { found: false };
-      if (args.p_action === 'PAPER_RETRY_RECORD') {
-        return { http_status: args.p_payload.http_status, result: args.p_payload.result };
-      }
       if (args.p_action === 'WORKFLOW_ACTION_EXECUTE'
           && args.p_payload.workflow_action === 'PAPER_PACK_ATTEMPT_CLAIM') {
         claimEnvelope = args.p_payload;
@@ -2084,10 +2555,24 @@ test('Office PAPER retry recovers an expired executor lease with a new inner att
       if (args.p_action === 'WORKFLOW_ACTION_EXECUTE'
           && args.p_payload.workflow_action === 'PAPER_PACK_MARK_FAILURE') {
         failureEnvelope = args.p_payload;
+        const result = {
+          ok: false,
+          contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+          idempotency_key: operationId,
+          workflow_id: workflowId,
+          generation: 1,
+          paper_pack_state: 'FAILED_RETRYABLE',
+          retryable: true,
+          error_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
+          next_retry_at_utc: '2099-01-01T00:00:00.000Z'
+        };
         return {
           ok: true, paper_pack_state: 'FAILED_RETRYABLE',
           failure_code: 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
-          next_retry_at_utc: '2099-01-01T00:00:00.000Z'
+          next_retry_at_utc: '2099-01-01T00:00:00.000Z',
+          office_paper_retry_receipt: {
+            found: true, http_status: 503, result, idempotent_replay: false
+          }
         };
       }
       throw new Error(`unexpected RPC ${args.p_action}:${args.p_payload?.workflow_action || ''}`);

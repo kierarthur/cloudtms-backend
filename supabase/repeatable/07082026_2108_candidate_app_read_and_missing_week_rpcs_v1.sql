@@ -370,15 +370,13 @@ begin
   if lower(coalesce(v_scope->>'candidate_paper_generation_retired','false')) in ('true','t','1','yes') then
     v_state:='RETIRED'; v_reason:='CANDIDATE_PAPER_GENERATION_RETIRED';
   elsif v_retryable and v_failure_code='CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT' then
-    if v_next_retry_at is not null and v_next_retry_at>now() then
-      v_state:='BACKOFF'; v_reason:='CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE';
-    else
-      -- A timed-out source document is still owned by the asynchronous document
-      -- operation. The pack scheduler will re-check it; Office must not be given
-      -- a pack-assembly retry action until a READY document version exists.
-      v_state:='PREPARING'; v_reason:='CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT';
-    end if;
+    -- Legacy observations of a slow source document are not pack failures.  The
+    -- document pipeline still owns the work, so neither Candidate nor Office may
+    -- expose backoff/retry authority while the source remains pending.
+    v_state:='PREPARING'; v_reason:='CANDIDATE_PAPER_DOCUMENT_PENDING';
     v_retryable:=false;
+    v_next_retry_at:=null;
+    v_retry_in_progress:=false;
   elsif v_retryable then
     if v_next_retry_at is not null and v_next_retry_at>now() then
       v_state:='BACKOFF'; v_reason:='CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE';

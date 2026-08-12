@@ -219,12 +219,12 @@ begin
     'START','TEST','auth@example.test','ACTIVATE',null,v_token,'auth-start-v1',now()
   );
   if coalesce((v_response->>'idempotent_replay')::boolean,false)=false
-     or coalesce((v_response->>'deliver_email')::boolean,true)=true then
+     or coalesce((v_response->>'deliver_email')::boolean,false)=false then
     raise exception 'challenge replay failed: %',v_response;
   end if;
 
   v_response:=public.candidate_auth_challenge_transition_v1(
-    'VERIFY','TEST','auth@example.test','ACTIVATE',v_challenge,v_wrong,null,now()
+    'VERIFY','TEST','auth@example.test','ACTIVATE',v_challenge,v_wrong,'auth-verify-wrong-v1',now()
   );
   if coalesce((v_response->>'ok')::boolean,true)=true then
     raise exception 'wrong challenge accepted: %',v_response;
@@ -236,7 +236,7 @@ begin
   end if;
 
   v_response:=public.candidate_auth_challenge_transition_v1(
-    'VERIFY','TEST','auth@example.test','ACTIVATE',v_challenge,v_token,null,now()
+    'VERIFY','TEST','auth@example.test','ACTIVATE',v_challenge,v_token,'auth-verify-good-v1',now()
   );
   if v_response->>'state'<>'VERIFIED' then
     raise exception 'challenge VERIFY failed: %',v_response;
@@ -251,7 +251,9 @@ begin
       'password_params',jsonb_build_object('iterations',600000),
       'refresh_token_hash_hex',repeat('31',32),
       'expires_at_utc',now()+interval '30 days',
-      'absolute_expires_at_utc',now()+interval '90 days','platform','TEST'
+      'absolute_expires_at_utc',now()+interval '90 days','platform','TEST',
+      'idempotency_request_sha256',repeat('41',32),
+      'idempotency_key_version',1
     ),
     'auth-activate-v1',now()
   );
@@ -268,7 +270,9 @@ begin
     jsonb_build_object(
       'presented_refresh_token_hash_hex',repeat('31',32),
       'new_refresh_token_hash_hex',repeat('32',32),
-      'new_session_id',v_next_session
+      'new_session_id',v_next_session,
+      'idempotency_request_sha256',repeat('42',32),
+      'idempotency_key_version',1
     ),
     'auth-refresh-v1',now()
   );
@@ -277,12 +281,32 @@ begin
     raise exception 'refresh rotation failed: %',v_response;
   end if;
 
+  -- Lost-response replay must return the same successor before the rotated-token
+  -- theft path is evaluated, even if generated session/hash inputs differ.
+  v_response:=public.candidate_auth_account_transition_v1(
+    'REFRESH_SESSION','TEST',v_account,null,v_session,null,
+    jsonb_build_object(
+      'presented_refresh_token_hash_hex',repeat('31',32),
+      'new_refresh_token_hash_hex',repeat('39',32),
+      'new_session_id','aaaaaaaa-0000-4000-8000-000000000009',
+      'idempotency_request_sha256',repeat('42',32),
+      'idempotency_key_version',1
+    ),
+    'auth-refresh-v1',now()
+  );
+  if (v_response->>'session_id')::uuid<>v_next_session
+     or coalesce((v_response->>'idempotent_replay')::boolean,false)=false then
+    raise exception 'refresh lost-response replay failed: %',v_response;
+  end if;
+
   v_response:=public.candidate_auth_account_transition_v1(
     'REFRESH_SESSION','TEST',v_account,null,v_session,null,
     jsonb_build_object(
       'presented_refresh_token_hash_hex',repeat('31',32),
       'new_refresh_token_hash_hex',repeat('33',32),
-      'new_session_id','aaaaaaaa-0000-0000-0000-000000000004'
+      'new_session_id','aaaaaaaa-0000-0000-0000-000000000004',
+      'idempotency_request_sha256',repeat('43',32),
+      'idempotency_key_version',1
     ),
     'auth-refresh-reuse-v1',now()
   );
@@ -495,7 +519,7 @@ begin
     v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
     jsonb_build_object(
       'approval_token_hash_hex',encode(extensions.digest(v_workflow::text||':phone','sha256'),'hex'),
-      'expires_at_utc',now()+interval '30 minutes'
+      'expires_at_utc',now()+interval '30 minutes','handoff_token_key_version',1
     ),
     'workflow-select-phone-v1',now()
   );
@@ -654,6 +678,21 @@ begin
   ) then
     raise exception 'manager-review artefact incorrectly consumed canonical evidence';
   end if;
+  update public.candidate_approval_requests
+  set state='SUPERSEDED',superseded_at_utc=now(),updated_at_utc=now()
+  where id=v_approval_request;
+  v_response:=public.candidate_submission_finalize_atomic_v1(
+    null,'TEST',v_workflow,2,null,'workflow-finalise-v1',now(),
+    jsonb_build_object('service_finalisation',jsonb_build_object(
+      'contract_version','CANDIDATE_MANAGER_FINALISATION_V1',
+      'workflow_generation',2,
+      'replay_key_probe_only',true
+    ))
+  );
+  if v_response->>'state'<>'FINALISED'
+     or not coalesce((v_response->>'idempotent_replay')::boolean,false) then
+    raise exception 'finalisation completion receipt was not replayable after approval history moved: %',v_response;
+  end if;
 end;
 $workflow_finalisation$;
 
@@ -786,7 +825,7 @@ begin
     v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
     jsonb_build_object(
       'approval_token_hash_hex',encode(extensions.digest(v_workflow::text||':daily-phone','sha256'),'hex'),
-      'expires_at_utc',now()+interval '30 minutes'
+      'expires_at_utc',now()+interval '30 minutes','handoff_token_key_version',1
     ),
     'daily-select-phone-v1',now()
   );

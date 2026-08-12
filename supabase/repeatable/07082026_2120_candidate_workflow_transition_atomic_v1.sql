@@ -2596,6 +2596,7 @@ begin
         v_payload-'service_office_action'-'actor_user_id'-'storage_key'
       when v_action='SELECT_PHONE_APPROVAL' then
         v_payload-'service_office_action'-'actor_user_id'-'expires_at_utc'
+          -'approval_token_hash_hex'-'handoff_token_key_version'
       when v_action='WORKER_SUBMIT' then
         case when jsonb_typeof(v_payload->'submission_request_identity')='object'
           then jsonb_build_object(
@@ -3566,6 +3567,15 @@ begin
       'approval_request_id',v_approval.id,'method',v_approval.method,
       'review_manifest_sha256',encode(v_approval.review_manifest_sha256,'hex'),
       'expires_at_utc',v_approval.expires_at_utc,'mail_outbox_id',v_mail_id);
+    if v_action='SELECT_PHONE_APPROVAL' then
+      if coalesce(v_payload->>'handoff_token_key_version','') !~ '^[1-9][0-9]{0,2}$'
+         or (v_payload->>'handoff_token_key_version')::integer>32 then
+        raise exception 'CANDIDATE_REPLAY_KEY_VERSION_INVALID' using errcode='22023';
+      end if;
+      v_response:=v_response||jsonb_build_object(
+        'handoff_token_key_version',(v_payload->>'handoff_token_key_version')::integer
+      );
+    end if;
     update public.candidate_submission_workflows set
       state='AWAITING_MANAGER_APPROVAL',route=v_approval.method,policy_snapshot_json=v_policy,
       last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
@@ -4721,7 +4731,6 @@ begin
       'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
       'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
       'CANDIDATE_PAPER_R2_WRITE_TRANSIENT',
-      'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT',
       'CANDIDATE_PAPER_DOCUMENT_FAILED',
       'CANDIDATE_PAPER_OUTBOX_NOT_READY',
       'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
@@ -4739,8 +4748,7 @@ begin
       when v_paper_failure_code in (
         'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
         'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT',
-        'CANDIDATE_PAPER_R2_WRITE_TRANSIENT',
-        'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT'
+        'CANDIDATE_PAPER_R2_WRITE_TRANSIENT'
       ) then 'RETRYABLE'
       when v_paper_failure_code in (
         'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',

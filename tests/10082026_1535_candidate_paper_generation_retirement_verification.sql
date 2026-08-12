@@ -19,6 +19,9 @@ declare
   v_workflow constant uuid:='b5100000-0000-4000-8000-000000000008';
   v_mail constant uuid:='b5100000-0000-4000-8000-000000000009';
   v_sent_mail constant uuid:='b5100000-0000-4000-8000-000000000010';
+  v_actor constant uuid:='b5100000-0000-4000-8000-000000000011';
+  v_attempt_token constant text:=repeat('bc',32);
+  v_operation_id constant text:='b5100000-0000-4000-8000-000000000012';
   v_manifest jsonb;
   v_manifest_sha bytea;
   v_manifest_hex text;
@@ -107,6 +110,19 @@ begin
   );
 
   v_result:=public.candidate_workflow_transition_atomic_v1(
+    null,'TEST',v_workflow,'PAPER_PACK_ATTEMPT_CLAIM',1,
+    jsonb_build_object(
+      'service_paper_pack_attempt',true,'mail_outbox_id',v_mail,
+      'paper_return_manifest_sha256',v_manifest_hex,
+      'paper_pack_attempt_token',v_attempt_token,
+      'paper_pack_operation_id',v_operation_id
+    ),v_operation_id,now()
+  );
+  if not coalesce((v_result->>'claim_acquired_new')::boolean,false) then
+    raise exception 'Atomic PAPER release fixture did not acquire its execution attempt: %',v_result;
+  end if;
+
+  v_result:=public.candidate_workflow_transition_atomic_v1(
     null,'TEST',v_workflow,'PAPER_PACK_RELEASE',1,
     jsonb_build_object(
       'service_paper_pack_release',true,'mail_outbox_id',v_mail,
@@ -114,7 +130,8 @@ begin
       'complete_pack_storage_key',v_pack_key,'complete_pack_sha256',v_pack_sha,
       'complete_pack_byte_size',500,'complete_pack_page_count',1,
       'complete_pack_media_type','application/pdf','base_document_sha256',v_base_sha,
-      'branding_contract_sha256',v_branding_sha,'renderer_contract_version',v_renderer
+      'branding_contract_sha256',v_branding_sha,'renderer_contract_version',v_renderer,
+      'paper_pack_attempt_token',v_attempt_token,'paper_pack_operation_id',v_operation_id
     ),'paper-release-once',now()
   );
   if not coalesce((v_result->>'ok')::boolean,false)
@@ -133,6 +150,31 @@ begin
   if (select count(*) from public.candidate_notifications
       where workflow_id=v_workflow and event_type='PAPER_PACK_READY')<>1 then
     raise exception 'Atomic PAPER release did not insert exactly one readiness notification';
+  end if;
+
+  -- Simulate a Worker crash after READY committed but before the Office HTTP
+  -- handler received and stored its outer response. The Office UUID must
+  -- reconstruct READY from the exact inner operation, then replay it exactly.
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'PAPER_RETRY_REPLAY',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_workflow,'generation',1,'idempotency_key',v_operation_id
+    ),now()
+  );
+  if not coalesce((v_result->>'found')::boolean,false)
+     or coalesce((v_result->>'idempotent_replay')::boolean,true)
+     or not coalesce((v_result#>>'{result,reconstructed_from_inner_receipt}')::boolean,false)
+     or v_result#>>'{result,paper_pack_state}'<>'READY'
+     or (v_result->>'http_status')::integer<>200 then
+    raise exception 'Office READY crash-window result was not reconstructed: %',v_result;
+  end if;
+  v_result:=public.cloudtms_office_candidate_adapter_v1(
+    'PAPER_RETRY_REPLAY',v_actor,'TEST',jsonb_build_object(
+      'workflow_id',v_workflow,'generation',1,'idempotency_key',v_operation_id
+    ),now()+interval '1 second'
+  );
+  if not coalesce((v_result->>'idempotent_replay')::boolean,false)
+     or v_result#>>'{result,paper_pack_state}'<>'READY' then
+    raise exception 'reconstructed Office READY receipt did not replay exactly: %',v_result;
   end if;
 
   v_result:=public.candidate_workflow_transition_atomic_v1(

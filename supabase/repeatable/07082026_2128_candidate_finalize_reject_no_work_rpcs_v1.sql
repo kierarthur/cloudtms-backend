@@ -491,6 +491,7 @@ declare
   v_service_finalisation jsonb;
   v_is_office_service boolean:=false;
   v_replay_probe_only boolean:=false;
+  v_key_replay_probe_only boolean:=false;
   v_mutation_channel text;
   v_mutation_actor_identity text;
   v_mutation_request_hash text;
@@ -510,6 +511,8 @@ begin
     );
   v_replay_probe_only:=p_session_id is null
     and coalesce((v_service_finalisation->>'replay_probe_only')::boolean,false);
+  v_key_replay_probe_only:=p_session_id is null
+    and coalesce((v_service_finalisation->>'replay_key_probe_only')::boolean,false);
   if not v_is_office_service then
     perform private._candidate_require_feature_v1(v_environment,'candidate_app_writes');
   end if;
@@ -541,6 +544,36 @@ begin
     when p_session_id is null then 'SERVICE' else 'CANDIDATE_CLIENT' end;
   v_mutation_actor_identity:=case when v_is_office_service
     then v_service_finalisation->>'actor_user_id' else coalesce(p_session_id::text,'SERVICE') end;
+  if v_key_replay_probe_only then
+    select ae.before_json,ae.after_json
+    into v_prior_receipt_before,v_prior_receipt_after
+    from public.audit_events ae
+    where ae.object_type='candidate_workflow_mutation_receipt'
+      and ae.object_id_text=v_workflow.id::text
+      and ae.correlation_id=btrim(p_idempotency_key)
+    order by ae.ts_utc desc,ae.id desc
+    limit 1;
+    if found then
+      if upper(coalesce(v_prior_receipt_before->>'workflow_action',''))<>'RETRY_FINALISATION'
+         or upper(coalesce(v_prior_receipt_before->>'channel',''))<>v_mutation_channel
+         or coalesce(v_prior_receipt_before->>'actor_identity','')
+              is distinct from coalesce(v_mutation_actor_identity,'')
+         or nullif(v_prior_receipt_after->>'generation','')::integer
+              is distinct from p_expected_generation+1 then
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+          using errcode='40001',detail=jsonb_build_object(
+            'code','CANDIDATE_IDEMPOTENCY_CONFLICT','workflow_id',v_workflow.id,
+            'idempotency_key',btrim(p_idempotency_key)
+          )::text;
+      end if;
+      return coalesce(v_prior_receipt_after,'{}'::jsonb)
+        ||jsonb_build_object('idempotent_replay',true);
+    end if;
+    return jsonb_build_object(
+      'ok',true,'replay_found',false,'workflow_id',v_workflow.id,
+      'expected_generation',p_expected_generation
+    );
+  end if;
   -- Candidate-session calls retain their established lifecycle errors before
   -- an immutable approval identity exists. Service replay/finalisation calls
   -- continue through the receipt path below before mutable lifecycle checks.

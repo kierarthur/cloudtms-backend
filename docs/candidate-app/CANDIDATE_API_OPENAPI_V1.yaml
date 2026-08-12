@@ -85,7 +85,7 @@ paths:
       operationId: startCandidateChallenge
       summary: Start candidate challenge
       x-cloudtms-private-path: /private/candidate-app/v1/auth/challenge/start
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *acceptedResponses
   /candidate-app/v1/auth/challenge/resend:
     post:
@@ -94,7 +94,7 @@ paths:
       operationId: resendCandidateChallenge
       summary: Resend candidate challenge
       x-cloudtms-private-path: /private/candidate-app/v1/auth/challenge/resend
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *acceptedResponses
   /candidate-app/v1/auth/challenge/verify:
     post:
@@ -103,7 +103,7 @@ paths:
       operationId: verifyCandidateChallenge
       summary: Verify candidate challenge
       x-cloudtms-private-path: /private/candidate-app/v1/auth/challenge/verify
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/auth/password/complete:
     post:
@@ -112,7 +112,7 @@ paths:
       operationId: completeCandidatePassword
       summary: Complete candidate password
       x-cloudtms-private-path: /private/candidate-app/v1/auth/password/complete
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *sessionResponses
   /candidate-app/v1/auth/login:
     post:
@@ -121,7 +121,7 @@ paths:
       operationId: loginCandidate
       summary: Login candidate
       x-cloudtms-private-path: /private/candidate-app/v1/auth/login
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *sessionResponses
   /candidate-app/v1/auth/refresh:
     post:
@@ -138,7 +138,7 @@ paths:
       operationId: logoutCandidate
       summary: Logout candidate
       x-cloudtms-private-path: /private/candidate-app/v1/auth/logout
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/account/select-candidate:
     post:
@@ -146,7 +146,7 @@ paths:
       operationId: selectTestCandidate
       summary: Select test candidate
       x-cloudtms-private-path: /private/candidate-app/v1/account/select-candidate
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses:
         '200': {description: Candidate selected; returns a replacement broker access token and the same public session_id, content: {application/json: {schema: {$ref: '#/components/schemas/SelectedCandidateSession'}}}}
         '400': {$ref: '#/components/responses/Error'}
@@ -158,7 +158,7 @@ paths:
       operationId: updateCandidateNotificationPreferences
       summary: Update candidate notification preferences
       x-cloudtms-private-path: /private/candidate-app/v1/account/preferences
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/account/push-token:
     post:
@@ -175,7 +175,7 @@ paths:
       operationId: changeCandidatePassword
       summary: Change candidate password
       x-cloudtms-private-path: /private/candidate-app/v1/account/password
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/bootstrap:
     get:
@@ -317,7 +317,7 @@ paths:
       summary: Mark candidate notification read
       x-cloudtms-private-path: /private/candidate-app/v1/notifications/{notificationId}/read
       parameters: [{$ref: '#/components/parameters/NotificationId'}]
-      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
       responses: *standardResponses
   /candidate-app/v1/workflows:
     post:
@@ -752,21 +752,22 @@ components:
         application/json:
           schema:
             type: object
-            required: [refresh_token, session_id]
+            required: [refresh_token, session_id, idempotency_key]
             properties:
               refresh_token: {type: string}
               session_id: {type: string}
-              idempotency_key: {type: string, maxLength: 200}
+              idempotency_key: {type: string, minLength: 1, maxLength: 200}
     PushTokenBody:
       required: true
       content:
         application/json:
           schema:
             type: object
-            required: [push_provider, push_token]
+            required: [push_provider, push_token, idempotency_key]
             properties:
               push_provider: {type: string, enum: [APNS, FCM, WEB_PUSH]}
               push_token: {type: string, maxLength: 8192}
+              idempotency_key: {type: string, minLength: 1, maxLength: 200}
   responses:
     Error:
       description: Stable public-safe failure.

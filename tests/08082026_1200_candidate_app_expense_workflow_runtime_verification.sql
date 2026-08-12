@@ -104,7 +104,7 @@ begin
     p_session_id,'TEST',p_workflow_id,'SELECT_PHONE_APPROVAL',p_generation,
     jsonb_build_object(
       'approval_token_hash_hex',encode(extensions.digest(p_workflow_id::text||':'||p_key_prefix||':phone','sha256'),'hex'),
-      'expires_at_utc',p_now_utc+interval '30 minutes'
+      'expires_at_utc',p_now_utc+interval '30 minutes','handoff_token_key_version',1
     ),p_key_prefix||':phone-select',p_now_utc);
   v_manifest_hash:=v_response->>'review_manifest_sha256';
   v_approval_request_id:=(v_response->>'approval_request_id')::uuid;
@@ -516,7 +516,7 @@ begin
     v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
     jsonb_build_object(
       'approval_token_hash_hex',encode(extensions.digest(v_workflow::text||':first-phone','sha256'),'hex'),
-      'expires_at_utc',now()+interval '30 minutes'
+      'expires_at_utc',now()+interval '30 minutes','handoff_token_key_version',1
     ),
     'combined:first-phone-select',now());
   select id into v_old_request from public.candidate_approval_requests
