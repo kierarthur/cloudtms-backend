@@ -844,9 +844,13 @@ BEGIN
                     (v_diagnostic ->> 'can_pre_provider_cancel')::boolean,
                     false
                 )
-                AND v_candidate.latest_work_status IS DISTINCT FROM 'BLOCKED'
-                AND v_candidate.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
-                AND v_candidate.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
+                -- A terminal outcome from an older Draft-cancellation attempt is
+                -- historical evidence, not current payment authority.  The exact
+                -- candidate diagnostic above has just re-proved the complete
+                -- frozen scope and every provider/rail/settlement fence.  Let that
+                -- current proof govern a fresh Draft retry.  Scheduled and
+                -- executed-not-paid cancellation retain their historical-work
+                -- fences in the next branch.
             WHEN v_requested_action IN ('PRE_BANK_CANCEL', 'CANCEL_PAYMENT') THEN
                 COALESCE(
                     (v_diagnostic ->> 'can_pre_provider_cancel')::boolean,

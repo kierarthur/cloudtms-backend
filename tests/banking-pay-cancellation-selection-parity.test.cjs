@@ -133,6 +133,10 @@ function preparedOrdinaryCancellationEligible(fixture) {
     && !['BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE'].includes(fixture.latestWorkStatus);
 }
 
+function preparedDraftCancellationEligible(fixture) {
+  return diagnosticCanPreProviderCancel(fixture);
+}
+
 function nonEmptyProviderValue(value) {
   if (value === null || value === undefined) return false;
   if (Array.isArray(value)) return value.length > 0;
@@ -422,7 +426,7 @@ test('reviewed and immutable failed-release sets are equal in both directions', 
   ]);
 });
 
-test('ordinary cancellation has one fail-closed reviewed authority and preparation excludes prior failed work', () => {
+test('ordinary cancellation keeps historical-work fences while a fresh Draft retry uses current exact authority', () => {
   assert.match(statusPage, /AS pre_provider_cancel_eligible/);
   assert.match(statusPage, /pre_provider_cancel_eligible THEN ARRAY\['CANCEL_PAYMENT'\]/);
   assert.match(statusPage, /active_item_count > 0/);
@@ -438,8 +442,13 @@ test('ordinary cancellation has one fail-closed reviewed authority and preparati
   const actionStart = selectionPrepare.indexOf('v_action_allowed := CASE');
   const actionEnd = selectionPrepare.indexOf('v_effective_display_state := CASE', actionStart);
   const action = selectionPrepare.slice(actionStart, actionEnd);
+  const draftBranchStart = action.indexOf("WHEN v_requested_action = 'DRAFT_CANCEL'");
+  const draftBranchEnd = action.indexOf('WHEN v_requested_action', draftBranchStart + 1);
+  const draftBranch = action.slice(draftBranchStart, draftBranchEnd);
+  assert.match(draftBranch, /can_pre_provider_cancel/);
+  assert.doesNotMatch(draftBranch, /latest_work_status IS DISTINCT FROM/);
+
   for (const branch of [
-    "WHEN v_requested_action = 'DRAFT_CANCEL'",
     "WHEN v_requested_action IN ('PRE_BANK_CANCEL', 'CANCEL_PAYMENT')",
     "WHEN v_requested_action IN ('NO_MONEY_RELEASE', 'NO_MONEY_UNWIND')",
   ]) {
@@ -633,7 +642,7 @@ test('reviewed and immutable ordinary-cancellation sets are equal in both direct
   ]);
 });
 
-test('draft cancellation uses the same provider, full-scope and prior-work authority in both readers', () => {
+test('Draft retry still uses the same provider and full-scope authority while terminal attempt history cannot poison it', () => {
   const common = {
     activeItemCount: 1,
     scopeIsFull: true,
@@ -665,8 +674,15 @@ test('draft cancellation uses the same provider, full-scope and prior-work autho
   ];
   const reviewed = fixtures.filter(eligibleForOrdinaryCancellation).map(({ id }) => id).sort();
   const prepared = fixtures.filter(preparedOrdinaryCancellationEligible).map(({ id }) => id).sort();
+  const preparedDraft = fixtures.filter(preparedDraftCancellationEligible).map(({ id }) => id).sort();
   assert.deepEqual(reviewed, ['local-full']);
   assert.deepEqual(prepared, reviewed);
+  assert.deepEqual(preparedDraft, [
+    'blocked-work',
+    'failed-final-work',
+    'failed-retryable-work',
+    'local-full',
+  ]);
   assert.match(statusPage, /WHEN v_batch\.status = 'DRAFT' AND pre_provider_cancel_eligible/);
   assert.match(selectionPrepare, /WHEN v_requested_action = 'DRAFT_CANCEL'[\s\S]*can_pre_provider_cancel/);
 });
