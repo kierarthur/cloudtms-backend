@@ -887,7 +887,7 @@
       "schema": "public",
       "name": "pay_batch_freshness_user_failures_v1",
       "identity_arguments": "p_operation_id uuid, p_pay_batch_id uuid, p_actor_user_id uuid, p_limit integer",
-      "definition_sha256": "873941268a26e3e6281b87eb34989fafa1b222fb1eee8b802767e60d794c9aca",
+      "definition_sha256": "9a17f14a5801096fa690da5254cd7784cd7cc2a18274270779c2bc1f39d25cc1",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

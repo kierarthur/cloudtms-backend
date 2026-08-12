@@ -97,6 +97,9 @@ BEGIN
         WHEN COALESCE(failed_unit.unit_payload_json->>'timesheet_id', '')
              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN (failed_unit.unit_payload_json->>'timesheet_id')::uuid
+        WHEN COALESCE(failed_unit.unit_payload_json #>> '{validation_result,diff,stored_key,timesheet_id}', '')
+             ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (failed_unit.unit_payload_json #>> '{validation_result,diff,stored_key,timesheet_id}')::uuid
         ELSE NULL::uuid
       END AS timesheet_id
     FROM public.banking_pay_operation_scope_units AS failed_unit

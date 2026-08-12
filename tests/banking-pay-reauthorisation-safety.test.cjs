@@ -27,6 +27,7 @@ test('freshness presentation reuses exact scope-unit decisions and identifies af
   assert.match(freshnessSql, /unit_payload_json->>'pay_batch_item_id'/);
   assert.match(freshnessSql, /LEFT JOIN public\.pay_batch_items AS frozen_batch_item/);
   assert.match(freshnessSql, /COALESCE\(failed_unit\.timesheet_id, frozen_batch_item\.timesheet_id\)/);
+  assert.match(freshnessSql, /validation_result,diff,stored_key,timesheet_id/);
   assert.match(freshnessSql, /candidate_display_name/);
   assert.match(freshnessSql, /pay_batch_timesheet_snapshots/);
   assert.match(freshnessSql, /target_snapshot_json->>'client_name'/);
