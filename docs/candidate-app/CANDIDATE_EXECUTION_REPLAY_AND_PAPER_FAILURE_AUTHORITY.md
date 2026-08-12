@@ -10,6 +10,10 @@ An idempotency key identifies one semantic request, not one set of server-genera
 
 `WORKER_SUBMIT` requires the factual `candidate_signed_at_utc` supplied by the Candidate client. The backend does not substitute wall-clock time. The first successful response is durable. Reusing its key for a different action or materially different factual payload returns `CANDIDATE_IDEMPOTENCY_CONFLICT`.
 
+The signed submission identity contains factual claim/signature input only. It never includes a regenerated official-review presentation. Where a valid standalone expense submission has no target row yet, the backend derives one deterministic provisional target identity from workflow, generation, key and stable contract/week facts; it never introduces a fresh random UUID on replay.
+
+`REMIND` and `RENEW` bind the exact approval-request ID and request generation carried by the server action envelope. The backend and SQL both load that exact request. They never replace it with whichever request happens to be newest when the call arrives.
+
 ## Finalisation replay
 
 Weekly, PHONE, PAPER and DAILY finalisation first probe the durable finalisation receipt using workflow ID, original generation, approval identity, actor/channel and idempotency key. An exact replay returns the committed `FINALISED` result before current generation, current state, current row signature or regenerated DAILY materialisation is considered. If no receipt exists, every current-state, signature, approval and canonical materialisation check still runs before mutation.
@@ -26,13 +30,13 @@ The exact `TIMESHEET_QR` outbox row owns the PAPER preparation execution state f
 - `READY`: the exact complete-pack receipt is installed and the held mail may proceed through normal provider fencing.
 - `RETIRED` or `STALE`: no preparation or retry authority remains.
 
-Every assembly attempt acquires one database-owned ten-minute attempt lease. The scheduler and Office retry share it. Only the matching token may release the complete pack or record the attempt failure. Retryable failures use bounded backoff of 1, 5, 15 and then 30 minutes. A later attempt may recover an expired lease; an active lease cannot be duplicated.
+Every assembly attempt has a unique operation ID and acquires one database-owned ten-minute attempt lease. The scheduler and Office retry share it. Only a newly acquired claim may execute R2 reads or pack assembly; replay of a prior `CLAIMED` receipt is observational and never authorises a second executor. Only the matching operation ID and token may release the complete pack or record the attempt failure. Retryable failures use bounded backoff of 1, 5, 15 and then 30 minutes. The durable attempt count advances for every actual claimed attempt, including attempts that end in a document timeout. A later attempt may recover an expired lease; an active lease cannot be duplicated.
 
 Canonical enqueue records `candidate_paper_pack_preparation_started_at_utc` and a 15-minute deadline. A missing or non-ready document before the deadline remains `PREPARING`. Once the deadline passes, `CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT` is durably recorded as retryable. A document marked failed is terminal. A missing exact outbox receives a workflow-level durable operational receipt so it cannot disappear into a silent scheduler loop.
 
 ## Office retry ownership
 
-The normal CloudTMS Office retry endpoint uses the client UUID as the attempt-claim idempotency key. The first claimant performs R2 reads/assembly. A concurrent exact replay receives `RETRY_IN_PROGRESS`; a lost-response replay after release receives `READY`. No retry response exposes an R2 storage key.
+The normal CloudTMS Office retry endpoint uses the client UUID as the outer operation identity. A database-owned Office receipt stores the complete final `READY`, `FAILED_RETRYABLE` or `FAILED_TERMINAL` result and HTTP status. A concurrent exact call may receive transient `RETRY_IN_PROGRESS`, but that in-progress response is not frozen as the final replay result. Once the original execution finishes, every exact lost-response retry returns its complete durable final result. No retry response exposes an R2 storage key.
 
 Office remains under the currently agreed authenticated `admin` boundary. This addendum does not introduce future supervisor roles or a three-state Office master switch. Candidate app sessions remain separate from Office authority.
 

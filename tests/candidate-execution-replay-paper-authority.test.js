@@ -40,7 +40,12 @@ test('PAPER execution has one database-owned attempt lease, backoff and terminal
   assert.match(backend, /execution_state: 'FAILED_TERMINAL'/);
   assert.match(backend, /execution_state: 'BACKOFF'/);
   assert.match(backend, /claimCandidatePaperPackAttempt/);
-  assert.match(backend, /OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2/);
+  assert.match(backend, /claim_acquired_new/);
+  assert.match(backend, /PAPER_RETRY_REPLAY/);
+  assert.match(backend, /PAPER_RETRY_RECORD/);
+  assert.match(backend, /OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3/);
+  assert.match(office, /cloudtms_office_candidate_paper_retry/);
+  assert.match(office, /OFFICE_CANDIDATE_PAPER_RETRY_RECEIPT_V1/);
 });
 
 test('PAPER preparation owns an enforceable deadline and pre-outbox failure receipt', () => {

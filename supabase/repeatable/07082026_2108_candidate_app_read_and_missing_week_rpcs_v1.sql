@@ -292,6 +292,13 @@ declare
   v_state text:='PREPARING';
   v_reason text:='CANDIDATE_PAPER_PACK_PREPARING';
   v_ready boolean:=false;
+  v_retryable boolean:=false;
+  v_failure_scope text;
+  v_failure_code text;
+  v_attempt_count integer:=0;
+  v_next_retry_at timestamptz;
+  v_retry_in_progress boolean:=false;
+  v_operation_id text;
 begin
   select * into v_workflow from public.candidate_submission_workflows
   where id=p_workflow_id and generation=p_expected_generation;
@@ -304,6 +311,23 @@ begin
       'download_available',false,'upload_available',false,'page_count',null,
       'reason_code',case when v_workflow.state='RECEIVED' then 'CANDIDATE_PAPER_RETURN_RECEIVED'
         else 'CANDIDATE_PAPER_PACK_NOT_APPLICABLE' end);
+  end if;
+  if coalesce(v_workflow.last_mutation_response_json->>'failure_scope','')='WORKFLOW'
+     and coalesce(v_workflow.last_mutation_response_json->>'paper_pack_state','')='FAILED_TERMINAL' then
+    return jsonb_build_object(
+      'state','FAILED_TERMINAL','download_available',false,'upload_available',false,
+      'page_count',null,'reason_code',coalesce(
+        v_workflow.last_mutation_response_json->>'failure_code',
+        'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+      ),
+      'failure_scope','WORKFLOW','failure_code',coalesce(
+        v_workflow.last_mutation_response_json->>'failure_code',
+        'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+      ),
+      'retryable',false,'attempt_count',0,'next_retry_at_utc',null,
+      'retry_in_progress',false,
+      'operation_id',v_workflow.last_mutation_response_json->>'paper_pack_operation_id'
+    );
   end if;
   v_manifest:=case when v_workflow.paper_return_manifest_sha256 is null then null
     else encode(v_workflow.paper_return_manifest_sha256,'hex') end;
@@ -330,10 +354,33 @@ begin
     and mail.payment_scope_json->>'candidate_workflow_generation'=v_workflow.generation::text
     and lower(coalesce(mail.payment_scope_json->>'paper_return_manifest_sha256',''))=v_manifest;
   v_scope:=coalesce(v_mail.payment_scope_json,'{}'::jsonb);
+  v_failure_scope:='OUTBOX';
+  v_failure_code:=nullif(v_scope->>'candidate_paper_pack_failure_code','');
+  v_retryable:=lower(coalesce(v_scope->>'candidate_paper_pack_retryable','false'))
+    in ('true','t','1','yes');
+  v_attempt_count:=case when coalesce(v_scope->>'candidate_paper_pack_attempt_count','')~'^[0-9]+$'
+    then (v_scope->>'candidate_paper_pack_attempt_count')::integer else 0 end;
+  v_next_retry_at:=nullif(v_scope->>'candidate_paper_pack_next_retry_at_utc','')::timestamptz;
+  v_retry_in_progress:=coalesce(
+    nullif(v_scope->>'candidate_paper_pack_attempt_token','') is not null
+      and nullif(v_scope->>'candidate_paper_pack_attempt_expires_at_utc','')::timestamptz>now(),
+    false
+  );
+  v_operation_id:=nullif(v_scope->>'candidate_paper_pack_operation_id','');
   if lower(coalesce(v_scope->>'candidate_paper_generation_retired','false')) in ('true','t','1','yes') then
     v_state:='RETIRED'; v_reason:='CANDIDATE_PAPER_GENERATION_RETIRED';
+  elsif v_retryable then
+    if v_next_retry_at is not null and v_next_retry_at>now() then
+      v_state:='BACKOFF'; v_reason:='CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE';
+    else
+      v_state:='FAILED_RETRYABLE';
+      v_reason:=coalesce(v_failure_code,'CANDIDATE_PAPER_PACK_FAILED_RETRYABLE');
+    end if;
+  elsif upper(coalesce(v_scope->>'candidate_paper_pack_failure_class',''))='TERMINAL' then
+    v_state:='FAILED_TERMINAL';
+    v_reason:=coalesce(v_failure_code,'CANDIDATE_PAPER_PACK_FAILED_TERMINAL');
   elsif v_mail.status='FAILED' then
-    v_state:='FAILED'; v_reason:='CANDIDATE_PAPER_OUTBOX_FAILED';
+    v_state:='FAILED_TERMINAL'; v_reason:='CANDIDATE_PAPER_OUTBOX_FAILED';
   elsif jsonb_typeof(v_mail.attachments)='array' and jsonb_array_length(v_mail.attachments)=1 then
     v_attachment:=v_mail.attachments->0;
     v_ready:=v_mail.status in ('QUEUED','SENT')
@@ -352,7 +399,10 @@ begin
   end if;
   return jsonb_build_object('state',v_state,'download_available',v_ready,'upload_available',v_ready,
     'page_count',case when v_ready then nullif(v_scope->>'candidate_complete_pack_page_count','')::integer else null end,
-    'reason_code',v_reason);
+    'reason_code',v_reason,'failure_scope',v_failure_scope,'failure_code',v_failure_code,
+    'retryable',v_retryable,'attempt_count',v_attempt_count,
+    'next_retry_at_utc',v_next_retry_at,'retry_in_progress',v_retry_in_progress,
+    'operation_id',v_operation_id);
 end;
 $function$;
 
@@ -704,14 +754,18 @@ begin
           'code','SEND_MANAGER_REMINDER','label','Send Manager Reminder',
           'method','POST','path','/candidate-app/v1/workflows/'||v_workflow.id::text||'/actions/remind',
           'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation,
-          'approval_request_id',v_approval.id,'requires_confirmation',false,'requires_reason',false,
+          'approval_request_id',v_approval.id,
+          'approval_request_generation',v_approval.request_generation,
+          'requires_confirmation',false,'requires_reason',false,
           'enabled',v_reminder_eligible,'disabled_reason',v_disabled_reason
         ));
         v_actions:=v_actions||jsonb_build_array(jsonb_build_object(
           'code','REQUEST_APPROVAL_AGAIN','label','Request Approval Again',
           'method','POST','path','/candidate-app/v1/workflows/'||v_workflow.id::text||'/actions/renew',
           'workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation,
-          'approval_request_id',v_approval.id,'requires_confirmation',true,'requires_reason',false,
+          'approval_request_id',v_approval.id,
+          'approval_request_generation',v_approval.request_generation,
+          'requires_confirmation',true,'requires_reason',false,
           'enabled',v_renewal_eligible,
           'disabled_reason',case when v_renewal_eligible then null else 'MANAGER_APPROVAL_REQUEST_NOT_EXPIRED' end
         ));

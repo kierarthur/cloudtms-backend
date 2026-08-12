@@ -643,11 +643,17 @@ components:
       type: object
       required: [state, download_available, upload_available]
       properties:
-        state: {type: string, enum: [NOT_APPLICABLE, PREPARING, READY, FAILED, RETIRED, STALE, RETURN_RECEIVED]}
+        state: {type: string, enum: [NOT_APPLICABLE, PREPARING, BACKOFF, READY, FAILED_RETRYABLE, FAILED_TERMINAL, RETIRED, STALE, RETURN_RECEIVED]}
         download_available: {type: boolean}
         upload_available: {type: boolean}
         page_count: {type: [integer, 'null'], minimum: 1}
         reason_code: {type: [string, 'null']}
+        failure_scope: {type: [string, 'null'], enum: [WORKFLOW, OUTBOX, null]}
+        retryable: {type: boolean}
+        retry_in_progress: {type: boolean}
+        attempt_count: {type: integer, minimum: 0}
+        next_retry_at_utc: {type: [string, 'null'], format: date-time}
+        operation_id: {type: [string, 'null']}
     WorkflowActionRequest:
       type: object
       required: [generation, idempotency_key]
@@ -662,9 +668,19 @@ components:
     ReminderRequest:
       allOf:
         - {$ref: '#/components/schemas/WorkflowActionRequest'}
+        - type: object
+          required: [approval_request_id, approval_request_generation]
+          properties:
+            approval_request_id: {$ref: '#/components/schemas/Uuid'}
+            approval_request_generation: {type: integer, minimum: 1}
     RenewalRequest:
       allOf:
         - {$ref: '#/components/schemas/WorkflowActionRequest'}
+        - type: object
+          required: [approval_request_id, approval_request_generation]
+          properties:
+            approval_request_id: {$ref: '#/components/schemas/Uuid'}
+            approval_request_generation: {type: integer, minimum: 1}
     CancellationRequest:
       allOf:
         - {$ref: '#/components/schemas/WorkflowActionRequest'}

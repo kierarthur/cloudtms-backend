@@ -28800,7 +28800,22 @@ function buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, fact
   };
 }
 
-async function buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { workflow, factualSubmission } = {}) {
+async function deterministicCandidateUuid(namespace, ...parts) {
+  const source = new TextEncoder().encode(
+    [namespace, ...parts.map(value => String(value == null ? '' : value))].join('\u001f')
+  );
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', source));
+  const bytes = digest.slice(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const value = Array.from(bytes).map(byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}`
+    + `-${value.slice(16, 20)}-${value.slice(20)}`;
+}
+
+async function buildCandidateWeeklySubmissionThroughCanonicalAuthority(
+  env, { workflow, factualSubmission, mutationKey } = {}
+) {
   const enc = encodeURIComponent;
   const factual = (factualSubmission && typeof factualSubmission === 'object' && !Array.isArray(factualSubmission))
     ? factualSubmission : {};
@@ -28814,7 +28829,11 @@ async function buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { wo
   ]);
   if (!cw || !contract || String(cw.contract_id) !== String(contract.id)) throw new Error('CANDIDATE_WORKFLOW_WEEK_NOT_FOUND');
 
-  const targetTimesheetId = String(workflow.target_timesheet_id || '').trim() || crypto.randomUUID();
+  const targetTimesheetId = String(workflow.target_timesheet_id || '').trim()
+    || await deterministicCandidateUuid(
+      'candidate-weekly-provisional-timesheet-v1', workflow.id, workflow.generation,
+      mutationKey, contractWeekId, contractId
+    );
   const [existingTimesheet, existingFinancials, candidate, client] = await Promise.all([
     workflow.target_timesheet_id
       ? sbGetOne(env, `${env.SUPABASE_URL}/rest/v1/timesheets?timesheet_id=eq.${enc(workflow.target_timesheet_id)}&is_current=eq.true&select=*`)
@@ -192978,10 +192997,10 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
     routeAudience,
     rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
     requireOfficeUser: (request, roles) => requireUser(env, request, roles),
-    buildWeeklySubmission: ({ workflow, factualSubmission }) =>
-      buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { workflow, factualSubmission }),
-    buildDailySubmission: ({ workflow, factualSubmission }) =>
-      buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission }),
+    buildWeeklySubmission: ({ workflow, factualSubmission, mutationKey }) =>
+      buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { workflow, factualSubmission, mutationKey }),
+    buildDailySubmission: ({ workflow, factualSubmission, mutationKey }) =>
+      buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission, mutationKey }),
     finaliseDaily: (options) => finaliseCandidateDailyThroughCanonicalAuthority(env, options),
     enqueueQrPack: (options) => enqueueCandidateQrPackThroughCanonicalAuthority(env, options),
     nudgeQrPack: (options) => nudgeCandidateQrPackDocumentOperation(env, options)

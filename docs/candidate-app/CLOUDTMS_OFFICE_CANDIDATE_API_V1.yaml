@@ -135,9 +135,10 @@ paths:
         The cancel action cancels only the exact current manager approval
         request and link. It does not cancel the Candidate claim. Immutable sent
         mail remains history and a provider handoff in progress blocks mutation.
-        PAPER retry uses the caller UUID as the durable execution identity. An
-        exact lost-response replay returns READY or RETRY_IN_PROGRESS without
-        assembling the pack twice.
+        PAPER retry uses the caller UUID as the durable outer operation identity.
+        A concurrent call may return transient RETRY_IN_PROGRESS, but exact
+        lost-response replay after completion returns the stored READY,
+        FAILED_RETRYABLE or FAILED_TERMINAL result without assembling twice.
       parameters:
         - {$ref: '#/components/parameters/WorkflowId'}
         - name: action
@@ -397,7 +398,7 @@ components:
       additionalProperties: true
       required: [state]
       properties:
-        state: {type: string, enum: [NOT_APPLICABLE, PREPARING, READY, RETURN_RECEIVED, FAILED_RETRYABLE, FAILED_TERMINAL, RETIRED, STALE]}
+        state: {type: string, enum: [NOT_APPLICABLE, PREPARING, BACKOFF, READY, RETURN_RECEIVED, FAILED_RETRYABLE, FAILED_TERMINAL, RETIRED, STALE]}
         lifecycle_code: {type: [string, 'null']}
         delivery_generation:
           type: [integer, 'null']
@@ -405,9 +406,12 @@ components:
           description: Immutable PAPER delivery generation. FINALISED workflows use the preceding generation; live preparation uses the current generation.
         page_count: {type: [integer, 'null'], minimum: 1}
         reason_code: {type: [string, 'null']}
+        failure_scope: {type: [string, 'null'], enum: [WORKFLOW, OUTBOX, null]}
         retryable: {type: boolean}
+        retry_in_progress: {type: boolean}
         attempt_count: {type: integer, minimum: 0}
         next_retry_at_utc: {type: [string, 'null'], format: date-time}
+        operation_id: {type: [string, 'null']}
         issued_at_utc: {type: [string, 'null'], format: date-time}
         returned_at_utc: {type: [string, 'null'], format: date-time}
     WorkflowProjection:

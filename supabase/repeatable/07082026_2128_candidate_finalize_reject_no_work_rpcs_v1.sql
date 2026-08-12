@@ -495,6 +495,8 @@ declare
   v_mutation_actor_identity text;
   v_mutation_request_hash text;
   v_mutation_receipt jsonb;
+  v_prior_receipt_before jsonb;
+  v_prior_receipt_after jsonb;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   v_service_finalisation:=coalesce(p_daily_materialisation_json->'service_finalisation','{}'::jsonb);
@@ -535,6 +537,42 @@ begin
     when p_session_id is null then 'SERVICE' else 'CANDIDATE_CLIENT' end;
   v_mutation_actor_identity:=case when v_is_office_service
     then v_service_finalisation->>'actor_user_id' else coalesce(p_session_id::text,'SERVICE') end;
+  if v_replay_probe_only then
+    if p_session_id is null and (
+      coalesce(v_service_finalisation->>'contract_version','')
+        <>'CANDIDATE_MANAGER_FINALISATION_V1'
+      or coalesce((v_service_finalisation->>'workflow_generation')::integer,0)
+        <>p_expected_generation
+    ) then
+      raise exception 'CANDIDATE_SERVICE_FINALISATION_INVALID' using errcode='28000';
+    end if;
+    select ae.before_json,ae.after_json
+    into v_prior_receipt_before,v_prior_receipt_after
+    from public.audit_events ae
+    where ae.object_type='candidate_workflow_mutation_receipt'
+      and ae.object_id_text=v_workflow.id::text
+      and ae.correlation_id=btrim(p_idempotency_key)
+    order by ae.ts_utc desc,ae.id desc
+    limit 1;
+    if found then
+      if upper(coalesce(v_prior_receipt_before->>'workflow_action',''))<>'RETRY_FINALISATION'
+         or upper(coalesce(v_prior_receipt_before->>'channel',''))<>v_mutation_channel
+         or coalesce(v_prior_receipt_before->>'actor_identity','')
+              is distinct from coalesce(v_mutation_actor_identity,'')
+         or nullif(v_prior_receipt_after->>'generation','')::integer
+              is distinct from p_expected_generation+1 then
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+          using errcode='40001',detail=jsonb_build_object(
+            'code','CANDIDATE_IDEMPOTENCY_CONFLICT','workflow_id',v_workflow.id,
+            'idempotency_key',btrim(p_idempotency_key)
+          )::text;
+      end if;
+      return coalesce(v_prior_receipt_after,'{}'::jsonb)
+        ||jsonb_build_object('idempotent_replay',true);
+    end if;
+    return jsonb_build_object('ok',true,'replay_found',false,'workflow_id',v_workflow.id,
+      'expected_generation',p_expected_generation);
+  end if;
   v_mutation_request_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
     'contract_version','CANDIDATE_FINALISATION_MUTATION_REQUEST_V2',
     'workflow_id',v_workflow.id,
@@ -551,10 +589,6 @@ begin
   );
   if coalesce((v_mutation_receipt->>'found')::boolean,false) then
     return coalesce(v_mutation_receipt->'response','{}'::jsonb)||jsonb_build_object('idempotent_replay',true);
-  end if;
-  if v_replay_probe_only then
-    return jsonb_build_object('ok',true,'replay_found',false,'workflow_id',v_workflow.id,
-      'expected_generation',p_expected_generation);
   end if;
   if p_session_id is null then
     if coalesce(v_service_finalisation->>'contract_version','')<>'CANDIDATE_MANAGER_FINALISATION_V1'

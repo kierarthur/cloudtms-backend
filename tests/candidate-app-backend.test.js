@@ -382,6 +382,7 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
   const accountId = '00000000-0000-4000-8000-000000000092';
   const candidateId = '00000000-0000-4000-8000-000000000093';
   const workflowId = '00000000-0000-4000-8000-000000000094';
+  const approvalRequestId = '00000000-0000-4000-8000-000000000095';
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
@@ -401,7 +402,10 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
     const value = String(url);
     if (value.includes('candidate_app_sessions')) return Response.json([session]);
     if (value.includes('candidate_approval_requests')) {
-      return Response.json([{ manager_email_normalized: 'manager@example.test' }]);
+      return Response.json([{
+        id: approvalRequestId, request_generation: 2,
+        manager_email_normalized: 'manager@example.test'
+      }]);
     }
     throw new Error(`unexpected fetch ${value}`);
   };
@@ -419,7 +423,8 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
   );
   try {
     const reminder = await handleCandidateAppRequest(request('remind', {
-      generation: 3, idempotency_key: 'reminder-1'
+      generation: 3, idempotency_key: 'reminder-1',
+      approval_request_id: approvalRequestId, approval_request_generation: 2
     }), env, {}, deps);
     assert.equal(reminder.status, 200);
     assert.equal(calls[0].name, 'candidate_workflow_transition_atomic_v1');
@@ -1903,6 +1908,11 @@ test('paper-pack scheduler durably records a classified retryable storage failur
       }
     }, {
       async rpc(name, args) {
+        if (args.p_action === 'PAPER_PACK_ATTEMPT_CLAIM') {
+          return { data: {
+            ok: true, paper_pack_attempt_state: 'CLAIMED', claim_acquired_new: true
+          } };
+        }
         failureRpc = { name, args };
         return { data: { ok: true, paper_pack_state: 'FAILED_RETRYABLE' } };
       }

@@ -380,6 +380,7 @@ declare
   v_action jsonb;
   v_rejections jsonb:='[]'::jsonb;
   v_paper_state text:='NOT_APPLICABLE';
+  v_paper_pack jsonb:='{}'::jsonb;
   v_paper_delivery_generation integer;
   v_paper_outbox public.mail_outbox%rowtype;
   v_candidate_status_code text;
@@ -497,8 +498,13 @@ begin
       and lower(coalesce(m.payment_scope_json->>'paper_return_manifest_sha256',''))
         =encode(v_workflow.paper_return_manifest_sha256,'hex')
     order by m.created_at_utc desc,m.id desc limit 1;
+    if v_workflow.state in ('AWAITING_PAPER_RETURN','RECEIVED') then
+      v_paper_pack:=private._candidate_paper_pack_readiness_v1(
+        v_workflow.id,v_workflow.generation
+      );
+      v_paper_state:=coalesce(v_paper_pack->>'state','STALE');
+    else
     v_paper_state:=case
-      when v_workflow.state='RECEIVED' then 'RETURN_RECEIVED'
       when v_workflow.state in ('CANCELLED','REJECTED','SUPERSEDED','EXPIRED') then 'RETIRED'
       when lower(coalesce(v_paper_outbox.payment_scope_json->>'candidate_paper_generation_retired','false'))
         in ('true','t','1','yes') then 'RETIRED'
@@ -511,6 +517,7 @@ begin
       when coalesce((v_paper_outbox.payment_scope_json->>'candidate_paper_pack_ready')::boolean,false) then 'READY'
       when v_workflow.state='AWAITING_PAPER_RETURN' then 'PREPARING'
       else 'STALE' end;
+    end if;
   end if;
 
   select coalesce(jsonb_agg(jsonb_build_object(
@@ -778,16 +785,24 @@ begin
       'page_count',case when coalesce(v_paper_outbox.payment_scope_json,'{}'::jsonb)->>'candidate_complete_pack_page_count'~'^[1-9][0-9]*$'
         then (v_paper_outbox.payment_scope_json->>'candidate_complete_pack_page_count')::integer else null end,
       'reason_code',case when v_paper_state in ('FAILED_RETRYABLE','FAILED_TERMINAL')
-        then coalesce(v_paper_outbox.payment_scope_json->>'candidate_paper_pack_failure_code',
+        then coalesce(v_paper_pack->>'failure_code',
+          v_paper_outbox.payment_scope_json->>'candidate_paper_pack_failure_code',
           'CANDIDATE_PAPER_PACK_'||v_paper_state)
+        when v_paper_state='BACKOFF' then 'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE'
         when v_paper_state='STALE' then 'CANDIDATE_PAPER_PACK_STALE' else null end,
-      'retryable',v_paper_state='FAILED_RETRYABLE',
-      'attempt_count',case when coalesce(v_paper_outbox.payment_scope_json,'{}'::jsonb)
+      'failure_scope',coalesce(v_paper_pack->>'failure_scope',
+        case when v_paper_outbox.id is not null then 'OUTBOX' else null end),
+      'retryable',v_paper_state in ('FAILED_RETRYABLE','BACKOFF'),
+      'attempt_count',coalesce((v_paper_pack->>'attempt_count')::integer,
+        case when coalesce(v_paper_outbox.payment_scope_json,'{}'::jsonb)
           ->>'candidate_paper_pack_attempt_count'~'^[0-9]+$'
-        then (v_paper_outbox.payment_scope_json->>'candidate_paper_pack_attempt_count')::integer else 0 end,
-      'next_retry_at_utc',nullif(
+        then (v_paper_outbox.payment_scope_json->>'candidate_paper_pack_attempt_count')::integer else 0 end),
+      'next_retry_at_utc',coalesce(nullif(v_paper_pack->>'next_retry_at_utc','')::timestamptz,nullif(
         v_paper_outbox.payment_scope_json->>'candidate_paper_pack_next_retry_at_utc',''
-      )::timestamptz,
+      )::timestamptz),
+      'retry_in_progress',coalesce((v_paper_pack->>'retry_in_progress')::boolean,false),
+      'operation_id',coalesce(v_paper_pack->>'operation_id',
+        v_paper_outbox.payment_scope_json->>'candidate_paper_pack_operation_id'),
       'issued_at_utc',v_paper_outbox.sent_at,
       'returned_at_utc',case when v_workflow.state='RECEIVED' then v_workflow.updated_at_utc else null end
     ),
@@ -1017,6 +1032,75 @@ begin
       )
     )||jsonb_build_object('contract_version','OFFICE_CANDIDATE_MUTATION_RESULT_V1');
     perform private._candidate_office_service_context_close_v1();
+    return v_result;
+  elsif v_action in ('PAPER_RETRY_REPLAY','PAPER_RETRY_RECORD') then
+    v_workflow_id:=nullif(v_payload->>'workflow_id','')::uuid;
+    v_generation:=nullif(v_payload->>'generation','')::integer;
+    v_idempotency_key:=nullif(btrim(coalesce(v_payload->>'idempotency_key','')),'');
+    if v_workflow_id is null or v_generation is null or v_generation<1
+       or v_idempotency_key is null or length(v_idempotency_key)>200 then
+      raise exception 'CANDIDATE_PAPER_RETRY_PAYLOAD_INVALID' using errcode='22023';
+    end if;
+    v_request_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
+      'contract_version','OFFICE_CANDIDATE_PAPER_RETRY_REQUEST_V1',
+      'workflow_id',v_workflow_id,'generation',v_generation,
+      'idempotency_key',v_idempotency_key
+    )::text,'UTF8'),'sha256'),'hex');
+    if v_action='PAPER_RETRY_RECORD' then
+      perform pg_advisory_xact_lock(hashtextextended(
+        'OFFICE_CANDIDATE_PAPER_RETRY:'||p_actor_user_id::text||':'
+          ||v_workflow_id::text||':'||v_idempotency_key,0
+      ));
+    end if;
+    select ae.before_json,ae.after_json into v_existing_before,v_existing_after
+    from public.audit_events ae
+    where ae.object_type='cloudtms_office_candidate_paper_retry'
+      and ae.object_id_text=v_workflow_id::text
+      and ae.actor_user_id=p_actor_user_id
+      and ae.correlation_id=v_idempotency_key
+    order by ae.ts_utc desc,ae.id desc limit 1;
+    if found then
+      if v_existing_before->>'request_sha256' is distinct from v_request_hash then
+        raise exception 'IDEMPOTENCY_CONFLICT' using errcode='23505';
+      end if;
+      return coalesce(v_existing_after,'{}'::jsonb)||jsonb_build_object(
+        'found',true,'idempotent_replay',true
+      );
+    end if;
+    if v_action='PAPER_RETRY_REPLAY' then
+      return jsonb_build_object(
+        'ok',true,'found',false,
+        'contract_version','OFFICE_CANDIDATE_PAPER_RETRY_RECEIPT_V1'
+      );
+    end if;
+    if jsonb_typeof(v_payload->'result')<>'object'
+       or v_payload#>>'{result,contract_version}'<>'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3'
+       or v_payload#>>'{result,workflow_id}'<>v_workflow_id::text
+       or nullif(v_payload#>>'{result,generation}','') is null
+       or nullif(v_payload#>>'{result,generation}','')::integer<>v_generation
+       or v_payload#>>'{result,idempotency_key}'<>v_idempotency_key
+       or upper(coalesce(v_payload#>>'{result,paper_pack_state}','')) not in (
+         'READY','FAILED_RETRYABLE','FAILED_TERMINAL'
+       )
+       or nullif(v_payload->>'http_status','') is null
+       or nullif(v_payload->>'http_status','')::integer not in (200,409,503) then
+      raise exception 'CANDIDATE_PAPER_RETRY_RESULT_INVALID' using errcode='22023';
+    end if;
+    v_result:=jsonb_build_object(
+      'ok',true,'found',true,
+      'contract_version','OFFICE_CANDIDATE_PAPER_RETRY_RECEIPT_V1',
+      'http_status',(v_payload->>'http_status')::integer,
+      'result',v_payload->'result','idempotent_replay',false
+    );
+    insert into public.audit_events(
+      actor_user_id,object_type,object_id_text,action,before_json,after_json,
+      reason,correlation_id,ts_utc
+    ) values (
+      p_actor_user_id,'cloudtms_office_candidate_paper_retry',v_workflow_id::text,
+      'CANDIDATE_OFFICE_PAPER_RETRY_COMPLETED',
+      jsonb_build_object('request_sha256',v_request_hash),v_result,
+      'Durable Office PAPER retry operation result',v_idempotency_key,v_observed
+    );
     return v_result;
   elsif v_action='WORKFLOW_ACTION_EXECUTE' then
     v_workflow_action:=upper(btrim(coalesce(v_payload->>'workflow_action','')));

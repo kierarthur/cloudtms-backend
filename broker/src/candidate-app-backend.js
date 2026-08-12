@@ -2145,6 +2145,15 @@ async function probeFinalisationReplay(
 
 async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKey, officeActorId = null) {
   const workflow = await workflowRow(env, workflowId);
+  const replayServiceFinalisation = {
+    contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
+    workflow_generation: generation,
+    actor_user_id: officeActorId || null
+  };
+  const replay = await probeFinalisationReplay(
+    env, deps, workflow, generation, idempotencyKey, replayServiceFinalisation, officeActorId
+  );
+  if (replay) return replay;
   const approved = upper(workflow.route) === 'PAPER' ? null : await restOne(env, 'candidate_approval_requests',
     `workflow_id=eq.${encodeURIComponent(workflow.id)}&workflow_generation=eq.${encodeURIComponent(generation)}`
     + '&state=eq.APPROVED&select=id,method,review_manifest_sha256,approved_at_utc&order=approved_at_utc.desc');
@@ -2159,10 +2168,6 @@ async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKe
     review_manifest_sha256_hex: text(approved?.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase(),
     actor_user_id: officeActorId || null
   };
-  const replay = await probeFinalisationReplay(
-    env, deps, workflow, generation, idempotencyKey, serviceFinalisation, officeActorId
-  );
-  if (replay) return replay;
   if (workflow.workflow_kind === 'DAILY') {
     return safeFinalisationResult(await deps.finaliseDaily({
       sessionId: null,
@@ -2304,13 +2309,13 @@ async function handleWorkflowResubmit(request, env, deps, workflowId) {
   return jsonResponse(201, result);
 }
 
-async function prepareImmutableSubmission(env, deps, workflow, body) {
+async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey) {
   const supplied = isObject(body.immutable_submission) ? structuredClone(body.immutable_submission) : {};
   const forbidden = forbiddenFinancialKeys(supplied);
   if (forbidden.length) throw new CandidateHttpError(400, 'CANDIDATE_FINANCIAL_AUTHORITY_FORBIDDEN', { fields: forbidden.slice(0, 20) });
   const authoritySubmission = workflow.workflow_kind === 'DAILY'
-    ? await deps.buildDailySubmission({ workflow, factualSubmission: supplied })
-    : await deps.buildWeeklySubmission({ workflow, factualSubmission: supplied });
+    ? await deps.buildDailySubmission({ workflow, factualSubmission: supplied, mutationKey })
+    : await deps.buildWeeklySubmission({ workflow, factualSubmission: supplied, mutationKey });
   return {
     ...authoritySubmission,
     official_presentation: await buildOfficialPresentationSnapshot(env, workflow)
@@ -2332,9 +2337,6 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     if (workflow.account_id !== access.account_id || workflow.candidate_id !== access.selected_candidate_id) {
       throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
     }
-    if (!['RECEIVED', 'FINALISED'].includes(workflow.state)) {
-      throw new CandidateHttpError(409, 'CANDIDATE_FINALISATION_RETRY_NOT_READY');
-    }
     return jsonResponse(200, await finaliseWorkflow(
       env, deps, workflowId, generation, mutationKey
     ));
@@ -2346,12 +2348,25 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     if (!candidateSignedAtUtc || !Number.isFinite(Date.parse(candidateSignedAtUtc))) {
       throw new CandidateHttpError(400, 'CANDIDATE_SIGNATURE_TIMESTAMP_REQUIRED');
     }
+    const approvalRoute = upper(body.approval_route || payload.approval_route || workflow.route);
+    const signatureComponentId = body.candidate_signature_component_id
+      || payload.candidate_signature_component_id || null;
+    const submissionFacts = isObject(body.immutable_submission)
+      ? structuredClone(body.immutable_submission) : {};
+    delete submissionFacts.official_presentation;
     payload = {
       ...payload,
-      immutable_submission: await prepareImmutableSubmission(env, deps, workflow, body),
-      candidate_signature_component_id: body.candidate_signature_component_id || payload.candidate_signature_component_id || null,
+      immutable_submission: await prepareImmutableSubmission(env, deps, workflow, body, mutationKey),
+      submission_request_identity: {
+        contract_version: 'CANDIDATE_WORKER_SUBMISSION_REQUEST_V1',
+        factual_submission: submissionFacts,
+        candidate_signature_component_id: signatureComponentId,
+        candidate_signed_at_utc: new Date(candidateSignedAtUtc).toISOString(),
+        approval_route: approvalRoute
+      },
+      candidate_signature_component_id: signatureComponentId,
       candidate_signed_at_utc: new Date(candidateSignedAtUtc).toISOString(),
-      approval_route: upper(body.approval_route || payload.approval_route || workflow.route),
+      approval_route: approvalRoute,
       renderer_contract_version: RENDERER_CONTRACT_VERSION
     };
   } else if (dbAction === 'SELECT_PHONE_APPROVAL') {
@@ -2370,12 +2385,28 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       : dbAction === 'RENEW' ? 'RENEWAL' : 'INITIAL';
     let managerEmail = body.manager_email || payload.manager_email;
     let approvalIdentity = 'INITIAL';
-    if (!managerEmail && (dbAction === 'RENEW' || dbAction === 'REMIND')) {
+    if (dbAction === 'RENEW' || dbAction === 'REMIND') {
+      const approvalRequestId = requireUuid(
+        body.approval_request_id || payload.approval_request_id,
+        'CANDIDATE_REQUEST_GENERATION_STALE'
+      );
+      const approvalRequestGeneration = requireInteger(
+        body.approval_request_generation || payload.approval_request_generation,
+        'CANDIDATE_REQUEST_GENERATION_STALE', 1
+      );
       const approval = await restOne(env, 'candidate_approval_requests',
-        `workflow_id=eq.${encodeURIComponent(workflowId)}&method=eq.EMAIL`
-        + '&select=id,request_generation,manager_email_normalized&order=request_generation.desc');
-      managerEmail = approval?.manager_email_normalized;
-      approvalIdentity = `${approval?.id || 'MISSING'}:${Number(approval?.request_generation || 0)}`;
+        `id=eq.${encodeURIComponent(approvalRequestId)}`
+        + `&workflow_id=eq.${encodeURIComponent(workflowId)}&method=eq.EMAIL`
+        + `&request_generation=eq.${approvalRequestGeneration}`
+        + '&select=id,request_generation,manager_email_normalized');
+      if (!approval) throw new CandidateHttpError(409, 'CANDIDATE_REQUEST_GENERATION_STALE');
+      if (managerEmail && normaliseEmail(managerEmail) !== approval.manager_email_normalized) {
+        throw new CandidateHttpError(409, 'CANDIDATE_REQUEST_GENERATION_STALE');
+      }
+      managerEmail = approval.manager_email_normalized;
+      approvalIdentity = `${approval.id}:${Number(approval.request_generation)}`;
+      payload.approval_request_id = approval.id;
+      payload.approval_request_generation = Number(approval.request_generation);
     }
     const normalisedManagerEmail = normaliseEmail(managerEmail);
     const managerToken = await deterministicOpaqueToken(
@@ -2729,6 +2760,54 @@ function candidateCompletePackAttachmentMatchesScope(row) {
       === text(scope.paper_return_manifest_sha256).toLowerCase();
 }
 
+function candidatePaperExecutionState(workflow, outbox = null, timesheet = null, complete = null) {
+  const workflowReceipt = parseJson(workflow?.last_mutation_response_json, {}) || {};
+  if (workflowReceipt.failure_scope === 'WORKFLOW'
+      && workflowReceipt.paper_pack_state === 'FAILED_TERMINAL') {
+    return {
+      state: 'FAILED_TERMINAL', failure_scope: 'WORKFLOW', retryable: false,
+      failure_code: text(workflowReceipt.failure_code)
+        || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED',
+      attempt_count: 0, next_retry_at_utc: null, retry_in_progress: false,
+      operation_id: workflowReceipt.paper_pack_operation_id || null
+    };
+  }
+  const scope = parseJson(outbox?.payment_scope_json, {}) || {};
+  const attemptExpiresAt = Date.parse(text(scope.candidate_paper_pack_attempt_expires_at_utc));
+  const common = {
+    failure_scope: outbox ? 'OUTBOX' : null,
+    failure_code: text(scope.candidate_paper_pack_failure_code) || null,
+    attempt_count: Number(scope.candidate_paper_pack_attempt_count || 0),
+    next_retry_at_utc: scope.candidate_paper_pack_next_retry_at_utc || null,
+    retry_in_progress: !!text(scope.candidate_paper_pack_attempt_token)
+      && Number.isFinite(attemptExpiresAt) && attemptExpiresAt > Date.now(),
+    operation_id: scope.candidate_paper_pack_operation_id || null
+  };
+  if (scope.candidate_paper_generation_retired === true) {
+    return { ...common, state: 'RETIRED', retryable: false };
+  }
+  if (complete?.ready === true || candidateCompletePackAttachmentMatchesScope(outbox)) {
+    return { ...common, state: 'READY', retryable: false, failure_code: null };
+  }
+  if (scope.candidate_paper_pack_retryable === true
+      || upper(scope.candidate_paper_pack_failure_class) === 'RETRYABLE') {
+    const due = Date.parse(text(scope.candidate_paper_pack_next_retry_at_utc));
+    return {
+      ...common,
+      state: Number.isFinite(due) && due > Date.now() ? 'BACKOFF' : 'FAILED_RETRYABLE',
+      retryable: true
+    };
+  }
+  if (upper(scope.candidate_paper_pack_failure_class) === 'TERMINAL'
+      || upper(outbox?.status) === 'FAILED' || upper(timesheet?.document_state) === 'FAILED') {
+    return {
+      ...common, state: 'FAILED_TERMINAL', retryable: false,
+      failure_code: common.failure_code || 'CANDIDATE_PAPER_DOCUMENT_FAILED'
+    };
+  }
+  return { ...common, state: outbox ? 'PREPARING' : 'STALE', retryable: false };
+}
+
 function candidatePaperDeliveryGeneration(workflow) {
   const generation = requireInteger(workflow?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
   return upper(workflow?.state) === 'FINALISED' ? Math.max(generation - 1, 1) : generation;
@@ -2879,7 +2958,8 @@ async function claimCandidatePaperPackAttempt(
     service_paper_pack_attempt: true,
     mail_outbox_id: outbox.id,
     paper_return_manifest_sha256: manifestHash,
-    paper_pack_attempt_token: attemptToken
+    paper_pack_attempt_token: attemptToken,
+    paper_pack_operation_id: idempotencyKey
   };
   const result = officeActorId
     ? await officeAdapter(deps, env, officeActorId, 'WORKFLOW_ACTION_EXECUTE', {
@@ -2899,12 +2979,17 @@ async function claimCandidatePaperPackAttempt(
       p_idempotency_key: idempotencyKey,
       p_now_utc: new Date().toISOString()
     });
-  return { ...result, attempt_token: attemptToken };
+  return {
+    ...result,
+    attempt_token: attemptToken,
+    claim_acquired_new: result?.paper_pack_attempt_state === 'CLAIMED'
+      && result?.idempotent_replay !== true && result?.claim_acquired_new === true
+  };
 }
 
 async function releaseCandidatePaperPack(
   env, deps, workflow, timesheet, complete, outbox = null, officeActorId = null,
-  paperPackAttemptToken = null
+  paperPackAttemptToken = null, paperPackOperationId = null
 ) {
   const row = outbox || await requireCandidatePaperOutbox(env, workflow, timesheet);
   if (!UUID_RE.test(text(row?.id))) {
@@ -2935,7 +3020,8 @@ async function releaseCandidatePaperPack(
       base_document_sha256: text(complete.base_hash).toLowerCase(),
       branding_contract_sha256: text(complete.branding_hash).toLowerCase(),
       renderer_contract_version: complete.renderer_contract_version,
-      paper_pack_attempt_token: paperPackAttemptToken
+      paper_pack_attempt_token: paperPackAttemptToken,
+      paper_pack_operation_id: paperPackOperationId
     };
   const releaseKey = `paper-pack-release:${workflow.id}:${workflow.generation}:${complete.manifest_hash}:${complete.sha256}`;
   if (officeActorId) {
@@ -3064,25 +3150,27 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
       + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
   }
   let outbox = null;
-  let outboxState = 'PREPARING';
+  let outboxError = null;
   try {
     outbox = await requireCandidatePaperOutbox(env, workflows[0], timesheet);
-    if (candidateCompletePackAttachmentMatchesScope(outbox)) outboxState = 'READY';
   } catch (error) {
     const code = knownErrorCode(error);
-    if (code === 'CANDIDATE_PAPER_OUTBOX_FAILED') outboxState = 'FAILED';
-    else if (code === 'CANDIDATE_PAPER_OUTBOX_CONFLICT') outboxState = 'STALE';
-    else if (code !== 'CANDIDATE_PAPER_OUTBOX_NOT_READY') throw error;
+    if (!['CANDIDATE_PAPER_OUTBOX_FAILED', 'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+      'CANDIDATE_PAPER_OUTBOX_NOT_READY'].includes(code)) throw error;
+    outboxError = code;
   }
   let complete = null;
-  if (outboxState === 'READY' && version?.r2_key) {
+  if (outbox && candidateCompletePackAttachmentMatchesScope(outbox) && version?.r2_key) {
     complete = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
   }
-  const ready = outboxState === 'READY' && complete?.ready === true;
-  const state = ready ? 'READY'
-    : outboxState === 'READY' ? 'STALE'
-      : upper(timesheet.document_state) === 'FAILED' ? 'FAILED' : outboxState;
-  return { id, timesheet, version, key: complete?.key || null, ready, state, complete, outbox };
+  const execution = candidatePaperExecutionState(workflows[0], outbox, timesheet, complete);
+  if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_CONFLICT') execution.state = 'STALE';
+  if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_FAILED') execution.state = 'FAILED_TERMINAL';
+  const ready = execution.state === 'READY' && complete?.ready === true;
+  return {
+    id, timesheet, version, key: complete?.key || null, ready,
+    state: execution.state, execution, complete, outbox
+  };
 }
 
 async function handlePaperPackStatus(request, env, deps, timesheetId) {
@@ -3092,6 +3180,12 @@ async function handlePaperPackStatus(request, env, deps, timesheetId) {
     timesheet_id: context.id,
     timesheet_version: Number(context.timesheet.version || 1),
     paper_pack_state: context.state,
+    failure_scope: context.execution.failure_scope,
+    failure_code: context.execution.failure_code,
+    retryable: context.execution.retryable,
+    attempt_count: context.execution.attempt_count,
+    next_retry_at_utc: context.execution.next_retry_at_utc,
+    retry_in_progress: context.execution.retry_in_progress,
     download_available: context.ready,
     page_count: context.complete?.page_count || null
   });
@@ -3100,7 +3194,7 @@ async function handlePaperPackStatus(request, env, deps, timesheetId) {
 async function handlePaperPackDownload(request, env, deps, timesheetId) {
   const context = await candidatePaperPackContext(request, env, deps, timesheetId);
   if (!context.ready) {
-    throw new CandidateHttpError(409, context.state === 'FAILED'
+    throw new CandidateHttpError(409, context.state.startsWith('FAILED')
       ? 'CANDIDATE_PAPER_PACK_FAILED' : 'CANDIDATE_PAPER_PACK_PREPARING');
   }
 
@@ -3148,7 +3242,7 @@ function canonicalPaperPackFailureCode(error) {
 
 async function recordCandidatePaperPackFailure(
   env, deps, workflow, outbox, failureCode, attemptToken = null, officeActorId = null,
-  idempotencyKey = null
+  idempotencyKey = null, operationId = null
 ) {
   const manifestHash = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
   const failureKey = idempotencyKey || `paper-pack-failure:${workflow.id}:${workflow.generation}`
@@ -3158,6 +3252,7 @@ async function recordCandidatePaperPackFailure(
     mail_outbox_id: outbox?.id || null,
     paper_return_manifest_sha256: manifestHash,
     paper_pack_attempt_token: attemptToken,
+    paper_pack_operation_id: operationId,
     error_code: failureCode
   };
   if (officeActorId) {
@@ -3191,7 +3286,19 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
     if (!UUID_RE.test(id)) continue;
     let outbox = null;
     let attemptToken = null;
+    let operationId = null;
     try {
+      const workflowFailure = parseJson(workflow.last_mutation_response_json, {}) || {};
+      if (workflowFailure.failure_scope === 'WORKFLOW'
+          && workflowFailure.paper_pack_state === 'FAILED_TERMINAL') {
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false,
+          execution_state: 'FAILED_TERMINAL', failure_scope: 'WORKFLOW',
+          error_code: text(workflowFailure.failure_code)
+            || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED'
+        });
+        continue;
+      }
       const matchingWorkflows = await activePaperWorkflowsForTimesheet(env, id);
       if (matchingWorkflows.length > 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_WORKFLOW_CONFLICT');
       if (matchingWorkflows.length !== 1 || matchingWorkflows[0].id !== workflow.id) continue;
@@ -3226,6 +3333,22 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
           throw new CandidateHttpError(409, 'CANDIDATE_PAPER_DOCUMENT_FAILED');
         }
         if (Number.isFinite(deadline) && deadline <= Date.now()) {
+          operationId = `paper-pack-scheduler:${workflow.id}:${workflow.generation}:${crypto.randomUUID()}`;
+          const timeoutClaim = await claimCandidatePaperPackAttempt(
+            env, deps, workflow, outbox, operationId
+          );
+          if (timeoutClaim.paper_pack_attempt_state === 'READY') {
+            results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, already_ready: true });
+            continue;
+          }
+          if (timeoutClaim.claim_acquired_new !== true) {
+            results.push({
+              workflow_id: workflow.id, timesheet_id: id, ok: false,
+              execution_state: 'IN_PROGRESS', error_code: 'CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS'
+            });
+            continue;
+          }
+          attemptToken = timeoutClaim.attempt_token;
           throw new CandidateHttpError(503, 'CANDIDATE_PAPER_DOCUMENT_PENDING_TIMEOUT');
         }
         results.push({
@@ -3239,19 +3362,27 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
         + `&entity_type=eq.TIMESHEET&entity_id=eq.${encodeURIComponent(id)}`
         + '&purpose=eq.TIMESHEET&status=eq.READY&select=id,r2_key,sha256,status');
       if (!version?.r2_key) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_DOCUMENT_FAILED');
-      const nextAttempt = Number(scope.candidate_paper_pack_attempt_count || 0) + 1;
-      const attemptKey = `paper-pack-attempt:${workflow.id}:${workflow.generation}:${nextAttempt}`;
+      operationId = `paper-pack-scheduler:${workflow.id}:${workflow.generation}:${crypto.randomUUID()}`;
       const claim = await claimCandidatePaperPackAttempt(
-        env, deps, workflow, outbox, attemptKey
+        env, deps, workflow, outbox, operationId
       );
       if (claim.paper_pack_attempt_state === 'READY') {
         results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, already_ready: true });
         continue;
       }
+      if (claim.claim_acquired_new !== true) {
+        results.push({
+          workflow_id: workflow.id, timesheet_id: id, ok: false,
+          execution_state: 'IN_PROGRESS', error_code: 'CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS'
+        });
+        continue;
+      }
       attemptToken = claim.attempt_token;
       let complete = await readyPaperPackReceipt(env, workflow, timesheet, version);
       if (!complete.ready) complete = await assembleCandidatePaperPack(env, workflow, timesheet, version);
-      await releaseCandidatePaperPack(env, deps, workflow, timesheet, complete, outbox, null, attemptToken);
+      await releaseCandidatePaperPack(
+        env, deps, workflow, timesheet, complete, outbox, null, attemptToken, operationId
+      );
       results.push({ workflow_id: workflow.id, timesheet_id: id, ok: true, page_count: complete.page_count });
     } catch (error) {
       const observedErrorCode = knownErrorCode(error);
@@ -3264,7 +3395,8 @@ export async function processPendingCandidatePaperPacks(env, deps, limit = 10) {
           && SHA256_RE.test(text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase())) {
         try {
           failureReceipt = await recordCandidatePaperPackFailure(
-            env, deps, workflow, outbox, failureCode, attemptToken
+            env, deps, workflow, outbox, failureCode, attemptToken,
+            null, null, operationId
           );
         } catch (receiptError) {
           failureReceiptError = knownErrorCode(receiptError);
@@ -3571,16 +3703,28 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
   const workflow = await workflowRow(env, workflowId);
   const body = await readJson(request);
   const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
-  if (generation !== Number(workflow.generation)) {
-    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
-  }
   const idempotencyKey = requireOfficeIdempotency(body.idempotency_key);
   if (action === 'retry-finalisation') {
+    const replayServiceFinalisation = {
+      contract_version: 'CANDIDATE_MANAGER_FINALISATION_V1',
+      workflow_generation: generation,
+      actor_user_id: user.id
+    };
+    const replay = await probeFinalisationReplay(
+      env, deps, workflow, generation, idempotencyKey, replayServiceFinalisation, user.id
+    );
+    if (replay) return jsonResponse(200, replay);
+    if (generation !== Number(workflow.generation)) {
+      throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+    }
     const contract = workflow.last_mutation_response_json?.final_render_contract;
     if (contract) await renderAndRegister(env, deps, contract, 'FINAL', user.id);
     return jsonResponse(200, await finaliseWorkflow(
       env, deps, workflow.id, generation, idempotencyKey, user.id
     ));
+  }
+  if (generation !== Number(workflow.generation)) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
   }
   const dbAction = OFFICE_MANAGER_ACTIONS[action];
   if (!dbAction) throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
@@ -3830,6 +3974,33 @@ async function handleOfficePaperReturnReview(request, env, deps, workflowId) {
 async function handleOfficePaperRetry(request, env, deps, workflowId) {
   const body = await readJson(request);
   const idempotencyKey = requireOfficeIdempotency(body.idempotency_key);
+  const generation = requireInteger(body.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const user = await requireOfficeActor(request, deps, 'manage_paper');
+  const operationIdentity = {
+    workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    generation,
+    idempotency_key: idempotencyKey
+  };
+  const durableReplay = await officeAdapter(
+    deps, env, user.id, 'PAPER_RETRY_REPLAY', operationIdentity
+  );
+  if (durableReplay?.found === true && isObject(durableReplay.result)) {
+    return jsonResponse(Number(durableReplay.http_status || 200), {
+      ...durableReplay.result,
+      idempotent_replay: true
+    });
+  }
+  const durableResult = async (status, result) => {
+    const receipt = await officeAdapter(deps, env, user.id, 'PAPER_RETRY_RECORD', {
+      ...operationIdentity,
+      http_status: status,
+      result
+    });
+    return jsonResponse(Number(receipt?.http_status || status), {
+      ...(receipt?.result || result),
+      idempotent_replay: receipt?.idempotent_replay === true
+    });
+  };
   const context = await officePaperContext(request, env, deps, workflowId, body.generation);
   const retryScope = parseJson(context.outbox?.payment_scope_json, {}) || {};
   if (upper(context.workflow.state) !== 'AWAITING_PAPER_RETURN'
@@ -3844,9 +4015,9 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
     env, deps, context.workflow, outbox, idempotencyKey, context.office_actor_id
   );
   if (claim.paper_pack_attempt_state === 'READY') {
-    return jsonResponse(200, {
+    return durableResult(200, {
       ok: true,
-      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2',
+      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
       idempotency_key: idempotencyKey,
       workflow_id: context.workflow.id,
       generation: Number(context.workflow.generation),
@@ -3855,12 +4026,47 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
       page_count: Number(context.complete?.page_count || 0)
     });
   }
-  if (claim.idempotent_replay === true) {
+  if (claim.claim_acquired_new !== true) {
     const replayContext = await officePaperContext(request, env, deps, workflowId, body.generation);
-    if (!replayContext.complete?.ready) {
+    const replayScope = parseJson(replayContext.outbox?.payment_scope_json, {}) || {};
+    const operationMatches = text(replayScope.candidate_paper_pack_operation_id) === idempotencyKey;
+    if (replayContext.complete?.ready || (operationMatches
+        && replayScope.candidate_paper_pack_operation_state === 'READY')) {
+      return durableResult(200, {
+        ok: true,
+        contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+        idempotency_key: idempotencyKey,
+        workflow_id: replayContext.workflow.id,
+        generation: Number(replayContext.workflow.generation),
+        paper_pack_state: 'READY',
+        idempotent_replay: true,
+        page_count: Number(replayContext.complete?.page_count || 0)
+      });
+    }
+    if (operationMatches && ['FAILED_RETRYABLE', 'FAILED_TERMINAL'].includes(
+      upper(replayScope.candidate_paper_pack_operation_state)
+    )) {
+      const paperPackState = upper(replayScope.candidate_paper_pack_operation_state);
+      return durableResult(paperPackState === 'FAILED_RETRYABLE' ? 503 : 409, {
+        ok: false,
+        contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+        idempotency_key: idempotencyKey,
+        workflow_id: replayContext.workflow.id,
+        generation: Number(replayContext.workflow.generation),
+        paper_pack_state: paperPackState,
+        retryable: paperPackState === 'FAILED_RETRYABLE',
+        error_code: text(replayScope.candidate_paper_pack_failure_code)
+          || 'CANDIDATE_PAPER_PACK_OPERATIONAL_REVIEW_REQUIRED',
+        next_retry_at_utc: replayScope.candidate_paper_pack_next_retry_at_utc || null,
+        idempotent_replay: true
+      });
+    }
+    const leaseExpiresAt = Date.parse(text(replayScope.candidate_paper_pack_attempt_expires_at_utc));
+    if (operationMatches && replayScope.candidate_paper_pack_operation_state === 'CLAIMED'
+        && Number.isFinite(leaseExpiresAt) && leaseExpiresAt > Date.now()) {
       return jsonResponse(202, {
         ok: true,
-        contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2',
+        contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
         idempotency_key: idempotencyKey,
         workflow_id: replayContext.workflow.id,
         generation: Number(replayContext.workflow.generation),
@@ -3868,16 +4074,7 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
         idempotent_replay: true
       });
     }
-    return jsonResponse(200, {
-      ok: true,
-      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2',
-      idempotency_key: idempotencyKey,
-      workflow_id: replayContext.workflow.id,
-      generation: Number(replayContext.workflow.generation),
-      paper_pack_state: 'READY',
-      idempotent_replay: true,
-      page_count: Number(replayContext.complete?.page_count || 0)
-    });
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETRY_OPERATION_STALE');
   }
   let complete = context.complete;
   try {
@@ -3886,11 +4083,11 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
     }
     const release = await releaseCandidatePaperPack(
       env, deps, context.workflow, context.timesheet, complete, outbox, context.office_actor_id,
-      claim.attempt_token
+      claim.attempt_token, idempotencyKey
     );
-    return jsonResponse(200, {
+    return durableResult(200, {
       ok: true,
-      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V2',
+      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
       idempotency_key: idempotencyKey,
       workflow_id: context.workflow.id,
       generation: Number(context.workflow.generation),
@@ -3910,15 +4107,30 @@ async function handleOfficePaperRetry(request, env, deps, workflowId) {
     });
   } catch (error) {
     const failureCode = canonicalPaperPackFailureCode(error);
+    let failureReceipt = null;
     try {
-      await recordCandidatePaperPackFailure(
+      failureReceipt = await recordCandidatePaperPackFailure(
         env, deps, context.workflow, outbox, failureCode, claim.attempt_token,
-        context.office_actor_id, `${idempotencyKey}:failure:${failureCode}`
+        context.office_actor_id, `${idempotencyKey}:failure:${failureCode}`, idempotencyKey
       );
     } catch {
       // Preserve the canonical execution error; the scheduler can reconcile an expired attempt lease.
     }
-    throw error;
+    if (!failureReceipt?.ok) throw error;
+    const paperPackState = failureReceipt.paper_pack_state
+      || (RETRYABLE_PAPER_PACK_FAILURES.has(failureCode) ? 'FAILED_RETRYABLE' : 'FAILED_TERMINAL');
+    return durableResult(paperPackState === 'FAILED_RETRYABLE' ? 503 : 409, {
+      ok: false,
+      contract_version: 'OFFICE_CANDIDATE_PAPER_RETRY_RESULT_V3',
+      idempotency_key: idempotencyKey,
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      paper_pack_state: paperPackState,
+      retryable: paperPackState === 'FAILED_RETRYABLE',
+      error_code: failureReceipt.failure_code || failureCode,
+      next_retry_at_utc: failureReceipt.next_retry_at_utc || null,
+      idempotent_replay: false
+    });
   }
 }
 

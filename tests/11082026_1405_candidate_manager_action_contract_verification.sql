@@ -95,6 +95,8 @@ begin
   v_result:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'REMIND',1,
     jsonb_build_object(
+      'approval_request_id',v_request,
+      'approval_request_generation',1,
       'approval_token_hash_hex',encode(v_reminder_token_hash,'hex'),
       'mail',jsonb_build_object('subject','Reminder','body_text','Please review.')
     ),'manager-action-remind',v_now
@@ -112,6 +114,8 @@ begin
     perform public.candidate_workflow_transition_atomic_v1(
       v_session,'TEST',v_workflow,'REMIND',1,
       jsonb_build_object(
+        'approval_request_id',v_request,
+        'approval_request_generation',1,
         'approval_token_hash_hex',repeat('17',32),
         'mail',jsonb_build_object('subject','Duplicate reminder','body_text','Do not queue.')
       ),'manager-action-remind-too-soon',v_now
@@ -124,6 +128,8 @@ begin
     perform public.candidate_workflow_transition_atomic_v1(
       v_session,'TEST',v_workflow,'RENEW',1,
       jsonb_build_object(
+        'approval_request_id',v_request,
+        'approval_request_generation',1,
         'approval_token_hash_hex',repeat('18',32),
         'mail',jsonb_build_object('subject','Renewal','body_text','Do not queue.')
       ),'manager-action-renew-live',v_now

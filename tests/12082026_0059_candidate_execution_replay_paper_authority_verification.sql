@@ -78,6 +78,20 @@ begin
      or not coalesce((v_result->>'idempotent_replay')::boolean,false) then
     raise exception 'finalisation did not replay before current-generation/state validation: %',v_result;
   end if;
+  v_failed:=false;
+  begin
+    perform public.candidate_submission_finalize_atomic_v1(
+      null,'TEST',v_finalised,2,null,v_finalise_key,v_now+interval '1 minute 1 second',
+      jsonb_build_object('service_finalisation',v_service||jsonb_build_object(
+        'workflow_generation',2,'replay_probe_only',true
+      ))
+    );
+  exception when sqlstate '40001' then
+    v_failed:=position('CANDIDATE_IDEMPOTENCY_CONFLICT' in sqlerrm)>0;
+  end;
+  if not v_failed then
+    raise exception 'finalisation replay accepted a different generation under the same key';
+  end if;
 
   v_hash:=encode(extensions.digest(convert_to(jsonb_build_object(
     'contract_version','CANDIDATE_REJECTION_REQUEST_V2','environment','TEST',
