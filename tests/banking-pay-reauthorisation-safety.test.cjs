@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, '..');
 const worker = fs.readFileSync(path.join(root, 'broker', 'src', 'index.js'), 'utf8');
 const overlaySql = fs.readFileSync(path.join(root, 'supabase', 'repeatable', '12082026_1343_pay_payment_correction_reauthorisation_overlay_reset_v1.sql'), 'utf8');
 const freshnessSql = fs.readFileSync(path.join(root, 'supabase', 'repeatable', '12082026_1343_pay_batch_freshness_user_failures_v1.sql'), 'utf8');
+const transferPrepareSql = fs.readFileSync(path.join(root, 'supabase', 'repeatable', '12082026_1446_pay_execute_bank_transfer_chunk_prepare_voided_overlay.sql'), 'utf8');
 
 test('financially complete correction retires only a proven local reauthorisation transfer overlay', () => {
   assert.match(worker, /phase === 'REFRESH_WORKBENCH'[\s\S]*result\.financial_complete === true[\s\S]*financialResult\.reauthorisation_required === true/);
@@ -29,6 +30,16 @@ test('financially complete correction retires only a proven local reauthorisatio
   assert.match(overlaySql, /v_transfer_scopes_deleted IS DISTINCT FROM v_transfer_scope_count/);
   assert.match(overlaySql, /status = 'VOIDED'/);
   assert.match(overlaySql, /policy_x_economics_changed/);
+});
+
+test('a proven voided local overlay does not block the next execution transfer scope', () => {
+  assert.match(transferPrepareSql, /existing_transfer\.status[\s\S]*NOT IN \('PENDING', 'BLOCKED', 'FAILED', 'VOIDED'\)/);
+  assert.match(transferPrepareSql, /existing_transfer\.rail_tx_id/);
+  assert.match(transferPrepareSql, /provider_request_sent/);
+  assert.match(transferPrepareSql, /provider_called/);
+  assert.match(transferPrepareSql, /provider_response_present/);
+  assert.match(transferPrepareSql, /provider_acceptance_evidence_present/);
+  assert.match(transferPrepareSql, /EXISTING_TRANSFER_PROVIDER_EVIDENCE_PRESENT/);
 });
 
 test('freshness presentation reuses exact scope-unit decisions and identifies affected frozen payments', () => {
