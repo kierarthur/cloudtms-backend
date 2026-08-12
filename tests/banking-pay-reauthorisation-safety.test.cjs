@@ -23,6 +23,10 @@ test('financially complete correction retires only a proven local reauthorisatio
   assert.doesNotMatch(overlaySql, /NULLIF\(pg_catalog\.btrim\(COALESCE\(execution_scope\.provider_idempotency_key/);
   assert.doesNotMatch(overlaySql, /NULLIF\(pg_catalog\.btrim\(COALESCE\(execution_scope\.provider_request_id/);
   assert.match(overlaySql, /SET pay_bank_transfer_id = NULL::uuid/);
+  assert.match(overlaySql, /_tmp_correction_reauthorisation_transfer_scopes/);
+  assert.match(overlaySql, /DELETE FROM public\.banking_pay_operation_transfer_scope/);
+  assert.match(overlaySql, /scope_delete\.pay_bank_transfer_id IN/);
+  assert.match(overlaySql, /v_transfer_scopes_deleted IS DISTINCT FROM v_transfer_scope_count/);
   assert.match(overlaySql, /status = 'VOIDED'/);
   assert.match(overlaySql, /policy_x_economics_changed/);
 });

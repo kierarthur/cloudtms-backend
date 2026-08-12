@@ -3,8 +3,9 @@
 --
 -- Policy X: this function never recalculates payment economics. It only
 -- detaches active frozen batch items from an obsolete local transfer and
--- voids that transfer after proving that no provider, rail, settlement or
--- transfer-event boundary has been crossed.
+-- retires that transfer's obsolete operation-local scope before voiding the
+-- transfer, after proving that no provider, rail, settlement or transfer-event
+-- boundary has been crossed.
 
 CREATE OR REPLACE FUNCTION public.pay_payment_correction_reauthorisation_overlay_reset_v1(
   p_correction_request_id uuid,
@@ -29,9 +30,11 @@ DECLARE
   v_active_item_count integer := 0;
   v_linked_active_item_count integer := 0;
   v_transfer_count integer := 0;
+  v_transfer_scope_count integer := 0;
   v_unsafe_transfer_count integer := 0;
   v_item_links_cleared integer := 0;
   v_bank_references_cleared integer := 0;
+  v_transfer_scopes_deleted integer := 0;
   v_transfers_voided integer := 0;
   v_transfer_ids jsonb := '[]'::jsonb;
 BEGIN
@@ -183,6 +186,24 @@ BEGIN
   INTO v_transfer_count, v_transfer_ids
   FROM pg_temp._tmp_correction_reauthorisation_transfers AS transfer_scope;
 
+  -- A completed unsent execution retains its operation-local transfer scope.
+  -- That scope is no longer authoritative after the correction has returned
+  -- the remainder to Draft, and the table's batch/group uniqueness would
+  -- otherwise reject the next legitimate execution attempt. Preserve the
+  -- parent operation audit row, but retire only scopes tied to the exact local
+  -- transfers proven safe below. Scope-item rows cascade from this exact set.
+  DROP TABLE IF EXISTS pg_temp._tmp_correction_reauthorisation_transfer_scopes;
+  CREATE TEMPORARY TABLE pg_temp._tmp_correction_reauthorisation_transfer_scopes ON COMMIT DROP AS
+  SELECT execution_scope.id AS transfer_scope_id
+  FROM public.banking_pay_operation_transfer_scope AS execution_scope
+  JOIN pg_temp._tmp_correction_reauthorisation_transfers AS target_transfer
+    ON target_transfer.pay_bank_transfer_id = execution_scope.pay_bank_transfer_id
+  WHERE execution_scope.pay_batch_id = p_pay_batch_id;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_transfer_scope_count
+  FROM pg_temp._tmp_correction_reauthorisation_transfer_scopes;
+
   SELECT pg_catalog.count(*)::integer
   INTO v_linked_active_item_count
   FROM public.pay_batch_items AS linked_item
@@ -215,12 +236,29 @@ BEGIN
             )::text;
   END IF;
 
+  IF v_transfer_scope_count > 2000 THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REAUTHORISATION_TRANSFER_SCOPE_TOO_LARGE'
+      USING ERRCODE = 'P0001',
+            DETAIL = pg_catalog.jsonb_build_object(
+              'code', 'PAYMENT_CORRECTION_REAUTHORISATION_TRANSFER_SCOPE_TOO_LARGE',
+              'transfer_scope_count', v_transfer_scope_count,
+              'maximum_transfer_scope_count', 2000
+            )::text;
+  END IF;
+
   PERFORM 1
   FROM public.pay_bank_transfers AS transfer_lock
   JOIN pg_temp._tmp_correction_reauthorisation_transfers AS target_transfer
     ON target_transfer.pay_bank_transfer_id = transfer_lock.id
   ORDER BY transfer_lock.id
   FOR UPDATE OF transfer_lock;
+
+  PERFORM 1
+  FROM public.banking_pay_operation_transfer_scope AS scope_lock
+  JOIN pg_temp._tmp_correction_reauthorisation_transfer_scopes AS target_scope
+    ON target_scope.transfer_scope_id = scope_lock.id
+  ORDER BY scope_lock.id
+  FOR UPDATE OF scope_lock;
 
   SELECT pg_catalog.count(*)::integer
   INTO v_unsafe_transfer_count
@@ -286,6 +324,7 @@ BEGIN
       'active_item_count', v_active_item_count,
       'linked_active_item_count', v_linked_active_item_count,
       'transfer_count', v_transfer_count,
+      'transfer_scope_count', v_transfer_scope_count,
       'transfer_ids', v_transfer_ids
     );
   END IF;
@@ -323,6 +362,21 @@ BEGIN
   INTO v_item_links_cleared, v_bank_references_cleared
   FROM cleared_item_links;
 
+  WITH deleted_transfer_scopes AS (
+    DELETE FROM public.banking_pay_operation_transfer_scope AS scope_delete
+    USING pg_temp._tmp_correction_reauthorisation_transfer_scopes AS target_scope
+    WHERE scope_delete.id = target_scope.transfer_scope_id
+      AND scope_delete.pay_batch_id = p_pay_batch_id
+      AND scope_delete.pay_bank_transfer_id IN (
+        SELECT target_transfer.pay_bank_transfer_id
+        FROM pg_temp._tmp_correction_reauthorisation_transfers AS target_transfer
+      )
+    RETURNING scope_delete.id
+  )
+  SELECT pg_catalog.count(*)::integer
+  INTO v_transfer_scopes_deleted
+  FROM deleted_transfer_scopes;
+
   WITH voided_transfers AS (
     UPDATE public.pay_bank_transfers AS transfer_update
     SET amount = 0,
@@ -352,7 +406,8 @@ BEGIN
   INTO v_transfers_voided
   FROM voided_transfers;
 
-  IF v_transfers_voided IS DISTINCT FROM v_transfer_count
+  IF v_transfer_scopes_deleted IS DISTINCT FROM v_transfer_scope_count
+     OR v_transfers_voided IS DISTINCT FROM v_transfer_count
      OR v_item_links_cleared IS DISTINCT FROM v_linked_active_item_count THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REAUTHORISATION_OVERLAY_EFFECT_MISMATCH'
       USING ERRCODE = 'P0001',
@@ -360,6 +415,8 @@ BEGIN
               'code', 'PAYMENT_CORRECTION_REAUTHORISATION_OVERLAY_EFFECT_MISMATCH',
               'expected_transfer_count', v_transfer_count,
               'transfers_voided', v_transfers_voided,
+              'expected_transfer_scope_count', v_transfer_scope_count,
+              'transfer_scopes_deleted', v_transfer_scopes_deleted,
               'expected_linked_active_item_count', v_linked_active_item_count,
               'item_links_cleared', v_item_links_cleared
             )::text;
@@ -376,6 +433,8 @@ BEGIN
     'active_item_count', v_active_item_count,
     'linked_active_item_count', v_linked_active_item_count,
     'transfer_count', v_transfer_count,
+    'transfer_scope_count', v_transfer_scope_count,
+    'transfer_scopes_deleted', v_transfer_scopes_deleted,
     'item_links_cleared', v_item_links_cleared,
     'bank_references_cleared', v_bank_references_cleared,
     'transfers_voided', v_transfers_voided,
