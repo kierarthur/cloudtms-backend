@@ -70,6 +70,8 @@ test('cancelled amount presentation is sourced from immutable correction evidenc
   assert.match(statusPage, /public\.pay_payment_correction_request_candidates/);
   assert.match(statusPage, /removed_frozen_source_amount/);
   assert.match(statusPage, /removed_frozen_payable_amount/);
+  assert.match(statusPage, /LEFT JOIN public\.pay_batch_items AS frozen_batch_item/);
+  assert.match(statusPage, /coalesce\(frozen_batch_item\.amount_inc_vat, correction_item\.amount_inc_vat\)/);
   assert.match(statusPage, /removed_reviewed_payment_amount/);
   assert.match(statusPage, /'cancelled_gross_base_amount_pence'/);
   assert.match(statusPage, /'cancelled_payable_amount_pence'/);

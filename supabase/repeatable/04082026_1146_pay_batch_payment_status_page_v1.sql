@@ -1316,7 +1316,9 @@ BEGIN
     ), removed_amount_rollup AS (
         SELECT latest_removal.pay_batch_candidate_id,
                pg_catalog.sum(correction_item.source_amount) AS removed_frozen_source_amount,
-               pg_catalog.sum(correction_item.amount_inc_vat) AS removed_frozen_payable_amount,
+               pg_catalog.sum(
+                   coalesce(frozen_batch_item.amount_inc_vat, correction_item.amount_inc_vat)
+               ) AS removed_frozen_payable_amount,
                pg_catalog.max(member_row.active_amount) AS removed_reviewed_payment_amount
         FROM latest_removal_request AS latest_removal
         JOIN public.pay_payment_correction_items AS correction_item
@@ -1325,8 +1327,10 @@ BEGIN
          AND correction_item.status = 'APPLIED'
          AND correction_item.correction_item_kind IN (
              'PRE_BANK_CANCEL',
-             'NO_MONEY_UNWIND'
-         )
+              'NO_MONEY_UNWIND'
+          )
+        LEFT JOIN public.pay_batch_items AS frozen_batch_item
+          ON frozen_batch_item.id = correction_item.pay_batch_item_id
         LEFT JOIN public.pay_payment_correction_request_candidates AS member_row
           ON member_row.correction_request_id = latest_removal.correction_request_id
          AND member_row.pay_batch_candidate_id = latest_removal.pay_batch_candidate_id
