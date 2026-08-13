@@ -178,3 +178,38 @@ BEGIN
   END IF;
 END;
 $verification$;
+
+DO $verification$
+DECLARE
+  v_sync_definition text;
+  v_helper_invocation_count integer;
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef(
+    'private.pay_sync_overpayments_from_workbench_workspace_v1(uuid,uuid,uuid,uuid,date,date,uuid,text,uuid[],jsonb,uuid,uuid[],uuid[])'::regprocedure)
+  INTO STRICT v_sync_definition;
+
+  SELECT count(*)::integer
+  INTO v_helper_invocation_count
+  FROM regexp_matches(
+    v_sync_definition,
+    'private\.pay_workbench_sealed_rate_component_projection_v1\s*\(',
+    'g'
+  );
+
+  IF v_helper_invocation_count <> 1 THEN
+    RAISE EXCEPTION 'V1210_RATE_HELPER_INVOCATION_COUNT_MISMATCH';
+  END IF;
+
+  IF v_sync_definition ~ '''source_pay_method''\s*,\s*v_scope'
+     OR v_sync_definition ~ '''target_pay_method''\s*,\s*v_scope'
+     OR v_sync_definition ~* 'preliminary_outstanding_allocation|preliminary_allocations|final_allocations|preview_truth_weight_total' THEN
+    RAISE EXCEPTION 'V1210_BOUNDED_RATE_AUTHORITY_REGRESSION';
+  END IF;
+
+  IF position('tmp_sync_builder_physical_components' in v_sync_definition)=0
+     OR position('builder_comparison_digest' in v_sync_definition)=0
+     OR position('PAY_WORKBENCH_CANONICAL_PHYSICAL_COMPONENT_MISMATCH' in v_sync_definition)=0 THEN
+    RAISE EXCEPTION 'V1210_BUILDER_PHYSICAL_OWNER_FENCE_MISSING';
+  END IF;
+END;
+$verification$;

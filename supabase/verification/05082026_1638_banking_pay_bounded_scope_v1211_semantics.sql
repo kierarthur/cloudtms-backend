@@ -134,3 +134,27 @@ BEGIN
   END IF;
 END;
 $verification$;
+
+DO $verification$
+DECLARE
+  v_sync_definition text;
+BEGIN
+  SELECT pg_catalog.pg_get_functiondef(
+    'private.pay_sync_overpayments_from_workbench_workspace_v1(uuid,uuid,uuid,uuid,date,date,uuid,text,uuid[],jsonb,uuid,uuid[],uuid[])'::regprocedure)
+  INTO STRICT v_sync_definition;
+
+  IF position('PAY_SYNC_OVERPAYMENTS_RATE_ECONOMIC_FENCE_MISMATCH' in v_sync_definition)=0
+     OR position('PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_COMPONENT_MISSING' in v_sync_definition)=0
+     OR position('PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_COMPONENT_EXTRA' in v_sync_definition)=0
+     OR position('PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_DIGEST_MISMATCH' in v_sync_definition)=0
+     OR position('PAY_WORKBENCH_CANONICAL_PHYSICAL_COMPONENT_MISMATCH' in v_sync_definition)=0 THEN
+    RAISE EXCEPTION 'V1211_ECONOMIC_OR_PHYSICAL_RATE_FENCE_MISSING';
+  END IF;
+
+  IF position('physical_bucket_key' in v_sync_definition)=0
+     OR position('physical_bucket_digest' in v_sync_definition)=0
+     OR position('sealed_evidence_digest' in v_sync_definition)=0 THEN
+    RAISE EXCEPTION 'V1211_PHYSICAL_RATE_EVIDENCE_MISSING';
+  END IF;
+END;
+$verification$;

@@ -157,9 +157,9 @@ test('ACL and catalogue verifier preserve least privilege and one manifest owner
   assert.match(acl, /pay_workbench_candidate_delta_refresh_chunk[\s\S]+FROM PUBLIC,anon,authenticated,service_role[\s\S]+TO service_role/);
   assert.match(acl, /pay_workbench_delta_write_compatible_rows_v1[\s\S]+FROM PUBLIC,anon,authenticated,service_role/);
   assert.doesNotMatch(acl.match(/pay_workbench_delta_write_compatible_rows_v1[\s\S]*$/)?.[0] || '', /TO service_role/);
-  assert.equal(catalogue.function_count, 25);
-  assert.equal(catalogue.functions.length, 25);
-  assert.equal(new Set(catalogue.functions.map((entry) => entry.schema + '.' + entry.name + '(' + entry.identity_arguments + ')')).size, 25);
+  assert.equal(catalogue.function_count, 27);
+  assert.equal(catalogue.functions.length, 27);
+  assert.equal(new Set(catalogue.functions.map((entry) => entry.schema + '.' + entry.name + '(' + entry.identity_arguments + ')')).size, 27);
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_enqueue_stage_continuation'));
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_fail_job'));
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_candidate_source_build_chunk_legacy_v1'));
