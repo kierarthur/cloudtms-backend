@@ -613,10 +613,19 @@ begin
       if v_presented_refresh_hash is distinct from v_session.refresh_token_hash then
         raise exception 'CANDIDATE_SESSION_INVALID' using errcode='28000';
       end if;
+      v_response:=jsonb_build_object(
+        'ok',false,
+        'error_code','CANDIDATE_REFRESH_TOKEN_REUSE',
+        'family_revoked',true
+      );
       update public.candidate_app_sessions set status='REVOKED',revoked_at_utc=p_now_utc,
         revoke_reason='REFRESH_TOKEN_REUSE',updated_at_utc=p_now_utc
       where token_family_id=v_session.token_family_id and status in ('ACTIVE','ROTATED');
-      return jsonb_build_object('ok',false,'error_code','CANDIDATE_REFRESH_TOKEN_REUSE','family_revoked',true);
+      perform private._candidate_auth_mutation_receipt_v1(
+        v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
+        jsonb_build_object('request_key_version',v_request_key_version),p_now_utc
+      );
+      return v_response;
     end if;
     if v_session.status<>'ACTIVE' or v_session.expires_at_utc<=p_now_utc or v_session.absolute_expires_at_utc<=p_now_utc then
       raise exception 'CANDIDATE_SESSION_EXPIRED' using errcode='28000';

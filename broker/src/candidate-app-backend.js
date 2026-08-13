@@ -943,6 +943,31 @@ async function challengeTokenForReceipt(
   return token;
 }
 
+async function phoneTokenForWorkflowResult(
+  env, result, workflowId, expectedGeneration, idempotencyKey
+) {
+  const expectedHashHex = text(result?.approval_token_hash_hex).toLowerCase();
+  if (!SHA256_RE.test(expectedHashHex)) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  const keyVersion = requireInteger(
+    result?.handoff_token_key_version,
+    'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
+  );
+  if (keyVersion > 32) {
+    throw new CandidateHttpError(503, 'CANDIDATE_REPLAY_KEY_VERSION_INVALID');
+  }
+  const token = await deterministicOpaqueToken(
+    managerTokenSecret(env, keyVersion),
+    'candidate-phone-handoff-v1', workflowId, expectedGeneration, idempotencyKey
+  );
+  if (await sha256Hex(token) !== expectedHashHex) {
+    throw new CandidateHttpError(503, 'CANDIDATE_AUTH_RECEIPT_UNAVAILABLE');
+  }
+  const { approval_token_hash_hex: _internalTokenHash, ...publicResult } = result;
+  return { ...publicResult, manager_handoff_token: token };
+}
+
 async function handleChallengeStart(request, env, deps, isResend = false) {
   const body = await readJson(request);
   const email = normaliseEmail(body.email);
@@ -1219,6 +1244,9 @@ async function handleRefresh(request, env, deps) {
       { session_id: oldSessionId }
     );
     if (!replay) throw new CandidateHttpError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    if (replay?.ok !== true) {
+      throw new CandidateHttpError(401, replay?.error_code || 'CANDIDATE_SESSION_INVALID');
+    }
     const replayRefresh = await deterministicRefreshToken(
       env, keyVersion, 'REFRESH_SESSION', replay.session_id, idempotencyKey
     );
@@ -3063,15 +3091,9 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       replaySemanticPayload
     );
     if (replay) {
-      const replayKeyVersion = requireInteger(
-        replay.handoff_token_key_version || 1,
-        'CANDIDATE_REPLAY_KEY_VERSION_INVALID', 1
-      );
-      const managerToken = await deterministicOpaqueToken(
-        managerTokenSecret(env, replayKeyVersion),
-        'candidate-phone-handoff-v1', workflowId, generation, mutationKey
-      );
-      return jsonResponse(201, { ...replay, manager_handoff_token: managerToken });
+      return jsonResponse(201, await phoneTokenForWorkflowResult(
+        env, replay, workflowId, generation, mutationKey
+      ));
     }
     const handoffTokenKeyVersion = managerTokenKeyVersion(env);
     const managerToken = await deterministicOpaqueToken(
@@ -3086,7 +3108,6 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       public_broker_binding: brokerBinding,
       broker_handoff_key_version: brokerHandoffKeyVersion
     };
-    body.__manager_handoff_token = managerToken;
   } else if (dbAction === 'CREATE_EMAIL_APPROVAL_REQUEST' || dbAction === 'RENEW' || dbAction === 'REMIND') {
     const mailKind = dbAction === 'REMIND' ? 'REMINDER'
       : dbAction === 'RENEW' ? 'RENEWAL' : 'INITIAL';
@@ -3157,7 +3178,9 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     access, env, workflowId, dbAction, generation, payload, mutationKey
   ));
   if (dbAction === 'SELECT_PHONE_APPROVAL') {
-    return jsonResponse(201, { ...result, manager_handoff_token: body.__manager_handoff_token });
+    return jsonResponse(201, await phoneTokenForWorkflowResult(
+      env, result, workflowId, generation, mutationKey
+    ));
   }
   if (dbAction === 'WORKER_SUBMIT' && result?.render_contract) {
     const work = renderAndRegister(env, deps, result.render_contract, 'REVIEW');

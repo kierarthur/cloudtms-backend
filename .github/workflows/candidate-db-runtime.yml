@@ -27,6 +27,7 @@ on:
       - 'tests/10082026_*candidate*_verification.sql'
       - 'tests/11082026_*candidate*_verification.sql'
       - 'tests/12082026_*candidate*_verification.sql'
+      - 'tests/13082026_*candidate*_verification.sql'
       - '.github/workflows/candidate-db-runtime.yml'
 
 permissions:
@@ -142,6 +143,7 @@ jobs:
             tests/12082026_2146_candidate_public_auth_final_correction_verification.sql
             tests/12082026_2223_candidate_public_auth_concurrency_verification.sql
             tests/13082026_0002_candidate_auth_mixed_version_concurrency_verification.sql
+            tests/13082026_0617_candidate_phone_refresh_security_verification.sql
           )
           for file in "${suites[@]}"; do apply_sql "$file"; done
 

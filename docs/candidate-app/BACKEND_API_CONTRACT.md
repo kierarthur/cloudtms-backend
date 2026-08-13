@@ -39,6 +39,8 @@ Machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Trust and deployment
 
 Challenge/outbox insertion is retry-safe: the backend deterministically reproduces the same challenge token from the receipt-recorded issuing key version and upserts the same mail-outbox identity. A retained reader can reconstruct a newer-version token after an approved writer rollback; removal from the reader catalogue fails closed.
 
+Refresh-token-reuse is a durable negative security operation. Family revocation and `CANDIDATE_REFRESH_TOKEN_REUSE` commit in the same receipt transaction; an exact lost-response or concurrent retry returns that same result rather than substituting `CANDIDATE_SESSION_EXPIRED`. No successor credential is derived for a negative replay.
+
 ## Candidate account and read API
 
 | Method | Path | Purpose |
@@ -123,6 +125,8 @@ The claimed Candidate paper email is not sent on the strength of a separate read
 | GET | `/candidate-manager/v1/workflows/:workflowId/components/:componentId/document` | Stream only a component in the token-bound manifest. |
 
 The broker and private router enforce this exact method map before any workflow RPC. Unsupported method/path pairs return `405 METHOD_NOT_ALLOWED`; for example, `GET .../approve` cannot start or touch manager review state.
+
+PHONE selection treats a pre-RPC private manager token as a proposal only. The canonical workflow result returns the database-winning approval-token hash and key version internally; the private backend reconstructs and verifies that winner after the RPC and strips the hash before its response. Concurrent Workers on different manager-token writers therefore return one identical usable private/public handoff.
 
 Approval commits before guarded asynchronous final rendering/finalisation. Independent workflows do not share a global lock. A failed follow-on leaves durable manager approval and a retryable workflow; it does not create partial canonical finalisation.
 

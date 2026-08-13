@@ -166,6 +166,14 @@ test('new authentication is clean registration only and stores versioned verifie
   assert.doesNotMatch(codeOnly, /GOOGLE_LEGACY|legacy_password|_deriveKeyHmacSha256|passwordhash|passwordsalt/i);
 });
 
+test('refresh-token-reuse revocation and its negative response share one durable receipt', () => {
+  const auth = definition(sql.auth, 'candidate_auth_account_transition_v1');
+  assert.match(
+    auth,
+    /v_session\.status='ROTATED'[\s\S]*v_response:=jsonb_build_object\([\s\S]*CANDIDATE_REFRESH_TOKEN_REUSE[\s\S]*revoke_reason='REFRESH_TOKEN_REUSE'[\s\S]*_candidate_auth_mutation_receipt_v1\([\s\S]*return v_response/i
+  );
+});
+
 test('exact-byte evidence has one digest authority and one active TIMESHEET constraint', () => {
   assert.match(sql.foundation, /source_content_sha256 bytea/);
   assert.match(sql.foundation, /octet_length\(source_content_sha256\)\s*=\s*32/i);
@@ -275,6 +283,7 @@ test('manager approval and evidence completion are session-independent, token-bo
   assert.match(workflow, /v_is_public_manager_action:=not v_is_service_action[\s\S]*PHONE_APPROVE[\s\S]*COMPONENT_COMPLETE/i);
   assert.match(workflow, /method in \('EMAIL','PHONE'\)[\s\S]*expires_at_utc>p_now_utc/i);
   assert.match(workflow, /'PHONE','PENDING',v_token_hash[\s\S]*expires_at_utc/i);
+  assert.match(workflow, /v_action='SELECT_PHONE_APPROVAL'[\s\S]*'approval_token_hash_hex',encode\(v_approval\.token_hash,'hex'\)[\s\S]*'handoff_token_key_version'/i);
   assert.match(workflow, /CANCEL_MANAGER_HANDOFF[\s\S]*handoff_cancelled/i);
   assert.match(workflow, /EXPENSE_EVIDENCE'\)[\s\S]*application\/pdf/i);
   assert.match(workflow, /v_component\.source_content_sha256=v_digest[\s\S]*CANDIDATE_COMPONENT_IMMUTABLE_CONFLICT/i);

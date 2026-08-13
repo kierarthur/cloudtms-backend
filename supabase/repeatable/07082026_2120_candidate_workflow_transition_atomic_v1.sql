@@ -3602,6 +3602,7 @@ begin
         raise exception 'CANDIDATE_PHONE_HANDOFF_BINDING_INVALID' using errcode='22023';
       end if;
       v_response:=v_response||jsonb_build_object(
+        'approval_token_hash_hex',encode(v_approval.token_hash,'hex'),
         'handoff_token_key_version',(v_payload->>'handoff_token_key_version')::integer,
         'public_broker_binding',v_payload->'public_broker_binding',
         'broker_handoff_key_version',(v_payload->>'broker_handoff_key_version')::integer

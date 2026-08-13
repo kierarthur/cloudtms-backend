@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: TEST broker/private-backend authority map, updated 12 August 2026 through semantic pre-enrichment replay, trigger-key-independent finalisation completion, exact PAPER claim/backoff recovery and the typed timesheet-detail action contract. Candidate features remain disabled pending independent approval.
+Status: TEST broker/private-backend authority map, updated 13 August 2026 through mixed-version credential-winner reconstruction, durable refresh security-event replay, semantic pre-enrichment replay, trigger-key-independent finalisation completion, exact PAPER claim/backoff recovery and the typed timesheet-detail action contract. Candidate features remain disabled pending independent approval.
 
 ## Canonical owner graph
 
@@ -151,3 +151,5 @@ It must not own rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN,
 - Challenge START/RESEND delivery always reconstructs from the token hash and issuing version returned by the database-winning result after the canonical RPC. A losing Worker proposal is never allowed to supply the create-only mail row.
 - Every authentication/account operation reserves one request-HMAC key version under the existing environment/idempotency-key lock before it creates a password/refresh proof or factual request hash. Overlapping Workers use that frozen version; a changed action conflicts and a retired reader fails closed.
 - The reservation and completed outcome are one durable `audit_events` receipt lifecycle. No Candidate business table or public Candidate RPC is added.
+- `SELECT_PHONE_APPROVAL` returns the database winner's internal token hash/version to the private backend. The backend reconstructs and verifies that winner after the RPC, discards every losing local proposal and strips the internal hash before any Candidate or public-broker response.
+- Refresh-token-reuse family revocation and `CANDIDATE_REFRESH_TOKEN_REUSE` are one atomic durable receipt. Exact and concurrent same-key security-event retries replay that negative result before the revoked predecessor session is re-evaluated.

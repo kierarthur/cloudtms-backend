@@ -314,6 +314,26 @@ begin
      or v_response->>'error_code'<>'CANDIDATE_REFRESH_TOKEN_REUSE' then
     raise exception 'refresh reuse handling failed: %',v_response;
   end if;
+  -- The family-revocation security result is part of the factual mutation.
+  -- An exact lost-response retry must replay it before re-evaluating the now
+  -- REVOKED predecessor session.
+  v_response:=public.candidate_auth_account_transition_v1(
+    'REFRESH_SESSION','TEST',v_account,null,v_session,null,
+    jsonb_build_object(
+      'presented_refresh_token_hash_hex',repeat('31',32),
+      'new_refresh_token_hash_hex',repeat('34',32),
+      'new_session_id','aaaaaaaa-0000-0000-0000-000000000005',
+      'idempotency_request_sha256',repeat('43',32),
+      'idempotency_key_version',1
+    ),
+    'auth-refresh-reuse-v1',now()
+  );
+  if coalesce((v_response->>'ok')::boolean,true)=true
+     or v_response->>'error_code'<>'CANDIDATE_REFRESH_TOKEN_REUSE'
+     or not coalesce((v_response->>'family_revoked')::boolean,false)
+     or not coalesce((v_response->>'idempotent_replay')::boolean,false) then
+    raise exception 'refresh reuse lost-response replay changed result: %',v_response;
+  end if;
   select status into v_state from public.candidate_app_sessions where id=v_next_session;
   if v_state<>'REVOKED' then
     raise exception 'refresh family revocation was not durable: %',v_state;
@@ -532,8 +552,33 @@ begin
   v_approval_request:=(v_response->>'approval_request_id')::uuid;
   if v_response->>'state'<>'AWAITING_MANAGER_APPROVAL'
      or nullif(v_response->>'issued_at_utc','') is null
+     or v_response->>'approval_token_hash_hex'
+          <>encode(extensions.digest(v_workflow::text||':phone','sha256'),'hex')
+     or (v_response->>'handoff_token_key_version')::integer<>1
      or (v_response->>'issued_at_utc')::timestamptz>now() then
     raise exception 'phone approval selection failed: %',v_response;
+  end if;
+
+  -- Generated PHONE token facts are proposals.  A same-key request handled by
+  -- a different writer must receive the first database winner's hash/version.
+  v_response:=public.candidate_workflow_transition_atomic_v1(
+    v_session,'TEST',v_workflow,'SELECT_PHONE_APPROVAL',2,
+    jsonb_build_object(
+      'approval_token_hash_hex',repeat('46',32),
+      'expires_at_utc',now()+interval '30 minutes','handoff_token_key_version',2,
+      'public_broker_binding',jsonb_build_object(
+        'contract_version','CANDIDATE_PUBLIC_PHONE_BINDING_V1',
+        'public_session_binding_sha256',repeat('ab',32),
+        'device_binding_sha256',repeat('cd',32)
+      ),'broker_handoff_key_version',2
+    ),
+    'workflow-select-phone-v1',now()
+  );
+  if v_response->>'approval_token_hash_hex'
+        <>encode(extensions.digest(v_workflow::text||':phone','sha256'),'hex')
+     or (v_response->>'handoff_token_key_version')::integer<>1
+     or not coalesce((v_response->>'idempotent_replay')::boolean,false) then
+    raise exception 'phone database winner token facts were not replayed: %',v_response;
   end if;
 
   v_response:=public.candidate_workflow_transition_atomic_v1(

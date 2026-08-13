@@ -430,3 +430,184 @@ test('activation, refresh and authenticated account mutations share the reserved
     globalThis.fetch = originalFetch;
   }
 });
+
+function phoneEnv(version) {
+  return {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'mixed-phone-access-secret',
+    CANDIDATE_MANAGER_TOKEN_KEY_VERSION: String(version),
+    CANDIDATE_MANAGER_TOKEN_SECRET_V1: 'mixed-phone-manager-version-one-secret',
+    CANDIDATE_MANAGER_TOKEN_SECRET_V2: 'mixed-phone-manager-version-two-secret',
+    SUPABASE_URL: `https://phone-v${version}.supabase.invalid`,
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+}
+
+async function runPhoneWinnerRace(winnerVersion) {
+  const originalFetch = globalThis.fetch;
+  const workflowId = '13082026-0002-4000-8000-000000000021';
+  const sessionId = '13082026-0002-4000-8000-000000000022';
+  const accountId = '13082026-0002-4000-8000-000000000023';
+  const candidateId = '13082026-0002-4000-8000-000000000024';
+  const operationKey = `mixed-phone-winner-${winnerVersion}`;
+  const publicBinding = {
+    contract_version: 'CANDIDATE_PUBLIC_PHONE_BINDING_V1',
+    public_session_binding_sha256: '51'.repeat(32),
+    device_binding_sha256: '52'.repeat(32)
+  };
+  const accessToken = await createAccessToken(phoneEnv(1), {
+    session_id: sessionId,
+    rotation: 0,
+    issued_at_utc: new Date().toISOString()
+  });
+  const probeResolvers = [];
+  const mainCalls = [];
+  const mainResolvers = [];
+
+  const releaseMain = () => {
+    if (mainCalls.length !== 2 || mainResolvers.length !== 2) return;
+    const winner = mainCalls.find(call => call.version === winnerVersion);
+    assert.ok(winner, `missing PHONE version-${winnerVersion} proposal`);
+    const durable = {
+      ok: true,
+      workflow_id: workflowId,
+      generation: 2,
+      state: 'AWAITING_MANAGER_APPROVAL',
+      approval_request_id: '13082026-0002-4000-8000-000000000025',
+      method: 'PHONE',
+      approval_token_hash_hex: winner.args.p_payload.approval_token_hash_hex,
+      handoff_token_key_version: winner.args.p_payload.handoff_token_key_version,
+      public_broker_binding: winner.args.p_payload.public_broker_binding,
+      broker_handoff_key_version: winner.args.p_payload.broker_handoff_key_version
+    };
+    while (mainResolvers.length) mainResolvers.shift()(durable);
+  };
+
+  const depsFor = version => ({
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_workflow_transition_atomic_v1');
+      assert.equal(args.p_action, 'SELECT_PHONE_APPROVAL');
+      if (args.p_payload.mutation_replay_probe_only === true) {
+        return new Promise(resolve => {
+          probeResolvers.push(resolve);
+          if (probeResolvers.length === 2) {
+            while (probeResolvers.length) probeResolvers.shift()({ replay_found: false });
+          }
+        });
+      }
+      mainCalls.push({ version, args });
+      return new Promise(resolve => {
+        mainResolvers.push(resolve);
+        releaseMain();
+      });
+    }
+  });
+
+  globalThis.fetch = async url => {
+    assert.match(new URL(url).pathname, /candidate_app_sessions$/);
+    return Response.json([{
+      id: sessionId,
+      account_id: accountId,
+      environment: 'TEST',
+      selected_candidate_id: candidateId,
+      status: 'ACTIVE',
+      rotation: 0,
+      expires_at_utc: '2099-01-01T00:00:00.000Z',
+      absolute_expires_at_utc: '2099-01-01T00:00:00.000Z'
+    }]);
+  };
+
+  const invoke = version => handleCandidateAppRequest(new Request(
+    `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/select-phone-approval`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`
+      },
+      body: JSON.stringify({
+        generation: 1,
+        idempotency_key: operationKey,
+        payload: {
+          public_broker_binding: publicBinding,
+          broker_handoff_key_version: 4
+        }
+      })
+    }
+  ), phoneEnv(version), {}, depsFor(version));
+
+  try {
+    const responses = await Promise.all([1, 2].map(invoke));
+    assert.deepEqual(responses.map(response => response.status), [201, 201]);
+    const bodies = await Promise.all(responses.map(response => response.json()));
+    const winner = mainCalls.find(call => call.version === winnerVersion);
+    const winnerHash = winner.args.p_payload.approval_token_hash_hex;
+    assert.equal(new Set(bodies.map(body => body.manager_handoff_token)).size, 1);
+    assert.deepEqual(bodies.map(body => body.handoff_token_key_version), [winnerVersion, winnerVersion]);
+    for (const body of bodies) {
+      assert.equal(createHash('sha256').update(body.manager_handoff_token).digest('hex'), winnerHash);
+      assert.equal(body.approval_token_hash_hex, undefined);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+}
+
+test('mixed PHONE writers return only the database-winning handoff token', async () => {
+  await runPhoneWinnerRace(1);
+  await runPhoneWinnerRace(2);
+});
+
+test('refresh-token-reuse security response is replayed without re-evaluating revoked state', async () => {
+  const key = 'refresh-security-event-lost-response';
+  const sessionId = '13082026-0002-4000-8000-000000000031';
+  let receipt = null;
+  let mutationCalls = 0;
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc(name, args) {
+      assert.equal(name, 'candidate_auth_account_transition_v1');
+      assert.equal(args.p_action, 'REFRESH_SESSION');
+      if (args.p_payload.replay_probe_only === true
+          && !args.p_payload.idempotency_request_sha256) {
+        return {
+          replay_receipt_found: receipt != null,
+          request_version_reserved: true,
+          request_key_version: 1
+        };
+      }
+      if (args.p_payload.replay_probe_only === true) {
+        assert.ok(receipt, 'negative refresh receipt must exist before exact replay');
+        return { ...receipt, idempotent_replay: true };
+      }
+      mutationCalls += 1;
+      receipt = {
+        ok: false,
+        error_code: 'CANDIDATE_REFRESH_TOKEN_REUSE',
+        family_revoked: true
+      };
+      return receipt;
+    }
+  };
+  const invoke = () => handleCandidateAppRequest(new Request(
+    'https://private.test/candidate-app/v1/auth/refresh', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        refresh_token: 'rotated-predecessor-refresh-token',
+        idempotency_key: key
+      })
+    }
+  ), authEnv(1), {}, deps);
+
+  const first = await invoke();
+  const replay = await invoke();
+  const firstBody = await first.json();
+  const replayBody = await replay.json();
+  assert.equal(first.status, 401);
+  assert.equal(replay.status, 401);
+  assert.equal(firstBody.error_code, 'CANDIDATE_REFRESH_TOKEN_REUSE');
+  assert.equal(replayBody.error_code, 'CANDIDATE_REFRESH_TOKEN_REUSE');
+  assert.equal(mutationCalls, 1);
+});

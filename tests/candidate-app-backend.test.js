@@ -2935,6 +2935,7 @@ test('phone handoff replay freezes key versions and conflicts on changed public 
         state: 'AWAITING_MANAGER_APPROVAL',
         approval_request_id: '00000000-0000-4000-8000-0000000000a5',
         method: 'PHONE', handoff_token_key_version: args.p_payload.handoff_token_key_version,
+        approval_token_hash_hex: args.p_payload.approval_token_hash_hex,
         public_broker_binding: args.p_payload.public_broker_binding,
         broker_handoff_key_version: args.p_payload.broker_handoff_key_version
       };
@@ -2966,6 +2967,8 @@ test('phone handoff replay freezes key versions and conflicts on changed public 
     assert.equal(firstBody.handoff_token_key_version, 1);
     assert.equal(replayBody.handoff_token_key_version, 1);
     assert.equal(replayBody.manager_handoff_token, firstBody.manager_handoff_token);
+    assert.equal(firstBody.approval_token_hash_hex, undefined);
+    assert.equal(replayBody.approval_token_hash_hex, undefined);
     assert.equal(replayBody.broker_handoff_key_version, 1);
     const changedDevice = await invoke(baseEnv, {
       ...binding, device_binding_sha256: '33'.repeat(32)

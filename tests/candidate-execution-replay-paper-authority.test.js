@@ -18,6 +18,8 @@ test('Candidate HTTP enrichment is stable and signing time is an explicit factua
     /CREATE_EMAIL_APPROVAL_REQUEST'[\s\S]{0,180}randomToken\(32\)/
   );
   assert.match(workflow, /v_action='SELECT_PHONE_APPROVAL'[\s\S]*-'expires_at_utc'/);
+  assert.match(backend, /phoneTokenForWorkflowResult[\s\S]*approval_token_hash_hex[\s\S]*sha256Hex\(token\)/);
+  assert.match(backend, /dbAction === 'SELECT_PHONE_APPROVAL'[\s\S]*phoneTokenForWorkflowResult/);
   assert.match(workflow, /v_action='WORKER_SUBMIT'[\s\S]*-'official_presentation'/);
 });
 
