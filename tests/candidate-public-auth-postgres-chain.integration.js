@@ -7,7 +7,8 @@ import {
   handleCandidateBrokerRequest
 } from '../candidate-broker/src/candidate-broker.js';
 import {
-  handleCandidateAppRequest
+  handleCandidateAppRequest,
+  candidateAppBackendInternals
 } from '../broker/src/candidate-app-backend.js';
 import {
   verifyCandidatePrivateRequest
@@ -15,6 +16,9 @@ import {
 
 const enabled = process.env.CANDIDATE_AUTH_POSTGRES_CHAIN === '1';
 const origin = 'https://candidate-postgres-chain.test.example';
+const {
+  derivePasswordVerifier, passwordVerificationProof, createAccessToken
+} = candidateAppBackendInternals;
 
 function psqlArguments(sql) {
   const args = ['-X', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres', '-tA',
@@ -367,6 +371,363 @@ test('real private handlers and PostgreSQL keep one winner across mixed auth wri
     );
     assert.equal(changed.status, 409);
     assert.equal((await changed.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('real private handlers and PostgreSQL revalidate password authority under the account lock', {
+  skip: !enabled
+}, async () => {
+  const originalFetch = globalThis.fetch;
+  const oldPassword = 'password-authority-old-value';
+  const resetPassword = 'password-authority-reset-value';
+  const changePassword = 'password-authority-change-value';
+  const oldVerifier = await derivePasswordVerifier(oldPassword);
+  const resetVerifier = await derivePasswordVerifier(resetPassword);
+  const changeVerifier = await derivePasswordVerifier(changePassword);
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'password-authority-session-not-live',
+    CANDIDATE_AUTH_REPLAY_SECRET_V1: 'password-authority-replay-not-live',
+    SUPABASE_URL: 'https://password-authority-postgres.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  psql(`
+    delete from public.candidate_auth_challenges
+    where email_normalized like 'password-authority-%@example.test';
+    delete from public.candidate_app_accounts
+    where email_normalized like 'password-authority-%@example.test';
+    delete from public.candidates
+    where email like 'password-authority-%@example.test';
+    delete from public.audit_events
+    where object_type='candidate_auth_mutation_receipt'
+      and correlation_id like 'password-authority-%';
+  `);
+
+  function quote(value) {
+    return `'${String(value).replaceAll("'", "''")}'`;
+  }
+
+  function rows(sql) {
+    return JSON.parse(psql(`select coalesce(jsonb_agg(row_data),'[]'::jsonb)::text from (${sql}) rows(row_data)`));
+  }
+
+  function accountRows(email, accountId = null) {
+    return rows(`select jsonb_build_object(
+      'id',a.id,'environment',a.environment,'status',a.status,
+      'password_scheme',a.password_scheme,'password_scheme_version',a.password_scheme_version,
+      'password_salt',encode(a.password_salt,'hex'),'password_digest',encode(a.password_digest,'hex'),
+      'password_params_json',a.password_params_json,'locked_until_utc',a.locked_until_utc
+    ) from public.candidate_app_accounts a
+    where a.environment='TEST' and ${accountId
+      ? `a.id=${quote(accountId)}::uuid`
+      : `a.email_normalized=${quote(email)}`}`);
+  }
+
+  function sessionRows(sessionId) {
+    return rows(`select jsonb_build_object(
+      'id',s.id,'account_id',s.account_id,'environment',s.environment,
+      'selected_candidate_id',s.selected_candidate_id,'status',s.status,'rotation',s.rotation,
+      'expires_at_utc',s.expires_at_utc,'absolute_expires_at_utc',s.absolute_expires_at_utc
+    ) from public.candidate_app_sessions s where s.id=${quote(sessionId)}::uuid`);
+  }
+
+  globalThis.fetch = async url => {
+    const parsed = new URL(url);
+    if (parsed.pathname.endsWith('/candidate_app_accounts')) {
+      const rawId = parsed.searchParams.get('id') || '';
+      if (rawId) return Response.json(accountRows(null, rawId.replace(/^eq\./, '')));
+      const raw = parsed.searchParams.get('email_normalized') || '';
+      const email = decodeURIComponent(raw.replace(/^eq\./, ''));
+      return Response.json(accountRows(email));
+    }
+    if (parsed.pathname.endsWith('/candidate_app_sessions')) {
+      const raw = parsed.searchParams.get('id') || '';
+      const sessionId = raw.replace(/^eq\./, '');
+      return Response.json(sessionRows(sessionId));
+    }
+    throw new Error(`unexpected password-authority REST operation ${parsed.pathname}`);
+  };
+
+  let fixtureNo = 0;
+  async function seed(label, verifier = oldVerifier) {
+    fixtureNo += 1;
+    const suffix = String(fixtureNo).padStart(12, '0');
+    const accountId = `aa130813-2000-4000-8000-${suffix}`;
+    const candidateId = `ca130813-2000-4000-8000-${suffix}`;
+    const sessionId = `5a130813-2000-4000-8000-${suffix}`;
+    const email = `password-authority-${label}@example.test`;
+    psql(`
+      insert into public.candidates(id,email,active,key_norm)
+      values(${quote(candidateId)}::uuid,${quote(email)},true,upper(replace(${quote(accountId)},'-','')));
+      insert into public.candidate_app_accounts(
+        id,environment,email_normalized,status,password_scheme,password_scheme_version,
+        password_salt,password_digest,password_params_json,password_changed_at_utc
+      ) values (
+        ${quote(accountId)}::uuid,'TEST',${quote(email)},'ACTIVE',${quote(verifier.scheme)},
+        ${Number(verifier.scheme_version)}::smallint,decode(${quote(verifier.salt_hex)},'hex'),
+        decode(${quote(verifier.digest_hex)},'hex'),${quote(JSON.stringify(verifier.params))}::jsonb,
+        clock_timestamp()-interval '1 day'
+      );
+      insert into public.candidate_app_sessions(
+        id,account_id,environment,selected_candidate_id,status,refresh_token_hash,
+        token_family_id,rotation,issued_at_utc,expires_at_utc,absolute_expires_at_utc,
+        last_used_at_utc,created_at_utc,updated_at_utc
+      ) values (
+        ${quote(sessionId)}::uuid,${quote(accountId)}::uuid,'TEST',${quote(candidateId)}::uuid,
+        'ACTIVE',extensions.digest(convert_to(${quote(`seed-refresh-${label}`)},'UTF8'),'sha256'),
+        gen_random_uuid(),0,clock_timestamp(),clock_timestamp()+interval '30 days',
+        clock_timestamp()+interval '90 days',clock_timestamp(),clock_timestamp(),clock_timestamp()
+      );
+    `);
+    return { accountId, candidateId, sessionId, email };
+  }
+
+  async function currentProof(fixture, password, accountVerifier = oldVerifier) {
+    return passwordVerificationProof(password, {
+      id: fixture.accountId,
+      password_scheme: accountVerifier.scheme,
+      password_scheme_version: accountVerifier.scheme_version,
+      password_salt: accountVerifier.salt_hex,
+      password_digest: accountVerifier.digest_hex,
+      password_params_json: accountVerifier.params
+    });
+  }
+
+  async function resetAccount(fixture, verifier, key) {
+    const challengeId = `ca130813-3000-4000-8000-${String(fixtureNo).padStart(12, '0')}`;
+    const newSessionId = `5a130813-3000-4000-8000-${String(fixtureNo).padStart(12, '0')}`;
+    psql(`insert into public.candidate_auth_challenges(
+      id,account_id,environment,email_normalized,purpose,state,token_hash,expires_at_utc,
+      verified_at_utc,deterministic_outbox_key
+    ) values (${quote(challengeId)}::uuid,${quote(fixture.accountId)}::uuid,'TEST',${quote(fixture.email)},
+      'RESET','VERIFIED',extensions.digest(convert_to(${quote(key)},'UTF8'),'sha256'),
+      clock_timestamp()+interval '30 minutes',clock_timestamp(),${quote(key)})`);
+    const payload = {
+      challenge_id: challengeId,
+      password_scheme: verifier.scheme,
+      password_scheme_version: verifier.scheme_version,
+      password_salt_hex: verifier.salt_hex,
+      password_digest_hex: verifier.digest_hex,
+      password_params: verifier.params,
+      refresh_token_hash_hex: createHash('sha256').update(`${key}-refresh`).digest('hex'),
+      expires_at_utc: new Date(Date.now() + 30 * 86400000).toISOString(),
+      absolute_expires_at_utc: new Date(Date.now() + 90 * 86400000).toISOString(),
+      idempotency_request_sha256: createHash('sha256').update(`${key}-request`).digest('hex'),
+      idempotency_key_version: 1
+    };
+    return JSON.parse(await psqlAsync(rpcSql('candidate_auth_account_transition_v1'), {
+      p_action: 'ACTIVATE_PASSWORD', p_environment: 'TEST', p_account_id: fixture.accountId,
+      p_email_normalized: fixture.email, p_session_id: newSessionId,
+      p_selected_candidate_id: fixture.candidateId, p_payload: payload,
+      p_idempotency_key: key, p_now_utc: new Date().toISOString()
+    }));
+  }
+
+  async function changeAccount(fixture, verifier, key, proof = null) {
+    const authority = proof || await currentProof(fixture, oldPassword);
+    return JSON.parse(await psqlAsync(rpcSql('candidate_auth_account_transition_v1'), {
+      p_action: 'CHANGE_PASSWORD', p_environment: 'TEST', p_account_id: fixture.accountId,
+      p_email_normalized: null, p_session_id: fixture.sessionId, p_selected_candidate_id: null,
+      p_payload: {
+        password_scheme: verifier.scheme, password_scheme_version: verifier.scheme_version,
+        password_salt_hex: verifier.salt_hex, password_digest_hex: verifier.digest_hex,
+        password_params: verifier.params,
+        presented_password_digest_hex: authority.presented_password_digest_hex,
+        expected_password_authority_sha256: authority.expected_password_authority_sha256,
+        idempotency_request_sha256: createHash('sha256').update(`${key}-request`).digest('hex'),
+        idempotency_key_version: 1
+      }, p_idempotency_key: key, p_now_utc: new Date().toISOString()
+    }));
+  }
+
+  function privateLogin(fixture, password, key, deps) {
+    return handleCandidateAppRequest(new Request('https://private.test/candidate-app/v1/auth/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: fixture.email, password, idempotency_key: key })
+    }), env, {}, deps);
+  }
+
+  async function accessToken(fixture) {
+    return createAccessToken(env, { session_id: fixture.sessionId, rotation: 0 });
+  }
+
+  function privateChange(fixture, currentPassword, password, key, deps, token) {
+    return handleCandidateAppRequest(new Request('https://private.test/candidate-app/v1/account/password', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+      body: JSON.stringify({ current_password: currentPassword, password, idempotency_key: key })
+    }), env, {}, deps);
+  }
+
+  function pausingDeps(action, count = 1) {
+    let arrivals = 0;
+    let release;
+    let readyResolve;
+    const ready = new Promise(resolve => { readyResolve = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    const payloads = [];
+    return {
+      ready, release, payloads,
+      deps: {
+        routeAudience: 'PRIVATE',
+        async rpc(name, args) {
+          assert.equal(name, 'candidate_auth_account_transition_v1');
+          if (args.p_action === action && args.p_payload.replay_probe_only !== true) {
+            payloads.push(args.p_payload);
+            arrivals += 1;
+            if (arrivals === count) readyResolve();
+            await gate;
+          }
+          return JSON.parse(await psqlAsync(rpcSql(name), args));
+        }
+      }
+    };
+  }
+
+  function waitForReady(controller, label) {
+    return Promise.race([
+      controller.ready,
+      new Promise((_, reject) => setTimeout(
+        () => reject(new Error(`timed out waiting for ${label} private-handler barrier`)), 10000
+      ))
+    ]);
+  }
+
+  function activeSessions(fixture) {
+    return JSON.parse(psql(`select coalesce(jsonb_agg(id order by id),'[]'::jsonb)::text
+      from public.candidate_app_sessions where account_id=${quote(fixture.accountId)}::uuid
+        and status='ACTIVE'`));
+  }
+
+  try {
+    const resetFirst = await seed('reset-first');
+    const resetPause = pausingDeps('LOGIN_SUCCESS');
+    const waitingResetLogin = privateLogin(
+      resetFirst, oldPassword, 'password-authority-reset-first-login', resetPause.deps
+    );
+    await waitForReady(resetPause, 'reset-first login');
+    const resetResult = await resetAccount(
+      resetFirst, resetVerifier, 'password-authority-reset-first-reset'
+    );
+    assert.equal(resetResult.ok, true);
+    resetPause.release();
+    const rejectedOldLogin = await waitingResetLogin;
+    assert.equal(rejectedOldLogin.status, 401);
+    assert.deepEqual(activeSessions(resetFirst), [resetResult.session_id]);
+
+    const loginFirst = await seed('login-first-reset');
+    const directDeps = { routeAudience: 'PRIVATE', async rpc(name, args) {
+      return JSON.parse(await psqlAsync(rpcSql(name), args));
+    } };
+    const acceptedBeforeReset = await privateLogin(
+      loginFirst, oldPassword, 'password-authority-login-first', directDeps
+    );
+    assert.equal(acceptedBeforeReset.status, 200);
+    const loginFirstResetResult = await resetAccount(
+      loginFirst, resetVerifier, 'password-authority-login-first-reset'
+    );
+    assert.equal(loginFirstResetResult.ok, true);
+    assert.deepEqual(activeSessions(loginFirst), [loginFirstResetResult.session_id]);
+
+    const changeFirst = await seed('change-first');
+    const changePause = pausingDeps('LOGIN_SUCCESS');
+    const waitingChangeLogin = privateLogin(
+      changeFirst, oldPassword, 'password-authority-change-first-login', changePause.deps
+    );
+    await waitForReady(changePause, 'change-first login');
+    assert.equal((await changeAccount(
+      changeFirst, changeVerifier, 'password-authority-change-first-change'
+    )).ok, true);
+    changePause.release();
+    assert.equal((await waitingChangeLogin).status, 401);
+    assert.deepEqual(activeSessions(changeFirst), [changeFirst.sessionId]);
+
+    const loginFirstChange = await seed('login-first-change');
+    const acceptedBeforeChange = await privateLogin(
+      loginFirstChange, oldPassword, 'password-authority-login-first-change-login', directDeps
+    );
+    assert.equal(acceptedBeforeChange.status, 200);
+    assert.equal((await changeAccount(
+      loginFirstChange, changeVerifier, 'password-authority-login-first-change-change'
+    )).ok, true);
+    assert.deepEqual(activeSessions(loginFirstChange), [loginFirstChange.sessionId]);
+
+    const staleFailure = await seed('stale-failure');
+    const stalePause = pausingDeps('LOGIN_SUCCESS');
+    const waitingFailure = privateLogin(
+      staleFailure, resetPassword, 'password-authority-stale-failure-login', stalePause.deps
+    );
+    await waitForReady(stalePause, 'stale failed login');
+    assert.equal((await resetAccount(
+      staleFailure, resetVerifier, 'password-authority-stale-failure-reset'
+    )).ok, true);
+    stalePause.release();
+    assert.equal((await waitingFailure).status, 401);
+    assert.equal(psql(`select failed_login_count from public.candidate_app_accounts
+      where id=${quote(staleFailure.accountId)}::uuid`), '0');
+
+    const concurrentChange = await seed('concurrent-change');
+    const token = await accessToken(concurrentChange);
+    const concurrentPauseOne = pausingDeps('CHANGE_PASSWORD');
+    const concurrentPauseTwo = pausingDeps('CHANGE_PASSWORD');
+    const firstBody = 'password-authority-first-new-value';
+    const secondBody = 'password-authority-second-new-value';
+    const changes = [
+      privateChange(concurrentChange, oldPassword, firstBody,
+        'password-authority-concurrent-change-one', concurrentPauseOne.deps, token),
+      privateChange(concurrentChange, oldPassword, secondBody,
+        'password-authority-concurrent-change-two', concurrentPauseTwo.deps, token)
+    ];
+    await Promise.race([
+      Promise.all([
+        waitForReady(concurrentPauseOne, 'first concurrent password change'),
+        waitForReady(concurrentPauseTwo, 'second concurrent password change')
+      ]),
+      changes[0].then(async response => {
+        throw new Error(`first password change completed before barrier: ${response.status} ${JSON.stringify(await response.json())}`);
+      }),
+      changes[1].then(async response => {
+        throw new Error(`second password change completed before barrier: ${response.status} ${JSON.stringify(await response.json())}`);
+      })
+    ]);
+    for (const payload of [...concurrentPauseOne.payloads, ...concurrentPauseTwo.payloads]) {
+      assert.equal(JSON.stringify(payload).includes(oldPassword), false);
+      assert.equal(JSON.stringify(payload).includes(firstBody), false);
+      assert.equal(JSON.stringify(payload).includes(secondBody), false);
+      assert.match(payload.presented_password_digest_hex, /^[0-9a-f]{64}$/);
+      assert.match(payload.expected_password_authority_sha256, /^[0-9a-f]{64}$/);
+    }
+    concurrentPauseOne.release();
+    concurrentPauseTwo.release();
+    const changeResponses = await Promise.all(changes);
+    assert.deepEqual(changeResponses.map(response => response.status).sort(), [200, 401]);
+    assert.deepEqual(activeSessions(concurrentChange), [concurrentChange.sessionId]);
+    const successfulIndex = changeResponses.findIndex(response => response.status === 200);
+    const replayPassword = successfulIndex === 0 ? firstBody : secondBody;
+    const replayKey = successfulIndex === 0
+      ? 'password-authority-concurrent-change-one'
+      : 'password-authority-concurrent-change-two';
+    const exactReplay = await privateChange(
+      concurrentChange, oldPassword, replayPassword, replayKey, directDeps, token
+    );
+    assert.equal(exactReplay.status, 200);
+    assert.equal((await exactReplay.json()).idempotent_replay, true);
+
+    const wrongCurrentKey = 'password-authority-wrong-current-durable';
+    const wrongCurrentOne = await privateChange(
+      concurrentChange, oldPassword, 'password-authority-rejected-new-value',
+      wrongCurrentKey, directDeps, token
+    );
+    const wrongCurrentTwo = await privateChange(
+      concurrentChange, oldPassword, 'password-authority-rejected-new-value',
+      wrongCurrentKey, directDeps, token
+    );
+    assert.equal(wrongCurrentOne.status, 401);
+    assert.equal(wrongCurrentTwo.status, 401);
+    assert.equal((await wrongCurrentOne.json()).error_code, 'CANDIDATE_LOGIN_INVALID');
+    assert.equal((await wrongCurrentTwo.json()).error_code, 'CANDIDATE_LOGIN_INVALID');
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -70,7 +70,12 @@ begin
     'LOGIN_SUCCESS','TEST',v_account,'candidate-auth-receipt@example.test',
     null,null,jsonb_build_object(
       'login_failed',true,'idempotency_request_sha256',repeat('a0',32),
-      'idempotency_key_version',1
+      'idempotency_key_version',1,
+      'presented_password_digest_hex',repeat('99',32),
+      'expected_password_authority_sha256',private._candidate_password_authority_sha256_v1(
+        v_account,'PBKDF2-HMAC-SHA256',1::smallint,decode(repeat('51',16),'hex'),
+        decode(repeat('52',32),'hex'),jsonb_build_object('iterations',100000)
+      )
     ),'auth-login-failure-receipt-v1',v_now-interval '2 seconds'
   );
   if coalesce((v_result->>'ok')::boolean,true)
@@ -94,6 +99,11 @@ begin
     'LOGIN_SUCCESS','TEST',v_account,'candidate-auth-receipt@example.test',
     v_login_session,v_candidate_one,jsonb_build_object(
       'refresh_token_hash_hex',repeat('54',32),
+      'presented_password_digest_hex',repeat('52',32),
+      'expected_password_authority_sha256',private._candidate_password_authority_sha256_v1(
+        v_account,'PBKDF2-HMAC-SHA256',1::smallint,decode(repeat('51',16),'hex'),
+        decode(repeat('52',32),'hex'),jsonb_build_object('iterations',100000)
+      ),
       'expires_at_utc',v_now+interval '30 days',
       'absolute_expires_at_utc',v_now+interval '90 days',
       'idempotency_request_sha256',repeat('a1',32),'idempotency_key_version',1
@@ -248,6 +258,11 @@ begin
       'password_scheme','PBKDF2-HMAC-SHA256','password_scheme_version',1,
       'password_salt_hex',repeat('56',16),'password_digest_hex',repeat('57',32),
       'password_params',jsonb_build_object('iterations',100000),
+      'presented_password_digest_hex',repeat('52',32),
+      'expected_password_authority_sha256',private._candidate_password_authority_sha256_v1(
+        v_account,'PBKDF2-HMAC-SHA256',1::smallint,decode(repeat('51',16),'hex'),
+        decode(repeat('52',32),'hex'),jsonb_build_object('iterations',100000)
+      ),
       'idempotency_request_sha256',repeat('b4',32),'idempotency_key_version',1
     ),'auth-password-receipt-v1',v_now+interval '12 seconds'
   );

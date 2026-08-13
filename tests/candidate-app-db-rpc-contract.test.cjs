@@ -90,7 +90,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 105, 'the latest-only payload must contain the closed 105-definition function inventory');
+  assert.equal(names.length, 106, 'the latest-only payload must contain the closed 106-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -184,6 +184,20 @@ test('account session creation rotation and invalidation share one transaction l
   assert.match(auth, /REFRESH_TOKEN_REUSE[\s\S]*status in \('ACTIVE','ROTATED'\)[\s\S]*CANDIDATE_SESSION_INVALIDATION_INCOMPLETE/i);
   assert.match(auth, /CHANGE_PASSWORD[\s\S]*_candidate_auth_account_session_lock_v1\([\s\S]*PASSWORD_CHANGED[\s\S]*CANDIDATE_SESSION_INVALIDATION_INCOMPLETE/i);
   assert.match(auth, /REVOKE_SESSIONS[\s\S]*_candidate_auth_account_session_lock_v1\([\s\S]*LOCK','DISABLE[\s\S]*CANDIDATE_SESSION_INVALIDATION_INCOMPLETE/i);
+});
+
+test('login and password change revalidate the exact non-plaintext password authority under the account lock', () => {
+  const auth = definition(sql.auth, 'candidate_auth_account_transition_v1');
+  const fingerprint = privateDefinition(sql.auth, '_candidate_password_authority_sha256_v1');
+  assert.match(fingerprint, /CANDIDATE_PASSWORD_AUTHORITY_V1/);
+  assert.match(fingerprint, /extensions\.digest\(/i);
+  assert.doesNotMatch(fingerprint, /plaintext_password/i);
+  assert.match(sql.auth, /revoke all on function private\._candidate_password_authority_sha256_v1\([\s\S]*service_role/i);
+  assert.match(auth, /_candidate_auth_account_session_lock_v1\([\s\S]*for update[\s\S]*expected_password_authority_sha256[\s\S]*presented_password_digest_hex/i);
+  assert.match(auth, /v_password_authority_current[\s\S]*v_password_matches_current[\s\S]*failed_login_recorded/i);
+  assert.match(auth, /CHANGE_PASSWORD[\s\S]*_candidate_password_authority_sha256_v1\([\s\S]*not v_password_matches_current[\s\S]*password_changed_at_utc/i);
+  assert.doesNotMatch(auth, /if v_action='LOGIN_FAILURE'/i);
+  assert.doesNotMatch(auth, /v_payload\s*\?\s*'password'/i);
 });
 
 test('exact-byte evidence has one digest authority and one active TIMESHEET constraint', () => {

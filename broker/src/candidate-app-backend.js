@@ -712,20 +712,49 @@ async function derivePasswordVerifier(password, salt = null, iterations = PASSWO
   };
 }
 
-async function verifyPassword(password, account) {
-  if (upper(account?.password_scheme) !== PASSWORD_SCHEME
-      || Number(account?.password_scheme_version) !== PASSWORD_SCHEME_VERSION) return false;
-  const params = isObject(account.password_params_json) ? account.password_params_json : {};
+async function passwordVerificationProof(password, account) {
+  const scheme = upper(account?.password_scheme);
+  const schemeVersion = Number(account?.password_scheme_version);
+  const params = isObject(account?.password_params_json) ? account.password_params_json : {};
   const iterations = Number(params.iterations || PASSWORD_ITERATIONS);
-  if (!Number.isSafeInteger(iterations) || iterations < 50000 || iterations > PASSWORD_ITERATIONS) return false;
-  const salt = bytesFromHex(account.password_salt);
-  const expected = bytesFromHex(account.password_digest);
-  if (salt.length < 16 || expected.length !== 32) return false;
-  const actual = bytesFromHex((await derivePasswordVerifier(password, salt, iterations)).digest_hex);
-  if (actual.length !== expected.length) return false;
-  let difference = 0;
-  for (let index = 0; index < actual.length; index += 1) difference |= actual[index] ^ expected[index];
-  return difference === 0;
+  const lengthBytes = Number(params.length_bytes || 32);
+  const hashName = upper(params.hash || 'SHA-256');
+  const salt = bytesFromHex(account?.password_salt);
+  const expected = bytesFromHex(account?.password_digest);
+  const accountId = text(account?.id).toLowerCase();
+  const verifierValid = scheme === PASSWORD_SCHEME
+    && schemeVersion === PASSWORD_SCHEME_VERSION
+    && Number.isSafeInteger(iterations) && iterations >= 50000 && iterations <= PASSWORD_ITERATIONS
+    && lengthBytes === 32 && hashName === 'SHA-256'
+    && salt.length >= 16 && expected.length === 32;
+  if (!verifierValid) {
+    return {
+      matches: false,
+      presented_password_digest_hex: null,
+      expected_password_authority_sha256: null
+    };
+  }
+  const presented = bytesFromHex(
+    (await derivePasswordVerifier(password, salt, iterations)).digest_hex
+  );
+  let difference = presented.length ^ expected.length;
+  for (let index = 0; index < expected.length; index += 1) {
+    difference |= (presented[index] || 0) ^ expected[index];
+  }
+  const canonicalAuthority = UUID_RE.test(accountId) ? [
+    'CANDIDATE_PASSWORD_AUTHORITY_V1', accountId, scheme, String(schemeVersion),
+    hex(salt), hex(expected), hashName, String(iterations), String(lengthBytes)
+  ].join('\n') : null;
+  return {
+    matches: difference === 0,
+    presented_password_digest_hex: hex(presented),
+    expected_password_authority_sha256: canonicalAuthority
+      ? await sha256Hex(canonicalAuthority) : null
+  };
+}
+
+async function verifyPassword(password, account) {
+  return (await passwordVerificationProof(password, account)).matches;
 }
 
 function sessionExpiries(now = new Date()) {
@@ -1171,19 +1200,27 @@ async function handleLogin(request, env, deps) {
   const account = await restOne(env, 'candidate_app_accounts',
     `environment=eq.${encodeURIComponent(environmentName(env))}&email_normalized=eq.${encodeURIComponent(email)}` +
     '&select=id,environment,status,password_scheme,password_scheme_version,password_salt,password_digest,password_params_json,locked_until_utc');
-  const passwordOk = await verifyPassword(body.password, account || {
+  const passwordProof = await passwordVerificationProof(body.password, account || {
     password_scheme: PASSWORD_SCHEME,
     password_scheme_version: PASSWORD_SCHEME_VERSION,
     password_salt: '00'.repeat(16),
     password_digest: '00'.repeat(32),
     password_params_json: { hash: 'SHA-256', iterations: PASSWORD_ITERATIONS, length_bytes: 32 }
   });
+  const passwordAuthorityPayload = account && passwordProof.expected_password_authority_sha256
+    ? {
+        presented_password_digest_hex: passwordProof.presented_password_digest_hex,
+        expected_password_authority_sha256: passwordProof.expected_password_authority_sha256
+      }
+    : {};
+  const passwordOk = passwordProof.matches;
   if (!passwordOk) {
     const failed = await rpcCall(deps, 'candidate_auth_account_transition_v1', {
       p_action: 'LOGIN_SUCCESS', p_environment: environmentName(env), p_account_id: account?.id || null,
       p_email_normalized: email, p_session_id: null, p_selected_candidate_id: null,
       p_payload: {
         login_failed: true,
+        ...passwordAuthorityPayload,
         ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
         idempotency_request_sha256: requestSha256,
         idempotency_key_version: keyVersion
@@ -1205,6 +1242,7 @@ async function handleLogin(request, env, deps) {
     p_selected_candidate_id: selectedCandidateId,
     p_payload: {
       refresh_token_hash_hex: await sha256Hex(refreshToken), ...sessionExpiries(now),
+      ...passwordAuthorityPayload,
       ...(deviceHash ? { device_id_hash_hex: deviceHash } : {}),
       platform: text(body.platform).slice(0, 80) || null,
       ...(credentialVersions ? { public_credential_versions: credentialVersions } : {}),
@@ -1213,6 +1251,9 @@ async function handleLogin(request, env, deps) {
     },
     p_idempotency_key: idempotencyKey, p_now_utc: now.toISOString()
   });
+  if (result?.ok !== true) {
+    throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_LOGIN_INVALID');
+  }
   const winningRefreshToken = await refreshTokenForSessionResult(
     env, keyVersion, 'LOGIN_SUCCESS', result, idempotencyKey
   );
@@ -1376,6 +1417,9 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
         env, claims, claims.sid, claims.rot, replay
       ));
     }
+    if (action === 'CHANGE_PASSWORD' && replay?.ok !== true) {
+      throw new CandidateHttpError(401, replay?.error_code || 'CANDIDATE_LOGIN_INVALID');
+    }
     return jsonResponse(200, replay);
   }
 
@@ -1410,19 +1454,14 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
     const account = await restOne(env, 'candidate_app_accounts',
       `id=eq.${encodeURIComponent(access.account_id)}` +
       '&select=id,password_scheme,password_scheme_version,password_salt,password_digest,password_params_json');
-    if (!account || !await verifyPassword(body.current_password, account)) {
-      const error = new CandidateHttpError(401, 'CANDIDATE_LOGIN_INVALID');
-      const replay = await candidateAuthReplayAfterPreconditionFailure(
-        deps, env, action, idempotencyKey, requestSha256, keyVersion,
-        { session_id: claims.sid, selected_candidate_id: selectedCandidateId }, error
-      );
-      return jsonResponse(200, replay);
-    }
+    const currentPasswordProof = await passwordVerificationProof(body.current_password, account);
     const verifier = await derivePasswordVerifier(body.password);
     payload = {
       password_scheme: verifier.scheme, password_scheme_version: verifier.scheme_version,
       password_salt_hex: verifier.salt_hex, password_digest_hex: verifier.digest_hex,
-      password_params: verifier.params
+      password_params: verifier.params,
+      presented_password_digest_hex: currentPasswordProof.presented_password_digest_hex,
+      expected_password_authority_sha256: currentPasswordProof.expected_password_authority_sha256
     };
   }
   payload = {
@@ -1437,6 +1476,9 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
     p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   });
+  if (action === 'CHANGE_PASSWORD' && result?.ok !== true) {
+    throw new CandidateHttpError(401, result?.error_code || 'CANDIDATE_LOGIN_INVALID');
+  }
   if (action === 'SELECT_TEST_CANDIDATE') {
     return jsonResponse(200, await selectedCandidateSessionResponse(
       env, claims, access.session_id, access.rotation, result
@@ -5031,6 +5073,7 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
 
 export const candidateAppBackendInternals = Object.freeze({
   derivePasswordVerifier,
+  passwordVerificationProof,
   deterministicOpaqueToken,
   createAccessToken,
   verifyPassword,

@@ -23,6 +23,7 @@ const {
   expenseSummaryDisplayLines,
   mileageJourneyRows,
   paperPackIdentity,
+  passwordVerificationProof,
   candidatePaperDeliveryGeneration,
   candidatePaperCompleteReceipt,
   readyPaperPackReceipt,
@@ -116,6 +117,12 @@ test('Candidate password verifiers accept the exact password and reject a differ
   };
   assert.equal(await verifyPassword('correct-horse-battery-staple', account), true);
   assert.equal(await verifyPassword('different-horse-battery-staple', account), false);
+  const proof = await passwordVerificationProof('correct-horse-battery-staple', {
+    id: 'ca130813-4000-4000-8000-000000000001', ...account
+  });
+  assert.equal(proof.matches, true);
+  assert.equal(proof.presented_password_digest_hex, verifier.digest_hex);
+  assert.match(proof.expected_password_authority_sha256, /^[0-9a-f]{64}$/);
 });
 
 test('challenge delivery tokens are stable for an idempotent replay and scoped to its identity', async () => {
@@ -2243,6 +2250,8 @@ test('failed login lost-response replay does not advance the lockout counter twi
       }
       assert.equal(args.p_action, 'LOGIN_SUCCESS');
       assert.equal(args.p_payload.login_failed, true);
+      assert.match(args.p_payload.presented_password_digest_hex, /^[0-9a-f]{64}$/);
+      assert.match(args.p_payload.expected_password_authority_sha256, /^[0-9a-f]{64}$/);
       failureWrites += 1;
       receipt = { ok: false, error_code: 'CANDIDATE_LOGIN_INVALID', failed_login_recorded: true };
       return receipt;
@@ -2306,6 +2315,8 @@ test('unknown-account login owns a durable generic failure receipt and changed e
       }
       assert.equal(args.p_account_id, null);
       assert.equal(args.p_payload.login_failed, true);
+      assert.equal(args.p_payload.presented_password_digest_hex, undefined);
+      assert.equal(args.p_payload.expected_password_authority_sha256, undefined);
       writes += 1;
       receipt = {
         request_sha256: args.p_payload.idempotency_request_sha256,
@@ -2391,6 +2402,10 @@ test('concurrent activation, login and refresh return the database winner refres
           return { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
         }
         mutationCalls += 1;
+        if (action === 'LOGIN_SUCCESS') {
+          assert.match(args.p_payload.presented_password_digest_hex, /^[0-9a-f]{64}$/);
+          assert.match(args.p_payload.expected_password_authority_sha256, /^[0-9a-f]{64}$/);
+        }
         if (!winner) {
           const sessionId = action === 'REFRESH_SESSION'
             ? args.p_payload.new_session_id : args.p_session_id;
@@ -2514,6 +2529,10 @@ test('concurrent logout and password change recover the durable result after mut
           return { replay_receipt_found: false, request_version_reserved: true, request_key_version: 1 };
         }
         if (args.p_payload.replay_probe_only === true) {
+          assert.equal(args.p_payload.idempotency_request_sha256, receipt.request_sha256);
+          return { ...receipt.response, idempotent_replay: true };
+        }
+        if (receipt) {
           assert.equal(args.p_payload.idempotency_request_sha256, receipt.request_sha256);
           return { ...receipt.response, idempotent_replay: true };
         }

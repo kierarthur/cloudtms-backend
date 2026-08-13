@@ -64,6 +64,11 @@ begin
         ),'hex'),
         'expires_at_utc',clock_timestamp()+interval '30 days',
         'absolute_expires_at_utc',clock_timestamp()+interval '90 days',
+        'presented_password_digest_hex',repeat('22',32),
+        'expected_password_authority_sha256',private._candidate_password_authority_sha256_v1(
+          p_account_id,'ARGON2ID',1::smallint,decode(repeat('11',16),'hex'),
+          decode(repeat('22',32),'hex'),'{}'::jsonb
+        ),
         'idempotency_request_sha256',encode(extensions.digest(
           convert_to('login|'||v_session_id::text,'UTF8'),'sha256'
         ),'hex'),
@@ -125,6 +130,15 @@ begin
         ),'hex'),
         'expires_at_utc',clock_timestamp()+interval '30 days',
         'absolute_expires_at_utc',clock_timestamp()+interval '90 days',
+        'presented_password_digest_hex',encode((
+          select a.password_digest from public.candidate_app_accounts a where a.id=p_account_id
+        ),'hex'),
+        'expected_password_authority_sha256',(
+          select private._candidate_password_authority_sha256_v1(
+            a.id,a.password_scheme,a.password_scheme_version,a.password_salt,
+            a.password_digest,a.password_params_json
+          ) from public.candidate_app_accounts a where a.id=p_account_id
+        ),
         'idempotency_request_sha256',encode(extensions.digest(
           convert_to('login-request|'||p_idempotency_key,'UTF8'),'sha256'
         ),'hex'),
@@ -139,6 +153,15 @@ begin
         'password_salt_hex',repeat('33',16),
         'password_digest_hex',repeat('44',32),
         'password_params',jsonb_build_object('memory_kib',65536),
+        'presented_password_digest_hex',encode((
+          select a.password_digest from public.candidate_app_accounts a where a.id=p_account_id
+        ),'hex'),
+        'expected_password_authority_sha256',(
+          select private._candidate_password_authority_sha256_v1(
+            a.id,a.password_scheme,a.password_scheme_version,a.password_salt,
+            a.password_digest,a.password_params_json
+          ) from public.candidate_app_accounts a where a.id=p_account_id
+        ),
         'idempotency_request_sha256',encode(extensions.digest(
           convert_to('password-request|'||p_idempotency_key,'UTF8'),'sha256'
         ),'hex'),

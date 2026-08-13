@@ -224,6 +224,36 @@ begin
 end;
 $function$;
 
+-- Domain-separated fingerprint of the exact password verifier read by the
+-- private Candidate service.  The fingerprint is non-secret request authority:
+-- no plaintext password crosses the database boundary.
+create or replace function private._candidate_password_authority_sha256_v1(
+  p_account_id uuid,
+  p_password_scheme text,
+  p_password_scheme_version smallint,
+  p_password_salt bytea,
+  p_password_digest bytea,
+  p_password_params jsonb
+)
+returns text
+language sql
+immutable
+security invoker
+set search_path = pg_catalog, public, private, extensions, pg_temp
+as $function$
+  select encode(extensions.digest(convert_to(concat_ws(E'\n',
+    'CANDIDATE_PASSWORD_AUTHORITY_V1',
+    coalesce(p_account_id::text,''),
+    upper(btrim(coalesce(p_password_scheme,''))),
+    coalesce(p_password_scheme_version,0)::text,
+    encode(coalesce(p_password_salt,''::bytea),'hex'),
+    encode(coalesce(p_password_digest,''::bytea),'hex'),
+    upper(btrim(coalesce(p_password_params->>'hash','SHA-256'))),
+    coalesce(nullif(p_password_params->>'iterations','')::integer,100000)::text,
+    coalesce(nullif(p_password_params->>'length_bytes','')::integer,32)::text
+  ),'UTF8'),'sha256'),'hex')
+$function$;
+
 create or replace function public.candidate_auth_account_transition_v1(
   p_action text,
   p_environment text,
@@ -276,6 +306,13 @@ declare
   v_response jsonb;
   v_account_id uuid;
   v_live_session_count integer;
+  v_expected_password_authority_sha256 text;
+  v_current_password_authority_sha256 text;
+  v_presented_password_digest bytea;
+  v_password_authority_current boolean:=false;
+  v_password_matches_current boolean:=false;
+  v_private_login_failed boolean:=false;
+  v_failed_login_recorded boolean:=false;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   perform private._candidate_require_feature_v1(v_environment,'candidate_account_registration');
@@ -556,7 +593,7 @@ begin
     where environment=v_environment and email_normalized=v_email;
   end if;
   if v_account.id is not null and v_action in (
-    'LOGIN_FAILURE','LOGIN_SUCCESS','REVOKE_SESSIONS','LOCK','DISABLE'
+    'LOGIN_SUCCESS','REVOKE_SESSIONS','LOCK','DISABLE'
   ) then
     v_account_id:=v_account.id;
     perform private._candidate_auth_account_session_lock_v1(
@@ -566,20 +603,41 @@ begin
     where id=v_account_id for update;
   end if;
 
-  if v_action='LOGIN_FAILURE' then
-    if v_account.id is not null and v_account.environment=v_environment and v_account.status<>'DISABLED' then
-      update public.candidate_app_accounts set
-        failed_login_count=least(failed_login_count+1,1000),
-        status=case when failed_login_count+1>=5 then 'LOCKED' else status end,
-        locked_until_utc=case when failed_login_count+1>=5 then p_now_utc+interval '15 minutes' else locked_until_utc end,
-        updated_at_utc=p_now_utc
-      where id=v_account.id returning * into v_account;
+  if v_action='LOGIN_SUCCESS' and v_account.id is not null then
+    v_expected_password_authority_sha256:=lower(nullif(btrim(
+      coalesce(v_payload->>'expected_password_authority_sha256','')
+    ),''));
+    if v_expected_password_authority_sha256 ~ '^[0-9a-f]{64}$'
+       and coalesce(v_payload->>'presented_password_digest_hex','') ~ '^[0-9a-fA-F]{64}$' then
+      v_presented_password_digest:=decode(v_payload->>'presented_password_digest_hex','hex');
+      v_current_password_authority_sha256:=private._candidate_password_authority_sha256_v1(
+        v_account.id,v_account.password_scheme,v_account.password_scheme_version,
+        v_account.password_salt,v_account.password_digest,v_account.password_params_json
+      );
+      v_password_authority_current:=
+        v_expected_password_authority_sha256=v_current_password_authority_sha256;
+      v_password_matches_current:=v_password_authority_current
+        and v_account.password_digest is not null
+        and v_presented_password_digest=v_account.password_digest;
     end if;
-    return jsonb_build_object('ok',true,'accepted',true);
   end if;
 
   if v_action='LOGIN_SUCCESS' then
-    if coalesce((v_payload->>'login_failed')::boolean,false) then
+    v_private_login_failed:=coalesce((v_payload->>'login_failed')::boolean,false);
+    if v_account.id is null or not v_password_authority_current
+       or (v_private_login_failed and v_password_matches_current)
+       or (not v_private_login_failed and not v_password_matches_current) then
+      v_response:=jsonb_build_object(
+        'ok',false,'error_code','CANDIDATE_LOGIN_INVALID',
+        'failed_login_recorded',false
+      );
+      perform private._candidate_auth_mutation_receipt_v1(
+        v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
+        jsonb_build_object('request_key_version',v_request_key_version),p_now_utc
+      );
+      return v_response;
+    end if;
+    if v_private_login_failed then
       if v_account.id is not null and v_account.environment=v_environment and v_account.status<>'DISABLED' then
         update public.candidate_app_accounts set
           failed_login_count=least(failed_login_count+1,1000),
@@ -587,10 +645,11 @@ begin
           locked_until_utc=case when failed_login_count+1>=5 then p_now_utc+interval '15 minutes' else locked_until_utc end,
           updated_at_utc=p_now_utc
         where id=v_account.id returning * into v_account;
+        v_failed_login_recorded:=true;
       end if;
       v_response:=jsonb_build_object(
         'ok',false,'error_code','CANDIDATE_LOGIN_INVALID',
-        'failed_login_recorded',v_account.id is not null
+        'failed_login_recorded',v_failed_login_recorded
       );
       perform private._candidate_auth_mutation_receipt_v1(
         v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
@@ -841,28 +900,50 @@ begin
     where id=v_session.id;
     v_response:=jsonb_build_object('ok',true,'session_id',v_session.id,'push_registered',true);
   elsif v_action='CHANGE_PASSWORD' then
-    update public.candidate_app_accounts set
-      password_scheme=btrim(v_payload->>'password_scheme'),
-      password_scheme_version=(v_payload->>'password_scheme_version')::smallint,
-      password_salt=v_salt,password_digest=v_digest,
-      password_params_json=coalesce(v_payload->'password_params','{}'::jsonb),
-      password_changed_at_utc=p_now_utc,failed_login_count=0,locked_until_utc=null,
-      session_version=session_version+1,updated_at_utc=p_now_utc
-    where id=v_account.id returning * into v_account;
-    update public.candidate_app_sessions set status='REVOKED',revoked_at_utc=p_now_utc,
-      revoke_reason='PASSWORD_CHANGED',updated_at_utc=p_now_utc
-    where account_id=v_account.id and status='ACTIVE' and id<>v_session.id;
-    select count(*) into v_live_session_count
-    from public.candidate_app_sessions
-    where account_id=v_account.id and status='ACTIVE';
-    if v_live_session_count<>1 or not exists(
-      select 1 from public.candidate_app_sessions
-      where id=v_session.id and account_id=v_account.id and status='ACTIVE'
-    ) then
-      raise exception 'CANDIDATE_SESSION_INVALIDATION_INCOMPLETE'
-        using errcode='40001';
+    v_expected_password_authority_sha256:=lower(nullif(btrim(
+      coalesce(v_payload->>'expected_password_authority_sha256','')
+    ),''));
+    if v_expected_password_authority_sha256 ~ '^[0-9a-f]{64}$'
+       and coalesce(v_payload->>'presented_password_digest_hex','') ~ '^[0-9a-fA-F]{64}$' then
+      v_presented_password_digest:=decode(v_payload->>'presented_password_digest_hex','hex');
+      v_current_password_authority_sha256:=private._candidate_password_authority_sha256_v1(
+        v_account.id,v_account.password_scheme,v_account.password_scheme_version,
+        v_account.password_salt,v_account.password_digest,v_account.password_params_json
+      );
+      v_password_authority_current:=
+        v_expected_password_authority_sha256=v_current_password_authority_sha256;
+      v_password_matches_current:=v_password_authority_current
+        and v_account.password_digest is not null
+        and v_presented_password_digest=v_account.password_digest;
     end if;
-    v_response:=jsonb_build_object('ok',true,'account_id',v_account.id,'session_version',v_account.session_version);
+    if not v_password_matches_current then
+      v_response:=jsonb_build_object(
+        'ok',false,'error_code','CANDIDATE_LOGIN_INVALID','password_changed',false
+      );
+    else
+      update public.candidate_app_accounts set
+        password_scheme=btrim(v_payload->>'password_scheme'),
+        password_scheme_version=(v_payload->>'password_scheme_version')::smallint,
+        password_salt=v_salt,password_digest=v_digest,
+        password_params_json=coalesce(v_payload->'password_params','{}'::jsonb),
+        password_changed_at_utc=p_now_utc,failed_login_count=0,locked_until_utc=null,
+        session_version=session_version+1,updated_at_utc=p_now_utc
+      where id=v_account.id returning * into v_account;
+      update public.candidate_app_sessions set status='REVOKED',revoked_at_utc=p_now_utc,
+        revoke_reason='PASSWORD_CHANGED',updated_at_utc=p_now_utc
+      where account_id=v_account.id and status='ACTIVE' and id<>v_session.id;
+      select count(*) into v_live_session_count
+      from public.candidate_app_sessions
+      where account_id=v_account.id and status='ACTIVE';
+      if v_live_session_count<>1 or not exists(
+        select 1 from public.candidate_app_sessions
+        where id=v_session.id and account_id=v_account.id and status='ACTIVE'
+      ) then
+        raise exception 'CANDIDATE_SESSION_INVALIDATION_INCOMPLETE'
+          using errcode='40001';
+      end if;
+      v_response:=jsonb_build_object('ok',true,'account_id',v_account.id,'session_version',v_account.session_version);
+    end if;
   elsif v_action='MARK_NOTIFICATION_READ' then
     if coalesce(v_payload->>'notification_id','') !~ '^[0-9a-fA-F-]{36}$' then
       raise exception 'CANDIDATE_NOTIFICATION_NOT_FOUND' using errcode='P0002';
@@ -1198,9 +1279,12 @@ comment on function private._candidate_auth_mutation_receipt_v1(text,text,text,t
   'Private durable auth/account mutation idempotency receipt. Stores request digests and non-secret reconstruction metadata only.';
 comment on function private._candidate_auth_account_session_lock_v1(text,uuid) is
   'Private transaction-scoped account session serialization boundary. Receipt/key lock first, then this lock, then account/session rows.';
+comment on function private._candidate_password_authority_sha256_v1(uuid,text,smallint,bytea,bytea,jsonb) is
+  'Private domain-separated fingerprint for the exact non-plaintext Candidate password verifier checked by the private service.';
 
 revoke all on function private._candidate_auth_mutation_receipt_v1(text,text,text,text,jsonb,jsonb,timestamptz) from public,anon,authenticated,service_role;
 revoke all on function private._candidate_auth_account_session_lock_v1(text,uuid) from public,anon,authenticated,service_role;
+revoke all on function private._candidate_password_authority_sha256_v1(uuid,text,smallint,bytea,bytea,jsonb) from public,anon,authenticated,service_role;
 revoke all on function public.candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamptz) from public,anon,authenticated;
 revoke all on function public.candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamptz,integer) from public,anon,authenticated;
 grant execute on function public.candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamptz) to service_role;

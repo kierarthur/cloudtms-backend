@@ -523,3 +523,9 @@ Please verify, function by function, including the final authority seams:
 - Banking Pay/Policy X code changed by this correction: no.
 
 The handover package must be treated as audit/merge evidence. It must not be copied over a later worktree without a current overlap/provenance check.
+
+## 13 August 2026 locked password-authority closure
+
+Login and authenticated password change no longer trust a Worker verdict computed from a mutable REST snapshot. The private Worker derives the presented PBKDF2 digest using the inspected verifier and sends only that digest plus a SHA-256 fingerprint of the exact password authority it inspected. Under the existing receipt/key owner and shared per-account session lock, PostgreSQL locks the account row, recomputes the fingerprint and compares the presented digest with the current locked verifier before session creation, genuine-current failed-login accounting or password replacement.
+
+The closed outcomes are: stale positive login creates no session; stale negative login does not advance the new verifier's counter; a stale password change cannot overwrite a reset or earlier password change; only the proof matching the current locked verifier may mutate; exact successful replay remains durable. The real private-handler/PostgreSQL suite executes reset/login and change/login in both orders, stale failure/reset and concurrent change/change on PostgreSQL 17.6 and 18.1. The change adds one private helper only, leaves seven Candidate business tables and fourteen public Candidate RPCs unchanged, sends no plaintext password to SQL and changes no Office modal, frontend, financial, invoice, payment, Banking Pay, Policy X or production authority.
