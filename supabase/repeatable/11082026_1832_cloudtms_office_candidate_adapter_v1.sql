@@ -1326,7 +1326,7 @@ begin
     v_items:=coalesce(v_payload->'identities','[]'::jsonb);
     v_batch_id:=nullif(v_payload->>'batch_id','')::uuid;
     v_idempotency_key:=nullif(btrim(coalesce(v_payload->>'idempotency_key','')),'');
-    if jsonb_typeof(v_items)<>'array' or jsonb_array_length(v_items)<1 or jsonb_array_length(v_items)>100
+    if jsonb_typeof(v_items)<>'array' or jsonb_array_length(v_items)<1 or jsonb_array_length(v_items)>1000
        or v_batch_id is null or v_idempotency_key is null or v_batch_id::text<>v_idempotency_key
        or coalesce(v_payload->>'preview_context_hash','') !~ '^[0-9a-fA-F]{64}$'
        or coalesce(v_payload->>'selection_fingerprint','') !~ '^[0-9a-fA-F]{64}$' then
@@ -1354,7 +1354,7 @@ begin
     return coalesce(v_existing_after,'{}'::jsonb)||jsonb_build_object('found',true,'idempotent_replay',true);
   elsif v_action in ('REMINDER_BATCH_PREVIEW','REMINDER_BATCH_EXECUTE') then
     v_items:=coalesce(v_payload->'identities','[]'::jsonb);
-    if jsonb_typeof(v_items)<>'array' or jsonb_array_length(v_items)<1 or jsonb_array_length(v_items)>100 then
+    if jsonb_typeof(v_items)<>'array' or jsonb_array_length(v_items)<1 or jsonb_array_length(v_items)>1000 then
       raise exception 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID' using errcode='22023';
     end if;
     if (select count(*)<>count(distinct coalesce(value->>'row_key',value->>'timesheet_id',value->>'contract_week_id'))

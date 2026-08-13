@@ -10,6 +10,7 @@ const invoiceIssueRowsUrl = new URL('../supabase/repeatable/26072026_1947_invoic
 const routes = Object.freeze([
   ['GET', '/api/candidate-app/office-capabilities'],
   ['POST', '/api/candidate-app/timesheets/office-projections'],
+  ['GET', '/api/candidate-app/manager-reminder-eligibility'],
   ['POST', '/api/candidate-app/manager-reminder-batches/preview'],
   ['POST', '/api/candidate-app/manager-reminder-batches'],
   ['GET', '/api/candidate-app/manager-reminder-batches/{batchId}'],
@@ -56,6 +57,7 @@ test('office OpenAPI and normal backend expose the same exact method/path invent
   assert.match(openapi, /direct_browser_rpc:\s*false/);
   assert.match(openapi, /candidate_broker:\s*false/);
   assert.match(openapi, /maximum_projection_rows:\s*100/);
+  assert.match(openapi, /maximum_manager_reminder_batch_rows:\s*1000/);
   assert.match(openapi, /CLOUDTMS_OFFICE_CANDIDATE_API_V1/);
   assert.match(openapi, /mode:\s*\{type:\s*string, const:\s*ENABLED\}/);
   assert.match(openapi, /required_office_role:\s*\{type:\s*string, const:\s*admin\}/);
@@ -79,7 +81,16 @@ test('office OpenAPI and normal backend expose the same exact method/path invent
 test('office contract preserves bounded projection and server-owned reminder batching', async () => {
   const openapi = await readFile(openapiUrl, 'utf8');
   assert.match(openapi, /selected_rows:\s*\{type:\s*array, minItems:\s*1, maxItems:\s*100/);
-  assert.match(openapi, /per-row browser reminder requests are prohibited/i);
+  assert.match(openapi, /contract_version:\s*\{const:\s*OFFICE_CANDIDATE_REMINDER_ELIGIBILITY_PAGE_V1\}/);
+  assert.match(openapi, /mode:\s*\{const:\s*ALL_ELIGIBLE\}/);
+  assert.match(openapi, /catalogue_revision:\s*\{\$ref:\s*'#\/components\/schemas\/Sha256'\}/);
+  assert.match(openapi, /name:\s*surname_query[\s\S]*Case-insensitive Candidate-surname substring filter/);
+  assert.match(openapi, /enum:\s*\[CANDIDATE_SURNAME, LAST_MANAGER_EMAIL\]/);
+  assert.match(openapi, /matching_selection_keys:/);
+  assert.match(openapi, /enum:\s*\[SWITCH_TO_MANUAL, SWITCH_DAILY_TO_MANUAL, CONVERT_QR_TO_MANUAL, ALLOW_ELECTRONIC_AGAIN, ALLOW_QR_AGAIN,/);
+  assert.match(openapi, /selected_rows:\s*\{type:\s*array, minItems:\s*1, maxItems:\s*1000/);
+  assert.match(openapi, /Exact lost-response replay is resolved from the[\s\S]*durable batch receipt before current eligibility is recalculated/i);
+  assert.match(openapi, /per-row browser\s+reminder\s+requests are prohibited/i);
   assert.match(openapi, /EXPENSE_EMAIL_MISSING/);
   assert.match(openapi, /calculation_effect:\s*\{const:\s*NONE\}/);
   assert.match(openapi, /name:\s*expected_row_signature, in:\s*query/);

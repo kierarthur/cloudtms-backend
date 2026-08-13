@@ -291,6 +291,18 @@ begin
   exception when others then
     if position('CANDIDATE_REMINDER_BATCH_DUPLICATE_IDENTITY' in sqlerrm)=0 then raise; end if;
   end;
+  begin
+    perform public.cloudtms_office_candidate_adapter_v1(
+      'REMINDER_BATCH_PREVIEW',v_actor,'TEST',
+      jsonb_build_object('identities',(
+        select jsonb_agg(v_identity||jsonb_build_object('row_key','overflow-'||g::text) order by g)
+        from generate_series(1,1001) g
+      )),v_now
+    );
+    raise exception 'oversized manager reminder batch unexpectedly succeeded';
+  exception when others then
+    if position('CANDIDATE_REMINDER_BATCH_SELECTION_INVALID' in sqlerrm)=0 then raise; end if;
+  end;
   v_reminders:=jsonb_build_array((v_preview->'items'->0)||jsonb_build_object(
     'payload',jsonb_build_object(
       'approval_token_hash_hex',repeat('51',32),

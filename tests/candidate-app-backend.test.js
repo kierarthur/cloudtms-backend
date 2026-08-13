@@ -1285,6 +1285,433 @@ test('office reminder batch execute remains one browser operation with server-ow
   }
 });
 
+test('office reminder eligibility is server-owned, eligible-only and paginated', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000261';
+  const workflowId = '00000000-0000-4000-8000-000000000262';
+  const requestId = '00000000-0000-4000-8000-000000000263';
+  const candidateId = '00000000-0000-4000-8000-000000000264';
+  const timesheetId = '00000000-0000-4000-8000-000000000265';
+  const acceptedAt = '2026-08-13T08:15:00.000Z';
+  const rpcCalls = [];
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      rpcCalls.push({ name, args });
+      assert.equal(args.p_action, 'PROJECT_BATCH');
+      return {
+        ok: true,
+        results: [{
+          ok: true,
+          correlation_key: timesheetId,
+          projection: {
+            current_identity: { row_key: timesheetId, timesheet_id: timesheetId, expected_row_signature: 'row-signature' },
+            manager_approval: {
+              request_id: requestId,
+              request_generation: 3,
+              provider_accepted_at_utc: acceptedAt
+            },
+            available_actions: [{
+              code: 'SEND_MANAGER_REMINDER', enabled: true,
+              invocation: { path: `/api/candidate-app/workflows/${workflowId}/actions/remind` }
+            }]
+          }
+        }]
+      };
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('/candidate_approval_requests?')) return Response.json([{
+      id: requestId, workflow_id: workflowId, workflow_generation: 2,
+      request_generation: 3, method: 'EMAIL', state: 'PENDING'
+    }]);
+    if (value.includes('/candidate_submission_workflows?')) return Response.json([{
+      id: workflowId, candidate_id: candidateId, generation: 2,
+      contract_week_id: null, anchor_timesheet_id: timesheetId,
+      target_timesheet_id: timesheetId, updated_at_utc: '2026-08-13T08:00:00.000Z'
+    }]);
+    if (value.includes('/candidates?')) return Response.json([{
+      id: candidateId, display_name: 'Alex Candidate', first_name: 'Alex', last_name: 'Candidate'
+    }]);
+    throw new Error(`unexpected URL: ${value}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-eligibility?page=1&page_size=25'
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, deps);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.contract_version, 'OFFICE_CANDIDATE_REMINDER_ELIGIBILITY_PAGE_V1');
+    assert.equal(result.total_items, 1);
+    assert.equal(result.catalogue_total_items, 1);
+    assert.equal(result.page_count, 1);
+    assert.equal(result.sort_by, 'CANDIDATE_SURNAME');
+    assert.equal(result.sort_direction, 'ASC');
+    assert.deepEqual(result.matching_selection_keys, [requestId]);
+    assert.equal(result.items[0].selection_key, requestId);
+    assert.equal(result.items[0].candidate_name, 'Alex Candidate');
+    assert.equal(result.items[0].candidate_surname, 'Candidate');
+    assert.equal(result.items[0].last_manager_email_at_utc, acceptedAt);
+    assert.equal(result.items[0].identity.timesheet_id, timesheetId);
+    assert.match(result.catalogue_revision, /^[a-f0-9]{64}$/);
+    assert.equal(rpcCalls.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('office reminder catalogue filters by Candidate surname and sorts every matching page', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000361';
+  const surnames = ['Baines', 'Smith', 'Barker'];
+  const approvals = surnames.map((surname, index) => ({
+    id: `00000000-0000-4000-8000-00000000037${index + 1}`,
+    workflow_id: `00000000-0000-4000-8000-00000000038${index + 1}`,
+    workflow_generation: 1, request_generation: 1, method: 'EMAIL', state: 'PENDING'
+  }));
+  const workflows = approvals.map((approval, index) => ({
+    id: approval.workflow_id,
+    candidate_id: `00000000-0000-4000-8000-00000000039${index + 1}`,
+    generation: 1, contract_week_id: null,
+    anchor_timesheet_id: `00000000-0000-4000-8000-00000000040${index + 1}`,
+    target_timesheet_id: `00000000-0000-4000-8000-00000000040${index + 1}`,
+    updated_at_utc: `2026-08-13T08:0${index}:00.000Z`
+  }));
+  const candidates = workflows.map((workflow, index) => ({
+    id: workflow.candidate_id, display_name: `Candidate ${surnames[index]}`,
+    first_name: 'Candidate', last_name: surnames[index]
+  }));
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      assert.equal(args.p_action, 'PROJECT_BATCH');
+      return {
+        ok: true,
+        results: workflows.map((workflow, index) => ({
+          ok: true,
+          correlation_key: workflow.target_timesheet_id,
+          projection: {
+            current_identity: { row_key: workflow.target_timesheet_id, timesheet_id: workflow.target_timesheet_id },
+            manager_approval: {
+              request_id: approvals[index].id, request_generation: 1,
+              provider_accepted_at_utc: `2026-08-13T0${7 + index}:00:00.000Z`
+            },
+            available_actions: [{
+              code: 'SEND_MANAGER_REMINDER', enabled: true,
+              invocation: { path: `/api/candidate-app/workflows/${workflow.id}/actions/remind` }
+            }]
+          }
+        }))
+      };
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('/candidate_approval_requests?')) return Response.json(approvals);
+    if (value.includes('/candidate_submission_workflows?')) return Response.json(workflows);
+    if (value.includes('/candidates?')) return Response.json(candidates);
+    throw new Error(`unexpected URL: ${value}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-eligibility?page=1&page_size=1&surname_query=ba&sort_by=CANDIDATE_SURNAME&sort_direction=DESC'
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, deps);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.catalogue_total_items, 3);
+    assert.equal(result.total_items, 2);
+    assert.equal(result.page_count, 2);
+    assert.equal(result.surname_query, 'ba');
+    assert.equal(result.sort_direction, 'DESC');
+    assert.equal(result.items[0].candidate_surname, 'Barker');
+    assert.deepEqual(result.matching_selection_keys, [approvals[2].id, approvals[0].id]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('office reminder catalogue limit counts eligible rows rather than all pending EMAIL requests', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000461';
+  const uuid = (prefix, number) => `${prefix}-0000-4000-8000-${String(number).padStart(12, '0')}`;
+  const approvals = Array.from({ length: 1001 }, (_, index) => ({
+    id: uuid('10000000', index + 1),
+    workflow_id: uuid('20000000', index + 1),
+    workflow_generation: 1,
+    request_generation: 1,
+    method: 'EMAIL',
+    state: 'PENDING'
+  }));
+  const workflows = approvals.map((approval, index) => ({
+    id: approval.workflow_id,
+    candidate_id: uuid('30000000', index + 1),
+    generation: 1,
+    contract_week_id: null,
+    anchor_timesheet_id: uuid('40000000', index + 1),
+    target_timesheet_id: uuid('40000000', index + 1),
+    updated_at_utc: '2026-08-13T08:00:00.000Z'
+  }));
+  const workflowByTimesheet = new Map(workflows.map((workflow, index) => [
+    workflow.target_timesheet_id,
+    { workflow, approval: approvals[index], index }
+  ]));
+  let projectionCalls = 0;
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      assert.equal(args.p_action, 'PROJECT_BATCH');
+      projectionCalls += 1;
+      return {
+        ok: true,
+        results: args.p_payload.identities.map(identity => {
+          const current = workflowByTimesheet.get(identity.timesheet_id);
+          const enabled = current.index === 0;
+          return {
+            ok: true,
+            correlation_key: identity.row_key,
+            projection: {
+              current_identity: { row_key: identity.row_key, timesheet_id: identity.timesheet_id },
+              manager_approval: {
+                request_id: current.approval.id,
+                request_generation: 1,
+                provider_accepted_at_utc: '2026-08-13T07:00:00.000Z'
+              },
+              available_actions: [{
+                code: 'SEND_MANAGER_REMINDER',
+                enabled,
+                invocation: { path: `/api/candidate-app/workflows/${current.workflow.id}/actions/remind` }
+              }]
+            }
+          };
+        })
+      };
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('/candidate_approval_requests?')) {
+      const offset = Number(new URL(value).searchParams.get('offset') || 0);
+      return Response.json(approvals.slice(offset, offset + 1000));
+    }
+    if (value.includes('/candidate_submission_workflows?')) return Response.json(workflows);
+    if (value.includes('/candidates?')) return Response.json(workflows.map((workflow, index) => ({
+      id: workflow.candidate_id,
+      display_name: `Candidate ${index + 1}`,
+      first_name: 'Candidate',
+      last_name: String(index + 1)
+    })));
+    throw new Error(`unexpected URL: ${value}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-eligibility?page=1&page_size=25'
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, deps);
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.catalogue_total_items, 1);
+    assert.equal(result.total_items, 1);
+    assert.equal(projectionCalls, 11);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('office reminder catalogue fails closed before an unbounded pending-request scan', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000462';
+  const page = Array.from({ length: 1000 }, (_, index) => ({
+    id: `10000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    workflow_id: `20000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    workflow_generation: 1,
+    request_generation: 1
+  }));
+  let sourceCalls = 0;
+  let joinedRowsRequested = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('/candidate_approval_requests?')) {
+      sourceCalls += 1;
+      return Response.json(page);
+    }
+    if (value.includes('/candidate_submission_workflows?') || value.includes('/candidates?')) {
+      joinedRowsRequested = true;
+    }
+    throw new Error(`unexpected URL: ${value}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-eligibility?page=1&page_size=25'
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, {
+      routeAudience: 'OFFICE',
+      async requireOfficeUser() { return { id: actorId }; },
+      async rpc() { throw new Error('projection must not start after the source ceiling is exceeded'); }
+    });
+    assert.equal(response.status, 409);
+    assert.equal((await response.json()).error_code, 'CANDIDATE_REMINDER_CATALOGUE_TOO_LARGE');
+    assert.equal(sourceCalls, 11);
+    assert.equal(joinedRowsRequested, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('office reminder all-eligible selection is resolved across the complete server catalogue', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000271';
+  const fingerprint = 'b'.repeat(64);
+  const approvals = [1, 2, 3].map(number => ({
+    id: `00000000-0000-4000-8000-00000000027${number}`,
+    workflow_id: `00000000-0000-4000-8000-00000000028${number}`,
+    workflow_generation: 2, request_generation: 1, method: 'EMAIL', state: 'PENDING'
+  }));
+  const workflows = approvals.map((approval, index) => ({
+    id: approval.workflow_id,
+    candidate_id: `00000000-0000-4000-8000-00000000029${index + 1}`,
+    generation: 2, contract_week_id: null,
+    anchor_timesheet_id: `00000000-0000-4000-8000-00000000030${index + 1}`,
+    target_timesheet_id: `00000000-0000-4000-8000-00000000030${index + 1}`,
+    updated_at_utc: `2026-08-13T08:0${index}:00.000Z`
+  }));
+  const candidates = workflows.map((workflow, index) => ({
+    id: workflow.candidate_id, display_name: `Candidate ${index + 1}`, first_name: null, last_name: null
+  }));
+  let previewIdentities = null;
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      if (args.p_action === 'PROJECT_BATCH') {
+        return {
+          ok: true,
+          results: workflows.map((workflow, index) => ({
+            ok: true,
+            correlation_key: workflow.target_timesheet_id,
+            projection: {
+              current_identity: { row_key: workflow.target_timesheet_id, timesheet_id: workflow.target_timesheet_id },
+              manager_approval: {
+                request_id: approvals[index].id, request_generation: 1,
+                provider_accepted_at_utc: `2026-08-13T07:0${index}:00.000Z`
+              },
+              available_actions: [{
+                code: 'SEND_MANAGER_REMINDER', enabled: true,
+                invocation: { path: `/api/candidate-app/workflows/${workflow.id}/actions/remind` }
+              }]
+            }
+          }))
+        };
+      }
+      assert.equal(args.p_action, 'REMINDER_BATCH_PREVIEW');
+      previewIdentities = args.p_payload.identities;
+      return {
+        ok: true, contract_version: 'OFFICE_CANDIDATE_REMINDER_BATCH_PREVIEW_V1',
+        preview_context_hash: fingerprint, selection_fingerprint: fingerprint,
+        selected_count: args.p_payload.identities.length, items: []
+      };
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('/candidate_approval_requests?')) return Response.json(approvals);
+    if (value.includes('/candidate_submission_workflows?')) return Response.json(workflows);
+    if (value.includes('/candidates?')) return Response.json(candidates);
+    throw new Error(`unexpected URL: ${value}`);
+  };
+  try {
+    const pageResponse = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-eligibility?page=1&page_size=1'
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, deps);
+    const page = await pageResponse.json();
+    assert.equal(page.page_count, 3);
+    const excludedKey = approvals[1].id;
+    const previewResponse = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-batches/preview', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          catalogue_revision: page.catalogue_revision,
+          selection: { mode: 'ALL_ELIGIBLE', included_row_keys: [], excluded_row_keys: [excludedKey] }
+        })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, deps);
+    assert.equal(previewResponse.status, 200);
+    const preview = await previewResponse.json();
+    assert.equal(preview.selected_count, 2);
+    assert.equal(preview.selected_rows.length, 2);
+    assert.equal(previewIdentities.length, 2);
+    assert.equal(previewIdentities.some(item => item.timesheet_id === workflows[1].target_timesheet_id), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('office reminder exact selection replay is returned before eligibility is recalculated', async () => {
+  const actorId = '00000000-0000-4000-8000-000000000311';
+  const batchId = '00000000-0000-4000-8000-000000000312';
+  const timesheetId = '00000000-0000-4000-8000-000000000313';
+  const requestId = '00000000-0000-4000-8000-000000000314';
+  const hash = 'c'.repeat(64);
+  const deps = {
+    routeAudience: 'OFFICE',
+    async requireOfficeUser() { return { id: actorId }; },
+    async rpc(name, args) {
+      assert.equal(args.p_action, 'REMINDER_BATCH_REPLAY');
+      return {
+        ok: true, found: true, idempotent_replay: true, batch_id: batchId,
+        contract_version: 'OFFICE_CANDIDATE_REMINDER_BATCH_RESULT_V1',
+        status: 'COMPLETED', success_count: 1, failure_count: 0, skipped_count: 0, items: []
+      };
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => { throw new Error('an exact replay must not recalculate current reminder eligibility'); };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      'https://office.test/api/candidate-app/manager-reminder-batches', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          catalogue_revision: hash,
+          selection: { mode: 'EXPLICIT', included_row_keys: [requestId], excluded_row_keys: [] },
+          selected_rows: [{ row_key: timesheetId, timesheet_id: timesheetId }],
+          batch_id: batchId, idempotency_key: batchId,
+          preview_context_hash: hash, selection_fingerprint: hash
+        })
+      }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+    }, {}, deps);
+    assert.equal(response.status, 202);
+    const result = await response.json();
+    assert.equal(result.idempotent_replay, true);
+    assert.equal(result.success_count, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('paper pack responses never expose an R2 storage identity', () => {
   const safe = safeQrPackResponse({
     queued: true,

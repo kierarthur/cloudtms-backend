@@ -112,6 +112,10 @@ const ROUTE_INTERVENTION_REASONS = new Set([
 ]);
 
 const OFFICE_CONTRACT_VERSION = 'CLOUDTMS_OFFICE_CANDIDATE_API_V1';
+const MAX_OFFICE_REMINDER_BATCH_ROWS = 1000;
+const MAX_OFFICE_REMINDER_SOURCE_ROWS = 10000;
+const OFFICE_REMINDER_PAGE_SIZE = 25;
+const MAX_OFFICE_REMINDER_PAGE_SIZE = 100;
 const OFFICE_PROJECTION_SURFACES = new Set([
   'SIMPLE_TIMESHEET', 'TIMESHEET_SUMMARY', 'BULK_PROCESS', 'BULK_AUTHORISE',
   'INVOICE_GENERATOR', 'INVOICE_ISSUER'
@@ -535,6 +539,18 @@ async function restRows(env, table, query) {
   if (!response.ok) throw new Error(`CANDIDATE_DATABASE_READ_FAILED:${response.status}`);
   const value = await response.json().catch(() => []);
   return Array.isArray(value) ? value : [];
+}
+
+async function restRowsPaged(env, table, query, { pageSize = 1000, maxRows = MAX_OFFICE_REMINDER_BATCH_ROWS } = {}) {
+  const rows = [];
+  let offset = 0;
+  while (true) {
+    const page = await restRows(env, table, `${query}${query ? '&' : ''}limit=${pageSize}&offset=${offset}`);
+    rows.push(...page);
+    if (rows.length > maxRows) throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_CATALOGUE_TOO_LARGE');
+    if (page.length < pageSize) return rows;
+    offset += page.length;
+  }
 }
 
 async function restOne(env, table, query) {
@@ -4235,13 +4251,13 @@ async function requireOfficeActor(request, deps, permission = 'view_candidate_st
   };
 }
 
-async function officeAdapter(deps, env, actorId, action, payload = {}) {
+async function officeAdapter(deps, env, actorId, action, payload = {}, observedAtUtc = null) {
   return rpcCall(deps, 'cloudtms_office_candidate_adapter_v1', {
     p_action: upper(action),
     p_actor_user_id: requireUuid(actorId, 'OFFICE_AUTH_REQUIRED'),
     p_environment: environmentName(env),
     p_payload: isObject(payload) ? payload : {},
-    p_now_utc: new Date().toISOString()
+    p_now_utc: observedAtUtc || new Date().toISOString()
   });
 }
 
@@ -4537,6 +4553,247 @@ async function handleOfficeReject(request, env, deps, timesheetId) {
   }));
 }
 
+function officeReminderChunks(values, size = 100) {
+  const output = [];
+  for (let index = 0; index < values.length; index += size) output.push(values.slice(index, index + size));
+  return output;
+}
+
+function officeReminderCandidateName(candidate) {
+  const display = text(candidate?.display_name);
+  if (display) return display;
+  const joined = [text(candidate?.first_name), text(candidate?.last_name)].filter(Boolean).join(' ');
+  return joined || 'Candidate';
+}
+
+function officeReminderCandidateSurname(candidate) {
+  const surname = text(candidate?.last_name);
+  if (surname) return surname;
+  const display = officeReminderCandidateName(candidate);
+  const parts = display.split(/\s+/).filter(Boolean);
+  return parts.at(-1) || display;
+}
+
+async function loadOfficeManagerReminderCatalogue(env, deps, actorId) {
+  const observedAtUtc = new Date().toISOString();
+  const approvals = await restRowsPaged(env, 'candidate_approval_requests', [
+    'method=eq.EMAIL',
+    'state=eq.PENDING',
+    'select=id,workflow_id,workflow_generation,request_generation',
+    'order=workflow_id.asc,request_generation.desc,id.desc'
+  ].join('&'), {
+    pageSize: 1000,
+    // The product limit applies to rows that are actually reminder-eligible,
+    // not merely to pending requests. Keep the source scan independently
+    // bounded so a damaged or unexpectedly large queue fails closed before
+    // the Worker loads workflow/candidate joins or starts projections.
+    maxRows: MAX_OFFICE_REMINDER_SOURCE_ROWS
+  });
+  if (!approvals.length) {
+    const catalogueRevision = await sha256Hex('OFFICE_CANDIDATE_REMINDER_ELIGIBILITY_PAGE_V1:[]');
+    return { observed_at_utc: observedAtUtc, catalogue_revision: catalogueRevision, items: [] };
+  }
+
+  const workflowIds = [...new Set(approvals.map(row => text(row.workflow_id)).filter(value => UUID_RE.test(value)))];
+  const workflows = [];
+  for (const ids of officeReminderChunks(workflowIds)) {
+    workflows.push(...await restRows(env, 'candidate_submission_workflows', [
+      `id=in.(${ids.map(encodeURIComponent).join(',')})`,
+      `environment=eq.${encodeURIComponent(environmentName(env))}`,
+      'select=id,candidate_id,generation,contract_week_id,anchor_timesheet_id,target_timesheet_id,updated_at_utc'
+    ].join('&')));
+  }
+  const workflowById = new Map(workflows.map(row => [text(row.id), row]));
+  const approvalByWorkflow = new Map();
+  for (const approval of approvals) {
+    const workflow = workflowById.get(text(approval.workflow_id));
+    if (!workflow || Number(approval.workflow_generation) !== Number(workflow.generation)) continue;
+    const existing = approvalByWorkflow.get(text(workflow.id));
+    if (!existing || Number(approval.request_generation) > Number(existing.request_generation)) {
+      approvalByWorkflow.set(text(workflow.id), approval);
+    }
+  }
+
+  const candidateIds = [...new Set(workflows.map(row => text(row.candidate_id)).filter(value => UUID_RE.test(value)))];
+  const candidates = [];
+  for (const ids of officeReminderChunks(candidateIds)) {
+    candidates.push(...await restRows(env, 'candidates', [
+      `id=in.(${ids.map(encodeURIComponent).join(',')})`,
+      'select=id,display_name,first_name,last_name'
+    ].join('&')));
+  }
+  const candidateById = new Map(candidates.map(row => [text(row.id), row]));
+
+  const currentByRowKey = new Map();
+  for (const workflow of workflows) {
+    const approval = approvalByWorkflow.get(text(workflow.id));
+    if (!approval) continue;
+    const timesheetId = text(workflow.target_timesheet_id || workflow.anchor_timesheet_id);
+    const contractWeekId = text(workflow.contract_week_id);
+    if (!UUID_RE.test(timesheetId) && !UUID_RE.test(contractWeekId)) continue;
+    const rowKey = UUID_RE.test(timesheetId) ? timesheetId : contractWeekId;
+    const existing = currentByRowKey.get(rowKey);
+    if (existing && String(existing.workflow.updated_at_utc || '') >= String(workflow.updated_at_utc || '')) continue;
+    currentByRowKey.set(rowKey, {
+      workflow,
+      approval,
+      identity: {
+        row_key: rowKey,
+        timesheet_id: UUID_RE.test(timesheetId) ? timesheetId : null,
+        contract_week_id: UUID_RE.test(contractWeekId) ? contractWeekId : null,
+        expected_row_signature: null
+      }
+    });
+  }
+
+  const candidatesForProjection = [...currentByRowKey.values()];
+  const projectionsByRowKey = new Map();
+  for (const group of officeReminderChunks(candidatesForProjection, 100)) {
+    const response = await officeAdapter(deps, env, actorId, 'PROJECT_BATCH', {
+      surface: 'TIMESHEET_SUMMARY',
+      identities: group.map(item => item.identity)
+    }, observedAtUtc);
+    for (const row of Array.isArray(response?.results) ? response.results : []) {
+      if (row?.ok !== true || !row.projection) {
+        throw new CandidateHttpError(503, 'CANDIDATE_REMINDER_CATALOGUE_UNAVAILABLE');
+      }
+      projectionsByRowKey.set(text(row.correlation_key), row.projection);
+    }
+  }
+
+  const items = [];
+  for (const candidateRow of candidatesForProjection) {
+    const projection = projectionsByRowKey.get(candidateRow.identity.row_key);
+    if (!projection) throw new CandidateHttpError(503, 'CANDIDATE_REMINDER_CATALOGUE_UNAVAILABLE');
+    const action = (Array.isArray(projection.available_actions) ? projection.available_actions : [])
+      .find(item => upper(item?.code) === 'SEND_MANAGER_REMINDER' && item?.enabled === true);
+    const manager = projection.manager_approval;
+    if (!action || text(action?.invocation?.path) !== `/api/candidate-app/workflows/${candidateRow.workflow.id}/actions/remind`
+        || text(manager?.request_id) !== text(candidateRow.approval.id)
+        || Number(manager?.request_generation) !== Number(candidateRow.approval.request_generation)
+        || !manager?.provider_accepted_at_utc) continue;
+    const currentIdentity = officeProjectionIdentity(projection.current_identity);
+    const candidate = candidateById.get(text(candidateRow.workflow.candidate_id));
+    items.push({
+      selection_key: candidateRow.approval.id,
+      candidate_name: officeReminderCandidateName(candidate),
+      candidate_surname: officeReminderCandidateSurname(candidate),
+      last_manager_email_at_utc: manager.provider_accepted_at_utc,
+      identity: currentIdentity
+    });
+  }
+  if (items.length > MAX_OFFICE_REMINDER_BATCH_ROWS) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_CATALOGUE_TOO_LARGE');
+  }
+  items.sort((left, right) => left.candidate_surname.localeCompare(right.candidate_surname, 'en-GB', { sensitivity: 'base' })
+    || left.candidate_name.localeCompare(right.candidate_name, 'en-GB', { sensitivity: 'base' })
+    || String(left.last_manager_email_at_utc).localeCompare(String(right.last_manager_email_at_utc))
+    || left.selection_key.localeCompare(right.selection_key));
+  const revisionFacts = items.map(item => ({
+    selection_key: item.selection_key,
+    candidate_name: item.candidate_name,
+    candidate_surname: item.candidate_surname,
+    identity: item.identity,
+    last_manager_email_at_utc: item.last_manager_email_at_utc
+  }));
+  const catalogueRevision = await sha256Hex(`OFFICE_CANDIDATE_REMINDER_ELIGIBILITY_PAGE_V1:${JSON.stringify(revisionFacts)}`);
+  return { observed_at_utc: observedAtUtc, catalogue_revision: catalogueRevision, items };
+}
+
+async function handleOfficeReminderEligibility(request, env, deps) {
+  const user = await requireOfficeActor(request, deps, 'send_manager_reminder_batch');
+  const url = new URL(request.url);
+  const page = Number(url.searchParams.get('page') || 1);
+  const pageSize = Number(url.searchParams.get('page_size') || OFFICE_REMINDER_PAGE_SIZE);
+  const expectedRevision = text(url.searchParams.get('catalogue_revision')).toLowerCase();
+  const surnameQuery = text(url.searchParams.get('surname_query'));
+  const sortBy = upper(url.searchParams.get('sort_by') || 'CANDIDATE_SURNAME');
+  const sortDirection = upper(url.searchParams.get('sort_direction') || 'ASC');
+  if (!Number.isSafeInteger(page) || page < 1 || !Number.isSafeInteger(pageSize)
+      || pageSize < 1 || pageSize > MAX_OFFICE_REMINDER_PAGE_SIZE
+      || surnameQuery.length > 100
+      || !['CANDIDATE_SURNAME', 'LAST_MANAGER_EMAIL'].includes(sortBy)
+      || !['ASC', 'DESC'].includes(sortDirection)
+      || (expectedRevision && !SHA256_RE.test(expectedRevision))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_CATALOGUE_PAGE_INVALID');
+  }
+  const catalogue = await loadOfficeManagerReminderCatalogue(env, deps, user.id);
+  if (expectedRevision && expectedRevision !== catalogue.catalogue_revision) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  }
+  const foldedSurnameQuery = surnameQuery.toLocaleLowerCase('en-GB');
+  const filteredItems = surnameQuery
+    ? catalogue.items.filter(item => item.candidate_surname.toLocaleLowerCase('en-GB').includes(foldedSurnameQuery))
+    : [...catalogue.items];
+  const direction = sortDirection === 'DESC' ? -1 : 1;
+  filteredItems.sort((left, right) => direction * (
+    sortBy === 'LAST_MANAGER_EMAIL'
+      ? String(left.last_manager_email_at_utc).localeCompare(String(right.last_manager_email_at_utc))
+        || left.candidate_surname.localeCompare(right.candidate_surname, 'en-GB', { sensitivity: 'base' })
+      : left.candidate_surname.localeCompare(right.candidate_surname, 'en-GB', { sensitivity: 'base' })
+        || left.candidate_name.localeCompare(right.candidate_name, 'en-GB', { sensitivity: 'base' })
+  ) || left.selection_key.localeCompare(right.selection_key));
+  const totalItems = filteredItems.length;
+  const pageCount = totalItems ? Math.ceil(totalItems / pageSize) : 0;
+  if ((totalItems && page > pageCount) || (!totalItems && page !== 1)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_CATALOGUE_PAGE_INVALID');
+  }
+  const offset = (page - 1) * pageSize;
+  return jsonResponse(200, {
+    ok: true,
+    contract_version: 'OFFICE_CANDIDATE_REMINDER_ELIGIBILITY_PAGE_V1',
+    observed_at_utc: catalogue.observed_at_utc,
+    catalogue_revision: catalogue.catalogue_revision,
+    page,
+    page_size: pageSize,
+    page_count: pageCount,
+    total_items: totalItems,
+    catalogue_total_items: catalogue.items.length,
+    surname_query: surnameQuery,
+    sort_by: sortBy,
+    sort_direction: sortDirection,
+    matching_selection_keys: filteredItems.map(item => item.selection_key),
+    items: filteredItems.slice(offset, offset + pageSize)
+  });
+}
+
+function officeReminderSelection(value) {
+  if (!isObject(value)) throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+  const mode = upper(value.mode);
+  const normalizeKeys = (input) => {
+    if (!Array.isArray(input) || input.length > MAX_OFFICE_REMINDER_BATCH_ROWS) {
+      throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+    }
+    const keys = [...new Set(input.map(text))];
+    if (keys.some(key => !UUID_RE.test(key))) throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+    return keys;
+  };
+  const included = normalizeKeys(value.included_row_keys || []);
+  const excluded = normalizeKeys(value.excluded_row_keys || []);
+  if (!['EXPLICIT', 'ALL_ELIGIBLE'].includes(mode)
+      || (mode === 'EXPLICIT' && (!included.length || excluded.length))
+      || (mode === 'ALL_ELIGIBLE' && included.length)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
+  }
+  return { mode, included_row_keys: included, excluded_row_keys: excluded };
+}
+
+async function resolveOfficeReminderSelection(env, deps, actorId, body) {
+  const selection = officeReminderSelection(body.selection);
+  const expectedRevision = text(body.catalogue_revision).toLowerCase();
+  if (!SHA256_RE.test(expectedRevision)) throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  const catalogue = await loadOfficeManagerReminderCatalogue(env, deps, actorId);
+  if (expectedRevision !== catalogue.catalogue_revision) throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  const byKey = new Map(catalogue.items.map(item => [item.selection_key, item]));
+  const keys = selection.mode === 'ALL_ELIGIBLE'
+    ? catalogue.items.map(item => item.selection_key).filter(key => !selection.excluded_row_keys.includes(key))
+    : selection.included_row_keys;
+  if (!keys.length || keys.length > MAX_OFFICE_REMINDER_BATCH_ROWS || keys.some(key => !byKey.has(key))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+  }
+  return { catalogue, selection, identities: keys.map(key => byKey.get(key).identity) };
+}
+
 async function handleOfficeReminderBatch(request, env, deps, operation, batchId = null) {
   const user = await requireOfficeActor(request, deps, 'send_manager_reminder_batch');
   if (operation === 'status') {
@@ -4545,16 +4802,24 @@ async function handleOfficeReminderBatch(request, env, deps, operation, batchId 
     }));
   }
   const body = await readJson(request);
-  const source = Array.isArray(body.identities) ? body.identities
+  const selectionRequest = isObject(body.selection);
+  let selectionResolution = null;
+  let source = Array.isArray(body.identities) ? body.identities
     : Array.isArray(body.selected_rows) ? body.selected_rows : [];
-  if (source.length < 1 || source.length > 100) {
+  const maxRows = selectionRequest ? MAX_OFFICE_REMINDER_BATCH_ROWS : 100;
+  if (operation === 'preview' && selectionRequest) {
+    selectionResolution = await resolveOfficeReminderSelection(env, deps, user.id, body);
+    source = selectionResolution.identities;
+  }
+  if (source.length < 1 || source.length > maxRows) {
     throw new CandidateHttpError(400, 'CANDIDATE_REMINDER_BATCH_SELECTION_INVALID');
   }
   const identities = source.map(officeProjectionIdentity);
   if (operation === 'preview') {
-    return jsonResponse(200, await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_PREVIEW', {
+    const preview = await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_PREVIEW', {
       identities
-    }));
+    });
+    return jsonResponse(200, selectionRequest ? { ...preview, selected_rows: identities } : preview);
   }
 
   const batchKey = requireOfficeIdempotency(body.idempotency_key || body.batch_id);
@@ -4577,6 +4842,13 @@ async function handleOfficeReminderBatch(request, env, deps, operation, batchId 
       retry_after_ms: 1000,
       status_url: `/api/candidate-app/manager-reminder-batches/${batchKey}`
     });
+  }
+  if (selectionRequest) {
+    selectionResolution = await resolveOfficeReminderSelection(env, deps, user.id, body);
+    const resolvedIdentities = selectionResolution.identities.map(officeProjectionIdentity);
+    if (JSON.stringify(resolvedIdentities) !== JSON.stringify(identities)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED');
+    }
   }
   const currentPreview = await officeAdapter(deps, env, user.id, 'REMINDER_BATCH_PREVIEW', { identities });
   if (currentPreview.preview_context_hash !== previewContextHash
@@ -4993,6 +5265,10 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     if (path === '/api/candidate-app/timesheets/office-projections') {
       if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
       return await handleOfficeProjectionBatch(request, env, deps);
+    }
+    if (path === '/api/candidate-app/manager-reminder-eligibility') {
+      if (request.method !== 'GET') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');
+      return await handleOfficeReminderEligibility(request, env, deps);
     }
     if (path === '/api/candidate-app/manager-reminder-batches/preview') {
       if (request.method !== 'POST') throw new CandidateHttpError(405, 'METHOD_NOT_ALLOWED');

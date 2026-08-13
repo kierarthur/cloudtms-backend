@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 11 August 2026. The DB/RPC authority is installed. The separate public Candidate broker and private CloudTMS Candidate API are implemented and deployed to TEST with every Candidate feature flag false. This revision closes the Candidate timesheet-detail action authority: rejected history remains immutable and resubmission creates a new server-derived workflow; every independent rejection retains its own executable recovery action; detail is restricted to the exact card/version family; PAPER download and signed-return upload are enabled only after one exact immutable pack receipt is ready; and every action carries a typed server-owned invocation contract. Independent re-audit remains the API-freeze and frontend-code gate. The complete office-frontend implementation plan is nevertheless required now and must not be withheld merely because a backend audit verdict remains NO-GO.
+Status: active implementation; TEST-only. Updated: 13 August 2026. The Candidate DB/RPC/backend/API and integrated Office Candidate API have received independent GO. The separate public Candidate broker and private CloudTMS Candidate API remain deployed to TEST with every Candidate feature flag false. The CloudTMS Office Candidate frontend is implemented in an isolated frontend worktree against the frozen projection/action contract and is progressing through publish, TEST rollout and independent frontend re-audit. Candidate responsive web, iOS and Android remain later stages. This work preserves the existing Office authentication/authorisation boundary and makes no Office role-policy change.
 
 This is the controlling, evolving delivery plan. It deliberately keeps the completed DB/RPC authority, the current private-backend/public-broker implementation, and the remaining CloudTMS frontend and Candidate App/web work in one sequence. It must be updated whenever implementation or independent audit changes the contract.
 
@@ -504,7 +504,7 @@ flowchart TD
   UNA["Use existing Unauthorise first\nthen Unprocess if ordinarily required"]
   BLOCK["Route/rejection blocked\nuse correction/credit/reversal authority"]
   WAIT{"Awaiting manager?"}
-  REM["Reminder / renew / cancel approval request"]
+  REM["Reminder / renew manager request"]
   DONE{"Approved documents ready?"}
   RETRY["Retry final rendering/finalisation"]
   AUTHZ["Review and use existing Authorise\nor allow policy-safe auto-authorisation"]
@@ -525,9 +525,9 @@ flowchart TD
 
 These office actions never create a second financial, Process, Authorise, QR/version, invoice or approval engine. They compose the installed canonical authorities and preserve immutable audit evidence.
 
-## Stage 3 — CloudTMS frontend (planning now; code after backend independent GO)
+## Stage 3 — CloudTMS Office Candidate frontend (implemented; TEST verification and independent re-audit in progress)
 
-The receiving frontend-planning chat must produce the complete, meticulous office-frontend implementation plan now, even if its simultaneous backend review returns NO-GO. A NO-GO blocks frontend code execution and API freeze; it does not block the planning deliverable. The plan must be detailed enough for a subsequent coding chat to implement directly without inventing fields, routes, actions, modal behaviour or state precedence.
+The independent backend/API GO has satisfied the former frontend-code gate. The Office implementation uses the existing CloudTMS pages and modal families and consumes server-owned identity, status, evidence and typed action envelopes without inventing lifecycle authority. It is app-ready: the later Candidate clients will consume the same canonical contracts, while Candidate sessions remain unable to invoke Office authority.
 
 - consume server route/capability/status projections; never infer route or economics in the browser;
 - implement Simple Timesheet, Timesheet Summary, Bulk Process and Bulk Authorise Candidate states/actions using existing UI patterns;
@@ -538,7 +538,7 @@ The receiving frontend-planning chat must produce the complete, meticulous offic
 - consume the implemented Current/History API contract exactly. Current is the default and excludes genuinely future timesheets; from each contract's effective current week ending backwards it shows every unpaid timesheet with no age limit and paid timesheets whose authoritative `paid_at_utc` is within seven days. History shows only paid timesheets older than seven days within the effective current contract week plus the preceding 15 contract weeks, per contract. The sets are server-disjoint, archived rows are excluded and week-ending order is newest first;
 - render every date label as `Week Ending 1 January 2025`. Tapping a card opens the authoritative detail/review screen; the card exposes at most one primary action and the detail screen is the action hub rather than a generic menu;
 - render the exact `available_actions` returned by detail, including disabled reason handling. A UI click must use the returned HTTP method/path and exact workflow/generation/request identity; it must not translate `SEND_MANAGER_REMINDER` into `REQUEST_APPROVAL_AGAIN` or synthesize finalisation;
-- manager cancellation uses a professional confirmation/reason modal with a required plain-English reason, then submits `CANCEL` exactly. Reminder and renewal must be visually and verbally distinct, and the UI must show provider-accepted sent time, expiry, resends remaining and next eligible reminder from `manager_approval`;
+- reminder and renewal remain visually and verbally distinct and use the exact request/generation returned by `manager_approval`. `Cancel Manager Approval Request` is not exposed anywhere in the Office frontend;
 - hide ordinary revoked-QR restore and ordinary exact electronic restore; use fresh resubmission actions;
 - retain the approved manager reminder, Candidate rejection, evidence eligibility, border, tooltip and Expense Email missing-badge decisions;
 - merge into the then-current frontend worktree and prove patched assets loaded before browser assertions.
@@ -546,6 +546,17 @@ The receiving frontend-planning chat must produce the complete, meticulous offic
 Every affected modal must be visually inspected at desktop and narrow responsive sizes using the actual patched frontend asset. If spacing, wrapping, hierarchy, disabled actions, colour, overflow or alignment looks untidy or unprofessional, it must be corrected and rechecked before frontend handover.
 
 The exact W01–W14 warning catalogue in `docs/candidate-app/ROUTE_WARNING_CATALOGUE.md` remains controlling and must be consumed unchanged by the frontend shared warning module.
+
+### Current approved Office presentation and action closure
+
+- Timesheet Summary has a dedicated read-only **Candidate Submission** column immediately after **Processing Status** and before **Issues**. It is compact, non-sortable, non-draggable, two-line maximum and contains no actions. Candidate state never becomes an Issue.
+- The closed Office status catalogue is: `Awaiting Candidate Submission`, `Candidate Submitted`, `Awaiting Manager Approval`, `Manager Approved`, `QR Awaiting Signed Return`, `QR Pack Preparing`, `Finalising Submission`, `Finalisation Needs Attention`, `QR Pack Needs Attention`, `Refused by Client`, `Rejected by Agency`, `Candidate Submission Cancelled`, `Candidate Submission Complete`, and fail-closed `Status unavailable`. EMAIL/PHONE method mechanics are hidden.
+- Simple Timesheet preserves Overview, Lines, Expenses, Evidence, Issues, Finance and Audit. It displays the combined issued document as audit-only `Unsigned QR Pack`; returned signed documents remain separate and classified by server-owned type. User-facing wording is **QR Pack** or **QR Timesheet**, never PAPER.
+- Simple Timesheet can render only server-enabled reminder, request-again, rejection, finalisation retry, QR-preparation retry, replacement QR Pack, Convert to Manual, Enable Electronic Submission and Enable QR submission actions. Reject is absent once authorised. Enable QR is never shown where electronic submission is eligible. `Resend QR Pack` is a disabled Simple-only placeholder until separate backend support. No manager-cancellation control is rendered.
+- Bulk Process is limited to reminder, request-again, rejection, finalisation retry, QR-preparation retry, Convert to Manual, Enable Electronic Submission and Enable QR submission. Bulk Authorise may expose only pre-authorisation rejection. Replacement and resend are absent from both.
+- Timesheet tools contains **Send Manager Reminders** immediately below Bulk Process. The modal uses the full server-owned eligible catalogue, sortable Selection/Candidate/Last manager email columns, live surname filtering with persistent selections, Previous/Next/Page n of n, an all-pages checkbox, fail-closed handling above 1,000 actually eligible requests, styled exact-count confirmation and Sent/no-longer-eligible/Failed results.
+- Every mutation uses the styled CloudTMS confirmation family. Native `alert`, `confirm` and `prompt` are prohibited. There is no permanent Candidate Refresh control; **Refresh current state** appears only for controlled stale/conflict recovery.
+- Patched-asset Playwright must prove desktop and narrow layout, action gating, approved wording, method hiding, search/selection/paging, styled confirmations and zero native dialogs before handover.
 
 ## Stage 4 — public Candidate broker and delivery activation
 
