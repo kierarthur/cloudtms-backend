@@ -1,7 +1,9 @@
 # CloudTMS Candidate locked password-authority closure
 
-Date: 13 August 2026  
-Environment: TEST only  
+Date: 13 August 2026
+
+Environment: TEST only
+
 Runtime commit: `7a98383fe08f559c5eb10a455e7253c2c0b3dd87`
 
 ## Outcome
