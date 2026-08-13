@@ -226,7 +226,7 @@
     {
       "schema": "private", "name": "pay_workbench_unsent_execution_overlay_proof_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_candidate_ids uuid[], p_mode text, p_correction_request_id uuid, p_options_json jsonb",
-      "definition_sha256": "f828c80d64d6a90e35f1c8a998ca3ebdd104137fd3a0ada735255a7af2f3542c",
+      "definition_sha256": "e4e6591b107ec6d6cd4a8fb511a5642b72a91fb6ed7647fc9b51cdb11b90a7d1",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/12082026_0915_pay_workbench_unsent_execution_overlay_proof_page_v1.sql"]
@@ -234,7 +234,7 @@
     {
       "schema": "private", "name": "pay_workbench_execution_unsent_overlay_chain_seal_v2",
       "identity_arguments": "p_operation_id uuid, p_pay_batch_id uuid, p_options_json jsonb",
-      "definition_sha256": "83cabdfdf5e6d733cdfb2c69eefba91248e7ab606296a00e877d3171df966218",
+      "definition_sha256": "e322cef5e2f4ad0a0f35e77fd4140116190abbab261db384a17706afea0e9062",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/13082026_0122_pay_workbench_execution_unsent_overlay_chain_seal_v2.sql"]
