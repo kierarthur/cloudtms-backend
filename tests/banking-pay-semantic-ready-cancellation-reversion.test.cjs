@@ -82,6 +82,8 @@ const payBatchSchedule = read('supabase', 'repeatable',
   '04082026_1158_pay_batch_schedule.sql');
 const executionOverlayChainSeal = read('supabase', 'repeatable',
   '13082026_0122_pay_workbench_execution_unsent_overlay_chain_seal_v2.sql');
+const operationReleaseLease = read('supabase', 'repeatable',
+  '05082026_0915_banking_pay_operation_release_lease.sql');
 
 test('semantic V3 and cancellation controls install disabled with a fail-closed dependency', () => {
   for (const setting of [
@@ -181,6 +183,12 @@ test('executed-not-paid reversion proves an exact unsent execution overlay witho
 
   assert.match(operationFinish,
     /pay_workbench_execution_unsent_overlay_chain_seal_v2\([\s\S]*UPDATE public\.banking_pay_operations/);
+  assert.match(operationReleaseLease,
+    /v_operation_type = 'PAYMENT_EXECUTE'[\s\S]*v_next_status = 'COMPLETE'[\s\S]*pay_workbench_execution_unsent_overlay_chain_seal_v2\([\s\S]*execution_unsent_overlay_chain_v2/);
+  assert.doesNotMatch(executionOverlayChainSeal,
+    /draft_operation\.pay_batch_id\s*=\s*p_pay_batch_id/);
+  assert.match(executionOverlayChainSeal,
+    /draft_scope\.pay_batch_id\s*=\s*p_pay_batch_id/);
   assert.match(unsentExecutionOverlayProof,
     /execution_chain_receipt->>'active_item_scope_digest'/);
   assert.match(unsentExecutionOverlayProof, /scope_proof\.active_item_scope_digest/);

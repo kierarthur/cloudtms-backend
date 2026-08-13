@@ -234,7 +234,7 @@
     {
       "schema": "private", "name": "pay_workbench_execution_unsent_overlay_chain_seal_v2",
       "identity_arguments": "p_operation_id uuid, p_pay_batch_id uuid, p_options_json jsonb",
-      "definition_sha256": "3d85ea05b36d63614a8f60442b35f2c34a9e82a33cad11d84496ec76f983d167",
+      "definition_sha256": "b0821a9de115e7ed344adfbf096efb9e59dc6877e97e2d18011ecb12d3e9b3b9",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/13082026_0122_pay_workbench_execution_unsent_overlay_chain_seal_v2.sql"]

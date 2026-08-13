@@ -295,7 +295,6 @@ BEGIN
      AND draft_scope.status NOT IN ('FAILED','CANCELLED','SUPERSEDED')
     WHERE draft_operation.operation_type='DRAFT_CREATE'
       AND draft_operation.status='COMPLETE'
-      AND draft_operation.pay_batch_id=p_pay_batch_id
     ORDER BY draft_operation.completed_at_utc DESC NULLS LAST,
       draft_operation.created_at_utc DESC,draft_operation.id DESC
     LIMIT 1;

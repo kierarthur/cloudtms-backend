@@ -113,7 +113,7 @@
       "schema": "public",
       "name": "banking_pay_operation_release_lease",
       "identity_arguments": "p_operation_id uuid, p_lease_owner text, p_release_state text, p_run_after_delay_seconds integer, p_progress_patch_json jsonb, p_result_patch_json jsonb, p_error_json jsonb, p_resume_reason text, p_actor_user_id uuid",
-      "definition_sha256": "1f107914b9232d7248fa2894d73b42694c9795d7cb781164a76d5f2c9d45170c",
+      "definition_sha256": "b37ee03b7d2fd543f2eb3b0de6e08ed5fb597e5382c99491e8eb28c6954450fd",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

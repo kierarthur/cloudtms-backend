@@ -46,6 +46,7 @@ DECLARE
   v_previous_phase text := NULL::text;
   v_requested_phase text := NULL::text;
   v_phase_for_update text := NULL::text;
+  v_execution_overlay_chain_v2 jsonb := NULL::jsonb;
 BEGIN
   PERFORM set_config('lock_timeout', '3s', true);
 
@@ -312,6 +313,23 @@ BEGIN
     )
   );
 
+  -- The canonical PAYMENT_EXECUTE runner terminalises through this lease
+  -- release function rather than banking_pay_operation_finish.  Seal and
+  -- retain the exact provider-unsubmitted execution-owned dirty chain before
+  -- exposing the operation as COMPLETE.  A rejected receipt is diagnostic
+  -- evidence only; it never blocks a valid execution and cancellation will
+  -- continue through its safe fallback route.
+  IF v_operation_type = 'PAYMENT_EXECUTE'
+     AND v_next_status = 'COMPLETE'
+     AND v_operation_row.pay_batch_id IS NOT NULL THEN
+    v_execution_overlay_chain_v2 :=
+      private.pay_workbench_execution_unsent_overlay_chain_seal_v2(
+        v_operation_row.id,
+        v_operation_row.pay_batch_id,
+        '{}'::jsonb
+      );
+  END IF;
+
   v_release_diag_json := jsonb_build_object(
     'function_name', 'banking_pay_operation_release_lease',
     'operation_id', p_operation_id::text,
@@ -361,6 +379,7 @@ BEGIN
           ELSE v_progress_patch_json
         END
         || jsonb_build_object(
+          'execution_unsent_overlay_chain_v2', v_execution_overlay_chain_v2,
           'last_release', jsonb_build_object(
             'released_at_utc', v_now::text,
             'release_state', v_release_state,
@@ -383,8 +402,15 @@ BEGIN
         )
       ),
       result_json = CASE
-        WHEN p_result_patch_json IS NULL THEN operation_update.result_json
-        ELSE jsonb_strip_nulls(COALESCE(operation_update.result_json, '{}'::jsonb) || p_result_patch_json)
+        WHEN p_result_patch_json IS NULL AND v_execution_overlay_chain_v2 IS NULL
+          THEN operation_update.result_json
+        ELSE jsonb_strip_nulls(
+          COALESCE(operation_update.result_json, '{}'::jsonb)
+          || COALESCE(p_result_patch_json, '{}'::jsonb)
+          || jsonb_build_object(
+            'execution_unsent_overlay_chain_v2', v_execution_overlay_chain_v2
+          )
+        )
       END,
       error_json = CASE
         WHEN v_clear_retryable_pre_provider_error IS TRUE THEN NULL::jsonb
