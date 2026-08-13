@@ -27,11 +27,14 @@ DECLARE
   v_link_transition_count integer:=0;
   v_schedule_transition_count integer:=0;
   v_non_final_count integer:=0;
+  v_invalid_owned_event_count integer:=0;
+  v_owned_source_event_count integer:=0;
   v_terminal_generation bigint:=NULL::bigint;
   v_first_generation bigint:=NULL::bigint;
   v_terminal_token uuid:=NULL::uuid;
   v_live_generation bigint:=0;
   v_live_source_seq bigint:=0;
+  v_pre_execution_source_seq bigint:=NULL::bigint;
   v_live_token uuid:=NULL::uuid;
   v_registry_generation bigint:=NULL::bigint;
   v_registry_token uuid:=NULL::uuid;
@@ -113,11 +116,14 @@ BEGIN
     v_link_transition_count:=0;
     v_schedule_transition_count:=0;
     v_non_final_count:=0;
+    v_invalid_owned_event_count:=0;
+    v_owned_source_event_count:=0;
     v_terminal_generation:=NULL::bigint;
     v_first_generation:=NULL::bigint;
     v_terminal_token:=NULL::uuid;
     v_live_generation:=0;
     v_live_source_seq:=0;
+    v_pre_execution_source_seq:=NULL::bigint;
     v_live_token:=NULL::uuid;
     v_registry_generation:=NULL::bigint;
     v_registry_token:=NULL::uuid;
@@ -183,7 +189,22 @@ BEGIN
         pg_catalog.jsonb_agg(DISTINCT context_row.context_json->>'context_digest'
           ORDER BY context_row.context_json->>'context_digest')
           FILTER (WHERE NULLIF(context_row.context_json->>'context_digest','') IS NOT NULL)
-          AS context_digests
+          AS context_digests,
+        pg_catalog.max(CASE
+          WHEN COALESCE(context_row.context_json->>'owned_source_event_count','') ~ '^[1-9][0-9]{0,8}$'
+            THEN (context_row.context_json->>'owned_source_event_count')::integer
+          ELSE NULL::integer
+        END) AS owned_source_event_count,
+        pg_catalog.bool_and(
+          COALESCE(context_row.context_json->>'owned_source_event_count','') ~ '^[1-9][0-9]{0,8}$'
+          AND COALESCE(context_row.context_json->>'owned_source_event_count_digest','')
+              =pg_catalog.md5(
+                COALESCE(context_row.context_json->>'context_digest','')||'|'||
+                context_row.tx_token::text||'|'||v_candidate.candidate_id::text||'|'||
+                COALESCE(context_row.context_json->>'owned_source_event_count','')||
+                '|EXECUTION_OWNED_SOURCE_EVENT_COUNT_V1'
+              )
+        ) AS owned_source_event_count_exact
       FROM owned_contexts AS context_row
       WHERE context_row.tx_token IS NOT NULL
       GROUP BY context_row.tx_token
@@ -193,7 +214,10 @@ BEGIN
           owned_tokens.tx_token::text||'|'||COALESCE(scope_tx.allocated_generation::text,'')||'|'||
           COALESCE(owned_tokens.dirty_job_ids::text,'[]')||'|'||
           COALESCE(owned_tokens.causal_contract_versions::text,'[]')||'|'||
-          COALESCE(owned_tokens.context_digests::text,'[]')||'|EXECUTION_OVERLAY_TRANSITION_V2'
+          COALESCE(owned_tokens.context_digests::text,'[]')||'|'||
+          COALESCE(owned_tokens.owned_source_event_count::text,'')||'|'||
+          COALESCE(owned_tokens.owned_source_event_count_exact::text,'')||
+          '|EXECUTION_OVERLAY_TRANSITION_V2'
         ) AS transition_digest
       FROM owned_tokens
       LEFT JOIN public.banking_pay_scope_change_transactions AS scope_tx
@@ -208,6 +232,10 @@ BEGIN
         WHERE causal_contract_versions @> '["EXECUTION_UNSENT_SCHEDULE_CAUSAL_V2"]'::jsonb
       )::integer,
       pg_catalog.count(*) FILTER (WHERE state<>'FINALIZED' OR allocated_generation IS NULL)::integer,
+      pg_catalog.count(*) FILTER (
+        WHERE owned_source_event_count IS NULL OR owned_source_event_count_exact IS NOT TRUE
+      )::integer,
+      COALESCE(pg_catalog.sum(owned_source_event_count),0)::integer,
       pg_catalog.min(allocated_generation),pg_catalog.max(allocated_generation),
       (pg_catalog.array_agg(tx_token ORDER BY allocated_generation DESC,tx_token DESC))[1],
       COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
@@ -216,10 +244,13 @@ BEGIN
         'representative_dirty_job_id',representative_job_id,'dirty_job_ids',dirty_job_ids,
         'causal_contract_versions',causal_contract_versions,
         'context_digests',COALESCE(context_digests,'[]'::jsonb),
+        'owned_source_event_count',owned_source_event_count,
+        'owned_source_event_count_exact',owned_source_event_count_exact,
         'transition_digest',transition_digest
       ) ORDER BY ordinality),'[]'::jsonb)
     INTO v_transition_count,v_distinct_generation_count,v_link_transition_count,
-      v_schedule_transition_count,v_non_final_count,v_first_generation,
+      v_schedule_transition_count,v_non_final_count,v_invalid_owned_event_count,
+      v_owned_source_event_count,v_first_generation,
       v_terminal_generation,v_terminal_token,v_transition_rows
     FROM (
       SELECT transitions.*,
@@ -244,10 +275,18 @@ BEGIN
       ),
       draft_scope.allocation_basis_json->>'source_publication_id',
       draft_scope.allocation_basis_json->>'source_identity_digest',
-      draft_scope.allocation_basis_json->>'semantic_proof_digest'
+      draft_scope.allocation_basis_json->>'semantic_proof_digest',
+      CASE
+        WHEN COALESCE(
+          draft_scope.allocation_basis_json#>>'{post_draft_authority,source_change_seq}',''
+        ) ~ '^[0-9]{1,18}$'
+          THEN (draft_scope.allocation_basis_json#>>'{post_draft_authority,source_change_seq}')::bigint
+        ELSE NULL::bigint
+      END
     INTO v_draft_operation_id,v_original_economic_build_id,
       v_original_source_build_run_id,v_original_source_publication_id,
-      v_original_source_identity_digest,v_original_semantic_proof_digest
+      v_original_source_identity_digest,v_original_semantic_proof_digest,
+      v_pre_execution_source_seq
     FROM public.banking_pay_operations AS draft_operation
     JOIN public.banking_pay_operation_candidate_scope AS draft_scope
       ON draft_scope.operation_id=draft_operation.id
@@ -342,6 +381,8 @@ BEGIN
       WHEN v_link_transition_count<1 OR v_schedule_transition_count<1
         THEN 'EXECUTION_OVERLAY_CHAIN_INCOMPLETE'
       WHEN v_non_final_count<>0 THEN 'EXECUTION_OVERLAY_CHAIN_NON_FINAL_TRANSACTION'
+      WHEN v_invalid_owned_event_count<>0 OR v_owned_source_event_count<v_transition_count
+        THEN 'EXECUTION_OVERLAY_CHAIN_SOURCE_EVENT_PROOF_INVALID'
       WHEN v_unowned_generation_count<>0 THEN 'EXECUTION_OVERLAY_CHAIN_UNOWNED_TRANSITION'
       WHEN v_draft_operation_id IS NULL
         OR COALESCE(v_original_economic_build_id,'')
@@ -352,13 +393,18 @@ BEGIN
              !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         OR NULLIF(pg_catalog.btrim(COALESCE(v_original_source_identity_digest,'')),'') IS NULL
         OR NULLIF(pg_catalog.btrim(COALESCE(v_original_semantic_proof_digest,'')),'') IS NULL
+        OR v_pre_execution_source_seq IS NULL
         THEN 'EXECUTION_OVERLAY_DRAFT_AUTHORITY_MISSING'
+      WHEN v_live_source_seq IS DISTINCT FROM
+           (v_pre_execution_source_seq+v_owned_source_event_count)
+        THEN 'EXECUTION_OVERLAY_CHAIN_SOURCE_SEQUENCE_MISMATCH'
       WHEN v_terminal_generation IS DISTINCT FROM v_live_generation
         OR v_registry_generation IS DISTINCT FROM v_live_generation
         THEN 'EXECUTION_OVERLAY_CHAIN_TERMINAL_GENERATION_MISMATCH'
-      WHEN v_terminal_token IS DISTINCT FROM v_live_token
-        OR v_registry_token IS DISTINCT FROM v_live_token
-        THEN 'EXECUTION_OVERLAY_CHAIN_TERMINAL_TOKEN_MISMATCH'
+      -- Finalization deliberately clears the staged live token fields.  The
+      -- immutable terminal token remains in the FINALIZED transaction receipt.
+      WHEN v_live_token IS NOT NULL OR v_registry_token IS NOT NULL
+        THEN 'EXECUTION_OVERLAY_CHAIN_LIVE_TOKEN_NOT_CLEARED'
       WHEN pg_catalog.upper(pg_catalog.btrim(COALESCE(v_batch.execution_commit_state,'NOT_SUBMITTED')))
             <>'NOT_SUBMITTED'
         THEN 'EXECUTION_OVERLAY_PROVIDER_ACTIVITY_PRESENT'
@@ -383,6 +429,8 @@ BEGIN
       COALESCE(v_original_source_publication_id,'')||'|'||
       COALESCE(v_original_source_identity_digest,'')||'|'||
       COALESCE(v_original_semantic_proof_digest,'')||'|'||
+      COALESCE(v_pre_execution_source_seq::text,'')||'|'||
+      COALESCE(v_owned_source_event_count::text,'')||'|'||
       COALESCE(v_live_source_seq::text,'')||'|'||COALESCE(v_rejection_reason,'')||
       '|EXECUTION_UNSENT_OVERLAY_CHAIN_V2'
     );
@@ -400,10 +448,12 @@ BEGIN
       'original_source_identity_digest',v_original_source_identity_digest,
       'original_semantic_proof_digest',v_original_semantic_proof_digest,
       'pre_execution_dirty_generation',v_batch.source_scope_change_generation,
+      'pre_execution_source_change_seq',v_pre_execution_source_seq,
       'first_execution_generation',v_first_generation,
       'terminal_execution_generation',v_terminal_generation,
       'terminal_scope_change_tx_token',v_terminal_token,
       'terminal_source_change_seq',v_live_source_seq,
+      'owned_source_event_count',v_owned_source_event_count,
       'transition_count',v_transition_count,'transitions',v_transition_rows,
       'link_transition_count',v_link_transition_count,
       'schedule_transition_count',v_schedule_transition_count,

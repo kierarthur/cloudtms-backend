@@ -147,6 +147,10 @@ test('executed-not-paid reversion proves an exact unsent execution overlay witho
   assert.match(financialScopeDirtyTransition,
     /RESERVED'[\s\S]*COMMITTED'[\s\S]*RESERVATION_COMMITTED'[\s\S]*schedule_commit/);
   assert.match(financialScopeDirtyTransition, /EXECUTION_UNSENT_SCHEDULE_CAUSAL_V2/);
+  assert.match(financialScopeDirtyTransition,
+    /_bpay_wb_execution_owned_event_counter_v2[\s\S]*owned_source_event_count/);
+  assert.match(financialScopeDirtyTransition,
+    /EXECUTION_OWNED_SOURCE_EVENT_COUNT_V1/);
 
   assert.match(executionOverlayChainSeal,
     /EXECUTION_UNSENT_OVERLAY_CHAIN_V2[\s\S]*v_transition_count>16/);
@@ -156,6 +160,14 @@ test('executed-not-paid reversion proves an exact unsent execution overlay witho
     /v_link_transition_count<1 OR v_schedule_transition_count<1[\s\S]*EXECUTION_OVERLAY_CHAIN_INCOMPLETE/);
   assert.match(executionOverlayChainSeal,
     /v_unowned_generation_count<>0[\s\S]*EXECUTION_OVERLAY_CHAIN_UNOWNED_TRANSITION/);
+  assert.match(executionOverlayChainSeal,
+    /v_invalid_owned_event_count<>0[\s\S]*EXECUTION_OVERLAY_CHAIN_SOURCE_EVENT_PROOF_INVALID/);
+  assert.match(executionOverlayChainSeal,
+    /v_live_source_seq IS DISTINCT FROM[\s\S]*v_pre_execution_source_seq\+v_owned_source_event_count[\s\S]*EXECUTION_OVERLAY_CHAIN_SOURCE_SEQUENCE_MISMATCH/);
+  assert.match(executionOverlayChainSeal,
+    /v_live_token IS NOT NULL OR v_registry_token IS NOT NULL[\s\S]*EXECUTION_OVERLAY_CHAIN_LIVE_TOKEN_NOT_CLEARED/);
+  assert.doesNotMatch(executionOverlayChainSeal,
+    /v_terminal_token IS DISTINCT FROM v_live_token/);
   assert.match(executionOverlayChainSeal,
     /state<>'FINALIZED'[\s\S]*EXECUTION_OVERLAY_CHAIN_NON_FINAL_TRANSACTION/);
   assert.match(executionOverlayChainSeal,

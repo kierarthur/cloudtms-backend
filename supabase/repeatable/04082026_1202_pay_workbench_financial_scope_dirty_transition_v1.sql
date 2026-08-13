@@ -1016,6 +1016,74 @@ BEGIN
       END IF;
     END IF;
 
+    -- A candidate scope generation is global and may legitimately have gaps
+    -- caused by other candidates.  Count the exact execution-owned source
+    -- events per candidate/transaction instead.  The later V2 sealer compares
+    -- this closed count with the per-candidate source sequence, so a committed
+    -- intervening change cannot hide merely because it did not retain a
+    -- candidate dirty-job row.
+    IF (v_execution_overlay_exact OR v_execution_schedule_exact)
+       AND v_scope_change_tx_token IS NOT NULL THEN
+      CREATE TEMP TABLE IF NOT EXISTS pg_temp._bpay_wb_execution_owned_event_counter_v2(
+        scope_change_tx_token uuid NOT NULL,
+        candidate_id uuid NOT NULL,
+        owned_source_event_count integer NOT NULL,
+        PRIMARY KEY(scope_change_tx_token,candidate_id)
+      ) ON COMMIT DROP;
+
+      INSERT INTO pg_temp._bpay_wb_execution_owned_event_counter_v2 AS owned_event(
+        scope_change_tx_token,candidate_id,owned_source_event_count
+      )
+      SELECT v_scope_change_tx_token,candidate_id,1
+      FROM (
+        SELECT DISTINCT candidate_id
+        FROM pg_catalog.unnest(v_candidate_ids) AS candidate_input(candidate_id)
+        WHERE candidate_id IS NOT NULL
+      ) AS exact_candidate
+      ON CONFLICT(scope_change_tx_token,candidate_id) DO UPDATE
+      SET owned_source_event_count=owned_event.owned_source_event_count+1;
+
+      IF v_execution_overlay_exact THEN
+        SELECT COALESCE(pg_catalog.jsonb_object_agg(
+                 context_entry.key,
+                 context_entry.value||pg_catalog.jsonb_build_object(
+                   'owned_source_event_count',owned_event.owned_source_event_count,
+                   'owned_source_event_count_digest',pg_catalog.md5(
+                     COALESCE(context_entry.value->>'context_digest','')||'|'||
+                     v_scope_change_tx_token::text||'|'||context_entry.key||'|'||
+                     owned_event.owned_source_event_count::text||
+                     '|EXECUTION_OWNED_SOURCE_EVENT_COUNT_V1'
+                   )
+                 ) ORDER BY context_entry.key
+               ),'{}'::jsonb)
+        INTO v_execution_overlay_contexts
+        FROM pg_catalog.jsonb_each(v_execution_overlay_contexts) AS context_entry(key,value)
+        JOIN pg_temp._bpay_wb_execution_owned_event_counter_v2 AS owned_event
+          ON owned_event.scope_change_tx_token=v_scope_change_tx_token
+         AND owned_event.candidate_id=context_entry.key::uuid;
+      END IF;
+
+      IF v_execution_schedule_exact THEN
+        SELECT COALESCE(pg_catalog.jsonb_object_agg(
+                 context_entry.key,
+                 context_entry.value||pg_catalog.jsonb_build_object(
+                   'owned_source_event_count',owned_event.owned_source_event_count,
+                   'owned_source_event_count_digest',pg_catalog.md5(
+                     COALESCE(context_entry.value->>'context_digest','')||'|'||
+                     v_scope_change_tx_token::text||'|'||context_entry.key||'|'||
+                     owned_event.owned_source_event_count::text||
+                     '|EXECUTION_OWNED_SOURCE_EVENT_COUNT_V1'
+                   )
+                 ) ORDER BY context_entry.key
+               ),'{}'::jsonb)
+        INTO v_execution_schedule_contexts
+        FROM pg_catalog.jsonb_each(v_execution_schedule_contexts) AS context_entry(key,value)
+        JOIN pg_temp._bpay_wb_execution_owned_event_counter_v2 AS owned_event
+          ON owned_event.scope_change_tx_token=v_scope_change_tx_token
+         AND owned_event.candidate_id=context_entry.key::uuid;
+      END IF;
+    END IF;
+
     PERFORM private.pay_workbench_scope_invalidate_v1(
       v_candidate_ids,v_timesheet_ids,v_reason,v_scope_change_tx_token,
       jsonb_strip_nulls(jsonb_build_object(
