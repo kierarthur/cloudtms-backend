@@ -262,7 +262,7 @@ Implemented:
 - access envelope binds public audience, environment, public session, internal access token and expiry;
 - refresh envelope binds a separate audience, environment, public session, internal session, internal rotating refresh value and absolute expiry;
 - internal Candidate access/refresh values are never returned to the public client;
-- private database refresh-family rotation, reuse detection and family revocation remain unchanged and authoritative.
+- private database refresh-family rotation, reuse detection and family revocation remain authoritative; every session create/rotate and account/family-wide invalidation participates in one transaction-scoped per-account lock taken after receipt ownership and before account/session row locks, so a concurrent refresh successor cannot escape reset, password change, reuse revocation, revoke, lock or disable.
 
 ### Manager approval and finalisation independence
 

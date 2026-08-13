@@ -1,6 +1,6 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: TEST broker/private-backend authority map, updated 13 August 2026 through mixed-version credential-winner reconstruction, durable refresh security-event replay, semantic pre-enrichment replay, trigger-key-independent finalisation completion, exact PAPER claim/backoff recovery and the typed timesheet-detail action contract. Candidate features remain disabled pending independent approval.
+Status: TEST broker/private-backend authority map, updated 13 August 2026 through mixed-version credential-winner reconstruction, durable refresh security-event replay, account-session invalidation concurrency closure, semantic pre-enrichment replay, trigger-key-independent finalisation completion, exact PAPER claim/backoff recovery and the typed timesheet-detail action contract. Candidate features remain disabled pending independent approval.
 
 ## Canonical owner graph
 
@@ -153,3 +153,10 @@ It must not own rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN,
 - The reservation and completed outcome are one durable `audit_events` receipt lifecycle. No Candidate business table or public Candidate RPC is added.
 - `SELECT_PHONE_APPROVAL` returns the database winner's internal token hash/version to the private backend. The backend reconstructs and verifies that winner after the RPC, discards every losing local proposal and strips the internal hash before any Candidate or public-broker response.
 - Refresh-token-reuse family revocation and `CANDIDATE_REFRESH_TOKEN_REUSE` are one atomic durable receipt. Exact and concurrent same-key security-event retries replay that negative result before the revoked predecessor session is re-evaluated.
+
+## 13 August 2026 account-session mutation authority
+
+- One private transaction-scoped advisory lock keyed by environment and Candidate account serialises session creation/rotation against family-wide and account-wide invalidation. It is taken after the receipt/key lock and before account/session row locks.
+- Refresh/reuse, existing-account reset, password change, revoke/lock/disable and login session creation all use the same boundary and revalidate mutable facts after acquiring it.
+- Locked postconditions prevent a refresh successor from escaping: reuse proves zero active/rotated family members; reset/password change prove the exact permitted active set; revoke/lock/disable prove zero active sessions; login proves the five-session cap.
+- Real two-transaction tests execute both orders on PostgreSQL 17.6 and 18.1. The authority adds no Candidate business table, public Candidate RPC, frontend contract or financial/Banking Pay/Policy X behaviour.

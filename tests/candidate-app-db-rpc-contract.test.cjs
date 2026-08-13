@@ -90,7 +90,7 @@ test('the installable Candidate App SQL contains only one latest definition of e
   const installableSql = `${all}\n${replacements.generatedOffice}\n${replacements.generatedOther}`;
   const names = [...installableSql.matchAll(/^create(?: or replace)? function\s+((?:public|private)\.[a-z0-9_]+)\s*\(/gmi)]
     .map((match) => match[1].toLowerCase());
-  assert.equal(names.length, 104, 'the latest-only payload must contain the closed 104-definition function inventory');
+  assert.equal(names.length, 105, 'the latest-only payload must contain the closed 105-definition function inventory');
   const duplicates = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))].sort();
   assert.deepEqual(duplicates, []);
 });
@@ -172,6 +172,18 @@ test('refresh-token-reuse revocation and its negative response share one durable
     auth,
     /v_session\.status='ROTATED'[\s\S]*v_response:=jsonb_build_object\([\s\S]*CANDIDATE_REFRESH_TOKEN_REUSE[\s\S]*revoke_reason='REFRESH_TOKEN_REUSE'[\s\S]*_candidate_auth_mutation_receipt_v1\([\s\S]*return v_response/i
   );
+});
+
+test('account session creation rotation and invalidation share one transaction lock authority', () => {
+  const auth = definition(sql.auth, 'candidate_auth_account_transition_v1');
+  const lock = privateDefinition(sql.auth, '_candidate_auth_account_session_lock_v1');
+  assert.match(lock, /pg_catalog\.pg_advisory_xact_lock\(pg_catalog\.hashtextextended\(/i);
+  assert.match(lock, /CANDIDATE_AUTH_ACCOUNT_SESSION_V1/i);
+  assert.match(sql.auth, /revoke all on function private\._candidate_auth_account_session_lock_v1\(text,uuid\) from public,anon,authenticated,service_role/i);
+  assert.match(auth, /REFRESH_SESSION[\s\S]*_candidate_auth_account_session_lock_v1\([\s\S]*candidate_app_accounts[\s\S]*for update[\s\S]*candidate_app_sessions[\s\S]*for update/i);
+  assert.match(auth, /REFRESH_TOKEN_REUSE[\s\S]*status in \('ACTIVE','ROTATED'\)[\s\S]*CANDIDATE_SESSION_INVALIDATION_INCOMPLETE/i);
+  assert.match(auth, /CHANGE_PASSWORD[\s\S]*_candidate_auth_account_session_lock_v1\([\s\S]*PASSWORD_CHANGED[\s\S]*CANDIDATE_SESSION_INVALIDATION_INCOMPLETE/i);
+  assert.match(auth, /REVOKE_SESSIONS[\s\S]*_candidate_auth_account_session_lock_v1\([\s\S]*LOCK','DISABLE[\s\S]*CANDIDATE_SESSION_INVALIDATION_INCOMPLETE/i);
 });
 
 test('exact-byte evidence has one digest authority and one active TIMESHEET constraint', () => {

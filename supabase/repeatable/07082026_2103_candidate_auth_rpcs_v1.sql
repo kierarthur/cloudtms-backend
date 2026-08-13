@@ -195,6 +195,35 @@ begin
 end;
 $function$;
 
+-- One short transaction-scoped serialization boundary for every Candidate
+-- session create/rotate/invalidate operation belonging to an account.  The
+-- caller must acquire its idempotency-key receipt lock first (where the action
+-- is idempotent), then this account lock before any account or session row
+-- lock.  This closes READ COMMITTED snapshot gaps without a new table or a
+-- session-level advisory lock that could outlive the transaction.
+create or replace function private._candidate_auth_account_session_lock_v1(
+  p_environment text,
+  p_account_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_environment text:=private._candidate_assert_environment(p_environment);
+begin
+  if p_account_id is null then
+    raise exception 'CANDIDATE_ACCOUNT_SESSION_LOCK_INVALID' using errcode='22023';
+  end if;
+
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+    'CANDIDATE_AUTH_ACCOUNT_SESSION_V1|'||v_environment||'|'||p_account_id::text,
+    13082026
+  ));
+end;
+$function$;
+
 create or replace function public.candidate_auth_account_transition_v1(
   p_action text,
   p_environment text,
@@ -245,6 +274,8 @@ declare
   v_receipt_metadata jsonb:='{}'::jsonb;
   v_receipt jsonb;
   v_response jsonb;
+  v_account_id uuid;
+  v_live_session_count integer;
 begin
   v_environment:=private._candidate_assert_environment(p_environment);
   perform private._candidate_require_feature_v1(v_environment,'candidate_account_registration');
@@ -418,10 +449,27 @@ begin
       v_device_hash:=decode(v_payload->>'device_id_hash_hex','hex');
     end if;
 
+    -- Resolve the stable account identity without a row lock, acquire the
+    -- shared account/session lock, then re-read the account authoritatively.
+    -- New-account activation has no pre-existing sessions to serialize; once
+    -- the row exists it acquires the same lock before creating its first one.
     select * into v_account from public.candidate_app_accounts
-    where environment=v_environment and email_normalized=v_email for update;
+    where environment=v_environment and email_normalized=v_email;
 
-    if not found then
+    if found then
+      v_account_id:=v_account.id;
+      perform private._candidate_auth_account_session_lock_v1(
+        v_environment,v_account_id
+      );
+      select * into v_account from public.candidate_app_accounts
+      where id=v_account_id for update;
+      if not found or v_account.environment<>v_environment
+         or v_account.email_normalized<>v_email then
+        raise exception 'CANDIDATE_ACCOUNT_NOT_ELIGIBLE' using errcode='28000';
+      end if;
+    end if;
+
+    if v_account.id is null then
       if v_challenge.purpose<>'ACTIVATE' then
         raise exception 'CANDIDATE_ACCOUNT_NOT_ELIGIBLE' using errcode='28000';
       end if;
@@ -434,6 +482,9 @@ begin
         (v_payload->>'password_scheme_version')::smallint,v_salt,v_digest,
         coalesce(v_payload->'password_params','{}'::jsonb),p_now_utc,0,null,p_now_utc,p_now_utc
       ) returning * into v_account;
+      perform private._candidate_auth_account_session_lock_v1(
+        v_environment,v_account.id
+      );
       v_audit_action:='CANDIDATE_ACCOUNT_ACTIVATED';
     else
       if v_account.status='DISABLED' then raise exception 'CANDIDATE_ACCOUNT_DISABLED' using errcode='28000'; end if;
@@ -462,6 +513,16 @@ begin
       0,p_now_utc,v_expires,v_absolute,p_now_utc,v_device_hash,
       nullif(btrim(v_payload->>'platform'),''),p_now_utc,p_now_utc
     ) returning * into v_new_session;
+    select count(*) into v_live_session_count
+    from public.candidate_app_sessions
+    where account_id=v_account.id and status='ACTIVE';
+    if v_live_session_count<>1 or not exists(
+      select 1 from public.candidate_app_sessions
+      where id=v_new_session.id and account_id=v_account.id and status='ACTIVE'
+    ) then
+      raise exception 'CANDIDATE_SESSION_INVALIDATION_INCOMPLETE'
+        using errcode='40001';
+    end if;
     perform private._candidate_audit_v1('candidate_app_account',v_account.id::text,v_audit_action,null,
       jsonb_build_object('status',v_account.status,'session_version',v_account.session_version,
         'session_id',v_new_session.id,'selected_candidate_id',v_new_session.selected_candidate_id),
@@ -489,10 +550,20 @@ begin
   end if;
 
   if p_account_id is not null then
-    select * into v_account from public.candidate_app_accounts where id=p_account_id for update;
+    select * into v_account from public.candidate_app_accounts where id=p_account_id;
   elsif v_email<>'' then
     select * into v_account from public.candidate_app_accounts
-    where environment=v_environment and email_normalized=v_email for update;
+    where environment=v_environment and email_normalized=v_email;
+  end if;
+  if v_account.id is not null and v_action in (
+    'LOGIN_FAILURE','LOGIN_SUCCESS','REVOKE_SESSIONS','LOCK','DISABLE'
+  ) then
+    v_account_id:=v_account.id;
+    perform private._candidate_auth_account_session_lock_v1(
+      v_environment,v_account_id
+    );
+    select * into v_account from public.candidate_app_accounts
+    where id=v_account_id for update;
   end if;
 
   if v_action='LOGIN_FAILURE' then
@@ -576,6 +647,13 @@ begin
     update public.candidate_app_sessions s set status='REVOKED',revoked_at_utc=p_now_utc,
       revoke_reason='CONCURRENT_SESSION_LIMIT',updated_at_utc=p_now_utc
     from ranked r where s.id=r.id and r.rn>5;
+    select count(*) into v_live_session_count
+    from public.candidate_app_sessions
+    where account_id=v_account.id and status='ACTIVE';
+    if v_live_session_count<1 or v_live_session_count>5 then
+      raise exception 'CANDIDATE_SESSION_LIMIT_POSTCONDITION_FAILED'
+        using errcode='40001';
+    end if;
 
     update public.candidate_app_accounts set status='ACTIVE',failed_login_count=0,locked_until_utc=null,
       last_login_at_utc=p_now_utc,updated_at_utc=p_now_utc where id=v_account.id returning * into v_account;
@@ -601,7 +679,26 @@ begin
   end if;
 
   if v_action='REFRESH_SESSION' then
-    select * into v_session from public.candidate_app_sessions where id=p_session_id for update;
+    -- The first read discovers only the stable account identity.  It is not
+    -- authoritative for session state.  Acquire the account lock, lock the
+    -- account row, and only then re-read/lock the session.
+    select s.account_id into v_account_id
+    from public.candidate_app_sessions s
+    where s.id=p_session_id and s.environment=v_environment;
+    if v_account_id is null then
+      raise exception 'CANDIDATE_SESSION_INVALID' using errcode='28000';
+    end if;
+    perform private._candidate_auth_account_session_lock_v1(
+      v_environment,v_account_id
+    );
+    select * into v_account from public.candidate_app_accounts
+    where id=v_account_id for update;
+    if not found or v_account.environment<>v_environment
+       or v_account.status<>'ACTIVE' then
+      raise exception 'CANDIDATE_ACCOUNT_INACTIVE' using errcode='28000';
+    end if;
+    select * into v_session from public.candidate_app_sessions
+    where id=p_session_id and account_id=v_account_id for update;
     if not found or v_session.environment<>v_environment then raise exception 'CANDIDATE_SESSION_INVALID' using errcode='28000'; end if;
     if coalesce(v_payload->>'presented_refresh_token_hash_hex','') !~ '^[0-9a-fA-F]{64}$'
        or coalesce(v_payload->>'new_refresh_token_hash_hex','') !~ '^[0-9a-fA-F]{64}$'
@@ -621,6 +718,14 @@ begin
       update public.candidate_app_sessions set status='REVOKED',revoked_at_utc=p_now_utc,
         revoke_reason='REFRESH_TOKEN_REUSE',updated_at_utc=p_now_utc
       where token_family_id=v_session.token_family_id and status in ('ACTIVE','ROTATED');
+      if exists(
+        select 1 from public.candidate_app_sessions
+        where token_family_id=v_session.token_family_id
+          and status in ('ACTIVE','ROTATED')
+      ) then
+        raise exception 'CANDIDATE_SESSION_INVALIDATION_INCOMPLETE'
+          using errcode='40001';
+      end if;
       perform private._candidate_auth_mutation_receipt_v1(
         v_environment,p_idempotency_key,v_request_sha256,v_action,v_response,
         jsonb_build_object('request_key_version',v_request_key_version),p_now_utc
@@ -651,6 +756,16 @@ begin
     ) returning * into v_new_session;
     update public.candidate_app_sessions set status='ROTATED',replaced_by_session_id=v_new_session_id,
       last_used_at_utc=p_now_utc,updated_at_utc=p_now_utc where id=v_session.id;
+    select count(*) into v_live_session_count
+    from public.candidate_app_sessions
+    where token_family_id=v_session.token_family_id and status='ACTIVE';
+    if v_live_session_count<>1 or not exists(
+      select 1 from public.candidate_app_sessions
+      where id=v_new_session.id and status='ACTIVE'
+    ) then
+      raise exception 'CANDIDATE_SESSION_ROTATION_POSTCONDITION_FAILED'
+        using errcode='40001';
+    end if;
     v_response:=jsonb_build_object('ok',true,'session_id',v_new_session.id,'rotation',v_new_session.rotation,
       'issued_at_utc',v_new_session.issued_at_utc,
       'expires_at_utc',v_new_session.expires_at_utc,'absolute_expires_at_utc',v_new_session.absolute_expires_at_utc,
@@ -671,9 +786,23 @@ begin
     'LOGOUT','SELECT_TEST_CANDIDATE','SET_NOTIFICATION_PREFERENCES',
     'REGISTER_PUSH_TOKEN','CHANGE_PASSWORD','MARK_NOTIFICATION_READ'
   ) then
+    select s.account_id into v_account_id
+    from public.candidate_app_sessions s
+    where s.id=p_session_id and s.environment=v_environment;
+    if v_account_id is null then
+      raise exception 'CANDIDATE_SESSION_INVALID' using errcode='28000';
+    end if;
+    perform private._candidate_auth_account_session_lock_v1(
+      v_environment,v_account_id
+    );
+    select * into v_account from public.candidate_app_accounts
+    where id=v_account_id for update;
+    if not found or v_account.environment<>v_environment then
+      raise exception 'CANDIDATE_ACCOUNT_INACTIVE' using errcode='28000';
+    end if;
     v_context:=private._candidate_session_context_v1(p_session_id,v_environment,null,p_now_utc,true);
-    select * into v_session from public.candidate_app_sessions where id=p_session_id;
-    select * into v_account from public.candidate_app_accounts where id=v_session.account_id for update;
+    select * into v_session from public.candidate_app_sessions
+    where id=p_session_id and account_id=v_account_id;
   end if;
 
   if v_action='LOGOUT' then
@@ -723,6 +852,16 @@ begin
     update public.candidate_app_sessions set status='REVOKED',revoked_at_utc=p_now_utc,
       revoke_reason='PASSWORD_CHANGED',updated_at_utc=p_now_utc
     where account_id=v_account.id and status='ACTIVE' and id<>v_session.id;
+    select count(*) into v_live_session_count
+    from public.candidate_app_sessions
+    where account_id=v_account.id and status='ACTIVE';
+    if v_live_session_count<>1 or not exists(
+      select 1 from public.candidate_app_sessions
+      where id=v_session.id and account_id=v_account.id and status='ACTIVE'
+    ) then
+      raise exception 'CANDIDATE_SESSION_INVALIDATION_INCOMPLETE'
+        using errcode='40001';
+    end if;
     v_response:=jsonb_build_object('ok',true,'account_id',v_account.id,'session_version',v_account.session_version);
   elsif v_action='MARK_NOTIFICATION_READ' then
     if coalesce(v_payload->>'notification_id','') !~ '^[0-9a-fA-F-]{36}$' then
@@ -763,6 +902,13 @@ begin
     update public.candidate_app_sessions set status='REVOKED',revoked_at_utc=p_now_utc,
       revoke_reason=coalesce(nullif(btrim(v_payload->>'reason'),''),'ACCOUNT_SESSION_REVOKE'),updated_at_utc=p_now_utc
     where account_id=v_account.id and status='ACTIVE';
+    if exists(
+      select 1 from public.candidate_app_sessions
+      where account_id=v_account.id and status='ACTIVE'
+    ) then
+      raise exception 'CANDIDATE_SESSION_INVALIDATION_INCOMPLETE'
+        using errcode='40001';
+    end if;
     update public.candidate_app_accounts set session_version=session_version+1,updated_at_utc=p_now_utc
     where id=v_account.id returning * into v_account;
     return jsonb_build_object('ok',true,'account_id',v_account.id,'session_version',v_account.session_version);
@@ -773,6 +919,13 @@ begin
       session_version=session_version+1,updated_at_utc=p_now_utc where id=v_account.id returning * into v_account;
     update public.candidate_app_sessions set status='REVOKED',revoked_at_utc=p_now_utc,
       revoke_reason=v_action,updated_at_utc=p_now_utc where account_id=v_account.id and status='ACTIVE';
+    if exists(
+      select 1 from public.candidate_app_sessions
+      where account_id=v_account.id and status='ACTIVE'
+    ) then
+      raise exception 'CANDIDATE_SESSION_INVALIDATION_INCOMPLETE'
+        using errcode='40001';
+    end if;
     return jsonb_build_object('ok',true,'account_id',v_account.id,'status',v_account.status);
   end if;
 
@@ -1043,8 +1196,11 @@ comment on function public.candidate_auth_challenge_transition_v1(text,text,text
   'Service-role-only single-use activation/reset/recovery challenge authority. Durable receipts freeze resend throttles and the exact challenge-token issuing key version.';
 comment on function private._candidate_auth_mutation_receipt_v1(text,text,text,text,jsonb,jsonb,timestamptz) is
   'Private durable auth/account mutation idempotency receipt. Stores request digests and non-secret reconstruction metadata only.';
+comment on function private._candidate_auth_account_session_lock_v1(text,uuid) is
+  'Private transaction-scoped account session serialization boundary. Receipt/key lock first, then this lock, then account/session rows.';
 
 revoke all on function private._candidate_auth_mutation_receipt_v1(text,text,text,text,jsonb,jsonb,timestamptz) from public,anon,authenticated,service_role;
+revoke all on function private._candidate_auth_account_session_lock_v1(text,uuid) from public,anon,authenticated,service_role;
 revoke all on function public.candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamptz) from public,anon,authenticated;
 revoke all on function public.candidate_auth_challenge_transition_v1(text,text,text,text,uuid,bytea,text,timestamptz,integer) from public,anon,authenticated;
 grant execute on function public.candidate_auth_account_transition_v1(text,text,uuid,text,uuid,uuid,jsonb,text,timestamptz) to service_role;
