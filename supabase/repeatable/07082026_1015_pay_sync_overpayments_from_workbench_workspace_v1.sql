@@ -1456,6 +1456,26 @@ begin
         OR NULLIF(BTRIM(raw.physical_bucket_key),'') IS NULL);
 
     INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 21,'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING',raw.timesheet_id,
+      raw.economic_key_type,raw.economic_key_value,raw.physical_bucket_key,
+      jsonb_build_object('materialization_ordinal',raw.materialization_ordinal,
+        'source_pay_method',raw.source_pay_method)
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(COALESCE(raw.projection_status,''))<>'FAILED'
+      AND (NULLIF(BTRIM(raw.source_pay_method),'') IS NULL
+        OR UPPER(BTRIM(raw.source_pay_method)) NOT IN ('PAYE','UMBRELLA'));
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 22,'RATE_AUTHORITY_TARGET_PAY_METHOD_MISSING',raw.timesheet_id,
+      raw.economic_key_type,raw.economic_key_value,raw.physical_bucket_key,
+      jsonb_build_object('materialization_ordinal',raw.materialization_ordinal,
+        'target_pay_method',raw.target_pay_method)
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(COALESCE(raw.projection_status,''))<>'FAILED'
+      AND (NULLIF(BTRIM(raw.target_pay_method),'') IS NULL
+        OR UPPER(BTRIM(raw.target_pay_method)) NOT IN ('PAYE','UMBRELLA'));
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
     SELECT 30,'RATE_AUTHORITY_DUPLICATE_PHYSICAL_BUCKET',duplicate.timesheet_id,
       duplicate.economic_key_type,duplicate.economic_key_value,
       duplicate.physical_bucket_key,
@@ -1487,14 +1507,17 @@ begin
 
     INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
     SELECT 45,'RATE_AUTHORITY_MULTIPLE_RATES_UNSUPPORTED',raw.timesheet_id,
-      MIN(raw.economic_key_type),MIN(raw.economic_key_value),NULL::text,
-      jsonb_build_object('bucket_code',raw.bucket_code,
+      raw.economic_key_type,raw.economic_key_value,MIN(raw.physical_bucket_key),
+      jsonb_build_object('component_kind',raw.component_kind,
+        'component_member_identity',raw.component_member_identity,
+        'bucket_code',raw.bucket_code,
         'source_rate_count',count(DISTINCT ROUND(raw.source_rate,6)),
         'source_charge_rate_count',count(DISTINCT ROUND(raw.source_charge_rate,6)))
     FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
     WHERE UPPER(COALESCE(raw.projection_status,'')) IN ('READY','FIXED')
       AND raw.component_kind IN ('WORKED_TIME','ADDITIONAL_UNIT')
-    GROUP BY raw.timesheet_id,raw.bucket_code
+    GROUP BY raw.timesheet_id,raw.component_kind,raw.component_member_identity,
+      raw.economic_key_type,raw.economic_key_value,raw.bucket_code
     HAVING count(DISTINCT ROUND(raw.source_rate,6))>1
        OR count(DISTINCT ROUND(raw.source_charge_rate,6))>1;
 

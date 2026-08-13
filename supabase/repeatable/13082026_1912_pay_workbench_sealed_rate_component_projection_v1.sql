@@ -252,13 +252,189 @@ AS $function$
         END) AS validated_failure
     FROM bucket_canonical bucket
     JOIN occurrence_validated occurrence USING(natural_key)
+  ), physical_bucket_cardinality AS MATERIALIZED (
+    SELECT bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)) AS economic_key_type,
+      BTRIM(bucket.economic_key_value) AS economic_key_value,
+      COUNT(DISTINCT bucket.parsed_physical_bucket_key)::integer AS physical_bucket_count
+    FROM bucket_validated bucket
+    WHERE bucket.validated_failure IS NULL
+    GROUP BY bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)),
+      BTRIM(bucket.economic_key_value)
+  ), sealed_physical_amount_fact_base AS MATERIALIZED (
+    SELECT fact.fact_family||':'||fact.natural_key AS fact_identity,
+      CASE WHEN fact.fact_family='RESERVATION_COMPONENT' THEN 'RESERVATION'
+        ELSE 'BASELINE' END AS authority_kind,
+      fact.timesheet_id,UPPER(BTRIM(fact.economic_key_type)) AS economic_key_type,
+      BTRIM(fact.economic_key_value) AS economic_key_value,
+      ROUND(CASE WHEN fact.fact_family='RESERVATION_COMPONENT'
+        THEN COALESCE(fact.reserved_source_amount,0)
+        ELSE COALESCE(fact.amount_ex_vat,0) END,2) AS authority_amount_ex_vat,
+      basis.source_basis_json,
+      NULLIF(BTRIM(COALESCE(
+        basis.source_basis_json->>'physical_bucket_key',
+        fact.source_payload_json#>>'{pay_batch_item,frozen_component_snapshot_json,physical_bucket_key}',
+        fact.source_payload_json#>>'{frozen_component_snapshot_json,physical_bucket_key}'
+      )), '') AS direct_physical_bucket_key,
+      NULLIF(BTRIM(COALESCE(
+        basis.source_basis_json->>'component_member_identity',
+        fact.source_payload_json#>>'{pay_batch_item,frozen_component_snapshot_json,component_member_identity}',
+        fact.source_payload_json#>>'{frozen_component_snapshot_json,component_member_identity}'
+      )), '') AS direct_component_member_identity,
+      NULLIF(BTRIM(COALESCE(
+        basis.source_basis_json->>'source_family_key',
+        basis.source_basis_json->>'represented_source_family_key'
+      )), '') AS direct_source_family_key
+    FROM private.banking_pay_workbench_economic_build_facts fact
+    JOIN build_authority build ON build.id=fact.build_id
+    CROSS JOIN LATERAL (
+      SELECT COALESCE(
+        NULLIF(CASE WHEN jsonb_typeof(
+          fact.source_payload_json#>'{pay_batch_item,frozen_source_basis_json}')='object'
+          THEN fact.source_payload_json#>'{pay_batch_item,frozen_source_basis_json}'
+          ELSE '{}'::jsonb END,'{}'::jsonb),
+        NULLIF(CASE WHEN jsonb_typeof(
+          fact.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,source_basis_json}')='object'
+          THEN fact.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,source_basis_json}'
+          ELSE '{}'::jsonb END,'{}'::jsonb),
+        NULLIF(CASE WHEN jsonb_typeof(fact.source_payload_json->'frozen_source_basis_json')='object'
+          THEN fact.source_payload_json->'frozen_source_basis_json'
+          ELSE '{}'::jsonb END,'{}'::jsonb),
+        NULLIF(CASE WHEN jsonb_typeof(
+          fact.source_payload_json#>'{frozen_component_snapshot_json,source_basis_json}')='object'
+          THEN fact.source_payload_json#>'{frozen_component_snapshot_json,source_basis_json}'
+          ELSE '{}'::jsonb END,'{}'::jsonb),
+        '{}'::jsonb
+      ) AS source_basis_json
+    ) basis
+    WHERE fact.fact_family IN ('FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK',
+        'RESERVATION_COMPONENT')
+      AND fact.candidate_id=p_candidate_id AND fact.timesheet_id IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(fact.economic_key_type,'')),'') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(fact.economic_key_value,'')),'') IS NOT NULL
+      AND (p_timesheet_ids IS NULL OR fact.timesheet_id=ANY(p_timesheet_ids))
+  ), sealed_physical_amount_facts AS MATERIALIZED (
+    SELECT fact.*,
+      COALESCE(fact.direct_source_family_key,'timesheet:'||fact.timesheet_id::text)
+        AS expected_source_family_key,
+      COALESCE(fact.direct_component_member_identity,
+        CASE
+          WHEN fact.economic_key_type IN ('TS_DAY','TS_TOTAL') THEN COALESCE(
+            NULLIF(BTRIM(fact.source_basis_json->>'segment_stable_key'),''),
+            NULLIF(BTRIM(fact.source_basis_json->>'segment_id'),''),
+            NULLIF(BTRIM(fact.source_basis_json->>'segment_key'),''),
+            NULLIF(BTRIM(COALESCE(fact.source_basis_json->>'work_date',
+              fact.source_basis_json->>'date')),''),
+            NULLIF(BTRIM(fact.source_basis_json->>'ref_num'),'')
+          )
+          WHEN fact.economic_key_type='ADDITIONAL_CODE'
+            THEN 'additional:'||UPPER(fact.economic_key_value)
+          WHEN fact.economic_key_type='EXPENSE_CODE'
+            THEN 'expense:'||UPPER(fact.economic_key_value)
+          WHEN fact.economic_key_type='ADJUSTMENT_CODE'
+            THEN 'adjustment:'||fact.economic_key_value
+        END
+      ) AS expected_component_member_identity,
+      UPPER(COALESCE(
+        NULLIF(BTRIM(fact.source_basis_json->>'bucket_code'),''),
+        CASE WHEN UPPER(BTRIM(COALESCE(fact.source_basis_json->>'band','')))
+          IN ('DAY','NIGHT','SAT','SUN','BH')
+          THEN UPPER(BTRIM(fact.source_basis_json->>'band')) END,
+        CASE fact.economic_key_type
+          WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
+          WHEN 'EXPENSE_CODE' THEN 'FIXED'
+          WHEN 'ADJUSTMENT_CODE' THEN 'FIXED'
+        END
+      )) AS expected_bucket_code
+    FROM sealed_physical_amount_fact_base fact
+  ), sealed_physical_amount_matches AS MATERIALIZED (
+    SELECT fact.fact_identity,fact.authority_kind,fact.timesheet_id,
+      fact.economic_key_type,fact.economic_key_value,fact.authority_amount_ex_vat,
+      bucket.parsed_physical_bucket_key AS matched_physical_bucket_key,
+      CASE
+        WHEN fact.direct_physical_bucket_key IS NOT NULL THEN 'PHYSICAL_BUCKET_KEY'
+        WHEN fact.expected_component_member_identity IS NOT NULL
+          AND fact.expected_bucket_code IS NOT NULL THEN 'STRUCTURAL_IDENTITY'
+        WHEN cardinality.physical_bucket_count=1 THEN 'SOLE_BUCKET'
+      END AS match_authority
+    FROM sealed_physical_amount_facts fact
+    JOIN physical_bucket_cardinality cardinality
+      USING(timesheet_id,economic_key_type,economic_key_value)
+    LEFT JOIN bucket_validated bucket
+      ON bucket.validated_failure IS NULL
+     AND bucket.timesheet_id=fact.timesheet_id
+     AND UPPER(BTRIM(bucket.economic_key_type))=fact.economic_key_type
+     AND BTRIM(bucket.economic_key_value)=fact.economic_key_value
+     AND (
+       (fact.direct_physical_bucket_key IS NOT NULL
+         AND bucket.parsed_physical_bucket_key=fact.direct_physical_bucket_key)
+       OR (fact.direct_physical_bucket_key IS NULL
+         AND fact.expected_component_member_identity IS NOT NULL
+         AND fact.expected_bucket_code IS NOT NULL
+         AND bucket.parsed_component_member_identity=fact.expected_component_member_identity
+         AND bucket.parsed_bucket_code=fact.expected_bucket_code
+         AND bucket.rate_authority#>>'{economic,source_family_key}'=
+           fact.expected_source_family_key)
+       OR (fact.direct_physical_bucket_key IS NULL
+         AND (fact.expected_component_member_identity IS NULL
+           OR fact.expected_bucket_code IS NULL)
+         AND cardinality.physical_bucket_count=1)
+     )
+  ), sealed_physical_amount_match_counts AS MATERIALIZED (
+    SELECT match.fact_identity,match.authority_kind,match.timesheet_id,
+      match.economic_key_type,match.economic_key_value,match.authority_amount_ex_vat,
+      COUNT(DISTINCT match.matched_physical_bucket_key) FILTER(
+        WHERE match.matched_physical_bucket_key IS NOT NULL)::integer AS matched_bucket_count,
+      MIN(match.matched_physical_bucket_key) FILTER(
+        WHERE match.matched_physical_bucket_key IS NOT NULL) AS matched_physical_bucket_key,
+      MIN(match.match_authority) FILTER(
+        WHERE match.matched_physical_bucket_key IS NOT NULL) AS match_authority
+    FROM sealed_physical_amount_matches match
+    GROUP BY match.fact_identity,match.authority_kind,match.timesheet_id,
+      match.economic_key_type,match.economic_key_value,match.authority_amount_ex_vat
+  ), sealed_physical_amount_attribution AS MATERIALIZED (
+    SELECT match.timesheet_id,match.economic_key_type,match.economic_key_value,
+      match.matched_physical_bucket_key,
+      ROUND(COALESCE(SUM(match.authority_amount_ex_vat) FILTER(
+        WHERE match.authority_kind='BASELINE'),0),2) AS baseline_ex_vat,
+      ROUND(COALESCE(SUM(match.authority_amount_ex_vat) FILTER(
+        WHERE match.authority_kind='RESERVATION'),0),2) AS reserved_ex_vat,
+      COALESCE(jsonb_agg(DISTINCT match.match_authority ORDER BY match.match_authority) FILTER(
+        WHERE match.match_authority IS NOT NULL),'[]'::jsonb) AS match_authorities
+    FROM sealed_physical_amount_match_counts match
+    WHERE match.matched_bucket_count=1
+    GROUP BY match.timesheet_id,match.economic_key_type,match.economic_key_value,
+      match.matched_physical_bucket_key
+  ), sealed_physical_amount_ambiguity AS MATERIALIZED (
+    SELECT match.timesheet_id,match.economic_key_type,match.economic_key_value,
+      BOOL_OR(match.authority_kind='BASELINE'
+        AND ABS(match.authority_amount_ex_vat)>0.005
+        AND match.matched_bucket_count<>1) AS baseline_ambiguous,
+      BOOL_OR(match.authority_kind='RESERVATION'
+        AND ABS(match.authority_amount_ex_vat)>0.005
+        AND match.matched_bucket_count<>1) AS reservation_ambiguous
+    FROM sealed_physical_amount_match_counts match
+    GROUP BY match.timesheet_id,match.economic_key_type,match.economic_key_value
+  ), bucket_attributed AS MATERIALIZED (
+    SELECT bucket.*,
+      ROUND(COALESCE(attribution.baseline_ex_vat,0),2) AS attributed_baseline_ex_vat,
+      ROUND(COALESCE(attribution.reserved_ex_vat,0),2) AS attributed_reserved_ex_vat,
+      ROUND(bucket.parsed_source_pay_ex_vat
+        - COALESCE(attribution.baseline_ex_vat,0)
+        - COALESCE(attribution.reserved_ex_vat,0),2) AS attributed_outstanding_ex_vat,
+      COALESCE(attribution.match_authorities,'[]'::jsonb) AS attribution_authorities
+    FROM bucket_validated bucket
+    LEFT JOIN sealed_physical_amount_attribution attribution
+      ON attribution.timesheet_id=bucket.timesheet_id
+     AND attribution.economic_key_type=UPPER(BTRIM(bucket.economic_key_type))
+     AND attribution.economic_key_value=BTRIM(bucket.economic_key_value)
+     AND attribution.matched_physical_bucket_key=bucket.parsed_physical_bucket_key
   ), economic_physical_totals AS MATERIALIZED (
     SELECT bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)) AS economic_key_type,
       BTRIM(bucket.economic_key_value) AS economic_key_value,
       ROUND(COALESCE(SUM(bucket.parsed_source_pay_ex_vat),0),2) AS truth_ex_vat,
-      ROUND(COALESCE(SUM(bucket.parsed_baseline_ex_vat),0),2) AS baseline_ex_vat,
-      ROUND(COALESCE(SUM(bucket.parsed_reserved_ex_vat),0),2) AS reserved_ex_vat
-    FROM bucket_validated bucket
+      ROUND(COALESCE(SUM(bucket.attributed_baseline_ex_vat),0),2) AS baseline_ex_vat,
+      ROUND(COALESCE(SUM(bucket.attributed_reserved_ex_vat),0),2) AS reserved_ex_vat
+    FROM bucket_attributed bucket
     WHERE bucket.validated_failure IS NULL
     GROUP BY bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)),
       BTRIM(bucket.economic_key_value)
@@ -267,16 +443,22 @@ AS $function$
       CASE
         WHEN actual.truth_ex_vat IS NULL OR actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
           THEN 'RATE_AUTHORITY_PARENT_PAY_MISMATCH'
-        WHEN actual.baseline_ex_vat IS DISTINCT FROM expected.baseline_ex_vat
+        WHEN COALESCE(ambiguity.baseline_ambiguous,false)
+          OR actual.baseline_ex_vat IS DISTINCT FROM expected.baseline_ex_vat
           THEN 'RATE_AUTHORITY_PHYSICAL_BASELINE_REQUIRED'
-        WHEN actual.reserved_ex_vat IS DISTINCT FROM expected.reserved_ex_vat
+        WHEN COALESCE(ambiguity.reservation_ambiguous,false)
+          OR actual.reserved_ex_vat IS DISTINCT FROM expected.reserved_ex_vat
           THEN 'RATE_AUTHORITY_PHYSICAL_RESERVATION_REQUIRED'
       END AS failure_code
     FROM economic_totals expected
     LEFT JOIN economic_physical_totals actual
       USING(timesheet_id,economic_key_type,economic_key_value)
+    LEFT JOIN sealed_physical_amount_ambiguity ambiguity
+      USING(timesheet_id,economic_key_type,economic_key_value)
     WHERE actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
+       OR COALESCE(ambiguity.baseline_ambiguous,false)
        OR actual.baseline_ex_vat IS DISTINCT FROM expected.baseline_ex_vat
+       OR COALESCE(ambiguity.reservation_ambiguous,false)
        OR actual.reserved_ex_vat IS DISTINCT FROM expected.reserved_ex_vat
   ), failed_occurrences AS (
     SELECT occurrence.build_id,occurrence.build_candidate_id AS candidate_id,
@@ -342,8 +524,8 @@ AS $function$
       bucket.parsed_bucket_code,bucket.parsed_bucket_sort_ordinal,
       bucket.parsed_physical_bucket_key,bucket.bucket_json->>'physical_bucket_digest',
       bucket.parsed_source_units,bucket.parsed_source_rate,bucket.parsed_source_charge_rate,
-      bucket.parsed_source_pay_ex_vat,bucket.parsed_baseline_ex_vat,
-      bucket.parsed_reserved_ex_vat,bucket.parsed_outstanding_ex_vat,
+      bucket.parsed_source_pay_ex_vat,bucket.attributed_baseline_ex_vat,
+      bucket.attributed_reserved_ex_vat,bucket.attributed_outstanding_ex_vat,
       bucket.parsed_source_charge_ex_vat,bucket.parsed_source_pay_method,
       bucket.parsed_target_pay_method,
       CASE WHEN COALESCE(bucket.rate_authority#>>'{target,umbrella_id}','')
@@ -368,8 +550,13 @@ AS $function$
       jsonb_build_object('source_key',bucket.source_payload_json->>'source_key',
         'source_ordinal',bucket.source_payload_json#>'{rate_authority,lineage,source_ordinal}',
         'source_payload',bucket.source_payload_json,
-        'physical_bucket',bucket.bucket_json) AS evidence_json
-    FROM bucket_validated bucket
+        'physical_bucket',bucket.bucket_json,
+        'sealed_physical_attribution',jsonb_build_object(
+          'baseline_ex_vat',bucket.attributed_baseline_ex_vat,
+          'reserved_ex_vat',bucket.attributed_reserved_ex_vat,
+          'outstanding_ex_vat',bucket.attributed_outstanding_ex_vat,
+          'match_authorities',bucket.attribution_authorities)) AS evidence_json
+    FROM bucket_attributed bucket
     LEFT JOIN economic_failures economic
       ON economic.timesheet_id=bucket.timesheet_id
      AND economic.economic_key_type=UPPER(BTRIM(bucket.economic_key_type))

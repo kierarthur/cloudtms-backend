@@ -9,7 +9,7 @@
       "schema": "private",
       "name": "pay_sync_overpayments_from_workbench_workspace_v1",
       "identity_arguments": "p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]",
-      "definition_sha256": "eea3ea6321ebbce779283b7ad99dbb732ce8bb1808adf8f87e929f90a2c22229",
+      "definition_sha256": "ff25f84cebffa4c6cfe4df360f907e139d517e7d1c8c2e0c40ebe1997a63e953",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -287,7 +287,7 @@
       "schema": "private",
       "name": "pay_workbench_unit_economic_occurrence_page_v1",
       "identity_arguments": "p_build_id uuid, p_dependency_unit_key text, p_fact_family text, p_projected_timesheet_id uuid, p_last_source_key text, p_limit integer",
-      "definition_sha256": "0d6c4819f48b44c82845ff20c1692708693892e6e1a52e65957a6a7e0e89bece",
+      "definition_sha256": "cb18cd1961ce32158e7707b5bc146d99ee504fbaa16d514933d0bd502487de4c",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -309,7 +309,7 @@
       "schema": "private",
       "name": "pay_workbench_sealed_rate_component_projection_v1",
       "identity_arguments": "p_build_id uuid, p_candidate_id uuid, p_timesheet_ids uuid[]",
-      "definition_sha256": "ea13c330aefeef0b5642557d775c8af2fca6225f56a8cc8ae4c8db98c4d3ba96",
+      "definition_sha256": "7fddbe2596587bebf47edfb02852263bb61e2f64a27e4798171d1a8fe81cee0f",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

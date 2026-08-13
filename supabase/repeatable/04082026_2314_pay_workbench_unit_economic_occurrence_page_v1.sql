@@ -611,9 +611,12 @@ BEGIN
           'source_rate',keyed.source_rate,'source_charge_rate',keyed.source_charge_rate,
           'source_pay_ex_vat',keyed.source_pay_ex_vat,
           'source_charge_ex_vat',keyed.source_charge_ex_vat,
-          'baseline_source_pay_ex_vat',0::numeric,
-          'reserved_source_pay_ex_vat',0::numeric,
-          'outstanding_source_pay_ex_vat',keyed.source_pay_ex_vat,
+          -- Baseline and reservation are separate sealed finance authority.
+          -- They are attributed to this physical source only after all build
+          -- fact families have been persisted; do not invent a live zero here.
+          'baseline_source_pay_ex_vat',NULL::numeric,
+          'reserved_source_pay_ex_vat',NULL::numeric,
+          'outstanding_source_pay_ex_vat',NULL::numeric,
           'source_pay_method',input.source_pay_method,
           'target_pay_method',input.target_pay_method) AS physical_canonical_json
       FROM physical_keyed keyed JOIN rate_inputs input USING(source_key)
@@ -632,9 +635,11 @@ BEGIN
           WHEN input.current_financial_count<>1 THEN 'RATE_AUTHORITY_FINANCIAL_ROW_AMBIGUOUS'
           WHEN input.financial_timesheet_version IS DISTINCT FROM input.version
             THEN 'RATE_AUTHORITY_FINANCIAL_VERSION_MISMATCH'
-          WHEN input.source_pay_method NOT IN ('PAYE','UMBRELLA')
+          WHEN input.source_pay_method IS NULL
+            OR input.source_pay_method NOT IN ('PAYE','UMBRELLA')
             THEN 'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'
-          WHEN input.target_pay_method NOT IN ('PAYE','UMBRELLA')
+          WHEN input.target_pay_method IS NULL
+            OR input.target_pay_method NOT IN ('PAYE','UMBRELLA')
             THEN 'RATE_AUTHORITY_TARGET_PAY_METHOD_MISSING'
           WHEN input.target_pay_method='UMBRELLA' AND input.umbrella_id IS NULL
             THEN 'RATE_AUTHORITY_UMBRELLA_REQUIRED'
@@ -687,9 +692,9 @@ BEGIN
               'source_charge_rate',physical.source_charge_rate,
               'source_pay_ex_vat',physical.source_pay_ex_vat,
               'source_charge_ex_vat',physical.source_charge_ex_vat,
-              'baseline_source_pay_ex_vat',0::numeric,
-              'reserved_source_pay_ex_vat',0::numeric,
-              'outstanding_source_pay_ex_vat',physical.source_pay_ex_vat,
+              'baseline_source_pay_ex_vat',NULL::numeric,
+              'reserved_source_pay_ex_vat',NULL::numeric,
+              'outstanding_source_pay_ex_vat',NULL::numeric,
               'is_rate_bearing',physical.is_rate_bearing,
               'is_actionable_candidate',physical.is_rate_bearing
                 AND input.source_pay_method IS DISTINCT FROM input.target_pay_method,
@@ -790,8 +795,8 @@ BEGIN
             'component_kind',document.component_kind,
             'parent_source_pay_ex_vat',ROUND(document.amount_ex_vat,2),
             'parent_source_charge_ex_vat',ROUND(document.parent_source_charge_ex_vat,2),
-            'truth_ex_vat',ROUND(document.amount_ex_vat,2),'baseline_ex_vat',0::numeric,
-            'reserved_ex_vat',0::numeric,'outstanding_ex_vat',ROUND(document.amount_ex_vat,2),
+            'truth_ex_vat',ROUND(document.amount_ex_vat,2),'baseline_ex_vat',NULL::numeric,
+            'reserved_ex_vat',NULL::numeric,'outstanding_ex_vat',NULL::numeric,
             'physical_bucket_digest',document.physical_bucket_digest),
           'physical_buckets',document.physical_buckets,
           'lineage',jsonb_build_object(

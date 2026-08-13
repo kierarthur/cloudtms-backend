@@ -132,6 +132,34 @@ for (const required of [
 ]) {
   if (!jamesSerializer.includes(required)) problems.push(`serializer rate contract is missing: ${required}`);
 }
+if (!/WHEN input\.source_pay_method IS NULL\s+OR input\.source_pay_method NOT IN \('PAYE','UMBRELLA'\)/
+  .test(jamesSerializer)
+  || !/WHEN input\.target_pay_method IS NULL\s+OR input\.target_pay_method NOT IN \('PAYE','UMBRELLA'\)/
+    .test(jamesSerializer)) {
+  problems.push('serializer nullable pay-method failures are not typed before materialisation');
+}
+if (!jamesSerializer.includes('FROM jsonb_each(CASE')
+    || !jamesSerializer.includes("WHEN 'ADDITIONAL' THEN 'additional:'||UPPER")) {
+  problems.push('serializer does not preserve every arbitrary additional-rate identity');
+}
+for (const required of [
+  'sealed_physical_amount_facts', 'sealed_physical_amount_matches',
+  'PHYSICAL_BUCKET_KEY', 'STRUCTURAL_IDENTITY', 'SOLE_BUCKET',
+  'RATE_AUTHORITY_PHYSICAL_BASELINE_REQUIRED',
+  'RATE_AUTHORITY_PHYSICAL_RESERVATION_REQUIRED',
+]) {
+  if (!jamesHelper.includes(required)) {
+    problems.push(`sealed physical baseline/reservation attribution is missing: ${required}`);
+  }
+}
+if (!jamesSynchronizer.includes("SELECT 21,'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'")
+    || !jamesSynchronizer.includes("SELECT 22,'RATE_AUTHORITY_TARGET_PAY_METHOD_MISSING'")) {
+  problems.push('synchronizer nullable pay-method failures are not materialised before constraints');
+}
+if (!/GROUP BY raw\.timesheet_id,raw\.component_kind,raw\.component_member_identity,\s*raw\.economic_key_type,raw\.economic_key_value,raw\.bucket_code/
+  .test(jamesSynchronizer)) {
+  problems.push('multiple-rate fence does not use the full physical component identity');
+}
 if (/public\.(timesheets|timesheets_financials|candidates|umbrellas|settings_finance_windows)/i
   .test(jamesHelper)) {
   problems.push('sealed rate helper contains a live authority relation');
