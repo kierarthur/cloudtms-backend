@@ -248,6 +248,8 @@ declare
   v_observed_effect_digest text := md5('');
   v_effect_mismatch_detail jsonb := '{}'::jsonb;
   v_presentation_mismatch_detail jsonb := '{}'::jsonb;
+  v_rate_authority_failure_code text := NULL::text;
+  v_rate_authority_failure_detail jsonb := '[]'::jsonb;
   v_exception_detail text := NULL::text;
   v_exception_context text := NULL::text;
   v_effect_capture_mode boolean := lower(COALESCE(current_setting('cloudtms.pay_workbench_effect_capture_mode',true),''))='capture';
@@ -1403,6 +1405,223 @@ begin
               )::text;
     END IF;
   END IF;
+
+  IF COALESCE(v_authoritative_timesheet_scope,false) THEN
+    DROP TABLE IF EXISTS pg_temp.tmp_sync_sealed_rate_projection_raw;
+    DROP TABLE IF EXISTS pg_temp.tmp_sync_sealed_rate_projection_failures;
+    DROP TABLE IF EXISTS pg_temp.tmp_sync_sealed_rate_projection;
+
+    CREATE TEMP TABLE pg_temp.tmp_sync_sealed_rate_projection_raw
+    ON COMMIT DROP AS
+    SELECT row_number() OVER(ORDER BY helper_row.timesheet_id NULLS FIRST,
+        helper_row.economic_key_type NULLS FIRST,helper_row.economic_key_value NULLS FIRST,
+        helper_row.physical_bucket_key NULLS FIRST,helper_row.failure_code NULLS FIRST,
+        helper_row.evidence_json::text)::bigint AS materialization_ordinal,
+      helper_row.*
+    FROM private.pay_workbench_sealed_rate_component_projection_v1(
+      p_build_id,v_bounded_build.candidate_id,
+      CASE WHEN p_force_include_timesheet_ids IS NULL THEN NULL::uuid[]
+        ELSE p_force_include_timesheet_ids END
+    ) helper_row;
+
+    CREATE TEMP TABLE pg_temp.tmp_sync_sealed_rate_projection_failures(
+      failure_rank integer NOT NULL,failure_code text NOT NULL,timesheet_id uuid,
+      economic_key_type text,economic_key_value text,physical_bucket_key text,
+      detail_json jsonb NOT NULL
+    ) ON COMMIT DROP;
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 10,COALESCE(NULLIF(BTRIM(raw.failure_code),''),
+        'RATE_AUTHORITY_FAILED_ROW_CODE_MISSING'),raw.timesheet_id,
+      raw.economic_key_type,raw.economic_key_value,raw.physical_bucket_key,
+      jsonb_build_object('materialization_ordinal',raw.materialization_ordinal,
+        'projection_status',raw.projection_status,'failure_code',raw.failure_code)
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(COALESCE(raw.projection_status,''))='FAILED';
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 20,'RATE_AUTHORITY_PHYSICAL_IDENTITY_INCOMPLETE',raw.timesheet_id,
+      raw.economic_key_type,raw.economic_key_value,raw.physical_bucket_key,
+      jsonb_build_object('materialization_ordinal',raw.materialization_ordinal,
+        'source_family_key',raw.source_family_key,'component_kind',raw.component_kind,
+        'component_member_identity',raw.component_member_identity,'bucket_code',raw.bucket_code)
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(COALESCE(raw.projection_status,''))<>'FAILED'
+      AND (raw.timesheet_id IS NULL OR NULLIF(BTRIM(raw.economic_key_type),'') IS NULL
+        OR NULLIF(BTRIM(raw.economic_key_value),'') IS NULL
+        OR NULLIF(BTRIM(raw.source_family_key),'') IS NULL
+        OR NULLIF(BTRIM(raw.component_kind),'') IS NULL
+        OR NULLIF(BTRIM(raw.component_member_identity),'') IS NULL
+        OR NULLIF(BTRIM(raw.bucket_code),'') IS NULL
+        OR NULLIF(BTRIM(raw.physical_bucket_key),'') IS NULL);
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 21,'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING',raw.timesheet_id,
+      raw.economic_key_type,raw.economic_key_value,raw.physical_bucket_key,
+      jsonb_build_object('materialization_ordinal',raw.materialization_ordinal,
+        'source_pay_method',raw.source_pay_method)
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(COALESCE(raw.projection_status,''))<>'FAILED'
+      AND (NULLIF(BTRIM(raw.source_pay_method),'') IS NULL
+        OR UPPER(BTRIM(raw.source_pay_method)) NOT IN ('PAYE','UMBRELLA'));
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 22,'RATE_AUTHORITY_TARGET_PAY_METHOD_MISSING',raw.timesheet_id,
+      raw.economic_key_type,raw.economic_key_value,raw.physical_bucket_key,
+      jsonb_build_object('materialization_ordinal',raw.materialization_ordinal,
+        'target_pay_method',raw.target_pay_method)
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(COALESCE(raw.projection_status,''))<>'FAILED'
+      AND (NULLIF(BTRIM(raw.target_pay_method),'') IS NULL
+        OR UPPER(BTRIM(raw.target_pay_method)) NOT IN ('PAYE','UMBRELLA'));
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 30,'RATE_AUTHORITY_DUPLICATE_PHYSICAL_BUCKET',duplicate.timesheet_id,
+      duplicate.economic_key_type,duplicate.economic_key_value,
+      duplicate.physical_bucket_key,
+      jsonb_build_object('duplicate_count',duplicate.duplicate_count)
+    FROM (
+      SELECT raw.timesheet_id,raw.economic_key_type,raw.economic_key_value,
+        raw.physical_bucket_key,count(*)::integer AS duplicate_count
+      FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+      WHERE UPPER(COALESCE(raw.projection_status,''))<>'FAILED'
+        AND raw.timesheet_id IS NOT NULL
+        AND NULLIF(BTRIM(raw.economic_key_type),'') IS NOT NULL
+        AND NULLIF(BTRIM(raw.economic_key_value),'') IS NOT NULL
+        AND NULLIF(BTRIM(raw.physical_bucket_key),'') IS NOT NULL
+      GROUP BY raw.timesheet_id,raw.economic_key_type,raw.economic_key_value,
+        raw.physical_bucket_key HAVING count(*)>1
+    ) duplicate;
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 40,'RATE_AUTHORITY_TARGET_AUTHORITY_CONFLICT',NULL::uuid,NULL::text,
+      NULL::text,NULL::text,jsonb_build_object(
+        'target_method_count',count(DISTINCT raw.target_pay_method),
+        'target_digest_count',count(DISTINCT raw.target_authority_digest),
+        'conversion_digest_count',count(DISTINCT raw.conversion_context_digest))
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(COALESCE(raw.projection_status,'')) IN ('READY','FIXED')
+    HAVING count(DISTINCT raw.target_pay_method)<>1
+       OR count(DISTINCT raw.target_authority_digest)<>1
+       OR count(DISTINCT raw.conversion_context_digest)<>1;
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 45,'RATE_AUTHORITY_MULTIPLE_RATES_UNSUPPORTED',raw.timesheet_id,
+      raw.economic_key_type,raw.economic_key_value,MIN(raw.physical_bucket_key),
+      jsonb_build_object('component_kind',raw.component_kind,
+        'component_member_identity',raw.component_member_identity,
+        'bucket_code',raw.bucket_code,
+        'source_rate_count',count(DISTINCT ROUND(raw.source_rate,6)),
+        'source_charge_rate_count',count(DISTINCT ROUND(raw.source_charge_rate,6)))
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(COALESCE(raw.projection_status,'')) IN ('READY','FIXED')
+      AND raw.component_kind IN ('WORKED_TIME','ADDITIONAL_UNIT')
+    GROUP BY raw.timesheet_id,raw.component_kind,raw.component_member_identity,
+      raw.economic_key_type,raw.economic_key_value,raw.bucket_code
+    HAVING count(DISTINCT ROUND(raw.source_rate,6))>1
+       OR count(DISTINCT ROUND(raw.source_charge_rate,6))>1;
+
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 50,'PAY_SYNC_OVERPAYMENTS_RATE_ECONOMIC_FENCE_MISMATCH',
+      COALESCE(expected.timesheet_id,actual.timesheet_id),
+      COALESCE(expected.key_type,actual.economic_key_type),
+      COALESCE(expected.key_value,actual.economic_key_value),NULL::text,
+      jsonb_build_object('expected_truth_ex_vat',expected.truth_ex_vat,
+        'actual_truth_ex_vat',actual.truth_ex_vat,
+        'expected_baseline_ex_vat',expected.baseline_ex_vat,
+        'actual_baseline_ex_vat',actual.baseline_ex_vat,
+        'expected_reserved_ex_vat',expected.reserved_ex_vat,
+        'actual_reserved_ex_vat',actual.reserved_ex_vat,
+        'expected_outstanding_ex_vat',expected.outstanding_ex_vat,
+        'actual_outstanding_ex_vat',actual.outstanding_ex_vat)
+    FROM pg_temp.tmp_sync_authoritative_components expected
+    FULL OUTER JOIN (
+      SELECT raw.timesheet_id,UPPER(BTRIM(raw.economic_key_type)) AS economic_key_type,
+        BTRIM(raw.economic_key_value) AS economic_key_value,
+        ROUND(SUM(raw.truth_ex_vat),2) AS truth_ex_vat,
+        ROUND(SUM(raw.baseline_ex_vat),2) AS baseline_ex_vat,
+        ROUND(SUM(raw.reserved_ex_vat),2) AS reserved_ex_vat,
+        ROUND(SUM(raw.outstanding_ex_vat),2) AS outstanding_ex_vat
+      FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+      WHERE UPPER(COALESCE(raw.projection_status,'')) IN ('READY','FIXED')
+        AND raw.failure_code IS NULL
+      GROUP BY raw.timesheet_id,UPPER(BTRIM(raw.economic_key_type)),
+        BTRIM(raw.economic_key_value)
+    ) actual ON actual.timesheet_id=expected.timesheet_id
+      AND actual.economic_key_type=expected.key_type
+      AND actual.economic_key_value=expected.key_value
+    WHERE expected.timesheet_id IS NULL OR actual.timesheet_id IS NULL
+      OR actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
+      OR actual.baseline_ex_vat IS DISTINCT FROM expected.baseline_ex_vat
+      OR actual.reserved_ex_vat IS DISTINCT FROM expected.reserved_ex_vat
+      OR actual.outstanding_ex_vat IS DISTINCT FROM expected.outstanding_ex_vat;
+
+    v_rate_authority_failure_code:=NULL::text;
+    v_rate_authority_failure_detail:='[]'::jsonb;
+
+    SELECT failure.failure_code
+    INTO v_rate_authority_failure_code
+    FROM pg_temp.tmp_sync_sealed_rate_projection_failures failure
+    ORDER BY failure.failure_rank,failure.timesheet_id NULLS FIRST,
+      failure.economic_key_type NULLS FIRST,failure.economic_key_value NULLS FIRST,
+      failure.physical_bucket_key NULLS FIRST,failure.failure_code
+    LIMIT 1;
+
+    SELECT COALESCE(jsonb_agg(jsonb_build_object('failure_rank',failure.failure_rank,
+        'failure_code',failure.failure_code,'timesheet_id',failure.timesheet_id,
+        'economic_key_type',failure.economic_key_type,
+        'economic_key_value',failure.economic_key_value,
+        'physical_bucket_key',failure.physical_bucket_key,
+        'detail',failure.detail_json) ORDER BY failure.failure_rank,
+        failure.timesheet_id NULLS FIRST,failure.economic_key_type NULLS FIRST,
+        failure.economic_key_value NULLS FIRST,failure.physical_bucket_key NULLS FIRST,
+        failure.failure_code),'[]'::jsonb)
+    INTO v_rate_authority_failure_detail
+    FROM pg_temp.tmp_sync_sealed_rate_projection_failures failure;
+
+    IF v_rate_authority_failure_code IS NOT NULL THEN
+      RAISE EXCEPTION '%',v_rate_authority_failure_code USING ERRCODE='P0001',
+        DETAIL=jsonb_build_object('code',v_rate_authority_failure_code,
+          'failures',v_rate_authority_failure_detail)::text;
+    END IF;
+
+    CREATE TEMP TABLE pg_temp.tmp_sync_sealed_rate_projection ON COMMIT DROP AS
+    SELECT raw.build_id,raw.candidate_id,raw.timesheet_id,raw.financial_row_id,
+      raw.source_family_key,raw.economic_key_type,raw.economic_key_value,
+      raw.component_kind,raw.component_member_identity,raw.segment_id,raw.segment_key,
+      raw.segment_stable_key,raw.bucket_code,raw.bucket_sort_ordinal,
+      raw.physical_bucket_key,raw.physical_bucket_digest,raw.source_units,
+      raw.source_rate,raw.source_charge_rate,raw.truth_ex_vat,raw.baseline_ex_vat,
+      raw.reserved_ex_vat,raw.outstanding_ex_vat,raw.source_charge_ex_vat,
+      raw.source_pay_method,raw.target_pay_method,raw.umbrella_id,
+      raw.umbrella_enabled,raw.umbrella_vat_chargeable,raw.erni_pct,raw.vat_rate_pct,
+      raw.financial_revision_digest,raw.target_authority_digest,
+      raw.conversion_context_digest,raw.sealed_evidence_digest,
+      raw.projection_status,raw.failure_code,raw.evidence_json
+    FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+    WHERE UPPER(raw.projection_status) IN ('READY','FIXED') AND raw.failure_code IS NULL;
+
+    ALTER TABLE pg_temp.tmp_sync_sealed_rate_projection
+      ALTER COLUMN timesheet_id SET NOT NULL,
+      ALTER COLUMN economic_key_type SET NOT NULL,
+      ALTER COLUMN economic_key_value SET NOT NULL,
+      ALTER COLUMN source_family_key SET NOT NULL,
+      ALTER COLUMN component_kind SET NOT NULL,
+      ALTER COLUMN component_member_identity SET NOT NULL,
+      ALTER COLUMN bucket_code SET NOT NULL,
+      ALTER COLUMN physical_bucket_key SET NOT NULL,
+      ALTER COLUMN physical_bucket_digest SET NOT NULL,
+      ALTER COLUMN source_pay_method SET NOT NULL,
+      ALTER COLUMN target_pay_method SET NOT NULL,
+      ALTER COLUMN projection_status SET NOT NULL,
+      ALTER COLUMN evidence_json SET NOT NULL,
+      ADD CHECK (projection_status IN ('READY','FIXED')),
+      ADD PRIMARY KEY(timesheet_id,economic_key_type,economic_key_value,physical_bucket_key);
+    CREATE INDEX tmp_sync_sealed_rate_projection_lookup_idx
+      ON pg_temp.tmp_sync_sealed_rate_projection(
+        timesheet_id,source_family_key,economic_key_type,economic_key_value,bucket_code);
+  END IF;
+
   v_component_assembly_ms := FLOOR(EXTRACT(EPOCH FROM (clock_timestamp()-v_phase_started_at))*1000)::integer;
   v_authoritative_components_ms := COALESCE(v_preflight_setup_ms,0)
     + COALESCE(v_correction_residuals_ms,0)
@@ -1442,8 +1661,7 @@ begin
         ELSE '{}'::jsonb
       END;
 
-      IF v_execution_profile_version = 2
-         AND COALESCE(v_authoritative_timesheet_scope, false) THEN
+      IF COALESCE(v_authoritative_timesheet_scope, false) THEN
         v_phase_started_at := clock_timestamp();
         v_preview_collect_result_json := public.pay_preview_candidate_collect_scope(
           p_context_json => v_preview_context_json,
@@ -1452,13 +1670,214 @@ begin
         v_preview_collect_ms := v_preview_collect_ms
           + FLOOR(EXTRACT(EPOCH FROM (clock_timestamp()-v_phase_started_at))*1000)::integer;
 
-        v_phase_started_at := clock_timestamp();
-        v_preview_canonical_result_json := public.pay_preview_candidate_build_canonical_lines(
-          p_context_json => v_preview_context_json,
-          p_candidate_id => v_preview_candidate_loop_id
-        );
-        v_preview_canonical_ms := v_preview_canonical_ms
-          + FLOOR(EXTRACT(EPOCH FROM (clock_timestamp()-v_phase_started_at))*1000)::integer;
+        IF to_regclass('pg_temp.ts_baseline') IS NULL
+           OR to_regclass('pg_temp.pay_preview_candidate_context') IS NULL THEN
+          RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_INPUT_MISSING'
+            USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+              'code','PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_INPUT_MISSING',
+              'candidate_id',v_preview_candidate_loop_id::text)::text;
+        END IF;
+
+        IF EXISTS(
+          SELECT 1 FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+          LEFT JOIN pg_temp.ts_baseline baseline
+            ON baseline.candidate_id=v_preview_candidate_loop_id
+           AND baseline.timesheet_id=sealed.timesheet_id
+          WHERE baseline.timesheet_id IS NULL
+        ) THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_PRESENTATION_METADATA_INCOMPLETE'
+            USING ERRCODE='23514';
+        END IF;
+
+        UPDATE pg_temp.pay_preview_candidate_context context_row
+        SET erni_pct=authority.erni_pct,vat_rate_pct=authority.vat_rate_pct
+        FROM (
+          SELECT MIN(sealed.erni_pct) AS erni_pct,MIN(sealed.vat_rate_pct) AS vat_rate_pct
+          FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+        ) authority
+        WHERE context_row.candidate_id=v_preview_candidate_loop_id;
+
+        WITH segment_bucket_rows AS (
+          SELECT sealed.*,
+            CASE WHEN COALESCE(sealed.evidence_json#>>'{source_ordinal}','') ~ '^\d+$'
+              THEN (sealed.evidence_json#>>'{source_ordinal}')::bigint ELSE 0 END
+              AS source_ordinal,
+            CASE WHEN jsonb_typeof(sealed.evidence_json#>'{source_payload,segment}')='object'
+              THEN sealed.evidence_json#>'{source_payload,segment}' ELSE '{}'::jsonb END
+              AS source_segment
+          FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+          WHERE sealed.component_kind='WORKED_TIME'
+        ), segment_grouped AS (
+          SELECT segment.timesheet_id,segment.segment_stable_key,
+            MIN(segment.segment_id) AS segment_id,MIN(segment.segment_key) AS segment_key,
+            MIN(segment.source_ordinal) AS source_ordinal,
+            (array_agg(segment.source_segment ORDER BY segment.source_ordinal,
+              segment.segment_stable_key,segment.segment_id))[1]
+              ||jsonb_build_object(
+                'segment_id',MIN(segment.segment_id),
+                'segment_key',MIN(segment.segment_key),
+                'segment_stable_key',segment.segment_stable_key,
+                'hours_day',ROUND(COALESCE(SUM(segment.source_units)
+                  FILTER(WHERE segment.bucket_code='DAY'),0),6),
+                'hours_night',ROUND(COALESCE(SUM(segment.source_units)
+                  FILTER(WHERE segment.bucket_code='NIGHT'),0),6),
+                'hours_sat',ROUND(COALESCE(SUM(segment.source_units)
+                  FILTER(WHERE segment.bucket_code='SAT'),0),6),
+                'hours_sun',ROUND(COALESCE(SUM(segment.source_units)
+                  FILTER(WHERE segment.bucket_code='SUN'),0),6),
+                'hours_bh',ROUND(COALESCE(SUM(segment.source_units)
+                  FILTER(WHERE segment.bucket_code='BH'),0),6),
+                'pay_amount',ROUND(SUM(segment.truth_ex_vat),2),
+                'charge_amount',ROUND(SUM(COALESCE(segment.source_charge_ex_vat,0)),2))
+              AS segment_json
+          FROM segment_bucket_rows segment
+          GROUP BY segment.timesheet_id,segment.segment_stable_key
+        ), segments_by_timesheet AS (
+          SELECT grouped.timesheet_id,jsonb_agg(grouped.segment_json ORDER BY
+            grouped.source_ordinal,grouped.segment_stable_key,grouped.segment_id) AS segments_json
+          FROM segment_grouped grouped GROUP BY grouped.timesheet_id
+        ), additional_by_timesheet AS (
+          SELECT additional.timesheet_id,
+            COALESCE(jsonb_object_agg(
+              additional.evidence_json#>>'{source_payload,raw_additional_code}',
+              additional.evidence_json#>'{source_payload,source_value}' ORDER BY
+              octet_length(additional.evidence_json#>>'{source_payload,raw_additional_code}'),
+              encode(convert_to(additional.evidence_json#>>'{source_payload,raw_additional_code}',
+                'UTF8'),'hex')),'{}'::jsonb) AS additional_json,
+            ROUND(SUM(additional.truth_ex_vat),2) AS additional_pay_ex_vat,
+            ROUND(SUM(COALESCE(additional.source_charge_ex_vat,0)),2)
+              AS additional_charge_ex_vat
+          FROM pg_temp.tmp_sync_sealed_rate_projection additional
+          WHERE additional.component_kind='ADDITIONAL_UNIT'
+            AND NULLIF(additional.evidence_json#>>'{source_payload,raw_additional_code}','')
+              IS NOT NULL
+          GROUP BY additional.timesheet_id
+        ), adjustments_by_timesheet AS (
+          SELECT adjustment.timesheet_id,jsonb_agg(jsonb_build_object(
+              'id',adjustment.evidence_json#>>'{source_payload,adjustment_id}',
+              'delta_pay_ex_vat',ROUND(adjustment.truth_ex_vat,2))
+            ORDER BY adjustment.evidence_json#>>'{source_payload,adjustment_id}') AS adjustments_json
+          FROM pg_temp.tmp_sync_sealed_rate_projection adjustment
+          WHERE adjustment.component_kind='ADJUSTMENT'
+          GROUP BY adjustment.timesheet_id
+        ), timesheet_authority AS (
+          SELECT sealed.timesheet_id,MIN(sealed.source_pay_method) AS source_pay_method,
+            MIN(sealed.target_pay_method) AS target_pay_method,
+            MIN(sealed.umbrella_id::text)::uuid AS umbrella_id,
+            bool_and(sealed.umbrella_enabled) AS umbrella_enabled,
+            bool_and(sealed.umbrella_vat_chargeable) AS umbrella_vat_chargeable,
+            ROUND(COALESCE(SUM(sealed.source_units)
+              FILTER(WHERE sealed.component_kind='WORKED_TIME'),0),6) AS total_hours,
+            ROUND(SUM(sealed.truth_ex_vat),2) AS total_pay_ex_vat,
+            ROUND(SUM(COALESCE(sealed.source_charge_ex_vat,0)),2) AS total_charge_ex_vat,
+            ROUND(COALESCE(SUM(sealed.source_units) FILTER(WHERE sealed.bucket_code='DAY'),0),6)
+              AS hours_day,
+            ROUND(COALESCE(SUM(sealed.source_units) FILTER(WHERE sealed.bucket_code='NIGHT'),0),6)
+              AS hours_night,
+            ROUND(COALESCE(SUM(sealed.source_units) FILTER(WHERE sealed.bucket_code='SAT'),0),6)
+              AS hours_sat,
+            ROUND(COALESCE(SUM(sealed.source_units) FILTER(WHERE sealed.bucket_code='SUN'),0),6)
+              AS hours_sun,
+            ROUND(COALESCE(SUM(sealed.source_units) FILTER(WHERE sealed.bucket_code='BH'),0),6)
+              AS hours_bh,
+            MIN(sealed.source_rate) FILTER(WHERE sealed.bucket_code='DAY') AS pay_day,
+            MIN(sealed.source_rate) FILTER(WHERE sealed.bucket_code='NIGHT') AS pay_night,
+            MIN(sealed.source_rate) FILTER(WHERE sealed.bucket_code='SAT') AS pay_sat,
+            MIN(sealed.source_rate) FILTER(WHERE sealed.bucket_code='SUN') AS pay_sun,
+            MIN(sealed.source_rate) FILTER(WHERE sealed.bucket_code='BH') AS pay_bh,
+            MIN(sealed.source_charge_rate) FILTER(WHERE sealed.bucket_code='DAY') AS charge_day,
+            MIN(sealed.source_charge_rate) FILTER(WHERE sealed.bucket_code='NIGHT') AS charge_night,
+            MIN(sealed.source_charge_rate) FILTER(WHERE sealed.bucket_code='SAT') AS charge_sat,
+            MIN(sealed.source_charge_rate) FILTER(WHERE sealed.bucket_code='SUN') AS charge_sun,
+            MIN(sealed.source_charge_rate) FILTER(WHERE sealed.bucket_code='BH') AS charge_bh,
+            ROUND(COALESCE(SUM(sealed.truth_ex_vat)
+              FILTER(WHERE sealed.component_kind='EXPENSE'),0),2) AS expenses_pay_ex_vat,
+            ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
+              FILTER(WHERE sealed.component_kind='EXPENSE'),0),2) AS expenses_charge_ex_vat,
+            ROUND(COALESCE(SUM(sealed.truth_ex_vat) FILTER(WHERE sealed.component_kind='EXPENSE'
+              AND sealed.evidence_json#>>'{source_payload,expense_code}'='TRAVEL'),0),2)
+              AS travel_pay_ex_vat,
+            ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
+              FILTER(WHERE sealed.component_kind='EXPENSE'
+                AND sealed.evidence_json#>>'{source_payload,expense_code}'='TRAVEL'),0),2)
+              AS travel_charge_ex_vat,
+            ROUND(COALESCE(SUM(sealed.truth_ex_vat) FILTER(WHERE sealed.component_kind='EXPENSE'
+              AND sealed.evidence_json#>>'{source_payload,expense_code}'='ACCOMMODATION'),0),2)
+              AS accommodation_pay_ex_vat,
+            ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
+              FILTER(WHERE sealed.component_kind='EXPENSE'
+                AND sealed.evidence_json#>>'{source_payload,expense_code}'='ACCOMMODATION'),0),2)
+              AS accommodation_charge_ex_vat,
+            ROUND(COALESCE(SUM(sealed.truth_ex_vat) FILTER(WHERE sealed.component_kind='EXPENSE'
+              AND sealed.evidence_json#>>'{source_payload,expense_code}'='OTHER'),0),2)
+              AS other_pay_ex_vat,
+            ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
+              FILTER(WHERE sealed.component_kind='EXPENSE'
+                AND sealed.evidence_json#>>'{source_payload,expense_code}'='OTHER'),0),2)
+              AS other_charge_ex_vat,
+            ROUND(COALESCE(SUM(sealed.truth_ex_vat) FILTER(WHERE sealed.component_kind='EXPENSE'
+              AND sealed.evidence_json#>>'{source_payload,expense_code}'='MILEAGE'),0),2)
+              AS mileage_pay_ex_vat,
+            ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
+              FILTER(WHERE sealed.component_kind='EXPENSE'
+                AND sealed.evidence_json#>>'{source_payload,expense_code}'='MILEAGE'),0),2)
+              AS mileage_charge_ex_vat
+          FROM pg_temp.tmp_sync_sealed_rate_projection sealed GROUP BY sealed.timesheet_id
+        )
+        UPDATE pg_temp.ts_baseline baseline
+        SET ts_pay_method=authority.source_pay_method,
+          cand_pay_method=authority.target_pay_method,
+          cand_umbrella_id=authority.umbrella_id,
+          umb_enabled=authority.umbrella_enabled,
+          umb_vat_chargeable=authority.umbrella_vat_chargeable,
+          current_segments_json=COALESCE(segments.segments_json,'[]'::jsonb),
+          current_adjustments_json=COALESCE(adjustments.adjustments_json,'[]'::jsonb),
+          total_hours=authority.total_hours,total_pay_ex_vat=authority.total_pay_ex_vat,
+          total_charge_ex_vat=authority.total_charge_ex_vat,
+          hours_day=authority.hours_day,hours_night=authority.hours_night,
+          hours_sat=authority.hours_sat,hours_sun=authority.hours_sun,hours_bh=authority.hours_bh,
+          pay_day=authority.pay_day,pay_night=authority.pay_night,pay_sat=authority.pay_sat,
+          pay_sun=authority.pay_sun,pay_bh=authority.pay_bh,
+          charge_day=authority.charge_day,charge_night=authority.charge_night,
+          charge_sat=authority.charge_sat,charge_sun=authority.charge_sun,
+          charge_bh=authority.charge_bh,
+          cur_hours_day=authority.hours_day,cur_hours_night=authority.hours_night,
+          cur_hours_sat=authority.hours_sat,cur_hours_sun=authority.hours_sun,
+          cur_hours_bh=authority.hours_bh,
+          cur_pay_day=authority.pay_day,cur_pay_night=authority.pay_night,
+          cur_pay_sat=authority.pay_sat,cur_pay_sun=authority.pay_sun,cur_pay_bh=authority.pay_bh,
+          cur_charge_day=authority.charge_day,cur_charge_night=authority.charge_night,
+          cur_charge_sat=authority.charge_sat,cur_charge_sun=authority.charge_sun,
+          cur_charge_bh=authority.charge_bh,
+          current_additional_units_json=COALESCE(additional.additional_json,'{}'::jsonb),
+          current_additional_pay_ex_vat=COALESCE(additional.additional_pay_ex_vat,0),
+          current_additional_charge_ex_vat=COALESCE(additional.additional_charge_ex_vat,0),
+          current_expenses_pay_ex_vat=authority.expenses_pay_ex_vat,
+          current_expenses_charge_ex_vat=authority.expenses_charge_ex_vat,
+          current_travel_pay_ex_vat=authority.travel_pay_ex_vat,
+          current_travel_charge_ex_vat=authority.travel_charge_ex_vat,
+          current_accommodation_pay_ex_vat=authority.accommodation_pay_ex_vat,
+          current_accommodation_charge_ex_vat=authority.accommodation_charge_ex_vat,
+          current_other_pay_ex_vat=authority.other_pay_ex_vat,
+          current_other_charge_ex_vat=authority.other_charge_ex_vat,
+          current_mileage_pay_ex_vat=authority.mileage_pay_ex_vat,
+          current_mileage_charge_ex_vat=authority.mileage_charge_ex_vat
+        FROM timesheet_authority authority
+        LEFT JOIN segments_by_timesheet segments USING(timesheet_id)
+        LEFT JOIN additional_by_timesheet additional USING(timesheet_id)
+        LEFT JOIN adjustments_by_timesheet adjustments USING(timesheet_id)
+        WHERE baseline.candidate_id=v_preview_candidate_loop_id
+          AND baseline.timesheet_id=authority.timesheet_id;
+
+        IF v_execution_profile_version=2 THEN
+          v_phase_started_at := clock_timestamp();
+          v_preview_canonical_result_json := public.pay_preview_candidate_build_canonical_lines(
+            p_context_json => v_preview_context_json,
+            p_candidate_id => v_preview_candidate_loop_id
+          );
+          v_preview_canonical_ms := v_preview_canonical_ms
+            + FLOOR(EXTRACT(EPOCH FROM (clock_timestamp()-v_phase_started_at))*1000)::integer;
+        END IF;
       END IF;
 
       v_phase_started_at := clock_timestamp();
@@ -1666,162 +2085,66 @@ begin
           raw_case.candidate_id,
           raw_case.timesheet_id,
           raw_case.client_id,
-          COALESCE(NULLIF(UPPER(BTRIM(raw_case.cand_pay_method)), ''), v_scope),
+          (SELECT MIN(sealed.target_pay_method)
+            FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+            WHERE sealed.timesheet_id=raw_case.timesheet_id),
           COALESCE(raw_case.is_blocked, false),
           COALESCE((
-            WITH matching_preview_components AS (
-              SELECT
-                authoritative_component.timesheet_id,
-                authoritative_component.key_type,
-                authoritative_component.key_value,
-                authoritative_component.truth_ex_vat,
-                authoritative_component.baseline_ex_vat,
-                authoritative_component.reserved_ex_vat,
-                authoritative_component.outstanding_ex_vat,
-                raw_component.value AS component_json,
-                raw_component.ordinality::integer AS component_ordinality,
-                ROUND(
-                  (raw_component.value->>'component_amount_ex_vat')::numeric,
-                  2
-                )::numeric(12,2) AS preview_truth_component_ex_vat,
-                COUNT(*) OVER (
-                  PARTITION BY
-                    authoritative_component.timesheet_id,
-                    authoritative_component.key_type,
-                    authoritative_component.key_value
-                )::integer AS physical_component_count,
-                ROUND(
-                  SUM(ABS((raw_component.value->>'component_amount_ex_vat')::numeric)) OVER (
-                    PARTITION BY
-                      authoritative_component.timesheet_id,
-                      authoritative_component.key_type,
-                      authoritative_component.key_value
-                  ),
-                  2
-                )::numeric(12,2) AS preview_truth_weight_total_ex_vat,
-                ROW_NUMBER() OVER (
-                  PARTITION BY
-                    authoritative_component.timesheet_id,
-                    authoritative_component.key_type,
-                    authoritative_component.key_value
-                  ORDER BY
-                    COALESCE(raw_component.value->'source_basis_json', '{}'::jsonb)::text,
-                    raw_component.ordinality
-                )::integer AS allocation_rank
-              FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
-              CROSS JOIN LATERAL jsonb_array_elements(
-                CASE
-                  WHEN jsonb_typeof(raw_case.case_components_json) = 'array'
-                    THEN COALESCE(raw_case.case_components_json, '[]'::jsonb)
-                  ELSE '[]'::jsonb
-                END
-              ) WITH ORDINALITY AS raw_component(value, ordinality)
-              WHERE authoritative_component.timesheet_id = raw_case.timesheet_id
-                AND authoritative_component.key_type = UPPER(BTRIM(COALESCE(raw_component.value->>'component_key_type', '')))
-                AND authoritative_component.key_value = BTRIM(COALESCE(raw_component.value->>'component_key_value', ''))
-                AND COALESCE(raw_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-            ), preliminary_allocations AS (
-              SELECT
-                matching_component.*,
-                CASE
-                  WHEN matching_component.physical_component_count = 1
-                    THEN matching_component.outstanding_ex_vat
-                  WHEN COALESCE(matching_component.preview_truth_weight_total_ex_vat, 0) <= 0.01
-                    THEN CASE
-                      WHEN matching_component.allocation_rank = 1
-                        THEN matching_component.outstanding_ex_vat
-                      ELSE 0::numeric
-                    END
-                  ELSE ROUND(
-                    matching_component.outstanding_ex_vat
-                    * ABS(matching_component.preview_truth_component_ex_vat)
-                    / matching_component.preview_truth_weight_total_ex_vat,
-                    2
-                  )
-                END::numeric(12,2) AS preliminary_outstanding_allocation
-              FROM matching_preview_components AS matching_component
-            ), final_allocations AS (
-              SELECT
-                preliminary_allocation.*,
-                CASE
-                  WHEN preliminary_allocation.allocation_rank = preliminary_allocation.physical_component_count
-                    THEN ROUND(
-                      preliminary_allocation.outstanding_ex_vat
-                      - COALESCE(
-                          SUM(preliminary_allocation.preliminary_outstanding_allocation) OVER (
-                            PARTITION BY
-                              preliminary_allocation.timesheet_id,
-                              preliminary_allocation.key_type,
-                              preliminary_allocation.key_value
-                            ORDER BY preliminary_allocation.allocation_rank
-                            ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
-                          ),
-                          0
-                        ),
-                      2
-                    )
-                  ELSE preliminary_allocation.preliminary_outstanding_allocation
-                END::numeric(12,2) AS authoritative_outstanding_allocation
-              FROM preliminary_allocations AS preliminary_allocation
-            )
             SELECT jsonb_agg(
-              allocated_component.component_json
+              raw_component.value
               || jsonb_build_object(
-                'component_amount_ex_vat', allocated_component.authoritative_outstanding_allocation,
-                'authoritative_truth_ex_vat', allocated_component.truth_ex_vat,
-                'authoritative_baseline_ex_vat', allocated_component.baseline_ex_vat,
-                'authoritative_reserved_ex_vat', allocated_component.reserved_ex_vat,
-                'authoritative_outstanding_ex_vat', allocated_component.outstanding_ex_vat,
-                'overpayment_component_authority', 'PRE_DRAFT_LIVE_TRUTH'
+                'component_amount_ex_vat',sealed.outstanding_ex_vat,
+                'authoritative_truth_ex_vat',sealed.truth_ex_vat,
+                'authoritative_baseline_ex_vat',sealed.baseline_ex_vat,
+                'authoritative_reserved_ex_vat',sealed.reserved_ex_vat,
+                'authoritative_outstanding_ex_vat',sealed.outstanding_ex_vat,
+                'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
+                'physical_bucket_key',sealed.physical_bucket_key,
+                'physical_bucket_digest',sealed.physical_bucket_digest,
+                'sealed_evidence_digest',sealed.sealed_evidence_digest
               )
-              ORDER BY
-                allocated_component.key_type,
-                allocated_component.key_value,
-                COALESCE(allocated_component.component_json->'source_basis_json', '{}'::jsonb)::text,
-                allocated_component.component_ordinality
+              ORDER BY sealed.economic_key_type,sealed.economic_key_value,
+                sealed.bucket_sort_ordinal,sealed.physical_bucket_key
             )
-            FROM final_allocations AS allocated_component
-          ), '[]'::jsonb)
-          || COALESCE((
-            SELECT jsonb_agg(
-              jsonb_build_object(
-                'component_key_type', authoritative_component.key_type,
-                'component_key_value', authoritative_component.key_value,
-                'component_amount_ex_vat', authoritative_component.outstanding_ex_vat,
-                'authoritative_truth_ex_vat', authoritative_component.truth_ex_vat,
-                'authoritative_baseline_ex_vat', authoritative_component.baseline_ex_vat,
-                'authoritative_reserved_ex_vat', authoritative_component.reserved_ex_vat,
-                'authoritative_outstanding_ex_vat', authoritative_component.outstanding_ex_vat,
-                'overpayment_component_authority', 'PRE_DRAFT_LIVE_TRUTH',
-                'source_pay_method', COALESCE(NULLIF(UPPER(BTRIM(raw_case.cand_pay_method)), ''), v_scope),
-                'source_basis_json', jsonb_build_object(
-                  'linked_timesheet_id', authoritative_component.timesheet_id::text,
-                  'component_key_type', authoritative_component.key_type,
-                  'component_key_value', authoritative_component.key_value,
-                  'source_pay_method', COALESCE(NULLIF(UPPER(BTRIM(raw_case.cand_pay_method)), ''), v_scope),
-                  'component_amount_ex_vat', ABS(authoritative_component.outstanding_ex_vat),
-                  'authority_helper', '_pay_current_timesheet_entitlement_components'
-                )
-              )
-              ORDER BY authoritative_component.key_type, authoritative_component.key_value
-            )
-            FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
-            WHERE authoritative_component.timesheet_id = raw_case.timesheet_id
-              AND ABS(ROUND(authoritative_component.truth_ex_vat, 2)) <= 0.01
-              AND NOT EXISTS (
-                SELECT 1
-                FROM jsonb_array_elements(
-                  CASE
-                    WHEN jsonb_typeof(raw_case.case_components_json) = 'array'
-                      THEN COALESCE(raw_case.case_components_json, '[]'::jsonb)
-                    ELSE '[]'::jsonb
-                  END
-                ) AS preview_component(value)
-                WHERE authoritative_component.key_type = UPPER(BTRIM(COALESCE(preview_component.value->>'component_key_type', '')))
-                  AND authoritative_component.key_value = BTRIM(COALESCE(preview_component.value->>'component_key_value', ''))
-                  AND COALESCE(preview_component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-              )
-          ), '[]'::jsonb)
+            FROM jsonb_array_elements(CASE
+              WHEN jsonb_typeof(raw_case.case_components_json)='array'
+                THEN raw_case.case_components_json ELSE '[]'::jsonb END)
+              WITH ORDINALITY raw_component(value,ordinality)
+            JOIN pg_temp.tmp_sync_sealed_rate_projection sealed
+              ON sealed.timesheet_id=raw_case.timesheet_id
+             AND sealed.economic_key_type=UPPER(BTRIM(raw_component.value->>'component_key_type'))
+             AND sealed.economic_key_value=BTRIM(raw_component.value->>'component_key_value')
+             AND sealed.physical_bucket_key=concat_ws('|','RATE_BUCKET_V1',
+               raw_case.timesheet_id::text,
+               NULLIF(BTRIM(raw_component.value->>'source_family_key'),''),
+               UPPER(BTRIM(raw_component.value->>'component_key_type')),
+               BTRIM(raw_component.value->>'component_key_value'),
+               CASE
+                 WHEN UPPER(BTRIM(raw_component.value->>'component_key_type')) IN ('TS_DAY','TS_TOTAL')
+                   THEN COALESCE(NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_stable_key}'),''),
+                     NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_id}'),''),
+                     NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_key}'),''),
+                     NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,work_date}'),''),
+                     NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,ref_num}'),''))
+                 WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='ADDITIONAL_CODE'
+                   THEN 'additional:'||UPPER(BTRIM(raw_component.value#>>'{source_basis_json,additional_code}'))
+                 WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='EXPENSE_CODE'
+                   THEN 'expense:'||UPPER(BTRIM(raw_component.value#>>'{source_basis_json,expense_code}'))
+                 WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='ADJUSTMENT_CODE'
+                   THEN 'adjustment:'||BTRIM(raw_component.value#>>'{source_basis_json,adjustment_id}')
+               END,
+               UPPER(BTRIM(COALESCE(
+                 NULLIF(raw_component.value#>>'{source_basis_json,bucket_code}',''),
+                 CASE UPPER(BTRIM(raw_component.value->>'component_key_type'))
+                   WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
+                   WHEN 'EXPENSE_CODE' THEN 'FIXED'
+                   WHEN 'ADJUSTMENT_CODE' THEN 'FIXED'
+                 END))))
+            JOIN pg_temp.tmp_sync_authoritative_negative_components negative_component
+              ON negative_component.timesheet_id=sealed.timesheet_id
+             AND negative_component.key_type=sealed.economic_key_type
+             AND negative_component.key_value=sealed.economic_key_value
+          ),'[]'::jsonb)
         FROM pg_temp.timesheet_case_rollup AS raw_case
         WHERE raw_case.candidate_id = v_preview_candidate_loop_id
           AND raw_case.timesheet_id = ANY(COALESCE(p_force_include_timesheet_ids, ARRAY[]::uuid[]))
@@ -1842,80 +2165,21 @@ begin
           case_is_blocked = EXCLUDED.case_is_blocked,
           case_components_json = EXCLUDED.case_components_json;
 
-        INSERT INTO pg_temp.tmp_sync_raw_negative_timesheet_rows (
-          candidate_id,
-          timesheet_id,
-          client_id,
-          candidate_pay_method,
-          case_is_blocked,
-          case_components_json
-        )
-        SELECT
-          v_preview_candidate_loop_id,
-          authoritative_component.timesheet_id,
-          financial_metadata.client_id,
-          COALESCE(financial_metadata.candidate_pay_method, v_scope),
-          false,
-          jsonb_agg(
-            jsonb_build_object(
-              'component_key_type', authoritative_component.key_type,
-              'component_key_value', authoritative_component.key_value,
-              'component_amount_ex_vat', authoritative_component.outstanding_ex_vat,
-              'authoritative_truth_ex_vat', authoritative_component.truth_ex_vat,
-              'authoritative_baseline_ex_vat', authoritative_component.baseline_ex_vat,
-              'authoritative_reserved_ex_vat', authoritative_component.reserved_ex_vat,
-              'authoritative_outstanding_ex_vat', authoritative_component.outstanding_ex_vat,
-              'overpayment_component_authority', 'PRE_DRAFT_LIVE_TRUTH',
-              'source_pay_method', COALESCE(financial_metadata.candidate_pay_method, v_scope),
-              'source_basis_json', jsonb_build_object(
-                'linked_timesheet_id', authoritative_component.timesheet_id::text,
-                'component_key_type', authoritative_component.key_type,
-                'component_key_value', authoritative_component.key_value,
-                'source_pay_method', COALESCE(financial_metadata.candidate_pay_method, v_scope),
-                'component_amount_ex_vat', ABS(authoritative_component.outstanding_ex_vat),
-                'authority_helper', '_pay_current_timesheet_entitlement_components'
-              )
-            )
-            ORDER BY authoritative_component.key_type, authoritative_component.key_value
-          )
-        FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
-        LEFT JOIN LATERAL (
-          SELECT
-            COALESCE(
-              MIN(financial_row.client_id::text) FILTER (WHERE COALESCE(financial_row.is_current, false)),
-              MIN(financial_row.client_id::text)
-            )::uuid AS client_id,
-            COALESCE(
-              MIN(NULLIF(UPPER(BTRIM(financial_row.pay_method)), '')) FILTER (WHERE COALESCE(financial_row.is_current, false)),
-              MIN(NULLIF(UPPER(BTRIM(financial_row.pay_method)), ''))
-            ) AS candidate_pay_method
-          FROM public.timesheets_financials AS financial_row
-          WHERE financial_row.timesheet_id = authoritative_component.timesheet_id
-            AND financial_row.candidate_id = v_preview_candidate_loop_id
-        ) AS financial_metadata ON true
-        WHERE ABS(ROUND(authoritative_component.truth_ex_vat, 2)) <= 0.01
-          AND NOT (
-            authoritative_component.timesheet_id
-              = ANY(COALESCE(v_resolution_pending_root_ids, ARRAY[]::uuid[]))
-            OR authoritative_component.timesheet_id
-              = ANY(COALESCE(v_resolution_pending_member_ids, ARRAY[]::uuid[]))
-          )
-          AND NOT EXISTS (
-            SELECT 1
-            FROM pg_temp.timesheet_case_rollup AS raw_case
-            WHERE raw_case.candidate_id = v_preview_candidate_loop_id
-              AND raw_case.timesheet_id = authoritative_component.timesheet_id
-          )
-        GROUP BY
-          authoritative_component.timesheet_id,
-          financial_metadata.client_id,
-          financial_metadata.candidate_pay_method
-        ON CONFLICT (candidate_id, timesheet_id) DO UPDATE
-        SET
-          client_id = EXCLUDED.client_id,
-          candidate_pay_method = EXCLUDED.candidate_pay_method,
-          case_is_blocked = EXCLUDED.case_is_blocked,
-          case_components_json = EXCLUDED.case_components_json;
+        IF EXISTS(
+          SELECT 1 FROM pg_temp.tmp_sync_authoritative_negative_components negative_component
+          WHERE NOT (negative_component.timesheet_id
+              =ANY(COALESCE(v_resolution_pending_root_ids,ARRAY[]::uuid[])))
+            AND NOT (negative_component.timesheet_id
+              =ANY(COALESCE(v_resolution_pending_member_ids,ARRAY[]::uuid[])))
+            AND NOT EXISTS(SELECT 1 FROM pg_temp.tmp_sync_raw_negative_timesheet_rows raw_row
+              WHERE raw_row.candidate_id=v_preview_candidate_loop_id
+                AND raw_row.timesheet_id=negative_component.timesheet_id)
+        ) THEN
+          RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_COMPONENT_MISSING'
+            USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+              'code','PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_COMPONENT_MISSING',
+              'candidate_id',v_preview_candidate_loop_id::text)::text;
+        END IF;
 
         IF EXISTS (
           WITH allocated_component_totals AS (
@@ -2228,17 +2492,19 @@ begin
         and nullif(btrim(coalesce(itm.value->>'timesheet_id','')),'')::uuid=any(p_exclude_timesheet_ids))
   ),
   authoritative_timesheet_rows AS (
-    SELECT v_authoritative_candidate_id AS candidate_id,v_scope AS candidate_pay_method,
+    SELECT v_authoritative_candidate_id AS candidate_id,
+      (SELECT MIN(sealed.target_pay_method)
+       FROM pg_temp.tmp_sync_sealed_rate_projection sealed) AS candidate_pay_method,
       jsonb_build_object('line_type','TIMESHEET_PAYMENT','timesheet_id',scope_row.timesheet_id::text,
         'client_id',CASE WHEN metadata.client_id IS NULL THEN NULL ELSE metadata.client_id::text END,
-        'amount_ex_vat',ROUND(COALESCE(component_total.truth_ex_vat,0),2),
+        'amount_ex_vat',ROUND(COALESCE(economic_total.truth_ex_vat,0),2),
         'case_is_blocked',COALESCE(metadata.case_is_blocked,false),
-        'case_components',COALESCE(component_total.case_components_json,'[]'::jsonb),
+        'case_components',COALESCE(physical_components.case_components_json,'[]'::jsonb),
         'source_authority','SEALED_ECONOMIC_BUILD_FACTS','build_id',p_build_id::text) AS item_json,
       scope_row.timesheet_id,metadata.client_id,
-      ROUND(COALESCE(component_total.truth_ex_vat,0),2)::numeric(12,2) AS corrected_amount_ex,
+      ROUND(COALESCE(economic_total.truth_ex_vat,0),2)::numeric(12,2) AS corrected_amount_ex,
       COALESCE(metadata.case_is_blocked,false) AS case_is_blocked,
-      COALESCE(component_total.case_components_json,'[]'::jsonb) AS case_components_json
+      COALESCE(physical_components.case_components_json,'[]'::jsonb) AS case_components_json
     FROM private.banking_pay_workbench_economic_build_scope scope_row
     LEFT JOIN LATERAL (
       SELECT COALESCE(preview_row.client_id,current_financial.client_id) AS client_id,
@@ -2256,29 +2522,64 @@ begin
       ) current_financial ON true
     ) metadata ON true
     LEFT JOIN LATERAL (
-      SELECT ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS truth_ex_vat,
-        COALESCE(jsonb_agg(jsonb_build_object(
-          'component_key_type',component.key_type,'component_key_value',component.key_value,
-          'component_amount_ex_vat',component.outstanding_ex_vat,
-          'authoritative_truth_ex_vat',component.truth_ex_vat,
-          'authoritative_baseline_ex_vat',component.baseline_ex_vat,
-          'authoritative_reserved_ex_vat',component.reserved_ex_vat,
-          'authoritative_outstanding_ex_vat',component.outstanding_ex_vat,
-          'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
-          'source_pay_method',v_scope,
-          'source_family_key','timesheet:'||scope_row.timesheet_id::text,
-          -- A private build UUID is execution lineage, not component economic
-          -- identity.  Keeping it in the durable finance-component basis made
-          -- an otherwise identical rebuild rewrite every component and emit a
-          -- COMPONENT_UPDATED event.  The current build UUID remains present
-          -- in canonical staging and its build attestation below.
-          'source_basis_json',jsonb_build_object(
-            'linked_timesheet_id',scope_row.timesheet_id::text,'component_key_type',component.key_type,
-            'component_key_value',component.key_value,'authority','SEALED_ECONOMIC_BUILD_FACTS'))
-          ORDER BY component.key_type,component.key_value),'[]'::jsonb) AS case_components_json
+      SELECT ROUND(COALESCE(SUM(component.truth_ex_vat),0),2) AS truth_ex_vat
       FROM pg_temp.tmp_sync_authoritative_components component
       WHERE component.timesheet_id=scope_row.timesheet_id
-    ) component_total ON true
+    ) economic_total ON true
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(jsonb_agg(
+        raw_component.value||jsonb_build_object(
+          'component_amount_ex_vat',sealed.outstanding_ex_vat,
+          'authoritative_truth_ex_vat',sealed.truth_ex_vat,
+          'authoritative_baseline_ex_vat',sealed.baseline_ex_vat,
+          'authoritative_reserved_ex_vat',sealed.reserved_ex_vat,
+          'authoritative_outstanding_ex_vat',sealed.outstanding_ex_vat,
+          'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
+          'physical_bucket_key',sealed.physical_bucket_key,
+          'physical_bucket_digest',sealed.physical_bucket_digest,
+          'sealed_evidence_digest',sealed.sealed_evidence_digest,
+          'financial_revision_digest',sealed.financial_revision_digest,
+          'target_authority_digest',sealed.target_authority_digest,
+          'conversion_context_digest',sealed.conversion_context_digest)
+        ORDER BY raw_component.ordinality),'[]'::jsonb) AS case_components_json
+      FROM pg_temp.timesheet_case_rollup raw_case
+      CROSS JOIN LATERAL jsonb_array_elements(CASE
+        WHEN jsonb_typeof(raw_case.case_components_json)='array'
+          THEN raw_case.case_components_json ELSE '[]'::jsonb END)
+        WITH ORDINALITY raw_component(value,ordinality)
+      JOIN pg_temp.tmp_sync_sealed_rate_projection sealed
+        ON sealed.timesheet_id=raw_case.timesheet_id
+       AND sealed.economic_key_type=UPPER(BTRIM(raw_component.value->>'component_key_type'))
+       AND sealed.economic_key_value=BTRIM(raw_component.value->>'component_key_value')
+       AND sealed.physical_bucket_key=concat_ws('|','RATE_BUCKET_V1',
+         raw_case.timesheet_id::text,
+         NULLIF(BTRIM(raw_component.value->>'source_family_key'),''),
+         UPPER(BTRIM(raw_component.value->>'component_key_type')),
+         BTRIM(raw_component.value->>'component_key_value'),
+         CASE
+           WHEN UPPER(BTRIM(raw_component.value->>'component_key_type')) IN ('TS_DAY','TS_TOTAL')
+             THEN COALESCE(NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_stable_key}'),''),
+               NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_id}'),''),
+               NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_key}'),''),
+               NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,work_date}'),''),
+               NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,ref_num}'),''))
+           WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='ADDITIONAL_CODE'
+             THEN 'additional:'||UPPER(BTRIM(raw_component.value#>>'{source_basis_json,additional_code}'))
+           WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='EXPENSE_CODE'
+             THEN 'expense:'||UPPER(BTRIM(raw_component.value#>>'{source_basis_json,expense_code}'))
+           WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='ADJUSTMENT_CODE'
+             THEN 'adjustment:'||BTRIM(raw_component.value#>>'{source_basis_json,adjustment_id}')
+         END,
+         UPPER(BTRIM(COALESCE(
+           NULLIF(raw_component.value#>>'{source_basis_json,bucket_code}',''),
+           CASE UPPER(BTRIM(raw_component.value->>'component_key_type'))
+             WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
+             WHEN 'EXPENSE_CODE' THEN 'FIXED'
+              WHEN 'ADJUSTMENT_CODE' THEN 'FIXED'
+            END))))
+      WHERE raw_case.candidate_id=v_authoritative_candidate_id
+        AND raw_case.timesheet_id=scope_row.timesheet_id
+    ) physical_components ON true
     WHERE scope_row.build_id=p_build_id
       AND (coalesce(array_length(p_force_include_timesheet_ids,1),0)=0
         OR scope_row.timesheet_id=ANY(p_force_include_timesheet_ids)
@@ -4295,23 +4596,168 @@ begin
   WHERE preview_row.candidate_id=v_bounded_build.candidate_id
     AND NOT EXISTS(SELECT 1 FROM pg_temp.tmp_sync_authoritative_components component
       WHERE component.timesheet_id=preview_row.timesheet_id);
+
+  DROP TABLE IF EXISTS pg_temp.tmp_sync_builder_physical_components;
+  CREATE TEMP TABLE pg_temp.tmp_sync_builder_physical_components ON COMMIT DROP AS
+  SELECT preview_row.candidate_id,preview_row.timesheet_id,
+    component.ordinality::integer AS component_ordinality,component.value AS component_json,
+    UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')) AS economic_key_type,
+    NULLIF(BTRIM(component.value->>'component_key_value'),'') AS economic_key_value,
+    concat_ws('|','RATE_BUCKET_V1',preview_row.timesheet_id::text,
+      NULLIF(BTRIM(component.value->>'source_family_key'),''),
+      UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')),
+      NULLIF(BTRIM(component.value->>'component_key_value'),''),
+      CASE
+        WHEN UPPER(BTRIM(component.value->>'component_key_type')) IN ('TS_DAY','TS_TOTAL')
+          THEN COALESCE(
+            NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_stable_key}'),''),
+            NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_id}'),''),
+            NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_key}'),''),
+            NULLIF(BTRIM(component.value#>>'{source_basis_json,work_date}'),''),
+            NULLIF(BTRIM(component.value#>>'{source_basis_json,date}'),''),
+            NULLIF(BTRIM(component.value#>>'{source_basis_json,ref_num}'),''))
+        WHEN UPPER(BTRIM(component.value->>'component_key_type'))='ADDITIONAL_CODE'
+          THEN 'additional:'||UPPER(BTRIM(component.value#>>'{source_basis_json,additional_code}'))
+        WHEN UPPER(BTRIM(component.value->>'component_key_type'))='EXPENSE_CODE'
+          THEN 'expense:'||UPPER(BTRIM(component.value#>>'{source_basis_json,expense_code}'))
+        WHEN UPPER(BTRIM(component.value->>'component_key_type'))='ADJUSTMENT_CODE'
+          THEN 'adjustment:'||BTRIM(component.value#>>'{source_basis_json,adjustment_id}')
+      END,
+      UPPER(BTRIM(COALESCE(
+        NULLIF(component.value#>>'{source_basis_json,bucket_code}',''),
+        CASE UPPER(BTRIM(component.value->>'component_key_type'))
+          WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
+          WHEN 'EXPENSE_CODE' THEN 'FIXED'
+          WHEN 'ADJUSTMENT_CODE' THEN 'FIXED'
+        END))))
+      AS physical_bucket_key,
+    md5(jsonb_build_object(
+      'builder_comparison_version',1,'timesheet_id',preview_row.timesheet_id::text,
+      'source_family_key',NULLIF(BTRIM(component.value->>'source_family_key'),''),
+      'component_key_type',UPPER(BTRIM(component.value->>'component_key_type')),
+      'component_key_value',BTRIM(component.value->>'component_key_value'),
+      'segment_id',NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_id}'),''),
+      'segment_key',NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_key}'),''),
+      'segment_stable_key',NULLIF(BTRIM(
+        component.value#>>'{source_basis_json,segment_stable_key}'),''),
+      'work_date',NULLIF(BTRIM(COALESCE(component.value#>>'{source_basis_json,work_date}',
+        component.value#>>'{source_basis_json,date}')),''),
+      'ref_num',NULLIF(BTRIM(component.value#>>'{source_basis_json,ref_num}'),''),
+      'additional_code',NULLIF(UPPER(BTRIM(
+        component.value#>>'{source_basis_json,additional_code}')),''),
+      'expense_code',NULLIF(UPPER(BTRIM(
+        component.value#>>'{source_basis_json,expense_code}')),''),
+      'adjustment_id',NULLIF(BTRIM(component.value#>>'{source_basis_json,adjustment_id}'),''),
+      'bucket_code',UPPER(BTRIM(COALESCE(
+        NULLIF(component.value#>>'{source_basis_json,bucket_code}',''),
+        CASE UPPER(BTRIM(component.value->>'component_key_type'))
+          WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
+          WHEN 'EXPENSE_CODE' THEN 'FIXED'
+          WHEN 'ADJUSTMENT_CODE' THEN 'FIXED'
+        END))),
+      'source_units',CASE WHEN COALESCE(component.value->>'source_units','') ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((component.value->>'source_units')::numeric,6) END,
+      'source_rate',CASE WHEN COALESCE(component.value->>'source_rate','') ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((component.value->>'source_rate')::numeric,6) END,
+      'source_charge_rate',CASE WHEN COALESCE(component.value->>'source_charge_rate','')
+          ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((component.value->>'source_charge_rate')::numeric,6) END,
+      'source_pay_ex_vat',CASE WHEN COALESCE(component.value->>'source_pay_ex_vat','')
+          ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((component.value->>'source_pay_ex_vat')::numeric,2) END,
+      'source_charge_ex_vat',CASE WHEN COALESCE(component.value->>'source_charge_ex_vat','')
+          ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((component.value->>'source_charge_ex_vat')::numeric,2) END,
+      'source_pay_method',UPPER(NULLIF(BTRIM(component.value->>'source_pay_method'),'')),
+      'target_pay_method',UPPER(NULLIF(BTRIM(
+        component.value->>'current_target_pay_method'),'')))::text) AS builder_comparison_digest
+  FROM pg_temp.timesheet_case_rollup_effective preview_row
+  CROSS JOIN LATERAL jsonb_array_elements(CASE
+    WHEN jsonb_typeof(preview_row.case_components_json)='array'
+      THEN preview_row.case_components_json ELSE '[]'::jsonb END)
+    WITH ORDINALITY component(value,ordinality)
+  WHERE preview_row.candidate_id=v_bounded_build.candidate_id;
+
+  SELECT failure.failure_code,failure.detail_json
+  INTO v_rate_authority_failure_code,v_rate_authority_failure_detail
+  FROM (
+    SELECT 10 AS failure_rank,'PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_COMPONENT_MISSING'::text
+        AS failure_code,jsonb_build_object('timesheet_id',sealed.timesheet_id,
+          'physical_bucket_key',sealed.physical_bucket_key) AS detail_json
+    FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+    LEFT JOIN pg_temp.tmp_sync_builder_physical_components builder
+      ON builder.timesheet_id=sealed.timesheet_id
+     AND builder.physical_bucket_key=sealed.physical_bucket_key
+    WHERE builder.timesheet_id IS NULL
+    UNION ALL
+    SELECT 20,'PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_COMPONENT_EXTRA',jsonb_build_object(
+      'timesheet_id',builder.timesheet_id,'physical_bucket_key',builder.physical_bucket_key)
+    FROM pg_temp.tmp_sync_builder_physical_components builder
+    LEFT JOIN pg_temp.tmp_sync_sealed_rate_projection sealed
+      ON sealed.timesheet_id=builder.timesheet_id
+     AND sealed.physical_bucket_key=builder.physical_bucket_key
+    WHERE sealed.timesheet_id IS NULL
+    UNION ALL
+    SELECT 30,'PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_DIGEST_MISMATCH',jsonb_build_object(
+      'timesheet_id',sealed.timesheet_id,'physical_bucket_key',sealed.physical_bucket_key,
+      'expected_digest',sealed.evidence_json#>>'{physical_bucket,builder_comparison_digest}',
+      'actual_digest',builder.builder_comparison_digest)
+    FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+    JOIN pg_temp.tmp_sync_builder_physical_components builder
+      ON builder.timesheet_id=sealed.timesheet_id
+     AND builder.physical_bucket_key=sealed.physical_bucket_key
+    WHERE builder.builder_comparison_digest IS DISTINCT FROM
+        sealed.evidence_json#>>'{physical_bucket,builder_comparison_digest}'
+       OR CASE WHEN COALESCE(builder.component_json->>'component_amount_ex_vat','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((builder.component_json->>'component_amount_ex_vat')::numeric,2)
+          ELSE NULL::numeric END IS DISTINCT FROM ROUND(sealed.outstanding_ex_vat,2)
+  ) failure
+  ORDER BY failure.failure_rank,
+    failure.detail_json->>'timesheet_id',failure.detail_json->>'physical_bucket_key'
+  LIMIT 1;
+
+  IF v_rate_authority_failure_code IS NOT NULL THEN
+    RAISE EXCEPTION '%',v_rate_authority_failure_code USING ERRCODE='P0001',
+      DETAIL=jsonb_build_object('code',v_rate_authority_failure_code,
+        'detail',v_rate_authority_failure_detail)::text;
+  END IF;
+
+  WITH overlaid AS (
+    SELECT builder.candidate_id,builder.timesheet_id,builder.component_ordinality,
+      builder.component_json||jsonb_build_object(
+        'component_amount_ex_vat',sealed.outstanding_ex_vat,
+        'authoritative_truth_ex_vat',sealed.truth_ex_vat,
+        'authoritative_baseline_ex_vat',sealed.baseline_ex_vat,
+        'authoritative_reserved_ex_vat',sealed.reserved_ex_vat,
+        'authoritative_outstanding_ex_vat',sealed.outstanding_ex_vat,
+        'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
+        'physical_bucket_key',sealed.physical_bucket_key,
+        'physical_bucket_digest',sealed.physical_bucket_digest,
+        'sealed_evidence_digest',sealed.sealed_evidence_digest,
+        'financial_revision_digest',sealed.financial_revision_digest,
+        'target_authority_digest',sealed.target_authority_digest,
+        'conversion_context_digest',sealed.conversion_context_digest)
+        AS component_json
+    FROM pg_temp.tmp_sync_builder_physical_components builder
+    JOIN pg_temp.tmp_sync_sealed_rate_projection sealed
+      ON sealed.timesheet_id=builder.timesheet_id
+     AND sealed.physical_bucket_key=builder.physical_bucket_key
+  ), grouped AS (
+    SELECT overlaid.candidate_id,overlaid.timesheet_id,
+      jsonb_agg(overlaid.component_json ORDER BY overlaid.component_ordinality) AS components_json
+    FROM overlaid GROUP BY overlaid.candidate_id,overlaid.timesheet_id
+  )
+  UPDATE pg_temp.timesheet_case_rollup_effective preview_row
+  SET case_components_json=grouped.components_json
+  FROM grouped
+  WHERE preview_row.candidate_id=grouped.candidate_id
+    AND preview_row.timesheet_id=grouped.timesheet_id;
+
   WITH fact_totals AS (
     SELECT component.timesheet_id,
       ROUND(COALESCE(SUM(component.truth_ex_vat),0),2)::numeric(12,2) AS truth_ex_vat,
-      ROUND(COALESCE(SUM(entitlement.truth_inc_vat),0),2)::numeric(12,2) AS truth_inc_vat,
-      COALESCE(jsonb_agg(jsonb_build_object(
-        'component_key_type',component.key_type,'component_key_value',component.key_value,
-        'component_amount_ex_vat',component.outstanding_ex_vat,
-        'authoritative_truth_ex_vat',component.truth_ex_vat,
-        'authoritative_baseline_ex_vat',component.baseline_ex_vat,
-        'authoritative_reserved_ex_vat',component.reserved_ex_vat,
-        'authoritative_outstanding_ex_vat',component.outstanding_ex_vat,
-        'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
-        'source_pay_method',v_scope,'source_family_key','timesheet:'||component.timesheet_id::text,
-        'source_basis_json',jsonb_build_object('build_id',p_build_id::text,
-          'linked_timesheet_id',component.timesheet_id::text,'component_key_type',component.key_type,
-          'component_key_value',component.key_value,'authority','SEALED_ECONOMIC_BUILD_FACTS'))
-        ORDER BY component.key_type,component.key_value),'[]'::jsonb) AS components_json
+      ROUND(COALESCE(SUM(entitlement.truth_inc_vat),0),2)::numeric(12,2) AS truth_inc_vat
     FROM pg_temp.tmp_sync_authoritative_components component
     LEFT JOIN (
       SELECT legacy_component.*
@@ -4332,7 +4778,6 @@ begin
       payment_amount=COALESCE(fact_totals.truth_inc_vat,fact_totals.truth_ex_vat,0),
       case_total_amount_ex=COALESCE(fact_totals.truth_ex_vat,0),
       safe_amount_ex=CASE WHEN preview_row.is_blocked THEN 0 ELSE COALESCE(fact_totals.truth_ex_vat,0) END,
-      case_components_json=COALESCE(fact_totals.components_json,'[]'::jsonb),
       case_resolution_summary_json=COALESCE(preview_row.case_resolution_summary_json,'{}'::jsonb)
         ||jsonb_build_object('economic_authority','SEALED_ECONOMIC_BUILD_FACTS','build_id',p_build_id::text)
   FROM fact_totals
@@ -4354,27 +4799,13 @@ begin
   -- snoozed line is not required to invent a public row merely to prove that
   -- its physical components were preserved.
   SELECT md5(COALESCE(string_agg(
-    component.timesheet_id::text||':'||component.key_type||':'||component.key_value||':'||
-    private.pay_workbench_canonical_component_core_v1(jsonb_build_object(
-      'component_key_type',component.key_type,
-      'component_key_value',component.key_value,
-      'component_amount_ex_vat',component.outstanding_ex_vat,
-      'authoritative_truth_ex_vat',component.truth_ex_vat,
-      'authoritative_baseline_ex_vat',component.baseline_ex_vat,
-      'authoritative_reserved_ex_vat',component.reserved_ex_vat,
-      'authoritative_outstanding_ex_vat',component.outstanding_ex_vat,
-      'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
-      'source_pay_method',v_scope,
-      'source_family_key','timesheet:'||component.timesheet_id::text,
-      'source_basis_json',jsonb_build_object(
-        'build_id',p_build_id::text,
-        'linked_timesheet_id',component.timesheet_id::text,
-        'component_key_type',component.key_type,
-        'component_key_value',component.key_value,
-        'authority','SEALED_ECONOMIC_BUILD_FACTS'))
-      )::text,'' ORDER BY component.timesheet_id,component.key_type,component.key_value),''))
+    sealed.timesheet_id::text||':'||sealed.economic_key_type||':'||
+    sealed.economic_key_value||':'||sealed.physical_bucket_key||':'||
+    sealed.sealed_evidence_digest,'' ORDER BY sealed.timesheet_id,
+    sealed.economic_key_type,sealed.economic_key_value,sealed.bucket_sort_ordinal,
+    sealed.physical_bucket_key),''))
   INTO v_bounded_economic_component_digest
-  FROM pg_temp.tmp_sync_authoritative_components component;
+  FROM pg_temp.tmp_sync_sealed_rate_projection sealed;
 
   v_bounded_canonical_result:=public.pay_preview_candidate_build_canonical_lines(
     v_preview_context_json,v_bounded_build.candidate_id);
@@ -4608,24 +5039,16 @@ begin
   WHERE state.candidate_id=v_bounded_build.candidate_id;
   IF EXISTS(
     WITH expected AS (
-      SELECT scope_row.timesheet_id,component.key_type,component.key_value,
-        private.pay_workbench_canonical_component_core_v1(jsonb_build_object(
-          'component_key_type',component.key_type,'component_key_value',component.key_value,
-          'component_amount_ex_vat',component.outstanding_ex_vat,
-          'authoritative_truth_ex_vat',component.truth_ex_vat,
-          'authoritative_baseline_ex_vat',component.baseline_ex_vat,
-          'authoritative_reserved_ex_vat',component.reserved_ex_vat,
-          'authoritative_outstanding_ex_vat',component.outstanding_ex_vat,
-          'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
-          'source_pay_method',v_scope,'source_family_key','timesheet:'||component.timesheet_id::text,
-          'source_basis_json',jsonb_build_object('build_id',p_build_id::text,
-            'linked_timesheet_id',component.timesheet_id::text,
-            'component_key_type',component.key_type,'component_key_value',component.key_value,
-            'authority','SEALED_ECONOMIC_BUILD_FACTS'))) AS component_core
-      FROM private.banking_pay_workbench_economic_build_scope scope_row
-      JOIN pg_temp.tmp_sync_authoritative_components component
-        ON component.timesheet_id=scope_row.timesheet_id
-      WHERE scope_row.build_id=p_build_id
+      SELECT sealed.timesheet_id,sealed.economic_key_type AS key_type,
+        sealed.economic_key_value AS key_value,sealed.physical_bucket_key,
+        sealed.evidence_json#>>'{physical_bucket,builder_comparison_digest}'
+          AS builder_comparison_digest,
+        sealed.outstanding_ex_vat AS component_amount_ex_vat,
+        sealed.truth_ex_vat,sealed.baseline_ex_vat,sealed.reserved_ex_vat,
+        sealed.outstanding_ex_vat,sealed.physical_bucket_digest,
+        sealed.sealed_evidence_digest,sealed.financial_revision_digest,
+        sealed.target_authority_digest,sealed.conversion_context_digest
+      FROM pg_temp.tmp_sync_sealed_rate_projection sealed
     ), actual_lines AS (
       SELECT COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid AS timesheet_id,
@@ -4651,22 +5074,106 @@ begin
       SELECT actual_line.timesheet_id,actual_line.line_identity,
         UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')) AS key_type,
         NULLIF(BTRIM(component.value->>'component_key_value'),'') AS key_value,
-        private.pay_workbench_canonical_component_core_v1(component.value) AS component_core
+        NULLIF(BTRIM(component.value->>'physical_bucket_key'),'') AS physical_bucket_key,
+        md5(jsonb_build_object(
+          'builder_comparison_version',1,
+          'timesheet_id',actual_line.timesheet_id::text,
+          'source_family_key',NULLIF(BTRIM(component.value->>'source_family_key'),''),
+          'component_key_type',UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')),
+          'component_key_value',NULLIF(BTRIM(component.value->>'component_key_value'),''),
+          'segment_id',NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_id}'),''),
+          'segment_key',NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_key}'),''),
+          'segment_stable_key',NULLIF(BTRIM(
+            component.value#>>'{source_basis_json,segment_stable_key}'),''),
+          'work_date',NULLIF(BTRIM(COALESCE(component.value#>>'{source_basis_json,work_date}',
+            component.value#>>'{source_basis_json,date}')),''),
+          'ref_num',NULLIF(BTRIM(component.value#>>'{source_basis_json,ref_num}'),''),
+          'additional_code',NULLIF(UPPER(BTRIM(
+            component.value#>>'{source_basis_json,additional_code}')),''),
+          'expense_code',NULLIF(UPPER(BTRIM(
+            component.value#>>'{source_basis_json,expense_code}')),''),
+          'adjustment_id',NULLIF(BTRIM(component.value#>>'{source_basis_json,adjustment_id}'),''),
+          'bucket_code',UPPER(BTRIM(COALESCE(
+            NULLIF(component.value#>>'{source_basis_json,bucket_code}',''),
+            CASE UPPER(BTRIM(component.value->>'component_key_type'))
+              WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
+              WHEN 'EXPENSE_CODE' THEN 'FIXED'
+              WHEN 'ADJUSTMENT_CODE' THEN 'FIXED'
+            END))),
+          'source_units',CASE WHEN COALESCE(component.value->>'source_units','')
+              ~ '^-?\d+(\.\d+)?$'
+            THEN ROUND((component.value->>'source_units')::numeric,6) END,
+          'source_rate',CASE WHEN COALESCE(component.value->>'source_rate','')
+              ~ '^-?\d+(\.\d+)?$'
+            THEN ROUND((component.value->>'source_rate')::numeric,6) END,
+          'source_charge_rate',CASE WHEN COALESCE(component.value->>'source_charge_rate','')
+              ~ '^-?\d+(\.\d+)?$'
+            THEN ROUND((component.value->>'source_charge_rate')::numeric,6) END,
+          'source_pay_ex_vat',CASE WHEN COALESCE(component.value->>'source_pay_ex_vat','')
+              ~ '^-?\d+(\.\d+)?$'
+            THEN ROUND((component.value->>'source_pay_ex_vat')::numeric,2) END,
+          'source_charge_ex_vat',CASE WHEN COALESCE(component.value->>'source_charge_ex_vat','')
+              ~ '^-?\d+(\.\d+)?$'
+            THEN ROUND((component.value->>'source_charge_ex_vat')::numeric,2) END,
+          'source_pay_method',UPPER(NULLIF(BTRIM(component.value->>'source_pay_method'),'')),
+          'target_pay_method',UPPER(NULLIF(BTRIM(
+            component.value->>'current_target_pay_method'),'')))::text)
+          AS builder_comparison_digest,
+        CASE WHEN COALESCE(component.value->>'component_amount_ex_vat','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((component.value->>'component_amount_ex_vat')::numeric,2) END
+          AS component_amount_ex_vat,
+        CASE WHEN COALESCE(component.value->>'authoritative_truth_ex_vat','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((component.value->>'authoritative_truth_ex_vat')::numeric,2) END
+          AS truth_ex_vat,
+        CASE WHEN COALESCE(component.value->>'authoritative_baseline_ex_vat','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((component.value->>'authoritative_baseline_ex_vat')::numeric,2) END
+          AS baseline_ex_vat,
+        CASE WHEN COALESCE(component.value->>'authoritative_reserved_ex_vat','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((component.value->>'authoritative_reserved_ex_vat')::numeric,2) END
+          AS reserved_ex_vat,
+        CASE WHEN COALESCE(component.value->>'authoritative_outstanding_ex_vat','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((component.value->>'authoritative_outstanding_ex_vat')::numeric,2) END
+          AS outstanding_ex_vat,
+        NULLIF(BTRIM(component.value->>'physical_bucket_digest'),'') AS physical_bucket_digest,
+        NULLIF(BTRIM(component.value->>'sealed_evidence_digest'),'') AS sealed_evidence_digest,
+        NULLIF(BTRIM(component.value->>'financial_revision_digest'),'') AS financial_revision_digest,
+        NULLIF(BTRIM(component.value->>'target_authority_digest'),'') AS target_authority_digest,
+        NULLIF(BTRIM(component.value->>'conversion_context_digest'),'') AS conversion_context_digest
       FROM actual_lines actual_line
       CROSS JOIN LATERAL jsonb_array_elements(actual_line.components_json) component(value)
     ), conflicting_actual AS (
-      SELECT timesheet_id,line_identity,key_type,key_value
+      SELECT timesheet_id,line_identity,physical_bucket_key
       FROM actual_occurrence
-      GROUP BY timesheet_id,line_identity,key_type,key_value
-      HAVING key_type IS NULL OR key_value IS NULL
-        OR bool_or(component_core IS NULL)
+      GROUP BY timesheet_id,line_identity,physical_bucket_key
+      HAVING physical_bucket_key IS NULL
+        OR bool_or(key_type IS NULL OR key_value IS NULL OR
+          builder_comparison_digest IS NULL OR physical_bucket_digest IS NULL OR
+          sealed_evidence_digest IS NULL)
         OR count(*)>1
-        OR count(DISTINCT component_core)>1
+        OR count(DISTINCT jsonb_build_object('key_type',key_type,'key_value',key_value,
+          'builder_comparison_digest',builder_comparison_digest,
+          'component_amount_ex_vat',component_amount_ex_vat,'truth_ex_vat',truth_ex_vat,
+          'baseline_ex_vat',baseline_ex_vat,'reserved_ex_vat',reserved_ex_vat,
+          'outstanding_ex_vat',outstanding_ex_vat,
+          'physical_bucket_digest',physical_bucket_digest,
+          'sealed_evidence_digest',sealed_evidence_digest,
+          'financial_revision_digest',financial_revision_digest,
+          'target_authority_digest',target_authority_digest,
+          'conversion_context_digest',conversion_context_digest))>1
     ), actual AS (
-      -- Presentation splitting may repeat one identical economic component on
+      -- Presentation splitting may repeat one identical physical component on
       -- several stable lines.  Collapse only after per-line duplicate and
-      -- conflict checks have succeeded.
-      SELECT DISTINCT timesheet_id,key_type,key_value,component_core
+      -- conflict checks have succeeded; never collapse DAY and NIGHT together.
+      SELECT DISTINCT timesheet_id,key_type,key_value,physical_bucket_key,
+        builder_comparison_digest,component_amount_ex_vat,truth_ex_vat,
+        baseline_ex_vat,reserved_ex_vat,outstanding_ex_vat,
+        physical_bucket_digest,sealed_evidence_digest,financial_revision_digest,
+        target_authority_digest,conversion_context_digest
       FROM actual_occurrence
     ), expected_rendered AS (
       SELECT expected.* FROM expected
@@ -4675,11 +5182,21 @@ begin
     SELECT 1 FROM conflicting_actual
     UNION ALL
     SELECT 1 FROM expected_rendered expected
-      FULL OUTER JOIN actual USING(timesheet_id,key_type,key_value)
+      FULL OUTER JOIN actual USING(timesheet_id,key_type,key_value,physical_bucket_key)
     WHERE expected.timesheet_id IS NULL OR actual.timesheet_id IS NULL
-       OR actual.component_core IS DISTINCT FROM expected.component_core
+       OR actual.builder_comparison_digest IS DISTINCT FROM expected.builder_comparison_digest
+       OR actual.component_amount_ex_vat IS DISTINCT FROM expected.component_amount_ex_vat
+       OR actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
+       OR actual.baseline_ex_vat IS DISTINCT FROM expected.baseline_ex_vat
+       OR actual.reserved_ex_vat IS DISTINCT FROM expected.reserved_ex_vat
+       OR actual.outstanding_ex_vat IS DISTINCT FROM expected.outstanding_ex_vat
+       OR actual.physical_bucket_digest IS DISTINCT FROM expected.physical_bucket_digest
+       OR actual.sealed_evidence_digest IS DISTINCT FROM expected.sealed_evidence_digest
+       OR actual.financial_revision_digest IS DISTINCT FROM expected.financial_revision_digest
+       OR actual.target_authority_digest IS DISTINCT FROM expected.target_authority_digest
+       OR actual.conversion_context_digest IS DISTINCT FROM expected.conversion_context_digest
   ) THEN
-    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_FACT_COMPONENT_MISMATCH' USING ERRCODE='23514';
+    RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH' USING ERRCODE='P0001';
   END IF;
 
   v_canonical_render_ms := FLOOR(EXTRACT(EPOCH FROM (clock_timestamp()-v_phase_started_at))*1000)::integer;

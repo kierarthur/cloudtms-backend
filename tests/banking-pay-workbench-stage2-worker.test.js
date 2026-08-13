@@ -438,7 +438,13 @@ test('actual RPC 1 non-success bodies never enter claim-uncertain results, aggre
 });
 
 test('no-claim result codes are restricted to the database-owned allowlist', async () => {
-  for (const resultCode of ['NO_CLAIM', 'CANDIDATE_DELETED', 'SESSION_OBSOLETE', 'ATTEMPT_GENERATION_OBSOLETE']) {
+  for (const resultCode of [
+    'NO_CLAIM',
+    'CANDIDATE_DELETED',
+    'SESSION_OBSOLETE',
+    'ATTEMPT_GENERATION_OBSOLETE',
+    'SOURCE_BUILD_OBSOLETE_SUCCESSOR_PENDING',
+  ]) {
     const result = await loadLaneAttempt()({}, baseOptions(async () => ({ ok: true, claimed: false, result_code: resultCode })));
     assert.equal(result.result_code, resultCode);
   }

@@ -43,19 +43,31 @@ test('orphan repair owns candidate serialisation and gives an obsolete generatio
   assert.match(repair, /PAY_WORKBENCH_OWNER_REPAIR_SUCCESSOR_INVALID/);
 });
 
-test('claim-start preserves the stale-build fence and atomically proves a current successor', () => {
+test('claim-start preserves the stale-build fence and durably waits for a current successor', () => {
   const staleFenceAt = claim.indexOf('v_build.source_change_seq IS DISTINCT FROM v_registry.current_source_change_seq');
   const obsoleteAt = claim.indexOf("SET status='OBSOLETE'", staleFenceAt);
   const repairAt = claim.indexOf('public.pay_workbench_repair_orphaned_pending_source_build', obsoleteAt);
   const returnAt = claim.indexOf("'result_code','ATTEMPT_GENERATION_OBSOLETE'", repairAt);
   assert.ok(staleFenceAt >= 0 && obsoleteAt > staleFenceAt && repairAt > obsoleteAt && returnAt > repairAt);
   assert.match(claim, /p_reason=>'ATTEMPT_GENERATION_OBSOLETE_SUCCESSOR'/);
-  assert.match(claim, /SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN/);
+  assert.match(claim, /SOURCE_BUILD_OBSOLETE_SUCCESSOR_WAIT_V1/);
+  assert.match(claim, /'result_code','SOURCE_BUILD_OBSOLETE_SUCCESSOR_PENDING'/);
+  assert.match(claim, /run_at_utc=v_obsolete_successor_retry_at_utc/);
+  assert.match(claim, /obsolete_successor_wait_count/);
+  assert.match(claim, /obsolete_successor_expected_source_change_seq/);
+  assert.match(claim, /obsolete_successor_expected_dirty_generation/);
+  assert.doesNotMatch(claim,
+    /COALESCE\(v_obsolete_active_successor_proven,false\) IS NOT TRUE[\s\S]{0,300}RAISE EXCEPTION 'SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN'/);
   assert.match(claim, /successor_job\.status IN \('QUEUED','RUNNING'\)/);
   assert.match(claim, /successor_state\.pending_job_id=successor_job\.id/);
   assert.match(claim, /successor_state\.source_change_seq=successor_registry\.current_source_change_seq/);
   assert.match(claim, /certified_preview_publication_parity_ok/);
   assert.match(claim, /'successor_resolution'/);
+  const successorFenceAt = claim.indexOf('COALESCE(v_obsolete_active_successor_proven,false) IS NOT TRUE');
+  const waitingReturnAt = claim.indexOf("'result_code','SOURCE_BUILD_OBSOLETE_SUCCESSOR_PENDING'", successorFenceAt);
+  const terminalUpdateAt = claim.indexOf("SET status='SUCCEEDED'", waitingReturnAt);
+  assert.ok(successorFenceAt >= 0 && waitingReturnAt > successorFenceAt && terminalUpdateAt > waitingReturnAt,
+    'obsolete job must remain queued while waiting and become terminal only after successor/current proof');
 });
 
 test('the correction does not alter Worker RPC fanout, nonce handling, or financial authority', () => {

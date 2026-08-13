@@ -181953,7 +181953,8 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
     'CLAIM_SCAN_CURSOR_WRAPPED',
     'CANDIDATE_DELETED',
     'SESSION_OBSOLETE',
-    'ATTEMPT_GENERATION_OBSOLETE'
+    'ATTEMPT_GENERATION_OBSOLETE',
+    'SOURCE_BUILD_OBSOLETE_SUCCESSOR_PENDING'
   ]);
   const boundedInteger = (value, fallback, min, max) => {
     const number = Number(value);

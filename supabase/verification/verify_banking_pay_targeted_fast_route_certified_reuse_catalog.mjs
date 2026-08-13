@@ -19,6 +19,13 @@ if (!databaseUrl) {
 
 const sqlLiteral = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const expected = Array.isArray(manifest.functions) ? manifest.functions : [];
+const repoRoot = path.resolve(here, '..', '..');
+const jamesSerializerPath = 'supabase/repeatable/04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql';
+const jamesHelperPath = 'supabase/repeatable/13082026_1912_pay_workbench_sealed_rate_component_projection_v1.sql';
+const jamesSynchronizerPath = 'supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql';
+const jamesSerializer = fs.readFileSync(path.join(repoRoot, jamesSerializerPath), 'utf8');
+const jamesHelper = fs.readFileSync(path.join(repoRoot, jamesHelperPath), 'utf8');
+const jamesSynchronizer = fs.readFileSync(path.join(repoRoot, jamesSynchronizerPath), 'utf8');
 const names = expected.map((item) => `(${sqlLiteral(item.schema)},${sqlLiteral(item.name)})`).join(',');
 const query = `
 with wanted(schema_name,function_name) as (values ${names}), catalogue as (
@@ -26,7 +33,7 @@ with wanted(schema_name,function_name) as (values ${names}), catalogue as (
     pg_catalog.pg_get_function_identity_arguments(p.oid) as identity_arguments,
     pg_catalog.encode(extensions.digest(pg_catalog.convert_to(pg_catalog.pg_get_functiondef(p.oid),'UTF8'),'sha256'),'hex') as definition_sha256,
     pg_catalog.pg_get_userbyid(p.proowner) as owner,
-    p.prosecdef as security_definer,
+    p.prosecdef as security_definer, p.provolatile as volatility, p.proparallel as parallel,
     coalesce(to_jsonb(p.proconfig),'[]'::jsonb) as proconfig,
     coalesce(acl.expanded_acl,'[]'::jsonb) as expanded_acl
   from pg_catalog.pg_proc p
@@ -75,6 +82,87 @@ for (const [key, item] of expectedByKey) {
 }
 for (const [key, item] of actualByKey) {
   if (!expectedByKey.has(key)) problems.push(`unexpected overload: ${item.schema}.${item.name}`);
+}
+
+const requiredJamesOwners = [
+  ['private', 'pay_workbench_unit_economic_occurrence_page_v1', jamesSerializerPath],
+  ['private', 'pay_workbench_sealed_rate_component_projection_v1', jamesHelperPath],
+  ['private', 'pay_sync_overpayments_from_workbench_workspace_v1', jamesSynchronizerPath],
+];
+for (const [schema, name, sourceFile] of requiredJamesOwners) {
+  const matches = expected.filter((item) => item.schema === schema && item.name === name);
+  if (matches.length !== 1 || JSON.stringify(matches[0].source_files) !== JSON.stringify([sourceFile])) {
+    problems.push(`James authority owner or source file is not exact: ${schema}.${name}`);
+  }
+}
+
+const helperManifest = expected.find((item) =>
+  item.schema === 'private' && item.name === 'pay_workbench_sealed_rate_component_projection_v1');
+const helperActual = helperManifest ? actualByKey.get(keyOf(helperManifest)) : undefined;
+if (!helperActual || helperActual.volatility !== 's' || helperActual.parallel !== 'u'
+    || helperActual.security_definer !== true
+    || JSON.stringify(helperActual.proconfig) !== JSON.stringify(['search_path=""'])
+    || JSON.stringify(helperActual.expanded_acl) !== JSON.stringify([{
+      grantee: 'postgres', grantor: 'postgres', is_grantable: false, privilege_type: 'EXECUTE',
+    }])) {
+  problems.push('sealed rate helper metadata or ACL is not exact');
+}
+
+const helperCalls = jamesSynchronizer.match(
+  /private\.pay_workbench_sealed_rate_component_projection_v1\s*\(/g,
+) || [];
+if (helperCalls.length !== 1) problems.push('bounded synchronizer must invoke the sealed rate helper exactly once');
+if (/'source_pay_method'\s*,\s*v_scope|'target_pay_method'\s*,\s*v_scope/.test(jamesSynchronizer)) {
+  problems.push('bounded synchronizer uses v_scope as component rate-method authority');
+}
+if (/preliminary_outstanding_allocation|preliminary_allocations|final_allocations|preview_truth_weight_total/i
+  .test(jamesSynchronizer)) {
+  problems.push('bounded synchronizer contains prohibited proportional allocation ownership');
+}
+for (const required of [
+  'tmp_sync_builder_physical_components',
+  'PAY_SYNC_OVERPAYMENTS_RATE_ECONOMIC_FENCE_MISMATCH',
+  'PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH',
+]) {
+  if (!jamesSynchronizer.includes(required)) problems.push(`bounded physical fence is missing: ${required}`);
+}
+for (const required of [
+  'rate_authority_version', 'physical_bucket_key', 'physical_bucket_digest',
+  'builder_comparison_digest', 'financial_digest_version',
+]) {
+  if (!jamesSerializer.includes(required)) problems.push(`serializer rate contract is missing: ${required}`);
+}
+if (!/WHEN input\.source_pay_method IS NULL\s+OR input\.source_pay_method NOT IN \('PAYE','UMBRELLA'\)/
+  .test(jamesSerializer)
+  || !/WHEN input\.target_pay_method IS NULL\s+OR input\.target_pay_method NOT IN \('PAYE','UMBRELLA'\)/
+    .test(jamesSerializer)) {
+  problems.push('serializer nullable pay-method failures are not typed before materialisation');
+}
+if (!jamesSerializer.includes('FROM jsonb_each(CASE')
+    || !jamesSerializer.includes("WHEN 'ADDITIONAL' THEN 'additional:'||UPPER")) {
+  problems.push('serializer does not preserve every arbitrary additional-rate identity');
+}
+for (const required of [
+  'sealed_physical_amount_facts', 'sealed_physical_amount_matches',
+  'PHYSICAL_BUCKET_KEY', 'STRUCTURAL_IDENTITY', 'SOLE_BUCKET',
+  'RATE_AUTHORITY_PHYSICAL_BASELINE_REQUIRED',
+  'RATE_AUTHORITY_PHYSICAL_RESERVATION_REQUIRED',
+]) {
+  if (!jamesHelper.includes(required)) {
+    problems.push(`sealed physical baseline/reservation attribution is missing: ${required}`);
+  }
+}
+if (!jamesSynchronizer.includes("SELECT 21,'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'")
+    || !jamesSynchronizer.includes("SELECT 22,'RATE_AUTHORITY_TARGET_PAY_METHOD_MISSING'")) {
+  problems.push('synchronizer nullable pay-method failures are not materialised before constraints');
+}
+if (!/GROUP BY raw\.timesheet_id,raw\.component_kind,raw\.component_member_identity,\s*raw\.economic_key_type,raw\.economic_key_value,raw\.bucket_code/
+  .test(jamesSynchronizer)) {
+  problems.push('multiple-rate fence does not use the full physical component identity');
+}
+if (/public\.(timesheets|timesheets_financials|candidates|umbrellas|settings_finance_windows)/i
+  .test(jamesHelper)) {
+  problems.push('sealed rate helper contains a live authority relation');
 }
 if (problems.length) {
   console.error('Targeted fast-route and certified-reuse catalogue verification failed:');

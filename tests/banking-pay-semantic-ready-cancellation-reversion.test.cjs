@@ -222,7 +222,7 @@ test('mid-build execution refresh bridge is exact, bounded, inert by default and
   assert.match(executionRefreshOwnerProof,
     /EXECUTION_UNSENT_OVERLAY_CHAIN_V2[\s\S]*transition_count[\s\S]*NOT BETWEEN 1 AND 16/);
   assert.match(executionRefreshOwnerProof,
-    /current_source_publication_id IS NOT NULL[\s\S]*current_source_count<>0[\s\S]*EXECUTION_REFRESH_OWNER_PARTIAL_OR_CURRENT_PUBLICATION/);
+    /observed_source_provenance_shape<>'ORIGINAL_CERTIFIED_RESIDUAL_ONLY'[\s\S]*current_source_publication_id IS NOT NULL[\s\S]*current_source_count<>0[\s\S]*EXECUTION_REFRESH_OWNER_PARTIAL_OR_CURRENT_PUBLICATION/);
   assert.match(executionRefreshOwnerProof,
     /ORIGINAL_CERTIFIED_RESIDUAL_ONLY[\s\S]*EXECUTION_OWNER_PARTIAL_ONLY[\s\S]*MIXED_ORIGINAL_AND_EXECUTION_OWNER/);
   assert.match(executionRefreshOwnerProof,
@@ -235,6 +235,14 @@ test('mid-build execution refresh bridge is exact, bounded, inert by default and
     /unexpected_current_publication_count[\s\S]*unexpected_current_source_build_run_count[\s\S]*unexpected_current_source_identity_digest/);
   assert.match(executionRefreshOwnerProof,
     /ready_preview_current_session_version_count[\s\S]*ready_preview_other_session_version_count[\s\S]*ready_preview_identity_digest/);
+  assert.match(executionRefreshOwnerProof,
+    /CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3[\s\S]*READY_TO_PAY_SEMANTIC_V2[\s\S]*EXECUTION_REFRESH_OWNER_ORIGINAL_ATTESTATION_MISMATCH/);
+  assert.match(executionRefreshOwnerProof,
+    /canonical_original_source_identity_digest[\s\S]*frozen_attestation->>'source_identity_digest'[\s\S]*EXECUTION_REFRESH_OWNER_ORIGINAL_SOURCE_ATTESTATION_MISMATCH/);
+  assert.match(executionRefreshOwnerProof,
+    /frozen_attestation->>'preview_row_count'[\s\S]*ready_preview_identity_digest[\s\S]*source_minus_preview_count<>0[\s\S]*preview_minus_source_count<>0[\s\S]*EXECUTION_REFRESH_OWNER_ORIGINAL_PREVIEW_ATTESTATION_MISMATCH/);
+  assert.match(executionRefreshOwnerProof,
+    /'transient_publication_shape',classified\.observed_source_provenance_shape/);
   assert.match(executionRefreshOwnerProof,
     /EXECUTION_REFRESH_OWNER_TRANSIENT_SHAPE_OBSERVE_V1/);
   assert.match(executionRefreshOwnerProof,
@@ -323,7 +331,7 @@ test('reconciliation keeps its presentation fence while validating V3 allocation
   assert.match(reconciliation, /actual\.semantic_negative_parent/);
   assert.match(reconciliation, /actual\.presentation_section='BLOCKED_FOR_PAY'/);
   assert.match(reconciliation, /expected\.presentation_section='READY_TO_PAY'/);
-  assert.match(reconciliation, /PAY_WORKBENCH_CANONICAL_FACT_COMPONENT_MISMATCH/);
+  assert.match(reconciliation, /PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH/);
 });
 
 test('V3 caps recognised recoveries to exact same-candidate allocation headroom', () => {

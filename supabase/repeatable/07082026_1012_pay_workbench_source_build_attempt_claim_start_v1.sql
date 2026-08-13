@@ -72,6 +72,9 @@ DECLARE
   v_obsolete_successor_job_id uuid:=NULL::uuid;
   v_obsolete_active_successor_proven boolean:=false;
   v_obsolete_terminal_current_proven boolean:=false;
+  v_obsolete_successor_wait_count integer:=0;
+  v_obsolete_successor_wait_seconds integer:=2;
+  v_obsolete_successor_retry_at_utc timestamptz:=NULL::timestamptz;
   v_draft_deferral_enabled boolean:=false;
   v_draft_operation_id uuid:=NULL::uuid;
   v_draft_operation public.banking_pay_operations%ROWTYPE;
@@ -950,14 +953,6 @@ BEGIN
       UPDATE private.banking_pay_workbench_candidate_scope_registry
       SET current_build_id=NULL,updated_at_utc=clock_timestamp()
       WHERE candidate_id=v_job.candidate_id AND current_build_id=v_build_id;
-      UPDATE public.banking_pay_workbench_jobs
-      SET status='SUCCEEDED',completed_at_utc=clock_timestamp(),
-          economic_build_id=NULL,private_stage=NULL,private_cursor_kind=NULL,
-          private_cursor_json='{}'::jsonb,private_stage_version=NULL,
-          last_error_json=jsonb_build_object('code','ATTEMPT_GENERATION_OBSOLETE'),
-          updated_at_utc=clock_timestamp()
-      WHERE id=v_job.id AND status='QUEUED';
-
       v_obsolete_repair_result:=public.pay_workbench_repair_orphaned_pending_source_build(
         p_session_id=>v_job.session_id,
         p_candidate_id=>v_job.candidate_id,
@@ -967,11 +962,7 @@ BEGIN
       );
 
       IF jsonb_typeof(v_obsolete_repair_result) IS DISTINCT FROM 'object'
-         OR lower(BTRIM(COALESCE(v_obsolete_repair_result->>'ok','false'))) <> 'true'
-         OR COALESCE((v_obsolete_repair_result->>'unresolved_count')::integer,0) <> 0
-         OR lower(BTRIM(COALESCE(
-              v_obsolete_repair_result->>'all_state_transitions_proven','false'
-            ))) <> 'true' THEN
+         OR lower(BTRIM(COALESCE(v_obsolete_repair_result->>'ok','false'))) <> 'true' THEN
         RAISE EXCEPTION 'SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN'
           USING ERRCODE='40001',DETAIL=jsonb_build_object(
             'code','SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN',
@@ -1033,15 +1024,75 @@ BEGIN
 
       IF COALESCE(v_obsolete_active_successor_proven,false) IS NOT TRUE
          AND COALESCE(v_obsolete_terminal_current_proven,false) IS NOT TRUE THEN
-        RAISE EXCEPTION 'SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN'
-          USING ERRCODE='40001',DETAIL=jsonb_build_object(
-            'code','SOURCE_BUILD_OBSOLETE_SUCCESSOR_NOT_PROVEN',
-            'job_id',v_job.id,
-            'candidate_id',v_job.candidate_id,
-            'successor_job_id',v_obsolete_successor_job_id,
-            'repair_result_code',v_obsolete_repair_result->>'repair_code'
-          )::text;
+        v_obsolete_successor_wait_count:=CASE
+          WHEN COALESCE(v_job.payload_json->>'obsolete_successor_wait_count','')~'^[0-9]{1,9}$'
+            THEN LEAST((v_job.payload_json->>'obsolete_successor_wait_count')::integer,1000000)
+          ELSE 0
+        END;
+        v_obsolete_successor_wait_seconds:=LEAST(30,GREATEST(2,
+          power(2,LEAST(v_obsolete_successor_wait_count+1,5))::integer
+        ));
+        v_obsolete_successor_retry_at_utc:=pg_catalog.clock_timestamp()
+          +pg_catalog.make_interval(secs=>v_obsolete_successor_wait_seconds);
+
+        UPDATE public.banking_pay_workbench_jobs AS waiting_job
+        SET run_at_utc=v_obsolete_successor_retry_at_utc,
+            payload_json=(COALESCE(waiting_job.payload_json,'{}'::jsonb)
+              -'obsolete_successor_retry_at_utc')||pg_catalog.jsonb_build_object(
+                'obsolete_successor_wait_contract_version',
+                  'SOURCE_BUILD_OBSOLETE_SUCCESSOR_WAIT_V1',
+                'obsolete_successor_wait_count',v_obsolete_successor_wait_count+1,
+                'obsolete_successor_wait_started_at_utc',COALESCE(
+                  waiting_job.payload_json->>'obsolete_successor_wait_started_at_utc',
+                  pg_catalog.clock_timestamp()::text
+                ),
+                'obsolete_successor_retry_at_utc',v_obsolete_successor_retry_at_utc,
+                'obsolete_successor_expected_source_change_seq',
+                  v_registry.current_source_change_seq,
+                'obsolete_successor_expected_dirty_generation',v_registry.dirty_generation,
+                'obsolete_successor_last_repair_code',
+                  v_obsolete_repair_result->>'repair_code',
+                'obsolete_successor_repair_unresolved_count',COALESCE(
+                  CASE WHEN COALESCE(v_obsolete_repair_result->>'unresolved_count','')
+                    ~'^[0-9]{1,9}$'
+                    THEN (v_obsolete_repair_result->>'unresolved_count')::integer END,0
+                ),
+                'obsolete_successor_repair_transitions_proven',
+                  pg_catalog.lower(pg_catalog.btrim(COALESCE(
+                    v_obsolete_repair_result->>'all_state_transitions_proven','false'
+                  ))) IN ('true','t','1','yes','y','on')
+              ),
+            updated_at_utc=pg_catalog.clock_timestamp()
+        WHERE waiting_job.id=v_job.id AND waiting_job.status='QUEUED';
+
+        RETURN pg_catalog.jsonb_build_object(
+          'ok',true,'claimed',false,
+          'result_code','SOURCE_BUILD_OBSOLETE_SUCCESSOR_PENDING',
+          'job_id',v_job.id,'candidate_id',v_job.candidate_id,
+          'retry_at_utc',v_obsolete_successor_retry_at_utc,
+          'repair_result_code',v_obsolete_repair_result->>'repair_code',
+          'expected_source_change_seq',v_registry.current_source_change_seq,
+          'expected_generation',v_registry.dirty_generation
+        );
       END IF;
+
+      UPDATE public.banking_pay_workbench_jobs AS obsolete_job
+      SET status='SUCCEEDED',completed_at_utc=pg_catalog.clock_timestamp(),
+          economic_build_id=NULL,private_stage=NULL,private_cursor_kind=NULL,
+          private_cursor_json='{}'::jsonb,private_stage_version=NULL,
+          payload_json=COALESCE(obsolete_job.payload_json,'{}'::jsonb)
+            -'obsolete_successor_wait_contract_version'
+            -'obsolete_successor_wait_count'
+            -'obsolete_successor_wait_started_at_utc'
+            -'obsolete_successor_retry_at_utc'
+            -'obsolete_successor_expected_source_change_seq'
+            -'obsolete_successor_expected_dirty_generation'
+            -'obsolete_successor_last_repair_code'
+            -'obsolete_successor_repair_unresolved_count'
+            -'obsolete_successor_repair_transitions_proven',
+          last_error_json=pg_catalog.jsonb_build_object('code','ATTEMPT_GENERATION_OBSOLETE'),
+          updated_at_utc=pg_catalog.clock_timestamp()
+      WHERE obsolete_job.id=v_job.id AND obsolete_job.status='QUEUED';
 
       RETURN jsonb_build_object('ok',true,'claimed',false,
         'result_code','ATTEMPT_GENERATION_OBSOLETE',

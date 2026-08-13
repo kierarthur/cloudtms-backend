@@ -3,13 +3,13 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 25,
+  "function_count": 27,
   "functions": [
     {
       "schema": "private",
       "name": "pay_sync_overpayments_from_workbench_workspace_v1",
       "identity_arguments": "p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]",
-      "definition_sha256": "7e09381f2dbe3f4214d3812ac68186a20120b6fcefb59b7d3c5d0d321040d48d",
+      "definition_sha256": "ff25f84cebffa4c6cfe4df360f907e139d517e7d1c8c2e0c40ebe1997a63e953",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -281,6 +281,50 @@
       ],
       "source_files": [
         "supabase/repeatable/07082026_1016_banking_pay_targeted_delta_runtime.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_unit_economic_occurrence_page_v1",
+      "identity_arguments": "p_build_id uuid, p_dependency_unit_key text, p_fact_family text, p_projected_timesheet_id uuid, p_last_source_key text, p_limit integer",
+      "definition_sha256": "cb18cd1961ce32158e7707b5bc146d99ee504fbaa16d514933d0bd502487de4c",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_sealed_rate_component_projection_v1",
+      "identity_arguments": "p_build_id uuid, p_candidate_id uuid, p_timesheet_ids uuid[]",
+      "definition_sha256": "7fddbe2596587bebf47edfb02852263bb61e2f64a27e4798171d1a8fe81cee0f",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/13082026_1912_pay_workbench_sealed_rate_component_projection_v1.sql"
       ]
     },
     {
@@ -658,7 +702,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "18c47646172f8f23f1a319c48ee9e1699ee00a05ef522a6cf60ed65d8fa110a7",
+      "definition_sha256": "39a16a81aaa1fa57ca8184432e0680a3a7b1624f2ab27741f0deb93e2b4842d2",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

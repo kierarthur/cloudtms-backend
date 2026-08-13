@@ -146,6 +146,9 @@ BEGIN
       source_provenance.original_current_source_identity_digest,
       source_provenance.owner_current_source_identity_digest,
       source_provenance.unexpected_current_source_identity_digest,
+      source_provenance.canonical_original_source_identity_digest,
+      COALESCE(source_provenance.current_source_other_session_version_count,0)
+        AS current_source_other_session_version_count,
       CASE
         WHEN COALESCE(source_provenance.current_source_count,0)=0
           THEN 'NO_CURRENT_SOURCE_ROWS'
@@ -169,6 +172,12 @@ BEGIN
       COALESCE(preview_provenance.ready_preview_other_session_version_count,0)
         AS ready_preview_other_session_version_count,
       preview_provenance.ready_preview_identity_digest,
+      COALESCE(parity_provenance.source_minus_preview_count,0)
+        AS source_minus_preview_count,
+      COALESCE(parity_provenance.preview_minus_source_count,0)
+        AS preview_minus_source_count,
+      original_authority.frozen_attestation,
+      original_authority.frozen_scope_ordinal,
       scope_pending.economic_build_id AS scope_pending_economic_build_id,
       state_pending.economic_build_id AS state_pending_economic_build_id,
       COALESCE(expected.expected_chain_digest,'') AS expected_chain_digest,
@@ -183,6 +192,28 @@ BEGIN
         WHERE context_digest.value=root_context.context_digest
       ) AS context_digest_in_chain
     FROM authority
+    LEFT JOIN LATERAL (
+      SELECT
+        draft_scope.allocation_basis_json->'source_publication_attestation'
+          AS frozen_attestation,
+        CASE
+          WHEN COALESCE(
+            draft_scope.allocation_basis_json#>>'{source_publication_attestation,scope_ordinal}',
+            ''
+          )~'^[0-9]{1,18}$'
+          THEN (draft_scope.allocation_basis_json#>>
+            '{source_publication_attestation,scope_ordinal}')::bigint
+          ELSE NULL::bigint
+        END AS frozen_scope_ordinal
+      FROM public.banking_pay_operation_candidate_scope AS draft_scope
+      WHERE COALESCE(authority.chain_receipt->>'draft_operation_id','')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        AND draft_scope.operation_id=(authority.chain_receipt->>'draft_operation_id')::uuid
+        AND draft_scope.pay_batch_id=p_pay_batch_id
+        AND draft_scope.candidate_id=authority.candidate_id
+        AND draft_scope.status NOT IN ('FAILED','CANCELLED','SUPERSEDED')
+      LIMIT 1
+    ) AS original_authority ON true
     LEFT JOIN LATERAL (
       SELECT build_row.*
       FROM private.banking_pay_workbench_economic_builds AS build_row
@@ -224,6 +255,8 @@ BEGIN
         END AS owner_source_publication_id
       ), current_rows AS (
         SELECT source_row.*,
+          public.pay_workbench_preview_section_from_line_json(source_row.source_row_json)
+            AS effective_section,
           COALESCE(
             source_row.source_build_run_id::text
               =authority.chain_receipt->>'original_source_build_run_id'
@@ -302,7 +335,17 @@ BEGIN
           pg_catalog.string_agg(current_rows.canonical_active_identity,'|' ORDER BY
             current_rows.canonical_active_identity) FILTER (
               WHERE NOT current_rows.is_original_source AND NOT current_rows.is_owner_source
-            ),''),'UTF8'),'sha256'),'hex') AS unexpected_current_source_identity_digest
+            ),''),'UTF8'),'sha256'),'hex') AS unexpected_current_source_identity_digest,
+        pg_catalog.md5(COALESCE(pg_catalog.string_agg(
+          current_rows.effective_section||E'\x1f'||current_rows.line_key||E'\x1f'||
+            current_rows.source_ordinal::text,E'\x1e'
+          ORDER BY current_rows.source_ordinal,current_rows.effective_section,
+            current_rows.line_key
+        ) FILTER (WHERE current_rows.is_original_source),''))
+          AS canonical_original_source_identity_digest,
+        pg_catalog.count(*) FILTER (
+          WHERE current_rows.session_version IS DISTINCT FROM authority.session_version
+        )::integer AS current_source_other_session_version_count
       FROM expected_publication
       LEFT JOIN current_rows ON true
       CROSS JOIN duplicate_identities
@@ -321,16 +364,53 @@ BEGIN
           WHERE preview_row.status='READY'
             AND preview_row.session_version IS DISTINCT FROM authority.session_version
         )::integer AS ready_preview_other_session_version_count,
-        pg_catalog.encode(extensions.digest(pg_catalog.convert_to(COALESCE(
-          pg_catalog.string_agg(pg_catalog.concat_ws('|',
-            preview_row.session_version::text,preview_row.section,preview_row.row_key
-          ),'|' ORDER BY preview_row.session_version,preview_row.section,preview_row.row_key)
-            FILTER (WHERE preview_row.status='READY'),''),'UTF8'),'sha256'),'hex')
-          AS ready_preview_identity_digest
+        pg_catalog.md5(COALESCE(pg_catalog.string_agg(
+          preview_row.section||E'\x1f'||preview_row.row_key||E'\x1f'||
+            (preview_row.row_ordinal-(original_authority.frozen_scope_ordinal*1000000))::text,
+          E'\x1e' ORDER BY
+            (preview_row.row_ordinal-(original_authority.frozen_scope_ordinal*1000000)),
+            preview_row.section,preview_row.row_key
+        ) FILTER (
+          WHERE preview_row.status='READY'
+            AND preview_row.session_version=authority.session_version
+        ),'')) AS ready_preview_identity_digest
       FROM public.banking_pay_workbench_preview_rows AS preview_row
       WHERE preview_row.session_id=authority.session_id
         AND preview_row.candidate_id=authority.candidate_id
     ) AS preview_provenance ON true
+    LEFT JOIN LATERAL (
+      WITH current_source AS (
+        SELECT
+          public.pay_workbench_preview_section_from_line_json(source_row.source_row_json)
+            AS section,
+          source_row.line_key,
+          source_row.source_ordinal
+        FROM public.banking_pay_workbench_candidate_source_lines AS source_row
+        WHERE source_row.session_id=authority.session_id
+          AND source_row.candidate_id=authority.candidate_id
+          AND source_row.status='CURRENT'
+      ), ready_preview AS (
+        SELECT preview_row.section,preview_row.row_key,
+          (preview_row.row_ordinal-(original_authority.frozen_scope_ordinal*1000000))::bigint
+            AS source_ordinal
+        FROM public.banking_pay_workbench_preview_rows AS preview_row
+        WHERE preview_row.session_id=authority.session_id
+          AND preview_row.candidate_id=authority.candidate_id
+          AND preview_row.session_version=authority.session_version
+          AND preview_row.status='READY'
+      )
+      SELECT
+        (SELECT pg_catalog.count(*)::integer FROM (
+          SELECT section,line_key,source_ordinal FROM current_source
+          EXCEPT ALL
+          SELECT section,row_key,source_ordinal FROM ready_preview
+        ) AS source_diff) AS source_minus_preview_count,
+        (SELECT pg_catalog.count(*)::integer FROM (
+          SELECT section,row_key,source_ordinal FROM ready_preview
+          EXCEPT ALL
+          SELECT section,line_key,source_ordinal FROM current_source
+        ) AS preview_diff) AS preview_minus_source_count
+    ) AS parity_provenance ON true
     LEFT JOIN LATERAL (
       SELECT source_job.*
       FROM public.banking_pay_workbench_jobs AS source_job
@@ -453,9 +533,76 @@ BEGIN
           OR candidate_state_source_change_seq IS DISTINCT FROM live_source_change_seq
           OR candidate_state_session_version IS DISTINCT FROM session_version
           THEN 'EXECUTION_REFRESH_OWNER_LIVE_AUTHORITY_MISMATCH'
-        WHEN current_source_publication_id IS NOT NULL OR current_source_build_run_id IS NOT NULL
-          OR current_source_count<>0 OR partial_current_publication_count<>0
-          OR current_publication_parity IS TRUE
+        WHEN observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND (
+            pg_catalog.jsonb_typeof(frozen_attestation)<>'object'
+            OR COALESCE(frozen_attestation->>'attestation_version','')
+                 <>'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+            OR COALESCE(frozen_attestation->>'contract_version','')<>'3'
+            OR COALESCE(frozen_attestation->>'semantic_contract_version','')
+                 <>'READY_TO_PAY_SEMANTIC_V2'
+            OR pg_catalog.lower(pg_catalog.btrim(COALESCE(
+                 frozen_attestation->>'semantic_ready','false'
+               ))) NOT IN ('true','t','1','yes','y','on')
+            OR pg_catalog.lower(pg_catalog.btrim(COALESCE(
+                 frozen_attestation->>'parity_complete','false'
+               ))) NOT IN ('true','t','1','yes','y','on')
+            OR COALESCE(frozen_attestation->>'session_id','')<>COALESCE(session_id::text,'')
+            OR COALESCE(frozen_attestation->>'candidate_id','')<>candidate_id::text
+            OR COALESCE(frozen_attestation->>'session_version','')<>COALESCE(session_version::text,'')
+            OR frozen_scope_ordinal IS NULL
+            OR COALESCE(frozen_attestation->>'source_change_seq','')
+                 <>COALESCE(chain_receipt->>'pre_execution_source_change_seq','')
+            OR COALESCE(frozen_attestation->>'source_build_run_id','')
+                 <>COALESCE(chain_receipt->>'original_source_build_run_id','')
+            OR COALESCE(frozen_attestation->>'source_publication_id','')
+                 <>COALESCE(chain_receipt->>'original_source_publication_id','')
+            OR COALESCE(frozen_attestation->>'semantic_proof_digest','')
+                 <>COALESCE(chain_receipt->>'original_semantic_proof_digest','')
+          )
+          THEN 'EXECUTION_REFRESH_OWNER_ORIGINAL_ATTESTATION_MISMATCH'
+        WHEN observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND (
+            CASE
+              WHEN COALESCE(frozen_attestation->>'source_row_count','')~'^[0-9]{1,9}$'
+              THEN (frozen_attestation->>'source_row_count')::integer
+              ELSE NULL::integer
+            END IS DISTINCT FROM current_source_count
+            OR owner_current_source_count<>0 OR unexpected_current_source_count<>0
+            OR unexpected_current_publication_count<>0
+            OR unexpected_current_source_build_run_count<>0
+            OR null_current_publication_count<>0 OR partial_current_publication_count<>1
+            OR duplicate_active_identity_count<>0
+            OR current_source_other_session_version_count<>0
+            OR COALESCE(canonical_original_source_identity_digest,'')
+                 <>COALESCE(frozen_attestation->>'source_identity_digest','')
+            OR COALESCE(chain_receipt->>'original_source_identity_digest','')
+                 <>COALESCE(frozen_attestation->>'source_identity_digest','')
+            OR COALESCE(current_source_build_run_id::text,'')
+                 <>COALESCE(chain_receipt->>'original_source_build_run_id','')
+            OR COALESCE(current_source_publication_id::text,'')
+                 <>COALESCE(chain_receipt->>'original_source_publication_id','')
+            OR current_publication_parity IS NOT TRUE
+          )
+          THEN 'EXECUTION_REFRESH_OWNER_ORIGINAL_SOURCE_ATTESTATION_MISMATCH'
+        WHEN observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND (
+            CASE
+              WHEN COALESCE(frozen_attestation->>'preview_row_count','')~'^[0-9]{1,9}$'
+              THEN (frozen_attestation->>'preview_row_count')::integer
+              ELSE NULL::integer
+            END IS DISTINCT FROM ready_preview_count
+            OR ready_preview_current_session_version_count<>ready_preview_count
+            OR ready_preview_other_session_version_count<>0
+            OR COALESCE(ready_preview_identity_digest,'')
+                 <>COALESCE(frozen_attestation->>'preview_identity_digest','')
+            OR source_minus_preview_count<>0 OR preview_minus_source_count<>0
+          )
+          THEN 'EXECUTION_REFRESH_OWNER_ORIGINAL_PREVIEW_ATTESTATION_MISMATCH'
+        WHEN observed_source_provenance_shape<>'ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND (current_source_publication_id IS NOT NULL OR current_source_build_run_id IS NOT NULL
+            OR current_source_count<>0 OR partial_current_publication_count<>0
+            OR current_publication_parity IS TRUE)
           THEN 'EXECUTION_REFRESH_OWNER_PARTIAL_OR_CURRENT_PUBLICATION'
         WHEN pg_catalog.upper(pg_catalog.btrim(COALESCE(scope_status,'')))<>'SOURCE_BUILD_PENDING'
           OR pg_catalog.upper(pg_catalog.btrim(COALESCE(candidate_status,'')))<>'PENDING'
@@ -504,6 +651,7 @@ BEGIN
       'bridge_admitted',classified.rejection_reason IS NULL,
       'admitted',classified.rejection_reason IS NULL,
       'currentness_basis','EXACT_UNSENT_EXECUTION_REFRESH_OWNER',
+      'transient_publication_shape',classified.observed_source_provenance_shape,
       'rejection_reason',classified.rejection_reason,
       'execution_operation_id',classified.execution_operation_id,
       'pay_batch_id',p_pay_batch_id,
@@ -540,6 +688,18 @@ BEGIN
         'ready_preview_other_session_version_count',
           classified.ready_preview_other_session_version_count,
         'ready_preview_identity_digest',classified.ready_preview_identity_digest,
+        'canonical_original_source_identity_digest',
+          classified.canonical_original_source_identity_digest,
+        'frozen_original_source_identity_digest',
+          classified.frozen_attestation->>'source_identity_digest',
+        'frozen_original_preview_identity_digest',
+          classified.frozen_attestation->>'preview_identity_digest',
+        'frozen_original_source_row_count',classified.frozen_attestation->'source_row_count',
+        'frozen_original_preview_row_count',classified.frozen_attestation->'preview_row_count',
+        'current_source_other_session_version_count',
+          classified.current_source_other_session_version_count,
+        'source_minus_preview_count',classified.source_minus_preview_count,
+        'preview_minus_source_count',classified.preview_minus_source_count,
         'observed_transient_shape_digest',pg_catalog.encode(extensions.digest(
           pg_catalog.convert_to(pg_catalog.concat_ws('|',
             'EXECUTION_REFRESH_OWNER_TRANSIENT_SHAPE_OBSERVE_V1',
@@ -575,6 +735,11 @@ BEGIN
           COALESCE(classified.owner_context_digest,''),
           COALESCE(classified.owner_source_change_seq,-1)::text,
           COALESCE(classified.owner_dirty_generation,-1)::text,
+          COALESCE(classified.observed_source_provenance_shape,''),
+          COALESCE(classified.chain_receipt->>'original_source_build_run_id',''),
+          COALESCE(classified.chain_receipt->>'original_source_publication_id',''),
+          COALESCE(classified.frozen_attestation->>'source_identity_digest',''),
+          COALESCE(classified.frozen_attestation->>'preview_identity_digest',''),
           (classified.rejection_reason IS NULL)::text,COALESCE(classified.rejection_reason,'')),
         'UTF8'),'sha256'),'hex')
     )) AS result_json
