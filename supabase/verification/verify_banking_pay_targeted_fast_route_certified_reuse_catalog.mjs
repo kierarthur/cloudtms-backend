@@ -122,7 +122,7 @@ if (/preliminary_outstanding_allocation|preliminary_allocations|final_allocation
 for (const required of [
   'tmp_sync_builder_physical_components',
   'PAY_SYNC_OVERPAYMENTS_RATE_ECONOMIC_FENCE_MISMATCH',
-  'PAY_WORKBENCH_CANONICAL_PHYSICAL_COMPONENT_MISMATCH',
+  'PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH',
 ]) {
   if (!jamesSynchronizer.includes(required)) problems.push(`bounded physical fence is missing: ${required}`);
 }

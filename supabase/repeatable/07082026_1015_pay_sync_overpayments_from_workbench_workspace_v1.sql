@@ -5173,7 +5173,7 @@ begin
        OR actual.target_authority_digest IS DISTINCT FROM expected.target_authority_digest
        OR actual.conversion_context_digest IS DISTINCT FROM expected.conversion_context_digest
   ) THEN
-    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_PHYSICAL_COMPONENT_MISMATCH' USING ERRCODE='23514';
+    RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH' USING ERRCODE='P0001';
   END IF;
 
   v_canonical_render_ms := FLOOR(EXTRACT(EPOCH FROM (clock_timestamp()-v_phase_started_at))*1000)::integer;

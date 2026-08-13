@@ -323,7 +323,7 @@ test('reconciliation keeps its presentation fence while validating V3 allocation
   assert.match(reconciliation, /actual\.semantic_negative_parent/);
   assert.match(reconciliation, /actual\.presentation_section='BLOCKED_FOR_PAY'/);
   assert.match(reconciliation, /expected\.presentation_section='READY_TO_PAY'/);
-  assert.match(reconciliation, /PAY_WORKBENCH_CANONICAL_FACT_COMPONENT_MISMATCH/);
+  assert.match(reconciliation, /PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH/);
 });
 
 test('V3 caps recognised recoveries to exact same-candidate allocation headroom', () => {

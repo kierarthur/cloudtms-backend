@@ -208,7 +208,7 @@ BEGIN
 
   IF position('tmp_sync_builder_physical_components' in v_sync_definition)=0
      OR position('builder_comparison_digest' in v_sync_definition)=0
-     OR position('PAY_WORKBENCH_CANONICAL_PHYSICAL_COMPONENT_MISMATCH' in v_sync_definition)=0 THEN
+     OR position('PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH' in v_sync_definition)=0 THEN
     RAISE EXCEPTION 'V1210_BUILDER_PHYSICAL_OWNER_FENCE_MISSING';
   END IF;
 END;

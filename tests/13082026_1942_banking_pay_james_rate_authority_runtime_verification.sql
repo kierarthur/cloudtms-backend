@@ -32,7 +32,7 @@ BEGIN
 
   IF v_sync_definition ~* 'preliminary_outstanding_allocation|preliminary_allocations|final_allocations|preview_truth_weight_total'
      OR v_sync_definition ~ '''source_pay_method''\s*,\s*v_scope'
-     OR position('PAY_WORKBENCH_CANONICAL_PHYSICAL_COMPONENT_MISMATCH' in v_sync_definition)=0 THEN
+     OR position('PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH' in v_sync_definition)=0 THEN
     RAISE EXCEPTION 'JAMES_RATE_SYNCHRONIZER_PHYSICAL_OWNER_FAILED';
   END IF;
 END;
