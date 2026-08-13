@@ -51,6 +51,15 @@ DECLARE
   v_attestation_current boolean := false;
   v_active_owner_count integer := 0;
   v_active_owner_job_id uuid := NULL::uuid;
+  v_active_owner_group_count integer := 0;
+  v_current_owner_group_count integer := 0;
+  v_older_owner_group_count integer := 0;
+  v_unfenced_owner_group_count integer := 0;
+  v_current_owner_group_key text := NULL::text;
+  v_scope_pending_owner_group_key text := NULL::text;
+  v_state_pending_owner_group_key text := NULL::text;
+  v_active_owner_topology text := NULL::text;
+  v_active_owner_job_ids jsonb := '[]'::jsonb;
   v_terminal_current boolean := false;
   v_current_or_active_owner boolean := false;
   v_reason text := NULL::text;
@@ -128,6 +137,15 @@ BEGIN
     v_attestation_current := false;
     v_active_owner_count := 0;
     v_active_owner_job_id := NULL::uuid;
+    v_active_owner_group_count := 0;
+    v_current_owner_group_count := 0;
+    v_older_owner_group_count := 0;
+    v_unfenced_owner_group_count := 0;
+    v_current_owner_group_key := NULL::text;
+    v_scope_pending_owner_group_key := NULL::text;
+    v_state_pending_owner_group_key := NULL::text;
+    v_active_owner_topology := NULL::text;
+    v_active_owner_job_ids := '[]'::jsonb;
     v_terminal_current := false;
     v_current_or_active_owner := false;
 
@@ -235,16 +253,78 @@ BEGIN
         'DIRTY','PENDING','READY','RUNNING','QUEUED','ERROR','FAILED'
       );
 
-    SELECT pg_catalog.count(*)::integer,
-           pg_catalog.min(owner_job.id::text)::uuid
-    INTO v_active_owner_count,v_active_owner_job_id
-    FROM public.banking_pay_workbench_jobs AS owner_job
-    WHERE owner_job.session_id=p_session_id
-      AND owner_job.candidate_id=v_candidate_id
-      AND pg_catalog.upper(pg_catalog.btrim(COALESCE(owner_job.status,''))) IN ('QUEUED','RUNNING')
-      AND pg_catalog.upper(pg_catalog.btrim(COALESCE(owner_job.job_type,''))) IN (
-        'WORKBENCH_CANDIDATE_SOURCE_BUILD','WORKBENCH_CANDIDATE_DELTA_REFRESH'
-      );
+    WITH active_jobs AS (
+      SELECT owner_job.id,owner_job.economic_build_id,
+        CASE WHEN owner_job.economic_build_id IS NOT NULL
+          THEN 'BUILD:'||owner_job.economic_build_id::text ELSE 'JOB:'||owner_job.id::text END
+          AS owner_group_key,
+        COALESCE(owner_build.source_change_seq,CASE
+          WHEN COALESCE(owner_job.payload_json->>'source_change_seq','')~'^[0-9]{1,18}$'
+          THEN (owner_job.payload_json->>'source_change_seq')::bigint END) AS owner_source_change_seq,
+        COALESCE(owner_build.captured_candidate_generation,owner_job.scope_change_generation,CASE
+          WHEN COALESCE(owner_job.payload_json->>'scope_change_generation','')~'^[0-9]{1,18}$'
+          THEN (owner_job.payload_json->>'scope_change_generation')::bigint END) AS owner_dirty_generation
+      FROM public.banking_pay_workbench_jobs AS owner_job
+      LEFT JOIN private.banking_pay_workbench_economic_builds AS owner_build
+        ON owner_build.id=owner_job.economic_build_id
+      WHERE owner_job.session_id=p_session_id
+        AND owner_job.candidate_id=v_candidate_id
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(owner_job.status,''))) IN ('QUEUED','RUNNING')
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(owner_job.job_type,''))) IN (
+          'WORKBENCH_CANDIDATE_SOURCE_BUILD','WORKBENCH_CANDIDATE_DELTA_REFRESH'
+        )
+      ORDER BY owner_job.created_at_utc,owner_job.id
+      LIMIT 101
+    ), owner_groups AS (
+      SELECT owner_group_key,
+        pg_catalog.count(*)::integer AS active_job_count,
+        pg_catalog.count(DISTINCT owner_source_change_seq)::integer AS source_sequence_count,
+        pg_catalog.count(DISTINCT owner_dirty_generation)::integer AS dirty_generation_count,
+        pg_catalog.min(owner_source_change_seq) AS owner_source_change_seq,
+        pg_catalog.min(owner_dirty_generation) AS owner_dirty_generation,
+        pg_catalog.min(id::text)::uuid AS representative_job_id
+      FROM active_jobs
+      GROUP BY owner_group_key
+    ), classified_groups AS (
+      SELECT owner_groups.*,
+        owner_groups.source_sequence_count=1
+          AND owner_groups.dirty_generation_count=1
+          AND owner_groups.owner_source_change_seq IS NOT DISTINCT FROM v_registry.current_source_change_seq
+          AND owner_groups.owner_dirty_generation IS NOT DISTINCT FROM v_registry.dirty_generation
+          AS is_current_authority,
+        owner_groups.source_sequence_count=1
+          AND owner_groups.dirty_generation_count=1
+          AND owner_groups.owner_source_change_seq<v_registry.current_source_change_seq
+          AND owner_groups.owner_dirty_generation<v_registry.dirty_generation
+          AS is_provably_older
+      FROM owner_groups
+    )
+    SELECT
+      (SELECT pg_catalog.count(*)::integer FROM active_jobs),
+      (SELECT pg_catalog.count(*)::integer FROM owner_groups),
+      (SELECT pg_catalog.count(*)::integer FROM classified_groups WHERE is_current_authority),
+      (SELECT pg_catalog.count(*)::integer FROM classified_groups WHERE is_provably_older),
+      (SELECT pg_catalog.count(*)::integer FROM classified_groups
+        WHERE is_current_authority IS NOT TRUE AND is_provably_older IS NOT TRUE),
+      (SELECT pg_catalog.min(owner_group_key) FROM classified_groups WHERE is_current_authority),
+      (SELECT pg_catalog.min(representative_job_id::text)::uuid
+        FROM classified_groups WHERE is_current_authority),
+      COALESCE((SELECT pg_catalog.jsonb_agg(id::text ORDER BY id) FROM active_jobs),'[]'::jsonb)
+    INTO v_active_owner_count,v_active_owner_group_count,v_current_owner_group_count,
+         v_older_owner_group_count,v_unfenced_owner_group_count,v_current_owner_group_key,
+         v_active_owner_job_id,v_active_owner_job_ids;
+
+    SELECT CASE WHEN pending_job.economic_build_id IS NOT NULL
+             THEN 'BUILD:'||pending_job.economic_build_id::text ELSE 'JOB:'||pending_job.id::text END
+    INTO v_scope_pending_owner_group_key
+    FROM public.banking_pay_workbench_jobs AS pending_job
+    WHERE pending_job.id=v_scope.pending_job_id;
+
+    SELECT CASE WHEN pending_job.economic_build_id IS NOT NULL
+             THEN 'BUILD:'||pending_job.economic_build_id::text ELSE 'JOB:'||pending_job.id::text END
+    INTO v_state_pending_owner_group_key
+    FROM public.banking_pay_workbench_jobs AS pending_job
+    WHERE pending_job.id=v_state.pending_job_id;
 
     SELECT pg_catalog.count(*)::integer
     INTO v_selected_preview_count
@@ -339,16 +419,30 @@ BEGIN
 
     v_current_or_active_owner:=v_terminal_current OR (
       v_allow_active_owner
-      AND v_active_owner_count=1
-      AND v_scope.pending_job_id=v_active_owner_job_id
-      AND v_state.pending_job_id=v_active_owner_job_id
+      AND v_current_owner_group_count=1
+      AND v_unfenced_owner_group_count=0
+      AND v_scope_pending_owner_group_key=v_current_owner_group_key
+      AND v_state_pending_owner_group_key=v_current_owner_group_key
       AND v_scope.dirty IS TRUE
       AND pg_catalog.upper(pg_catalog.btrim(COALESCE(v_scope.status,'')))='SOURCE_BUILD_PENDING'
       AND pg_catalog.upper(pg_catalog.btrim(COALESCE(v_state.status,''))) IN ('PENDING','DIRTY')
     );
 
+    v_active_owner_topology:=CASE
+      WHEN v_current_owner_group_count=1 AND v_unfenced_owner_group_count=0
+        AND v_older_owner_group_count>0 THEN 'CURRENT_WITH_PROVEN_OLDER_OWNER'
+      WHEN v_current_owner_group_count=1 AND v_unfenced_owner_group_count=0
+        THEN 'CURRENT_ONLY'
+      WHEN v_current_owner_group_count>1 THEN 'COMPETING_CURRENT_OWNERS'
+      WHEN v_unfenced_owner_group_count>0 THEN 'UNFENCED_OWNER_PRESENT'
+      ELSE NULL
+    END;
+
     v_reason:=CASE
       WHEN v_terminal_current THEN 'TERMINAL_CURRENT'
+      -- Preserve the established route value consumed by session refresh.
+      -- The exact current/older owner topology is exposed separately.
+      WHEN v_current_or_active_owner THEN 'ACTIVE_OWNER'
       WHEN v_active_noncurrent_preview_count>0 THEN 'ACTIVE_NONCURRENT_PREVIEW_ROWS'
       WHEN v_active_noncurrent_source_count>0 THEN 'ACTIVE_NONCURRENT_SOURCE_ROWS'
       WHEN v_active_noncurrent_line_work_count>0 THEN 'ACTIVE_NONCURRENT_LINE_WORK'
@@ -356,7 +450,8 @@ BEGIN
       WHEN v_duplicate_active_identity_count>0 THEN 'DUPLICATE_ACTIVE_IDENTITY'
       WHEN v_attestation_current IS NOT TRUE THEN 'ATTESTATION_NOT_CURRENT'
       WHEN v_selection_consistent IS NOT TRUE THEN 'SELECTION_STATE_MISMATCH'
-      WHEN v_active_owner_count=1 AND v_current_or_active_owner THEN 'ACTIVE_OWNER'
+      WHEN v_unfenced_owner_group_count>0 THEN 'ACTIVE_OWNER_AUTHORITY_UNFENCED'
+      WHEN v_current_owner_group_count>1 THEN 'COMPETING_CURRENT_AUTHORITY_OWNERS'
       WHEN v_active_owner_count>0 THEN 'ACTIVE_OWNER_NOT_EXACT'
       ELSE 'TERMINAL_STATE_NOT_CURRENT'
     END;
@@ -370,7 +465,11 @@ BEGIN
         v_active_noncurrent_line_work_count::text,v_source_minus_preview_count::text,
         v_preview_minus_source_count::text,COALESCE(v_live_source_identity_digest,''),
         COALESCE(v_live_preview_identity_digest,''),v_attestation_current::text,
-        v_terminal_current::text,v_current_or_active_owner::text,v_reason),
+        v_active_owner_group_count::text,v_current_owner_group_count::text,
+        v_older_owner_group_count::text,v_unfenced_owner_group_count::text,
+        COALESCE(v_current_owner_group_key,''),COALESCE(v_active_owner_topology,''),
+        v_terminal_current::text,
+        v_current_or_active_owner::text,v_reason),
       'UTF8'),'sha256'),'hex');
 
     v_results:=v_results||pg_catalog.jsonb_build_array(pg_catalog.jsonb_strip_nulls(
@@ -400,7 +499,16 @@ BEGIN
         'attested_source_identity_digest',v_attestation->>'source_identity_digest',
         'attested_preview_identity_digest',v_attestation->>'preview_identity_digest',
         'attestation_current',v_attestation_current,'selection_consistent',v_selection_consistent,
-        'active_owner_count',v_active_owner_count,'active_owner_job_id',v_active_owner_job_id,
+        'active_owner_count',v_active_owner_count,'active_owner_job_ids',v_active_owner_job_ids,
+        'active_owner_group_count',v_active_owner_group_count,
+        'current_owner_group_count',v_current_owner_group_count,
+        'older_owner_group_count',v_older_owner_group_count,
+        'unfenced_owner_group_count',v_unfenced_owner_group_count,
+        'active_owner_topology',v_active_owner_topology,
+        'current_owner_group_key',v_current_owner_group_key,
+        'scope_pending_owner_group_key',v_scope_pending_owner_group_key,
+        'state_pending_owner_group_key',v_state_pending_owner_group_key,
+        'active_owner_job_id',v_active_owner_job_id,
         'proof_digest',v_proof_digest
       )
     ));

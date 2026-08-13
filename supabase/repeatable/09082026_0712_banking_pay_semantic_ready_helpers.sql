@@ -1,6 +1,7 @@
 -- Banking Pay semantic Ready-to-Pay contract helpers.
--- Clean installs reach this file before the later execution-overlay helper.
--- Install that read-only dependency now; its later repeatable remains idempotent.
+-- Clean installs reach this file before the later execution-overlay helpers.
+-- Install those read-only dependencies now; their later repeatables remain idempotent.
+\ir 13082026_1245_pay_workbench_execution_refresh_owner_proof_page_v1.sql
 \ir 12082026_0915_pay_workbench_unsent_execution_overlay_proof_page_v1.sql
 --
 -- This helper deliberately evaluates the public READY projection rather than
@@ -1717,12 +1718,16 @@ BEGIN
         current_scope.certified_preview_publication_attestation_json AS current_attestation,
         current_scope.certified_preview_publication_parity_ok AS current_parity,
         original_build.id AS original_economic_build_id,
-        current_build.id AS current_economic_build_id,
+        COALESCE(current_build.id,refresh_owner_build.id) AS current_economic_build_id,
+        CASE WHEN refresh_owner_build.id IS NOT NULL THEN original_build.id ELSE current_build.id END
+          AS invariant_current_economic_build_id,
         COALESCE((cancelability_row.value->>'pre_provider_cancel_eligible')::boolean,false)
           AS pre_provider_cancel_eligible,
         COALESCE(cancelability_row.value->'available_actions','[]'::jsonb)
           AS current_available_actions,
         COALESCE((overlay_row.value->>'admitted')::boolean,false) AS exact_unsent_overlay,
+        COALESCE(overlay_row.value->>'currentness_basis','')
+          ='EXACT_UNSENT_EXECUTION_REFRESH_OWNER' AS exact_execution_refresh_owner,
         overlay_row.value AS unsent_overlay_authority
       FROM requested_candidates
       JOIN public.pay_batches AS batch_row
@@ -1799,6 +1804,20 @@ BEGIN
         WHERE overlay_result.value->>'candidate_id'=requested_candidates.candidate_id::text
         LIMIT 1
       ) AS overlay_row ON true
+      LEFT JOIN private.banking_pay_workbench_economic_builds AS refresh_owner_build
+        ON refresh_owner_build.id=CASE
+          WHEN COALESCE(overlay_row.value
+            #>>'{execution_refresh_owner_authority,owner_economic_build_id}','')
+            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (overlay_row.value
+            #>>'{execution_refresh_owner_authority,owner_economic_build_id}')::uuid
+          ELSE NULL::uuid END
+       AND refresh_owner_build.session_id=batch_row.source_workbench_session_id
+       AND refresh_owner_build.candidate_id=requested_candidates.candidate_id
+       AND pg_catalog.upper(pg_catalog.btrim(COALESCE(refresh_owner_build.status,''))) IN (
+         'COLLECTING','READY_FOR_RECONCILIATION','RECONCILING','RECONCILED',
+         'PUBLISHING','BLOCKED_UNVALIDATED_RECONCILIATION_SCALE'
+       )
     ), family_proof AS (
       SELECT
         authority.*,
@@ -1826,7 +1845,9 @@ BEGIN
             ),'')) AS family_digest
           FROM private.banking_pay_workbench_economic_build_facts AS fact
           JOIN required_family ON required_family.fact_family=fact.fact_family
-          WHERE fact.build_id IN (authority.original_economic_build_id,authority.current_economic_build_id)
+          WHERE fact.build_id IN (
+            authority.original_economic_build_id,authority.invariant_current_economic_build_id
+          )
           GROUP BY fact.build_id,fact.fact_family
         ), compared AS (
           SELECT required_family.fact_family,
@@ -1837,7 +1858,7 @@ BEGIN
             ON original.build_id=authority.original_economic_build_id
            AND original.fact_family=required_family.fact_family
           LEFT JOIN per_build AS current_fact
-            ON current_fact.build_id=authority.current_economic_build_id
+            ON current_fact.build_id=authority.invariant_current_economic_build_id
            AND current_fact.fact_family=required_family.fact_family
         )
         SELECT pg_catalog.count(*)::integer AS invariant_family_count,
@@ -1870,11 +1891,12 @@ BEGIN
             THEN 'CURRENT_CANCELABILITY_AUTHORITY_REJECTED'
           WHEN original_economic_build_id IS NULL OR current_economic_build_id IS NULL
             THEN 'ECONOMIC_BUILD_LINEAGE_MISSING'
-          WHEN current_parity IS NOT TRUE
+          WHEN exact_execution_refresh_owner IS NOT TRUE AND (
+            current_parity IS NOT TRUE
             OR COALESCE(current_attestation->>'attestation_version','')<>'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
             OR COALESCE((current_attestation->>'semantic_ready')::boolean,false) IS NOT TRUE
             OR COALESCE((current_attestation->>'parity_complete')::boolean,false) IS NOT TRUE
-            THEN 'CURRENT_SEMANTIC_PUBLICATION_NOT_EXACT'
+          ) THEN 'CURRENT_SEMANTIC_PUBLICATION_NOT_EXACT'
           WHEN publication_source_change_seq IS DISTINCT FROM live_source_change_seq
             OR registry_source_change_seq IS DISTINCT FROM live_source_change_seq
             OR registry_dirty_generation IS DISTINCT FROM live_dirty_generation
@@ -1906,7 +1928,8 @@ BEGIN
       'contract_version','CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3',
       'pre_request_exact',classified.rejection_reason IS NULL,
       'currentness_basis',CASE WHEN classified.exact_unsent_overlay
-        THEN 'EXACT_UNSENT_EXECUTION_OVERLAY' ELSE 'CERTIFIED_CURRENT_PUBLICATION' END,
+        THEN COALESCE(NULLIF(classified.unsent_overlay_authority->>'currentness_basis',''),
+          'EXACT_UNSENT_EXECUTION_OVERLAY') ELSE 'CERTIFIED_CURRENT_PUBLICATION' END,
       'execution_overlay_authority',classified.unsent_overlay_authority,
       'authority_digest',pg_catalog.md5(
         classified.pay_batch_id::text||'|'||classified.candidate_id::text||'|'||
@@ -1915,8 +1938,9 @@ BEGIN
         COALESCE(classified.current_economic_build_id::text,'')||'|'||
         classified.live_source_change_seq::text||'|'||classified.live_dirty_generation::text||'|'||
         COALESCE(classified.invariant_economic_digest,'')||'|'||
-        CASE WHEN classified.exact_unsent_overlay THEN 'EXACT_UNSENT_EXECUTION_OVERLAY'
-          ELSE 'CERTIFIED_CURRENT_PUBLICATION' END||'|'||
+        CASE WHEN classified.exact_unsent_overlay THEN COALESCE(
+          NULLIF(classified.unsent_overlay_authority->>'currentness_basis',''),
+          'EXACT_UNSENT_EXECUTION_OVERLAY') ELSE 'CERTIFIED_CURRENT_PUBLICATION' END||'|'||
         COALESCE(classified.unsent_overlay_authority->>'authority_digest','')||'|'||
         (classified.rejection_reason IS NULL)::text||'|CANCELLATION_REVERSION_PRE_REQUEST_AUTHORITY_V3'
       )

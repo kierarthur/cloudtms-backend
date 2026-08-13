@@ -2,6 +2,8 @@
 -- provider-unsubmitted transfer overlay.  This helper is deliberately a
 -- subproof: the cancellation proof core remains the only route decision owner.
 
+\ir 13082026_1245_pay_workbench_execution_refresh_owner_proof_page_v1.sql
+
 CREATE OR REPLACE FUNCTION private.pay_workbench_unsent_execution_overlay_proof_page_v1(
   p_pay_batch_id uuid,
   p_candidate_ids uuid[],
@@ -20,6 +22,13 @@ DECLARE
   v_mode text:=pg_catalog.upper(pg_catalog.btrim(COALESCE(p_mode,'PRE_REQUEST')));
   v_results jsonb:='[]'::jsonb;
   v_count integer:=0;
+  v_refresh_owner_execution_operation_id uuid:=NULL::uuid;
+  v_refresh_owner_proof jsonb:=pg_catalog.jsonb_build_object(
+    'ok',true,'contract_version','EXECUTION_REFRESH_OWNER_PROOF_PAGE_V1',
+    'candidate_count',0,'admitted_count',0,'candidate_results','[]'::jsonb
+  );
+  v_refresh_owner_bridge_observe_enabled boolean:=false;
+  v_refresh_owner_bridge_publish_enabled boolean:=false;
 BEGIN
   IF p_pay_batch_id IS NULL OR p_candidate_ids IS NULL
      OR pg_catalog.cardinality(p_candidate_ids)<1
@@ -32,6 +41,52 @@ BEGIN
       USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
         'code','EXECUTION_UNSENT_OVERLAY_PROOF_ARGUMENT_INVALID','mode',v_mode
       )::text;
+  END IF;
+
+  SELECT
+    COALESCE((pg_catalog.to_jsonb(settings_row)
+      ->>'banking_pay_execution_refresh_owner_bridge_v1_observe_enabled')::boolean,false),
+    COALESCE((pg_catalog.to_jsonb(settings_row)
+      ->>'banking_pay_execution_refresh_owner_bridge_v1_publish_enabled')::boolean,false)
+  INTO v_refresh_owner_bridge_observe_enabled,v_refresh_owner_bridge_publish_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id=1
+  LIMIT 1;
+
+  v_refresh_owner_bridge_publish_enabled:=
+    v_refresh_owner_bridge_observe_enabled
+    AND v_refresh_owner_bridge_publish_enabled
+    AND v_mode='PRE_REQUEST';
+
+  IF v_refresh_owner_bridge_observe_enabled AND v_mode IN ('PRE_REQUEST','OBSERVE_ONLY') THEN
+    SELECT operation_row.id
+    INTO v_refresh_owner_execution_operation_id
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.operation_type='PAYMENT_EXECUTE'
+      AND operation_row.status='COMPLETE'
+      AND operation_row.phase='COMPLETE'
+      AND operation_row.pay_batch_id=p_pay_batch_id
+      AND EXISTS (
+        SELECT 1
+        FROM pg_catalog.unnest(p_candidate_ids) AS requested_candidate(candidate_id)
+        WHERE COALESCE(
+          operation_row.progress_json->'execution_unsent_overlay_chain_v2'->'candidates'
+            ->requested_candidate.candidate_id::text,
+          operation_row.result_json->'execution_unsent_overlay_chain_v2'->'candidates'
+            ->requested_candidate.candidate_id::text
+        ) IS NOT NULL
+      )
+    ORDER BY operation_row.completed_at_utc DESC NULLS LAST,operation_row.created_at_utc DESC,
+             operation_row.id DESC
+    LIMIT 1;
+
+    IF v_refresh_owner_execution_operation_id IS NOT NULL THEN
+      v_refresh_owner_proof:=private.pay_workbench_execution_refresh_owner_proof_page_v1(
+        v_refresh_owner_execution_operation_id,p_pay_batch_id,p_candidate_ids,
+        CASE WHEN v_mode='PRE_REQUEST' THEN 'PRE_REQUEST' ELSE 'OBSERVE_ONLY' END,
+        '{}'::jsonb
+      );
+    END IF;
   END IF;
 
   WITH requested AS (
@@ -65,7 +120,8 @@ BEGIN
       dirty_job.scope_change_generation AS dirty_job_generation,
       dirty_job.payload_json AS dirty_payload,
       dirty_job.payload_json->'execution_overlay_contexts'->requested.candidate_id::text
-        AS execution_context
+        AS execution_context,
+      refresh_owner_result.value AS refresh_owner_authority
     FROM requested
     JOIN public.pay_batches AS batch_row ON batch_row.id=p_pay_batch_id
     JOIN public.pay_batch_candidates AS batch_candidate
@@ -133,6 +189,14 @@ BEGIN
                candidate_job.id DESC
       LIMIT 1
     ) AS dirty_job ON true
+    LEFT JOIN LATERAL (
+      SELECT result_row.value
+      FROM pg_catalog.jsonb_array_elements(
+        COALESCE(v_refresh_owner_proof->'candidate_results','[]'::jsonb)
+      ) AS result_row(value)
+      WHERE result_row.value->>'candidate_id'=requested.candidate_id::text
+      LIMIT 1
+    ) AS refresh_owner_result ON true
   ), execution_authority AS (
     SELECT base.*,
       COALESCE(base.execution_chain_operation_id,
@@ -328,7 +392,8 @@ BEGIN
           OR COALESCE((proof.frozen_attestation->>'semantic_ready')::boolean,false) IS NOT TRUE
           OR COALESCE((proof.frozen_attestation->>'parity_complete')::boolean,false) IS NOT TRUE
           THEN 'EXECUTION_OVERLAY_PUBLICATION_MISMATCH'
-        WHEN proof.current_parity IS NOT TRUE
+        WHEN (
+          proof.current_parity IS NOT TRUE
           OR proof.current_publication_id::text IS DISTINCT FROM proof.frozen_publication_id
           OR COALESCE(proof.current_attestation->>'economic_build_id','')
                IS DISTINCT FROM COALESCE(proof.frozen_attestation->>'economic_build_id','')
@@ -336,7 +401,12 @@ BEGIN
                IS DISTINCT FROM COALESCE(proof.frozen_attestation->>'source_identity_digest','')
           OR COALESCE(proof.current_attestation->>'semantic_proof_digest','')
                IS DISTINCT FROM COALESCE(proof.frozen_attestation->>'semantic_proof_digest','')
-          THEN 'EXECUTION_OVERLAY_PUBLICATION_MISMATCH'
+        ) AND NOT (
+          v_refresh_owner_bridge_publish_enabled
+          AND COALESCE((proof.refresh_owner_authority->>'admitted')::boolean,false)
+          AND COALESCE(proof.refresh_owner_authority->>'currentness_basis','')
+                ='EXACT_UNSENT_EXECUTION_REFRESH_OWNER'
+        ) THEN 'EXECUTION_OVERLAY_PUBLICATION_MISMATCH'
         WHEN proof.execution_chain_receipt IS NOT NULL
           AND (COALESCE(proof.execution_chain_receipt->>'contract_version','')
                 <>'EXECUTION_UNSENT_OVERLAY_CHAIN_V2'
@@ -475,7 +545,11 @@ BEGIN
       'pay_batch_candidate_id',classified.pay_batch_candidate_id,
       'overlay_exact',classified.rejection_reason IS NULL,
       'admitted',classified.rejection_reason IS NULL,
-      'currentness_basis','EXACT_UNSENT_EXECUTION_OVERLAY',
+      'currentness_basis',CASE
+        WHEN v_refresh_owner_bridge_publish_enabled
+          AND COALESCE((classified.refresh_owner_authority->>'admitted')::boolean,false)
+          THEN 'EXACT_UNSENT_EXECUTION_REFRESH_OWNER'
+        ELSE 'EXACT_UNSENT_EXECUTION_OVERLAY' END,
       'rejection_reason',classified.rejection_reason,
       'execution_operation_id',classified.execution_operation_id,
       'execution_overlay_dirty_job_id',classified.dirty_job_id,
@@ -487,6 +561,13 @@ BEGIN
       'execution_overlay_chain_contract_version',classified.execution_chain_receipt->>'contract_version',
       'execution_overlay_chain_digest',classified.execution_chain_receipt->>'chain_digest',
       'execution_overlay_chain_transition_count',classified.execution_chain_receipt->'transition_count',
+      'execution_refresh_owner_bridge_observed',
+        v_refresh_owner_bridge_observe_enabled
+          AND COALESCE((classified.refresh_owner_authority->>'admitted')::boolean,false),
+      'execution_refresh_owner_bridge_published',
+        v_refresh_owner_bridge_publish_enabled
+          AND COALESCE((classified.refresh_owner_authority->>'admitted')::boolean,false),
+      'execution_refresh_owner_authority',classified.refresh_owner_authority,
       'authority_digest',pg_catalog.md5(
         p_pay_batch_id::text||'|'||classified.candidate_id::text||'|'||
         COALESCE(classified.execution_operation_id::text,'')||'|'||
@@ -496,6 +577,11 @@ BEGIN
         classified.live_source_change_seq::text||'|'||classified.live_dirty_generation::text||'|'||
         COALESCE(classified.execution_context->>'context_digest','')||'|'||
         COALESCE(classified.execution_chain_receipt->>'chain_digest','')||'|'||
+        COALESCE(classified.refresh_owner_authority->>'proof_digest','')||'|'||
+        CASE WHEN v_refresh_owner_bridge_publish_enabled
+          AND COALESCE((classified.refresh_owner_authority->>'admitted')::boolean,false)
+          THEN 'EXACT_UNSENT_EXECUTION_REFRESH_OWNER'
+          ELSE 'EXACT_UNSENT_EXECUTION_OVERLAY' END||'|'||
         (classified.rejection_reason IS NULL)::text||'|EXECUTION_UNSENT_OVERLAY_PROOF_PAGE_V1')
     )) AS result_json
     FROM classified

@@ -82,6 +82,10 @@ const payBatchSchedule = read('supabase', 'repeatable',
   '04082026_1158_pay_batch_schedule.sql');
 const executionOverlayChainSeal = read('supabase', 'repeatable',
   '13082026_0122_pay_workbench_execution_unsent_overlay_chain_seal_v2.sql');
+const executionRefreshOwnerProof = read('supabase', 'repeatable',
+  '13082026_1245_pay_workbench_execution_refresh_owner_proof_page_v1.sql');
+const executionRefreshOwnerControls = read('supabase', 'migrations',
+  '13082026_1253_banking_pay_execution_refresh_owner_bridge_controls.sql');
 const operationReleaseLease = read('supabase', 'repeatable',
   '05082026_0915_banking_pay_operation_release_lease.sql');
 
@@ -199,6 +203,89 @@ test('executed-not-paid reversion proves an exact unsent execution overlay witho
     /EXECUTION_OVERLAY_CHAIN_DRAFT_AUTHORITY_MISMATCH/);
   assert.doesNotMatch(unsentExecutionOverlayProof,
     /terminal_execution_generation[^\n]{0,120}\+\s*1/);
+});
+
+test('mid-build execution refresh bridge is exact, bounded, inert by default and Policy X safe', () => {
+  for (const setting of [
+    'banking_pay_execution_refresh_owner_bridge_v1_observe_enabled',
+    'banking_pay_execution_refresh_owner_bridge_v1_publish_enabled',
+  ]) {
+    assert.match(executionRefreshOwnerControls, new RegExp(`${setting}\\s+boolean NOT NULL DEFAULT false`));
+  }
+  assert.match(executionRefreshOwnerControls,
+    /settings_bpay_execution_refresh_owner_bridge_v1_dependency_ck/);
+  assert.match(executionRefreshOwnerControls,
+    /bridge_v1_publish_enabled IS NOT TRUE[\s\S]*bridge_v1_observe_enabled IS TRUE[\s\S]*scheduled_cancellation_reversion_v2_publish_enabled IS TRUE/);
+
+  assert.match(executionRefreshOwnerProof,
+    /cardinality\(p_candidate_ids\)>100/);
+  assert.match(executionRefreshOwnerProof,
+    /EXECUTION_UNSENT_OVERLAY_CHAIN_V2[\s\S]*transition_count[\s\S]*NOT BETWEEN 1 AND 16/);
+  assert.match(executionRefreshOwnerProof,
+    /current_source_publication_id IS NOT NULL[\s\S]*current_source_count<>0[\s\S]*EXECUTION_REFRESH_OWNER_PARTIAL_OR_CURRENT_PUBLICATION/);
+  assert.match(executionRefreshOwnerProof,
+    /active_economic_owner_count<>1 OR competing_owner_count<>0[\s\S]*EXECUTION_REFRESH_OWNER_COMPETING_OWNER/);
+  assert.match(executionRefreshOwnerProof,
+    /scope_pending_economic_build_id IS DISTINCT FROM owner_economic_build_id[\s\S]*state_pending_economic_build_id IS DISTINCT FROM owner_economic_build_id/);
+  assert.match(executionRefreshOwnerProof,
+    /context_digest_in_chain IS NOT TRUE[\s\S]*EXECUTION_REFRESH_OWNER_CAUSAL_PROVENANCE_MISMATCH/);
+  assert.match(executionRefreshOwnerProof,
+    /provider_attempt_count[\s\S]*rail_transaction_count[\s\S]*settlement_count[\s\S]*remittance_count/);
+  assert.match(executionRefreshOwnerProof,
+    /POST_DRAFT_FROZEN_PAYMENT_PROOF_PLUS_EXACT_V2_EXECUTION_REFRESH_OWNER/);
+  assert.doesNotMatch(executionRefreshOwnerProof,
+    /UPDATE\s+public\.|INSERT\s+INTO\s+public\.|DELETE\s+FROM\s+public\./i);
+  assert.match(executionRefreshOwnerProof,
+    /REVOKE ALL ON FUNCTION private\.pay_workbench_execution_refresh_owner_proof_page_v1[\s\S]*FROM PUBLIC,anon,authenticated,service_role/);
+  assert.match(executionRefreshOwnerProof,
+    /GRANT EXECUTE ON FUNCTION private\.pay_workbench_execution_refresh_owner_proof_page_v1[\s\S]*TO postgres/);
+
+  assert.match(unsentExecutionOverlayProof,
+    /bridge_v1_publish_enabled[\s\S]*refresh_owner_authority->>'admitted'[\s\S]*EXACT_UNSENT_EXECUTION_REFRESH_OWNER/);
+  assert.match(helpers,
+    /refresh_owner_build\.id IS NOT NULL THEN original_build\.id ELSE current_build\.id/);
+  assert.match(helpers,
+    /exact_execution_refresh_owner IS NOT TRUE AND \([\s\S]*CURRENT_SEMANTIC_PUBLICATION_NOT_EXACT/);
+  assert.match(helpers,
+    /execution_refresh_owner_authority,owner_economic_build_id/);
+});
+
+test('fallback liveness reasons by economic owner and never sends currentness retry to user review', () => {
+  assert.match(physicalCurrentness,
+    /'BUILD:'\|\|owner_job\.economic_build_id::text ELSE 'JOB:'\|\|owner_job\.id::text/);
+  assert.match(physicalCurrentness,
+    /owner_source_change_seq<v_registry\.current_source_change_seq[\s\S]*owner_dirty_generation<v_registry\.dirty_generation/);
+  assert.match(physicalCurrentness,
+    /v_current_owner_group_count=1[\s\S]*v_unfenced_owner_group_count=0/);
+  assert.match(physicalCurrentness,
+    /v_scope_pending_owner_group_key=v_current_owner_group_key[\s\S]*v_state_pending_owner_group_key=v_current_owner_group_key/);
+  assert.match(physicalCurrentness,
+    /CURRENT_WITH_PROVEN_OLDER_OWNER/);
+  assert.match(physicalCurrentness,
+    /WHEN v_current_or_active_owner THEN 'ACTIVE_OWNER'/);
+  assert.match(physicalCurrentness,
+    /ACTIVE_OWNER_AUTHORITY_UNFENCED/);
+  assert.match(physicalCurrentness,
+    /COMPETING_CURRENT_AUTHORITY_OWNERS/);
+
+  assert.match(broker,
+    /isRetryablePaymentCorrectionRefreshError[\s\S]*operationTypeForError !== 'PAYMENT_CORRECTION'[\s\S]*phaseForError !== 'REFRESH_WORKBENCH'/);
+  assert.match(broker,
+    /PAYMENT_CANCEL_CURRENT_OR_REPAIR_OWNER_REQUIRED[\s\S]*PAYMENT_CORRECTION_WORKBENCH_ROUTE_NOT_PHYSICALLY_CURRENT/);
+  assert.match(broker,
+    /release_state: 'MORE_WORK'[\s\S]*retry_status: 'WAITING_CURRENTNESS'[\s\S]*PAYMENT_CORRECTION_WORKBENCH_CURRENTNESS_RETRY/);
+  assert.match(broker,
+    /legitimateFutureWait = paymentCorrectionRefreshRetryable === true/);
+  assert.match(broker,
+    /paymentCorrectionRefreshRetryable[\s\S]*requires_user_action: false[\s\S]*review_required: false/);
+  assert.match(broker,
+    /immediateMoreWork = releaseState === 'MORE_WORK' && legitimateFutureWait !== true/);
+  assert.match(operationReleaseLease,
+    /v_release_state IN \('MORE_WORK'[\s\S]*v_next_status := 'RUNNING'[\s\S]*v_next_runner_state := 'RUNNABLE'/);
+  assert.match(operationReleaseLease,
+    /attempt_count = CASE WHEN v_retry_failure IS TRUE THEN COALESCE\(v_next_attempt_count, operation_update\.attempt_count\) ELSE operation_update\.attempt_count END/);
+  assert.match(cancelSafe,
+    /pay_workbench_enqueue_candidate_refresh\([\s\S]*allow_active_owner',true[\s\S]*PAYMENT_CANCEL_CURRENT_OR_REPAIR_OWNER_REQUIRED/);
 });
 
 test('canonical rows split presentation parents from exact positive allocation components only under V3', () => {
@@ -686,8 +773,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 45);
-  assert.equal(semanticManifest.functions.length, 45);
+  assert.equal(semanticManifest.function_count, 46);
+  assert.equal(semanticManifest.functions.length, 46);
   for (const identity of [
     'public._ctms_materialise_candidate_correction_residuals_v1',
     'public._pay_active_settled_components',
@@ -701,6 +788,7 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'private.pay_workbench_correction_dirty_context_set_v1',
     'private.pay_workbench_correction_post_commit_authority_page_v1',
     'private.pay_workbench_cancel_reversion_proof_core_v1',
+    'private.pay_workbench_execution_refresh_owner_proof_page_v1',
     'private.pay_workbench_unsent_execution_overlay_proof_page_v1',
     'private.pay_workbench_execution_unsent_overlay_chain_seal_v2',
     'private.pay_workbench_correction_held_dirty_job_resolve_v1',
