@@ -226,7 +226,7 @@
     {
       "schema": "private", "name": "pay_workbench_execution_refresh_owner_proof_page_v1",
       "identity_arguments": "p_execution_operation_id uuid, p_pay_batch_id uuid, p_candidate_ids uuid[], p_mode text, p_options_json jsonb",
-      "definition_sha256": "4057de8f6d5f991cf76a8c014dacf9a0ec84f7b019e29c5fe118a5d840f5bb40",
+      "definition_sha256": "ecc86e91c3d818a9303942fb2cd49e5cd38bc1fdd7fedcb5632a9eba18130f56",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/13082026_1245_pay_workbench_execution_refresh_owner_proof_page_v1.sql"]

@@ -224,6 +224,20 @@ test('mid-build execution refresh bridge is exact, bounded, inert by default and
   assert.match(executionRefreshOwnerProof,
     /current_source_publication_id IS NOT NULL[\s\S]*current_source_count<>0[\s\S]*EXECUTION_REFRESH_OWNER_PARTIAL_OR_CURRENT_PUBLICATION/);
   assert.match(executionRefreshOwnerProof,
+    /ORIGINAL_CERTIFIED_RESIDUAL_ONLY[\s\S]*EXECUTION_OWNER_PARTIAL_ONLY[\s\S]*MIXED_ORIGINAL_AND_EXECUTION_OWNER/);
+  assert.match(executionRefreshOwnerProof,
+    /EXECUTION_REFRESH_OWNER_PROVENANCE_OBSERVE_V1/);
+  assert.match(executionRefreshOwnerProof,
+    /original_current_source_count[\s\S]*owner_current_source_count[\s\S]*unexpected_current_source_count[\s\S]*duplicate_active_identity_count/);
+  assert.match(executionRefreshOwnerProof,
+    /original_source_build_run_id[\s\S]*original_source_publication_id[\s\S]*expected_owner_source_publication_id/);
+  assert.match(executionRefreshOwnerProof,
+    /unexpected_current_publication_count[\s\S]*unexpected_current_source_build_run_count[\s\S]*unexpected_current_source_identity_digest/);
+  assert.match(executionRefreshOwnerProof,
+    /ready_preview_current_session_version_count[\s\S]*ready_preview_other_session_version_count[\s\S]*ready_preview_identity_digest/);
+  assert.match(executionRefreshOwnerProof,
+    /EXECUTION_REFRESH_OWNER_TRANSIENT_SHAPE_OBSERVE_V1/);
+  assert.match(executionRefreshOwnerProof,
     /active_economic_owner_count<>1 OR competing_owner_count<>0[\s\S]*EXECUTION_REFRESH_OWNER_COMPETING_OWNER/);
   assert.match(executionRefreshOwnerProof,
     /scope_pending_economic_build_id IS DISTINCT FROM owner_economic_build_id[\s\S]*state_pending_economic_build_id IS DISTINCT FROM owner_economic_build_id/);

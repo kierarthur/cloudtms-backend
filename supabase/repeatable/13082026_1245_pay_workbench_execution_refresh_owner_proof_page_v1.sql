@@ -90,10 +90,7 @@ BEGIN
       registry.current_source_change_seq AS registry_source_change_seq,
       registry.dirty_generation AS registry_dirty_generation,
       COALESCE(change_counter.seq,0) AS live_source_change_seq,
-      COALESCE(change_counter.scope_change_generation,0) AS live_dirty_generation,
-      COALESCE(current_rows.current_source_count,0) AS current_source_count,
-      COALESCE(current_rows.partial_current_publication_count,0)
-        AS partial_current_publication_count
+      COALESCE(change_counter.scope_change_generation,0) AS live_dirty_generation
     FROM requested
     LEFT JOIN public.banking_pay_operations AS execution_operation
       ON execution_operation.id=p_execution_operation_id
@@ -110,18 +107,6 @@ BEGIN
       ON registry.candidate_id=requested.candidate_id
     LEFT JOIN public.app_change_counters AS change_counter
       ON change_counter.entity_key='pay_candidate:'||requested.candidate_id::text
-    LEFT JOIN LATERAL (
-      SELECT
-        pg_catalog.count(*) FILTER (
-          WHERE source_row.status='CURRENT'
-        )::integer AS current_source_count,
-        pg_catalog.count(DISTINCT source_row.source_publication_id) FILTER (
-          WHERE source_row.status='CURRENT'
-        )::integer AS partial_current_publication_count
-      FROM public.banking_pay_workbench_candidate_source_lines AS source_row
-      WHERE source_row.session_id=batch_row.source_workbench_session_id
-        AND source_row.candidate_id=requested.candidate_id
-    ) AS current_rows ON true
   ), owner_groups AS (
     SELECT authority.*,
       owner_build.id AS owner_economic_build_id,
@@ -139,6 +124,51 @@ BEGIN
       COALESCE(active_jobs.running_job_count,0) AS running_job_count,
       COALESCE(active_builds.active_economic_owner_count,0) AS active_economic_owner_count,
       COALESCE(active_builds.competing_owner_count,0) AS competing_owner_count,
+      source_provenance.expected_owner_source_publication_id,
+      COALESCE(source_provenance.current_source_count,0) AS current_source_count,
+      COALESCE(source_provenance.original_current_source_count,0)
+        AS original_current_source_count,
+      COALESCE(source_provenance.owner_current_source_count,0)
+        AS owner_current_source_count,
+      COALESCE(source_provenance.unexpected_current_source_count,0)
+        AS unexpected_current_source_count,
+      COALESCE(source_provenance.null_current_publication_count,0)
+        AS null_current_publication_count,
+      COALESCE(source_provenance.partial_current_publication_count,0)
+        AS partial_current_publication_count,
+      COALESCE(source_provenance.unexpected_current_publication_count,0)
+        AS unexpected_current_publication_count,
+      COALESCE(source_provenance.unexpected_current_source_build_run_count,0)
+        AS unexpected_current_source_build_run_count,
+      COALESCE(source_provenance.duplicate_active_identity_count,0)
+        AS duplicate_active_identity_count,
+      source_provenance.current_active_identity_digest,
+      source_provenance.original_current_source_identity_digest,
+      source_provenance.owner_current_source_identity_digest,
+      source_provenance.unexpected_current_source_identity_digest,
+      CASE
+        WHEN COALESCE(source_provenance.current_source_count,0)=0
+          THEN 'NO_CURRENT_SOURCE_ROWS'
+        WHEN COALESCE(source_provenance.unexpected_current_source_count,0)>0
+          THEN 'UNEXPECTED_CURRENT_SOURCE_AUTHORITY'
+        WHEN COALESCE(source_provenance.original_current_source_count,0)
+             =COALESCE(source_provenance.current_source_count,0)
+          THEN 'ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+        WHEN COALESCE(source_provenance.owner_current_source_count,0)
+             =COALESCE(source_provenance.current_source_count,0)
+          THEN 'EXECUTION_OWNER_PARTIAL_ONLY'
+        WHEN COALESCE(source_provenance.original_current_source_count,0)
+             +COALESCE(source_provenance.owner_current_source_count,0)
+             =COALESCE(source_provenance.current_source_count,0)
+          THEN 'MIXED_ORIGINAL_AND_EXECUTION_OWNER'
+        ELSE 'UNCLASSIFIED_CURRENT_SOURCE_AUTHORITY'
+      END AS observed_source_provenance_shape,
+      COALESCE(preview_provenance.ready_preview_count,0) AS ready_preview_count,
+      COALESCE(preview_provenance.ready_preview_current_session_version_count,0)
+        AS ready_preview_current_session_version_count,
+      COALESCE(preview_provenance.ready_preview_other_session_version_count,0)
+        AS ready_preview_other_session_version_count,
+      preview_provenance.ready_preview_identity_digest,
       scope_pending.economic_build_id AS scope_pending_economic_build_id,
       state_pending.economic_build_id AS state_pending_economic_build_id,
       COALESCE(expected.expected_chain_digest,'') AS expected_chain_digest,
@@ -178,6 +208,129 @@ BEGIN
       ORDER BY build_row.created_at_utc DESC,build_row.id DESC
       LIMIT 1
     ) AS owner_build ON true
+    LEFT JOIN LATERAL (
+      WITH expected_publication AS (
+        SELECT CASE
+          WHEN authority.session_id IS NOT NULL
+           AND authority.candidate_id IS NOT NULL
+           AND authority.session_version IS NOT NULL
+           AND owner_build.source_change_seq IS NOT NULL
+           AND owner_build.source_build_run_id IS NOT NULL
+          THEN private.pay_workbench_source_publication_identity_v1(
+            authority.session_id,authority.candidate_id,authority.session_version,
+            owner_build.source_change_seq,owner_build.source_build_run_id
+          )
+          ELSE NULL::uuid
+        END AS owner_source_publication_id
+      ), current_rows AS (
+        SELECT source_row.*,
+          COALESCE(
+            source_row.source_build_run_id::text
+              =authority.chain_receipt->>'original_source_build_run_id'
+            AND source_row.source_publication_id::text
+              =authority.chain_receipt->>'original_source_publication_id',
+            false
+          ) AS is_original_source,
+          COALESCE(
+            source_row.source_build_run_id=owner_build.source_build_run_id
+            AND source_row.source_publication_id
+              =expected_publication.owner_source_publication_id,
+            false
+          ) AS is_owner_source,
+          pg_catalog.concat_ws('|',
+            COALESCE(source_row.source_publication_id::text,''),
+            COALESCE(source_row.source_build_run_id::text,''),
+            source_row.source_change_seq::text,source_row.session_version::text,
+            COALESCE(source_row.timesheet_id::text,'00000000-0000-0000-0000-000000000000'),
+            source_row.line_key
+          ) AS canonical_active_identity
+        FROM public.banking_pay_workbench_candidate_source_lines AS source_row
+        CROSS JOIN expected_publication
+        WHERE source_row.session_id=authority.session_id
+          AND source_row.candidate_id=authority.candidate_id
+          AND source_row.status='CURRENT'
+      ), duplicate_identities AS (
+        SELECT pg_catalog.count(*)::integer AS duplicate_active_identity_count
+        FROM (
+          SELECT COALESCE(current_rows.timesheet_id,
+                   '00000000-0000-0000-0000-000000000000'::uuid),
+                 current_rows.line_key
+          FROM current_rows
+          GROUP BY COALESCE(current_rows.timesheet_id,
+                     '00000000-0000-0000-0000-000000000000'::uuid),
+                   current_rows.line_key
+          HAVING pg_catalog.count(*)>1
+        ) AS duplicate_identity
+      )
+      SELECT expected_publication.owner_source_publication_id
+          AS expected_owner_source_publication_id,
+        pg_catalog.count(current_rows.id)::integer AS current_source_count,
+        pg_catalog.count(*) FILTER (WHERE current_rows.is_original_source)::integer
+          AS original_current_source_count,
+        pg_catalog.count(*) FILTER (WHERE current_rows.is_owner_source)::integer
+          AS owner_current_source_count,
+        pg_catalog.count(*) FILTER (
+          WHERE NOT current_rows.is_original_source AND NOT current_rows.is_owner_source
+        )::integer AS unexpected_current_source_count,
+        pg_catalog.count(*) FILTER (
+          WHERE current_rows.source_publication_id IS NULL
+        )::integer AS null_current_publication_count,
+        pg_catalog.count(DISTINCT current_rows.source_publication_id)::integer
+          AS partial_current_publication_count,
+        pg_catalog.count(DISTINCT current_rows.source_publication_id) FILTER (
+          WHERE NOT current_rows.is_original_source AND NOT current_rows.is_owner_source
+        )::integer AS unexpected_current_publication_count,
+        pg_catalog.count(DISTINCT current_rows.source_build_run_id) FILTER (
+          WHERE NOT current_rows.is_original_source AND NOT current_rows.is_owner_source
+        )::integer AS unexpected_current_source_build_run_count,
+        duplicate_identities.duplicate_active_identity_count,
+        pg_catalog.encode(extensions.digest(pg_catalog.convert_to(COALESCE(
+          pg_catalog.string_agg(current_rows.canonical_active_identity,'|' ORDER BY
+            current_rows.canonical_active_identity),''),'UTF8'),'sha256'),'hex')
+          AS current_active_identity_digest,
+        pg_catalog.encode(extensions.digest(pg_catalog.convert_to(COALESCE(
+          pg_catalog.string_agg(current_rows.canonical_active_identity,'|' ORDER BY
+            current_rows.canonical_active_identity) FILTER (
+              WHERE current_rows.is_original_source
+            ),''),'UTF8'),'sha256'),'hex') AS original_current_source_identity_digest,
+        pg_catalog.encode(extensions.digest(pg_catalog.convert_to(COALESCE(
+          pg_catalog.string_agg(current_rows.canonical_active_identity,'|' ORDER BY
+            current_rows.canonical_active_identity) FILTER (
+              WHERE current_rows.is_owner_source
+            ),''),'UTF8'),'sha256'),'hex') AS owner_current_source_identity_digest,
+        pg_catalog.encode(extensions.digest(pg_catalog.convert_to(COALESCE(
+          pg_catalog.string_agg(current_rows.canonical_active_identity,'|' ORDER BY
+            current_rows.canonical_active_identity) FILTER (
+              WHERE NOT current_rows.is_original_source AND NOT current_rows.is_owner_source
+            ),''),'UTF8'),'sha256'),'hex') AS unexpected_current_source_identity_digest
+      FROM expected_publication
+      LEFT JOIN current_rows ON true
+      CROSS JOIN duplicate_identities
+      GROUP BY expected_publication.owner_source_publication_id,
+               duplicate_identities.duplicate_active_identity_count
+    ) AS source_provenance ON true
+    LEFT JOIN LATERAL (
+      SELECT pg_catalog.count(*) FILTER (
+          WHERE preview_row.status='READY'
+        )::integer AS ready_preview_count,
+        pg_catalog.count(*) FILTER (
+          WHERE preview_row.status='READY'
+            AND preview_row.session_version=authority.session_version
+        )::integer AS ready_preview_current_session_version_count,
+        pg_catalog.count(*) FILTER (
+          WHERE preview_row.status='READY'
+            AND preview_row.session_version IS DISTINCT FROM authority.session_version
+        )::integer AS ready_preview_other_session_version_count,
+        pg_catalog.encode(extensions.digest(pg_catalog.convert_to(COALESCE(
+          pg_catalog.string_agg(pg_catalog.concat_ws('|',
+            preview_row.session_version::text,preview_row.section,preview_row.row_key
+          ),'|' ORDER BY preview_row.session_version,preview_row.section,preview_row.row_key)
+            FILTER (WHERE preview_row.status='READY'),''),'UTF8'),'sha256'),'hex')
+          AS ready_preview_identity_digest
+      FROM public.banking_pay_workbench_preview_rows AS preview_row
+      WHERE preview_row.session_id=authority.session_id
+        AND preview_row.candidate_id=authority.candidate_id
+    ) AS preview_provenance ON true
     LEFT JOIN LATERAL (
       SELECT source_job.*
       FROM public.banking_pay_workbench_jobs AS source_job
@@ -360,6 +513,47 @@ BEGIN
       'scope_status',classified.scope_status,'scope_dirty',classified.scope_dirty,
       'candidate_status',classified.candidate_status,
       'current_source_count',classified.current_source_count,
+      'provenance_diagnostics',pg_catalog.jsonb_build_object(
+        'contract_version','EXECUTION_REFRESH_OWNER_PROVENANCE_OBSERVE_V1',
+        'observed_source_shape',classified.observed_source_provenance_shape,
+        'original_source_build_run_id',classified.chain_receipt->>'original_source_build_run_id',
+        'original_source_publication_id',classified.chain_receipt->>'original_source_publication_id',
+        'expected_owner_source_publication_id',classified.expected_owner_source_publication_id,
+        'original_current_source_count',classified.original_current_source_count,
+        'owner_current_source_count',classified.owner_current_source_count,
+        'unexpected_current_source_count',classified.unexpected_current_source_count,
+        'null_current_publication_count',classified.null_current_publication_count,
+        'distinct_current_publication_count',classified.partial_current_publication_count,
+        'unexpected_current_publication_count',classified.unexpected_current_publication_count,
+        'unexpected_current_source_build_run_count',
+          classified.unexpected_current_source_build_run_count,
+        'duplicate_active_identity_count',classified.duplicate_active_identity_count,
+        'current_active_identity_digest',classified.current_active_identity_digest,
+        'original_current_source_identity_digest',
+          classified.original_current_source_identity_digest,
+        'owner_current_source_identity_digest',classified.owner_current_source_identity_digest,
+        'unexpected_current_source_identity_digest',
+          classified.unexpected_current_source_identity_digest,
+        'ready_preview_count',classified.ready_preview_count,
+        'ready_preview_current_session_version_count',
+          classified.ready_preview_current_session_version_count,
+        'ready_preview_other_session_version_count',
+          classified.ready_preview_other_session_version_count,
+        'ready_preview_identity_digest',classified.ready_preview_identity_digest,
+        'observed_transient_shape_digest',pg_catalog.encode(extensions.digest(
+          pg_catalog.convert_to(pg_catalog.concat_ws('|',
+            'EXECUTION_REFRESH_OWNER_TRANSIENT_SHAPE_OBSERVE_V1',
+            classified.observed_source_provenance_shape,
+            classified.owner_stage,classified.current_source_count::text,
+            classified.original_current_source_count::text,
+            classified.owner_current_source_count::text,
+            classified.unexpected_current_source_count::text,
+            classified.duplicate_active_identity_count::text,
+            classified.current_active_identity_digest,
+            classified.ready_preview_count::text,
+            classified.ready_preview_identity_digest
+          ),'UTF8'),'sha256'),'hex')
+      ),
       'owner_economic_build_id',classified.owner_economic_build_id,
       'owner_source_build_run_id',classified.owner_source_build_run_id,
       'owner_root_job_id',classified.owner_root_job_id,
