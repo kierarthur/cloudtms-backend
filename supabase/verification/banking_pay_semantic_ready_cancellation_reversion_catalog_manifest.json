@@ -258,7 +258,7 @@
     {
       "schema": "private", "name": "pay_workbench_cancel_reversion_proof_core_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_session_id uuid, p_work_item_ids uuid[], p_mode text, p_options_json jsonb",
-      "definition_sha256": "536ef0d8492fb44e88e30829ccf8e94952bb8e4d32b2f0bd32778b1a21965145",
+      "definition_sha256": "508dc2c77ea3610fc360fe90bb329f2c2899caaaf902f663207190bdc2316bfe",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
