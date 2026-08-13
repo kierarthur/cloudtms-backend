@@ -1,6 +1,8 @@
 -- Canonical later authority for Draft completion's frozen post-Draft live fence.
 -- The historical omnibus remains complete; this repeatable is replayed after it.
 
+\ir 13082026_0122_pay_workbench_execution_unsent_overlay_chain_seal_v2.sql
+
 CREATE OR REPLACE FUNCTION public.banking_pay_operation_finish(
     p_operation_id uuid,
     p_status text,
@@ -66,6 +68,7 @@ DECLARE
     v_finish_freshness_status text := 'VALID_AT_SCOPE_FREEZE';
     v_post_draft_authority_count integer := 0;
     v_source_publication_identity_enforce_enabled boolean := false;
+    v_execution_overlay_chain_v2 jsonb := NULL::jsonb;
 BEGIN
     PERFORM set_config('lock_timeout', '3s', true);
 
@@ -388,6 +391,24 @@ BEGIN
       );
     END IF;
 
+    -- PAYMENT_EXECUTE may legitimately create more than one finalized dirty
+    -- generation while preparing a local unsent transfer and committing its
+    -- frozen reservation/audit overlay.  Seal that exact bounded chain before
+    -- exposing the operation as COMPLETE.  An unprovable chain never blocks
+    -- execution; it is retained as a typed rejection and cancellation safely
+    -- falls back to the ordinary current-authority route.
+    IF UPPER(BTRIM(COALESCE(v_operation.operation_type, ''))) = 'PAYMENT_EXECUTE'
+       AND v_status = 'COMPLETE'
+       AND v_operation.pay_batch_id IS NOT NULL THEN
+      v_execution_overlay_chain_v2 :=
+        private.pay_workbench_execution_unsent_overlay_chain_seal_v2(
+          v_operation.id,v_operation.pay_batch_id,'{}'::jsonb);
+      v_result_json := COALESCE(v_result_json,'{}'::jsonb)
+        || jsonb_build_object(
+          'execution_unsent_overlay_chain_v2',v_execution_overlay_chain_v2
+        );
+    END IF;
+
     UPDATE public.banking_pay_operations AS operation_update
     SET status = v_status,
         runner_state = v_runner_state,
@@ -409,7 +430,8 @@ BEGIN
           'finish_status', v_status,
           'runner_state', v_runner_state,
           'requires_user_action', v_requires_user_action,
-          'resume_reason', v_resume_reason
+          'resume_reason', v_resume_reason,
+          'execution_unsent_overlay_chain_v2',v_execution_overlay_chain_v2
         )),
         post_freeze_scope_status = CASE
           WHEN UPPER(BTRIM(COALESCE(operation_update.operation_type, ''))) = 'DRAFT_CREATE'
@@ -446,7 +468,6 @@ BEGIN
     RETURN QUERY SELECT true, NULL::text, v_operation.id, v_operation.operation_type, v_operation.status, v_operation.phase, v_operation.actor_user_id, v_operation.workbench_session_id, v_operation.pay_batch_id, v_operation.root_operation_id, v_operation.idempotency_key, v_operation.input_json, v_operation.config_json, v_operation.progress_json, v_operation.result_json, v_operation.error_json, v_operation.total_units, v_operation.completed_units, v_operation.failed_units, v_operation.current_chunk_index, v_operation.chunk_count, COALESCE(v_operation.lease_owner, v_operation.locked_by), COALESCE(v_operation.lease_expires_at_utc, v_operation.lock_expires_at_utc), v_operation.created_at_utc, v_operation.started_at_utc, v_operation.updated_at_utc, v_operation.completed_at_utc, v_operation.failed_at_utc;
 END;
 $function$;
-
 
 
 

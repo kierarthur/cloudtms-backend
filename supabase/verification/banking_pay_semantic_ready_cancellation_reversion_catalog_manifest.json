@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay semantic Ready-to-Pay and certified cancellation reversion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 44,
+  "function_count": 45,
   "functions": [
     {
       "schema": "public", "name": "_ctms_materialise_candidate_correction_residuals_v1",
@@ -48,7 +48,7 @@
     {
       "schema": "public", "name": "banking_pay_operation_finish",
       "identity_arguments": "p_operation_id uuid, p_status text, p_result_json jsonb, p_error_json jsonb",
-      "definition_sha256": "9cb6a82ec764de980ec6eb57f2472e7400604372e464d29ada2fda3a8d8c1695",
+      "definition_sha256": "1188d1421590cc45f0cb144c4f73135a1863a67eb0642b7e04845dbe28469cb2",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -226,10 +226,18 @@
     {
       "schema": "private", "name": "pay_workbench_unsent_execution_overlay_proof_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_candidate_ids uuid[], p_mode text, p_correction_request_id uuid, p_options_json jsonb",
-      "definition_sha256": "61b58518d0bfc1e75e91fb06e62f97ca203b60fbff14fd45a2ad2a693f0ff059",
+      "definition_sha256": "f828c80d64d6a90e35f1c8a998ca3ebdd104137fd3a0ada735255a7af2f3542c",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/12082026_0915_pay_workbench_unsent_execution_overlay_proof_page_v1.sql"]
+    },
+    {
+      "schema": "private", "name": "pay_workbench_execution_unsent_overlay_chain_seal_v2",
+      "identity_arguments": "p_operation_id uuid, p_pay_batch_id uuid, p_options_json jsonb",
+      "definition_sha256": "83cabdfdf5e6d733cdfb2c69eefba91248e7ab606296a00e877d3171df966218",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
+      "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
+      "source_files": ["supabase/repeatable/13082026_0122_pay_workbench_execution_unsent_overlay_chain_seal_v2.sql"]
     },
     {
       "schema": "private", "name": "pay_workbench_correction_post_commit_authority_page_v1",
@@ -318,7 +326,7 @@
     {
       "schema": "private", "name": "pay_workbench_financial_scope_dirty_transition_v1",
       "identity_arguments": "",
-      "definition_sha256": "3623a91f721affdecd6524195f128a144e61bdb77a37441e77697d6187ef2ab5",
+      "definition_sha256": "7afc40a706d67963c250aa87e3b1e9f8bd8c6a9777f4c8407016811f70c6c2b0",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql"]

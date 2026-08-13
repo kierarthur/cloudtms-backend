@@ -78,6 +78,10 @@ const financialScopeDirtyTransition = read('supabase', 'repeatable',
   '04082026_1202_pay_workbench_financial_scope_dirty_transition_v1.sql');
 const correctionSelectionPrepare = read('supabase', 'repeatable',
   '04082026_1147_pay_payment_correction_selection_prepare_chunk_v1.sql');
+const payBatchSchedule = read('supabase', 'repeatable',
+  '04082026_1158_pay_batch_schedule.sql');
+const executionOverlayChainSeal = read('supabase', 'repeatable',
+  '13082026_0122_pay_workbench_execution_unsent_overlay_chain_seal_v2.sql');
 
 test('semantic V3 and cancellation controls install disabled with a fail-closed dependency', () => {
   for (const setting of [
@@ -133,6 +137,48 @@ test('executed-not-paid reversion proves an exact unsent execution overlay witho
     /overlay_proof_mode','REQUEST_OWNED_CONTINUITY'[\s\S]*cancellation_reversion_pre_request_authorities_v3/);
   assert.match(expand,
     /cancellation_reversion_pre_request_authority'[\s\S]*cancellation_reversion_start_authority_v2/);
+
+  assert.match(payBatchSchedule,
+    /_bpay_wb_unsent_execution_schedule_context_v2[\s\S]*EXECUTION_UNSENT_SCHEDULE_CONTEXT_V2/);
+  assert.match(payBatchSchedule,
+    /operation_type,''\)\)\)='PAYMENT_EXECUTE'[\s\S]*execution_commit_state,'NOT_SUBMITTED'\)\)\)='NOT_SUBMITTED'/);
+  assert.match(financialScopeDirtyTransition,
+    /TG_TABLE_NAME='pay_advance_reservations'[\s\S]*TG_TABLE_NAME='pay_finance_case_events'/);
+  assert.match(financialScopeDirtyTransition,
+    /RESERVED'[\s\S]*COMMITTED'[\s\S]*RESERVATION_COMMITTED'[\s\S]*schedule_commit/);
+  assert.match(financialScopeDirtyTransition, /EXECUTION_UNSENT_SCHEDULE_CAUSAL_V2/);
+
+  assert.match(executionOverlayChainSeal,
+    /EXECUTION_UNSENT_OVERLAY_CHAIN_V2[\s\S]*v_transition_count>16/);
+  assert.match(executionOverlayChainSeal,
+    /v_distinct_generation_count<>v_transition_count[\s\S]*EXECUTION_OVERLAY_CHAIN_DUPLICATE_GENERATION/);
+  assert.match(executionOverlayChainSeal,
+    /v_link_transition_count<1 OR v_schedule_transition_count<1[\s\S]*EXECUTION_OVERLAY_CHAIN_INCOMPLETE/);
+  assert.match(executionOverlayChainSeal,
+    /v_unowned_generation_count<>0[\s\S]*EXECUTION_OVERLAY_CHAIN_UNOWNED_TRANSITION/);
+  assert.match(executionOverlayChainSeal,
+    /state<>'FINALIZED'[\s\S]*EXECUTION_OVERLAY_CHAIN_NON_FINAL_TRANSACTION/);
+  assert.match(executionOverlayChainSeal,
+    /original_source_publication_id[\s\S]*original_source_identity_digest[\s\S]*original_semantic_proof_digest/);
+  assert.match(executionOverlayChainSeal,
+    /active_item_scope_digest[\s\S]*execution_transfer_scope_digest/);
+  assert.match(executionOverlayChainSeal,
+    /provider_attempt_count[\s\S]*rail_transaction_count[\s\S]*settlement_count[\s\S]*remittance_count/);
+  assert.doesNotMatch(executionOverlayChainSeal,
+    /UPDATE\s+public\.|INSERT\s+INTO\s+public\.|DELETE\s+FROM\s+public\./i);
+
+  assert.match(operationFinish,
+    /pay_workbench_execution_unsent_overlay_chain_seal_v2\([\s\S]*UPDATE public\.banking_pay_operations/);
+  assert.match(unsentExecutionOverlayProof,
+    /execution_chain_receipt->>'active_item_scope_digest'/);
+  assert.match(unsentExecutionOverlayProof, /scope_proof\.active_item_scope_digest/);
+  assert.match(unsentExecutionOverlayProof,
+    /execution_chain_receipt->>'execution_transfer_scope_digest'/);
+  assert.match(unsentExecutionOverlayProof, /scope_proof\.execution_transfer_scope_digest/);
+  assert.match(unsentExecutionOverlayProof,
+    /EXECUTION_OVERLAY_CHAIN_DRAFT_AUTHORITY_MISMATCH/);
+  assert.doesNotMatch(unsentExecutionOverlayProof,
+    /terminal_execution_generation[^\n]{0,120}\+\s*1/);
 });
 
 test('canonical rows split presentation parents from exact positive allocation components only under V3', () => {
@@ -620,8 +666,8 @@ test('focused modern authorities are replayed after the historical omnibus', () 
 
 test('semantic and cancellation authorities have one exact catalogue owner and workflow verifier', () => {
   const semanticManifest = manifests.at(-1);
-  assert.equal(semanticManifest.function_count, 44);
-  assert.equal(semanticManifest.functions.length, 44);
+  assert.equal(semanticManifest.function_count, 45);
+  assert.equal(semanticManifest.functions.length, 45);
   for (const identity of [
     'public._ctms_materialise_candidate_correction_residuals_v1',
     'public._pay_active_settled_components',
@@ -636,6 +682,7 @@ test('semantic and cancellation authorities have one exact catalogue owner and w
     'private.pay_workbench_correction_post_commit_authority_page_v1',
     'private.pay_workbench_cancel_reversion_proof_core_v1',
     'private.pay_workbench_unsent_execution_overlay_proof_page_v1',
+    'private.pay_workbench_execution_unsent_overlay_chain_seal_v2',
     'private.pay_workbench_correction_held_dirty_job_resolve_v1',
     'private.pay_workbench_candidate_physical_currentness_page_v1',
     'public.pay_payment_cancellation_route_diagnostic_v1',

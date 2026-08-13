@@ -157,7 +157,10 @@ begin
     pb.execution_intent_json,
     pb.freshness_validation_status,
     pb.freshness_result_hash,
-    pb.freshness_scope_hash
+    pb.freshness_scope_hash,
+    pb.source_workbench_session_id,
+    pb.source_snapshot_run_id,
+    pb.source_session_version
   into v_batch
   from public.pay_batches pb
   where pb.id = p_pay_batch_id
@@ -1195,6 +1198,85 @@ begin
       'freshness_scope_hash', v_stored_freshness_scope_hash
     )
   where pb.id = p_pay_batch_id;
+
+  -- Scheduling is the second half of the same provider-unsubmitted execution
+  -- overlay that linked the frozen batch items to their local transfer rows.
+  -- Preserve ordinary dirtying, but give the exact reservation/event statement
+  -- triggers a transaction-local, operation-owned scope they can prove.  A
+  -- missing or partial context never blocks execution; it merely leaves the
+  -- later cancellation proof ineligible for certified fast reversion.
+  DROP TABLE IF EXISTS pg_temp._bpay_wb_unsent_execution_schedule_context_v2;
+  CREATE TEMPORARY TABLE pg_temp._bpay_wb_unsent_execution_schedule_context_v2 (
+    contract_version text NOT NULL,
+    execution_operation_id uuid NOT NULL,
+    pay_batch_id uuid NOT NULL,
+    actor_user_id uuid NOT NULL,
+    pay_batch_candidate_id uuid NOT NULL,
+    candidate_id uuid NOT NULL,
+    timesheet_id uuid,
+    pay_batch_item_id uuid NOT NULL,
+    pay_bank_transfer_id uuid NOT NULL,
+    transfer_scope_id uuid NOT NULL,
+    reservation_id uuid,
+    finance_case_id uuid,
+    finance_component_id uuid,
+    source_workbench_session_id uuid,
+    source_snapshot_run_id uuid,
+    source_session_version bigint,
+    row_context_digest text NOT NULL,
+    created_at_utc timestamptz NOT NULL
+  ) ON COMMIT DROP;
+
+  IF p_operation_id IS NOT NULL
+     AND upper(btrim(coalesce(v_operation_row.operation_type,'')))='PAYMENT_EXECUTE'
+     AND v_operation_row.pay_batch_id IS NOT DISTINCT FROM p_pay_batch_id
+     AND upper(btrim(coalesce(v_execution_mode,'')))='STANDARD_BANK'
+     AND upper(btrim(coalesce(v_execution_commit_state,'NOT_SUBMITTED')))='NOT_SUBMITTED' THEN
+    INSERT INTO pg_temp._bpay_wb_unsent_execution_schedule_context_v2 (
+      contract_version,execution_operation_id,pay_batch_id,actor_user_id,
+      pay_batch_candidate_id,candidate_id,timesheet_id,pay_batch_item_id,
+      pay_bank_transfer_id,transfer_scope_id,reservation_id,finance_case_id,
+      finance_component_id,source_workbench_session_id,source_snapshot_run_id,
+      source_session_version,row_context_digest,created_at_utc
+    )
+    SELECT
+      'EXECUTION_UNSENT_SCHEDULE_CONTEXT_V2',p_operation_id,p_pay_batch_id,
+      p_actor_user_id,batch_item.pay_batch_candidate_id,batch_candidate.candidate_id,
+      batch_item.timesheet_id,batch_item.id,transfer_scope.pay_bank_transfer_id,
+      membership.transfer_scope_id,batch_item.reservation_id,batch_item.finance_case_id,
+      batch_item.finance_component_id,v_batch.source_workbench_session_id,
+      v_batch.source_snapshot_run_id,v_batch.source_session_version,
+      md5(
+        p_operation_id::text||'|'||p_pay_batch_id::text||'|'||p_actor_user_id::text||'|'||
+        batch_candidate.candidate_id::text||'|'||batch_item.pay_batch_candidate_id::text||'|'||
+        batch_item.id::text||'|'||coalesce(batch_item.timesheet_id::text,'')||'|'||
+        membership.transfer_scope_id::text||'|'||transfer_scope.pay_bank_transfer_id::text||'|'||
+        coalesce(batch_item.reservation_id::text,'')||'|'||
+        coalesce(batch_item.finance_case_id::text,'')||'|'||
+        coalesce(batch_item.finance_component_id::text,'')||'|'||
+        coalesce(v_batch.source_workbench_session_id::text,'')||'|'||
+        coalesce(v_batch.source_snapshot_run_id::text,'')||'|'||
+        coalesce(v_batch.source_session_version::text,'')||
+        '|EXECUTION_UNSENT_SCHEDULE_CONTEXT_V2'
+      ),v_commit_ts
+    FROM public.banking_pay_operation_transfer_scope_items AS membership
+    JOIN public.banking_pay_operation_transfer_scope AS transfer_scope
+      ON transfer_scope.id=membership.transfer_scope_id
+     AND transfer_scope.operation_id=membership.operation_id
+     AND transfer_scope.pay_batch_id=membership.pay_batch_id
+    JOIN public.pay_batch_items AS batch_item
+      ON batch_item.id=membership.pay_batch_item_id
+     AND batch_item.pay_batch_candidate_id=membership.pay_batch_candidate_id
+    JOIN public.pay_batch_candidates AS batch_candidate
+      ON batch_candidate.id=batch_item.pay_batch_candidate_id
+     AND batch_candidate.pay_batch_id=p_pay_batch_id
+     AND batch_candidate.candidate_id=membership.candidate_id
+    WHERE membership.operation_id=p_operation_id
+      AND membership.pay_batch_id=p_pay_batch_id
+      AND coalesce(batch_item.is_voided,false) IS NOT TRUE
+      AND batch_item.pay_bank_transfer_id=transfer_scope.pay_bank_transfer_id
+      AND transfer_scope.pay_bank_transfer_id IS NOT NULL;
+  END IF;
 
   update public.pay_advance_reservations par
   set

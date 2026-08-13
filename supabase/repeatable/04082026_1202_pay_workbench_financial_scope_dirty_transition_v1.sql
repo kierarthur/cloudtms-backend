@@ -35,6 +35,11 @@ DECLARE
   v_execution_overlay_contexts jsonb:='{}'::jsonb;
   v_execution_overlay_context_count integer:=0;
   v_execution_overlay_exact boolean:=false;
+  v_execution_schedule_context regclass:=pg_catalog.to_regclass(
+    'pg_temp._bpay_wb_unsent_execution_schedule_context_v2');
+  v_execution_schedule_contexts jsonb:='{}'::jsonb;
+  v_execution_schedule_context_count integer:=0;
+  v_execution_schedule_exact boolean:=false;
   v_impacted_candidate_count integer:=0;
   v_scope_change_tx_token uuid:=NULL::uuid;
 BEGIN
@@ -812,6 +817,174 @@ BEGIN
       END IF;
     END IF;
 
+    -- The exact PAYMENT_EXECUTE scheduling owner may create one further
+    -- finalized candidate generation while committing frozen reservations and
+    -- their audit events.  Stamp only the two writer statements whose complete
+    -- transition tables match that owner-created temporary scope.  Other
+    -- finance mutations remain ordinary/unowned dirtiness and therefore make
+    -- the later certified route fail closed.
+    IF v_execution_schedule_context IS NOT NULL
+       AND ((TG_TABLE_NAME='pay_advance_reservations' AND TG_OP='UPDATE')
+         OR (TG_TABLE_NAME='pay_finance_case_events' AND TG_OP='INSERT')) THEN
+      SELECT relation.relowner INTO v_relation_owner
+      FROM pg_catalog.pg_class AS relation
+      WHERE relation.oid=v_execution_schedule_context;
+
+      IF v_relation_owner=current_user::regrole::oid
+         AND EXISTS (
+           SELECT 1 FROM pg_catalog.pg_class AS relation
+           WHERE relation.oid=v_execution_schedule_context
+             AND relation.relpersistence='t'
+             AND relation.relnamespace=pg_catalog.pg_my_temp_schema()
+         )
+         AND (SELECT pg_catalog.array_agg(
+                attribute.attname||':'||pg_catalog.format_type(attribute.atttypid,attribute.atttypmod)
+                ORDER BY attribute.attnum)
+              FROM pg_catalog.pg_attribute AS attribute
+              WHERE attribute.attrelid=v_execution_schedule_context
+                AND attribute.attnum>0 AND NOT attribute.attisdropped)
+             =ARRAY[
+               'contract_version:text','execution_operation_id:uuid','pay_batch_id:uuid',
+               'actor_user_id:uuid','pay_batch_candidate_id:uuid','candidate_id:uuid',
+               'timesheet_id:uuid','pay_batch_item_id:uuid','pay_bank_transfer_id:uuid',
+               'transfer_scope_id:uuid','reservation_id:uuid','finance_case_id:uuid',
+               'finance_component_id:uuid','source_workbench_session_id:uuid',
+               'source_snapshot_run_id:uuid','source_session_version:bigint',
+               'row_context_digest:text','created_at_utc:timestamp with time zone'
+             ] THEN
+        IF TG_TABLE_NAME='pay_advance_reservations' THEN
+          SELECT NOT EXISTS (
+              SELECT 1
+              FROM new_rows AS new_row
+              JOIN old_rows AS old_row ON old_row.id=new_row.id
+              LEFT JOIN pg_temp._bpay_wb_unsent_execution_schedule_context_v2 AS context_row
+                ON context_row.reservation_id=new_row.id
+               AND context_row.pay_batch_id=new_row.pay_batch_id
+               AND context_row.pay_batch_candidate_id=new_row.pay_batch_candidate_id
+               AND context_row.pay_batch_item_id=new_row.pay_batch_item_id
+               AND context_row.finance_case_id=new_row.finance_case_id
+               AND context_row.finance_component_id IS NOT DISTINCT FROM new_row.finance_component_id
+              WHERE context_row.reservation_id IS NULL
+                 OR pg_catalog.upper(pg_catalog.btrim(COALESCE(old_row.status,'')))<>'RESERVED'
+                 OR pg_catalog.upper(pg_catalog.btrim(COALESCE(new_row.status,'')))<>'COMMITTED'
+                 OR new_row.committed_at_utc IS NULL
+                 OR (pg_catalog.to_jsonb(new_row)-'status'-'committed_at_utc'-'updated_by_user_id')
+                      IS DISTINCT FROM
+                    (pg_catalog.to_jsonb(old_row)-'status'-'committed_at_utc'-'updated_by_user_id')
+            )
+            AND (SELECT pg_catalog.count(DISTINCT new_row.id) FROM new_rows AS new_row)
+              =(SELECT pg_catalog.count(DISTINCT context_row.reservation_id)
+                FROM pg_temp._bpay_wb_unsent_execution_schedule_context_v2 AS context_row
+                WHERE context_row.reservation_id IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM new_rows AS new_row
+                    WHERE new_row.id=context_row.reservation_id))
+          INTO v_execution_schedule_exact;
+        ELSE
+          SELECT NOT EXISTS (
+              SELECT 1
+              FROM new_rows AS new_row
+              LEFT JOIN pg_temp._bpay_wb_unsent_execution_schedule_context_v2 AS context_row
+                ON context_row.reservation_id=new_row.reservation_id
+               AND context_row.pay_batch_id=new_row.pay_batch_id
+               AND context_row.finance_case_id=new_row.finance_case_id
+              WHERE context_row.reservation_id IS NULL
+                 OR pg_catalog.upper(pg_catalog.btrim(COALESCE(new_row.event_type,'')))
+                      <>'RESERVATION_COMMITTED'
+                 OR COALESCE(new_row.reason,'')<>'schedule_commit'
+                 OR new_row.actor_user_id IS DISTINCT FROM context_row.actor_user_id
+            )
+            AND (SELECT pg_catalog.count(*) FROM new_rows)
+              =(SELECT pg_catalog.count(DISTINCT context_row.reservation_id)
+                FROM pg_temp._bpay_wb_unsent_execution_schedule_context_v2 AS context_row
+                WHERE context_row.reservation_id IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM new_rows AS new_row
+                    WHERE new_row.reservation_id=context_row.reservation_id))
+          INTO v_execution_schedule_exact;
+        END IF;
+
+        IF v_execution_schedule_exact THEN
+          SELECT COALESCE(pg_catalog.jsonb_object_agg(
+                   candidate_group.candidate_id::text,
+                   pg_catalog.jsonb_build_object(
+                     'contract_version','EXECUTION_UNSENT_SCHEDULE_CONTEXT_V2',
+                     'execution_operation_id',candidate_group.execution_operation_id,
+                     'pay_batch_id',candidate_group.pay_batch_id,
+                     'candidate_id',candidate_group.candidate_id,
+                     'pay_batch_candidate_ids',candidate_group.pay_batch_candidate_ids,
+                     'pay_batch_item_ids',candidate_group.pay_batch_item_ids,
+                     'timesheet_ids',candidate_group.timesheet_ids,
+                     'transfer_scope_ids',candidate_group.transfer_scope_ids,
+                     'pay_bank_transfer_ids',candidate_group.pay_bank_transfer_ids,
+                     'reservation_ids',candidate_group.reservation_ids,
+                     'finance_case_ids',candidate_group.finance_case_ids,
+                     'finance_component_ids',candidate_group.finance_component_ids,
+                     'source_workbench_session_id',candidate_group.source_workbench_session_id,
+                     'source_snapshot_run_id',candidate_group.source_snapshot_run_id,
+                     'source_session_version',candidate_group.source_session_version,
+                     'context_digest',pg_catalog.md5(
+                       candidate_group.execution_operation_id::text||'|'||
+                       candidate_group.pay_batch_id::text||'|'||candidate_group.candidate_id::text||'|'||
+                       candidate_group.pay_batch_candidate_ids::text||'|'||
+                       candidate_group.pay_batch_item_ids::text||'|'||candidate_group.timesheet_ids::text||'|'||
+                       candidate_group.transfer_scope_ids::text||'|'||
+                       candidate_group.pay_bank_transfer_ids::text||'|'||
+                       candidate_group.reservation_ids::text||'|'||candidate_group.finance_case_ids::text||'|'||
+                       candidate_group.finance_component_ids::text||'|'||
+                       COALESCE(candidate_group.source_workbench_session_id::text,'')||'|'||
+                       COALESCE(candidate_group.source_snapshot_run_id::text,'')||'|'||
+                       COALESCE(candidate_group.source_session_version::text,'')||
+                       '|EXECUTION_UNSENT_SCHEDULE_CONTEXT_V2'
+                     )
+                   ) ORDER BY candidate_group.candidate_id
+                 ),'{}'::jsonb),pg_catalog.count(*)::integer
+          INTO v_execution_schedule_contexts,v_execution_schedule_context_count
+          FROM (
+            SELECT context_row.candidate_id,
+              pg_catalog.min(context_row.execution_operation_id::text)::uuid AS execution_operation_id,
+              pg_catalog.min(context_row.pay_batch_id::text)::uuid AS pay_batch_id,
+              pg_catalog.jsonb_agg(DISTINCT context_row.pay_batch_candidate_id::text
+                ORDER BY context_row.pay_batch_candidate_id::text) AS pay_batch_candidate_ids,
+              pg_catalog.jsonb_agg(DISTINCT context_row.pay_batch_item_id::text
+                ORDER BY context_row.pay_batch_item_id::text) AS pay_batch_item_ids,
+              COALESCE(pg_catalog.jsonb_agg(DISTINCT context_row.timesheet_id::text
+                ORDER BY context_row.timesheet_id::text)
+                FILTER (WHERE context_row.timesheet_id IS NOT NULL),'[]'::jsonb) AS timesheet_ids,
+              pg_catalog.jsonb_agg(DISTINCT context_row.transfer_scope_id::text
+                ORDER BY context_row.transfer_scope_id::text) AS transfer_scope_ids,
+              pg_catalog.jsonb_agg(DISTINCT context_row.pay_bank_transfer_id::text
+                ORDER BY context_row.pay_bank_transfer_id::text) AS pay_bank_transfer_ids,
+              COALESCE(pg_catalog.jsonb_agg(DISTINCT context_row.reservation_id::text
+                ORDER BY context_row.reservation_id::text)
+                FILTER (WHERE context_row.reservation_id IS NOT NULL),'[]'::jsonb) AS reservation_ids,
+              COALESCE(pg_catalog.jsonb_agg(DISTINCT context_row.finance_case_id::text
+                ORDER BY context_row.finance_case_id::text)
+                FILTER (WHERE context_row.finance_case_id IS NOT NULL),'[]'::jsonb) AS finance_case_ids,
+              COALESCE(pg_catalog.jsonb_agg(DISTINCT context_row.finance_component_id::text
+                ORDER BY context_row.finance_component_id::text)
+                FILTER (WHERE context_row.finance_component_id IS NOT NULL),'[]'::jsonb)
+                AS finance_component_ids,
+              pg_catalog.min(context_row.source_workbench_session_id::text)::uuid
+                AS source_workbench_session_id,
+              pg_catalog.min(context_row.source_snapshot_run_id::text)::uuid
+                AS source_snapshot_run_id,
+              pg_catalog.min(context_row.source_session_version) AS source_session_version
+            FROM pg_temp._bpay_wb_unsent_execution_schedule_context_v2 AS context_row
+            WHERE context_row.candidate_id=ANY(v_candidate_ids)
+            GROUP BY context_row.candidate_id
+            HAVING pg_catalog.count(DISTINCT context_row.execution_operation_id)=1
+               AND pg_catalog.count(DISTINCT context_row.pay_batch_id)=1
+          ) AS candidate_group;
+
+          IF v_execution_schedule_context_count<>v_impacted_candidate_count THEN
+            v_execution_schedule_exact:=false;
+            v_execution_schedule_contexts:='{}'::jsonb;
+          ELSE
+            v_scope_change_tx_token:=public.pay_workbench_scope_change_tx_token_v1();
+          END IF;
+        END IF;
+      END IF;
+    END IF;
+
     -- Financial DML performed by the correction page remains genuine audit
     -- evidence.  Where every impacted candidate belongs to the exact
     -- transaction-local correction context, stamp (never suppress) that
@@ -865,6 +1038,13 @@ BEGIN
           WHEN v_execution_overlay_exact THEN v_scope_change_tx_token ELSE NULL::uuid END,
         'execution_overlay_causal_contract_version',CASE
           WHEN v_execution_overlay_exact THEN 'EXECUTION_UNSENT_OVERLAY_CAUSAL_V1'
+          ELSE NULL::text END,
+        'execution_overlay_schedule_contexts',CASE
+          WHEN v_execution_schedule_exact THEN v_execution_schedule_contexts ELSE NULL::jsonb END,
+        'execution_overlay_schedule_scope_change_tx_token',CASE
+          WHEN v_execution_schedule_exact THEN v_scope_change_tx_token ELSE NULL::uuid END,
+        'execution_overlay_schedule_causal_contract_version',CASE
+          WHEN v_execution_schedule_exact THEN 'EXECUTION_UNSENT_SCHEDULE_CAUSAL_V2'
           ELSE NULL::text END
       ))
     );

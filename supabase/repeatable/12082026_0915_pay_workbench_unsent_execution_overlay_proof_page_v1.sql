@@ -55,8 +55,11 @@ BEGIN
       current_scope.certified_preview_publication_parity_ok AS current_parity,
       COALESCE(change_counter.seq,0) AS live_source_change_seq,
       COALESCE(change_counter.scope_change_generation,0) AS live_dirty_generation,
+      change_counter.scope_change_tx_token AS live_scope_change_tx_token,
       registry.dirty_generation AS registry_dirty_generation,
       registry.last_scope_change_tx_token AS registry_tx_token,
+      execution_chain.operation_id AS execution_chain_operation_id,
+      execution_chain.chain_receipt AS execution_chain_receipt,
       dirty_job.id AS dirty_job_id,dirty_job.status AS dirty_job_status,
       dirty_job.started_at_utc AS dirty_job_started_at_utc,
       dirty_job.scope_change_generation AS dirty_job_generation,
@@ -95,6 +98,27 @@ BEGIN
     LEFT JOIN private.banking_pay_workbench_candidate_scope_registry AS registry
       ON registry.candidate_id=requested.candidate_id
     LEFT JOIN LATERAL (
+      SELECT operation_row.id AS operation_id,
+        COALESCE(
+          operation_row.progress_json->'execution_unsent_overlay_chain_v2'->'candidates'
+            ->requested.candidate_id::text,
+          operation_row.result_json->'execution_unsent_overlay_chain_v2'->'candidates'
+            ->requested.candidate_id::text
+        ) AS chain_receipt
+      FROM public.banking_pay_operations AS operation_row
+      WHERE operation_row.operation_type='PAYMENT_EXECUTE'
+        AND operation_row.status='COMPLETE'
+        AND operation_row.pay_batch_id=batch_row.id
+        AND COALESCE(
+          operation_row.progress_json->'execution_unsent_overlay_chain_v2'->'candidates'
+            ->requested.candidate_id::text,
+          operation_row.result_json->'execution_unsent_overlay_chain_v2'->'candidates'
+            ->requested.candidate_id::text
+        ) IS NOT NULL
+      ORDER BY operation_row.completed_at_utc DESC NULLS LAST,operation_row.created_at_utc DESC
+      LIMIT 1
+    ) AS execution_chain ON true
+    LEFT JOIN LATERAL (
       SELECT candidate_job.*
       FROM public.banking_pay_workbench_jobs AS candidate_job
       WHERE candidate_job.candidate_id=requested.candidate_id
@@ -111,16 +135,22 @@ BEGIN
     ) AS dirty_job ON true
   ), execution_authority AS (
     SELECT base.*,
-      CASE WHEN COALESCE(base.execution_context->>'execution_operation_id','')
+      COALESCE(base.execution_chain_operation_id,
+        CASE WHEN COALESCE(base.execution_context->>'execution_operation_id','')
         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-        THEN (base.execution_context->>'execution_operation_id')::uuid END AS execution_operation_id,
-      CASE WHEN COALESCE(base.dirty_payload->>'execution_overlay_scope_change_tx_token','')
+        THEN (base.execution_context->>'execution_operation_id')::uuid END) AS execution_operation_id,
+      COALESCE(
+        CASE WHEN COALESCE(base.execution_chain_receipt->>'terminal_scope_change_tx_token','')
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (base.execution_chain_receipt->>'terminal_scope_change_tx_token')::uuid END,
+        CASE WHEN COALESCE(base.dirty_payload->>'execution_overlay_scope_change_tx_token','')
         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-        THEN (base.dirty_payload->>'execution_overlay_scope_change_tx_token')::uuid END
+        THEN (base.dirty_payload->>'execution_overlay_scope_change_tx_token')::uuid END)
         AS execution_scope_change_tx_token,
-      CASE WHEN COALESCE(base.dirty_payload->>'scope_change_tx_token','')
+      COALESCE(base.live_scope_change_tx_token,
+        CASE WHEN COALESCE(base.dirty_payload->>'scope_change_tx_token','')
         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-        THEN (base.dirty_payload->>'scope_change_tx_token')::uuid END AS current_scope_change_tx_token
+        THEN (base.dirty_payload->>'scope_change_tx_token')::uuid END) AS current_scope_change_tx_token
     FROM base
   ), proof AS (
     SELECT execution_authority.*,
@@ -140,6 +170,8 @@ BEGIN
       COALESCE(scope_proof.item_difference_count,0) AS item_difference_count,
       COALESCE(scope_proof.timesheet_difference_count,0) AS timesheet_difference_count,
       COALESCE(scope_proof.transfer_difference_count,0) AS transfer_difference_count,
+      scope_proof.active_item_scope_digest,
+      scope_proof.execution_transfer_scope_digest,
       COALESCE(scope_proof.provider_attempt_count,0) AS provider_attempt_count,
       COALESCE(scope_proof.transfer_event_count,0) AS transfer_event_count,
       COALESCE(scope_proof.unsafe_transfer_count,0) AS unsafe_transfer_count,
@@ -181,7 +213,8 @@ BEGIN
           AND membership.pay_batch_id=p_pay_batch_id
           AND membership.candidate_id=execution_authority.candidate_id
       ), active_items AS (
-        SELECT item.id,item.timesheet_id,item.pay_bank_transfer_id
+        SELECT item.id,item.timesheet_id,item.pay_bank_transfer_id,item.amount_inc_vat,
+          item.item_type,item.finance_case_id,item.finance_component_id,item.reservation_id
         FROM public.pay_batch_items AS item
         JOIN public.pay_batch_candidates AS candidate_row
           ON candidate_row.id=item.pay_batch_candidate_id
@@ -233,6 +266,24 @@ BEGIN
         (SELECT pg_catalog.count(*) FROM item_difference)::integer AS item_difference_count,
         (SELECT pg_catalog.count(*) FROM timesheet_difference)::integer AS timesheet_difference_count,
         (SELECT pg_catalog.count(*) FROM transfer_difference)::integer AS transfer_difference_count,
+        pg_catalog.md5(COALESCE((SELECT pg_catalog.string_agg(
+          active_items.id::text||':'||COALESCE(active_items.timesheet_id::text,'')||':'||
+          COALESCE(active_items.pay_bank_transfer_id::text,'')||':'||
+          COALESCE(active_items.amount_inc_vat::text,'')||':'||
+          COALESCE(active_items.item_type,'')||':'||
+          COALESCE(active_items.finance_case_id::text,'')||':'||
+          COALESCE(active_items.finance_component_id::text,'')||':'||
+          COALESCE(active_items.reservation_id::text,'')
+          ,'|' ORDER BY active_items.id) FROM active_items),'')) AS active_item_scope_digest,
+        pg_catalog.md5(COALESCE((SELECT pg_catalog.string_agg(
+          exact_membership.transfer_scope_id::text||':'||
+          exact_membership.pay_batch_item_id::text||':'||
+          COALESCE(exact_scope.pay_bank_transfer_id::text,'')||':'||
+          COALESCE(exact_membership.item_amount::text,'')
+          ,'|' ORDER BY exact_membership.transfer_scope_id,exact_membership.pay_batch_item_id)
+          FROM exact_membership
+          JOIN exact_scope ON exact_scope.id=exact_membership.transfer_scope_id),''))
+          AS execution_transfer_scope_digest,
         (SELECT pg_catalog.count(*) FROM public.banking_pay_operation_provider_attempts AS attempt
           WHERE attempt.operation_id=execution_authority.execution_operation_id
              OR attempt.pay_batch_id=p_pay_batch_id)::integer AS provider_attempt_count,
@@ -286,15 +337,53 @@ BEGIN
           OR COALESCE(proof.current_attestation->>'semantic_proof_digest','')
                IS DISTINCT FROM COALESCE(proof.frozen_attestation->>'semantic_proof_digest','')
           THEN 'EXECUTION_OVERLAY_PUBLICATION_MISMATCH'
-        WHEN proof.dirty_job_id IS NULL THEN 'EXECUTION_OVERLAY_DIRTY_JOB_MISSING'
-        WHEN proof.dirty_job_started_at_utc IS NOT NULL
+        WHEN proof.execution_chain_receipt IS NOT NULL
+          AND (COALESCE(proof.execution_chain_receipt->>'contract_version','')
+                <>'EXECUTION_UNSENT_OVERLAY_CHAIN_V2'
+            OR COALESCE((proof.execution_chain_receipt->>'closed')::boolean,false) IS NOT TRUE)
+          THEN COALESCE(NULLIF(proof.execution_chain_receipt->>'rejection_reason',''),
+            'EXECUTION_OVERLAY_CHAIN_NOT_CLOSED')
+        WHEN proof.execution_chain_receipt IS NOT NULL
+          AND (COALESCE(proof.execution_chain_receipt->>'execution_operation_id','')
+                <>COALESCE(proof.execution_operation_id::text,'')
+            OR COALESCE(proof.execution_chain_receipt->>'pay_batch_id','')<>p_pay_batch_id::text
+            OR COALESCE(proof.execution_chain_receipt->>'candidate_id','')<>proof.candidate_id::text)
+          THEN 'EXECUTION_OVERLAY_CHAIN_SCOPE_MISMATCH'
+        WHEN proof.execution_chain_receipt IS NOT NULL
+          AND (COALESCE(proof.execution_chain_receipt->>'draft_operation_id','')
+                <>COALESCE(proof.draft_operation_id::text,'')
+            OR COALESCE(proof.execution_chain_receipt->>'original_economic_build_id','')
+                IS DISTINCT FROM COALESCE(proof.frozen_attestation->>'economic_build_id','')
+            OR COALESCE(proof.execution_chain_receipt->>'original_source_build_run_id','')
+                IS DISTINCT FROM COALESCE(
+                  proof.frozen_attestation->>'original_source_build_run_id',
+                  proof.allocation_basis_json->>'source_build_run_id','')
+            OR COALESCE(proof.execution_chain_receipt->>'original_source_publication_id','')
+                IS DISTINCT FROM COALESCE(proof.frozen_publication_id,'')
+            OR COALESCE(proof.execution_chain_receipt->>'original_source_identity_digest','')
+                IS DISTINCT FROM COALESCE(proof.allocation_basis_json->>'source_identity_digest','')
+            OR COALESCE(proof.execution_chain_receipt->>'original_semantic_proof_digest','')
+                IS DISTINCT FROM COALESCE(proof.allocation_basis_json->>'semantic_proof_digest',''))
+          THEN 'EXECUTION_OVERLAY_CHAIN_DRAFT_AUTHORITY_MISMATCH'
+        WHEN proof.execution_chain_receipt IS NOT NULL
+          AND (COALESCE(proof.execution_chain_receipt->>'transition_count','') !~ '^\d+$'
+            OR COALESCE(CASE
+              WHEN COALESCE(proof.execution_chain_receipt->>'transition_count','') ~ '^\d+$'
+                THEN (proof.execution_chain_receipt->>'transition_count')::integer
+              END,0) NOT BETWEEN 1 AND 16)
+          THEN 'EXECUTION_OVERLAY_CHAIN_TOO_LARGE'
+        WHEN proof.execution_chain_receipt IS NULL AND proof.dirty_job_id IS NULL
+          THEN 'EXECUTION_OVERLAY_DIRTY_JOB_MISSING'
+        WHEN proof.execution_chain_receipt IS NULL AND proof.dirty_job_started_at_utc IS NOT NULL
           THEN 'EXECUTION_OVERLAY_DIRTY_JOB_ALREADY_STARTED'
-        WHEN COALESCE(proof.dirty_payload->>'execution_overlay_causal_contract_version','')
+        WHEN proof.execution_chain_receipt IS NULL
+          AND (COALESCE(proof.dirty_payload->>'execution_overlay_causal_contract_version','')
               <>'EXECUTION_UNSENT_OVERLAY_CAUSAL_V1'
           OR COALESCE(proof.execution_context->>'contract_version','')
-              <>'EXECUTION_UNSENT_OVERLAY_CONTEXT_V1'
+              <>'EXECUTION_UNSENT_OVERLAY_CONTEXT_V1')
           THEN 'EXECUTION_OVERLAY_CAUSAL_CONTEXT_MISSING'
-        WHEN COALESCE(proof.execution_context->>'pay_batch_id','')<>p_pay_batch_id::text
+        WHEN proof.execution_chain_receipt IS NULL AND (
+          COALESCE(proof.execution_context->>'pay_batch_id','')<>p_pay_batch_id::text
           OR COALESCE(proof.execution_context->>'candidate_id','')<>proof.candidate_id::text
           OR proof.execution_operation_id IS NULL
           OR COALESCE(proof.execution_context->>'context_digest','')
@@ -309,7 +398,7 @@ BEGIN
                  COALESCE(proof.execution_context->>'source_workbench_session_id','')||'|'||
                  COALESCE(proof.execution_context->>'source_snapshot_run_id','')||'|'||
                  COALESCE(proof.execution_context->>'source_session_version','')||
-                 '|EXECUTION_UNSENT_OVERLAY_CONTEXT_V1')
+                 '|EXECUTION_UNSENT_OVERLAY_CONTEXT_V1'))
           THEN 'EXECUTION_OVERLAY_CAUSAL_CONTEXT_MISMATCH'
         WHEN proof.execution_operation_type<>'PAYMENT_EXECUTE'
           OR proof.execution_operation_batch_id IS DISTINCT FROM p_pay_batch_id
@@ -319,8 +408,15 @@ BEGIN
         WHEN proof.execution_tx_state<>'FINALIZED' OR proof.execution_generation IS NULL
           THEN 'EXECUTION_OVERLAY_TRANSACTION_NOT_FINALIZED'
         WHEN proof.scope_count<1 OR proof.scope_item_count<1 OR proof.bad_scope_count<>0
-          OR proof.item_difference_count<>0 OR proof.timesheet_difference_count<>0
-          OR proof.transfer_difference_count<>0
+          OR proof.item_difference_count<>0
+          OR (proof.execution_chain_receipt IS NULL AND proof.timesheet_difference_count<>0)
+          OR (proof.execution_chain_receipt IS NULL AND proof.transfer_difference_count<>0)
+          OR (proof.execution_chain_receipt IS NOT NULL AND
+            COALESCE(proof.execution_chain_receipt->>'active_item_scope_digest','')
+              IS DISTINCT FROM COALESCE(proof.active_item_scope_digest,''))
+          OR (proof.execution_chain_receipt IS NOT NULL AND
+            COALESCE(proof.execution_chain_receipt->>'execution_transfer_scope_digest','')
+              IS DISTINCT FROM COALESCE(proof.execution_transfer_scope_digest,''))
           THEN 'EXECUTION_OVERLAY_ITEM_SCOPE_MISMATCH'
         WHEN proof.scope_item_count<>proof.active_item_count
           OR pg_catalog.round(proof.scope_amount,2)<>pg_catalog.round(proof.scope_item_amount,2)
@@ -336,8 +432,16 @@ BEGIN
           OR proof.current_tx_state<>'FINALIZED'
           OR proof.current_generation IS DISTINCT FROM proof.live_dirty_generation
           OR proof.execution_generation IS DISTINCT FROM proof.live_dirty_generation
-          OR proof.dirty_job_generation IS DISTINCT FROM proof.live_dirty_generation
-          OR COALESCE(proof.dirty_payload->>'source_change_seq','')<>proof.live_source_change_seq::text
+          OR (proof.execution_chain_receipt IS NULL
+            AND proof.dirty_job_generation IS DISTINCT FROM proof.live_dirty_generation)
+          OR (proof.execution_chain_receipt IS NULL
+            AND COALESCE(proof.dirty_payload->>'source_change_seq','')<>proof.live_source_change_seq::text)
+          OR (proof.execution_chain_receipt IS NOT NULL
+            AND COALESCE(proof.execution_chain_receipt->>'terminal_execution_generation','')
+                  <>proof.live_dirty_generation::text)
+          OR (proof.execution_chain_receipt IS NOT NULL
+            AND COALESCE(proof.execution_chain_receipt->>'terminal_source_change_seq','')
+                  <>proof.live_source_change_seq::text)
           OR proof.registry_dirty_generation IS DISTINCT FROM proof.live_dirty_generation
           OR proof.registry_tx_token IS DISTINCT FROM proof.current_scope_change_tx_token
           OR proof.timesheet_generation_mismatch_count<>0)
@@ -380,6 +484,9 @@ BEGIN
       'source_change_seq',classified.live_source_change_seq,
       'dirty_generation',classified.live_dirty_generation,
       'execution_overlay_context_digest',classified.execution_context->>'context_digest',
+      'execution_overlay_chain_contract_version',classified.execution_chain_receipt->>'contract_version',
+      'execution_overlay_chain_digest',classified.execution_chain_receipt->>'chain_digest',
+      'execution_overlay_chain_transition_count',classified.execution_chain_receipt->'transition_count',
       'authority_digest',pg_catalog.md5(
         p_pay_batch_id::text||'|'||classified.candidate_id::text||'|'||
         COALESCE(classified.execution_operation_id::text,'')||'|'||
@@ -388,6 +495,7 @@ BEGIN
         COALESCE(classified.execution_generation::text,'')||'|'||
         classified.live_source_change_seq::text||'|'||classified.live_dirty_generation::text||'|'||
         COALESCE(classified.execution_context->>'context_digest','')||'|'||
+        COALESCE(classified.execution_chain_receipt->>'chain_digest','')||'|'||
         (classified.rejection_reason IS NULL)::text||'|EXECUTION_UNSENT_OVERLAY_PROOF_PAGE_V1')
     )) AS result_json
     FROM classified
