@@ -210,6 +210,7 @@ paths:
       responses:
         '200': {$ref: '#/components/responses/ReminderBatchResult'}
         '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
         default: {$ref: '#/components/responses/Error'}
   /api/candidate-app/workflows/{workflowId}/paper-pack:
     get:
@@ -658,11 +659,16 @@ components:
     ReminderBatchResult:
       type: object
       additionalProperties: true
-      required: [contract_version, batch_id, status, items]
+      description: A durable batch result. PARTIAL and FAILED describe per-item outcomes and are successful retrievals of authoritative batch truth, not transport failures.
+      required: [ok, contract_version, batch_id, status, success_count, failure_count, skipped_count, items]
       properties:
+        ok: {const: true, description: "True once the batch outcome has been durably completed, including PARTIAL or FAILED item outcomes."}
         contract_version: {const: OFFICE_CANDIDATE_REMINDER_BATCH_RESULT_V1}
         batch_id: {$ref: '#/components/schemas/Uuid'}
         status: {type: string, enum: [COMPLETED, PARTIAL, FAILED]}
+        success_count: {type: integer, minimum: 0}
+        failure_count: {type: integer, minimum: 0}
+        skipped_count: {type: integer, minimum: 0}
         items: {type: array, maxItems: 1000, items: {type: object, additionalProperties: true}}
     Mutation:
       type: object
@@ -713,6 +719,7 @@ components:
         - CANDIDATE_REMINDER_CATALOGUE_PAGE_INVALID
         - CANDIDATE_REMINDER_BATCH_SELECTION_INVALID
         - CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED
+        - CANDIDATE_REMINDER_BATCH_NOT_FOUND
         - CANDIDATE_ROUTE_NOT_FOUND
         - METHOD_NOT_ALLOWED
   responses:

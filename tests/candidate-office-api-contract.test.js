@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 
 const backendUrl = new URL('../broker/src/candidate-app-backend.js', import.meta.url);
 const openapiUrl = new URL('../docs/candidate-app/CLOUDTMS_OFFICE_CANDIDATE_API_V1.yaml', import.meta.url);
+const officeSqlUrl = new URL('../supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql', import.meta.url);
 const invoiceGenerateRowsUrl = new URL('../supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql', import.meta.url);
 const invoiceIssueRowsUrl = new URL('../supabase/repeatable/26072026_1947_invoice_batch_issue_candidate_rows_v1.sql', import.meta.url);
 
@@ -67,6 +68,7 @@ test('office OpenAPI and normal backend expose the same exact method/path invent
   assert.match(openapi, /candidate_client_flags_continue_to_block_candidate_sessions:\s*true/);
   assert.match(backend, /cancel:\s*'MANAGER_REQUEST_CANCEL'/);
   assert.match(backend, /cancel:\s*'cancel_manager_request'/);
+  assert.match(backend, /NOT_FOUND_ERROR_CODES[\s\S]*CANDIDATE_REMINDER_BATCH_NOT_FOUND/);
   assert.match(backend, /requireOfficeUser\(request, \['admin'\]\)/);
   assert.match(openapi, /enum:\s*\[remind, renew, cancel, cancel-manager-handoff, phone-review, phone-progress, phone-approve, phone-refuse, retry-finalisation, retry-paper-preparation\]/);
   assert.match(openapi, /decision_code:\s*\{const:\s*REJECT_OR_MANUAL\}/);
@@ -119,6 +121,17 @@ test('office contract preserves bounded projection and server-owned reminder bat
     'CANDIDATE_PAPER_PACK_RETRY_NOT_READY', 'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
     'CANDIDATE_PAPER_PACK_FAILURE_RECEIPT_INVALID', 'CANDIDATE_ROUTE_NOT_FOUND'
   ]) assert.match(openapi, new RegExp(`- ${code}\\b`));
+});
+
+test('durable reminder batch PARTIAL and FAILED outcomes remain successful structured results', async () => {
+  const [officeSql, openapi] = await Promise.all([
+    readFile(officeSqlUrl, 'utf8'),
+    readFile(openapiUrl, 'utf8')
+  ]);
+  assert.match(officeSql, /'ok',true,'contract_version','OFFICE_CANDIDATE_REMINDER_BATCH_RESULT_V1'/);
+  assert.doesNotMatch(officeSql, /'ok',v_failure_count=0,'contract_version','OFFICE_CANDIDATE_REMINDER_BATCH_RESULT_V1'/);
+  assert.match(openapi, /PARTIAL and FAILED describe per-item outcomes/);
+  assert.match(openapi, /ok: \{const: true, description: "True once the batch outcome has been durably completed, including PARTIAL or FAILED item outcomes\."\}/);
 });
 
 test('invoice row projections expose the office expense-email diagnostic without changing authority fields', async () => {

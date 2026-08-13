@@ -1489,7 +1489,11 @@ begin
       end;
     end loop;
     v_result:=jsonb_build_object(
-      'ok',v_failure_count=0,'contract_version','OFFICE_CANDIDATE_REMINDER_BATCH_RESULT_V1',
+      -- The batch operation itself completed durably even when one or more
+      -- independently fenced items failed. Item outcome truth is represented
+      -- by status/counts/items; top-level ok=false is reserved for a request or
+      -- transaction that did not produce a durable batch result.
+      'ok',true,'contract_version','OFFICE_CANDIDATE_REMINDER_BATCH_RESULT_V1',
       'batch_version','OFFICE_CANDIDATE_REMINDER_BATCH_V1','batch_id',v_batch_id,
       'status',case when v_failure_count=0 then 'COMPLETED' when v_success_count>0 then 'PARTIAL' else 'FAILED' end,
       'observed_at_utc',v_observed,'completed_at_utc',v_observed,
