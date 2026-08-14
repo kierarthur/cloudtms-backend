@@ -131,6 +131,7 @@ binding = "BROWSER"
 
 [env.test.vars]
 SUPABASE_URL = "https://yakevhtttcsljosbdpov.supabase.co"
+CANDIDATE_APP_ENVIRONMENT = "TEST"
 ALLOWED_ORIGINS = "https://testmode.arthur-rai.co.uk,https://kierarthur.github.io"
 COOKIE_SAME_SITE = "None"
 COOKIE_PARTITIONED = "true"
