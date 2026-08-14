@@ -168,7 +168,8 @@ for (const required of [
 }
 for (const required of [
   'tmp_sync_sealed_reservation_items', 'tmp_sync_reserved_batch_items_replacement',
-  'tmp_sync_reserved_additional_by_code_replacement', "'component_fallback','WORKED_TIME_AMOUNT'",
+  'tmp_sync_reserved_additional_by_code_replacement', 'component_fallback',
+  'WORKED_TIME_AMOUNT',
 ]) {
   if (!jamesSynchronizer.includes(required)) {
     problems.push(`sealed synchronizer reconstruction is missing: ${required}`);
