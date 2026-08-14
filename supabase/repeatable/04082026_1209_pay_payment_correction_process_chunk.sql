@@ -127,6 +127,24 @@ DECLARE
   v_committed_route_input_digest text;
   v_existing_refresh_result jsonb := '{}'::jsonb;
   v_existing_refresh_found boolean := false;
+  v_q_bound_authority_set jsonb := '{}'::jsonb;
+  v_q_bound_candidate_authorities jsonb := '{}'::jsonb;
+  v_q_bound_execution_operation_id uuid;
+  v_q_bound_route_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_q_bound_route_eligible_candidate_ids uuid[] := ARRAY[]::uuid[];
+  v_q_bound_route_eligible_candidate_count integer := 0;
+  v_q_bound_chain_digest_by_candidate jsonb := '{}'::jsonb;
+  v_q_bound_selected_anchor_digest_by_candidate jsonb := '{}'::jsonb;
+  v_q_bound_affected_closure_digest_by_candidate jsonb := '{}'::jsonb;
+  v_q_bound_residual_proof_digest_by_candidate jsonb := '{}'::jsonb;
+  v_q_bound_parent_proof_digest_by_candidate jsonb := '{}'::jsonb;
+  v_q_bound_pre_request_authority_digest_by_candidate jsonb := '{}'::jsonb;
+  v_q_bound_route_replay jsonb := '{}'::jsonb;
+  v_q_bound_route_replay_complete boolean := false;
+  v_q_bound_route_replay_exact boolean := false;
+  v_q_bound_authority_set_digest_recomputed text;
+  v_standard_reversion_admission jsonb := '{}'::jsonb;
+  v_execution_step text := 'INITIALISE';
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
@@ -1333,19 +1351,49 @@ BEGIN
         AND applied_work.candidate_id IS NOT NULL
       ORDER BY applied_work.candidate_id
     LOOP
-      PERFORM pg_catalog.pg_advisory_xact_lock(
-        pg_catalog.hashtextextended(
-          public._pay_workbench_candidate_serial_key(v_work.candidate_id),24062027
-        )
-      );
+      v_execution_step:='FINALISE_CANDIDATE_SERIAL_LOCK';
+      BEGIN
+        PERFORM pg_catalog.pg_advisory_xact_lock(
+          pg_catalog.hashtextextended(
+            public._pay_workbench_candidate_serial_key(v_work.candidate_id),24062027
+          )
+        );
+      EXCEPTION WHEN lock_not_available THEN
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_FINALISE_STEP_FAILED'
+          USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
+            'contract_version','PAYMENT_CORRECTION_FINALISE_ERROR_V1',
+            'code','PAYMENT_CORRECTION_FINALISE_STEP_FAILED',
+            'phase','FINALISE','step',v_execution_step,
+            'database_error_class','LOCK_NOT_AVAILABLE',
+            'logical_lock_resource','WORKBENCH_CANDIDATE_SERIAL',
+            -- Stage 1 deliberately records the exact step and SQLSTATE while
+            -- leaving retry classification inert.  The TEST contention harness
+            -- must prove the observed boundary before this may be promoted to
+            -- LOCK_CONTENTION_BEFORE_ROUTE.
+            'retry_class','UNCLASSIFIED',
+            'original_sqlstate',SQLSTATE,
+            'correction_request_id',p_correction_request_id,
+            'operation_id',v_operation.id,'pay_batch_id',v_request.pay_batch_id,
+            'candidate_id',v_work.candidate_id,
+            'financial_work_item_count',v_total_terminal,
+            'financial_applied_count',v_total_applied,
+            'financial_nonterminal_count',v_nonterminal_count,
+            'route_input_committed',false,
+            'route_result_committed',false
+          )::text;
+      END;
     END LOOP;
 
     WITH terminal_rows AS (
       SELECT
         applied_work.candidate_id,
         applied_work.id AS work_item_id,
-        correction_operation.input_json->'cancellation_reversion_start_authorities_v2'
-          ->applied_work.candidate_id::text AS start_authority,
+        COALESCE(
+          correction_operation.input_json->'cancellation_reversion_start_authorities_v3'
+            ->applied_work.candidate_id::text,
+          correction_operation.input_json->'cancellation_reversion_start_authorities_v2'
+            ->applied_work.candidate_id::text
+        ) AS start_authority,
         pg_catalog.md5((COALESCE(applied_work.result_json,'{}'::jsonb)
           -'applied_at_utc'-'processed_at_utc')::text) AS financial_result_digest
       FROM public.pay_payment_correction_work_items AS applied_work
@@ -1605,6 +1653,175 @@ BEGIN
       FROM pg_catalog.unnest(v_refresh_work_item_ids)
         AS requested_work_item(work_item_id);
 
+      -- A scheduled/executed-not-submitted cancellation may carry one exact
+      -- Q-bound authority captured after PREPARE had durably selected the
+      -- batch items but before REQUEST_START dirtied the financial lifecycle.
+      -- Re-read the same frozen request-candidate rows through the one parent
+      -- proof owner.  Missing, incomplete or changed evidence is not inferred
+      -- from current Workbench state: it remains a normal safe-fallback case.
+      v_q_bound_authority_set:=COALESCE(
+        v_operation.input_json->'cancellation_reversion_q_bound_pre_request_start_v1',
+        '{}'::jsonb
+      );
+      v_q_bound_candidate_authorities:=COALESCE(
+        v_q_bound_authority_set->'candidate_authorities','{}'::jsonb
+      );
+      SELECT COALESCE(pg_catalog.array_agg(candidate_value.value::uuid
+               ORDER BY candidate_value.value),ARRAY[]::uuid[])
+      INTO v_q_bound_route_candidate_ids
+      FROM pg_catalog.jsonb_array_elements_text(v_route_candidate_ids)
+        AS candidate_value(value)
+      WHERE pg_catalog.pg_input_is_valid(candidate_value.value,'uuid');
+
+      v_q_bound_authority_set_digest_recomputed:=
+        private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+          'contract_version','CANCELLATION_REVERSION_Q_BOUND_PRE_REQUEST_START_SET_V1',
+          'boundary','AFTER_REQUEST_PREPARE_BEFORE_REQUEST_START',
+          'correction_request_id',p_correction_request_id,
+          'correction_operation_id',v_operation.id,
+          'execution_operation_id',CASE
+            WHEN COALESCE(v_q_bound_authority_set->>'execution_operation_id','')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (v_q_bound_authority_set->>'execution_operation_id')::uuid END,
+          'pay_batch_id',v_request.pay_batch_id,
+          'request_selection_hash',v_request.selection_hash,
+          'request_plan_hash',v_request.plan_hash,
+          'candidate_authorities',v_q_bound_candidate_authorities
+        ));
+
+      IF v_requested_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT')
+         AND COALESCE(v_q_bound_authority_set->>'contract_version','')
+               ='CANCELLATION_REVERSION_Q_BOUND_PRE_REQUEST_START_SET_V1'
+         AND COALESCE(v_q_bound_authority_set->>'boundary','')
+               ='AFTER_REQUEST_PREPARE_BEFORE_REQUEST_START'
+         AND COALESCE(v_q_bound_authority_set->>'correction_request_id','')
+               =p_correction_request_id::text
+         AND COALESCE(v_q_bound_authority_set->>'correction_operation_id','')
+               =v_operation.id::text
+         AND COALESCE(v_q_bound_authority_set->>'pay_batch_id','')
+               =v_request.pay_batch_id::text
+         AND COALESCE(v_q_bound_authority_set->>'workbench_session_id','')
+               =v_session_id::text
+         AND COALESCE(v_q_bound_authority_set->>'workbench_session_version','')
+               =v_session_version::text
+         AND COALESCE(v_q_bound_authority_set->>'request_selection_hash','')
+               =v_request.selection_hash
+         AND COALESCE(v_q_bound_authority_set->>'request_plan_hash','')
+               =v_request.plan_hash
+         AND COALESCE(v_q_bound_authority_set->>'execution_operation_id','')
+               ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+         AND COALESCE(v_q_bound_authority_set->>'execution_operation_resolution','')='EXACT'
+         AND COALESCE(v_q_bound_authority_set->>'authority_set_digest','')
+               =v_q_bound_authority_set_digest_recomputed
+         AND pg_catalog.cardinality(v_q_bound_route_candidate_ids)=v_refresh_count
+         AND NOT EXISTS (
+           SELECT 1
+           FROM pg_catalog.unnest(v_q_bound_route_candidate_ids) AS route_candidate(candidate_id)
+           WHERE COALESCE(v_q_bound_candidate_authorities
+             ->route_candidate.candidate_id::text->>'contract_version','')
+               <>'CANCELLATION_REVERSION_Q_BOUND_PRE_REQUEST_START_AUTHORITY_V1'
+         ) THEN
+        v_q_bound_execution_operation_id:=
+          (v_q_bound_authority_set->>'execution_operation_id')::uuid;
+
+        -- Admission is candidate-local.  A rejected authority remains bound
+        -- into the full request authority-set digest, but cannot prevent a
+        -- different, exact candidate from replaying its own proof.  Only
+        -- candidates carrying the complete persisted digest chain are sent
+        -- to the replay owner; every other candidate remains on the existing
+        -- fail-closed fallback path.
+        SELECT COALESCE(pg_catalog.array_agg(route_candidate.candidate_id
+                 ORDER BY route_candidate.candidate_id),ARRAY[]::uuid[])
+        INTO v_q_bound_route_eligible_candidate_ids
+        FROM pg_catalog.unnest(v_q_bound_route_candidate_ids)
+          AS route_candidate(candidate_id)
+        WHERE COALESCE((v_q_bound_candidate_authorities
+                ->route_candidate.candidate_id::text->>'admitted')::boolean,false)
+          AND COALESCE(v_q_bound_candidate_authorities
+                ->route_candidate.candidate_id::text->>'v2_chain_digest','')~'^[0-9a-f]{32}$'
+          AND COALESCE(v_q_bound_candidate_authorities
+                ->route_candidate.candidate_id::text->>'authority_digest','')~'^[0-9a-f]{64}$'
+          AND COALESCE(v_q_bound_candidate_authorities
+                ->route_candidate.candidate_id::text->>'selected_anchor_digest','')~'^[0-9a-f]{64}$'
+          AND COALESCE(v_q_bound_candidate_authorities
+                ->route_candidate.candidate_id::text->>'affected_physical_closure_digest','')
+                ~'^[0-9a-f]{64}$'
+          AND COALESCE(v_q_bound_candidate_authorities
+                ->route_candidate.candidate_id::text->>'residual_proof_digest','')~'^[0-9a-f]{64}$'
+          AND COALESCE(v_q_bound_candidate_authorities
+                ->route_candidate.candidate_id::text->>'parent_proof_digest','')~'^[0-9a-f]{64}$';
+        v_q_bound_route_eligible_candidate_count:=
+          COALESCE(pg_catalog.cardinality(v_q_bound_route_eligible_candidate_ids),0);
+
+        SELECT COALESCE(pg_catalog.jsonb_object_agg(
+                 route_candidate.candidate_id::text,
+                 v_q_bound_candidate_authorities->route_candidate.candidate_id::text->>'v2_chain_digest'
+                 ORDER BY route_candidate.candidate_id),'{}'::jsonb),
+               COALESCE(pg_catalog.jsonb_object_agg(
+                 route_candidate.candidate_id::text,
+                 v_q_bound_candidate_authorities->route_candidate.candidate_id::text->>'selected_anchor_digest'
+                 ORDER BY route_candidate.candidate_id),'{}'::jsonb),
+               COALESCE(pg_catalog.jsonb_object_agg(
+                 route_candidate.candidate_id::text,
+                 v_q_bound_candidate_authorities->route_candidate.candidate_id::text->>'affected_physical_closure_digest'
+                 ORDER BY route_candidate.candidate_id),'{}'::jsonb),
+               COALESCE(pg_catalog.jsonb_object_agg(
+                 route_candidate.candidate_id::text,
+                 v_q_bound_candidate_authorities->route_candidate.candidate_id::text->>'residual_proof_digest'
+                 ORDER BY route_candidate.candidate_id),'{}'::jsonb),
+               COALESCE(pg_catalog.jsonb_object_agg(
+                 route_candidate.candidate_id::text,
+                 v_q_bound_candidate_authorities->route_candidate.candidate_id::text->>'parent_proof_digest'
+                 ORDER BY route_candidate.candidate_id),'{}'::jsonb),
+               COALESCE(pg_catalog.jsonb_object_agg(
+                 route_candidate.candidate_id::text,
+                 v_q_bound_candidate_authorities->route_candidate.candidate_id::text->>'authority_digest'
+                 ORDER BY route_candidate.candidate_id),'{}'::jsonb)
+        INTO v_q_bound_chain_digest_by_candidate,
+             v_q_bound_selected_anchor_digest_by_candidate,
+             v_q_bound_affected_closure_digest_by_candidate,
+             v_q_bound_residual_proof_digest_by_candidate,
+             v_q_bound_parent_proof_digest_by_candidate,
+             v_q_bound_pre_request_authority_digest_by_candidate
+        FROM pg_catalog.unnest(v_q_bound_route_eligible_candidate_ids)
+          AS route_candidate(candidate_id);
+
+        IF v_q_bound_route_eligible_candidate_count>0 THEN
+          v_q_bound_route_replay:=private.pay_workbench_execution_refresh_owner_proof_page_v1(
+            v_q_bound_execution_operation_id,v_request.pay_batch_id,
+            v_q_bound_route_eligible_candidate_ids,'ROUTE_REPLAY',
+            pg_catalog.jsonb_build_object(
+              'contract_version','2',
+              'expected_chain_digest_by_candidate',v_q_bound_chain_digest_by_candidate,
+              'expected_owner_by_candidate','{}'::jsonb,
+              'expected_parent_proof_digest_by_candidate',v_q_bound_parent_proof_digest_by_candidate,
+              'residual_selection_binding',pg_catalog.jsonb_build_object(
+                'contract_version','EXECUTION_RESIDUAL_SELECTION_BINDING_V1',
+                'boundary','AFTER_REQUEST_PREPARE_BEFORE_REQUEST_START',
+                'correction_request_id',p_correction_request_id,
+                'correction_operation_id',v_operation.id,
+                'workbench_session_id',v_session_id,
+                'workbench_session_version',v_session_version,
+                'request_selection_hash',v_request.selection_hash,
+                'request_plan_hash',v_request.plan_hash,
+                'expected_selected_anchor_digest_by_candidate',
+                  v_q_bound_selected_anchor_digest_by_candidate
+              )
+            )
+          );
+          v_q_bound_route_replay_complete:=
+            COALESCE((v_q_bound_route_replay->>'ok')::boolean,false)
+            AND COALESCE((v_q_bound_route_replay->>'candidate_count')::integer,0)
+                  =v_q_bound_route_eligible_candidate_count
+            AND pg_catalog.jsonb_array_length(
+                  COALESCE(v_q_bound_route_replay->'candidate_results','[]'::jsonb)
+                )=v_q_bound_route_eligible_candidate_count;
+          v_q_bound_route_replay_exact:=v_q_bound_route_replay_complete
+            AND COALESCE((v_q_bound_route_replay->>'admitted_count')::integer,0)
+                  =v_q_bound_route_eligible_candidate_count;
+        END IF;
+      END IF;
+
       v_route_input:=pg_catalog.jsonb_build_object(
         'contract_version','CANCELLATION_ROUTE_INPUT_V1',
         'correction_request_id',p_correction_request_id,
@@ -1622,7 +1839,24 @@ BEGIN
         'held_dirty_absorption_enabled',v_held_dirty_absorption_enabled,
         'physical_currentness_contract_version','PAY_WORKBENCH_CANDIDATE_PHYSICAL_CURRENTNESS_V1',
         'semantic_contract_version','READY_TO_PAY_SEMANTIC_V2'
-      );
+      )||CASE WHEN v_requested_action IN ('PRE_BANK_CANCEL','CANCEL_PAYMENT') THEN
+        pg_catalog.jsonb_build_object(
+          'authority_components_version',2,
+          'request_selection_hash',v_request.selection_hash,
+          'request_plan_hash',v_request.plan_hash,
+          'pre_request_authority_digest_by_candidate',
+            v_q_bound_pre_request_authority_digest_by_candidate,
+          'pre_request_authority_set_digest',
+            v_q_bound_authority_set->>'authority_set_digest',
+          'selected_anchor_digest_by_candidate',
+            v_q_bound_selected_anchor_digest_by_candidate,
+          'affected_physical_closure_digest_by_candidate',
+            v_q_bound_affected_closure_digest_by_candidate,
+          'residual_proof_digest_by_candidate',
+            v_q_bound_residual_proof_digest_by_candidate,
+          'parent_proof_digest_by_candidate',
+            v_q_bound_parent_proof_digest_by_candidate
+        ) ELSE '{}'::jsonb END;
       v_route_input_digest:=private.pay_payment_correction_sha256_v1(v_route_input);
       v_route_input:=v_route_input||pg_catalog.jsonb_build_object(
         'route_input_digest',v_route_input_digest,
@@ -1727,7 +1961,7 @@ BEGIN
         )::text;
     ELSIF v_requested_action IN ('DRAFT_CANCEL','PRE_BANK_CANCEL','CANCEL_PAYMENT')
        AND COALESCE(v_route_reversion_observe_enabled,false) THEN
-      v_reversion_admission := private.pay_workbench_cancel_reversion_admission_page_v1(
+      v_standard_reversion_admission := private.pay_workbench_cancel_reversion_admission_page_v1(
         p_correction_request_id,
         v_operation.id,
         v_session_id,
@@ -1735,6 +1969,82 @@ BEGIN
         pg_catalog.jsonb_build_object('mode',CASE
           WHEN v_route_reversion_publish_enabled THEN 'POST_FINANCIAL' ELSE 'OBSERVE_ONLY' END)
       );
+
+      -- The existing admission engine remains authoritative.  The exact
+      -- residual replay may replace only its known terminal-authority result:
+      -- that result is expected when the legacy whole-publication comparison
+      -- cannot express F - A = C = P.  Every other rejection remains closed.
+      WITH standard_rows AS (
+        SELECT standard.value AS result_json
+        FROM pg_catalog.jsonb_array_elements(COALESCE(
+          v_standard_reversion_admission->'candidate_results','[]'::jsonb
+        )) AS standard(value)
+      ), replay_rows AS (
+        SELECT replay.value AS result_json
+        FROM pg_catalog.jsonb_array_elements(COALESCE(
+          v_q_bound_route_replay->'candidate_results','[]'::jsonb
+        )) AS replay(value)
+      ), composed AS (
+        SELECT pg_catalog.jsonb_strip_nulls(
+          standard_rows.result_json
+          ||pg_catalog.jsonb_build_object(
+            'admitted',
+              COALESCE((standard_rows.result_json->>'admitted')::boolean,false)
+              OR (
+                v_q_bound_route_replay_complete
+                AND COALESCE((replay_rows.result_json->>'admitted')::boolean,false)
+                AND standard_rows.result_json->>'rejection_reason'
+                      ='POST_FINANCIAL_TERMINAL_AUTHORITY_CHANGED'
+              ),
+            'fast_reversion_eligible',
+              COALESCE((standard_rows.result_json->>'admitted')::boolean,false)
+              OR (
+                v_q_bound_route_replay_complete
+                AND COALESCE((replay_rows.result_json->>'admitted')::boolean,false)
+                AND standard_rows.result_json->>'rejection_reason'
+                      ='POST_FINANCIAL_TERMINAL_AUTHORITY_CHANGED'
+              ),
+            'rejection_reason',CASE
+              WHEN COALESCE((standard_rows.result_json->>'admitted')::boolean,false)
+                OR (
+                  v_q_bound_route_replay_complete
+                  AND COALESCE((replay_rows.result_json->>'admitted')::boolean,false)
+                  AND standard_rows.result_json->>'rejection_reason'
+                        ='POST_FINANCIAL_TERMINAL_AUTHORITY_CHANGED'
+                ) THEN NULL
+              ELSE standard_rows.result_json->>'rejection_reason' END,
+            'admission_authority',CASE
+              WHEN COALESCE((standard_rows.result_json->>'admitted')::boolean,false)
+                THEN 'STANDARD_CANCELLATION_REVERSION_ADMISSION_V1'
+              WHEN v_q_bound_route_replay_complete
+                AND COALESCE((replay_rows.result_json->>'admitted')::boolean,false)
+                AND standard_rows.result_json->>'rejection_reason'
+                      ='POST_FINANCIAL_TERMINAL_AUTHORITY_CHANGED'
+                THEN 'Q_BOUND_RESIDUAL_ROUTE_REPLAY_V1'
+              ELSE 'REJECTED' END,
+            'q_bound_residual_route_replay',replay_rows.result_json
+          )
+        ) AS result_json
+        FROM standard_rows
+        LEFT JOIN replay_rows
+          ON replay_rows.result_json->>'candidate_id'
+             =standard_rows.result_json->>'candidate_id'
+      )
+      SELECT COALESCE(pg_catalog.jsonb_agg(composed.result_json
+               ORDER BY composed.result_json->>'candidate_id'),'[]'::jsonb)
+      INTO v_reversion_candidate_ids
+      FROM composed;
+
+      v_reversion_admission:=v_standard_reversion_admission
+        ||pg_catalog.jsonb_build_object(
+          'candidate_results',v_reversion_candidate_ids,
+          'admitted_count',(SELECT pg_catalog.count(*)
+            FROM pg_catalog.jsonb_array_elements(v_reversion_candidate_ids) AS admitted(value)
+            WHERE COALESCE((admitted.value->>'admitted')::boolean,false)),
+          'q_bound_residual_route_replay',v_q_bound_route_replay,
+          'q_bound_residual_route_replay_complete',v_q_bound_route_replay_complete,
+          'q_bound_residual_route_replay_exact',v_q_bound_route_replay_exact
+        );
 
       SELECT
         COALESCE(pg_catalog.jsonb_agg(result_row.value->>'candidate_id'

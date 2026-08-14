@@ -41611,7 +41611,9 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       ['provider_status_evidence_count', `pay_bank_transfers?select=id&${batchFilter}&status=in.(PROCESSING,UNKNOWN,COMPLETED,FAILED,DECLINED,REJECTED,RETURNED,REVERTED,SUBMISSION_FAILED)`],
       ['provider_event_count', `pay_bank_transfer_events?select=id&${batchFilter}&event_source=in.(PROVIDER_WEBHOOK,PROVIDER_POLL,PROVIDER_RESPONSE)`],
       ['provider_event_transaction_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_transaction_id=not.is.null`],
-      ['provider_event_request_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_request_id=not.is.null`]
+      ['provider_event_request_count', `pay_bank_transfer_events?select=id&${batchFilter}&provider_request_id=not.is.null`],
+      ['settlement_scope_count', `banking_pay_operation_settlement_scope?select=id&${batchFilter}`],
+      ['remittance_scope_count', `banking_pay_operation_remittance_scope?select=id&${batchFilter}`]
     ];
     const counts = {};
     const readErrors = [];
@@ -41671,6 +41673,8 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       provider_event_count: countValue('provider_event_count'),
       provider_event_transaction_count: countValue('provider_event_transaction_count'),
       provider_event_request_count: countValue('provider_event_request_count'),
+      settlement_scope_count: countValue('settlement_scope_count'),
+      remittance_scope_count: countValue('remittance_scope_count'),
       evidence_read_error_count: readErrors.length,
       evidence_read_errors: readErrors.slice(0, 3),
       diagnostic_source: 'claimAndAdvanceOneBankingPayOperation'
@@ -41682,7 +41686,7 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     try {
       const operationRes = await sbFetch(
         env,
-        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(claimedOperationId)}&select=id,operation_type,status,phase,runner_state,requires_user_action,resume_reason,progress_json,result_json,error_json,failed_at_utc,lease_owner,lease_expires_at_utc,locked_by,lock_expires_at_utc,run_after_utc,updated_at_utc&limit=1`,
+        `${env.SUPABASE_URL}/rest/v1/banking_pay_operations?id=eq.${enc(claimedOperationId)}&select=id,pay_batch_id,root_operation_id,operation_type,status,phase,runner_state,requires_user_action,resume_reason,input_json,progress_json,result_json,error_json,failed_at_utc,lease_owner,lease_expires_at_utc,locked_by,lock_expires_at_utc,run_after_utc,updated_at_utc&limit=1`,
         false
       );
       const rows = operationRes && Array.isArray(operationRes.rows) ? operationRes.rows : [];
@@ -41782,6 +41786,139 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       'PAYMENT_CORRECTION_WORKBENCH_REVERSION_RETRY',
       'PAYMENT_CORRECTION_WORKBENCH_OVERLAY_RESTORE_RETRY'
     ].some((code) => diagnosticText.includes(code));
+  };
+
+  const extractPaymentCorrectionFinaliseErrorEnvelope = (error) => {
+    const seen = new Set();
+    const scan = (value, depth = 0) => {
+      if (value == null || depth > 5) return null;
+      if (typeof value === 'object') {
+        if (seen.has(value)) return null;
+        seen.add(value);
+        if (upperText(value.contract_version) === 'PAYMENT_CORRECTION_FINALISE_ERROR_V1') return value;
+        for (const key of ['detail', 'details', 'json', 'error_json', 'errorJson', 'body', 'message', 'error', 'data']) {
+          const found = scan(value[key], depth + 1);
+          if (found) return found;
+        }
+        return null;
+      }
+      if (typeof value !== 'string') return null;
+      const text = value.trim();
+      if (!text) return null;
+      try {
+        const parsed = JSON.parse(text);
+        const found = scan(parsed, depth + 1);
+        if (found) return found;
+      } catch {}
+      const first = text.indexOf('{');
+      const last = text.lastIndexOf('}');
+      if (first >= 0 && last > first) {
+        try { return scan(JSON.parse(text.slice(first, last + 1)), depth + 1); } catch {}
+      }
+      return null;
+    };
+    return scan(error);
+  };
+
+  const inspectPaymentCorrectionFinaliseRetry = async (error) => {
+    const disabled = upperText(env.BANKING_PAY_PAYMENT_CORRECTION_FINALISE_RETRY_V1_ENABLED) !== 'TRUE'
+      && String(env.BANKING_PAY_PAYMENT_CORRECTION_FINALISE_RETRY_V1_ENABLED || '').trim() !== '1';
+    const envelope = extractPaymentCorrectionFinaliseErrorEnvelope(error);
+    const result = {
+      enabled: !disabled,
+      envelope,
+      eligible: false,
+      exhausted: false,
+      durable_progressed: false,
+      retry_count: 0,
+      next_delay_seconds: 0,
+      evidence: null
+    };
+    if (disabled || operationType !== 'PAYMENT_CORRECTION' || claimedOperationPhase !== 'FINALISE' || !envelope) return result;
+    if (
+      upperText(envelope.code) !== 'PAYMENT_CORRECTION_FINALISE_STEP_FAILED'
+      || upperText(envelope.phase) !== 'FINALISE'
+      || upperText(envelope.step) !== 'FINALISE_CANDIDATE_SERIAL_LOCK'
+      || upperText(envelope.retry_class) !== 'LOCK_CONTENTION_BEFORE_ROUTE'
+      || upperText(envelope.original_sqlstate) !== '55P03'
+      || firstText(envelope.operation_id) !== claimedOperationId
+      || firstText(envelope.pay_batch_id) !== claimedPayBatchId
+    ) return result;
+
+    const correctionRequestId = firstText(
+      envelope.correction_request_id,
+      asPlainObject(claim.input_json || claim.inputJson).correction_request_id
+    );
+    if (!isUuid(correctionRequestId)) return result;
+
+    const [durableOperation, workResponse, batchResponse, routeChunkCount, providerEvidence] = await Promise.all([
+      readOperationDurableStateForClaim(),
+      sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_payment_correction_work_items?correction_request_id=eq.${enc(correctionRequestId)}&select=id,status&order=id.asc&limit=101`, false),
+      sbFetch(env, `${env.SUPABASE_URL}/rest/v1/pay_batches?id=eq.${enc(claimedPayBatchId)}&select=id,execution_commit_state&limit=1`, false),
+      countRowsForProviderEvidence(`banking_pay_operation_chunks?select=id&operation_id=eq.${enc(claimedOperationId)}&phase=eq.REFRESH_WORKBENCH`),
+      readProviderDispatchEvidenceForClaim()
+    ]);
+    const durablePhase = upperText(durableOperation.phase);
+    if (['REFRESH_WORKBENCH', 'COMPLETE'].includes(durablePhase)) {
+      result.durable_progressed = true;
+      result.evidence = { durable_phase: durablePhase, lost_response_safe_resume: true };
+      return result;
+    }
+
+    const workRows = Array.isArray(workResponse && workResponse.rows) ? workResponse.rows : [];
+    const workCounts = workRows.reduce((counts, row) => {
+      const status = upperText(row && row.status);
+      counts.total += 1;
+      if (status === 'APPLIED') counts.applied += 1;
+      if (['PENDING', 'PROCESSING', 'FAILED_RETRYABLE'].includes(status)) counts.nonterminal += 1;
+      if (['APPLIED', 'SKIPPED', 'BLOCKED', 'FAILED_FINAL', 'CANCELLED'].includes(status)) counts.terminal += 1;
+      return counts;
+    }, { total: 0, applied: 0, terminal: 0, nonterminal: 0 });
+    const batchRow = asPlainObject(batchResponse && Array.isArray(batchResponse.rows) ? batchResponse.rows[0] : null);
+    const durableInput = asPlainObject(durableOperation.input_json || durableOperation.inputJson);
+    const routeInputs = asPlainObject(durableInput.cancellation_route_inputs_v1);
+    const retryCount = clampInteger(asPlainObject(durableOperation.progress_json).payment_correction_finalise_retry_count, 0, 0, 100);
+    const evidence = {
+      durable_phase: durablePhase,
+      work_item_total: workCounts.total,
+      work_item_applied: workCounts.applied,
+      work_item_terminal: workCounts.terminal,
+      work_item_nonterminal: workCounts.nonterminal,
+      execution_commit_state: upperText(batchRow.execution_commit_state || 'NOT_SUBMITTED'),
+      route_chunk_count: Number(routeChunkCount || 0),
+      route_input_count: Object.keys(routeInputs).length,
+      provider_evidence_read_ok: providerEvidence.evidence_read_ok === true,
+      provider_call_started: providerEvidence.provider_call_started === true,
+      rail_transaction_present: providerEvidence.rail_tx_id_present === true,
+      settlement_scope_count: Number(providerEvidence.settlement_scope_count || 0),
+      remittance_scope_count: Number(providerEvidence.remittance_scope_count || 0)
+    };
+    result.retry_count = retryCount;
+    result.evidence = evidence;
+    const safe = durableOperation.id === claimedOperationId
+      && upperText(durableOperation.operation_type) === 'PAYMENT_CORRECTION'
+      && firstText(durableOperation.pay_batch_id) === claimedPayBatchId
+      && durablePhase === 'FINALISE'
+      && workCounts.total > 0
+      && workCounts.applied > 0
+      && workCounts.terminal === workCounts.total
+      && workCounts.nonterminal === 0
+      && evidence.execution_commit_state === 'NOT_SUBMITTED'
+      && evidence.route_chunk_count === 0
+      && evidence.route_input_count === 0
+      && evidence.provider_evidence_read_ok === true
+      && evidence.provider_call_started !== true
+      && evidence.rail_transaction_present !== true
+      && evidence.settlement_scope_count === 0
+      && evidence.remittance_scope_count === 0;
+    if (!safe) return result;
+    if (retryCount >= 3) {
+      result.exhausted = true;
+      return result;
+    }
+    result.eligible = true;
+    result.next_delay_seconds = [1, 2, 5][retryCount] || 5;
+    return result;
   };
 
   const determineReleaseState = (payload, error, context = {}) => {
@@ -41990,6 +42127,10 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   let advanceError = null;
   let preProviderReleaseRetryable = false;
   let paymentCorrectionRefreshRetryable = false;
+  let paymentCorrectionFinaliseRetry = {
+    enabled: false, eligible: false, exhausted: false, durable_progressed: false,
+    retry_count: 0, next_delay_seconds: 0, evidence: null, envelope: null
+  };
   let providerEvidenceState = null;
   let releaseFailureDiagnostic = null;
   let releaseRetryPhase = null;
@@ -42051,7 +42192,21 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     paymentCorrectionRefreshRetryable=isRetryablePaymentCorrectionRefreshError(error, {
       operationType,phase:claimedOperationPhase
     });
-    releaseState = determineReleaseState(null, error, { operationType,phase:claimedOperationPhase });
+    try {
+      paymentCorrectionFinaliseRetry = await inspectPaymentCorrectionFinaliseRetry(error);
+    } catch (finaliseInspectionError) {
+      paymentCorrectionFinaliseRetry = Object.assign({}, paymentCorrectionFinaliseRetry, {
+        inspection_failed: true,
+        inspection_error: compactError(finaliseInspectionError)
+      });
+    }
+    if (paymentCorrectionFinaliseRetry.eligible || paymentCorrectionFinaliseRetry.durable_progressed) {
+      releaseState = 'MORE_WORK';
+    } else if (paymentCorrectionFinaliseRetry.exhausted) {
+      releaseState = 'FAILED';
+    } else {
+      releaseState = determineReleaseState(null, error, { operationType,phase:claimedOperationPhase });
+    }
     if (['PAYMENT_EXECUTE', 'PAYMENT_RETRY_BLOCKED_FUNDS'].includes(operationType) && isReleaseLeaseRpcError(error)) {
       const classification = await classifyReleaseFailureForClaim(error, 'advance_error');
       providerEvidenceState = classification.evidence;
@@ -42287,6 +42442,8 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     || advancedContinuation.runAfterUtc
   );
   const legitimateFutureWait = paymentCorrectionRefreshRetryable === true
+    || paymentCorrectionFinaliseRetry.eligible === true
+    || paymentCorrectionFinaliseRetry.durable_progressed === true
     || (advancedRunAfterMs !== null && advancedRunAfterMs > Date.now());
   const immediateMoreWork = releaseState === 'MORE_WORK' && legitimateFutureWait !== true;
   const noProgressResult = continuationMode
@@ -42353,8 +42510,20 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
   }
 
   const rawAdvanceErrorPayload = advanceError ? compactError(advanceError) : null;
-  const advanceErrorPayload = (preProviderReleaseRetryable || paymentCorrectionRefreshRetryable)
+  let advanceErrorPayload = (preProviderReleaseRetryable || paymentCorrectionRefreshRetryable
+    || paymentCorrectionFinaliseRetry.eligible || paymentCorrectionFinaliseRetry.durable_progressed)
     ? null : rawAdvanceErrorPayload;
+  if (paymentCorrectionFinaliseRetry.exhausted) {
+    advanceErrorPayload = {
+      code: 'PAYMENT_CORRECTION_FINALISE_SYSTEM_RETRY_EXHAUSTED',
+      message: 'Payment cancellation financial work is complete, but finalisation could not obtain its internal candidate lock after three automatic retries.',
+      contract_version: 'PAYMENT_CORRECTION_FINALISE_SYSTEM_FAILURE_V1',
+      requires_operator_action: true,
+      operator_action: 'RETRY_SAME_OPERATION_AFTER_CONTENTION_CLEAR',
+      finalise_retry_count: paymentCorrectionFinaliseRetry.retry_count,
+      finalise_retry_evidence: paymentCorrectionFinaliseRetry.evidence
+    };
+  }
   if (advanceErrorPayload) {
     progressPatch.error = advanceErrorPayload;
     if (operationType === 'DRAFT_CREATE') {
@@ -42427,6 +42596,67 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       status_text: 'Financial cancellation is complete; Banking Pay currentness will retry automatically.',
       last_retryable_error: rawAdvanceErrorPayload,
       retry_reclassified_at_utc: new Date().toISOString()
+    });
+  }
+
+  if (paymentCorrectionFinaliseRetry.durable_progressed) {
+    delete progressPatch.error;
+    Object.assign(progressPatch, {
+      status: 'RUNNING',
+      phase: paymentCorrectionFinaliseRetry.evidence && paymentCorrectionFinaliseRetry.evidence.durable_phase || 'REFRESH_WORKBENCH',
+      runner_state: 'RUNNABLE',
+      next_required_phase: paymentCorrectionFinaliseRetry.evidence && paymentCorrectionFinaliseRetry.evidence.durable_phase || 'REFRESH_WORKBENCH',
+      release_state: 'MORE_WORK',
+      retry_status: 'FINALISE_COMMIT_RESPONSE_LOST',
+      resume_reason: 'PAYMENT_CORRECTION_FINALISE_COMMIT_ALREADY_DURABLE',
+      run_after_delay_seconds: 0,
+      run_after_utc: new Date().toISOString(),
+      requires_user_action: false,
+      review_required: false,
+      retryable_orchestration_issue: true,
+      provider_ambiguity: false,
+      last_finalise_retry_evidence: paymentCorrectionFinaliseRetry.evidence,
+      status_text: 'Financial cancellation is complete; Banking Pay is continuing from the committed finalisation.'
+    });
+  } else if (paymentCorrectionFinaliseRetry.eligible) {
+    const nextRetryCount = paymentCorrectionFinaliseRetry.retry_count + 1;
+    const retryDelaySeconds = paymentCorrectionFinaliseRetry.next_delay_seconds;
+    delete progressPatch.error;
+    Object.assign(progressPatch, {
+      status: 'RUNNING',
+      phase: 'FINALISE',
+      runner_state: 'RUNNABLE',
+      next_required_phase: 'FINALISE',
+      release_state: 'MORE_WORK',
+      retry_status: 'WAITING_FINALISE_LOCK',
+      resume_reason: 'PAYMENT_CORRECTION_FINALISE_LOCK_RETRY',
+      payment_correction_finalise_retry_count: nextRetryCount,
+      run_after_delay_seconds: retryDelaySeconds,
+      run_after_utc: new Date(Date.now() + (retryDelaySeconds * 1000)).toISOString(),
+      requires_user_action: false,
+      review_required: false,
+      retryable_orchestration_issue: true,
+      provider_ambiguity: false,
+      last_finalise_retry_step: paymentCorrectionFinaliseRetry.envelope && paymentCorrectionFinaliseRetry.envelope.step || null,
+      last_finalise_retry_sqlstate: paymentCorrectionFinaliseRetry.envelope && paymentCorrectionFinaliseRetry.envelope.original_sqlstate || null,
+      last_finalise_retry_evidence: paymentCorrectionFinaliseRetry.evidence,
+      status_text: 'Financial cancellation is complete; Banking Pay is retrying a brief internal lock automatically.'
+    });
+  } else if (paymentCorrectionFinaliseRetry.exhausted) {
+    Object.assign(progressPatch, {
+      status: 'FAILED',
+      phase: 'FINALISE',
+      runner_state: 'SYSTEM_FAILURE',
+      next_required_phase: 'FINALISE',
+      release_state: 'FAILED',
+      retry_status: 'FINALISE_LOCK_RETRY_EXHAUSTED',
+      resume_reason: 'PAYMENT_CORRECTION_FINALISE_SYSTEM_RETRY_EXHAUSTED',
+      requires_user_action: false,
+      review_required: false,
+      requires_operator_action: true,
+      operator_action: 'RETRY_SAME_OPERATION_AFTER_CONTENTION_CLEAR',
+      last_finalise_retry_evidence: paymentCorrectionFinaliseRetry.evidence,
+      status_text: 'Financial cancellation is complete, but Banking Pay finalisation needs an operator retry after lock contention clears.'
     });
   }
 
@@ -42503,7 +42733,8 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
       p_run_after_delay_seconds: delaySeconds,
       p_progress_patch_json: progressPatch,
       p_result_patch_json: releaseState === 'COMPLETE' ? { worker_completed_at_utc: new Date().toISOString() } : null,
-      p_error_json: (preProviderReleaseRetryable || paymentCorrectionRefreshRetryable)
+      p_error_json: (preProviderReleaseRetryable || paymentCorrectionRefreshRetryable
+        || paymentCorrectionFinaliseRetry.eligible || paymentCorrectionFinaliseRetry.durable_progressed)
         ? null : advanceErrorPayload,
       p_resume_reason: progressPatch.resume_reason || progressPatch.next_required_phase || (operationType === 'DRAFT_CREATE' && releaseState === 'FAILED' ? 'DRAFT_CREATE_OPERATION_FAILED' : releaseState),
       p_actor_user_id: actorContext.businessActorUserId || actorUserId
@@ -42557,7 +42788,10 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
 
   if (advanceError && opts.throwOnAdvanceError === true
       && preProviderReleaseRetryable !== true
-      && paymentCorrectionRefreshRetryable !== true) throw advanceError;
+      && paymentCorrectionRefreshRetryable !== true
+      && paymentCorrectionFinaliseRetry.eligible !== true
+      && paymentCorrectionFinaliseRetry.durable_progressed !== true
+      && paymentCorrectionFinaliseRetry.exhausted !== true) throw advanceError;
 
   const currentAfterRelease = continuationMode ? await readBankingPayContinuationOperation(env, claimedOperationId) : null;
   const continuation = continuationMode && currentAfterRelease
@@ -42565,10 +42799,14 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     : null;
   return {
     ok: advanceError && preProviderReleaseRetryable !== true
-      && paymentCorrectionRefreshRetryable !== true ? false : true,
+      && paymentCorrectionRefreshRetryable !== true
+      && paymentCorrectionFinaliseRetry.eligible !== true
+      && paymentCorrectionFinaliseRetry.durable_progressed !== true ? false : true,
     claimed: true,
     advanced: !advanceError || preProviderReleaseRetryable === true
-      || paymentCorrectionRefreshRetryable === true,
+      || paymentCorrectionRefreshRetryable === true
+      || paymentCorrectionFinaliseRetry.eligible === true
+      || paymentCorrectionFinaliseRetry.durable_progressed === true,
     operation_id: claimedOperationId,
     lock_owner: lockOwner,
     release_state: releaseState,
@@ -42577,17 +42815,28 @@ async function claimAndAdvanceOneBankingPayOperation(env, opts = {}) {
     release: releasePayload,
     error: advanceErrorPayload,
     retryable_orchestration_issue: preProviderReleaseRetryable === true
-      || paymentCorrectionRefreshRetryable === true,
-    provider_ambiguity: (preProviderReleaseRetryable || paymentCorrectionRefreshRetryable)
+      || paymentCorrectionRefreshRetryable === true
+      || paymentCorrectionFinaliseRetry.eligible === true
+      || paymentCorrectionFinaliseRetry.durable_progressed === true,
+    provider_ambiguity: (preProviderReleaseRetryable || paymentCorrectionRefreshRetryable
+      || paymentCorrectionFinaliseRetry.eligible || paymentCorrectionFinaliseRetry.durable_progressed)
       ? false : (providerEvidenceState && providerEvidenceState.provider_call_started === true ? true : null),
     recovery_persisted: preProviderReleaseRetryable === true
-      || paymentCorrectionRefreshRetryable === true ? true : undefined,
+      || paymentCorrectionRefreshRetryable === true
+      || paymentCorrectionFinaliseRetry.eligible === true
+      || paymentCorrectionFinaliseRetry.durable_progressed === true ? true : undefined,
     durable_recovery_state: retryableRecoveryPersistence,
     release_failure_classification: preProviderReleaseRetryable === true
       ? 'RETRYABLE_ORCHESTRATION'
       : (paymentCorrectionRefreshRetryable === true
         ? 'PAYMENT_CORRECTION_WORKBENCH_CURRENTNESS_RETRY'
-        : (releaseFailureDiagnostic ? releaseFailureDiagnostic.classification || null : null)),
+        : (paymentCorrectionFinaliseRetry.eligible === true
+          ? 'PAYMENT_CORRECTION_FINALISE_LOCK_RETRY'
+          : (paymentCorrectionFinaliseRetry.durable_progressed === true
+            ? 'PAYMENT_CORRECTION_FINALISE_COMMIT_ALREADY_DURABLE'
+            : (paymentCorrectionFinaliseRetry.exhausted === true
+              ? 'PAYMENT_CORRECTION_FINALISE_SYSTEM_RETRY_EXHAUSTED'
+              : (releaseFailureDiagnostic ? releaseFailureDiagnostic.classification || null : null))))),
     last_rpc_failure: releaseFailureDiagnostic,
     provider_evidence_state: providerEvidenceState,
     continuation

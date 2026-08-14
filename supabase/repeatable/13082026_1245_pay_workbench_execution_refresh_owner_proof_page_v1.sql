@@ -4,6 +4,8 @@
 -- This is a subordinate currentness proof only.  It never elects a payment
 -- route, mutates Workbench state, or changes frozen post-Draft economics.
 
+\ir 14082026_1254_pay_workbench_execution_residual_identity_proof_page_v1.sql
+
 CREATE OR REPLACE FUNCTION private.pay_workbench_execution_refresh_owner_proof_page_v1(
   p_execution_operation_id uuid,
   p_pay_batch_id uuid,
@@ -20,28 +22,94 @@ SET search_path TO ''
 AS $function$
 DECLARE
   v_mode text:=pg_catalog.upper(pg_catalog.btrim(COALESCE(p_mode,'OBSERVE_ONLY')));
+  v_options_version text:=COALESCE(p_options_json->>'contract_version','1');
+  v_residual_binding jsonb:=COALESCE(p_options_json->'residual_selection_binding','{}'::jsonb);
+  v_residual_page jsonb:='{}'::jsonb;
   v_results jsonb:='[]'::jsonb;
   v_count integer:=0;
 BEGIN
   IF p_execution_operation_id IS NULL OR p_pay_batch_id IS NULL
      OR p_candidate_ids IS NULL OR pg_catalog.cardinality(p_candidate_ids)<1
      OR pg_catalog.cardinality(p_candidate_ids)>100
-     OR v_mode NOT IN ('OBSERVE_ONLY','PRE_REQUEST')
+     OR v_mode NOT IN ('OBSERVE_ONLY','PRE_REQUEST','ROUTE_REPLAY')
      OR pg_catalog.jsonb_typeof(COALESCE(p_options_json,'{}'::jsonb))<>'object'
      OR EXISTS (
        SELECT 1
        FROM pg_catalog.jsonb_object_keys(COALESCE(p_options_json,'{}'::jsonb)) AS option_key(key)
        WHERE option_key.key NOT IN (
-         'contract_version','expected_chain_digest_by_candidate','expected_owner_by_candidate'
+         'contract_version','expected_chain_digest_by_candidate','expected_owner_by_candidate',
+         'expected_parent_proof_digest_by_candidate','residual_selection_binding'
        )
      )
-     OR COALESCE(p_options_json->>'contract_version','1')<>'1'
+     OR v_options_version NOT IN ('1','2')
      OR pg_catalog.jsonb_typeof(COALESCE(
        p_options_json->'expected_chain_digest_by_candidate','{}'::jsonb
      ))<>'object'
      OR pg_catalog.jsonb_typeof(COALESCE(
        p_options_json->'expected_owner_by_candidate','{}'::jsonb
      ))<>'object'
+     OR pg_catalog.jsonb_typeof(COALESCE(
+       p_options_json->'expected_parent_proof_digest_by_candidate','{}'::jsonb
+     ))<>'object'
+     OR (v_options_version='1' AND (
+       p_options_json ? 'expected_parent_proof_digest_by_candidate'
+       OR p_options_json ? 'residual_selection_binding'
+     ))
+     OR (v_options_version='2' AND (
+       v_mode NOT IN ('PRE_REQUEST','ROUTE_REPLAY')
+       OR (SELECT pg_catalog.count(*)
+           FROM pg_catalog.jsonb_object_keys(COALESCE(
+             p_options_json->'expected_owner_by_candidate','{}'::jsonb
+           )))<>0
+       OR (v_mode='PRE_REQUEST' AND (SELECT pg_catalog.count(*)
+           FROM pg_catalog.jsonb_object_keys(COALESCE(
+             p_options_json->'expected_parent_proof_digest_by_candidate','{}'::jsonb
+           )))<>0)
+       OR (v_mode='ROUTE_REPLAY' AND (
+         (SELECT pg_catalog.count(*)
+          FROM pg_catalog.jsonb_object_keys(COALESCE(
+            p_options_json->'expected_parent_proof_digest_by_candidate','{}'::jsonb
+          )))<>pg_catalog.cardinality(p_candidate_ids)
+         OR EXISTS (
+           SELECT 1
+           FROM pg_catalog.jsonb_each_text(COALESCE(
+             p_options_json->'expected_parent_proof_digest_by_candidate','{}'::jsonb
+           )) AS expected(key,value)
+           WHERE expected.value!~'^[0-9a-f]{64}$'
+              OR CASE
+                WHEN expected.key~'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                  THEN NOT ((expected.key)::uuid=ANY(p_candidate_ids))
+                ELSE true
+              END
+         )
+       ))
+       OR
+       pg_catalog.jsonb_typeof(v_residual_binding)<>'object'
+       OR EXISTS (
+         SELECT 1 FROM pg_catalog.jsonb_object_keys(v_residual_binding) AS binding_key(key)
+         WHERE binding_key.key NOT IN (
+           'contract_version','boundary','correction_request_id','correction_operation_id',
+           'workbench_session_id','workbench_session_version','request_selection_hash',
+           'request_plan_hash','expected_selected_anchor_digest_by_candidate'
+         )
+       )
+       OR COALESCE(v_residual_binding->>'contract_version','')
+            <>'EXECUTION_RESIDUAL_SELECTION_BINDING_V1'
+       OR COALESCE(v_residual_binding->>'boundary','')
+            <>'AFTER_REQUEST_PREPARE_BEFORE_REQUEST_START'
+       OR COALESCE(v_residual_binding->>'correction_request_id','')
+            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR COALESCE(v_residual_binding->>'correction_operation_id','')
+            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR COALESCE(v_residual_binding->>'workbench_session_id','')
+            !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+       OR COALESCE(v_residual_binding->>'workbench_session_version','')!~'^[1-9][0-9]{0,17}$'
+       OR COALESCE(v_residual_binding->>'request_selection_hash','')!~'^[0-9a-f]{64}$'
+       OR COALESCE(v_residual_binding->>'request_plan_hash','')!~'^[0-9a-f]{64}$'
+       OR pg_catalog.jsonb_typeof(COALESCE(
+         v_residual_binding->'expected_selected_anchor_digest_by_candidate','{}'::jsonb
+       ))<>'object'
+     ))
      OR EXISTS (
        SELECT 1 FROM pg_catalog.unnest(p_candidate_ids) AS supplied(candidate_id)
        WHERE supplied.candidate_id IS NULL
@@ -54,6 +122,21 @@ BEGIN
       USING ERRCODE='P0001',DETAIL=pg_catalog.jsonb_build_object(
         'code','EXECUTION_REFRESH_OWNER_PROOF_ARGUMENT_INVALID','mode',v_mode
       )::text;
+  END IF;
+
+  IF v_options_version='2' THEN
+    v_residual_page:=private.pay_workbench_execution_residual_identity_proof_page_v1(
+      (v_residual_binding->>'correction_request_id')::uuid,
+      (v_residual_binding->>'correction_operation_id')::uuid,
+      p_execution_operation_id,p_pay_batch_id,
+      (v_residual_binding->>'workbench_session_id')::uuid,
+      (v_residual_binding->>'workbench_session_version')::bigint,
+      p_candidate_ids,v_residual_binding->>'request_selection_hash',
+      v_residual_binding->>'request_plan_hash',
+      COALESCE(p_options_json->'expected_chain_digest_by_candidate','{}'::jsonb),
+      COALESCE(v_residual_binding->'expected_selected_anchor_digest_by_candidate','{}'::jsonb),
+      CASE WHEN v_mode='ROUTE_REPLAY' THEN 'ROUTE_REPLAY' ELSE 'PRE_REQUEST_START' END
+    );
   END IF;
 
   WITH requested AS (
@@ -182,6 +265,11 @@ BEGIN
       state_pending.economic_build_id AS state_pending_economic_build_id,
       COALESCE(expected.expected_chain_digest,'') AS expected_chain_digest,
       expected.expected_owner_economic_build_id,
+      expected.expected_parent_proof_digest,
+      residual.result_json AS residual_identity_authority,
+      COALESCE((residual.result_json->>'admitted')::boolean,false)
+        AS residual_identity_admitted,
+      residual.result_json->>'residual_proof_digest' AS residual_proof_digest,
       EXISTS (
         SELECT 1
         FROM pg_catalog.jsonb_array_elements(COALESCE(authority.chain_receipt->'transitions','[]'::jsonb))
@@ -485,12 +573,22 @@ BEGIN
       SELECT
         p_options_json->'expected_chain_digest_by_candidate'
           ->>authority.candidate_id::text AS expected_chain_digest,
+        p_options_json->'expected_parent_proof_digest_by_candidate'
+          ->>authority.candidate_id::text AS expected_parent_proof_digest,
         CASE WHEN COALESCE(p_options_json->'expected_owner_by_candidate'
           ->>authority.candidate_id::text,'')
           ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           THEN (p_options_json->'expected_owner_by_candidate'
             ->>authority.candidate_id::text)::uuid END AS expected_owner_economic_build_id
     ) AS expected ON true
+    LEFT JOIN LATERAL (
+      SELECT result.value AS result_json
+      FROM pg_catalog.jsonb_array_elements(COALESCE(
+        v_residual_page->'candidate_results','[]'::jsonb
+      )) AS result(value)
+      WHERE result.value->>'candidate_id'=authority.candidate_id::text
+      LIMIT 1
+    ) AS residual ON true
   ), classified AS (
     SELECT owner_groups.*,
       CASE
@@ -522,7 +620,16 @@ BEGIN
         WHEN expected_chain_digest<>''
           AND expected_chain_digest IS DISTINCT FROM chain_receipt->>'chain_digest'
           THEN 'EXECUTION_REFRESH_OWNER_EXPECTED_CHAIN_MISMATCH'
-        WHEN live_source_change_seq IS DISTINCT FROM
+        WHEN observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND v_options_version<>'2'
+          THEN 'EXECUTION_RESIDUAL_SELECTION_AUTHORITY_REQUIRED'
+        WHEN observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND residual_identity_admitted IS NOT TRUE
+          THEN COALESCE(
+            NULLIF(residual_identity_authority->>'rejection_reason',''),
+            'EXECUTION_RESIDUAL_SELECTION_AUTHORITY_REQUIRED'
+          )
+        WHEN (live_source_change_seq IS DISTINCT FROM
           CASE WHEN COALESCE(chain_receipt->>'terminal_source_change_seq','')~'^[0-9]{1,18}$'
             THEN (chain_receipt->>'terminal_source_change_seq')::bigint END
           OR live_dirty_generation IS DISTINCT FROM
@@ -531,9 +638,14 @@ BEGIN
           OR registry_source_change_seq IS DISTINCT FROM live_source_change_seq
           OR registry_dirty_generation IS DISTINCT FROM live_dirty_generation
           OR candidate_state_source_change_seq IS DISTINCT FROM live_source_change_seq
-          OR candidate_state_session_version IS DISTINCT FROM session_version
+          OR candidate_state_session_version IS DISTINCT FROM session_version)
+          AND NOT (
+            observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+            AND residual_identity_admitted IS TRUE
+          )
           THEN 'EXECUTION_REFRESH_OWNER_LIVE_AUTHORITY_MISMATCH'
         WHEN observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND residual_identity_admitted IS NOT TRUE
           AND (
             pg_catalog.jsonb_typeof(frozen_attestation)<>'object'
             OR COALESCE(frozen_attestation->>'attestation_version','')
@@ -562,6 +674,7 @@ BEGIN
           )
           THEN 'EXECUTION_REFRESH_OWNER_ORIGINAL_ATTESTATION_MISMATCH'
         WHEN observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND residual_identity_admitted IS NOT TRUE
           AND (
             CASE
               WHEN COALESCE(frozen_attestation->>'source_row_count','')~'^[0-9]{1,9}$'
@@ -586,6 +699,7 @@ BEGIN
           )
           THEN 'EXECUTION_REFRESH_OWNER_ORIGINAL_SOURCE_ATTESTATION_MISMATCH'
         WHEN observed_source_provenance_shape='ORIGINAL_CERTIFIED_RESIDUAL_ONLY'
+          AND residual_identity_admitted IS NOT TRUE
           AND (
             CASE
               WHEN COALESCE(frozen_attestation->>'preview_row_count','')~'^[0-9]{1,9}$'
@@ -642,6 +756,27 @@ BEGIN
         WHEN expected_owner_economic_build_id IS NOT NULL
           AND expected_owner_economic_build_id IS DISTINCT FROM owner_economic_build_id
           THEN 'EXECUTION_REFRESH_OWNER_EXPECTED_OWNER_MISMATCH'
+        WHEN NULLIF(COALESCE(expected_parent_proof_digest,''),'') IS NOT NULL
+          AND expected_parent_proof_digest IS DISTINCT FROM
+            private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+              'contract_version','EXECUTION_REFRESH_OWNER_PROOF_V2',
+              'execution_operation_id',p_execution_operation_id,
+              'pay_batch_id',p_pay_batch_id,'candidate_id',candidate_id,
+              'chain_digest',chain_receipt->>'chain_digest',
+              'owner_economic_build_id',owner_economic_build_id,
+              'owner_source_build_run_id',owner_source_build_run_id,
+              'owner_authority_fingerprint',owner_authority_fingerprint,
+              'owner_context_digest',owner_context_digest,
+              'owner_source_change_seq',owner_source_change_seq,
+              'owner_dirty_generation',owner_dirty_generation,
+              'observed_source_provenance_shape',observed_source_provenance_shape,
+              'original_source_build_run_id',chain_receipt->>'original_source_build_run_id',
+              'original_source_publication_id',chain_receipt->>'original_source_publication_id',
+              'frozen_source_identity_digest',frozen_attestation->>'source_identity_digest',
+              'frozen_preview_identity_digest',frozen_attestation->>'preview_identity_digest',
+              'residual_proof_digest',residual_proof_digest
+            ))
+          THEN 'EXECUTION_REFRESH_OWNER_EXPECTED_PARENT_PROOF_MISMATCH'
         ELSE NULL
       END AS rejection_reason
     FROM owner_groups
@@ -725,7 +860,30 @@ BEGIN
       'competing_owner_count',classified.competing_owner_count,
       'partial_publication_count',classified.partial_current_publication_count,
       'context_digest',classified.owner_context_digest,
-      'proof_digest',pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+      'residual_identity_authority',classified.residual_identity_authority,
+      'residual_proof_digest',classified.residual_proof_digest,
+      'proof_contract_version',CASE WHEN v_options_version='2'
+        THEN 'EXECUTION_REFRESH_OWNER_PROOF_V2' ELSE 'EXECUTION_REFRESH_OWNER_PROOF_V1' END,
+      'proof_digest',CASE WHEN v_options_version='2' THEN
+        private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+          'contract_version','EXECUTION_REFRESH_OWNER_PROOF_V2',
+          'execution_operation_id',p_execution_operation_id,
+          'pay_batch_id',p_pay_batch_id,'candidate_id',classified.candidate_id,
+          'chain_digest',classified.chain_receipt->>'chain_digest',
+          'owner_economic_build_id',classified.owner_economic_build_id,
+          'owner_source_build_run_id',classified.owner_source_build_run_id,
+          'owner_authority_fingerprint',classified.owner_authority_fingerprint,
+          'owner_context_digest',classified.owner_context_digest,
+          'owner_source_change_seq',classified.owner_source_change_seq,
+          'owner_dirty_generation',classified.owner_dirty_generation,
+          'observed_source_provenance_shape',classified.observed_source_provenance_shape,
+          'original_source_build_run_id',classified.chain_receipt->>'original_source_build_run_id',
+          'original_source_publication_id',classified.chain_receipt->>'original_source_publication_id',
+          'frozen_source_identity_digest',classified.frozen_attestation->>'source_identity_digest',
+          'frozen_preview_identity_digest',classified.frozen_attestation->>'preview_identity_digest',
+          'residual_proof_digest',classified.residual_proof_digest
+        ))
+      ELSE pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         pg_catalog.concat_ws('|','EXECUTION_REFRESH_OWNER_PROOF_V1',
           p_execution_operation_id::text,p_pay_batch_id::text,classified.candidate_id::text,
           COALESCE(classified.chain_receipt->>'chain_digest',''),
@@ -740,8 +898,9 @@ BEGIN
           COALESCE(classified.chain_receipt->>'original_source_publication_id',''),
           COALESCE(classified.frozen_attestation->>'source_identity_digest',''),
           COALESCE(classified.frozen_attestation->>'preview_identity_digest',''),
-          (classified.rejection_reason IS NULL)::text,COALESCE(classified.rejection_reason,'')),
-        'UTF8'),'sha256'),'hex')
+          (classified.rejection_reason IS NULL)::text,
+          COALESCE(classified.rejection_reason,'')),
+        'UTF8'),'sha256'),'hex') END
     )) AS result_json
     FROM classified
   )

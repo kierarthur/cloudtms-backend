@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay semantic Ready-to-Pay and certified cancellation reversion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 46,
+  "function_count": 47,
   "functions": [
     {
       "schema": "public", "name": "_ctms_materialise_candidate_correction_residuals_v1",
@@ -226,10 +226,18 @@
     {
       "schema": "private", "name": "pay_workbench_execution_refresh_owner_proof_page_v1",
       "identity_arguments": "p_execution_operation_id uuid, p_pay_batch_id uuid, p_candidate_ids uuid[], p_mode text, p_options_json jsonb",
-      "definition_sha256": "d863b0f8a4332af42f77daca931c3f854990fa453a2d10a326b61afc9c2f17b4",
+      "definition_sha256": "bc16b9560098e6cf1d619b811b70ae195d1c6cb6379514e3a77f723863d11102",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/13082026_1245_pay_workbench_execution_refresh_owner_proof_page_v1.sql"]
+    },
+    {
+      "schema": "private", "name": "pay_workbench_execution_residual_identity_proof_page_v1",
+      "identity_arguments": "p_correction_request_id uuid, p_correction_operation_id uuid, p_execution_operation_id uuid, p_pay_batch_id uuid, p_workbench_session_id uuid, p_workbench_session_version bigint, p_candidate_ids uuid[], p_expected_request_selection_hash text, p_expected_request_plan_hash text, p_expected_v2_chain_digest_by_candidate jsonb, p_expected_selected_anchor_digest_by_candidate jsonb, p_mode text",
+      "definition_sha256": "4efc538fd4be531f695d88125f89eaa4aac177fa0e9d470c4f4fb0136e0eb850",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\""],
+      "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
+      "source_files": ["supabase/repeatable/14082026_1254_pay_workbench_execution_residual_identity_proof_page_v1.sql"]
     },
     {
       "schema": "private", "name": "pay_workbench_unsent_execution_overlay_proof_page_v1",
