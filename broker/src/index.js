@@ -83007,18 +83007,17 @@ function candidateSummaryProjectionError(value, fallback = 'CANDIDATE_OFFICE_PRO
 
 function candidateSummaryApplicability(row) {
   const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
-  const truthyValue = (value) => value === true
-    || ['1', 'TRUE', 'YES', 'Y', 'ON'].includes(upper(value));
   const route = [row?.route_type,row?.route_display,row?.route,row?.route_family]
     .map(upper).filter(Boolean).join(' ');
   const submissionMode = upper(row?.submission_mode || row?.submission_mode_snapshot);
-  const importAuthoritative = truthyValue(row?.client_is_nhsp)
-    || truthyValue(row?.client_autoprocess_hr)
-    || /(^|[_\s-])(NHSP|HEALTHROSTER|HEALTH_ROSTER|HR_IMPORT|IMPORT_AUTHORITATIVE)([_\s-]|$)/.test(route);
-  if (importAuthoritative) return false;
-  if (submissionMode === 'MANUAL' || /(^|[_\s-])MANUAL([_\s-]|$)/.test(route)) return false;
-  if (['ELECTRONIC', 'QR'].includes(submissionMode)
-    || /(^|[_\s-])(ELECTRONIC|QR)([_\s-]|$)/.test(route)) return true;
+  // The exact row route wins over broad client settings and over a generic
+  // submission-mode snapshot. One client can legitimately have both import
+  // and Candidate-enabled rows, including DAILY ELECTRONIC.
+  if (/(^|[_\s-])(NHSP|HEALTHROSTER|HEALTH_ROSTER|HR_IMPORT|IMPORT_AUTHORITATIVE)([_\s-]|$)/.test(route)) return false;
+  if (/(^|[_\s-])MANUAL([_\s-]|$)/.test(route)) return false;
+  if (/(^|[_\s-])(ELECTRONIC|QR)([_\s-]|$)/.test(route)) return true;
+  if (submissionMode === 'MANUAL') return false;
+  if (['ELECTRONIC', 'QR'].includes(submissionMode)) return true;
   return null;
 }
 

@@ -79,7 +79,10 @@ test('Timesheet Summary resolves Manual and import-authoritative routes as immed
     { id: 'manual-adjustment', timesheet_id: uuid(2), route_display: 'Weekly Manual Adjustment' },
     { id: 'nhsp', timesheet_id: uuid(3), route_type: 'WEEKLY_NHSP', client_is_nhsp: true },
     { id: 'healthroster', timesheet_id: uuid(4), route_display: 'Weekly HealthRoster', client_autoprocess_hr: true },
-    { id: 'electronic', timesheet_id: uuid(5), route_type: 'DAILY_ELECTRONIC', submission_mode: 'ELECTRONIC' }
+    {
+      id: 'electronic',timesheet_id: uuid(5),route_type: 'DAILY_ELECTRONIC',
+      submission_mode: 'ELECTRONIC',client_autoprocess_hr: true,client_is_nhsp: true
+    }
   ];
   const calls = [];
   const rpc = async (_env, _functionName, args) => {
