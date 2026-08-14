@@ -83005,6 +83005,23 @@ function candidateSummaryProjectionError(value, fallback = 'CANDIDATE_OFFICE_PRO
   return { code, retryable: source.retryable === true };
 }
 
+function candidateSummaryApplicability(row) {
+  const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+  const truthyValue = (value) => value === true
+    || ['1', 'TRUE', 'YES', 'Y', 'ON'].includes(upper(value));
+  const route = [row?.route_type,row?.route_display,row?.route,row?.route_family]
+    .map(upper).filter(Boolean).join(' ');
+  const submissionMode = upper(row?.submission_mode || row?.submission_mode_snapshot);
+  const importAuthoritative = truthyValue(row?.client_is_nhsp)
+    || truthyValue(row?.client_autoprocess_hr)
+    || /(^|[_\s-])(NHSP|HEALTHROSTER|HEALTH_ROSTER|HR_IMPORT|IMPORT_AUTHORITATIVE)([_\s-]|$)/.test(route);
+  if (importAuthoritative) return false;
+  if (submissionMode === 'MANUAL' || /(^|[_\s-])MANUAL([_\s-]|$)/.test(route)) return false;
+  if (['ELECTRONIC', 'QR'].includes(submissionMode)
+    || /(^|[_\s-])(ELECTRONIC|QR)([_\s-]|$)/.test(route)) return true;
+  return null;
+}
+
 async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, rpc = sbRpc) {
   const output = (Array.isArray(rows) ? rows : []).map((row) => ({ ...(row || {}) }));
   const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
@@ -83015,6 +83032,16 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
     const row = output[index];
     const timesheetId = String(row?.timesheet_id || '').trim();
     if (!timesheetId) continue;
+    if (candidateSummaryApplicability(row) === false) {
+      // Summary already owns the exact route classification needed to prove
+      // that Candidate lifecycle does not apply. Mark it as a resolved blank
+      // and do not spend canonical projection work on Manual/import rows.
+      row.candidate_office_projection_loaded = true;
+      row.candidate_office_projection_not_applicable = true;
+      row.candidate_office_projection = null;
+      row.candidate_office_projection_error = null;
+      continue;
+    }
     const contractWeekId = String(row?.contract_week_id || '').trim();
     const rowKey = String(row?.row_key || row?.id || timesheetId || contractWeekId).trim();
     const identity = {
@@ -193266,6 +193293,7 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
 }
 export const candidateOfficeSummaryInternals = Object.freeze({
   candidateSummaryProjectionError,
+  candidateSummaryApplicability,
   attachCandidateOfficeSummaryProjections
 });
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
