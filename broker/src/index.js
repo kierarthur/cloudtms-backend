@@ -82996,9 +82996,108 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId, ctx = null) {
 }
 
 
+const TIMESHEET_SUMMARY_CANDIDATE_BATCH_SIZE = 100;
 
+function candidateSummaryProjectionError(value, fallback = 'CANDIDATE_OFFICE_PROJECTION_FAILED') {
+  const source = value && typeof value === 'object' ? value : {};
+  const candidate = String(source.code || source.error_code || fallback).trim().toUpperCase();
+  const code = /^[A-Z][A-Z0-9_]{2,100}$/.test(candidate) ? candidate : fallback;
+  return { code, retryable: source.retryable === true };
+}
 
+async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, rpc = sbRpc) {
+  const output = (Array.isArray(rows) ? rows : []).map((row) => ({ ...(row || {}) }));
+  const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
+  const pending = [];
+  const chunks = [];
 
+  for (let index = 0; index < output.length; index += 1) {
+    const row = output[index];
+    const timesheetId = String(row?.timesheet_id || '').trim();
+    if (!timesheetId) continue;
+    const contractWeekId = String(row?.contract_week_id || '').trim();
+    const rowKey = String(row?.row_key || row?.id || timesheetId || contractWeekId).trim();
+    const identity = {
+      row_key: rowKey,
+      timesheet_id: timesheetId,
+      contract_week_id: contractWeekId || null,
+      expected_row_signature: String(
+        row?.backend_row_signature || row?.row_signature || row?.expected_row_signature || ''
+      ).trim() || null
+    };
+    pending.push({ index, identity });
+  }
+
+  if (!pending.length) return output;
+  if (!['TEST', 'LIVE'].includes(environment)) {
+    for (const item of pending) {
+      output[item.index].candidate_office_projection_loaded = true;
+      output[item.index].candidate_office_projection = null;
+      output[item.index].candidate_office_projection_error = {
+        code: 'CANDIDATE_ENVIRONMENT_INVALID', retryable: false
+      };
+    }
+    return output;
+  }
+
+  // Keep row keys unique inside each canonical Office batch. The same display
+  // key may legitimately occur for different exact identities, so it is moved
+  // into another bounded batch rather than being collapsed or reconciled.
+  for (const item of pending) {
+    let chunk = chunks.find((candidate) =>
+      candidate.items.length < TIMESHEET_SUMMARY_CANDIDATE_BATCH_SIZE
+      && !candidate.rowKeys.has(item.identity.row_key)
+    );
+    if (!chunk) {
+      chunk = { items: [], rowKeys: new Set() };
+      chunks.push(chunk);
+    }
+    chunk.items.push(item);
+    chunk.rowKeys.add(item.identity.row_key);
+  }
+
+  const observedAtUtc = new Date().toISOString();
+  await Promise.all(chunks.map(async (chunk) => {
+    try {
+      const raw = await rpc(env, 'cloudtms_office_candidate_adapter_v1', {
+        p_action: 'PROJECT_BATCH',
+        p_actor_user_id: actorUserId,
+        p_environment: environment,
+        p_payload: {
+          surface: 'TIMESHEET_SUMMARY',
+          identities: chunk.items.map((item) => item.identity)
+        },
+        p_now_utc: observedAtUtc
+      });
+      const batch = unwrapRpcJsonb(raw, 'cloudtms_office_candidate_adapter_v1') || raw || {};
+      const results = Array.isArray(batch?.results) ? batch.results : [];
+      const byRowKey = new Map(chunk.items.map((item) => [item.identity.row_key, item]));
+      for (const result of results) {
+        const item = byRowKey.get(String(result?.correlation_key || ''));
+        if (!item) continue;
+        output[item.index].candidate_office_projection_loaded = true;
+        output[item.index].candidate_office_projection = result?.ok === true && result?.projection
+          ? result.projection : null;
+        output[item.index].candidate_office_projection_error = result?.ok === true
+          ? null : candidateSummaryProjectionError(result?.error);
+        byRowKey.delete(item.identity.row_key);
+      }
+      for (const item of byRowKey.values()) {
+        output[item.index].candidate_office_projection_loaded = true;
+        output[item.index].candidate_office_projection = null;
+        output[item.index].candidate_office_projection_error = candidateSummaryProjectionError(null);
+      }
+    } catch (error) {
+      const safeError = candidateSummaryProjectionError(error, 'CANDIDATE_OFFICE_PROJECTION_FAILED');
+      for (const item of chunk.items) {
+        output[item.index].candidate_office_projection_loaded = true;
+        output[item.index].candidate_office_projection = null;
+        output[item.index].candidate_office_projection_error = safeError;
+      }
+    }
+  }));
+  return output;
+}
 
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -83066,6 +83165,9 @@ async function handleTimesheetsSummary(env, req) {
     const s = String(value).trim().toLowerCase();
     return ['1', 'true', 'yes', 'y', 'on', 'ids', 'full', 'full_ids'].includes(s);
   };
+  const includeCandidateProjection = truthy(
+    q('include_candidate_projection') || q('includeCandidateProjection')
+  );
   const membershipMode = String(
     q('membership_mode') ||
     q('membershipMode') ||
@@ -83384,7 +83486,10 @@ async function handleTimesheetsSummary(env, req) {
       const payload = unwrapRpcPayload(rowRes, 'pay_batch_timesheet_summary_lightweight_v1');
       const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
       const rawRows = Array.isArray(payloadObj.rows) ? payloadObj.rows : rpcRows(payload, 'pay_batch_timesheet_summary_lightweight_v1');
-      const outRows = normalizeSummaryRows(rawRows);
+      const normalizedRows = normalizeSummaryRows(rawRows);
+      const outRows = includeCandidateProjection
+        ? await attachCandidateOfficeSummaryProjections(env,user.id,normalizedRows)
+        : normalizedRows;
 
       const payloadTotals = (payloadObj.totals && typeof payloadObj.totals === 'object' && !Array.isArray(payloadObj.totals))
         ? payloadObj.totals
@@ -83412,7 +83517,12 @@ async function handleTimesheetsSummary(env, req) {
     }
 
     const rowRes = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', { p_filters: rowFilters });
-    const outRows = normalizeSummaryRows(rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1'));
+    const normalizedRows = normalizeSummaryRows(
+      rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1')
+    );
+    const outRows = includeCandidateProjection
+      ? await attachCandidateOfficeSummaryProjections(env,user.id,normalizedRows)
+      : normalizedRows;
 
     let totals = null;
     let totalCount = outRows.length;
@@ -193154,6 +193264,10 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
     nudgeQrPack: (options) => nudgeCandidateQrPackDocumentOperation(env, options)
   };
 }
+export const candidateOfficeSummaryInternals = Object.freeze({
+  candidateSummaryProjectionError,
+  attachCandidateOfficeSummaryProjections
+});
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {
   async fetch(req, env, ctx) {

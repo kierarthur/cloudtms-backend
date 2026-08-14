@@ -30,6 +30,7 @@ declare
   v_component uuid:='ad510000-0000-4000-8000-000000000011';
   v_rejected uuid:='ad510000-0000-4000-8000-000000000017';
   v_replacement uuid:='ad510000-0000-4000-8000-000000000018';
+  v_daily_timesheet uuid:='ad510000-0000-4000-8000-000000000019';
   v_capabilities jsonb;
   v_projection jsonb;
   v_preview jsonb;
@@ -117,6 +118,20 @@ begin
   ) values(v_other_week,v_contract,current_date,'SUBMITTED','ELECTRONIC',v_other_timesheet,1);
   insert into public.timesheets_financials(timesheet_id,candidate_id,client_id,total_hours,processing_status)
   values(v_other_timesheet,v_candidate,v_client,4,'UNPROCESSED');
+  insert into public.timesheets(
+    timesheet_id,contract_id,booking_id,week_ending_date,sheet_scope,
+    submission_mode,line_type,status,scheduled_start_iso,scheduled_end_iso,
+    r2_nurse_key,r2_auth_key
+  ) values(
+    v_daily_timesheet,v_contract,'OFFICE-ADAPTER-DAILY',current_date,'DAILY',
+    'ELECTRONIC','HOURS','RECEIVED',current_date::timestamptz+interval '8 hours',
+    current_date::timestamptz+interval '16 hours',
+    'candidate-office/daily/candidate-signature.png',
+    'candidate-office/daily/manager-signature.png'
+  );
+  insert into public.timesheets_financials(
+    timesheet_id,candidate_id,client_id,basis,processing_status,total_hours
+  ) values(v_daily_timesheet,v_candidate,v_client,'SELF_REPORTED','UNPROCESSED',8);
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','office-adapter@example.test','ACTIVE');
   insert into public.candidate_submission_workflows(
@@ -223,6 +238,18 @@ begin
      or jsonb_typeof(v_projection->'diagnostics')<>'array'
      or nullif(v_signature,'') is null then
     raise exception 'office projection incorrect: %',v_projection;
+  end if;
+  v_projection:=public.cloudtms_office_candidate_adapter_v1(
+    'PROJECT_ONE',v_actor,'TEST',jsonb_build_object('timesheet_id',v_daily_timesheet),v_now
+  );
+  if v_projection#>>'{current_identity,timesheet_id}'<>v_daily_timesheet::text
+     or v_projection#>'{current_identity,contract_week_id}'<>'null'::jsonb
+     or v_projection#>>'{current_identity,row_key}'<>v_daily_timesheet::text
+     or v_projection#>>'{current_identity,route_family}'<>'ELECTRONIC'
+     or nullif(v_projection#>>'{current_identity,row_signature}','') is null
+     or v_projection->'workflow'<>'null'::jsonb
+     or v_projection#>'{refresh_hints,affected_contract_week_ids}'<>'[]'::jsonb then
+    raise exception 'DAILY Office projection did not preserve timesheet-only identity: %',v_projection;
   end if;
   insert into public.candidate_submission_workflows(
     id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,

@@ -35,6 +35,8 @@ x-cloudtms-authority:
   public_candidate_client: false
   database_adapter: public.cloudtms_office_candidate_adapter_v1
   maximum_projection_rows: 100
+  timesheet_summary_projection_transport: normal summary response
+  timesheet_summary_after_render_hydration: false
   maximum_manager_reminder_batch_rows: 1000
   financial_calculation: forbidden
   candidate_client_business_rpc_count_change: 0
@@ -77,7 +79,11 @@ paths:
       tags: [Projection]
       operationId: projectOfficeCandidateRows
       summary: Project a bounded set of office timesheet rows
-      description: One bounded snapshot request. The browser must not fan out one request per row.
+      description: >-
+        One bounded snapshot request. The browser must not fan out one request
+        per row. The normal Timesheet Summary backend may compose these exact
+        bounded projections into its own row response so Candidate Submission
+        paints with the initial grid rather than through after-render hydration.
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ProjectionBatchRequest'}}}}
       responses:
         '200': {$ref: '#/components/responses/ProjectionBatch'}
@@ -304,6 +310,11 @@ components:
       enum: [SWITCH_TO_MANUAL, SWITCH_DAILY_TO_MANUAL, CONVERT_QR_TO_MANUAL, ALLOW_ELECTRONIC_AGAIN, ALLOW_QR_AGAIN, DISABLE_QR, INVALIDATE_QR, REISSUE_QR]
     Identity:
       type: object
+      description: >-
+        Exact Office row identity. DAILY Candidate rows are timesheet/booking-family
+        owned and are requested by timesheet_id without a contract_week_id. WEEKLY
+        rows retain their exact timesheet plus contract-week identity. Mixed or
+        ambiguous identities fail closed.
       additionalProperties: false
       required: [row_key]
       properties:
@@ -371,8 +382,19 @@ components:
         contract_version: {const: OFFICE_CANDIDATE_TIMESHEET_V1}
         office_contract_version: {const: CLOUDTMS_OFFICE_CANDIDATE_API_V1}
         observed_at_utc: {type: string, format: date-time}
-        current_identity: {type: object, additionalProperties: true}
-        candidate_status: {type: object, additionalProperties: true}
+        current_identity:
+          type: object
+          additionalProperties: true
+          description: >-
+            Canonical current identity. contract_week_id is null for a DAILY
+            timesheet-owned row and present for a WEEKLY contract-week-owned row.
+        candidate_status:
+          type: object
+          additionalProperties: true
+          description: >-
+            Server source status. Financial completion alone is not proof of a
+            completed Candidate submission; Office presentation requires an
+            applicable ELECTRONIC or QR route and durable Candidate workflow truth.
         workflow: {$ref: '#/components/schemas/WorkflowProjection'}
         manager_approval: {type: [object, 'null'], additionalProperties: true}
         paper_pack: {$ref: '#/components/schemas/PaperPack'}

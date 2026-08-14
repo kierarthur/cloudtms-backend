@@ -109,6 +109,10 @@ test('office contract preserves bounded projection and server-owned reminder bat
   assert.match(openapi, /Terminal workflow history is returned for audit but never drives current status/);
   assert.match(openapi, /rejection_actionable:/);
   assert.match(openapi, /Null once durable direct replacement lineage exists/);
+  assert.match(openapi, /DAILY Candidate rows are timesheet\/booking-family\s+owned and are requested by timesheet_id without a contract_week_id/);
+  assert.match(openapi, /Financial completion alone is not proof of a\s+completed Candidate submission/);
+  assert.match(openapi, /timesheet_summary_after_render_hydration:\s*false/);
+  assert.match(openapi, /paints with the initial grid rather than through after-render hydration/);
   for (const code of [
     'OFFICE_AUTH_REQUIRED', 'CANDIDATE_OFFICE_PERMISSION_DENIED',
     'CANDIDATE_CONTEXT_STALE', 'CANDIDATE_TIMESHEET_MOVED',
@@ -121,6 +125,15 @@ test('office contract preserves bounded projection and server-owned reminder bat
     'CANDIDATE_PAPER_PACK_RETRY_NOT_READY', 'CANDIDATE_PAPER_PACK_ASSEMBLY_TRANSIENT',
     'CANDIDATE_PAPER_PACK_FAILURE_RECEIPT_INVALID', 'CANDIDATE_ROUTE_NOT_FOUND'
   ]) assert.match(openapi, new RegExp(`- ${code}\\b`));
+});
+
+test('Office projection SQL preserves DAILY timesheet-only identity without weakening WEEKLY exactness', async () => {
+  const officeSql = await readFile(officeSqlUrl, 'utf8');
+  assert.match(officeSql, /v_current\.sheet_scope='DAILY'::public\.timesheet_scope_enum/);
+  assert.match(officeSql, /DAILY is owned by its current timesheet\/booking family/);
+  assert.match(officeSql, /if v_week_count<>1 then\s+raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID'/);
+  assert.match(officeSql, /'contract_week_id',v_week\.id/);
+  assert.match(officeSql, /'additional_seq',v_week\.additional_seq/);
 });
 
 test('durable reminder batch PARTIAL and FAILED outcomes remain successful structured results', async () => {

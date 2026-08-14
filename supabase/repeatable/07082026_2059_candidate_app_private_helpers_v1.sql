@@ -864,20 +864,31 @@ begin
     raise exception 'CANDIDATE_RECORD_IDENTITY_REQUIRED' using errcode='22023';
   end if;
 
+  if p_timesheet_id is not null then
+    select * into v_timesheet from public.timesheets where timesheet_id=p_timesheet_id;
+    if not found then raise exception 'CANDIDATE_TIMESHEET_NOT_FOUND' using errcode='P0002'; end if;
+  end if;
+
   if p_contract_week_id is not null then
     select * into v_week from public.contract_weeks where id=p_contract_week_id;
   else
     select cw.* into v_week from public.contract_weeks cw
     where cw.timesheet_id=p_timesheet_id order by cw.updated_at desc,cw.id desc limit 1;
   end if;
-  if not found then raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002'; end if;
-
-  select * into v_contract from public.contracts where id=v_week.contract_id;
+  if v_week.id is null then
+    -- DAILY is timesheet-owned and intentionally has no contract_weeks row.
+    if v_timesheet.timesheet_id is null
+       or v_timesheet.sheet_scope<>'DAILY'::public.timesheet_scope_enum
+       or v_timesheet.contract_id is null then
+      raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002';
+    end if;
+    select * into v_contract from public.contracts where id=v_timesheet.contract_id;
+  else
+    select * into v_contract from public.contracts where id=v_week.contract_id;
+  end if;
   if not found then raise exception 'CANDIDATE_CONTRACT_NOT_FOUND' using errcode='P0002'; end if;
 
-  if p_timesheet_id is not null then
-    select * into v_timesheet from public.timesheets where timesheet_id=p_timesheet_id;
-  elsif v_week.timesheet_id is not null then
+  if v_timesheet.timesheet_id is null and v_week.timesheet_id is not null then
     select * into v_timesheet from public.timesheets where timesheet_id=v_week.timesheet_id;
   end if;
 
@@ -887,7 +898,9 @@ begin
     order by computed_at_utc desc nulls last,updated_at desc,id desc limit 1;
   end if;
 
-  v_policy:=private._candidate_policy_resolve_v1(v_contract.client_id,v_contract.id,v_week.week_ending_date);
+  v_policy:=private._candidate_policy_resolve_v1(
+    v_contract.client_id,v_contract.id,coalesce(v_week.week_ending_date,v_timesheet.week_ending_date)
+  );
   v_route:=private._candidate_route_family_v1(v_timesheet.timesheet_id,v_week.id);
   v_route_family:=v_route->>'route_family';
   v_hours_route_allowed:=coalesce((v_route->>'candidate_hours_submission_allowed')::boolean,false);
@@ -938,7 +951,9 @@ begin
     or (v_timesheet.timesheet_id is not null and (not v_timesheet.is_current))
     or v_fin.paid_at_utc is not null
     or v_fin.locked_by_invoice_id is not null
-    or v_week.status in ('INVOICED'::public.contract_week_status_enum,'CANCELLED'::public.contract_week_status_enum);
+    or coalesce(v_week.status in (
+      'INVOICED'::public.contract_week_status_enum,'CANCELLED'::public.contract_week_status_enum
+    ),false);
   v_candidate_mutation_locked:=v_fin.authorised_at_utc is not null;
   if v_candidate_mutation_locked then
     v_reasons:=v_reasons||'"CANDIDATE_MUTATION_LOCKED_AUTHORISED"'::jsonb;

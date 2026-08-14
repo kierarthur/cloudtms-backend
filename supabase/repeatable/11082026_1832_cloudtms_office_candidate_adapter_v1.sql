@@ -147,7 +147,9 @@ begin
   end if;
   select * into v_week from public.contract_weeks where timesheet_id=v_timesheet.timesheet_id
   order by updated_at desc,id desc limit 1;
-  if not found then raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002'; end if;
+  if v_week.id is null and v_timesheet.sheet_scope<>'DAILY'::public.timesheet_scope_enum then
+    raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002';
+  end if;
   select * into v_fin from public.timesheets_financials
   where timesheet_id=v_timesheet.timesheet_id and is_current=true
   order by computed_at_utc desc nulls last,updated_at desc,id desc limit 1;
@@ -237,6 +239,7 @@ declare
   v_requested_current_id uuid;
   v_week public.contract_weeks%rowtype;
   v_week_timesheet public.timesheets%rowtype;
+  v_current public.timesheets%rowtype;
   v_week_current_id uuid;
   v_current_id uuid;
   v_current_count integer:=0;
@@ -316,16 +319,28 @@ begin
   v_current_id:=coalesce(v_requested_current_id,v_week_current_id);
 
   if p_contract_week_id is null then
-    select count(*)::integer,min(week_row.id::text)::uuid
-    into v_week_count,v_resolved_week_id
-    from public.contract_weeks week_row
-    where week_row.timesheet_id=v_current_id;
-    if v_week_count<>1 then
+    select current_row.* into v_current
+    from public.timesheets current_row
+    where current_row.timesheet_id=v_current_id;
+    if not found then
       raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
     end if;
-    select week_row.* into v_week
-    from public.contract_weeks week_row
-    where week_row.id=v_resolved_week_id;
+    if v_current.sheet_scope='DAILY'::public.timesheet_scope_enum then
+      -- DAILY is owned by its current timesheet/booking family and has no
+      -- contract_weeks row. The requested timesheet is the complete identity.
+      v_resolved_week_id:=null;
+    else
+      select count(*)::integer,min(week_row.id::text)::uuid
+      into v_week_count,v_resolved_week_id
+      from public.contract_weeks week_row
+      where week_row.timesheet_id=v_current_id;
+      if v_week_count<>1 then
+        raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
+      end if;
+      select week_row.* into v_week
+      from public.contract_weeks week_row
+      where week_row.id=v_resolved_week_id;
+    end if;
   elsif v_week_current_id is distinct from v_current_id then
     raise exception 'CANDIDATE_OFFICE_PROJECTION_IDENTITY_INVALID' using errcode='22023';
   end if;
@@ -747,7 +762,9 @@ begin
     'current_identity',jsonb_build_object(
       'timesheet_id',v_current.timesheet_id,'timesheet_version',v_current.version,
       'contract_week_id',v_week.id,
-      'row_key',coalesce(nullif(btrim(coalesce(p_row_key,'')),''),v_week.id::text),
+      'row_key',coalesce(
+        nullif(btrim(coalesce(p_row_key,'')),''),v_week.id::text,v_current.timesheet_id::text
+      ),
       'row_signature',v_signature,'route_family',v_capabilities->>'route_family',
       'record_role',v_capabilities->>'record_role',
       'moved',coalesce((v_identity->>'moved')::boolean,false),
@@ -816,7 +833,8 @@ begin
     'refresh_hints',jsonb_build_object(
       'summary',true,'simple_timesheet',true,'bulk_process',true,'bulk_authorise',true,
       'affected_timesheet_ids',jsonb_build_array(v_current.timesheet_id),
-      'affected_contract_week_ids',jsonb_build_array(v_week.id)
+      'affected_contract_week_ids',case when v_week.id is null
+        then '[]'::jsonb else jsonb_build_array(v_week.id) end
     )
   );
 end;
