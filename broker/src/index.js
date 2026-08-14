@@ -72058,7 +72058,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         requires_full_details_refresh: !!bundle.requires_full_details_refresh
       });
 
-      return withCORS(env, req, ok({
+      const lifecyclePayload = markCandidateOfficePayloadApplicability({
         ok: true,
         mode: 'lifecycle',
         purpose: 'lifecycle_patch',
@@ -72091,7 +72091,8 @@ async function handleTimesheetDetails(env, req, timesheetId) {
         refresh_required: bundle.refresh_required,
         missing: Array.isArray(lightweight.missing) ? lightweight.missing : [],
         removed: Array.isArray(lightweight.removed) ? lightweight.removed : []
-      }));
+      });
+      return withCORS(env, req, ok(lifecyclePayload));
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -73357,7 +73358,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       compare_block_required: compareBlockRequired
     });
 
-    return withCORS(env, req, ok({
+    const detailsPayload = markCandidateOfficePayloadApplicability({
       booking_id: bookingId,
       requested_timesheet_id: resolved.requested_timesheet_id,
       current_timesheet_id: resolved.current_timesheet_id,
@@ -73436,7 +73437,8 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       bulk_authorise,
       artifact_hints,
       healthroster_compare
-    }));
+    });
+    return withCORS(env, req, ok(detailsPayload));
   } catch (e) {
     console.error('[TIMESHEET_DETAILS] error', {
       timesheet_id: timesheetId,
@@ -83005,7 +83007,7 @@ function candidateSummaryProjectionError(value, fallback = 'CANDIDATE_OFFICE_PRO
   return { code, retryable: source.retryable === true };
 }
 
-function candidateSummaryApplicability(row) {
+function candidateOfficeApplicability(row) {
   const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
   const classifyRoute = (value) => {
     const route = upper(value);
@@ -83028,6 +83030,63 @@ function candidateSummaryApplicability(row) {
   return null;
 }
 
+function markCandidateOfficeApplicability(rowInput, resolvedClassification = undefined) {
+  const row = rowInput && typeof rowInput === 'object' && !Array.isArray(rowInput)
+    ? { ...rowInput }
+    : rowInput;
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+  const classification = resolvedClassification === undefined
+    ? candidateOfficeApplicability(row)
+    : resolvedClassification;
+  if (classification !== null) {
+    row.candidate_office_projection_not_applicable = classification === false;
+  }
+  return row;
+}
+
+function markCandidateOfficePayloadApplicability(payloadInput) {
+  const payload = payloadInput && typeof payloadInput === 'object' && !Array.isArray(payloadInput)
+    ? { ...payloadInput }
+    : payloadInput;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return payload;
+
+  const sources = [
+    payload,
+    payload.row,
+    payload.data_row,
+    payload.effective,
+    payload.timesheet,
+    payload.contract_week
+  ].filter((value) => value && typeof value === 'object' && !Array.isArray(value));
+  const firstNonBlank = (key) => {
+    for (const source of sources) {
+      const value = source?.[key];
+      if (String(value == null ? '' : value).trim()) return value;
+    }
+    return null;
+  };
+  const classification = candidateOfficeApplicability({
+    route_type: firstNonBlank('route_type'),
+    route_display: firstNonBlank('route_display'),
+    route: firstNonBlank('route'),
+    route_family: firstNonBlank('route_family'),
+    submission_mode: firstNonBlank('submission_mode'),
+    submission_mode_snapshot: firstNonBlank('submission_mode_snapshot')
+  });
+  if (classification === null) return payload;
+
+  payload.candidate_office_projection_not_applicable = classification === false;
+  for (const key of ['row', 'data_row', 'effective', 'timesheet', 'contract_week']) {
+    if (payload[key] && typeof payload[key] === 'object' && !Array.isArray(payload[key])) {
+      payload[key] = markCandidateOfficeApplicability(payload[key], classification);
+    }
+  }
+  if (Array.isArray(payload.rows)) {
+    payload.rows = payload.rows.map((row) => markCandidateOfficeApplicability(row));
+  }
+  return payload;
+}
+
 async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, rpc = sbRpc) {
   const output = (Array.isArray(rows) ? rows : []).map((row) => ({ ...(row || {}) }));
   const environment = String(env?.CANDIDATE_APP_ENVIRONMENT || '').trim().toUpperCase();
@@ -83038,7 +83097,7 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
     const row = output[index];
     const timesheetId = String(row?.timesheet_id || '').trim();
     if (!timesheetId) continue;
-    if (candidateSummaryApplicability(row) === false) {
+    if (candidateOfficeApplicability(row) === false) {
       // Summary already owns the exact route classification needed to prove
       // that Candidate lifecycle does not apply. Mark it as a resolved blank
       // and do not spend canonical projection work on Manual/import rows.
@@ -85516,10 +85575,14 @@ async function handleBulkProcessDataset(env, req) {
     const payload = unwrapRpcPayload(rpcRes, 'bulk_process_dataset_v1');
 
     const unprocessedRows = Array.isArray(payload.unprocessed_rows)
-      ? payload.unprocessed_rows.map(normalizeBulkProcessRetentionRow)
+      ? payload.unprocessed_rows
+          .map(normalizeBulkProcessRetentionRow)
+          .map(markCandidateOfficeApplicability)
       : [];
     const processedRows = Array.isArray(payload.processed_rows)
-      ? payload.processed_rows.map(normalizeBulkProcessRetentionRow)
+      ? payload.processed_rows
+          .map(normalizeBulkProcessRetentionRow)
+          .map(markCandidateOfficeApplicability)
       : [];
 
     const counts = (payload.counts && typeof payload.counts === 'object' && !Array.isArray(payload.counts))
@@ -85737,12 +85800,6 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
     readOwn(summary, 'sheet_scope') ||
     ''
   );
-  const isQrFamily = (
-    routeFamily === 'QR' ||
-    routeSubfamily === 'QR' ||
-    underlyingChannelFamily === 'QR'
-  );
-
   const processingStatus = upper(
     readOwn(tsfin, 'processing_status') ??
     readOwn(source, 'processing_status') ??
@@ -85861,10 +85918,11 @@ function buildBulkAuthoriseEligibility(row, fin, summaryBase, validation, family
 
   const hrValidationAwaiting = hrValidationRequiredForInvoice && !hrValidationSatisfied;
 
-  const qrBulkAuthoriseVisible = (!isQrFamily || qrSignedReturned === true);
-
-  const canBulkAuthorise = hasTimesheet && !documentLocked && requiresAuthorisation && !isAuthorised && !qrUnsignedBlocked && qrBulkAuthoriseVisible;
-  const canBulkUnauthorise = hasTimesheet && !documentLocked && isAuthorised && qrBulkAuthoriseVisible;
+  // Candidate ELECTRONIC/QR completion now feeds the ordinary processing
+  // authority.  Historic QR columns remain evidence/route facts only and
+  // must not independently gate Office Authorise or Unauthorise.
+  const canBulkAuthorise = hasTimesheet && !documentLocked && requiresAuthorisation && !isAuthorised;
+  const canBulkUnauthorise = hasTimesheet && !documentLocked && isAuthorised;
 
   const canEditTimesheetData = !dataMutationLocked && !isAuthorised && routeFamily === 'MANUAL_NON_QR';
   const hasValidEvidenceContext = hasTimesheet;
@@ -86932,7 +86990,9 @@ async function handleBulkAuthoriseDataset(env, req) {
   try {
     const rpcRes = await sbRpc(env, 'bulk_authorise_dataset_v1', { p_filters: filters }, { timeoutMs: 45000 });
     const payload = unwrapRpcPayload(rpcRes, 'bulk_authorise_dataset_v1');
-    const rows = Array.isArray(payload.rows) ? payload.rows : [];
+    const rows = Array.isArray(payload.rows)
+      ? payload.rows.map(markCandidateOfficeApplicability)
+      : [];
 
     const counts = (payload.counts && typeof payload.counts === 'object' && !Array.isArray(payload.counts))
       ? payload.counts
@@ -88057,7 +88117,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
     });
     const rpcRes = await sbRpc(env, 'bulk_process_row_context_v1', { p_filters: compactFilters }, { timeoutMs: 45000 });
     const payload = normaliseReturnedContext(unwrapRpcPayload(rpcRes, 'bulk_process_row_context_v1'), { profile, includeEvidence, baseOnly: profile === 'status_header' });
-    return withCORS(env, req, ok(payload));
+    return withCORS(env, req, ok(markCandidateOfficePayloadApplicability(payload)));
   } catch (err) {
     const message = String(err?.message || err || 'Failed to load bulk process row context');
     console.warn('[TS][BULK-PROCESS][ROW-CONTEXT][RPC-FAILED]', {
@@ -88127,7 +88187,7 @@ async function handleBulkProcessRowContext(env, req, rowIdentity = null) {
           : 'Evidence was attached, but the row context could not be refreshed. Please refresh the row or reopen Bulk Process.',
         error: hasFallbackEvidenceRows ? null : 'EVIDENCE_ROW_CONTEXT_REFRESH_FAILED'
       };
-      return withCORS(env, req, ok(normaliseReturnedContext(fallbackPayload)));
+      return withCORS(env, req, ok(markCandidateOfficePayloadApplicability(normaliseReturnedContext(fallbackPayload))));
     }
 
     return withCORS(env, req, ok({
@@ -88634,7 +88694,7 @@ async function handleTimesheetBulkAuthoriseContext(env, req, timesheetId = null)
         });
       }
     }
-    return withCORS(env, req, ok(payload));
+    return withCORS(env, req, ok(markCandidateOfficePayloadApplicability(payload)));
   } catch (err) {
     const message = String(err?.message || err || 'Failed to load bulk authorise row context');
     console.warn('[TS][BULK-AUTH][ROW-CONTEXT][RPC-FAILED]', {
@@ -90286,7 +90346,6 @@ function buildTimesheetLifecyclePatchFromMutation(input = {}) {
   const canAuthorise = !!(
     authorised === false &&
     !locked &&
-    !qrUnsignedBlocked &&
     currentTimesheetId &&
     (!processingStatusUpper || ['PENDING_AUTH', 'READY_FOR_HR'].includes(processingStatusUpper))
   );
@@ -90303,7 +90362,6 @@ function buildTimesheetLifecyclePatchFromMutation(input = {}) {
           locked ? 'TIMESHEET_LOCKED' : null,
           paid ? 'TIMESHEET_PAID' : null,
           invoiceLocked ? 'TIMESHEET_LOCKED_BY_INVOICE' : null,
-          qrUnsignedBlocked ? 'AWAITING_SIGNED_QR' : null,
           authorised === true ? 'AUTHORISED_READ_ONLY' : null
         ].filter(Boolean)
   };
@@ -92706,15 +92764,9 @@ async function runTimesheetAuthoriseDecision(env, req, selection, row, factsMap)
 
   const family = classifyBulkAuthoriseRow(row, finRow, summaryBaseRow);
   const eligibility = buildBulkAuthoriseEligibility(row, finRow, summaryBaseRow, validationRow, family);
-  const routeFamily = String(family?.route_family || row?.route_family || '').trim().toUpperCase();
-
   if (eligibility.can_bulk_authorise !== true) {
     let reason = 'row no longer eligible to authorise';
-    if (routeFamily === 'QR' && eligibility.qr_signed_returned !== true) {
-      reason = 'awaiting signed QR timesheet';
-    } else if (eligibility.qr_unsigned_blocked === true) {
-      reason = 'awaiting signed QR timesheet';
-    } else if (eligibility.locked === true) {
+    if (eligibility.locked === true) {
       reason = 'row is locked or paid';
     } else if (eligibility.bulk_authorise_section !== 'processed_eligible') {
       reason = 'row is not in Processed Eligible';
@@ -92838,18 +92890,9 @@ async function runTimesheetUnauthoriseDecision(env, req, selection, row, factsMa
 
   const family = classifyBulkAuthoriseRow(row, finRow, summaryBaseRow);
   const eligibility = buildBulkAuthoriseEligibility(row, finRow, summaryBaseRow, validationRow, family);
-  const routeFamily = String(family?.route_family || row?.route_family || '').trim().toUpperCase();
-  const routeSubfamily = String(family?.route_subfamily || row?.route_subfamily || '').trim().toUpperCase();
-  const underlyingChannelFamily = String(family?.underlying_channel_family || row?.underlying_channel_family || '').trim().toUpperCase();
-  const isQrFamily = (routeFamily === 'QR' || routeSubfamily === 'QR' || underlyingChannelFamily === 'QR');
-
   if (eligibility.can_bulk_unauthorise !== true) {
     let reason = 'row no longer eligible to unauthorise';
-    if (isQrFamily && eligibility.qr_signed_returned !== true) {
-      reason = 'awaiting signed QR timesheet';
-    } else if (eligibility.qr_unsigned_blocked === true) {
-      reason = 'awaiting signed QR timesheet';
-    } else if (eligibility.locked === true) {
+    if (eligibility.locked === true) {
       reason = 'row is locked or paid';
     } else if (eligibility.bulk_authorise_section !== 'authorised_eligible') {
       reason = 'row is not in Authorised Eligible';
@@ -193299,7 +193342,9 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
 }
 export const candidateOfficeSummaryInternals = Object.freeze({
   candidateSummaryProjectionError,
-  candidateSummaryApplicability,
+  candidateOfficeApplicability,
+  markCandidateOfficeApplicability,
+  markCandidateOfficePayloadApplicability,
   attachCandidateOfficeSummaryProjections
 });
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch

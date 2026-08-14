@@ -26,6 +26,13 @@ create type public.invoice_consolidation_mode_enum as enum ('NONE','BY_WEEK','AN
 create type public.correction_financials_date_basis_enum as enum ('PAID_DATE','NOW');
 create type public.hr_source_enum as enum ('HEALTHROSTER','NHSP');
 create type public.ts_fin_reason_enum as enum ('FIXTURE','CONTEXT_CHANGED');
+create type public.timesheet_fin_basis_enum as enum (
+  'SELF_REPORTED','HR_VALIDATED','OVERRIDDEN','NHSP','NHSP_ADJUSTMENT',
+  'CONTRACT_WEEKLY','HEALTHROSTER_ADJUSTMENT','HEALTHROSTER_SELF_BILL'
+);
+create type public.validation_status_enum as enum (
+  'PENDING','VALIDATION_OK','VALIDATION_ERROR','OVERRIDE_AWAITING_CONFIRM','OVERRIDDEN'
+);
 create type public.ts_fin_processing_status_enum as enum (
   'UNASSIGNED','CLIENT_UNRESOLVED','RATE_MISSING','PAY_CHANNEL_MISSING','READY_FOR_HR',
   'READY_FOR_INVOICE','PENDING_AUTH','AWAITING_MANUAL_SIGNATURE','UNPROCESSED'

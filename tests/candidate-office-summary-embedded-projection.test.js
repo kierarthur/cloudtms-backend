@@ -110,18 +110,47 @@ test('Timesheet Summary resolves Manual and import-authoritative routes as immed
   assert.equal(result[4].candidate_office_projection?.ok, true);
 });
 
-test('Timesheet Summary trusts the exact row route before contradictory broad route-family hints', () => {
-  assert.equal(candidateOfficeSummaryInternals.candidateSummaryApplicability({
+test('Candidate Office applicability trusts the exact row route before contradictory broad route-family hints', () => {
+  assert.equal(candidateOfficeSummaryInternals.candidateOfficeApplicability({
     route_type: 'DAILY_ELECTRONIC',
     route_display: 'Daily Electronic',
     route_family: 'MANUAL',
     submission_mode: 'ELECTRONIC'
   }), true);
-  assert.equal(candidateOfficeSummaryInternals.candidateSummaryApplicability({
+  assert.equal(candidateOfficeSummaryInternals.candidateOfficeApplicability({
     route_type: 'WEEKLY_NHSP',
     route_family: 'ELECTRONIC',
     submission_mode: 'ELECTRONIC'
   }), false);
+});
+
+test('Candidate Office marks Manual and import rows across nested non-Summary response shapes', () => {
+  for (const routeType of ['DAILY_MANUAL', 'WEEKLY_MANUAL', 'WEEKLY_MANUAL_ADJUSTMENT', 'WEEKLY_NHSP', 'WEEKLY_HEALTHROSTER']) {
+    const payload = candidateOfficeSummaryInternals.markCandidateOfficePayloadApplicability({
+      row: { route_type: routeType },
+      data_row: { route_type: routeType },
+      effective: { route_type: routeType },
+      timesheet: { route_type: routeType },
+      contract_week: { route_type: routeType }
+    });
+    assert.equal(payload.candidate_office_projection_not_applicable, true, routeType);
+    for (const key of ['row', 'data_row', 'effective', 'timesheet', 'contract_week']) {
+      assert.equal(payload[key].candidate_office_projection_not_applicable, true, `${routeType}:${key}`);
+    }
+  }
+
+  const electronic = candidateOfficeSummaryInternals.markCandidateOfficePayloadApplicability({
+    timesheet: { route_type: 'DAILY_ELECTRONIC' },
+    effective: { route_family: 'MANUAL' }
+  });
+  assert.equal(electronic.candidate_office_projection_not_applicable, false,
+    'the exact DAILY ELECTRONIC route remains Candidate-applicable');
+
+  const unknown = candidateOfficeSummaryInternals.markCandidateOfficePayloadApplicability({
+    timesheet: { route_type: 'FUTURE_ROUTE' }
+  });
+  assert.equal(Object.hasOwn(unknown, 'candidate_office_projection_not_applicable'), false,
+    'unknown routes remain fail-closed instead of being silently suppressed');
 });
 
 test('Timesheet Summary embeds a safe row-level error and never starts browser hydration', async () => {
