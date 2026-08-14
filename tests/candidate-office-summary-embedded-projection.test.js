@@ -110,6 +110,20 @@ test('Timesheet Summary resolves Manual and import-authoritative routes as immed
   assert.equal(result[4].candidate_office_projection?.ok, true);
 });
 
+test('Timesheet Summary trusts the exact row route before contradictory broad route-family hints', () => {
+  assert.equal(candidateOfficeSummaryInternals.candidateSummaryApplicability({
+    route_type: 'DAILY_ELECTRONIC',
+    route_display: 'Daily Electronic',
+    route_family: 'MANUAL',
+    submission_mode: 'ELECTRONIC'
+  }), true);
+  assert.equal(candidateOfficeSummaryInternals.candidateSummaryApplicability({
+    route_type: 'WEEKLY_NHSP',
+    route_family: 'ELECTRONIC',
+    submission_mode: 'ELECTRONIC'
+  }), false);
+});
+
 test('Timesheet Summary embeds a safe row-level error and never starts browser hydration', async () => {
   const rows = [{ id: 'row-one', timesheet_id: uuid(1) }, { id: 'row-two', timesheet_id: uuid(2) }];
   const rpc = async (_env, _functionName, args) => ({

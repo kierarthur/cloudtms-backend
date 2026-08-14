@@ -83007,15 +83007,22 @@ function candidateSummaryProjectionError(value, fallback = 'CANDIDATE_OFFICE_PRO
 
 function candidateSummaryApplicability(row) {
   const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
-  const route = [row?.route_type,row?.route_display,row?.route,row?.route_family]
-    .map(upper).filter(Boolean).join(' ');
+  const classifyRoute = (value) => {
+    const route = upper(value);
+    if (!route) return null;
+    if (/(^|[_\s-])(NHSP|HEALTHROSTER|HEALTH_ROSTER|HR_IMPORT|IMPORT_AUTHORITATIVE)([_\s-]|$)/.test(route)) return false;
+    if (/(^|[_\s-])MANUAL([_\s-]|$)/.test(route)) return false;
+    if (/(^|[_\s-])(ELECTRONIC|QR)([_\s-]|$)/.test(route)) return true;
+    return null;
+  };
   const submissionMode = upper(row?.submission_mode || row?.submission_mode_snapshot);
   // The exact row route wins over broad client settings and over a generic
   // submission-mode snapshot. One client can legitimately have both import
   // and Candidate-enabled rows, including DAILY ELECTRONIC.
-  if (/(^|[_\s-])(NHSP|HEALTHROSTER|HEALTH_ROSTER|HR_IMPORT|IMPORT_AUTHORITATIVE)([_\s-]|$)/.test(route)) return false;
-  if (/(^|[_\s-])MANUAL([_\s-]|$)/.test(route)) return false;
-  if (/(^|[_\s-])(ELECTRONIC|QR)([_\s-]|$)/.test(route)) return true;
+  for (const authority of [row?.route_type,row?.route_display,row?.route,row?.route_family]) {
+    const classification = classifyRoute(authority);
+    if (classification !== null) return classification;
+  }
   if (submissionMode === 'MANUAL') return false;
   if (['ELECTRONIC', 'QR'].includes(submissionMode)) return true;
   return null;
