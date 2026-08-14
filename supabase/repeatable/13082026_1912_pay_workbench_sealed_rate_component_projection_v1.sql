@@ -70,6 +70,54 @@ AS $function$
       AND fact.source_relation<>'UNIT_PROJECTION'
       AND fact.timesheet_id IS NOT NULL
       AND (p_timesheet_ids IS NULL OR fact.timesheet_id=ANY(p_timesheet_ids))
+  ), candidate_context_values AS MATERIALIZED (
+    SELECT DISTINCT
+      UPPER(NULLIF(BTRIM(fact.rate_authority#>>'{source,source_pay_method}'),''))
+        AS source_pay_method,
+      UPPER(NULLIF(BTRIM(fact.rate_authority#>>'{target,target_pay_method}'),''))
+        AS target_pay_method,
+      NULLIF(BTRIM(fact.rate_authority#>>'{target,target_authority_digest}'),'')
+        AS target_authority_digest,
+      NULLIF(BTRIM(fact.rate_authority#>>'{conversion,conversion_context_digest}'),'')
+        AS conversion_context_digest,
+      CASE WHEN COALESCE(fact.rate_authority#>>'{target,umbrella_id}','')
+          ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (fact.rate_authority#>>'{target,umbrella_id}')::uuid END AS umbrella_id,
+      CASE WHEN jsonb_typeof(fact.rate_authority#>'{target,umbrella_enabled}')='boolean'
+        THEN (fact.rate_authority#>>'{target,umbrella_enabled}')::boolean END
+        AS umbrella_enabled,
+      CASE WHEN jsonb_typeof(fact.rate_authority#>'{target,umbrella_vat_chargeable}')='boolean'
+        THEN (fact.rate_authority#>>'{target,umbrella_vat_chargeable}')::boolean END
+        AS umbrella_vat_chargeable,
+      CASE WHEN COALESCE(fact.rate_authority#>>'{conversion,erni_pct}','')
+          ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((fact.rate_authority#>>'{conversion,erni_pct}')::numeric,6) END AS erni_pct,
+      CASE WHEN COALESCE(fact.rate_authority#>>'{conversion,vat_rate_pct}','')
+          ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((fact.rate_authority#>>'{conversion,vat_rate_pct}')::numeric,6) END
+        AS vat_rate_pct
+    FROM scoped_facts fact
+    WHERE jsonb_typeof(fact.rate_authority)='object'
+      AND COALESCE(fact.rate_authority->>'rate_authority_version','')='1'
+  ), candidate_sealed_context AS MATERIALIZED (
+    SELECT MIN(context.source_pay_method) AS source_pay_method,
+      MIN(context.target_pay_method) AS target_pay_method,
+      MIN(context.target_authority_digest) AS target_authority_digest,
+      MIN(context.conversion_context_digest) AS conversion_context_digest,
+      MIN(context.umbrella_id::text)::uuid AS umbrella_id,
+      BOOL_AND(context.umbrella_enabled) AS umbrella_enabled,
+      BOOL_AND(context.umbrella_vat_chargeable) AS umbrella_vat_chargeable,
+      MIN(context.erni_pct) AS erni_pct,MIN(context.vat_rate_pct) AS vat_rate_pct,
+      CASE
+        WHEN COUNT(*)=0 OR COUNT(context.target_authority_digest)=0
+          OR COUNT(context.conversion_context_digest)=0
+          THEN 'RATE_AUTHORITY_TARGET_AUTHORITY_NOT_SEALED'
+        WHEN COUNT(DISTINCT context.target_authority_digest)<>1
+          OR COUNT(DISTINCT context.conversion_context_digest)<>1
+          OR COUNT(DISTINCT context.target_pay_method)<>1
+          THEN 'RATE_AUTHORITY_TARGET_AUTHORITY_CONFLICT'
+      END AS context_failure
+    FROM candidate_context_values context
   ), occurrence_base AS MATERIALIZED (
     SELECT fact.*,
       CASE
@@ -142,6 +190,9 @@ AS $function$
   ), bucket_canonical AS MATERIALIZED (
     SELECT bucket.*,
       jsonb_build_object(
+        -- Validate the serializer-owned sealed payload against its frozen V1
+        -- canonical document.  The helper publishes a separate attributed V2
+        -- document after baseline/reservation ownership has been resolved.
         'physical_bucket_version',1,
         'physical_bucket_key',bucket.parsed_physical_bucket_key,
         'component_kind',bucket.parsed_component_kind,
@@ -191,23 +242,42 @@ AS $function$
       AND (p_timesheet_ids IS NULL OR reservation.timesheet_id=ANY(p_timesheet_ids))
     GROUP BY reservation.timesheet_id,UPPER(BTRIM(reservation.economic_key_type)),
       BTRIM(reservation.economic_key_value)
+  ), entitlement_economic_domain AS MATERIALIZED (
+    SELECT entitlement.timesheet_id,UPPER(BTRIM(entitlement.key_type)) AS economic_key_type,
+      BTRIM(entitlement.key_value) AS economic_key_value,
+      ROUND(COALESCE(SUM(entitlement.truth_ex_vat),0),2) AS truth_ex_vat,
+      ROUND(COALESCE(SUM(entitlement.baseline_ex_vat),0),2) AS baseline_ex_vat,
+      ROUND(COALESCE(SUM(entitlement.truth_inc_vat),SUM(entitlement.truth_ex_vat),0),2)
+        AS truth_inc_vat,
+      ROUND(COALESCE(SUM(entitlement.baseline_inc_vat),SUM(entitlement.baseline_ex_vat),0),2)
+        AS baseline_inc_vat
+    FROM private.pay_current_timesheet_entitlement_components_from_build_v1(
+      p_build_id,NULL::text) entitlement
+    WHERE entitlement.timesheet_id IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(entitlement.key_type,'')),'') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(entitlement.key_value,'')),'') IS NOT NULL
+      AND (p_timesheet_ids IS NULL OR entitlement.timesheet_id=ANY(p_timesheet_ids))
+    GROUP BY entitlement.timesheet_id,UPPER(BTRIM(entitlement.key_type)),
+      BTRIM(entitlement.key_value)
   ), economic_totals AS MATERIALIZED (
-    SELECT live.timesheet_id,UPPER(BTRIM(live.economic_key_type)) AS economic_key_type,
-      BTRIM(live.economic_key_value) AS economic_key_value,
-      ROUND(COALESCE(SUM(live.truth_ex_vat),0),2) AS truth_ex_vat,
-      ROUND(COALESCE(MIN(baseline.baseline_ex_vat),0),2) AS baseline_ex_vat,
-      ROUND(COALESCE(MIN(reservation.reserved_ex_vat),0),2) AS reserved_ex_vat
-    FROM scoped_facts live
-    LEFT JOIN baseline_totals baseline
-      ON baseline.timesheet_id=live.timesheet_id
-     AND baseline.economic_key_type=UPPER(BTRIM(live.economic_key_type))
-     AND baseline.economic_key_value=BTRIM(live.economic_key_value)
+    SELECT domain.timesheet_id,domain.economic_key_type,domain.economic_key_value,
+      domain.truth_ex_vat,domain.baseline_ex_vat,
+      ROUND(COALESCE(reservation.reserved_ex_vat,0),2) AS reserved_ex_vat,
+      domain.truth_inc_vat,domain.baseline_inc_vat
+    FROM entitlement_economic_domain domain
     LEFT JOIN reservation_totals reservation
-      ON reservation.timesheet_id=live.timesheet_id
-     AND reservation.economic_key_type=UPPER(BTRIM(live.economic_key_type))
-     AND reservation.economic_key_value=BTRIM(live.economic_key_value)
-    GROUP BY live.timesheet_id,UPPER(BTRIM(live.economic_key_type)),
-      BTRIM(live.economic_key_value)
+      USING(timesheet_id,economic_key_type,economic_key_value)
+    UNION ALL
+    SELECT reservation.timesheet_id,reservation.economic_key_type,
+      reservation.economic_key_value,0::numeric AS truth_ex_vat,
+      0::numeric AS baseline_ex_vat,reservation.reserved_ex_vat,
+      0::numeric AS truth_inc_vat,0::numeric AS baseline_inc_vat
+    FROM reservation_totals reservation
+    WHERE NOT EXISTS(
+      SELECT 1 FROM entitlement_economic_domain domain
+      WHERE domain.timesheet_id=reservation.timesheet_id
+        AND domain.economic_key_type=reservation.economic_key_type
+        AND domain.economic_key_value=reservation.economic_key_value)
   ), occurrence_validated AS MATERIALIZED (
     SELECT occurrence.*,
       COALESCE(occurrence.occurrence_failure,
@@ -260,7 +330,7 @@ AS $function$
     WHERE bucket.validated_failure IS NULL
     GROUP BY bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)),
       BTRIM(bucket.economic_key_value)
-  ), sealed_physical_amount_fact_base AS MATERIALIZED (
+  ), sealed_parent_facts AS MATERIALIZED (
     SELECT fact.fact_family||':'||fact.natural_key AS fact_identity,
       CASE WHEN fact.fact_family='RESERVATION_COMPONENT' THEN 'RESERVATION'
         ELSE 'BASELINE' END AS authority_kind,
@@ -268,152 +338,540 @@ AS $function$
       BTRIM(fact.economic_key_value) AS economic_key_value,
       ROUND(CASE WHEN fact.fact_family='RESERVATION_COMPONENT'
         THEN COALESCE(fact.reserved_source_amount,0)
-        ELSE COALESCE(fact.amount_ex_vat,0) END,2) AS authority_amount_ex_vat,
-      basis.source_basis_json,
-      NULLIF(BTRIM(COALESCE(
-        basis.source_basis_json->>'physical_bucket_key',
-        fact.source_payload_json#>>'{pay_batch_item,frozen_component_snapshot_json,physical_bucket_key}',
-        fact.source_payload_json#>>'{frozen_component_snapshot_json,physical_bucket_key}'
-      )), '') AS direct_physical_bucket_key,
-      NULLIF(BTRIM(COALESCE(
-        basis.source_basis_json->>'component_member_identity',
-        fact.source_payload_json#>>'{pay_batch_item,frozen_component_snapshot_json,component_member_identity}',
-        fact.source_payload_json#>>'{frozen_component_snapshot_json,component_member_identity}'
-      )), '') AS direct_component_member_identity,
-      NULLIF(BTRIM(COALESCE(
-        basis.source_basis_json->>'source_family_key',
-        basis.source_basis_json->>'represented_source_family_key'
-      )), '') AS direct_source_family_key
+        ELSE COALESCE(fact.amount_ex_vat,0) END,2) AS parent_amount_ex_vat,
+      CASE WHEN fact.fact_family='RESERVATION_COMPONENT' THEN NULL::numeric
+        WHEN COALESCE(
+          fact.source_payload_json#>>'{pay_batch_item,frozen_source_basis_json,source_charge_ex_vat}',
+          fact.source_payload_json#>>'{pay_batch_item,frozen_component_snapshot_json,source_basis_json,source_charge_ex_vat}',
+          fact.source_payload_json#>>'{pay_batch_item,frozen_resolution_result_json,source_charge_ex_vat}',
+          fact.source_payload_json#>>'{frozen_source_basis_json,source_charge_ex_vat}',
+          fact.source_payload_json#>>'{frozen_component_snapshot_json,source_basis_json,source_charge_ex_vat}',
+          fact.source_payload_json#>>'{frozen_resolution_result_json,source_charge_ex_vat}','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND(COALESCE(
+            fact.source_payload_json#>>'{pay_batch_item,frozen_source_basis_json,source_charge_ex_vat}',
+            fact.source_payload_json#>>'{pay_batch_item,frozen_component_snapshot_json,source_basis_json,source_charge_ex_vat}',
+            fact.source_payload_json#>>'{pay_batch_item,frozen_resolution_result_json,source_charge_ex_vat}',
+            fact.source_payload_json#>>'{frozen_source_basis_json,source_charge_ex_vat}',
+            fact.source_payload_json#>>'{frozen_component_snapshot_json,source_basis_json,source_charge_ex_vat}',
+            fact.source_payload_json#>>'{frozen_resolution_result_json,source_charge_ex_vat}')::numeric,2)
+        END AS parent_source_charge_ex_vat,
+      fact.source_payload_json,fact.financial_digest,
+      UPPER(NULLIF(BTRIM(COALESCE(
+        fact.source_payload_json#>>'{pay_batch_item,frozen_source_pay_method}',
+        fact.source_payload_json->>'frozen_source_pay_method')),'')) AS sealed_source_pay_method
     FROM private.banking_pay_workbench_economic_build_facts fact
     JOIN build_authority build ON build.id=fact.build_id
-    CROSS JOIN LATERAL (
-      SELECT COALESCE(
-        NULLIF(CASE WHEN jsonb_typeof(
-          fact.source_payload_json#>'{pay_batch_item,frozen_source_basis_json}')='object'
-          THEN fact.source_payload_json#>'{pay_batch_item,frozen_source_basis_json}'
-          ELSE '{}'::jsonb END,'{}'::jsonb),
-        NULLIF(CASE WHEN jsonb_typeof(
-          fact.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,source_basis_json}')='object'
-          THEN fact.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,source_basis_json}'
-          ELSE '{}'::jsonb END,'{}'::jsonb),
-        NULLIF(CASE WHEN jsonb_typeof(fact.source_payload_json->'frozen_source_basis_json')='object'
-          THEN fact.source_payload_json->'frozen_source_basis_json'
-          ELSE '{}'::jsonb END,'{}'::jsonb),
-        NULLIF(CASE WHEN jsonb_typeof(
-          fact.source_payload_json#>'{frozen_component_snapshot_json,source_basis_json}')='object'
-          THEN fact.source_payload_json#>'{frozen_component_snapshot_json,source_basis_json}'
-          ELSE '{}'::jsonb END,'{}'::jsonb),
-        '{}'::jsonb
-      ) AS source_basis_json
-    ) basis
     WHERE fact.fact_family IN ('FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK',
         'RESERVATION_COMPONENT')
       AND fact.candidate_id=p_candidate_id AND fact.timesheet_id IS NOT NULL
       AND NULLIF(BTRIM(COALESCE(fact.economic_key_type,'')),'') IS NOT NULL
       AND NULLIF(BTRIM(COALESCE(fact.economic_key_value,'')),'') IS NOT NULL
       AND (p_timesheet_ids IS NULL OR fact.timesheet_id=ANY(p_timesheet_ids))
-  ), sealed_physical_amount_facts AS MATERIALIZED (
-    SELECT fact.*,
-      COALESCE(fact.direct_source_family_key,'timesheet:'||fact.timesheet_id::text)
-        AS expected_source_family_key,
-      COALESCE(fact.direct_component_member_identity,
-        CASE
-          WHEN fact.economic_key_type IN ('TS_DAY','TS_TOTAL') THEN COALESCE(
-            NULLIF(BTRIM(fact.source_basis_json->>'segment_stable_key'),''),
-            NULLIF(BTRIM(fact.source_basis_json->>'segment_id'),''),
-            NULLIF(BTRIM(fact.source_basis_json->>'segment_key'),''),
-            NULLIF(BTRIM(COALESCE(fact.source_basis_json->>'work_date',
-              fact.source_basis_json->>'date')),''),
-            NULLIF(BTRIM(fact.source_basis_json->>'ref_num'),'')
-          )
-          WHEN fact.economic_key_type='ADDITIONAL_CODE'
-            THEN 'additional:'||UPPER(fact.economic_key_value)
-          WHEN fact.economic_key_type='EXPENSE_CODE'
-            THEN 'expense:'||UPPER(fact.economic_key_value)
-          WHEN fact.economic_key_type='ADJUSTMENT_CODE'
-            THEN 'adjustment:'||fact.economic_key_value
-        END
-      ) AS expected_component_member_identity,
-      UPPER(COALESCE(
-        NULLIF(BTRIM(fact.source_basis_json->>'bucket_code'),''),
-        CASE WHEN UPPER(BTRIM(COALESCE(fact.source_basis_json->>'band','')))
-          IN ('DAY','NIGHT','SAT','SUN','BH')
-          THEN UPPER(BTRIM(fact.source_basis_json->>'band')) END,
-        CASE fact.economic_key_type
-          WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
-          WHEN 'EXPENSE_CODE' THEN 'FIXED'
-          WHEN 'ADJUSTMENT_CODE' THEN 'FIXED'
-        END
-      )) AS expected_bucket_code
-    FROM sealed_physical_amount_fact_base fact
-  ), sealed_physical_amount_matches AS MATERIALIZED (
-    SELECT fact.fact_identity,fact.authority_kind,fact.timesheet_id,
-      fact.economic_key_type,fact.economic_key_value,fact.authority_amount_ex_vat,
-      bucket.parsed_physical_bucket_key AS matched_physical_bucket_key,
+  ), nested_evidence_shape_failures AS MATERIALIZED (
+    SELECT parent.fact_identity,
+      'RATE_AUTHORITY_NESTED_EVIDENCE_INVALID'::text AS failure_code
+    FROM sealed_parent_facts parent
+    WHERE (parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,case_components}' IS NOT NULL
+        AND jsonb_typeof(parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,case_components}')<>'array')
+       OR (parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_component,resolution_rows}' IS NOT NULL
+        AND jsonb_typeof(parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_component,resolution_rows}')<>'array')
+       OR (parent.source_payload_json#>'{pay_batch_item,frozen_source_basis_json,correction_chain_residual,components}' IS NOT NULL
+        AND jsonb_typeof(parent.source_payload_json#>'{pay_batch_item,frozen_source_basis_json,correction_chain_residual,components}')<>'array')
+       OR (parent.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,correction_chain_residual,components}' IS NOT NULL
+        AND jsonb_typeof(parent.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,correction_chain_residual,components}')<>'array')
+       OR (parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_residual,components}' IS NOT NULL
+        AND jsonb_typeof(parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_residual,components}')<>'array')
+    UNION
+    SELECT parent.fact_identity,'RATE_AUTHORITY_NESTED_EVIDENCE_INVALID'::text
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,case_components}')='array'
+      THEN parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,case_components}'
+      ELSE '[]'::jsonb END) component(value)
+    WHERE component.value#>'{saved_resolution_payload_json,bucket_resolutions}' IS NOT NULL
+      AND jsonb_typeof(component.value#>'{saved_resolution_payload_json,bucket_resolutions}')<>'array'
+    UNION
+    SELECT parent.fact_identity,'RATE_AUTHORITY_NESTED_EVIDENCE_INVALID'::text
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_component,resolution_rows}')='array'
+      THEN parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_component,resolution_rows}'
+      ELSE '[]'::jsonb END) resolution(value)
+    WHERE resolution.value#>'{payload_json,bucket_resolutions}' IS NOT NULL
+      AND jsonb_typeof(resolution.value#>'{payload_json,bucket_resolutions}')<>'array'
+  ), nested_evidence_raw AS MATERIALIZED (
+    SELECT parent.*, 'TOP_LEVEL_SOURCE_BASIS'::text AS evidence_origin,
+      NULL::text AS evidence_container_identity,basis.source_basis_json AS evidence_json
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL (
+      SELECT source_basis_json
+      FROM (VALUES
+        (CASE WHEN jsonb_typeof(parent.source_payload_json#>'{pay_batch_item,frozen_source_basis_json}')='object'
+          THEN parent.source_payload_json#>'{pay_batch_item,frozen_source_basis_json}' END),
+        (CASE WHEN jsonb_typeof(parent.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,source_basis_json}')='object'
+          THEN parent.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,source_basis_json}' END),
+        (CASE WHEN jsonb_typeof(parent.source_payload_json->'frozen_source_basis_json')='object'
+          THEN parent.source_payload_json->'frozen_source_basis_json' END),
+        (CASE WHEN jsonb_typeof(parent.source_payload_json#>'{frozen_component_snapshot_json,source_basis_json}')='object'
+          THEN parent.source_payload_json#>'{frozen_component_snapshot_json,source_basis_json}' END)
+      ) basis_values(source_basis_json)
+    ) basis
+    WHERE basis.source_basis_json IS NOT NULL AND basis.source_basis_json<>'{}'::jsonb
+    UNION ALL
+    SELECT parent.*,'CASE_COMPONENT',COALESCE(NULLIF(component.value->>'source_basis_fingerprint',''),
+      md5(component.value::text)),component.value
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,case_components}')='array'
+      THEN parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,case_components}'
+      ELSE '[]'::jsonb END) component(value)
+    UNION ALL
+    SELECT parent.*,'CASE_BUCKET_RESOLUTION',COALESCE(
+      NULLIF(component.value->>'source_basis_fingerprint',''),md5(component.value::text)),bucket.value
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,case_components}')='array'
+      THEN parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,case_components}'
+      ELSE '[]'::jsonb END) component(value)
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      component.value#>'{saved_resolution_payload_json,bucket_resolutions}')='array'
+      THEN component.value#>'{saved_resolution_payload_json,bucket_resolutions}'
+      ELSE '[]'::jsonb END) bucket(value)
+    UNION ALL
+    SELECT parent.*,'CORRECTION_BUCKET_RESOLUTION',COALESCE(
+      NULLIF(resolution.value->>'source_basis_fingerprint',''),md5(resolution.value::text)),bucket.value
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_component,resolution_rows}')='array'
+      THEN parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_component,resolution_rows}'
+      ELSE '[]'::jsonb END) resolution(value)
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      resolution.value#>'{payload_json,bucket_resolutions}')='array'
+      THEN resolution.value#>'{payload_json,bucket_resolutions}' ELSE '[]'::jsonb END) bucket(value)
+    UNION ALL
+    SELECT parent.*,'SOURCE_BASIS_CORRECTION_RESIDUAL',NULL::text,residual.value
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      parent.source_payload_json#>'{pay_batch_item,frozen_source_basis_json,correction_chain_residual,components}')='array'
+      THEN parent.source_payload_json#>'{pay_batch_item,frozen_source_basis_json,correction_chain_residual,components}'
+      ELSE '[]'::jsonb END) residual(value)
+    UNION ALL
+    SELECT parent.*,'SNAPSHOT_CORRECTION_RESIDUAL',NULL::text,residual.value
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      parent.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,correction_chain_residual,components}')='array'
+      THEN parent.source_payload_json#>'{pay_batch_item,frozen_component_snapshot_json,correction_chain_residual,components}'
+      ELSE '[]'::jsonb END) residual(value)
+    UNION ALL
+    SELECT parent.*,'RESOLUTION_CORRECTION_RESIDUAL',NULL::text,residual.value
+    FROM sealed_parent_facts parent
+    CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(
+      parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_residual,components}')='array'
+      THEN parent.source_payload_json#>'{pay_batch_item,frozen_resolution_payload_json,correction_chain_residual,components}'
+      ELSE '[]'::jsonb END) residual(value)
+  ), nested_evidence_parsed AS MATERIALIZED (
+    SELECT raw.*,
+      CASE WHEN jsonb_typeof(raw.evidence_json->'source_basis_json')='object'
+        THEN raw.evidence_json->'source_basis_json' ELSE raw.evidence_json END AS source_basis_json,
+      NULLIF(BTRIM(COALESCE(raw.evidence_json->>'physical_bucket_key',
+        raw.evidence_json#>>'{source_basis_json,physical_bucket_key}')),'') AS direct_physical_bucket_key,
+      NULLIF(BTRIM(COALESCE(raw.evidence_json->>'component_member_identity',
+        raw.evidence_json#>>'{source_basis_json,component_member_identity}')),'')
+        AS direct_component_member_identity,
+      NULLIF(BTRIM(COALESCE(raw.evidence_json->>'source_family_key',
+        raw.evidence_json#>>'{source_basis_json,source_family_key}',
+        raw.evidence_json#>>'{source_basis_json,represented_source_family_key}')),'')
+        AS direct_source_family_key,
+      NULLIF(BTRIM(COALESCE(raw.evidence_json->>'source_basis_fingerprint',
+        raw.evidence_json#>>'{source_basis_json,source_basis_fingerprint}')),'')
+        AS source_basis_fingerprint,
+      NULLIF(BTRIM(COALESCE(raw.evidence_json->>'component_fingerprint',
+        raw.evidence_json#>>'{source_basis_json,component_fingerprint}')),'')
+        AS component_fingerprint,
+      UPPER(NULLIF(BTRIM(COALESCE(raw.evidence_json->>'source_pay_method',
+        raw.evidence_json#>>'{source_basis_json,source_pay_method}')),''))
+        AS evidence_source_pay_method,
+      UPPER(NULLIF(BTRIM(COALESCE(raw.evidence_json->>'component_fallback',
+        raw.evidence_json#>>'{source_basis_json,component_fallback}')),''))
+        AS component_fallback
+    FROM nested_evidence_raw raw
+  ), nested_evidence_normalized AS MATERIALIZED (
+    SELECT parsed.*,
       CASE
-        WHEN fact.direct_physical_bucket_key IS NOT NULL THEN 'PHYSICAL_BUCKET_KEY'
-        WHEN fact.expected_component_member_identity IS NOT NULL
-          AND fact.expected_bucket_code IS NOT NULL THEN 'STRUCTURAL_IDENTITY'
-        WHEN cardinality.physical_bucket_count=1 THEN 'SOLE_BUCKET'
-      END AS match_authority
-    FROM sealed_physical_amount_facts fact
-    JOIN physical_bucket_cardinality cardinality
-      USING(timesheet_id,economic_key_type,economic_key_value)
-    LEFT JOIN bucket_validated bucket
-      ON bucket.validated_failure IS NULL
-     AND bucket.timesheet_id=fact.timesheet_id
-     AND UPPER(BTRIM(bucket.economic_key_type))=fact.economic_key_type
-     AND BTRIM(bucket.economic_key_value)=fact.economic_key_value
-     AND (
-       (fact.direct_physical_bucket_key IS NOT NULL
-         AND bucket.parsed_physical_bucket_key=fact.direct_physical_bucket_key)
-       OR (fact.direct_physical_bucket_key IS NULL
-         AND fact.expected_component_member_identity IS NOT NULL
-         AND fact.expected_bucket_code IS NOT NULL
-         AND bucket.parsed_component_member_identity=fact.expected_component_member_identity
-         AND bucket.parsed_bucket_code=fact.expected_bucket_code
-         AND bucket.rate_authority#>>'{economic,source_family_key}'=
-           fact.expected_source_family_key)
-       OR (fact.direct_physical_bucket_key IS NULL
-         AND (fact.expected_component_member_identity IS NULL
-           OR fact.expected_bucket_code IS NULL)
-         AND cardinality.physical_bucket_count=1)
-     )
-  ), sealed_physical_amount_match_counts AS MATERIALIZED (
-    SELECT match.fact_identity,match.authority_kind,match.timesheet_id,
-      match.economic_key_type,match.economic_key_value,match.authority_amount_ex_vat,
-      COUNT(DISTINCT match.matched_physical_bucket_key) FILTER(
-        WHERE match.matched_physical_bucket_key IS NOT NULL)::integer AS matched_bucket_count,
-      MIN(match.matched_physical_bucket_key) FILTER(
-        WHERE match.matched_physical_bucket_key IS NOT NULL) AS matched_physical_bucket_key,
-      MIN(match.match_authority) FILTER(
-        WHERE match.matched_physical_bucket_key IS NOT NULL) AS match_authority
-    FROM sealed_physical_amount_matches match
-    GROUP BY match.fact_identity,match.authority_kind,match.timesheet_id,
-      match.economic_key_type,match.economic_key_value,match.authority_amount_ex_vat
+        WHEN parsed.direct_physical_bucket_key IS NOT NULL THEN 10
+        WHEN parsed.evidence_origin='CASE_COMPONENT' THEN 20
+        WHEN parsed.evidence_origin IN ('CASE_BUCKET_RESOLUTION','CORRECTION_BUCKET_RESOLUTION')
+          THEN 30
+        ELSE 40 END AS evidence_priority,
+      COALESCE(parsed.direct_source_family_key,'timesheet:'||parsed.timesheet_id::text)
+        AS source_family_key,
+      COALESCE(parsed.direct_component_member_identity,
+        CASE
+          WHEN parsed.component_fallback='WORKED_TIME_AMOUNT'
+            THEN 'worked-time-residual:'||parsed.economic_key_type||':'||parsed.economic_key_value
+          WHEN parsed.economic_key_type IN ('TS_DAY','TS_TOTAL') THEN COALESCE(
+            NULLIF(BTRIM(parsed.source_basis_json->>'segment_stable_key'),''),
+            NULLIF(BTRIM(parsed.source_basis_json->>'segment_id'),''),
+            NULLIF(BTRIM(parsed.source_basis_json->>'segment_key'),''))
+          WHEN parsed.economic_key_type='ADDITIONAL_CODE'
+            THEN 'additional:'||UPPER(parsed.economic_key_value)
+          WHEN parsed.economic_key_type='EXPENSE_CODE'
+            THEN 'expense:'||UPPER(parsed.economic_key_value)
+          WHEN parsed.economic_key_type='ADJUSTMENT_CODE'
+            THEN 'adjustment:'||parsed.economic_key_value
+        END) AS component_member_identity,
+      UPPER(COALESCE(CASE WHEN parsed.component_fallback='WORKED_TIME_AMOUNT'
+          THEN 'FIXED' END,
+        NULLIF(BTRIM(parsed.evidence_json->>'bucket_code'),''),
+        NULLIF(BTRIM(parsed.source_basis_json->>'bucket_code'),''),
+        CASE WHEN UPPER(BTRIM(COALESCE(parsed.source_basis_json->>'band','')))
+          IN ('DAY','NIGHT','SAT','SUN','BH')
+          THEN UPPER(BTRIM(parsed.source_basis_json->>'band')) END,
+        CASE parsed.economic_key_type WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
+          WHEN 'EXPENSE_CODE' THEN 'FIXED' WHEN 'ADJUSTMENT_CODE' THEN 'FIXED' END))
+        AS bucket_code,
+      NULLIF(BTRIM(COALESCE(parsed.evidence_json->>'segment_id',
+        parsed.source_basis_json->>'segment_id')),'') AS segment_id,
+      COALESCE(NULLIF(BTRIM(COALESCE(parsed.evidence_json->>'segment_key',
+        parsed.source_basis_json->>'segment_key')),''),
+        NULLIF(BTRIM(COALESCE(parsed.evidence_json->>'segment_id',
+          parsed.source_basis_json->>'segment_id')),'')) AS segment_key,
+      NULLIF(BTRIM(COALESCE(parsed.evidence_json->>'segment_stable_key',
+        parsed.source_basis_json->>'segment_stable_key')),'') AS segment_stable_key,
+      CASE WHEN COALESCE(parsed.evidence_json->>'source_units',
+          parsed.source_basis_json->>'source_units','') ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND(COALESCE(parsed.evidence_json->>'source_units',
+          parsed.source_basis_json->>'source_units')::numeric,6) END AS source_units,
+      CASE WHEN COALESCE(parsed.evidence_json->>'source_rate',
+          parsed.source_basis_json->>'source_rate','') ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND(COALESCE(parsed.evidence_json->>'source_rate',
+          parsed.source_basis_json->>'source_rate')::numeric,6) END AS source_rate,
+      CASE WHEN COALESCE(parsed.evidence_json->>'source_charge_rate',
+          parsed.source_basis_json->>'source_charge_rate','') ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND(COALESCE(parsed.evidence_json->>'source_charge_rate',
+          parsed.source_basis_json->>'source_charge_rate')::numeric,6) END
+        AS source_charge_rate,
+      CASE WHEN COALESCE(parsed.evidence_json->>'source_charge_ex_vat',
+          parsed.source_basis_json->>'source_charge_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND(COALESCE(parsed.evidence_json->>'source_charge_ex_vat',
+          parsed.source_basis_json->>'source_charge_ex_vat')::numeric,2) END
+        AS source_charge_ex_vat,
+      CASE
+        WHEN COALESCE(parsed.evidence_json->>'component_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((parsed.evidence_json->>'component_amount_ex_vat')::numeric,2)
+        WHEN COALESCE(parsed.evidence_json->>'source_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((parsed.evidence_json->>'source_amount_ex_vat')::numeric,2)
+        WHEN COALESCE(parsed.evidence_json->>'source_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((parsed.evidence_json->>'source_pay_ex_vat')::numeric,2)
+        WHEN COALESCE(parsed.source_basis_json->>'source_amount_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((parsed.source_basis_json->>'source_amount_ex_vat')::numeric,2)
+        WHEN COALESCE(parsed.source_basis_json->>'source_pay_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND((parsed.source_basis_json->>'source_pay_ex_vat')::numeric,2)
+        WHEN COALESCE(parsed.evidence_json->>'source_units',parsed.source_basis_json->>'source_units','')
+            ~ '^-?\d+(\.\d+)?$'
+          AND COALESCE(parsed.evidence_json->>'source_rate',parsed.source_basis_json->>'source_rate','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN ROUND(COALESCE(parsed.evidence_json->>'source_units',
+            parsed.source_basis_json->>'source_units')::numeric
+            *COALESCE(parsed.evidence_json->>'source_rate',
+              parsed.source_basis_json->>'source_rate')::numeric,2)
+      END AS allocated_amount_ex_vat,
+      CASE
+        WHEN parsed.evidence_origin IN ('CASE_COMPONENT','CASE_BUCKET_RESOLUTION',
+            'CORRECTION_BUCKET_RESOLUTION','SOURCE_BASIS_CORRECTION_RESIDUAL',
+            'SNAPSHOT_CORRECTION_RESIDUAL','RESOLUTION_CORRECTION_RESIDUAL')
+          THEN COALESCE(parsed.evidence_json->>'component_amount_ex_vat',
+            parsed.evidence_json->>'source_amount_ex_vat',parsed.evidence_json->>'source_pay_ex_vat',
+            CASE WHEN COALESCE(parsed.evidence_json->>'source_units','') ~ '^-?\d+(\.\d+)?$'
+              AND COALESCE(parsed.evidence_json->>'source_rate','') ~ '^-?\d+(\.\d+)?$'
+              THEN 'DERIVED_UNITS_RATE' END) IS NOT NULL
+        WHEN parsed.evidence_origin='TOP_LEVEL_SOURCE_BASIS'
+          THEN COALESCE(parsed.source_basis_json->>'source_amount_ex_vat',
+            parsed.source_basis_json->>'source_pay_ex_vat') IS NOT NULL
+        ELSE false END AS allocation_claimed
+    FROM nested_evidence_parsed parsed
+  ), nested_evidence_digest AS MATERIALIZED (
+    SELECT normalized.*,md5(jsonb_build_object(
+      'evidence_contract_version',1,
+      'economic_key_type',normalized.economic_key_type,
+      'economic_key_value',normalized.economic_key_value,
+      'source_family_key',normalized.source_family_key,
+      'physical_bucket_key',normalized.direct_physical_bucket_key,
+      'component_member_identity',normalized.component_member_identity,
+      'bucket_code',normalized.bucket_code,
+      'source_basis_fingerprint',normalized.source_basis_fingerprint,
+      'component_fingerprint',normalized.component_fingerprint,
+      'source_units',normalized.source_units,
+      'source_rate',normalized.source_rate,
+      'source_charge_rate',normalized.source_charge_rate,
+      'source_amount_ex_vat',normalized.allocated_amount_ex_vat)::text)
+        AS logical_evidence_digest
+    FROM nested_evidence_normalized normalized
+  ), nested_evidence_preferred AS MATERIALIZED (
+    SELECT normalized.*
+    FROM nested_evidence_digest normalized
+    WHERE NOT (normalized.evidence_origin='CASE_COMPONENT'
+      AND EXISTS(
+        SELECT 1 FROM nested_evidence_digest specific
+        WHERE specific.fact_identity=normalized.fact_identity
+          AND specific.evidence_container_identity IS NOT DISTINCT FROM
+            normalized.evidence_container_identity
+          AND specific.evidence_origin='CASE_BUCKET_RESOLUTION'
+          AND specific.bucket_code IS NOT NULL
+          AND specific.allocation_claimed
+          AND specific.allocated_amount_ex_vat IS NOT NULL))
+  ), nested_evidence_deduped AS MATERIALIZED (
+    SELECT ranked.*
+    FROM (
+      SELECT preferred.*,ROW_NUMBER() OVER(PARTITION BY preferred.fact_identity,
+        preferred.logical_evidence_digest
+        ORDER BY preferred.evidence_priority,preferred.evidence_origin,
+          preferred.direct_physical_bucket_key NULLS LAST,
+          preferred.source_basis_fingerprint NULLS LAST,
+          preferred.component_fingerprint NULLS LAST)::integer AS evidence_rank
+      FROM nested_evidence_preferred preferred
+    ) ranked
+    WHERE ranked.evidence_rank=1
+  ), exact_allocation_candidates AS MATERIALIZED (
+    SELECT evidence.*
+    FROM nested_evidence_deduped evidence
+    WHERE evidence.allocation_claimed AND evidence.allocated_amount_ex_vat IS NOT NULL
+      AND ABS(evidence.allocated_amount_ex_vat)>0.005
+      AND (evidence.direct_physical_bucket_key IS NOT NULL
+        OR (evidence.component_member_identity IS NOT NULL AND evidence.bucket_code IS NOT NULL))
+      AND (evidence.parent_amount_ex_vat=0
+        OR SIGN(evidence.allocated_amount_ex_vat)=SIGN(evidence.parent_amount_ex_vat)
+        OR evidence.component_fallback='WORKED_TIME_AMOUNT')
+  ), nested_allocation_failures AS MATERIALIZED (
+    SELECT parent.timesheet_id,parent.economic_key_type,parent.economic_key_value,
+      MIN(failure.failure_rank) AS failure_rank,
+      (array_agg(failure.failure_code ORDER BY failure.failure_rank,failure.failure_code))[1]
+        AS failure_code
+    FROM sealed_parent_facts parent
+    JOIN (
+      SELECT shape.fact_identity,10 AS failure_rank,shape.failure_code
+      FROM nested_evidence_shape_failures shape
+      UNION ALL
+      SELECT evidence.fact_identity,20,'RATE_AUTHORITY_NESTED_AMOUNT_SIGN_MISMATCH'::text
+      FROM nested_evidence_deduped evidence
+      WHERE evidence.allocation_claimed AND evidence.allocated_amount_ex_vat IS NOT NULL
+        AND ABS(evidence.allocated_amount_ex_vat)>0.005
+        AND evidence.parent_amount_ex_vat<>0
+        AND SIGN(evidence.allocated_amount_ex_vat)<>SIGN(evidence.parent_amount_ex_vat)
+        AND evidence.component_fallback IS DISTINCT FROM 'WORKED_TIME_AMOUNT'
+    ) failure USING(fact_identity)
+    GROUP BY parent.timesheet_id,parent.economic_key_type,parent.economic_key_value
+  ), exact_allocation_matched AS MATERIALIZED (
+    SELECT allocation.*,
+      COALESCE(match.matched_physical_bucket_key,
+        CASE WHEN allocation.direct_physical_bucket_key IS NOT NULL
+          THEN allocation.direct_physical_bucket_key
+          WHEN allocation.component_member_identity IS NOT NULL AND allocation.bucket_code IS NOT NULL
+            THEN concat_ws('|','RATE_BUCKET_V1',allocation.timesheet_id::text,
+              allocation.source_family_key,allocation.economic_key_type,
+              allocation.economic_key_value,allocation.component_member_identity,
+              allocation.bucket_code) END) AS physical_bucket_key,
+      COALESCE(match.match_authority,
+        CASE WHEN allocation.direct_physical_bucket_key IS NOT NULL THEN 'PHYSICAL_BUCKET_KEY'
+          ELSE 'SEALED_NESTED_IDENTITY' END) AS match_authority,
+      COALESCE(match.matched_count,0) AS matched_count
+    FROM exact_allocation_candidates allocation
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*)::integer AS matched_count,MIN(candidate.physical_bucket_key)
+          AS matched_physical_bucket_key,MIN(candidate.match_authority) AS match_authority
+      FROM (
+        SELECT bucket.parsed_physical_bucket_key AS physical_bucket_key,
+          CASE
+            WHEN allocation.direct_physical_bucket_key IS NOT NULL
+              AND bucket.parsed_physical_bucket_key=allocation.direct_physical_bucket_key
+              THEN 'PHYSICAL_BUCKET_KEY'
+            WHEN bucket.parsed_component_member_identity=allocation.component_member_identity
+              AND bucket.parsed_bucket_code=allocation.bucket_code THEN 'STRUCTURAL_IDENTITY'
+            WHEN bucket.parsed_bucket_code=allocation.bucket_code THEN 'BUCKET_RESOLUTION'
+            ELSE 'SOLE_BUCKET' END AS match_authority,
+          CASE
+            WHEN allocation.direct_physical_bucket_key IS NOT NULL
+              AND bucket.parsed_physical_bucket_key=allocation.direct_physical_bucket_key THEN 10
+            WHEN bucket.parsed_component_member_identity=allocation.component_member_identity
+              AND bucket.parsed_bucket_code=allocation.bucket_code THEN 20
+            WHEN bucket.parsed_bucket_code=allocation.bucket_code THEN 30 ELSE 40 END AS match_rank
+        FROM bucket_validated bucket
+        WHERE bucket.validated_failure IS NULL
+          AND bucket.timesheet_id=allocation.timesheet_id
+          AND UPPER(BTRIM(bucket.economic_key_type))=allocation.economic_key_type
+          AND BTRIM(bucket.economic_key_value)=allocation.economic_key_value
+          AND (bucket.parsed_physical_bucket_key=allocation.direct_physical_bucket_key
+            OR (bucket.parsed_component_member_identity=allocation.component_member_identity
+              AND bucket.parsed_bucket_code=allocation.bucket_code)
+            OR bucket.parsed_bucket_code=allocation.bucket_code
+            OR (SELECT COUNT(*) FROM bucket_validated sole
+              WHERE sole.validated_failure IS NULL
+                AND sole.timesheet_id=allocation.timesheet_id
+                AND UPPER(BTRIM(sole.economic_key_type))=allocation.economic_key_type
+                AND BTRIM(sole.economic_key_value)=allocation.economic_key_value)=1)
+      ) candidate
+      WHERE candidate.match_rank=(SELECT MIN(ranked.match_rank) FROM (
+        SELECT CASE
+          WHEN allocation.direct_physical_bucket_key IS NOT NULL
+            AND bucket_rank.parsed_physical_bucket_key=allocation.direct_physical_bucket_key THEN 10
+          WHEN bucket_rank.parsed_component_member_identity=allocation.component_member_identity
+            AND bucket_rank.parsed_bucket_code=allocation.bucket_code THEN 20
+          WHEN bucket_rank.parsed_bucket_code=allocation.bucket_code THEN 30 ELSE 40 END AS match_rank
+        FROM bucket_validated bucket_rank
+        WHERE bucket_rank.validated_failure IS NULL
+          AND bucket_rank.timesheet_id=allocation.timesheet_id
+          AND UPPER(BTRIM(bucket_rank.economic_key_type))=allocation.economic_key_type
+          AND BTRIM(bucket_rank.economic_key_value)=allocation.economic_key_value
+          AND (bucket_rank.parsed_physical_bucket_key=allocation.direct_physical_bucket_key
+            OR (bucket_rank.parsed_component_member_identity=allocation.component_member_identity
+              AND bucket_rank.parsed_bucket_code=allocation.bucket_code)
+            OR bucket_rank.parsed_bucket_code=allocation.bucket_code
+            OR (SELECT COUNT(*) FROM bucket_validated sole_rank
+              WHERE sole_rank.validated_failure IS NULL
+                AND sole_rank.timesheet_id=allocation.timesheet_id
+                AND UPPER(BTRIM(sole_rank.economic_key_type))=allocation.economic_key_type
+                AND BTRIM(sole_rank.economic_key_value)=allocation.economic_key_value)=1)
+      ) ranked)
+    ) match ON true
+  ), parent_allocation_totals AS MATERIALIZED (
+    SELECT parent.fact_identity,ROUND(COALESCE(SUM(CASE
+        WHEN allocation.economic_key_type IN ('TS_DAY','TS_TOTAL')
+          AND allocation.matched_count=0
+          AND allocation.component_fallback IS DISTINCT FROM 'WORKED_TIME_AMOUNT'
+          THEN 0 ELSE allocation.allocated_amount_ex_vat END),0),2)
+        AS exact_allocated_ex_vat,
+      ROUND(SUM(CASE WHEN allocation.economic_key_type IN ('TS_DAY','TS_TOTAL')
+          AND allocation.matched_count=0
+          AND allocation.component_fallback IS DISTINCT FROM 'WORKED_TIME_AMOUNT'
+          THEN 0 ELSE allocation.source_charge_ex_vat END),2)
+        AS exact_allocated_charge_ex_vat,
+      BOOL_OR(allocation.component_fallback='WORKED_TIME_AMOUNT') AS has_explicit_residual
+    FROM sealed_parent_facts parent
+    LEFT JOIN exact_allocation_matched allocation USING(fact_identity)
+    GROUP BY parent.fact_identity
+  ), parent_reconciliation_failures AS MATERIALIZED (
+    SELECT parent.timesheet_id,parent.economic_key_type,parent.economic_key_value,
+      MIN(failure.failure_rank) AS failure_rank,
+      (array_agg(failure.failure_code ORDER BY failure.failure_rank,failure.failure_code))[1]
+        AS failure_code
+    FROM sealed_parent_facts parent
+    JOIN parent_allocation_totals total USING(fact_identity)
+    CROSS JOIN LATERAL (VALUES
+      (CASE WHEN NOT COALESCE(total.has_explicit_residual,false)
+          AND parent.parent_amount_ex_vat<>0 AND total.exact_allocated_ex_vat<>0
+          AND SIGN(total.exact_allocated_ex_vat)=SIGN(parent.parent_amount_ex_vat)
+          AND ABS(total.exact_allocated_ex_vat)>ABS(parent.parent_amount_ex_vat)+0.005
+        THEN 30 END,
+       CASE WHEN NOT COALESCE(total.has_explicit_residual,false)
+          AND parent.parent_amount_ex_vat<>0 AND total.exact_allocated_ex_vat<>0
+          AND SIGN(total.exact_allocated_ex_vat)=SIGN(parent.parent_amount_ex_vat)
+          AND ABS(total.exact_allocated_ex_vat)>ABS(parent.parent_amount_ex_vat)+0.005
+        THEN 'RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED' END),
+      (CASE WHEN parent.authority_kind='BASELINE'
+          AND parent.economic_key_type IN ('TS_DAY','TS_TOTAL')
+          AND ABS(ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2))>0.005
+          AND parent.parent_source_charge_ex_vat IS NULL THEN 40 END,
+       CASE WHEN parent.authority_kind='BASELINE'
+          AND parent.economic_key_type IN ('TS_DAY','TS_TOTAL')
+          AND ABS(ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2))>0.005
+          AND parent.parent_source_charge_ex_vat IS NULL
+        THEN 'RATE_AUTHORITY_PARENT_SOURCE_CHARGE_MISSING' END)
+      ,(CASE WHEN ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat
+            - ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2),2)<>0
+          THEN 50 END,
+        CASE WHEN ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat
+            - ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2),2)<>0
+          THEN 'RATE_AUTHORITY_PARENT_COMPONENT_RECONCILIATION_MISMATCH' END)
+    ) failure(failure_rank,failure_code)
+    WHERE failure.failure_code IS NOT NULL
+    GROUP BY parent.timesheet_id,parent.economic_key_type,parent.economic_key_value
+  ), sealed_physical_amount_facts AS MATERIALIZED (
+    SELECT allocation.fact_identity,allocation.authority_kind,allocation.timesheet_id,
+      allocation.economic_key_type,allocation.economic_key_value,
+      allocation.allocated_amount_ex_vat AS authority_amount_ex_vat,
+      allocation.source_basis_json,allocation.physical_bucket_key AS direct_physical_bucket_key,
+      allocation.component_member_identity AS direct_component_member_identity,
+      allocation.source_family_key AS direct_source_family_key,
+      allocation.bucket_code,allocation.segment_id,allocation.segment_key,
+      allocation.segment_stable_key,allocation.source_units,allocation.source_rate,
+      allocation.source_charge_rate,allocation.source_charge_ex_vat,
+      COALESCE(allocation.evidence_source_pay_method,allocation.sealed_source_pay_method)
+        AS sealed_source_pay_method,
+      allocation.match_authority,(allocation.component_fallback='WORKED_TIME_AMOUNT') AS is_residual
+    FROM exact_allocation_matched allocation
+    WHERE allocation.physical_bucket_key IS NOT NULL AND allocation.matched_count<=1
+      AND NOT (allocation.economic_key_type IN ('TS_DAY','TS_TOTAL')
+        AND allocation.matched_count=0
+        AND allocation.component_fallback IS DISTINCT FROM 'WORKED_TIME_AMOUNT')
+    UNION ALL
+    SELECT parent.fact_identity||':RESIDUAL',parent.authority_kind,parent.timesheet_id,
+      parent.economic_key_type,parent.economic_key_value,
+      ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2),
+      jsonb_build_object('timesheet_id',parent.timesheet_id::text,
+        'work_date',CASE WHEN parent.economic_key_type='TS_DAY'
+          THEN parent.economic_key_value END,'component_fallback','WORKED_TIME_AMOUNT',
+        'residual_contract_version',1),
+      concat_ws('|','RATE_BUCKET_V1',parent.timesheet_id::text,
+        'timesheet:'||parent.timesheet_id::text,parent.economic_key_type,
+        parent.economic_key_value,
+        CASE WHEN parent.economic_key_type='EXPENSE_CODE'
+          THEN 'expense:'||UPPER(parent.economic_key_value)
+          WHEN parent.economic_key_type='ADJUSTMENT_CODE'
+          THEN 'adjustment:'||parent.economic_key_value
+          ELSE 'worked-time-residual:'||parent.economic_key_type||':'||parent.economic_key_value END,
+        'FIXED'),
+      CASE WHEN parent.economic_key_type='EXPENSE_CODE'
+          THEN 'expense:'||UPPER(parent.economic_key_value)
+        WHEN parent.economic_key_type='ADJUSTMENT_CODE'
+          THEN 'adjustment:'||parent.economic_key_value
+        ELSE 'worked-time-residual:'||parent.economic_key_type||':'||parent.economic_key_value END,
+      'timesheet:'||parent.timesheet_id::text,'FIXED',NULL,NULL,NULL,NULL,NULL,NULL,
+      CASE WHEN parent.authority_kind='BASELINE'
+        THEN ROUND(parent.parent_source_charge_ex_vat
+          - COALESCE(total.exact_allocated_charge_ex_vat,0),2) END,
+      parent.sealed_source_pay_method,'ECONOMIC_RESIDUAL',true
+    FROM sealed_parent_facts parent
+    JOIN parent_allocation_totals total USING(fact_identity)
+    WHERE ABS(ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2))>0.005
+      AND parent.economic_key_type<>'ADDITIONAL_CODE'
+      AND NOT EXISTS(SELECT 1 FROM nested_allocation_failures failure
+        WHERE failure.timesheet_id=parent.timesheet_id
+          AND failure.economic_key_type=parent.economic_key_type
+          AND failure.economic_key_value=parent.economic_key_value)
+      AND NOT EXISTS(SELECT 1 FROM parent_reconciliation_failures failure
+        WHERE failure.timesheet_id=parent.timesheet_id
+          AND failure.economic_key_type=parent.economic_key_type
+          AND failure.economic_key_value=parent.economic_key_value)
   ), sealed_physical_amount_attribution AS MATERIALIZED (
-    SELECT match.timesheet_id,match.economic_key_type,match.economic_key_value,
-      match.matched_physical_bucket_key,
-      ROUND(COALESCE(SUM(match.authority_amount_ex_vat) FILTER(
-        WHERE match.authority_kind='BASELINE'),0),2) AS baseline_ex_vat,
-      ROUND(COALESCE(SUM(match.authority_amount_ex_vat) FILTER(
-        WHERE match.authority_kind='RESERVATION'),0),2) AS reserved_ex_vat,
-      COALESCE(jsonb_agg(DISTINCT match.match_authority ORDER BY match.match_authority) FILTER(
-        WHERE match.match_authority IS NOT NULL),'[]'::jsonb) AS match_authorities
-    FROM sealed_physical_amount_match_counts match
-    WHERE match.matched_bucket_count=1
-    GROUP BY match.timesheet_id,match.economic_key_type,match.economic_key_value,
-      match.matched_physical_bucket_key
+    SELECT fact.timesheet_id,fact.economic_key_type,fact.economic_key_value,
+      fact.direct_physical_bucket_key AS matched_physical_bucket_key,
+      ROUND(COALESCE(SUM(fact.authority_amount_ex_vat) FILTER(
+        WHERE fact.authority_kind='BASELINE'),0),2) AS baseline_ex_vat,
+      ROUND(COALESCE(SUM(fact.authority_amount_ex_vat) FILTER(
+        WHERE fact.authority_kind='RESERVATION'),0),2) AS reserved_ex_vat,
+      ROUND(SUM(fact.source_charge_ex_vat) FILTER(
+        WHERE fact.authority_kind='BASELINE'),2) AS baseline_source_charge_ex_vat,
+      COALESCE(jsonb_agg(DISTINCT fact.match_authority ORDER BY fact.match_authority),
+        '[]'::jsonb) AS match_authorities
+    FROM sealed_physical_amount_facts fact
+    GROUP BY fact.timesheet_id,fact.economic_key_type,fact.economic_key_value,
+      fact.direct_physical_bucket_key
   ), sealed_physical_amount_ambiguity AS MATERIALIZED (
-    SELECT match.timesheet_id,match.economic_key_type,match.economic_key_value,
-      BOOL_OR(match.authority_kind='BASELINE'
-        AND ABS(match.authority_amount_ex_vat)>0.005
-        AND match.matched_bucket_count<>1) AS baseline_ambiguous,
-      BOOL_OR(match.authority_kind='RESERVATION'
-        AND ABS(match.authority_amount_ex_vat)>0.005
-        AND match.matched_bucket_count<>1) AS reservation_ambiguous
-    FROM sealed_physical_amount_match_counts match
-    GROUP BY match.timesheet_id,match.economic_key_type,match.economic_key_value
+    SELECT parent.timesheet_id,parent.economic_key_type,parent.economic_key_value,
+      BOOL_OR(parent.authority_kind='BASELINE' AND (
+        EXISTS(SELECT 1 FROM exact_allocation_matched allocation
+          WHERE allocation.fact_identity=parent.fact_identity AND allocation.matched_count>1)
+        OR ABS(total.exact_allocated_ex_vat)>ABS(parent.parent_amount_ex_vat)+0.005))
+        AS baseline_ambiguous,
+      BOOL_OR(parent.authority_kind='RESERVATION' AND (
+        EXISTS(SELECT 1 FROM exact_allocation_matched allocation
+          WHERE allocation.fact_identity=parent.fact_identity AND allocation.matched_count>1)
+        OR ABS(total.exact_allocated_ex_vat)>ABS(parent.parent_amount_ex_vat)+0.005))
+        AS reservation_ambiguous
+    FROM sealed_parent_facts parent
+    JOIN parent_allocation_totals total USING(fact_identity)
+    GROUP BY parent.timesheet_id,parent.economic_key_type,parent.economic_key_value
   ), bucket_attributed AS MATERIALIZED (
     SELECT bucket.*,
       ROUND(COALESCE(attribution.baseline_ex_vat,0),2) AS attributed_baseline_ex_vat,
@@ -421,6 +879,10 @@ AS $function$
       ROUND(bucket.parsed_source_pay_ex_vat
         - COALESCE(attribution.baseline_ex_vat,0)
         - COALESCE(attribution.reserved_ex_vat,0),2) AS attributed_outstanding_ex_vat,
+      (bucket.parsed_component_kind<>'WORKED_TIME'
+        OR (COALESCE(bucket.parsed_source_units,0)>0
+          AND bucket.parsed_source_rate IS NOT NULL
+          AND bucket.parsed_source_pay_ex_vat>0)) AS builder_bucket_eligible,
       COALESCE(attribution.match_authorities,'[]'::jsonb) AS attribution_authorities
     FROM bucket_validated bucket
     LEFT JOIN sealed_physical_amount_attribution attribution
@@ -428,19 +890,193 @@ AS $function$
      AND attribution.economic_key_type=UPPER(BTRIM(bucket.economic_key_type))
      AND attribution.economic_key_value=BTRIM(bucket.economic_key_value)
      AND attribution.matched_physical_bucket_key=bucket.parsed_physical_bucket_key
-  ), economic_physical_totals AS MATERIALIZED (
+  ), bucket_builder_expected AS MATERIALIZED (
+    SELECT bucket.*,
+      ROUND(bucket.parsed_source_pay_ex_vat-bucket.attributed_reserved_ex_vat,2)
+        AS builder_component_amount_ex_vat,
+      CASE WHEN bucket.parsed_source_pay_ex_vat<>0 THEN ROUND(
+        bucket.parsed_source_charge_ex_vat
+          *((bucket.parsed_source_pay_ex_vat-bucket.attributed_reserved_ex_vat)
+            /bucket.parsed_source_pay_ex_vat),2)
+        ELSE bucket.parsed_source_charge_ex_vat END AS builder_source_charge_ex_vat,
+      CASE WHEN bucket.parsed_source_units>0 AND bucket.parsed_source_rate IS NOT NULL
+          AND ROUND(bucket.parsed_source_units*bucket.parsed_source_rate,2)=
+            ROUND(bucket.parsed_source_pay_ex_vat-bucket.attributed_reserved_ex_vat,2)
+        THEN bucket.parsed_source_units END AS builder_source_units,
+      CASE WHEN bucket.parsed_source_units>0 AND bucket.parsed_source_rate IS NOT NULL
+          AND ROUND(bucket.parsed_source_units*bucket.parsed_source_rate,2)=
+            ROUND(bucket.parsed_source_pay_ex_vat-bucket.attributed_reserved_ex_vat,2)
+        THEN bucket.parsed_source_rate END AS builder_source_rate,
+      CASE WHEN bucket.parsed_source_units>0 AND bucket.parsed_source_rate IS NOT NULL
+          AND ROUND(bucket.parsed_source_units*bucket.parsed_source_rate,2)=
+            ROUND(bucket.parsed_source_pay_ex_vat-bucket.attributed_reserved_ex_vat,2)
+        THEN bucket.parsed_source_charge_rate END AS builder_source_charge_rate
+    FROM bucket_attributed bucket
+  ), synthetic_baseline_sources AS MATERIALIZED (
+    SELECT attribution.timesheet_id,attribution.economic_key_type,attribution.economic_key_value,
+      attribution.matched_physical_bucket_key AS physical_bucket_key,
+      CASE WHEN BOOL_OR(fact.is_residual) THEN 'WORKED_TIME_RESIDUAL'
+        WHEN attribution.economic_key_type IN ('TS_DAY','TS_TOTAL') THEN 'WORKED_TIME'
+        WHEN attribution.economic_key_type='ADDITIONAL_CODE' THEN 'ADDITIONAL_UNIT'
+        WHEN attribution.economic_key_type='EXPENSE_CODE' THEN 'EXPENSE'
+        ELSE 'ADJUSTMENT' END AS component_kind,
+      (array_agg(fact.direct_component_member_identity ORDER BY fact.is_residual DESC,
+        fact.fact_identity))[1] AS component_member_identity,
+      (array_agg(fact.segment_id ORDER BY fact.is_residual DESC,fact.fact_identity))[1]
+        AS segment_id,
+      (array_agg(fact.segment_key ORDER BY fact.is_residual DESC,fact.fact_identity))[1]
+        AS segment_key,
+      (array_agg(fact.segment_stable_key ORDER BY fact.is_residual DESC,fact.fact_identity))[1]
+        AS segment_stable_key,
+      (array_agg(fact.bucket_code ORDER BY fact.is_residual DESC,fact.fact_identity))[1]
+        AS bucket_code,
+      NULL::numeric AS source_units,NULL::numeric AS source_rate,
+      NULL::numeric AS source_charge_rate,0::numeric AS truth_ex_vat,
+      attribution.baseline_ex_vat,attribution.reserved_ex_vat,
+      -COALESCE(attribution.baseline_source_charge_ex_vat,0) AS source_charge_ex_vat,
+      MIN(COALESCE(fact.sealed_source_pay_method,context.source_pay_method)) AS source_pay_method,
+      context.target_pay_method,context.umbrella_id,context.umbrella_enabled,
+      context.umbrella_vat_chargeable,context.erni_pct,context.vat_rate_pct,
+      string_agg(fact.fact_identity||':'||fact.authority_amount_ex_vat::text,''
+        ORDER BY fact.fact_identity) AS revision_identity,
+      context.target_authority_digest,context.conversion_context_digest,
+      (array_agg(fact.source_basis_json ORDER BY fact.is_residual DESC,fact.fact_identity))[1]
+        AS source_basis_json,
+      attribution.match_authorities,BOOL_OR(fact.is_residual) AS is_residual
+    FROM sealed_physical_amount_attribution attribution
+    JOIN sealed_physical_amount_facts fact
+      ON fact.timesheet_id=attribution.timesheet_id
+     AND fact.economic_key_type=attribution.economic_key_type
+     AND fact.economic_key_value=attribution.economic_key_value
+     AND fact.direct_physical_bucket_key=attribution.matched_physical_bucket_key
+    CROSS JOIN candidate_sealed_context context
+    WHERE NOT EXISTS(
+      SELECT 1 FROM bucket_validated live_bucket
+      WHERE live_bucket.validated_failure IS NULL
+        AND live_bucket.timesheet_id=attribution.timesheet_id
+        AND live_bucket.parsed_physical_bucket_key=attribution.matched_physical_bucket_key)
+    GROUP BY attribution.timesheet_id,attribution.economic_key_type,
+      attribution.economic_key_value,attribution.matched_physical_bucket_key,
+      attribution.baseline_ex_vat,attribution.reserved_ex_vat,
+      attribution.baseline_source_charge_ex_vat,attribution.match_authorities,
+      context.target_pay_method,context.umbrella_id,context.umbrella_enabled,
+      context.umbrella_vat_chargeable,context.erni_pct,context.vat_rate_pct,
+      context.target_authority_digest,context.conversion_context_digest
+  ), truth_residual_sources AS MATERIALIZED (
+    SELECT expected.timesheet_id,expected.economic_key_type,expected.economic_key_value,
+      concat_ws('|','RATE_BUCKET_V1',expected.timesheet_id::text,
+        'timesheet:'||expected.timesheet_id::text,expected.economic_key_type,
+        expected.economic_key_value,
+        'worked-time-residual:'||expected.economic_key_type||':'||expected.economic_key_value,
+        'FIXED') AS physical_bucket_key,
+      'WORKED_TIME_RESIDUAL'::text AS component_kind,
+      'worked-time-residual:'||expected.economic_key_type||':'||expected.economic_key_value
+        AS component_member_identity,
+      NULL::text AS segment_id,NULL::text AS segment_key,NULL::text AS segment_stable_key,
+      'FIXED'::text AS bucket_code,NULL::numeric AS source_units,NULL::numeric AS source_rate,
+      NULL::numeric AS source_charge_rate,
+      ROUND(expected.truth_ex_vat-COALESCE(represented.truth_ex_vat,0),2) AS truth_ex_vat,
+      0::numeric AS baseline_ex_vat,0::numeric AS reserved_ex_vat,
+      represented.residual_source_charge_ex_vat AS source_charge_ex_vat,
+      context.source_pay_method,context.target_pay_method,context.umbrella_id,
+      context.umbrella_enabled,context.umbrella_vat_chargeable,context.erni_pct,
+      context.vat_rate_pct,
+      'TRUTH_RESIDUAL:'||expected.timesheet_id::text||':'||expected.economic_key_type||':'
+        ||expected.economic_key_value AS revision_identity,
+      context.target_authority_digest,context.conversion_context_digest,
+      jsonb_build_object('timesheet_id',expected.timesheet_id::text,
+        'work_date',CASE WHEN expected.economic_key_type='TS_DAY'
+          THEN expected.economic_key_value END,
+        'component_fallback','WORKED_TIME_AMOUNT','residual_contract_version',1)
+        AS source_basis_json,
+      jsonb_build_array('ECONOMIC_TRUTH_RESIDUAL') AS match_authorities,true AS is_residual
+    FROM economic_totals expected
+    CROSS JOIN candidate_sealed_context context
+    LEFT JOIN LATERAL (
+      SELECT ROUND(COALESCE(SUM(bucket.parsed_source_pay_ex_vat)
+          FILTER(WHERE bucket.builder_bucket_eligible),0),2) AS truth_ex_vat,
+        ROUND(COALESCE(SUM(bucket.parsed_source_charge_ex_vat)
+          FILTER(WHERE NOT bucket.builder_bucket_eligible),0),2)
+          AS residual_source_charge_ex_vat
+      FROM bucket_attributed bucket
+      WHERE bucket.validated_failure IS NULL
+        AND bucket.timesheet_id=expected.timesheet_id
+        AND UPPER(BTRIM(bucket.economic_key_type))=expected.economic_key_type
+        AND BTRIM(bucket.economic_key_value)=expected.economic_key_value
+    ) represented ON true
+    WHERE expected.economic_key_type IN ('TS_DAY','TS_TOTAL')
+      AND ABS(ROUND(expected.truth_ex_vat-COALESCE(represented.truth_ex_vat,0),2))>0.005
+  ), synthetic_component_sources AS MATERIALIZED (
+    SELECT * FROM synthetic_baseline_sources
+    UNION ALL SELECT * FROM truth_residual_sources
+  ), synthetic_bucket_attributed AS MATERIALIZED (
+    SELECT source.timesheet_id,source.economic_key_type,source.economic_key_value,
+      source.physical_bucket_key,
+      CASE WHEN BOOL_OR(source.is_residual) THEN 'WORKED_TIME_RESIDUAL'
+        ELSE MIN(source.component_kind) END AS component_kind,
+      (array_agg(source.component_member_identity ORDER BY source.is_residual DESC,
+        source.revision_identity))[1] AS component_member_identity,
+      (array_agg(source.segment_id ORDER BY source.is_residual DESC,source.revision_identity))[1]
+        AS segment_id,
+      (array_agg(source.segment_key ORDER BY source.is_residual DESC,source.revision_identity))[1]
+        AS segment_key,
+      (array_agg(source.segment_stable_key ORDER BY source.is_residual DESC,
+        source.revision_identity))[1] AS segment_stable_key,
+      (array_agg(source.bucket_code ORDER BY source.is_residual DESC,source.revision_identity))[1]
+        AS bucket_code,
+      CASE WHEN BOOL_OR(source.is_residual) THEN 90 ELSE 7 END AS bucket_sort_ordinal,
+      NULL::numeric AS source_units,NULL::numeric AS source_rate,
+      NULL::numeric AS source_charge_rate,
+      ROUND(SUM(source.truth_ex_vat),2) AS truth_ex_vat,
+      ROUND(SUM(source.baseline_ex_vat),2) AS baseline_ex_vat,
+      ROUND(SUM(source.reserved_ex_vat),2) AS reserved_ex_vat,
+      ROUND(SUM(source.truth_ex_vat)-SUM(source.baseline_ex_vat)-SUM(source.reserved_ex_vat),2)
+        AS outstanding_ex_vat,
+      ROUND(SUM(source.source_charge_ex_vat),2) AS source_charge_ex_vat,
+      MIN(source.source_pay_method) AS source_pay_method,MIN(source.target_pay_method)
+        AS target_pay_method,MIN(source.umbrella_id::text)::uuid AS umbrella_id,
+      BOOL_AND(source.umbrella_enabled) AS umbrella_enabled,
+      BOOL_AND(source.umbrella_vat_chargeable) AS umbrella_vat_chargeable,
+      MIN(source.erni_pct) AS erni_pct,MIN(source.vat_rate_pct) AS vat_rate_pct,
+      md5(string_agg(source.revision_identity,'' ORDER BY source.revision_identity))
+        AS financial_revision_digest,
+      MIN(source.target_authority_digest) AS target_authority_digest,
+      MIN(source.conversion_context_digest) AS conversion_context_digest,
+      (array_agg(source.source_basis_json ORDER BY source.is_residual DESC,
+        source.revision_identity))[1] AS source_basis_json,
+      COALESCE(jsonb_agg(DISTINCT authority.value ORDER BY authority.value)
+        FILTER(WHERE authority.value IS NOT NULL), '[]'::jsonb)
+        AS match_authorities,BOOL_OR(source.is_residual) AS is_residual
+    FROM synthetic_component_sources source
+    LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(source.match_authorities,'[]'::jsonb))
+      authority(value) ON true
+    GROUP BY source.timesheet_id,source.economic_key_type,source.economic_key_value,
+      source.physical_bucket_key
+  ), physical_amount_rows AS MATERIALIZED (
     SELECT bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)) AS economic_key_type,
       BTRIM(bucket.economic_key_value) AS economic_key_value,
-      ROUND(COALESCE(SUM(bucket.parsed_source_pay_ex_vat),0),2) AS truth_ex_vat,
-      ROUND(COALESCE(SUM(bucket.attributed_baseline_ex_vat),0),2) AS baseline_ex_vat,
-      ROUND(COALESCE(SUM(bucket.attributed_reserved_ex_vat),0),2) AS reserved_ex_vat
-    FROM bucket_attributed bucket
-    WHERE bucket.validated_failure IS NULL
-    GROUP BY bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)),
-      BTRIM(bucket.economic_key_value)
+      bucket.parsed_source_pay_ex_vat AS truth_ex_vat,
+      bucket.attributed_baseline_ex_vat AS baseline_ex_vat,
+      bucket.attributed_reserved_ex_vat AS reserved_ex_vat
+    FROM bucket_builder_expected bucket
+    WHERE bucket.validated_failure IS NULL AND bucket.builder_bucket_eligible
+    UNION ALL
+    SELECT synthetic.timesheet_id,synthetic.economic_key_type,synthetic.economic_key_value,
+      synthetic.truth_ex_vat,synthetic.baseline_ex_vat,synthetic.reserved_ex_vat
+    FROM synthetic_bucket_attributed synthetic
+  ), economic_physical_totals AS MATERIALIZED (
+    SELECT bucket.timesheet_id,bucket.economic_key_type,bucket.economic_key_value,
+      ROUND(COALESCE(SUM(bucket.truth_ex_vat),0),2) AS truth_ex_vat,
+      ROUND(COALESCE(SUM(bucket.baseline_ex_vat),0),2) AS baseline_ex_vat,
+      ROUND(COALESCE(SUM(bucket.reserved_ex_vat),0),2) AS reserved_ex_vat
+    FROM physical_amount_rows bucket
+    GROUP BY bucket.timesheet_id,bucket.economic_key_type,bucket.economic_key_value
   ), economic_failures AS MATERIALIZED (
     SELECT expected.timesheet_id,expected.economic_key_type,expected.economic_key_value,
       CASE
+        WHEN context.context_failure IS NOT NULL THEN context.context_failure
+        WHEN nested.failure_code IS NOT NULL THEN nested.failure_code
+        WHEN reconciliation.failure_code IS NOT NULL THEN reconciliation.failure_code
         WHEN actual.truth_ex_vat IS NULL OR actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
           THEN 'RATE_AUTHORITY_PARENT_PAY_MISMATCH'
         WHEN COALESCE(ambiguity.baseline_ambiguous,false)
@@ -451,15 +1087,114 @@ AS $function$
           THEN 'RATE_AUTHORITY_PHYSICAL_RESERVATION_REQUIRED'
       END AS failure_code
     FROM economic_totals expected
+    CROSS JOIN candidate_sealed_context context
+    LEFT JOIN nested_allocation_failures nested
+      USING(timesheet_id,economic_key_type,economic_key_value)
+    LEFT JOIN parent_reconciliation_failures reconciliation
+      USING(timesheet_id,economic_key_type,economic_key_value)
     LEFT JOIN economic_physical_totals actual
       USING(timesheet_id,economic_key_type,economic_key_value)
     LEFT JOIN sealed_physical_amount_ambiguity ambiguity
       USING(timesheet_id,economic_key_type,economic_key_value)
-    WHERE actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
+    WHERE context.context_failure IS NOT NULL
+       OR nested.failure_code IS NOT NULL
+       OR reconciliation.failure_code IS NOT NULL
+       OR actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
        OR COALESCE(ambiguity.baseline_ambiguous,false)
        OR actual.baseline_ex_vat IS DISTINCT FROM expected.baseline_ex_vat
        OR COALESCE(ambiguity.reservation_ambiguous,false)
        OR actual.reserved_ex_vat IS DISTINCT FROM expected.reserved_ex_vat
+  ), bucket_documents AS MATERIALIZED (
+    SELECT bucket.*,
+      jsonb_build_object(
+        'physical_bucket_version',2,
+        'physical_bucket_key',bucket.parsed_physical_bucket_key,
+        'component_kind',bucket.parsed_component_kind,
+        'component_member_identity',bucket.parsed_component_member_identity,
+        'bucket_code',bucket.parsed_bucket_code,
+        'source_units',bucket.builder_source_units,
+        'source_rate',bucket.builder_source_rate,
+        'source_charge_rate',bucket.builder_source_charge_rate,
+        'source_pay_ex_vat',bucket.parsed_source_pay_ex_vat,
+        'source_charge_ex_vat',bucket.builder_source_charge_ex_vat,
+        'baseline_source_pay_ex_vat',bucket.attributed_baseline_ex_vat,
+        'reserved_source_pay_ex_vat',bucket.attributed_reserved_ex_vat,
+        'outstanding_source_pay_ex_vat',bucket.attributed_outstanding_ex_vat,
+        'source_pay_method',bucket.parsed_source_pay_method,
+        'target_pay_method',bucket.parsed_target_pay_method) AS attributed_physical_canonical_json,
+      md5(jsonb_build_object(
+        'builder_comparison_version',1,'timesheet_id',bucket.timesheet_id::text,
+        'source_family_key',bucket.rate_authority#>>'{economic,source_family_key}',
+        'component_key_type',UPPER(BTRIM(bucket.economic_key_type)),
+        'component_key_value',BTRIM(bucket.economic_key_value),
+        'segment_id',bucket.parsed_segment_id,
+        'segment_key',COALESCE(bucket.parsed_segment_key,bucket.parsed_segment_id),
+        'segment_stable_key',bucket.parsed_segment_stable_key,
+        'work_date',NULLIF(BTRIM(COALESCE(bucket.bucket_json->>'work_date',
+          bucket.source_payload_json#>>'{segment,work_date}',
+          bucket.source_payload_json#>>'{segment,date}')),''),
+        'ref_num',NULLIF(BTRIM(COALESCE(bucket.bucket_json->>'ref_num',
+          bucket.source_payload_json#>>'{segment,ref_num}')),''),
+        'additional_code',NULLIF(UPPER(BTRIM(bucket.bucket_json->>'additional_code')),''),
+        'expense_code',NULLIF(UPPER(BTRIM(bucket.bucket_json->>'expense_code')),''),
+        'adjustment_id',NULLIF(BTRIM(bucket.bucket_json->>'adjustment_id'),''),
+        'bucket_code',bucket.parsed_bucket_code,
+        'source_units',bucket.builder_source_units,
+        'source_rate',bucket.builder_source_rate,
+        'source_charge_rate',bucket.builder_source_charge_rate,
+        'source_pay_ex_vat',bucket.builder_component_amount_ex_vat,
+        'source_charge_ex_vat',bucket.builder_source_charge_ex_vat,
+        'source_pay_method',bucket.parsed_source_pay_method,
+        'target_pay_method',bucket.parsed_target_pay_method)::text)
+        AS attributed_builder_comparison_digest
+    FROM bucket_builder_expected bucket
+    WHERE bucket.builder_bucket_eligible
+  ), synthetic_bucket_documents AS MATERIALIZED (
+    SELECT synthetic.*,
+      jsonb_build_object(
+        'physical_bucket_version',2,
+        'physical_bucket_key',synthetic.physical_bucket_key,
+        'component_kind',synthetic.component_kind,
+        'component_member_identity',synthetic.component_member_identity,
+        'bucket_code',synthetic.bucket_code,
+        'source_units',synthetic.source_units,
+        'source_rate',synthetic.source_rate,
+        'source_charge_rate',synthetic.source_charge_rate,
+        'source_pay_ex_vat',synthetic.truth_ex_vat,
+        'source_charge_ex_vat',synthetic.source_charge_ex_vat,
+        'baseline_source_pay_ex_vat',synthetic.baseline_ex_vat,
+        'reserved_source_pay_ex_vat',synthetic.reserved_ex_vat,
+        'outstanding_source_pay_ex_vat',synthetic.outstanding_ex_vat,
+        'source_pay_method',synthetic.source_pay_method,
+        'target_pay_method',synthetic.target_pay_method) AS physical_canonical_json,
+      md5(jsonb_build_object(
+        'builder_comparison_version',1,
+        'timesheet_id',synthetic.timesheet_id::text,
+        'source_family_key','timesheet:'||synthetic.timesheet_id::text,
+        'component_key_type',synthetic.economic_key_type,
+        'component_key_value',synthetic.economic_key_value,
+        'segment_id',synthetic.segment_id,
+        'segment_key',COALESCE(synthetic.segment_key,synthetic.segment_id),
+        'segment_stable_key',synthetic.segment_stable_key,
+        'work_date',NULLIF(BTRIM(COALESCE(synthetic.source_basis_json->>'work_date',
+          synthetic.source_basis_json->>'date')),''),
+        'ref_num',NULLIF(BTRIM(synthetic.source_basis_json->>'ref_num'),''),
+        'additional_code',CASE WHEN synthetic.economic_key_type='ADDITIONAL_CODE'
+          THEN UPPER(synthetic.economic_key_value) END,
+        'expense_code',CASE WHEN synthetic.economic_key_type='EXPENSE_CODE'
+          THEN UPPER(synthetic.economic_key_value) END,
+        'adjustment_id',CASE WHEN synthetic.economic_key_type='ADJUSTMENT_CODE'
+          THEN synthetic.economic_key_value END,
+        'bucket_code',synthetic.bucket_code,
+        'source_units',synthetic.source_units,
+        'source_rate',synthetic.source_rate,
+        'source_charge_rate',synthetic.source_charge_rate,
+        'source_pay_ex_vat',synthetic.outstanding_ex_vat,
+        'source_charge_ex_vat',synthetic.source_charge_ex_vat,
+        'source_pay_method',synthetic.source_pay_method,
+        'target_pay_method',synthetic.target_pay_method)::text)
+        AS builder_comparison_digest
+    FROM synthetic_bucket_attributed synthetic
   ), failed_occurrences AS (
     SELECT occurrence.build_id,occurrence.build_candidate_id AS candidate_id,
       occurrence.timesheet_id,
@@ -511,6 +1246,36 @@ AS $function$
      AND economic.economic_key_type=UPPER(BTRIM(occurrence.economic_key_type))
      AND economic.economic_key_value=BTRIM(occurrence.economic_key_value)
     WHERE COALESCE(occurrence.validated_failure,economic.failure_code) IS NOT NULL
+  ), failed_economic_domain AS (
+    SELECT p_build_id,p_candidate_id,economic.timesheet_id,NULL::uuid AS financial_row_id,
+      'timesheet:'||economic.timesheet_id::text AS source_family_key,
+      economic.economic_key_type,economic.economic_key_value,NULL::text AS component_kind,
+      NULL::text AS component_member_identity,NULL::text AS segment_id,
+      NULL::text AS segment_key,NULL::text AS segment_stable_key,NULL::text AS bucket_code,
+      NULL::integer AS bucket_sort_ordinal,NULL::text AS physical_bucket_key,
+      NULL::text AS physical_bucket_digest,NULL::numeric AS source_units,
+      NULL::numeric AS source_rate,NULL::numeric AS source_charge_rate,
+      expected.truth_ex_vat,expected.baseline_ex_vat,expected.reserved_ex_vat,
+      ROUND(expected.truth_ex_vat-expected.baseline_ex_vat-expected.reserved_ex_vat,2)
+        AS outstanding_ex_vat,
+      NULL::numeric AS source_charge_ex_vat,context.source_pay_method,
+      context.target_pay_method,context.umbrella_id,context.umbrella_enabled,
+      context.umbrella_vat_chargeable,context.erni_pct,context.vat_rate_pct,
+      NULL::text AS financial_revision_digest,context.target_authority_digest,
+      context.conversion_context_digest,NULL::text AS sealed_evidence_digest,
+      'FAILED'::text AS projection_status,economic.failure_code,
+      jsonb_build_object('build_id',p_build_id::text,'candidate_id',p_candidate_id::text,
+        'timesheet_id',economic.timesheet_id::text,
+        'economic_key_type',economic.economic_key_type,
+        'economic_key_value',economic.economic_key_value) AS evidence_json
+    FROM economic_failures economic
+    JOIN economic_totals expected USING(timesheet_id,economic_key_type,economic_key_value)
+    CROSS JOIN candidate_sealed_context context
+    WHERE NOT EXISTS(
+      SELECT 1 FROM occurrence_validated occurrence
+      WHERE occurrence.timesheet_id=economic.timesheet_id
+        AND UPPER(BTRIM(occurrence.economic_key_type))=economic.economic_key_type
+        AND BTRIM(occurrence.economic_key_value)=economic.economic_key_value)
   ), bucket_outputs AS (
     SELECT bucket.build_id,bucket.build_candidate_id AS candidate_id,bucket.timesheet_id,
       CASE WHEN COALESCE(bucket.rate_authority#>>'{source,financial_row_id}','')
@@ -522,11 +1287,11 @@ AS $function$
       bucket.parsed_component_kind,bucket.parsed_component_member_identity,
       bucket.parsed_segment_id,bucket.parsed_segment_key,bucket.parsed_segment_stable_key,
       bucket.parsed_bucket_code,bucket.parsed_bucket_sort_ordinal,
-      bucket.parsed_physical_bucket_key,bucket.bucket_json->>'physical_bucket_digest',
-      bucket.parsed_source_units,bucket.parsed_source_rate,bucket.parsed_source_charge_rate,
+      bucket.parsed_physical_bucket_key,md5(bucket.attributed_physical_canonical_json::text),
+      bucket.builder_source_units,bucket.builder_source_rate,bucket.builder_source_charge_rate,
       bucket.parsed_source_pay_ex_vat,bucket.attributed_baseline_ex_vat,
       bucket.attributed_reserved_ex_vat,bucket.attributed_outstanding_ex_vat,
-      bucket.parsed_source_charge_ex_vat,bucket.parsed_source_pay_method,
+      bucket.builder_source_charge_ex_vat,bucket.parsed_source_pay_method,
       bucket.parsed_target_pay_method,
       CASE WHEN COALESCE(bucket.rate_authority#>>'{target,umbrella_id}','')
         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -542,21 +1307,47 @@ AS $function$
       bucket.rate_authority#>>'{source,financial_revision_digest}',
       bucket.rate_authority#>>'{target,target_authority_digest}',
       bucket.rate_authority#>>'{conversion,conversion_context_digest}',
-      bucket.rate_authority->>'sealed_evidence_digest',
-      CASE WHEN jsonb_typeof(bucket.bucket_json->'is_actionable_candidate')='boolean'
-        AND (bucket.bucket_json->>'is_actionable_candidate')::boolean
+      md5(jsonb_build_object(
+        'sealed_evidence_version',2,
+        'financial_revision_digest',bucket.rate_authority#>>'{source,financial_revision_digest}',
+        'target_authority_digest',bucket.rate_authority#>>'{target,target_authority_digest}',
+        'conversion_context_digest',bucket.rate_authority#>>'{conversion,conversion_context_digest}',
+        'physical_bucket_digest',md5(bucket.attributed_physical_canonical_json::text),
+        'economic_key_type',UPPER(BTRIM(bucket.economic_key_type)),
+        'economic_key_value',BTRIM(bucket.economic_key_value),
+        'truth_ex_vat',bucket.parsed_source_pay_ex_vat,
+        'baseline_ex_vat',bucket.attributed_baseline_ex_vat,
+        'reserved_ex_vat',bucket.attributed_reserved_ex_vat)::text),
+      CASE WHEN bucket.builder_source_units IS NOT NULL
+        AND bucket.builder_source_rate IS NOT NULL
+        AND bucket.parsed_source_pay_method IS DISTINCT FROM bucket.parsed_target_pay_method
         THEN 'READY' ELSE 'FIXED' END AS projection_status,
       COALESCE(bucket.validated_failure,economic.failure_code) AS failure_code,
       jsonb_build_object('source_key',bucket.source_payload_json->>'source_key',
         'source_ordinal',bucket.source_payload_json#>'{rate_authority,lineage,source_ordinal}',
         'source_payload',bucket.source_payload_json,
-        'physical_bucket',bucket.bucket_json,
+        'physical_bucket',bucket.attributed_physical_canonical_json||jsonb_build_object(
+          'physical_bucket_digest',md5(bucket.attributed_physical_canonical_json::text),
+          'builder_comparison_digest',bucket.attributed_builder_comparison_digest,
+          'builder_component_amount_ex_vat',bucket.builder_component_amount_ex_vat,
+          'is_rate_bearing',bucket.builder_source_units IS NOT NULL
+            AND bucket.builder_source_rate IS NOT NULL,
+          'is_actionable_candidate',bucket.builder_source_units IS NOT NULL
+            AND bucket.builder_source_rate IS NOT NULL
+            AND bucket.parsed_source_pay_method IS DISTINCT FROM bucket.parsed_target_pay_method),
         'sealed_physical_attribution',jsonb_build_object(
           'baseline_ex_vat',bucket.attributed_baseline_ex_vat,
           'reserved_ex_vat',bucket.attributed_reserved_ex_vat,
           'outstanding_ex_vat',bucket.attributed_outstanding_ex_vat,
-          'match_authorities',bucket.attribution_authorities)) AS evidence_json
-    FROM bucket_attributed bucket
+          'match_authorities',bucket.attribution_authorities),
+        'economic_authority',(SELECT jsonb_build_object(
+            'truth_inc_vat',economic_total.truth_inc_vat,
+            'baseline_inc_vat',economic_total.baseline_inc_vat)
+          FROM economic_totals economic_total
+          WHERE economic_total.timesheet_id=bucket.timesheet_id
+            AND economic_total.economic_key_type=UPPER(BTRIM(bucket.economic_key_type))
+            AND economic_total.economic_key_value=BTRIM(bucket.economic_key_value))) AS evidence_json
+    FROM bucket_documents bucket
     LEFT JOIN economic_failures economic
       ON economic.timesheet_id=bucket.timesheet_id
      AND economic.economic_key_type=UPPER(BTRIM(bucket.economic_key_type))
@@ -565,6 +1356,75 @@ AS $function$
       WHERE failed.build_id=bucket.build_id AND failed.timesheet_id=bucket.timesheet_id
         AND failed.economic_key_type=bucket.economic_key_type
         AND failed.economic_key_value=bucket.economic_key_value)
+  ), synthetic_bucket_outputs AS (
+    SELECT p_build_id,p_candidate_id,synthetic.timesheet_id,NULL::uuid AS financial_row_id,
+      'timesheet:'||synthetic.timesheet_id::text AS source_family_key,
+      synthetic.economic_key_type,synthetic.economic_key_value,synthetic.component_kind,
+      synthetic.component_member_identity,synthetic.segment_id,synthetic.segment_key,
+      synthetic.segment_stable_key,synthetic.bucket_code,synthetic.bucket_sort_ordinal,
+      synthetic.physical_bucket_key,md5(synthetic.physical_canonical_json::text)
+        AS physical_bucket_digest,
+      synthetic.source_units,synthetic.source_rate,synthetic.source_charge_rate,
+      synthetic.truth_ex_vat,synthetic.baseline_ex_vat,synthetic.reserved_ex_vat,
+      synthetic.outstanding_ex_vat,synthetic.source_charge_ex_vat,
+      synthetic.source_pay_method,synthetic.target_pay_method,synthetic.umbrella_id,
+      synthetic.umbrella_enabled,synthetic.umbrella_vat_chargeable,synthetic.erni_pct,
+      synthetic.vat_rate_pct,synthetic.financial_revision_digest,
+      synthetic.target_authority_digest,synthetic.conversion_context_digest,
+      md5(jsonb_build_object(
+        'sealed_evidence_version',2,
+        'financial_revision_digest',synthetic.financial_revision_digest,
+        'target_authority_digest',synthetic.target_authority_digest,
+        'conversion_context_digest',synthetic.conversion_context_digest,
+        'physical_bucket_digest',md5(synthetic.physical_canonical_json::text),
+        'economic_key_type',synthetic.economic_key_type,
+        'economic_key_value',synthetic.economic_key_value,
+        'truth_ex_vat',synthetic.truth_ex_vat,
+        'baseline_ex_vat',synthetic.baseline_ex_vat,
+        'reserved_ex_vat',synthetic.reserved_ex_vat)::text) AS sealed_evidence_digest,
+      CASE WHEN NOT synthetic.is_residual AND synthetic.source_units IS NOT NULL
+        AND synthetic.source_rate IS NOT NULL
+        AND synthetic.source_pay_method IS DISTINCT FROM synthetic.target_pay_method
+        THEN 'READY' ELSE 'FIXED' END AS projection_status,
+      economic.failure_code,
+      jsonb_build_object(
+        'source_key','SEALED_SYNTHETIC:'||synthetic.physical_bucket_key,
+        'source_payload',jsonb_build_object(
+          'source_kind',CASE WHEN synthetic.is_residual THEN 'WORKED_TIME_RESIDUAL'
+            ELSE 'SEALED_BASELINE_COMPONENT' END,
+          'source_value',synthetic.source_basis_json,
+          'segment',synthetic.source_basis_json,
+          'expense_code',CASE WHEN synthetic.economic_key_type='EXPENSE_CODE'
+            THEN UPPER(synthetic.economic_key_value) END,
+          'adjustment_id',CASE WHEN synthetic.economic_key_type='ADJUSTMENT_CODE'
+            THEN synthetic.economic_key_value END),
+        'physical_bucket',synthetic.physical_canonical_json||jsonb_build_object(
+          'physical_bucket_digest',md5(synthetic.physical_canonical_json::text),
+          'builder_comparison_digest',synthetic.builder_comparison_digest,
+          'builder_component_amount_ex_vat',synthetic.outstanding_ex_vat,
+          'is_rate_bearing',NOT synthetic.is_residual
+            AND synthetic.source_units IS NOT NULL AND synthetic.source_rate IS NOT NULL,
+          'is_actionable_candidate',NOT synthetic.is_residual
+            AND synthetic.source_units IS NOT NULL AND synthetic.source_rate IS NOT NULL
+            AND synthetic.source_pay_method IS DISTINCT FROM synthetic.target_pay_method),
+        'sealed_physical_attribution',jsonb_build_object(
+          'baseline_ex_vat',synthetic.baseline_ex_vat,
+          'reserved_ex_vat',synthetic.reserved_ex_vat,
+          'outstanding_ex_vat',synthetic.outstanding_ex_vat,
+          'match_authorities',synthetic.match_authorities,
+          'residual_contract_version',CASE WHEN synthetic.is_residual THEN 1 END),
+        'economic_authority',(SELECT jsonb_build_object(
+            'truth_inc_vat',economic_total.truth_inc_vat,
+            'baseline_inc_vat',economic_total.baseline_inc_vat)
+          FROM economic_totals economic_total
+          WHERE economic_total.timesheet_id=synthetic.timesheet_id
+            AND economic_total.economic_key_type=synthetic.economic_key_type
+            AND economic_total.economic_key_value=synthetic.economic_key_value))
+        AS evidence_json
+    FROM synthetic_bucket_documents synthetic
+    LEFT JOIN economic_failures economic
+      USING(timesheet_id,economic_key_type,economic_key_value)
+    WHERE economic.failure_code IS NULL
   ), missing_authority AS (
     SELECT p_build_id,p_candidate_id,NULL::uuid,NULL::uuid,NULL::text,NULL::text,NULL::text,
       NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,NULL::text,NULL::integer,
@@ -584,7 +1444,9 @@ AS $function$
     WHERE NOT EXISTS(SELECT 1 FROM scoped_facts)
   )
   SELECT * FROM failed_occurrences
+  UNION ALL SELECT * FROM failed_economic_domain
   UNION ALL SELECT * FROM bucket_outputs
+  UNION ALL SELECT * FROM synthetic_bucket_outputs
   UNION ALL SELECT * FROM missing_authority
   ORDER BY timesheet_id NULLS FIRST,economic_key_type NULLS FIRST,
     economic_key_value NULLS FIRST,bucket_sort_ordinal NULLS FIRST,

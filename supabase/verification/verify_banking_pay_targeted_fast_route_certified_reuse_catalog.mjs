@@ -23,9 +23,12 @@ const repoRoot = path.resolve(here, '..', '..');
 const jamesSerializerPath = 'supabase/repeatable/04082026_2314_pay_workbench_unit_economic_occurrence_page_v1.sql';
 const jamesHelperPath = 'supabase/repeatable/13082026_1912_pay_workbench_sealed_rate_component_projection_v1.sql';
 const jamesSynchronizerPath = 'supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql';
+const jamesSourceBuildPath = 'supabase/repeatable/07082026_1013_pay_workbench_candidate_source_build_chunk.sql';
+const jamesSourceBuildAuthorityPath = 'supabase/repeatable/08082026_0322_pay_workbench_candidate_source_build_chunk_authority.sql';
 const jamesSerializer = fs.readFileSync(path.join(repoRoot, jamesSerializerPath), 'utf8');
 const jamesHelper = fs.readFileSync(path.join(repoRoot, jamesHelperPath), 'utf8');
 const jamesSynchronizer = fs.readFileSync(path.join(repoRoot, jamesSynchronizerPath), 'utf8');
+const jamesSourceBuild = fs.readFileSync(path.join(repoRoot, jamesSourceBuildPath), 'utf8');
 const names = expected.map((item) => `(${sqlLiteral(item.schema)},${sqlLiteral(item.name)})`).join(',');
 const query = `
 with wanted(schema_name,function_name) as (values ${names}), catalogue as (
@@ -85,13 +88,15 @@ for (const [key, item] of actualByKey) {
 }
 
 const requiredJamesOwners = [
-  ['private', 'pay_workbench_unit_economic_occurrence_page_v1', jamesSerializerPath],
-  ['private', 'pay_workbench_sealed_rate_component_projection_v1', jamesHelperPath],
-  ['private', 'pay_sync_overpayments_from_workbench_workspace_v1', jamesSynchronizerPath],
+  ['private', 'pay_workbench_unit_economic_occurrence_page_v1', [jamesSerializerPath]],
+  ['private', 'pay_workbench_sealed_rate_component_projection_v1', [jamesHelperPath]],
+  ['private', 'pay_sync_overpayments_from_workbench_workspace_v1', [jamesSynchronizerPath]],
+  ['private', 'pay_workbench_candidate_source_build_chunk_legacy_v1',
+    [jamesSourceBuildPath, jamesSourceBuildAuthorityPath]],
 ];
-for (const [schema, name, sourceFile] of requiredJamesOwners) {
+for (const [schema, name, sourceFiles] of requiredJamesOwners) {
   const matches = expected.filter((item) => item.schema === schema && item.name === name);
-  if (matches.length !== 1 || JSON.stringify(matches[0].source_files) !== JSON.stringify([sourceFile])) {
+  if (matches.length !== 1 || JSON.stringify(matches[0].source_files) !== JSON.stringify(sourceFiles)) {
     problems.push(`James authority owner or source file is not exact: ${schema}.${name}`);
   }
 }
@@ -143,13 +148,30 @@ if (!jamesSerializer.includes('FROM jsonb_each(CASE')
   problems.push('serializer does not preserve every arbitrary additional-rate identity');
 }
 for (const required of [
-  'sealed_physical_amount_facts', 'sealed_physical_amount_matches',
-  'PHYSICAL_BUCKET_KEY', 'STRUCTURAL_IDENTITY', 'SOLE_BUCKET',
-  'RATE_AUTHORITY_PHYSICAL_BASELINE_REQUIRED',
-  'RATE_AUTHORITY_PHYSICAL_RESERVATION_REQUIRED',
+  'nested_evidence_raw', 'nested_evidence_normalized', 'exact_allocation_matched',
+  'sealed_physical_amount_attribution', 'truth_residual_sources',
+  'RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED',
+  'RATE_AUTHORITY_PARENT_COMPONENT_RECONCILIATION_MISMATCH',
 ]) {
   if (!jamesHelper.includes(required)) {
     problems.push(`sealed physical baseline/reservation attribution is missing: ${required}`);
+  }
+}
+for (const required of [
+  'ACTIVE_ITEM_RESERVATION:', 'pay_batch_items_active_reservation',
+  'RESERVATION_ECONOMIC_KEY_MISSING', 'RESERVATION_ECONOMIC_KEY_CONFLICT',
+  'RESERVATION_DUPLICATE_LOGICAL_OWNER',
+]) {
+  if (!jamesSourceBuild.includes(required)) {
+    problems.push(`sealed active-item reservation authority is missing: ${required}`);
+  }
+}
+for (const required of [
+  'tmp_sync_sealed_reservation_items', 'tmp_sync_reserved_batch_items_replacement',
+  'tmp_sync_reserved_additional_by_code_replacement', "'component_fallback','WORKED_TIME_AMOUNT'",
+]) {
+  if (!jamesSynchronizer.includes(required)) {
+    problems.push(`sealed synchronizer reconstruction is missing: ${required}`);
   }
 }
 if (!jamesSynchronizer.includes("SELECT 21,'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'")

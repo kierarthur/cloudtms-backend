@@ -56,3 +56,16 @@ test('RPC 1 validates the shared session without serialising candidate lanes', (
   );
   assert.match(claimStart, /RPC 2\/final publication revalidate/i);
 });
+
+test('reservation paging seals the normal active-item domain once and preserves cursor authority', () => {
+  assert.match(canonical, /active_item_candidates AS MATERIALIZED/);
+  assert.match(canonical,
+    /public\._pay_batch_item_economic_components\(\s*NULL::uuid,item_ids\.pay_batch_item_ids\)/);
+  assert.equal((canonical.match(/public\._pay_batch_item_economic_components\(/g) || []).length, 1);
+  assert.match(canonical, /NOT EXISTS \(\s*SELECT 1\s*FROM public\.pay_advance_reservations advance[\s\S]*advance\.pay_batch_item_id=item\.id[\s\S]*advance\.id=item\.reservation_id/);
+  assert.match(canonical, /'~ITEM:'\|\|item\.pay_batch_item_id::text/);
+  assert.match(canonical, /ORDER BY '~ITEM:'\|\|item\.pay_batch_item_id::text/);
+  assert.match(canonical, /'RESERVATION_DUPLICATE_LOGICAL_OWNER'/);
+  assert.match(canonical, /'RESERVATION_ECONOMIC_KEY_MISSING'/);
+  assert.match(canonical, /'RESERVATION_ECONOMIC_KEY_CONFLICT'/);
+});

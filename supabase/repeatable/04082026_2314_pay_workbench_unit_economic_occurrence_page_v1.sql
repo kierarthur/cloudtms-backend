@@ -512,7 +512,10 @@ BEGIN
     ), physical_rows AS MATERIALIZED (
       SELECT input.source_key,input.component_kind,input.component_member_identity,
         NULLIF(BTRIM(input.payload#>>'{segment,segment_id}'),'') AS segment_id,
-        NULLIF(BTRIM(input.payload#>>'{segment,segment_key}'),'') AS segment_key,
+        COALESCE(
+          NULLIF(BTRIM(input.payload#>>'{segment,segment_key}'),''),
+          NULLIF(BTRIM(input.payload#>>'{segment,segment_id}'),'')
+        ) AS segment_key,
         CASE WHEN input.component_kind='WORKED_TIME' THEN input.segment_stable_key END
           AS segment_stable_key,
         NULLIF(BTRIM(input.payload#>>'{segment,date}'),'') AS work_date,

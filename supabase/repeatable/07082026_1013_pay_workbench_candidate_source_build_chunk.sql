@@ -607,6 +607,289 @@ BEGIN
           SELECT timesheet_id FROM private.banking_pay_workbench_economic_build_scope WHERE build_id=v_build_id))
         AND (v_last_source_key IS NULL OR reservation.id::text>v_last_source_key)
       ORDER BY reservation.id LIMIT v_fact_limit+1;
+
+      -- The normal pre-Draft preview treats active, non-settled pay-batch items as
+      -- reservations even where no pay_advance_reservations row exists.  Seal
+      -- that same authority here so reconciliation never has to rediscover it
+      -- from later live state.  Existing directly-linked advance reservations
+      -- remain the preferred owner and exclude the corresponding item below.
+      WITH active_item_candidates AS MATERIALIZED (
+        SELECT DISTINCT
+          item.id AS pay_batch_item_id,
+          batch_candidate.pay_batch_id,
+          item.pay_batch_candidate_id,
+          item.timesheet_id AS source_timesheet_id,
+          item.item_type,
+          item.segment_key,
+          item.source_ref,
+          UPPER(BTRIM(item.pay_channel)) AS pay_channel,
+          item.reservation_id,
+          item.finance_case_id,
+          item.finance_component_id,
+          item.frozen_component_key_type,
+          item.frozen_component_key_value,
+          COALESCE(item.frozen_source_basis_json,'{}'::jsonb) AS frozen_source_basis_json,
+          COALESCE(item.frozen_component_snapshot_json,'{}'::jsonb)
+            AS frozen_component_snapshot_json,
+          COALESCE(item.frozen_resolution_payload_json,'{}'::jsonb)
+            AS frozen_resolution_payload_json,
+          COALESCE(item.frozen_resolution_result_json,'{}'::jsonb)
+            AS frozen_resolution_result_json,
+          ROUND(public._pay_batch_item_source_reservation_amount_ex_vat(item.id),2)
+            AS reserved_source_amount,
+          batch_row.status AS batch_status,
+          batch_candidate.settlement_status AS candidate_settlement_status,
+          batch_candidate.settled_at_utc AS candidate_settled_at_utc,
+          transfer.status AS transfer_status,
+          transfer.completed_at_utc AS transfer_completed_at_utc
+        FROM public.pay_batch_items item
+        JOIN public.pay_batch_candidates batch_candidate
+          ON batch_candidate.id=item.pay_batch_candidate_id
+        JOIN public.pay_batches batch_row ON batch_row.id=batch_candidate.pay_batch_id
+        LEFT JOIN public.pay_bank_transfers transfer ON transfer.id=item.pay_bank_transfer_id
+        WHERE batch_candidate.candidate_id=p_candidate_id
+          AND item.timesheet_id IS NOT NULL
+          AND UPPER(BTRIM(COALESCE(item.pay_channel,''))) IN ('PAYE','UMBRELLA')
+          AND item.item_type IN ('SEGMENT_DELTA','EXPENSE_DELTA','ADJUSTMENT_DELTA','MILEAGE_DELTA')
+          AND public._pay_batch_item_source_reservation_amount_ex_vat(item.id) IS NOT NULL
+          AND COALESCE(item.is_voided,false) IS NOT TRUE
+          AND EXISTS (
+            SELECT 1
+            FROM private.banking_pay_workbench_economic_build_scope scope_row
+            WHERE scope_row.build_id=v_build_id
+              AND scope_row.candidate_id=p_candidate_id
+              AND (scope_row.timesheet_id=item.timesheet_id
+                OR scope_row.root_timesheet_id=item.timesheet_id)
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.pay_payment_correction_items applied_correction
+            WHERE applied_correction.pay_batch_item_id=item.id
+              AND applied_correction.status='APPLIED'
+              AND applied_correction.correction_item_kind IN (
+                'PRE_BANK_CANCEL','NO_MONEY_UNWIND','SETTLED_REVERSAL')
+          )
+          AND NOT (
+            UPPER(BTRIM(COALESCE(batch_candidate.settlement_status,'')))='SETTLED'
+            OR batch_candidate.settled_at_utc IS NOT NULL
+            OR UPPER(BTRIM(COALESCE(transfer.status,'')))='COMPLETED'
+            OR transfer.completed_at_utc IS NOT NULL
+          )
+          AND (
+            public._pay_batch_status_is_active_reservation(batch_row.status)
+            OR EXISTS (
+              SELECT 1
+              FROM public.pay_payment_correction_requests correction_request
+              JOIN LATERAL public._pay_payment_correction_selected_items(
+                correction_request.pay_batch_id,
+                CASE
+                  WHEN jsonb_typeof(correction_request.plan_json->'selected_pay_batch_item_ids')='array'
+                    THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
+                      ||jsonb_build_object(
+                        'pay_batch_item_ids',correction_request.plan_json->'selected_pay_batch_item_ids',
+                        'expected_pay_batch_item_ids',
+                          correction_request.plan_json->'selected_pay_batch_item_ids')
+                  WHEN jsonb_typeof(correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}')='array'
+                    THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
+                      ||jsonb_build_object(
+                        'pay_batch_item_ids',
+                          correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}',
+                        'expected_pay_batch_item_ids',
+                          correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}')
+                  WHEN jsonb_typeof(correction_request.plan_json#>'{selection,pay_batch_item_ids}')='array'
+                    THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
+                      ||jsonb_build_object(
+                        'pay_batch_item_ids',
+                          correction_request.plan_json#>'{selection,pay_batch_item_ids}',
+                        'expected_pay_batch_item_ids',
+                          correction_request.plan_json#>'{selection,pay_batch_item_ids}')
+                  ELSE COALESCE(correction_request.selection_json,'{}'::jsonb)
+                END,
+                false
+              ) selected_item ON selected_item.pay_batch_id=correction_request.pay_batch_id
+              WHERE correction_request.pay_batch_id=batch_candidate.pay_batch_id
+                AND correction_request.status IN (
+                  'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
+                AND correction_request.correction_kind IN (
+                  'PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
+                AND selected_item.pay_batch_item_id=item.id
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM public.pay_bank_transfer_events terminal_event
+              WHERE terminal_event.pay_batch_id=batch_candidate.pay_batch_id
+                AND terminal_event.pay_bank_transfer_id=item.pay_bank_transfer_id
+                AND terminal_event.mapping_status='MATCHED'
+                AND terminal_event.normalised_state IN ('FAILED','DECLINED','REJECTED','CANCELLED')
+                AND NOT EXISTS (
+                  SELECT 1
+                  FROM public.pay_payment_correction_items applied_failure_correction
+                  WHERE applied_failure_correction.pay_batch_item_id=item.id
+                    AND applied_failure_correction.status='APPLIED'
+                    AND applied_failure_correction.correction_item_kind IN (
+                      'NO_MONEY_UNWIND','PRE_BANK_CANCEL','SETTLED_REVERSAL')
+                )
+            )
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM public.pay_advance_reservations advance
+            WHERE (advance.pay_batch_item_id=item.id OR advance.id=item.reservation_id)
+              AND UPPER(BTRIM(COALESCE(advance.status,''))) IN ('RESERVED','COMMITTED')
+              AND advance.released_at_utc IS NULL
+          )
+      ), active_item_id_array AS MATERIALIZED (
+        SELECT CASE WHEN COUNT(*)=0
+          THEN ARRAY['00000000-0000-0000-0000-000000000000'::uuid]
+          ELSE ARRAY_AGG(candidate.pay_batch_item_id ORDER BY candidate.pay_batch_item_id) END
+          AS pay_batch_item_ids
+        FROM active_item_candidates candidate
+      ), active_item_components AS MATERIALIZED (
+        SELECT component.pay_batch_item_id,
+          UPPER(NULLIF(BTRIM(component.key_type),'')) AS key_type,
+          NULLIF(BTRIM(component.key_value),'') AS key_value,
+          NULLIF(BTRIM(component.key_resolution_source),'') AS key_resolution_source,
+          NULLIF(BTRIM(component.key_resolution_failure_reason),'')
+            AS key_resolution_failure_reason
+        FROM active_item_id_array item_ids
+        JOIN LATERAL public._pay_batch_item_economic_components(
+          NULL::uuid,item_ids.pay_batch_item_ids) component ON true
+      ), active_item_component_summary AS MATERIALIZED (
+        SELECT candidate.pay_batch_item_id,
+          COUNT(DISTINCT (component.key_type,component.key_value)) FILTER(
+            WHERE component.key_type IS NOT NULL AND component.key_value IS NOT NULL)::integer
+            AS economic_key_count,
+          MIN(component.key_type) FILTER(
+            WHERE component.key_type IS NOT NULL AND component.key_value IS NOT NULL) AS key_type,
+          MIN(component.key_value) FILTER(
+            WHERE component.key_type IS NOT NULL AND component.key_value IS NOT NULL) AS key_value,
+          MIN(component.key_resolution_source) AS key_resolution_source,
+          MIN(component.key_resolution_failure_reason) AS key_resolution_failure_reason
+        FROM active_item_candidates candidate
+        LEFT JOIN active_item_components component
+          ON component.pay_batch_item_id=candidate.pay_batch_item_id
+        GROUP BY candidate.pay_batch_item_id
+      ), active_item_rotation AS MATERIALIZED (
+        SELECT DISTINCT ON (rotation.requested_timesheet_id)
+          rotation.requested_timesheet_id,
+          COALESCE(rotation.canonical_timesheet_id,rotation.requested_timesheet_id)
+            AS canonical_timesheet_id
+        FROM public._pay_timesheet_rotation_scope(ARRAY(
+          SELECT DISTINCT candidate.source_timesheet_id
+          FROM active_item_candidates candidate
+          ORDER BY candidate.source_timesheet_id)) rotation
+        ORDER BY rotation.requested_timesheet_id,rotation.family_is_current DESC NULLS LAST,
+          rotation.family_version DESC NULLS LAST,rotation.family_timesheet_id
+      ), active_item_enriched AS MATERIALIZED (
+        SELECT candidate.*,
+          CASE WHEN candidate.reservation_id IS NULL THEN 1
+            ELSE COUNT(*) OVER(PARTITION BY candidate.reservation_id) END::integer
+            AS logical_owner_count,
+          COALESCE(rotation.canonical_timesheet_id,candidate.source_timesheet_id)
+            AS sealed_timesheet_id,
+          component.economic_key_count,component.key_type,component.key_value,
+          component.key_resolution_source,component.key_resolution_failure_reason,
+          COALESCE((SELECT jsonb_agg(to_jsonb(breakdown) ORDER BY breakdown.id)
+            FROM public.pay_batch_item_breakdowns breakdown
+            WHERE breakdown.pay_batch_item_id=candidate.pay_batch_item_id),'[]'::jsonb)
+            AS breakdowns,
+          COALESCE((SELECT jsonb_agg(correction_request.id::text ORDER BY correction_request.id)
+            FROM public.pay_payment_correction_requests correction_request
+            JOIN LATERAL public._pay_payment_correction_selected_items(
+              correction_request.pay_batch_id,COALESCE(correction_request.selection_json,'{}'::jsonb),false
+            ) selected_item ON selected_item.pay_batch_id=correction_request.pay_batch_id
+            WHERE correction_request.pay_batch_id=candidate.pay_batch_id
+              AND selected_item.pay_batch_item_id=candidate.pay_batch_item_id
+              AND correction_request.status IN (
+                'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')),
+            '[]'::jsonb) AS open_correction_request_ids
+        FROM active_item_candidates candidate
+        LEFT JOIN active_item_component_summary component
+          ON component.pay_batch_item_id=candidate.pay_batch_item_id
+        LEFT JOIN active_item_rotation rotation
+          ON rotation.requested_timesheet_id=candidate.source_timesheet_id
+      ), active_item_payloads AS MATERIALIZED (
+        SELECT enriched.*,
+          CASE
+            WHEN enriched.logical_owner_count<>1
+              THEN 'RESERVATION_DUPLICATE_LOGICAL_OWNER'
+            WHEN COALESCE(enriched.economic_key_count,0)=0
+              THEN 'RESERVATION_ECONOMIC_KEY_MISSING'
+            WHEN enriched.economic_key_count<>1
+              THEN 'RESERVATION_ECONOMIC_KEY_CONFLICT'
+            WHEN enriched.key_resolution_failure_reason IS NOT NULL
+              THEN enriched.key_resolution_failure_reason
+            WHEN enriched.key_type NOT IN (
+              'TS_DAY','TS_TOTAL','ADDITIONAL_CODE','ADJUSTMENT_CODE',
+              'EXPENSE_CODE','MANUAL_CARRY_FORWARD')
+              OR enriched.key_value IS NULL
+              THEN 'RESERVATION_ECONOMIC_KEY_INVALID'
+            WHEN enriched.key_type='TS_DAY' AND NOT (
+              enriched.key_value ~ '^\d{4}-\d{2}-\d{2}$'
+              AND pg_input_is_valid(enriched.key_value,'date')
+              AND CASE WHEN pg_input_is_valid(enriched.key_value,'date')
+                THEN enriched.key_value::date::text=enriched.key_value ELSE false END)
+              THEN 'RESERVATION_TS_DAY_INVALID'
+          END AS resolution_failure
+        FROM active_item_enriched enriched
+      ), active_item_documents AS MATERIALIZED (
+        SELECT item.*,
+          jsonb_build_object(
+            'reservation_authority_version',2,
+            'authority_source','ACTIVE_PAY_BATCH_ITEM',
+            'pay_batch_item',jsonb_build_object(
+              'id',item.pay_batch_item_id::text,
+              'pay_batch_id',item.pay_batch_id::text,
+              'pay_batch_candidate_id',item.pay_batch_candidate_id::text,
+              'timesheet_id',item.source_timesheet_id::text,
+              'projected_timesheet_id',item.sealed_timesheet_id::text,
+              'item_type',item.item_type,
+              'segment_key',item.segment_key,
+              'source_ref',item.source_ref,
+              'pay_channel',item.pay_channel,
+              'reservation_id',item.reservation_id::text,
+              'finance_case_id',item.finance_case_id::text,
+              'finance_component_id',item.finance_component_id::text,
+              'frozen_component_key_type',item.frozen_component_key_type,
+              'frozen_component_key_value',item.frozen_component_key_value,
+              'frozen_source_basis_json',item.frozen_source_basis_json,
+              'frozen_component_snapshot_json',item.frozen_component_snapshot_json,
+              'frozen_resolution_payload_json',item.frozen_resolution_payload_json,
+              'frozen_resolution_result_json',item.frozen_resolution_result_json),
+            'economic_key',jsonb_build_object(
+              'key_type',item.key_type,'key_value',item.key_value,
+              'key_resolution_source',item.key_resolution_source,
+              'key_resolution_failure_reason',item.key_resolution_failure_reason),
+            'active_state',jsonb_build_object(
+              'batch_status',item.batch_status,
+              'candidate_settlement_status',item.candidate_settlement_status,
+              'candidate_settled_at_utc',item.candidate_settled_at_utc,
+              'transfer_status',item.transfer_status,
+              'transfer_completed_at_utc',item.transfer_completed_at_utc,
+              'open_correction_request_ids',item.open_correction_request_ids),
+            'breakdowns',item.breakdowns,
+            'source_reservation_amount_ex_vat',item.reserved_source_amount,
+            'resolution_failure',item.resolution_failure) AS source_payload_json
+        FROM active_item_payloads item
+      )
+      INSERT INTO pg_temp._bpay_wb_fact_page_v1
+      SELECT '~ITEM:'||item.pay_batch_item_id::text,
+        md5('ACTIVE_ITEM_RESERVATION:'||item.pay_batch_item_id::text),
+        item.sealed_timesheet_id,
+        ARRAY(SELECT DISTINCT owner_id FROM unnest(ARRAY[
+          item.source_timesheet_id,item.sealed_timesheet_id]) owner(owner_id)
+          WHERE owner_id IS NOT NULL ORDER BY owner_id),
+        'pay_batch_items_active_reservation',item.pay_batch_item_id,
+        item.key_type,item.key_value,
+        NULL,NULL,NULL,NULL,NULL,NULL,item.reserved_source_amount,
+        item.finance_case_id,item.finance_component_id,item.reservation_id,
+        item.source_payload_json,md5(item.source_payload_json::text)
+      FROM active_item_documents item
+      WHERE v_last_source_key IS NULL
+        OR '~ITEM:'||item.pay_batch_item_id::text>v_last_source_key
+      ORDER BY '~ITEM:'||item.pay_batch_item_id::text
+      LIMIT v_fact_limit+1
+      ON CONFLICT(source_key) DO NOTHING;
     ELSIF v_fact_family='FINANCE_CASE_IDENTITY' THEN
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
       SELECT finance_case.id::text,md5('CASE:'||finance_case.id::text),finance_case.linked_timesheet_id,

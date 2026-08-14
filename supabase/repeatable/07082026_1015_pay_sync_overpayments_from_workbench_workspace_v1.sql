@@ -1670,6 +1670,191 @@ begin
         v_preview_collect_ms := v_preview_collect_ms
           + FLOOR(EXTRACT(EPOCH FROM (clock_timestamp()-v_phase_started_at))*1000)::integer;
 
+        -- pay_preview_candidate_collect_scope intentionally discovers current
+        -- pre-Draft reservation state.  A sealed build must not continue using
+        -- those later live rows, so replace the complete reservation workspace
+        -- with the RESERVATION_COMPONENT facts captured by this build before
+        -- any baseline or component construction consumes it.
+        DROP TABLE IF EXISTS pg_temp.tmp_sync_sealed_reservation_items;
+        CREATE TEMP TABLE pg_temp.tmp_sync_sealed_reservation_items ON COMMIT DROP AS
+        SELECT fact.fact_family||':'||fact.natural_key AS authority_fact_identity,
+          CASE WHEN COALESCE(fact.source_payload_json#>>'{pay_batch_item,id}','')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (fact.source_payload_json#>>'{pay_batch_item,id}')::uuid
+            WHEN COALESCE(fact.source_payload_json->>'pay_batch_item_id','')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (fact.source_payload_json->>'pay_batch_item_id')::uuid END AS pay_batch_item_id,
+          CASE WHEN COALESCE(fact.source_payload_json#>>'{pay_batch_item,pay_batch_id}','')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (fact.source_payload_json#>>'{pay_batch_item,pay_batch_id}')::uuid
+            WHEN COALESCE(fact.source_payload_json->>'pay_batch_id','')
+              ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            THEN (fact.source_payload_json->>'pay_batch_id')::uuid END AS pay_batch_id,
+          fact.timesheet_id,
+          NULLIF(BTRIM(COALESCE(fact.source_payload_json#>>'{pay_batch_item,segment_key}',
+            fact.source_payload_json#>>'{pay_batch_item,frozen_source_basis_json,segment_key}',
+            fact.source_payload_json#>>'{frozen_source_basis_json,segment_key}')),'')
+            AS segment_key,
+          NULLIF(BTRIM(COALESCE(
+            fact.source_payload_json#>>'{pay_batch_item,frozen_source_basis_json,segment_id}',
+            fact.source_payload_json#>>'{frozen_source_basis_json,segment_id}',
+            CASE WHEN NULLIF(BTRIM(COALESCE(
+                fact.source_payload_json#>>'{pay_batch_item,source_ref}',
+                fact.source_payload_json->>'source_ref')),'') LIKE 'seg:%'
+              THEN split_part(COALESCE(fact.source_payload_json#>>'{pay_batch_item,source_ref}',
+                fact.source_payload_json->>'source_ref'),':',2) END,
+            fact.source_payload_json#>>'{pay_batch_item,segment_key}',
+            fact.source_payload_json#>>'{pay_batch_item,frozen_source_basis_json,segment_key}',
+            fact.source_payload_json#>>'{frozen_source_basis_json,segment_key}')),'')
+            AS segment_id_norm,
+          NULLIF(BTRIM(COALESCE(fact.source_payload_json#>>'{pay_batch_item,source_ref}',
+            fact.source_payload_json->>'source_ref')),'') AS source_ref,
+          COALESCE(NULLIF(BTRIM(fact.source_payload_json#>>'{pay_batch_item,item_type}'),''),
+            CASE UPPER(BTRIM(fact.economic_key_type))
+              WHEN 'TS_DAY' THEN 'SEGMENT_DELTA' WHEN 'TS_TOTAL' THEN 'SEGMENT_DELTA'
+              WHEN 'EXPENSE_CODE' THEN 'EXPENSE_DELTA'
+              WHEN 'ADJUSTMENT_CODE' THEN 'ADJUSTMENT_DELTA'
+              WHEN 'ADDITIONAL_CODE' THEN 'ADJUSTMENT_DELTA'
+              ELSE 'ADJUSTMENT_DELTA' END) AS item_type,
+          UPPER(BTRIM(fact.economic_key_type)) AS component_key_type,
+          BTRIM(fact.economic_key_value) AS component_key_value,
+          COALESCE(NULLIF(BTRIM(fact.source_payload_json#>>'{economic_key,key_resolution_source}'),''),
+            'SEALED_RESERVATION_COMPONENT') AS key_resolution_source,
+          NULLIF(BTRIM(COALESCE(fact.source_payload_json#>>'{economic_key,key_resolution_failure_reason}',
+            fact.source_payload_json->>'resolution_failure')),'') AS key_resolution_failure_reason,
+          ROUND(COALESCE(fact.reserved_source_amount,0),2) AS amount_ex_vat,
+          CASE WHEN jsonb_typeof(fact.source_payload_json->'breakdowns')='array'
+            THEN fact.source_payload_json->'breakdowns' ELSE '[]'::jsonb END AS breakdowns
+        FROM private.banking_pay_workbench_economic_build_facts fact
+        WHERE fact.build_id=p_build_id AND fact.candidate_id=v_preview_candidate_loop_id
+          AND fact.fact_family='RESERVATION_COMPONENT'
+          AND fact.timesheet_id IS NOT NULL
+          AND NULLIF(BTRIM(COALESCE(fact.economic_key_type,'')),'') IS NOT NULL
+          AND NULLIF(BTRIM(COALESCE(fact.economic_key_value,'')),'') IS NOT NULL;
+
+        CREATE UNIQUE INDEX tmp_sync_sealed_reservation_items_authority_idx
+          ON pg_temp.tmp_sync_sealed_reservation_items(authority_fact_identity);
+        CREATE INDEX tmp_sync_sealed_reservation_items_key_idx
+          ON pg_temp.tmp_sync_sealed_reservation_items(
+            timesheet_id,component_key_type,component_key_value);
+        CREATE INDEX tmp_sync_sealed_reservation_items_source_ref_idx
+          ON pg_temp.tmp_sync_sealed_reservation_items(timesheet_id,source_ref);
+        CREATE INDEX tmp_sync_sealed_reservation_items_type_idx
+          ON pg_temp.tmp_sync_sealed_reservation_items(timesheet_id,item_type);
+
+        CREATE TEMP TABLE pg_temp.tmp_sync_reserved_batch_items_replacement
+          (LIKE pg_temp.reserved_batch_items INCLUDING ALL) ON COMMIT DROP;
+        INSERT INTO pg_temp.tmp_sync_reserved_batch_items_replacement(
+          pay_batch_item_id,pay_batch_id,timesheet_id,segment_key,segment_id_norm,
+          source_ref,item_type,component_key_type,component_key_value,
+          key_resolution_source,key_resolution_failure_reason,amount_ex_vat)
+        SELECT sealed.pay_batch_item_id,sealed.pay_batch_id,sealed.timesheet_id,
+          sealed.segment_key,sealed.segment_id_norm,sealed.source_ref,sealed.item_type,
+          sealed.component_key_type,sealed.component_key_value,
+          sealed.key_resolution_source,sealed.key_resolution_failure_reason,
+          sealed.amount_ex_vat
+        FROM pg_temp.tmp_sync_sealed_reservation_items sealed;
+
+        CREATE TEMP TABLE pg_temp.tmp_sync_reserved_by_source_ref_replacement
+          (LIKE pg_temp.reserved_by_source_ref INCLUDING ALL) ON COMMIT DROP;
+        INSERT INTO pg_temp.tmp_sync_reserved_by_source_ref_replacement
+        SELECT sealed.timesheet_id,sealed.source_ref,ROUND(SUM(sealed.amount_ex_vat),2)
+        FROM pg_temp.tmp_sync_sealed_reservation_items sealed
+        WHERE sealed.source_ref IS NOT NULL
+        GROUP BY sealed.timesheet_id,sealed.source_ref;
+
+        CREATE TEMP TABLE pg_temp.tmp_sync_reserved_total_by_timesheet_replacement
+          (LIKE pg_temp.reserved_total_by_timesheet INCLUDING ALL) ON COMMIT DROP;
+        INSERT INTO pg_temp.tmp_sync_reserved_total_by_timesheet_replacement
+        SELECT sealed.timesheet_id,ROUND(SUM(sealed.amount_ex_vat),2)
+        FROM pg_temp.tmp_sync_sealed_reservation_items sealed
+        GROUP BY sealed.timesheet_id;
+
+        CREATE TEMP TABLE pg_temp.tmp_sync_reserved_segment_key_map_replacement
+          (LIKE pg_temp.reserved_segment_key_map INCLUDING ALL) ON COMMIT DROP;
+        INSERT INTO pg_temp.tmp_sync_reserved_segment_key_map_replacement
+        SELECT sealed.timesheet_id,sealed.segment_id_norm,
+          sealed.component_key_type,sealed.component_key_value
+        FROM pg_temp.tmp_sync_sealed_reservation_items sealed
+        WHERE sealed.item_type='SEGMENT_DELTA'
+          AND sealed.component_key_type IN ('TS_DAY','TS_TOTAL')
+          AND sealed.component_key_value IS NOT NULL
+          AND (sealed.component_key_type<>'TS_DAY'
+            OR sealed.component_key_value ~ '^\d{4}-\d{2}-\d{2}$');
+
+        CREATE TEMP TABLE pg_temp.tmp_sync_reserved_segment_sums_replacement
+          (LIKE pg_temp.reserved_segment_sums INCLUDING ALL) ON COMMIT DROP;
+        INSERT INTO pg_temp.tmp_sync_reserved_segment_sums_replacement
+        SELECT sealed.timesheet_id,sealed.component_key_type,sealed.component_key_value,
+          ROUND(SUM(sealed.amount_ex_vat),2)
+        FROM pg_temp.tmp_sync_sealed_reservation_items sealed
+        WHERE sealed.item_type='SEGMENT_DELTA'
+          AND sealed.component_key_type IN ('TS_DAY','TS_TOTAL')
+          AND sealed.component_key_value IS NOT NULL
+          AND (sealed.component_key_type<>'TS_DAY'
+            OR sealed.component_key_value ~ '^\d{4}-\d{2}-\d{2}$')
+        GROUP BY sealed.timesheet_id,sealed.component_key_type,sealed.component_key_value;
+
+        CREATE TEMP TABLE pg_temp.tmp_sync_reserved_preview_segment_ords_replacement
+          (LIKE pg_temp.reserved_preview_segment_ords INCLUDING ALL) ON COMMIT DROP;
+        INSERT INTO pg_temp.tmp_sync_reserved_preview_segment_ords_replacement
+        SELECT sealed.timesheet_id,
+          CASE WHEN split_part(COALESCE(sealed.source_ref,''),':',3) ~ '^\d+$'
+            THEN split_part(sealed.source_ref,':',3)::integer END,
+          ROUND(SUM(sealed.amount_ex_vat),2)
+        FROM pg_temp.tmp_sync_sealed_reservation_items sealed
+        WHERE sealed.item_type='ADJUSTMENT_DELTA'
+          AND BTRIM(COALESCE(sealed.source_ref,'')) LIKE 'preview_seg:%'
+        GROUP BY sealed.timesheet_id,
+          CASE WHEN split_part(COALESCE(sealed.source_ref,''),':',3) ~ '^\d+$'
+            THEN split_part(sealed.source_ref,':',3)::integer END;
+
+        CREATE TEMP TABLE pg_temp.tmp_sync_reserved_additional_by_code_replacement
+          (LIKE pg_temp.reserved_additional_by_code INCLUDING ALL) ON COMMIT DROP;
+        INSERT INTO pg_temp.tmp_sync_reserved_additional_by_code_replacement
+        SELECT sealed.timesheet_id,UPPER(NULLIF(BTRIM(COALESCE(
+            breakdown.value->>'bucket_code',
+            CASE WHEN sealed.component_key_type='ADDITIONAL_CODE'
+              THEN sealed.component_key_value END)),'')) AS code,
+          ROUND(SUM(CASE
+            WHEN COALESCE(breakdown.value#>>'{meta_json,source_amount_ex_vat}','')
+                ~ '^-?\d+(\.\d+)?$'
+              THEN ABS((breakdown.value#>>'{meta_json,source_amount_ex_vat}')::numeric)
+            WHEN COALESCE(breakdown.value#>>'{meta_json,source_pay_ex_vat}','')
+                ~ '^-?\d+(\.\d+)?$'
+              THEN ABS((breakdown.value#>>'{meta_json,source_pay_ex_vat}')::numeric)
+            WHEN COALESCE(breakdown.value->>'amount_ex_vat','') ~ '^-?\d+(\.\d+)?$'
+              THEN ABS((breakdown.value->>'amount_ex_vat')::numeric)
+            ELSE ABS(sealed.amount_ex_vat) END),2)
+        FROM pg_temp.tmp_sync_sealed_reservation_items sealed
+        LEFT JOIN LATERAL jsonb_array_elements(CASE
+          WHEN jsonb_typeof(sealed.breakdowns)='array' AND jsonb_array_length(sealed.breakdowns)>0
+            THEN sealed.breakdowns
+          WHEN sealed.component_key_type='ADDITIONAL_CODE'
+            THEN jsonb_build_array(jsonb_build_object(
+              'bucket_code',sealed.component_key_value,
+              'amount_ex_vat',sealed.amount_ex_vat,
+              'line_kind','ADDITIONAL_UNIT'))
+          ELSE '[]'::jsonb END) breakdown(value) ON true
+        WHERE (breakdown.value->>'line_kind'='ADDITIONAL_UNIT'
+            OR sealed.component_key_type='ADDITIONAL_CODE')
+          AND NULLIF(BTRIM(COALESCE(breakdown.value->>'bucket_code',
+            sealed.component_key_value)),'') IS NOT NULL
+        GROUP BY sealed.timesheet_id,UPPER(NULLIF(BTRIM(COALESCE(
+          breakdown.value->>'bucket_code',sealed.component_key_value)),''));
+
+        DROP TABLE pg_temp.reserved_batch_items,pg_temp.reserved_by_source_ref,
+          pg_temp.reserved_total_by_timesheet,pg_temp.reserved_segment_key_map,
+          pg_temp.reserved_segment_sums,pg_temp.reserved_preview_segment_ords,
+          pg_temp.reserved_additional_by_code;
+        ALTER TABLE pg_temp.tmp_sync_reserved_batch_items_replacement RENAME TO reserved_batch_items;
+        ALTER TABLE pg_temp.tmp_sync_reserved_by_source_ref_replacement RENAME TO reserved_by_source_ref;
+        ALTER TABLE pg_temp.tmp_sync_reserved_total_by_timesheet_replacement RENAME TO reserved_total_by_timesheet;
+        ALTER TABLE pg_temp.tmp_sync_reserved_segment_key_map_replacement RENAME TO reserved_segment_key_map;
+        ALTER TABLE pg_temp.tmp_sync_reserved_segment_sums_replacement RENAME TO reserved_segment_sums;
+        ALTER TABLE pg_temp.tmp_sync_reserved_preview_segment_ords_replacement RENAME TO reserved_preview_segment_ords;
+        ALTER TABLE pg_temp.tmp_sync_reserved_additional_by_code_replacement RENAME TO reserved_additional_by_code;
+
         IF to_regclass('pg_temp.ts_baseline') IS NULL
            OR to_regclass('pg_temp.pay_preview_candidate_context') IS NULL THEN
           RAISE EXCEPTION 'PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_INPUT_MISSING'
@@ -1704,19 +1889,28 @@ begin
               AS source_ordinal,
             CASE WHEN jsonb_typeof(sealed.evidence_json#>'{source_payload,segment}')='object'
               THEN sealed.evidence_json#>'{source_payload,segment}' ELSE '{}'::jsonb END
-              AS source_segment
+              AS source_segment,
+            COALESCE(sealed.segment_stable_key,sealed.segment_id,sealed.segment_key,
+              CASE WHEN sealed.component_kind='WORKED_TIME_RESIDUAL'
+                THEN 'worked-time-residual:'||sealed.economic_key_type||':'
+                  ||sealed.economic_key_value END) AS builder_segment_identity
           FROM pg_temp.tmp_sync_sealed_rate_projection sealed
-          WHERE sealed.component_kind='WORKED_TIME'
+          WHERE sealed.component_kind IN ('WORKED_TIME','WORKED_TIME_RESIDUAL')
         ), segment_grouped AS (
-          SELECT segment.timesheet_id,segment.segment_stable_key,
-            MIN(segment.segment_id) AS segment_id,MIN(segment.segment_key) AS segment_key,
+          SELECT segment.timesheet_id,segment.builder_segment_identity,
+            segment.economic_key_type,segment.economic_key_value,
+            COALESCE(MIN(segment.segment_id),segment.builder_segment_identity) AS segment_id,
+            COALESCE(MIN(segment.segment_key),segment.builder_segment_identity) AS segment_key,
             MIN(segment.source_ordinal) AS source_ordinal,
             (array_agg(segment.source_segment ORDER BY segment.source_ordinal,
-              segment.segment_stable_key,segment.segment_id))[1]
+              segment.builder_segment_identity,segment.segment_id))[1]
               ||jsonb_build_object(
-                'segment_id',MIN(segment.segment_id),
-                'segment_key',MIN(segment.segment_key),
-                'segment_stable_key',segment.segment_stable_key,
+                'segment_id',COALESCE(MIN(segment.segment_id),segment.builder_segment_identity),
+                'segment_key',COALESCE(MIN(segment.segment_key),segment.builder_segment_identity),
+                'segment_stable_key',segment.builder_segment_identity,
+                'date',MIN(COALESCE(segment.source_segment->>'date',
+                  segment.source_segment->>'work_date',CASE
+                    WHEN segment.economic_key_type='TS_DAY' THEN segment.economic_key_value END)),
                 'hours_day',ROUND(COALESCE(SUM(segment.source_units)
                   FILTER(WHERE segment.bucket_code='DAY'),0),6),
                 'hours_night',ROUND(COALESCE(SUM(segment.source_units)
@@ -1731,10 +1925,12 @@ begin
                 'charge_amount',ROUND(SUM(COALESCE(segment.source_charge_ex_vat,0)),2))
               AS segment_json
           FROM segment_bucket_rows segment
-          GROUP BY segment.timesheet_id,segment.segment_stable_key
+          GROUP BY segment.timesheet_id,segment.builder_segment_identity,
+            segment.economic_key_type,segment.economic_key_value
         ), segments_by_timesheet AS (
           SELECT grouped.timesheet_id,jsonb_agg(grouped.segment_json ORDER BY
-            grouped.source_ordinal,grouped.segment_stable_key,grouped.segment_id) AS segments_json
+            grouped.source_ordinal,grouped.builder_segment_identity,grouped.segment_id)
+              AS segments_json
           FROM segment_grouped grouped GROUP BY grouped.timesheet_id
         ), additional_by_timesheet AS (
           SELECT additional.timesheet_id,
@@ -1749,6 +1945,7 @@ begin
               AS additional_charge_ex_vat
           FROM pg_temp.tmp_sync_sealed_rate_projection additional
           WHERE additional.component_kind='ADDITIONAL_UNIT'
+            AND COALESCE(additional.evidence_json->>'source_key','') NOT LIKE 'SEALED_SYNTHETIC:%'
             AND NULLIF(additional.evidence_json#>>'{source_payload,raw_additional_code}','')
               IS NOT NULL
           GROUP BY additional.timesheet_id
@@ -1759,7 +1956,96 @@ begin
             ORDER BY adjustment.evidence_json#>>'{source_payload,adjustment_id}') AS adjustments_json
           FROM pg_temp.tmp_sync_sealed_rate_projection adjustment
           WHERE adjustment.component_kind='ADJUSTMENT'
+            AND COALESCE(adjustment.evidence_json->>'source_key','') NOT LIKE 'SEALED_SYNTHETIC:%'
           GROUP BY adjustment.timesheet_id
+        ), economic_projection_totals AS (
+          SELECT sealed.timesheet_id,sealed.economic_key_type,sealed.economic_key_value,
+            ROUND(SUM(sealed.truth_ex_vat),2) AS truth_ex_vat,
+            ROUND(SUM(sealed.baseline_ex_vat),2) AS baseline_ex_vat,
+            ROUND(SUM(sealed.reserved_ex_vat),2) AS reserved_ex_vat,
+            MIN(CASE WHEN COALESCE(sealed.evidence_json#>>'{economic_authority,baseline_inc_vat}','')
+                ~ '^-?\d+(\.\d+)?$'
+              THEN (sealed.evidence_json#>>'{economic_authority,baseline_inc_vat}')::numeric END)
+              AS baseline_inc_vat
+          FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+          GROUP BY sealed.timesheet_id,sealed.economic_key_type,sealed.economic_key_value
+        ), baseline_only_keys AS (
+          SELECT total.*
+          FROM economic_projection_totals total
+          WHERE ABS(total.truth_ex_vat)<=0.005 AND ABS(total.baseline_ex_vat)>0.005
+        ), baseline_only_physical_evidence AS (
+          SELECT sealed.timesheet_id,sealed.economic_key_type,sealed.economic_key_value,
+            ROUND(SUM(sealed.source_charge_ex_vat),2) AS source_charge_ex_vat,
+            (array_agg(sealed.evidence_json#>'{source_payload,source_value}' ORDER BY
+              sealed.physical_bucket_key))[1] AS source_value
+          FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+          JOIN baseline_only_keys baseline
+            USING(timesheet_id,economic_key_type,economic_key_value)
+          GROUP BY sealed.timesheet_id,sealed.economic_key_type,sealed.economic_key_value
+        ), baseline_only_active_artifacts AS (
+          SELECT baseline.timesheet_id,
+            jsonb_agg(jsonb_build_object(
+              'key_type',baseline.economic_key_type,
+              'key_value',baseline.economic_key_value,
+              'amount_ex_vat',baseline.baseline_ex_vat,
+              'amount_inc_vat',COALESCE(baseline.baseline_inc_vat,baseline.baseline_ex_vat),
+              'baseline_source','SEALED_BUILD_FACTS') ORDER BY
+              baseline.economic_key_type,baseline.economic_key_value) AS components_json,
+            COUNT(*)::integer AS component_count,
+            ROUND(SUM(baseline.baseline_ex_vat),2) AS amount_ex_vat,
+            ROUND(SUM(COALESCE(baseline.baseline_inc_vat,baseline.baseline_ex_vat)),2)
+              AS amount_inc_vat
+          FROM baseline_only_keys baseline GROUP BY baseline.timesheet_id
+        ), baseline_only_expenses AS (
+          SELECT baseline.timesheet_id,
+            ROUND(SUM(baseline.baseline_ex_vat),2) AS expenses_pay_ex_vat,
+            ROUND(-COALESCE(SUM(sealed.source_charge_ex_vat),0),2) AS expenses_charge_ex_vat,
+            ROUND(SUM(baseline.baseline_ex_vat) FILTER(
+              WHERE baseline.economic_key_value='TRAVEL'),2) AS travel_pay_ex_vat,
+            ROUND(-COALESCE(SUM(sealed.source_charge_ex_vat) FILTER(
+              WHERE baseline.economic_key_value='TRAVEL'),0),2) AS travel_charge_ex_vat,
+            ROUND(SUM(baseline.baseline_ex_vat) FILTER(
+              WHERE baseline.economic_key_value='ACCOMMODATION'),2) AS accommodation_pay_ex_vat,
+            ROUND(-COALESCE(SUM(sealed.source_charge_ex_vat) FILTER(
+              WHERE baseline.economic_key_value='ACCOMMODATION'),0),2)
+              AS accommodation_charge_ex_vat,
+            ROUND(SUM(baseline.baseline_ex_vat) FILTER(
+              WHERE baseline.economic_key_value='OTHER'),2) AS other_pay_ex_vat,
+            ROUND(-COALESCE(SUM(sealed.source_charge_ex_vat) FILTER(
+              WHERE baseline.economic_key_value='OTHER'),0),2) AS other_charge_ex_vat,
+            ROUND(SUM(baseline.baseline_ex_vat) FILTER(
+              WHERE baseline.economic_key_value='MILEAGE'),2) AS mileage_pay_ex_vat,
+            ROUND(-COALESCE(SUM(sealed.source_charge_ex_vat) FILTER(
+              WHERE baseline.economic_key_value='MILEAGE'),0),2) AS mileage_charge_ex_vat
+          FROM baseline_only_keys baseline
+          LEFT JOIN baseline_only_physical_evidence sealed
+            USING(timesheet_id,economic_key_type,economic_key_value)
+          WHERE baseline.economic_key_type='EXPENSE_CODE'
+          GROUP BY baseline.timesheet_id
+        ), baseline_only_additional AS (
+          SELECT baseline.timesheet_id,
+            ROUND(SUM(baseline.baseline_ex_vat),2) AS additional_pay_ex_vat,
+            ROUND(-COALESCE(SUM(sealed.source_charge_ex_vat),0),2) AS additional_charge_ex_vat,
+            COALESCE(jsonb_object_agg(baseline.economic_key_value,
+              COALESCE(sealed.source_value,
+                jsonb_build_object('source_pay_ex_vat',baseline.baseline_ex_vat))
+              ORDER BY octet_length(baseline.economic_key_value),
+                encode(convert_to(baseline.economic_key_value,'UTF8'),'hex')),'{}'::jsonb)
+              AS additional_units_json
+          FROM baseline_only_keys baseline
+          LEFT JOIN baseline_only_physical_evidence sealed
+            USING(timesheet_id,economic_key_type,economic_key_value)
+          WHERE baseline.economic_key_type='ADDITIONAL_CODE'
+          GROUP BY baseline.timesheet_id
+        ), baseline_only_adjustments AS (
+          SELECT baseline.timesheet_id,jsonb_agg(jsonb_build_object(
+              'id',baseline.economic_key_value,
+              'pay_amount_ex_vat',baseline.baseline_ex_vat,
+              'source_pay_ex_vat',baseline.baseline_ex_vat)
+            ORDER BY baseline.economic_key_value) AS adjustments_json
+          FROM baseline_only_keys baseline
+          WHERE baseline.economic_key_type='ADJUSTMENT_CODE'
+          GROUP BY baseline.timesheet_id
         ), timesheet_authority AS (
           SELECT sealed.timesheet_id,MIN(sealed.source_pay_method) AS source_pay_method,
             MIN(sealed.target_pay_method) AS target_pay_method,
@@ -1769,7 +2055,8 @@ begin
             ROUND(COALESCE(SUM(sealed.source_units)
               FILTER(WHERE sealed.component_kind='WORKED_TIME'),0),6) AS total_hours,
             ROUND(SUM(sealed.truth_ex_vat),2) AS total_pay_ex_vat,
-            ROUND(SUM(COALESCE(sealed.source_charge_ex_vat,0)),2) AS total_charge_ex_vat,
+            ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
+              FILTER(WHERE ABS(sealed.truth_ex_vat)>0.005),0),2) AS total_charge_ex_vat,
             ROUND(COALESCE(SUM(sealed.source_units) FILTER(WHERE sealed.bucket_code='DAY'),0),6)
               AS hours_day,
             ROUND(COALESCE(SUM(sealed.source_units) FILTER(WHERE sealed.bucket_code='NIGHT'),0),6)
@@ -1793,33 +2080,34 @@ begin
             ROUND(COALESCE(SUM(sealed.truth_ex_vat)
               FILTER(WHERE sealed.component_kind='EXPENSE'),0),2) AS expenses_pay_ex_vat,
             ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
-              FILTER(WHERE sealed.component_kind='EXPENSE'),0),2) AS expenses_charge_ex_vat,
+              FILTER(WHERE sealed.component_kind='EXPENSE'
+                AND ABS(sealed.truth_ex_vat)>0.005),0),2) AS expenses_charge_ex_vat,
             ROUND(COALESCE(SUM(sealed.truth_ex_vat) FILTER(WHERE sealed.component_kind='EXPENSE'
               AND sealed.evidence_json#>>'{source_payload,expense_code}'='TRAVEL'),0),2)
               AS travel_pay_ex_vat,
             ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
-              FILTER(WHERE sealed.component_kind='EXPENSE'
+              FILTER(WHERE sealed.component_kind='EXPENSE' AND ABS(sealed.truth_ex_vat)>0.005
                 AND sealed.evidence_json#>>'{source_payload,expense_code}'='TRAVEL'),0),2)
               AS travel_charge_ex_vat,
             ROUND(COALESCE(SUM(sealed.truth_ex_vat) FILTER(WHERE sealed.component_kind='EXPENSE'
               AND sealed.evidence_json#>>'{source_payload,expense_code}'='ACCOMMODATION'),0),2)
               AS accommodation_pay_ex_vat,
             ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
-              FILTER(WHERE sealed.component_kind='EXPENSE'
+              FILTER(WHERE sealed.component_kind='EXPENSE' AND ABS(sealed.truth_ex_vat)>0.005
                 AND sealed.evidence_json#>>'{source_payload,expense_code}'='ACCOMMODATION'),0),2)
               AS accommodation_charge_ex_vat,
             ROUND(COALESCE(SUM(sealed.truth_ex_vat) FILTER(WHERE sealed.component_kind='EXPENSE'
               AND sealed.evidence_json#>>'{source_payload,expense_code}'='OTHER'),0),2)
               AS other_pay_ex_vat,
             ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
-              FILTER(WHERE sealed.component_kind='EXPENSE'
+              FILTER(WHERE sealed.component_kind='EXPENSE' AND ABS(sealed.truth_ex_vat)>0.005
                 AND sealed.evidence_json#>>'{source_payload,expense_code}'='OTHER'),0),2)
               AS other_charge_ex_vat,
             ROUND(COALESCE(SUM(sealed.truth_ex_vat) FILTER(WHERE sealed.component_kind='EXPENSE'
               AND sealed.evidence_json#>>'{source_payload,expense_code}'='MILEAGE'),0),2)
               AS mileage_pay_ex_vat,
             ROUND(COALESCE(SUM(sealed.source_charge_ex_vat)
-              FILTER(WHERE sealed.component_kind='EXPENSE'
+              FILTER(WHERE sealed.component_kind='EXPENSE' AND ABS(sealed.truth_ex_vat)>0.005
                 AND sealed.evidence_json#>>'{source_payload,expense_code}'='MILEAGE'),0),2)
               AS mileage_charge_ex_vat
           FROM pg_temp.tmp_sync_sealed_rate_projection sealed GROUP BY sealed.timesheet_id
@@ -1830,6 +2118,36 @@ begin
           cand_umbrella_id=authority.umbrella_id,
           umb_enabled=authority.umbrella_enabled,
           umb_vat_chargeable=authority.umbrella_vat_chargeable,
+          base_json=jsonb_build_object(
+            'baseline_source','SEALED_BUILD_FACTS',
+            'active_settled_artifact_components',COALESCE(active.components_json,'[]'::jsonb),
+            'active_settled_amount_ex_vat',COALESCE(active.amount_ex_vat,0),
+            'active_settled_amount_inc_vat',COALESCE(active.amount_inc_vat,0),
+            'segments','[]'::jsonb,
+            'additional_pay_ex_vat',COALESCE(baseline_additional.additional_pay_ex_vat,0),
+            'additional_charge_ex_vat',COALESCE(baseline_additional.additional_charge_ex_vat,0),
+            'additional_units_json',COALESCE(baseline_additional.additional_units_json,'{}'::jsonb),
+            'expenses',jsonb_build_object(
+              'expenses_pay_ex_vat',COALESCE(baseline_expenses.expenses_pay_ex_vat,0),
+              'expenses_charge_ex_vat',COALESCE(baseline_expenses.expenses_charge_ex_vat,0),
+              'travel_pay_ex_vat',COALESCE(baseline_expenses.travel_pay_ex_vat,0),
+              'travel_charge_ex_vat',COALESCE(baseline_expenses.travel_charge_ex_vat,0),
+              'accommodation_pay_ex_vat',COALESCE(baseline_expenses.accommodation_pay_ex_vat,0),
+              'accommodation_charge_ex_vat',COALESCE(baseline_expenses.accommodation_charge_ex_vat,0),
+              'other_pay_ex_vat',COALESCE(baseline_expenses.other_pay_ex_vat,0),
+              'other_charge_ex_vat',COALESCE(baseline_expenses.other_charge_ex_vat,0),
+              'mileage_pay_ex_vat',COALESCE(baseline_expenses.mileage_pay_ex_vat,0),
+              'mileage_charge_ex_vat',COALESCE(baseline_expenses.mileage_charge_ex_vat,0)),
+            'adjustments',COALESCE(baseline_adjustments.adjustments_json,'[]'::jsonb)),
+          active_settled_artifact_components_json=COALESCE(active.components_json,'[]'::jsonb),
+          active_settled_artifact_component_count=COALESCE(active.component_count,0),
+          active_settled_artifact_amount_ex_vat=COALESCE(active.amount_ex_vat,0),
+          active_settled_artifact_amount_inc_vat=COALESCE(active.amount_inc_vat,0),
+          has_active_settled_artifact_baseline=COALESCE(active.component_count,0)>0,
+          bas_hours_day=0,bas_hours_night=0,bas_hours_sat=0,bas_hours_sun=0,bas_hours_bh=0,
+          bas_pay_day=NULL,bas_pay_night=NULL,bas_pay_sat=NULL,bas_pay_sun=NULL,bas_pay_bh=NULL,
+          bas_charge_day=NULL,bas_charge_night=NULL,bas_charge_sat=NULL,
+          bas_charge_sun=NULL,bas_charge_bh=NULL,
           current_segments_json=COALESCE(segments.segments_json,'[]'::jsonb),
           current_adjustments_json=COALESCE(adjustments.adjustments_json,'[]'::jsonb),
           total_hours=authority.total_hours,total_pay_ex_vat=authority.total_pay_ex_vat,
@@ -1866,6 +2184,10 @@ begin
         LEFT JOIN segments_by_timesheet segments USING(timesheet_id)
         LEFT JOIN additional_by_timesheet additional USING(timesheet_id)
         LEFT JOIN adjustments_by_timesheet adjustments USING(timesheet_id)
+        LEFT JOIN baseline_only_active_artifacts active USING(timesheet_id)
+        LEFT JOIN baseline_only_expenses baseline_expenses USING(timesheet_id)
+        LEFT JOIN baseline_only_additional baseline_additional USING(timesheet_id)
+        LEFT JOIN baseline_only_adjustments baseline_adjustments USING(timesheet_id)
         WHERE baseline.candidate_id=v_preview_candidate_loop_id
           AND baseline.timesheet_id=authority.timesheet_id;
 
@@ -2120,6 +2442,12 @@ begin
                UPPER(BTRIM(raw_component.value->>'component_key_type')),
                BTRIM(raw_component.value->>'component_key_value'),
                CASE
+                 WHEN UPPER(BTRIM(COALESCE(
+                     raw_component.value#>>'{source_basis_json,component_fallback}','')))
+                       ='WORKED_TIME_AMOUNT'
+                   THEN 'worked-time-residual:'
+                     ||UPPER(BTRIM(raw_component.value->>'component_key_type'))||':'
+                     ||BTRIM(raw_component.value->>'component_key_value')
                  WHEN UPPER(BTRIM(raw_component.value->>'component_key_type')) IN ('TS_DAY','TS_TOTAL')
                    THEN COALESCE(NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_stable_key}'),''),
                      NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_id}'),''),
@@ -2134,6 +2462,9 @@ begin
                    THEN 'adjustment:'||BTRIM(raw_component.value#>>'{source_basis_json,adjustment_id}')
                END,
                UPPER(BTRIM(COALESCE(
+                 CASE WHEN UPPER(BTRIM(COALESCE(
+                     raw_component.value#>>'{source_basis_json,component_fallback}','')))
+                       ='WORKED_TIME_AMOUNT' THEN 'FIXED' END,
                  NULLIF(raw_component.value#>>'{source_basis_json,bucket_code}',''),
                  CASE UPPER(BTRIM(raw_component.value->>'component_key_type'))
                    WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
@@ -2557,6 +2888,12 @@ begin
          UPPER(BTRIM(raw_component.value->>'component_key_type')),
          BTRIM(raw_component.value->>'component_key_value'),
          CASE
+           WHEN UPPER(BTRIM(COALESCE(
+               raw_component.value#>>'{source_basis_json,component_fallback}','')))
+                 ='WORKED_TIME_AMOUNT'
+             THEN 'worked-time-residual:'
+               ||UPPER(BTRIM(raw_component.value->>'component_key_type'))||':'
+               ||BTRIM(raw_component.value->>'component_key_value')
            WHEN UPPER(BTRIM(raw_component.value->>'component_key_type')) IN ('TS_DAY','TS_TOTAL')
              THEN COALESCE(NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_stable_key}'),''),
                NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_id}'),''),
@@ -2571,6 +2908,9 @@ begin
              THEN 'adjustment:'||BTRIM(raw_component.value#>>'{source_basis_json,adjustment_id}')
          END,
          UPPER(BTRIM(COALESCE(
+           CASE WHEN UPPER(BTRIM(COALESCE(
+               raw_component.value#>>'{source_basis_json,component_fallback}','')))
+                 ='WORKED_TIME_AMOUNT' THEN 'FIXED' END,
            NULLIF(raw_component.value#>>'{source_basis_json,bucket_code}',''),
            CASE UPPER(BTRIM(raw_component.value->>'component_key_type'))
              WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
@@ -4608,6 +4948,10 @@ begin
       UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')),
       NULLIF(BTRIM(component.value->>'component_key_value'),''),
       CASE
+        WHEN UPPER(BTRIM(COALESCE(
+            component.value#>>'{source_basis_json,component_fallback}','')))='WORKED_TIME_AMOUNT'
+          THEN 'worked-time-residual:'||UPPER(BTRIM(component.value->>'component_key_type'))
+            ||':'||BTRIM(component.value->>'component_key_value')
         WHEN UPPER(BTRIM(component.value->>'component_key_type')) IN ('TS_DAY','TS_TOTAL')
           THEN COALESCE(
             NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_stable_key}'),''),
@@ -4624,6 +4968,9 @@ begin
           THEN 'adjustment:'||BTRIM(component.value#>>'{source_basis_json,adjustment_id}')
       END,
       UPPER(BTRIM(COALESCE(
+        CASE WHEN UPPER(BTRIM(COALESCE(
+            component.value#>>'{source_basis_json,component_fallback}','')))='WORKED_TIME_AMOUNT'
+          THEN 'FIXED' END,
         NULLIF(component.value#>>'{source_basis_json,bucket_code}',''),
         CASE UPPER(BTRIM(component.value->>'component_key_type'))
           WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
@@ -4637,7 +4984,9 @@ begin
       'component_key_type',UPPER(BTRIM(component.value->>'component_key_type')),
       'component_key_value',BTRIM(component.value->>'component_key_value'),
       'segment_id',NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_id}'),''),
-      'segment_key',NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_key}'),''),
+      'segment_key',COALESCE(
+        NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_key}'),''),
+        NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_id}'),'')),
       'segment_stable_key',NULLIF(BTRIM(
         component.value#>>'{source_basis_json,segment_stable_key}'),''),
       'work_date',NULLIF(BTRIM(COALESCE(component.value#>>'{source_basis_json,work_date}',
@@ -4700,8 +5049,28 @@ begin
     UNION ALL
     SELECT 30,'PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_DIGEST_MISMATCH',jsonb_build_object(
       'timesheet_id',sealed.timesheet_id,'physical_bucket_key',sealed.physical_bucket_key,
+      'economic_key_type',sealed.economic_key_type,
+      'economic_key_value',sealed.economic_key_value,
+      'digest_mismatch',builder.builder_comparison_digest IS DISTINCT FROM
+        sealed.evidence_json#>>'{physical_bucket,builder_comparison_digest}',
+      'amount_mismatch',CASE WHEN COALESCE(builder.component_json->>'component_amount_ex_vat','')
+          ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((builder.component_json->>'component_amount_ex_vat')::numeric,2)
+        ELSE NULL::numeric END IS DISTINCT FROM ROUND(COALESCE(
+          CASE WHEN COALESCE(sealed.evidence_json#>>'{physical_bucket,builder_component_amount_ex_vat}','')
+              ~ '^-?\d+(\.\d+)?$'
+            THEN (sealed.evidence_json#>>'{physical_bucket,builder_component_amount_ex_vat}')::numeric END,
+          sealed.outstanding_ex_vat),2),
       'expected_digest',sealed.evidence_json#>>'{physical_bucket,builder_comparison_digest}',
-      'actual_digest',builder.builder_comparison_digest)
+      'actual_digest',builder.builder_comparison_digest,
+      'expected_amount_ex_vat',ROUND(COALESCE(
+        CASE WHEN COALESCE(sealed.evidence_json#>>'{physical_bucket,builder_component_amount_ex_vat}','')
+            ~ '^-?\d+(\.\d+)?$'
+          THEN (sealed.evidence_json#>>'{physical_bucket,builder_component_amount_ex_vat}')::numeric END,
+        sealed.outstanding_ex_vat),2),
+      'actual_amount_ex_vat',CASE WHEN COALESCE(builder.component_json->>'component_amount_ex_vat','')
+          ~ '^-?\d+(\.\d+)?$'
+        THEN ROUND((builder.component_json->>'component_amount_ex_vat')::numeric,2) END)
     FROM pg_temp.tmp_sync_sealed_rate_projection sealed
     JOIN pg_temp.tmp_sync_builder_physical_components builder
       ON builder.timesheet_id=sealed.timesheet_id
@@ -4711,7 +5080,11 @@ begin
        OR CASE WHEN COALESCE(builder.component_json->>'component_amount_ex_vat','')
             ~ '^-?\d+(\.\d+)?$'
           THEN ROUND((builder.component_json->>'component_amount_ex_vat')::numeric,2)
-          ELSE NULL::numeric END IS DISTINCT FROM ROUND(sealed.outstanding_ex_vat,2)
+          ELSE NULL::numeric END IS DISTINCT FROM ROUND(COALESCE(
+            CASE WHEN COALESCE(sealed.evidence_json#>>'{physical_bucket,builder_component_amount_ex_vat}','')
+                ~ '^-?\d+(\.\d+)?$'
+              THEN (sealed.evidence_json#>>'{physical_bucket,builder_component_amount_ex_vat}')::numeric END,
+            sealed.outstanding_ex_vat),2)
   ) failure
   ORDER BY failure.failure_rank,
     failure.detail_json->>'timesheet_id',failure.detail_json->>'physical_bucket_key'
@@ -5082,7 +5455,9 @@ begin
           'component_key_type',UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),'')),
           'component_key_value',NULLIF(BTRIM(component.value->>'component_key_value'),''),
           'segment_id',NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_id}'),''),
-          'segment_key',NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_key}'),''),
+          'segment_key',COALESCE(
+            NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_key}'),''),
+            NULLIF(BTRIM(component.value#>>'{source_basis_json,segment_id}'),'')),
           'segment_stable_key',NULLIF(BTRIM(
             component.value#>>'{source_basis_json,segment_stable_key}'),''),
           'work_date',NULLIF(BTRIM(COALESCE(component.value#>>'{source_basis_json,work_date}',

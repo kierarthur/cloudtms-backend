@@ -1,5 +1,5 @@
 -- Runtime contract checks for James physical rate authority.
--- Run only against TEST after the three repeatables are installed.
+-- Run only against TEST after the four James runtime repeatables are installed.
 \set ON_ERROR_STOP on
 \ir ../supabase/verification/13082026_1943_banking_pay_james_rate_authority_readonly.sql
 
@@ -8,6 +8,7 @@ DECLARE
   v_helper_definition text;
   v_serializer_definition text;
   v_sync_definition text;
+  v_source_build_definition text;
 BEGIN
   SELECT pg_catalog.pg_get_functiondef(
     'private.pay_workbench_sealed_rate_component_projection_v1(uuid,uuid,uuid[])'::regprocedure)
@@ -18,6 +19,9 @@ BEGIN
   SELECT pg_catalog.pg_get_functiondef(
     'private.pay_sync_overpayments_from_workbench_workspace_v1(uuid,uuid,uuid,uuid,date,date,uuid,text,uuid[],jsonb,uuid,uuid[],uuid[])'::regprocedure)
   INTO STRICT v_sync_definition;
+  SELECT pg_catalog.pg_get_functiondef(
+    'private.pay_workbench_candidate_source_build_chunk_legacy_v1(uuid,uuid,jsonb,jsonb,integer)'::regprocedure)
+  INTO STRICT v_source_build_definition;
 
   IF v_helper_definition ~* 'public\.(timesheets|timesheets_financials|candidates|umbrellas|settings_finance_windows)'
      OR v_helper_definition ~* 'pay_preview_candidate_build_case_component_rows' THEN
@@ -42,12 +46,22 @@ BEGIN
     RAISE EXCEPTION 'JAMES_RATE_SYNCHRONIZER_PHYSICAL_OWNER_FAILED';
   END IF;
 
-  IF position('sealed_physical_amount_matches' in v_helper_definition)=0
-     OR position('STRUCTURAL_IDENTITY' in v_helper_definition)=0
-     OR position('SOLE_BUCKET' in v_helper_definition)=0
-     OR position('RATE_AUTHORITY_PHYSICAL_BASELINE_REQUIRED' in v_helper_definition)=0
-     OR position('RATE_AUTHORITY_PHYSICAL_RESERVATION_REQUIRED' in v_helper_definition)=0 THEN
+  IF position('nested_evidence_raw' in v_helper_definition)=0
+     OR position('nested_evidence_normalized' in v_helper_definition)=0
+     OR position('exact_allocation_matched' in v_helper_definition)=0
+     OR position('sealed_physical_amount_attribution' in v_helper_definition)=0
+     OR position('truth_residual_sources' in v_helper_definition)=0
+     OR position('RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED' in v_helper_definition)=0
+     OR position('RATE_AUTHORITY_PARENT_COMPONENT_RECONCILIATION_MISMATCH' in v_helper_definition)=0 THEN
     RAISE EXCEPTION 'JAMES_RATE_HELPER_SEALED_AMOUNT_OWNER_FAILED';
+  END IF;
+
+  IF position('ACTIVE_ITEM_RESERVATION:' in v_source_build_definition)=0
+     OR position('pay_batch_items_active_reservation' in v_source_build_definition)=0
+     OR position('RESERVATION_ECONOMIC_KEY_MISSING' in v_source_build_definition)=0
+     OR position('RESERVATION_ECONOMIC_KEY_CONFLICT' in v_source_build_definition)=0
+     OR position('tmp_sync_sealed_reservation_items' in v_sync_definition)=0 THEN
+    RAISE EXCEPTION 'JAMES_RATE_SEALED_RESERVATION_DOMAIN_MISSING';
   END IF;
 END;
 $verification$;
@@ -80,6 +94,7 @@ DECLARE
   v_count integer;
   v_baseline numeric;
   v_reserved numeric;
+  v_residual_count integer;
 BEGIN
   IF EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_builds
       WHERE id=v_build) THEN
@@ -210,12 +225,14 @@ BEGIN
     5,jsonb_build_object('frozen_source_basis_json',jsonb_build_object(
       'source_family_key',v_family)),md5('fixture-baseline-ambiguous'));
 
-  SELECT min(failure_code)
-  INTO v_failure
+  SELECT min(failure_code),count(*) FILTER(WHERE component_kind='WORKED_TIME_RESIDUAL'),
+    sum(baseline_ex_vat)
+  INTO v_failure,v_residual_count,v_baseline
   FROM private.pay_workbench_sealed_rate_component_projection_v1(
     v_build,v_candidate,ARRAY[v_timesheet]);
-  IF v_failure IS DISTINCT FROM 'RATE_AUTHORITY_PHYSICAL_BASELINE_REQUIRED' THEN
-    RAISE EXCEPTION 'JAMES_RATE_AMBIGUOUS_BASELINE_DID_NOT_FAIL_CLOSED';
+  IF v_failure IS NOT NULL OR v_residual_count<>1
+     OR round(v_baseline,2) IS DISTINCT FROM 20::numeric THEN
+    RAISE EXCEPTION 'JAMES_RATE_UNALLOCATED_BASELINE_RESIDUAL_FAILED';
   END IF;
 
   DELETE FROM private.banking_pay_workbench_economic_build_facts
@@ -230,12 +247,14 @@ BEGIN
     ARRAY[v_timesheet],'GLOBAL','JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',5,
     v_ambiguous_reservation,'{}'::jsonb,md5('fixture-reservation-ambiguous'));
 
-  SELECT min(failure_code)
-  INTO v_failure
+  SELECT min(failure_code),count(*) FILTER(WHERE component_kind='WORKED_TIME_RESIDUAL'),
+    sum(reserved_ex_vat)
+  INTO v_failure,v_residual_count,v_reserved
   FROM private.pay_workbench_sealed_rate_component_projection_v1(
     v_build,v_candidate,ARRAY[v_timesheet]);
-  IF v_failure IS DISTINCT FROM 'RATE_AUTHORITY_PHYSICAL_RESERVATION_REQUIRED' THEN
-    RAISE EXCEPTION 'JAMES_RATE_AMBIGUOUS_RESERVATION_DID_NOT_FAIL_CLOSED';
+  IF v_failure IS NOT NULL OR v_residual_count<>1
+     OR round(v_reserved,2) IS DISTINCT FROM 15::numeric THEN
+    RAISE EXCEPTION 'JAMES_RATE_UNALLOCATED_RESERVATION_RESIDUAL_FAILED';
   END IF;
 END;
 $sealed_amount_fixture$;
