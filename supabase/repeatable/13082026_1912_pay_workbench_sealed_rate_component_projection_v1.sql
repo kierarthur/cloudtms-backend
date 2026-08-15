@@ -501,6 +501,7 @@ AS $function$
         AS raw_source_pay_method,
       UPPER(NULLIF(BTRIM(occurrence.rate_authority#>>'{source,source_pay_method}'),''))
         AS normalized_source_pay_method,
+      10::integer AS authority_priority,
       'LIVE_OCCURRENCE'::text AS evidence_kind,
       occurrence.natural_key AS evidence_identity
     FROM occurrence_validated occurrence
@@ -511,12 +512,14 @@ AS $function$
     SELECT parent.timesheet_id,parent.economic_key_type,parent.economic_key_value,
       NULLIF(BTRIM(parent.sealed_source_pay_method),''),
       UPPER(NULLIF(BTRIM(parent.sealed_source_pay_method),'')),
+      20::integer,
       'SEALED_PARENT',parent.fact_identity
     FROM sealed_parent_facts parent
     UNION ALL
     SELECT nested.timesheet_id,nested.economic_key_type,nested.economic_key_value,
       NULLIF(BTRIM(nested.evidence_source_pay_method),''),
       UPPER(NULLIF(BTRIM(nested.evidence_source_pay_method),'')),
+      20::integer,
       'NESTED_'||nested.evidence_origin,
       nested.fact_identity||':'||COALESCE(nested.evidence_container_identity,
         md5(nested.evidence_json::text))
@@ -524,35 +527,53 @@ AS $function$
   ), source_method_evidence_documents AS MATERIALIZED (
     SELECT evidence.*,
       jsonb_build_object(
+        'authority_priority',evidence.authority_priority,
         'evidence_kind',evidence.evidence_kind,
         'evidence_identity',evidence.evidence_identity,
         'source_pay_method',evidence.normalized_source_pay_method) AS evidence_document
     FROM source_method_evidence evidence
+  ), source_method_authority_tier AS MATERIALIZED (
+    SELECT evidence.timesheet_id,evidence.economic_key_type,evidence.economic_key_value,
+      MIN(evidence.authority_priority)::integer AS selected_authority_priority
+    FROM source_method_evidence_documents evidence
+    GROUP BY evidence.timesheet_id,evidence.economic_key_type,evidence.economic_key_value
   ), source_method_authority_summary AS MATERIALIZED (
     SELECT evidence.timesheet_id,evidence.economic_key_type,evidence.economic_key_value,
       COUNT(*)::integer AS total_evidence_count,
-      COUNT(*) FILTER(WHERE evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))::integer
+      COUNT(*) FILTER(WHERE evidence.authority_priority=tier.selected_authority_priority)::integer
+        AS selected_evidence_count,
+      tier.selected_authority_priority,
+      COUNT(*) FILTER(WHERE evidence.authority_priority=tier.selected_authority_priority
+        AND evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))::integer
         AS supported_method_evidence_count,
-      COUNT(*) FILTER(WHERE evidence.raw_source_pay_method IS NOT NULL
+      COUNT(*) FILTER(WHERE evidence.authority_priority=tier.selected_authority_priority
+        AND evidence.raw_source_pay_method IS NOT NULL
         AND evidence.normalized_source_pay_method NOT IN ('PAYE','UMBRELLA'))::integer
         AS invalid_method_count,
       COUNT(DISTINCT evidence.normalized_source_pay_method) FILTER(
-        WHERE evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))::integer
+        WHERE evidence.authority_priority=tier.selected_authority_priority
+          AND evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))::integer
         AS distinct_supported_source_method_count,
-      CASE WHEN COUNT(*) FILTER(WHERE evidence.raw_source_pay_method IS NOT NULL
+      CASE WHEN COUNT(*) FILTER(WHERE evidence.authority_priority=tier.selected_authority_priority
+          AND evidence.raw_source_pay_method IS NOT NULL
           AND evidence.normalized_source_pay_method NOT IN ('PAYE','UMBRELLA'))=0
           AND COUNT(DISTINCT evidence.normalized_source_pay_method) FILTER(
-            WHERE evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))=1
+            WHERE evidence.authority_priority=tier.selected_authority_priority
+              AND evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))=1
         THEN (jsonb_agg(DISTINCT evidence.normalized_source_pay_method
           ORDER BY evidence.normalized_source_pay_method) FILTER(
-            WHERE evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))->>0)
+            WHERE evidence.authority_priority=tier.selected_authority_priority
+              AND evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))->>0)
       END AS authoritative_source_pay_method,
       pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
         COALESCE(jsonb_agg(evidence.evidence_document ORDER BY evidence.evidence_kind,
           evidence.evidence_identity),'[]'::jsonb)::text,'UTF8'),'sha256'),'hex')
         AS complete_evidence_digest
     FROM source_method_evidence_documents evidence
-    GROUP BY evidence.timesheet_id,evidence.economic_key_type,evidence.economic_key_value
+    JOIN source_method_authority_tier tier
+      USING(timesheet_id,economic_key_type,economic_key_value)
+    GROUP BY evidence.timesheet_id,evidence.economic_key_type,evidence.economic_key_value,
+      tier.selected_authority_priority
   ), source_method_authority AS MATERIALIZED (
     SELECT summary.*,
       CASE
@@ -566,6 +587,8 @@ AS $function$
       jsonb_build_object(
         'authority_contract_version',1,
         'total_evidence_count',summary.total_evidence_count,
+        'selected_evidence_count',summary.selected_evidence_count,
+        'selected_authority_priority',summary.selected_authority_priority,
         'supported_method_evidence_count',summary.supported_method_evidence_count,
         'invalid_method_count',summary.invalid_method_count,
         'distinct_supported_source_method_count',
@@ -577,16 +600,16 @@ AS $function$
         'complete_evidence_digest',summary.complete_evidence_digest,
         'sample_truncated',summary.total_evidence_count>25,
         'evidence_sample',COALESCE((
-          SELECT jsonb_agg(sample.evidence_document ORDER BY sample.evidence_kind,
-            sample.evidence_identity)
+          SELECT jsonb_agg(sample.evidence_document ORDER BY sample.authority_priority,
+            sample.evidence_kind,sample.evidence_identity)
           FROM (
-            SELECT evidence.evidence_document,evidence.evidence_kind,
+            SELECT evidence.evidence_document,evidence.authority_priority,evidence.evidence_kind,
               evidence.evidence_identity
             FROM source_method_evidence_documents evidence
             WHERE evidence.timesheet_id=summary.timesheet_id
               AND evidence.economic_key_type=summary.economic_key_type
               AND evidence.economic_key_value=summary.economic_key_value
-            ORDER BY evidence.evidence_kind,evidence.evidence_identity
+            ORDER BY evidence.authority_priority,evidence.evidence_kind,evidence.evidence_identity
             LIMIT 25
           ) sample
         ),'[]'::jsonb)) AS evidence_json
@@ -830,16 +853,10 @@ AS $function$
       ) ranked)
     ) match ON true
   ), parent_allocation_totals AS MATERIALIZED (
-    SELECT parent.fact_identity,ROUND(COALESCE(SUM(CASE
-        WHEN allocation.economic_key_type IN ('TS_DAY','TS_TOTAL')
-          AND allocation.matched_count=0
-          AND allocation.component_fallback IS DISTINCT FROM 'WORKED_TIME_AMOUNT'
-          THEN 0 ELSE allocation.allocated_amount_ex_vat END),0),2)
+    SELECT parent.fact_identity,ROUND(COALESCE(SUM(
+        allocation.allocated_amount_ex_vat),0),2)
         AS exact_allocated_ex_vat,
-      ROUND(SUM(CASE WHEN allocation.economic_key_type IN ('TS_DAY','TS_TOTAL')
-          AND allocation.matched_count=0
-          AND allocation.component_fallback IS DISTINCT FROM 'WORKED_TIME_AMOUNT'
-          THEN 0 ELSE allocation.source_charge_ex_vat END),2)
+      ROUND(SUM(allocation.source_charge_ex_vat),2)
         AS exact_allocated_charge_ex_vat,
       BOOL_OR(allocation.component_fallback='WORKED_TIME_AMOUNT') AS has_explicit_residual
     FROM sealed_parent_facts parent
@@ -896,9 +913,6 @@ AS $function$
       allocation.match_authority,(allocation.component_fallback='WORKED_TIME_AMOUNT') AS is_residual
     FROM exact_allocation_matched allocation
     WHERE allocation.physical_bucket_key IS NOT NULL AND allocation.matched_count<=1
-      AND NOT (allocation.economic_key_type IN ('TS_DAY','TS_TOTAL')
-        AND allocation.matched_count=0
-        AND allocation.component_fallback IS DISTINCT FROM 'WORKED_TIME_AMOUNT')
     UNION ALL
     SELECT parent.fact_identity||':RESIDUAL',parent.authority_kind,parent.timesheet_id,
       parent.economic_key_type,parent.economic_key_value,

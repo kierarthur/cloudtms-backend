@@ -178,6 +178,9 @@ for (const required of [
     problems.push(`sealed active-item reservation authority is missing: ${required}`);
   }
 }
+if (!/COALESCE\(item\.reservation_id,item\.pay_batch_item_id\)/.test(jamesSourceBuild)) {
+  problems.push('active item reservation does not bind its deterministic fact authority identity');
+}
 for (const required of [
   'tmp_sync_sealed_reservation_items', 'tmp_sync_reserved_batch_items_replacement',
   'tmp_sync_reserved_additional_by_code_replacement', 'component_fallback',
@@ -195,16 +198,26 @@ if (!/GROUP BY raw\.timesheet_id,raw\.component_kind,raw\.component_member_ident
   .test(jamesSynchronizer)) {
   problems.push('multiple-rate fence does not use the full physical component identity');
 }
+const additionalCodeExpression = /UPPER\(NULLIF\(BTRIM\(COALESCE\(\s*breakdown\.value->>'bucket_code',\s*CASE WHEN sealed\.component_key_type='ADDITIONAL_CODE'\s*THEN sealed\.component_key_value END\)\),''\)\)/g;
+if ((jamesSynchronizer.match(additionalCodeExpression) || []).length !== 2) {
+  problems.push('reservation additional-code SELECT and GROUP BY expressions differ');
+}
 if (/public\.(timesheets|timesheets_financials|candidates|umbrellas|settings_finance_windows)/i
   .test(jamesHelper)) {
   problems.push('sealed rate helper contains a live authority relation');
 }
 for (const required of [
-  'source_method_evidence', 'source_method_authority_summary', 'source_method_authority',
+  'source_method_evidence', 'source_method_authority_tier',
+  'source_method_authority_summary', 'source_method_authority',
+  'selected_authority_priority',
   'distinct_supported_source_method_count', 'complete_evidence_digest',
   'RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT',
 ]) {
   if (!jamesHelper.includes(required)) problems.push(`exact economic-key source-method proof is missing: ${required}`);
+}
+if (/allocation\.economic_key_type IN \('TS_DAY','TS_TOTAL'\)[\s\S]{0,160}allocation\.matched_count=0[\s\S]{0,160}THEN 0/
+  .test(jamesHelper)) {
+  problems.push('complete baseline-only nested evidence is still discarded without a live bucket');
 }
 if (!/GROUP BY evidence\.timesheet_id,evidence\.economic_key_type,evidence\.economic_key_value/
   .test(jamesHelper) || /MIN\((?:source\.)?source_pay_method\)/i.test(jamesHelper)) {

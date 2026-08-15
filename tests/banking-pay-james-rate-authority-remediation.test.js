@@ -119,6 +119,8 @@ test('James proves source method at the exact economic key without changing the 
   for (const marker of [
     'source_method_evidence',
     'source_method_authority_summary',
+    'source_method_authority_tier',
+    'selected_authority_priority',
     'source_method_authority',
     'distinct_supported_source_method_count',
     'complete_evidence_digest',
@@ -127,11 +129,20 @@ test('James proves source method at the exact economic key without changing the 
 
   assert.match(helper,
     /GROUP BY evidence\.timesheet_id,evidence\.economic_key_type,evidence\.economic_key_value/);
+  assert.match(helper, /10::integer AS authority_priority,[\s\S]*'LIVE_OCCURRENCE'/);
+  assert.match(helper, /20::integer,[\s\S]*'SEALED_PARENT'/);
   assert.match(helper, /'evidence_sample'/);
   assert.match(helper,
     /CASE WHEN COALESCE\(bucket\.validated_failure,economic\.failure_code\) IS NOT NULL\s+THEN 'FAILED'/);
   assert.doesNotMatch(helper, /MIN\((?:source\.)?source_pay_method\)/i);
   assert.doesNotMatch(helper, /distinct_supported_source_method_count\s+text/i);
+  assert.doesNotMatch(helper,
+    /allocation\.economic_key_type IN \('TS_DAY','TS_TOTAL'\)[\s\S]{0,160}allocation\.matched_count=0[\s\S]{0,160}THEN 0/);
+});
+
+test('reservation additional-code aggregation groups by the exact selected expression', () => {
+  const selectedExpression = /UPPER\(NULLIF\(BTRIM\(COALESCE\(\s*breakdown\.value->>'bucket_code',\s*CASE WHEN sealed\.component_key_type='ADDITIONAL_CODE'\s*THEN sealed\.component_key_value END\)\),''\)\)/g;
+  assert.equal((synchronizer.match(selectedExpression) || []).length, 2);
 });
 
 test('synchronizer proves singleton method cardinality before case persistence and never uses target as source', () => {

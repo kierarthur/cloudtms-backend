@@ -53,6 +53,8 @@ BEGIN
   END IF;
 
   IF position('source_method_evidence' in v_projection)=0
+     OR position('source_method_authority_tier' in v_projection)=0
+     OR position('selected_authority_priority' in v_projection)=0
      OR position('source_method_authority_summary' in v_projection)=0
      OR position('RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT' in v_projection)=0
      OR position('complete_evidence_digest' in v_projection)=0
@@ -72,6 +74,10 @@ BEGIN
      OR position('reservation.id::text COLLATE "C"' in v_builder)=0
      OR position('page.source_key COLLATE "C"' in v_builder)=0 THEN
     RAISE EXCEPTION 'BANKING_PAY_RESERVATION_ORDER_CONTRACT_MISSING';
+  END IF;
+
+  IF v_builder !~* 'coalesce\s*\(\s*item\.reservation_id\s*,\s*item\.pay_batch_item_id\s*\)' THEN
+    RAISE EXCEPTION 'BANKING_PAY_ACTIVE_ITEM_RESERVATION_IDENTITY_MISSING';
   END IF;
 
   IF position('pay_workbench_repair_orphaned_pending_source_build' in v_claim)=0

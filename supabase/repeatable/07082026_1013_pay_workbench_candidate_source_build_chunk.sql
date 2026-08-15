@@ -922,7 +922,8 @@ BEGIN
         'pay_batch_items_active_reservation',item.pay_batch_item_id,
         item.key_type,item.key_value,
         NULL,NULL,NULL,NULL,NULL,NULL,item.reserved_source_amount,
-        item.finance_case_id,item.finance_component_id,item.reservation_id,
+        item.finance_case_id,item.finance_component_id,
+        COALESCE(item.reservation_id,item.pay_batch_item_id),
         item.source_payload_json,md5(item.source_payload_json::text)
       FROM active_item_documents item
       WHERE v_last_source_key IS NULL

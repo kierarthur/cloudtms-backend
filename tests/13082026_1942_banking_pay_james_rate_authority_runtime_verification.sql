@@ -56,6 +56,8 @@ BEGIN
      OR position('sealed_physical_amount_attribution' in v_helper_definition)=0
      OR position('truth_residual_sources' in v_helper_definition)=0
      OR position('source_method_authority_summary' in v_helper_definition)=0
+     OR position('source_method_authority_tier' in v_helper_definition)=0
+     OR position('selected_authority_priority' in v_helper_definition)=0
      OR position('RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT' in v_helper_definition)=0
      OR position('complete_evidence_digest' in v_helper_definition)=0
      OR v_helper_definition ~* 'min\s*\(\s*(source\.)?source_pay_method\s*\)'
@@ -70,6 +72,7 @@ BEGIN
      OR position('RESERVATION_ECONOMIC_KEY_CONFLICT' in v_source_build_definition)=0
      OR position('RESERVATION_COMPONENT_SOURCE_KEY_C_V1' in v_source_build_definition)=0
      OR position('source_key COLLATE "C"' in v_source_build_definition)=0
+     OR v_source_build_definition !~* 'coalesce\s*\(\s*item\.reservation_id\s*,\s*item\.pay_batch_item_id\s*\)'
      OR position('tmp_sync_sealed_reservation_items' in v_sync_definition)=0 THEN
     RAISE EXCEPTION 'JAMES_RATE_SEALED_RESERVATION_DOMAIN_MISSING';
   END IF;
@@ -297,27 +300,96 @@ BEGIN
     RAISE EXCEPTION 'JAMES_RATE_UNALLOCATED_RESERVATION_RESIDUAL_FAILED';
   END IF;
 
+  -- Current financial occurrence authority is selected before historical
+  -- baseline/reservation evidence for the same current economic key.  The
+  -- lower tier remains bound into the complete evidence digest, but cannot
+  -- turn a valid current PAYE row into an alphabetical PAYE/UMBRELLA choice.
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    amount_ex_vat,source_payload_json,financial_digest)
+  VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-method-lower-tier',v_candidate,v_timesheet,
+    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
+    0,jsonb_build_object('frozen_source_pay_method','UMBRELLA'),
+    md5('fixture-method-lower-tier'));
+
+  SELECT count(*)::integer
+  INTO v_count
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]) projection
+  WHERE projection.failure_code IS NOT NULL
+     OR projection.source_pay_method IS DISTINCT FROM 'PAYE'
+     OR COALESCE((projection.evidence_json#>>
+       '{source_method_authority,selected_authority_priority}')::integer,0)<>10;
+  IF v_count<>0 THEN
+    RAISE EXCEPTION 'JAMES_RATE_CURRENT_OCCURRENCE_METHOD_PRIORITY_FAILED';
+  END IF;
+
+  DELETE FROM private.banking_pay_workbench_economic_build_facts
+  WHERE build_id=v_build AND fact_family='FROZEN_SETTLED_COMPONENT'
+    AND natural_key='fixture-method-lower-tier';
+
+  -- A complete frozen nested component is an authoritative baseline-only
+  -- physical row even when no current occurrence bucket exists for the key.
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    truth_ex_vat,truth_inc_vat,baseline_ex_vat,baseline_inc_vat,financial_digest)
+  VALUES(v_build,'ENTITLEMENT_COMPONENT','fixture-baseline-only-entitlement',v_candidate,v_timesheet,
+    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-14',
+    0,0,11.25,11.25,md5('fixture-baseline-only-entitlement'));
+
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    amount_ex_vat,source_payload_json,financial_digest)
+  VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-baseline-only-parent',v_candidate,v_timesheet,
+    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-14',
+    11.25,jsonb_build_object('pay_batch_item',jsonb_build_object(
+      'frozen_source_pay_method','PAYE',
+      'frozen_resolution_payload_json',jsonb_build_object('case_components',jsonb_build_array(
+        jsonb_build_object('component_amount_ex_vat',11.25,
+          'component_member_identity','segment:baseline-only','bucket_code','DAY',
+          'source_units',7.5,'source_rate',1.5,'source_charge_rate',10,
+          'source_charge_ex_vat',75,'source_pay_method','PAYE'))))),
+    md5('fixture-baseline-only-parent'));
+
+  SELECT count(*)::integer,min(failure_code),sum(baseline_ex_vat)
+  INTO v_count,v_failure,v_baseline
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]) projection
+  WHERE projection.economic_key_type='TS_DAY'
+    AND projection.economic_key_value='2026-08-14';
+  IF v_count<>1 OR v_failure IS NOT NULL
+     OR round(v_baseline,2) IS DISTINCT FROM 11.25::numeric THEN
+    RAISE EXCEPTION 'JAMES_RATE_BASELINE_ONLY_NESTED_COMPONENT_REJECTED';
+  END IF;
+
+  -- Conflicts and invalid values still fail closed inside the selected frozen
+  -- authority tier when no current occurrence exists for the key.
   INSERT INTO private.banking_pay_workbench_economic_build_facts(
     build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
     dependency_unit_key,source_relation,economic_key_type,economic_key_value,
     amount_ex_vat,source_payload_json,financial_digest)
   VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-method-conflict',v_candidate,v_timesheet,
-    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
-    0,jsonb_build_object('frozen_source_pay_method','UMBRELLA',
-      'frozen_source_basis_json',jsonb_build_object('source_charge_ex_vat',0)),
+    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-14',
+    0,jsonb_build_object('frozen_source_pay_method','UMBRELLA'),
     md5('fixture-method-conflict'));
 
   SELECT count(*)::integer
   INTO v_count
   FROM private.pay_workbench_sealed_rate_component_projection_v1(
     v_build,v_candidate,ARRAY[v_timesheet]) projection
-  WHERE projection.failure_code='RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT'
+  WHERE projection.economic_key_value='2026-08-14'
+    AND projection.failure_code='RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT'
     AND projection.projection_status='FAILED'
     AND projection.source_pay_method IS NULL
     AND COALESCE((projection.evidence_json#>>
+      '{source_method_authority,selected_authority_priority}')::integer,0)=20
+    AND COALESCE((projection.evidence_json#>>
       '{source_method_authority,distinct_supported_source_method_count}')::integer,0)=2;
   IF v_count<1 THEN
-    RAISE EXCEPTION 'JAMES_RATE_EXACT_KEY_SOURCE_METHOD_CONFLICT_NOT_TYPED';
+    RAISE EXCEPTION 'JAMES_RATE_SELECTED_TIER_SOURCE_METHOD_CONFLICT_NOT_TYPED';
   END IF;
 
   DELETE FROM private.banking_pay_workbench_economic_build_facts
@@ -329,22 +401,22 @@ BEGIN
     dependency_unit_key,source_relation,economic_key_type,economic_key_value,
     amount_ex_vat,source_payload_json,financial_digest)
   VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-method-invalid',v_candidate,v_timesheet,
-    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
-    0,jsonb_build_object('frozen_source_pay_method','PSC',
-      'frozen_source_basis_json',jsonb_build_object('source_charge_ex_vat',0)),
+    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-14',
+    0,jsonb_build_object('frozen_source_pay_method','PSC'),
     md5('fixture-method-invalid'));
 
   SELECT count(*)::integer
   INTO v_count
   FROM private.pay_workbench_sealed_rate_component_projection_v1(
     v_build,v_candidate,ARRAY[v_timesheet]) projection
-  WHERE projection.failure_code='RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'
+  WHERE projection.economic_key_value='2026-08-14'
+    AND projection.failure_code='RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'
     AND projection.projection_status='FAILED'
     AND projection.source_pay_method IS NULL
     AND COALESCE((projection.evidence_json#>>
       '{source_method_authority,invalid_method_count}')::integer,0)>0;
   IF v_count<1 THEN
-    RAISE EXCEPTION 'JAMES_RATE_INVALID_SOURCE_METHOD_WAS_FILTERED_OUT';
+    RAISE EXCEPTION 'JAMES_RATE_SELECTED_TIER_INVALID_SOURCE_METHOD_NOT_TYPED';
   END IF;
 END;
 $sealed_amount_fixture$;

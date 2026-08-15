@@ -68,6 +68,8 @@ test('reservation paging seals the normal active-item domain once and preserves 
   assert.equal((canonical.match(/public\._pay_batch_item_economic_components\(/g) || []).length, 1);
   assert.match(canonical, /NOT EXISTS \(\s*SELECT 1\s*FROM public\.pay_advance_reservations advance[\s\S]*advance\.pay_batch_item_id=item\.id[\s\S]*advance\.id=item\.reservation_id/);
   assert.match(canonical, /'~ITEM:'\|\|item\.pay_batch_item_id::text/);
+  assert.match(canonical,
+    /item\.finance_case_id,item\.finance_component_id,\s*COALESCE\(item\.reservation_id,item\.pay_batch_item_id\)/);
   assert.match(canonical, /ORDER BY \('~ITEM:'\|\|item\.pay_batch_item_id::text\) COLLATE "C"/);
   assert.match(canonical, /reservation\.id::text COLLATE "C"\s*>v_last_source_key COLLATE "C"/);
   assert.match(canonical, /ORDER BY reservation\.id::text COLLATE "C"/);

@@ -1878,7 +1878,9 @@ begin
           AND NULLIF(BTRIM(COALESCE(breakdown.value->>'bucket_code',
             sealed.component_key_value)),'') IS NOT NULL
         GROUP BY sealed.timesheet_id,UPPER(NULLIF(BTRIM(COALESCE(
-          breakdown.value->>'bucket_code',sealed.component_key_value)),''));
+          breakdown.value->>'bucket_code',
+          CASE WHEN sealed.component_key_type='ADDITIONAL_CODE'
+            THEN sealed.component_key_value END)),''));
 
         DROP TABLE pg_temp.reserved_batch_items,pg_temp.reserved_by_source_ref,
           pg_temp.reserved_total_by_timesheet,pg_temp.reserved_segment_key_map,
