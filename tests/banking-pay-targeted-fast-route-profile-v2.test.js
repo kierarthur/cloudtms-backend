@@ -99,7 +99,7 @@ test('profile 2 reconciliation reuses set-owned immutable workspace without chan
   assert.match(reconcile, /total_reconcile_ms/);
   assert.match(reconcile, /reconcile_execute_timing_json/);
   assert.match(reconcile, /attestation_json=COALESCE\(attestation_json,'\{\}'::jsonb\)\|\|jsonb_build_object/);
-  assert.match(reconcile, /source_basis_json', CASE[\s\S]+jsonb_typeof\(tec\.component_json->'source_basis_json'\)[\s\S]+THEN tec\.component_json->'source_basis_json'[\s\S]+ELSE jsonb_strip_nulls\(jsonb_build_object\([\s\S]+linked_timesheet_id/i);
+  assert.match(reconcile, /source_basis_json',\s*\(CASE[\s\S]+jsonb_typeof\(tec\.component_json->'source_basis_json'\)[\s\S]+THEN tec\.component_json->'source_basis_json'[\s\S]+ELSE jsonb_strip_nulls\(jsonb_build_object\([\s\S]+linked_timesheet_id[\s\S]+END\)\|\|jsonb_build_object\('source_pay_method'/i);
   assert.match(reconcile, /pay_workbench_sealed_rate_component_projection_v1[\s\S]+economic_authority','SEALED_ECONOMIC_BUILD_FACTS','build_id',p_build_id::text/);
   assert.match(chunk, /reconcile_capture_timing_json/);
   assert.doesNotMatch(reconcile, /\bfact\.id\b/);

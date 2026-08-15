@@ -1657,6 +1657,32 @@ begin
     CREATE INDEX tmp_sync_sealed_rate_projection_lookup_idx
       ON pg_temp.tmp_sync_sealed_rate_projection(
         timesheet_id,source_family_key,economic_key_type,economic_key_value,bucket_code);
+
+    /* The legacy pre-Draft renderer is allowed to omit an economic component
+       whose live truth is zero.  Preserve every renderer-owned component as-is,
+       but retain an exact physical-bucket map so a frozen baseline-only
+       component can be supplied from the already validated sealed projection
+       when (and only when) the renderer has no owner for that bucket. */
+    DROP TABLE IF EXISTS pg_temp.tmp_sync_raw_preview_physical_components;
+    CREATE TEMP TABLE pg_temp.tmp_sync_raw_preview_physical_components (
+      candidate_id uuid NOT NULL,
+      timesheet_id uuid NOT NULL,
+      component_ordinality bigint NOT NULL,
+      physical_bucket_key text NULL,
+      component_json jsonb NOT NULL
+    ) ON COMMIT DROP;
+
+    DROP TABLE IF EXISTS pg_temp.tmp_sync_sealed_missing_preview_components;
+    CREATE TEMP TABLE pg_temp.tmp_sync_sealed_missing_preview_components (
+      candidate_id uuid NOT NULL,
+      timesheet_id uuid NOT NULL,
+      economic_key_type text NOT NULL,
+      economic_key_value text NOT NULL,
+      bucket_sort_ordinal integer NOT NULL,
+      physical_bucket_key text NOT NULL,
+      component_json jsonb NOT NULL,
+      PRIMARY KEY(candidate_id,timesheet_id,physical_bucket_key)
+    ) ON COMMIT DROP;
   END IF;
 
   v_component_assembly_ms := FLOOR(EXTRACT(EPOCH FROM (clock_timestamp()-v_phase_started_at))*1000)::integer;
@@ -2270,6 +2296,166 @@ begin
         );
       END IF;
 
+      IF COALESCE(v_authoritative_timesheet_scope,false) THEN
+        DELETE FROM pg_temp.tmp_sync_raw_preview_physical_components
+        WHERE candidate_id=v_preview_candidate_loop_id;
+        DELETE FROM pg_temp.tmp_sync_sealed_missing_preview_components
+        WHERE candidate_id=v_preview_candidate_loop_id;
+
+        IF to_regclass('pg_temp.timesheet_case_rollup') IS NOT NULL THEN
+          INSERT INTO pg_temp.tmp_sync_raw_preview_physical_components(
+            candidate_id,timesheet_id,component_ordinality,physical_bucket_key,
+            component_json
+          )
+          SELECT raw_case.candidate_id,raw_case.timesheet_id,
+            raw_component.ordinality::bigint,
+            concat_ws('|','RATE_BUCKET_V1',raw_case.timesheet_id::text,
+              NULLIF(BTRIM(raw_component.value->>'source_family_key'),''),
+              UPPER(NULLIF(BTRIM(raw_component.value->>'component_key_type'),'')),
+              NULLIF(BTRIM(raw_component.value->>'component_key_value'),''),
+              CASE
+                WHEN UPPER(BTRIM(COALESCE(
+                    raw_component.value#>>'{source_basis_json,component_fallback}','')))
+                      ='WORKED_TIME_AMOUNT'
+                  THEN 'worked-time-residual:'
+                    ||UPPER(BTRIM(raw_component.value->>'component_key_type'))||':'
+                    ||BTRIM(raw_component.value->>'component_key_value')
+                WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))
+                    IN ('TS_DAY','TS_TOTAL')
+                  THEN COALESCE(
+                    NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_stable_key}'),''),
+                    NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_id}'),''),
+                    NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_key}'),''),
+                    NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,work_date}'),''),
+                    NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,date}'),''),
+                    NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,ref_num}'),''))
+                WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='ADDITIONAL_CODE'
+                  THEN 'additional:'
+                    ||UPPER(BTRIM(raw_component.value#>>'{source_basis_json,additional_code}'))
+                WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='EXPENSE_CODE'
+                  THEN 'expense:'
+                    ||UPPER(BTRIM(raw_component.value#>>'{source_basis_json,expense_code}'))
+                WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='ADJUSTMENT_CODE'
+                  THEN 'adjustment:'
+                    ||BTRIM(raw_component.value#>>'{source_basis_json,adjustment_id}')
+              END,
+              UPPER(BTRIM(COALESCE(
+                CASE WHEN UPPER(BTRIM(COALESCE(
+                    raw_component.value#>>'{source_basis_json,component_fallback}','')))
+                      ='WORKED_TIME_AMOUNT' THEN 'FIXED' END,
+                NULLIF(raw_component.value#>>'{source_basis_json,bucket_code}',''),
+                CASE UPPER(BTRIM(raw_component.value->>'component_key_type'))
+                  WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
+                  WHEN 'EXPENSE_CODE' THEN 'FIXED'
+                  WHEN 'ADJUSTMENT_CODE' THEN 'FIXED'
+                END)))) AS physical_bucket_key,
+            raw_component.value
+          FROM pg_temp.timesheet_case_rollup raw_case
+          CROSS JOIN LATERAL jsonb_array_elements(CASE
+            WHEN jsonb_typeof(raw_case.case_components_json)='array'
+              THEN raw_case.case_components_json ELSE '[]'::jsonb END)
+            WITH ORDINALITY raw_component(value,ordinality)
+          WHERE raw_case.candidate_id=v_preview_candidate_loop_id;
+        END IF;
+
+        IF EXISTS(
+          SELECT 1
+          FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+          WHERE sealed.candidate_id=v_preview_candidate_loop_id
+            AND sealed.evidence_json#>>'{physical_bucket,builder_component_expected}'='true'
+            AND sealed.evidence_json#>>'{source_payload,source_kind}'
+              IN ('SEGMENT','SEALED_BASELINE_COMPONENT','WORKED_TIME_RESIDUAL')
+            AND jsonb_typeof(CASE
+              WHEN sealed.evidence_json#>>'{source_payload,source_kind}'='SEGMENT'
+                THEN sealed.evidence_json#>'{source_payload,segment}'
+              ELSE sealed.evidence_json#>'{source_payload,source_value}' END)<>'object'
+        ) THEN
+          RAISE EXCEPTION 'RATE_AUTHORITY_PHYSICAL_IDENTITY_INCOMPLETE'
+            USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+              'code','RATE_AUTHORITY_PHYSICAL_IDENTITY_INCOMPLETE',
+              'candidate_id',v_preview_candidate_loop_id::text,
+              'message','A sealed builder component has no complete frozen source basis.'
+            )::text;
+        END IF;
+
+        INSERT INTO pg_temp.tmp_sync_sealed_missing_preview_components(
+          candidate_id,timesheet_id,economic_key_type,economic_key_value,
+          bucket_sort_ordinal,physical_bucket_key,component_json
+        )
+        SELECT sealed.candidate_id,sealed.timesheet_id,sealed.economic_key_type,
+          sealed.economic_key_value,sealed.bucket_sort_ordinal,sealed.physical_bucket_key,
+          jsonb_strip_nulls(jsonb_build_object(
+            'source_family_key',sealed.source_family_key,
+            'component_key_type',sealed.economic_key_type,
+            'component_key_value',sealed.economic_key_value,
+            'component_kind',sealed.component_kind,
+            'component_member_identity',sealed.component_member_identity,
+            'classification',CASE WHEN sealed.economic_key_type='EXPENSE_CODE'
+              THEN 'REIMBURSEMENT_GROSS_FIXED' ELSE 'TAXABLE_CHANNEL_SENSITIVE' END,
+            'source_pay_method',sealed.source_pay_method,
+            'current_target_pay_method',sealed.target_pay_method,
+            'source_basis_json',
+              bridge.source_basis_json
+              ||jsonb_strip_nulls(jsonb_build_object(
+                'linked_timesheet_id',sealed.timesheet_id::text,
+                'source_family_key',sealed.source_family_key,
+                'component_key_type',sealed.economic_key_type,
+                'component_key_value',sealed.economic_key_value,
+                'segment_id',sealed.segment_id,
+                'segment_key',COALESCE(sealed.segment_key,sealed.segment_id),
+                'segment_stable_key',sealed.segment_stable_key,
+                'work_date',COALESCE(
+                  bridge.source_basis_json->>'work_date',
+                  bridge.source_basis_json->>'date'),
+                'ref_num',bridge.source_basis_json->>'ref_num',
+                'additional_code',CASE WHEN sealed.economic_key_type='ADDITIONAL_CODE'
+                  THEN UPPER(sealed.economic_key_value) END,
+                'expense_code',CASE WHEN sealed.economic_key_type='EXPENSE_CODE'
+                  THEN UPPER(sealed.economic_key_value) END,
+                'adjustment_id',CASE WHEN sealed.economic_key_type='ADJUSTMENT_CODE'
+                  THEN sealed.economic_key_value END,
+                'bucket_code',sealed.bucket_code,
+                'source_pay_method',sealed.source_pay_method)),
+            'source_units',sealed.source_units,
+            'source_rate',sealed.source_rate,
+            'source_charge_rate',sealed.source_charge_rate,
+            'source_pay_ex_vat',sealed.outstanding_ex_vat,
+            'source_charge_ex_vat',sealed.source_charge_ex_vat,
+            'component_amount_ex_vat',sealed.outstanding_ex_vat,
+            'authoritative_truth_ex_vat',sealed.truth_ex_vat,
+            'authoritative_baseline_ex_vat',sealed.baseline_ex_vat,
+            'authoritative_reserved_ex_vat',sealed.reserved_ex_vat,
+            'authoritative_outstanding_ex_vat',sealed.outstanding_ex_vat,
+            'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
+            'physical_bucket_key',sealed.physical_bucket_key,
+            'physical_bucket_digest',sealed.physical_bucket_digest,
+            'sealed_evidence_digest',sealed.sealed_evidence_digest,
+            'financial_revision_digest',sealed.financial_revision_digest,
+            'target_authority_digest',sealed.target_authority_digest,
+            'conversion_context_digest',sealed.conversion_context_digest
+          )) AS component_json
+        FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+        CROSS JOIN LATERAL (
+          SELECT CASE
+            WHEN sealed.evidence_json#>>'{source_payload,source_kind}'='SEGMENT'
+              THEN sealed.evidence_json#>'{source_payload,segment}'
+            ELSE sealed.evidence_json#>'{source_payload,source_value}'
+          END AS source_basis_json
+        ) bridge
+        WHERE sealed.candidate_id=v_preview_candidate_loop_id
+          AND sealed.evidence_json#>>'{physical_bucket,builder_component_expected}'='true'
+          AND sealed.evidence_json#>>'{source_payload,source_kind}'
+            IN ('SEGMENT','SEALED_BASELINE_COMPONENT','WORKED_TIME_RESIDUAL')
+          AND jsonb_typeof(bridge.source_basis_json)='object'
+          AND NOT EXISTS(
+            SELECT 1
+            FROM pg_temp.tmp_sync_raw_preview_physical_components raw_component
+            WHERE raw_component.candidate_id=sealed.candidate_id
+              AND raw_component.timesheet_id=sealed.timesheet_id
+              AND raw_component.physical_bucket_key=sealed.physical_bucket_key
+          );
+      END IF;
+
       IF COALESCE(v_authoritative_timesheet_scope, false)
          AND to_regclass('pg_temp.timesheet_case_rollup') IS NOT NULL THEN
         IF EXISTS (
@@ -2350,6 +2536,19 @@ begin
             SELECT * FROM correction_component_totals
             UNION ALL
             SELECT * FROM raw_preview_component_totals
+          ), sealed_baseline_only_keys AS (
+            SELECT sealed.timesheet_id,sealed.economic_key_type AS key_type,
+              sealed.economic_key_value AS key_value
+            FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+            GROUP BY sealed.timesheet_id,sealed.economic_key_type,
+              sealed.economic_key_value
+            HAVING COUNT(*)=COUNT(*) FILTER(WHERE
+                sealed.evidence_json#>>'{source_payload,source_kind}'=
+                  'SEALED_BASELINE_COMPONENT')
+              AND COUNT(*) FILTER(WHERE
+                sealed.evidence_json#>>'{physical_bucket,builder_component_expected}'='true')>0
+              AND ROUND(SUM(sealed.truth_ex_vat),2)=0
+              AND ROUND(SUM(sealed.outstanding_ex_vat),2)<0
           )
           SELECT 1
           FROM pg_temp.tmp_sync_authoritative_negative_components AS authoritative_component
@@ -2357,20 +2556,25 @@ begin
             ON preview_total.timesheet_id = authoritative_component.timesheet_id
            AND preview_total.key_type = authoritative_component.key_type
            AND preview_total.key_value = authoritative_component.key_value
+          LEFT JOIN sealed_baseline_only_keys sealed_baseline
+            ON sealed_baseline.timesheet_id=authoritative_component.timesheet_id
+           AND sealed_baseline.key_type=authoritative_component.key_type
+           AND sealed_baseline.key_value=authoritative_component.key_value
           WHERE (
                   (
                     preview_total.preview_component_count IS NULL
-                    AND ABS(ROUND(authoritative_component.outstanding_ex_vat, 2)) > 0.01
+                    AND ABS(ROUND(authoritative_component.truth_ex_vat, 2)) > 0.01
                   )
                   OR (
                     preview_total.preview_component_count IS NOT NULL
                     AND ABS(ROUND(
                       preview_total.preview_truth_ex_vat
-                      - authoritative_component.outstanding_ex_vat,
+                      - authoritative_component.truth_ex_vat,
                       2
                     )) > 0.01
                   )
                 )
+            AND sealed_baseline.timesheet_id IS NULL
             AND NOT (
               authoritative_component.timesheet_id
                 = ANY(COALESCE(v_resolution_pending_root_ids, ARRAY[]::uuid[]))
@@ -2494,6 +2698,7 @@ begin
                      NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_id}'),''),
                      NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_key}'),''),
                      NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,work_date}'),''),
+                     NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,date}'),''),
                      NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,ref_num}'),''))
                  WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='ADDITIONAL_CODE'
                    THEN 'additional:'||UPPER(BTRIM(raw_component.value#>>'{source_basis_json,additional_code}'))
@@ -2536,6 +2741,57 @@ begin
           candidate_pay_method = EXCLUDED.candidate_pay_method,
           case_is_blocked = EXCLUDED.case_is_blocked,
           case_components_json = EXCLUDED.case_components_json;
+
+        WITH missing_components AS (
+          SELECT missing.candidate_id,missing.timesheet_id,
+            jsonb_agg(missing.component_json ORDER BY missing.economic_key_type,
+              missing.economic_key_value,missing.bucket_sort_ordinal,
+              missing.physical_bucket_key) AS components_json
+          FROM pg_temp.tmp_sync_sealed_missing_preview_components missing
+          JOIN pg_temp.tmp_sync_authoritative_negative_components negative_component
+            ON negative_component.timesheet_id=missing.timesheet_id
+           AND negative_component.key_type=missing.economic_key_type
+           AND negative_component.key_value=missing.economic_key_value
+          WHERE missing.candidate_id=v_preview_candidate_loop_id
+          GROUP BY missing.candidate_id,missing.timesheet_id
+        )
+        UPDATE pg_temp.tmp_sync_raw_negative_timesheet_rows raw_row
+        SET case_components_json=raw_row.case_components_json||missing.components_json
+        FROM missing_components missing
+        WHERE raw_row.candidate_id=missing.candidate_id
+          AND raw_row.timesheet_id=missing.timesheet_id;
+
+        INSERT INTO pg_temp.tmp_sync_raw_negative_timesheet_rows(
+          candidate_id,timesheet_id,client_id,candidate_pay_method,
+          case_is_blocked,case_components_json
+        )
+        SELECT missing.candidate_id,missing.timesheet_id,baseline.client_id,
+          (SELECT MIN(sealed.target_pay_method)
+           FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+           WHERE sealed.timesheet_id=missing.timesheet_id),
+          false,missing.components_json
+        FROM (
+          SELECT sealed_missing.candidate_id,sealed_missing.timesheet_id,
+            jsonb_agg(sealed_missing.component_json ORDER BY
+              sealed_missing.economic_key_type,sealed_missing.economic_key_value,
+              sealed_missing.bucket_sort_ordinal,sealed_missing.physical_bucket_key)
+              AS components_json
+          FROM pg_temp.tmp_sync_sealed_missing_preview_components sealed_missing
+          JOIN pg_temp.tmp_sync_authoritative_negative_components negative_component
+            ON negative_component.timesheet_id=sealed_missing.timesheet_id
+           AND negative_component.key_type=sealed_missing.economic_key_type
+           AND negative_component.key_value=sealed_missing.economic_key_value
+          WHERE sealed_missing.candidate_id=v_preview_candidate_loop_id
+          GROUP BY sealed_missing.candidate_id,sealed_missing.timesheet_id
+        ) missing
+        JOIN pg_temp.ts_baseline baseline
+          ON baseline.candidate_id=missing.candidate_id
+         AND baseline.timesheet_id=missing.timesheet_id
+        WHERE NOT EXISTS(
+          SELECT 1 FROM pg_temp.tmp_sync_raw_negative_timesheet_rows existing_row
+          WHERE existing_row.candidate_id=missing.candidate_id
+            AND existing_row.timesheet_id=missing.timesheet_id
+        );
 
         IF EXISTS(
           SELECT 1 FROM pg_temp.tmp_sync_authoritative_negative_components negative_component
@@ -2871,12 +3127,15 @@ begin
         'client_id',CASE WHEN metadata.client_id IS NULL THEN NULL ELSE metadata.client_id::text END,
         'amount_ex_vat',ROUND(COALESCE(economic_total.truth_ex_vat,0),2),
         'case_is_blocked',COALESCE(metadata.case_is_blocked,false),
-        'case_components',COALESCE(physical_components.case_components_json,'[]'::jsonb),
+        'case_components',COALESCE(physical_components.case_components_json,'[]'::jsonb)
+          ||COALESCE(missing_physical_components.case_components_json,'[]'::jsonb),
         'source_authority','SEALED_ECONOMIC_BUILD_FACTS','build_id',p_build_id::text) AS item_json,
       scope_row.timesheet_id,metadata.client_id,
       ROUND(COALESCE(economic_total.truth_ex_vat,0),2)::numeric(12,2) AS corrected_amount_ex,
       COALESCE(metadata.case_is_blocked,false) AS case_is_blocked,
-      COALESCE(physical_components.case_components_json,'[]'::jsonb) AS case_components_json
+      COALESCE(physical_components.case_components_json,'[]'::jsonb)
+        ||COALESCE(missing_physical_components.case_components_json,'[]'::jsonb)
+        AS case_components_json
     FROM private.banking_pay_workbench_economic_build_scope scope_row
     LEFT JOIN LATERAL (
       SELECT COALESCE(preview_row.client_id,current_financial.client_id) AS client_id,
@@ -2947,6 +3206,7 @@ begin
                NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_id}'),''),
                NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,segment_key}'),''),
                NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,work_date}'),''),
+               NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,date}'),''),
                NULLIF(BTRIM(raw_component.value#>>'{source_basis_json,ref_num}'),''))
            WHEN UPPER(BTRIM(raw_component.value->>'component_key_type'))='ADDITIONAL_CODE'
              THEN 'additional:'||UPPER(BTRIM(raw_component.value#>>'{source_basis_json,additional_code}'))
@@ -2968,6 +3228,15 @@ begin
       WHERE raw_case.candidate_id=v_authoritative_candidate_id
         AND raw_case.timesheet_id=scope_row.timesheet_id
     ) physical_components ON true
+    LEFT JOIN LATERAL (
+      SELECT COALESCE(jsonb_agg(missing.component_json ORDER BY
+        missing.economic_key_type,missing.economic_key_value,
+        missing.bucket_sort_ordinal,missing.physical_bucket_key),'[]'::jsonb)
+        AS case_components_json
+      FROM pg_temp.tmp_sync_sealed_missing_preview_components missing
+      WHERE missing.candidate_id=v_authoritative_candidate_id
+        AND missing.timesheet_id=scope_row.timesheet_id
+    ) missing_physical_components ON true
     WHERE scope_row.build_id=p_build_id
       AND (coalesce(array_length(p_force_include_timesheet_ids,1),0)=0
         OR scope_row.timesheet_id=ANY(p_force_include_timesheet_ids)
@@ -5044,6 +5313,47 @@ begin
     AND NOT EXISTS(SELECT 1 FROM pg_temp.tmp_sync_authoritative_components component
       WHERE component.timesheet_id=preview_row.timesheet_id);
 
+  UPDATE pg_temp.timesheet_case_rollup_effective preview_row
+  SET case_components_json=COALESCE((
+    SELECT jsonb_agg(component.component_json ORDER BY component.source_rank,
+      component.component_ordinality,component.physical_bucket_key)
+    FROM (
+      SELECT 0::integer AS source_rank,raw_component.component_ordinality,
+        raw_component.physical_bucket_key,
+        raw_component.component_json||jsonb_strip_nulls(jsonb_build_object(
+          'component_amount_ex_vat',COALESCE(
+            CASE WHEN COALESCE(sealed.evidence_json#>>
+                '{physical_bucket,builder_component_amount_ex_vat}','')
+                ~ '^-?\d+(\.\d+)?$'
+              THEN (sealed.evidence_json#>>
+                '{physical_bucket,builder_component_amount_ex_vat}')::numeric END,
+            sealed.outstanding_ex_vat),
+          'source_pay_ex_vat',COALESCE(
+            CASE WHEN COALESCE(sealed.evidence_json#>>
+                '{physical_bucket,builder_component_amount_ex_vat}','')
+                ~ '^-?\d+(\.\d+)?$'
+              THEN (sealed.evidence_json#>>
+                '{physical_bucket,builder_component_amount_ex_vat}')::numeric END,
+            sealed.outstanding_ex_vat),
+          'source_charge_ex_vat',sealed.source_charge_ex_vat
+        )) AS component_json
+      FROM pg_temp.tmp_sync_raw_preview_physical_components raw_component
+      JOIN pg_temp.tmp_sync_sealed_rate_projection sealed
+        ON sealed.timesheet_id=raw_component.timesheet_id
+       AND sealed.physical_bucket_key=raw_component.physical_bucket_key
+       AND sealed.evidence_json#>>'{physical_bucket,builder_component_expected}'='true'
+      WHERE raw_component.candidate_id=preview_row.candidate_id
+        AND raw_component.timesheet_id=preview_row.timesheet_id
+      UNION ALL
+      SELECT 1::integer,missing.bucket_sort_ordinal::bigint,
+        missing.physical_bucket_key,missing.component_json
+      FROM pg_temp.tmp_sync_sealed_missing_preview_components missing
+      WHERE missing.candidate_id=preview_row.candidate_id
+        AND missing.timesheet_id=preview_row.timesheet_id
+    ) component
+  ),'[]'::jsonb)
+  WHERE preview_row.candidate_id=v_bounded_build.candidate_id;
+
   DROP TABLE IF EXISTS pg_temp.tmp_sync_builder_physical_components;
   CREATE TEMP TABLE pg_temp.tmp_sync_builder_physical_components ON COMMIT DROP AS
   SELECT preview_row.candidate_id,preview_row.timesheet_id,
@@ -5105,6 +5415,9 @@ begin
         component.value#>>'{source_basis_json,expense_code}')),''),
       'adjustment_id',NULLIF(BTRIM(component.value#>>'{source_basis_json,adjustment_id}'),''),
       'bucket_code',UPPER(BTRIM(COALESCE(
+        CASE WHEN UPPER(BTRIM(COALESCE(
+            component.value#>>'{source_basis_json,component_fallback}','')))='WORKED_TIME_AMOUNT'
+          THEN 'FIXED' END,
         NULLIF(component.value#>>'{source_basis_json,bucket_code}',''),
         CASE UPPER(BTRIM(component.value->>'component_key_type'))
           WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'
@@ -5585,6 +5898,9 @@ begin
             component.value#>>'{source_basis_json,expense_code}')),''),
           'adjustment_id',NULLIF(BTRIM(component.value#>>'{source_basis_json,adjustment_id}'),''),
           'bucket_code',UPPER(BTRIM(COALESCE(
+            CASE WHEN UPPER(BTRIM(COALESCE(
+                component.value#>>'{source_basis_json,component_fallback}','')))='WORKED_TIME_AMOUNT'
+              THEN 'FIXED' END,
             NULLIF(component.value#>>'{source_basis_json,bucket_code}',''),
             CASE UPPER(BTRIM(component.value->>'component_key_type'))
               WHEN 'ADDITIONAL_CODE' THEN 'ADDITIONAL'

@@ -52,11 +52,50 @@ test('physical baseline and reservation use sealed exact attribution without pro
     /public\.(?:timesheets|timesheets_financials|candidates|umbrellas|settings_finance_windows|pay_batch_items|pay_batches|pay_batch_candidates|pay_advance_reservations)\b/i);
 });
 
+test('a sealed sole worked-time bucket can reconstruct an otherwise unfrozen parent charge exactly', () => {
+  for (const marker of [
+    'parent_residual_bucket_authority',
+    'physical_bucket_count=1',
+    'SEALED_SOLE_BUCKET_RATE_DERIVATION_V1',
+  ]) assert.ok(helper.includes(marker), `missing sole-bucket derivation marker: ${marker}`);
+
+  assert.match(helper,
+    /parent\.authority_kind='BASELINE'[\s\S]*parent\.economic_key_type IN \('TS_DAY','TS_TOTAL'\)[\s\S]*parent\.is_signed_non_charge_recovery IS NOT TRUE/);
+  assert.match(helper,
+    /ROUND\(ROUND\(\(parent\.parent_amount_ex_vat-total\.exact_allocated_ex_vat\)[\s\S]*\/bucket\.parsed_source_rate,6\)\*bucket\.parsed_source_rate,2\)=[\s\S]*ROUND\(parent\.parent_amount_ex_vat-total\.exact_allocated_ex_vat,2\)/);
+  assert.match(helper,
+    /ROUND\(parent\.parent_amount_ex_vat-total\.exact_allocated_ex_vat,2\)=[\s\S]*ROUND\(bucket\.parsed_source_pay_ex_vat,2\)[\s\S]*THEN bucket\.parsed_source_units/);
+  assert.match(helper,
+    /bucket\.parsed_source_charge_ex_vat IS NOT NULL[\s\S]*ROUND\(parent\.parent_amount_ex_vat-total\.exact_allocated_ex_vat,2\)=[\s\S]*ROUND\(bucket\.parsed_source_pay_ex_vat,2\)[\s\S]*THEN bucket\.parsed_source_charge_ex_vat/);
+  assert.match(helper,
+    /parent\.parent_source_charge_ex_vat IS NULL[\s\S]*NOT EXISTS\(SELECT 1 FROM parent_residual_bucket_authority authority/);
+  assert.doesNotMatch(helper,
+    /ABS\(parent\.parent_amount_ex_vat-total\.exact_allocated_ex_vat\)\s*\/\s*bucket\.parsed_source_rate/);
+});
+
+test('a sealed sole worked-time bucket receives an otherwise unallocated reservation exactly', () => {
+  assert.ok(helper.includes('SEALED_SOLE_BUCKET_RESERVATION_ATTRIBUTION_V1'));
+  assert.match(helper,
+    /parent\.authority_kind IN \('BASELINE','RESERVATION'\)[\s\S]*parent\.authority_kind='RESERVATION' OR \(/);
+  assert.match(helper,
+    /CASE WHEN parent\.authority_kind='RESERVATION' THEN NULL::numeric[\s\S]*AS residual_source_units/);
+  assert.match(helper,
+    /WHEN parent\.authority_kind='RESERVATION' THEN NULL::numeric[\s\S]*AS residual_source_charge_ex_vat/);
+  assert.doesNotMatch(helper,
+    /physical_bucket_count\s*(?:>|>=)\s*1[\s\S]*SEALED_SOLE_BUCKET_RESERVATION_ATTRIBUTION_V1/);
+});
+
 test('serializer and synchronizer share the defensive segment-key canonicalisation', () => {
   assert.match(serializer,
     /COALESCE\(\s*NULLIF\(BTRIM\(input\.payload#>>'\{segment,segment_key\}'\),''\),\s*NULLIF\(BTRIM\(input\.payload#>>'\{segment,segment_id\}'\),''\)\s*\) AS segment_key/);
   assert.match(synchronizer,
     /'segment_key',COALESCE\(\s*NULLIF\(BTRIM\(component\.value#>>'\{source_basis_json,segment_key\}'\),''\),\s*NULLIF\(BTRIM\(component\.value#>>'\{source_basis_json,segment_id\}'\),''\)\)/);
+  assert.equal((synchronizer.match(
+    /source_basis_json,work_date\}'\),''\),\s*NULLIF\(BTRIM\([^\n]*source_basis_json,date\}'\),''\),\s*NULLIF\(BTRIM\([^\n]*source_basis_json,ref_num\}'\),''\)/g,
+  ) || []).length, 4, 'every physical-key join must use the same work_date/date/ref_num fallback');
+  assert.equal((synchronizer.match(
+    /component_fallback\}',''\)\)\)='WORKED_TIME_AMOUNT'\s*THEN 'FIXED' END,\s*NULLIF\(component\.value#>>'\{source_basis_json,bucket_code\}'/g,
+  ) || []).length, 3, 'the physical key and both digest proofs must share the worked-time FIXED bucket fallback');
 });
 
 test('source build seals active item reservations and synchronizer replaces all live reservation workspaces', () => {
@@ -139,11 +178,47 @@ test('zero-outstanding sealed buckets remain audit evidence but are not required
     /FROM pg_temp\.tmp_sync_sealed_rate_projection sealed\s+WHERE sealed\.evidence_json#>>'\{physical_bucket,builder_component_expected\}'='true'/);
 });
 
-test('negative preview metadata compares signed component amount with authoritative outstanding', () => {
+test('negative preview metadata validates live truth before the sealed outstanding overlay', () => {
   assert.match(synchronizer,
-    /preview_total\.preview_truth_ex_vat\s*- authoritative_component\.outstanding_ex_vat/);
-  assert.doesNotMatch(synchronizer,
     /preview_total\.preview_truth_ex_vat\s*- authoritative_component\.truth_ex_vat/);
+  assert.doesNotMatch(synchronizer,
+    /preview_total\.preview_truth_ex_vat\s*- authoritative_component\.outstanding_ex_vat/);
+  assert.match(synchronizer,
+    /preview_total\.preview_component_count IS NULL[\s\S]*ABS\(ROUND\(authoritative_component\.truth_ex_vat, 2\)\) > 0\.01/);
+});
+
+test('missing preview components are bridged only by exact sealed physical buckets', () => {
+  for (const marker of [
+    'tmp_sync_raw_preview_physical_components',
+    'tmp_sync_sealed_missing_preview_components',
+    'SEALED_BASELINE_COMPONENT',
+    'WORKED_TIME_RESIDUAL',
+    'A sealed builder component has no complete frozen source basis.',
+  ]) assert.ok(synchronizer.includes(marker), `missing sealed baseline bridge marker: ${marker}`);
+
+  assert.match(synchronizer,
+    /sealed\.evidence_json#>>'\{physical_bucket,builder_component_expected\}'='true'[\s\S]*sealed\.evidence_json#>>'\{source_payload,source_kind\}'[\s\S]*IN \('SEGMENT','SEALED_BASELINE_COMPONENT','WORKED_TIME_RESIDUAL'\)[\s\S]*CROSS JOIN LATERAL \([\s\S]*source_payload,segment[\s\S]*source_payload,source_value[\s\S]*jsonb_typeof\(bridge\.source_basis_json\)='object'[\s\S]*NOT EXISTS\([\s\S]*raw_component\.physical_bucket_key=sealed\.physical_bucket_key/);
+  assert.match(synchronizer,
+    /'source_basis_json',[\s\S]*bridge\.source_basis_json[\s\S]*'source_pay_method',sealed\.source_pay_method/);
+  assert.match(synchronizer,
+    /'source_pay_ex_vat',sealed\.outstanding_ex_vat[\s\S]*'component_amount_ex_vat',sealed\.outstanding_ex_vat/);
+  assert.equal(
+    (synchronizer.match(/tmp_sync_sealed_missing_preview_components/g) || []).length >= 7,
+    true,
+    'the same sealed bridge must feed validation, finance-case sync, and final presentation parity',
+  );
+  assert.match(synchronizer,
+    /sealed_baseline_only_keys[\s\S]*COUNT\(\*\)=COUNT\(\*\) FILTER\(WHERE[\s\S]*'SEALED_BASELINE_COMPONENT'[\s\S]*ROUND\(SUM\(sealed\.truth_ex_vat\),2\)=0[\s\S]*ROUND\(SUM\(sealed\.outstanding_ex_vat\),2\)<0/);
+  assert.match(synchronizer,
+    /LEFT JOIN sealed_baseline_only_keys sealed_baseline[\s\S]*AND sealed_baseline\.timesheet_id IS NULL/);
+  assert.match(synchronizer,
+    /INSERT INTO pg_temp\.tmp_sync_raw_negative_timesheet_rows\([\s\S]*JOIN pg_temp\.ts_baseline baseline[\s\S]*WHERE NOT EXISTS\([\s\S]*existing_row\.timesheet_id=missing\.timesheet_id/);
+  assert.match(synchronizer,
+    /UPDATE pg_temp\.timesheet_case_rollup_effective preview_row[\s\S]*SET case_components_json=COALESCE\(\([\s\S]*FROM pg_temp\.tmp_sync_raw_preview_physical_components raw_component[\s\S]*JOIN pg_temp\.tmp_sync_sealed_rate_projection sealed[\s\S]*sealed\.physical_bucket_key=raw_component\.physical_bucket_key[\s\S]*sealed\.evidence_json#>>'\{physical_bucket,builder_component_expected\}'='true'[\s\S]*UNION ALL[\s\S]*FROM pg_temp\.tmp_sync_sealed_missing_preview_components missing[\s\S]*WHERE preview_row\.candidate_id=v_bounded_build\.candidate_id/);
+  assert.match(synchronizer,
+    /raw_component\.component_json\|\|jsonb_strip_nulls\(jsonb_build_object\([\s\S]*'component_amount_ex_vat',COALESCE\([\s\S]*builder_component_amount_ex_vat[\s\S]*sealed\.outstanding_ex_vat[\s\S]*'source_pay_ex_vat',COALESCE\([\s\S]*builder_component_amount_ex_vat[\s\S]*sealed\.outstanding_ex_vat[\s\S]*'source_charge_ex_vat',sealed\.source_charge_ex_vat/);
+  assert.doesNotMatch(synchronizer,
+    /UPDATE pg_temp\.timesheet_case_rollup_effective preview_row[\s\S]{0,2500}WHERE EXISTS\([\s\S]{0,1200}tmp_sync_sealed_missing_preview_components/);
 });
 
 test('every additional-rate code is an independent physical rate identity', () => {

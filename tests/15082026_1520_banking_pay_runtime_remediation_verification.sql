@@ -83,8 +83,7 @@ BEGIN
     RAISE EXCEPTION 'BANKING_PAY_JAMES_TIMESHEET_METHOD_CONTRACT_MISSING';
   END IF;
 
-  IF position('preview_total.preview_truth_ex_vat - authoritative_component.outstanding_ex_vat'
-       in v_sync)=0
+  IF v_sync !~* 'preview_total\.preview_truth_ex_vat\s*-\s*authoritative_component\.truth_ex_vat'
      OR position('physical_bucket,builder_component_expected' in v_sync)=0 THEN
     RAISE EXCEPTION 'BANKING_PAY_JAMES_BUILDER_ADMISSION_CONTRACT_MISSING';
   END IF;

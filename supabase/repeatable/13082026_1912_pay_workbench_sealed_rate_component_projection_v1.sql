@@ -872,6 +872,59 @@ AS $function$
     FROM sealed_parent_facts parent
     LEFT JOIN exact_allocation_matched allocation USING(fact_identity)
     GROUP BY parent.fact_identity
+  ), parent_residual_bucket_authority AS MATERIALIZED (
+    SELECT parent.fact_identity,bucket.parsed_physical_bucket_key,
+      bucket.parsed_component_member_identity,bucket.parsed_bucket_code,
+      bucket.parsed_segment_id,bucket.parsed_segment_key,
+      bucket.parsed_segment_stable_key,bucket.parsed_source_rate,
+      bucket.parsed_source_charge_rate,
+      CASE WHEN parent.authority_kind='RESERVATION' THEN NULL::numeric
+        WHEN bucket.parsed_source_units IS NOT NULL
+          AND ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2)=
+            ROUND(bucket.parsed_source_pay_ex_vat,2)
+        THEN bucket.parsed_source_units
+        ELSE ROUND((parent.parent_amount_ex_vat-total.exact_allocated_ex_vat)
+          /bucket.parsed_source_rate,6) END AS residual_source_units,
+      CASE
+        WHEN parent.authority_kind='RESERVATION' THEN NULL::numeric
+        WHEN parent.parent_source_charge_ex_vat IS NOT NULL
+          THEN ROUND(parent.parent_source_charge_ex_vat
+            - COALESCE(total.exact_allocated_charge_ex_vat,0),2)
+        WHEN bucket.parsed_source_charge_ex_vat IS NOT NULL
+          AND ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2)=
+            ROUND(bucket.parsed_source_pay_ex_vat,2)
+          THEN bucket.parsed_source_charge_ex_vat
+        ELSE ROUND(ROUND((parent.parent_amount_ex_vat-total.exact_allocated_ex_vat)
+            /bucket.parsed_source_rate,6)*bucket.parsed_source_charge_rate,2)
+      END AS residual_source_charge_ex_vat,
+      CASE WHEN parent.authority_kind='RESERVATION'
+        THEN 'SEALED_SOLE_BUCKET_RESERVATION_ATTRIBUTION_V1'
+        ELSE 'SEALED_SOLE_BUCKET_RATE_DERIVATION_V1' END::text AS match_authority
+    FROM sealed_parent_facts parent
+    JOIN parent_allocation_totals total USING(fact_identity)
+    JOIN physical_bucket_cardinality cardinality
+      ON cardinality.timesheet_id=parent.timesheet_id
+     AND cardinality.economic_key_type=parent.economic_key_type
+     AND cardinality.economic_key_value=parent.economic_key_value
+     AND cardinality.physical_bucket_count=1
+    JOIN bucket_validated bucket
+      ON bucket.validated_failure IS NULL
+     AND bucket.timesheet_id=parent.timesheet_id
+     AND UPPER(BTRIM(bucket.economic_key_type))=parent.economic_key_type
+     AND BTRIM(bucket.economic_key_value)=parent.economic_key_value
+    WHERE parent.authority_kind IN ('BASELINE','RESERVATION')
+      AND parent.economic_key_type IN ('TS_DAY','TS_TOTAL')
+      AND parent.is_signed_non_charge_recovery IS NOT TRUE
+      AND ABS(ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2))>0.005
+      AND (parent.authority_kind='RESERVATION' OR (
+        bucket.parsed_source_rate IS NOT NULL
+        AND bucket.parsed_source_rate<>0
+        AND (parent.parent_source_charge_ex_vat IS NOT NULL
+          OR bucket.parsed_source_charge_ex_vat IS NOT NULL
+          OR bucket.parsed_source_charge_rate IS NOT NULL)
+        AND ROUND(ROUND((parent.parent_amount_ex_vat-total.exact_allocated_ex_vat)
+            /bucket.parsed_source_rate,6)*bucket.parsed_source_rate,2)=
+          ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2)))
   ), parent_reconciliation_failures AS MATERIALIZED (
     SELECT parent.timesheet_id,parent.economic_key_type,parent.economic_key_value,
       MIN(failure.failure_rank) AS failure_rank,
@@ -894,12 +947,16 @@ AS $function$
           AND parent.economic_key_type IN ('TS_DAY','TS_TOTAL')
           AND parent.is_signed_non_charge_recovery IS NOT TRUE
           AND ABS(ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2))>0.005
-          AND parent.parent_source_charge_ex_vat IS NULL THEN 40 END,
+          AND parent.parent_source_charge_ex_vat IS NULL
+          AND NOT EXISTS(SELECT 1 FROM parent_residual_bucket_authority authority
+            WHERE authority.fact_identity=parent.fact_identity) THEN 40 END,
        CASE WHEN parent.authority_kind='BASELINE'
           AND parent.economic_key_type IN ('TS_DAY','TS_TOTAL')
           AND parent.is_signed_non_charge_recovery IS NOT TRUE
           AND ABS(ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2))>0.005
           AND parent.parent_source_charge_ex_vat IS NULL
+          AND NOT EXISTS(SELECT 1 FROM parent_residual_bucket_authority authority
+            WHERE authority.fact_identity=parent.fact_identity)
         THEN 'RATE_AUTHORITY_PARENT_SOURCE_CHARGE_MISSING' END)
       ,(CASE WHEN ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat
             - ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2),2)<>0
@@ -933,10 +990,11 @@ AS $function$
         'work_date',CASE WHEN parent.economic_key_type='TS_DAY'
           THEN parent.economic_key_value END,'component_fallback','WORKED_TIME_AMOUNT',
         'residual_contract_version',1,
+        'sole_bucket_rate_derivation_contract',residual_bucket.match_authority,
         'signed_non_charge_recovery_contract',CASE
           WHEN parent.is_signed_non_charge_recovery
             THEN 'SIGNED_NON_CHARGE_RECOVERY_V1' END),
-      concat_ws('|','RATE_BUCKET_V1',parent.timesheet_id::text,
+      COALESCE(residual_bucket.parsed_physical_bucket_key,concat_ws('|','RATE_BUCKET_V1',parent.timesheet_id::text,
         'timesheet:'||parent.timesheet_id::text,parent.economic_key_type,
         parent.economic_key_value,
         CASE WHEN parent.economic_key_type='EXPENSE_CODE'
@@ -944,22 +1002,29 @@ AS $function$
           WHEN parent.economic_key_type='ADJUSTMENT_CODE'
           THEN 'adjustment:'||parent.economic_key_value
           ELSE 'worked-time-residual:'||parent.economic_key_type||':'||parent.economic_key_value END,
-        'FIXED'),
-      CASE WHEN parent.economic_key_type='EXPENSE_CODE'
+        'FIXED')),
+      COALESCE(residual_bucket.parsed_component_member_identity,CASE WHEN parent.economic_key_type='EXPENSE_CODE'
           THEN 'expense:'||UPPER(parent.economic_key_value)
         WHEN parent.economic_key_type='ADJUSTMENT_CODE'
           THEN 'adjustment:'||parent.economic_key_value
-        ELSE 'worked-time-residual:'||parent.economic_key_type||':'||parent.economic_key_value END,
-      'timesheet:'||parent.timesheet_id::text,'FIXED',NULL,NULL,NULL,NULL,NULL,NULL,
+        ELSE 'worked-time-residual:'||parent.economic_key_type||':'||parent.economic_key_value END),
+      'timesheet:'||parent.timesheet_id::text,
+      COALESCE(residual_bucket.parsed_bucket_code,'FIXED'),
+      residual_bucket.parsed_segment_id,residual_bucket.parsed_segment_key,
+      residual_bucket.parsed_segment_stable_key,residual_bucket.residual_source_units,
+      residual_bucket.parsed_source_rate,residual_bucket.parsed_source_charge_rate,
       CASE WHEN parent.is_signed_non_charge_recovery THEN 0::numeric
         WHEN parent.authority_kind='BASELINE'
-        THEN ROUND(parent.parent_source_charge_ex_vat
-          - COALESCE(total.exact_allocated_charge_ex_vat,0),2) END,
+        THEN COALESCE(residual_bucket.residual_source_charge_ex_vat,
+          ROUND(parent.parent_source_charge_ex_vat
+            - COALESCE(total.exact_allocated_charge_ex_vat,0),2)) END,
       parent.sealed_source_pay_method,
       CASE WHEN parent.is_signed_non_charge_recovery
-        THEN 'SIGNED_NON_CHARGE_RECOVERY_V1' ELSE 'ECONOMIC_RESIDUAL' END,true
+        THEN 'SIGNED_NON_CHARGE_RECOVERY_V1'
+        ELSE COALESCE(residual_bucket.match_authority,'ECONOMIC_RESIDUAL') END,true
     FROM sealed_parent_facts parent
     JOIN parent_allocation_totals total USING(fact_identity)
+    LEFT JOIN parent_residual_bucket_authority residual_bucket USING(fact_identity)
     WHERE ABS(ROUND(parent.parent_amount_ex_vat-total.exact_allocated_ex_vat,2))>0.005
       AND parent.economic_key_type<>'ADDITIONAL_CODE'
       AND NOT EXISTS(SELECT 1 FROM nested_allocation_failures failure
