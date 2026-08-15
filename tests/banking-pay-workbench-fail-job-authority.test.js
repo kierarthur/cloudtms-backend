@@ -42,6 +42,22 @@ test('deterministic semantic publication failure terminalises once and proves th
   );
 });
 
+test('obsolete source-stage completion also converges scope currentness before returning', () => {
+  const obsoleteBranch = canonical.match(
+    /ELSIF v_is_obsolete THEN[\s\S]*?END IF;\s*v_retry_after_seconds:=/,
+  );
+  assert.ok(obsoleteBranch, 'obsolete source-stage branch must exist');
+  assert.match(obsoleteBranch[0], /pay_workbench_repair_orphaned_pending_source_build/);
+  assert.match(obsoleteBranch[0], /OBSOLETE_SOURCE_STAGE_ATOMIC_REPAIR/);
+  assert.match(obsoleteBranch[0], /PAY_WORKBENCH_OBSOLETE_SUCCESSOR_NOT_PROVEN/);
+  assert.match(obsoleteBranch[0], /terminal_owner\.status, ''\)\)\) IN \('QUEUED', 'RUNNING'\)/);
+  assert.ok(
+    obsoleteBranch[0].indexOf('pay_workbench_repair_orphaned_pending_source_build')
+      < obsoleteBranch[0].indexOf("'result_code','OBSOLETE'"),
+    'obsolete completion must repair and prove currentness before returning success',
+  );
+});
+
 test('orphan repair is bounded to expired deterministic source-stage failures', () => {
   assert.match(repair, /v_target_count>10/i);
   assert.match(repair, /attempt\.attempt_status='STARTED'/i);

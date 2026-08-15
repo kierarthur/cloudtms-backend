@@ -99,6 +99,53 @@ test('negative worked-time recovery preserves the unchanged fixed residual ident
     /THEN 'worked-time-residual:'\|\|UPPER\(BTRIM\(component\.value->>'component_key_type'\)\)/);
 });
 
+test('paired negative hours use the preview builder signed delta contract without absolute-value drift', () => {
+  assert.match(helper,
+    /SUM\(fact\.source_units\) FILTER\(\s*WHERE fact\.authority_kind='BASELINE'\)/);
+  assert.match(helper,
+    /parsed_source_units,0\)\s*- bucket\.attributed_baseline_source_units[\s\S]*AS raw_delta_source_units/);
+  assert.match(helper,
+    /parsed_source_pay_ex_vat-bucket\.attributed_baseline_ex_vat[\s\S]*AS raw_delta_before_reservation_ex/);
+  assert.match(helper,
+    /raw_delta_before_reservation_ex-delta\.attributed_reserved_ex_vat[\s\S]*AS builder_component_amount_ex_vat/);
+  assert.match(helper,
+    /GREATEST\(delta\.raw_delta_source_units,0\)[\s\S]*THEN ROUND\(GREATEST\(delta\.raw_delta_source_units,0\),6\) END AS builder_source_units/);
+  assert.doesNotMatch(helper,
+    /ABS\([^\n]*raw_delta_(?:source_units|before_reservation_ex|charge_ex_vat)[^\n]*\)\s+AS/);
+});
+
+test('signed finance recovery is non-allocative sealed movement evidence, not negative hours', () => {
+  assert.match(helper,
+    /parent_item_type[\s\S]*key_resolution_source[\s\S]*is_signed_non_charge_recovery/);
+  assert.match(helper,
+    /parent\.is_signed_non_charge_recovery IS NOT TRUE[\s\S]*nested_evidence_shape_failures/);
+  assert.match(helper,
+    /parent\.is_signed_non_charge_recovery THEN 0::numeric/);
+  assert.match(helper, /SIGNED_NON_CHARGE_RECOVERY_V1/);
+  assert.match(helper,
+    /parent\.is_signed_non_charge_recovery IS NOT TRUE[\s\S]*RATE_AUTHORITY_PARENT_SOURCE_CHARGE_MISSING/);
+});
+
+test('zero-outstanding sealed buckets remain audit evidence but are not required modal components', () => {
+  assert.match(helper,
+    /AS builder_component_expected[\s\S]*FROM bucket_builder_delta delta/);
+  assert.match(helper,
+    /'builder_component_expected',bucket\.builder_component_expected/);
+  assert.match(helper,
+    /'builder_component_expected',ABS\(ROUND\(synthetic\.outstanding_ex_vat,2\)\)>0\.005/);
+  assert.match(synchronizer,
+    /sealed\.evidence_json#>>'\{physical_bucket,builder_component_expected\}'='true'[\s\S]*builder\.timesheet_id IS NULL/);
+  assert.match(synchronizer,
+    /FROM pg_temp\.tmp_sync_sealed_rate_projection sealed\s+WHERE sealed\.evidence_json#>>'\{physical_bucket,builder_component_expected\}'='true'/);
+});
+
+test('negative preview metadata compares signed component amount with authoritative outstanding', () => {
+  assert.match(synchronizer,
+    /preview_total\.preview_truth_ex_vat\s*- authoritative_component\.outstanding_ex_vat/);
+  assert.doesNotMatch(synchronizer,
+    /preview_total\.preview_truth_ex_vat\s*- authoritative_component\.truth_ex_vat/);
+});
+
 test('every additional-rate code is an independent physical rate identity', () => {
   assert.match(serializer, /FROM jsonb_each\(CASE/);
   assert.match(serializer,

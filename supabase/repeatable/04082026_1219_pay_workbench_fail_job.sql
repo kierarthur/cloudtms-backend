@@ -192,8 +192,81 @@ BEGIN
       UPDATE public.banking_pay_workbench_jobs SET status='SUCCEEDED',completed_at_utc=clock_timestamp(),
         failed_at_utc=NULL,last_error_json=p_error_json,updated_at_utc=clock_timestamp()
       WHERE id=p_job_id AND status='RUNNING';
+
+      v_terminal_repair_result := public.pay_workbench_repair_orphaned_pending_source_build(
+        p_session_id => v_job_session_id,
+        p_candidate_id => v_job_candidate_id,
+        p_limit => 1,
+        p_now_utc => clock_timestamp(),
+        p_reason => 'OBSOLETE_SOURCE_STAGE_ATOMIC_REPAIR'
+      );
+
+      SELECT terminal_scope.status,
+             terminal_scope.pending_job_id,
+             terminal_scope.error_json
+      INTO v_terminal_scope_status,
+           v_terminal_scope_pending_job_id,
+           v_terminal_scope_error_json
+      FROM public.banking_pay_workbench_session_scope AS terminal_scope
+      WHERE terminal_scope.session_id = v_job_session_id
+        AND terminal_scope.candidate_id = v_job_candidate_id
+      FOR UPDATE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_OBSOLETE_SCOPE_MISSING'
+          USING ERRCODE = 'P0001';
+      END IF;
+
+      IF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_PENDING'
+         AND v_terminal_scope_pending_job_id IS NOT NULL THEN
+        SELECT EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_jobs AS terminal_owner
+          WHERE terminal_owner.id = v_terminal_scope_pending_job_id
+            AND terminal_owner.session_id = v_job_session_id
+            AND terminal_owner.candidate_id = v_job_candidate_id
+            AND UPPER(BTRIM(COALESCE(terminal_owner.status, ''))) IN ('QUEUED', 'RUNNING')
+        )
+        INTO v_terminal_owner_valid;
+      ELSE
+        v_terminal_owner_valid := false;
+      END IF;
+
+      IF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_PENDING'
+         AND v_terminal_owner_valid IS NOT TRUE THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_OBSOLETE_SUCCESSOR_NOT_PROVEN'
+          USING ERRCODE = 'P0001';
+      END IF;
+
+      IF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_ERROR'
+         AND v_terminal_scope_pending_job_id IS NULL THEN
+        UPDATE public.banking_pay_workbench_session_candidate_state AS terminal_candidate_state
+        SET status = 'ERROR',
+            pending_job_id = NULL::uuid,
+            last_error_json = COALESCE(v_terminal_scope_error_json, p_error_json),
+            updated_at_utc = clock_timestamp()
+        WHERE terminal_candidate_state.session_id = v_job_session_id
+          AND terminal_candidate_state.candidate_id = v_job_candidate_id;
+      ELSIF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_PENDING'
+            AND v_terminal_owner_valid THEN
+        UPDATE public.banking_pay_workbench_session_candidate_state AS terminal_candidate_state
+        SET status = 'PENDING',
+            pending_job_id = v_terminal_scope_pending_job_id,
+            last_error_json = '{}'::jsonb,
+            updated_at_utc = clock_timestamp()
+        WHERE terminal_candidate_state.session_id = v_job_session_id
+          AND terminal_candidate_state.candidate_id = v_job_candidate_id;
+      END IF;
+
       RETURN jsonb_build_object('ok',true,'job_id',p_job_id,'status','SUCCEEDED',
-        'result_code','OBSOLETE','retry_scheduled',false);
+        'result_code','OBSOLETE','retry_scheduled',false,
+        'terminal_repair_result',v_terminal_repair_result,
+        'terminal_scope_status',v_terminal_scope_status,
+        'terminal_successor_job_id',v_terminal_scope_pending_job_id,
+        'terminal_successor_proven',(
+          UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) <> 'SOURCE_BUILD_PENDING'
+          OR v_terminal_owner_valid
+        ));
     END IF;
     v_retry_after_seconds:=COALESCE(p_retry_after_seconds,
       LEAST(300,GREATEST(1,power(2,LEAST(COALESCE(v_attempt_count,1),8))::integer)));

@@ -2360,13 +2360,13 @@ begin
           WHERE (
                   (
                     preview_total.preview_component_count IS NULL
-                    AND ABS(ROUND(authoritative_component.truth_ex_vat, 2)) > 0.01
+                    AND ABS(ROUND(authoritative_component.outstanding_ex_vat, 2)) > 0.01
                   )
                   OR (
                     preview_total.preview_component_count IS NOT NULL
                     AND ABS(ROUND(
                       preview_total.preview_truth_ex_vat
-                      - authoritative_component.truth_ex_vat,
+                      - authoritative_component.outstanding_ex_vat,
                       2
                     )) > 0.01
                   )
@@ -5144,7 +5144,8 @@ begin
     LEFT JOIN pg_temp.tmp_sync_builder_physical_components builder
       ON builder.timesheet_id=sealed.timesheet_id
      AND builder.physical_bucket_key=sealed.physical_bucket_key
-    WHERE builder.timesheet_id IS NULL
+    WHERE sealed.evidence_json#>>'{physical_bucket,builder_component_expected}'='true'
+      AND builder.timesheet_id IS NULL
     UNION ALL
     SELECT 20,'PAY_SYNC_OVERPAYMENTS_RATE_BUILDER_COMPONENT_EXTRA',jsonb_build_object(
       'timesheet_id',builder.timesheet_id,'physical_bucket_key',builder.physical_bucket_key)
@@ -5536,6 +5537,7 @@ begin
         sealed.sealed_evidence_digest,sealed.financial_revision_digest,
         sealed.target_authority_digest,sealed.conversion_context_digest
       FROM pg_temp.tmp_sync_sealed_rate_projection sealed
+      WHERE sealed.evidence_json#>>'{physical_bucket,builder_component_expected}'='true'
     ), actual_lines AS (
       SELECT COALESCE(line.line_json->>'real_business_timesheet_id',
           line.line_json#>>'{economic_key,timesheet_id}',line.line_json->>'timesheet_id')::uuid AS timesheet_id,

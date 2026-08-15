@@ -14,6 +14,7 @@ DECLARE
   v_sync text;
   v_builder text;
   v_claim text;
+  v_fail_job text;
   v_child text;
   v_parent text;
 BEGIN
@@ -35,6 +36,9 @@ BEGIN
   SELECT pg_catalog.pg_get_functiondef(
     'public.pay_workbench_source_build_attempt_claim_start_v1(text,text,integer,timestamptz,uuid,uuid)'::regprocedure)
   INTO STRICT v_claim;
+  SELECT pg_catalog.pg_get_functiondef(
+    'public.pay_workbench_fail_job(uuid,jsonb,integer)'::regprocedure)
+  INTO STRICT v_fail_job;
   SELECT pg_catalog.pg_get_functiondef(
     'private.pay_workbench_execution_residual_identity_proof_page_v1(uuid,uuid,uuid,uuid,uuid,bigint,uuid[],text,text,jsonb,jsonb,text)'::regprocedure)
   INTO STRICT v_child;
@@ -62,11 +66,27 @@ BEGIN
     RAISE EXCEPTION 'BANKING_PAY_JAMES_ECONOMIC_KEY_METHOD_CONTRACT_MISSING';
   END IF;
 
+  IF position('bucket_builder_delta' in v_projection)=0
+     OR position('raw_delta_source_units' in v_projection)=0
+     OR position('raw_delta_before_reservation_ex' in v_projection)=0
+     OR position('raw_delta_charge_ex_vat' in v_projection)=0
+     OR position('builder_component_expected' in v_projection)=0
+     OR position('is_signed_non_charge_recovery' in v_projection)=0
+     OR position('SIGNED_NON_CHARGE_RECOVERY_V1' in v_projection)=0 THEN
+    RAISE EXCEPTION 'BANKING_PAY_JAMES_SIGNED_DELTA_CONTRACT_MISSING';
+  END IF;
+
   IF position('complete_component_method_digest' in v_sync)=0
      OR position('RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT' in v_sync)=0
      OR v_sync ~* 'coalesce\s*\(\s*component\.source_pay_method\s*,\s*(candidate_pay_method|current_target_pay_method)'
      OR v_sync ~* 'min\s*\(\s*sealed\.source_pay_method\s*\)' THEN
     RAISE EXCEPTION 'BANKING_PAY_JAMES_TIMESHEET_METHOD_CONTRACT_MISSING';
+  END IF;
+
+  IF position('preview_total.preview_truth_ex_vat - authoritative_component.outstanding_ex_vat'
+       in v_sync)=0
+     OR position('physical_bucket,builder_component_expected' in v_sync)=0 THEN
+    RAISE EXCEPTION 'BANKING_PAY_JAMES_BUILDER_ADMISSION_CONTRACT_MISSING';
   END IF;
 
   IF position('RESERVATION_COMPONENT_SOURCE_KEY_C_V1' in v_builder)=0
@@ -88,6 +108,13 @@ BEGIN
     RAISE EXCEPTION 'BANKING_PAY_TERMINAL_CONVERGENCE_CONTRACT_MISSING';
   END IF;
 
+
+  IF position('OBSOLETE_SOURCE_STAGE_ATOMIC_REPAIR' in v_fail_job)=0
+     OR position('PAY_WORKBENCH_OBSOLETE_SUCCESSOR_NOT_PROVEN' in v_fail_job)=0
+     OR position('pay_workbench_repair_orphaned_pending_source_build' in v_fail_job)=0 THEN
+    RAISE EXCEPTION 'BANKING_PAY_OBSOLETE_CURRENTNESS_CONTRACT_MISSING';
+  END IF;
+
   IF position('referenced_scope_set_digest' in v_child)=0
      OR position('common_publication_attestation_digest' in v_child)=0
      OR position('ready_rows_validated' in v_child)=0
@@ -101,6 +128,114 @@ BEGIN
   END IF;
 END;
 $definition_contract$;
+
+CREATE TEMP TABLE banking_pay_signed_bucket_fixture(
+  fixture_name text PRIMARY KEY,
+  current_units numeric NOT NULL,
+  baseline_units numeric NOT NULL,
+  source_rate numeric NOT NULL,
+  source_charge_rate numeric NOT NULL,
+  baseline_charge_ex_vat numeric NOT NULL,
+  reserved_ex_vat numeric NOT NULL,
+  expected_component_ex_vat numeric NOT NULL,
+  expected_source_units numeric,
+  expected_source_rate numeric,
+  expected_source_charge_ex_vat numeric NOT NULL,
+  expected_builder_component boolean NOT NULL
+) ON COMMIT DROP;
+
+INSERT INTO banking_pay_signed_bucket_fixture VALUES
+  ('positive_delta',12.5,11.5,25,45,517.5,0,25,1,25,45,true),
+  ('paired_negative_delta',0.5,1.5,25,45,67.5,0,-25,NULL,NULL,-45,true),
+  ('fully_reserved_zero',12.5,11.5,25,45,517.5,25,0,NULL,NULL,0,false);
+
+DO $signed_bucket_contract$
+DECLARE
+  v_mismatch_count integer;
+BEGIN
+  WITH calculated AS (
+    SELECT fixture.*,
+      ROUND(fixture.current_units-fixture.baseline_units,6) AS raw_delta_units,
+      ROUND((fixture.current_units-fixture.baseline_units)*fixture.source_rate,2)
+        AS raw_delta_pay,
+      ROUND(fixture.current_units*fixture.source_charge_rate
+        - fixture.baseline_charge_ex_vat,2) AS raw_delta_charge
+    FROM banking_pay_signed_bucket_fixture fixture
+  ), actual AS (
+    SELECT calculated.*,
+      ROUND(calculated.raw_delta_pay-calculated.reserved_ex_vat,2) AS component_ex_vat,
+      CASE WHEN ROUND(GREATEST(calculated.raw_delta_units,0),6)>0
+          AND ROUND(GREATEST(calculated.raw_delta_units,0)*calculated.source_rate,2)=
+            ROUND(calculated.raw_delta_pay-calculated.reserved_ex_vat,2)
+        THEN ROUND(GREATEST(calculated.raw_delta_units,0),6) END AS source_units,
+      CASE WHEN ROUND(GREATEST(calculated.raw_delta_units,0),6)>0
+          AND ROUND(GREATEST(calculated.raw_delta_units,0)*calculated.source_rate,2)=
+            ROUND(calculated.raw_delta_pay-calculated.reserved_ex_vat,2)
+        THEN calculated.source_rate END AS effective_source_rate,
+      CASE
+        WHEN ROUND(GREATEST(calculated.raw_delta_units,0),6)>0
+          AND ROUND(GREATEST(calculated.raw_delta_units,0)*calculated.source_rate,2)=
+            ROUND(calculated.raw_delta_pay-calculated.reserved_ex_vat,2)
+          THEN ROUND(GREATEST(calculated.raw_delta_units,0)
+            *calculated.source_charge_rate,2)
+        WHEN calculated.raw_delta_pay=0 THEN calculated.raw_delta_charge
+        ELSE ROUND(calculated.raw_delta_charge
+          *((calculated.raw_delta_pay-calculated.reserved_ex_vat)
+            /NULLIF(calculated.raw_delta_pay,0)),2)
+      END AS source_charge_ex_vat
+    FROM calculated
+  )
+  SELECT count(*)::integer
+  INTO v_mismatch_count
+  FROM actual
+  WHERE actual.component_ex_vat IS DISTINCT FROM actual.expected_component_ex_vat
+     OR actual.source_units IS DISTINCT FROM actual.expected_source_units
+     OR actual.effective_source_rate IS DISTINCT FROM actual.expected_source_rate
+     OR actual.source_charge_ex_vat IS DISTINCT FROM actual.expected_source_charge_ex_vat
+     OR (ABS(actual.component_ex_vat)>0.005) IS DISTINCT FROM
+       actual.expected_builder_component;
+
+  IF v_mismatch_count<>0 THEN
+    RAISE EXCEPTION 'BANKING_PAY_SIGNED_BUCKET_FIXTURE_FAILED';
+  END IF;
+END;
+$signed_bucket_contract$;
+
+CREATE TEMP TABLE banking_pay_recovery_movement_fixture(
+  item_type text NOT NULL,
+  key_resolution_source text NOT NULL,
+  signed_parent_amount_ex_vat numeric NOT NULL,
+  frozen_reference_charge_ex_vat numeric
+) ON COMMIT DROP;
+
+INSERT INTO banking_pay_recovery_movement_fixture VALUES
+  ('SEGMENT_DELTA','FROZEN_COMPONENT_KEY',100,200),
+  ('OVERPAYMENT_RECOVERY','FINANCE_ITEM_AUTHORITY',-25,50);
+
+DO $recovery_movement_contract$
+DECLARE
+  v_allocative_amount numeric;
+  v_signed_recovery_amount numeric;
+  v_signed_recovery_charge numeric;
+BEGIN
+  SELECT ROUND(COALESCE(SUM(signed_parent_amount_ex_vat) FILTER(
+      WHERE NOT (UPPER(item_type)='OVERPAYMENT_RECOVERY'
+        AND UPPER(key_resolution_source)='FINANCE_ITEM_AUTHORITY')),0),2),
+    ROUND(COALESCE(SUM(signed_parent_amount_ex_vat) FILTER(
+      WHERE UPPER(item_type)='OVERPAYMENT_RECOVERY'
+        AND UPPER(key_resolution_source)='FINANCE_ITEM_AUTHORITY'),0),2),
+    ROUND(COALESCE(SUM(0::numeric) FILTER(
+      WHERE UPPER(item_type)='OVERPAYMENT_RECOVERY'
+        AND UPPER(key_resolution_source)='FINANCE_ITEM_AUTHORITY'),0),2)
+  INTO v_allocative_amount,v_signed_recovery_amount,v_signed_recovery_charge
+  FROM banking_pay_recovery_movement_fixture;
+
+  IF v_allocative_amount<>100 OR v_signed_recovery_amount<>-25
+     OR v_signed_recovery_charge<>0 THEN
+    RAISE EXCEPTION 'BANKING_PAY_SIGNED_NON_CHARGE_RECOVERY_FIXTURE_FAILED';
+  END IF;
+END;
+$recovery_movement_contract$;
 
 DO $cursor_contract$
 DECLARE
