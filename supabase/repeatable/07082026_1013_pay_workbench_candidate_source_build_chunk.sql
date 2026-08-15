@@ -141,6 +141,8 @@ DECLARE
   v_bootstrap_evidence_complete boolean:=false;
   v_bootstrap_reset_count integer:=0;
   v_bootstrap_id uuid;
+  v_reservation_order_contract constant text:='RESERVATION_COMPONENT_SOURCE_KEY_C_V1';
+  v_is_fresh_reservation_cursor boolean:=false;
 BEGIN
   IF v_build_id IS NULL OR v_attempt_id IS NULL OR v_attempt_nonce IS NULL
      OR jsonb_typeof(v_cursor)<>'object' OR p_session_id IS NULL OR p_candidate_id IS NULL THEN
@@ -217,6 +219,43 @@ BEGIN
        OR NULLIF(v_cursor->>'dependency_unit_key','') IS NULL
        OR NULLIF(v_cursor->>'fact_family','') IS NULL THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_BUILD_CURSOR_INVALID' USING ERRCODE='22023';
+    END IF;
+    IF v_fact_family='RESERVATION_COMPONENT' THEN
+      v_is_fresh_reservation_cursor:=
+        v_page_number=1
+        AND v_last_source_key IS NULL
+        AND v_cursor->>'previous_page_digest' IS NULL
+        AND v_cumulative_fact_count=0
+        AND v_cumulative_digest=md5('BPAY_FACT_STREAM_V2')
+        AND v_raw_physical_source_count=0
+        AND v_resolved_physical_source_count=0
+        AND v_failed_physical_source_count=0
+        AND v_raw_physical_amount_ex_vat=0
+        AND v_resolved_physical_amount_ex_vat=0
+        AND v_last_raw_physical_source_key IS NULL
+        AND COALESCE((v_cursor->>'terminal')::boolean,false)=false
+        AND COALESCE((v_cursor->>'source_exhausted')::boolean,false)=false
+        AND v_cursor->>'raw_terminal_source_key' IS NULL
+        AND v_cursor->>'raw_page_evidence_digest' IS NULL
+        AND NOT EXISTS(
+          SELECT 1
+          FROM private.banking_pay_workbench_economic_build_fact_pages page
+          WHERE page.build_id=v_build_id
+            AND page.dependency_unit_key=v_unit_key
+            AND page.fact_family=v_fact_family
+          LIMIT 1);
+      IF NOT (v_cursor ? 'reservation_source_key_order_contract') THEN
+        IF NOT v_is_fresh_reservation_cursor THEN
+          RAISE EXCEPTION 'PAY_WORKBENCH_RESERVATION_ORDER_CONTRACT_OBSOLETE'
+            USING ERRCODE='40001';
+        END IF;
+        v_cursor:=v_cursor || jsonb_build_object(
+          'reservation_source_key_order_contract',v_reservation_order_contract);
+      ELSIF v_cursor->>'reservation_source_key_order_contract'
+          <>v_reservation_order_contract THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_RESERVATION_ORDER_CONTRACT_OBSOLETE'
+          USING ERRCODE='40001';
+      END IF;
     END IF;
     IF v_build.dependency_closure_sealed_at_utc IS NULL OR EXISTS(
       SELECT 1 FROM private.banking_pay_workbench_economic_build_scope
@@ -605,8 +644,9 @@ BEGIN
         AND (item.id IS NULL OR COALESCE(item.is_voided,false) IS NOT TRUE)
         AND (authority.resolution_failure IS NOT NULL OR authority.owner_ids && ARRAY(
           SELECT timesheet_id FROM private.banking_pay_workbench_economic_build_scope WHERE build_id=v_build_id))
-        AND (v_last_source_key IS NULL OR reservation.id::text>v_last_source_key)
-      ORDER BY reservation.id LIMIT v_fact_limit+1;
+        AND (v_last_source_key IS NULL OR reservation.id::text COLLATE "C"
+          >v_last_source_key COLLATE "C")
+      ORDER BY reservation.id::text COLLATE "C" LIMIT v_fact_limit+1;
 
       -- The normal pre-Draft preview treats active, non-settled pay-batch items as
       -- reservations even where no pay_advance_reservations row exists.  Seal
@@ -886,8 +926,9 @@ BEGIN
         item.source_payload_json,md5(item.source_payload_json::text)
       FROM active_item_documents item
       WHERE v_last_source_key IS NULL
-        OR '~ITEM:'||item.pay_batch_item_id::text>v_last_source_key
-      ORDER BY '~ITEM:'||item.pay_batch_item_id::text
+        OR ('~ITEM:'||item.pay_batch_item_id::text) COLLATE "C"
+          >v_last_source_key COLLATE "C"
+      ORDER BY ('~ITEM:'||item.pay_batch_item_id::text) COLLATE "C"
       LIMIT v_fact_limit+1
       ON CONFLICT(source_key) DO NOTHING;
     ELSIF v_fact_family='FINANCE_CASE_IDENTITY' THEN
@@ -1032,7 +1073,12 @@ BEGIN
     INTO v_resolution_failure
     FROM pg_temp._bpay_wb_fact_page_v1 page
     WHERE NULLIF(BTRIM(page.source_payload_json->>'resolution_failure'),'') IS NOT NULL
-    ORDER BY page.source_key LIMIT 1;
+    ORDER BY
+      CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+        THEN page.source_key END COLLATE "C",
+      CASE WHEN v_fact_family<>'RESERVATION_COMPONENT'
+        THEN page.source_key END
+    LIMIT 1;
     IF v_resolution_failure IS NOT NULL THEN
       RAISE EXCEPTION 'PAY_WORKBENCH_ECONOMIC_KEY_RESOLUTION_INCOMPLETE'
         USING ERRCODE='23514',DETAIL=v_resolution_failure;
@@ -1051,10 +1097,21 @@ BEGIN
       SELECT count(*)>v_fact_limit INTO v_has_more FROM pg_temp._bpay_wb_fact_page_v1;
     END IF;
     SELECT count(*)::integer,
-      md5(COALESCE(string_agg(source_key||':'||financial_digest,'' ORDER BY source_key),'')),
-      max(source_key)
+      md5(CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+        THEN v_reservation_order_contract||':' ELSE '' END
+        ||COALESCE(string_agg(source_key||':'||financial_digest,'' ORDER BY
+          CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+            THEN source_key END COLLATE "C",
+          CASE WHEN v_fact_family<>'RESERVATION_COMPONENT'
+            THEN source_key END),'')),
+      CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+        THEN max(source_key COLLATE "C") ELSE max(source_key) END
     INTO v_page_count,v_page_digest,v_last_page_key
-    FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page_rows;
+    FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY
+      CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+        THEN source_key END COLLATE "C",
+      CASE WHEN v_fact_family<>'RESERVATION_COMPONENT'
+        THEN source_key END LIMIT v_fact_limit) page_rows;
 
     IF NOT v_has_more AND v_fact_family='LIVE_ENTITLEMENT_INPUT' AND v_input_phase='PROJECTION' THEN
       SELECT projection_ids.projected_timesheet_id INTO v_next_projection_id
@@ -1065,7 +1122,11 @@ BEGIN
           AND fact.dependency_unit_key=v_unit_key AND fact.source_relation='UNIT_PROJECTION'
         UNION ALL
         SELECT page.timesheet_id
-        FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page
+        FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY
+          CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+            THEN source_key END COLLATE "C",
+          CASE WHEN v_fact_family<>'RESERVATION_COMPONENT'
+            THEN source_key END LIMIT v_fact_limit) page
         WHERE page.source_relation='UNIT_PROJECTION'
       ) projection_ids
       ORDER BY projection_ids.projected_timesheet_id
@@ -1127,18 +1188,22 @@ BEGIN
       INTO v_page_physical_source_count,v_page_resolved_source_count,
         v_page_failed_source_count,v_page_physical_amount_ex_vat,
         v_page_resolved_amount_ex_vat
-      FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page
+      FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY
+        CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+          THEN source_key END COLLATE "C",
+        CASE WHEN v_fact_family<>'RESERVATION_COMPONENT'
+          THEN source_key END LIMIT v_fact_limit) page
       WHERE v_fact_family='RESERVATION_COMPONENT'
         AND page.source_relation<>'UNIT_PROJECTION';
       IF v_fact_family='RESERVATION_COMPONENT' THEN
         SELECT jsonb_build_object(
-          'evidence_digest',md5(COALESCE(string_agg(page.source_key||':'||COALESCE(
+          'evidence_digest',md5(v_reservation_order_contract||':'||COALESCE(string_agg(page.source_key||':'||COALESCE(
             NULLIF(page.source_payload_json->>'raw_physical_digest',''),page.financial_digest),''
-            ORDER BY page.source_key),'')),
-          'last_raw_source_key',max(page.source_key))
+            ORDER BY page.source_key COLLATE "C"),'')),
+          'last_raw_source_key',max(page.source_key COLLATE "C"))
         INTO v_occurrence_bundle
         FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1
-          ORDER BY source_key LIMIT v_fact_limit) page;
+          ORDER BY source_key COLLATE "C" LIMIT v_fact_limit) page;
       END IF;
     END IF;
     v_next_raw_physical_source_count:=v_raw_physical_source_count+
@@ -1186,6 +1251,10 @@ BEGIN
         ELSE v_input_phase END,
       'input_projection_id',CASE WHEN v_projection_phase_transition OR v_projection_family_transition
         THEN v_next_projection_id ELSE v_input_projection_id END);
+    IF v_fact_family='RESERVATION_COMPONENT' THEN
+      v_next:=v_next || jsonb_build_object(
+        'reservation_source_key_order_contract',v_reservation_order_contract);
+    END IF;
     v_cursor_end_hash:=md5(v_next::text);
     v_expected_source_count:=CASE
       WHEN v_is_final AND v_fact_family IN ('FINANCE_ITEM_AUTHORITY','LIVE_ENTITLEMENT_INPUT','FROZEN_SETTLED_COMPONENT',
@@ -1267,7 +1336,11 @@ BEGIN
       page.truth_ex_vat,page.truth_inc_vat,page.baseline_ex_vat,page.baseline_inc_vat,
       page.reserved_source_amount,page.finance_case_id,page.finance_component_id,page.reservation_id,
       page.source_payload_json,page.financial_digest
-    FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page;
+    FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY
+      CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+        THEN source_key END COLLATE "C",
+      CASE WHEN v_fact_family<>'RESERVATION_COMPONENT'
+        THEN source_key END LIMIT v_fact_limit) page;
       GET DIAGNOSTICS v_scope_inserted=ROW_COUNT;
       IF v_scope_inserted<>v_page_count THEN
         RAISE EXCEPTION 'PAY_WORKBENCH_FACT_PAGE_COUNT_MISMATCH' USING ERRCODE='23514';
@@ -1304,7 +1377,11 @@ BEGIN
           updated_at_utc=clock_timestamp()
       FROM (
         SELECT page.timesheet_id,count(*)::integer page_count
-        FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) page
+        FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY
+          CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+            THEN source_key END COLLATE "C",
+          CASE WHEN v_fact_family<>'RESERVATION_COMPONENT'
+            THEN source_key END LIMIT v_fact_limit) page
         WHERE page.timesheet_id IS NOT NULL GROUP BY page.timesheet_id
       ) page_count
       WHERE scope_row.build_id=v_build_id AND scope_row.timesheet_id=page_count.timesheet_id;
@@ -1336,7 +1413,11 @@ BEGIN
       count(*) FILTER(WHERE v_fact_family='ENTITLEMENT_COMPONENT' AND truth_ex_vat<baseline_ex_vat)::bigint negative_count,
       count(*) FILTER(WHERE v_fact_family='CANONICAL_INPUT')::bigint canonical_count,
       COALESCE(sum(pg_column_size(source_payload_json)) FILTER(WHERE v_fact_family='CANONICAL_INPUT'),0)::bigint staging_bytes
-      FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY source_key LIMIT v_fact_limit) accepted) page_stats
+      FROM (SELECT * FROM pg_temp._bpay_wb_fact_page_v1 ORDER BY
+        CASE WHEN v_fact_family='RESERVATION_COMPONENT'
+          THEN source_key END COLLATE "C",
+        CASE WHEN v_fact_family<>'RESERVATION_COMPONENT'
+          THEN source_key END LIMIT v_fact_limit) accepted) page_stats
     WHERE build_row.id=v_build_id;
 
     IF v_is_final THEN

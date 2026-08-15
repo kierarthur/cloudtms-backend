@@ -10,6 +10,12 @@ on:
       - "tests/banking-pay-revision5-final-authority.test.cjs"
       - "tests/banking-pay-legacy-monolith-authority-reassert.test.cjs"
       - "tests/banking-pay-semantic-ready-cancellation-reversion.test.cjs"
+      - "tests/banking-pay-james-rate-authority-remediation.test.js"
+      - "tests/banking-pay-workbench-source-build-authority.test.js"
+      - "tests/banking-pay-source-publication-draft-cancel-fast-path.test.js"
+      - "tests/banking-pay-finalise-residual-fast-route.test.cjs"
+      - "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql"
+      - "tests/15082026_1520_banking_pay_runtime_remediation_verification.sql"
       - "tests/candidate-app-db-rpc-contract.test.cjs"
       - "tests/daily-canonical-authority.test.mjs"
       - "broker/src/daily-canonical-authority.js"
@@ -46,7 +52,11 @@ jobs:
           node --test \
             tests/banking-pay-revision5-final-authority.test.cjs \
             tests/banking-pay-legacy-monolith-authority-reassert.test.cjs \
-            tests/banking-pay-semantic-ready-cancellation-reversion.test.cjs
+            tests/banking-pay-semantic-ready-cancellation-reversion.test.cjs \
+            tests/banking-pay-james-rate-authority-remediation.test.js \
+            tests/banking-pay-workbench-source-build-authority.test.js \
+            tests/banking-pay-source-publication-draft-cancel-fast-path.test.js \
+            tests/banking-pay-finalise-residual-fast-route.test.cjs
 
       - name: Verify Candidate App DB/RPC authority
         run: |
@@ -308,5 +318,10 @@ jobs:
           node supabase/verification/verify_banking_pay_workbench_certified_source_preview_catalog.mjs
           node supabase/verification/verify_banking_pay_targeted_fast_route_certified_reuse_catalog.mjs
           node supabase/verification/verify_banking_pay_semantic_ready_cancellation_reversion_catalog.mjs
+
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+            -f tests/15082026_1520_banking_pay_runtime_remediation_verification.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+            -f tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql
 
           echo "Done."

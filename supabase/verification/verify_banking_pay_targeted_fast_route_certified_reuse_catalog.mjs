@@ -25,10 +25,18 @@ const jamesHelperPath = 'supabase/repeatable/13082026_1912_pay_workbench_sealed_
 const jamesSynchronizerPath = 'supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql';
 const jamesSourceBuildPath = 'supabase/repeatable/07082026_1013_pay_workbench_candidate_source_build_chunk.sql';
 const jamesSourceBuildAuthorityPath = 'supabase/repeatable/08082026_0322_pay_workbench_candidate_source_build_chunk_authority.sql';
+const clonePath = 'supabase/repeatable/04082026_1302_pay_workbench_session_clone_eligible_rows_v1.sql';
+const cursorPreservePath = 'supabase/repeatable/05082026_1348_pay_workbench_fact_cursor_preserve_v2.sql';
+const cursorTransitionPath = 'supabase/repeatable/05082026_1539_pay_workbench_fact_cursor_transition_v3.sql';
+const claimStartPath = 'supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql';
 const jamesSerializer = fs.readFileSync(path.join(repoRoot, jamesSerializerPath), 'utf8');
 const jamesHelper = fs.readFileSync(path.join(repoRoot, jamesHelperPath), 'utf8');
 const jamesSynchronizer = fs.readFileSync(path.join(repoRoot, jamesSynchronizerPath), 'utf8');
 const jamesSourceBuild = fs.readFileSync(path.join(repoRoot, jamesSourceBuildPath), 'utf8');
+const clone = fs.readFileSync(path.join(repoRoot, clonePath), 'utf8');
+const cursorPreserve = fs.readFileSync(path.join(repoRoot, cursorPreservePath), 'utf8');
+const cursorTransition = fs.readFileSync(path.join(repoRoot, cursorTransitionPath), 'utf8');
+const claimStart = fs.readFileSync(path.join(repoRoot, claimStartPath), 'utf8');
 const names = expected.map((item) => `(${sqlLiteral(item.schema)},${sqlLiteral(item.name)})`).join(',');
 const query = `
 with wanted(schema_name,function_name) as (values ${names}), catalogue as (
@@ -93,6 +101,10 @@ const requiredJamesOwners = [
   ['private', 'pay_sync_overpayments_from_workbench_workspace_v1', [jamesSynchronizerPath]],
   ['private', 'pay_workbench_candidate_source_build_chunk_legacy_v1',
     [jamesSourceBuildPath, jamesSourceBuildAuthorityPath]],
+  ['public', 'pay_workbench_session_clone_eligible_rows_v1', [clonePath]],
+  ['private', 'pay_workbench_fact_cursor_preserve_v2', [cursorPreservePath]],
+  ['private', 'pay_workbench_fact_cursor_transition_v3', [cursorTransitionPath]],
+  ['public', 'pay_workbench_source_build_attempt_claim_start_v1', [claimStartPath]],
 ];
 for (const [schema, name, sourceFiles] of requiredJamesOwners) {
   const matches = expected.filter((item) => item.schema === schema && item.name === name);
@@ -186,6 +198,56 @@ if (!/GROUP BY raw\.timesheet_id,raw\.component_kind,raw\.component_member_ident
 if (/public\.(timesheets|timesheets_financials|candidates|umbrellas|settings_finance_windows)/i
   .test(jamesHelper)) {
   problems.push('sealed rate helper contains a live authority relation');
+}
+for (const required of [
+  'source_method_evidence', 'source_method_authority_summary', 'source_method_authority',
+  'distinct_supported_source_method_count', 'complete_evidence_digest',
+  'RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT',
+]) {
+  if (!jamesHelper.includes(required)) problems.push(`exact economic-key source-method proof is missing: ${required}`);
+}
+if (!/GROUP BY evidence\.timesheet_id,evidence\.economic_key_type,evidence\.economic_key_value/
+  .test(jamesHelper) || /MIN\((?:source\.)?source_pay_method\)/i.test(jamesHelper)) {
+  problems.push('sealed rate helper does not preserve exact economic-key source-method cardinality');
+}
+if (!/CASE WHEN COALESCE\(bucket\.validated_failure,economic\.failure_code\) IS NOT NULL\s+THEN 'FAILED'/
+  .test(jamesHelper)) {
+  problems.push('failed economic-key rows are not typed FAILED before component admission');
+}
+if (!jamesSynchronizer.includes('complete_component_method_digest')
+    || !jamesSynchronizer.includes('component_method_sample')
+    || /COALESCE\(component\.source_pay_method,(?:candidate_pay_method|current_target_pay_method)\)/i
+      .test(jamesSynchronizer)
+    || /MIN\(sealed\.source_pay_method\)/i.test(jamesSynchronizer)) {
+  problems.push('synchronizer source-method proof or target-as-source prohibition is incomplete');
+}
+for (const required of [
+  'WORKBENCH_SOURCE_OWNER_V3', 'WORKBENCH_SOURCE_OWNER_V2',
+  'authority_fingerprint_version', 'authority_fingerprint',
+  'source_publication_baseline_required', 'required_physical_publication_contract_version',
+]) {
+  if (!clone.includes(required)) problems.push(`clone fingerprint parity is missing: ${required}`);
+}
+for (const required of [
+  'RESERVATION_COMPONENT_SOURCE_KEY_C_V1', 'reservation_source_key_order_contract',
+  'PAY_WORKBENCH_RESERVATION_ORDER_CONTRACT_OBSOLETE',
+]) {
+  if (!cursorPreserve.includes(required) || !jamesSourceBuild.includes(required)) {
+    problems.push(`reservation cursor cutover is missing: ${required}`);
+  }
+}
+if (!cursorTransition.includes('RESERVATION_COMPONENT_SOURCE_KEY_C_V1')
+    || !/source_key COLLATE "C"/.test(jamesSourceBuild)
+    || !/v_last_source_key COLLATE "C"/.test(jamesSourceBuild)) {
+  problems.push('reservation cursor transition or C-order paging contract is incomplete');
+}
+for (const required of [
+  'pay_workbench_repair_orphaned_pending_source_build',
+  'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN',
+  'REBOUND_ACTIVE_SUCCESSOR', 'RECONCILED_SUCCESSFUL_BUILD', 'FAILED_CLOSED_MAX_ATTEMPTS',
+  'v_terminal_candidate_state_present:=FOUND',
+]) {
+  if (!claimStart.includes(required)) problems.push(`terminal claim convergence is missing: ${required}`);
 }
 if (problems.length) {
   console.error('Targeted fast-route and certified-reuse catalogue verification failed:');

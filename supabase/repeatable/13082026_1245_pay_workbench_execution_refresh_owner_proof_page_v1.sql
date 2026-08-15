@@ -259,8 +259,19 @@ BEGIN
         AS source_minus_preview_count,
       COALESCE(parity_provenance.preview_minus_source_count,0)
         AS preview_minus_source_count,
-      original_authority.frozen_attestation,
-      original_authority.frozen_scope_ordinal,
+      CASE WHEN v_options_version='2' THEN residual.result_json->'frozen_attestation'
+        ELSE original_authority.frozen_attestation END AS frozen_attestation,
+      CASE WHEN v_options_version='2'
+          AND COALESCE(residual.result_json->>'frozen_scope_ordinal','')~'^[1-9][0-9]{0,17}$'
+        THEN (residual.result_json->>'frozen_scope_ordinal')::bigint
+        ELSE original_authority.frozen_scope_ordinal END AS frozen_scope_ordinal,
+      residual.result_count AS residual_candidate_result_count,
+      CASE WHEN COALESCE(residual.result_json->>'referenced_scope_count','')~'^[1-9][0-9]{0,8}$'
+        THEN (residual.result_json->>'referenced_scope_count')::integer END
+        AS referenced_scope_count,
+      residual.result_json->>'common_publication_attestation_digest'
+        AS common_publication_attestation_digest,
+      residual.result_json->>'referenced_scope_set_digest' AS referenced_scope_set_digest,
       scope_pending.economic_build_id AS scope_pending_economic_build_id,
       state_pending.economic_build_id AS state_pending_economic_build_id,
       COALESCE(expected.expected_chain_digest,'') AS expected_chain_digest,
@@ -294,7 +305,8 @@ BEGIN
           ELSE NULL::bigint
         END AS frozen_scope_ordinal
       FROM public.banking_pay_operation_candidate_scope AS draft_scope
-      WHERE COALESCE(authority.chain_receipt->>'draft_operation_id','')
+      WHERE v_options_version='1'
+        AND COALESCE(authority.chain_receipt->>'draft_operation_id','')
               ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
         AND draft_scope.operation_id=(authority.chain_receipt->>'draft_operation_id')::uuid
         AND draft_scope.pay_batch_id=p_pay_batch_id
@@ -582,12 +594,13 @@ BEGIN
             ->>authority.candidate_id::text)::uuid END AS expected_owner_economic_build_id
     ) AS expected ON true
     LEFT JOIN LATERAL (
-      SELECT result.value AS result_json
+      SELECT pg_catalog.count(*)::integer AS result_count,
+        CASE WHEN pg_catalog.count(*)=1
+          THEN (pg_catalog.jsonb_agg(result.value ORDER BY result.value)->0) END AS result_json
       FROM pg_catalog.jsonb_array_elements(COALESCE(
         v_residual_page->'candidate_results','[]'::jsonb
       )) AS result(value)
       WHERE result.value->>'candidate_id'=authority.candidate_id::text
-      LIMIT 1
     ) AS residual ON true
   ), classified AS (
     SELECT owner_groups.*,
@@ -606,6 +619,15 @@ BEGIN
             WHEN COALESCE(chain_receipt->>'transition_count','')~'^[0-9]{1,2}$'
             THEN (chain_receipt->>'transition_count')::integer END,0) NOT BETWEEN 1 AND 16
           THEN 'EXECUTION_REFRESH_OWNER_CHAIN_SCOPE_MISMATCH'
+        WHEN v_options_version='2' AND COALESCE(residual_candidate_result_count,0)<>1
+          THEN 'EXECUTION_RESIDUAL_CANDIDATE_RESULT_CARDINALITY_MISMATCH'
+        WHEN v_options_version='2' AND (
+          COALESCE(referenced_scope_count,0)<1
+          OR COALESCE(common_publication_attestation_digest,'')!~'^[0-9a-f]{64}$'
+          OR COALESCE(referenced_scope_set_digest,'')!~'^[0-9a-f]{64}$'
+          OR frozen_scope_ordinal IS NULL
+          OR pg_catalog.jsonb_typeof(frozen_attestation)<>'object')
+          THEN 'EXECUTION_RESIDUAL_COMMON_PUBLICATION_AUTHORITY_INVALID'
         WHEN execution_commit_state<>'NOT_SUBMITTED'
           OR COALESCE(chain_receipt->>'execution_commit_state','')<>'NOT_SUBMITTED'
           OR COALESCE(CASE WHEN COALESCE(chain_receipt->>'provider_attempt_count','')~'^[0-9]{1,9}$'
@@ -774,6 +796,11 @@ BEGIN
               'original_source_publication_id',chain_receipt->>'original_source_publication_id',
               'frozen_source_identity_digest',frozen_attestation->>'source_identity_digest',
               'frozen_preview_identity_digest',frozen_attestation->>'preview_identity_digest',
+              'referenced_scope_count',referenced_scope_count,
+              'common_publication_attestation_digest',
+                common_publication_attestation_digest,
+              'referenced_scope_set_digest',referenced_scope_set_digest,
+              'frozen_scope_ordinal',frozen_scope_ordinal,
               'residual_proof_digest',residual_proof_digest
             ))
           THEN 'EXECUTION_REFRESH_OWNER_EXPECTED_PARENT_PROOF_MISMATCH'
@@ -862,6 +889,12 @@ BEGIN
       'context_digest',classified.owner_context_digest,
       'residual_identity_authority',classified.residual_identity_authority,
       'residual_proof_digest',classified.residual_proof_digest,
+      'residual_candidate_result_count',classified.residual_candidate_result_count,
+      'referenced_scope_count',classified.referenced_scope_count,
+      'common_publication_attestation_digest',
+        classified.common_publication_attestation_digest,
+      'referenced_scope_set_digest',classified.referenced_scope_set_digest,
+      'frozen_scope_ordinal',classified.frozen_scope_ordinal,
       'proof_contract_version',CASE WHEN v_options_version='2'
         THEN 'EXECUTION_REFRESH_OWNER_PROOF_V2' ELSE 'EXECUTION_REFRESH_OWNER_PROOF_V1' END,
       'proof_digest',CASE WHEN v_options_version='2' THEN
@@ -881,6 +914,11 @@ BEGIN
           'original_source_publication_id',classified.chain_receipt->>'original_source_publication_id',
           'frozen_source_identity_digest',classified.frozen_attestation->>'source_identity_digest',
           'frozen_preview_identity_digest',classified.frozen_attestation->>'preview_identity_digest',
+          'referenced_scope_count',classified.referenced_scope_count,
+          'common_publication_attestation_digest',
+            classified.common_publication_attestation_digest,
+          'referenced_scope_set_digest',classified.referenced_scope_set_digest,
+          'frozen_scope_ordinal',classified.frozen_scope_ordinal,
           'residual_proof_digest',classified.residual_proof_digest
         ))
       ELSE pg_catalog.encode(extensions.digest(pg_catalog.convert_to(

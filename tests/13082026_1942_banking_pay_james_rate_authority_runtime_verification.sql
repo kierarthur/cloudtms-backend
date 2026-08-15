@@ -42,6 +42,10 @@ BEGIN
      OR position('PAY_SYNC_OVERPAYMENTS_RATE_PHYSICAL_FENCE_MISMATCH' in v_sync_definition)=0
      OR position('raw.component_member_identity' in v_sync_definition)=0
      OR position('RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING' in v_sync_definition)=0
+     OR position('RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT' in v_sync_definition)=0
+     OR position('complete_component_method_digest' in v_sync_definition)=0
+     OR v_sync_definition ~* 'coalesce\s*\(\s*component\.source_pay_method\s*,\s*(candidate_pay_method|current_target_pay_method)'
+     OR v_sync_definition ~* 'min\s*\(\s*sealed\.source_pay_method\s*\)'
      OR position('RATE_AUTHORITY_TARGET_PAY_METHOD_MISSING' in v_sync_definition)=0 THEN
     RAISE EXCEPTION 'JAMES_RATE_SYNCHRONIZER_PHYSICAL_OWNER_FAILED';
   END IF;
@@ -51,6 +55,10 @@ BEGIN
      OR position('exact_allocation_matched' in v_helper_definition)=0
      OR position('sealed_physical_amount_attribution' in v_helper_definition)=0
      OR position('truth_residual_sources' in v_helper_definition)=0
+     OR position('source_method_authority_summary' in v_helper_definition)=0
+     OR position('RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT' in v_helper_definition)=0
+     OR position('complete_evidence_digest' in v_helper_definition)=0
+     OR v_helper_definition ~* 'min\s*\(\s*(source\.)?source_pay_method\s*\)'
      OR position('RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED' in v_helper_definition)=0
      OR position('RATE_AUTHORITY_PARENT_COMPONENT_RECONCILIATION_MISMATCH' in v_helper_definition)=0 THEN
     RAISE EXCEPTION 'JAMES_RATE_HELPER_SEALED_AMOUNT_OWNER_FAILED';
@@ -60,6 +68,8 @@ BEGIN
      OR position('pay_batch_items_active_reservation' in v_source_build_definition)=0
      OR position('RESERVATION_ECONOMIC_KEY_MISSING' in v_source_build_definition)=0
      OR position('RESERVATION_ECONOMIC_KEY_CONFLICT' in v_source_build_definition)=0
+     OR position('RESERVATION_COMPONENT_SOURCE_KEY_C_V1' in v_source_build_definition)=0
+     OR position('source_key COLLATE "C"' in v_source_build_definition)=0
      OR position('tmp_sync_sealed_reservation_items' in v_sync_definition)=0 THEN
     RAISE EXCEPTION 'JAMES_RATE_SEALED_RESERVATION_DOMAIN_MISSING';
   END IF;
@@ -95,18 +105,23 @@ DECLARE
   v_baseline numeric;
   v_reserved numeric;
   v_residual_count integer;
+  v_fixture_now timestamptz:=clock_timestamp();
 BEGIN
   IF EXISTS(SELECT 1 FROM private.banking_pay_workbench_economic_builds
       WHERE id=v_build) THEN
     RAISE EXCEPTION 'JAMES_RATE_FIXTURE_ID_ALREADY_EXISTS';
   END IF;
 
-  INSERT INTO private.banking_pay_workbench_economic_builds(
-    id,build_token,candidate_id,session_id,session_version,source_build_run_id,
-    captured_candidate_generation,source_change_seq,status,private_stage,obsolete_at_utc)
-  SELECT v_build,gen_random_uuid(),v_candidate,template.session_id,template.session_version,
-    gen_random_uuid(),template.captured_candidate_generation,template.source_change_seq,
-    'OBSOLETE','WORKSPACE_FACT',clock_timestamp()
+  INSERT INTO private.banking_pay_workbench_economic_builds
+  SELECT (pg_catalog.jsonb_populate_record(
+    NULL::private.banking_pay_workbench_economic_builds,
+    to_jsonb(template)||jsonb_build_object(
+      'id',v_build,'build_token',gen_random_uuid(),
+      'source_build_run_id',gen_random_uuid(),'source_job_id',NULL,
+      'status','OBSOLETE','private_stage','WORKSPACE_FACT',
+      'obsolete_at_utc',v_fixture_now,'failed_at_utc',NULL,
+      'cleanup_not_before_utc',NULL,'authority_fingerprint_version',NULL,
+      'authority_fingerprint',NULL,'updated_at_utc',v_fixture_now))).*
   FROM private.banking_pay_workbench_economic_builds template
   WHERE template.id=v_template_build;
 
@@ -173,6 +188,14 @@ BEGIN
   INSERT INTO private.banking_pay_workbench_economic_build_facts(
     build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
     dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    truth_ex_vat,baseline_ex_vat,truth_inc_vat,baseline_inc_vat,financial_digest,source_ordinal)
+  VALUES(v_build,'ENTITLEMENT_COMPONENT','fixture-entitlement',v_candidate,v_timesheet,
+    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
+    100,0,100,0,md5('fixture-entitlement'),1);
+
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
     truth_ex_vat,source_payload_json,financial_digest,source_ordinal)
   VALUES(v_build,'LIVE_ENTITLEMENT_INPUT','fixture-live',v_candidate,v_timesheet,
     ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
@@ -187,6 +210,11 @@ BEGIN
     RAISE EXCEPTION 'JAMES_RATE_ZERO_BASELINE_RESERVATION_FIXTURE_FAILED';
   END IF;
 
+  UPDATE private.banking_pay_workbench_economic_build_facts
+  SET baseline_ex_vat=15,baseline_inc_vat=15
+  WHERE build_id=v_build AND fact_family='ENTITLEMENT_COMPONENT'
+    AND natural_key='fixture-entitlement';
+
   INSERT INTO private.banking_pay_workbench_economic_build_facts(
     build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
     dependency_unit_key,source_relation,economic_key_type,economic_key_value,
@@ -194,7 +222,8 @@ BEGIN
   VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-baseline-exact',v_candidate,v_timesheet,
     ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
     15,jsonb_build_object('frozen_source_basis_json',jsonb_build_object(
-      'source_family_key',v_family,'segment_stable_key','segment:test','band','DAY')),
+      'source_family_key',v_family,'segment_stable_key','segment:test','band','DAY',
+      'physical_bucket_key',v_day_key,'source_pay_ex_vat',15,'source_charge_ex_vat',30)),
     md5('fixture-baseline-exact'));
 
   INSERT INTO private.banking_pay_workbench_economic_build_facts(
@@ -210,7 +239,7 @@ BEGIN
   INTO v_count,v_failure,v_baseline,v_reserved
   FROM private.pay_workbench_sealed_rate_component_projection_v1(
     v_build,v_candidate,ARRAY[v_timesheet]);
-  IF v_count<>2 OR v_failure IS NOT NULL
+  IF v_count<>3 OR v_failure IS NOT NULL
      OR round(v_baseline,2) IS DISTINCT FROM 15::numeric
      OR round(v_reserved,2) IS DISTINCT FROM 10::numeric THEN
     RAISE EXCEPTION 'JAMES_RATE_EXACT_SEALED_AMOUNT_ATTRIBUTION_FAILED';
@@ -223,7 +252,13 @@ BEGIN
   VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-baseline-ambiguous',v_candidate,v_timesheet,
     ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
     5,jsonb_build_object('frozen_source_basis_json',jsonb_build_object(
-      'source_family_key',v_family)),md5('fixture-baseline-ambiguous'));
+      'source_family_key',v_family,'source_pay_ex_vat',5,'source_charge_ex_vat',10)),
+    md5('fixture-baseline-ambiguous'));
+
+  UPDATE private.banking_pay_workbench_economic_build_facts
+  SET baseline_ex_vat=20,baseline_inc_vat=20
+  WHERE build_id=v_build AND fact_family='ENTITLEMENT_COMPONENT'
+    AND natural_key='fixture-entitlement';
 
   SELECT min(failure_code),count(*) FILTER(WHERE component_kind='WORKED_TIME_RESIDUAL'),
     sum(baseline_ex_vat)
@@ -238,6 +273,11 @@ BEGIN
   DELETE FROM private.banking_pay_workbench_economic_build_facts
   WHERE build_id=v_build AND fact_family='FROZEN_SETTLED_COMPONENT'
     AND natural_key='fixture-baseline-ambiguous';
+
+  UPDATE private.banking_pay_workbench_economic_build_facts
+  SET baseline_ex_vat=15,baseline_inc_vat=15
+  WHERE build_id=v_build AND fact_family='ENTITLEMENT_COMPONENT'
+    AND natural_key='fixture-entitlement';
 
   INSERT INTO private.banking_pay_workbench_economic_build_facts(
     build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
@@ -255,6 +295,56 @@ BEGIN
   IF v_failure IS NOT NULL OR v_residual_count<>1
      OR round(v_reserved,2) IS DISTINCT FROM 15::numeric THEN
     RAISE EXCEPTION 'JAMES_RATE_UNALLOCATED_RESERVATION_RESIDUAL_FAILED';
+  END IF;
+
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    amount_ex_vat,source_payload_json,financial_digest)
+  VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-method-conflict',v_candidate,v_timesheet,
+    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
+    0,jsonb_build_object('frozen_source_pay_method','UMBRELLA',
+      'frozen_source_basis_json',jsonb_build_object('source_charge_ex_vat',0)),
+    md5('fixture-method-conflict'));
+
+  SELECT count(*)::integer
+  INTO v_count
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]) projection
+  WHERE projection.failure_code='RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT'
+    AND projection.projection_status='FAILED'
+    AND projection.source_pay_method IS NULL
+    AND COALESCE((projection.evidence_json#>>
+      '{source_method_authority,distinct_supported_source_method_count}')::integer,0)=2;
+  IF v_count<1 THEN
+    RAISE EXCEPTION 'JAMES_RATE_EXACT_KEY_SOURCE_METHOD_CONFLICT_NOT_TYPED';
+  END IF;
+
+  DELETE FROM private.banking_pay_workbench_economic_build_facts
+  WHERE build_id=v_build AND fact_family='FROZEN_SETTLED_COMPONENT'
+    AND natural_key='fixture-method-conflict';
+
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    amount_ex_vat,source_payload_json,financial_digest)
+  VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-method-invalid',v_candidate,v_timesheet,
+    ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
+    0,jsonb_build_object('frozen_source_pay_method','PSC',
+      'frozen_source_basis_json',jsonb_build_object('source_charge_ex_vat',0)),
+    md5('fixture-method-invalid'));
+
+  SELECT count(*)::integer
+  INTO v_count
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]) projection
+  WHERE projection.failure_code='RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'
+    AND projection.projection_status='FAILED'
+    AND projection.source_pay_method IS NULL
+    AND COALESCE((projection.evidence_json#>>
+      '{source_method_authority,invalid_method_count}')::integer,0)>0;
+  IF v_count<1 THEN
+    RAISE EXCEPTION 'JAMES_RATE_INVALID_SOURCE_METHOD_WAS_FILTERED_OUT';
   END IF;
 END;
 $sealed_amount_fixture$;

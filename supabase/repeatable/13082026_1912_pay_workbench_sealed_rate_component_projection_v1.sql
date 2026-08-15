@@ -72,8 +72,6 @@ AS $function$
       AND (p_timesheet_ids IS NULL OR fact.timesheet_id=ANY(p_timesheet_ids))
   ), candidate_context_values AS MATERIALIZED (
     SELECT DISTINCT
-      UPPER(NULLIF(BTRIM(fact.rate_authority#>>'{source,source_pay_method}'),''))
-        AS source_pay_method,
       UPPER(NULLIF(BTRIM(fact.rate_authority#>>'{target,target_pay_method}'),''))
         AS target_pay_method,
       NULLIF(BTRIM(fact.rate_authority#>>'{target,target_authority_digest}'),'')
@@ -100,8 +98,7 @@ AS $function$
     WHERE jsonb_typeof(fact.rate_authority)='object'
       AND COALESCE(fact.rate_authority->>'rate_authority_version','')='1'
   ), candidate_sealed_context AS MATERIALIZED (
-    SELECT MIN(context.source_pay_method) AS source_pay_method,
-      MIN(context.target_pay_method) AS target_pay_method,
+    SELECT MIN(context.target_pay_method) AS target_pay_method,
       MIN(context.target_authority_digest) AS target_authority_digest,
       MIN(context.conversion_context_digest) AS conversion_context_digest,
       MIN(context.umbrella_id::text)::uuid AS umbrella_id,
@@ -496,6 +493,104 @@ AS $function$
         raw.evidence_json#>>'{source_basis_json,component_fallback}')),''))
         AS component_fallback
     FROM nested_evidence_raw raw
+  ), source_method_evidence AS MATERIALIZED (
+    SELECT occurrence.timesheet_id,
+      UPPER(BTRIM(occurrence.economic_key_type)) AS economic_key_type,
+      BTRIM(occurrence.economic_key_value) AS economic_key_value,
+      NULLIF(BTRIM(occurrence.rate_authority#>>'{source,source_pay_method}'),'')
+        AS raw_source_pay_method,
+      UPPER(NULLIF(BTRIM(occurrence.rate_authority#>>'{source,source_pay_method}'),''))
+        AS normalized_source_pay_method,
+      'LIVE_OCCURRENCE'::text AS evidence_kind,
+      occurrence.natural_key AS evidence_identity
+    FROM occurrence_validated occurrence
+    WHERE occurrence.validated_failure IS NULL
+      AND NULLIF(BTRIM(COALESCE(occurrence.economic_key_type,'')),'') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(occurrence.economic_key_value,'')),'') IS NOT NULL
+    UNION ALL
+    SELECT parent.timesheet_id,parent.economic_key_type,parent.economic_key_value,
+      NULLIF(BTRIM(parent.sealed_source_pay_method),''),
+      UPPER(NULLIF(BTRIM(parent.sealed_source_pay_method),'')),
+      'SEALED_PARENT',parent.fact_identity
+    FROM sealed_parent_facts parent
+    UNION ALL
+    SELECT nested.timesheet_id,nested.economic_key_type,nested.economic_key_value,
+      NULLIF(BTRIM(nested.evidence_source_pay_method),''),
+      UPPER(NULLIF(BTRIM(nested.evidence_source_pay_method),'')),
+      'NESTED_'||nested.evidence_origin,
+      nested.fact_identity||':'||COALESCE(nested.evidence_container_identity,
+        md5(nested.evidence_json::text))
+    FROM nested_evidence_parsed nested
+  ), source_method_evidence_documents AS MATERIALIZED (
+    SELECT evidence.*,
+      jsonb_build_object(
+        'evidence_kind',evidence.evidence_kind,
+        'evidence_identity',evidence.evidence_identity,
+        'source_pay_method',evidence.normalized_source_pay_method) AS evidence_document
+    FROM source_method_evidence evidence
+  ), source_method_authority_summary AS MATERIALIZED (
+    SELECT evidence.timesheet_id,evidence.economic_key_type,evidence.economic_key_value,
+      COUNT(*)::integer AS total_evidence_count,
+      COUNT(*) FILTER(WHERE evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))::integer
+        AS supported_method_evidence_count,
+      COUNT(*) FILTER(WHERE evidence.raw_source_pay_method IS NOT NULL
+        AND evidence.normalized_source_pay_method NOT IN ('PAYE','UMBRELLA'))::integer
+        AS invalid_method_count,
+      COUNT(DISTINCT evidence.normalized_source_pay_method) FILTER(
+        WHERE evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))::integer
+        AS distinct_supported_source_method_count,
+      CASE WHEN COUNT(*) FILTER(WHERE evidence.raw_source_pay_method IS NOT NULL
+          AND evidence.normalized_source_pay_method NOT IN ('PAYE','UMBRELLA'))=0
+          AND COUNT(DISTINCT evidence.normalized_source_pay_method) FILTER(
+            WHERE evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))=1
+        THEN (jsonb_agg(DISTINCT evidence.normalized_source_pay_method
+          ORDER BY evidence.normalized_source_pay_method) FILTER(
+            WHERE evidence.normalized_source_pay_method IN ('PAYE','UMBRELLA'))->>0)
+      END AS authoritative_source_pay_method,
+      pg_catalog.encode(extensions.digest(pg_catalog.convert_to(
+        COALESCE(jsonb_agg(evidence.evidence_document ORDER BY evidence.evidence_kind,
+          evidence.evidence_identity),'[]'::jsonb)::text,'UTF8'),'sha256'),'hex')
+        AS complete_evidence_digest
+    FROM source_method_evidence_documents evidence
+    GROUP BY evidence.timesheet_id,evidence.economic_key_type,evidence.economic_key_value
+  ), source_method_authority AS MATERIALIZED (
+    SELECT summary.*,
+      CASE
+        WHEN summary.invalid_method_count>0
+          THEN 'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'
+        WHEN summary.distinct_supported_source_method_count=0
+          THEN 'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'
+        WHEN summary.distinct_supported_source_method_count>1
+          THEN 'RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT'
+      END AS failure_code,
+      jsonb_build_object(
+        'authority_contract_version',1,
+        'total_evidence_count',summary.total_evidence_count,
+        'supported_method_evidence_count',summary.supported_method_evidence_count,
+        'invalid_method_count',summary.invalid_method_count,
+        'distinct_supported_source_method_count',
+          summary.distinct_supported_source_method_count,
+        'authoritative_source_pay_method',CASE
+          WHEN summary.invalid_method_count=0
+            AND summary.distinct_supported_source_method_count=1
+            THEN summary.authoritative_source_pay_method END,
+        'complete_evidence_digest',summary.complete_evidence_digest,
+        'sample_truncated',summary.total_evidence_count>25,
+        'evidence_sample',COALESCE((
+          SELECT jsonb_agg(sample.evidence_document ORDER BY sample.evidence_kind,
+            sample.evidence_identity)
+          FROM (
+            SELECT evidence.evidence_document,evidence.evidence_kind,
+              evidence.evidence_identity
+            FROM source_method_evidence_documents evidence
+            WHERE evidence.timesheet_id=summary.timesheet_id
+              AND evidence.economic_key_type=summary.economic_key_type
+              AND evidence.economic_key_value=summary.economic_key_value
+            ORDER BY evidence.evidence_kind,evidence.evidence_identity
+            LIMIT 25
+          ) sample
+        ),'[]'::jsonb)) AS evidence_json
+    FROM source_method_authority_summary summary
   ), nested_evidence_normalized AS MATERIALIZED (
     SELECT parsed.*,
       CASE
@@ -934,7 +1029,7 @@ AS $function$
       NULL::numeric AS source_charge_rate,0::numeric AS truth_ex_vat,
       attribution.baseline_ex_vat,attribution.reserved_ex_vat,
       -COALESCE(attribution.baseline_source_charge_ex_vat,0) AS source_charge_ex_vat,
-      MIN(COALESCE(fact.sealed_source_pay_method,context.source_pay_method)) AS source_pay_method,
+      method.authoritative_source_pay_method AS source_pay_method,
       context.target_pay_method,context.umbrella_id,context.umbrella_enabled,
       context.umbrella_vat_chargeable,context.erni_pct,context.vat_rate_pct,
       string_agg(fact.fact_identity||':'||fact.authority_amount_ex_vat::text,''
@@ -949,6 +1044,10 @@ AS $function$
      AND fact.economic_key_type=attribution.economic_key_type
      AND fact.economic_key_value=attribution.economic_key_value
      AND fact.direct_physical_bucket_key=attribution.matched_physical_bucket_key
+    JOIN source_method_authority method
+      ON method.timesheet_id=attribution.timesheet_id
+     AND method.economic_key_type=attribution.economic_key_type
+     AND method.economic_key_value=attribution.economic_key_value
     CROSS JOIN candidate_sealed_context context
     WHERE NOT EXISTS(
       SELECT 1 FROM bucket_validated live_bucket
@@ -961,7 +1060,8 @@ AS $function$
       attribution.baseline_source_charge_ex_vat,attribution.match_authorities,
       context.target_pay_method,context.umbrella_id,context.umbrella_enabled,
       context.umbrella_vat_chargeable,context.erni_pct,context.vat_rate_pct,
-      context.target_authority_digest,context.conversion_context_digest
+      context.target_authority_digest,context.conversion_context_digest,
+      method.authoritative_source_pay_method
   ), truth_residual_sources AS MATERIALIZED (
     SELECT expected.timesheet_id,expected.economic_key_type,expected.economic_key_value,
       concat_ws('|','RATE_BUCKET_V1',expected.timesheet_id::text,
@@ -978,7 +1078,7 @@ AS $function$
       ROUND(expected.truth_ex_vat-COALESCE(represented.truth_ex_vat,0),2) AS truth_ex_vat,
       0::numeric AS baseline_ex_vat,0::numeric AS reserved_ex_vat,
       represented.residual_source_charge_ex_vat AS source_charge_ex_vat,
-      context.source_pay_method,context.target_pay_method,context.umbrella_id,
+      method.authoritative_source_pay_method,context.target_pay_method,context.umbrella_id,
       context.umbrella_enabled,context.umbrella_vat_chargeable,context.erni_pct,
       context.vat_rate_pct,
       'TRUTH_RESIDUAL:'||expected.timesheet_id::text||':'||expected.economic_key_type||':'
@@ -991,6 +1091,8 @@ AS $function$
         AS source_basis_json,
       jsonb_build_array('ECONOMIC_TRUTH_RESIDUAL') AS match_authorities,true AS is_residual
     FROM economic_totals expected
+    JOIN source_method_authority method
+      USING(timesheet_id,economic_key_type,economic_key_value)
     CROSS JOIN candidate_sealed_context context
     LEFT JOIN LATERAL (
       SELECT ROUND(COALESCE(SUM(bucket.parsed_source_pay_ex_vat)
@@ -1033,7 +1135,9 @@ AS $function$
       ROUND(SUM(source.truth_ex_vat)-SUM(source.baseline_ex_vat)-SUM(source.reserved_ex_vat),2)
         AS outstanding_ex_vat,
       ROUND(SUM(source.source_charge_ex_vat),2) AS source_charge_ex_vat,
-      MIN(source.source_pay_method) AS source_pay_method,MIN(source.target_pay_method)
+      (jsonb_agg(DISTINCT source.source_pay_method ORDER BY source.source_pay_method)
+        FILTER(WHERE source.source_pay_method IS NOT NULL)->>0) AS source_pay_method,
+      MIN(source.target_pay_method)
         AS target_pay_method,MIN(source.umbrella_id::text)::uuid AS umbrella_id,
       BOOL_AND(source.umbrella_enabled) AS umbrella_enabled,
       BOOL_AND(source.umbrella_vat_chargeable) AS umbrella_vat_chargeable,
@@ -1075,6 +1179,8 @@ AS $function$
     SELECT expected.timesheet_id,expected.economic_key_type,expected.economic_key_value,
       CASE
         WHEN context.context_failure IS NOT NULL THEN context.context_failure
+        WHEN method.failure_code IS NOT NULL THEN method.failure_code
+        WHEN method.timesheet_id IS NULL THEN 'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'
         WHEN nested.failure_code IS NOT NULL THEN nested.failure_code
         WHEN reconciliation.failure_code IS NOT NULL THEN reconciliation.failure_code
         WHEN actual.truth_ex_vat IS NULL OR actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
@@ -1085,9 +1191,22 @@ AS $function$
         WHEN COALESCE(ambiguity.reservation_ambiguous,false)
           OR actual.reserved_ex_vat IS DISTINCT FROM expected.reserved_ex_vat
           THEN 'RATE_AUTHORITY_PHYSICAL_RESERVATION_REQUIRED'
-      END AS failure_code
+      END AS failure_code,
+      COALESCE(method.evidence_json,jsonb_build_object(
+        'authority_contract_version',1,
+        'total_evidence_count',0,
+        'supported_method_evidence_count',0,
+        'invalid_method_count',0,
+        'distinct_supported_source_method_count',0,
+        'authoritative_source_pay_method',NULL,
+        'complete_evidence_digest',pg_catalog.encode(extensions.digest(
+          pg_catalog.convert_to('[]','UTF8'),'sha256'),'hex'),
+        'sample_truncated',false,
+        'evidence_sample','[]'::jsonb)) AS source_method_evidence_json
     FROM economic_totals expected
     CROSS JOIN candidate_sealed_context context
+    LEFT JOIN source_method_authority method
+      USING(timesheet_id,economic_key_type,economic_key_value)
     LEFT JOIN nested_allocation_failures nested
       USING(timesheet_id,economic_key_type,economic_key_value)
     LEFT JOIN parent_reconciliation_failures reconciliation
@@ -1097,6 +1216,8 @@ AS $function$
     LEFT JOIN sealed_physical_amount_ambiguity ambiguity
       USING(timesheet_id,economic_key_type,economic_key_value)
     WHERE context.context_failure IS NOT NULL
+       OR method.failure_code IS NOT NULL
+       OR method.timesheet_id IS NULL
        OR nested.failure_code IS NOT NULL
        OR reconciliation.failure_code IS NOT NULL
        OR actual.truth_ex_vat IS DISTINCT FROM expected.truth_ex_vat
@@ -1213,8 +1334,7 @@ AS $function$
       0::numeric AS baseline_ex_vat,0::numeric AS reserved_ex_vat,
       ROUND(occurrence.truth_ex_vat,2) AS outstanding_ex_vat,
       NULL::numeric AS source_charge_ex_vat,
-      UPPER(NULLIF(BTRIM(occurrence.rate_authority#>>'{source,source_pay_method}'),''))
-        AS source_pay_method,
+      NULL::text AS source_pay_method,
       UPPER(NULLIF(BTRIM(occurrence.rate_authority#>>'{target,target_pay_method}'),''))
         AS target_pay_method,
       CASE WHEN COALESCE(occurrence.rate_authority#>>'{target,umbrella_id}','')
@@ -1239,7 +1359,8 @@ AS $function$
       COALESCE(occurrence.validated_failure,economic.failure_code) AS failure_code,
       jsonb_build_object('source_key',occurrence.source_payload_json->>'source_key',
         'source_ordinal',occurrence.source_payload_json#>'{rate_authority,lineage,source_ordinal}',
-        'source_payload',occurrence.source_payload_json,'physical_bucket',NULL) AS evidence_json
+        'source_payload',occurrence.source_payload_json,'physical_bucket',NULL,
+        'source_method_authority',economic.source_method_evidence_json) AS evidence_json
     FROM occurrence_validated occurrence
     LEFT JOIN economic_failures economic
       ON economic.timesheet_id=occurrence.timesheet_id
@@ -1258,7 +1379,7 @@ AS $function$
       expected.truth_ex_vat,expected.baseline_ex_vat,expected.reserved_ex_vat,
       ROUND(expected.truth_ex_vat-expected.baseline_ex_vat-expected.reserved_ex_vat,2)
         AS outstanding_ex_vat,
-      NULL::numeric AS source_charge_ex_vat,context.source_pay_method,
+      NULL::numeric AS source_charge_ex_vat,NULL::text AS source_pay_method,
       context.target_pay_method,context.umbrella_id,context.umbrella_enabled,
       context.umbrella_vat_chargeable,context.erni_pct,context.vat_rate_pct,
       NULL::text AS financial_revision_digest,context.target_authority_digest,
@@ -1267,7 +1388,8 @@ AS $function$
       jsonb_build_object('build_id',p_build_id::text,'candidate_id',p_candidate_id::text,
         'timesheet_id',economic.timesheet_id::text,
         'economic_key_type',economic.economic_key_type,
-        'economic_key_value',economic.economic_key_value) AS evidence_json
+        'economic_key_value',economic.economic_key_value,
+        'source_method_authority',economic.source_method_evidence_json) AS evidence_json
     FROM economic_failures economic
     JOIN economic_totals expected USING(timesheet_id,economic_key_type,economic_key_value)
     CROSS JOIN candidate_sealed_context context
@@ -1291,7 +1413,9 @@ AS $function$
       bucket.builder_source_units,bucket.builder_source_rate,bucket.builder_source_charge_rate,
       bucket.parsed_source_pay_ex_vat,bucket.attributed_baseline_ex_vat,
       bucket.attributed_reserved_ex_vat,bucket.attributed_outstanding_ex_vat,
-      bucket.builder_source_charge_ex_vat,bucket.parsed_source_pay_method,
+      bucket.builder_source_charge_ex_vat,CASE
+        WHEN COALESCE(bucket.validated_failure,economic.failure_code) IS NULL
+          THEN method.authoritative_source_pay_method END,
       bucket.parsed_target_pay_method,
       CASE WHEN COALESCE(bucket.rate_authority#>>'{target,umbrella_id}','')
         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -1318,9 +1442,11 @@ AS $function$
         'truth_ex_vat',bucket.parsed_source_pay_ex_vat,
         'baseline_ex_vat',bucket.attributed_baseline_ex_vat,
         'reserved_ex_vat',bucket.attributed_reserved_ex_vat)::text),
-      CASE WHEN bucket.builder_source_units IS NOT NULL
+      CASE WHEN COALESCE(bucket.validated_failure,economic.failure_code) IS NOT NULL
+        THEN 'FAILED'
+        WHEN bucket.builder_source_units IS NOT NULL
         AND bucket.builder_source_rate IS NOT NULL
-        AND bucket.parsed_source_pay_method IS DISTINCT FROM bucket.parsed_target_pay_method
+        AND method.authoritative_source_pay_method IS DISTINCT FROM bucket.parsed_target_pay_method
         THEN 'READY' ELSE 'FIXED' END AS projection_status,
       COALESCE(bucket.validated_failure,economic.failure_code) AS failure_code,
       jsonb_build_object('source_key',bucket.source_payload_json->>'source_key',
@@ -1334,7 +1460,8 @@ AS $function$
             AND bucket.builder_source_rate IS NOT NULL,
           'is_actionable_candidate',bucket.builder_source_units IS NOT NULL
             AND bucket.builder_source_rate IS NOT NULL
-            AND bucket.parsed_source_pay_method IS DISTINCT FROM bucket.parsed_target_pay_method),
+            AND COALESCE(bucket.validated_failure,economic.failure_code) IS NULL
+            AND method.authoritative_source_pay_method IS DISTINCT FROM bucket.parsed_target_pay_method),
         'sealed_physical_attribution',jsonb_build_object(
           'baseline_ex_vat',bucket.attributed_baseline_ex_vat,
           'reserved_ex_vat',bucket.attributed_reserved_ex_vat,
@@ -1346,8 +1473,13 @@ AS $function$
           FROM economic_totals economic_total
           WHERE economic_total.timesheet_id=bucket.timesheet_id
             AND economic_total.economic_key_type=UPPER(BTRIM(bucket.economic_key_type))
-            AND economic_total.economic_key_value=BTRIM(bucket.economic_key_value))) AS evidence_json
+            AND economic_total.economic_key_value=BTRIM(bucket.economic_key_value)),
+        'source_method_authority',method.evidence_json) AS evidence_json
     FROM bucket_documents bucket
+    LEFT JOIN source_method_authority method
+      ON method.timesheet_id=bucket.timesheet_id
+     AND method.economic_key_type=UPPER(BTRIM(bucket.economic_key_type))
+     AND method.economic_key_value=BTRIM(bucket.economic_key_value)
     LEFT JOIN economic_failures economic
       ON economic.timesheet_id=bucket.timesheet_id
      AND economic.economic_key_type=UPPER(BTRIM(bucket.economic_key_type))
@@ -1419,9 +1551,12 @@ AS $function$
           FROM economic_totals economic_total
           WHERE economic_total.timesheet_id=synthetic.timesheet_id
             AND economic_total.economic_key_type=synthetic.economic_key_type
-            AND economic_total.economic_key_value=synthetic.economic_key_value))
+            AND economic_total.economic_key_value=synthetic.economic_key_value),
+        'source_method_authority',method.evidence_json)
         AS evidence_json
     FROM synthetic_bucket_documents synthetic
+    JOIN source_method_authority method
+      USING(timesheet_id,economic_key_type,economic_key_value)
     LEFT JOIN economic_failures economic
       USING(timesheet_id,economic_key_type,economic_key_value)
     WHERE economic.failure_code IS NULL

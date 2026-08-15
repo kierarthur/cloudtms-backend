@@ -114,3 +114,33 @@ test('every additional-rate code is an independent physical rate identity', () =
   const physicalMembers = arbitraryCodes.map((code) => `additional:${code.toUpperCase()}`);
   assert.equal(new Set(physicalMembers).size, arbitraryCodes.length);
 });
+
+test('James proves source method at the exact economic key without changing the helper return contract', () => {
+  for (const marker of [
+    'source_method_evidence',
+    'source_method_authority_summary',
+    'source_method_authority',
+    'distinct_supported_source_method_count',
+    'complete_evidence_digest',
+    'RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT',
+  ]) assert.ok(helper.includes(marker), `missing exact source-method authority marker: ${marker}`);
+
+  assert.match(helper,
+    /GROUP BY evidence\.timesheet_id,evidence\.economic_key_type,evidence\.economic_key_value/);
+  assert.match(helper, /'evidence_sample'/);
+  assert.match(helper,
+    /CASE WHEN COALESCE\(bucket\.validated_failure,economic\.failure_code\) IS NOT NULL\s+THEN 'FAILED'/);
+  assert.doesNotMatch(helper, /MIN\((?:source\.)?source_pay_method\)/i);
+  assert.doesNotMatch(helper, /distinct_supported_source_method_count\s+text/i);
+});
+
+test('synchronizer proves singleton method cardinality before case persistence and never uses target as source', () => {
+  assert.match(synchronizer, /RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT/);
+  assert.match(synchronizer, /complete_component_method_digest/);
+  assert.match(synchronizer, /component_method_sample/);
+  assert.match(synchronizer,
+    /FROM pg_temp\.tmp_sync_timesheet_case_candidates candidate[\s\S]*distinct_supported_method_count<>1/);
+  assert.doesNotMatch(synchronizer, /COALESCE\(component\.source_pay_method,candidate_pay_method\)/i);
+  assert.doesNotMatch(synchronizer, /COALESCE\(component\.source_pay_method,current_target_pay_method\)/i);
+  assert.doesNotMatch(synchronizer, /MIN\(sealed\.source_pay_method\)/i);
+});

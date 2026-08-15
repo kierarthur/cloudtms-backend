@@ -62,6 +62,12 @@ BEGIN
     'input_phase',v_input_phase,
     'input_projection_id',p_input_projection_id);
 
+  IF v_fact_family='RESERVATION_COMPONENT' THEN
+    v_result:=v_result || jsonb_build_object(
+      'reservation_source_key_order_contract',
+      'RESERVATION_COMPONENT_SOURCE_KEY_C_V1');
+  END IF;
+
   -- Both functions validate the exact member set.  This is the producer-side
   -- assertion that the generated cursor is directly consumable.
   RETURN private.pay_workbench_fact_cursor_preserve_v2(v_result);

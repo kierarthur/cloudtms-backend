@@ -27,6 +27,7 @@ DECLARE
     'input_phase','input_projection_id'
   ];
   v_key text;
+  v_reservation_order_contract constant text:='RESERVATION_COMPONENT_SOURCE_KEY_C_V1';
 BEGIN
   IF jsonb_typeof(v_cursor)<>'object'
      OR v_cursor->>'cursor_kind'<>'WORKSPACE_FACT'
@@ -45,10 +46,24 @@ BEGIN
   IF EXISTS(
     SELECT 1
     FROM jsonb_object_keys(v_cursor) supplied(key_name)
-    WHERE NOT supplied.key_name=ANY(v_required_keys)
+    WHERE NOT supplied.key_name=ANY(
+      v_required_keys || ARRAY['reservation_source_key_order_contract'])
   ) THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_BUILD_CURSOR_V2_FIELD_UNKNOWN'
       USING ERRCODE='22023';
+  END IF;
+
+  IF v_cursor->>'fact_family'='RESERVATION_COMPONENT' THEN
+    IF v_cursor ? 'reservation_source_key_order_contract'
+       AND v_cursor->>'reservation_source_key_order_contract'
+           <>v_reservation_order_contract THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_RESERVATION_ORDER_CONTRACT_OBSOLETE'
+        USING ERRCODE='40001';
+    END IF;
+  ELSIF v_cursor ? 'reservation_source_key_order_contract' THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_BUILD_CURSOR_V2_FIELD_UNKNOWN'
+      USING ERRCODE='22023',
+            DETAIL='reservation_source_key_order_contract';
   END IF;
 
   IF COALESCE(v_cursor->>'input_phase','') NOT IN ('PHYSICAL_SOURCE','PROJECTION','COMPONENTS')

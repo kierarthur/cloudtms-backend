@@ -14,6 +14,10 @@ const manifest = JSON.parse(fs.readFileSync(
   'utf8',
 ));
 const expected = Array.isArray(manifest.functions) ? manifest.functions : [];
+const residualPath = 'supabase/repeatable/14082026_1254_pay_workbench_execution_residual_identity_proof_page_v1.sql';
+const parentPath = 'supabase/repeatable/13082026_1245_pay_workbench_execution_refresh_owner_proof_page_v1.sql';
+const residual = fs.readFileSync(path.join(repoRoot, residualPath), 'utf8');
+const parent = fs.readFileSync(path.join(repoRoot, parentPath), 'utf8');
 const databaseUrl = process.env.DB_URL;
 if (!databaseUrl) {
   console.error('DB_URL is not set');
@@ -85,6 +89,76 @@ for (const [key, item] of expectedByKey) {
 }
 for (const [key, item] of actualByKey) {
   if (!expectedByKey.has(key)) problems.push(`unexpected overload: ${item.schema}.${item.name}`);
+}
+for (const [schema, name, sourceFile] of [
+  ['private', 'pay_workbench_execution_residual_identity_proof_page_v1', residualPath],
+  ['private', 'pay_workbench_execution_refresh_owner_proof_page_v1', parentPath],
+]) {
+  const matches = expected.filter((item) => item.schema === schema && item.name === name);
+  if (matches.length !== 1 || JSON.stringify(matches[0].source_files) !== JSON.stringify([sourceFile])) {
+    problems.push(`residual authority owner or source file is not exact: ${schema}.${name}`);
+  }
+}
+for (const required of [
+  'referenced_scopes', 'validated_scope_attestations', 'referenced_scope_set_digest',
+  'common_publication_attestation_digest', 'frozen_scope_ordinal',
+  'ready_rows_raw', 'ready_rows_validated', 'ready_identity_invalid_count',
+  "row_json->>'source_ordinal'", "row_json->>'source_line_id'",
+  'EXECUTION_RESIDUAL_COMMON_PUBLICATION_AUTHORITY_CONFLICT',
+]) {
+  if (!residual.includes(required)) problems.push(`complete V2 residual authority is missing: ${required}`);
+}
+if (!/ready\.row_ordinal::numeric IS DISTINCT FROM\s*\(v_frozen_scope_ordinal::numeric\*1000000::numeric\s*\+ready\.source_ordinal::numeric\)/
+  .test(residual) || /%\s*1000000/.test(residual)) {
+  problems.push('READY identity is not bound to the explicit frozen source ordinal equation');
+}
+const requiredV3Match = residual.match(
+  /\]\s*::text\[\]\s+AS\s+allowed_keys,\s*ARRAY\[([\s\S]*?)\]\s*::text\[\]\s+AS\s+required_keys/i,
+);
+if (!requiredV3Match) {
+  problems.push('invariant V3 attestation key contract is missing');
+} else {
+  for (const key of [
+    'source_publication_id', 'source_identity_digest', 'preview_identity_digest',
+    'semantic_proof_digest', 'scope_ordinal',
+  ]) {
+    if (!new RegExp(`'${key}'`).test(requiredV3Match[1])) {
+      problems.push(`invariant V3 attestation key is missing: ${key}`);
+    }
+  }
+  for (const key of [
+    'certification_version', 'certification_digest', 'admission_seal_version',
+    'admission_seal_digest', 'projection_fingerprint', 'original_semantic_proof_digest',
+    'selection_recovery_headroom_v1', 'cancellation_request_id',
+  ]) {
+    if (new RegExp(`'${key}'`).test(requiredV3Match[1])) {
+      problems.push(`optional V3 attestation key was made unconditional: ${key}`);
+    }
+  }
+}
+for (const requiredPattern of [
+  /optional_digest\.value IS NOT NULL\s+AND optional_digest\.value!~'\^\[0-9a-f\]\{32\}\$'/,
+  /attestation \? 'selection_recovery_headroom_v1'/,
+  /attestation \? 'certification_version'/,
+  /attestation \? 'admission_seal_version'/,
+  /scope_ordinal',''\)!~'\^\[1-9\]\[0-9\]\{0,17\}\$'/,
+  /source_ordinal',''\)~'\^\[1-9\]\[0-9\]\{0,17\}\$'/,
+]) {
+  if (!requiredPattern.test(residual)) {
+    problems.push(`optional V3 evidence or bigint-safe ordinal guard is missing: ${requiredPattern}`);
+  }
+}
+if (!/frozen_scope_ordinal',''\)~'\^\[1-9\]\[0-9\]\{0,17\}\$'/.test(parent)) {
+  problems.push('V2 parent frozen scope ordinal is not bigint-safe');
+}
+for (const required of [
+  'residual_candidate_result_count', 'referenced_scope_set_digest',
+  'common_publication_attestation_digest', 'frozen_scope_ordinal',
+]) {
+  if (!parent.includes(required)) problems.push(`V2 residual parent binding is missing: ${required}`);
+}
+if (!/v_options_version='1'[\s\S]*LIMIT 1/.test(parent)) {
+  problems.push('legacy V1 scope selection is not explicitly isolated from V2 authority');
 }
 if (problems.length) {
   console.error('Semantic Ready-to-Pay and cancellation-reversion catalogue verification failed:');

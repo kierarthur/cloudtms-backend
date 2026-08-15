@@ -3,13 +3,13 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 27,
+  "function_count": 29,
   "functions": [
     {
       "schema": "private",
       "name": "pay_sync_overpayments_from_workbench_workspace_v1",
       "identity_arguments": "p_build_id uuid, p_job_id uuid, p_attempt_id uuid, p_attempt_nonce uuid, p_pay_date date, p_week_ending_cutoff date, p_actor_user_id uuid, p_pay_channel_scope text, p_candidate_ids uuid[], p_mismatch_choices jsonb, p_client_filter_single uuid, p_force_include_timesheet_ids uuid[], p_exclude_timesheet_ids uuid[]",
-      "definition_sha256": "902579bbd45e627d650308974a33576ce7f430fb2f55c861bffd33e13b4234a5",
+      "definition_sha256": "7594b45cb35925f8d32ad82b6980a7888b38ecec531da65aa3688f61ac47c197",
       "owner": "postgres",
       "security_definer": false,
       "proconfig": [
@@ -309,7 +309,7 @@
       "schema": "private",
       "name": "pay_workbench_sealed_rate_component_projection_v1",
       "identity_arguments": "p_build_id uuid, p_candidate_id uuid, p_timesheet_ids uuid[]",
-      "definition_sha256": "8abdfa4cef9892194c5c007f97127c9272d71682a430360b047742a8db38eea1",
+      "definition_sha256": "ad222addd9fe6fef5627d5f0dd083143516f8658c795199664eab605d3a189f5",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -434,7 +434,7 @@
       "schema": "public",
       "name": "pay_workbench_session_clone_eligible_rows_v1",
       "identity_arguments": "p_target_session_id uuid, p_source_session_id uuid, p_limit integer, p_cursor_json jsonb, p_options_json jsonb",
-      "definition_sha256": "b41df4c6020aed867006ed0fed37d07f5fe662e89344e23aae2705243f8fde27",
+      "definition_sha256": "b114b231d263671051581be2898bee07a6bec701b8e42a79393dc537f04c0be2",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -526,7 +526,7 @@
       "schema": "private",
       "name": "pay_workbench_candidate_source_build_chunk_legacy_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
-      "definition_sha256": "a3b36bb9c302340857675aa1137f75bcde28be70708c9f2677c7716eb7bc5059",
+      "definition_sha256": "6296a5553dec551e6b9350f45fd257adad593d652a63f343531a954be41ff8a4",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -699,10 +699,54 @@
       ]
     },
     {
+      "schema": "private",
+      "name": "pay_workbench_fact_cursor_preserve_v2",
+      "identity_arguments": "p_cursor_json jsonb",
+      "definition_sha256": "dd0902a9693ae6f14090fd286d43bd53bf81819bcf29e32a71906baa297c45f2",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/05082026_1348_pay_workbench_fact_cursor_preserve_v2.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_fact_cursor_transition_v3",
+      "identity_arguments": "p_current_cursor jsonb, p_dependency_unit_key text, p_fact_family text, p_input_phase text, p_input_projection_id uuid",
+      "definition_sha256": "c97699055eac0be4e1efb8d59e9780712fe39867fbe2b29b2040d55445285959",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=\"\""
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/05082026_1539_pay_workbench_fact_cursor_transition_v3.sql"
+      ]
+    },
+    {
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "866e27dfed3e79dff1f7e4e4226de974f7b13cc74921e12f3d0e3aa603acbbad",
+      "definition_sha256": "f94d941e4470bb75895595e315a9e2db60618a64698d40062f07bce33aee4694",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

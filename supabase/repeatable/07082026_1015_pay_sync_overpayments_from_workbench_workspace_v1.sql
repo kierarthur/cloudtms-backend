@@ -1475,6 +1475,43 @@ begin
       AND (NULLIF(BTRIM(raw.target_pay_method),'') IS NULL
         OR UPPER(BTRIM(raw.target_pay_method)) NOT IN ('PAYE','UMBRELLA'));
 
+    WITH key_methods AS MATERIALIZED (
+      SELECT DISTINCT raw.timesheet_id,
+        UPPER(BTRIM(raw.economic_key_type)) AS economic_key_type,
+        BTRIM(raw.economic_key_value) AS economic_key_value,
+        UPPER(BTRIM(raw.source_pay_method)) AS source_pay_method
+      FROM pg_temp.tmp_sync_sealed_rate_projection_raw raw
+      WHERE UPPER(COALESCE(raw.projection_status,'')) IN ('READY','FIXED')
+        AND raw.failure_code IS NULL
+    ), timesheet_methods AS MATERIALIZED (
+      SELECT key_method.timesheet_id,
+        COUNT(DISTINCT key_method.source_pay_method)::integer
+          AS distinct_supported_method_count,
+        COUNT(*)::integer AS economic_key_count,
+        jsonb_agg(jsonb_build_object(
+          'economic_key_type',key_method.economic_key_type,
+          'economic_key_value',key_method.economic_key_value,
+          'source_pay_method',key_method.source_pay_method)
+          ORDER BY key_method.economic_key_type,key_method.economic_key_value,
+            key_method.source_pay_method) AS complete_key_method_set
+      FROM key_methods key_method
+      GROUP BY key_method.timesheet_id
+    )
+    INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
+    SELECT 23,'RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT',method.timesheet_id,
+      NULL::text,NULL::text,NULL::text,
+      jsonb_build_object(
+        'distinct_supported_method_count',method.distinct_supported_method_count,
+        'economic_key_count',method.economic_key_count,
+        'complete_economic_key_method_digest',pg_catalog.encode(extensions.digest(
+          pg_catalog.convert_to(method.complete_key_method_set::text,'UTF8'),
+          'sha256'),'hex'),
+        'sample_truncated',method.economic_key_count>25,
+        'economic_key_method_sample',pg_catalog.jsonb_path_query_array(
+          method.complete_key_method_set,'$[0 to 24]'))
+    FROM timesheet_methods method
+    WHERE method.distinct_supported_method_count<>1;
+
     INSERT INTO pg_temp.tmp_sync_sealed_rate_projection_failures
     SELECT 30,'RATE_AUTHORITY_DUPLICATE_PHYSICAL_BUCKET',duplicate.timesheet_id,
       duplicate.economic_key_type,duplicate.economic_key_value,
@@ -2047,7 +2084,9 @@ begin
           WHERE baseline.economic_key_type='ADJUSTMENT_CODE'
           GROUP BY baseline.timesheet_id
         ), timesheet_authority AS (
-          SELECT sealed.timesheet_id,MIN(sealed.source_pay_method) AS source_pay_method,
+          SELECT sealed.timesheet_id,
+            (jsonb_agg(DISTINCT sealed.source_pay_method ORDER BY sealed.source_pay_method)->>0)
+              AS source_pay_method,
             MIN(sealed.target_pay_method) AS target_pay_method,
             MIN(sealed.umbrella_id::text)::uuid AS umbrella_id,
             bool_and(sealed.umbrella_enabled) AS umbrella_enabled,
@@ -2867,11 +2906,18 @@ begin
           'authoritative_outstanding_ex_vat',sealed.outstanding_ex_vat,
           'overpayment_component_authority','PRE_DRAFT_LIVE_TRUTH',
           'physical_bucket_key',sealed.physical_bucket_key,
-          'physical_bucket_digest',sealed.physical_bucket_digest,
-          'sealed_evidence_digest',sealed.sealed_evidence_digest,
-          'financial_revision_digest',sealed.financial_revision_digest,
-          'target_authority_digest',sealed.target_authority_digest,
-          'conversion_context_digest',sealed.conversion_context_digest)
+           'physical_bucket_digest',sealed.physical_bucket_digest,
+           'sealed_evidence_digest',sealed.sealed_evidence_digest,
+           'financial_revision_digest',sealed.financial_revision_digest,
+           'target_authority_digest',sealed.target_authority_digest,
+           'conversion_context_digest',sealed.conversion_context_digest,
+           'source_pay_method',sealed.source_pay_method,
+           'current_target_pay_method',sealed.target_pay_method,
+           'source_basis_json',(CASE
+             WHEN jsonb_typeof(raw_component.value->'source_basis_json')='object'
+               THEN raw_component.value->'source_basis_json'
+             ELSE '{}'::jsonb END)||jsonb_build_object(
+               'source_pay_method',sealed.source_pay_method))
         ORDER BY raw_component.ordinality),'[]'::jsonb) AS case_components_json
       FROM pg_temp.timesheet_case_rollup raw_case
       CROSS JOIN LATERAL jsonb_array_elements(CASE
@@ -3122,9 +3168,9 @@ begin
                 THEN 'REIMBURSEMENT_GROSS_FIXED'
               ELSE 'TAXABLE_CHANNEL_SENSITIVE'
             END,
-            'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
-            'current_target_pay_method', tec.candidate_pay_method,
-            'source_basis_json', CASE
+            'source_pay_method', nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''),
+            'current_target_pay_method', nullif(btrim(coalesce(tec.component_json->>'current_target_pay_method', '')), ''),
+            'source_basis_json', (CASE
               WHEN jsonb_typeof(tec.component_json->'source_basis_json') = 'object'
                    AND coalesce(tec.component_json->'source_basis_json', '{}'::jsonb) <> '{}'::jsonb
                 THEN tec.component_json->'source_basis_json'
@@ -3133,10 +3179,10 @@ begin
                 'source_family_key', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_family_key', '')), ''), 'timesheet:' || tec.timesheet_id::text),
                 'component_key_type', tec.component_key_type,
                 'component_key_value', tec.component_key_value,
-                'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
                 'component_amount_ex_vat', abs(tec.signed_component_amount_ex)
               ))
-            END,
+            END)||jsonb_build_object('source_pay_method',
+              nullif(btrim(coalesce(tec.component_json->>'source_pay_method','')),'')),
             'source_amount', abs(tec.signed_component_amount_ex),
             'overpayment_component_authority', NULLIF(UPPER(BTRIM(COALESCE(
               tec.component_json->>'overpayment_component_authority',
@@ -3173,9 +3219,9 @@ begin
                 THEN 'REIMBURSEMENT_GROSS_FIXED'
               ELSE 'TAXABLE_CHANNEL_SENSITIVE'
             END,
-            'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
-            'current_target_pay_method', tec.candidate_pay_method,
-            'source_basis_json', CASE
+            'source_pay_method', nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''),
+            'current_target_pay_method', nullif(btrim(coalesce(tec.component_json->>'current_target_pay_method', '')), ''),
+            'source_basis_json', (CASE
               WHEN jsonb_typeof(tec.component_json->'source_basis_json') = 'object'
                    AND coalesce(tec.component_json->'source_basis_json', '{}'::jsonb) <> '{}'::jsonb
                 THEN tec.component_json->'source_basis_json'
@@ -3184,10 +3230,10 @@ begin
                 'source_family_key', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_family_key', '')), ''), 'timesheet:' || tec.timesheet_id::text),
                 'component_key_type', tec.component_key_type,
                 'component_key_value', tec.component_key_value,
-                'source_pay_method', coalesce(nullif(btrim(coalesce(tec.component_json->>'source_pay_method', '')), ''), tec.candidate_pay_method),
                 'component_amount_ex_vat', abs(tec.signed_component_amount_ex)
               ))
-            END,
+            END)||jsonb_build_object('source_pay_method',
+              nullif(btrim(coalesce(tec.component_json->>'source_pay_method','')),'')),
             'source_amount', abs(tec.signed_component_amount_ex),
             'overpayment_component_authority', NULLIF(UPPER(BTRIM(COALESCE(
               tec.component_json->>'overpayment_component_authority',
@@ -3476,6 +3522,69 @@ begin
   from deduped_case_candidates dcc
   where dcc.desired_case_type is not null;
 
+  IF COALESCE(v_authoritative_timesheet_scope,false) THEN
+    v_rate_authority_failure_code:=NULL::text;
+    v_rate_authority_failure_detail:='{}'::jsonb;
+    WITH component_methods AS MATERIALIZED (
+      SELECT candidate.candidate_id,candidate.timesheet_id,
+        UPPER(NULLIF(BTRIM(component.value->>'source_pay_method'),''))
+          AS source_pay_method,
+        UPPER(NULLIF(BTRIM(component.value->>'component_key_type'),''))
+          AS economic_key_type,
+        NULLIF(BTRIM(component.value->>'component_key_value'),'')
+          AS economic_key_value,
+        component.ordinality::integer AS component_ordinality
+      FROM pg_temp.tmp_sync_timesheet_case_candidates candidate
+      CROSS JOIN LATERAL jsonb_array_elements(CASE
+        WHEN jsonb_typeof(candidate.components_sync_json)='array'
+          THEN candidate.components_sync_json ELSE '[]'::jsonb END)
+        WITH ORDINALITY component(value,ordinality)
+    ), method_summary AS MATERIALIZED (
+      SELECT method.candidate_id,method.timesheet_id,COUNT(*)::integer AS component_count,
+        COUNT(*) FILTER(WHERE method.source_pay_method IS NULL
+          OR method.source_pay_method NOT IN ('PAYE','UMBRELLA'))::integer
+          AS invalid_method_count,
+        COUNT(DISTINCT method.source_pay_method) FILTER(
+          WHERE method.source_pay_method IN ('PAYE','UMBRELLA'))::integer
+          AS distinct_supported_method_count,
+        jsonb_agg(jsonb_build_object(
+          'component_ordinality',method.component_ordinality,
+          'economic_key_type',method.economic_key_type,
+          'economic_key_value',method.economic_key_value,
+          'source_pay_method',method.source_pay_method)
+          ORDER BY method.component_ordinality) AS complete_component_method_set
+      FROM component_methods method
+      GROUP BY method.candidate_id,method.timesheet_id
+    )
+    SELECT CASE WHEN summary.invalid_method_count>0
+        THEN 'RATE_AUTHORITY_SOURCE_PAY_METHOD_MISSING'
+        ELSE 'RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT' END,
+      jsonb_build_object(
+        'candidate_id',summary.candidate_id,
+        'timesheet_id',summary.timesheet_id,
+        'component_count',summary.component_count,
+        'invalid_method_count',summary.invalid_method_count,
+        'distinct_supported_method_count',summary.distinct_supported_method_count,
+        'complete_component_method_digest',pg_catalog.encode(extensions.digest(
+          pg_catalog.convert_to(summary.complete_component_method_set::text,'UTF8'),
+          'sha256'),'hex'),
+        'sample_truncated',summary.component_count>25,
+        'component_method_sample',pg_catalog.jsonb_path_query_array(
+          summary.complete_component_method_set,'$[0 to 24]'))
+    INTO v_rate_authority_failure_code,v_rate_authority_failure_detail
+    FROM method_summary summary
+    WHERE summary.invalid_method_count>0
+       OR summary.distinct_supported_method_count<>1
+    ORDER BY summary.timesheet_id
+    LIMIT 1;
+
+    IF v_rate_authority_failure_code IS NOT NULL THEN
+      RAISE EXCEPTION '%',v_rate_authority_failure_code USING ERRCODE='P0001',
+        DETAIL=jsonb_build_object('code',v_rate_authority_failure_code,
+          'detail',v_rate_authority_failure_detail)::text;
+    END IF;
+  END IF;
+
   v_correction_rewrite_result :=
     public._ctms_rewrite_sync_correction_cases_v1(
     case
@@ -3616,12 +3725,8 @@ begin
       FROM (
         SELECT
           upper(nullif(btrim(coalesce(component_element.value->>'classification', '')), '')) AS classification,
-          upper(nullif(btrim(coalesce(
-            component_element.value->>'source_pay_method',
-            component_element.value->>'current_target_pay_method',
-            v_target_case_row.candidate_pay_method,
-            ''
-          )), '')) AS source_pay_method
+          upper(nullif(btrim(component_element.value->>'source_pay_method'),''))
+            AS source_pay_method
         FROM jsonb_array_elements(
           CASE
             WHEN jsonb_typeof(v_target_case_row.components_sync_json) = 'array' THEN v_target_case_row.components_sync_json
@@ -5110,7 +5215,14 @@ begin
         'sealed_evidence_digest',sealed.sealed_evidence_digest,
         'financial_revision_digest',sealed.financial_revision_digest,
         'target_authority_digest',sealed.target_authority_digest,
-        'conversion_context_digest',sealed.conversion_context_digest)
+        'conversion_context_digest',sealed.conversion_context_digest,
+        'source_pay_method',sealed.source_pay_method,
+        'current_target_pay_method',sealed.target_pay_method,
+        'source_basis_json',(CASE
+          WHEN jsonb_typeof(builder.component_json->'source_basis_json')='object'
+            THEN builder.component_json->'source_basis_json'
+          ELSE '{}'::jsonb END)||jsonb_build_object(
+            'source_pay_method',sealed.source_pay_method))
         AS component_json
     FROM pg_temp.tmp_sync_builder_physical_components builder
     JOIN pg_temp.tmp_sync_sealed_rate_projection sealed

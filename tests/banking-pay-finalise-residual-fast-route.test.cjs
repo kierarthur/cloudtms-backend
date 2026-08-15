@@ -52,6 +52,58 @@ test('the residual identity is a closed F minus A equals C equals P multiset pro
   assert.match(residual, /remittance_count/);
 });
 
+test('V2 residual authority validates every referenced Draft scope and explicit READY source identity', () => {
+  for (const token of [
+    'referenced_scopes',
+    'validated_scope_attestations',
+    'referenced_scope_set_digest',
+    'common_publication_attestation_digest',
+    'frozen_scope_ordinal',
+    'ready_rows_raw',
+    'ready_rows_validated',
+    'ready_identity_invalid_count',
+    'row_json->>\'source_ordinal\'',
+    'row_json->>\'source_line_id\'',
+    'EXECUTION_RESIDUAL_COMMON_PUBLICATION_AUTHORITY_CONFLICT',
+  ]) assert.ok(residual.includes(token), `missing complete residual authority token: ${token}`);
+  assert.match(residual,
+    /ready\.row_ordinal::numeric IS DISTINCT FROM\s*\(v_frozen_scope_ordinal::numeric\*1000000::numeric\s*\+ready\.source_ordinal::numeric\)/);
+  assert.doesNotMatch(residual, /%\s*1000000/);
+  assert.doesNotMatch(residual, /MIN\([^\n]*attestation/i);
+});
+
+test('V3 residual admission requires the invariant publication core and validates optional evidence only when supplied', () => {
+  const requiredMatch = residual.match(
+    /\]\s*::text\[\]\s+AS\s+allowed_keys,\s*ARRAY\[([\s\S]*?)\]\s*::text\[\]\s+AS\s+required_keys/i,
+  );
+  assert.ok(requiredMatch, 'required V3 attestation key contract not found');
+  const requiredKeys = requiredMatch[1];
+  for (const key of [
+    'source_publication_id',
+    'source_identity_digest',
+    'preview_identity_digest',
+    'semantic_proof_digest',
+    'scope_ordinal',
+  ]) assert.match(requiredKeys, new RegExp(`'${key}'`), `missing invariant key: ${key}`);
+  for (const key of [
+    'certification_version',
+    'certification_digest',
+    'admission_seal_version',
+    'admission_seal_digest',
+    'projection_fingerprint',
+    'original_semantic_proof_digest',
+    'selection_recovery_headroom_v1',
+    'cancellation_request_id',
+  ]) assert.doesNotMatch(requiredKeys, new RegExp(`'${key}'`), `optional key made unconditional: ${key}`);
+  assert.match(residual, /optional_digest\.value IS NOT NULL\s+AND optional_digest\.value!~'\^\[0-9a-f\]\{32\}\$'/);
+  assert.match(residual, /attestation \? 'selection_recovery_headroom_v1'/);
+  assert.match(residual, /attestation \? 'certification_version'/);
+  assert.match(residual, /attestation \? 'admission_seal_version'/);
+  assert.match(residual, /scope_ordinal',''\)!~'\^\[1-9\]\[0-9\]\{0,17\}\$'/);
+  assert.match(residual, /source_ordinal',''\)~'\^\[1-9\]\[0-9\]\{0,17\}\$'/);
+  assert.match(parent, /frozen_scope_ordinal',''\)~'\^\[1-9\]\[0-9\]\{0,17\}\$'/);
+});
+
 test('request start persists Q-bound authority after reauth checks and before REQUEST_START mutation', () => {
   const proof = requestStart.indexOf("'cancellation_reversion_q_bound_pre_request_start_v1'");
   const lifecycle = requestStart.indexOf("IF v_command IN ('START_AUTO', 'START_PREPARED') THEN");
@@ -79,6 +131,11 @@ test('one parent owns PRE_REQUEST_START and ROUTE_REPLAY and binds child proof d
   assert.match(parent, /EXECUTION_REFRESH_OWNER_PROOF_V2/);
   assert.match(parent, /CASE WHEN v_options_version='2'[\s\S]*EXECUTION_REFRESH_OWNER_PROOF_V1/);
   assert.match(parent, /pg_catalog\.concat_ws\('\|','EXECUTION_REFRESH_OWNER_PROOF_V1'/);
+  assert.match(parent, /residual_candidate_result_count/);
+  assert.match(parent, /referenced_scope_set_digest/);
+  assert.match(parent, /common_publication_attestation_digest/);
+  assert.match(parent, /frozen_scope_ordinal/);
+  assert.match(parent, /v_options_version='1'[\s\S]*LIMIT 1/);
 });
 
 test('route input replay binds all frozen authority components before election', () => {

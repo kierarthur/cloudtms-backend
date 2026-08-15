@@ -87,13 +87,38 @@ DECLARE
   v_certified_publication jsonb := '{}'::jsonb;
   v_current_source_change_seq bigint := 0;
   v_semantic_publication_v3_enabled boolean := false;
+  v_source_publication_identity_enforced boolean := false;
+  v_source_publication_baseline_required boolean := false;
+  v_required_physical_publication_contract_version smallint := 0;
+  v_authority_fingerprint_version smallint := 2;
+  v_authority_fingerprint_text text := NULL::text;
+  v_authority_fingerprint text := NULL::text;
+  v_session_signature_token text := 'none';
+  v_registry_dirty_generation bigint := 0;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('WORKBENCH_CHUNK');
 
-  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,false)
-  INTO v_semantic_publication_v3_enabled
+  SELECT COALESCE(settings_row.banking_pay_workbench_semantic_ready_publication_v3_enabled,false),
+         COALESCE(settings_row.banking_pay_source_publication_identity_enforce_v1_enabled,false)
+  INTO v_semantic_publication_v3_enabled,
+       v_source_publication_identity_enforced
   FROM public.settings_defaults AS settings_row
   WHERE settings_row.id=1;
+
+  v_source_publication_baseline_required :=
+    v_source_publication_identity_enforced
+    OR lower(BTRIM(COALESCE(
+      v_options_json->>'source_publication_baseline_required',
+      v_options_json#>>'{source_publication,baseline_required}',
+      'false'
+    ))) IN ('true','t','1','yes','y','on');
+  v_required_physical_publication_contract_version :=
+    CASE WHEN v_source_publication_baseline_required THEN 1 ELSE 0 END;
+  v_authority_fingerprint_version := CASE
+    WHEN v_semantic_publication_v3_enabled
+      OR v_source_publication_baseline_required THEN 3
+    ELSE 2
+  END;
 
   IF p_target_session_id IS NULL THEN
     RETURN jsonb_build_object(
@@ -1070,6 +1095,16 @@ BEGIN
       LEFT JOIN public.app_change_counters AS app_counter
         ON app_counter.entity_key = 'pay_candidate:' || v_candidate_id::text;
 
+      SELECT COALESCE(registry.dirty_generation,0)
+      INTO v_registry_dirty_generation
+      FROM private.banking_pay_workbench_candidate_scope_registry AS registry
+      WHERE registry.candidate_id=v_candidate_id;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'PAY_WORKBENCH_CLONE_REGISTRY_AUTHORITY_MISSING'
+          USING ERRCODE='40001',DETAIL=v_candidate_id::text;
+      END IF;
+
       SELECT CASE
                WHEN UPPER(BTRIM(COALESCE(candidate_row.pay_method, ''))) IN ('PAYE', 'UMBRELLA')
                  THEN UPPER(BTRIM(candidate_row.pay_method))
@@ -1085,6 +1120,27 @@ BEGIN
       v_fallback_linked_timesheet_ids_json := '[]'::jsonb;
       v_fallback_targeted_timesheet_count := 0;
       v_ineligible_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
+
+      v_session_signature_token:=md5(COALESCE(v_target_session.session_signature,''));
+      v_authority_fingerprint_text:=concat_ws('|',
+        CASE WHEN v_authority_fingerprint_version=3
+          THEN 'WORKBENCH_SOURCE_OWNER_V3' ELSE 'WORKBENCH_SOURCE_OWNER_V2' END,
+        p_target_session_id::text,
+        COALESCE(v_target_session.version,0)::text,
+        v_target_session.source_snapshot_run_id::text,
+        v_session_signature_token,
+        v_candidate_id::text,
+        COALESCE(v_ineligible_source_change_seq,0)::text,
+        COALESCE(v_registry_dirty_generation,0)::text,
+        UPPER(BTRIM(COALESCE(v_ineligible_final_pay_channel_scope,'ALL'))),
+        'FULL_CANDIDATE',
+        CASE WHEN v_authority_fingerprint_version=3
+          THEN 'READY_TO_PAY_SEMANTIC_V2' ELSE NULL END,
+        CASE WHEN v_authority_fingerprint_version=3
+          THEN v_required_physical_publication_contract_version::text ELSE NULL END);
+      v_authority_fingerprint:=pg_catalog.encode(
+        extensions.digest(pg_catalog.convert_to(v_authority_fingerprint_text,'UTF8'),'sha256'),
+        'hex');
 
       v_ineligible_source_build_base_dedupe_key := 'WORKBENCH_CANDIDATE_SOURCE_BUILD:session:' || p_target_session_id::text || ':candidate:' || v_candidate_id::text || ':clone_ineligible';
       v_ineligible_source_build_dedupe_key := v_ineligible_source_build_base_dedupe_key;
@@ -1168,7 +1224,12 @@ BEGIN
           'terminal_coverage_required', true,
           'discard_source_session_completion_markers', true,
           'source_session_completion_marker_authoritative', false,
-          'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+          'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+          'authority_fingerprint_version',v_authority_fingerprint_version,
+          'authority_fingerprint',v_authority_fingerprint,
+          'source_publication_baseline_required',v_source_publication_baseline_required,
+          'required_physical_publication_contract_version',
+            v_required_physical_publication_contract_version
         )
         || jsonb_build_object(
           'source_build_run_id_source', jsonb_build_object(
@@ -1206,6 +1267,10 @@ BEGIN
             'session_version', v_target_session.version,
             'refresh_scope_kind', 'CANDIDATE_FULL_LIVE',
             'pay_channel_scope', v_ineligible_final_pay_channel_scope,
+            'source_publication_baseline_required',
+              v_source_publication_baseline_required,
+            'required_physical_publication_contract_version',
+              v_required_physical_publication_contract_version,
             'targeted_timesheet_ids', '[]'::jsonb,
             'linked_timesheet_ids', '[]'::jsonb,
             'targeted_payload_received', false,
@@ -1296,6 +1361,10 @@ BEGIN
           AND COALESCE(v_ineligible_source_build_job_payload_json->>'target_snapshot_run_id', v_ineligible_source_build_job_payload_json->>'snapshot_run_id', '') = COALESCE(v_target_session.source_snapshot_run_id::text, '')
           AND COALESCE(v_ineligible_source_build_job_payload_json->>'source_session_snapshot_run_id', '') = COALESCE(v_source_session.source_snapshot_run_id::text, '')
           AND COALESCE(v_ineligible_source_build_job_payload_json->>'current_authority_scope_digest', '') = COALESCE(v_current_authority_scope_digest, '')
+          AND COALESCE(v_ineligible_source_build_job_payload_json->>'authority_fingerprint_version','')=v_authority_fingerprint_version::text
+          AND COALESCE(v_ineligible_source_build_job_payload_json->>'authority_fingerprint','')=v_authority_fingerprint
+          AND LOWER(BTRIM(COALESCE(v_ineligible_source_build_job_payload_json->>'source_publication_baseline_required','')))=v_source_publication_baseline_required::text
+          AND COALESCE(v_ineligible_source_build_job_payload_json->>'required_physical_publication_contract_version','')=v_required_physical_publication_contract_version::text
           AND jsonb_typeof(v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids') = 'array'
           AND jsonb_array_length(CASE WHEN jsonb_typeof(v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids') = 'array' THEN v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END) = 0
           AND jsonb_typeof(v_ineligible_source_build_job_payload_json->'linked_timesheet_ids') = 'array'
@@ -1398,6 +1467,10 @@ BEGIN
           AND COALESCE(v_existing_source_build_job_payload_json->>'target_snapshot_run_id', v_existing_source_build_job_payload_json->>'snapshot_run_id', '') = COALESCE(v_target_session.source_snapshot_run_id::text, '')
           AND COALESCE(v_existing_source_build_job_payload_json->>'source_session_snapshot_run_id', '') = COALESCE(v_source_session.source_snapshot_run_id::text, '')
           AND COALESCE(v_existing_source_build_job_payload_json->>'current_authority_scope_digest', '') = COALESCE(v_current_authority_scope_digest, '')
+          AND COALESCE(v_existing_source_build_job_payload_json->>'authority_fingerprint_version','')=v_authority_fingerprint_version::text
+          AND COALESCE(v_existing_source_build_job_payload_json->>'authority_fingerprint','')=v_authority_fingerprint
+          AND LOWER(BTRIM(COALESCE(v_existing_source_build_job_payload_json->>'source_publication_baseline_required','')))=v_source_publication_baseline_required::text
+          AND COALESCE(v_existing_source_build_job_payload_json->>'required_physical_publication_contract_version','')=v_required_physical_publication_contract_version::text
           AND jsonb_typeof(v_existing_source_build_job_payload_json->'targeted_timesheet_ids') = 'array'
           AND jsonb_array_length(CASE WHEN jsonb_typeof(v_existing_source_build_job_payload_json->'targeted_timesheet_ids') = 'array' THEN v_existing_source_build_job_payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END) = 0
           AND jsonb_typeof(v_existing_source_build_job_payload_json->'linked_timesheet_ids') = 'array'
@@ -1619,6 +1692,10 @@ BEGIN
           AND COALESCE(v_ineligible_source_build_job_payload_json->>'target_snapshot_run_id', v_ineligible_source_build_job_payload_json->>'snapshot_run_id', '') = COALESCE(v_target_session.source_snapshot_run_id::text, '')
           AND COALESCE(v_ineligible_source_build_job_payload_json->>'source_session_snapshot_run_id', '') = COALESCE(v_source_session.source_snapshot_run_id::text, '')
           AND COALESCE(v_ineligible_source_build_job_payload_json->>'current_authority_scope_digest', '') = COALESCE(v_current_authority_scope_digest, '')
+          AND COALESCE(v_ineligible_source_build_job_payload_json->>'authority_fingerprint_version','')=v_authority_fingerprint_version::text
+          AND COALESCE(v_ineligible_source_build_job_payload_json->>'authority_fingerprint','')=v_authority_fingerprint
+          AND LOWER(BTRIM(COALESCE(v_ineligible_source_build_job_payload_json->>'source_publication_baseline_required','')))=v_source_publication_baseline_required::text
+          AND COALESCE(v_ineligible_source_build_job_payload_json->>'required_physical_publication_contract_version','')=v_required_physical_publication_contract_version::text
           AND jsonb_typeof(v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids') = 'array'
           AND jsonb_array_length(CASE WHEN jsonb_typeof(v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids') = 'array' THEN v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END) = 0
           AND jsonb_typeof(v_ineligible_source_build_job_payload_json->'linked_timesheet_ids') = 'array'
@@ -1753,6 +1830,10 @@ BEGIN
         AND COALESCE(v_ineligible_source_build_job_payload_json->>'target_snapshot_run_id', v_ineligible_source_build_job_payload_json->>'snapshot_run_id', '') = COALESCE(v_target_session.source_snapshot_run_id::text, '')
         AND COALESCE(v_ineligible_source_build_job_payload_json->>'source_session_snapshot_run_id', '') = COALESCE(v_source_session.source_snapshot_run_id::text, '')
         AND COALESCE(v_ineligible_source_build_job_payload_json->>'current_authority_scope_digest', '') = COALESCE(v_current_authority_scope_digest, '')
+        AND COALESCE(v_ineligible_source_build_job_payload_json->>'authority_fingerprint_version','')=v_authority_fingerprint_version::text
+        AND COALESCE(v_ineligible_source_build_job_payload_json->>'authority_fingerprint','')=v_authority_fingerprint
+        AND LOWER(BTRIM(COALESCE(v_ineligible_source_build_job_payload_json->>'source_publication_baseline_required','')))=v_source_publication_baseline_required::text
+        AND COALESCE(v_ineligible_source_build_job_payload_json->>'required_physical_publication_contract_version','')=v_required_physical_publication_contract_version::text
         AND jsonb_typeof(v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids') = 'array'
         AND jsonb_array_length(CASE WHEN jsonb_typeof(v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids') = 'array' THEN v_ineligible_source_build_job_payload_json->'targeted_timesheet_ids' ELSE '[]'::jsonb END) = 0
         AND jsonb_typeof(v_ineligible_source_build_job_payload_json->'linked_timesheet_ids') = 'array'

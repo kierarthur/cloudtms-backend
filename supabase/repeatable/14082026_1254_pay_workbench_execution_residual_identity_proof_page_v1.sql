@@ -89,6 +89,11 @@ DECLARE
   v_request_owned_latest_source_seq bigint;
   v_request_owned_dirty_generation bigint;
   v_request_owned_dirty_proven boolean:=false;
+  v_invalid_scope_count integer:=0;
+  v_common_attestation_digest text;
+  v_referenced_scope_set_digest text;
+  v_frozen_scope_ordinal bigint;
+  v_ready_identity_invalid_count integer:=0;
 BEGIN
   v_supplied_candidate_count:=COALESCE(pg_catalog.cardinality(p_candidate_ids),0);
 
@@ -242,6 +247,11 @@ BEGIN
     v_ambiguous_allocation_count:=0;
     v_scope_count:=0;
     v_attestation_identity_count:=0;
+    v_invalid_scope_count:=0;
+    v_common_attestation_digest:=NULL;
+    v_referenced_scope_set_digest:=NULL;
+    v_frozen_scope_ordinal:=NULL;
+    v_ready_identity_invalid_count:=0;
     v_anchor_count:=0;
     v_context_bound_item_count:=0;
     v_context_unproved_item_count:=0;
@@ -410,21 +420,222 @@ BEGIN
           ON allocation.pay_batch_item_id=item_rows.id
         JOIN public.banking_pay_operation_candidate_scope AS scope
           ON scope.id=allocation.candidate_scope_id
+      ), referenced_scopes AS MATERIALIZED (
+        SELECT DISTINCT exact.candidate_scope_id,exact.scope_operation_id,
+          exact.scope_batch_id,exact.scope_candidate_id,exact.workbench_session_id,
+          exact.source_session_version,exact.scope_pay_channel,exact.scope_hash,
+          exact.scope_status,exact.scope_basis,
+          exact.scope_basis->'source_publication_attestation' AS attestation
+        FROM exact_rows exact
+      ), attestation_contract AS MATERIALIZED (
+        SELECT ARRAY[
+          'attestation_version','contract_version','semantic_contract_version','authority_kind',
+          'final_state','parity_complete','semantic_ready','session_id','candidate_id',
+          'economic_build_id','source_build_run_id','source_publication_id',
+          'original_economic_build_id','original_source_build_run_id',
+          'original_source_publication_id','source_session_id','source_change_seq',
+          'session_version','completion_job_id','refresh_scope_kind','source_row_count',
+          'preview_row_count','selectable_row_count','ordinary_positive_selectable_count',
+          'ordinary_positive_amount','recognised_deduction_count','recognised_deduction_amount',
+          'usable_same_candidate_headroom','candidate_ready_amount','context_row_count',
+          'blocked_row_count','invalid_selectable_row_count','selected_row_count','source_digest',
+          'source_identity_digest','preview_identity_digest','section_counts','scope_ordinal',
+          'minimum_public_ordinal','maximum_public_ordinal','certification_version',
+          'certification_digest','admission_seal_version','admission_seal_digest',
+          'projection_fingerprint','semantic_proof_digest','original_semantic_proof_digest',
+          'selection_recovery_headroom_v1','cancellation_request_id',
+          'cancellation_operation_id','cancellation_work_item_id','pay_batch_id',
+          'cancellation_reversion_run_id','financial_reversion_digest','attested_at_utc',
+          'policy_x_authority_scope'
+        ]::text[] AS allowed_keys,
+        ARRAY[
+          'attestation_version','contract_version','semantic_contract_version','authority_kind',
+          'final_state','parity_complete','semantic_ready','session_id','candidate_id',
+          'economic_build_id','source_build_run_id','source_publication_id','source_change_seq',
+          'session_version','completion_job_id','refresh_scope_kind','source_row_count',
+          'preview_row_count','selectable_row_count','ordinary_positive_selectable_count',
+          'ordinary_positive_amount','recognised_deduction_count','recognised_deduction_amount',
+          'usable_same_candidate_headroom','candidate_ready_amount','context_row_count',
+          'blocked_row_count','invalid_selectable_row_count','selected_row_count','source_digest',
+          'source_identity_digest','preview_identity_digest','section_counts','scope_ordinal',
+          'minimum_public_ordinal','maximum_public_ordinal','semantic_proof_digest','attested_at_utc',
+          'policy_x_authority_scope'
+        ]::text[] AS required_keys
+      ), validated_scope_attestations AS MATERIALIZED (
+        SELECT scope_row.*,
+          CASE WHEN
+            scope_row.scope_operation_id IS DISTINCT FROM
+              CASE WHEN COALESCE(v_chain->>'draft_operation_id','')
+                  ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                THEN (v_chain->>'draft_operation_id')::uuid END
+            OR scope_row.scope_batch_id IS DISTINCT FROM p_pay_batch_id
+            OR scope_row.scope_candidate_id IS DISTINCT FROM v_candidate
+            OR scope_row.workbench_session_id IS DISTINCT FROM p_workbench_session_id
+            OR scope_row.source_session_version IS DISTINCT FROM p_workbench_session_version
+            OR scope_row.scope_status IS DISTINCT FROM 'DRAFTED'
+            OR NULLIF(pg_catalog.btrim(COALESCE(scope_row.scope_pay_channel,'')),'') IS NULL
+            OR NULLIF(pg_catalog.btrim(COALESCE(scope_row.scope_hash,'')),'') IS NULL
+            OR EXISTS(SELECT 1 FROM exact_rows exact
+              WHERE exact.candidate_scope_id=scope_row.candidate_scope_id
+                AND pg_catalog.upper(pg_catalog.btrim(COALESCE(exact.allocation_pay_channel,'')))
+                    IS DISTINCT FROM pg_catalog.upper(pg_catalog.btrim(
+                      COALESCE(scope_row.scope_pay_channel,''))))
+            OR pg_catalog.jsonb_typeof(scope_row.attestation)<>'object'
+            OR EXISTS(SELECT 1 FROM pg_catalog.jsonb_object_keys(
+                COALESCE(scope_row.attestation,'{}'::jsonb)) supplied(key_name)
+              WHERE NOT supplied.key_name=ANY(contract.allowed_keys))
+            OR EXISTS(SELECT 1 FROM pg_catalog.unnest(contract.required_keys) required(key_name)
+              WHERE NOT COALESCE(scope_row.attestation,'{}'::jsonb) ? required.key_name)
+            OR COALESCE(scope_row.attestation->>'attestation_version','')
+                <>'CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3'
+            OR COALESCE(scope_row.attestation->>'contract_version','')<>'3'
+            OR COALESCE(scope_row.attestation->>'semantic_contract_version','')
+                <>'READY_TO_PAY_SEMANTIC_V2'
+            OR COALESCE(scope_row.attestation->>'authority_kind','') NOT IN (
+              'BOUNDED_FULL_SOURCE_BUILD','CERTIFIED_CLONE','TARGETED_DELTA',
+              'CERTIFIED_CANCELLATION_REVERSION')
+            OR COALESCE(scope_row.attestation->>'final_state','')<>'READY'
+            OR pg_catalog.lower(pg_catalog.btrim(COALESCE(
+              scope_row.attestation->>'parity_complete',''))) NOT IN ('true','t','1','yes','y','on')
+            OR pg_catalog.lower(pg_catalog.btrim(COALESCE(
+              scope_row.attestation->>'semantic_ready',''))) NOT IN ('true','t','1','yes','y','on')
+            OR COALESCE(scope_row.attestation->>'session_id','')<>p_workbench_session_id::text
+            OR COALESCE(scope_row.attestation->>'candidate_id','')<>v_candidate::text
+            OR COALESCE(scope_row.attestation->>'session_version','')
+                <>p_workbench_session_version::text
+            OR COALESCE(scope_row.attestation->>'economic_build_id','')
+                !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            OR COALESCE(scope_row.attestation->>'source_build_run_id','')
+                !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            OR COALESCE(scope_row.attestation->>'source_publication_id','')
+                !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            OR COALESCE(scope_row.attestation->>'completion_job_id','')
+                !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            OR EXISTS(SELECT 1 FROM (VALUES
+                (scope_row.attestation->>'original_economic_build_id'),
+                (scope_row.attestation->>'original_source_build_run_id'),
+                (scope_row.attestation->>'original_source_publication_id'),
+                (scope_row.attestation->>'source_session_id')) optional(value)
+              WHERE optional.value IS NOT NULL AND optional.value
+                !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+            OR COALESCE(scope_row.attestation->>'source_change_seq','')!~'^[0-9]{1,18}$'
+            OR COALESCE(scope_row.attestation->>'source_row_count','')!~'^[1-9][0-9]{0,8}$'
+            OR COALESCE(scope_row.attestation->>'preview_row_count','')
+                IS DISTINCT FROM COALESCE(scope_row.attestation->>'source_row_count','')
+            OR EXISTS(SELECT 1 FROM (VALUES
+                (scope_row.attestation->>'selectable_row_count'),
+                (scope_row.attestation->>'ordinary_positive_selectable_count'),
+                (scope_row.attestation->>'recognised_deduction_count'),
+                (scope_row.attestation->>'context_row_count'),
+                (scope_row.attestation->>'blocked_row_count'),
+                (scope_row.attestation->>'invalid_selectable_row_count'),
+                (scope_row.attestation->>'selected_row_count')) count_value(value)
+              WHERE COALESCE(count_value.value,'')!~'^[0-9]{1,9}$')
+            OR EXISTS(SELECT 1 FROM (VALUES
+                (scope_row.attestation->>'ordinary_positive_amount'),
+                (scope_row.attestation->>'recognised_deduction_amount'),
+                (scope_row.attestation->>'usable_same_candidate_headroom'),
+                (scope_row.attestation->>'candidate_ready_amount')) amount_value(value)
+              WHERE COALESCE(amount_value.value,'')!~'^[-]?[0-9]+([.][0-9]+)?$')
+            OR EXISTS(SELECT 1 FROM (VALUES
+                (scope_row.attestation->>'source_digest'),
+                (scope_row.attestation->>'source_identity_digest'),
+                (scope_row.attestation->>'preview_identity_digest'),
+                (scope_row.attestation->>'semantic_proof_digest')) digest(value)
+              WHERE COALESCE(digest.value,'')!~'^[0-9a-f]{32}$')
+            OR EXISTS(SELECT 1 FROM (VALUES
+                (scope_row.attestation->>'certification_digest'),
+                (scope_row.attestation->>'admission_seal_digest'),
+                (scope_row.attestation->>'projection_fingerprint'),
+                (scope_row.attestation->>'original_semantic_proof_digest')) optional_digest(value)
+              WHERE optional_digest.value IS NOT NULL
+                AND optional_digest.value!~'^[0-9a-f]{32}$')
+            OR pg_catalog.jsonb_typeof(scope_row.attestation->'section_counts')<>'object'
+            OR (scope_row.attestation ? 'selection_recovery_headroom_v1'
+              AND pg_catalog.jsonb_typeof(
+                scope_row.attestation->'selection_recovery_headroom_v1')<>'object')
+            OR COALESCE(scope_row.attestation->>'scope_ordinal','')!~'^[1-9][0-9]{0,17}$'
+            OR COALESCE(scope_row.attestation->>'minimum_public_ordinal','')!~'^[1-9][0-9]{0,17}$'
+            OR COALESCE(scope_row.attestation->>'maximum_public_ordinal','')!~'^[1-9][0-9]{0,17}$'
+            OR CASE WHEN COALESCE(scope_row.attestation->>'minimum_public_ordinal','')
+                  ~'^[1-9][0-9]{0,17}$'
+                AND COALESCE(scope_row.attestation->>'maximum_public_ordinal','')
+                  ~'^[1-9][0-9]{0,17}$'
+              THEN (scope_row.attestation->>'minimum_public_ordinal')::numeric>
+                (scope_row.attestation->>'maximum_public_ordinal')::numeric
+              ELSE false END
+            OR (scope_row.attestation ? 'certification_version'
+              AND COALESCE(scope_row.attestation->>'certification_version','')
+                !~'^[1-9][0-9]{0,8}$')
+            OR (scope_row.attestation ? 'admission_seal_version'
+              AND COALESCE(scope_row.attestation->>'admission_seal_version','')
+                !~'^[1-9][0-9]{0,8}$')
+            OR NULLIF(pg_catalog.btrim(COALESCE(scope_row.attestation->>'refresh_scope_kind','')),'') IS NULL
+            OR NULLIF(pg_catalog.btrim(COALESCE(scope_row.attestation->>'attested_at_utc','')),'') IS NULL
+            OR COALESCE(scope_row.attestation->>'policy_x_authority_scope','')
+                <>'PRE_DRAFT_LIVE_TRUTH'
+            OR (scope_row.attestation->>'authority_kind'='CERTIFIED_CANCELLATION_REVERSION'
+              AND (COALESCE(scope_row.attestation->>'cancellation_request_id','')
+                    !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                OR COALESCE(scope_row.attestation->>'cancellation_operation_id','')
+                    !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                OR COALESCE(scope_row.attestation->>'cancellation_work_item_id','')
+                    !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                OR COALESCE(scope_row.attestation->>'pay_batch_id','')
+                    !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                OR COALESCE(scope_row.attestation->>'cancellation_reversion_run_id','')
+                    !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                OR COALESCE(scope_row.attestation->>'financial_reversion_digest','')
+                    !~'^[0-9a-f]{32}$'))
+          THEN 1 ELSE 0 END AS invalid_scope,
+          private.pay_payment_correction_sha256_v1(scope_row.attestation)
+            AS complete_attestation_digest
+        FROM referenced_scopes scope_row
+        CROSS JOIN attestation_contract contract
+      ), scope_set_entries AS MATERIALIZED (
+        SELECT validated.candidate_scope_id,
+          pg_catalog.jsonb_build_object(
+            'candidate_scope_id',validated.candidate_scope_id,
+            'draft_operation_id',validated.scope_operation_id,
+            'pay_batch_id',validated.scope_batch_id,
+            'candidate_id',validated.scope_candidate_id,
+            'workbench_session_id',validated.workbench_session_id,
+            'source_session_version',validated.source_session_version,
+            'pay_channel',validated.scope_pay_channel,
+            'scope_hash',validated.scope_hash,
+            'scope_status',validated.scope_status,
+            'complete_attestation_digest',validated.complete_attestation_digest)
+            AS scope_entry
+        FROM validated_scope_attestations validated
+      ), scope_summary AS MATERIALIZED (
+        SELECT pg_catalog.count(*)::integer AS scope_count,
+          COALESCE(pg_catalog.sum(validated.invalid_scope),0)::integer AS invalid_scope_count,
+          pg_catalog.count(DISTINCT validated.attestation)::integer
+            AS distinct_common_authority_count,
+          CASE WHEN pg_catalog.count(DISTINCT validated.attestation)=1
+            THEN (pg_catalog.jsonb_agg(DISTINCT validated.attestation
+              ORDER BY validated.attestation)->0) END AS common_attestation,
+          CASE WHEN pg_catalog.count(DISTINCT validated.attestation)=1
+            THEN private.pay_payment_correction_sha256_v1(
+              (pg_catalog.jsonb_agg(DISTINCT validated.attestation
+                ORDER BY validated.attestation)->0)) END AS common_attestation_digest,
+          private.pay_payment_correction_sha256_v1(pg_catalog.jsonb_build_object(
+            'contract_version','EXECUTION_RESIDUAL_REFERENCED_SCOPE_SET_V1',
+            'referenced_scopes',COALESCE((SELECT pg_catalog.jsonb_agg(
+              entry.scope_entry ORDER BY entry.candidate_scope_id)
+              FROM scope_set_entries entry),'[]'::jsonb))) AS referenced_scope_set_digest
+        FROM validated_scope_attestations validated
       )
       SELECT
         (SELECT pg_catalog.count(*)::integer FROM item_rows),
         (SELECT pg_catalog.count(*)::integer FROM exact_rows),
         (SELECT pg_catalog.count(*)::integer FROM allocation_counts WHERE allocation_count>1),
-        (SELECT pg_catalog.count(DISTINCT candidate_scope_id)::integer FROM exact_rows),
-        (SELECT pg_catalog.count(DISTINCT pg_catalog.concat_ws('|',
-          scope_basis#>>'{source_publication_attestation,source_build_run_id}',
-          scope_basis#>>'{source_publication_attestation,source_publication_id}',
-          scope_basis#>>'{source_publication_attestation,source_change_seq}',
-          scope_basis#>>'{source_publication_attestation,source_identity_digest}',
-          scope_basis#>>'{source_publication_attestation,semantic_proof_digest}',
-          scope_basis#>>'{source_publication_attestation,source_row_count}'
-        ))::integer FROM exact_rows),
-        (SELECT pg_catalog.min((scope_basis->'source_publication_attestation')::text)::jsonb FROM exact_rows),
+        (SELECT scope_count FROM scope_summary),
+        (SELECT distinct_common_authority_count FROM scope_summary),
+        (SELECT common_attestation FROM scope_summary),
+        (SELECT invalid_scope_count FROM scope_summary),
+        (SELECT common_attestation_digest FROM scope_summary),
+        (SELECT referenced_scope_set_digest FROM scope_summary),
         (SELECT COALESCE(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
           'pay_batch_item_id',id,'item_type',item_type,'pay_channel',pay_channel,
           'timesheet_id',timesheet_id,'amount_ex_vat',amount_ex_vat,
@@ -458,14 +669,19 @@ BEGIN
           COALESCE(finance_component_id::text,'')||':'||COALESCE(reservation_id::text,''),
           '|' ORDER BY id),'')) FROM item_rows)
       INTO v_resolved_item_count,v_allocation_count,v_ambiguous_allocation_count,
-        v_scope_count,v_attestation_identity_count,v_attestation,v_selected_items,
+        v_scope_count,v_attestation_identity_count,v_attestation,v_invalid_scope_count,
+        v_common_attestation_digest,v_referenced_scope_set_digest,v_selected_items,
         v_active_item_scope_digest;
 
       IF v_resolved_item_count<>v_item_count THEN v_rejection:='EXECUTION_RESIDUAL_SELECTED_ITEM_MISSING';
       ELSIF v_ambiguous_allocation_count>0 THEN v_rejection:='EXECUTION_RESIDUAL_SELECTED_ITEM_ALLOCATION_AMBIGUOUS';
       ELSIF v_allocation_count<>v_item_count THEN v_rejection:='EXECUTION_RESIDUAL_SELECTED_ITEM_ALLOCATION_MISSING';
-      ELSIF v_attestation_identity_count<>1 OR v_scope_count<1
-        THEN v_rejection:='EXECUTION_RESIDUAL_CANDIDATE_SCOPE_PUBLICATION_AMBIGUOUS';
+      ELSIF v_scope_count<1
+        THEN v_rejection:='EXECUTION_RESIDUAL_CANDIDATE_SCOPE_PUBLICATION_MISSING';
+      ELSIF v_invalid_scope_count<>0
+        THEN v_rejection:='EXECUTION_RESIDUAL_REFERENCED_SCOPE_INVALID';
+      ELSIF v_attestation_identity_count<>1
+        THEN v_rejection:='EXECUTION_RESIDUAL_COMMON_PUBLICATION_AUTHORITY_CONFLICT';
       ELSIF EXISTS (
         SELECT 1
         FROM pg_catalog.jsonb_array_elements(v_selected_items) AS selected(value)
@@ -506,6 +722,9 @@ BEGIN
       ELSIF v_mode='PRE_REQUEST_START'
          AND v_active_item_scope_digest IS DISTINCT FROM v_chain->>'active_item_scope_digest'
         THEN v_rejection:='EXECUTION_RESIDUAL_SELECTED_ITEM_CONTRACT_MISMATCH';
+      END IF;
+      IF v_rejection IS NULL THEN
+        v_frozen_scope_ordinal:=(v_attestation->>'scope_ordinal')::bigint;
       END IF;
     END IF;
 
@@ -551,15 +770,38 @@ BEGIN
         FROM public.banking_pay_workbench_candidate_source_lines AS source_row
         WHERE source_row.session_id=p_workbench_session_id
           AND source_row.candidate_id=v_candidate AND source_row.status='CURRENT'
-      ), ready_rows AS (
-        SELECT preview.section,preview.row_key AS line_key,
-          pg_catalog.mod(preview.row_ordinal,1000000)::bigint AS source_ordinal,
-          preview.row_json
+      ), ready_rows_raw AS MATERIALIZED (
+        SELECT preview.section,preview.row_key AS line_key,preview.row_ordinal,
+          preview.row_json,
+          CASE WHEN COALESCE(preview.row_json->>'source_ordinal','')~'^[1-9][0-9]{0,17}$'
+            THEN (preview.row_json->>'source_ordinal')::bigint END AS source_ordinal,
+          CASE WHEN pg_catalog.pg_input_is_valid(
+              COALESCE(preview.row_json->>'source_line_id',''),'uuid')
+            THEN (preview.row_json->>'source_line_id')::uuid END AS source_line_id
         FROM public.banking_pay_workbench_preview_rows AS preview
         WHERE preview.session_id=p_workbench_session_id
           AND preview.candidate_id=v_candidate
           AND preview.session_version=p_workbench_session_version
           AND preview.status='READY'
+      ), ready_rows_validated AS MATERIALIZED (
+        SELECT ready.*,original.id AS matched_source_line_id,
+          original.source_ordinal AS matched_source_ordinal,
+          original.section AS matched_section,original.line_key AS matched_line_key,
+          CASE WHEN ready.source_ordinal IS NULL OR ready.source_line_id IS NULL
+              OR original.id IS NULL
+              OR original.source_ordinal IS DISTINCT FROM ready.source_ordinal
+              OR original.section IS DISTINCT FROM ready.section
+              OR original.line_key IS DISTINCT FROM ready.line_key
+              OR ready.row_ordinal::numeric IS DISTINCT FROM
+                (v_frozen_scope_ordinal::numeric*1000000::numeric
+                  +ready.source_ordinal::numeric)
+            THEN 1 ELSE 0 END AS identity_invalid
+        FROM ready_rows_raw ready
+        LEFT JOIN original_rows original ON original.id=ready.source_line_id
+      ), ready_rows AS (
+        SELECT ready.section,ready.line_key,ready.source_ordinal,ready.row_json
+        FROM ready_rows_validated ready
+        WHERE ready.identity_invalid=0
       ), chain_transitions AS (
         SELECT transition.value AS transition_json
         FROM pg_catalog.jsonb_array_elements(COALESCE(v_chain->'transitions','[]'::jsonb))
@@ -871,6 +1113,8 @@ BEGIN
         (SELECT pg_catalog.count(*)::integer FROM expected_rows),
         (SELECT pg_catalog.count(*)::integer FROM current_rows),
         (SELECT pg_catalog.count(*)::integer FROM ready_rows),
+        (SELECT COALESCE(pg_catalog.sum(identity_invalid),0)::integer
+          FROM ready_rows_validated),
         (SELECT pg_catalog.count(*)::integer FROM (
           SELECT section,line_key,source_ordinal FROM original_rows EXCEPT ALL SELECT * FROM partition_rows
         ) d),(SELECT pg_catalog.count(*)::integer FROM (
@@ -911,6 +1155,7 @@ BEGIN
         v_context_ambiguous_item_count,v_unproved_affected_item_count,
         v_affected_closure_ambiguity_count,
         v_f_count,v_a_count,v_e_count,v_c_count,v_p_count,
+        v_ready_identity_invalid_count,
         v_f_minus_partition,v_partition_minus_f,v_e_minus_c,v_c_minus_e,
         v_e_minus_p,v_p_minus_e,v_c_minus_p,v_p_minus_c,
         v_duplicate_active_identity_count,v_lineage_mismatch_count,
@@ -933,6 +1178,7 @@ BEGIN
         OR v_e_minus_c<>0 OR v_c_minus_e<>0 OR v_e_minus_p<>0 OR v_p_minus_e<>0
         OR v_c_minus_p<>0 OR v_p_minus_c<>0
         OR v_duplicate_active_identity_count<>0 OR v_lineage_mismatch_count<>0
+        OR v_ready_identity_invalid_count<>0
         OR v_e_semantic IS DISTINCT FROM v_c_semantic
         THEN v_rejection:='EXECUTION_RESIDUAL_IDENTITY_MISMATCH';
       END IF;
@@ -942,6 +1188,11 @@ BEGIN
       pg_catalog.jsonb_build_object(
         'contract_version','EXECUTION_RESIDUAL_AFFECTED_PHYSICAL_CLOSURE_V1',
         'selected_anchor_digest',v_selected_anchor_digest,
+        'referenced_scope_count',v_scope_count,
+        'invalid_referenced_scope_count',v_invalid_scope_count,
+        'common_publication_attestation_digest',v_common_attestation_digest,
+        'referenced_scope_set_digest',v_referenced_scope_set_digest,
+        'frozen_scope_ordinal',v_frozen_scope_ordinal,
         'execution_operation_id',p_execution_operation_id,
         'v2_chain_digest',v_chain->>'chain_digest',
         'affected_physical_rows',COALESCE(v_affected_rows,'[]'::jsonb)
@@ -956,6 +1207,11 @@ BEGIN
         'candidate_id',v_candidate,'request_selection_hash',v_request.selection_hash,
         'request_plan_hash',v_request.plan_hash,'v2_chain_digest',v_chain->>'chain_digest',
         'selected_anchor_digest',v_selected_anchor_digest,
+        'referenced_scope_count',v_scope_count,
+        'invalid_referenced_scope_count',v_invalid_scope_count,
+        'common_publication_attestation_digest',v_common_attestation_digest,
+        'referenced_scope_set_digest',v_referenced_scope_set_digest,
+        'frozen_scope_ordinal',v_frozen_scope_ordinal,
         'affected_physical_closure_digest',v_affected_digest,
         'frozen_original_count',v_f_count,'affected_physical_count',v_a_count,
         'expected_residual_count',v_e_count,'current_source_count',v_c_count,
@@ -969,6 +1225,7 @@ BEGIN
         'current_minus_preview_count',v_c_minus_p,'preview_minus_current_count',v_p_minus_c,
         'duplicate_active_identity_count',v_duplicate_active_identity_count,
         'lineage_mismatch_count',v_lineage_mismatch_count,
+        'ready_identity_invalid_count',v_ready_identity_invalid_count,
         'context_unproved_item_count',v_context_unproved_item_count,
         'context_ambiguous_item_count',v_context_ambiguous_item_count,
         'unproved_affected_item_count',v_unproved_affected_item_count,
@@ -989,6 +1246,11 @@ BEGIN
         'workbench_session_version',p_workbench_session_version,
         'request_selection_hash',v_request.selection_hash,'request_plan_hash',v_request.plan_hash,
         'v2_chain_digest',v_chain->>'chain_digest','selected_anchor_digest',v_selected_anchor_digest,
+        'referenced_scope_count',v_scope_count,
+        'invalid_referenced_scope_count',v_invalid_scope_count,
+        'common_publication_attestation_digest',v_common_attestation_digest,
+        'referenced_scope_set_digest',v_referenced_scope_set_digest,
+        'frozen_scope_ordinal',v_frozen_scope_ordinal,
         'affected_physical_closure_digest',v_affected_digest,
         'residual_proof_digest',v_residual_digest,
         'request_owned_dirty_job_id',v_request_owned_dirty_job_id,
@@ -1003,6 +1265,12 @@ BEGIN
         'candidate_id',v_candidate,'pay_batch_candidate_id',v_request_candidate.pay_batch_candidate_id,
         'admitted',v_rejection IS NULL,'rejection_reason',v_rejection,
         'v2_chain_digest',v_chain->>'chain_digest','selected_anchor_digest',v_selected_anchor_digest,
+        'referenced_scope_count',v_scope_count,
+        'invalid_referenced_scope_count',v_invalid_scope_count,
+        'common_publication_attestation_digest',v_common_attestation_digest,
+        'referenced_scope_set_digest',v_referenced_scope_set_digest,
+        'frozen_scope_ordinal',v_frozen_scope_ordinal,
+        'frozen_attestation',v_attestation,
         'affected_physical_closure_digest',v_affected_digest,'residual_proof_digest',v_residual_digest,
         'authority_digest',v_authority_digest,'frozen_original_count',v_f_count,
         'request_owned_dirty_job_id',v_request_owned_dirty_job_id,
@@ -1013,6 +1281,7 @@ BEGIN
         'context_ambiguous_item_count',v_context_ambiguous_item_count,
         'unproved_affected_item_count',v_unproved_affected_item_count,
         'affected_closure_ambiguity_count',v_affected_closure_ambiguity_count,
+        'ready_identity_invalid_count',v_ready_identity_invalid_count,
         'expected_residual_identity_digest',v_e_identity,
         'current_source_identity_digest',v_c_identity,'ready_preview_identity_digest',v_p_identity,
         'affected_physical_rows',COALESCE(v_affected_rows,'[]'::jsonb)
@@ -1023,6 +1292,12 @@ BEGIN
         'contract_version','CANCELLATION_REVERSION_Q_BOUND_PRE_REQUEST_START_AUTHORITY_V1',
         'pay_batch_candidate_id',v_request_candidate.pay_batch_candidate_id,
         'v2_chain_digest',v_chain->>'chain_digest','selected_anchor_digest',v_selected_anchor_digest,
+        'referenced_scope_count',v_scope_count,
+        'invalid_referenced_scope_count',v_invalid_scope_count,
+        'common_publication_attestation_digest',v_common_attestation_digest,
+        'referenced_scope_set_digest',v_referenced_scope_set_digest,
+        'frozen_scope_ordinal',v_frozen_scope_ordinal,
+        'frozen_attestation',v_attestation,
         'affected_physical_closure_digest',v_affected_digest,'residual_proof_digest',v_residual_digest,
         'authority_digest',v_authority_digest,'admitted',v_rejection IS NULL,
         'rejection_reason',v_rejection

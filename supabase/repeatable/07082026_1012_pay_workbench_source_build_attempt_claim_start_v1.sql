@@ -89,6 +89,15 @@ DECLARE
   v_winner_active_job_id uuid:=NULL::uuid;
   v_winner_scope public.banking_pay_workbench_session_scope%ROWTYPE;
   v_winner_complete_current_proven boolean:=false;
+  v_terminal_repair_result jsonb:='{}'::jsonb;
+  v_terminal_repair_row jsonb:='{}'::jsonb;
+  v_terminal_action text:=NULL::text;
+  v_terminal_successor_job_id uuid:=NULL::uuid;
+  v_terminal_scope public.banking_pay_workbench_session_scope%ROWTYPE;
+  v_terminal_candidate_state public.banking_pay_workbench_session_candidate_state%ROWTYPE;
+  v_terminal_candidate_state_present boolean:=false;
+  v_terminal_owner_valid boolean:=false;
+  v_terminal_progress_json jsonb:='{}'::jsonb;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -209,6 +218,124 @@ BEGIN
             failed_at_utc=clock_timestamp(),failure_json=jsonb_build_object(
               'code','DELIVERED_ATTEMPT_EXHAUSTED'),updated_at_utc=clock_timestamp()
           WHERE id=v_recovery.build_id AND status NOT IN ('COMPLETE','OBSOLETE');
+
+          v_terminal_repair_result:=public.pay_workbench_repair_orphaned_pending_source_build(
+            p_session_id=>(SELECT job.session_id
+              FROM public.banking_pay_workbench_jobs job
+              WHERE job.id=v_recovery.job_id),
+            p_candidate_id=>v_recovery.candidate_id,
+            p_limit=>1,
+            p_now_utc=>v_database_now,
+            p_reason=>'EXHAUSTED_DELIVERED_ATTEMPT_ATOMIC_CONVERGENCE');
+          v_terminal_repair_row:=COALESCE(v_terminal_repair_result->'results'->0,'{}'::jsonb);
+          v_terminal_action:=NULLIF(BTRIM(v_terminal_repair_row->>'action'),'');
+          v_terminal_successor_job_id:=CASE
+            WHEN COALESCE(v_terminal_repair_row->>'successor_job_id','')
+                ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              THEN (v_terminal_repair_row->>'successor_job_id')::uuid END;
+
+          IF COALESCE((v_terminal_repair_result->>'ok')::boolean,false) IS NOT TRUE
+             OR COALESCE((v_terminal_repair_result->>'examined_count')::integer,-1)<>1
+             OR COALESCE((v_terminal_repair_result->>'repaired_count')::integer,-1)<>1
+             OR COALESCE((v_terminal_repair_result->>'skipped_count')::integer,-1)<>0
+             OR COALESCE((v_terminal_repair_result->>'unresolved_count')::integer,-1)<>0
+             OR COALESCE((v_terminal_repair_result->>'progress_recompute_failed_count')::integer,-1)<>0
+             OR COALESCE((v_terminal_repair_result->>'all_state_transitions_proven')::boolean,false)
+                IS NOT TRUE
+             OR COALESCE((v_terminal_repair_result->>'all_progress_recomputed')::boolean,false)
+                IS NOT TRUE
+             OR jsonb_array_length(COALESCE(v_terminal_repair_result->'results','[]'::jsonb))<>1
+             OR COALESCE(v_terminal_repair_row->>'candidate_id','')<>v_recovery.candidate_id::text
+             OR COALESCE((v_terminal_repair_row->>'state_transition_proven')::boolean,false)
+                IS NOT TRUE
+             OR COALESCE((v_terminal_repair_row->>'progress_recomputed')::boolean,false)
+                IS NOT TRUE
+             OR v_terminal_action NOT IN ('FAILED_CLOSED_MAX_ATTEMPTS',
+               'REBOUND_ACTIVE_SUCCESSOR','RECONCILED_SUCCESSFUL_BUILD') THEN
+            RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
+              USING ERRCODE='40001',DETAIL=jsonb_build_object(
+                'candidate_id',v_recovery.candidate_id,
+                'job_id',v_recovery.job_id,
+                'repair_result',v_terminal_repair_result)::text;
+          END IF;
+
+          SELECT scope_row.* INTO v_terminal_scope
+          FROM public.banking_pay_workbench_session_scope scope_row
+          WHERE scope_row.session_id=(v_terminal_repair_row->>'session_id')::uuid
+            AND scope_row.candidate_id=v_recovery.candidate_id
+          FOR UPDATE;
+          IF NOT FOUND THEN
+            RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
+              USING ERRCODE='40001',DETAIL='TERMINAL_SCOPE_MISSING';
+          END IF;
+
+          SELECT state_row.* INTO v_terminal_candidate_state
+          FROM public.banking_pay_workbench_session_candidate_state state_row
+          WHERE state_row.session_id=v_terminal_scope.session_id
+            AND state_row.candidate_id=v_terminal_scope.candidate_id
+          FOR UPDATE;
+          v_terminal_candidate_state_present:=FOUND;
+
+          SELECT COALESCE(session_row.progress_json,'{}'::jsonb)
+          INTO v_terminal_progress_json
+          FROM public.banking_pay_workbench_sessions session_row
+          WHERE session_row.id=v_terminal_scope.session_id
+          FOR UPDATE;
+
+          IF v_terminal_action='FAILED_CLOSED_MAX_ATTEMPTS' THEN
+            IF UPPER(BTRIM(COALESCE(v_terminal_scope.status,'')))<>'SOURCE_BUILD_ERROR'
+               OR v_terminal_scope.pending_job_id IS NOT NULL
+               OR NULLIF(BTRIM(COALESCE(v_terminal_scope.error_json->>'code','')),'') IS NULL
+               OR (v_terminal_candidate_state_present AND (
+                 UPPER(BTRIM(COALESCE(v_terminal_candidate_state.status,'')))<>'ERROR'
+                 OR v_terminal_candidate_state.pending_job_id IS NOT NULL
+                 OR v_terminal_scope.error_json->>'code' IS DISTINCT FROM
+                      v_terminal_candidate_state.last_error_json->>'code')) THEN
+              RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
+                USING ERRCODE='40001',DETAIL='FAILED_CLOSED_POSTCONDITION';
+            END IF;
+          ELSIF v_terminal_action='REBOUND_ACTIVE_SUCCESSOR' THEN
+            SELECT EXISTS(SELECT 1
+              FROM public.banking_pay_workbench_jobs successor
+              WHERE successor.id=v_terminal_successor_job_id
+                AND successor.session_id=v_terminal_scope.session_id
+                AND successor.candidate_id=v_terminal_scope.candidate_id
+                AND UPPER(BTRIM(COALESCE(successor.status,''))) IN ('QUEUED','RUNNING'))
+            INTO v_terminal_owner_valid;
+            IF UPPER(BTRIM(COALESCE(v_terminal_scope.status,'')))<>'SOURCE_BUILD_PENDING'
+               OR v_terminal_successor_job_id IS NULL
+               OR v_terminal_scope.pending_job_id IS DISTINCT FROM v_terminal_successor_job_id
+               OR v_terminal_owner_valid IS NOT TRUE
+               OR (v_terminal_candidate_state_present AND (
+                 UPPER(BTRIM(COALESCE(v_terminal_candidate_state.status,'')))<>'PENDING'
+                 OR v_terminal_candidate_state.pending_job_id IS DISTINCT FROM
+                      v_terminal_successor_job_id
+                 OR COALESCE(v_terminal_candidate_state.last_error_json,'{}'::jsonb)<>'{}'::jsonb)) THEN
+              RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
+                USING ERRCODE='40001',DETAIL='REBOUND_POSTCONDITION';
+            END IF;
+          ELSE
+            IF UPPER(BTRIM(COALESCE(v_terminal_scope.status,''))) NOT IN (
+                 'SOURCE_READY','LINE_WORK_PENDING','MATERIALISED','MATERIALIZED','READY','SOURCE_EMPTY')
+               OR COALESCE(v_terminal_scope.dirty,true)
+               OR v_terminal_scope.pending_job_id IS NOT DISTINCT FROM v_recovery.job_id
+               OR (v_terminal_candidate_state_present AND (
+                 UPPER(BTRIM(COALESCE(v_terminal_candidate_state.status,'')))='ERROR'
+                 OR v_terminal_candidate_state.pending_job_id IS NOT DISTINCT FROM v_recovery.job_id
+                 OR v_terminal_candidate_state.session_version IS DISTINCT FROM
+                      v_terminal_scope.session_version
+                 OR v_terminal_candidate_state.source_change_seq IS DISTINCT FROM
+                      v_terminal_scope.source_change_seq)) THEN
+              RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
+                USING ERRCODE='40001',DETAIL='RECONCILED_POSTCONDITION';
+            END IF;
+          END IF;
+
+          IF COALESCE((v_terminal_progress_json->>'recovery_required_count')::integer,0)<>0
+             OR COALESCE((v_terminal_progress_json#>>'{blocker_counts,pending_scope_without_active_job}')::integer,0)<>0 THEN
+            RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
+              USING ERRCODE='40001',DETAIL='SESSION_PROGRESS_POSTCONDITION';
+          END IF;
         END IF;
         IF v_recovered_count>=5 THEN EXIT; END IF;
       END IF;
