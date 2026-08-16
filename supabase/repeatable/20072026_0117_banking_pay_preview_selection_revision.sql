@@ -118,16 +118,45 @@ BEGIN
   FROM public.banking_pay_workbench_preview_rows AS preview_count_row
   WHERE preview_count_row.session_id = p_session_id
     AND preview_count_row.session_version = v_session_row.version
-    AND LOWER(BTRIM(COALESCE(
-      CASE
-        WHEN preview_count_row.row_json#>>'{selection_recovery_headroom_v1,contract_version}' = '1'
-          THEN preview_count_row.row_json#>>'{selection_recovery_headroom_v1,effective_section}'
-        ELSE NULL::text
-      END,
-      preview_count_row.section,
-      ''
-    ))) = v_resolved_section
+    AND LOWER(private.pay_workbench_preview_effective_section_v1(
+      preview_count_row.section, preview_count_row.row_json
+    )) = v_resolved_section
     AND preview_count_row.status = 'READY'
+    AND NOT (
+      UPPER(BTRIM(COALESCE(
+        preview_count_row.row_json->>'line_type',
+        preview_count_row.row_json#>>'{preview_contract,line_type}',
+        ''
+      ))) = 'OVERPAYMENT_RECOVERY'
+      AND private.pay_workbench_preview_effective_section_v1(
+        preview_count_row.section, preview_count_row.row_json
+      ) <> 'cases_resolutions'
+      AND NULLIF(BTRIM(COALESCE(
+        preview_count_row.row_json->>'finance_case_id', ''
+      )), '') IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS actionable_sibling
+        WHERE actionable_sibling.session_id = preview_count_row.session_id
+          AND actionable_sibling.session_version = preview_count_row.session_version
+          AND actionable_sibling.candidate_id = preview_count_row.candidate_id
+          AND actionable_sibling.id <> preview_count_row.id
+          AND actionable_sibling.status = 'READY'
+          AND UPPER(BTRIM(COALESCE(
+            actionable_sibling.row_json->>'line_type',
+            actionable_sibling.row_json#>>'{preview_contract,line_type}',
+            ''
+          ))) = 'OVERPAYMENT_RECOVERY'
+          AND NULLIF(BTRIM(COALESCE(
+            actionable_sibling.row_json->>'finance_case_id', ''
+          )), '') = NULLIF(BTRIM(COALESCE(
+            preview_count_row.row_json->>'finance_case_id', ''
+          )), '')
+          AND private.pay_workbench_preview_effective_section_v1(
+            actionable_sibling.section, actionable_sibling.row_json
+          ) = 'cases_resolutions'
+      )
+    )
     AND (
       v_resolved_section <> 'canonical_preview_lines'
       OR NOT (
@@ -194,15 +223,10 @@ BEGIN
     FROM (
       SELECT
         preview_row.id,
-        LOWER(BTRIM(COALESCE(
-          CASE
-            WHEN preview_row.row_json#>>'{selection_recovery_headroom_v1,contract_version}' = '1'
-              THEN preview_row.row_json#>>'{selection_recovery_headroom_v1,effective_section}'
-            ELSE NULL::text
-          END,
-          preview_row.section,
-          ''
-        ))) AS section,
+        LOWER(private.pay_workbench_preview_effective_section_v1(
+          preview_row.section, preview_row.row_json
+        )) AS section,
+        preview_row.section AS physical_section,
         preview_row.candidate_id,
         preview_row.row_key,
         preview_row.row_ordinal,
@@ -217,16 +241,45 @@ BEGIN
       FROM public.banking_pay_workbench_preview_rows AS preview_row
       WHERE preview_row.session_id = p_session_id
         AND preview_row.session_version = v_session_row.version
-        AND LOWER(BTRIM(COALESCE(
-          CASE
-            WHEN preview_row.row_json#>>'{selection_recovery_headroom_v1,contract_version}' = '1'
-              THEN preview_row.row_json#>>'{selection_recovery_headroom_v1,effective_section}'
-            ELSE NULL::text
-          END,
-          preview_row.section,
-          ''
-        ))) = v_resolved_section
+        AND LOWER(private.pay_workbench_preview_effective_section_v1(
+          preview_row.section, preview_row.row_json
+        )) = v_resolved_section
         AND preview_row.status = 'READY'
+        AND NOT (
+          UPPER(BTRIM(COALESCE(
+            preview_row.row_json->>'line_type',
+            preview_row.row_json#>>'{preview_contract,line_type}',
+            ''
+          ))) = 'OVERPAYMENT_RECOVERY'
+          AND private.pay_workbench_preview_effective_section_v1(
+            preview_row.section, preview_row.row_json
+          ) <> 'cases_resolutions'
+          AND NULLIF(BTRIM(COALESCE(
+            preview_row.row_json->>'finance_case_id', ''
+          )), '') IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM public.banking_pay_workbench_preview_rows AS actionable_sibling
+            WHERE actionable_sibling.session_id = preview_row.session_id
+              AND actionable_sibling.session_version = preview_row.session_version
+              AND actionable_sibling.candidate_id = preview_row.candidate_id
+              AND actionable_sibling.id <> preview_row.id
+              AND actionable_sibling.status = 'READY'
+              AND UPPER(BTRIM(COALESCE(
+                actionable_sibling.row_json->>'line_type',
+                actionable_sibling.row_json#>>'{preview_contract,line_type}',
+                ''
+              ))) = 'OVERPAYMENT_RECOVERY'
+              AND NULLIF(BTRIM(COALESCE(
+                actionable_sibling.row_json->>'finance_case_id', ''
+              )), '') = NULLIF(BTRIM(COALESCE(
+                preview_row.row_json->>'finance_case_id', ''
+              )), '')
+              AND private.pay_workbench_preview_effective_section_v1(
+                actionable_sibling.section, actionable_sibling.row_json
+              ) = 'cases_resolutions'
+          )
+        )
         AND (
           v_resolved_section <> 'canonical_preview_lines'
           OR NOT (
@@ -332,14 +385,36 @@ BEGIN
           'preview_row_id', limited_rows.id::text,
           'row_id', limited_rows.id::text,
           'section', limited_rows.section,
+          'effective_section', limited_rows.section,
+          'physical_section', limited_rows.physical_section,
+          'presentation_section', CASE limited_rows.section
+            WHEN 'canonical_preview_lines' THEN 'READY_TO_PAY'
+            WHEN 'cases_resolutions' THEN 'CASES_RESOLUTIONS'
+            WHEN 'blocked_for_pay' THEN 'BLOCKED_FOR_PAY'
+            ELSE UPPER(limited_rows.section)
+          END,
+          'readiness_state', CASE limited_rows.section
+            WHEN 'canonical_preview_lines' THEN 'READY_TO_PAY'
+            WHEN 'cases_resolutions' THEN 'CASES_RESOLUTIONS'
+            WHEN 'blocked_for_pay' THEN 'BLOCKED_FOR_PAY'
+            ELSE UPPER(limited_rows.section)
+          END,
           'row_key', limited_rows.row_key,
           'row_ordinal', limited_rows.row_ordinal,
           'candidate_id', limited_rows.candidate_id::text,
           'timesheet_id', CASE WHEN limited_rows.timesheet_id IS NULL THEN NULL ELSE limited_rows.timesheet_id::text END,
           'key_type', limited_rows.key_type,
           'key_value', limited_rows.key_value,
-          'selected', COALESCE(limited_rows.selected, false),
-          'selection_state', limited_rows.selection_state,
+          'selected', CASE
+            WHEN limited_rows.section = 'canonical_preview_lines'
+              THEN COALESCE(limited_rows.selected, false)
+            ELSE false
+          END,
+          'selection_state', CASE
+            WHEN limited_rows.section = 'canonical_preview_lines'
+              THEN limited_rows.selection_state
+            ELSE 'NOT_SELECTABLE'
+          END,
           'status', limited_rows.status,
           'session_version', limited_rows.session_version,
           'amount_ex_vat', COALESCE(
@@ -403,6 +478,7 @@ BEGIN
       SELECT
         CASE
           WHEN post_draft_values.post_draft_unavailable_bool IS TRUE THEN false
+          WHEN limited_rows.section <> 'canonical_preview_lines' THEN false
           WHEN lower(NULLIF(BTRIM(base_values.base_json->>'selection_allowed'), '')) IN ('true', 't', '1', 'yes', 'y') THEN true
           WHEN lower(NULLIF(BTRIM(base_values.base_json->>'selection_allowed'), '')) IN ('false', 'f', '0', 'no', 'n') THEN false
           WHEN limited_rows.section = 'canonical_preview_lines'
@@ -429,6 +505,7 @@ BEGIN
         END AS materialisable_bool,
         CASE
           WHEN post_draft_values.post_draft_unavailable_bool IS TRUE THEN false
+          WHEN limited_rows.section <> 'canonical_preview_lines' THEN false
           WHEN lower(NULLIF(BTRIM(base_values.base_json->>'draftable'), '')) IN ('true', 't', '1', 'yes', 'y') THEN true
           WHEN lower(NULLIF(BTRIM(base_values.base_json->>'draftable'), '')) IN ('false', 'f', '0', 'no', 'n') THEN false
           WHEN limited_rows.section = 'canonical_preview_lines'
@@ -440,6 +517,7 @@ BEGIN
         END AS draftable_bool,
         CASE
           WHEN post_draft_values.post_draft_unavailable_bool IS TRUE THEN false
+          WHEN limited_rows.section <> 'canonical_preview_lines' THEN false
           WHEN lower(NULLIF(BTRIM(base_values.base_json->>'is_ready_for_draft'), '')) IN ('true', 't', '1', 'yes', 'y') THEN true
           WHEN lower(NULLIF(BTRIM(base_values.base_json->>'is_ready_for_draft'), '')) IN ('false', 'f', '0', 'no', 'n') THEN false
           WHEN lower(NULLIF(BTRIM(base_values.base_json->>'draftable'), '')) IN ('true', 't', '1', 'yes', 'y') THEN true

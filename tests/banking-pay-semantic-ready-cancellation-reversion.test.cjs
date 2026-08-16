@@ -407,15 +407,13 @@ test('newly eligible recovery defaults selected while explicit user deselection 
 });
 
 test('preview paging exposes each recovery through its single effective section', () => {
-  assert.match(previewPage, /selection_recovery_headroom_v1,contract_version/);
-  assert.match(previewPage, /selection_recovery_headroom_v1,effective_section/);
   assert.match(
     previewPage,
-    /preview_count_row\.row_json#>>'\{selection_recovery_headroom_v1,effective_section\}'[\s\S]{0,180}?= v_resolved_section/,
+    /private\.pay_workbench_preview_effective_section_v1\(\s*preview_count_row\.section, preview_count_row\.row_json\s*\)[\s\S]{0,80}?= v_resolved_section/,
   );
   assert.match(
     previewPage,
-    /preview_row\.row_json#>>'\{selection_recovery_headroom_v1,effective_section\}'[\s\S]{0,180}?AS section/,
+    /private\.pay_workbench_preview_effective_section_v1\(\s*preview_row\.section, preview_row\.row_json\s*\)[\s\S]{0,80}?AS section/,
   );
 });
 

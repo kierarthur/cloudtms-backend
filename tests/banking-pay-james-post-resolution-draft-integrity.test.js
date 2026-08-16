@@ -10,8 +10,10 @@ const read = (...parts) => fs.readFileSync(path.join(root, ...parts), 'utf8');
 
 const canonical = read('supabase', 'repeatable', '05082026_1545_pay_preview_candidate_build_canonical_lines.sql');
 const recovery = read('supabase', 'repeatable', '09082026_0712_banking_pay_semantic_ready_helpers.sql');
+const semanticSelection = read('supabase', 'repeatable', '09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql');
 const refresh = read('supabase', 'repeatable', '11082026_1557_pay_workbench_session_refresh_current_authority_v1.sql');
 const candidatePreview = read('supabase', 'repeatable', '16082026_2035_pay_workbench_candidate_preview_effective_section_v1.sql');
+const sessionPreviewPage = read('supabase', 'repeatable', '20072026_0117_banking_pay_preview_selection_revision.sql');
 const replay = read('supabase', 'repeatable', '08082026_0902_reassert_authorities_after_legacy_monolith.sql');
 
 test('resolved timesheet allocation children retain exact segment and rate-resolution authority', () => {
@@ -82,11 +84,30 @@ test('candidate preview pages by effective section and exposes physical section 
   assert.match(candidatePreview, /'cursor_scheme', 'effective_section_row_ordinal_id'/i);
   assert.match(candidatePreview, /SECURITY DEFINER[\s\S]*SET search_path TO 'public'/i);
   assert.match(candidatePreview, /GRANT EXECUTE[\s\S]*TO service_role/i);
+  assert.match(candidatePreview, /actionable_sibling[\s\S]*finance_case_id[\s\S]*cases_resolutions/i);
+  assert.match(candidatePreview, /'presentation_section', CASE limited_rows\.effective_section/i);
+  assert.match(candidatePreview, /'selection_allowed', CASE[\s\S]*ELSE false/i);
   assert.match(replay, /\\ir 16082026_2035_pay_workbench_candidate_preview_effective_section_v1\.sql\s+\\ir 19072026_1816_cancel_refresh_supersede_finance_dirty\.sql/i);
 });
 
+test('normal session preview page uses the same effective routing and suppresses dominated recovery carriers', () => {
+  assert.match(sessionPreviewPage, /private\.pay_workbench_preview_effective_section_v1\(\s*preview_count_row\.section, preview_count_row\.row_json/i);
+  assert.match(sessionPreviewPage, /private\.pay_workbench_preview_effective_section_v1\(\s*preview_row\.section, preview_row\.row_json/i);
+  assert.match(sessionPreviewPage, /actionable_sibling[\s\S]*finance_case_id[\s\S]*cases_resolutions/i);
+  assert.match(sessionPreviewPage, /'effective_section', limited_rows\.section/i);
+  assert.match(sessionPreviewPage, /'physical_section', limited_rows\.physical_section/i);
+  assert.match(sessionPreviewPage, /WHEN limited_rows\.section <> 'canonical_preview_lines' THEN false/i);
+});
+
+test('actionable taxable restructure is a read-time Cases authority even before a headroom overlay is refreshed', () => {
+  assert.match(semanticSelection, /case_needs_resolution/i);
+  assert.match(semanticSelection, /TAXABLE_CHANNEL_RESTRUCTURE/i);
+  assert.match(semanticSelection, /taxable_channel_restructure,can_apply/i);
+  assert.match(semanticSelection, /THEN 'cases_resolutions'/i);
+});
+
 test('the bounded fix does not redefine frozen James or post-Draft economic owners', () => {
-  const combined = [canonical, recovery, refresh, candidatePreview].join('\n');
+  const combined = [canonical, recovery, semanticSelection, refresh, candidatePreview, sessionPreviewPage].join('\n');
   for (const frozenOwner of [
     'pay_workbench_unit_economic_occurrence_page_v1',
     'pay_workbench_sealed_rate_component_projection_v1',

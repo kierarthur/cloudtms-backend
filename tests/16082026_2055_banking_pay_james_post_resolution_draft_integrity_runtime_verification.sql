@@ -16,6 +16,11 @@ BEGIN
      ) IS NULL THEN
     RAISE EXCEPTION 'JAMES_POST_RESOLUTION_CANDIDATE_PREVIEW_OWNER_MISSING';
   END IF;
+  IF pg_catalog.to_regprocedure(
+       'public.pay_workbench_session_get_preview_page(uuid,text,jsonb,integer)'
+     ) IS NULL THEN
+    RAISE EXCEPTION 'JAMES_POST_RESOLUTION_SESSION_PREVIEW_PAGE_OWNER_MISSING';
+  END IF;
 END;
 $verify_catalog$;
 
@@ -101,6 +106,14 @@ BEGIN
      OR v_cases IS DISTINCT FROM 'cases_resolutions'
      OR v_blocked IS DISTINCT FROM 'blocked_for_pay' THEN
     RAISE EXCEPTION 'JAMES_POST_RESOLUTION_EFFECTIVE_SECTION_FAILED';
+  END IF;
+
+  v_cases := private.pay_workbench_preview_effective_section_v1(
+    'blocked_for_pay',
+    '{"line_type":"OVERPAYMENT_RECOVERY","case_needs_resolution":true,"resolution_family":"TAXABLE_CHANNEL_RESTRUCTURE","taxable_channel_restructure":{"can_apply":true}}'::jsonb
+  );
+  IF v_cases IS DISTINCT FROM 'cases_resolutions' THEN
+    RAISE EXCEPTION 'JAMES_POST_RESOLUTION_ACTIONABLE_RESTRUCTURE_ROUTING_FAILED';
   END IF;
 END;
 $verify_effective_sections$;

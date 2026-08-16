@@ -4,11 +4,13 @@
 
 WITH required_functions(schema_name, function_name, identity_arguments) AS (
   VALUES
-    ('public', 'pay_preview_candidate_build_canonical_lines', 'jsonb, uuid, jsonb'),
+    ('public', 'pay_preview_candidate_build_canonical_lines', 'jsonb, uuid'),
     ('private', 'pay_workbench_recovery_selection_overlay_apply_v1', 'uuid, uuid, jsonb'),
+    ('private', 'pay_workbench_preview_effective_section_v1', 'text, jsonb'),
     ('private', 'pay_workbench_candidate_session_version_rebase_v1', 'uuid, uuid, bigint, bigint, uuid'),
     ('public', 'pay_workbench_session_refresh_current_authority_v1', 'uuid, uuid, jsonb, integer'),
-    ('public', 'pay_workbench_session_get_candidate_preview', 'uuid, uuid, jsonb, integer')
+    ('public', 'pay_workbench_session_get_candidate_preview', 'uuid, uuid, jsonb, integer'),
+    ('public', 'pay_workbench_session_get_preview_page', 'uuid, text, jsonb, integer')
 ), installed AS (
   SELECT
     namespace_row.nspname AS schema_name,
@@ -52,6 +54,9 @@ SELECT
     WHEN installed.function_name = 'pay_workbench_recovery_selection_overlay_apply_v1'
       THEN installed.definition_sql LIKE '%PAY_WORKBENCH_RECOVERY_COMPONENT_CAPACITY_INSUFFICIENT%'
        AND installed.definition_sql LIKE '%penny_residual_ex_vat%'
+    WHEN installed.function_name = 'pay_workbench_preview_effective_section_v1'
+      THEN installed.definition_sql LIKE '%TAXABLE_CHANNEL_RESTRUCTURE%'
+       AND installed.definition_sql LIKE '%taxable_channel_restructure,can_apply%'
     WHEN installed.function_name = 'pay_workbench_candidate_session_version_rebase_v1'
       THEN installed.definition_sql LIKE '%SESSION_VERSION_REBASE%'
        AND installed.definition_sql LIKE '%pay_workbench_delta_update_candidate_state_v1%'
@@ -60,6 +65,11 @@ SELECT
     WHEN installed.function_name = 'pay_workbench_session_get_candidate_preview'
       THEN installed.definition_sql LIKE '%effective_section_row_ordinal_id%'
        AND installed.definition_sql LIKE '%physical_section%'
+       AND installed.definition_sql LIKE '%actionable_sibling%'
+    WHEN installed.function_name = 'pay_workbench_session_get_preview_page'
+      THEN installed.definition_sql LIKE '%pay_workbench_preview_effective_section_v1%'
+       AND installed.definition_sql LIKE '%physical_section%'
+       AND installed.definition_sql LIKE '%actionable_sibling%'
     ELSE false
   END AS source_contract_present
 FROM required_functions AS required

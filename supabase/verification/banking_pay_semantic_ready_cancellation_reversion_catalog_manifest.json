@@ -147,7 +147,7 @@
     {
       "schema": "private", "name": "pay_workbench_preview_effective_section_v1",
       "identity_arguments": "p_physical_section text, p_row_json jsonb",
-      "definition_sha256": "1a0723e21bb1c4137b3868662536e026cd914bf391a2c88c46c72fb199f255d1",
+      "definition_sha256": "745ffb60369e58bc090096cea4534bf25a2d549f68f4cb2035cad9d1e26ad290",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql"]
@@ -167,7 +167,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_get_preview_page",
       "identity_arguments": "p_session_id uuid, p_section text, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "c0d559583885ca9be664de4de31cc7edcd5b9dbcc6549cf2f4e348efbdb4b362",
+      "definition_sha256": "37eecbc591ef4e620deacde39e9e4d768dbee5f4d0400e8a748ecb38a679dd3f",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -481,7 +481,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_get_candidate_preview",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "e82a2e8f05efcabf458ddd406f8ecf34cce9da99e7f856a157f884222831e1b6",
+      "definition_sha256": "311024765f70d6f2635e67658f4674cfc4e74a8a6303fc716a2bdb11c87a4e28",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

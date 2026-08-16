@@ -9,7 +9,34 @@ SECURITY INVOKER
 SET search_path TO ''
 AS $function$
   SELECT CASE
-    WHEN COALESCE(p_row_json#>>'{selection_recovery_headroom_v1,contract_version}', '') = '1'
+    WHEN COALESCE(
+      pg_catalog.lower(pg_catalog.btrim(COALESCE(
+        p_row_json->>'case_needs_resolution',
+        p_row_json#>>'{case_resolution_summary,case_needs_resolution}',
+        p_row_json#>>'{case_resolution_summary_json,case_needs_resolution}',
+        ''
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      false
+    )
+    AND pg_catalog.upper(pg_catalog.btrim(COALESCE(
+      p_row_json->>'resolution_family',
+      p_row_json#>>'{case_resolution_summary,resolution_family}',
+      p_row_json#>>'{case_resolution_summary_json,resolution_family}',
+      ''
+    ))) = 'TAXABLE_CHANNEL_RESTRUCTURE'
+    AND COALESCE(
+      pg_catalog.lower(pg_catalog.btrim(COALESCE(
+        p_row_json#>>'{taxable_channel_restructure,can_apply}',
+        p_row_json#>>'{case_resolution_summary,taxable_channel_restructure,can_apply}',
+        p_row_json#>>'{case_resolution_summary_json,taxable_channel_restructure,can_apply}',
+        ''
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+      false
+    )
+      THEN 'cases_resolutions'
+    WHEN COALESCE(p_row_json#>>'{selection_recovery_headroom_v1,contract_version}', '') IN (
+      '1', 'PAY_WORKBENCH_SELECTION_RECOVERY_HEADROOM_V1'
+    )
       THEN COALESCE(
         NULLIF(pg_catalog.btrim(p_row_json#>>'{selection_recovery_headroom_v1,effective_section}'), ''),
         NULLIF(pg_catalog.btrim(p_physical_section), ''),

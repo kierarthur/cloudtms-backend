@@ -166,6 +166,41 @@ BEGIN
           ))) NOT IN ('false', 'f', '0', 'no', 'n', 'off')
         )
       )
+      AND NOT (
+        pg_catalog.upper(pg_catalog.btrim(COALESCE(
+          preview_row.row_json->>'line_type',
+          preview_row.row_json#>>'{preview_contract,line_type}',
+          ''
+        ))) = 'OVERPAYMENT_RECOVERY'
+        AND private.pay_workbench_preview_effective_section_v1(
+          preview_row.section, preview_row.row_json
+        ) <> 'cases_resolutions'
+        AND NULLIF(pg_catalog.btrim(COALESCE(
+          preview_row.row_json->>'finance_case_id', ''
+        )), '') IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM public.banking_pay_workbench_preview_rows AS actionable_sibling
+          WHERE actionable_sibling.session_id = preview_row.session_id
+            AND actionable_sibling.session_version = preview_row.session_version
+            AND actionable_sibling.candidate_id = preview_row.candidate_id
+            AND actionable_sibling.id <> preview_row.id
+            AND actionable_sibling.status = 'READY'
+            AND pg_catalog.upper(pg_catalog.btrim(COALESCE(
+              actionable_sibling.row_json->>'line_type',
+              actionable_sibling.row_json#>>'{preview_contract,line_type}',
+              ''
+            ))) = 'OVERPAYMENT_RECOVERY'
+            AND NULLIF(pg_catalog.btrim(COALESCE(
+              actionable_sibling.row_json->>'finance_case_id', ''
+            )), '') = NULLIF(pg_catalog.btrim(COALESCE(
+              preview_row.row_json->>'finance_case_id', ''
+            )), '')
+            AND private.pay_workbench_preview_effective_section_v1(
+              actionable_sibling.section, actionable_sibling.row_json
+            ) = 'cases_resolutions'
+        )
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM public.pay_batch_items AS active_item
@@ -255,10 +290,69 @@ BEGIN
         'section', limited_rows.effective_section,
         'effective_section', limited_rows.effective_section,
         'physical_section', limited_rows.physical_section,
+        'presentation_section', CASE limited_rows.effective_section
+          WHEN 'canonical_preview_lines' THEN 'READY_TO_PAY'
+          WHEN 'cases_resolutions' THEN 'CASES_RESOLUTIONS'
+          WHEN 'blocked_for_pay' THEN 'BLOCKED_FOR_PAY'
+          ELSE pg_catalog.upper(limited_rows.effective_section)
+        END,
+        'readiness_state', CASE limited_rows.effective_section
+          WHEN 'canonical_preview_lines' THEN 'READY_TO_PAY'
+          WHEN 'cases_resolutions' THEN 'CASES_RESOLUTIONS'
+          WHEN 'blocked_for_pay' THEN 'BLOCKED_FOR_PAY'
+          ELSE pg_catalog.upper(limited_rows.effective_section)
+        END,
         'row_key', limited_rows.row_key,
         'row_ordinal', limited_rows.row_ordinal,
-        'selected', COALESCE(limited_rows.selected, false),
-        'selection_state', limited_rows.selection_state,
+        'selected', CASE
+          WHEN limited_rows.effective_section = 'canonical_preview_lines'
+            THEN COALESCE(limited_rows.selected, false)
+          ELSE false
+        END,
+        'selection_state', CASE
+          WHEN limited_rows.effective_section = 'canonical_preview_lines'
+            THEN limited_rows.selection_state
+          ELSE 'NOT_SELECTABLE'
+        END,
+        'selection_allowed', CASE
+          WHEN limited_rows.effective_section = 'canonical_preview_lines'
+            THEN CASE
+              WHEN pg_catalog.lower(NULLIF(pg_catalog.btrim(
+                limited_rows.row_json->>'selection_allowed'
+              ), '')) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true
+              WHEN pg_catalog.lower(NULLIF(pg_catalog.btrim(
+                limited_rows.row_json->>'selection_allowed'
+              ), '')) IN ('false', 'f', '0', 'no', 'n', 'off') THEN false
+              ELSE COALESCE(limited_rows.selected, false)
+            END
+          ELSE false
+        END,
+        'draftable', CASE
+          WHEN limited_rows.effective_section = 'canonical_preview_lines'
+            THEN CASE
+              WHEN pg_catalog.lower(NULLIF(pg_catalog.btrim(
+                limited_rows.row_json->>'draftable'
+              ), '')) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true
+              WHEN pg_catalog.lower(NULLIF(pg_catalog.btrim(
+                limited_rows.row_json->>'draftable'
+              ), '')) IN ('false', 'f', '0', 'no', 'n', 'off') THEN false
+              ELSE COALESCE(limited_rows.selected, false)
+            END
+          ELSE false
+        END,
+        'is_ready_for_draft', CASE
+          WHEN limited_rows.effective_section = 'canonical_preview_lines'
+            THEN CASE
+              WHEN pg_catalog.lower(NULLIF(pg_catalog.btrim(
+                limited_rows.row_json->>'is_ready_for_draft'
+              ), '')) IN ('true', 't', '1', 'yes', 'y', 'on') THEN true
+              WHEN pg_catalog.lower(NULLIF(pg_catalog.btrim(
+                limited_rows.row_json->>'is_ready_for_draft'
+              ), '')) IN ('false', 'f', '0', 'no', 'n', 'off') THEN false
+              ELSE COALESCE(limited_rows.selected, false)
+            END
+          ELSE false
+        END,
         'status', limited_rows.status,
         'session_version', limited_rows.session_version,
         'timesheet_id', CASE WHEN limited_rows.timesheet_id IS NULL
