@@ -1,6 +1,8 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: TEST broker/private-backend authority map, updated 13 August 2026 through mixed-version credential-winner reconstruction, durable refresh security-event replay, account-session invalidation concurrency closure, semantic pre-enrichment replay, trigger-key-independent finalisation completion, exact PAPER claim/backoff recovery and the typed timesheet-detail action contract. Candidate features remain disabled pending independent approval.
+Status: TEST broker/private-backend authority map, updated 16 August 2026. The accepted Candidate authority below is preserved. R7 retains the dark Candidate Daily transport/policy seam introduced in R6: 11 authenticated Candidate routes and 13 signed Google-system routes from the sole merged R5 OpenAPI, with no Daily business/RPC authority installed or enabled. R7 closes only the nine bounded public-error, response-reconstruction, 403, pre-auth-rate, nonce-age, correlation, framing, query-order and Fetch-boundary findings. Candidate features remain disabled pending independent approval.
+
+Candidate Daily current authority is documented in `CANDIDATE_DAILY_PHASE1A_IMPLEMENTATION_AUTHORITY.md`. Until Phase 2/1B, those routes can authenticate/validate/rate-limit only and fail closed; they cannot read or mutate availability, rota, Emergency or Google state. The later temporary legacy seam is existing browser -> existing Apps Script -> narrow signed server adapter -> the same CloudTMS Daily authority. It is not a new browser authority.
 
 ## Canonical owner graph
 
@@ -9,7 +11,7 @@ Candidate app/web or manager browser
         ↓
 public Candidate broker
   origin/rate-limit/public-token boundary
-        ↓ signed service binding
+        ↓ signed service binding (plus credential-free forwarding of signed Google-system bytes)
 private CloudTMS Candidate API
         ↓
 installed Candidate DB/RPC validation + immutable workflow
@@ -25,6 +27,8 @@ existing invoice and payment-eligibility pipelines
 ```
 
 Neither Worker alters the existing financial algorithms. The broker cannot access Supabase or R2. The private API adapts factual input to the existing WEEKLY/DAILY owners. Banking Pay is not called or changed.
+
+The private Candidate API alone verifies Google-system HMAC v1 and owns the R2 nonce namespace. The public broker has neither Google-system secret nor replay storage. Signed-system pre-auth traffic always consumes a source-IP bucket and either an accepted-key-ID bucket or one shared invalid-key bucket before private HMAC work. Phase 1A routes remain dark and therefore do not yet adapt any Google or Daily business input.
 
 ## Fourteen Candidate business RPCs and HTTP callers
 

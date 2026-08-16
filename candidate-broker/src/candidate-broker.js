@@ -1,4 +1,19 @@
 import { signCandidatePrivateRequest } from '../../broker/src/candidate-service-auth.js';
+import {
+  CANDIDATE_DAILY_BOOTSTRAP_ROUTE,
+  boundedBodyLength,
+  candidateCorrelationId,
+  createCorrelationId,
+  dailyErrorResponse,
+  findCandidateDailyRoute,
+  isCandidateDailyPath,
+  isCandidateDailySystemPath,
+  isValidCorrelationId,
+  readBoundedDailyJson,
+  rebuildCandidateDailyErrorBody,
+  validateDailyIdempotency,
+  requestWithCandidateCorrelation
+} from '../../broker/src/candidate-daily-contract-v1.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -6,6 +21,7 @@ const PUBLIC_CANDIDATE_PREFIX = '/candidate-app/v1';
 const PUBLIC_MANAGER_PREFIX = '/candidate-manager/v1';
 const PRIVATE_CANDIDATE_PREFIX = '/private/candidate-app/v1';
 const PRIVATE_MANAGER_PREFIX = '/private/candidate-manager/v1';
+const PRIVATE_SYSTEM_PREFIX = '/private/candidate-system/v1';
 const UNAUTHENTICATED_PUBLIC_AUTH_PATHS = new Set([
   `${PUBLIC_CANDIDATE_PREFIX}/auth/challenge/start`,
   `${PUBLIC_CANDIDATE_PREFIX}/auth/challenge/resend`,
@@ -619,6 +635,9 @@ function privatePath(publicPath) {
   if (publicPath.startsWith(PUBLIC_MANAGER_PREFIX)) {
     return `${PRIVATE_MANAGER_PREFIX}${publicPath.slice(PUBLIC_MANAGER_PREFIX.length)}`;
   }
+  if (publicPath.startsWith('/candidate-system/v1')) {
+    return `${PRIVATE_SYSTEM_PREFIX}${publicPath.slice('/candidate-system/v1'.length)}`;
+  }
   throw new CandidateBrokerError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
 }
 
@@ -638,7 +657,7 @@ function enforceManagerMethod(path, method) {
 
 function privateRequestHeaders(request, authorization) {
   const headers = new Headers();
-  for (const name of ['content-type', 'idempotency-key', 'x-request-id']) {
+  for (const name of ['content-type', 'idempotency-key', 'x-request-id', 'x-correlation-id']) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -647,7 +666,70 @@ function privateRequestHeaders(request, authorization) {
   return headers;
 }
 
-async function forwardPrivate(request, env, { authorization = '', body = undefined } = {}) {
+function systemRequestHeaders(request) {
+  const headers = new Headers();
+  for (const name of [
+    'content-type', 'content-length', 'idempotency-key', 'x-correlation-id',
+    'x-cloudtms-key-id', 'x-cloudtms-signature-version', 'x-cloudtms-timestamp',
+    'x-cloudtms-nonce', 'x-cloudtms-content-sha256', 'x-cloudtms-signature'
+  ]) {
+    const value = request.headers.get(name);
+    if (value != null) headers.set(name, value);
+  }
+  headers.set('x-cloudtms-public-client', 'signed-google-system');
+  return headers;
+}
+
+function candidateDailyPublicSystemKeyIds(env) {
+  const values = [
+    ...String(env.CANDIDATE_DAILY_GOOGLE_HMAC_ACCEPTED_KEY_IDS || '').split(','),
+    env.CANDIDATE_DAILY_GOOGLE_HMAC_PRIMARY_KEY_ID,
+    env.CANDIDATE_DAILY_GOOGLE_HMAC_OVERLAP_KEY_ID
+  ].map((value) => text(value)).filter((value) => /^[A-Za-z0-9._-]{1,64}$/.test(value));
+  return new Set(values);
+}
+
+function candidateDailySystemRateKeys(request, env) {
+  const ip = text(request.headers.get('cf-connecting-ip')) || 'unknown-ip';
+  const keyId = text(request.headers.get('x-cloudtms-key-id'));
+  const keyBucket = candidateDailyPublicSystemKeyIds(env).has(keyId) ? keyId : 'invalid-key';
+  return [`preauth-ip:${ip}`, `key:${keyBucket}`];
+}
+
+async function forwardPrivateSystem(request, env, routeDefinition = null) {
+  if (!env.CLOUDTMS_PRIVATE || typeof env.CLOUDTMS_PRIVATE.fetch !== 'function') {
+    throw new CandidateBrokerError(503, 'DEPENDENCY_UNAVAILABLE');
+  }
+  if (request.headers.has('origin') || request.headers.has('cookie') || request.headers.has('authorization')) {
+    throw new CandidateBrokerError(401, 'SYSTEM_AUTH_FAILED');
+  }
+  if (request.headers.has('transfer-encoding') || request.headers.has('content-encoding')) {
+    throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+  }
+  const url = new URL(request.url);
+  const route = routeDefinition || findCandidateDailyRoute(request.method, url.pathname);
+  if (!route?.signedSystem) throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+  const body = await boundedBodyBytes(request, route.maxBodyBytes);
+  const declared = request.headers.get('content-length');
+  if (declared == null || !/^(?:0|[1-9][0-9]*)$/.test(declared) || Number(declared) !== body.byteLength) {
+    throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+  }
+  await applyRateLimit(env, 'CANDIDATE_DAILY_SYSTEM_RATE_LIMIT', candidateDailySystemRateKeys(request, env));
+  url.protocol = 'https:';
+  url.hostname = 'cloudtms-candidate-private.internal';
+  url.port = '';
+  url.pathname = privatePath(url.pathname);
+  const unsigned = new Request(url.toString(), {
+    method: request.method,
+    headers: systemRequestHeaders(request),
+    body,
+    redirect: 'manual',
+    signal: AbortSignal.timeout(route.deadlineMs)
+  });
+  return env.CLOUDTMS_PRIVATE.fetch(await signCandidatePrivateRequest(unsigned, env));
+}
+
+async function forwardPrivate(request, env, { authorization = '', body = undefined, timeoutMs = null } = {}) {
   if (!env.CLOUDTMS_PRIVATE || typeof env.CLOUDTMS_PRIVATE.fetch !== 'function') {
     throw new CandidateBrokerError(503, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');
   }
@@ -668,7 +750,10 @@ async function forwardPrivate(request, env, { authorization = '', body = undefin
     method: request.method,
     headers,
     body: bodyValue,
-    redirect: 'manual'
+    redirect: 'manual',
+    ...(Number.isSafeInteger(timeoutMs) && timeoutMs > 0
+      ? { signal: AbortSignal.timeout(timeoutMs) }
+      : {})
   });
   return env.CLOUDTMS_PRIVATE.fetch(await signCandidatePrivateRequest(unsigned, env));
 }
@@ -690,7 +775,7 @@ async function responseJson(response, maximumBytes = MAX_PUBLIC_JSON_BYTES) {
 async function publicSafePrivateResponse(response) {
   if (response.status < 400) {
     const headers = new Headers();
-    for (const name of ['content-type', 'content-length', 'content-disposition', 'cache-control']) {
+    for (const name of ['content-type', 'content-length', 'content-disposition', 'cache-control', 'x-correlation-id']) {
       const value = response.headers.get(name);
       if (value) headers.set(name, value);
     }
@@ -727,6 +812,94 @@ async function publicSafePrivateResponse(response) {
     };
   }
   return jsonResponse(status, body, headers);
+}
+
+function dailyDependencyResponse(routeDefinition, correlationId) {
+  const candidateRoute = String(routeDefinition?.routeClass || '').startsWith('CANDIDATE_DAILY_');
+  return dailyErrorResponse(
+    503,
+    candidateRoute ? 'CANDIDATE_DAILY_NOT_READY' : 'DEPENDENCY_UNAVAILABLE',
+    candidateRoute ? 'STATUS_CHECK' : 'RETRY_AFTER',
+    correlationId
+  );
+}
+
+async function publicSafeDailyResponse(response, correlationId, routeDefinition) {
+  const declared = Number(response.headers.get('content-length') || 0);
+  if (Number.isFinite(declared) && declared > MAX_PUBLIC_JSON_BYTES) {
+    return dailyDependencyResponse(routeDefinition, correlationId);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > MAX_PUBLIC_JSON_BYTES) {
+    return dailyDependencyResponse(routeDefinition, correlationId);
+  }
+  let body;
+  try {
+    body = JSON.parse(decoder.decode(bytes));
+  } catch {
+    return dailyDependencyResponse(routeDefinition, correlationId);
+  }
+  if (!isObject(body) || body.correlation_id !== correlationId || response.headers.get('x-correlation-id') !== correlationId) {
+    return dailyDependencyResponse(routeDefinition, correlationId);
+  }
+  const rebuilt = rebuildCandidateDailyErrorBody(routeDefinition, response.status, body, correlationId);
+  if (!rebuilt) return dailyDependencyResponse(routeDefinition, correlationId);
+  const safe = dailyErrorResponse(
+    response.status, rebuilt.error_code, rebuilt.retry_class, correlationId, rebuilt.details
+  );
+  const replay = response.headers.get('x-idempotent-replay');
+  if (replay === 'true' || replay === 'false') safe.headers.set('x-idempotent-replay', replay);
+  const retryAfter = response.headers.get('retry-after');
+  if (retryAfter && /^\d{1,9}$/.test(retryAfter)) safe.headers.set('retry-after', retryAfter);
+  return safe;
+}
+
+function dailyBrokerError(error, correlationId, { systemRoute = false, routeDefinition = null, bootstrap = false } = {}) {
+  const status = error instanceof CandidateBrokerError ? error.status : 500;
+  const code = error instanceof CandidateBrokerError ? error.code : 'INTERNAL_ERROR';
+  if (status === 429) return dailyErrorResponse(429, 'RATE_LIMITED', 'RETRY_AFTER', correlationId);
+  if (status === 400 || status === 405 || status === 413) {
+    return dailyErrorResponse(400, 'VALIDATION_FAILED', 'DO_NOT_RETRY', correlationId);
+  }
+  if (status === 401 && systemRoute) return dailyErrorResponse(401, 'SYSTEM_AUTH_FAILED', 'DO_NOT_RETRY', correlationId);
+  if (status === 401) return dailyErrorResponse(401, 'UNAUTHENTICATED', 'REAUTHENTICATE', correlationId);
+  if (status === 403) return dailyErrorResponse(403, 'FORBIDDEN', 'DO_NOT_RETRY', correlationId);
+  if (code === 'DEPENDENCY_UNAVAILABLE' || code.endsWith('_UNAVAILABLE')) {
+    return bootstrap
+      ? dailyErrorResponse(503, 'DEPENDENCY_UNAVAILABLE', 'RETRY_AFTER', correlationId)
+      : dailyDependencyResponse(routeDefinition, correlationId);
+  }
+  const command = String(routeDefinition?.routeClass || '').endsWith('_COMMAND');
+  return dailyErrorResponse(500, 'INTERNAL_ERROR', command ? 'STATUS_CHECK' : 'RETRY_AFTER', correlationId);
+}
+
+async function validateCandidateDailyTransport(request, route) {
+  if (request.headers.has('transfer-encoding') || request.headers.has('content-encoding')) {
+    throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+  }
+  if (request.method === 'GET' || request.method === 'HEAD') {
+    const declared = boundedBodyLength(request, route.maxBodyBytes);
+    if (!declared.ok) {
+      throw new CandidateBrokerError(declared.tooLarge ? 413 : 400,
+        declared.tooLarge ? 'PAYLOAD_TOO_LARGE' : 'VALIDATION_FAILED');
+    }
+    if (declared.declared != null && declared.declared !== 0) {
+      throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+    }
+    if (!validateDailyIdempotency(route, request).ok) {
+      throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+    }
+    return;
+  }
+  const contentType = text(request.headers.get('content-type')).toLowerCase();
+  if (!/^application\/json(?:;[ \t]*charset=utf-8)?$/.test(contentType)) {
+    throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+  }
+  const parsed = await readBoundedDailyJson(request.clone(), route.maxBodyBytes);
+  if (!parsed.ok) throw new CandidateBrokerError(parsed.status, parsed.errorCode);
+  if (!validateDailyIdempotency(route, request, parsed.body).ok) {
+    throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+  }
 }
 
 async function wrapPrivateSession(response, env, publicSessionId = null) {
@@ -1077,6 +1250,23 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
   const id = requestId(request);
   const url = new URL(request.url);
   const path = url.pathname;
+  const systemRoute = isCandidateDailySystemPath(path);
+  if (systemRoute) {
+    const suppliedCorrelationId = text(request.headers.get('x-correlation-id'));
+    const correlationId = isValidCorrelationId(suppliedCorrelationId)
+      ? suppliedCorrelationId : createCorrelationId();
+    const routeDefinition = findCandidateDailyRoute(request.method, path);
+    if (!isValidCorrelationId(suppliedCorrelationId) || !routeDefinition?.signedSystem) {
+      return dailyErrorResponse(400, 'VALIDATION_FAILED', 'DO_NOT_RETRY', correlationId);
+    }
+    try {
+      return await publicSafeDailyResponse(
+        await forwardPrivateSystem(request, env, routeDefinition), correlationId, routeDefinition
+      );
+    } catch (error) {
+      return dailyBrokerError(error, correlationId, { systemRoute: true, routeDefinition });
+    }
+  }
   if (path === '/healthz') {
     try {
       return jsonResponse(200, { ok: true, service: 'candidate-broker', environment: environmentName(env) });
@@ -1099,7 +1289,16 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
   const managerRoute = path.startsWith(PUBLIC_MANAGER_PREFIX);
   if (!candidateRoute && !managerRoute) return jsonResponse(404, { ok: false, error_code: 'CANDIDATE_ROUTE_NOT_FOUND', request_id: id });
   let origin = '';
+  const dailyCandidateRoute = isCandidateDailyPath(path);
+  const dailyBootstrap = path === `${PUBLIC_CANDIDATE_PREFIX}/bootstrap`;
+  let dailyCorrelationId = '';
+  let dailyRouteDefinition = null;
   try {
+    if (dailyCandidateRoute || dailyBootstrap) {
+      dailyCorrelationId = candidateCorrelationId(request);
+      request = requestWithCandidateCorrelation(request, dailyCorrelationId);
+      if (dailyBootstrap) dailyRouteDefinition = CANDIDATE_DAILY_BOOTSTRAP_ROUTE;
+    }
     if (request.method === 'OPTIONS') return preflight(request, env);
     origin = requestOriginContext(request, env, managerRoute).origin;
     const declared = Number(request.headers.get('content-length') || 0);
@@ -1160,6 +1359,24 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
     } catch (error) {
       if (!path.includes('/uploads/')) throw error;
       authorization = await managerAuthorization(request, env);
+    }
+
+    if (dailyCandidateRoute) {
+      const route = findCandidateDailyRoute(request.method, path);
+      if (!route || route.signedSystem) throw new CandidateBrokerError(400, 'VALIDATION_FAILED');
+      dailyRouteDefinition = route;
+      await validateCandidateDailyTransport(request, route);
+      const bindingName = route.externalEffect
+        ? 'CANDIDATE_DAILY_EFFECT_RATE_LIMIT'
+        : route.routeClass === 'CANDIDATE_DAILY_COMMAND'
+          ? 'CANDIDATE_DAILY_COMMAND_RATE_LIMIT'
+          : 'CANDIDATE_DAILY_READ_RATE_LIMIT';
+      await applyRateLimit(env, bindingName, [`candidate:${access.public_session_id}`]);
+      const response = await forwardPrivate(request, env, {
+        authorization,
+        timeoutMs: route.deadlineMs
+      });
+      return withCors(await publicSafeDailyResponse(response, dailyCorrelationId, route), origin);
     }
 
     if (path === `${PUBLIC_CANDIDATE_PREFIX}/account/push-token`) {
@@ -1229,8 +1446,19 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
     if (phoneAction) {
       return withCors(await wrapPhoneHandoff(response, env, access, request, phoneBinding), origin);
     }
+    if (dailyBootstrap && !response.ok) {
+      return withCors(await publicSafeDailyResponse(
+        response, dailyCorrelationId, CANDIDATE_DAILY_BOOTSTRAP_ROUTE
+      ), origin);
+    }
     return withCors(await publicSafePrivateResponse(response), origin);
   } catch (error) {
+    if (dailyCandidateRoute || dailyBootstrap) {
+      return withCors(dailyBrokerError(error, dailyCorrelationId, {
+        routeDefinition: dailyRouteDefinition,
+        bootstrap: dailyBootstrap
+      }), origin);
+    }
     const response = errorResponse(error, id);
     if (error instanceof CandidateBrokerError && error.status === 429) response.headers.set('retry-after', '60');
     return withCors(response, origin);
@@ -1263,5 +1491,9 @@ export const candidateBrokerInternals = Object.freeze({
   sealEnvelope,
   sealVersionedEnvelope,
   sha256Hex,
+  forwardPrivateSystem,
+  candidateDailySystemRateKeys,
+  publicSafeDailyResponse,
+  validateCandidateDailyTransport,
   wrapPrivateSession
 });

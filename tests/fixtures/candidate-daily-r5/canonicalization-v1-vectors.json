@@ -1,0 +1,1109 @@
+{
+  "algorithm": "HMAC-SHA-256",
+  "encoding": "UTF-8",
+  "key_ascii": "phase0-r5-cross-language-test-key",
+  "key_is_secret": false,
+  "active_key_id": "test-primary-v1",
+  "signature_encoding": "lowercase_hex",
+  "specification": "21_HMAC_CANONICALIZATION_V1.md",
+  "verification_epoch": 1786790405,
+  "positive_vectors": [
+    {
+      "id": "route_valid_legacy_tiles",
+      "route_schema_valid": true,
+      "key_id": "test-primary-v1",
+      "method": "POST",
+      "normalized_path": "/candidate-system/v1/google-availability/legacy/tiles",
+      "normalized_query": "",
+      "timestamp": "1786790400",
+      "nonce": "dGVzdC1ub25jZS0wMDAwMDAx",
+      "correlation_id": "01K2ABCDEF0123456789ABCDEF",
+      "idempotency_key": "",
+      "body": "{\"candidate_source_hmac\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"days\":14,\"from\":\"2026-08-17\"}",
+      "body_sha256": "56543b0aa060e9e5ce95b6b10114ae855483f9daa84fd7f9eca106132cad8442",
+      "canonical_prefix_base64": "Q0xPVURUTVMtSE1BQy1WMQpQT1NUCi9jYW5kaWRhdGUtc3lzdGVtL3YxL2dvb2dsZS1hdmFpbGFiaWxpdHkvbGVnYWN5L3RpbGVzCgoxNzg2NzkwNDAwCmRHVnpkQzF1YjI1alpTMHdNREF3TURBeAo1NjU0M2IwYWEwNjBlOWU1Y2U5NWI2YjEwMTE0YWU4NTU0ODNmOWRhYTg0ZmQ3ZjllY2ExMDYxMzJjYWQ4NDQyCgowMUsyQUJDREVGMDEyMzQ1Njc4OUFCQ0RFRgoK",
+      "signed_message_sha256": "57ed7506d0886de65e889df565419d12efa497b0e495a4d6d3a51eb8bd8357d0",
+      "signature_hex": "169b9aa6aebf0c235beb917582d53b452a5b36813969da555f5d4607ab65d285"
+    },
+    {
+      "id": "route_valid_legacy_availability",
+      "route_schema_valid": true,
+      "key_id": "test-primary-v1",
+      "method": "POST",
+      "normalized_path": "/candidate-system/v1/google-availability/legacy/availability",
+      "normalized_query": "",
+      "timestamp": "1786790401",
+      "nonce": "dGVzdC1ub25jZS0wMDAwMDAy",
+      "correlation_id": "01K2ABCDEF0123456789ABCDEG",
+      "idempotency_key": "idem_test_00000001",
+      "body": "{\"candidate_source_hmac\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"changes\":[{\"availability\":\"LD\",\"date\":\"2026-08-18\"}],\"request_id\":\"00000000-0000-4000-8000-000000000001\"}",
+      "body_sha256": "6a2bc39c88bc1d1b466e5af4e2f8a80878f1578d12075c27f0f045bc20db3bfa",
+      "canonical_prefix_base64": "Q0xPVURUTVMtSE1BQy1WMQpQT1NUCi9jYW5kaWRhdGUtc3lzdGVtL3YxL2dvb2dsZS1hdmFpbGFiaWxpdHkvbGVnYWN5L2F2YWlsYWJpbGl0eQoKMTc4Njc5MDQwMQpkR1Z6ZEMxdWIyNWpaUzB3TURBd01EQXkKNmEyYmMzOWM4OGJjMWQxYjQ2NmU1YWY0ZTJmOGE4MDg3OGYxNTc4ZDEyMDc1YzI3ZjBmMDQ1YmMyMGRiM2JmYQppZGVtX3Rlc3RfMDAwMDAwMDEKMDFLMkFCQ0RFRjAxMjM0NTY3ODlBQkNERUcKCg==",
+      "signed_message_sha256": "b9b7a75ec0ec60c24d70ae1fb79bd26bad41e8b2fbfce39fd036d68c6b50ca52",
+      "signature_hex": "df5a633383342c9136b68f790ff3d34565f53286a2c46828f73ff94814844370"
+    },
+    {
+      "id": "canonical_utf8_edge",
+      "route_schema_valid": false,
+      "key_id": "test-primary-v1",
+      "method": "POST",
+      "normalized_path": "/candidate-system/v1/google-availability/reconciliation",
+      "normalized_query": "",
+      "timestamp": "1786790402",
+      "nonce": "dGVzdC1ub25jZS0wMDAwMDAz",
+      "correlation_id": "01K2ABCDEF0123456789ABCDEH",
+      "idempotency_key": "idem_test_00000002",
+      "body": "{\"note\":\"Ångström – 東京\",\"value\":\"é\"}",
+      "body_sha256": "9a5029749b480515a1c2ac821800a62035cf30d234f2358567f38c2fa667bc3c",
+      "canonical_prefix_base64": "Q0xPVURUTVMtSE1BQy1WMQpQT1NUCi9jYW5kaWRhdGUtc3lzdGVtL3YxL2dvb2dsZS1hdmFpbGFiaWxpdHkvcmVjb25jaWxpYXRpb24KCjE3ODY3OTA0MDIKZEdWemRDMXViMjVqWlMwd01EQXdNREF6CjlhNTAyOTc0OWI0ODA1MTVhMWMyYWM4MjE4MDBhNjIwMzVjZjMwZDIzNGYyMzU4NTY3ZjM4YzJmYTY2N2JjM2MKaWRlbV90ZXN0XzAwMDAwMDAyCjAxSzJBQkNERUYwMTIzNDU2Nzg5QUJDREVICgo=",
+      "signed_message_sha256": "ec2a84713337b09994023337fedb3e53056c6e03cab1446f066782f59c9871e2",
+      "signature_hex": "5525046e7fdf62e2d1b8be03730f223fe818ca9b2b67be97538bb7dabc14d2dc"
+    }
+  ],
+  "query_canonicalization_cases": [
+    {
+      "id": "ordering",
+      "raw_query": "z=2&a=1",
+      "normalized_query": "a=1&z=2"
+    },
+    {
+      "id": "duplicate_keys_retained",
+      "raw_query": "a=2&a=1&a=1",
+      "normalized_query": "a=1&a=1&a=2"
+    },
+    {
+      "id": "percent_encoding_uppercase",
+      "raw_query": "q=%c3%85&space=%20",
+      "normalized_query": "q=%C3%85&space=%20"
+    },
+    {
+      "id": "reserved_percent_uppercase",
+      "raw_query": "slash=%2f",
+      "normalized_query": "slash=%2F"
+    },
+    {
+      "id": "utf8_nfc_preserved",
+      "raw_query": "name=A%CC%8A",
+      "normalized_query": "name=A%CC%8A"
+    },
+    {
+      "id": "ascii_case_order",
+      "raw_query": "a=1&A=1",
+      "normalized_query": "A=1&a=1"
+    },
+    {
+      "id": "ascii_percent_underscore_tilde_order",
+      "raw_query": "%7E=1&a=1&A=1&_=1",
+      "normalized_query": "A=1&_=1&a=1&~=1"
+    },
+    {
+      "id": "ascii_duplicate_value_order",
+      "raw_query": "k=%7E&k=A&k=_&k=a",
+      "normalized_query": "k=A&k=_&k=a&k=~"
+    }
+  ],
+  "negative_vectors": [
+    {
+      "id": "json_whitespace",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "body_append": " "
+      },
+      "expected": "CONTENT_HASH_MISMATCH"
+    },
+    {
+      "id": "json_key_order",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "body": "{\"from\":\"2026-08-17\",\"days\":14,\"candidate_source_hmac\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}"
+      },
+      "expected": "CONTENT_HASH_MISMATCH"
+    },
+    {
+      "id": "utf8_byte_change",
+      "base_id": "canonical_utf8_edge",
+      "mutation": {
+        "body_replace": [
+          "é",
+          "é"
+        ]
+      },
+      "expected": "CONTENT_HASH_MISMATCH"
+    },
+    {
+      "id": "unexpected_query",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "raw_query": "z=2&a=1&a=0",
+        "resign": true
+      },
+      "expected": "UNEXPECTED_QUERY"
+    },
+    {
+      "id": "raw_body_change",
+      "base_id": "route_valid_legacy_availability",
+      "mutation": {
+        "body_replace": [
+          "LD",
+          "N"
+        ]
+      },
+      "expected": "CONTENT_HASH_MISMATCH"
+    },
+    {
+      "id": "stale_timestamp",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "timestamp": "1786789000",
+        "resign": true
+      },
+      "expected": "TIMESTAMP_OUTSIDE_WINDOW"
+    },
+    {
+      "id": "future_timestamp",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "timestamp": "1786790800",
+        "resign": true
+      },
+      "expected": "TIMESTAMP_OUTSIDE_WINDOW"
+    },
+    {
+      "id": "nonce_replay",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "verify_twice": true
+      },
+      "expected": "NONCE_REPLAY"
+    },
+    {
+      "id": "correlation_change",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "correlation_id": "01K2ABCDEF0123456789ABCDEZ"
+      },
+      "expected": "SIGNATURE_MISMATCH"
+    },
+    {
+      "id": "idempotency_change",
+      "base_id": "route_valid_legacy_availability",
+      "mutation": {
+        "idempotency_key": "idem_test_00000009"
+      },
+      "expected": "SIGNATURE_MISMATCH"
+    },
+    {
+      "id": "content_hash_change",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "content_hash": "06543b0aa060e9e5ce95b6b10114ae855483f9daa84fd7f9eca106132cad8442"
+      },
+      "expected": "CONTENT_HASH_MISMATCH"
+    },
+    {
+      "id": "signature_mutation",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "signature_hex": "0535179992e20d69a35281d08a1245c27545e18772b731cbeb10cb89a3ce686c"
+      },
+      "expected": "SIGNATURE_MISMATCH"
+    },
+    {
+      "id": "duplicate_security_header",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "duplicate_header": "X-CloudTMS-Nonce"
+      },
+      "expected": "AMBIGUOUS_HEADER"
+    },
+    {
+      "id": "duplicate_correlation_header",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "duplicate_header": "X-Correlation-Id"
+      },
+      "expected": "AMBIGUOUS_HEADER"
+    },
+    {
+      "id": "duplicate_idempotency_header",
+      "base_id": "route_valid_legacy_availability",
+      "mutation": {
+        "duplicate_header": "Idempotency-Key"
+      },
+      "expected": "AMBIGUOUS_HEADER"
+    },
+    {
+      "id": "header_outer_whitespace",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "header_outer_whitespace": "X-CloudTMS-Timestamp"
+      },
+      "expected": "HEADER_FORMAT_INVALID"
+    },
+    {
+      "id": "body_bom",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "body_prefix_bom": true
+      },
+      "expected": "BODY_ENCODING_INVALID"
+    },
+    {
+      "id": "transfer_ambiguity",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "transfer_ambiguity": true
+      },
+      "expected": "TRANSFER_AMBIGUOUS"
+    },
+    {
+      "id": "method_mutation",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "method": "GET"
+      },
+      "expected": "SIGNATURE_MISMATCH"
+    },
+    {
+      "id": "path_mutation",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "normalized_path": "/candidate-system/v1/google-availability/legacy/tilez"
+      },
+      "expected": "SIGNATURE_MISMATCH"
+    },
+    {
+      "id": "key_version_mismatch",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "key_id": "test-retired-v0"
+      },
+      "expected": "KEY_VERSION_MISMATCH"
+    },
+    {
+      "id": "duplicate_signature_header",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "duplicate_header": "X-CloudTMS-Signature"
+      },
+      "expected": "AMBIGUOUS_HEADER"
+    },
+    {
+      "id": "ambiguous_header_casing",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "ambiguous_header_casing": "x-cloudtms-nonce"
+      },
+      "expected": "AMBIGUOUS_HEADER"
+    },
+    {
+      "id": "encoded_path_slash",
+      "base_id": "route_valid_legacy_tiles",
+      "mutation": {
+        "path_invalid": "%2f"
+      },
+      "expected": "PATH_NORMALIZATION_INVALID"
+    }
+  ],
+  "version": "v1-r5",
+  "raw_parser_cases": [
+    {
+      "id": "raw_valid_plain",
+      "raw_target": "/candidate-system/v1/google-availability/legacy/tiles",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_path": "/candidate-system/v1/google-availability/legacy/tiles",
+      "expected_query": ""
+    },
+    {
+      "id": "raw_valid_query",
+      "raw_target": "/candidate-system/v1/google-availability/sync-status?z=2&a=%c3%85",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_path": "/candidate-system/v1/google-availability/sync-status",
+      "expected_query": "a=%C3%85&z=2"
+    },
+    {
+      "id": "raw_bad_percent_path",
+      "raw_target": "/candidate-system/%ZZ",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_ENCODING_INVALID"
+    },
+    {
+      "id": "raw_invalid_utf8_path",
+      "raw_target": "/candidate-system/%FF",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_ENCODING_INVALID"
+    },
+    {
+      "id": "raw_c0_path",
+      "raw_target": "/candidate-system/%00",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_CONTROL_INVALID"
+    },
+    {
+      "id": "raw_del_path",
+      "raw_target": "/candidate-system/%7F",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_CONTROL_INVALID"
+    },
+    {
+      "id": "raw_encoded_slash",
+      "raw_target": "/candidate-system%2Fv1",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_SEPARATOR_ENCODED"
+    },
+    {
+      "id": "raw_encoded_backslash",
+      "raw_target": "/candidate-system%5Cv1",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_SEPARATOR_ENCODED"
+    },
+    {
+      "id": "raw_dot_segment",
+      "raw_target": "/candidate-system/../admin",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_NORMALIZATION_INVALID"
+    },
+    {
+      "id": "raw_double_slash",
+      "raw_target": "/candidate-system//v1",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_NORMALIZATION_INVALID"
+    },
+    {
+      "id": "raw_bad_percent_query",
+      "raw_target": "/candidate-system/v1?a=%ZZ",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "QUERY_ENCODING_INVALID"
+    },
+    {
+      "id": "raw_invalid_utf8_query",
+      "raw_target": "/candidate-system/v1?a=%FF",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "QUERY_ENCODING_INVALID"
+    },
+    {
+      "id": "raw_query_control",
+      "raw_target": "/candidate-system/v1?a=%1F",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "QUERY_CONTROL_INVALID"
+    },
+    {
+      "id": "raw_duplicate_nonce",
+      "raw_target": "/candidate-system/v1",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ],
+        [
+          "x-cloudtms-nonce",
+          "other"
+        ]
+      ],
+      "expected_error": "AMBIGUOUS_HEADER"
+    },
+    {
+      "id": "raw_header_outer_space",
+      "raw_target": "/candidate-system/v1",
+      "headers": [
+        [
+          "Content-Length",
+          " 2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "HEADER_FORMAT_INVALID"
+    },
+    {
+      "id": "raw_header_crlf",
+      "raw_target": "/candidate-system/v1",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-Test",
+          "ok\r\nbad"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "HEADER_FORMAT_INVALID"
+    },
+    {
+      "id": "raw_transfer_encoding",
+      "raw_target": "/candidate-system/v1",
+      "headers": [
+        [
+          "Transfer-Encoding",
+          "chunked"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "TRANSFER_AMBIGUOUS"
+    },
+    {
+      "id": "raw_content_length_and_transfer",
+      "raw_target": "/candidate-system/v1",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "Transfer-Encoding",
+          "chunked"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "TRANSFER_AMBIGUOUS"
+    },
+    {
+      "id": "raw_duplicate_content_length",
+      "raw_target": "/candidate-system/v1",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "content-length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "AMBIGUOUS_HEADER"
+    },
+    {
+      "id": "raw_fragment",
+      "raw_target": "/candidate-system/v1#fragment",
+      "headers": [
+        [
+          "Content-Length",
+          "2"
+        ],
+        [
+          "X-CloudTMS-Key-Id",
+          "test-primary-v1"
+        ],
+        [
+          "X-CloudTMS-Signature-Version",
+          "v1"
+        ],
+        [
+          "X-CloudTMS-Timestamp",
+          "1786790400"
+        ],
+        [
+          "X-CloudTMS-Nonce",
+          "dGVzdC1ub25jZS0wMDAwMDAx"
+        ],
+        [
+          "X-CloudTMS-Content-SHA256",
+          "0000000000000000000000000000000000000000000000000000000000000000"
+        ],
+        [
+          "X-CloudTMS-Signature",
+          "1111111111111111111111111111111111111111111111111111111111111111"
+        ],
+        [
+          "X-Correlation-Id",
+          "01K2ABCDEF0123456789ABCDEF"
+        ]
+      ],
+      "expected_error": "PATH_NORMALIZATION_INVALID"
+    }
+  ]
+}

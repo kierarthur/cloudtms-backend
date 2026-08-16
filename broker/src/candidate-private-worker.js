@@ -1,9 +1,12 @@
 import { handleCandidateAppRequest, processPendingCandidatePaperPacks } from './candidate-app-backend.js';
 import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import { createCandidatePrivateDependencies } from './index.js';
+import { handleCandidateDailySystemPhase1aRequest } from './candidate-daily-phase1a.js';
+import { purgeCandidateDailySystemNonces } from './candidate-daily-hmac-v1.js';
 
 const PRIVATE_CANDIDATE_PREFIX = '/private/candidate-app/v1';
 const PRIVATE_MANAGER_PREFIX = '/private/candidate-manager/v1';
+const PRIVATE_SYSTEM_PREFIX = '/private/candidate-system/v1';
 
 function json(status, body) {
   return new Response(JSON.stringify(body), {
@@ -63,6 +66,8 @@ async function removePrivatePrefix(request) {
     url.pathname = `/candidate-app/v1${url.pathname.slice(PRIVATE_CANDIDATE_PREFIX.length)}`;
   } else if (url.pathname.startsWith(PRIVATE_MANAGER_PREFIX)) {
     url.pathname = `/candidate-manager/v1${url.pathname.slice(PRIVATE_MANAGER_PREFIX.length)}`;
+  } else if (url.pathname.startsWith(PRIVATE_SYSTEM_PREFIX)) {
+    url.pathname = `/candidate-system/v1${url.pathname.slice(PRIVATE_SYSTEM_PREFIX.length)}`;
   }
   const headers = new Headers(request.headers);
   for (const name of Array.from(headers.keys())) {
@@ -81,7 +86,9 @@ async function removePrivatePrefix(request) {
 export default {
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
-    const privateRoute = path.startsWith(PRIVATE_CANDIDATE_PREFIX) || path.startsWith(PRIVATE_MANAGER_PREFIX);
+    const privateRoute = path.startsWith(PRIVATE_CANDIDATE_PREFIX)
+      || path.startsWith(PRIVATE_MANAGER_PREFIX)
+      || path.startsWith(PRIVATE_SYSTEM_PREFIX);
     if (!privateRoute) return json(404, { ok: false, error_code: 'CANDIDATE_PRIVATE_ROUTE_NOT_FOUND' });
     if (!await verifyCandidatePrivateRequest(request, env)) {
       return json(401, { ok: false, error_code: 'CANDIDATE_PRIVATE_SERVICE_AUTH_REQUIRED' });
@@ -101,6 +108,14 @@ export default {
     if (!requiredConfigurationAvailable(env)) {
       return json(503, { ok: false, error_code: 'CANDIDATE_PRIVATE_CONFIGURATION_UNAVAILABLE' });
     }
+    if (path.startsWith(PRIVATE_SYSTEM_PREFIX)) {
+      const response = await handleCandidateDailySystemPhase1aRequest(
+        await removePrivatePrefix(request), env
+      );
+      const headers = new Headers(response.headers);
+      headers.set('x-cloudtms-private-api', 'candidate-daily-r5-phase1a');
+      return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+    }
     const response = await handleCandidateAppRequest(
       await removePrivatePrefix(request),
       env,
@@ -117,6 +132,7 @@ export default {
   async scheduled(controller, env, ctx) {
     if (!requiredConfigurationAvailable(env)) return;
     ctx.waitUntil(purgeExpiredServiceNonces(env));
+    ctx.waitUntil(purgeCandidateDailySystemNonces(env));
     ctx.waitUntil(processPendingCandidatePaperPacks(
       env,
       createCandidatePrivateDependencies(env, 'PRIVATE'),
@@ -129,5 +145,6 @@ export const candidatePrivateWorkerInternals = Object.freeze({
   removePrivatePrefix,
   requiredConfigurationAvailable,
   consumeServiceNonce,
-  purgeExpiredServiceNonces
+  purgeExpiredServiceNonces,
+  purgeCandidateDailySystemNonces
 });

@@ -5,6 +5,12 @@ import {
   renderOfficialTimesheetPdfBytes
 } from './timesheet-official-pdf.js';
 import { validateFrozenTimesheetPresentationModel } from './invoice-presentation-contract.js';
+import {
+  candidateBootstrapCorrelation,
+  composeCandidateBootstrapPhase1a,
+  handleCandidateDailyPhase1aRequest
+} from './candidate-daily-phase1a.js';
+import { isCandidateDailyPath } from './candidate-daily-contract-v1.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -2951,9 +2957,13 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
   const access = await verifyCandidateAccess(request, env);
   const url = new URL(request.url);
   if (kind === 'bootstrap') {
-    return jsonResponse(200, await rpcCall(deps, 'candidate_app_bootstrap_v1', candidateRpcArgs(access, env, {
+    const bootstrap = await rpcCall(deps, 'candidate_app_bootstrap_v1', candidateRpcArgs(access, env, {
       p_expected_rotation: access.rotation
-    })));
+    }));
+    const correlationId = candidateBootstrapCorrelation(request);
+    return jsonResponse(200, composeCandidateBootstrapPhase1a(bootstrap), {
+      'x-correlation-id': correlationId
+    });
   }
   if (kind === 'page') {
     const requestedView = text(url.searchParams.get('view') || 'current').toLowerCase();
@@ -5189,6 +5199,10 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
   if (privateCandidateRoute && routeAudience !== 'PRIVATE') return null;
   if (officeRoute && routeAudience !== 'OFFICE') return null;
   try {
+    if (isCandidateDailyPath(path)) {
+      const access = await verifyCandidateAccess(request, env);
+      return await handleCandidateDailyPhase1aRequest(request, access);
+    }
     if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/start`) return await handleChallengeStart(request, env, deps);
     if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/resend`) return await handleChallengeStart(request, env, deps, true);
     if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/verify`) return await handleChallengeVerify(request, env, deps);

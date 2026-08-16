@@ -48,6 +48,26 @@
       "name": "CANDIDATE_UPLOAD_RATE_LIMIT",
       "namespace_id": "71004",
       "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_DAILY_READ_RATE_LIMIT",
+      "namespace_id": "71005",
+      "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_DAILY_COMMAND_RATE_LIMIT",
+      "namespace_id": "71006",
+      "simple": { "limit": 12, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_DAILY_EFFECT_RATE_LIMIT",
+      "namespace_id": "71007",
+      "simple": { "limit": 6, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_DAILY_SYSTEM_RATE_LIMIT",
+      "namespace_id": "71008",
+      "simple": { "limit": 120, "period": 60 }
     }
   ],
   "observability": {

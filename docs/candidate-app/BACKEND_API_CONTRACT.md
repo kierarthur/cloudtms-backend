@@ -1,19 +1,25 @@
 # CloudTMS Candidate App backend contract
 
-Status: versioned TEST implementation contract, updated 12 August 2026. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. PAPER delivery retirement and provider submission are coordinated by the installed service-only workflow authority; route intervention is bound to the immutable current-token owner and cannot strand an unselected nonterminal claim. Manager reminder/renew/cancel meaning, provider-accepted timing, exact PAPER readiness, immutable rejected-workflow replacement and the typed timesheet-detail action catalogue are server-owned.
+Status: versioned TEST implementation contract, updated 16 August 2026 for the Candidate Daily Phase 1A R7 correction. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. The accepted Candidate contract below remains authoritative for the installed product. Candidate Daily Phase 1A is an additive dark transport layer documented separately in `CANDIDATE_DAILY_PHASE1A_IMPLEMENTATION_AUTHORITY.md`; it is not enabled business authority and has no Daily table/RPC owner.
 
-Machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Trust and deployment contract: `BROKER_PRIVATE_TOPOLOGY.md`.
+Installed baseline machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Candidate Daily Phase 1A sole merged contract: `CANDIDATE_API_OPENAPI_V1_MERGED_R5.yaml`, carried unchanged through R7, SHA-256 `1e4362f363e02eda34405f1f7edacdf7db0da8aad2a018cf75a5cd0993f765fa`. Trust and deployment contract: `BROKER_PRIVATE_TOPOLOGY.md`.
 
 ## Boundary rules
 
 - Public broker Candidate API: `/candidate-app/v1`.
 - Public broker manager API: `/candidate-manager/v1`.
+- Dark Candidate Daily API: `/candidate-app/v1/daily/*` (11 closed operations; authenticated but globally disabled).
+- Dark signed Google-system API: `/candidate-system/v1/google-availability/*` (13 closed operations; no browser CORS/cookie/access-token authority).
 - Private service-bound Candidate API: `/private/candidate-app/v1`.
 - Private service-bound manager API: `/private/candidate-manager/v1`.
+- Private service-bound Google-system API: `/private/candidate-system/v1` (service-authenticated, then HMAC/nonce verified).
 - Existing CloudTMS office adapters: `/api/candidate-app`.
 - The normal CloudTMS Worker exposes only the office adapters; it does not expose the public Candidate or manager paths.
 - Public Candidate/manager paths map deterministically to their private-prefixed equivalent over a signed Cloudflare Worker service binding.
 - JSON responses use `cache-control: no-store` and stable `error_code` values.
+- Candidate Daily/bootstrap failures are rebuilt at the public edge from the closed route/status/error/retry matrix. Every error has exactly `ok=false`, `error_code`, a valid correlation ULID, the fixed public `message`, `retry_class`, and either no `details` or one typed closed detail variant. Arbitrary private JSON, stack, token, database, storage, diagnostic or unknown future fields are never forwarded.
+- Disallowed browser Origin, native-client and preflight/header-policy failures remain public HTTP 403 `FORBIDDEN`/`DO_NOT_RETRY`; private drift cannot remap them to 500.
+- Where `Content-Length` is observable, supplied and accepted, the Candidate and signed-system paths require exact equality with the actual received byte count. Cloudflare Workers can enforce only the Fetch-normalised request/header representation delivered by the platform; raw pre-normalisation header properties are not claimed.
 - Public Candidate access and refresh values are independently encrypted broker envelopes bound to audience, environment, frozen private issue/expiry facts and a stable opaque public session identity. New v4 envelopes cryptographically bind the issuing key version into their HMAC identity, per-message AES-GCM key and authenticated data, so an exact durable private replay produces the same public credential strings and changing only the version label always fails. Explicit reader catalogues retain approved v1/v2/v3/v4 versions and can retire a version without accepting it merely because its secret remains bound. The broker rejects any configuration where two version slots for one authority resolve to identical secret material, including while reading retained v3 credentials.
 - The private access token and rotating refresh token are never returned to the browser/native client. The broker unwraps them only for the signed service-bound call; refresh hashes remain the database authority.
 - Manager access is an opaque token from the URL fragment; only its SHA-256 reaches SQL.
