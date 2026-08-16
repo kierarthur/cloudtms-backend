@@ -2278,15 +2278,36 @@ begin
             component.value as component_json,
             upper(nullif(btrim(coalesce(component.value->>'component_key_type','')), '')) as component_key_type,
             nullif(btrim(coalesce(component.value->>'component_key_value','')), '') as component_key_value,
-            round(coalesce(
-              nullif(component.value->>'component_amount_ex_vat','')::numeric,
-              nullif(component.value->>'authoritative_outstanding_ex_vat','')::numeric,
-              nullif(component.value->>'preview_due_amount_ex_vat','')::numeric,
-              nullif(component.value->>'ready_preview_amount_ex_vat','')::numeric,
-              nullif(component.value->>'target_pay_ex_vat','')::numeric,
-              nullif(component.value->>'preview_component_amount_ex_vat','')::numeric,
-              0::numeric
-            ), 2) as component_amount_ex_vat,
+            round(case
+              when exists (
+                select 1
+                from canonical_timesheet_segment_rows resolved_segment
+                where resolved_segment.candidate_id=ctl.candidate_id
+                  and resolved_segment.timesheet_id=ctl.timesheet_id
+              )
+              and (
+                lower(btrim(coalesce(ctl.case_resolution_summary_json->>'has_resolved_rate','false'))) in ('true','t','1','yes','y','on')
+                or lower(btrim(coalesce(ctl.case_resolution_summary_json->>'resolved_rate_applied','false'))) in ('true','t','1','yes','y','on')
+                or lower(btrim(coalesce(ctl.case_resolution_summary_json->>'resolved_rate_active','false'))) in ('true','t','1','yes','y','on')
+                or (
+                  coalesce(ctl.case_resolution_summary_json->>'resolved_rate_component_count','') ~ '^[0-9]+$'
+                  and (ctl.case_resolution_summary_json->>'resolved_rate_component_count')::integer > 0
+                )
+              ) then coalesce(
+                nullif(component.value->>'ready_preview_amount_ex_vat','')::numeric,
+                nullif(component.value->>'target_pay_ex_vat','')::numeric,
+                nullif(component.value->>'preview_component_amount_ex_vat','')::numeric
+              )
+              else coalesce(
+                nullif(component.value->>'component_amount_ex_vat','')::numeric,
+                nullif(component.value->>'authoritative_outstanding_ex_vat','')::numeric,
+                nullif(component.value->>'preview_due_amount_ex_vat','')::numeric,
+                nullif(component.value->>'ready_preview_amount_ex_vat','')::numeric,
+                nullif(component.value->>'target_pay_ex_vat','')::numeric,
+                nullif(component.value->>'preview_component_amount_ex_vat','')::numeric,
+                0::numeric
+              )
+            end, 2) as component_amount_ex_vat,
             coalesce(nullif(btrim(coalesce(component.value->>'component_fingerprint','')), ''), md5(component.value::text)) as component_fingerprint,
             coalesce(
               nullif(btrim(coalesce(component.value#>>'{source_basis_json,segment_stable_key}','')), ''),
@@ -2305,9 +2326,28 @@ begin
         ), eligible_components as (
           select
             component_rows.*,
+            count(*) over (
+              partition by component_rows.candidate_id,
+                component_rows.timesheet_id,
+                component_rows.component_key_type,
+                component_rows.stable_component_identity
+            ) as stable_component_identity_count,
             case
               when component_rows.component_key_type='TS_DAY' then
                 component_rows.timesheet_id::text || ':segment:' || component_rows.stable_component_identity
+                || case
+                  when count(*) over (
+                    partition by component_rows.candidate_id,
+                      component_rows.timesheet_id,
+                      component_rows.component_key_type,
+                      component_rows.stable_component_identity
+                  ) > 1 then ':bucket:' || lower(coalesce(
+                    nullif(btrim(coalesce(component_rows.component_json->>'bucket_code','')), ''),
+                    nullif(btrim(coalesce(component_rows.component_json#>>'{source_basis_json,bucket_code}','')), ''),
+                    '~'
+                  ))
+                  else ''
+                end
               when component_rows.component_key_type='EXPENSE_CODE' then
                 component_rows.timesheet_id::text || ':component:expense:' || component_rows.component_fingerprint
               when lower(coalesce(component_rows.component_json->>'source_family_key','')) like 'correction%'

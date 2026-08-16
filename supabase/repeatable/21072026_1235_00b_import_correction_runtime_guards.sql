@@ -2652,13 +2652,16 @@ declare
   v_component jsonb;
   v_member_ids uuid[];
   v_resolution public.banking_pay_workbench_session_case_resolutions%rowtype;
-  v_bucket jsonb;
   v_source_amount numeric;
-  v_original_source_amount numeric;
-  v_original_target_amount numeric;
   v_target_amount numeric;
-  v_source_rate numeric;
-  v_source_units numeric;
+  v_bucket_resolutions jsonb:='[]'::jsonb;
+  v_bucket_set_digest text;
+  v_physical_decision_count integer:=0;
+  v_invalid_decision_count integer:=0;
+  v_projected_target_count integer:=0;
+  v_physical_source_total numeric:=0;
+  v_physical_target_total numeric:=0;
+  v_base_payload jsonb:='{}'::jsonb;
   v_component_timesheet_id uuid;
   v_canonical_resolution_id uuid;
   v_normalised_resolution_id uuid;
@@ -2859,7 +2862,6 @@ begin
       into v_resolution;
     end if;
 
-    v_bucket:=coalesce(v_resolution.payload_json#>'{bucket_resolutions,0}','{}'::jsonb);
     select canonical_resolution.id
     into v_canonical_resolution_id
     from public.banking_pay_workbench_session_case_resolutions
@@ -2873,10 +2875,6 @@ begin
              canonical_resolution.id desc
     limit 1
     for update;
-    v_normalised_resolution_id:=coalesce(
-      v_canonical_resolution_id,
-      v_resolution.id
-    );
     v_component_timesheet_id:=coalesce(
       nullif(btrim(coalesce(v_component->>'carrier_timesheet_id','')),'')::uuid,
       case
@@ -2899,91 +2897,197 @@ begin
     v_source_amount:=abs(round(
       (v_component->>'effective_source_outstanding_ex_vat')::numeric,2
     ));
-    v_original_source_amount:=abs(coalesce(
-      nullif(v_bucket->>'source_pay_ex_vat','')::numeric,
-      nullif(v_bucket#>>'{saved_resolution_result_json,source_pay_ex_vat}','')::numeric,
-      0
-    ));
-    v_original_target_amount:=abs(coalesce(
-      nullif(v_bucket->>'target_pay_ex_vat','')::numeric,
-      nullif(v_bucket->>'target_amount_ex_vat','')::numeric,
-      nullif(v_bucket#>>'{saved_resolution_result_json,target_pay_ex_vat}','')::numeric,
-      nullif(v_bucket#>>'{saved_resolution_result_json,target_amount_ex_vat}','')::numeric,
-      0
-    ));
-    v_source_rate:=abs(coalesce(nullif(v_bucket->>'source_rate','')::numeric,0));
+    -- Preserve the exact saved physical decisions.  The correction residual
+    -- is a dated aggregate, so it may consume those decisions only when every
+    -- valid bucket independently projects the same two-decimal residual
+    -- amount.  This proves that DAY/NIGHT/SAT/SUN/BH/additional-rate choice
+    -- cannot change the aggregate result; no representative bucket is chosen.
+    with physical_resolution as (
+      select resolution_row.*,
+             bucket_element.value as bucket_json,
+             bucket_element.ordinality
+      from public.banking_pay_workbench_session_case_resolutions resolution_row
+      left join lateral jsonb_array_elements(
+        case
+          when jsonb_typeof(resolution_row.payload_json->'bucket_resolutions')='array'
+            then resolution_row.payload_json->'bucket_resolutions'
+          else '[]'::jsonb
+        end
+      ) with ordinality bucket_element(value,ordinality) on true
+      where resolution_row.session_id=p_session_id
+        and resolution_row.candidate_id=p_candidate_id
+        and resolution_row.resolution_family='BUCKETED'
+        and resolution_row.timesheet_id=any(v_member_ids)
+        and upper(btrim(coalesce(resolution_row.component_key_type,'')))=
+            upper(btrim(coalesce(v_component->>'component_key_type','')))
+        and btrim(coalesce(resolution_row.component_key_value,''))=
+            btrim(coalesce(v_component->>'component_key_value',''))
+        and resolution_row.source_family_key is distinct from
+            v_residual->>'source_family_key'
+        and coalesce(resolution_row.payload_json->>'source_anchor_timesheet_id','')=
+            p_anchor_timesheet_id::text
+    ), validated as (
+      select physical_resolution.*,
+        case
+          when jsonb_typeof(bucket_json)='object'
+           and jsonb_array_length(payload_json->'bucket_resolutions')=1
+           and coalesce(bucket_json->>'source_pay_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'
+           and abs((bucket_json->>'source_pay_ex_vat')::numeric)>0
+           and coalesce(
+                 bucket_json->>'target_pay_ex_vat',
+                 bucket_json->>'target_amount_ex_vat',''
+               ) ~ '^-?[0-9]+([.][0-9]+)?$'
+           and upper(btrim(coalesce(bucket_json->>'target_pay_method','')))=
+               upper(btrim(coalesce(v_residual->>'target_pay_method','')))
+           and coalesce(bucket_json->>'timesheet_id','')=timesheet_id::text
+           and coalesce(bucket_json->>'source_basis_fingerprint','')=
+               coalesce(source_basis_fingerprint,'')
+           and upper(btrim(coalesce(bucket_json->>'component_key_type','')))=
+               upper(btrim(coalesce(v_component->>'component_key_type','')))
+           and btrim(coalesce(bucket_json->>'component_key_value',''))=
+               btrim(coalesce(v_component->>'component_key_value',''))
+            then true else false
+        end as valid_decision
+      from physical_resolution
+    )
+    select count(*)::integer,
+      count(*) filter(where not valid_decision)::integer,
+      count(distinct case when valid_decision then round(
+        v_source_amount*abs(coalesce(
+          nullif(bucket_json->>'target_pay_ex_vat','')::numeric,
+          nullif(bucket_json->>'target_amount_ex_vat','')::numeric
+        ))/abs((bucket_json->>'source_pay_ex_vat')::numeric),2
+      ) end)::integer,
+      min(case when valid_decision then round(
+        v_source_amount*abs(coalesce(
+          nullif(bucket_json->>'target_pay_ex_vat','')::numeric,
+          nullif(bucket_json->>'target_amount_ex_vat','')::numeric
+        ))/abs((bucket_json->>'source_pay_ex_vat')::numeric),2
+      ) end),
+      coalesce(jsonb_agg(
+        bucket_json||jsonb_build_object(
+          'physical_resolution_identity_key',resolution_identity_key,
+          'physical_source_basis_fingerprint',source_basis_fingerprint
+        ) order by timesheet_id,coalesce(bucket_code,''),resolution_identity_key
+      ) filter(where valid_decision),'[]'::jsonb),
+      round(coalesce(sum(abs((bucket_json->>'source_pay_ex_vat')::numeric))
+        filter(where valid_decision),0),2),
+      round(coalesce(sum(abs(coalesce(
+        nullif(bucket_json->>'target_pay_ex_vat','')::numeric,
+        nullif(bucket_json->>'target_amount_ex_vat','')::numeric
+      ))) filter(where valid_decision),0),2),
+      coalesce((array_agg(payload_json order by timesheet_id,
+        coalesce(bucket_code,''),resolution_identity_key)
+        filter(where valid_decision))[1],'{}'::jsonb)
+    into v_physical_decision_count,v_invalid_decision_count,
+         v_projected_target_count,v_target_amount,v_bucket_resolutions,
+         v_physical_source_total,v_physical_target_total,v_base_payload
+    from validated;
 
-    if v_original_source_amount<=0 or v_original_target_amount<=0 then
-      raise exception 'CORRECTION_CHAIN_RESOLUTION_CONVERSION_BASIS_REQUIRED'
-        using errcode='P0001',
-              detail=jsonb_build_object(
-                'session_id',p_session_id,
-                'candidate_id',p_candidate_id,
-                'component_key_value',v_component->>'component_key_value'
-              )::text;
+    if v_physical_decision_count=0 then
+      -- Carry replay and a correction component without a standalone preview
+      -- row use the already-proven canonical family decision.  Preserve the
+      -- existing coupled-chain rule, but validate every carried bucket.
+      select coalesce(v_resolution.payload_json->'bucket_resolutions','[]'::jsonb),
+             coalesce(v_resolution.payload_json,'{}'::jsonb)
+      into v_bucket_resolutions,v_base_payload;
+
+      select count(*)::integer,
+        count(*) filter(where not (
+          jsonb_typeof(bucket.value)='object'
+          and coalesce(bucket.value->>'source_pay_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'
+          and abs((bucket.value->>'source_pay_ex_vat')::numeric)>0
+          and coalesce(bucket.value->>'target_pay_ex_vat',
+                bucket.value->>'target_amount_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'
+          and upper(btrim(coalesce(bucket.value->>'target_pay_method','')))=
+              upper(btrim(coalesce(v_residual->>'target_pay_method','')))
+        ))::integer,
+        count(distinct case when
+          coalesce(bucket.value->>'source_pay_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'
+          and abs((bucket.value->>'source_pay_ex_vat')::numeric)>0
+          and coalesce(bucket.value->>'target_pay_ex_vat',
+                bucket.value->>'target_amount_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'
+        then round(v_source_amount*abs(coalesce(
+          nullif(bucket.value->>'target_pay_ex_vat','')::numeric,
+          nullif(bucket.value->>'target_amount_ex_vat','')::numeric
+        ))/abs((bucket.value->>'source_pay_ex_vat')::numeric),2) end)::integer,
+        min(case when
+          coalesce(bucket.value->>'source_pay_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'
+          and abs((bucket.value->>'source_pay_ex_vat')::numeric)>0
+          and coalesce(bucket.value->>'target_pay_ex_vat',
+                bucket.value->>'target_amount_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'
+        then round(v_source_amount*abs(coalesce(
+          nullif(bucket.value->>'target_pay_ex_vat','')::numeric,
+          nullif(bucket.value->>'target_amount_ex_vat','')::numeric
+        ))/abs((bucket.value->>'source_pay_ex_vat')::numeric),2) end),
+        round(coalesce(sum(abs((bucket.value->>'source_pay_ex_vat')::numeric))
+          filter(where coalesce(bucket.value->>'source_pay_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'),0),2),
+        round(coalesce(sum(abs(coalesce(
+          nullif(bucket.value->>'target_pay_ex_vat','')::numeric,
+          nullif(bucket.value->>'target_amount_ex_vat','')::numeric
+        ))) filter(where coalesce(bucket.value->>'target_pay_ex_vat',
+          bucket.value->>'target_amount_ex_vat','') ~ '^-?[0-9]+([.][0-9]+)?$'),0),2)
+      into v_physical_decision_count,v_invalid_decision_count,
+           v_projected_target_count,v_target_amount,
+           v_physical_source_total,v_physical_target_total
+      from jsonb_array_elements(v_bucket_resolutions) bucket(value);
     end if;
 
-    v_target_amount:=round(
-      v_source_amount*(v_original_target_amount/v_original_source_amount),2
-    );
-    v_source_units:=case
-      when v_source_rate>0 then round(v_source_amount/v_source_rate,6)
-      else round(
-        coalesce(nullif(v_bucket->>'source_units','')::numeric,0)
-        *(v_source_amount/v_original_source_amount),6
-      )
-    end;
+    if v_physical_decision_count=0 or v_invalid_decision_count>0 then
+      raise exception 'CORRECTION_CHAIN_RESOLUTION_BUCKET_SET_INVALID'
+        using errcode='P0001',detail=jsonb_build_object(
+          'session_id',p_session_id,'candidate_id',p_candidate_id,
+          'component_key_type',v_component->>'component_key_type',
+          'component_key_value',v_component->>'component_key_value',
+          'decision_count',v_physical_decision_count,
+          'invalid_decision_count',v_invalid_decision_count
+        )::text;
+    end if;
+    if v_projected_target_count<>1 or v_target_amount is null then
+      raise exception 'CORRECTION_CHAIN_RESOLUTION_PROJECTION_CONFLICT'
+        using errcode='P0001',detail=jsonb_build_object(
+          'session_id',p_session_id,'candidate_id',p_candidate_id,
+          'component_key_type',v_component->>'component_key_type',
+          'component_key_value',v_component->>'component_key_value',
+          'decision_count',v_physical_decision_count,
+          'distinct_projected_target_count',v_projected_target_count
+        )::text;
+    end if;
 
-    v_bucket:=v_bucket
-      ||jsonb_build_object(
-        'timesheet_id',v_component_timesheet_id::text,
-        'source_family_key',v_residual->>'source_family_key',
-        'source_basis_fingerprint',v_component->>'source_basis_fingerprint',
-        'source_basis_json',
-          coalesce(v_bucket->'source_basis_json','{}'::jsonb)
-          ||jsonb_build_object(
-            'source_family_key',v_residual->>'source_family_key',
-            'resolution_identity_key',
-              v_component->>'canonical_correction_key',
-            'resolution_identity_version','CORRECTION_CHAIN_V1',
-            'canonical_correction_key',
-              v_component->>'canonical_correction_key',
-            'resolution_economic_fingerprint',
-              v_component->>'resolution_economic_fingerprint',
-            'correction_root_id',v_residual->>'root_timesheet_id',
-            'ordered_member_timesheet_ids',
-              v_residual->'ordered_member_timesheet_ids',
-            'component_lineage_fingerprint',
-              v_component->>'component_lineage_fingerprint',
-            'root_timesheet_id',v_residual->>'root_timesheet_id',
-            'component_key_type',v_component->>'component_key_type',
-            'component_key_value',v_component->>'component_key_value',
-            'effective_source_outstanding_ex_vat',
-              (v_component->>'effective_source_outstanding_ex_vat')::numeric,
-            'correction_chain_fingerprint',v_residual->>'chain_fingerprint',
-            'correction_chain_residual_fingerprint',
-              v_residual->>'residual_fingerprint',
-            'correction_financials_policy_envelope_fingerprint',
-              v_residual->>'correction_financials_policy_envelope_fingerprint'
-          ),
-        'source_units',v_source_units,
-        'target_units',v_source_units,
-        'source_pay_ex_vat',v_source_amount,
-        'target_amount_ex_vat',v_target_amount,
-        'target_pay_ex_vat',v_target_amount,
-        'saved_resolution_result_json',
-          coalesce(v_bucket->'saved_resolution_result_json','{}'::jsonb)
-          ||jsonb_build_object(
-            'source_pay_ex_vat',v_source_amount,
-            'target_units',v_source_units,
-            'target_amount_ex_vat',v_target_amount,
-            'target_pay_ex_vat',v_target_amount
-          ),
-        'correction_chain_fingerprint',v_residual->>'chain_fingerprint',
-        'correction_chain_residual_fingerprint',v_residual->>'residual_fingerprint',
-        'correction_financials_policy_envelope_fingerprint',
-          v_residual->>'correction_financials_policy_envelope_fingerprint'
-      );
+    v_bucket_set_digest:=encode(extensions.digest(
+      convert_to(v_bucket_resolutions::text,'UTF8'),'sha256'),'hex');
+
+    -- Never repurpose one physical decision as the correction-chain row.  A
+    -- separate canonical aggregate lets the preview continue matching every
+    -- original timesheet/rate fingerprint exactly.
+    if v_canonical_resolution_id is null then
+      insert into public.banking_pay_workbench_session_case_resolutions(
+        session_id,candidate_id,case_key,resolution_family,
+        resolution_identity_key,timesheet_id,source_basis_fingerprint,
+        source_family_key,bucket_code,component_key_type,
+        component_key_value,payload_json,resolution_origin_session_id,
+        resolution_origin_pay_date,
+        resolution_origin_source_basis_fingerprint,
+        created_at_utc,updated_at_utc
+      ) values (
+        p_session_id,p_candidate_id,
+        'timesheet:'||v_component_timesheet_id::text,'BUCKETED',
+        v_component->>'canonical_correction_key',v_component_timesheet_id,
+        v_component->>'source_basis_fingerprint',
+        v_residual->>'source_family_key',null,
+        upper(v_component->>'component_key_type'),
+        v_component->>'component_key_value',v_base_payload,
+        v_resolution.resolution_origin_session_id,
+        v_resolution.resolution_origin_pay_date,
+        v_resolution.resolution_origin_source_basis_fingerprint,
+        now(),now()
+      )
+      on conflict(session_id,resolution_identity_key) do update
+      set updated_at_utc=excluded.updated_at_utc
+      returning id into v_normalised_resolution_id;
+    else
+      v_normalised_resolution_id:=v_canonical_resolution_id;
+    end if;
 
     -- A previously frozen batch may have been created from an older decision
     -- carrying this same stable canonical identity.  The frozen batch retains
@@ -2999,7 +3103,7 @@ begin
         source_family_key=v_residual->>'source_family_key',
         component_key_type=upper(v_component->>'component_key_type'),
         component_key_value=v_component->>'component_key_value',
-        payload_json=coalesce(v_resolution.payload_json,'{}'::jsonb)
+        payload_json=coalesce(v_base_payload,'{}'::jsonb)
           ||jsonb_build_object(
             'linked_timesheet_id',v_component_timesheet_id::text,
             'timesheet_id',v_component_timesheet_id::text,
@@ -3020,11 +3124,22 @@ begin
             -- resolution row boundary and in its detailed bucket.  The
             -- correction residual reader accepts both shapes so decisions
             -- saved before this repeatable was installed remain valid.
-            'target_pay_method',v_bucket->>'target_pay_method',
+            'target_pay_method',v_residual->>'target_pay_method',
             'target_amount_ex_vat',v_target_amount,
             'target_pay_ex_vat',v_target_amount,
             'saved_resolution_result_json',
-              v_bucket->'saved_resolution_result_json',
+              jsonb_build_object(
+                'source_pay_ex_vat',v_source_amount,
+                'target_amount_ex_vat',v_target_amount,
+                'target_pay_ex_vat',v_target_amount
+              ),
+            'correction_resolution_aggregate_version',
+              'CORRECTION_CHAIN_BUCKET_SET_V1',
+            'physical_decision_count',v_physical_decision_count,
+            'physical_decision_set_digest',v_bucket_set_digest,
+            'physical_source_total_ex_vat',v_physical_source_total,
+            'physical_target_total_ex_vat',v_physical_target_total,
+            'distinct_projected_target_count',v_projected_target_count,
             'correction_chain_fingerprint',v_residual->>'chain_fingerprint',
             'correction_chain_residual_fingerprint',
               v_residual->>'residual_fingerprint',
@@ -3032,26 +3147,14 @@ begin
               v_residual->'correction_financials_policy_envelope',
             'correction_financials_policy_envelope_fingerprint',
               v_residual->>'correction_financials_policy_envelope_fingerprint',
-            'bucket_resolutions',jsonb_build_array(v_bucket)
+            'bucket_resolutions',v_bucket_resolutions
           ),
         updated_at_utc=now()
     where id=v_normalised_resolution_id;
 
-    -- Remove only temporary per-member aliases for this exact correction
-    -- component.  Independent timesheets, expenses, additional codes and
-    -- other component dates remain outside this bounded predicate.
-    delete from public.banking_pay_workbench_session_case_resolutions
-      as alias_resolution
-    where alias_resolution.session_id=p_session_id
-      and alias_resolution.candidate_id=p_candidate_id
-      and alias_resolution.resolution_family='BUCKETED'
-      and alias_resolution.id<>v_normalised_resolution_id
-      and alias_resolution.timesheet_id=any(v_member_ids)
-      and upper(btrim(coalesce(alias_resolution.component_key_type,'')))=
-        upper(btrim(coalesce(v_component->>'component_key_type','')))
-      and btrim(coalesce(alias_resolution.component_key_value,''))=
-        btrim(coalesce(v_component->>'component_key_value',''));
-    get diagnostics v_alias_deleted_this_component=row_count;
+    -- Physical decisions are the Workbench overlay authority and must remain
+    -- available at their exact timesheet/rate grain.
+    v_alias_deleted_this_component:=0;
     v_alias_deleted_count:=
       v_alias_deleted_count+v_alias_deleted_this_component;
     v_normalised_resolution_ids:=

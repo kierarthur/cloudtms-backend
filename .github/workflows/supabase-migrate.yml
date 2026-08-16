@@ -16,6 +16,8 @@ on:
       - "tests/banking-pay-finalise-residual-fast-route.test.cjs"
       - "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql"
       - "tests/15082026_1520_banking_pay_runtime_remediation_verification.sql"
+      - "tests/16082026_0102_banking_pay_case_resolution_convergence_verification.sql"
+      - "tests/banking-pay-recovery-authority.test.cjs"
       - "tests/candidate-app-db-rpc-contract.test.cjs"
       - "tests/daily-canonical-authority.test.mjs"
       - "broker/src/daily-canonical-authority.js"
@@ -56,7 +58,8 @@ jobs:
             tests/banking-pay-james-rate-authority-remediation.test.js \
             tests/banking-pay-workbench-source-build-authority.test.js \
             tests/banking-pay-source-publication-draft-cancel-fast-path.test.js \
-            tests/banking-pay-finalise-residual-fast-route.test.cjs
+            tests/banking-pay-finalise-residual-fast-route.test.cjs \
+            tests/banking-pay-recovery-authority.test.cjs
 
       - name: Verify Candidate App DB/RPC authority
         run: |
@@ -323,5 +326,7 @@ jobs:
             -f tests/15082026_1520_banking_pay_runtime_remediation_verification.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
             -f tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+            -f tests/16082026_0102_banking_pay_case_resolution_convergence_verification.sql
 
           echo "Done."

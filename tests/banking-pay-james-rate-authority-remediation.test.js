@@ -153,6 +153,13 @@ test('paired negative hours use the preview builder signed delta contract withou
     /ABS\([^\n]*raw_delta_(?:source_units|before_reservation_ex|charge_ex_vat)[^\n]*\)\s+AS/);
 });
 
+test('authoritative source build passes the proven Workbench session to the saved-rate overlay', () => {
+  assert.match(synchronizer,
+    /WHEN COALESCE\(v_authoritative_timesheet_scope, false\) THEN[\s\S]*'workbench_resolution_session_id',v_workbench_session_id::text/);
+  assert.match(synchronizer,
+    /_pay_workbench_authoritative_scope_valid_v1\([\s\S]*v_workbench_session_id[\s\S]*v_authoritative_candidate_id[\s\S]*v_workbench_session_version/);
+});
+
 test('signed finance recovery is non-allocative sealed movement evidence, not negative hours', () => {
   assert.match(helper,
     /parent_item_type[\s\S]*key_resolution_source[\s\S]*is_signed_non_charge_recovery/);

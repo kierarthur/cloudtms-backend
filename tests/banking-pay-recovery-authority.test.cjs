@@ -534,7 +534,7 @@ test('source build attests pending pay-method resolution but draft gate remains 
   );
 });
 
-test('case resolution refreshes the complete candidate after advancing the session version', () => {
+test('case resolution refreshes the complete session after advancing the session version', () => {
   const resolutionBody = functionBody(
     'pay_workbench_session_apply_case_resolution',
     null,
@@ -551,6 +551,30 @@ test('case resolution refreshes the complete candidate after advancing the sessi
   assert.match(
     resolutionBody,
     /'linked_timesheet_ids', CASE[\s\S]*v_case_refresh_scope_kind = 'CANDIDATE_FULL_LIVE' THEN '\[\]'::jsonb/
+  );
+  assert.match(
+    resolutionBody,
+    /pay_workbench_session_refresh_current_authority_v1\([\s\S]*v_session_refresh_cursor[\s\S]*100[\s\S]*WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN/
+  );
+  assert.match(
+    resolutionBody,
+    /'session_version_refresh_pages',v_session_refresh_pages/
+  );
+});
+
+test('case resolution reads the exact certified candidate publication during partial session refresh', () => {
+  const resolutionBody = functionBody(
+    'pay_workbench_session_apply_case_resolution',
+    null,
+    sessionCaseResolutionSql
+  );
+  assert.match(
+    resolutionBody,
+    /preview_row\.session_version = COALESCE\([\s\S]*certified_scope\.certified_preview_publication_session_version[\s\S]*certified_scope\.session_id = p_session_id[\s\S]*certified_scope\.candidate_id = preview_row\.candidate_id[\s\S]*certified_scope\.certified_preview_publication_parity_ok IS TRUE[\s\S]*COALESCE\(v_session_row\.version, 1\)/
+  );
+  assert.doesNotMatch(
+    resolutionBody,
+    /preview_row\.session_version = COALESCE\(v_session_row\.version, 1\)/
   );
 });
 
@@ -2260,7 +2284,7 @@ test('a non-draftable correction pay-method mismatch cannot leave raw recovery a
   );
 });
 
-test('correction resolution normalisation reuses the stable canonical row and removes only member aliases', () => {
+test('correction resolution normalisation preserves physical decisions beside one proved canonical aggregate', () => {
   const start = correctionRuntimeSql.indexOf(
     'create or replace function public._ctms_normalise_correction_case_resolutions_v1'
   );
@@ -2277,15 +2301,36 @@ test('correction resolution normalisation reuses the stable canonical row and re
   );
   assert.match(
     body,
-    /v_normalised_resolution_id:=coalesce\(\s*v_canonical_resolution_id,\s*v_resolution\.id\s*\)/
+    /source_family_key is distinct from[\s\S]*v_residual->>'source_family_key'/
   );
   assert.match(
     body,
-    /where id=v_normalised_resolution_id/
+    /DAY\/NIGHT\/SAT\/SUN\/BH\/additional-rate choice/
   );
   assert.match(
     body,
-    /alias_resolution\.timesheet_id=any\(v_member_ids\)[\s\S]*component_key_type[\s\S]*component_key_value/
+    /count\(distinct case when valid_decision then round\([\s\S]*v_source_amount[\s\S]*target_pay_ex_vat[\s\S]*source_pay_ex_vat/
+  );
+  assert.match(
+    body,
+    /CORRECTION_CHAIN_RESOLUTION_PROJECTION_CONFLICT/
+  );
+  assert.match(
+    body,
+    /if v_canonical_resolution_id is null then[\s\S]*insert into public\.banking_pay_workbench_session_case_resolutions/
+  );
+  assert.match(
+    body,
+    /'correction_resolution_aggregate_version',[\s\S]*'CORRECTION_CHAIN_BUCKET_SET_V1'[\s\S]*'physical_decision_count'[\s\S]*'physical_decision_set_digest'/
+  );
+  assert.match(
+    body,
+    /'bucket_resolutions',v_bucket_resolutions/
+  );
+  assert.doesNotMatch(
+    body,
+    /delete from public\.banking_pay_workbench_session_case_resolutions/,
+    'normalisation must not delete the exact physical Workbench decisions'
   );
   assert.match(
     body,
@@ -2299,6 +2344,26 @@ test('correction resolution normalisation reuses the stable canonical row and re
     body,
     /delete from public\.pay_batch_items|update public\.pay_batch_items/,
     'normalising a pre-draft decision must never alter frozen batch artefacts'
+  );
+});
+
+test('correction residual accepts only the closed canonical physical-decision proof', () => {
+  const body = functionBody(
+    'pay_correction_chain_residual_v1',
+    null,
+    correctionResidualSql
+  );
+  assert.match(
+    body,
+    /correction_resolution_aggregate_version[\s\S]*CORRECTION_CHAIN_BUCKET_SET_V1/
+  );
+  assert.match(
+    body,
+    /physical_decision_count[\s\S]*jsonb_array_length[\s\S]*physical_decision_set_digest[\s\S]*extensions\.digest/
+  );
+  assert.match(
+    body,
+    /resolution_row_count, 0\) = 1[\s\S]*valid_target_amount_count, 0\) = 1[\s\S]*aggregate_proof_valid/
   );
 });
 

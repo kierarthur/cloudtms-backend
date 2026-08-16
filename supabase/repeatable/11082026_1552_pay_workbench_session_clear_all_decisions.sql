@@ -1,7 +1,9 @@
--- Clear user decisions without invalidating every physically current candidate.
--- Existing case/override economics are recomputed only for candidates whose
--- saved decisions were actually removed. Selection returns to IMPLICIT_ALL so
--- all current and subsequently rebuilt eligible Ready-to-Pay rows default on.
+-- Clear user decisions and advance the session economic authority when a saved
+-- case/override decision was actually removed. Selection returns to
+-- IMPLICIT_ALL so all current and subsequently rebuilt eligible Ready-to-Pay
+-- rows default on. The affected candidates rebuild from live pre-draft truth;
+-- the existing current-authority owner brings every other scoped candidate onto
+-- the same new session version without weakening physical-currentness checks.
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_clear_all_decisions(
   p_session_id uuid,
   p_actor_user_id uuid
@@ -25,6 +27,10 @@ DECLARE
   v_selected_ids jsonb := '[]'::jsonb;
   v_selected_count integer := 0;
   v_progress_counter_version bigint := 0;
+  v_new_session_version bigint := 0;
+  v_session_refresh_cursor jsonb := '{}'::jsonb;
+  v_session_refresh_page jsonb := '{}'::jsonb;
+  v_session_refresh_page_count integer := 0;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -99,8 +105,25 @@ BEGIN
   v_selected_count := COALESCE((v_selection_json->>'selected_row_count')::integer, pg_catalog.jsonb_array_length(v_selected_ids), 0);
   v_progress_counter_version := COALESCE((v_selection_json->>'progress_counter_version')::bigint, v_session_row.progress_counter_version, 0);
 
-  -- Only candidates whose saved economic decision was removed become pending.
+  v_new_session_version := COALESCE(v_session_row.version, 0);
+
+  -- Removing a saved decision changes the session's pre-draft economics. It
+  -- must therefore advance the same session-version authority used when a
+  -- decision is applied. Without this boundary, the deterministic source owner
+  -- can correctly reuse the still-current resolved publication and Clear All
+  -- never returns the affected rows to Case Resolution.
   IF pg_catalog.cardinality(v_affected_candidate_ids) > 0 THEN
+    UPDATE public.banking_pay_workbench_sessions AS session_update
+    SET version = session_update.version + 1,
+        progress_counter_version = COALESCE(session_update.progress_counter_version, 0) + 1,
+        progress_updated_at_utc = v_now,
+        updated_at_utc = v_now
+    WHERE session_update.id = p_session_id
+    RETURNING session_update.version,
+              session_update.progress_counter_version
+    INTO v_new_session_version,
+         v_progress_counter_version;
+
     UPDATE public.banking_pay_workbench_session_candidate_state AS candidate_state
     SET status = 'PENDING',
         effective_candidate_fragment_json = '{}'::jsonb,
@@ -137,6 +160,43 @@ BEGIN
         v_job_ids := v_job_ids || pg_catalog.jsonb_build_array(v_job_id::text);
       END IF;
     END LOOP;
+
+    -- Advancing the session version makes every scoped candidate non-current
+    -- until it is either proven on that version or enters the canonical
+    -- refresh ladder. The affected candidates already have owners above; this
+    -- established owner observes those and queues only the remaining work.
+    LOOP
+      v_session_refresh_page :=
+        public.pay_workbench_session_refresh_current_authority_v1(
+          p_session_id,
+          p_actor_user_id,
+          v_session_refresh_cursor,
+          100
+        );
+      IF pg_catalog.jsonb_typeof(v_session_refresh_page) IS DISTINCT FROM 'object'
+         OR COALESCE((v_session_refresh_page->>'ok')::boolean, false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN'
+          USING ERRCODE = 'P0001',
+                DETAIL = pg_catalog.jsonb_build_object(
+                  'code', 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN',
+                  'session_id', p_session_id,
+                  'page_number', v_session_refresh_page_count + 1
+                )::text;
+      END IF;
+      v_session_refresh_page_count := v_session_refresh_page_count + 1;
+      EXIT WHEN COALESCE((v_session_refresh_page->>'has_more')::boolean, false) IS NOT TRUE;
+      IF v_session_refresh_page_count >= 1000
+         OR pg_catalog.jsonb_typeof(v_session_refresh_page->'next_cursor') IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID'
+          USING ERRCODE = 'P0001',
+                DETAIL = pg_catalog.jsonb_build_object(
+                  'code', 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID',
+                  'session_id', p_session_id,
+                  'page_number', v_session_refresh_page_count
+                )::text;
+      END IF;
+      v_session_refresh_cursor := v_session_refresh_page->'next_cursor';
+    END LOOP;
   END IF;
 
   PERFORM public._audit_insert(
@@ -153,7 +213,9 @@ BEGIN
       'selection_intent_mode', 'IMPLICIT_ALL',
       'affected_candidate_ids', pg_catalog.to_jsonb(v_affected_candidate_ids),
       'job_ids', v_job_ids,
-      'session_version_unchanged', true
+      'session_version_advanced', pg_catalog.cardinality(v_affected_candidate_ids) > 0,
+      'session_version', v_new_session_version,
+      'session_refresh_page_count', v_session_refresh_page_count
     ),
     'SESSION_DECISIONS_CLEARED',
     p_actor_user_id
@@ -163,7 +225,7 @@ BEGIN
     'ok', true,
     'session_id', p_session_id::text,
     'status', v_session_row.status,
-    'session_version', v_session_row.version,
+    'session_version', v_new_session_version,
     'progress_counter_version', v_progress_counter_version,
     'server_selected_preview_row_ids', v_selected_ids,
     'server_selected_preview_row_ids_provided', true,
@@ -178,6 +240,7 @@ BEGIN
     'requeue_candidate_ids', pg_catalog.to_jsonb(v_affected_candidate_ids),
     'requeue_job_count', pg_catalog.jsonb_array_length(v_job_ids),
     'requeue_job_ids', v_job_ids,
+    'session_refresh_page_count', v_session_refresh_page_count,
     'physically_current_candidate_count', pg_catalog.cardinality(COALESCE(v_session_row.scope_candidate_ids, ARRAY[]::uuid[])) - pg_catalog.cardinality(v_affected_candidate_ids),
     'no_change_candidate_rebuild_count', 0,
     'state_changed', true

@@ -1719,7 +1719,12 @@ begin
           jsonb_build_object(
             'workbench_source_build_mode', true,
             'source_build_mode', true,
-            'job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            'job_type', 'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+            -- v_workbench_session_id has already passed the exact session,
+            -- candidate, version, actor, pay-date and scope authority checks
+            -- above.  The existing preview overlay deliberately requires this
+            -- explicit session authority before consuming saved rate choices.
+            'workbench_resolution_session_id',v_workbench_session_id::text
           )
         ELSE '{}'::jsonb
       END;
@@ -5636,8 +5641,34 @@ begin
       MIN(state.ready_section_amount_ex_vat) AS ready_amount,
       MIN(state.blocked_section_amount_ex_vat) AS blocked_amount,
       MIN(state.hidden_indefinite_segment_amount_ex_vat) AS hidden_segment_amount,
-      MIN(state.hidden_expense_amount_ex_vat) AS hidden_expense_amount
+      MIN(state.hidden_expense_amount_ex_vat) AS hidden_expense_amount,
+      BOOL_OR(COALESCE(state.resolved_segment_rows_replace_source_total,false))
+        AS resolved_segment_rows_replace_source_total,
+      MIN(component_allocation.component_count) AS component_count,
+      MIN(component_allocation.invalid_amount_count) AS invalid_component_amount_count,
+      MIN(component_allocation.presentation_amount_ex_vat)
+        AS component_presentation_amount_ex_vat
     FROM pg_temp.canonical_timesheet_presentation_state state
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*)::integer AS component_count,
+        COUNT(*) FILTER (WHERE
+          COALESCE(component.value->>'ready_preview_amount_ex_vat','')
+            !~ '^-?\d+(\.\d+)?$'
+          AND COALESCE(component.value->>'preview_component_amount_ex_vat','')
+            !~ '^-?\d+(\.\d+)?$')::integer AS invalid_amount_count,
+        ROUND(COALESCE(SUM(CASE
+          WHEN COALESCE(component.value->>'ready_preview_amount_ex_vat','')
+              ~ '^-?\d+(\.\d+)?$'
+            THEN (component.value->>'ready_preview_amount_ex_vat')::numeric
+          WHEN COALESCE(component.value->>'preview_component_amount_ex_vat','')
+              ~ '^-?\d+(\.\d+)?$'
+            THEN (component.value->>'preview_component_amount_ex_vat')::numeric
+          ELSE 0::numeric
+        END),0),2) AS presentation_amount_ex_vat
+      FROM jsonb_array_elements(CASE
+        WHEN jsonb_typeof(state.case_components_json)='array'
+          THEN state.case_components_json ELSE '[]'::jsonb END) component(value)
+    ) component_allocation ON true
     WHERE state.candidate_id=v_bounded_build.candidate_id
     GROUP BY state.timesheet_id
   ), rollup_row AS (
@@ -5662,7 +5693,20 @@ begin
       COALESCE(state.state_count,0)<>1 AS state_multiplicity_mismatch,
       ABS(COALESCE(state.amount_ex_vat,0)-COALESCE(fact.truth_ex_vat,0))>0.01
         AS truth_amount_mismatch,
-      ABS(COALESCE(state.amount_ex_vat,0)-(
+      (
+        COALESCE(state.resolved_segment_rows_replace_source_total,false)
+        AND (COALESCE(state.component_count,0)=0
+          OR COALESCE(state.invalid_component_amount_count,0)>0)
+      ) AS resolved_basis_bridge_invalid,
+      ABS(COALESCE(CASE
+        -- A resolved-rate presentation is intentionally target-valued while
+        -- amount_ex_vat remains the sealed source economic truth.  The
+        -- renderer's existing replacement marker selects the independently
+        -- materialised component presentation total for this sum only.
+        WHEN COALESCE(state.resolved_segment_rows_replace_source_total,false)
+          THEN state.component_presentation_amount_ex_vat
+        ELSE state.amount_ex_vat
+      END,0)-(
         COALESCE(state.ready_amount,0)+COALESCE(state.blocked_amount,0)
         +COALESCE(state.hidden_segment_amount,0)+COALESCE(state.hidden_expense_amount,0)))>0.01
         AS allocation_sum_mismatch,
@@ -5678,11 +5722,14 @@ begin
   SELECT jsonb_build_object(
     'mismatch_count',count(*) FILTER (
       WHERE missing_fact_target OR missing_state OR state_multiplicity_mismatch
-         OR truth_amount_mismatch OR allocation_sum_mismatch),
+         OR truth_amount_mismatch OR resolved_basis_bridge_invalid
+         OR allocation_sum_mismatch),
     'missing_fact_target_count',count(*) FILTER (WHERE missing_fact_target),
     'missing_state_count',count(*) FILTER (WHERE missing_state),
     'state_multiplicity_mismatch_count',count(*) FILTER (WHERE state_multiplicity_mismatch),
     'truth_amount_mismatch_count',count(*) FILTER (WHERE truth_amount_mismatch),
+    'resolved_basis_bridge_invalid_count',count(*) FILTER (
+      WHERE resolved_basis_bridge_invalid),
     'allocation_sum_mismatch_count',count(*) FILTER (WHERE allocation_sum_mismatch),
     'missing_state_with_rollup_count',count(*) FILTER (WHERE missing_state AND rollup_present),
     'missing_state_with_canonical_line_count',count(*) FILTER (
@@ -5726,7 +5773,58 @@ begin
       md5(line.line_json::text))
     HAVING count(*)>1
   ) THEN
-    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_LINE_IDENTITY_CONFLICT' USING ERRCODE='23514';
+    RAISE EXCEPTION 'PAY_WORKBENCH_CANONICAL_LINE_IDENTITY_CONFLICT %', (
+      WITH keyed_lines AS (
+        SELECT
+          COALESCE(NULLIF(BTRIM(line.line_json->>'presentation_line_id'),''),
+            NULLIF(BTRIM(line.line_json->>'preview_row_id'),''),
+            NULLIF(BTRIM(line.line_json->>'line_id'),''),NULLIF(BTRIM(line.line_json->>'case_key'),''),
+            md5(line.line_json::text)) AS line_identity,
+          CASE
+            WHEN NULLIF(BTRIM(line.line_json->>'presentation_line_id'),'') IS NOT NULL THEN 'PRESENTATION_LINE_ID'
+            WHEN NULLIF(BTRIM(line.line_json->>'preview_row_id'),'') IS NOT NULL THEN 'PREVIEW_ROW_ID'
+            WHEN NULLIF(BTRIM(line.line_json->>'line_id'),'') IS NOT NULL THEN 'LINE_ID'
+            WHEN NULLIF(BTRIM(line.line_json->>'case_key'),'') IS NOT NULL THEN 'CASE_KEY'
+            ELSE 'ROW_DIGEST'
+          END AS identity_source,
+          UPPER(COALESCE(NULLIF(BTRIM(line.line_json->>'presentation_role'),''),'~')) AS presentation_role,
+          UPPER(COALESCE(NULLIF(BTRIM(line.line_json->>'presentation_section'),''),'~')) AS presentation_section,
+          UPPER(COALESCE(NULLIF(BTRIM(line.line_json->>'line_type'),''),'~')) AS line_type,
+          UPPER(COALESCE(NULLIF(BTRIM(line.line_json->>'component_key_type'),''),'~')) AS component_key_type,
+          UPPER(COALESCE(NULLIF(BTRIM(COALESCE(
+            line.line_json->>'bucket_code',
+            line.line_json#>>'{source_basis_json,bucket_code}'
+          )),''),'~')) AS bucket_code
+        FROM pg_temp.canonical_preview_lines line
+        WHERE line.candidate_id=v_bounded_build.candidate_id
+      ), duplicate_identities AS (
+        SELECT keyed.line_identity,count(*)::integer AS row_count
+        FROM keyed_lines keyed
+        GROUP BY keyed.line_identity
+        HAVING count(*)>1
+      ), duplicate_rows AS (
+        SELECT keyed.*
+        FROM keyed_lines keyed
+        JOIN duplicate_identities duplicate_identity
+          ON duplicate_identity.line_identity=keyed.line_identity
+      ), shape_counts AS (
+        SELECT concat_ws('|',duplicate_row.identity_source,duplicate_row.presentation_role,
+                 duplicate_row.presentation_section,duplicate_row.line_type,
+                 duplicate_row.component_key_type,duplicate_row.bucket_code) AS shape,
+               count(*)::integer AS row_count
+        FROM duplicate_rows duplicate_row
+        GROUP BY duplicate_row.identity_source,duplicate_row.presentation_role,
+          duplicate_row.presentation_section,duplicate_row.line_type,
+          duplicate_row.component_key_type,duplicate_row.bucket_code
+      )
+      SELECT jsonb_build_object(
+        'duplicate_identity_count',(SELECT count(*)::integer FROM duplicate_identities),
+        'duplicate_row_count',(SELECT count(*)::integer FROM duplicate_rows),
+        'maximum_identity_multiplicity',COALESCE((SELECT max(row_count) FROM duplicate_identities),0),
+        'line_shape_counts',COALESCE((SELECT jsonb_object_agg(shape,row_count ORDER BY shape)
+          FROM shape_counts),'{}'::jsonb)
+      )
+    )::text USING ERRCODE='23514';
   END IF;
   IF EXISTS(
     WITH expected AS (

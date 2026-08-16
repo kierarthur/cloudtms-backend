@@ -28,7 +28,7 @@ function workerFunctionBody(name, nextName) {
   return workerSource.slice(start, end);
 }
 
-test('clear-all decisions selects all eligible current rows and rebuilds only changed candidates', () => {
+test('clear-all decisions advances economic authority and rebuilds changed candidates on the new session version', () => {
   const body = sqlFunctionBody('pay_workbench_session_clear_all_decisions');
 
   assert.match(body, /pay_workbench_session_set_selected_rows/);
@@ -38,7 +38,11 @@ test('clear-all decisions selects all eligible current rows and rebuilds only ch
   assert.match(body, /decision_changed_candidate_only/);
   assert.match(body, /'force_refresh',\s*true/);
   assert.match(body, /'no_change_candidate_rebuild_count',\s*0/);
-  assert.doesNotMatch(body, /version\s*=\s*\w+\.version\s*\+\s*1/);
+  assert.match(body, /SET version = session_update\.version \+ 1/);
+  assert.match(body, /pay_workbench_session_refresh_current_authority_v1/);
+  assert.match(body, /WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN/);
+  assert.match(body, /'session_version_advanced',\s*pg_catalog\.cardinality\(v_affected_candidate_ids\) > 0/);
+  assert.doesNotMatch(body, /'session_version_unchanged',\s*true/);
   assert.match(body, /'server_selected_preview_row_ids_provided',\s*true/);
   assert.doesNotMatch(body, /'server_selected_preview_row_ids_provided',\s*false/);
 });

@@ -672,6 +672,9 @@ BEGIN
         AND resolution_source.source_family_key = v_source_family_key
         AND upper(btrim(coalesce(resolution_source.component_key_type,''))) = 'TS_DAY'
         AND nullif(btrim(coalesce(resolution_source.component_key_value,'')),'') IS NOT NULL
+        AND resolution_source.payload_json->>
+              'correction_resolution_aggregate_version'
+            = 'CORRECTION_CHAIN_BUCKET_SET_V1'
     ) AS ranked
     WHERE ranked.resolution_rank = 1
   ),
@@ -698,6 +701,44 @@ BEGIN
             '{component_state_json,correction_financials_policy_envelope_fingerprint}'
         ) IS NOT DISTINCT FROM v_correction_financials_policy_envelope_fingerprint
       ) AS historical_anchor_matches,
+      bool_and(
+        resolution_row.payload_json->>
+          'correction_resolution_aggregate_version'
+            = 'CORRECTION_CHAIN_BUCKET_SET_V1'
+        AND jsonb_typeof(
+              resolution_row.payload_json->'bucket_resolutions'
+            ) = 'array'
+        AND COALESCE(
+              NULLIF(resolution_row.payload_json->>'physical_decision_count','')::integer,
+              0
+            ) = jsonb_array_length(
+                  resolution_row.payload_json->'bucket_resolutions'
+                )
+        AND COALESCE(
+              NULLIF(
+                resolution_row.payload_json->>'distinct_projected_target_count',
+                ''
+              )::integer,
+              0
+            ) = 1
+        AND COALESCE(
+              resolution_row.payload_json->>'physical_decision_set_digest',
+              ''
+            ) = encode(
+                  extensions.digest(
+                    convert_to(
+                      (resolution_row.payload_json->'bucket_resolutions')::text,
+                      'UTF8'
+                    ),
+                    'sha256'
+                  ),
+                  'hex'
+                )
+      ) AS aggregate_proof_valid,
+      min(COALESCE(
+        NULLIF(resolution_row.payload_json->>'physical_decision_count','')::integer,
+        0
+      )) AS physical_decision_count,
       min(nullif(btrim(coalesce(
         resolution_row.payload_json ->> 'resolution_economic_fingerprint',
         resolution_row.payload_json #>>
@@ -866,6 +907,10 @@ BEGIN
         AS source_basis_matches,
       COALESCE(session_resolution.historical_anchor_matches, false)
         AS historical_anchor_matches,
+      COALESCE(session_resolution.aggregate_proof_valid, false)
+        AS aggregate_proof_valid,
+      COALESCE(session_resolution.physical_decision_count, 0)
+        AS physical_decision_count,
       session_resolution.saved_resolution_economic_fingerprint,
       COALESCE(session_resolution.valid_target_amount_count, 0)
         AS valid_target_amount_count,
@@ -887,10 +932,11 @@ BEGIN
           - raw_component.reserved_underpayment_ex,
           2
         ) = 0 THEN true
-        WHEN COALESCE(
-               session_resolution.valid_target_amount_count,
-               0
-             ) >= GREATEST(v_mismatched_source_method_count, 1)
+        WHEN COALESCE(session_resolution.resolution_row_count, 0) = 1
+         AND COALESCE(session_resolution.valid_target_amount_count, 0) = 1
+         AND COALESCE(session_resolution.physical_decision_count, 0)
+             >= GREATEST(v_mismatched_source_method_count, 1)
+         AND COALESCE(session_resolution.aggregate_proof_valid, false)
          AND COALESCE(session_resolution.target_method_matches, false)
          AND COALESCE(session_resolution.resolution_not_stale, false)
          AND COALESCE(session_resolution.source_basis_matches, false)
@@ -1128,6 +1174,10 @@ BEGIN
             component_row.source_basis_matches,
           'historical_anchor_matches',
             component_row.historical_anchor_matches,
+          'aggregate_proof_valid',
+            component_row.aggregate_proof_valid,
+          'physical_decision_count',
+            component_row.physical_decision_count,
           'resolved_target_amount_ex_vat',
             component_row.resolved_target_amount_ex_vat,
           'resolution_rows',

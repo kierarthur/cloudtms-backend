@@ -20,6 +20,7 @@ const correctionResidual = read('supabase/repeatable/21072026_1235_09_pay_correc
 const effectNormaliser = read('supabase/repeatable/04082026_2315_pay_workbench_finance_effect_normalise_row_v1.sql');
 const cloneBoundedCertification = read('supabase/repeatable/07082026_1430_pay_workbench_session_clone_bounded_certification_v1.sql');
 const cloneEligibleRows = read('supabase/repeatable/04082026_1302_pay_workbench_session_clone_eligible_rows_v1.sql');
+const canonicalLines = read('supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql');
 
 test('schema rollout is disabled and profile 1 by default', () => {
   for (const flag of [
@@ -115,6 +116,7 @@ test('presentation allocation failure reports bounded aggregate categories only'
   assert.match(reconcile, /missing_state_count/);
   assert.match(reconcile, /state_multiplicity_mismatch_count/);
   assert.match(reconcile, /truth_amount_mismatch_count/);
+  assert.match(reconcile, /resolved_basis_bridge_invalid_count/);
   assert.match(reconcile, /allocation_sum_mismatch_count/);
   assert.match(reconcile, /missing_state_with_rollup_count/);
   assert.match(reconcile, /missing_state_with_canonical_line_count/);
@@ -122,6 +124,70 @@ test('presentation allocation failure reports bounded aggregate categories only'
   assert.match(reconcile, /PRESENTATION_ALLOCATION_AUTHORITY_MISMATCH[\s\S]+v_presentation_mismatch_detail::text/i);
   assert.match(mismatchRaise, /v_presentation_mismatch_detail::text/i);
   assert.doesNotMatch(mismatchRaise, /(timesheet_id|truth_ex_vat|amount_ex_vat|digest)/i);
+});
+
+test('resolved presentation allocation keeps sealed source truth separate from target-valued rows', () => {
+  assert.match(
+    reconcile,
+    /BOOL_OR\(COALESCE\(state\.resolved_segment_rows_replace_source_total,false\)\)[\s\S]*AS resolved_segment_rows_replace_source_total/i
+  );
+  assert.match(
+    reconcile,
+    /ready_preview_amount_ex_vat'[\s\S]*preview_component_amount_ex_vat'[\s\S]*AS presentation_amount_ex_vat/i
+  );
+  assert.match(
+    reconcile,
+    /WHEN COALESCE\(state\.resolved_segment_rows_replace_source_total,false\)[\s\S]*THEN state\.component_presentation_amount_ex_vat[\s\S]*ELSE state\.amount_ex_vat/i
+  );
+  assert.match(
+    reconcile,
+    /resolved_segment_rows_replace_source_total,false\)[\s\S]*component_count,0\)=0[\s\S]*invalid_component_amount_count,0\)>0/i
+  );
+  assert.match(
+    reconcile,
+    /ABS\(COALESCE\(state\.amount_ex_vat,0\)-COALESCE\(fact\.truth_ex_vat,0\)\)>0\.01[\s\S]*AS truth_amount_mismatch/i
+  );
+});
+
+test('semantic TS_DAY allocation rows preserve independent physical rate buckets on one date', () => {
+  assert.match(
+    canonicalLines,
+    /count\(\*\) over \([\s\S]*partition by component_rows\.candidate_id,[\s\S]*component_rows\.timesheet_id,[\s\S]*component_rows\.component_key_type,[\s\S]*component_rows\.stable_component_identity[\s\S]*\) as stable_component_identity_count/
+  );
+  assert.match(
+    canonicalLines,
+    /component_rows\.component_key_type='TS_DAY'[\s\S]*':segment:' \|\| component_rows\.stable_component_identity[\s\S]*when count\(\*\) over \([\s\S]*\) > 1 then ':bucket:' \|\| lower\(coalesce\([\s\S]*component_rows\.component_json->>'bucket_code'[\s\S]*source_basis_json,bucket_code/
+  );
+});
+
+test('resolved semantic allocation rows use the sealed target presentation amount', () => {
+  assert.match(
+    canonicalLines,
+    /when exists \([\s\S]*from canonical_timesheet_segment_rows resolved_segment[\s\S]*resolved_segment\.candidate_id=ctl\.candidate_id[\s\S]*resolved_segment\.timesheet_id=ctl\.timesheet_id[\s\S]*case_resolution_summary_json->>'has_resolved_rate'[\s\S]*case_resolution_summary_json->>'resolved_rate_component_count'[\s\S]*then coalesce\([\s\S]*ready_preview_amount_ex_vat[\s\S]*target_pay_ex_vat[\s\S]*preview_component_amount_ex_vat[\s\S]*else coalesce\([\s\S]*component_amount_ex_vat/
+  );
+  const resolvedBranch = canonicalLines.match(
+    /case_resolution_summary_json->>'resolved_rate_component_count'[\s\S]*?then coalesce\(([\s\S]*?)\)\s*else coalesce/
+  );
+  assert.ok(resolvedBranch);
+  assert.doesNotMatch(
+    resolvedBranch[1],
+    /component\.value->>'(?:component_amount_ex_vat|authoritative_outstanding_ex_vat|preview_due_amount_ex_vat)'/
+  );
+});
+
+test('canonical line conflicts expose bounded aggregate shapes without line identities', () => {
+  assert.match(
+    reconcile,
+    /PAY_WORKBENCH_CANONICAL_LINE_IDENTITY_CONFLICT[\s\S]*duplicate_identity_count[\s\S]*duplicate_row_count[\s\S]*maximum_identity_multiplicity[\s\S]*line_shape_counts/
+  );
+  assert.match(
+    reconcile,
+    /concat_ws\('\|',duplicate_row\.identity_source,duplicate_row\.presentation_role,[\s\S]*duplicate_row\.bucket_code\)/
+  );
+  assert.doesNotMatch(
+    reconcile,
+    /jsonb_build_object\([\s\S]{0,300}'line_identity'/
+  );
 });
 
 test('correction residuals reuse only exact entitlement inputs inside one valid profile-2 build transaction', () => {

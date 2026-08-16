@@ -49,6 +49,10 @@ DECLARE
   v_job_json jsonb := '{}'::jsonb;
   v_job_id_text text := NULL::text;
   v_job_id uuid := NULL::uuid;
+  v_session_refresh_cursor jsonb := '{}'::jsonb;
+  v_session_refresh_page jsonb := '{}'::jsonb;
+  v_session_refresh_pages jsonb := '[]'::jsonb;
+  v_session_refresh_page_count integer := 0;
   v_case_resolution_ids jsonb := '[]'::jsonb;
   v_resolution_identity_keys jsonb := '[]'::jsonb;
   v_case_resolution_id_text text := null;
@@ -1100,7 +1104,16 @@ BEGIN
         ))) AS resolution_family
       FROM public.banking_pay_workbench_preview_rows AS preview_row
       WHERE preview_row.session_id = p_session_id
-        AND preview_row.session_version = COALESCE(v_session_row.version, 1)
+        AND preview_row.session_version = COALESCE(
+          (
+            SELECT certified_scope.certified_preview_publication_session_version
+            FROM public.banking_pay_workbench_session_scope AS certified_scope
+            WHERE certified_scope.session_id = p_session_id
+              AND certified_scope.candidate_id = preview_row.candidate_id
+              AND certified_scope.certified_preview_publication_parity_ok IS TRUE
+          ),
+          COALESCE(v_session_row.version, 1)
+        )
         AND (v_candidate_id IS NULL OR preview_row.candidate_id = v_candidate_id)
         AND LOWER(BTRIM(COALESCE(preview_row.section, ''))) = 'cases_resolutions'
         AND UPPER(BTRIM(COALESCE(preview_row.status, ''))) = 'READY'
@@ -3405,6 +3418,45 @@ BEGIN
             )::text;
   END IF;
 
+  -- The decision advances the session version, so every scoped candidate must
+  -- either be physically current on that version or enter the existing
+  -- canonical refresh ladder.  The affected candidate already has an active
+  -- owner above; this established session owner observes it and enqueues only
+  -- the remaining non-current candidates.
+  LOOP
+    v_session_refresh_page :=
+      public.pay_workbench_session_refresh_current_authority_v1(
+        p_session_id,
+        p_actor_user_id,
+        v_session_refresh_cursor,
+        100
+      );
+    IF jsonb_typeof(v_session_refresh_page) IS DISTINCT FROM 'object'
+       OR COALESCE((v_session_refresh_page->>'ok')::boolean,false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+          'code','WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN',
+          'session_id',p_session_id,
+          'page_number',v_session_refresh_page_count+1
+        )::text;
+    END IF;
+    v_session_refresh_pages:=v_session_refresh_pages
+      ||jsonb_build_array(v_session_refresh_page);
+    v_session_refresh_page_count:=v_session_refresh_page_count+1;
+    EXIT WHEN COALESCE((v_session_refresh_page->>'has_more')::boolean,false)
+      IS NOT TRUE;
+    IF v_session_refresh_page_count>=1000
+       OR jsonb_typeof(v_session_refresh_page->'next_cursor') IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID'
+        USING ERRCODE='P0001',DETAIL=jsonb_build_object(
+          'code','WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID',
+          'session_id',p_session_id,
+          'page_number',v_session_refresh_page_count
+        )::text;
+    END IF;
+    v_session_refresh_cursor:=v_session_refresh_page->'next_cursor';
+  END LOOP;
+
 
   SELECT COALESCE(
            jsonb_agg(
@@ -3483,6 +3535,8 @@ BEGIN
     'targeted_timesheet_ids', COALESCE(to_jsonb(v_case_targeted_timesheet_ids), '[]'::jsonb),
     'linked_timesheet_ids', COALESCE(to_jsonb(v_case_linked_timesheet_ids), '[]'::jsonb),
     'targeted_refresh_enqueued', (v_job_id IS NOT NULL),
+    'session_version_refresh_pages',v_session_refresh_pages,
+    'session_version_refresh_page_count',v_session_refresh_page_count,
     'legacy_refresh_enqueued', CASE
       WHEN COALESCE(v_job_json->>'legacy_queued_count', '') ~ '^[0-9]+$' THEN (v_job_json->>'legacy_queued_count')::integer > 0
       ELSE upper(btrim(coalesce(v_job_json->>'job_type', v_job_json#>>'{enqueue_result,job_type}', ''))) <> 'WORKBENCH_CANDIDATE_DELTA_REFRESH'
