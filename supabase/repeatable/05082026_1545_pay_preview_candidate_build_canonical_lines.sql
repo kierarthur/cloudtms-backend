@@ -53,6 +53,7 @@ declare
   v_canonical_elapsed_ms numeric := 0;
   v_semantic_ready_observe_enabled boolean := false;
   v_semantic_ready_publication_enabled boolean := false;
+  v_allocation_segment_failure jsonb := '{}'::jsonb;
 begin
   if jsonb_typeof(v_context_json) <> 'object' then
     raise exception 'p_context_json must be a JSON object';
@@ -2326,6 +2327,8 @@ begin
         ), eligible_components as (
           select
             component_rows.*,
+            coalesce(segment_match.segment_match_count, 0)::integer as segment_match_count,
+            segment_match.segment_json as matched_segment_json,
             count(*) over (
               partition by component_rows.candidate_id,
                 component_rows.timesheet_id,
@@ -2363,6 +2366,51 @@ begin
                 || ':' || component_rows.component_fingerprint
             end as allocation_line_key
           from component_rows
+          left join lateral (
+            select
+              count(*)::integer as segment_match_count,
+              (jsonb_agg(
+                matched_segment.segment_json
+                order by matched_segment.match_rank,
+                         matched_segment.seg_ord,
+                         matched_segment.segment_stable_key
+              )->0) as segment_json
+            from (
+              select
+                segment_row.seg_ord,
+                segment_row.segment_stable_key,
+                segment_row.segment_json,
+                case
+                  when nullif(btrim(coalesce(component_rows.stable_component_identity, '')), '') is not null
+                   and segment_row.segment_stable_key is not distinct from component_rows.stable_component_identity
+                    then 10
+                  else 20
+                end as match_rank
+              from canonical_timesheet_segment_rows as segment_row
+              where component_rows.component_key_type = 'TS_DAY'
+                and segment_row.candidate_id = component_rows.candidate_id
+                and segment_row.timesheet_id = component_rows.timesheet_id
+                and segment_row.presentation_segment_state = 'READY'
+                and (
+                  (
+                    nullif(btrim(coalesce(component_rows.stable_component_identity, '')), '') is not null
+                    and segment_row.segment_stable_key is not distinct from component_rows.stable_component_identity
+                  )
+                  or (
+                    not exists (
+                      select 1
+                      from canonical_timesheet_segment_rows as exact_segment
+                      where exact_segment.candidate_id = component_rows.candidate_id
+                        and exact_segment.timesheet_id = component_rows.timesheet_id
+                        and exact_segment.presentation_segment_state = 'READY'
+                        and nullif(btrim(coalesce(component_rows.stable_component_identity, '')), '') is not null
+                        and exact_segment.segment_stable_key is not distinct from component_rows.stable_component_identity
+                    )
+                    and segment_row.segment_date::text is not distinct from component_rows.component_key_value
+                  )
+                )
+            ) as matched_segment
+          ) as segment_match on true
           where component_rows.component_key_type in ('TS_DAY','EXPENSE_CODE','ADDITIONAL_CODE','ADJUSTMENT_CODE')
             and component_rows.component_key_value is not null
             and component_rows.stable_component_identity is not null
@@ -2372,20 +2420,6 @@ begin
             and component_rows.case_is_blocked is false
             and component_rows.snooze_id is null
             and coalesce(jsonb_array_length(component_rows.payee_blockers),0)=0
-            and (
-              component_rows.component_key_type <> 'TS_DAY'
-              or exists (
-                select 1
-                from canonical_timesheet_segment_rows ready_segment
-                where ready_segment.candidate_id=component_rows.candidate_id
-                  and ready_segment.timesheet_id=component_rows.timesheet_id
-                  and ready_segment.presentation_segment_state='READY'
-                  and (
-                    ready_segment.segment_stable_key is not distinct from component_rows.stable_component_identity
-                    or ready_segment.segment_date is not distinct from component_rows.component_key_value
-                  )
-              )
-            )
         )
         select
           eligible_components.candidate_id,
@@ -2424,6 +2458,67 @@ begin
                 'key_value', eligible_components.component_key_value
               ),
               'component_fingerprint', eligible_components.component_fingerprint,
+              'bucket_code', nullif(btrim(coalesce(eligible_components.component_json->>'bucket_code','')), ''),
+              'physical_bucket_key', eligible_components.component_json->'physical_bucket_key',
+              'physical_bucket_digest', eligible_components.component_json->'physical_bucket_digest',
+              'source_family_key', eligible_components.component_json->'source_family_key',
+              'source_basis_fingerprint', eligible_components.component_json->'source_basis_fingerprint',
+              'source_basis_json', eligible_components.component_json->'source_basis_json',
+              'source_units', eligible_components.component_json->'source_units',
+              'source_rate', eligible_components.component_json->'source_rate',
+              'source_charge_rate', eligible_components.component_json->'source_charge_rate',
+              'source_pay_ex_vat', eligible_components.component_json->'source_pay_ex_vat',
+              'source_charge_ex_vat', eligible_components.component_json->'source_charge_ex_vat',
+              'target_rate', eligible_components.component_json->'target_rate',
+              'target_pay_ex_vat', eligible_components.component_json->'target_pay_ex_vat',
+              'source_pay_method', eligible_components.component_json->'source_pay_method',
+              'current_target_pay_method', eligible_components.component_json->'current_target_pay_method',
+              'segment_id', eligible_components.matched_segment_json->'segment_id',
+              'segment_key', eligible_components.matched_segment_json->'segment_key',
+              'segment_stable_key', eligible_components.matched_segment_json->'segment_stable_key',
+              'date', eligible_components.matched_segment_json->'date',
+              'work_date', coalesce(
+                eligible_components.matched_segment_json->'work_date',
+                eligible_components.matched_segment_json->'date'
+              ),
+              'role', eligible_components.matched_segment_json->'role',
+              'band', eligible_components.matched_segment_json->'band',
+              'start', eligible_components.matched_segment_json->'start',
+              'finish', eligible_components.matched_segment_json->'finish',
+              'start_utc', eligible_components.matched_segment_json->'start_utc',
+              'end_utc', eligible_components.matched_segment_json->'end_utc',
+              'break_start', eligible_components.matched_segment_json->'break_start',
+              'break_end', eligible_components.matched_segment_json->'break_end',
+              'break_mins', eligible_components.matched_segment_json->'break_mins',
+              'breaks', eligible_components.matched_segment_json->'breaks',
+              'ref_num', eligible_components.matched_segment_json->'ref_num',
+              'case_resolution_summary', coalesce(eligible_components.case_resolution_summary_json, '{}'::jsonb),
+              'case_resolution_summary_json', coalesce(eligible_components.case_resolution_summary_json, '{}'::jsonb),
+              'has_resolved_rate', eligible_components.case_resolution_summary_json->'has_resolved_rate',
+              'resolved_rate_applied', eligible_components.case_resolution_summary_json->'resolved_rate_applied',
+              'resolved_rate_active', eligible_components.case_resolution_summary_json->'resolved_rate_active',
+              'case_resolution_satisfied_now', eligible_components.case_resolution_summary_json->'case_resolution_satisfied_now',
+              'resolved_rate_family', eligible_components.case_resolution_summary_json->'resolved_rate_family',
+              'resolved_rate_component_count', eligible_components.case_resolution_summary_json->'resolved_rate_component_count',
+              'resolved_rate_candidate_id', coalesce(
+                eligible_components.case_resolution_summary_json->'resolved_rate_candidate_id',
+                eligible_components.case_resolution_summary_json->'resolution_candidate_id'
+              ),
+              'resolved_rate_timesheet_id', coalesce(
+                eligible_components.case_resolution_summary_json->'resolved_rate_timesheet_id',
+                eligible_components.case_resolution_summary_json->'resolution_timesheet_id'
+              ),
+              'resolved_rate_case_key', coalesce(
+                eligible_components.case_resolution_summary_json->'resolved_rate_case_key',
+                eligible_components.case_resolution_summary_json->'resolution_case_key'
+              ),
+              'resolution_candidate_id', eligible_components.case_resolution_summary_json->'resolution_candidate_id',
+              'resolution_timesheet_id', eligible_components.case_resolution_summary_json->'resolution_timesheet_id',
+              'resolution_case_key', eligible_components.case_resolution_summary_json->'resolution_case_key',
+              'case_resolution_id', eligible_components.case_resolution_summary_json->'case_resolution_id',
+              'case_resolution_ids', eligible_components.case_resolution_summary_json->'case_resolution_ids',
+              'resolution_identity_keys', eligible_components.case_resolution_summary_json->'resolution_identity_keys',
+              'resolved_rate_clear_payload_json', eligible_components.case_resolution_summary_json->'resolved_rate_clear_payload_json',
               'case_components', jsonb_build_array(eligible_components.component_json),
               'amount_ex_vat', eligible_components.component_amount_ex_vat,
               'amount_display', eligible_components.component_amount_ex_vat,
@@ -2454,10 +2549,66 @@ begin
           eligible_components.candidate_pay_method as pay_channel,
           case when eligible_components.candidate_pay_method='PAYE' then 'GROSS_ADD' else 'NONE' end as paye_treatment,
           eligible_components.component_amount_ex_vat as amount_ex_vat,
-          false as is_excluded_from_allocation
+          false as is_excluded_from_allocation,
+          eligible_components.component_key_type,
+          eligible_components.segment_match_count
         from eligible_components
 
   ;
+
+  if exists (
+    select 1
+    from timesheet_allocation_component_lines as component_line
+    where component_line.component_key_type = 'TS_DAY'
+      and component_line.segment_match_count = 0
+  ) then
+    SELECT pg_catalog.jsonb_build_object(
+      'code', 'PAY_WORKBENCH_ALLOCATION_SEGMENT_IDENTITY_MISSING',
+      'candidate_id', component_line.candidate_id,
+      'timesheet_id', component_line.timesheet_id,
+      'component_key_type', component_line.component_key_type,
+      'component_key_value', component_line.key_value,
+      'source_basis_fingerprint', component_line.line_json->>'source_basis_fingerprint',
+      'match_count', component_line.segment_match_count
+    )
+    INTO v_allocation_segment_failure
+    FROM timesheet_allocation_component_lines AS component_line
+    WHERE component_line.component_key_type = 'TS_DAY'
+      AND component_line.segment_match_count = 0
+    ORDER BY component_line.candidate_id, component_line.timesheet_id,
+      component_line.key_value, component_line.line_key
+    LIMIT 1;
+
+    raise exception 'PAY_WORKBENCH_ALLOCATION_SEGMENT_IDENTITY_MISSING'
+      using errcode = 'P0001', detail = v_allocation_segment_failure::text;
+  end if;
+
+  if exists (
+    select 1
+    from timesheet_allocation_component_lines as component_line
+    where component_line.component_key_type = 'TS_DAY'
+      and component_line.segment_match_count > 1
+  ) then
+    SELECT pg_catalog.jsonb_build_object(
+      'code', 'PAY_WORKBENCH_ALLOCATION_SEGMENT_IDENTITY_AMBIGUOUS',
+      'candidate_id', component_line.candidate_id,
+      'timesheet_id', component_line.timesheet_id,
+      'component_key_type', component_line.component_key_type,
+      'component_key_value', component_line.key_value,
+      'source_basis_fingerprint', component_line.line_json->>'source_basis_fingerprint',
+      'match_count', component_line.segment_match_count
+    )
+    INTO v_allocation_segment_failure
+    FROM timesheet_allocation_component_lines AS component_line
+    WHERE component_line.component_key_type = 'TS_DAY'
+      AND component_line.segment_match_count > 1
+    ORDER BY component_line.candidate_id, component_line.timesheet_id,
+      component_line.key_value, component_line.line_key
+    LIMIT 1;
+
+    raise exception 'PAY_WORKBENCH_ALLOCATION_SEGMENT_IDENTITY_AMBIGUOUS'
+      using errcode = 'P0001', detail = v_allocation_segment_failure::text;
+  end if;
 
   -- The finance resolver's run-level headroom predates semantic allocation
   -- children and therefore used aggregate presentation parents.  V3 replaces

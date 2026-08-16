@@ -5,11 +5,16 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 const repeatableDir = path.join(root, 'supabase', 'repeatable');
-const currentFunctionsPath = path.join(
+const historicalFunctionsPath = path.join(
   repeatableDir,
   '26052026_2100HRS_NEW_FUNCTIONS.sql'
 );
-const currentFunctionsSql = fs.readFileSync(currentFunctionsPath, 'utf8');
+const historicalFunctionsSql = fs.readFileSync(historicalFunctionsPath, 'utf8');
+const currentCandidatePreviewPath = path.join(
+  repeatableDir,
+  '16082026_2035_pay_workbench_candidate_preview_effective_section_v1.sql'
+);
+const currentCandidatePreviewSql = fs.readFileSync(currentCandidatePreviewPath, 'utf8');
 const currentPreviewPagePath = path.join(
   repeatableDir,
   '20072026_0117_banking_pay_preview_selection_revision.sql'
@@ -30,26 +35,26 @@ function functionBody(source, qualifiedName) {
 
 test('candidate preview preserves the existing bounded four-argument contract', () => {
   assert.match(
-    currentFunctionsSql,
-    /CREATE OR REPLACE FUNCTION public\.pay_workbench_session_get_candidate_preview\(p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb DEFAULT '\{\}'::jsonb, p_limit integer DEFAULT 100\)/
+    currentCandidatePreviewSql,
+    /CREATE OR REPLACE FUNCTION public\.pay_workbench_session_get_candidate_preview\(\s*p_session_id uuid,\s*p_candidate_id uuid,\s*p_cursor_json jsonb DEFAULT '\{\}'::jsonb,\s*p_limit integer DEFAULT 100\s*\)/
   );
   assert.match(
-    currentFunctionsSql,
+    historicalFunctionsSql,
     /DROP FUNCTION IF EXISTS public\.pay_workbench_session_get_candidate_preview\(uuid, uuid\);/
   );
   assert.match(
-    currentFunctionsSql,
-    /REVOKE ALL ON FUNCTION public\.pay_workbench_session_get_candidate_preview\(uuid, uuid, jsonb, integer\)\s+FROM PUBLIC, anon, authenticated;/
+    currentCandidatePreviewSql,
+    /REVOKE ALL ON FUNCTION public\.pay_workbench_session_get_candidate_preview\(uuid,\s*uuid,\s*jsonb,\s*integer\)\s+FROM PUBLIC,\s*anon,\s*authenticated;/
   );
   assert.match(
-    currentFunctionsSql,
-    /GRANT EXECUTE ON FUNCTION public\.pay_workbench_session_get_candidate_preview\(uuid, uuid, jsonb, integer\)\s+TO service_role;/
+    currentCandidatePreviewSql,
+    /GRANT EXECUTE ON FUNCTION public\.pay_workbench_session_get_candidate_preview\(uuid,\s*uuid,\s*jsonb,\s*integer\)\s+TO service_role;/
   );
 });
 
 test('candidate preview excludes rows reserved by an active draft or later payment stage', () => {
   const body = functionBody(
-    currentFunctionsSql,
+    currentCandidatePreviewSql,
     'public.pay_workbench_session_get_candidate_preview'
   );
 
@@ -60,12 +65,12 @@ test('candidate preview excludes rows reserved by an active draft or later payme
   assert.match(body, /'DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE'/);
   assert.match(body, /row_json->>'post_draft_overlay_active'/);
   assert.match(body, /NOT IN \('false', 'f', '0', 'no', 'n', 'off'\)/);
-  assert.match(body, /AND NOT EXISTS \(\s*SELECT 1\s*FROM public\.pay_batch_items AS active_batch_item/);
-  assert.match(body, /active_batch_candidate\.candidate_id = preview_row\.candidate_id/);
+  assert.match(body, /AND NOT EXISTS \(\s*SELECT 1\s*FROM public\.pay_batch_items AS active_item/);
+  assert.match(body, /active_candidate\.candidate_id = preview_row\.candidate_id/);
   assert.match(body, /active_batch\.cancelled_at_utc IS NULL/);
-  assert.match(body, /active_batch_item\.finance_component_id::text/);
-  assert.match(body, /active_batch_item\.finance_case_id::text/);
-  assert.match(body, /active_batch_item\.frozen_component_snapshot_json->>'canonical_correction_key'/);
+  assert.match(body, /active_item\.finance_component_id::text/);
+  assert.match(body, /active_item\.finance_case_id::text/);
+  assert.match(body, /active_item\.frozen_component_snapshot_json->>'canonical_correction_key'/);
   assert.match(body, /'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/);
 });
 
@@ -120,7 +125,7 @@ test('only the current preview-page function body remains in repeatable sources'
   assert.deepEqual(definitions, ['20072026_0117_banking_pay_preview_selection_revision.sql']);
 });
 
-test('only the current candidate-preview function body remains in repeatable sources', () => {
+test('the historical candidate-preview owner is superseded by one later exact reassertion', () => {
   const definitions = [];
   for (const entry of fs.readdirSync(repeatableDir, { withFileTypes: true })) {
     if (!entry.isFile()) continue;
@@ -134,12 +139,15 @@ test('only the current candidate-preview function body remains in repeatable sou
     }
   }
 
-  assert.deepEqual(definitions, ['26052026_2100HRS_NEW_FUNCTIONS.sql']);
+  assert.deepEqual(definitions, [
+    '16082026_2035_pay_workbench_candidate_preview_effective_section_v1.sql',
+    '26052026_2100HRS_NEW_FUNCTIONS.sql'
+  ]);
 });
 
 test('draft cancellation still restores preview eligibility in the batch overlay function', () => {
   const body = functionBody(
-    currentFunctionsSql,
+    historicalFunctionsSql,
     'public.pay_workbench_patch_preview_after_batch_mutation'
   );
 

@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 29,
+  "function_count": 30,
   "functions": [
     {
       "schema": "private",
@@ -632,7 +632,7 @@
       "schema": "public",
       "name": "pay_preview_candidate_build_canonical_lines",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "ec5e927f9d5d50eaa651163edb2832398b4e16f22b3f583b196f7ad798f2b514",
+      "definition_sha256": "7127060ec114016c52248fd50e5b081169ee38255f250f8de934371fbc2b105d",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -740,6 +740,29 @@
       ],
       "source_files": [
         "supabase/repeatable/05082026_1539_pay_workbench_fact_cursor_transition_v3.sql"
+      ]
+    },
+    {
+      "schema": "private",
+      "name": "pay_workbench_candidate_session_version_rebase_v1",
+      "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_from_session_version bigint, p_to_session_version bigint, p_actor_user_id uuid",
+      "definition_sha256": "3e947a0c2614b290ea41ef85a91e014c3e0f01f55736b1ae87684109a5f9a13b",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=\"\"",
+        "plpgsql_check.mode=disabled"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/11082026_1557_pay_workbench_session_refresh_current_authority_v1.sql"
       ]
     },
     {

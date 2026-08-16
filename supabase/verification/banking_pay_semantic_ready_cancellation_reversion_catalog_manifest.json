@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay semantic Ready-to-Pay and certified cancellation reversion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 47,
+  "function_count": 48,
   "functions": [
     {
       "schema": "public", "name": "_ctms_materialise_candidate_correction_residuals_v1",
@@ -139,7 +139,7 @@
     {
       "schema": "private", "name": "pay_workbench_recovery_selection_overlay_apply_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_options_json jsonb",
-      "definition_sha256": "4cf9ff834127e8d4e9f321c1d448b577554481c96ff18b457c1b50e6084e61c4",
+      "definition_sha256": "5b07356167c938076832108fb1ba3ae13e9d70021730d49f35c2a00da17367ad",
       "owner": "postgres", "security_definer": false, "proconfig": ["search_path=\"\""],
       "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
       "source_files": ["supabase/repeatable/09082026_0712_banking_pay_semantic_ready_helpers.sql"]
@@ -470,13 +470,24 @@
     {
       "schema": "public", "name": "pay_workbench_session_refresh_current_authority_v1",
       "identity_arguments": "p_session_id uuid, p_actor_user_id uuid, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "bce0e45e9fa2c01fc9b1d207e4fe92725e64eb34a299bc213ec8868a1eb8645f",
+      "definition_sha256": "231ab97bee3dad27647c020b145ef300a4b84d5c1bd46fcf692adb2c715fff67",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=\"\"", "plpgsql_check.mode=disabled"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
       "source_files": ["supabase/repeatable/11082026_1557_pay_workbench_session_refresh_current_authority_v1.sql"]
+    },
+    {
+      "schema": "public", "name": "pay_workbench_session_get_candidate_preview",
+      "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_limit integer",
+      "definition_sha256": "e82a2e8f05efcabf458ddd406f8ecf34cce9da99e7f856a157f884222831e1b6",
+      "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
+      "expanded_acl": [
+        {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
+        {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
+      ],
+      "source_files": ["supabase/repeatable/16082026_2035_pay_workbench_candidate_preview_effective_section_v1.sql"]
     }
   ]
 }

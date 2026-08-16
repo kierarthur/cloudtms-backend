@@ -390,6 +390,7 @@ DECLARE
   v_is_v3 boolean := false;
   v_recovery_row_count integer := 0;
   v_ready_recovery_count integer := 0;
+  v_case_recovery_count integer := 0;
   v_blocked_recovery_count integer := 0;
   v_forced_deselected_count integer := 0;
   v_updated_count integer := 0;
@@ -536,26 +537,8 @@ BEGIN
           ELSE NULL::numeric
         END,
         CASE
-          WHEN COALESCE((
-            SELECT pg_catalog.sum(
-              CASE
-                WHEN COALESCE(component.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-                  THEN pg_catalog.abs((component.value->>'preview_due_amount_ex_vat')::numeric)
-                ELSE 0::numeric
-              END
-            )
-            FROM pg_catalog.jsonb_array_elements(
-              CASE
-                WHEN pg_catalog.jsonb_typeof(recovery_row.row_json->'case_components') = 'array'
-                  THEN recovery_row.row_json->'case_components'
-                ELSE '[]'::jsonb
-              END
-            ) AS component(value)
-          ), 0) > 0 THEN (
-            SELECT pg_catalog.sum(pg_catalog.abs((component.value->>'preview_due_amount_ex_vat')::numeric))
-            FROM pg_catalog.jsonb_array_elements(recovery_row.row_json->'case_components') AS component(value)
-            WHERE COALESCE(component.value->>'preview_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-          )
+          WHEN COALESCE(recovery_row.row_json->>'source_due_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN pg_catalog.abs((recovery_row.row_json->>'source_due_amount_ex_vat')::numeric)
           ELSE NULL::numeric
         END,
         CASE
@@ -564,6 +547,37 @@ BEGIN
           ELSE 0::numeric
         END
       ), 2) AS nominal_due_amount_ex_vat,
+      CASE
+        WHEN pg_catalog.jsonb_typeof(recovery_row.row_json->'case_components') = 'array'
+          THEN recovery_row.row_json->'case_components'
+        ELSE '[]'::jsonb
+      END AS canonical_case_components,
+      CASE
+        WHEN pg_catalog.jsonb_typeof(recovery_row.row_json->'case_resolution_summary') = 'object'
+          THEN recovery_row.row_json->'case_resolution_summary'
+        WHEN pg_catalog.jsonb_typeof(recovery_row.row_json->'case_resolution_summary_json') = 'object'
+          THEN recovery_row.row_json->'case_resolution_summary_json'
+        ELSE '{}'::jsonb
+      END AS case_resolution_summary_json,
+      (
+        pg_catalog.lower(pg_catalog.btrim(COALESCE(
+          recovery_row.row_json#>>'{case_resolution_summary,case_needs_resolution}',
+          recovery_row.row_json#>>'{case_resolution_summary_json,case_needs_resolution}',
+          recovery_row.row_json->>'case_needs_resolution_now',
+          'false'
+        ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND pg_catalog.lower(pg_catalog.btrim(COALESCE(
+          recovery_row.row_json#>>'{case_resolution_summary,taxable_channel_restructure,can_apply}',
+          recovery_row.row_json#>>'{case_resolution_summary_json,taxable_channel_restructure,can_apply}',
+          'false'
+        ))) IN ('true', 't', '1', 'yes', 'y', 'on')
+        AND pg_catalog.upper(pg_catalog.btrim(COALESCE(
+          recovery_row.row_json#>>'{case_resolution_summary,resolution_family}',
+          recovery_row.row_json#>>'{case_resolution_summary_json,resolution_family}',
+          recovery_row.row_json->>'resolution_family',
+          ''
+        ))) = 'TAXABLE_CHANNEL_RESTRUCTURE'
+      ) AS actionable_restructure,
       COALESCE(
         recovery_row.row_json#>'{selection_recovery_headroom_v1,base_blocked_reason_codes}',
         (
@@ -635,6 +649,7 @@ BEGIN
       COALESCE(pg_catalog.sum(
         CASE
           WHEN recovery_base.static_recovery_eligible
+           AND recovery_base.actionable_restructure IS NOT TRUE
             THEN recovery_base.nominal_due_amount_ex_vat
           ELSE 0::numeric
         END
@@ -651,6 +666,7 @@ BEGIN
       ranked_recovery.*,
       CASE
         WHEN ranked_recovery.static_recovery_eligible
+         AND ranked_recovery.actionable_restructure IS NOT TRUE
          AND ranked_recovery.pay_channel IN ('PAYE', 'UMBRELLA')
           THEN pg_catalog.round(LEAST(
             ranked_recovery.nominal_due_amount_ex_vat,
@@ -663,10 +679,207 @@ BEGIN
         ELSE 0::numeric
       END AS recoverable_amount_ex_vat
     FROM ranked_recovery
+  ), recovery_component_base AS (
+    SELECT
+      allocated_recovery.id AS recovery_row_id,
+      component.ordinality::integer AS component_ordinality,
+      component.value AS component_json,
+      CASE
+        WHEN COALESCE(component.value->>'finance_component_id', '')
+               ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN true
+        ELSE NULLIF(pg_catalog.btrim(COALESCE(component.value->>'source_family_key', '')), '') IS NOT NULL
+          AND NULLIF(pg_catalog.btrim(COALESCE(
+                component.value->>'component_key_type',
+                component.value#>>'{component_key,key_type}',
+                ''
+              )), '') IS NOT NULL
+          AND NULLIF(pg_catalog.btrim(COALESCE(
+                component.value->>'component_key_value',
+                component.value#>>'{component_key,key_value}',
+                ''
+              )), '') IS NOT NULL
+          AND NULLIF(pg_catalog.btrim(COALESCE(component.value->>'bucket_code', '')), '') IS NOT NULL
+          AND NULLIF(pg_catalog.btrim(COALESCE(component.value->>'source_basis_fingerprint', '')), '') IS NOT NULL
+          AND NULLIF(pg_catalog.btrim(COALESCE(component.value->>'component_fingerprint', '')), '') IS NOT NULL
+      END AS identity_complete,
+      CASE
+        WHEN COALESCE(component.value->>'finance_component_id', '')
+               ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN 'FINANCE:' || pg_catalog.lower(component.value->>'finance_component_id')
+        ELSE 'STRUCT:' || pg_catalog.concat_ws(E'\x1f',
+          pg_catalog.upper(pg_catalog.btrim(COALESCE(component.value->>'source_family_key', ''))),
+          pg_catalog.upper(pg_catalog.btrim(COALESCE(
+            component.value->>'component_key_type', component.value#>>'{component_key,key_type}', ''
+          ))),
+          pg_catalog.btrim(COALESCE(
+            component.value->>'component_key_value', component.value#>>'{component_key,key_value}', ''
+          )),
+          pg_catalog.upper(pg_catalog.btrim(COALESCE(component.value->>'bucket_code', ''))),
+          pg_catalog.btrim(COALESCE(component.value->>'source_basis_fingerprint', '')),
+          pg_catalog.btrim(COALESCE(component.value->>'component_fingerprint', ''))
+        )
+      END AS component_identity,
+      pg_catalog.round(COALESCE(
+        CASE
+          WHEN COALESCE(component.value->>'target_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN pg_catalog.abs((component.value->>'target_pay_ex_vat')::numeric)
+          ELSE NULL::numeric
+        END,
+        CASE
+          WHEN COALESCE(component.value->>'authoritative_outstanding_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN pg_catalog.abs((component.value->>'authoritative_outstanding_ex_vat')::numeric)
+          ELSE NULL::numeric
+        END,
+        CASE
+          WHEN COALESCE(component.value->>'source_pay_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN pg_catalog.abs((component.value->>'source_pay_ex_vat')::numeric)
+          ELSE NULL::numeric
+        END,
+        CASE
+          WHEN COALESCE(component.value->>'component_amount_ex_vat', '') ~ '^-?[0-9]+(\.[0-9]+)?$'
+            THEN pg_catalog.abs((component.value->>'component_amount_ex_vat')::numeric)
+          ELSE 0::numeric
+        END
+      ), 2) AS component_capacity_ex_vat,
+      allocated_recovery.recoverable_amount_ex_vat
+    FROM allocated_recovery
+    CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+      allocated_recovery.canonical_case_components
+    ) WITH ORDINALITY AS component(value, ordinality)
+  ), recovery_component_ranked AS (
+    SELECT
+      recovery_component_base.*,
+      pg_catalog.count(*) OVER (
+        PARTITION BY recovery_component_base.recovery_row_id,
+          recovery_component_base.component_identity
+      )::integer AS component_identity_count,
+      COALESCE(pg_catalog.sum(recovery_component_base.component_capacity_ex_vat) OVER (
+        PARTITION BY recovery_component_base.recovery_row_id
+        ORDER BY
+          pg_catalog.upper(pg_catalog.btrim(COALESCE(
+            recovery_component_base.component_json->>'component_key_type',
+            recovery_component_base.component_json#>>'{component_key,key_type}',
+            ''
+          ))),
+          pg_catalog.btrim(COALESCE(
+            recovery_component_base.component_json->>'component_key_value',
+            recovery_component_base.component_json#>>'{component_key,key_value}',
+            ''
+          )),
+          pg_catalog.lower(COALESCE(recovery_component_base.component_json->>'finance_component_id', '')),
+          COALESCE(recovery_component_base.component_json->>'component_fingerprint', ''),
+          recovery_component_base.component_ordinality
+        ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+      ), 0)::numeric AS prior_component_capacity_ex_vat
+    FROM recovery_component_base
+  ), recovery_component_allocated AS (
+    SELECT
+      recovery_component_ranked.*,
+      pg_catalog.round(LEAST(
+        recovery_component_ranked.component_capacity_ex_vat,
+        GREATEST(
+          recovery_component_ranked.recoverable_amount_ex_vat
+            - recovery_component_ranked.prior_component_capacity_ex_vat,
+          0
+        )
+      ), 2) AS base_component_recoverable_ex_vat,
+      pg_catalog.row_number() OVER (
+        PARTITION BY recovery_component_ranked.recovery_row_id
+        ORDER BY
+          pg_catalog.upper(pg_catalog.btrim(COALESCE(
+            recovery_component_ranked.component_json->>'component_key_type',
+            recovery_component_ranked.component_json#>>'{component_key,key_type}',
+            ''
+          ))),
+          pg_catalog.btrim(COALESCE(
+            recovery_component_ranked.component_json->>'component_key_value',
+            recovery_component_ranked.component_json#>>'{component_key,key_value}',
+            ''
+          )),
+          pg_catalog.lower(COALESCE(recovery_component_ranked.component_json->>'finance_component_id', '')),
+          COALESCE(recovery_component_ranked.component_json->>'component_fingerprint', ''),
+          recovery_component_ranked.component_ordinality
+      )::integer AS allocation_order
+    FROM recovery_component_ranked
+  ), recovery_component_residual AS (
+    SELECT
+      recovery_component_allocated.*,
+      pg_catalog.round(
+        recovery_component_allocated.recoverable_amount_ex_vat
+          - pg_catalog.sum(recovery_component_allocated.base_component_recoverable_ex_vat)
+              OVER (PARTITION BY recovery_component_allocated.recovery_row_id),
+        2
+      ) AS penny_residual_ex_vat,
+      pg_catalog.max(recovery_component_allocated.allocation_order) FILTER (
+        WHERE recovery_component_allocated.component_capacity_ex_vat
+              - recovery_component_allocated.base_component_recoverable_ex_vat > 0
+      ) OVER (PARTITION BY recovery_component_allocated.recovery_row_id)
+        AS residual_target_order
+    FROM recovery_component_allocated
+  ), recovery_component_final AS (
+    SELECT
+      recovery_component_residual.*,
+      pg_catalog.round(
+        recovery_component_residual.base_component_recoverable_ex_vat
+          + CASE
+              WHEN recovery_component_residual.penny_residual_ex_vat <> 0
+               AND recovery_component_residual.allocation_order
+                    = recovery_component_residual.residual_target_order
+               AND recovery_component_residual.component_capacity_ex_vat
+                     - recovery_component_residual.base_component_recoverable_ex_vat
+                    >= recovery_component_residual.penny_residual_ex_vat
+                THEN recovery_component_residual.penny_residual_ex_vat
+              ELSE 0::numeric
+            END,
+        2
+      ) AS component_recoverable_ex_vat
+    FROM recovery_component_residual
+  ), recovery_component_rollup AS (
+    SELECT
+      recovery_component_final.recovery_row_id,
+      pg_catalog.jsonb_agg(
+        recovery_component_final.component_json
+        || pg_catalog.jsonb_build_object(
+          'preview_due_amount_ex_vat', recovery_component_final.component_recoverable_ex_vat,
+          'allocated_source_due_amount_ex_vat', recovery_component_final.component_recoverable_ex_vat,
+          'ready_preview_amount_ex_vat', recovery_component_final.component_recoverable_ex_vat,
+          'preview_component_amount_ex_vat', recovery_component_final.component_recoverable_ex_vat,
+          'component_amount_ex_vat', recovery_component_final.component_recoverable_ex_vat,
+          'recoverable_this_pay_run_ex_vat', recovery_component_final.component_recoverable_ex_vat
+        )
+        ORDER BY recovery_component_final.component_ordinality
+      ) AS allocated_case_components,
+      pg_catalog.count(*) FILTER (
+        WHERE recovery_component_final.identity_complete IS NOT TRUE
+      )::integer AS incomplete_identity_count,
+      pg_catalog.count(*) FILTER (
+        WHERE recovery_component_final.component_identity_count > 1
+      )::integer AS duplicate_identity_count,
+      pg_catalog.round(COALESCE(pg_catalog.sum(
+        recovery_component_final.component_capacity_ex_vat
+      ), 0), 2) AS component_capacity_ex_vat,
+      pg_catalog.round(COALESCE(pg_catalog.sum(
+        recovery_component_final.component_recoverable_ex_vat
+      ), 0), 2) AS component_recoverable_ex_vat
+    FROM recovery_component_final
+    GROUP BY recovery_component_final.recovery_row_id
   )
   SELECT
     allocated_recovery.*,
+    COALESCE(recovery_component_rollup.allocated_case_components, '[]'::jsonb)
+      AS allocated_case_components,
+    COALESCE(recovery_component_rollup.incomplete_identity_count, 0)::integer
+      AS incomplete_component_identity_count,
+    COALESCE(recovery_component_rollup.duplicate_identity_count, 0)::integer
+      AS duplicate_component_identity_count,
+    COALESCE(recovery_component_rollup.component_capacity_ex_vat, 0)::numeric
+      AS component_capacity_ex_vat,
+    COALESCE(recovery_component_rollup.component_recoverable_ex_vat, 0)::numeric
+      AS component_recoverable_ex_vat,
     CASE
+      WHEN allocated_recovery.actionable_restructure
+        THEN 'cases_resolutions'
       WHEN allocated_recovery.static_recovery_eligible
        AND allocated_recovery.recoverable_amount_ex_vat > 0
         THEN 'canonical_preview_lines'
@@ -681,13 +894,64 @@ BEGIN
       'nominal_due_amount_ex_vat', allocated_recovery.nominal_due_amount_ex_vat,
       'recoverable_amount_ex_vat', allocated_recovery.recoverable_amount_ex_vat,
       'effective_section', CASE
+        WHEN allocated_recovery.actionable_restructure
+          THEN 'cases_resolutions'
         WHEN allocated_recovery.static_recovery_eligible
          AND allocated_recovery.recoverable_amount_ex_vat > 0
           THEN 'canonical_preview_lines'
         ELSE 'blocked_for_pay'
       END
     )::text) AS row_overlay_digest
-  FROM allocated_recovery;
+  FROM allocated_recovery
+  LEFT JOIN recovery_component_rollup
+    ON recovery_component_rollup.recovery_row_id = allocated_recovery.id;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row
+    WHERE overlay_row.incomplete_component_identity_count > 0
+  ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_COMPONENT_IDENTITY_INCOMPLETE'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row
+    WHERE overlay_row.duplicate_component_identity_count > 0
+  ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_COMPONENT_IDENTITY_DUPLICATE'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row
+    WHERE overlay_row.nominal_due_amount_ex_vat > 0
+      AND pg_catalog.jsonb_array_length(overlay_row.allocated_case_components) = 0
+  ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_COMPONENT_AUTHORITY_MISSING'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row
+    WHERE overlay_row.recoverable_amount_ex_vat > overlay_row.component_capacity_ex_vat
+  ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_COMPONENT_CAPACITY_INSUFFICIENT'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row
+    WHERE overlay_row.component_recoverable_ex_vat
+      IS DISTINCT FROM overlay_row.recoverable_amount_ex_vat
+  ) THEN
+    RAISE EXCEPTION 'PAY_WORKBENCH_RECOVERY_COMPONENT_PENNY_RECONCILIATION_FAILED'
+      USING ERRCODE = 'P0001';
+  END IF;
 
   SELECT pg_catalog.count(*)::integer
   INTO v_duplicate_recovery_identity_count
@@ -709,6 +973,7 @@ BEGIN
 
   SELECT pg_catalog.count(*)::integer,
          pg_catalog.count(*) FILTER (WHERE overlay_row.effective_section = 'canonical_preview_lines')::integer,
+         pg_catalog.count(*) FILTER (WHERE overlay_row.effective_section = 'cases_resolutions')::integer,
          pg_catalog.count(*) FILTER (WHERE overlay_row.effective_section = 'blocked_for_pay')::integer,
          (
            SELECT pg_catalog.round(COALESCE(pg_catalog.sum(channel_headroom.selected_positive_headroom_ex_vat), 0), 2)
@@ -726,6 +991,7 @@ BEGIN
          ), ''))
   INTO v_recovery_row_count,
        v_ready_recovery_count,
+       v_case_recovery_count,
        v_blocked_recovery_count,
        v_selected_positive_amount,
        v_ready_recovery_amount,
@@ -750,6 +1016,7 @@ BEGIN
         row_json = pg_catalog.jsonb_strip_nulls(
           overlay_row.base_row_json
           || pg_catalog.jsonb_build_object(
+            'case_components', overlay_row.allocated_case_components,
             'amount_ex_vat', -overlay_row.recoverable_amount_ex_vat,
             'preview_amount_ex_vat', -overlay_row.recoverable_amount_ex_vat,
             'amount_display', -overlay_row.recoverable_amount_ex_vat,
@@ -764,17 +1031,23 @@ BEGIN
             'retained_positive_headroom_ex_vat', overlay_row.selected_positive_headroom_ex_vat,
             'semantic_recovery_headroom_capped',
               overlay_row.recoverable_amount_ex_vat < overlay_row.nominal_due_amount_ex_vat,
-            'readiness_state', CASE
-              WHEN overlay_row.effective_section = 'canonical_preview_lines' THEN 'READY_TO_PAY'
+            'effective_section', overlay_row.effective_section,
+            'physical_section', overlay_row.physical_section,
+            'readiness_state', CASE overlay_row.effective_section
+              WHEN 'canonical_preview_lines' THEN 'READY_TO_PAY'
+              WHEN 'cases_resolutions' THEN 'RESOLUTION_REQUIRED'
               ELSE 'BLOCKED_FOR_PAY'
             END,
-            'presentation_section', CASE
-              WHEN overlay_row.effective_section = 'canonical_preview_lines' THEN 'READY_TO_PAY'
+            'presentation_section', CASE overlay_row.effective_section
+              WHEN 'canonical_preview_lines' THEN 'READY_TO_PAY'
+              WHEN 'cases_resolutions' THEN 'CASES_RESOLUTIONS'
               ELSE 'BLOCKED_FOR_PAY'
             END,
             'presentation_reason', CASE
               WHEN overlay_row.effective_section = 'canonical_preview_lines'
                 THEN overlay_row.base_presentation_reason
+              WHEN overlay_row.effective_section = 'cases_resolutions'
+                THEN 'CASE_NEEDS_RESOLUTION'
               WHEN overlay_row.static_recovery_eligible THEN 'NO_PAY_HEADROOM'
               ELSE overlay_row.base_presentation_reason
             END,
@@ -812,9 +1085,11 @@ BEGIN
             'case_is_blocked', overlay_row.effective_section <> 'canonical_preview_lines',
             'selection_recovery_headroom_v1', pg_catalog.jsonb_build_object(
               'contract_version', 1,
+              'component_allocation_contract_version', 1,
               'candidate_id', p_candidate_id::text,
               'pay_channel', overlay_row.pay_channel,
               'physical_section', overlay_row.physical_section,
+              'prior_physical_section', overlay_row.physical_section,
               'effective_section', overlay_row.effective_section,
               'selected_positive_headroom_ex_vat', overlay_row.selected_positive_headroom_ex_vat,
               'nominal_due_amount_ex_vat', overlay_row.nominal_due_amount_ex_vat,
@@ -822,18 +1097,57 @@ BEGIN
               'base_blocked_reason_codes', overlay_row.base_blocked_reason_codes,
               'base_presentation_reason', overlay_row.base_presentation_reason,
               'static_recovery_eligible', overlay_row.static_recovery_eligible,
+              'actionable_restructure', overlay_row.actionable_restructure,
+              'component_capacity_ex_vat', overlay_row.component_capacity_ex_vat,
+              'component_recoverable_ex_vat', overlay_row.component_recoverable_ex_vat,
               'overlay_digest', overlay_row.row_overlay_digest,
               'reason', v_reason,
               'updated_at_utc', v_now::text,
               'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
             ),
             'case_resolution_summary', CASE
-              WHEN pg_catalog.jsonb_typeof(overlay_row.base_row_json->'case_resolution_summary') = 'object'
-                THEN overlay_row.base_row_json->'case_resolution_summary'
+              WHEN pg_catalog.jsonb_typeof(overlay_row.case_resolution_summary_json) = 'object'
+                THEN overlay_row.case_resolution_summary_json
+                  || pg_catalog.jsonb_build_object('due_amount_ex_vat', overlay_row.recoverable_amount_ex_vat)
+              ELSE pg_catalog.jsonb_build_object('due_amount_ex_vat', overlay_row.recoverable_amount_ex_vat)
+            END,
+            'case_resolution_summary_json', CASE
+              WHEN pg_catalog.jsonb_typeof(overlay_row.case_resolution_summary_json) = 'object'
+                THEN overlay_row.case_resolution_summary_json
                   || pg_catalog.jsonb_build_object('due_amount_ex_vat', overlay_row.recoverable_amount_ex_vat)
               ELSE pg_catalog.jsonb_build_object('due_amount_ex_vat', overlay_row.recoverable_amount_ex_vat)
             END
           )
+          || CASE
+            WHEN pg_catalog.jsonb_typeof(overlay_row.base_row_json->'row_json') = 'object'
+              THEN pg_catalog.jsonb_build_object(
+                'row_json', (overlay_row.base_row_json->'row_json')
+                  || pg_catalog.jsonb_build_object(
+                    'case_components', overlay_row.allocated_case_components
+                  )
+              )
+            ELSE '{}'::jsonb
+          END
+          || CASE
+            WHEN pg_catalog.jsonb_typeof(overlay_row.base_row_json->'case') = 'object'
+              THEN pg_catalog.jsonb_build_object(
+                'case', (overlay_row.base_row_json->'case')
+                  || pg_catalog.jsonb_build_object(
+                    'case_components', overlay_row.allocated_case_components
+                  )
+              )
+            ELSE '{}'::jsonb
+          END
+          || CASE
+            WHEN pg_catalog.jsonb_typeof(overlay_row.base_row_json->'raw_case') = 'object'
+              THEN pg_catalog.jsonb_build_object(
+                'raw_case', (overlay_row.base_row_json->'raw_case')
+                  || pg_catalog.jsonb_build_object(
+                    'case_components', overlay_row.allocated_case_components
+                  )
+              )
+            ELSE '{}'::jsonb
+          END
         ),
         updated_at_utc = v_now
     FROM pg_temp._bpay_recovery_selection_overlay AS overlay_row
@@ -905,6 +1219,7 @@ BEGIN
             'candidate_id', p_candidate_id::text,
             'selected_positive_headroom_ex_vat', v_selected_positive_amount,
             'ready_recovery_count', v_ready_recovery_count,
+            'case_recovery_count', v_case_recovery_count,
             'blocked_recovery_count', v_blocked_recovery_count,
             'recoverable_amount_ex_vat', v_ready_recovery_amount,
             'overlay_digest', v_overlay_digest,
@@ -932,6 +1247,7 @@ BEGIN
                 'contract_version', 1,
                 'selected_positive_headroom_ex_vat', v_selected_positive_amount,
                 'ready_recovery_count', v_ready_recovery_count,
+                'case_recovery_count', v_case_recovery_count,
                 'blocked_recovery_count', v_blocked_recovery_count,
                 'recoverable_amount_ex_vat', v_ready_recovery_amount,
                 'overlay_digest', v_overlay_digest,
@@ -951,6 +1267,7 @@ BEGIN
     'candidate_id', p_candidate_id::text,
     'recovery_row_count', v_recovery_row_count,
     'ready_recovery_count', v_ready_recovery_count,
+    'case_recovery_count', v_case_recovery_count,
     'blocked_recovery_count', v_blocked_recovery_count,
     'forced_deselected_count', v_forced_deselected_count,
     'updated_count', v_updated_count,
