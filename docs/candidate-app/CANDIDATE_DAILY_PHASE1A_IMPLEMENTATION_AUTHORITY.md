@@ -253,7 +253,7 @@ Final saved-source evidence:
 | Gate | Result |
 | --- | --- |
 | Focused Phase 1A Node TAP | 21 passed, 0 failed |
-| Complete backend Node TAP | 584 passed, 0 failed |
+| Complete backend Node TAP | 589 passed, 0 failed after rebase to the current shared backend authority |
 | R7 HMAC Node vectors | 3 positive, 2 route-valid, 24 negative, 8 query, 20 raw-parser - PASS |
 | R7 HMAC Python vectors | same corpus - PASS |
 | R5 source-identity Node vectors | 6 positive, 5 normalization, 2 malformed, 9 negative, 2 bindings — PASS |

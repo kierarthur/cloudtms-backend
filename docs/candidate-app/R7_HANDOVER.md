@@ -101,21 +101,42 @@ Tests, vectors and documentation are included separately. No frontend, SQL migra
 | Item | Final identity |
 | --- | --- |
 | Backend repository/branch | `kierarthur/cloudtms-backend` / `test` |
-| R7 implementation commit | `R7_IMPLEMENTATION_COMMIT_PENDING` |
-| Current backend `origin/test` | `R7_BACKEND_HEAD_PENDING` |
-| Safe migration workflow | `R7_SAFE_MIGRATION_PENDING` |
-| Candidate private Worker | `R7_PRIVATE_WORKER_VERSION_PENDING` |
-| Candidate public broker | `R7_PUBLIC_WORKER_VERSION_PENDING` |
+| R7 implementation commit | `fd7c8c4eee49ccb38848f0ebaa281f81a11a4974` |
+| Published backend runtime head | `fd7c8c4eee49ccb38848f0ebaa281f81a11a4974` before the later documentation-only evidence commit |
+| Candidate DB runtime workflow | `31975585688` - PASS on PostgreSQL 17.6 and PostgreSQL 18.1 |
+| Safe migration workflow | `31975584305` - deliberately recorded NO-GO at the post-apply catalogue verifier because TEST already contained exactly three manually installed James read/presentation definitions pending that separate task's publication; both Candidate and Banking Pay source-authority gates passed and R7 introduced no SQL |
+| Candidate private Worker | `4cdbcdeb-fc06-4a22-8af0-6876f633e41d` - 100% traffic |
+| Candidate public broker | `2bd9023c-b9de-4ae3-b5e2-2c91f96942f9` - 100% traffic |
 | Normal TEST Worker | deliberately unchanged unless separately stated |
 
 Candidate routes remain dark after deployment. Deployment is transport publication only; it is not feature enablement.
+
+The safe-migration NO-GO is not a Candidate defect and did not justify reverting or reinstalling the three James functions. The verifier named only:
+
+- `private.pay_workbench_preview_effective_section_v1`;
+- `public.pay_workbench_session_get_candidate_preview`;
+- `public.pay_workbench_session_get_preview_page`.
+
+Those definitions had been installed and verified manually by the separate James task immediately before R7 publication, while their source/ledger publication was intentionally still pending. R7 did not change SQL, the workflow passed the Candidate authority check, and the independent Candidate PostgreSQL matrix passed on both supported versions. The R7 pack preserves the failed workflow as shared-state evidence instead of misreporting it as a Candidate pass.
+
+Postdeployment public evidence:
+
+- `/healthz` returned HTTP 200 with service `candidate-broker` and environment `TEST`;
+- `/readyz` returned HTTP 200 with `ok=true`;
+- missing, invalid and duplicate correlation headers returned HTTP 400 `VALIDATION_FAILED`, a valid server-generated response correlation and the fixed public message;
+- duplicate signed key-ID input returned the same closed HTTP 400 response;
+- rejected browser origin and forbidden preflight-header probes remained HTTP 403 `FORBIDDEN`;
+- declared-shorter and exact-length unsigned system probes failed safely as HTTP 400; an over-declared raw request was retained by the HTTP client/framing layer until timeout and did not produce a business response;
+- no valid signed-system success or business effect was attempted.
+
+The read-only TEST safety snapshot at `2026-08-16 22:14:45 UTC` confirmed PostgreSQL 17.6, 0/12 enabled Candidate flags, `candidate_electronic_auto_authorise_default=false`, zero rows in all seven Candidate business tables, and zero Phase 2 `candidate_daily%` tables/functions.
 
 ## Verification summary
 
 The final raw logs are in `evidence/` in the sealed package. The minimum gates are:
 
 - 21/21 focused Candidate Daily R7 tests;
-- 584/584 complete backend JavaScript tests;
+- 589/589 complete backend JavaScript tests after rebase to the current shared backend authority;
 - Node and Python R7 HMAC/query/raw-parser vectors;
 - Node and Python source-identity vectors;
 - exact runtime/OpenAPI route parity;
