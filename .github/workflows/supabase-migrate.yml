@@ -223,7 +223,27 @@ jobs:
             MIGRATION_LEDGER_NAMES["__BOOTSTRAPPED__"]="1"
           fi
 
-          # 4) Apply only new or content-changed repeatables, in UK date order.
+          # 4) Apply declared schema prerequisites exactly once before repeatables.
+          # Candidate Daily Phase 2 introduces new row types that its repeatable
+          # functions compile against. The normal migration pass below will skip
+          # a prerequisite after this block records it in the same ledger.
+          PRE_REPEATABLE_MIGRATIONS=(
+            "supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql"
+          )
+          for f in "${PRE_REPEATABLE_MIGRATIONS[@]}"; do
+            base="$(basename "$f")"
+            already="${MIGRATION_LEDGER_NAMES[$base]:-}"
+            if [[ "$already" == "1" ]]; then
+              echo "SKIP prerequisite migration: $base"
+            else
+              echo "APPLY prerequisite migration: $base"
+              apply_file "$f"
+              record_migration "$f"
+              MIGRATION_LEDGER_NAMES["${base}"]="1"
+            fi
+          done
+
+          # 5) Apply only new or content-changed repeatables, in UK date order.
           # The hash is recorded only after a successful psql call, so a failed
           # repeatable remains pending and is retried on the next workflow run.
           echo "Applying new or changed repeatables first, in UK date order."
@@ -302,7 +322,7 @@ jobs:
             record_repeatable_hash "__BOOTSTRAPPED__" "v1"
           fi
 
-          # 5) Then apply one-time migrations, in UK date order
+          # 6) Then apply remaining one-time migrations, in UK date order
           echo "Applying one-time migrations after repeatables, in UK date order."
           for f in "${MIG_FILES_SORTED[@]}"; do
             base="$(basename "$f")"

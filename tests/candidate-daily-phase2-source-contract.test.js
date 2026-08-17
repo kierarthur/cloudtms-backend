@@ -7,6 +7,7 @@ const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const schema = read('../supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql');
 const authority = read('../supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql');
 const workflow = read('../.github/workflows/candidate-db-runtime.yml');
+const safeMigration = read('../.github/workflows/supabase-migrate.yml');
 
 const expectedTables = [
   'private.candidate_daily_authority_scopes',
@@ -77,4 +78,8 @@ test('Candidate runtime workflow installs Phase 2 schema then RPCs before depend
   const readIndex = workflow.indexOf('supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql');
   const testIndex = workflow.indexOf('tests/17082026_0053_candidate_daily_phase2_runtime_verification.sql');
   assert.ok(schemaIndex > 0 && rpcIndex > schemaIndex && readIndex > rpcIndex && testIndex > readIndex);
+  const prerequisiteIndex = safeMigration.indexOf('PRE_REPEATABLE_MIGRATIONS=(');
+  const prerequisiteFileIndex = safeMigration.indexOf('supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql', prerequisiteIndex);
+  const repeatablePassIndex = safeMigration.indexOf('for f in "${REP_FILES_SORTED[@]}"; do', prerequisiteFileIndex);
+  assert.ok(prerequisiteIndex > 0 && prerequisiteFileIndex > prerequisiteIndex && repeatablePassIndex > prerequisiteFileIndex);
 });
