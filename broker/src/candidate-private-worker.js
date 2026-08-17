@@ -1,7 +1,7 @@
 import { handleCandidateAppRequest, processPendingCandidatePaperPacks } from './candidate-app-backend.js';
 import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import { createCandidatePrivateDependencies } from './index.js';
-import { handleCandidateDailySystemPhase1aRequest } from './candidate-daily-phase1a.js';
+import { handleCandidateDailySystemPhase1bRequest } from './candidate-daily-phase1b.js';
 import { purgeCandidateDailySystemNonces } from './candidate-daily-hmac-v1.js';
 
 const PRIVATE_CANDIDATE_PREFIX = '/private/candidate-app/v1';
@@ -109,11 +109,11 @@ export default {
       return json(503, { ok: false, error_code: 'CANDIDATE_PRIVATE_CONFIGURATION_UNAVAILABLE' });
     }
     if (path.startsWith(PRIVATE_SYSTEM_PREFIX)) {
-      const response = await handleCandidateDailySystemPhase1aRequest(
-        await removePrivatePrefix(request), env
+      const response = await handleCandidateDailySystemPhase1bRequest(
+        await removePrivatePrefix(request), env, createCandidatePrivateDependencies(env, 'PRIVATE')
       );
       const headers = new Headers(response.headers);
-      headers.set('x-cloudtms-private-api', 'candidate-daily-r5-phase1a');
+      headers.set('x-cloudtms-private-api', 'candidate-daily-r8-phase1b');
       return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
     }
     const response = await handleCandidateAppRequest(

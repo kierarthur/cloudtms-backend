@@ -4,7 +4,7 @@ export const CANDIDATE_DAILY_PUBLIC_PREFIX = '/candidate-app/v1/daily';
 export const CANDIDATE_DAILY_SYSTEM_PREFIX = '/candidate-system/v1/google-availability';
 export const CANDIDATE_DAILY_PRIVATE_SYSTEM_PREFIX = '/private/candidate-system/v1/google-availability';
 export const CANDIDATE_DAILY_HMAC_VERSION = 'v1';
-export const CANDIDATE_DAILY_CONTRACT_VERSION = 'CANDIDATE_DAILY_R5_PHASE1A';
+export const CANDIDATE_DAILY_CONTRACT_VERSION = 'CANDIDATE_DAILY_R8_PHASE1B';
 
 const ULID_RE = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9._~:+\-/]{16,128}$/;
@@ -454,6 +454,352 @@ function exactObjectKeys(value, allowed, required = allowed) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const keys = Object.keys(value);
   return keys.every((key) => allowed.includes(key)) && required.every((key) => keys.includes(key));
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SHA256_RE = /^[a-f0-9]{64}$/;
+const SOURCE_HMAC_RE = /^[a-f0-9]{64}$/;
+const ACTION_ROW_SIGNATURE_RE = /^[a-f0-9]{32}$/;
+const OPAQUE_TOKEN_RE = /^[A-Za-z0-9._~-]{16,512}$/;
+const AVAILABILITY_VALUES = new Set(['PENDING', 'NOT_AVAILABLE', 'LONG_DAY', 'NIGHT', 'LONG_DAY_OR_NIGHT']);
+const LEGACY_VALUES = new Set(['', 'N/A', 'LD', 'N', 'LD/N']);
+const FRESHNESS_REASONS = new Set([
+  'GENERATION_MISSING', 'GENERATION_INCOMPLETE', 'GENERATION_STALE',
+  'PROJECTION_LAG', 'TERMINAL_OUTBOX', 'IDENTITY_NOT_READY'
+]);
+
+function stringValue(value, minimum = 0, maximum = 2048, pattern = null) {
+  return typeof value === 'string' && value.length >= minimum && value.length <= maximum
+    && (!pattern || pattern.test(value));
+}
+
+function integerValue(value, minimum = 0, maximum = Number.MAX_SAFE_INTEGER) {
+  return Number.isSafeInteger(value) && value >= minimum && value <= maximum;
+}
+
+function dateTimeValue(value) {
+  return stringValue(value, 1, 64) && Number.isFinite(Date.parse(value));
+}
+
+function normalizeFreshness(source) {
+  const required = ['generation_version', 'generation_published_at', 'generation_age_seconds',
+    'canonical_version', 'accepted_canonical_cursor', 'required_visible_cursor',
+    'projection_oldest_pending_seconds', 'generation_max_age_seconds', 'projection_warning_seconds',
+    'ready', 'reasons', 'overlay_proof_cursor', 'effective_visible_cursor', 'delivered_visible_cursor'];
+  if (!exactObjectKeys(source, required) || !integerValue(source.generation_version, 1)
+      || !dateTimeValue(source.generation_published_at)
+      || !required.filter((key) => key.endsWith('_seconds') || key.endsWith('_cursor') || key === 'canonical_version')
+        .every((key) => integerValue(source[key],
+          ['generation_max_age_seconds', 'projection_warning_seconds'].includes(key) ? 1 : 0))
+      || typeof source.ready !== 'boolean' || !Array.isArray(source.reasons)
+      || source.reasons.length > 10 || !source.reasons.every((item) => FRESHNESS_REASONS.has(item))) return null;
+  return { ...source, reasons: [...source.reasons] };
+}
+
+function normalizeActionTarget(source) {
+  if (source == null) return null;
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  const kind = source.target_kind;
+  if (kind === 'TIMESHEET_DETAIL') {
+    if (!exactObjectKeys(source, ['target_kind', 'timesheet_id', 'workflow_id', 'row_signature'],
+      ['target_kind', 'timesheet_id', 'row_signature']) || !UUID_RE.test(source.timesheet_id)
+      || (source.workflow_id !== undefined && source.workflow_id !== null && !UUID_RE.test(source.workflow_id))
+      || !ACTION_ROW_SIGNATURE_RE.test(source.row_signature)) return null;
+  } else if (kind === 'CONTRACT_WEEK_DETAIL') {
+    if (!exactObjectKeys(source, ['target_kind', 'contract_week_id', 'timesheet_id', 'workflow_id', 'row_signature'],
+      ['target_kind', 'contract_week_id', 'row_signature']) || !UUID_RE.test(source.contract_week_id)
+      || (source.timesheet_id !== undefined && source.timesheet_id !== null && !UUID_RE.test(source.timesheet_id))
+      || (source.workflow_id !== undefined && source.workflow_id !== null && !UUID_RE.test(source.workflow_id))
+      || !ACTION_ROW_SIGNATURE_RE.test(source.row_signature)) return null;
+  } else if (kind === 'WORKFLOW_DETAIL') {
+    if (!exactObjectKeys(source, ['target_kind', 'workflow_id', 'workflow_generation', 'row_signature'])
+      || !UUID_RE.test(source.workflow_id) || !integerValue(source.workflow_generation, 1)
+      || !ACTION_ROW_SIGNATURE_RE.test(source.row_signature)) return null;
+  } else return null;
+  return { ...source };
+}
+
+function normalizeDailyTilesResult(source) {
+  const allowed = ['candidate_id', 'window_start', 'window_end', 'generation_id', 'generation_version',
+    'availability_version', 'freshness', 'cohorts', 'tiles'];
+  const required = allowed;
+  if (!exactObjectKeys(source, allowed, required) || !UUID_RE.test(source.candidate_id)
+      || !DATE_RE.test(source.window_start) || !DATE_RE.test(source.window_end)
+      || !UUID_RE.test(source.generation_id) || !integerValue(source.generation_version, 1)
+      || !integerValue(source.availability_version, 0) || !Array.isArray(source.cohorts)
+      || !Array.isArray(source.tiles) || source.tiles.length !== 14) return null;
+  const freshness = normalizeFreshness(source.freshness);
+  if (!freshness) return null;
+  const cohorts = source.cohorts.map((item) => exactObjectKeys(item, ['display_name', 'role', 'subject_token'],
+    ['display_name', 'role']) && stringValue(item.display_name, 1, 160)
+    && stringValue(item.role, 1, 100)
+    && (item.subject_token === undefined || OPAQUE_TOKEN_RE.test(item.subject_token)) ? { ...item } : null);
+  if (cohorts.some((item) => item === null)) return null;
+  const tiles = [];
+  for (const item of source.tiles) {
+    const tileAllowed = ['date', 'display_day', 'display_date', 'booked', 'system_blocked', 'editable',
+      'status', 'availability', 'shift_info', 'hospital', 'ward', 'job_title', 'booking_ref', 'shift_type',
+      'booking_id', 'timesheet_authorised', 'timesheet_eligible', 'action_target'];
+    const tileRequired = ['date', 'display_day', 'display_date', 'booked', 'system_blocked', 'editable',
+      'status', 'availability'];
+    if (!exactObjectKeys(item, tileAllowed, tileRequired) || !DATE_RE.test(item.date)
+        || !stringValue(item.display_day, 1, 16) || !stringValue(item.display_date, 1, 16)
+        || typeof item.booked !== 'boolean' || typeof item.system_blocked !== 'boolean'
+        || typeof item.editable !== 'boolean' || !AVAILABILITY_VALUES.has(item.availability)
+        || !new Set(['BOOKED', 'BLOCKED', ...AVAILABILITY_VALUES]).has(item.status)) return null;
+    for (const key of ['shift_info', 'hospital', 'ward', 'job_title', 'booking_ref', 'shift_type', 'booking_id']) {
+      if (item[key] !== undefined && item[key] !== null && !stringValue(item[key], 1, key === 'shift_info' ? 256 : 160)) return null;
+    }
+    for (const key of ['timesheet_authorised', 'timesheet_eligible']) {
+      if (item[key] !== undefined && item[key] !== null && typeof item[key] !== 'boolean') return null;
+    }
+    const target = item.action_target === undefined ? undefined : normalizeActionTarget(item.action_target);
+    if (item.action_target !== undefined && item.action_target !== null && !target) return null;
+    tiles.push({ ...item, ...(item.action_target !== undefined ? { action_target: target } : {}) });
+  }
+  return { ...source, freshness, cohorts, tiles };
+}
+
+function normalizePastShiftsResult(source) {
+  if (!exactObjectKeys(source, ['items', 'next_cursor', 'limit'], ['items', 'limit'])
+      || !Array.isArray(source.items) || source.items.length > 100 || !integerValue(source.limit, 1, 100)
+      || (source.next_cursor !== undefined && source.next_cursor !== null
+        && !OPAQUE_TOKEN_RE.test(source.next_cursor))) return null;
+  const items = source.items.map((item) => {
+    const allowed = ['date', 'display_date', 'shift_type', 'starts_at', 'ends_at', 'notes', 'hospital',
+      'ward', 'booking_reference', 'job_title', 'status', 'action_target'];
+    const required = ['date', 'display_date', 'shift_type', 'starts_at', 'ends_at', 'hospital',
+      'ward', 'booking_reference', 'job_title', 'status'];
+    if (!exactObjectKeys(item, allowed, required) || !DATE_RE.test(item.date)
+        || !stringValue(item.display_date, 1, 64) || !stringValue(item.shift_type, 1, 80)
+        || !dateTimeValue(item.starts_at) || !dateTimeValue(item.ends_at)
+        || !stringValue(item.hospital, 1, 160) || !stringValue(item.status, 1, 80)) return null;
+    for (const [key, maximum] of [['notes', 1000], ['ward', 160], ['booking_reference', 128], ['job_title', 160]]) {
+      if (item[key] !== null && !stringValue(item[key], 0, maximum)) return null;
+    }
+    const target = item.action_target === undefined ? undefined : normalizeActionTarget(item.action_target);
+    if (item.action_target !== undefined && item.action_target !== null && !target) return null;
+    return { ...item, ...(item.action_target !== undefined ? { action_target: target } : {}) };
+  });
+  return items.some((item) => item === null) ? null : { ...source, items };
+}
+
+function normalizeCohortDisplay(item) {
+  return exactObjectKeys(item, ['display_name', 'role', 'subject_token'], ['display_name', 'role'])
+    && stringValue(item.display_name, 1, 160) && stringValue(item.role, 1, 100)
+    && (item.subject_token === undefined || OPAQUE_TOKEN_RE.test(item.subject_token)) ? { ...item } : null;
+}
+
+function normalizeCandidateEffectResult(source) {
+  if (!exactObjectKeys(source, ['effect_key', 'operation', 'status', 'created_at', 'updated_at', 'safe_message'],
+    ['effect_key', 'operation', 'status', 'created_at', 'updated_at']) || !OPAQUE_TOKEN_RE.test(source.effect_key)
+    || !['RUNNING_LATE_SEND', 'CANNOT_ATTEND', 'LEAVE_EARLY', 'DNA', 'MESSAGE_SEEN'].includes(source.operation)
+    || !['IN_PROGRESS', 'COMPLETED', 'FAILED_FINAL', 'UNKNOWN'].includes(source.status)
+    || !dateTimeValue(source.created_at) || !dateTimeValue(source.updated_at)
+    || (source.safe_message !== undefined && !stringValue(source.safe_message, 0, 320))) return null;
+  return { ...source };
+}
+
+function normalizeLegacyTilesResult(source) {
+  if (!exactObjectKeys(source, ['tiles', 'candidateName', 'lastLoadedAt'], ['tiles'])
+      || !Array.isArray(source.tiles) || source.tiles.length !== 14
+      || (source.candidateName !== undefined && !stringValue(source.candidateName, 0, 160))
+      || (source.lastLoadedAt !== undefined && !dateTimeValue(source.lastLoadedAt))) return null;
+  const tiles = source.tiles.map((item) => {
+    const allowed = ['ymd', 'displayDay', 'displayDate', 'booked', 'editable', 'status', 'shiftInfo',
+      'hospital', 'ward', 'jobTitle', 'bookingRef', 'shiftType', 'booking_id', 'timesheet_authorised', 'timesheet_eligible'];
+    const required = ['ymd', 'displayDay', 'displayDate', 'booked', 'editable', 'status'];
+    if (!exactObjectKeys(item, allowed, required) || !DATE_RE.test(item.ymd)
+        || !stringValue(item.displayDay, 2, 16) || !stringValue(item.displayDate, 5, 16)
+        || typeof item.booked !== 'boolean' || typeof item.editable !== 'boolean'
+        || !stringValue(item.status, 1, 80)) return null;
+    for (const key of ['shiftInfo', 'hospital', 'ward', 'jobTitle', 'bookingRef', 'shiftType', 'booking_id']) {
+      if (item[key] !== undefined && item[key] !== null && !stringValue(item[key], 1, key === 'shiftInfo' ? 256 : 160)) return null;
+    }
+    for (const key of ['timesheet_authorised', 'timesheet_eligible']) {
+      if (item[key] !== undefined && item[key] !== null && typeof item[key] !== 'boolean') return null;
+    }
+    return { ...item };
+  });
+  if (tiles.some((item) => item === null)) return null;
+  return { ...source, tiles };
+}
+
+function normalizeIndexedOutcomes(source, options = {}) {
+  if (!Array.isArray(source) || source.length < 1 || source.length > (options.maximum || 100)) return null;
+  const output = [];
+  for (const item of source) {
+    if (!item || typeof item !== 'object' || Array.isArray(item) || !integerValue(item.index, 0, 99)) return null;
+    if (options.kind === 'generation') {
+      if (!exactObjectKeys(item, ['index', 'status', 'generation_id', 'generation_version', 'error_code'], ['index', 'status'])
+          || !['COMMITTED', 'REPLAYED', 'REJECTED'].includes(item.status)
+          || (item.generation_id !== undefined && !UUID_RE.test(item.generation_id))
+          || (item.generation_version !== undefined && !integerValue(item.generation_version, 1))) return null;
+    } else if (options.kind === 'sheet') {
+      if (!exactObjectKeys(item, ['index', 'status', 'availability_version', 'error_code'], ['index', 'status'])
+          || !['COMMITTED', 'REPLAYED', 'REJECTED'].includes(item.status)
+          || (item.availability_version !== undefined && !integerValue(item.availability_version, 1))) return null;
+    } else if (options.kind === 'projection') {
+      if (!exactObjectKeys(item, ['index', 'accepted', 'state', 'delivered_visible_cursor'], ['index', 'accepted', 'state'])
+          || typeof item.accepted !== 'boolean'
+          || !['DELIVERED', 'RETRY', 'DEFERRED_OVERLAY', 'TERMINAL', 'LEASE_CONFLICT'].includes(item.state)
+          || (item.delivered_visible_cursor !== undefined && !integerValue(item.delivered_visible_cursor, 0))) return null;
+    } else if (options.kind === 'reconciliation') {
+      if (!exactObjectKeys(item, ['index', 'classification', 'error_code'], ['index', 'classification'])
+          || !['MATCH', 'REPAIR_PROJECTION', 'CANONICAL_COMMAND_REQUIRED', 'AMBIGUOUS', 'TERMINAL_CONFLICT'].includes(item.classification)) return null;
+    }
+    if (item.error_code !== undefined && !stringValue(item.error_code, 1, 80)) return null;
+    output.push({ ...item });
+  }
+  return output;
+}
+
+function normalizeCandidateDailyResult(operationId, source) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
+  if (operationId === 'getCandidateDailyTiles') return normalizeDailyTilesResult(source);
+  if (operationId === 'getCandidateDailyPastShifts') return normalizePastShiftsResult(source);
+  if (operationId === 'getCandidateDailyContent') {
+    return exactObjectKeys(source, ['kind', 'title', 'html', 'appInfo'])
+      && ['hospital-addresses', 'accommodation-contacts'].includes(source.kind)
+      && stringValue(source.title, 1, 160) && stringValue(source.html, 0, 200000)
+      && exactObjectKeys(source.appInfo, ['version', 'buildTs'])
+      && stringValue(source.appInfo.version, 0, 80) && stringValue(source.appInfo.buildTs, 0, 80)
+      ? { ...source, appInfo: { ...source.appInfo } } : null;
+  }
+  if (operationId === 'getCandidateDailyEmergencyWindow') {
+    if (!exactObjectKeys(source, ['eligible', 'grace_minutes_after_start', 'shifts'])
+        || typeof source.eligible !== 'boolean' || source.grace_minutes_after_start !== 600
+        || !Array.isArray(source.shifts) || source.shifts.length > 20) return null;
+    const shifts = source.shifts.map((item) => {
+      if (!exactObjectKeys(item, ['emergency_shift_token', 'date', 'starts_at', 'ends_at', 'display_label',
+        'allowed_issues', 'dna_subjects'], ['emergency_shift_token', 'date', 'starts_at', 'ends_at',
+        'display_label', 'allowed_issues']) || !OPAQUE_TOKEN_RE.test(item.emergency_shift_token)
+        || !DATE_RE.test(item.date) || !dateTimeValue(item.starts_at) || !dateTimeValue(item.ends_at)
+        || !stringValue(item.display_label, 1, 256) || !Array.isArray(item.allowed_issues)
+        || item.allowed_issues.length < 1 || item.allowed_issues.length > 4
+        || new Set(item.allowed_issues).size !== item.allowed_issues.length
+        || !item.allowed_issues.every((value) => ['RUNNING_LATE', 'CANNOT_ATTEND', 'LEAVE_EARLY', 'DNA'].includes(value))) return null;
+      const dnaSubjects = item.dna_subjects === undefined ? undefined
+        : Array.isArray(item.dna_subjects) && item.dna_subjects.length <= 100
+          ? item.dna_subjects.map(normalizeCohortDisplay) : null;
+      if (dnaSubjects === null || dnaSubjects?.some((entry) => entry === null)) return null;
+      return { ...item, ...(dnaSubjects !== undefined ? { dna_subjects: dnaSubjects } : {}) };
+    });
+    return shifts.some((item) => item === null) ? null : { ...source, shifts };
+  }
+  if (operationId === 'getCandidateDailyRunningLateOptions') {
+    if (!exactObjectKeys(source, ['options']) || !Array.isArray(source.options)
+        || source.options.length < 1 || source.options.length > 12) return null;
+    const options = source.options.map((item) => exactObjectKeys(item,
+      ['running_late_option_token', 'minutes', 'label', 'arrival_at'])
+      && OPAQUE_TOKEN_RE.test(item.running_late_option_token) && integerValue(item.minutes, 1, 1440)
+      && stringValue(item.label, 1, 160) && dateTimeValue(item.arrival_at) ? { ...item } : null);
+    return options.some((item) => item === null) ? null : { options };
+  }
+  if (operationId === 'previewCandidateDailyRunningLate') {
+    return exactObjectKeys(source, ['arrival_at', 'preview_text']) && dateTimeValue(source.arrival_at)
+      && stringValue(source.preview_text, 1, 1000) ? { ...source } : null;
+  }
+  if (['sendCandidateDailyRunningLate', 'raiseCandidateDailyEmergency', 'markCandidateDailyMessageSeen',
+    'getCandidateDailyEffectStatus'].includes(operationId)) return normalizeCandidateEffectResult(source);
+  if (operationId === 'applyCandidateDailyAvailability') {
+    if (!exactObjectKeys(source, ['command_id', 'availability_version', 'changed_dates'])
+        || !UUID_RE.test(source.command_id) || !integerValue(source.availability_version, 1)
+        || !Array.isArray(source.changed_dates) || source.changed_dates.length < 1 || source.changed_dates.length > 14
+        || !source.changed_dates.every((value) => DATE_RE.test(value))) return null;
+    return { ...source, changed_dates: [...source.changed_dates] };
+  }
+  if (operationId === 'googleAvailabilityLegacyTiles') return normalizeLegacyTilesResult(source);
+  if (operationId === 'googleAvailabilityLegacyApply') {
+    if (!exactObjectKeys(source, ['request_receipt_id', 'committed_version', 'outcomes'], ['request_receipt_id', 'outcomes'])
+        || !UUID_RE.test(source.request_receipt_id)
+        || (source.committed_version !== undefined && !integerValue(source.committed_version, 1))
+        || !Array.isArray(source.outcomes) || source.outcomes.length < 1 || source.outcomes.length > 14) return null;
+    const outcomes = source.outcomes.map((item) => exactObjectKeys(item, ['date', 'applied', 'reason'], ['date', 'applied'])
+      && DATE_RE.test(item.date) && typeof item.applied === 'boolean'
+      && (item.reason === undefined || ['INVALID_VALUE', 'DUPLICATE_DATE', 'OUTSIDE_WINDOW', 'BOOKED', 'BLOCKED', 'NOT_EDITABLE'].includes(item.reason))
+      ? { ...item } : null);
+    return outcomes.some((item) => item === null) ? null : { ...source, outcomes };
+  }
+  if (operationId === 'googleAvailabilityLegacyTimesheetAuthorisationStatus') {
+    return exactObjectKeys(source, ['booking_id', 'authorised', 'status_version'])
+      && stringValue(source.booking_id, 1, 128) && typeof source.authorised === 'boolean'
+      && integerValue(source.status_version, 0) ? { ...source } : null;
+  }
+  if (['googleAvailabilityPublishRotaGenerations', 'googleAvailabilityApplySheetEdits',
+    'googleAvailabilityCompleteProjection', 'googleAvailabilityApplyReconciliation'].includes(operationId)) {
+    const kind = operationId === 'googleAvailabilityPublishRotaGenerations' ? 'generation'
+      : operationId === 'googleAvailabilityApplySheetEdits' ? 'sheet'
+        : operationId === 'googleAvailabilityCompleteProjection' ? 'projection' : 'reconciliation';
+    const maximum = kind === 'generation' ? 50 : 100;
+    const outcomes = normalizeIndexedOutcomes(source.outcomes, { kind, maximum });
+    return exactObjectKeys(source, ['batch_receipt_id', 'outcomes']) && UUID_RE.test(source.batch_receipt_id)
+      && outcomes ? { batch_receipt_id: source.batch_receipt_id, outcomes } : null;
+  }
+  if (operationId === 'googleAvailabilityClaimProjection') {
+    if (!exactObjectKeys(source, ['claim_request_id', 'batch_receipt_id', 'lease_set_expires_at', 'items'])
+        || !UUID_RE.test(source.claim_request_id) || !UUID_RE.test(source.batch_receipt_id)
+        || !dateTimeValue(source.lease_set_expires_at) || !Array.isArray(source.items) || source.items.length > 100) return null;
+    const items = source.items.map((item) => exactObjectKeys(item,
+      ['outbox_id', 'lease_token', 'lease_expires_at', 'candidate_source_hmac', 'date', 'availability_version', 'availability'])
+      && UUID_RE.test(item.outbox_id) && stringValue(item.lease_token, 16, 256)
+      && dateTimeValue(item.lease_expires_at) && SOURCE_HMAC_RE.test(item.candidate_source_hmac)
+      && DATE_RE.test(item.date) && integerValue(item.availability_version, 1) && LEGACY_VALUES.has(item.availability)
+      ? { ...item } : null);
+    return items.some((item) => item === null) ? null : { ...source, items };
+  }
+  if (operationId === 'googleAvailabilityReadSyncStatus') {
+    if (!exactObjectKeys(source, ['items']) || !Array.isArray(source.items)
+        || source.items.length < 1 || source.items.length > 100) return null;
+    const items = source.items.map((item) => {
+      const freshness = normalizeFreshness(item?.freshness);
+      return exactObjectKeys(item, ['candidate_source_hmac', 'freshness'])
+        && SOURCE_HMAC_RE.test(item.candidate_source_hmac) && freshness
+        ? { candidate_source_hmac: item.candidate_source_hmac, freshness } : null;
+    });
+    return items.some((item) => item === null) ? null : { items };
+  }
+  if (operationId === 'googleAvailabilityLegacyStatus') {
+    if (!exactObjectKeys(source, ['request_id', 'state', 'terminal_response'], ['request_id', 'state'])
+        || !UUID_RE.test(source.request_id) || !['IN_PROGRESS', 'COMPLETED', 'FAILED_FINAL'].includes(source.state)) return null;
+    if (source.terminal_response !== undefined && source.terminal_response !== null) {
+      const nested = rebuildCandidateDailySuccessBody({ operationId: 'googleAvailabilityLegacyApply' }, 200,
+        source.terminal_response, source.terminal_response.correlation_id);
+      if (!nested) return null;
+      return { ...source, terminal_response: nested };
+    }
+    return { ...source, ...(source.terminal_response !== undefined ? { terminal_response: null } : {}) };
+  }
+  if (operationId === 'googleAvailabilityEffectClaim') {
+    if (!exactObjectKeys(source, ['effect_receipt_id', 'state', 'lease_token', 'lease_expires_at', 'safe_result'],
+      ['effect_receipt_id', 'state']) || !UUID_RE.test(source.effect_receipt_id)
+      || !['CLAIMED', 'COMPLETED', 'FAILED_FINAL', 'UNKNOWN'].includes(source.state)
+      || (source.lease_token !== undefined && source.lease_token !== null && !stringValue(source.lease_token, 16, 256))
+      || (source.lease_expires_at !== undefined && source.lease_expires_at !== null && !dateTimeValue(source.lease_expires_at))
+      || (source.safe_result !== undefined && source.safe_result !== null
+        && (!exactObjectKeys(source.safe_result, [], []) || Object.keys(source.safe_result).length))) return null;
+    return { ...source, ...(source.safe_result && { safe_result: {} }) };
+  }
+  if (operationId === 'googleAvailabilityEffectComplete') {
+    return exactObjectKeys(source, ['effect_receipt_id', 'state']) && UUID_RE.test(source.effect_receipt_id)
+      && ['COMPLETED', 'FAILED_FINAL', 'UNKNOWN'].includes(source.state) ? { ...source } : null;
+  }
+  if (operationId === 'googleAvailabilityEffectStatus') {
+    return exactObjectKeys(source, ['effect_key', 'operation', 'status', 'created_at', 'updated_at'])
+      && stringValue(source.effect_key, 16, 256)
+      && ['RUNNING_LATE_SEND', 'CANNOT_ATTEND', 'LEAVE_EARLY', 'DNA', 'MESSAGE_SEEN', 'ESCALATION_STEP', 'ACKNOWLEDGEMENT'].includes(source.operation)
+      && ['IN_PROGRESS', 'COMPLETED', 'FAILED_FINAL', 'UNKNOWN'].includes(source.status)
+      && dateTimeValue(source.created_at) && dateTimeValue(source.updated_at) ? { ...source } : null;
+  }
+  return null;
+}
+
+export function rebuildCandidateDailySuccessBody(routeDefinition, status, source, correlationId) {
+  if (status !== 200 || !exactObjectKeys(source, ['ok', 'correlation_id', 'result'])
+      || source.ok !== true || source.correlation_id !== correlationId || !isValidCorrelationId(correlationId)) return null;
+  const result = normalizeCandidateDailyResult(routeDefinition?.operationId, source.result);
+  return result ? { ok: true, correlation_id: correlationId, result } : null;
 }
 
 export function normalizeCandidateDailyErrorDetails(details) {

@@ -11,6 +11,7 @@ import {
   isValidCorrelationId,
   readBoundedDailyJson,
   rebuildCandidateDailyErrorBody,
+  rebuildCandidateDailySuccessBody,
   validateDailyIdempotency,
   requestWithCandidateCorrelation
 } from '../../broker/src/candidate-daily-contract-v1.js';
@@ -842,12 +843,22 @@ async function publicSafeDailyResponse(response, correlationId, routeDefinition)
   if (!isObject(body) || body.correlation_id !== correlationId || response.headers.get('x-correlation-id') !== correlationId) {
     return dailyDependencyResponse(routeDefinition, correlationId);
   }
+  const replay = response.headers.get('x-idempotent-replay');
+  const success = rebuildCandidateDailySuccessBody(routeDefinition, response.status, body, correlationId);
+  if (success) {
+    const headers = new Headers({
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-correlation-id': correlationId
+    });
+    if (replay === 'true' || replay === 'false') headers.set('x-idempotent-replay', replay);
+    return new Response(JSON.stringify(success), { status: 200, headers });
+  }
   const rebuilt = rebuildCandidateDailyErrorBody(routeDefinition, response.status, body, correlationId);
   if (!rebuilt) return dailyDependencyResponse(routeDefinition, correlationId);
   const safe = dailyErrorResponse(
     response.status, rebuilt.error_code, rebuilt.retry_class, correlationId, rebuilt.details
   );
-  const replay = response.headers.get('x-idempotent-replay');
   if (replay === 'true' || replay === 'false') safe.headers.set('x-idempotent-replay', replay);
   const retryAfter = response.headers.get('retry-after');
   if (retryAfter && /^\d{1,9}$/.test(retryAfter)) safe.headers.set('retry-after', retryAfter);

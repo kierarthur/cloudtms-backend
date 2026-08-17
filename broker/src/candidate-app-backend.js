@@ -7,9 +7,9 @@ import {
 import { validateFrozenTimesheetPresentationModel } from './invoice-presentation-contract.js';
 import {
   candidateBootstrapCorrelation,
-  composeCandidateBootstrapPhase1a,
-  handleCandidateDailyPhase1aRequest
-} from './candidate-daily-phase1a.js';
+  composeCandidateBootstrapPhase1b,
+  handleCandidateDailyPhase1bRequest
+} from './candidate-daily-phase1b.js';
 import { isCandidateDailyPath } from './candidate-daily-contract-v1.js';
 
 const encoder = new TextEncoder();
@@ -2961,7 +2961,7 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
       p_expected_rotation: access.rotation
     }));
     const correlationId = candidateBootstrapCorrelation(request);
-    return jsonResponse(200, composeCandidateBootstrapPhase1a(bootstrap), {
+    return jsonResponse(200, composeCandidateBootstrapPhase1b(bootstrap), {
       'x-correlation-id': correlationId
     });
   }
@@ -5201,7 +5201,7 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
   try {
     if (isCandidateDailyPath(path)) {
       const access = await verifyCandidateAccess(request, env);
-      return await handleCandidateDailyPhase1aRequest(request, access);
+      return await handleCandidateDailyPhase1bRequest(request, access, env, deps);
     }
     if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/start`) return await handleChallengeStart(request, env, deps);
     if (request.method === 'POST' && path === `${CANDIDATE_PREFIX}/auth/challenge/resend`) return await handleChallengeStart(request, env, deps, true);

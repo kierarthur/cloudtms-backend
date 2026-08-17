@@ -776,6 +776,7 @@ test('actual bootstrap/private dispatch preserves baseline and adds only disable
     const deps = {
       routeAudience: 'PRIVATE',
       async rpc(name) {
+        if (name === 'candidate_daily_tiles_get_v1') throw new Error('CANDIDATE_DAILY_DISABLED');
         assert.equal(name, 'candidate_app_bootstrap_v1');
         return {
           ok: true,
@@ -800,7 +801,7 @@ test('actual bootstrap/private dispatch preserves baseline and adds only disable
     assert.deepEqual(body.capabilities.existing_capability, { enabled: true });
     assert.deepEqual(body.capabilities.daily_availability, {
       enabled: false,
-      unavailable_reason: 'GLOBAL_DISABLED'
+      unavailable_reason: 'AUTHORITY_UNREADABLE'
     });
 
     const daily = await handleCandidateAppRequest(new Request(

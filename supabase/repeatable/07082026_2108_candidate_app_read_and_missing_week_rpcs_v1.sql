@@ -132,6 +132,7 @@ declare
   v_candidate public.candidates%rowtype;
   v_flags jsonb;
   v_contract_enabled boolean:=false;
+  v_daily_capability jsonb;
 begin
   perform private._candidate_require_feature_v1(p_environment,'candidate_app_reads');
   v_context:=private._candidate_session_context_v1(p_session_id,p_environment,p_expected_rotation,p_now_utc,false);
@@ -177,6 +178,11 @@ begin
     ) into v_contract_enabled;
   end if;
   select candidate_app_feature_flags_json into v_flags from public.settings_defaults where id=1;
+  v_daily_capability:=private._candidate_daily_capability_v1(
+    upper(v_context->>'environment'),
+    nullif(v_context->>'selected_candidate_id','')::uuid,
+    p_now_utc
+  );
   return jsonb_build_object(
     'ok',true,
     'feature_contract_version','candidate-app-private-v1',
@@ -195,6 +201,7 @@ begin
     ),
     'notification_preferences',v_context->'notification_preferences',
     'feature_flags',coalesce(v_flags,'{}'::jsonb),
+    'capabilities',jsonb_build_object('daily_availability',v_daily_capability),
     'session',jsonb_build_object(
       'rotation',(v_context->>'rotation')::integer,
       'session_version',(v_context->>'session_version')::bigint,
