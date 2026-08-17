@@ -746,7 +746,7 @@
       "schema": "private",
       "name": "pay_workbench_candidate_session_version_rebase_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_from_session_version bigint, p_to_session_version bigint, p_actor_user_id uuid",
-      "definition_sha256": "26f0ce1b3ffed665d36ae432a77ff7b25d4d902c47c088cc6a1be46d05e5acc2",
+      "definition_sha256": "f640801e2f38810f54621bb21fd313bd88618aec61943802572d31018424bf51",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
