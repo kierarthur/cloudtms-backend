@@ -78,6 +78,10 @@ DECLARE
   v_stale_batch_ids jsonb := '[]'::jsonb;
   v_stale_batch_item_ids jsonb := '[]'::jsonb;
   v_stale_batch_touch_json jsonb := '{}'::jsonb;
+  v_session_refresh_cursor jsonb := '{}'::jsonb;
+  v_session_refresh_page jsonb := '{}'::jsonb;
+  v_session_refresh_pages jsonb := '[]'::jsonb;
+  v_session_refresh_page_count integer := 0;
 BEGIN
   IF p_session_id IS NULL THEN
     RAISE EXCEPTION 'session_id is required';
@@ -659,6 +663,48 @@ BEGIN
       RAISE EXCEPTION 'candidate refresh enqueue did not return a durable job_id for session % candidate %', p_session_id, v_candidate_id;
     END IF;
 
+    -- Clearing a resolution advances the session-wide version.  The affected
+    -- candidate already owns the refresh job above, so converge every other
+    -- scoped candidate through the established certified-currentness owner.
+    -- Clean candidates are version-rebased without re-deriving economics;
+    -- only candidates that fail the existing proof enter its canonical
+    -- refresh ladder.  This keeps the session readable and Draft-ready while
+    -- preserving the affected candidate's mandatory rebuild.
+    LOOP
+      v_session_refresh_page :=
+        public.pay_workbench_session_refresh_current_authority_v1(
+          p_session_id,
+          p_actor_user_id,
+          v_session_refresh_cursor,
+          100
+        );
+      IF pg_catalog.jsonb_typeof(v_session_refresh_page) IS DISTINCT FROM 'object'
+         OR COALESCE((v_session_refresh_page->>'ok')::boolean, false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN'
+          USING ERRCODE = 'P0001',
+                DETAIL = pg_catalog.jsonb_build_object(
+                  'code', 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN',
+                  'session_id', p_session_id,
+                  'page_number', v_session_refresh_page_count + 1
+                )::text;
+      END IF;
+      v_session_refresh_pages := v_session_refresh_pages
+        || pg_catalog.jsonb_build_array(v_session_refresh_page);
+      v_session_refresh_page_count := v_session_refresh_page_count + 1;
+      EXIT WHEN COALESCE((v_session_refresh_page->>'has_more')::boolean, false) IS NOT TRUE;
+      IF v_session_refresh_page_count >= 1000
+         OR pg_catalog.jsonb_typeof(v_session_refresh_page->'next_cursor') IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID'
+          USING ERRCODE = 'P0001',
+                DETAIL = pg_catalog.jsonb_build_object(
+                  'code', 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID',
+                  'session_id', p_session_id,
+                  'page_number', v_session_refresh_page_count
+                )::text;
+      END IF;
+      v_session_refresh_cursor := v_session_refresh_page->'next_cursor';
+    END LOOP;
+
     INSERT INTO public.audit_events(
       object_type,
       object_id_text,
@@ -699,6 +745,8 @@ BEGIN
       'cleared', true,
       'state_changed', true,
       'no_op', false,
+      'session_version_refresh_pages', v_session_refresh_pages,
+      'session_version_refresh_page_count', v_session_refresh_page_count,
       'refresh_enqueue', COALESCE(v_job_json, '{}'::jsonb)
     );
   END IF;
@@ -978,6 +1026,41 @@ BEGIN
         )::text;
     END IF;
 
+    LOOP
+      v_session_refresh_page :=
+        public.pay_workbench_session_refresh_current_authority_v1(
+          p_session_id,
+          p_actor_user_id,
+          v_session_refresh_cursor,
+          100
+        );
+      IF pg_catalog.jsonb_typeof(v_session_refresh_page) IS DISTINCT FROM 'object'
+         OR COALESCE((v_session_refresh_page->>'ok')::boolean, false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN'
+          USING ERRCODE = 'P0001',
+                DETAIL = pg_catalog.jsonb_build_object(
+                  'code', 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN',
+                  'session_id', p_session_id,
+                  'page_number', v_session_refresh_page_count + 1
+                )::text;
+      END IF;
+      v_session_refresh_pages := v_session_refresh_pages
+        || pg_catalog.jsonb_build_array(v_session_refresh_page);
+      v_session_refresh_page_count := v_session_refresh_page_count + 1;
+      EXIT WHEN COALESCE((v_session_refresh_page->>'has_more')::boolean, false) IS NOT TRUE;
+      IF v_session_refresh_page_count >= 1000
+         OR pg_catalog.jsonb_typeof(v_session_refresh_page->'next_cursor') IS DISTINCT FROM 'object' THEN
+        RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID'
+          USING ERRCODE = 'P0001',
+                DETAIL = pg_catalog.jsonb_build_object(
+                  'code', 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID',
+                  'session_id', p_session_id,
+                  'page_number', v_session_refresh_page_count
+                )::text;
+      END IF;
+      v_session_refresh_cursor := v_session_refresh_page->'next_cursor';
+    END LOOP;
+
     SELECT
       NULLIF(BTRIM(COALESCE(actor_user.display_name, actor_user.email, '')), ''),
       NULLIF(BTRIM(COALESCE(actor_user.role, '')), '')
@@ -1044,6 +1127,8 @@ BEGIN
       'targeted_timesheet_ids', COALESCE(to_jsonb(v_clearable_timesheet_ids), '[]'::jsonb),
       'linked_timesheet_ids', COALESCE(to_jsonb(v_clearable_linked_timesheet_ids), '[]'::jsonb),
       'enqueue_result', COALESCE(v_job_json, '{}'::jsonb),
+      'session_version_refresh_pages', v_session_refresh_pages,
+      'session_version_refresh_page_count', v_session_refresh_page_count,
       'state_changed', true,
       'no_op', false
     );
@@ -1886,6 +1971,41 @@ BEGIN
     RAISE EXCEPTION 'candidate refresh enqueue did not return a durable job_id for session % candidate %', p_session_id, v_candidate_id;
   END IF;
 
+  LOOP
+    v_session_refresh_page :=
+      public.pay_workbench_session_refresh_current_authority_v1(
+        p_session_id,
+        p_actor_user_id,
+        v_session_refresh_cursor,
+        100
+      );
+    IF pg_catalog.jsonb_typeof(v_session_refresh_page) IS DISTINCT FROM 'object'
+       OR COALESCE((v_session_refresh_page->>'ok')::boolean, false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN'
+        USING ERRCODE = 'P0001',
+              DETAIL = pg_catalog.jsonb_build_object(
+                'code', 'WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN',
+                'session_id', p_session_id,
+                'page_number', v_session_refresh_page_count + 1
+              )::text;
+    END IF;
+    v_session_refresh_pages := v_session_refresh_pages
+      || pg_catalog.jsonb_build_array(v_session_refresh_page);
+    v_session_refresh_page_count := v_session_refresh_page_count + 1;
+    EXIT WHEN COALESCE((v_session_refresh_page->>'has_more')::boolean, false) IS NOT TRUE;
+    IF v_session_refresh_page_count >= 1000
+       OR pg_catalog.jsonb_typeof(v_session_refresh_page->'next_cursor') IS DISTINCT FROM 'object' THEN
+      RAISE EXCEPTION 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = pg_catalog.jsonb_build_object(
+                'code', 'WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID',
+                'session_id', p_session_id,
+                'page_number', v_session_refresh_page_count
+              )::text;
+    END IF;
+    v_session_refresh_cursor := v_session_refresh_page->'next_cursor';
+  END LOOP;
+
   SELECT
     NULLIF(BTRIM(COALESCE(actor_user.display_name, actor_user.email, '')), ''),
     NULLIF(BTRIM(COALESCE(actor_user.role, '')), '')
@@ -1972,6 +2092,8 @@ BEGIN
     'refresh_scope_kind', CASE WHEN COALESCE(v_selected_timesheet_count, 0) > 0 OR v_linked_timesheet_id IS NOT NULL THEN 'TARGETED_TIMESHEETS' ELSE 'CANDIDATE_FULL_LIVE' END,
     'targeted_timesheet_ids', CASE WHEN COALESCE(v_selected_timesheet_count, 0) > 0 THEN COALESCE(v_selected_timesheet_ids_json, '[]'::jsonb) WHEN v_linked_timesheet_id IS NOT NULL THEN jsonb_build_array(v_linked_timesheet_id::text) ELSE '[]'::jsonb END,
     'enqueue_result', COALESCE(v_job_json, '{}'::jsonb),
+    'session_version_refresh_pages', v_session_refresh_pages,
+    'session_version_refresh_page_count', v_session_refresh_page_count,
     'state_changed', true,
     'no_op', false
   );

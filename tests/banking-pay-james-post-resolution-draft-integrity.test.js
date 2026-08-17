@@ -12,6 +12,7 @@ const canonical = read('supabase', 'repeatable', '05082026_1545_pay_preview_cand
 const recovery = read('supabase', 'repeatable', '09082026_0712_banking_pay_semantic_ready_helpers.sql');
 const semanticSelection = read('supabase', 'repeatable', '09082026_1727_pay_workbench_session_set_selected_rows_semantic_overlay.sql');
 const refresh = read('supabase', 'repeatable', '11082026_1557_pay_workbench_session_refresh_current_authority_v1.sql');
+const clearResolution = read('supabase', 'repeatable', '21072026_1235_42_pay_workbench_session_clear_case_resolution.sql');
 const candidatePreview = read('supabase', 'repeatable', '16082026_2035_pay_workbench_candidate_preview_effective_section_v1.sql');
 const sessionPreviewPage = read('supabase', 'repeatable', '20072026_0117_banking_pay_preview_selection_revision.sql');
 const replay = read('supabase', 'repeatable', '08082026_0902_reassert_authorities_after_legacy_monolith.sql');
@@ -77,6 +78,25 @@ test('same-session rebase is version-only, parity-fenced and preserves physical 
   assert.match(refresh, /'post_draft_artifacts_touched', false/i);
 });
 
+test('every mutating Cancel Resolution branch converges the new session version after the affected owner is proven', () => {
+  const versionAdvanceCount = (clearResolution.match(/SET version = session_update\.version \+ 1/gi) || []).length;
+  const refreshOwnerCount = (clearResolution.match(/public\.pay_workbench_session_refresh_current_authority_v1\(/gi) || []).length;
+
+  assert.equal(versionAdvanceCount, 3);
+  assert.equal(refreshOwnerCount, versionAdvanceCount);
+  assert.equal((clearResolution.match(/WORKBENCH_SESSION_VERSION_REFRESH_NOT_PROVEN/gi) || []).length, versionAdvanceCount * 2);
+  assert.equal((clearResolution.match(/WORKBENCH_SESSION_VERSION_REFRESH_CURSOR_INVALID/gi) || []).length, versionAdvanceCount * 2);
+  assert.equal((clearResolution.match(/'session_version_refresh_pages', v_session_refresh_pages/gi) || []).length, versionAdvanceCount);
+  assert.equal((clearResolution.match(/'session_version_refresh_page_count', v_session_refresh_page_count/gi) || []).length, versionAdvanceCount);
+
+  for (const mutationBranch of clearResolution.split(/SET version = session_update\.version \+ 1/i).slice(1)) {
+    const enqueueAt = mutationBranch.indexOf('pay_workbench_enqueue_session_candidate_refresh');
+    const proveOwnerAt = mutationBranch.indexOf('IF v_job_id IS NULL');
+    const convergeAt = mutationBranch.indexOf('pay_workbench_session_refresh_current_authority_v1');
+    assert.ok(enqueueAt >= 0 && proveOwnerAt > enqueueAt && convergeAt > proveOwnerAt);
+  }
+});
+
 test('candidate preview pages by effective section and exposes physical section only as a diagnostic', () => {
   assert.match(candidatePreview, /private\.pay_workbench_preview_effective_section_v1\(/i);
   assert.match(candidatePreview, /ORDER BY eligible_rows\.effective_section, eligible_rows\.row_ordinal, eligible_rows\.id/i);
@@ -118,7 +138,6 @@ test('the bounded fix does not redefine frozen James or post-Draft economic owne
     'pay_workbench_sealed_rate_component_projection_v1',
     'pay_sync_overpayments_from_workbench_workspace_v1',
     'pay_workbench_session_apply_case_resolution',
-    'pay_workbench_session_clear_case_resolution',
     'banking_pay_draft_create_step_v1',
     'pay_payment_execute',
     'pay_payment_settle'
