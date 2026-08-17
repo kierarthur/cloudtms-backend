@@ -39,7 +39,7 @@ The real TEST negative probe uses a structurally valid 14-day body and deliberat
 
 Read-only identity qualification also proves that Kier's exact existing global Candidate key is present and matches, while the separate `GOOGLE_CREDENTIALLY_PUBLIC_ID` Daily source-link catalogue has zero active rows for Kier and zero overall. The controlled source-link bootstrap remains a prerequisite to enabled proving.
 
-The onboarding decision is population-safe and future-facing: a Candidate who registers only in the new app is identified by the admin-entered global key, and the derived Google source HMAC must be bound to that same existing Candidate UUID. Legacy-app participation is not required. Executable admin-onboarding proof remains a later gate and is not falsely reported as completed by R13.
+The onboarding decision is population-safe and future-facing: Google generates the CID1 global key from the normalized Credentially Public ID; a CloudTMS administrator enters that exact generated value on the Candidate record; and the separate derived Google source HMAC must be bound to that same existing Candidate UUID. Legacy-app participation is not required. Executable admin-onboarding proof remains a later gate and is not falsely reported as completed by R13.
 
 ## Google qualification
 

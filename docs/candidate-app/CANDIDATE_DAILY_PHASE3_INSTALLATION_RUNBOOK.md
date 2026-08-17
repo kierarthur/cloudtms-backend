@@ -8,7 +8,7 @@ This runbook records the completed disabled installation and governs the later c
 - Current Google Head/deployment/trigger evidence is re-exported and compared with the certified rollback files.
 - CloudTMS TEST Worker signed routes are healthy.
 - Exact, unambiguous source-link rows exist for every eligible TEST source row that the enabled Master publication will include.
-- Every source-link row resolves through the admin-controlled global Candidate key to exactly one pre-existing Candidate UUID. This includes candidates registered only in the new app; legacy-browser use is never a prerequisite. No-match, duplicate or ambiguous global-key mappings stop before enablement.
+- Every source-link row resolves through the Google-generated `CID1-...` global Candidate key that an administrator entered on exactly one pre-existing Candidate UUID. This includes candidates registered only in the new app; legacy-browser use is never a prerequisite. No-match, duplicate, checksum disagreement or ambiguous global-key mappings stop before enablement.
 - Required HMAC key ID/secret and source-HMAC secret are installed in retained-reader catalogues.
 - No other Google editor/deployment window is active.
 - `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED` is set to `false` in both projects.
@@ -77,7 +77,7 @@ The operator installed the TEST property family in both Google projects and the 
 Do not enable both projects simultaneously on the first attempt.
 
 1. The product owner has chosen a population-wide TEST bridge gate rather than a candidate-specific allowlist. Confirm all eligible source rows have exact TEST links, then enable Master Rota while Candidate entitlement remains false.
-2. Prove at least one legacy-coexistence mapping and one new-app-only mapping: in each case the admin-entered global key resolves to exactly one existing Candidate UUID, the separate Google source HMAC is bound to that UUID, and no duplicate Candidate row is created.
+2. Prove at least one legacy-coexistence mapping and one new-app-only mapping: in each case Google normalizes the Credentially Public ID and generates the exact `CID1-...` value, the administrator-entered CloudTMS value matches it, it resolves to one existing Candidate UUID, and the separate Google source HMAC is bound to that UUID without creating a duplicate Candidate.
 3. Run one update-end event and verify signed HMAC, complete generation receipts, 14 days per candidate, source/day hashes and no duplicate batch. Observe Kier Arthur first using the existing phone app, but do not hard-code or technically restrict the runtime to Kier.
 4. Disable Master if any mismatch occurs.
 5. Enable Availability for the eligible TEST population.

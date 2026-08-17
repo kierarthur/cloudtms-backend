@@ -70,7 +70,7 @@ EXPECTED_HASHES = {
     "source/master-rota/CloudTMSCandidateBridge.gs": "141538b2c7d3b9719963484d057fafbfe733fd150712a50a5b9fb673fdc3783f",
     "source/master-rota/rollback/Code.gs": "c3ae9c480a97ad2771312f5f453adbe7049c07219f89624f75df543d319fa0a8",
     "CloudTMS_Candidate_App_Current_Decisions_20260817_Phase3_R13.pdf":
-        "3a0e4066f2ccd11da3eb7afb31311dead06b05fef9ab9d6deefeccd6407eec38",
+        "68fc3300c3793628b027a96b55b2419ecf4c35aae693feb0c62be2530fdecd5d",
     "incoming_r12_review/CloudTMS_Candidate_App_Phase3_R12_Independent_Review_Artifacts_20260817.zip":
         "3e55281baf2eaf387f601850dfe91e0ff262d60cb861a421defa1d9f68680792",
     "incoming_r12_review/CloudTMS_Candidate_App_Phase3_R12_Independent_Verification_20260817.md":
@@ -174,9 +174,10 @@ def main() -> int:
             "99. Exact recovery",
             "100. Verification",
             "AV-281",
-            "AV-297",
+            "AV-298",
             "new-app-only candidate",
             "admin-entered global Candidate key",
+            "Google generates the CID1 global key",
             "version 102",
             "19 passed, 0 failed",
             "Phase 7",
@@ -196,6 +197,10 @@ def main() -> int:
         identity = provenance.get("identity_readiness", {})
         if identity.get("existing_global_candidate_key_present") is not True:
             errors.append("provenance existing global key qualification missing")
+        if identity.get("global_key_generated_from_google_credentially_public_id") is not True:
+            errors.append("provenance Google-to-CID1 mapping direction missing")
+        if identity.get("cloudtms_admin_enters_generated_cid1_not_raw_public_id") is not True:
+            errors.append("provenance CloudTMS admin-entry boundary missing")
         if identity.get("global_candidate_key_is_daily_source_link") is not False:
             errors.append("provenance must keep global key/source link distinct")
         if identity.get("new_app_only_candidate_requires_legacy_browser") is not False:

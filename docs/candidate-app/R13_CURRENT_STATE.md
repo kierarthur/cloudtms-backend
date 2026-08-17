@@ -14,7 +14,8 @@ Both Google bridges remain disabled. Candidate feature flags and entitlements re
 
 | Surface | Current fact |
 | --- | --- |
-| Backend `test` implementation head | `ccf193eb49d4e022a971d845ce77120f53cd6bb8` |
+| Backend `test` runtime implementation | `ccf193eb49d4e022a971d845ce77120f53cd6bb8` |
+| R13 evidence commit | `6a62cf9864cdb41a63b8516f81540b0fa434a41c` |
 | Availability active/rollback | 216 / 215; unchanged by R13 |
 | Master active/rollback | 102 / 101; R13 helper saved to Head only |
 | Master R13 Google deployment | Paused pending independent GO |
@@ -32,7 +33,7 @@ The Phase 2/3 Google Daily resolver deliberately does not resolve from that reve
 
 Kier is an observational first journey, not a hard-coded runtime restriction.
 
-This onboarding authority also applies after the legacy browser is retired. A new-app-only Candidate is first created/identified in CloudTMS under the administrator-entered global key. Controlled onboarding then attaches the derived Google source HMAC to that exact existing Candidate UUID. It must not require prior legacy-app use or create a second Candidate row.
+This onboarding authority also applies after the legacy browser is retired. Google normalizes `Public ID - Credentially` and generates the `CID1-...` Candidate_ID (Crockford Base32 payload plus keyed checksum). A CloudTMS administrator enters that exact generated value on the canonical Candidate record; they do not enter the raw Credentially ID. Controlled onboarding then attaches the separate derived Google source HMAC to that same existing Candidate UUID. It must not require prior legacy-app use or create a second Candidate row.
 
 ## Source hashes
 

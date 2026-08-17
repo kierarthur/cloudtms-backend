@@ -70,7 +70,7 @@ Use at least two eligible fixture candidates and prove both are included, no raw
 
 Independently verify both facts without disclosing either identity: Kier's existing global Candidate key is present and matches the operator-supplied mapping, while no active `private.candidate_daily_source_links` row currently exists for Kier. Confirm that the generation resolver uses only the non-reversible `GOOGLE_CREDENTIALLY_PUBLIC_ID` HMAC catalogue and never treats `public.candidates.key_norm` as a substitute. Confirm bootstrap binds the HMAC to the existing Candidate UUID and cannot create a replacement Candidate.
 
-Also verify the app-only onboarding case. A candidate who never used the legacy browser must be linkable by the admin-entered global Candidate key to exactly one existing CloudTMS Candidate UUID, after which the separate source HMAC is attached to that same UUID. Prove no duplicate Candidate can be created and no ambiguous/global-key conflict can silently select a person.
+Also verify the app-only onboarding case. Confirm certified Google code normalizes `Public ID - Credentially`, creates the exact `CID1-<Base32 payload><checksum>` value and that this generated value is what the administrator enters in CloudTMS. A candidate who never used the legacy browser must be linkable by that exact CID1 key to one existing CloudTMS Candidate UUID, after which the separate source HMAC is attached to the same UUID. Prove no duplicate Candidate can be created and no checksum, missing-key or ambiguous-key conflict can silently select a person.
 
 ### Real TEST negative runtime
 

@@ -122,9 +122,10 @@ def build_addendum(output: Path, facts: dict[str, str]) -> None:
         "An existing global Candidate key proves the established Candidate-product mapping but does not replace the Daily Google-source HMAC catalogue.",
         "Controlled source-link bootstrap binds the HMAC to the existing Candidate UUID and never creates or replaces a Candidate record.",
         "A new-app-only candidate joins through the admin-entered global Candidate key and does not need to use the temporary legacy browser.",
+        "Google generates the CID1 global key from normalized Credentially Public ID; the administrator enters that generated CID1 value in CloudTMS.",
         "Kier Arthur is the first observational phone-app journey, not a runtime scope boundary.",
     ])
-    story.append(callout(sty, "AV-287 to AV-297 freeze recovery ordering, population scope, distinct global-key/source-link authorities and new-app-only onboarding to the same Candidate UUID."))
+    story.append(callout(sty, "AV-287 to AV-298 freeze recovery ordering, population scope, Google-generated CID1 mapping, distinct source-HMAC authority and app-only onboarding to the same Candidate UUID."))
 
     section(story, sty, "100. Verification, deployment gate and remaining full product")
     story.append(table(sty, ["Evidence", "R13 result"], [
@@ -134,7 +135,7 @@ def build_addendum(output: Path, facts: dict[str, str]) -> None:
         ["Candidate Worker builds", "Public broker and private Candidate dry builds pass; no Worker runtime changed."],
         ["Real TEST broker negative proof", "Valid route/body with deliberately invalid signing authority fails closed at SYSTEM_AUTH_FAILED; no source or business mutation."],
         ["Source-link readiness", "Kier's existing global Candidate key is present and matches; that key is distinct from the Daily Google-source HMAC catalogue, whose active Kier and overall TEST counts are zero."],
-        ["App-only onboarding", "Admin global key resolves one existing Candidate UUID; bootstrap binds the separate source HMAC to that UUID and cannot create a duplicate Candidate."],
+        ["App-only onboarding", "Google generates CID1 from normalized Credentially Public ID; the administrator enters that exact value; bootstrap binds the separate source HMAC to the same existing UUID."],
         ["Google deployment", "R13 Master Head is saved but not deployed. Independent GO is required first."],
     ], [52 * mm, 111 * mm]))
     story.append(Spacer(1, 5 * mm))
@@ -147,7 +148,7 @@ def build_addendum(output: Path, facts: dict[str, str]) -> None:
         ["Phase 7", "Gradual rollout, monitoring and separately authorised retirement of the temporary browser adapter."],
     ], [38 * mm, 125 * mm]))
     story.append(Spacer(1, 5 * mm))
-    story.append(callout(sty, "AV-293 to AV-297 bind observational scope, source-link readiness, existing Candidate-row preservation, app-only onboarding and the independent-GO-before-Google-deployment rule. No production or feature enablement is authorised."))
+    story.append(callout(sty, "AV-293 to AV-298 bind observational scope, source-link readiness, Google-generated CID1 mapping, existing Candidate-row preservation, app-only onboarding and the independent-GO-before-Google-deployment rule."))
 
     doc.build(story)
 
@@ -186,7 +187,7 @@ def verify(base_path: Path, output_path: Path) -> None:
     appended = re.sub(r"\s+", " ", "\n".join((p.extract_text() or "") for p in output.pages[len(base.pages):]))
     required = [
         "98. Quota-safe immutable Master", "99. Exact recovery", "100. Verification",
-        "AV-281", "AV-297", "7,000", "480,000", "245,760",
+        "AV-281", "AV-298", "7,000", "480,000", "245,760",
         "population-wide TEST", "Kier Arthur", "version 102", "19 passed, 0 failed",
     ]
     missing = [item for item in required if item not in appended]

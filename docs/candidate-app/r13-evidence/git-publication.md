@@ -10,3 +10,9 @@ Title: Close Candidate Phase 3 generation recovery
 
 The commit contains exactly nine Candidate Daily files and no SQL, Worker runtime, frontend, finance, Banking Pay, Emergency/provider or production change.
 
+The self-contained R13 evidence and decisions were committed separately without changing runtime:
+
+```text
+Commit: 6a62cf9864cdb41a63b8516f81540b0fa434a41c
+Title: Record Candidate Phase 3 R13 audit evidence
+```

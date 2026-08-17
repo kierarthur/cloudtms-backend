@@ -96,7 +96,7 @@ Read-only TEST evidence proves that Kier's active Candidate record already conta
 
 It is not, however, the separate Daily source authority used by the signed Google bridge. The installed resolver accepts only a non-reversible HMAC of the Google `Public ID - Credentially`, catalogued as `GOOGLE_CREDENTIALLY_PUBLIC_ID` in `private.candidate_daily_source_links`. Read-only TEST evidence currently shows zero such rows for Kier and zero active TEST rows for that source type overall. Candidate/global-key existence is therefore not proof of Daily source-link readiness. Before enabled proving, the controlled bootstrap must derive, bind and verify exact source links for every eligible row. It must map to the existing Candidate UUID; it must not create a replacement Candidate. No source link or Candidate row was created by R13.
 
-The same rule explicitly covers candidates who never use the legacy browser. An administrator enters their global Candidate key against the canonical CloudTMS Candidate record. Controlled onboarding resolves that key to exactly one existing UUID and binds the derived Google source HMAC to that same UUID. The new app, Master Rota, Availability and Emergency journeys therefore converge on one person record without making legacy-app participation a prerequisite. Duplicate, missing or ambiguous mappings fail closed.
+The same rule explicitly covers candidates who never use the legacy browser. Master Rota normalizes `Public ID - Credentially` and generates `CID1-<Crockford Base32 payload><4-character keyed checksum>`. A CloudTMS administrator enters that generated CID1 value—not the raw Public ID—against the canonical Candidate record. Controlled onboarding resolves the exact CID1 match to one existing UUID and binds the separate derived Google source HMAC to that same UUID. The new app, Master Rota, Availability and Emergency journeys therefore converge on one person record without making legacy-app participation a prerequisite. Duplicate, missing, checksum-disagreeing or ambiguous mappings fail closed.
 
 ## 7. Source and publication authority
 
@@ -111,6 +111,13 @@ Parent R12 authority:
 
 ```text
 6117000635a2f287220e5d20b90ba9e74d5cd8b1
+```
+
+R13 evidence commit:
+
+```text
+6a62cf9864cdb41a63b8516f81540b0fa434a41c
+Record Candidate Phase 3 R13 audit evidence
 ```
 
 The implementation commit changes exactly nine files: the Master helper, one new focused recovery test, the existing Phase 3 test, and six Candidate Daily authority/runbook files. It changes no SQL, Worker runtime, frontend, finance, Banking Pay, Emergency/provider or production source.

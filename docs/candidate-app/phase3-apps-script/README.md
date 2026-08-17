@@ -54,6 +54,10 @@ Certified rollback SHA-256:
 c3ae9c480a97ad2771312f5f453adbe7049c07219f89624f75df543d319fa0a8
 ```
 
+## Candidate identity connection
+
+The existing Master Rota `Candidate_ID` authority transforms normalized `Public ID - Credentially` into `CID1-<Crockford Base32 payload><4-character keyed checksum>`. A CloudTMS administrator enters that exact generated CID1 value on the matching Candidate record; the raw Credentially Public ID is not entered in CloudTMS. During controlled onboarding, the separate non-reversible source HMAC derived from the same normalized Public ID is bound to that existing Candidate UUID for signed Daily runtime requests. CID1 and the source HMAC are deliberately different authorities.
+
 ## Binding invariant
 
 When the Google Apps Script Project Script Property is missing or false:
