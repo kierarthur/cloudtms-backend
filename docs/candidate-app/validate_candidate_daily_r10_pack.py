@@ -97,7 +97,11 @@ def main() -> int:
             if path.suffix.lower() not in {".md", ".txt", ".json", ".csv", ".sql", ".js", ".py", ".yml", ".yaml"}:
                 continue
             text = path.read_text(encoding="utf-8", errors="strict")
-            found = [value for value in FORBIDDEN_TEXT if value in text]
+            # GitHub Actions expressions are executable workflow syntax, not
+            # unresolved handover placeholders. Remove only their complete,
+            # bounded form before applying the generic double-brace check.
+            scan_text = re.sub(r"\$\{\{[\s\S]*?\}\}", "", text)
+            found = [value for value in FORBIDDEN_TEXT if value in scan_text]
             if found:
                 raise RuntimeError(f"Forbidden local/placeholder text in {path.relative_to(root)}: {found}")
 
