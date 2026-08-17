@@ -98,6 +98,9 @@ DECLARE
   v_terminal_candidate_state_present boolean:=false;
   v_terminal_owner_valid boolean:=false;
   v_terminal_progress_json jsonb:='{}'::jsonb;
+  v_terminal_progress_recompute_result jsonb:='{}'::jsonb;
+  v_terminal_existing_successor_proven boolean:=false;
+  v_terminal_live_change_seq bigint:=0;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -146,6 +149,7 @@ BEGIN
   -- Small indexed lease-recovery page.  No financial source relation is read.
   FOR v_recovery IN
     SELECT attempt.id attempt_id,attempt.job_id,attempt.build_id,attempt.candidate_id,
+           job.session_id,
            attempt.lease_expires_at_utc,
            job.attempt_count,job.max_attempts,
            CASE WHEN COALESCE(job.payload_json->>'recovery_scan_generation','') ~ '^\d+$'
@@ -219,44 +223,128 @@ BEGIN
               'code','DELIVERED_ATTEMPT_EXHAUSTED'),updated_at_utc=clock_timestamp()
           WHERE id=v_recovery.build_id AND status NOT IN ('COMPLETE','OBSOLETE');
 
-          v_terminal_repair_result:=public.pay_workbench_repair_orphaned_pending_source_build(
-            p_session_id=>(SELECT job.session_id
-              FROM public.banking_pay_workbench_jobs job
-              WHERE job.id=v_recovery.job_id),
-            p_candidate_id=>v_recovery.candidate_id,
-            p_limit=>1,
-            p_now_utc=>v_database_now,
-            p_reason=>'EXHAUSTED_DELIVERED_ATTEMPT_ATOMIC_CONVERGENCE');
-          v_terminal_repair_row:=COALESCE(v_terminal_repair_result->'results'->0,'{}'::jsonb);
-          v_terminal_action:=NULLIF(BTRIM(v_terminal_repair_row->>'action'),'');
-          v_terminal_successor_job_id:=CASE
-            WHEN COALESCE(v_terminal_repair_row->>'successor_job_id','')
-                ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-              THEN (v_terminal_repair_row->>'successor_job_id')::uuid END;
+          /* A prior bounded repair may already have rebound the scope to a
+             valid successor while the exhausted delivered attempt remains
+             STARTED.  In that state the orphan repair correctly has no row to
+             change.  Requiring repaired_count=1 makes this recovery transaction
+             roll back forever before the already-owned successor can be
+             claimed.  Prove that exact already-rebound state directly; only
+             call the repair owner when no such successor exists. */
+          v_terminal_existing_successor_proven:=false;
+          v_terminal_successor_job_id:=NULL::uuid;
+          SELECT COALESCE(change_counter.seq,0)
+          INTO v_terminal_live_change_seq
+          FROM public.app_change_counters AS change_counter
+          WHERE change_counter.entity_key='pay_candidate:'||v_recovery.candidate_id::text;
+          v_terminal_live_change_seq:=COALESCE(v_terminal_live_change_seq,0);
 
-          IF COALESCE((v_terminal_repair_result->>'ok')::boolean,false) IS NOT TRUE
-             OR COALESCE((v_terminal_repair_result->>'examined_count')::integer,-1)<>1
-             OR COALESCE((v_terminal_repair_result->>'repaired_count')::integer,-1)<>1
-             OR COALESCE((v_terminal_repair_result->>'skipped_count')::integer,-1)<>0
-             OR COALESCE((v_terminal_repair_result->>'unresolved_count')::integer,-1)<>0
-             OR COALESCE((v_terminal_repair_result->>'progress_recompute_failed_count')::integer,-1)<>0
-             OR COALESCE((v_terminal_repair_result->>'all_state_transitions_proven')::boolean,false)
-                IS NOT TRUE
-             OR COALESCE((v_terminal_repair_result->>'all_progress_recomputed')::boolean,false)
-                IS NOT TRUE
-             OR jsonb_array_length(COALESCE(v_terminal_repair_result->'results','[]'::jsonb))<>1
-             OR COALESCE(v_terminal_repair_row->>'candidate_id','')<>v_recovery.candidate_id::text
-             OR COALESCE((v_terminal_repair_row->>'state_transition_proven')::boolean,false)
-                IS NOT TRUE
-             OR COALESCE((v_terminal_repair_row->>'progress_recomputed')::boolean,false)
-                IS NOT TRUE
-             OR v_terminal_action NOT IN ('FAILED_CLOSED_MAX_ATTEMPTS',
-               'REBOUND_ACTIVE_SUCCESSOR','RECONCILED_SUCCESSFUL_BUILD') THEN
-            RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
-              USING ERRCODE='40001',DETAIL=jsonb_build_object(
-                'candidate_id',v_recovery.candidate_id,
-                'job_id',v_recovery.job_id,
-                'repair_result',v_terminal_repair_result)::text;
+          SELECT scope_row.* INTO v_terminal_scope
+          FROM public.banking_pay_workbench_session_scope AS scope_row
+          WHERE scope_row.session_id=v_recovery.session_id
+            AND scope_row.candidate_id=v_recovery.candidate_id
+            AND scope_row.pending_job_id IS NOT NULL
+            AND scope_row.pending_job_id IS DISTINCT FROM v_recovery.job_id
+            AND UPPER(BTRIM(COALESCE(scope_row.status,'')))='SOURCE_BUILD_PENDING'
+            AND COALESCE(scope_row.dirty,false)=true
+            AND scope_row.error_json IS NULL
+          FOR UPDATE;
+
+          IF FOUND THEN
+            SELECT successor.id INTO v_terminal_successor_job_id
+            FROM public.banking_pay_workbench_jobs AS successor
+            JOIN public.banking_pay_workbench_sessions AS successor_session
+              ON successor_session.id=successor.session_id
+            WHERE successor.id=v_terminal_scope.pending_job_id
+              AND successor.session_id=v_terminal_scope.session_id
+              AND successor.candidate_id=v_terminal_scope.candidate_id
+              AND UPPER(BTRIM(COALESCE(successor.status,''))) IN ('QUEUED','RUNNING')
+              AND UPPER(BTRIM(COALESCE(successor.job_type,''))) IN (
+                'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+                'WORKBENCH_CANDIDATE_SOURCE_BUILD_CHUNK',
+                'WORKBENCH_CANDIDATE_SOURCE_BUILD_PAGE',
+                'CANDIDATE_SOURCE_BUILD',
+                'CANDIDATE_SOURCE_BUILD_CHUNK',
+                'SOURCE_BUILD',
+                'SOURCE_BUILD_PAGE')
+              AND CASE
+                WHEN COALESCE(successor.payload_json->>'session_version','') ~ '^[0-9]{1,18}$'
+                  THEN (successor.payload_json->>'session_version')::bigint
+                ELSE NULL::bigint END=successor_session.version
+              AND CASE
+                WHEN COALESCE(successor.payload_json->>'source_change_seq','') ~ '^[0-9]{1,18}$'
+                  THEN (successor.payload_json->>'source_change_seq')::bigint
+                ELSE NULL::bigint END>=v_terminal_live_change_seq
+              AND COALESCE(successor.payload_json->>'source_build_run_id','')
+                ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+            FOR UPDATE OF successor,successor_session;
+            v_terminal_existing_successor_proven:=FOUND;
+          END IF;
+
+          IF v_terminal_existing_successor_proven THEN
+            v_terminal_action:='REBOUND_ACTIVE_SUCCESSOR';
+            v_terminal_progress_recompute_result:=
+              public.pay_workbench_session_recompute_progress_counters(
+                p_session_id=>v_recovery.session_id,
+                p_apply=>true,
+                p_reason=>'EXHAUSTED_ATTEMPT_EXISTING_SUCCESSOR_PROVEN',
+                p_write_progress_json=>true);
+            IF jsonb_typeof(v_terminal_progress_recompute_result)<>'object'
+               OR COALESCE((v_terminal_progress_recompute_result->>'ok')::boolean,false)
+                  IS NOT TRUE THEN
+              RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
+                USING ERRCODE='40001',DETAIL='EXISTING_SUCCESSOR_PROGRESS_RECOMPUTE';
+            END IF;
+            v_terminal_repair_row:=jsonb_build_object(
+              'session_id',v_recovery.session_id::text,
+              'candidate_id',v_recovery.candidate_id::text,
+              'old_pending_job_id',v_recovery.job_id::text,
+              'action',v_terminal_action,
+              'successor_job_id',v_terminal_successor_job_id::text,
+              'state_transition_proven',true,
+              'progress_recomputed',true,
+              'already_rebound_successor_proven',true);
+            v_terminal_repair_result:=jsonb_build_object(
+              'ok',true,
+              'already_rebound_successor_proven',true,
+              'results',jsonb_build_array(v_terminal_repair_row));
+          ELSE
+            v_terminal_repair_result:=public.pay_workbench_repair_orphaned_pending_source_build(
+              p_session_id=>v_recovery.session_id,
+              p_candidate_id=>v_recovery.candidate_id,
+              p_limit=>1,
+              p_now_utc=>v_database_now,
+              p_reason=>'EXHAUSTED_DELIVERED_ATTEMPT_ATOMIC_CONVERGENCE');
+            v_terminal_repair_row:=COALESCE(v_terminal_repair_result->'results'->0,'{}'::jsonb);
+            v_terminal_action:=NULLIF(BTRIM(v_terminal_repair_row->>'action'),'');
+            v_terminal_successor_job_id:=CASE
+              WHEN COALESCE(v_terminal_repair_row->>'successor_job_id','')
+                  ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                THEN (v_terminal_repair_row->>'successor_job_id')::uuid END;
+
+            IF COALESCE((v_terminal_repair_result->>'ok')::boolean,false) IS NOT TRUE
+               OR COALESCE((v_terminal_repair_result->>'examined_count')::integer,-1)<>1
+               OR COALESCE((v_terminal_repair_result->>'repaired_count')::integer,-1)<>1
+               OR COALESCE((v_terminal_repair_result->>'skipped_count')::integer,-1)<>0
+               OR COALESCE((v_terminal_repair_result->>'unresolved_count')::integer,-1)<>0
+               OR COALESCE((v_terminal_repair_result->>'progress_recompute_failed_count')::integer,-1)<>0
+               OR COALESCE((v_terminal_repair_result->>'all_state_transitions_proven')::boolean,false)
+                  IS NOT TRUE
+               OR COALESCE((v_terminal_repair_result->>'all_progress_recomputed')::boolean,false)
+                  IS NOT TRUE
+               OR jsonb_array_length(COALESCE(v_terminal_repair_result->'results','[]'::jsonb))<>1
+               OR COALESCE(v_terminal_repair_row->>'candidate_id','')<>v_recovery.candidate_id::text
+               OR COALESCE((v_terminal_repair_row->>'state_transition_proven')::boolean,false)
+                  IS NOT TRUE
+               OR COALESCE((v_terminal_repair_row->>'progress_recomputed')::boolean,false)
+                  IS NOT TRUE
+               OR v_terminal_action NOT IN ('FAILED_CLOSED_MAX_ATTEMPTS',
+                 'REBOUND_ACTIVE_SUCCESSOR','RECONCILED_SUCCESSFUL_BUILD') THEN
+              RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
+                USING ERRCODE='40001',DETAIL=jsonb_build_object(
+                  'candidate_id',v_recovery.candidate_id,
+                  'job_id',v_recovery.job_id,
+                  'repair_result',v_terminal_repair_result)::text;
+            END IF;
           END IF;
 
           SELECT scope_row.* INTO v_terminal_scope
@@ -287,7 +375,7 @@ BEGIN
                OR v_terminal_scope.pending_job_id IS NOT NULL
                OR NULLIF(BTRIM(COALESCE(v_terminal_scope.error_json->>'code','')),'') IS NULL
                OR (v_terminal_candidate_state_present AND (
-                 UPPER(BTRIM(COALESCE(v_terminal_candidate_state.status,'')))<>'ERROR'
+                 UPPER(BTRIM(COALESCE(v_terminal_candidate_state.status,'')))<>'FAILED'
                  OR v_terminal_candidate_state.pending_job_id IS NOT NULL
                  OR v_terminal_scope.error_json->>'code' IS DISTINCT FROM
                       v_terminal_candidate_state.last_error_json->>'code')) THEN
@@ -320,7 +408,7 @@ BEGIN
                OR COALESCE(v_terminal_scope.dirty,true)
                OR v_terminal_scope.pending_job_id IS NOT DISTINCT FROM v_recovery.job_id
                OR (v_terminal_candidate_state_present AND (
-                 UPPER(BTRIM(COALESCE(v_terminal_candidate_state.status,'')))='ERROR'
+                 UPPER(BTRIM(COALESCE(v_terminal_candidate_state.status,'')))='FAILED'
                  OR v_terminal_candidate_state.pending_job_id IS NOT DISTINCT FROM v_recovery.job_id
                  OR v_terminal_candidate_state.session_version IS DISTINCT FROM
                       v_terminal_scope.session_version

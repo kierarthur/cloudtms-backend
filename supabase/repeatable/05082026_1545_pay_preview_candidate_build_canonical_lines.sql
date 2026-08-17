@@ -2379,7 +2379,7 @@ begin
               select
                 segment_row.seg_ord,
                 segment_row.segment_stable_key,
-                segment_row.segment_json,
+                segment_row.segment_base_json as segment_json,
                 case
                   when nullif(btrim(coalesce(component_rows.stable_component_identity, '')), '') is not null
                    and segment_row.segment_stable_key is not distinct from component_rows.stable_component_identity
@@ -2414,6 +2414,17 @@ begin
           where component_rows.component_key_type in ('TS_DAY','EXPENSE_CODE','ADDITIONAL_CODE','ADJUSTMENT_CODE')
             and component_rows.component_key_value is not null
             and component_rows.stable_component_identity is not null
+            and (
+              component_rows.component_key_type <> 'TS_DAY'
+              or not exists (
+                select 1
+                from canonical_timesheet_segment_rows as exact_non_ready_segment
+                where exact_non_ready_segment.candidate_id = component_rows.candidate_id
+                  and exact_non_ready_segment.timesheet_id = component_rows.timesheet_id
+                  and exact_non_ready_segment.segment_stable_key is not distinct from component_rows.stable_component_identity
+                  and exact_non_ready_segment.presentation_segment_state in ('BLOCKED_VISIBLE', 'HIDDEN_INDEFINITE')
+              )
+            )
             and component_rows.component_amount_ex_vat > 0
             and component_rows.requires_resolution is not true
             and component_rows.is_ready_for_draft is true
@@ -2491,7 +2502,9 @@ begin
               'break_end', eligible_components.matched_segment_json->'break_end',
               'break_mins', eligible_components.matched_segment_json->'break_mins',
               'breaks', eligible_components.matched_segment_json->'breaks',
-              'ref_num', eligible_components.matched_segment_json->'ref_num',
+              'ref_num', eligible_components.matched_segment_json->'ref_num'
+            )
+            || jsonb_build_object(
               'case_resolution_summary', coalesce(eligible_components.case_resolution_summary_json, '{}'::jsonb),
               'case_resolution_summary_json', coalesce(eligible_components.case_resolution_summary_json, '{}'::jsonb),
               'has_resolved_rate', eligible_components.case_resolution_summary_json->'has_resolved_rate',

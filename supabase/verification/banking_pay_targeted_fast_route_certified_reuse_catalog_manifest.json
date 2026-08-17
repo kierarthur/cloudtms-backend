@@ -632,7 +632,7 @@
       "schema": "public",
       "name": "pay_preview_candidate_build_canonical_lines",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "7127060ec114016c52248fd50e5b081169ee38255f250f8de934371fbc2b105d",
+      "definition_sha256": "1224b02c8ddce21d2bdff6dd98d3a9b42f5ed1084c952833a300a58b1404f659",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -674,7 +674,7 @@
       "schema": "public",
       "name": "pay_workbench_repair_orphaned_pending_source_build",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_limit integer, p_now_utc timestamp with time zone, p_reason text",
-      "definition_sha256": "d47018c4e5ef20a0f051ea4d4acb40ead6eb635120c314d059a1ceb5d97e885f",
+      "definition_sha256": "b71da7c4003008f60625580a167efb0b405c13c4bb1bcb8aa4dbcc2bb17007b4",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -769,7 +769,7 @@
       "schema": "public",
       "name": "pay_workbench_source_build_attempt_claim_start_v1",
       "identity_arguments": "p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid",
-      "definition_sha256": "f94d941e4470bb75895595e315a9e2db60618a64698d40062f07bce33aee4694",
+      "definition_sha256": "d00ad36f7eef644259e77e1d6a8b35ec8f14461aed3b9cce98d736b57058048e",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

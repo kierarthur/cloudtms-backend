@@ -696,6 +696,35 @@ BEGIN
 
                 GET DIAGNOSTICS v_scope_transition_row_count = ROW_COUNT;
 
+                UPDATE public.banking_pay_workbench_session_candidate_state AS failed_state
+                SET status = 'FAILED',
+                    pending_job_id = NULL::uuid,
+                    last_error_json = jsonb_build_object(
+                      'code', v_candidate_failure_code,
+                      'message', v_candidate_failure_message,
+                      'job_id', v_owner.id::text,
+                      'attempt_count', COALESCE(v_owner.attempt_count, 0),
+                      'max_attempts', COALESCE(v_owner.max_attempts, 8),
+                      'automatic_recovery_scheduled', false,
+                      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+                    ),
+                    updated_at_utc = v_now
+                WHERE failed_state.session_id = v_scope.session_id
+                  AND failed_state.candidate_id = v_scope.candidate_id
+                  AND UPPER(BTRIM(COALESCE(failed_state.status, ''))) = 'PENDING'
+                  AND (
+                    failed_state.pending_job_id IS NULL
+                    OR failed_state.pending_job_id = v_owner.id
+                    OR EXISTS (
+                      SELECT 1
+                      FROM public.banking_pay_workbench_jobs AS state_owner
+                      WHERE state_owner.id = failed_state.pending_job_id
+                        AND state_owner.session_id = v_scope.session_id
+                        AND state_owner.candidate_id = v_scope.candidate_id
+                        AND state_owner.economic_build_id IS NOT DISTINCT FROM v_owner.economic_build_id
+                    )
+                  );
+
                 SELECT failed_post_scope.*
                 INTO v_post_scope
                 FROM public.banking_pay_workbench_session_scope AS failed_post_scope

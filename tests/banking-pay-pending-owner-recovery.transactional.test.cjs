@@ -337,6 +337,7 @@ const resetDatabase = () => {
       public.banking_pay_workbench_preview_rows,
       public.banking_pay_workbench_candidate_line_work,
       public.banking_pay_workbench_candidate_source_lines,
+      public.banking_pay_workbench_session_candidate_state,
       public.banking_pay_workbench_jobs,
       public.banking_pay_workbench_session_scope,
       public.app_change_counters,
@@ -401,6 +402,14 @@ const insertOwnerFixture = ({
     ) VALUES (
       '${scopeId}', '${sessionId}', '${candidateId}', ${scopeOrdinal},
       'SOURCE_BUILD_PENDING', '${ownerId}', false, true, NULL, now(), now()
+    );
+
+    INSERT INTO public.banking_pay_workbench_session_candidate_state (
+      id, session_id, candidate_id, status, source_change_seq, session_version,
+      pending_job_id, last_error_json, created_at_utc, updated_at_utc
+    ) VALUES (
+      gen_random_uuid(), '${sessionId}', '${candidateId}', 'PENDING',
+      ${ownerSeq}, ${sessionVersion}, '${ownerId}', '{}'::jsonb, now(), now()
     );
   `);
   return { ownerId, runId, scopeId };
@@ -605,6 +614,20 @@ const setupSql = `
     seeded boolean DEFAULT false,
     dirty boolean DEFAULT false,
     error_json jsonb,
+    created_at_utc timestamptz DEFAULT now(),
+    updated_at_utc timestamptz DEFAULT now(),
+    UNIQUE(session_id, candidate_id)
+  );
+
+  CREATE TABLE public.banking_pay_workbench_session_candidate_state (
+    id uuid PRIMARY KEY,
+    session_id uuid,
+    candidate_id uuid,
+    status text NOT NULL CHECK (status IN ('PENDING', 'READY', 'FAILED')),
+    source_change_seq bigint NOT NULL DEFAULT 0,
+    session_version bigint NOT NULL DEFAULT 1,
+    pending_job_id uuid,
+    last_error_json jsonb DEFAULT '{}'::jsonb,
     created_at_utc timestamptz DEFAULT now(),
     updated_at_utc timestamptz DEFAULT now(),
     UNIQUE(session_id, candidate_id)
@@ -1077,6 +1100,12 @@ test('T08 maximum-attempt fail close proves the safe terminal state', { skip: !e
     FROM public.banking_pay_workbench_session_scope
     WHERE session_id = '${sessionId}' AND candidate_id = '${candidateId}';
   `).trim(), 'SOURCE_BUILD_ERROR:NULL:WORKBENCH_PENDING_SCOPE_WITHOUT_ACTIVE_JOB');
+  assert.equal(psql(`
+    SELECT status || ':' || COALESCE(pending_job_id::text, 'NULL') || ':' ||
+           (last_error_json->>'code')
+    FROM public.banking_pay_workbench_session_candidate_state
+    WHERE session_id = '${sessionId}' AND candidate_id = '${candidateId}';
+  `).trim(), 'FAILED:NULL:WORKBENCH_PENDING_SCOPE_WITHOUT_ACTIVE_JOB');
 });
 
 test('T09 canonical enqueue proves returned job identity and exact scope binding', { skip: !enabled }, () => {
