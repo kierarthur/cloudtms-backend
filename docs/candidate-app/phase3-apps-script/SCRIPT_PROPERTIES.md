@@ -67,6 +67,8 @@ All existing Availability API and Master Rota properties remain unchanged. Do no
 4. Prove legacy behaviour while the flag is false.
 5. Enable only in a separately controlled TEST proving window after source links and retained-reader HMAC configuration are verified.
 
+No candidate-specific allowlist property exists in R13. The product owner explicitly chose a population-wide TEST bridge gate. When the flag is true, every otherwise eligible TEST source row may be included, and therefore every such row must have an exact database source link before enablement. Kier Arthur is the first observational phone-app journey only; no raw name, candidate ID or source identity is placed in the source or Script Properties for that purpose.
+
 ## Source identity canonicalisation
 
 Both projects derive exactly the same non-reversible source identity:

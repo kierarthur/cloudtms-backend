@@ -93,6 +93,20 @@ The operator installed the TEST transport key ID on both Candidate Worker layers
 - `STATUS_CHECK`, retryable/uncertain results and malformed 4xx retain the exact operation;
 - status not-found permits one exact retry only, after which recovery is status-only.
 
+## R13 Master Rota durability correction
+
+- all generation batches are frozen into quota-safe Script Property chunks before the first POST;
+- each manifest binds the exact request byte count and SHA-256;
+- each property value is capped at 7,000 UTF-8 bytes and the complete store is preflighted below 500 KB;
+- each request stays below both 50 candidates and the 256 KiB route limit;
+- `BATCH_IN_PROGRESS`, malformed responses, rate limiting, server failure and transport loss retain the exact body/key/correlation;
+- no seven-day expiry can create a replacement identity;
+- a later accepted rota event recovers the unresolved event before building anything new;
+- multi-batch completion is recorded only after every frozen batch succeeds;
+- persisted corruption fails closed and cannot silently create a new event.
+
+There is no candidate-specific runtime allowlist. The product owner chose population-wide TEST enablement; Kier Arthur is the first observational legacy-phone journey only. Both bridges remain false in the installed state covered by this package.
+
 ## Enabled coexistence behaviour
 
 ```text

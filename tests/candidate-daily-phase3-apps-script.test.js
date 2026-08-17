@@ -74,6 +74,7 @@ function propertyStore(initial = {}) {
       getScriptProperties() {
         return {
           getProperty: (name) => values.get(name) ?? null,
+          getProperties: () => Object.fromEntries(values),
           setProperty(name, value) { mutations += 1; values.set(name, String(value)); },
           deleteProperty(name) { mutations += 1; values.delete(name); }
         };
@@ -560,18 +561,20 @@ function sheet(values, backgrounds) {
   };
 }
 
-test('Master Rota generation builder emits exact 14-day hashed items without raw identity', () => {
+test('Master Rota generation builder emits every eligible TEST row without a candidate-specific limit', () => {
   const dates = Array.from({ length: 14 }, (_, index) => {
     const date = new Date(Date.UTC(2026, 7, 17 + index));
     return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`;
   });
   const candidateRows = [
     ['Surname', 'First', 'Email', 'Telephone', 'Public ID - Credentially'],
-    ['Worker', 'Test', 'hidden@example.invalid', '07000000000', 'public-id-not-transmitted']
+    ['Worker', 'Test', 'hidden@example.invalid', '07000000000', 'public-id-not-transmitted'],
+    ['Worker', 'Second', 'second@example.invalid', '07000000001', 'second-public-id-not-transmitted']
   ];
   const availabilityRows = [
     ['Surname', 'First', 'Email', 'Telephone', '', '', ...dates],
-    ['Worker', 'Test', '', '07000000000', '', '', ...Array(14).fill('')]
+    ['Worker', 'Test', '', '07000000000', '', '', ...Array(14).fill('')],
+    ['Worker', 'Second', '', '07000000001', '', '', ...Array(14).fill('')]
   ];
   const availabilityBackgrounds = availabilityRows.map((row) => row.map(() => '#ffffff'));
   const historyRows = [
@@ -611,7 +614,7 @@ test('Master Rota generation builder emits exact 14-day hashed items without raw
   });
   const items = context.ctmsP3_masterBuildGenerationItems_('phase3-test-run');
   const plain = JSON.parse(JSON.stringify(items));
-  assert.equal(plain.length, 1);
+  assert.equal(plain.length, 2);
   assert.equal(plain[0].days.length, 14);
   assert.equal(plain[0].days[0].booked, true);
   assert.equal(plain[0].days[0].booking_id, 'BOOK-1');
@@ -622,6 +625,9 @@ test('Master Rota generation builder emits exact 14-day hashed items without raw
   assert.equal(serialized.includes('public-id-not-transmitted'), false);
   assert.equal(serialized.includes('07000000000'), false);
   assert.equal(serialized.includes('hidden@example.invalid'), false);
+  assert.equal(serialized.includes('second-public-id-not-transmitted'), false);
+  assert.equal(serialized.includes('07000000001'), false);
+  assert.equal(serialized.includes('second@example.invalid'), false);
 });
 
 test('Phase 3 code preserves orphan ai_startDailyPings state and introduces no trigger owner', () => {

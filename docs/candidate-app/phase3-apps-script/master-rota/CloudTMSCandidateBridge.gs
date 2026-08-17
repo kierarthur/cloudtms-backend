@@ -12,8 +12,14 @@
  */
 
 var CTMS_P3_MASTER_BASE_PATH_ = '/candidate-system/v1/google-availability';
-var CTMS_P3_MASTER_STATE_PREFIX_ = 'CTMS_P3_ROTA_';
-var CTMS_P3_MASTER_STATE_TTL_MS_ = 7 * 24 * 60 * 60 * 1000;
+var CTMS_P3_MASTER_INDEX_KEY_ = 'CTMS_P3_ROTA_PENDING_INDEX';
+var CTMS_P3_MASTER_MANIFEST_PREFIX_ = 'CTMS_P3_ROTA_MANIFEST_';
+var CTMS_P3_MASTER_BODY_PREFIX_ = 'CTMS_P3_ROTA_BODY_';
+var CTMS_P3_MASTER_SCHEMA_ = 2;
+var CTMS_P3_MASTER_ITEM_LIMIT_ = 50;
+var CTMS_P3_MASTER_REQUEST_BYTES_ = 245760;
+var CTMS_P3_MASTER_PROPERTY_VALUE_BYTES_ = 7000;
+var CTMS_P3_MASTER_STORE_BYTES_ = 480000;
 var CTMS_P3_MASTER_ULID_ALPHABET_ = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 function ctmsP3_masterIsEnabled_() {
@@ -55,6 +61,10 @@ function ctmsP3_masterEnvironment_() {
 
 function ctmsP3_masterBytes_(text) {
   return Utilities.newBlob(String(text), 'application/json; charset=utf-8').getBytes();
+}
+
+function ctmsP3_masterByteLength_(text) {
+  return ctmsP3_masterBytes_(String(text)).length;
 }
 
 function ctmsP3_masterHex_(bytes) {
@@ -131,6 +141,9 @@ function ctmsP3_masterSignedPost_(path, body, idempotencyKey, correlationId) {
   var started = Date.now();
   var json = JSON.stringify(body || {});
   var rawBody = ctmsP3_masterBytes_(json);
+  if (rawBody.length > CTMS_P3_MASTER_REQUEST_BYTES_) {
+    return { http_code: -1, json: null, uncertain: true, local_error: 'CTMS_REQUEST_TOO_LARGE' };
+  }
   var bodyHash = ctmsP3_masterHex_(Utilities.computeDigest(
     Utilities.DigestAlgorithm.SHA_256, rawBody
   ));
@@ -356,48 +369,287 @@ function ctmsP3_masterBuildGenerationItems_(runId) {
   return items;
 }
 
-function ctmsP3_masterState_(body) {
-  var fingerprint = ctmsP3_masterSha_(JSON.stringify(body.items));
-  var key = CTMS_P3_MASTER_STATE_PREFIX_ + fingerprint.slice(0, 48);
-  var props = PropertiesService.getScriptProperties();
-  var lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    var existing = null;
-    try { existing = JSON.parse(props.getProperty(key) || 'null'); } catch (_) {}
-    if (existing && existing.fingerprint === fingerprint
-        && Date.now() - Number(existing.created_ms || 0) <= CTMS_P3_MASTER_STATE_TTL_MS_) {
-      return existing;
+function ctmsP3_masterSplitText_(text) {
+  var pieces = [];
+  var offset = 0;
+  while (offset < text.length) {
+    var low = offset + 1;
+    var high = Math.min(text.length, offset + CTMS_P3_MASTER_PROPERTY_VALUE_BYTES_);
+    var best = offset;
+    while (low <= high) {
+      var middle = Math.floor((low + high) / 2);
+      if (ctmsP3_masterByteLength_(text.slice(offset, middle))
+          <= CTMS_P3_MASTER_PROPERTY_VALUE_BYTES_) {
+        best = middle;
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
     }
+    if (best <= offset) throw new Error('CTMS_PROPERTY_CHUNK_UNSPLITTABLE');
+    pieces.push(text.slice(offset, best));
+    offset = best;
+  }
+  if (!pieces.length) pieces.push('');
+  return pieces;
+}
+
+function ctmsP3_masterAllProperties_() {
+  var service = PropertiesService.getScriptProperties();
+  return typeof service.getProperties === 'function' ? service.getProperties() : {};
+}
+
+function ctmsP3_masterStoredBytes_(values) {
+  var total = 0;
+  Object.keys(values || {}).forEach(function (key) {
+    total += ctmsP3_masterByteLength_(key) + ctmsP3_masterByteLength_(values[key]);
+  });
+  return total;
+}
+
+function ctmsP3_masterPendingIndex_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(CTMS_P3_MASTER_INDEX_KEY_);
+  if (!raw) return null;
+  var parsed;
+  try { parsed = JSON.parse(raw); } catch (_) { throw new Error('CTMS_PENDING_INDEX_CORRUPT'); }
+  if (!parsed || parsed.schema !== CTMS_P3_MASTER_SCHEMA_
+      || !/^[a-f0-9]{64}$/.test(String(parsed.event_fingerprint || ''))
+      || !Array.isArray(parsed.manifest_keys) || !parsed.manifest_keys.length
+      || parsed.manifest_keys.some(function (key) {
+        return !String(key || '').startsWith(CTMS_P3_MASTER_MANIFEST_PREFIX_);
+      })) throw new Error('CTMS_PENDING_INDEX_CORRUPT');
+  return parsed;
+}
+
+function ctmsP3_masterStateFromManifest_(manifestKey) {
+  var props = PropertiesService.getScriptProperties();
+  var manifest;
+  try { manifest = JSON.parse(props.getProperty(manifestKey) || 'null'); } catch (_) {}
+  if (!manifest || manifest.schema !== CTMS_P3_MASTER_SCHEMA_
+      || manifest.manifest_key !== manifestKey
+      || typeof manifest.body_prefix !== 'string'
+      || !Number.isInteger(manifest.body_chunk_count) || manifest.body_chunk_count < 1
+      || !/^[a-f0-9]{64}$/.test(String(manifest.body_sha256 || ''))
+      || typeof manifest.idempotency_key !== 'string'
+      || typeof manifest.correlation_id !== 'string') {
+    throw new Error('CTMS_PENDING_MANIFEST_CORRUPT');
+  }
+  var bodyText = Array.from({ length: manifest.body_chunk_count }, function (_, index) {
+    var key = manifest.body_prefix + String(index + 1);
+    var value = props.getProperty(key);
+    if (value == null) throw new Error('CTMS_PENDING_BODY_MISSING');
+    return value;
+  }).join('');
+  if (ctmsP3_masterByteLength_(bodyText) !== Number(manifest.body_bytes)
+      || ctmsP3_masterSha_(bodyText) !== manifest.body_sha256) {
+    throw new Error('CTMS_PENDING_BODY_CORRUPT');
+  }
+  var body;
+  try { body = JSON.parse(bodyText); } catch (_) { throw new Error('CTMS_PENDING_BODY_CORRUPT'); }
+  if (!body || body.batch_request_id !== manifest.batch_request_id
+      || !Array.isArray(body.items) || !body.items.length
+      || body.items.length > CTMS_P3_MASTER_ITEM_LIMIT_
+      || ctmsP3_masterByteLength_(bodyText) > CTMS_P3_MASTER_REQUEST_BYTES_) {
+    throw new Error('CTMS_PENDING_BODY_INVALID');
+  }
+  return { manifest: manifest, body: body, body_text: bodyText };
+}
+
+function ctmsP3_masterDeleteState_(state) {
+  var props = PropertiesService.getScriptProperties();
+  for (var index = 1; index <= state.manifest.body_chunk_count; index++) {
+    props.deleteProperty(state.manifest.body_prefix + String(index));
+  }
+  props.deleteProperty(state.manifest.manifest_key);
+}
+
+function ctmsP3_masterClearAllPending_(index) {
+  var active = index || ctmsP3_masterPendingIndex_();
+  var props = PropertiesService.getScriptProperties();
+  props.deleteProperty(CTMS_P3_MASTER_INDEX_KEY_);
+  if (active) {
+    active.manifest_keys.forEach(function (key) {
+      try { ctmsP3_masterDeleteState_(ctmsP3_masterStateFromManifest_(key)); }
+      catch (_) { props.deleteProperty(key); }
+    });
+  }
+}
+
+function ctmsP3_masterCleanupOrphans_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty(CTMS_P3_MASTER_INDEX_KEY_)) return;
+  var all = ctmsP3_masterAllProperties_();
+  Object.keys(all).forEach(function (key) {
+    if (key.startsWith(CTMS_P3_MASTER_MANIFEST_PREFIX_)
+        || key.startsWith(CTMS_P3_MASTER_BODY_PREFIX_)) props.deleteProperty(key);
+  });
+}
+
+function ctmsP3_masterPersistEvent_(items) {
+  if (!Array.isArray(items) || !items.length) return null;
+  var groups = [];
+  var current = [];
+  items.forEach(function (item) {
+    var candidate = current.concat([item]);
+    var probe = JSON.stringify({
+      batch_request_id: '00000000-0000-4000-8000-000000000000',
+      items: candidate
+    });
+    if (candidate.length > CTMS_P3_MASTER_ITEM_LIMIT_
+        || ctmsP3_masterByteLength_(probe) > CTMS_P3_MASTER_REQUEST_BYTES_) {
+      if (!current.length) throw new Error('CTMS_ROTA_ITEM_EXCEEDS_ROUTE_LIMIT');
+      groups.push(current);
+      current = [item];
+    } else {
+      current = candidate;
+    }
+  });
+  if (current.length) groups.push(current);
+
+  var eventFingerprint = ctmsP3_masterSha_(JSON.stringify(items));
+  var pendingWrites = {};
+  var manifests = [];
+  groups.forEach(function (group, groupIndex) {
     var batchId = ctmsP3_masterUuid_();
-    var state = {
-      key: key,
-      fingerprint: fingerprint,
-      created_ms: Date.now(),
+    var bodyText = JSON.stringify({ batch_request_id: batchId, items: group });
+    if (ctmsP3_masterByteLength_(bodyText) > CTMS_P3_MASTER_REQUEST_BYTES_) {
+      throw new Error('CTMS_ROTA_BATCH_EXCEEDS_ROUTE_LIMIT');
+    }
+    var stateId = eventFingerprint.slice(0, 32) + '_' + String(groupIndex + 1);
+    var manifestKey = CTMS_P3_MASTER_MANIFEST_PREFIX_ + stateId;
+    var bodyPrefix = CTMS_P3_MASTER_BODY_PREFIX_ + stateId + '_';
+    var bodyChunkCount = 0;
+    ctmsP3_masterSplitText_(bodyText).forEach(function (piece, pieceIndex) {
+      var bodyKey = bodyPrefix + String(pieceIndex + 1);
+      bodyChunkCount += 1;
+      pendingWrites[bodyKey] = piece;
+    });
+    var manifest = {
+      schema: CTMS_P3_MASTER_SCHEMA_,
+      manifest_key: manifestKey,
+      event_fingerprint: eventFingerprint,
       batch_request_id: batchId,
       idempotency_key: 'rota.generation.' + batchId,
       correlation_id: ctmsP3_masterCorrelation_(),
-      items: body.items
+      body_sha256: ctmsP3_masterSha_(bodyText),
+      body_bytes: ctmsP3_masterByteLength_(bodyText),
+      body_prefix: bodyPrefix,
+      body_chunk_count: bodyChunkCount
     };
-    props.setProperty(key, JSON.stringify(state));
-    return state;
+    var manifestText = JSON.stringify(manifest);
+    if (ctmsP3_masterByteLength_(manifestText) > CTMS_P3_MASTER_PROPERTY_VALUE_BYTES_) {
+      throw new Error('CTMS_ROTA_MANIFEST_TOO_LARGE');
+    }
+    pendingWrites[manifestKey] = manifestText;
+    manifests.push(manifestKey);
+  });
+  var index = {
+    schema: CTMS_P3_MASTER_SCHEMA_,
+    event_fingerprint: eventFingerprint,
+    created_ms: Date.now(),
+    manifest_keys: manifests
+  };
+  var indexText = JSON.stringify(index);
+  if (ctmsP3_masterByteLength_(indexText) > CTMS_P3_MASTER_PROPERTY_VALUE_BYTES_) {
+    throw new Error('CTMS_ROTA_INDEX_TOO_LARGE');
+  }
+
+  var props = PropertiesService.getScriptProperties();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  var written = [];
+  try {
+    if (props.getProperty(CTMS_P3_MASTER_INDEX_KEY_)) {
+      throw new Error('CTMS_PENDING_EVENT_ALREADY_EXISTS');
+    }
+    var all = ctmsP3_masterAllProperties_();
+    var projected = {};
+    Object.keys(all).forEach(function (key) { projected[key] = all[key]; });
+    Object.keys(pendingWrites).forEach(function (key) { projected[key] = pendingWrites[key]; });
+    projected[CTMS_P3_MASTER_INDEX_KEY_] = indexText;
+    if (ctmsP3_masterStoredBytes_(projected) > CTMS_P3_MASTER_STORE_BYTES_) {
+      throw new Error('CTMS_ROTA_PROPERTY_STORE_CAPACITY');
+    }
+    Object.keys(pendingWrites).forEach(function (key) {
+      props.setProperty(key, pendingWrites[key]);
+      written.push(key);
+    });
+    props.setProperty(CTMS_P3_MASTER_INDEX_KEY_, indexText);
+    return index;
+  } catch (error) {
+    written.forEach(function (key) { props.deleteProperty(key); });
+    throw error;
   } finally {
     lock.releaseLock();
   }
 }
 
-function ctmsP3_masterPublishBatch_(items) {
-  var state = ctmsP3_masterState_({ items: items });
+function ctmsP3_masterContractDisposition_(result) {
+  if (result && result.http_code >= 200 && result.http_code < 300
+      && result.json && result.json.ok === true) return 'SUCCESS';
+  if (!result || result.uncertain === true) return 'PRESERVE';
+  var body = result.json;
+  if (!body || body.ok !== false || typeof body.error_code !== 'string'
+      || typeof body.retry_class !== 'string') return 'PRESERVE';
+  var triple = String(result.http_code) + ':' + body.error_code + ':' + body.retry_class;
+  if (triple === '409:SOURCE_EVENT_CONFLICT:DO_NOT_RETRY'
+      || triple === '422:GENERATION_INCOMPLETE:DO_NOT_RETRY') return 'TERMINAL_REJECTION';
+  if (triple === '409:BATCH_IN_PROGRESS:STATUS_CHECK') return 'PRESERVE';
+  return 'PRESERVE';
+}
+
+function ctmsP3_masterPublishState_(state) {
   var result = ctmsP3_masterSignedPost_(
     CTMS_P3_MASTER_BASE_PATH_ + '/rota-generations',
-    { batch_request_id: state.batch_request_id, items: state.items },
-    state.idempotency_key,
-    state.correlation_id
+    state.body,
+    state.manifest.idempotency_key,
+    state.manifest.correlation_id
   );
-  if (result && result.http_code >= 200 && result.http_code < 500 && !result.uncertain) {
-    PropertiesService.getScriptProperties().deleteProperty(state.key);
+  return { result: result, disposition: ctmsP3_masterContractDisposition_(result) };
+}
+
+function ctmsP3_masterRecoverPending_() {
+  var index = ctmsP3_masterPendingIndex_();
+  if (!index) return { had_pending: false, resolved: true };
+  while (index.manifest_keys.length) {
+    var state = ctmsP3_masterStateFromManifest_(index.manifest_keys[0]);
+    var published = ctmsP3_masterPublishState_(state);
+    if (published.disposition === 'PRESERVE') {
+      return { had_pending: true, resolved: false, result: published.result };
+    }
+    if (published.disposition === 'TERMINAL_REJECTION') {
+      ctmsP3_masterLog_('ROTA_GENERATION_TERMINAL_REJECTION', {
+        status: String(published.result.http_code),
+        error_code: String(published.result.json && published.result.json.error_code || ''),
+        correlation_id: state.manifest.correlation_id,
+        operation_id: state.manifest.idempotency_key
+      });
+      ctmsP3_masterClearAllPending_(index);
+      return { had_pending: true, resolved: true, terminal_rejection: true };
+    }
+    index.manifest_keys.shift();
+    if (index.manifest_keys.length) {
+      PropertiesService.getScriptProperties().setProperty(
+        CTMS_P3_MASTER_INDEX_KEY_, JSON.stringify(index)
+      );
+    } else {
+      PropertiesService.getScriptProperties().deleteProperty(CTMS_P3_MASTER_INDEX_KEY_);
+    }
+    ctmsP3_masterDeleteState_(state);
+    if (!index.manifest_keys.length) {
+      ctmsP3_masterLog_('ROTA_GENERATION_MIRROR_COMPLETE', {
+        status: 'LEGACY_UNCHANGED', operation_id: index.event_fingerprint.slice(0, 24)
+      });
+    }
   }
-  return result;
+  return { had_pending: true, resolved: true };
+}
+
+function ctmsP3_masterPublishBatch_(items) {
+  var existing = ctmsP3_masterRecoverPending_();
+  if (existing.had_pending) return existing;
+  var index = ctmsP3_masterPersistEvent_(items);
+  return index ? ctmsP3_masterRecoverPending_() : { had_pending: false, resolved: true };
 }
 
 function ctmsP3_masterMirrorLegacyEvent_(action, payload, legacyResult) {
@@ -412,13 +664,13 @@ function ctmsP3_masterMirrorLegacyEvent_(action, payload, legacyResult) {
     return;
   }
   try {
+    ctmsP3_masterCleanupOrphans_();
+    var recovered = ctmsP3_masterRecoverPending_();
+    if (recovered.had_pending) return;
     var items = ctmsP3_masterBuildGenerationItems_(payload && payload.runId);
-    for (var offset = 0; offset < items.length; offset += 50) {
-      ctmsP3_masterPublishBatch_(items.slice(offset, offset + 50));
-    }
-    ctmsP3_masterLog_('ROTA_GENERATION_MIRROR_COMPLETE', {
-      status: 'LEGACY_UNCHANGED', operation_id: String(payload && payload.runId || '')
-    });
+    if (!items.length) return;
+    ctmsP3_masterPersistEvent_(items);
+    ctmsP3_masterRecoverPending_();
   } catch (error) {
     ctmsP3_masterLog_('ROTA_GENERATION_FAIL_OPEN', {
       status: 'LEGACY_UNCHANGED', error_code: String(error && error.message || error)

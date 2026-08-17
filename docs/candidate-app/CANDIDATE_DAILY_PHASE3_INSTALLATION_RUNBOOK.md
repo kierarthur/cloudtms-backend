@@ -7,7 +7,7 @@ This runbook records the completed disabled installation and governs the later c
 - Independent review has accepted the source and decisions.
 - Current Google Head/deployment/trigger evidence is re-exported and compared with the certified rollback files.
 - CloudTMS TEST Worker signed routes are healthy.
-- The exact approved source-link rows exist for the intended TEST candidates.
+- Exact, unambiguous source-link rows exist for every eligible TEST source row that the enabled Master publication will include.
 - Required HMAC key ID/secret and source-HMAC secret are installed in retained-reader catalogues.
 - No other Google editor/deployment window is active.
 - `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED` is set to `false` in both projects.
@@ -71,19 +71,21 @@ The operator installed the TEST property family in both Google projects and the 
 - `STATUS_CHECK`, `RETRY_AFTER`, `RETRY_SAME_KEY` and malformed 4xx results must retain the same operation; only approved terminal triples may clear it.
 - Repeated authoritative status not-found after the one exact retry is consumed must remain status-only.
 
-## 4. Controlled TEST enablement
+## 4. Controlled TEST enablement after R13
 
 Do not enable both projects simultaneously on the first attempt.
 
-1. Enable Master Rota for one explicitly selected TEST candidate/source cohort while Candidate entitlement remains false.
-2. Run one update-end event and verify signed HMAC, one generation receipt, 14 days, source/day hashes and no duplicate batch.
+1. The product owner has chosen a population-wide TEST bridge gate rather than a candidate-specific allowlist. Confirm all eligible source rows have exact TEST links, then enable Master Rota while Candidate entitlement remains false.
+2. Run one update-end event and verify signed HMAC, complete generation receipts, 14 days per candidate, source/day hashes and no duplicate batch. Observe Kier Arthur first using the existing phone app, but do not hard-code or technically restrict the runtime to Kier.
 3. Disable Master if any mismatch occurs.
-4. Enable Availability for the same cohort.
+4. Enable Availability for the eligible TEST population.
 5. Verify canonical tiles are read through the Worker and merged without losing cohorts/emergency fields.
 6. Perform one approved Availability change, deliberately simulate a lost response in a test harness, and prove status-first/same-key recovery.
 7. Verify legacy Sheet and CloudTMS parity, latency, UrlFetch quota, lock contention and no sensitive logging.
 8. Run projection claim/complete manually for an unblocked row and a booked/system-blocked row. Prove `DELIVERED` versus `DEFERRED_OVERLAY`.
 9. Keep effect/provider execution disabled; Phase 6 owns it.
+
+Before enabling, confirm no `CTMS_P3_ROTA_PENDING_INDEX` exists from a prior experiment. During an uncertain Master result, do not delete or edit `CTMS_P3_ROTA_*` properties: the next accepted update must replay the exact frozen event. The bridge has no seven-day automatic replacement.
 
 ## 5. Stop conditions
 

@@ -193,3 +193,36 @@ HTTP status + error_code + retry_class
 The R12 correction is bounded to the Availability queue/write seam, Availability helper disposition/recovery logic, executable tests and Candidate Daily documentation. Master Rota runtime semantics, Phase 1B Worker routes and signing, Phase 2 database authority, projection/effect adapters, legacy UI/login/msisdn, manifests/scopes/triggers, Emergency, finance, Banking Pay, Policy X and production remain unchanged.
 
 Live source installation retained `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED=false`. Availability API version 216 and NEW MASTER ROTA version 102 now contain the corrected sources while remaining legacy-only. Saving and versioning created no signed bridge request and no Candidate Daily data mutation. Controlled enablement remains a later, separately reviewed TEST proving gate.
+
+## 14. R13 Master Rota durable-generation correction
+
+R13 replaces the unsafe single-value, seven-day Master Rota retry record with one durable event owner. Before the first signed generation request, the helper freezes every batch body, `batch_request_id`, idempotency key and correlation ID for the complete accepted legacy event.
+
+The event is stored as:
+
+```text
+CTMS_P3_ROTA_PENDING_INDEX
+  -> ordered CTMS_P3_ROTA_MANIFEST_* records
+       -> numbered CTMS_P3_ROTA_BODY_* chunks
+```
+
+Each body chunk is bounded to 7,000 UTF-8 bytes, below Google's documented 9 KB per-value quota. The helper preflights the whole Script Property store at 480,000 bytes, below the documented 500 KB store quota, before it sends any batch. Each Worker request is also bounded to 50 items and 245,760 UTF-8 bytes, below the frozen 256 KiB route limit.
+
+Every manifest freezes the exact body hash and byte count. Reassembly verifies both before any replay. A missing/corrupt index, manifest or body fails closed: no replacement event is invented and the already-completed legacy action remains unchanged.
+
+Rota result ownership is closed:
+
+- `2xx` plus `ok:true` advances that exact frozen batch;
+- exact `409 / BATCH_IN_PROGRESS / STATUS_CHECK` retains the batch;
+- exact `409 / SOURCE_EVENT_CONFLICT / DO_NOT_RETRY` and `422 / GENERATION_INCOMPLETE / DO_NOT_RETRY` are explicit terminal rejections and never completion;
+- transport errors, `429`, `5xx`, malformed responses and every unknown triple retain the batch.
+
+When any pending event exists, a later accepted legacy update first replays that exact event. It cannot generate a new timestamp, body, batch ID, key or correlation ID. The seven-day replacement rule is removed. Overall completion is logged only after every frozen batch succeeds.
+
+## 15. R13 TEST population decision
+
+The product owner explicitly decided that the first enabled TEST exercise is not technically limited to one candidate. `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED=true` applies to the normal eligible TEST population. Kier Arthur is the named first observational journey because the product owner has the legacy phone app; Kier is not hard-coded and is not an authority boundary.
+
+Therefore R13 introduces no candidate allowlist property and no candidate-specific identifier in source. Before enablement, every eligible source row must nevertheless have an exact, unambiguous TEST source link because the database remains the identity authority. Any missing or ambiguous link remains a fail-closed signed-route result; the Apps Script must not nominate a replacement candidate.
+
+This later-controlling product decision supersedes earlier wording that described a one-candidate or one-cohort technical gate. It does not enable the bridge, enable Candidate features, change the database, or authorise production.

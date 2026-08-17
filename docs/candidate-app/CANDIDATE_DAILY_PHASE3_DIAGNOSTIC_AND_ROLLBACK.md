@@ -29,7 +29,7 @@ Use the same correlation ID to inspect the TEST Worker and database receipt. Do 
 
 ### Persisted recovery state
 
-Availability uncertain-operation keys begin `CTMS_P3_OP_`. Master uncertain-generation keys begin `CTMS_P3_ROTA_`. Inspect only key names and safe state metadata in a controlled diagnostic. Never publish stored factual bodies. The records expire after seven days and are deleted after authoritative completion/stable failure.
+Availability uncertain-operation keys begin `CTMS_P3_OP_`. Master R13 uses `CTMS_P3_ROTA_PENDING_INDEX`, `CTMS_P3_ROTA_MANIFEST_*` and numbered `CTMS_P3_ROTA_BODY_*` chunks. Inspect only key names and safe manifest metadata in a controlled diagnostic. Never publish stored factual bodies. Master records do not expire into replacement identities; they are removed only after complete success or an exact approved terminal rejection.
 
 ## Failure interpretation
 
@@ -42,7 +42,10 @@ Availability uncertain-operation keys begin `CTMS_P3_OP_`. Master uncertain-gene
 | Malformed/unrecognised 4xx | Preserve as uncertain; do not clear the operation or invent a replacement key. |
 | Deferred/busy legacy response | Expect no CloudTMS operation until the queue is revalidated and successfully written during flush. |
 | Mixed legacy result | The signed body must contain only `applied:true`, non-deferred rows that were actually written. |
-| Master publish uncertain | Preserve the existing `CTMS_P3_ROTA_` operation and replay the same batch/key/body. |
+| Master publish uncertain | Preserve the index/manifests/body chunks and replay the same ordered batch/key/body/correlation before building any new event. |
+| Master `409 / BATCH_IN_PROGRESS / STATUS_CHECK` | Non-terminal. Retain and replay the exact frozen batch; never log overall completion. |
+| Master stored body missing/hash mismatch | Disable and inspect the bounded key/manifest metadata. Do not delete the index or construct a replacement event. |
+| Master property capacity preflight fails | No POST should occur. Keep legacy operation unchanged; reduce the separately reviewed TEST scope or storage pressure before retrying. |
 | Booked/system-blocked projection | Expect `DEFERRED_OVERLAY`; do not force a Sheet overwrite. |
 | Source link missing/ambiguous | Disable. Correct Phase 4 bootstrap/mapping authority; do not nominate a different candidate in the browser. |
 | HMAC/reader retired | Disable. Restore the approved retained reader; never hard-code or log the secret. |
