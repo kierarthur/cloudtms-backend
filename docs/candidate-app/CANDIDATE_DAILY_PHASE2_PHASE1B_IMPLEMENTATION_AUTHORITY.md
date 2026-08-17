@@ -1,8 +1,10 @@
 # Candidate Daily Phase 2 and Phase 1B Implementation Authority - R8
 
-Date: 17 August 2026  
-Environment: TEST only  
-Runtime source commit: `1823403f33fc6e3741c435dce5b2b3a6340db1de`  
+Date: 17 August 2026
+
+Environment: TEST only
+
+Runtime source commit: `1823403f33fc6e3741c435dce5b2b3a6340db1de`
 Product state: installed and deployed, but globally disabled and unentitled
 
 ## 1. Scope and controlling outcome
