@@ -167,7 +167,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_get_preview_page",
       "identity_arguments": "p_session_id uuid, p_section text, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "37eecbc591ef4e620deacde39e9e4d768dbee5f4d0400e8a748ecb38a679dd3f",
+      "definition_sha256": "4df91265a42ba133b20eadda5102c11c311196719138dc2711d5770dfbd1e9d3",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -481,7 +481,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_get_candidate_preview",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "311024765f70d6f2635e67658f4674cfc4e74a8a6303fc716a2bdb11c87a4e28",
+      "definition_sha256": "f44ff4031fd2a77c0c849def23c8bc52e6a376cb9e55333c930d237b994627c0",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

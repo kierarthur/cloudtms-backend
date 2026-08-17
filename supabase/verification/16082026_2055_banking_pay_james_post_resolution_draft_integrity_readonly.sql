@@ -66,10 +66,14 @@ SELECT
       THEN installed.definition_sql LIKE '%effective_section_row_ordinal_id%'
        AND installed.definition_sql LIKE '%physical_section%'
        AND installed.definition_sql LIKE '%actionable_sibling%'
+       AND installed.definition_sql LIKE '%NEGATIVE_ORDINARY_PRESENTATION_ONLY%'
+       AND installed.definition_sql LIKE '%recovery_sibling%'
     WHEN installed.function_name = 'pay_workbench_session_get_preview_page'
       THEN installed.definition_sql LIKE '%pay_workbench_preview_effective_section_v1%'
        AND installed.definition_sql LIKE '%physical_section%'
        AND installed.definition_sql LIKE '%actionable_sibling%'
+       AND installed.definition_sql LIKE '%NEGATIVE_ORDINARY_PRESENTATION_ONLY%'
+       AND installed.definition_sql LIKE '%recovery_sibling%'
     ELSE false
   END AS source_contract_present
 FROM required_functions AS required

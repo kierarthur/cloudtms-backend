@@ -87,6 +87,7 @@ test('candidate preview pages by effective section and exposes physical section 
   assert.match(candidatePreview, /SECURITY DEFINER[\s\S]*SET search_path TO 'public'/i);
   assert.match(candidatePreview, /GRANT EXECUTE[\s\S]*TO service_role/i);
   assert.match(candidatePreview, /actionable_sibling[\s\S]*finance_case_id[\s\S]*cases_resolutions/i);
+  assert.match(candidatePreview, /NEGATIVE_ORDINARY_PRESENTATION_ONLY[\s\S]*recovery_sibling[\s\S]*recovery_sibling\.timesheet_id = preview_row\.timesheet_id[\s\S]*OVERPAYMENT_RECOVERY/i);
   assert.match(candidatePreview, /'presentation_section', CASE limited_rows\.effective_section/i);
   assert.match(candidatePreview, /'selection_allowed', CASE[\s\S]*ELSE false/i);
   assert.match(replay, /\\ir 16082026_2035_pay_workbench_candidate_preview_effective_section_v1\.sql\s+\\ir 19072026_1816_cancel_refresh_supersede_finance_dirty\.sql/i);
@@ -96,6 +97,8 @@ test('normal session preview page uses the same effective routing and suppresses
   assert.match(sessionPreviewPage, /private\.pay_workbench_preview_effective_section_v1\(\s*preview_count_row\.section, preview_count_row\.row_json/i);
   assert.match(sessionPreviewPage, /private\.pay_workbench_preview_effective_section_v1\(\s*preview_row\.section, preview_row\.row_json/i);
   assert.match(sessionPreviewPage, /actionable_sibling[\s\S]*finance_case_id[\s\S]*cases_resolutions/i);
+  assert.match(sessionPreviewPage, /NEGATIVE_ORDINARY_PRESENTATION_ONLY[\s\S]*recovery_sibling[\s\S]*recovery_sibling\.timesheet_id = preview_count_row\.timesheet_id[\s\S]*OVERPAYMENT_RECOVERY/i);
+  assert.match(sessionPreviewPage, /NEGATIVE_ORDINARY_PRESENTATION_ONLY[\s\S]*recovery_sibling[\s\S]*recovery_sibling\.timesheet_id = preview_row\.timesheet_id[\s\S]*OVERPAYMENT_RECOVERY/i);
   assert.match(sessionPreviewPage, /'effective_section', limited_rows\.section/i);
   assert.match(sessionPreviewPage, /'physical_section', limited_rows\.physical_section/i);
   assert.match(sessionPreviewPage, /WHEN limited_rows\.section <> 'canonical_preview_lines' THEN false/i);

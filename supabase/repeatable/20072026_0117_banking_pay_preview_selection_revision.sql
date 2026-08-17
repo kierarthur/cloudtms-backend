@@ -154,7 +154,33 @@ BEGIN
           )), '')
           AND private.pay_workbench_preview_effective_section_v1(
             actionable_sibling.section, actionable_sibling.row_json
-          ) = 'cases_resolutions'
+        ) = 'cases_resolutions'
+      )
+    )
+    AND NOT (
+      UPPER(BTRIM(COALESCE(
+        preview_count_row.row_json->>'line_type',
+        preview_count_row.row_json#>>'{preview_contract,line_type}',
+        ''
+      ))) = 'TIMESHEET_PAYMENT'
+      AND UPPER(BTRIM(COALESCE(
+        preview_count_row.row_json->>'presentation_reason', ''
+      ))) = 'NEGATIVE_ORDINARY_PRESENTATION_ONLY'
+      AND preview_count_row.timesheet_id IS NOT NULL
+      AND EXISTS (
+        SELECT 1
+        FROM public.banking_pay_workbench_preview_rows AS recovery_sibling
+        WHERE recovery_sibling.session_id = preview_count_row.session_id
+          AND recovery_sibling.session_version = preview_count_row.session_version
+          AND recovery_sibling.candidate_id = preview_count_row.candidate_id
+          AND recovery_sibling.id <> preview_count_row.id
+          AND recovery_sibling.status = 'READY'
+          AND recovery_sibling.timesheet_id = preview_count_row.timesheet_id
+          AND UPPER(BTRIM(COALESCE(
+            recovery_sibling.row_json->>'line_type',
+            recovery_sibling.row_json#>>'{preview_contract,line_type}',
+            ''
+          ))) = 'OVERPAYMENT_RECOVERY'
       )
     )
     AND (
@@ -277,7 +303,33 @@ BEGIN
               )), '')
               AND private.pay_workbench_preview_effective_section_v1(
                 actionable_sibling.section, actionable_sibling.row_json
-              ) = 'cases_resolutions'
+            ) = 'cases_resolutions'
+          )
+        )
+        AND NOT (
+          UPPER(BTRIM(COALESCE(
+            preview_row.row_json->>'line_type',
+            preview_row.row_json#>>'{preview_contract,line_type}',
+            ''
+          ))) = 'TIMESHEET_PAYMENT'
+          AND UPPER(BTRIM(COALESCE(
+            preview_row.row_json->>'presentation_reason', ''
+          ))) = 'NEGATIVE_ORDINARY_PRESENTATION_ONLY'
+          AND preview_row.timesheet_id IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM public.banking_pay_workbench_preview_rows AS recovery_sibling
+            WHERE recovery_sibling.session_id = preview_row.session_id
+              AND recovery_sibling.session_version = preview_row.session_version
+              AND recovery_sibling.candidate_id = preview_row.candidate_id
+              AND recovery_sibling.id <> preview_row.id
+              AND recovery_sibling.status = 'READY'
+              AND recovery_sibling.timesheet_id = preview_row.timesheet_id
+              AND UPPER(BTRIM(COALESCE(
+                recovery_sibling.row_json->>'line_type',
+                recovery_sibling.row_json#>>'{preview_contract,line_type}',
+                ''
+              ))) = 'OVERPAYMENT_RECOVERY'
           )
         )
         AND (
