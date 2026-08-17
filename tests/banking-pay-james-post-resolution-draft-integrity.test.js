@@ -64,6 +64,8 @@ test('same-session rebase is version-only, parity-fenced and preserves physical 
   assert.match(refresh, /v_from_version := p_from_session_version/i);
   assert.match(refresh, /evaluated_generation IS DISTINCT FROM v_registry\.dirty_generation/i);
   assert.match(refresh, /VERSION_REBASE_PARITY_NOT_EXACT/i);
+  assert.match(refresh, /v_session\.server_selected_preview_row_ids_provided IS NOT TRUE\s*OR v_selected_preview_count = v_selected_session_count/i);
+  assert.match(refresh, /VERSION_REBASE_SELECTION_NOT_EXACT/i);
   assert.match(refresh, /source_row_json, old_source\.economic_key_json/i);
   assert.match(refresh, /old_source\.section, old_source\.source_row_json/i);
   assert.match(refresh, /physical_section_preserved', true/i);

@@ -308,7 +308,15 @@ BEGIN
    AND preview_row.session_version = v_from_version
    AND pg_catalog.upper(pg_catalog.btrim(COALESCE(preview_row.status, ''))) = 'READY';
 
-  v_selection_consistent := v_selected_preview_count = v_selected_session_count
+  -- A false `server_selected_preview_row_ids_provided` flag means the session
+  -- is using the preview rows' certified default selection, so an empty server
+  -- id array is not an explicit "select none" decision.  Preserve those exact
+  -- row-backed defaults during a same-session version rebase instead of
+  -- unnecessarily rebuilding an unrelated candidate.
+  v_selection_consistent := (
+      v_session.server_selected_preview_row_ids_provided IS NOT TRUE
+      OR v_selected_preview_count = v_selected_session_count
+    )
     AND NOT EXISTS (
       SELECT 1
       FROM public.banking_pay_workbench_preview_rows AS preview_row
