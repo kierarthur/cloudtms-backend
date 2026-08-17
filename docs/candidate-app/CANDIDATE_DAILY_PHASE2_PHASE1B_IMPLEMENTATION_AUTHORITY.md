@@ -331,3 +331,30 @@ tests/candidate-daily-phase2-source-contract.test.js
 ```
 
 `CANDIDATE_DAILY_PHASE2_PHASE1B_R9_CORRECTION_AUTHORITY.md`, `R9_FINDING_CLOSURE_MATRIX.md`, current Decisions PDF Sections 80-84 and decisions AV-229 through AV-244 are later-controlling wherever an earlier R8 statement conflicts. Publication, installed TEST hashes, workflow identities and deployed Worker versions are recorded in the final R9 current-state and verification documents rather than retroactively altering historical R8 evidence.
+
+## 18. Later-controlling R10 first-rollback correction
+
+The independent R9 audit confirmed the locked R9 proof but found one bounded gap on the first rollback edge. `SUPABASE_PRIMARY -> ROLLBACK_PENDING` compared the caller's disposition with the database-derived result but did not reject the truthful result `NONE`. That allowed a mode change while unresolved projection, command, batch or effect work existed.
+
+R10 makes one additional database-owned rule controlling for every mode-changing item:
+
+```text
+prior mode differs from new mode
+and database-derived in-flight disposition is NONE
+-> CANDIDATE_DAILY_NOT_READY
+```
+
+The request assertion remains non-authoritative. A false `DRAINED` assertion still returns `SEMANTIC_REJECTION`; a truthful `NONE` assertion is accepted as an accurate description but rejected as not ready to switch authority. Exact no-op remains outside this rule because no authority mode changes.
+
+The first rollback stage therefore requires the global flag off, entitlement false and a settled derived state of `DRAINED` or exact `RECONCILED`. Pending, claimed, retry, terminal projection work, an active command, another active batch, an in-progress effect or an unknown effect all block the edge. The second rollback stage still uses the full R9 source/generation/cursor/reconciliation/parity barrier before Google becomes primary.
+
+The correction changes no schema, signature, route, Worker mapping, Google code, feature state or external authority. Its executable owners remain:
+
+```text
+supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql
+tests/17082026_0955_candidate_daily_authority_transition_runtime_verification.sql
+tests/candidate-daily-authority-transition-concurrency.integration.js
+tests/candidate-daily-phase2-source-contract.test.js
+```
+
+`CANDIDATE_DAILY_PHASE2_PHASE1B_R10_ROLLBACK_AUTHORITY.md`, current Decisions PDF Sections 85-88 and decisions AV-245 through AV-249 are later-controlling wherever an earlier statement conflicts.

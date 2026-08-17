@@ -494,6 +494,109 @@ begin
 end;
 $inflight$;
 
+do $rollback_unresolved$
+declare
+  v_approver uuid:='00000000-0000-4000-8000-00000000e102';
+  v_candidate uuid; v_generation uuid; v_item jsonb; v_result jsonb; v_state text; v_command uuid;
+  v_effect uuid; v_kind integer; v_transition_count bigint;
+begin
+  -- The first rollback edge is itself an authority switch. Every unresolved projection state blocks it,
+  -- including when the caller truthfully reports the database-derived NONE disposition.
+  foreach v_state in array array['PENDING','CLAIMED','RETRY','TERMINAL'] loop
+    v_kind:=case v_state when 'PENDING' then 1 when 'CLAIMED' then 2 when 'RETRY' then 3 else 4 end;
+    v_candidate:=('00000000-0000-4000-8000-'||lpad((600+v_kind)::text,12,'0'))::uuid;
+    v_generation:=('00000000-0000-4000-8000-'||lpad((610+v_kind)::text,12,'0'))::uuid;
+    perform pg_temp.candidate_daily_transition_fixture(v_candidate,v_generation,repeat(v_kind::text,64),1);
+    update private.candidate_daily_authority_scopes set authority_mode='SUPABASE_PRIMARY'
+    where environment='TEST' and candidate_id=v_candidate;
+    perform pg_temp.candidate_daily_outbox_fixture(v_candidate,v_generation,v_state,false);
+    v_item:=pg_temp.candidate_daily_transition_item(v_candidate,'SUPABASE_PRIMARY',1,false,
+      'ROLLBACK_PENDING',false,'DRAINED');
+    v_result:=public.candidate_daily_authority_transition_atomic_v1(pg_temp.candidate_daily_transition_context(),
+      gen_random_uuid(),'r10-rollback-false-drained-'||v_kind::text,jsonb_build_array(v_item),v_approver,
+      'R10 caller disposition rejection',repeat('1',64),'01K2ABCDEF0123456789ABCDE1');
+    if v_result#>>'{outcomes,0,error_code}'<>'SEMANTIC_REJECTION' then
+      raise exception 'Rollback accepted false DRAINED for %: %',v_state,v_result;
+    end if;
+    v_item:=v_item||jsonb_build_object('in_flight_disposition','NONE');
+    v_result:=public.candidate_daily_authority_transition_atomic_v1(pg_temp.candidate_daily_transition_context(),
+      gen_random_uuid(),'r10-rollback-derived-none-'||v_kind::text,jsonb_build_array(v_item),v_approver,
+      'R10 unresolved rollback rejection',repeat('1',64),'01K2ABCDEF0123456789ABCDE1');
+    if v_result#>>'{outcomes,0,error_code}'<>'CANDIDATE_DAILY_NOT_READY' then
+      raise exception 'Rollback accepted derived NONE for %: %',v_state,v_result;
+    end if;
+    if (select authority_mode from private.candidate_daily_authority_scopes
+        where environment='TEST' and candidate_id=v_candidate)<>'SUPABASE_PRIMARY'
+       or (select transition_in_progress from private.candidate_daily_authority_scopes
+        where environment='TEST' and candidate_id=v_candidate)
+       or (select enabled from private.candidate_daily_entitlements
+        where environment='TEST' and candidate_id=v_candidate)
+       or exists(select 1 from private.candidate_daily_authority_transitions
+        where environment='TEST' and candidate_id=v_candidate) then
+      raise exception 'Rejected rollback changed authority, entitlement, fence or ledger for %',v_state;
+    end if;
+  end loop;
+
+  -- Active commands, other active batches, and in-progress/unknown external effects block the same edge.
+  for v_kind in 1..4 loop
+    v_candidate:=('00000000-0000-4000-8000-'||lpad((630+v_kind)::text,12,'0'))::uuid;
+    v_generation:=('00000000-0000-4000-8000-'||lpad((640+v_kind)::text,12,'0'))::uuid;
+    perform pg_temp.candidate_daily_transition_fixture(v_candidate,v_generation,repeat((v_kind+4)::text,64));
+    update private.candidate_daily_authority_scopes set authority_mode='SUPABASE_PRIMARY'
+    where environment='TEST' and candidate_id=v_candidate;
+    if v_kind=1 then
+      v_command:=gen_random_uuid();
+      insert into public.candidate_daily_command_receipts(command_id,environment,candidate_id,actor_class,
+        command_class,idempotency_key,request_sha256,state,correlation_id)
+      values(v_command,'TEST',v_candidate,'CANDIDATE','AVAILABILITY_APPLY',
+        'r10-rollback-in-progress-command-0001',repeat('2',64),'IN_PROGRESS','01K2ABCDEF0123456789ABCDE1');
+    elsif v_kind=2 then
+      insert into private.candidate_daily_batch_receipts(batch_receipt_id,environment,actor_class,operation_class,
+        idempotency_key,request_hash,item_keys_json,item_count,state,correlation_id)
+      values(gen_random_uuid(),'TEST','SIGNED_SYSTEM','RECONCILIATION','r10-rollback-in-progress-batch-0001',
+        repeat('2',64),jsonb_build_array(v_candidate::text),1,'IN_PROGRESS','01K2ABCDEF0123456789ABCDE1');
+    else
+      v_effect:=gen_random_uuid();
+      insert into private.candidate_daily_external_effect_receipts(effect_receipt_id,environment,candidate_id,
+        effect_key,operation,request_hash,idempotency_key,state,first_claimed_at_utc,lease_owner,lease_token,
+        lease_expires_at_utc,stable_provider_request_id,safe_evidence_json,terminal_result_json,
+        terminal_body_sha256,correlation_id,retain_until_utc,completed_at_utc)
+      values(v_effect,'TEST',v_candidate,'r10-rollback-effect-key-'||v_kind::text||'-0001','CANNOT_ATTEND',
+        repeat('2',64),'r10-rollback-effect-idempotency-'||v_kind::text,
+        case when v_kind=3 then 'IN_PROGRESS' else 'UNKNOWN' end,now(),
+        case when v_kind=3 then 'r10-effect-worker' else null end,
+        case when v_kind=3 then repeat('3',32) else null end,
+        case when v_kind=3 then now()+interval '1 minute' else null end,
+        'r10-effect-provider-'||v_kind::text,'{}'::jsonb,
+        case when v_kind=4 then '{}'::jsonb else null end,
+        case when v_kind=4 then repeat('3',64) else null end,
+        '01K2ABCDEF0123456789ABCDE1',now()+interval '7 years',
+        case when v_kind=4 then now() else null end);
+    end if;
+    select count(*) into v_transition_count from private.candidate_daily_authority_transitions
+    where environment='TEST' and candidate_id=v_candidate;
+    v_item:=pg_temp.candidate_daily_transition_item(v_candidate,'SUPABASE_PRIMARY',0,false,
+      'ROLLBACK_PENDING',false,'NONE');
+    v_result:=public.candidate_daily_authority_transition_atomic_v1(pg_temp.candidate_daily_transition_context(),
+      gen_random_uuid(),'r10-rollback-inflight-owner-'||v_kind::text||'-0001',jsonb_build_array(v_item),v_approver,
+      'R10 in-flight rollback rejection',repeat('2',64),'01K2ABCDEF0123456789ABCDE1');
+    if v_result#>>'{outcomes,0,error_code}'<>'CANDIDATE_DAILY_NOT_READY' then
+      raise exception 'Rollback accepted in-flight owner %: %',v_kind,v_result;
+    end if;
+    if (select authority_mode from private.candidate_daily_authority_scopes
+        where environment='TEST' and candidate_id=v_candidate)<>'SUPABASE_PRIMARY'
+       or (select transition_in_progress from private.candidate_daily_authority_scopes
+        where environment='TEST' and candidate_id=v_candidate)
+       or (select enabled from private.candidate_daily_entitlements
+        where environment='TEST' and candidate_id=v_candidate)
+       or (select count(*) from private.candidate_daily_authority_transitions
+        where environment='TEST' and candidate_id=v_candidate)<>v_transition_count then
+      raise exception 'Rejected rollback changed authority, entitlement, fence or ledger for owner %',v_kind;
+    end if;
+  end loop;
+end;
+$rollback_unresolved$;
+
 do $cohort$
 declare
   v_approver uuid:='00000000-0000-4000-8000-00000000e102';

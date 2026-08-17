@@ -1,6 +1,6 @@
 # CloudTMS Candidate App — Living Implementation Plan
 
-Status: active implementation; TEST-only. Updated: 17 August 2026. The Candidate DB/RPC/backend/API and integrated Office Candidate API have received independent GO. Candidate Daily Phase 0 and corrected Phase 1A have received independent GO. Phase 2 additive Daily database/RPC authority and Phase 1B broker-to-RPC integration are now implemented, installed and deployed for R8 independent review, with every Candidate feature flag false and no Daily entitlement or business row. Phase 3 Google coexistence, Phase 4 Candidate Daily UI, controlled cutover, specialist acceptance and gradual rollout remain later gates. Candidate responsive web, iOS and Android are not claimed complete by R8.
+Status: active implementation; TEST-only. Updated: 17 August 2026. The Candidate DB/RPC/backend/API and integrated Office Candidate API have received independent GO. Candidate Daily Phase 0, corrected Phase 1A and Phase 1B have received independent GO. Phase 2 additive Daily database/RPC authority is implemented and installed but remains at a bounded R10 re-audit gate for the first-rollback unresolved-work correction. Every Candidate feature flag remains false and no Daily entitlement or business row exists. Phase 3 Google coexistence, Phase 4 Candidate Daily UI, controlled cutover, specialist acceptance and gradual rollout remain later gates. Candidate responsive web, iOS and Android are not claimed complete.
 
 ### 17 August 2026 Candidate Daily R8 checkpoint
 
@@ -610,6 +610,16 @@ Forward cutover remains possible while the product is dark when entitlement stay
 The transition no longer creates missing scope state. Exact no-op returns `NO_CHANGE` without appending the ledger. Partial cohorts are explicit and isolated. Real independent PostgreSQL sessions prove same-key exact replay and one-winner different-key concurrency on both supported engines.
 
 This correction does not advance the project into Phase 3 and does not authorise Google edits, real Candidate data, feature activation or production. The full Phase 3-7 plan above remains unchanged.
+
+## 17 August 2026 Phase 2 R10 first-rollback correction
+
+The independent R9 review found one narrower defect after accepting the remainder of the R9 transition design. The database correctly derived `NONE` when unresolved work existed, but the first rollback edge could commit when the caller truthfully supplied that same `NONE` value.
+
+R10 adds the controlling rule that a changed authority mode can never commit when the locked database owner derives `NONE`. A false `DRAINED` request remains a semantic conflict; a truthful unresolved request returns `CANDIDATE_DAILY_NOT_READY`. The direct suite now covers every projection state and every command/batch/effect owner on the first rollback edge, and a real two-session test proves concurrent different-key rollback attempts cannot change authority or append a transition.
+
+Valid settled `DRAINED` and exact `RECONCILED` paths remain available. Exact no-op remains unchanged. No schema, signature, route, Worker mapping, Google source, Candidate flag, entitlement or financial owner changes.
+
+Phase 1B GO remains in force. Phase 3 remains blocked until the R10 package receives independent Phase 2 GO. No feature activation, Google edit or production deployment is authorised by this correction.
 
 ### Known pre-enablement dependencies for independent audit
 

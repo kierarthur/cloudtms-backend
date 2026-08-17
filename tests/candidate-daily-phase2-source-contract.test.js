@@ -96,6 +96,7 @@ test('authority transition derives every cutover and rollback barrier inside the
   assert.match(transition, /candidate_daily_batch_receipts[\s\S]*batch_receipt_id<>v_batch\.batch_receipt_id/i);
   assert.match(transition, /candidate_daily_external_effect_receipts[\s\S]*state in \('IN_PROGRESS','UNKNOWN'\)/i);
   assert.match(transition, /v_actual_disposition:=case[\s\S]*v_requested_disposition<>v_actual_disposition/i);
+  assert.match(transition, /v_prior_mode<>v_new_mode\s+and\s+v_actual_disposition='NONE'[\s\S]*CANDIDATE_DAILY_NOT_READY/i);
   assert.match(transition, /v_link:=null[\s\S]*v_entitlement_before:=false[\s\S]*v_actual_disposition:=null/i);
   assert.doesNotMatch(transition, /v_actual_disposition:=case[\s\S]{0,500}then 'CANCELLED'/i);
   assert.match(transition, /v_invalid_overlay_count[\s\S]*PROJECTION_STALE_COMPLETION/i);

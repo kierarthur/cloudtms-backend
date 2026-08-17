@@ -191,3 +191,58 @@ test('parallel exact replay and parallel different-key transition remain single-
   assert.equal(psql(`select authority_mode from private.candidate_daily_authority_scopes
     where environment='TEST' and candidate_id='${candidateId}'`), 'SUPABASE_PRIMARY');
 });
+
+test('parallel first rollback attempts cannot cross unresolved projection work', {
+  skip: !enabled
+}, async () => {
+  const candidateId = randomUUID();
+  const generationId = randomUUID();
+  const generationBatchId = randomUUID();
+  const commandId = randomUUID();
+  psql(fixtureSql(candidateId, generationId, generationBatchId));
+  psql(`
+    update private.candidate_daily_authority_scopes
+    set authority_mode='SUPABASE_PRIMARY'
+    where environment='TEST' and candidate_id='${candidateId}';
+    insert into public.candidate_daily_command_receipts(command_id,environment,candidate_id,actor_class,
+      command_class,idempotency_key,request_sha256,canonical_version_before,canonical_version_after,state,
+      terminal_http_status,terminal_body_json,terminal_body_sha256,correlation_id,completed_at_utc)
+    values('${commandId}','TEST','${candidateId}','CANDIDATE','AVAILABILITY_APPLY',
+      'r10-rollback-concurrency-command-${candidateId.replaceAll('-', '')}','${'b'.repeat(64)}',0,1,
+      'COMPLETED',200,'{}'::jsonb,'${'c'.repeat(64)}','01K2ABCDEF0123456789ABCDE1',now());
+    insert into public.candidate_daily_sheet_projection_outbox(outbox_id,environment,candidate_id,
+      availability_date,availability_version,preference,command_id,state,correlation_id)
+    values(gen_random_uuid(),'TEST','${candidateId}',date '2026-08-17',1,'LONG_DAY','${commandId}',
+      'PENDING','01K2ABCDEF0123456789ABCDE1');
+  `);
+
+  const rollbackItem = {
+    candidate_id: candidateId,
+    expected_authority_mode: 'SUPABASE_PRIMARY',
+    expected_canonical_version: 0,
+    expected_entitlement_enabled: false,
+    new_authority_mode: 'ROLLBACK_PENDING',
+    entitlement_enabled: false,
+    in_flight_disposition: 'NONE'
+  };
+  const first = psqlAsync(transitionSql({
+    batchId: randomUUID(), key: `r10-parallel-rollback-a-${randomUUID()}`,
+    item: rollbackItem, sleep: true
+  }));
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const second = psqlAsync(transitionSql({
+    batchId: randomUUID(), key: `r10-parallel-rollback-b-${randomUUID()}`,
+    item: rollbackItem
+  }));
+  const [firstResult, secondResult] = (await Promise.all([first, second])).map(jsonResult);
+  for (const result of [firstResult, secondResult]) {
+    assert.equal(result.outcomes[0].status, 'REJECTED');
+    assert.equal(result.outcomes[0].error_code, 'CANDIDATE_DAILY_NOT_READY');
+  }
+  assert.equal(psql(`select authority_mode from private.candidate_daily_authority_scopes
+    where environment='TEST' and candidate_id='${candidateId}'`), 'SUPABASE_PRIMARY');
+  assert.equal(psql(`select transition_in_progress from private.candidate_daily_authority_scopes
+    where environment='TEST' and candidate_id='${candidateId}'`), 'f');
+  assert.equal(psql(`select count(*) from private.candidate_daily_authority_transitions
+    where environment='TEST' and candidate_id='${candidateId}'`), '0');
+});

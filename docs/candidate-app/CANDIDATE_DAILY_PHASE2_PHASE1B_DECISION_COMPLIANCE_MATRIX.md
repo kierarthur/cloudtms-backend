@@ -7,7 +7,8 @@ The complete current decision inventory is cumulative and consecutive:
 - AV-001 through AV-154: accepted R5 `02_DECISION_LEDGER.md` and `03_DECISION_COMPLIANCE_MATRIX.md`;
 - AV-155 through AV-192: R6/R7 `CANDIDATE_DAILY_PHASE1A_DECISION_COMPLIANCE_MATRIX.md`;
 - AV-193 through AV-228: the original R8 implementation matrix;
-- AV-229 through AV-244: the later-controlling R9 database-owned transition-barrier correction.
+- AV-229 through AV-244: the later-controlling R9 database-owned transition-barrier correction;
+- AV-245 through AV-249: the later-controlling R10 first-rollback unresolved-work correction.
 
 The sealed R8 handover includes all three layers. Earlier rows remain controlling unless a later row expressly records a supersession. Historical R6/R7 status documents are evidence of their phase and are not current-state authority.
 
@@ -82,6 +83,18 @@ These decisions close the single bounded R8 independent finding. They supersede 
 | AV-242 | Same-key concurrency returns one durable replay, while different-key simultaneous authority attempts produce one winner and one stale-precondition rejection. | Independent database sessions prove batch-lock replay and deterministic scope-lock single-winner behaviour. | `candidate-daily-authority-transition-concurrency.integration.js` on PostgreSQL 17.6/18.1 | PASS |
 | AV-243 | An exact no-op is observable but creates no transition or authority mutation. | Same mode, entitlement and no source change returns `NO_CHANGE`; non-`NONE` disposition is rejected. | direct SQL no-op/replay cases | PASS |
 | AV-244 | The corrected barrier must remain executable on both supported PostgreSQL engines and in the complete Candidate regression workflow. | 43 SQL suites, real-chain authentication, mixed-version tests and transition concurrency pass on PostgreSQL 17.6 and 18.1; the rebased complete JavaScript suite is 613/613. | workflow, local matrix and handover evidence | PASS |
+
+## R10 decisions AV-245 through AV-249
+
+These decisions close the single bounded R9 independent finding. They supersede any earlier wording that allowed database-derived `NONE` to satisfy a mode-changing transition merely because the caller reported it truthfully.
+
+| ID | Atomic decision | R10 compliance | Evidence owner | Status |
+| --- | --- | --- | --- | --- |
+| AV-245 | Database-derived `NONE` means unresolved work exists and can never authorise an authority-mode change. | After caller/database disposition equality, every item with a changed mode and derived `NONE` returns `CANDIDATE_DAILY_NOT_READY`. | transition repeatable, source-contract test | PASS IN R10 |
+| AV-246 | The first rollback edge from `SUPABASE_PRIMARY` to `ROLLBACK_PENDING` is blocked by every unresolved projection, command, other batch and external-effect owner. | Direct SQL covers PENDING, CLAIMED, RETRY, TERMINAL, IN_PROGRESS command, other IN_PROGRESS batch, IN_PROGRESS effect and UNKNOWN effect. | PostgreSQL 17.6/18.1 direct runtime suite | PASS IN R10 |
+| AV-247 | A falsified `DRAINED` claim and a truthful unresolved `NONE` claim have distinct stable outcomes. | Mismatch remains `SEMANTIC_REJECTION`; truthful unresolved mode change returns `CANDIDATE_DAILY_NOT_READY`. | direct SQL matrix | PASS IN R10 |
+| AV-248 | A rejected first rollback must change no authority, entitlement, transition ledger or residual fence, including under concurrent different-key execution. | Direct SQL asserts all four postconditions; two real sessions race the first rollback and both fail closed with zero transition rows. | SQL suite and Node/PostgreSQL concurrency test | PASS IN R10 |
+| AV-249 | R10 preserves valid `DRAINED`/exact `RECONCILED` transitions, exact no-op semantics and every R9 forward/final-rollback barrier. | The existing complete R9 suite remains in the workflow and passes unchanged alongside the added first-rollback matrix. | full Candidate workflow and focused regression | PASS IN R10 |
 
 ## Complete R5 decision-family compliance in R8
 

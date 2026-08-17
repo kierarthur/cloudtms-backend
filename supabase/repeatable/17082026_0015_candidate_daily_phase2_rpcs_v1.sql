@@ -1148,6 +1148,9 @@ begin
       if v_requested_disposition<>v_actual_disposition then
         raise exception using errcode='40001',message='SEMANTIC_REJECTION';
       end if;
+      if v_prior_mode<>v_new_mode and v_actual_disposition='NONE' then
+        raise exception using errcode='55000',message='CANDIDATE_DAILY_NOT_READY';
+      end if;
 
       v_strict_barrier:=v_new_mode='SUPABASE_PRIMARY'
         or (v_prior_mode='ROLLBACK_PENDING' and v_new_mode='GOOGLE_PRIMARY');
