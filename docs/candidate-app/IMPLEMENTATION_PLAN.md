@@ -677,3 +677,44 @@ The executable regression suite uses two independent PostgreSQL transactions and
 Worker-side PBKDF2 verification remains useful bounded preflight work, but it no longer authorises a mutation from a mutable REST snapshot. For known-account login and authenticated password change, the Worker derives a non-plaintext presented-password digest and fingerprints the exact account verifier authority it inspected. Inside `candidate_auth_account_transition_v1`, after receipt/key ownership, the shared account-session advisory lock and the account-row `FOR UPDATE`, PostgreSQL recomputes that fingerprint and compares the presented digest against the locked current digest before creating a login session, incrementing the genuine-current failed-login counter or replacing a password.
 
 A password reset or earlier password change therefore invalidates any already-computed Worker verdict. Stale login success returns the generic invalid result and creates no session; stale failed login returns the same generic result without advancing the new verifier's failure counter; concurrently preverified password changes cannot overwrite one another. Exact same-key success replay still returns the durable winner after the verifier has moved. The real private-handler/PostgreSQL regression runs reset/login and change/login in both orders, stale-failure/reset and concurrent change/change. No plaintext password enters SQL, and no Candidate business table, public Candidate RPC, frontend, finance, Banking Pay or Policy X surface changes.
+
+## Candidate Daily Phase 3 - Google coexistence source implementation prepared (17 August 2026)
+
+Phase 3 R12 is implemented, installed and versioned in both TEST Google projects with the bridge flag false. It is not enabled by this implementation package. Availability API version 216 and NEW MASTER ROTA version 102 preserve legacy-only behaviour until a separately accepted controlled proving window.
+
+### Availability API
+
+- retain the full certified legacy `Code.gs` and every HTML/manifest/trigger owner;
+- add one uniquely named CloudTMS helper file;
+- guard four additive response seams so a missing helper still returns legacy truth;
+- use the exact HMAC v1 Worker boundary and environment-bound Credentially source HMAC;
+- merge canonical database tiles into the existing envelope only while enabled;
+- mirror legacy availability changes under a persisted factual request identity;
+- recover uncertainty through status-first, one exact 404 retry and then status-only;
+- provide an explicit projection claim/complete function with booked/system-blocked overlay protection;
+- provide effect receipt primitives without invoking any provider or rewiring emergency actions.
+
+### NEW MASTER ROTA
+
+- retain the complete certified `Code.gs`, manifest and installed trigger graph;
+- add one uniquely named CloudTMS helper file;
+- preserve the current Availability API request as primary and return its exact result;
+- mirror only an accepted 2xx `AVAILABILITY_UPDATE_END` event;
+- publish one exact 14-day generation per mapped candidate using EmailHistory booking/time facts;
+- hash day/item truth, batch at fifty and retain the same batch/key/body across uncertainty;
+- do not revive or alter the orphan `ai_startDailyPings` menu/reference.
+
+### Phase 3 acceptance still required
+
+1. independent source/decision review;
+2. re-export and compare the installed R12 Google Head/deployment/trigger authority before enablement;
+3. confirm the installed versions remain Availability API 216 and NEW MASTER ROTA 102 with the bridge flag false;
+4. independently prove exact disabled legacy behaviour and zero bridge side effects;
+5. bootstrap only approved TEST source links under Phase 4 authority;
+6. enable one bounded cohort and prove signed generation/tile/write parity;
+7. prove lost response, outage/recovery, quota, latency and lock contention;
+8. prove projection delivered/deferred overlay behaviour;
+9. keep effects, entitlements and all Candidate feature flags disabled;
+10. issue a separate Phase 3 GO before starting Phase 4 UI or Phase 5 cutover.
+
+The later phases remain full-product phases, not Daily-only completion: Phase 4 implements the full responsive Candidate app; Phase 5 performs controlled TEST cutover; Phase 6 completes Emergency, specialist services, messages/content, Past Shifts and approval acceptance; Phase 7 performs gradual rollout and separately approved legacy-browser/adapter retirement. Availability, Emergency and Master Rota remain until their own later migration.

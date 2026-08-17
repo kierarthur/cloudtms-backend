@@ -140,3 +140,19 @@ This summary is a navigation aid; it does not replace the 154-row accepted R5 ma
 | Financial calculations and Office Process/Authorise | unchanged |
 | Invoice/payment/Banking Pay/Policy X/provider/settlement/remittance | unchanged |
 | Production | not accessed or deployed |
+
+## Phase 3 later-controlling status update
+
+The R8/R10 statements above that mark Google source as unchanged remain historically correct for those packages. Phase 3 R12 now supplies, installs and versions independently reviewable source in the live TEST Google projects while the bridge remains false.
+
+| Surface | Phase 3 source result | Live authority |
+| --- | --- | --- |
+| Legacy Availability browser | no client/login/msisdn/UI change | unchanged and active |
+| Availability Apps Script | full revised Code plus additive signed bridge helper installed | deployed version 216; bridge false |
+| NEW MASTER ROTA | minimal existing-post seam plus additive dual-publication helper installed | deployed version 102; operator setup helper preserved; bridge false |
+| Trigger inventory | no new/removed trigger in source | no trigger edit was performed; re-prove before enablement |
+| `ai_startDailyPings` | orphan reference left untouched; no declaration/trigger added | unchanged |
+| CloudTMS source links/entitlements/data | source-HMAC derivation frozen; no bootstrap/mutation | absent/disabled until separate gate |
+| Emergency/specialist effects | receipt primitives prepared only | existing legacy behaviour unchanged; Phase 6 acceptance pending |
+
+Phase 3 decisions AV-250 through AV-280 are recorded in `CANDIDATE_DAILY_PHASE3_DECISION_COMPLIANCE_MATRIX.md` and the later-controlling Decisions PDF addendum.

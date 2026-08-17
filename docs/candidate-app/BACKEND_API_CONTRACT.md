@@ -192,6 +192,32 @@ CloudTMS owns canonical notification events and preferences. The Candidate broke
 
 No endpoint in this contract executes Banking Pay, settlement, remittance or a production action.
 
+## Candidate Daily Phase 3 Google-system consumers
+
+The temporary legacy browser does not call these routes. The only new caller is trusted server-side Apps Script using the frozen Phase 1B `CLOUDTMS-HMAC-V1` envelope and an environment-bound source HMAC.
+
+| Method | Path | Phase 3 purpose |
+|---|---|---|
+| POST | `/candidate-system/v1/google-availability/legacy/tiles` | Read canonical Daily tiles for one signed legacy source and merge them into the already-built Availability envelope. |
+| POST | `/candidate-system/v1/google-availability/legacy/availability` | Mirror one already-accepted legacy Availability change under a caller-owned idempotency key. |
+| POST | `/candidate-system/v1/google-availability/legacy/availability-status` | Recover the exact durable Availability-change result before any retry. |
+| POST | `/candidate-system/v1/google-availability/rota-generations` | Publish complete fourteen-day Master Rota source generations in batches of at most fifty candidates. |
+| POST | `/candidate-system/v1/google-availability/projection/claim` | Claim a bounded Google Availability projection lease. |
+| POST | `/candidate-system/v1/google-availability/projection/complete` | Record delivered, deferred-overlay or retry outcome for the exact lease. |
+| POST | `/candidate-system/v1/google-availability/effects/claim` | Claim an existing external-effect receipt; installation alone invokes no provider. |
+| POST | `/candidate-system/v1/google-availability/effects/complete` | Complete the exact existing external-effect receipt. |
+| POST | `/candidate-system/v1/google-availability/effects/status` | Reconcile exact external-effect truth. |
+
+With `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED` missing or false, none of these routes is called and no bridge retry, log, Script Property or Sheet write occurs. With the flag true, the Apps Script helper must preserve one factual body, request or batch ID, idempotency key and correlation ID across uncertainty. Availability recovery reads status first, consumes no more than one exact retry after authoritative not-found, and becomes status-only thereafter.
+
+Master Rota always publishes to the existing Availability system first. Only an accepted `AVAILABILITY_UPDATE_END` is mirrored to CloudTMS, and the mirror never replaces the Availability publication. Availability, Emergency and Master Rota remain retained services after retirement of the temporary legacy browser until each is separately migrated and accepted.
+
+The Phase 3 source package adds no route, RPC, schema or Worker implementation. It consumes the already-frozen Phase 1B/Phase 2 contract and remains dark until the later controlled Google installation/proving gate.
+
+The route strings, HTTP method, HMAC header names and request bodies above are used verbatim by the installed Apps Script helpers. The public Candidate broker maps the public `/candidate-system/v1` prefix to the private service binding, where the private Candidate Worker validates the closed body schema and invokes the existing Phase 2 RPC owner. R12 installs this contract with the bridge false; the later enabled Google proving gate must still demonstrate the complete signed chain from the deployed Google projects.
+
+The operator installed the TEST transport key ID on both Candidate Worker layers and the matching signing secret only on the private verifier, while installing the same transport pair in both Google projects. A separate source-identity secret is shared only by the two Google projects and the controlled source-link bootstrap. Secret values are not in source or evidence. R12 keeps the bridge false throughout installation and deployment; enabled signed-route proof remains separately gated.
+
 ## Mixed private-Worker writer overlap
 
 After every successful or replayed challenge START/RESEND RPC, the private backend discards local proposal authority and reconstructs the delivery token from the database-winning token hash and issuing version returned by that result. It verifies the reconstructed hash before it attempts the create-only mail-outbox identity. A losing Worker can therefore repair missing mail but cannot persist its losing token, even when old/new challenge writers overlap and its mail attempt arrives first.

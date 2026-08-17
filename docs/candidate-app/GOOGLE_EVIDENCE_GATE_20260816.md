@@ -140,3 +140,21 @@ Apps Script's own execution and UrlFetch quotas remain operational constraints f
 ## Gate conclusion
 
 The two effective Google authorities are identified and their current source/deployment relationship is known, including the later user-confirmed Master Rota web version 101 deployment. Phase 1A may be reviewed without further Google evidence. Phase 3 remains separately gated and must use the smallest possible server-side compatibility changes, preserve the existing legacy browser, protect Master/Emergency behaviour, and revalidate the effective hashes before any edit or deployment. Decommissioning the temporary legacy browser and `LEGACY_COMPAT` facade must not decommission the Availability Sheet/Apps Script service, Emergency functions, Master Rota publication, signed CloudTMS synchronisation, projections/freshness or specialist services; each retained owner needs a separate later migration and acceptance decision.
+
+## Phase 3 R12 installed-source relationship
+
+R12 supplies complete revised `Code.gs` and additive helper files for both projects and records their disabled TEST installation. Availability API is deployed as version 216 and NEW MASTER ROTA as version 102. The bridge flag remains false, so installation does not activate signed transport or change legacy behaviour.
+
+The packaged rollback files retain the exact evidence-gate hashes:
+
+```text
+Availability API rollback Code.gs
+eacd187564ea9b0f00c1830f9240c6afcfe1a0d0611162c1bdf9b9fd6bbb3b3f
+
+NEW MASTER ROTA rollback Code.gs
+c3ae9c480a97ad2771312f5f453adbe7049c07219f89624f75df543d319fa0a8
+```
+
+The R12 revisions are deliberately confined to guarded server-side seams and new helper files. They change no manifest, HTML file, OAuth scope or trigger. `ai_startDailyPings` remains orphaned and untouched.
+
+Immediately before later manual installation, the reviewer/operator must export both current Heads and repeat this gate. A hash difference is a stop condition, not permission to overwrite newer Google work. The first save and version must keep `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED=false` and prove exact legacy response, cache, Sheet and trigger parity before any controlled TEST enablement.
