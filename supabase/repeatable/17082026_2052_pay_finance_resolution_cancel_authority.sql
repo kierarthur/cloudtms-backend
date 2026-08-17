@@ -338,7 +338,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
             (vfcr.case_type = 'PAYMENT_ADVANCE' and upper(coalesce(vfcr.payout_status::text,'')) = 'PAID')
             or vfcr.case_type in ('MANUAL_DEBT_ADJUSTMENT','OVERPAYMENT')
           )
-  
+
   ;
 
   create temporary table manual_debt_recovery_rows on commit drop as
@@ -360,7 +360,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
         from finance_case_recovery_rows_base fcrrb
         where fcrrb.case_type = 'MANUAL_DEBT_ADJUSTMENT'
           and fcrrb.nominal_due_amount > 0
-  
+
   ;
 
   create temporary table manual_debt_recovery_allocations on commit drop as
@@ -395,7 +395,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           p_run_take_home_headroom => mdra.run_take_home_before,
           p_default_take_home_floor => mdra.default_take_home_floor
         ) mdra_alloc
-  
+
   ;
 
   create temporary table manual_debt_recovery_totals on commit drop as
@@ -404,7 +404,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           round(sum(mdra.protected_recoverable_amount),2)::numeric(12,2) as protected_recoverable_total
         from manual_debt_recovery_allocations mdra
         group by mdra.candidate_id
-  
+
   ;
 
   create temporary table overpayment_recovery_rows on commit drop as
@@ -427,7 +427,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
         from finance_case_recovery_rows_base fcrrb
         where fcrrb.case_type = 'OVERPAYMENT'
           and fcrrb.nominal_due_amount > 0
-  
+
   ;
 
   create temporary table overpayment_recovery_allocations on commit drop as
@@ -488,7 +488,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           p_run_take_home_headroom => opra.run_take_home_before,
           p_default_take_home_floor => opra.default_take_home_floor
         ) opra_alloc
-  
+
   ;
 
   create temporary table overpayment_recovery_totals on commit drop as
@@ -497,7 +497,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           round(sum(opra.protected_recoverable_amount),2)::numeric(12,2) as protected_recoverable_total
         from overpayment_recovery_allocations opra
         group by opra.candidate_id
-  
+
   ;
 
   create temporary table payment_advance_recovery_rows on commit drop as
@@ -520,7 +520,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
         where fcrrb.case_type = 'PAYMENT_ADVANCE'
           and upper(coalesce(fcrrb.payout_status::text,'')) = 'PAID'
           and fcrrb.nominal_due_amount > 0
-  
+
   ;
 
   create temporary table payment_advance_recovery_allocations on commit drop as
@@ -582,7 +582,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           p_run_take_home_headroom => para.run_take_home_before,
           p_default_take_home_floor => null::numeric
         ) para_alloc
-  
+
   ;
 
   create temporary table finance_case_protected_allocations on commit drop as
@@ -604,7 +604,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           para.finance_case_id,
           para.protected_recoverable_amount
         from payment_advance_recovery_allocations para
-  
+
   ;
 
   create temporary table finance_case_payee_readiness on commit drop as
@@ -757,7 +757,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
          and bpm.entity_kind = f0.payee_entity_kind
          and bpm.entity_id = f0.payee_entity_id
          and bpm.bank_details_hash is not distinct from f0.bank_details_hash
-  
+
   ;
 
   create temporary table finance_case_component_rows on commit drop as
@@ -807,7 +807,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           on pfc.finance_case_id = vfcr.finance_case_id
          and pfc.closed_at_utc is null
          and coalesce(pfc.remaining_source_amount, 0) > 0
-  
+
   ;
 
 
@@ -1012,7 +1012,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
               else null::jsonb
             end as target_amounts_json
         ) fcsr on true
-  
+
   ;
 
   create temporary table finance_case_component_review_rows_effective on commit drop as
@@ -1312,7 +1312,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
               else null::numeric
             end as reusable_saved_target_pay_ex_vat
         ) fsaved on true
-  
+
   ;
 
 
@@ -1800,7 +1800,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
         left join finance_case_protected_allocations fcpa
           on fcpa.finance_case_id = vfcr.finance_case_id
         where vfcr.finance_case_id is not null
-  
+
   ;
 
   create temporary table finance_case_component_due_source_base on commit drop as
@@ -1818,7 +1818,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
         from finance_case_component_review_rows_effective fce
         join finance_case_due_source_amounts fcds
           on fcds.finance_case_id = fce.finance_case_id
-  
+
   ;
 
   create temporary table finance_case_component_due_source_shares on commit drop as
@@ -1835,7 +1835,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
             2
           ) as preliminary_source_due_amount_ex_vat
         from finance_case_component_due_source_base fcdsb
-  
+
   ;
 
   create temporary table finance_case_component_due_source_allocations on commit drop as
@@ -1851,7 +1851,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
             2
           ) as allocated_source_due_amount_ex_vat
         from finance_case_component_due_source_shares fcdss
-  
+
   ;
 
   create temporary table finance_case_component_due_preview_base on commit drop as
@@ -1875,7 +1875,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
         join finance_case_component_due_source_allocations fcda
           on fcda.finance_case_id = fce.finance_case_id
          and fcda.finance_component_id = fce.finance_component_id
-  
+
   ;
 
   create temporary table finance_case_component_due_preview_allocations on commit drop as
@@ -1884,7 +1884,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           fcdpb.finance_component_id,
           round(fcdpb.preliminary_preview_due_amount_ex_vat, 2) as allocated_preview_due_amount_ex_vat
         from finance_case_component_due_preview_base fcdpb
-  
+
   ;
 
   create temporary table finance_case_taxable_channel_restructure_resolution on commit drop as
@@ -2832,7 +2832,7 @@ create temporary table finance_case_recovery_rows_base on commit drop as
           end as taxable_manual_debt_resolution_json,
           g.case_components_json
         from grouped g
-  
+
   ;
 
   PERFORM public._imp_debug_audit(

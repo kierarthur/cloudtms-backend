@@ -632,7 +632,7 @@
       "schema": "public",
       "name": "pay_preview_candidate_build_finance_case_baseline",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "c888bfdd378c6157fdb35cf7b8e6f65042c27154f63ee4f85fcf279537ccd65c",
+      "definition_sha256": "a42412257febffe1efd5b6b103913897178fd44506552d77daa9cd88f3407ec4",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
