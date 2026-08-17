@@ -32073,3 +32073,178 @@ function backfillAllCandidateIds() {
     lock.releaseLock();
   }
 }
+
+/**
+ * One-time TEST Script Property installer for NEW MASTER ROTA.
+ *
+ * This deliberately keeps the bridge disabled.
+ * It never logs, returns or embeds either secret.
+ */
+function ctmsP3_installTestPropertiesMasterRota() {
+  var ui = SpreadsheetApp.getUi();
+  var properties = PropertiesService.getScriptProperties();
+
+  var currentEnabled = String(
+    properties.getProperty('CLOUDTMS_CANDIDATE_BRIDGE_ENABLED') || ''
+  ).trim().toLowerCase();
+
+  if (currentEnabled === 'true') {
+    throw new Error(
+      'CTMS_SETUP_REFUSED: Set CLOUDTMS_CANDIDATE_BRIDGE_ENABLED=false before provisioning.'
+    );
+  }
+
+  if (
+    properties.getProperty('CLOUDTMS_CANDIDATE_GOOGLE_HMAC_SECRET') ||
+    properties.getProperty('CLOUDTMS_CANDIDATE_SOURCE_HMAC_SECRET')
+  ) {
+    throw new Error(
+      'CTMS_SETUP_REFUSED: Candidate secrets already exist. Use the controlled rotation procedure instead of overwriting them.'
+    );
+  }
+
+  var confirmation = ui.alert(
+    'Install CloudTMS Candidate Daily TEST properties',
+    'This will install TEST configuration in the NEW MASTER ROTA project. ' +
+      'The CloudTMS bridge will remain disabled. Continue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (confirmation !== ui.Button.YES) {
+    return {
+      ok: false,
+      cancelled: true,
+      secrets_exposed: false
+    };
+  }
+
+  var signingSecret = ctmsP3_promptMasterSecret_(
+    ui,
+    'Google transport signing secret',
+    'Paste exactly the same 32-byte base64 TEST signing secret used by Availability API.'
+  );
+
+  if (signingSecret === null) {
+    return {
+      ok: false,
+      cancelled: true,
+      secrets_exposed: false
+    };
+  }
+
+  var sourceSecret = ctmsP3_promptMasterSecret_(
+    ui,
+    'Source identity HMAC secret',
+    'Paste exactly the same source-identity secret used by Availability API.'
+  );
+
+  if (sourceSecret === null) {
+    return {
+      ok: false,
+      cancelled: true,
+      secrets_exposed: false
+    };
+  }
+
+  if (signingSecret === sourceSecret) {
+    throw new Error(
+      'CTMS_SETUP_REFUSED: The signing and source-identity secrets must be different.'
+    );
+  }
+
+  properties.setProperties({
+    CLOUDTMS_CANDIDATE_BRIDGE_ENABLED: 'false',
+    CLOUDTMS_CANDIDATE_BASE_URL:
+      'https://test-cloudtms-candidate-broker.kier-88a.workers.dev',
+    CLOUDTMS_CANDIDATE_ENVIRONMENT: 'TEST',
+    CLOUDTMS_CANDIDATE_GOOGLE_HMAC_KEY_ID:
+      'candidate-daily-google-test-v1',
+    CLOUDTMS_CANDIDATE_GOOGLE_HMAC_SECRET: signingSecret,
+    CLOUDTMS_CANDIDATE_SOURCE_HMAC_SECRET: sourceSecret
+  }, false);
+
+  // This property belongs only to Availability API.
+  properties.deleteProperty('CLOUDTMS_CANDIDATE_EXECUTOR_ID');
+
+  var result = {
+    ok: true,
+    project_role: 'NEW_MASTER_ROTA',
+    bridge_enabled: false,
+    environment: 'TEST',
+    key_id: 'candidate-daily-google-test-v1',
+    executor_property_absent: true,
+    signing_secret_fingerprint:
+      ctmsP3_masterSecretFingerprint_(signingSecret),
+    source_secret_fingerprint:
+      ctmsP3_masterSecretFingerprint_(sourceSecret),
+    secrets_exposed: false
+  };
+
+  signingSecret = null;
+  sourceSecret = null;
+
+  ui.alert(
+    'TEST properties installed',
+    'The bridge remains disabled.\n\n' +
+      'Signing fingerprint: ' +
+      result.signing_secret_fingerprint +
+      '\nSource fingerprint: ' +
+      result.source_secret_fingerprint +
+      '\n\nBoth fingerprints must match the Availability API result.',
+    ui.ButtonSet.OK
+  );
+
+  return result;
+}
+
+function ctmsP3_promptMasterSecret_(ui, title, message) {
+  var response = ui.prompt(title, message, ui.ButtonSet.OK_CANCEL);
+
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return null;
+  }
+
+  var value = String(response.getResponseText() || '').trim();
+  ctmsP3_validateMasterSecret_(value);
+  return value;
+}
+
+function ctmsP3_validateMasterSecret_(value) {
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(value)) {
+    throw new Error(
+      'CTMS_SECRET_INVALID: Expected standard base64 encoding of exactly 32 random bytes.'
+    );
+  }
+
+  var decoded;
+
+  try {
+    decoded = Utilities.base64Decode(value);
+  } catch (error) {
+    throw new Error('CTMS_SECRET_INVALID: The supplied value is not valid base64.');
+  }
+
+  if (
+    decoded.length !== 32 ||
+    Utilities.base64Encode(decoded) !== value
+  ) {
+    throw new Error(
+      'CTMS_SECRET_INVALID: Expected standard base64 encoding of exactly 32 random bytes.'
+    );
+  }
+}
+
+function ctmsP3_masterSecretFingerprint_(value) {
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    Utilities.newBlob(
+      String(value),
+      'text/plain; charset=utf-8'
+    ).getBytes()
+  );
+
+  return bytes.slice(0, 8).map(function (byteValue) {
+    var unsigned = byteValue < 0 ? byteValue + 256 : byteValue;
+    return ('0' + unsigned.toString(16)).slice(-2);
+  }).join('');
+}

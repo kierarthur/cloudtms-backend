@@ -165,16 +165,19 @@ test('Availability revised Code.gs differs from certified source only at the app
   assert.doesNotMatch(read(availabilityCode).slice(busyStart, busyEnd), /ctmsP3_mirrorLegacyAvailability_/);
 });
 
-test('Master Rota revised Code.gs differs from certified source only at the post-legacy additive mirror seam', () => {
+test('Master Rota revised Code.gs adds only the post-legacy mirror seam and preserves the operator setup utility', () => {
   const result = spawnSync('git', ['diff', '--no-index', '--unified=0', '--', masterRollback, masterCode],
     { encoding: 'utf8' });
   assert.equal(result.status, 1);
   const hunks = [...result.stdout.matchAll(/^@@[^\n]+@@/gm)].map((match) => match[0]);
-  assert.equal(hunks.length, 1);
-  assert.equal(hunks[0], '@@ -19849,5 +19849,9 @@');
+  assert.deepEqual(hunks, [
+    '@@ -19852 +19852,5 @@',
+    '@@ -32071,0 +32076,175 @@'
+  ]);
   assert.match(result.stdout, /const legacyResult = _postWithRetry/);
   assert.match(result.stdout, /ctmsP3_masterMirrorLegacyEvent_\(action, payload, legacyResult\)/);
   assert.match(result.stdout, /return legacyResult/);
+  assert.match(result.stdout, /function ctmsP3_installTestPropertiesMasterRota\(\)/);
 });
 
 test('false or missing bridge flag is a hard no-op in Availability helper', () => {
