@@ -6,7 +6,8 @@ The complete current decision inventory is cumulative and consecutive:
 
 - AV-001 through AV-154: accepted R5 `02_DECISION_LEDGER.md` and `03_DECISION_COMPLIANCE_MATRIX.md`;
 - AV-155 through AV-192: R6/R7 `CANDIDATE_DAILY_PHASE1A_DECISION_COMPLIANCE_MATRIX.md`;
-- AV-193 through AV-228: this R8 matrix.
+- AV-193 through AV-228: the original R8 implementation matrix;
+- AV-229 through AV-244: the later-controlling R9 database-owned transition-barrier correction.
 
 The sealed R8 handover includes all three layers. Earlier rows remain controlling unless a later row expressly records a supersession. Historical R6/R7 status documents are evidence of their phase and are not current-state authority.
 
@@ -43,8 +44,8 @@ Status meanings:
 | AV-211 | `DEFERRED_OVERLAY` requires the exact current generation/hash proof. | Completion rejects stale or mismatched overlay proof. | SQL runtime tests | PASS |
 | AV-212 | Removing/changing an overlay retreats effective visibility and requeues eligible parked projection work. | Reconciliation/transition logic and runtime test cover retreat/requeue. | SQL runtime matrix | PASS |
 | AV-213 | Authority mode is exactly GOOGLE_PRIMARY, ROLLBACK_PENDING or SUPABASE_PRIMARY. | Scope/transition constraints and closed response enum enforce only these values. | schema/OpenAPI/contract tests | PASS |
-| AV-214 | Mode transition is fenced by expected mode/version, current generation, cursor/freshness and reconciliation barriers. | One atomic transition RPC and immutable audit row own the change. | SQL runtime tests | PASS |
-| AV-215 | Rollback is explicit and auditable; it never deletes receipts or silently makes stale Google projection authoritative. | ROLLBACK_PENDING plus transition audit/cursor checks. | transition tests and schema | PASS |
+| AV-214 | Mode transition is fenced by expected mode/version, current generation, cursor/freshness and reconciliation barriers. | R8 source did not fully implement this claim. R9 makes every authority-changing commit depend on locked database-owned generation, source, cursor, reconciliation and in-flight facts. | R9 direct SQL and parallel runtime suites | PASS IN R9 |
+| AV-215 | Rollback is explicit and auditable; it never deletes receipts or silently makes stale Google projection authoritative. | R8 source did not fully implement this claim. R9 requires the product switch off before rollback starts, derives in-flight disposition inside PostgreSQL, and requires exact current generation/cursor/parity proof before Google becomes primary again. | R9 direct SQL and parallel runtime suites | PASS IN R9 |
 | AV-216 | External Emergency/specialist effects use one claim/lease/completion/status receipt and exact replay. | Three effect RPCs plus private receipt table own the lifecycle. | SQL and Phase 1B contract tests | PASS |
 | AV-217 | R8 executes no real external effect and does not pretend a missing specialist dependency is success. | Specialist seam returns typed dependency unavailable until Phase 3/6 adapter is supplied. | strict fake/dependency tests and safety record | PASS / DEFERRED BY DESIGN |
 | AV-218 | Phase 1B maps every accepted Candidate/system operation to a closed installed RPC or typed specialist seam. | `candidate-daily-phase1b.js` owns one operation catalogue; route parity tests pass. | source and focused tests | PASS |
@@ -58,6 +59,29 @@ Status meanings:
 | AV-226 | Retiring the old browser later does not retire Availability, Emergency, Master Rota publication, projection/freshness or specialist services. | Explicit lifecycle rule retained in plan, authority and PDF. | documentation review | PASS |
 | AV-227 | Phase 2/1B completion does not mean the full Candidate App is complete. Phase 3–7 remain mandatory. | Current-state/handover name each remaining gate and prohibit feature activation. | handover and PDF | PASS |
 | AV-228 | No finance, Process/Authorise, invoice, payment, Banking Pay, Policy X, provider, settlement, remittance or production owner may drift in R8. | Changed-file inventory/tests show Candidate-only boundary; production untouched. | Git diff and safety statement | PASS |
+
+## R9 decisions AV-229 through AV-244
+
+These decisions close the single bounded R8 independent finding. They supersede any R8 wording that implied an authority switch could rely on caller assertions or incomplete database facts.
+
+| ID | Atomic decision | R9 compliance | Evidence owner | Status |
+| --- | --- | --- | --- | --- |
+| AV-229 | An authority transition never creates a missing Candidate authority scope or silently repairs a missing prerequisite. | The transition locks and requires the pre-existing exact scope; a missing scope produces an item-level fail-closed result and no scope/entitlement/transition row. | `candidate_daily_authority_transition_atomic_v1`, direct SQL suite | PASS |
+| AV-230 | All current facts that can invalidate cutover are locked and evaluated inside one database transaction. | PostgreSQL locks the global feature row, deterministic cohort scopes, entitlement, source links, active generation, sync row, commands, other batches, effects and projection outbox before commit. | repeatable source, static source contract, parallel suite | PASS |
+| AV-231 | `in_flight_disposition` is a caller assertion only; PostgreSQL derives the actual result and requires equality. | The only derived outcomes are `DRAINED`, `RECONCILED` or `NONE`; caller `CANCELLED` can never manufacture authority. | repeatable and falsified-disposition runtime cases | PASS |
+| AV-232 | A forward cutover and completed rollback require exactly one current PRIMARY legacy source in exactly one active link group. | Missing, expired/disabled, ambiguous and cross-group source authority fail closed under locked source-link rows. | direct SQL source-state matrix | PASS |
+| AV-233 | An authority switch requires the exact expected active generation, version and complete fourteen-day published generation. | Missing, BUILDING/partial, stale, wrong-ID, wrong-version or incomplete-day generations are rejected. | direct SQL generation matrix | PASS |
+| AV-234 | The accepted, required-visible and effective-visible cursors must all equal the locked scope canonical version and the caller's exact expectations. | Missing sync, lagging/elevated cursor, non-READY state, pending/retry/terminal counts or missing source revision/reconciliation time fail closed. | direct SQL cursor/freshness cases | PASS |
+| AV-235 | Reconciliation evidence must be at least as new as every relevant generation, availability and projection fact. | PostgreSQL computes the latest locked fact timestamp and refuses an older reconciliation watermark. | repeatable and runtime freshness proof | PASS |
+| AV-236 | `DEFERRED_OVERLAY` proves visibility only when generation ID/version, date and source-row hash match the exact active generation. | Invalid overlay rejects; an exact current overlay is derived as `RECONCILED` and is frozen in the transition. | direct SQL invalid/valid overlay cases | PASS |
+| AV-237 | Pending, claimed, retry, terminal, other-batch, command and in-progress/unknown effect work blocks an authority switch. | Every listed owner is counted under row locks; a terminal projection is never treated as drained and UNKNOWN effect truth never becomes success. | direct SQL in-flight matrix | PASS |
+| AV-238 | Entitlement and mode changes remain closed and feature-controlled. | Entitlement cannot be true in Google or rollback mode; enabling requires the global switch; rollback from Supabase requires the global switch disabled first. | direct forward/flag/rollback cases | PASS |
+| AV-239 | Rollback is two-stage: disable/stop Supabase authority, enter `ROLLBACK_PENDING`, then prove current Google parity before completing. | The first stage cannot carry an enabled entitlement; the second stage uses the same strict source/generation/cursor/reconciliation barrier as forward cutover. | direct rollback sequence | PASS |
+| AV-240 | Every authority-changing committed transition freezes database-winner generation, sync and derived in-flight facts in the immutable ledger. | Transition snapshots are populated from locked rows, not copied from request JSON, and immutable trigger authority is unchanged. | ledger assertions in direct SQL suite | PASS |
+| AV-241 | A cohort may be partially accepted only as explicit isolated item outcomes; one failed item cannot leak variables or a transition fence into another. | Per-item subtransactions, complete scalar resets and postcondition tests produce one explicit COMMITTED/REJECTED set with no stuck fence. | direct partial-cohort suite | PASS |
+| AV-242 | Same-key concurrency returns one durable replay, while different-key simultaneous authority attempts produce one winner and one stale-precondition rejection. | Independent database sessions prove batch-lock replay and deterministic scope-lock single-winner behaviour. | `candidate-daily-authority-transition-concurrency.integration.js` on PostgreSQL 17.6/18.1 | PASS |
+| AV-243 | An exact no-op is observable but creates no transition or authority mutation. | Same mode, entitlement and no source change returns `NO_CHANGE`; non-`NONE` disposition is rejected. | direct SQL no-op/replay cases | PASS |
+| AV-244 | The corrected barrier must remain executable on both supported PostgreSQL engines and in the complete Candidate regression workflow. | 43 SQL suites, real-chain authentication, mixed-version tests and transition concurrency pass on PostgreSQL 17.6 and 18.1; the rebased complete JavaScript suite is 613/613. | workflow, local matrix and handover evidence | PASS |
 
 ## Complete R5 decision-family compliance in R8
 

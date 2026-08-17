@@ -599,6 +599,18 @@ Release-specific commit hashes, workflow runs, installed-definition hashes and W
 
 Overall Candidate delivery is complete only after DB/RPC, backend, frontend, broker and app/web stages each pass independent verification and the coordinated TEST feature enablement is explicitly approved.
 
+## 17 August 2026 Phase 2/1B R9 transition-barrier correction
+
+The independent R8 review found one bounded defect in `candidate_daily_authority_transition_atomic_v1`: the documented cutover/rollback proof was not completely implemented inside the database transaction. R9 is later-controlling for that boundary.
+
+An authority-changing result now requires PostgreSQL to lock and prove the current feature switch, exact pre-existing scope and entitlement, one current source-link group, complete fresh fourteen-day generation, READY sync state, exact accepted/required/effective cursor parity, reconciliation freshness, deferred-overlay integrity and every command/batch/effect/projection in-flight owner. The request carries expected facts but does not own the result. PostgreSQL derives `DRAINED`, `RECONCILED` or `NONE`; it never derives caller `CANCELLED`.
+
+Forward cutover remains possible while the product is dark when entitlement stays false, because installation/proving must not require Candidate enablement. Enabling an entitlement still requires the global Candidate Daily flag. Rollback requires the global flag disabled before entering `ROLLBACK_PENDING`, and Google can become primary again only after the same strict generation/source/cursor/reconciliation proof.
+
+The transition no longer creates missing scope state. Exact no-op returns `NO_CHANGE` without appending the ledger. Partial cohorts are explicit and isolated. Real independent PostgreSQL sessions prove same-key exact replay and one-winner different-key concurrency on both supported engines.
+
+This correction does not advance the project into Phase 3 and does not authorise Google edits, real Candidate data, feature activation or production. The full Phase 3-7 plan above remains unchanged.
+
 ### Known pre-enablement dependencies for independent audit
 
 - transactional manager/candidate links currently target the existing TEST frontend placeholder. They must be changed to the final Candidate/public frontend base URL before manager emails or Candidate links are enabled; the private API must never use its own Worker origin for those links;

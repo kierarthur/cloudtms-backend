@@ -156,6 +156,26 @@ It must not own rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN,
 - Candidate app/web sends factual inputs and renders server truth.
 - Google Availability/rota remains unchanged and is mediated rather than moved.
 
+## Candidate Daily authority-transition owner (R9 later-controlling)
+
+`public.candidate_daily_authority_transition_atomic_v1` is the only owner permitted to change `private.candidate_daily_authority_scopes.authority_mode` or the Candidate Daily entitlement as one transition outcome. A caller supplies expected prior facts, reason/evidence, an independent approver and a disposition assertion; none of those assertions becomes authority without locked database equality.
+
+Before an authority-changing commit, this owner locks or proves:
+
+- the global Candidate Daily feature row;
+- every existing cohort scope in deterministic Candidate order;
+- exact scope and entitlement;
+- the current source-link catalogue;
+- in-progress commands and other batches;
+- in-progress/unknown effects;
+- all projection outbox rows;
+- the active generation and exact fourteen day rows;
+- the one sync/freshness row and exact current overlay evidence.
+
+It derives in-flight disposition, refuses missing/ambiguous source, missing/incomplete/stale generation, cursor lag, old reconciliation, invalid overlay and unresolved work, and freezes the resulting database-winner generation/sync/disposition in the immutable transition ledger. Missing scopes remain a separate provisioning responsibility and are never created by transition. A failed cohort item rolls back its local changes; a successful item cannot inherit another item's records or scalar state.
+
+Phase 1B remains an adapter only. The Worker may forward the expected generation/cursors and requested disposition from a controlled transition request, but it cannot infer success or substitute absent database proof. The public browser has no direct transition authority.
+
 ## 13 August 2026 mixed-version authentication authority
 
 - Challenge START/RESEND delivery always reconstructs from the token hash and issuing version returned by the database-winning result after the canonical RPC. A losing Worker proposal is never allowed to supply the create-only mail row.

@@ -279,3 +279,55 @@ No real email, push, R2 business write, external effect or Candidate business mu
 | Phase 7 | Gradual entitled rollout, monitoring, then separately authorised legacy-browser/compatibility-adapter retirement |
 
 The full Candidate App also retains all previously accepted non-Daily Candidate/Office/authentication/workflow functionality. R8 does not narrow the project to Daily availability.
+
+## 17. Later-controlling R9 authority-transition correction
+
+R8 remains the installed Phase 2/Phase 1B architecture authority except for the transition-proof statements in Sections 8 and 14. The independent R8 audit found that the original implementation did not execute enough of the accepted cutover/rollback proof inside the locked database owner. The later-controlling R9 correction therefore replaces any R8 inference that a caller-supplied generation snapshot or in-flight disposition was sufficient.
+
+R9 changes only `public.candidate_daily_authority_transition_atomic_v1` and its executable verification. It does not add a table, public RPC, HTTP route, Google adapter, UI, entitlement, source link, Candidate row, external effect or financial authority.
+
+For every authority-changing item, the corrected database owner now:
+
+1. takes the existing environment/batch receipt lock and owns exact replay/conflict;
+2. locks existing Candidate scope rows in deterministic Candidate order and rejects a missing scope without creating one;
+3. locks the global Candidate feature configuration and exact Candidate entitlement;
+4. locks and proves one current active PRIMARY legacy source identity;
+5. locks and proves the exact active fourteen-day generation, its identity/version, completion, publication and 120-second freshness;
+6. locks and proves the Candidate sync row, exact accepted/required/effective cursors and a reconciliation watermark not older than generation, availability or outbox facts;
+7. validates any deferred overlay against the exact active generation/date/source-row hash;
+8. locks and classifies projection rows, command receipts, other transition batches and external-effect receipts;
+9. derives `NONE`, `RECONCILED` or `DRAINED` from those locked rows and rejects a contrary caller assertion;
+10. freezes the database-winning generation, sync and derived-disposition facts into the immutable transition ledger;
+11. clears the transition fence on every expected per-item rejection through a subtransaction, while unexpected failures abort the batch;
+12. returns one durable result for exact replay and one stale-precondition rejection for a losing different-key concurrent cutover.
+
+The corrected owner deliberately never derives `CANCELLED`. A caller may not use `CANCELLED` to bypass unresolved work. `PENDING`, `CLAIMED`, `RETRY`, `TERMINAL`, in-progress command/batch state and `IN_PROGRESS` or `UNKNOWN` external effects all prevent a strict switch. A valid current-generation `DEFERRED_OVERLAY` is the only state that derives `RECONCILED`; otherwise fully settled state derives `DRAINED`.
+
+The supported forward/rollback sequence is now:
+
+```text
+GOOGLE_PRIMARY
+  -> SUPABASE_PRIMARY
+     requires exact source/generation/cursor/freshness/in-flight proof
+
+SUPABASE_PRIMARY
+  -> ROLLBACK_PENDING
+     requires the global Candidate Daily switch and entitlement off
+
+ROLLBACK_PENDING
+  -> GOOGLE_PRIMARY
+     requires the same exact source/generation/cursor/freshness/in-flight proof
+```
+
+An exact no-op does not add a transition row. A missing scope cannot bootstrap itself through the transition RPC. A partial cohort may commit valid items and reject invalid items, but no item may retain `transition_in_progress=true` after completion.
+
+The executable R9 authority is:
+
+```text
+supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql
+tests/17082026_0955_candidate_daily_authority_transition_runtime_verification.sql
+tests/candidate-daily-authority-transition-concurrency.integration.js
+tests/candidate-daily-phase2-source-contract.test.js
+```
+
+`CANDIDATE_DAILY_PHASE2_PHASE1B_R9_CORRECTION_AUTHORITY.md`, `R9_FINDING_CLOSURE_MATRIX.md`, current Decisions PDF Sections 80-84 and decisions AV-229 through AV-244 are later-controlling wherever an earlier R8 statement conflicts. Publication, installed TEST hashes, workflow identities and deployed Worker versions are recorded in the final R9 current-state and verification documents rather than retroactively altering historical R8 evidence.
