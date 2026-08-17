@@ -1,0 +1,19 @@
+
+ ⛅️ wrangler 4.43.0 (update available 4.123.0)
+──────────────────────────────────────────────
+Total Upload: 2648.95 KiB / gzip: 570.05 KiB
+Your Worker has access to the following bindings:
+Binding                                                                                           Resource
+env.R2 (test-cloudtms)                                                                            R2 Bucket
+env.CANDIDATE_APP_ENVIRONMENT ("TEST")                                                            Environment Variable
+env.CANDIDATE_APP_PUBLIC_URL ("https://testmode.arthur-rai.co.uk")                                Environment Variable
+env.CANDIDATE_AUTH_REPLAY_KEY_VERSION ("1")                                                       Environment Variable
+env.CANDIDATE_AUTH_REPLAY_READ_KEY_VERSIONS ("1")                                                 Environment Variable
+env.CANDIDATE_CHALLENGE_TOKEN_KEY_VERSION ("1")                                                   Environment Variable
+env.CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS ("1")                                             Environment Variable
+env.SUPABASE_URL ("https://yakevhtttcsljosbdpov.supabase...")                                     Environment Variable
+env.CANDIDATE_MAX_UPLOAD_BYTES ("15728640")                                                       Environment Variable
+env.CANDIDATE_MAX_IMAGE_DIMENSION ("12000")                                                       Environment Variable
+env.CANDIDATE_MAX_IMAGE_PIXELS ("40000000")                                                       Environment Variable
+
+--dry-run: exiting now.

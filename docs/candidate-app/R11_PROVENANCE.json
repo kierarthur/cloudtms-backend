@@ -1,0 +1,42 @@
+{
+  "artifact": "CloudTMS Candidate App Candidate Daily Phase 3 R11",
+  "date": "2026-08-17",
+  "environment": "TEST preparation only",
+  "repository_base_commit": "ea2ad4c5b23cf72cff21ecebae5f0ee5d4c85115",
+  "published": false,
+  "live_google_changed": false,
+  "feature_activated": false,
+  "test_worker_configuration_evidence": {
+    "public_candidate_version": "09ac826b-d7da-4932-b0ad-a5fe6e194779",
+    "private_candidate_version": "9d73bbff-5099-4f12-a58d-64cb9dbb4889",
+    "candidate_daily_google_primary_key_id_present": false,
+    "candidate_daily_google_primary_secret_present": false,
+    "candidate_daily_google_overlap_pair_present": false,
+    "candidate_daily_source_hmac_secret_present": false,
+    "secret_values_read_or_packaged": false
+  },
+  "source": {
+    "availability_revised_sha256": "4113dadcbd4044f222fafd51c78ff5bea8905cc22c8517107ba26866b269d905",
+    "availability_helper_sha256": "4bc6cb8eaa77ef21ba98d90b52b0d05cc6363f9e41c800e430d95361869d85f9",
+    "availability_rollback_sha256": "eacd187564ea9b0f00c1830f9240c6afcfe1a0d0611162c1bdf9b9fd6bbb3b3f",
+    "master_revised_sha256": "6d742f8fac4f9b98630f2afb44d4c2d7c7dc085a0c56c26391c6b921ee70db03",
+    "master_helper_sha256": "58e8da3948f2890b42abd802485776169ff500dedcf060d27b449a60597bcb2c",
+    "master_rollback_sha256": "c3ae9c480a97ad2771312f5f453adbe7049c07219f89624f75df543d319fa0a8"
+  },
+  "verification": {
+    "focused_tests": 48,
+    "focused_failures": 0,
+    "complete_backend_tests": 625,
+    "complete_backend_failures": 0,
+    "decisions_pdf_pages": 105,
+    "decisions_pdf_sha256": "930f1e4a4c2c062fc6f66273954136cfb557e62f90965fd63ca480cb48736e0c"
+  },
+  "safety": {
+    "secrets_packaged": false,
+    "raw_candidate_identity_packaged": false,
+    "database_mutation": false,
+    "worker_deployment": false,
+    "production_action": false,
+    "financial_authority_changed": false
+  }
+}
