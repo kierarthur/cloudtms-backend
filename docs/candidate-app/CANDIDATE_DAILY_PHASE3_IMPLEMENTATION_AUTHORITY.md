@@ -226,3 +226,11 @@ The product owner explicitly decided that the first enabled TEST exercise is not
 Therefore R13 introduces no candidate allowlist property and no candidate-specific identifier in source. Before enablement, every eligible source row must nevertheless have an exact, unambiguous TEST source link because the database remains the identity authority. Any missing or ambiguous link remains a fail-closed signed-route result; the Apps Script must not nominate a replacement candidate.
 
 This later-controlling product decision supersedes earlier wording that described a one-candidate or one-cohort technical gate. It does not enable the bridge, enable Candidate features, change the database, or authorise production.
+
+## 16. Existing global key and new-app-only onboarding
+
+The global Candidate key is the admin-controlled cross-system identity seed. It must resolve to exactly one existing CloudTMS Candidate UUID. That rule applies equally to a candidate who used the temporary legacy app and to a candidate who registers only in the new Candidate App after the legacy browser has been retired.
+
+The runtime Google bridge does not transmit or query the reversible global key on every request. A controlled onboarding/bootstrap step uses the global key once to identify the existing Candidate record, derives the separate non-reversible `GOOGLE_CREDENTIALLY_PUBLIC_ID` HMAC, and binds that HMAC to the same Candidate UUID in `private.candidate_daily_source_links`. It must never create or replace a Candidate row. No match, multiple matches, duplicate source ownership or conflicting source history fails closed for operator resolution.
+
+The current R13 implementation proves this design boundary but does not perform the TEST bootstrap. Enabled proving therefore remains blocked until the admin onboarding path is independently verified for both a legacy-coexistence candidate and a new-app-only candidate.

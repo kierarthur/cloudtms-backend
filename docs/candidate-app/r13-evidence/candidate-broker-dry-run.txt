@@ -1,0 +1,32 @@
+
+ ⛅️ wrangler 4.43.0 (update available 4.123.0)
+──────────────────────────────────────────────
+Total Upload: 141.59 KiB / gzip: 28.63 KiB
+Your Worker has access to the following bindings:
+Binding                                                                                                   Resource                  
+env.CLOUDTMS_PRIVATE (test-cloudtms-candidate-private-api)                                                Worker                    
+env.CANDIDATE_GENERAL_RATE_LIMIT (120 requests/60s)                                                       Rate Limit                
+env.CANDIDATE_AUTH_RATE_LIMIT (10 requests/60s)                                                           Rate Limit                
+env.CANDIDATE_MANAGER_RATE_LIMIT (60 requests/60s)                                                        Rate Limit                
+env.CANDIDATE_UPLOAD_RATE_LIMIT (20 requests/60s)                                                         Rate Limit                
+env.CANDIDATE_DAILY_READ_RATE_LIMIT (60 requests/60s)                                                     Rate Limit                
+env.CANDIDATE_DAILY_COMMAND_RATE_LIMIT (12 requests/60s)                                                  Rate Limit                
+env.CANDIDATE_DAILY_EFFECT_RATE_LIMIT (6 requests/60s)                                                    Rate Limit                
+env.CANDIDATE_DAILY_SYSTEM_RATE_LIMIT (120 requests/60s)                                                  Rate Limit                
+env.CANDIDATE_APP_ENVIRONMENT ("TEST")                                                                    Environment Variable      
+env.CANDIDATE_ALLOWED_ORIGINS ("https://testmode.arthur-rai.co.uk")                                       Environment Variable      
+env.CANDIDATE_ALLOW_NATIVE_CLIENTS ("true")                                                               Environment Variable      
+env.CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION ("1")                                                       Environment Variable      
+env.CANDIDATE_BROKER_ACCESS_TOKEN_READ_KEY_VERSIONS ("1")                                                 Environment Variable      
+env.CANDIDATE_BROKER_REFRESH_TOKEN_KEY_VERSION ("1")                                                      Environment Variable      
+env.CANDIDATE_BROKER_REFRESH_TOKEN_READ_KEY_VERSIONS ("1")                                                Environment Variable      
+env.CANDIDATE_BROKER_MANAGER_HANDOFF_KEY_VERSION ("1")                                                    Environment Variable      
+env.CANDIDATE_BROKER_MANAGER_HANDOFF_READ_KEY_VERSIONS ("1")                                              Environment Variable      
+env.CANDIDATE_BROKER_PUBLIC_SESSION_ID_KEY_VERSION ("1")                                                  Environment Variable      
+env.CANDIDATE_BROKER_PUBLIC_SESSION_ID_READ_KEY_VERSIONS ("1")                                            Environment Variable      
+env.CANDIDATE_BROKER_DEVICE_TOKEN_ENCRYPTION_KEY_VERSION ("1")                                            Environment Variable      
+env.CANDIDATE_BROKER_DEVICE_TOKEN_ENCRYPTION_READ_KEY_VERSIONS ("1")                                      Environment Variable      
+env.CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_KEY_VERSION ("1")                                              Environment Variable      
+env.CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_READ_KEY_VERSIONS ("1")                                        Environment Variable      
+
+--dry-run: exiting now.

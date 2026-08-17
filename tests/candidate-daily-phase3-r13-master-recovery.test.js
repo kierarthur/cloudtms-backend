@@ -5,8 +5,10 @@ import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
 
-const helper = path.join(process.cwd(), 'docs', 'candidate-app', 'phase3-apps-script',
+const repositoryHelper = path.join(process.cwd(), 'docs', 'candidate-app', 'phase3-apps-script',
   'master-rota', 'CloudTMSCandidateBridge.gs');
+const packagedHelper = path.join(process.cwd(), 'source', 'master-rota', 'CloudTMSCandidateBridge.gs');
+const helper = fs.existsSync(repositoryHelper) ? repositoryHelper : packagedHelper;
 const source = fs.readFileSync(helper, 'utf8');
 
 function utilities() {

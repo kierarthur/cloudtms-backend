@@ -1,0 +1,7 @@
+finding,independent_r12_result,r13_disposition,evidence
+R12-MASTER-001,No technical one-candidate cohort gate,SUPERSEDED,"Product owner selected population-wide TEST; two eligible fixtures are included; no candidate identity is hard-coded"
+R12-MASTER-002,BATCH_IN_PROGRESS state deleted,CLOSED,"Closed classifier retains exact manifest/body/key/correlation and suppresses completion"
+R12-MASTER-003,No pending recovery owner,CLOSED,"Ordered pending index replays exact frozen event before any new event; no TTL replacement"
+R12-MASTER-004,Single property exceeds quota,CLOSED,"UTF-8 chunks <=7000 bytes; store preflight <=480000 bytes; exact SHA/byte reconstruction"
+FUTURE-PHASE6-EFFECT-IDEMPOTENCY,Unwired empty effect-completion key,DEFERRED,"Not invoked or authorised in Phase 3; must close before Phase 6 provider effects"
+
