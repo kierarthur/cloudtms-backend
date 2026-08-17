@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay targeted fast route, certified reuse and bounded completion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 30,
+  "function_count": 32,
   "functions": [
     {
       "schema": "private",
@@ -630,9 +630,9 @@
     },
     {
       "schema": "public",
-      "name": "pay_preview_candidate_build_canonical_lines",
+      "name": "pay_preview_candidate_build_finance_case_baseline",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "1224b02c8ddce21d2bdff6dd98d3a9b42f5ed1084c952833a300a58b1404f659",
+      "definition_sha256": "c888bfdd378c6157fdb35cf7b8e6f65042c27154f63ee4f85fcf279537ccd65c",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -666,8 +666,89 @@
         }
       ],
       "source_files": [
-        "supabase/repeatable/05082026_1545_pay_preview_candidate_build_canonical_lines.sql",
-        "supabase/repeatable/08082026_0354_pay_preview_candidate_build_canonical_lines_authority.sql"
+        "supabase/repeatable/17082026_2052_pay_finance_resolution_cancel_authority.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_preview_candidate_build_canonical_lines",
+      "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
+      "definition_sha256": "0fd2ea2fb663a0a59f38c1cc2b7d95fbf23ce0f959702cb32d0f0a2e8a8927e6",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public",
+        "plpgsql_check.mode=disabled",
+        "plpgsql_check.profiler=off",
+        "plpgsql_check.tracer=off",
+        "plpgsql_check.constants_tracing=off",
+        "plpgsql_check.cursors_leaks=off",
+        "plpgsql_check.strict_cursors_leaks=off",
+        "plpgsql_check.fatal_errors=off"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/17082026_2052_pay_finance_resolution_cancel_authority.sql"
+      ]
+    },
+    {
+      "schema": "public",
+      "name": "pay_workbench_session_clear_case_resolution",
+      "identity_arguments": "p_session_id uuid, p_actor_user_id uuid, p_resolution_payload_json jsonb",
+      "definition_sha256": "415853e25cde34ca80638573cc3a4d303207936caa4d2084e716efb9b1cd31c7",
+      "owner": "postgres",
+      "security_definer": true,
+      "proconfig": [
+        "search_path=public",
+        "plpgsql_check.mode=disabled",
+        "plpgsql_check.profiler=off",
+        "plpgsql_check.tracer=off",
+        "plpgsql_check.constants_tracing=off",
+        "plpgsql_check.cursors_leaks=off",
+        "plpgsql_check.strict_cursors_leaks=off",
+        "plpgsql_check.fatal_errors=off"
+      ],
+      "expanded_acl": [
+        {
+          "grantee": "authenticated",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "postgres",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantor": "postgres",
+          "is_grantable": false,
+          "privilege_type": "EXECUTE"
+        }
+      ],
+      "source_files": [
+        "supabase/repeatable/17082026_2052_pay_finance_resolution_cancel_authority.sql"
       ]
     },
     {

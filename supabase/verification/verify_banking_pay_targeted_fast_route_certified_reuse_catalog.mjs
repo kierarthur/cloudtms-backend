@@ -29,6 +29,7 @@ const clonePath = 'supabase/repeatable/04082026_1302_pay_workbench_session_clone
 const cursorPreservePath = 'supabase/repeatable/05082026_1348_pay_workbench_fact_cursor_preserve_v2.sql';
 const cursorTransitionPath = 'supabase/repeatable/05082026_1539_pay_workbench_fact_cursor_transition_v3.sql';
 const claimStartPath = 'supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql';
+const financeCancellationAuthorityPath = 'supabase/repeatable/17082026_2052_pay_finance_resolution_cancel_authority.sql';
 const jamesSerializer = fs.readFileSync(path.join(repoRoot, jamesSerializerPath), 'utf8');
 const jamesHelper = fs.readFileSync(path.join(repoRoot, jamesHelperPath), 'utf8');
 const jamesSynchronizer = fs.readFileSync(path.join(repoRoot, jamesSynchronizerPath), 'utf8');
@@ -111,6 +112,22 @@ for (const [schema, name, sourceFiles] of requiredJamesOwners) {
   if (matches.length !== 1 || JSON.stringify(matches[0].source_files) !== JSON.stringify(sourceFiles)) {
     problems.push(`James authority owner or source file is not exact: ${schema}.${name}`);
   }
+}
+
+const requiredFinanceCancellationOwners = [
+  ['public', 'pay_preview_candidate_build_finance_case_baseline'],
+  ['public', 'pay_preview_candidate_build_canonical_lines'],
+  ['public', 'pay_workbench_session_clear_case_resolution'],
+];
+for (const [schema, name] of requiredFinanceCancellationOwners) {
+  const matches = expected.filter((item) => item.schema === schema && item.name === name);
+  if (matches.length !== 1
+      || JSON.stringify(matches[0].source_files) !== JSON.stringify([financeCancellationAuthorityPath])) {
+    problems.push(`finance cancellation owner or source file is not exact: ${schema}.${name}`);
+  }
+}
+if (!fs.existsSync(path.join(repoRoot, financeCancellationAuthorityPath))) {
+  problems.push('finance cancellation authority source file is missing');
 }
 
 const helperManifest = expected.find((item) =>

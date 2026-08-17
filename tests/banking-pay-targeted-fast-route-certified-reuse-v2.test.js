@@ -157,9 +157,9 @@ test('ACL and catalogue verifier preserve least privilege and one manifest owner
   assert.match(acl, /pay_workbench_candidate_delta_refresh_chunk[\s\S]+FROM PUBLIC,anon,authenticated,service_role[\s\S]+TO service_role/);
   assert.match(acl, /pay_workbench_delta_write_compatible_rows_v1[\s\S]+FROM PUBLIC,anon,authenticated,service_role/);
   assert.doesNotMatch(acl.match(/pay_workbench_delta_write_compatible_rows_v1[\s\S]*$/)?.[0] || '', /TO service_role/);
-  assert.equal(catalogue.function_count, 30);
-  assert.equal(catalogue.functions.length, 30);
-  assert.equal(new Set(catalogue.functions.map((entry) => entry.schema + '.' + entry.name + '(' + entry.identity_arguments + ')')).size, 30);
+  assert.equal(catalogue.function_count, 32);
+  assert.equal(catalogue.functions.length, 32);
+  assert.equal(new Set(catalogue.functions.map((entry) => entry.schema + '.' + entry.name + '(' + entry.identity_arguments + ')')).size, 32);
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_enqueue_stage_continuation'));
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_fail_job'));
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_candidate_source_build_chunk_legacy_v1'));
@@ -168,6 +168,8 @@ test('ACL and catalogue verifier preserve least privilege and one manifest owner
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_mark_finance_case_dirty'));
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_repair_orphaned_pending_source_build'));
   assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_candidate_session_version_rebase_v1'));
+  assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_preview_candidate_build_finance_case_baseline'));
+  assert.ok(catalogue.functions.some((entry) => entry.name === 'pay_workbench_session_clear_case_resolution'));
   assert.match(verifier, /definition_sha256/);
   assert.match(verifier, /unexpected overload/);
   assert.match(workflow, /verify_banking_pay_targeted_fast_route_certified_reuse_catalog\.mjs/);
