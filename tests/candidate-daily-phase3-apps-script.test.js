@@ -140,7 +140,7 @@ test('certified rollback sources retain the independently recorded SHA-256 autho
 });
 
 test('Availability revised Code.gs differs from certified source only at the approved Phase 3 seams', () => {
-  const result = spawnSync('git', ['diff', '--no-index', '--unified=0', '--', availabilityRollback, availabilityCode],
+  const result = spawnSync('git', ['-c', 'core.autocrlf=false', 'diff', '--no-index', '--text', '--unified=0', '--', availabilityRollback, availabilityCode],
     { encoding: 'utf8' });
   assert.equal(result.status, 1);
   const hunks = [...result.stdout.matchAll(/^@@[^\n]+@@/gm)].map((match) => match[0]);
@@ -166,7 +166,7 @@ test('Availability revised Code.gs differs from certified source only at the app
 });
 
 test('Master Rota revised Code.gs adds only the post-legacy mirror seam and preserves the operator setup utility', () => {
-  const result = spawnSync('git', ['diff', '--no-index', '--unified=0', '--', masterRollback, masterCode],
+  const result = spawnSync('git', ['-c', 'core.autocrlf=false', 'diff', '--no-index', '--text', '--unified=0', '--', masterRollback, masterCode],
     { encoding: 'utf8' });
   assert.equal(result.status, 1);
   const hunks = [...result.stdout.matchAll(/^@@[^\n]+@@/gm)].map((match) => match[0]);
