@@ -1,8 +1,8 @@
 # CloudTMS Candidate App authority and caller map
 
-Status: TEST broker/private-backend authority map, updated 16 August 2026. The accepted Candidate authority below is preserved. R7 retains the dark Candidate Daily transport/policy seam introduced in R6: 11 authenticated Candidate routes and 13 signed Google-system routes from the sole merged R5 OpenAPI, with no Daily business/RPC authority installed or enabled. R7 closes only the nine bounded public-error, response-reconstruction, 403, pre-auth-rate, nonce-age, correlation, framing, query-order and Fetch-boundary findings. Candidate features remain disabled pending independent approval.
+Status: TEST broker/private-backend authority map, updated 17 August 2026 for Candidate Daily Phase 2 and Phase 1B R8. The accepted Candidate authority below is preserved. R8 installs the additive twelve-table/thirteen-RPC Daily authority and wires the previously dark 11 authenticated Candidate routes plus 13 signed Google-system routes through the private Worker. All Candidate feature flags and Daily entitlements remain false/empty, so Candidate business use is still unavailable pending independent approval and later rollout gates.
 
-Candidate Daily current authority is documented in `CANDIDATE_DAILY_PHASE1A_IMPLEMENTATION_AUTHORITY.md`. Until Phase 2/1B, those routes can authenticate/validate/rate-limit only and fail closed; they cannot read or mutate availability, rota, Emergency or Google state. The later temporary legacy seam is existing browser -> existing Apps Script -> narrow signed server adapter -> the same CloudTMS Daily authority. It is not a new browser authority.
+Candidate Daily current authority is documented in `CANDIDATE_DAILY_PHASE2_PHASE1B_IMPLEMENTATION_AUTHORITY.md`. Phase 2 owns canonical generations, availability, source links, receipts, projection/outbox state, authority transitions and external-effect receipts. Phase 1B maps the frozen broker contract to those owners and reconstructs strict public envelopes. The later temporary legacy seam remains existing browser -> existing Apps Script -> narrow signed server adapter -> the same CloudTMS Daily authority. It is not a new browser authority, and no Google source was edited by R8.
 
 ## Canonical owner graph
 
@@ -28,7 +28,7 @@ existing invoice and payment-eligibility pipelines
 
 Neither Worker alters the existing financial algorithms. The broker cannot access Supabase or R2. The private API adapts factual input to the existing WEEKLY/DAILY owners. Banking Pay is not called or changed.
 
-The private Candidate API alone verifies Google-system HMAC v1 and owns the R2 nonce namespace. The public broker has neither Google-system secret nor replay storage. Signed-system pre-auth traffic always consumes a source-IP bucket and either an accepted-key-ID bucket or one shared invalid-key bucket before private HMAC work. Phase 1A routes remain dark and therefore do not yet adapt any Google or Daily business input.
+The private Candidate API alone verifies Google-system HMAC v1 and owns the R2 nonce namespace. The public broker has neither Google-system secret nor replay storage. Signed-system pre-auth traffic always consumes a source-IP bucket and either an accepted-key-ID bucket or one shared invalid-key bucket before private HMAC work. R8 signed-system routes may reach the installed Daily RPC authority without consulting the Candidate product switch, preserving coexistence continuity. Candidate-facing Daily routes additionally require the global Daily flag, exact entitlement, current mode, complete active generation and freshness proof; those prerequisites are absent in TEST.
 
 ## Fourteen Candidate business RPCs and HTTP callers
 

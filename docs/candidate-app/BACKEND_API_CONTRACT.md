@@ -1,15 +1,15 @@
 # CloudTMS Candidate App backend contract
 
-Status: versioned TEST implementation contract, updated 16 August 2026 for the Candidate Daily Phase 1A R7 correction. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. The accepted Candidate contract below remains authoritative for the installed product. Candidate Daily Phase 1A is an additive dark transport layer documented separately in `CANDIDATE_DAILY_PHASE1A_IMPLEMENTATION_AUTHORITY.md`; it is not enabled business authority and has no Daily table/RPC owner.
+Status: versioned TEST implementation contract, updated 17 August 2026 for Candidate Daily Phase 2 and Phase 1B R8. The public Candidate broker and private CloudTMS API are separate Worker artefacts. The app, Candidate web client and manager browser call only the broker. Only the private CloudTMS API can compose Supabase, R2, mail and canonical CloudTMS authorities. The accepted Candidate contract below remains authoritative for the installed product. The additive Daily database/RPC authority is installed and the broker-to-RPC integration is deployed, but Candidate business capability remains disabled by the global flag and empty entitlement catalogue.
 
-Installed baseline machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Candidate Daily Phase 1A sole merged contract: `CANDIDATE_API_OPENAPI_V1_MERGED_R5.yaml`, carried unchanged through R7, SHA-256 `1e4362f363e02eda34405f1f7edacdf7db0da8aad2a018cf75a5cd0993f765fa`. Trust and deployment contract: `BROKER_PRIVATE_TOPOLOGY.md`.
+Installed baseline machine-readable contract: `CANDIDATE_API_OPENAPI_V1.yaml`. Candidate Daily current merged contract: `CANDIDATE_API_OPENAPI_V1_MERGED_R8.yaml`; it preserves the accepted R5 paths and schemas while recording the installed Phase 2/1B implementation state. Trust and deployment contract: `BROKER_PRIVATE_TOPOLOGY.md`. Database and integration authority: `CANDIDATE_DAILY_PHASE2_PHASE1B_IMPLEMENTATION_AUTHORITY.md`.
 
 ## Boundary rules
 
 - Public broker Candidate API: `/candidate-app/v1`.
 - Public broker manager API: `/candidate-manager/v1`.
-- Dark Candidate Daily API: `/candidate-app/v1/daily/*` (11 closed operations; authenticated but globally disabled).
-- Dark signed Google-system API: `/candidate-system/v1/google-availability/*` (13 closed operations; no browser CORS/cookie/access-token authority).
+- Candidate Daily API: `/candidate-app/v1/daily/*` (11 closed operations; authenticated; additionally gated by global flag, exact entitlement, mode, complete generation and freshness).
+- Signed Google-system API: `/candidate-system/v1/google-availability/*` (13 closed operations; no browser CORS/cookie/access-token authority; continuity is not gated by the Candidate product switch).
 - Private service-bound Candidate API: `/private/candidate-app/v1`.
 - Private service-bound manager API: `/private/candidate-manager/v1`.
 - Private service-bound Google-system API: `/private/candidate-system/v1` (service-authenticated, then HMAC/nonce verified).
