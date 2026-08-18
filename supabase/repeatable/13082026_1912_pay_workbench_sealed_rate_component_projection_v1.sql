@@ -227,13 +227,35 @@ AS $function$
       AND (p_timesheet_ids IS NULL OR baseline.timesheet_id=ANY(p_timesheet_ids))
     GROUP BY baseline.timesheet_id,UPPER(BTRIM(baseline.economic_key_type)),
       BTRIM(baseline.economic_key_value)
+  ), sealed_finance_case_authority AS MATERIALIZED (
+    SELECT fact.build_id,fact.candidate_id,fact.finance_case_id,
+      COUNT(*)::integer AS evidence_count,
+      COUNT(DISTINCT UPPER(NULLIF(BTRIM(fact.source_payload_json->>'case_type'),'')))::integer
+        AS distinct_case_type_count,
+      MIN(UPPER(NULLIF(BTRIM(fact.source_payload_json->>'case_type'),''))) AS case_type
+    FROM private.banking_pay_workbench_economic_build_facts fact
+    JOIN build_authority build ON build.id=fact.build_id
+    WHERE fact.fact_family='FINANCE_CASE_IDENTITY'
+      AND fact.candidate_id=p_candidate_id
+      AND fact.finance_case_id IS NOT NULL
+    GROUP BY fact.build_id,fact.candidate_id,fact.finance_case_id
   ), reservation_totals AS MATERIALIZED (
     SELECT reservation.timesheet_id,
       UPPER(BTRIM(reservation.economic_key_type)) AS economic_key_type,
       BTRIM(reservation.economic_key_value) AS economic_key_value,
-      ROUND(COALESCE(SUM(reservation.reserved_source_amount),0),2) AS reserved_ex_vat
+      ROUND(COALESCE(SUM(CASE
+        WHEN case_authority.evidence_count=1
+          AND case_authority.distinct_case_type_count=1
+          AND case_authority.case_type='OVERPAYMENT'
+          THEN -ABS(COALESCE(reservation.reserved_source_amount,0))
+        ELSE COALESCE(reservation.reserved_source_amount,0)
+      END),0),2) AS reserved_ex_vat
     FROM private.banking_pay_workbench_economic_build_facts reservation
     JOIN build_authority build ON build.id=reservation.build_id
+    LEFT JOIN sealed_finance_case_authority case_authority
+      ON case_authority.build_id=reservation.build_id
+     AND case_authority.candidate_id=reservation.candidate_id
+     AND case_authority.finance_case_id=reservation.finance_case_id
     WHERE reservation.fact_family='RESERVATION_COMPONENT'
       AND reservation.candidate_id=p_candidate_id
       AND (p_timesheet_ids IS NULL OR reservation.timesheet_id=ANY(p_timesheet_ids))
@@ -327,18 +349,6 @@ AS $function$
     WHERE bucket.validated_failure IS NULL
     GROUP BY bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)),
       BTRIM(bucket.economic_key_value)
-  ), sealed_finance_case_authority AS MATERIALIZED (
-    SELECT fact.build_id,fact.candidate_id,fact.finance_case_id,
-      COUNT(*)::integer AS evidence_count,
-      COUNT(DISTINCT UPPER(NULLIF(BTRIM(fact.source_payload_json->>'case_type'),'')))::integer
-        AS distinct_case_type_count,
-      MIN(UPPER(NULLIF(BTRIM(fact.source_payload_json->>'case_type'),''))) AS case_type
-    FROM private.banking_pay_workbench_economic_build_facts fact
-    JOIN build_authority build ON build.id=fact.build_id
-    WHERE fact.fact_family='FINANCE_CASE_IDENTITY'
-      AND fact.candidate_id=p_candidate_id
-      AND fact.finance_case_id IS NOT NULL
-    GROUP BY fact.build_id,fact.candidate_id,fact.finance_case_id
   ), sealed_parent_facts AS MATERIALIZED (
     SELECT fact.fact_family||':'||fact.natural_key AS fact_identity,
       CASE WHEN fact.fact_family='RESERVATION_COMPONENT' THEN 'RESERVATION'
@@ -346,6 +356,11 @@ AS $function$
       fact.timesheet_id,UPPER(BTRIM(fact.economic_key_type)) AS economic_key_type,
       BTRIM(fact.economic_key_value) AS economic_key_value,
       ROUND(CASE WHEN fact.fact_family='RESERVATION_COMPONENT'
+          AND case_authority.evidence_count=1
+          AND case_authority.distinct_case_type_count=1
+          AND case_authority.case_type='OVERPAYMENT'
+        THEN -ABS(COALESCE(fact.reserved_source_amount,0))
+        WHEN fact.fact_family='RESERVATION_COMPONENT'
         THEN COALESCE(fact.reserved_source_amount,0)
         ELSE COALESCE(fact.amount_ex_vat,0) END,2) AS parent_amount_ex_vat,
       CASE WHEN fact.fact_family='RESERVATION_COMPONENT' THEN NULL::numeric

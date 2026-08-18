@@ -1206,6 +1206,23 @@ begin
   v_phase_started_at := clock_timestamp();
 
   IF COALESCE(v_authoritative_timesheet_scope, false) THEN
+    DROP TABLE IF EXISTS pg_temp.tmp_sync_sealed_finance_case_authority;
+    CREATE TEMP TABLE pg_temp.tmp_sync_sealed_finance_case_authority ON COMMIT DROP AS
+    SELECT fact.build_id,fact.candidate_id,fact.finance_case_id,
+      COUNT(*)::integer AS evidence_count,
+      COUNT(DISTINCT UPPER(NULLIF(BTRIM(fact.source_payload_json->>'case_type'),'')))::integer
+        AS distinct_case_type_count,
+      MIN(UPPER(NULLIF(BTRIM(fact.source_payload_json->>'case_type'),''))) AS case_type
+    FROM private.banking_pay_workbench_economic_build_facts fact
+    WHERE fact.build_id=p_build_id
+      AND fact.fact_family='FINANCE_CASE_IDENTITY'
+      AND fact.finance_case_id IS NOT NULL
+    GROUP BY fact.build_id,fact.candidate_id,fact.finance_case_id;
+
+    CREATE UNIQUE INDEX tmp_sync_sealed_finance_case_authority_idx
+      ON pg_temp.tmp_sync_sealed_finance_case_authority(
+        build_id,candidate_id,finance_case_id);
+
     INSERT INTO pg_temp.tmp_sync_authoritative_components (
       timesheet_id,
       key_type,
@@ -1245,8 +1262,18 @@ begin
       FROM (
         SELECT fact.timesheet_id,fact.economic_key_type AS key_type,
           fact.economic_key_value AS key_value,
-          SUM(COALESCE(fact.reserved_source_amount,0)) AS amount_ex_vat
+          SUM(CASE
+            WHEN case_authority.evidence_count=1
+              AND case_authority.distinct_case_type_count=1
+              AND case_authority.case_type='OVERPAYMENT'
+              THEN -ABS(COALESCE(fact.reserved_source_amount,0))
+            ELSE COALESCE(fact.reserved_source_amount,0)
+          END) AS amount_ex_vat
         FROM private.banking_pay_workbench_economic_build_facts fact
+        LEFT JOIN pg_temp.tmp_sync_sealed_finance_case_authority case_authority
+          ON case_authority.build_id=fact.build_id
+         AND case_authority.candidate_id=fact.candidate_id
+         AND case_authority.finance_case_id=fact.finance_case_id
         WHERE fact.build_id=p_build_id AND fact.fact_family='RESERVATION_COMPONENT'
         GROUP BY fact.timesheet_id,fact.economic_key_type,fact.economic_key_value
       ) AS reserved_component
@@ -1778,6 +1805,10 @@ begin
           NULLIF(BTRIM(COALESCE(fact.source_payload_json#>>'{pay_batch_item,source_ref}',
             fact.source_payload_json->>'source_ref')),'') AS source_ref,
           COALESCE(NULLIF(BTRIM(fact.source_payload_json#>>'{pay_batch_item,item_type}'),''),
+            CASE WHEN case_authority.evidence_count=1
+                AND case_authority.distinct_case_type_count=1
+                AND case_authority.case_type='OVERPAYMENT'
+              THEN 'OVERPAYMENT_RECOVERY' END,
             CASE UPPER(BTRIM(fact.economic_key_type))
               WHEN 'TS_DAY' THEN 'SEGMENT_DELTA' WHEN 'TS_TOTAL' THEN 'SEGMENT_DELTA'
               WHEN 'EXPENSE_CODE' THEN 'EXPENSE_DELTA'
@@ -1787,13 +1818,25 @@ begin
           UPPER(BTRIM(fact.economic_key_type)) AS component_key_type,
           BTRIM(fact.economic_key_value) AS component_key_value,
           COALESCE(NULLIF(BTRIM(fact.source_payload_json#>>'{economic_key,key_resolution_source}'),''),
+            CASE WHEN case_authority.evidence_count=1
+                AND case_authority.distinct_case_type_count=1
+                AND case_authority.case_type='OVERPAYMENT'
+              THEN 'FINANCE_CASE_IDENTITY' END,
             'SEALED_RESERVATION_COMPONENT') AS key_resolution_source,
           NULLIF(BTRIM(COALESCE(fact.source_payload_json#>>'{economic_key,key_resolution_failure_reason}',
             fact.source_payload_json->>'resolution_failure')),'') AS key_resolution_failure_reason,
-          ROUND(COALESCE(fact.reserved_source_amount,0),2) AS amount_ex_vat,
+          ROUND(CASE WHEN case_authority.evidence_count=1
+                AND case_authority.distinct_case_type_count=1
+                AND case_authority.case_type='OVERPAYMENT'
+              THEN -ABS(COALESCE(fact.reserved_source_amount,0))
+            ELSE COALESCE(fact.reserved_source_amount,0) END,2) AS amount_ex_vat,
           CASE WHEN jsonb_typeof(fact.source_payload_json->'breakdowns')='array'
             THEN fact.source_payload_json->'breakdowns' ELSE '[]'::jsonb END AS breakdowns
         FROM private.banking_pay_workbench_economic_build_facts fact
+        LEFT JOIN pg_temp.tmp_sync_sealed_finance_case_authority case_authority
+          ON case_authority.build_id=fact.build_id
+         AND case_authority.candidate_id=fact.candidate_id
+         AND case_authority.finance_case_id=fact.finance_case_id
         WHERE fact.build_id=p_build_id AND fact.candidate_id=v_preview_candidate_loop_id
           AND fact.fact_family='RESERVATION_COMPONENT'
           AND fact.timesheet_id IS NOT NULL

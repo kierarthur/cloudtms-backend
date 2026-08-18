@@ -328,7 +328,7 @@ BEGIN
   FROM private.pay_workbench_sealed_rate_component_projection_v1(
     v_build,v_candidate,ARRAY[v_timesheet]);
   IF v_failure IS NOT NULL OR v_count<>1
-     OR round(v_reserved,2) IS DISTINCT FROM 15::numeric THEN
+     OR round(v_reserved,2) IS DISTINCT FROM 5::numeric THEN
     RAISE EXCEPTION 'JAMES_RATE_SEALED_CASE_RECOVERY_AUTHORITY_FAILED';
   END IF;
 

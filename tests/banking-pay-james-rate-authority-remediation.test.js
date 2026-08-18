@@ -180,12 +180,28 @@ test('direct reservations reuse exact sealed finance-case recovery authority', (
     /COUNT\(\*\)::integer AS evidence_count[\s\S]*COUNT\(DISTINCT UPPER\(NULLIF\(BTRIM\(fact\.source_payload_json->>'case_type'\),''\)\)\)::integer/);
   assert.match(helper,
     /fact\.fact_family='RESERVATION_COMPONENT'[\s\S]*case_authority\.evidence_count=1[\s\S]*case_authority\.distinct_case_type_count=1[\s\S]*case_authority\.case_type='OVERPAYMENT'/);
+  assert.equal((helper.match(
+    /case_authority\.case_type='OVERPAYMENT'[\s\S]{0,120}THEN -ABS\(COALESCE\((?:reservation\.|fact\.)reserved_source_amount,0\)\)/g,
+  ) || []).length, 2, 'both the economic total and physical parent must sign sealed recovery reservations');
   assert.match(helper,
     /THEN 'FINANCE_CASE_IDENTITY' END\) AS key_resolution_source/);
   assert.match(helper,
     /synthetic_component_authorities AS MATERIALIZED \([\s\S]*jsonb_agg\(DISTINCT authority\.value ORDER BY authority\.value\)/);
   assert.doesNotMatch(helper,
     /synthetic_bucket_attributed AS MATERIALIZED \([\s\S]*?FROM synthetic_component_sources source\s+LEFT JOIN LATERAL jsonb_array_elements_text[\s\S]{0,180}\sGROUP BY source\.timesheet_id/);
+});
+
+test('synchronizer signs only singleton sealed overpayment reservation authority', () => {
+  assert.ok(synchronizer.includes('tmp_sync_sealed_finance_case_authority'));
+  assert.match(synchronizer,
+    /COUNT\(DISTINCT UPPER\(NULLIF\(BTRIM\(fact\.source_payload_json->>'case_type'\),''\)\)\)::integer[\s\S]*fact\.fact_family='FINANCE_CASE_IDENTITY'/);
+  assert.equal((synchronizer.match(
+    /case_authority\.evidence_count=1[\s\S]{0,140}case_authority\.distinct_case_type_count=1[\s\S]{0,140}case_authority\.case_type='OVERPAYMENT'[\s\S]{0,140}THEN -ABS\(COALESCE\(fact\.reserved_source_amount,0\)\)/g,
+  ) || []).length, 2, 'authoritative totals and preview workspaces must share the signed reservation rule');
+  assert.match(synchronizer,
+    /case_authority\.case_type='OVERPAYMENT'[\s\S]{0,140}THEN 'OVERPAYMENT_RECOVERY' END/);
+  assert.match(synchronizer,
+    /case_authority\.case_type='OVERPAYMENT'[\s\S]{0,140}THEN 'FINANCE_CASE_IDENTITY' END/);
 });
 
 test('specific sealed bucket evidence supersedes only the same top-level physical identity', () => {
