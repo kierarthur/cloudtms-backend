@@ -60,6 +60,9 @@ BEGIN
      OR position('selected_authority_priority' in v_helper_definition)=0
      OR position('RATE_AUTHORITY_SOURCE_PAY_METHOD_CONFLICT' in v_helper_definition)=0
      OR position('complete_evidence_digest' in v_helper_definition)=0
+     OR position('sealed_finance_case_authority' in v_helper_definition)=0
+     OR position('TOP_LEVEL_SOURCE_BASIS' in v_helper_definition)=0
+     OR position('CASE_BUCKET_RESOLUTION' in v_helper_definition)=0
      OR v_helper_definition ~* 'min\s*\(\s*(source\.)?source_pay_method\s*\)'
      OR position('RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED' in v_helper_definition)=0
      OR position('RATE_AUTHORITY_PARENT_COMPONENT_RECONCILIATION_MISMATCH' in v_helper_definition)=0 THEN
@@ -92,6 +95,8 @@ DECLARE
   v_candidate constant uuid := '6e8493ae-c207-497e-8d83-0b518753f590';
   v_reservation constant uuid := '13082026-1942-4000-8000-000000000003';
   v_ambiguous_reservation constant uuid := '13082026-1942-4000-8000-000000000004';
+  v_recovery_reservation constant uuid := '13082026-1942-4000-8000-000000000005';
+  v_recovery_case constant uuid := '13082026-1942-4000-8000-000000000006';
   v_family text := 'timesheet:'||v_timesheet::text;
   v_day_key text := 'RATE_BUCKET_V1|'||v_timesheet::text||'|'||
     'timesheet:'||v_timesheet::text||'|TS_DAY|2026-08-13|segment:test|DAY';
@@ -247,6 +252,89 @@ BEGIN
      OR round(v_reserved,2) IS DISTINCT FROM 10::numeric THEN
     RAISE EXCEPTION 'JAMES_RATE_EXACT_SEALED_AMOUNT_ATTRIBUTION_FAILED';
   END IF;
+
+  -- A bucket-resolution document is a more specific view of the same sealed
+  -- physical component. It must replace, rather than add to, the top-level
+  -- source basis for that exact physical identity.
+  UPDATE private.banking_pay_workbench_economic_build_facts
+  SET baseline_ex_vat=20,baseline_inc_vat=20
+  WHERE build_id=v_build AND fact_family='ENTITLEMENT_COMPONENT'
+    AND natural_key='fixture-entitlement';
+
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    amount_ex_vat,source_payload_json,financial_digest)
+  VALUES(v_build,'FROZEN_SETTLED_COMPONENT','fixture-specific-bucket-precedence',
+    v_candidate,v_timesheet,ARRAY[v_timesheet],'UNIT:'||v_timesheet::text,
+    'JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',5,
+    jsonb_build_object(
+      'frozen_source_basis_json',jsonb_build_object(
+        'source_family_key',v_family,'segment_stable_key','segment:test','band','DAY',
+        'physical_bucket_key',v_day_key,'source_pay_ex_vat',5,'source_charge_ex_vat',10),
+      'pay_batch_item',jsonb_build_object(
+        'frozen_resolution_payload_json',jsonb_build_object(
+          'case_components',jsonb_build_array(jsonb_build_object(
+            'source_basis_fingerprint','fixture-specific-bucket-precedence',
+            'saved_resolution_payload_json',jsonb_build_object(
+              'bucket_resolutions',jsonb_build_array(jsonb_build_object(
+                'component_amount_ex_vat',5,
+                'source_basis_json',jsonb_build_object(
+                  'source_family_key',v_family,'segment_stable_key','segment:test',
+                  'band','DAY','physical_bucket_key',v_day_key,
+                  'source_pay_ex_vat',5,'source_charge_ex_vat',10))))))))),
+    md5('fixture-specific-bucket-precedence'));
+
+  SELECT min(failure_code),sum(baseline_ex_vat)
+  INTO v_failure,v_baseline
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]);
+  IF v_failure IS NOT NULL OR round(v_baseline,2) IS DISTINCT FROM 20::numeric THEN
+    RAISE EXCEPTION 'JAMES_RATE_SPECIFIC_BUCKET_PRECEDENCE_FAILED';
+  END IF;
+
+  DELETE FROM private.banking_pay_workbench_economic_build_facts
+  WHERE build_id=v_build AND fact_family='FROZEN_SETTLED_COMPONENT'
+    AND natural_key='fixture-specific-bucket-precedence';
+  UPDATE private.banking_pay_workbench_economic_build_facts
+  SET baseline_ex_vat=15,baseline_inc_vat=15
+  WHERE build_id=v_build AND fact_family='ENTITLEMENT_COMPONENT'
+    AND natural_key='fixture-entitlement';
+
+  -- Direct advance reservations do not repeat pay-batch item classification.
+  -- Reuse the exact same-build sealed finance-case identity and remain
+  -- fail-closed if that identity is missing or conflicting.
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,source_id,finance_case_id,
+    source_payload_json,financial_digest)
+  VALUES(v_build,'FINANCE_CASE_IDENTITY','fixture-recovery-case',v_candidate,v_timesheet,
+    ARRAY[v_timesheet],'GLOBAL','JAMES_RATE_FIXTURE',v_recovery_case,v_recovery_case,
+    jsonb_build_object('case_type','OVERPAYMENT'),md5('fixture-recovery-case'));
+
+  INSERT INTO private.banking_pay_workbench_economic_build_facts(
+    build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,
+    dependency_unit_key,source_relation,economic_key_type,economic_key_value,
+    reserved_source_amount,finance_case_id,reservation_id,source_payload_json,financial_digest)
+  VALUES(v_build,'RESERVATION_COMPONENT','fixture-sealed-case-recovery',v_candidate,
+    v_timesheet,ARRAY[v_timesheet],'GLOBAL','JAMES_RATE_FIXTURE','TS_DAY','2026-08-13',
+    5,v_recovery_case,v_recovery_reservation,'{}'::jsonb,
+    md5('fixture-sealed-case-recovery'));
+
+  SELECT min(failure_code),count(*) FILTER(WHERE COALESCE(
+      evidence_json#>'{sealed_physical_attribution,match_authorities}','[]'::jsonb)
+      ? 'SIGNED_NON_CHARGE_RECOVERY_V1'),sum(reserved_ex_vat)
+  INTO v_failure,v_count,v_reserved
+  FROM private.pay_workbench_sealed_rate_component_projection_v1(
+    v_build,v_candidate,ARRAY[v_timesheet]);
+  IF v_failure IS NOT NULL OR v_count<>1
+     OR round(v_reserved,2) IS DISTINCT FROM 15::numeric THEN
+    RAISE EXCEPTION 'JAMES_RATE_SEALED_CASE_RECOVERY_AUTHORITY_FAILED';
+  END IF;
+
+  DELETE FROM private.banking_pay_workbench_economic_build_facts
+  WHERE build_id=v_build AND natural_key IN (
+    'fixture-recovery-case','fixture-sealed-case-recovery');
 
   INSERT INTO private.banking_pay_workbench_economic_build_facts(
     build_id,fact_family,natural_key,candidate_id,timesheet_id,subject_timesheet_ids,

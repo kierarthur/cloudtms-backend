@@ -179,12 +179,19 @@ if (!jamesSerializer.includes('FROM jsonb_each(CASE')
 for (const required of [
   'nested_evidence_raw', 'nested_evidence_normalized', 'exact_allocation_matched',
   'sealed_physical_amount_attribution', 'truth_residual_sources',
+  'sealed_finance_case_authority', 'FINANCE_CASE_IDENTITY',
+  'synthetic_component_authorities',
+  'TOP_LEVEL_SOURCE_BASIS', 'CASE_BUCKET_RESOLUTION',
   'RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED',
   'RATE_AUTHORITY_PARENT_COMPONENT_RECONCILIATION_MISMATCH',
 ]) {
   if (!jamesHelper.includes(required)) {
     problems.push(`sealed physical baseline/reservation attribution is missing: ${required}`);
   }
+}
+if (/synthetic_bucket_attributed AS MATERIALIZED \([\s\S]*?FROM synthetic_component_sources source\s+LEFT JOIN LATERAL jsonb_array_elements_text[\s\S]{0,180}\sGROUP BY source\.timesheet_id/
+  .test(jamesHelper)) {
+  problems.push('synthetic authority metadata still multiplies financial component rows');
 }
 for (const required of [
   'ACTIVE_ITEM_RESERVATION:', 'pay_batch_items_active_reservation',

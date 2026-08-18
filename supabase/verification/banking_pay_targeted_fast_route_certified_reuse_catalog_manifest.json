@@ -309,7 +309,7 @@
       "schema": "private",
       "name": "pay_workbench_sealed_rate_component_projection_v1",
       "identity_arguments": "p_build_id uuid, p_candidate_id uuid, p_timesheet_ids uuid[]",
-      "definition_sha256": "e1d6165282b5d41b17ab50fa9f9263711eea721318fe596001a9ab8e5f7abc23",
+      "definition_sha256": "459f4a67a0e381f7bb438d0b9fe3e383ff3f12d636bed25c36df018f37fff82e",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

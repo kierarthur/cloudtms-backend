@@ -327,6 +327,18 @@ AS $function$
     WHERE bucket.validated_failure IS NULL
     GROUP BY bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)),
       BTRIM(bucket.economic_key_value)
+  ), sealed_finance_case_authority AS MATERIALIZED (
+    SELECT fact.build_id,fact.candidate_id,fact.finance_case_id,
+      COUNT(*)::integer AS evidence_count,
+      COUNT(DISTINCT UPPER(NULLIF(BTRIM(fact.source_payload_json->>'case_type'),'')))::integer
+        AS distinct_case_type_count,
+      MIN(UPPER(NULLIF(BTRIM(fact.source_payload_json->>'case_type'),''))) AS case_type
+    FROM private.banking_pay_workbench_economic_build_facts fact
+    JOIN build_authority build ON build.id=fact.build_id
+    WHERE fact.fact_family='FINANCE_CASE_IDENTITY'
+      AND fact.candidate_id=p_candidate_id
+      AND fact.finance_case_id IS NOT NULL
+    GROUP BY fact.build_id,fact.candidate_id,fact.finance_case_id
   ), sealed_parent_facts AS MATERIALIZED (
     SELECT fact.fact_family||':'||fact.natural_key AS fact_identity,
       CASE WHEN fact.fact_family='RESERVATION_COMPONENT' THEN 'RESERVATION'
@@ -357,14 +369,31 @@ AS $function$
       UPPER(NULLIF(BTRIM(COALESCE(
         fact.source_payload_json#>>'{pay_batch_item,frozen_source_pay_method}',
         fact.source_payload_json->>'frozen_source_pay_method')),'')) AS sealed_source_pay_method,
-      UPPER(NULLIF(BTRIM(fact.source_payload_json->>'item_type'),'')) AS parent_item_type,
-      UPPER(NULLIF(BTRIM(fact.source_payload_json->>'key_resolution_source'),''))
-        AS key_resolution_source,
-      UPPER(NULLIF(BTRIM(fact.source_payload_json->>'item_type'),''))='OVERPAYMENT_RECOVERY'
-        AND UPPER(NULLIF(BTRIM(fact.source_payload_json->>'key_resolution_source'),''))=
-          'FINANCE_ITEM_AUTHORITY' AS is_signed_non_charge_recovery
+      COALESCE(UPPER(NULLIF(BTRIM(fact.source_payload_json->>'item_type'),'')),
+        CASE WHEN fact.fact_family='RESERVATION_COMPONENT'
+            AND case_authority.evidence_count=1
+            AND case_authority.distinct_case_type_count=1
+            AND case_authority.case_type='OVERPAYMENT'
+          THEN 'OVERPAYMENT_RECOVERY' END) AS parent_item_type,
+      COALESCE(UPPER(NULLIF(BTRIM(fact.source_payload_json->>'key_resolution_source'),'')),
+        CASE WHEN fact.fact_family='RESERVATION_COMPONENT'
+            AND case_authority.evidence_count=1
+            AND case_authority.distinct_case_type_count=1
+            AND case_authority.case_type='OVERPAYMENT'
+          THEN 'FINANCE_CASE_IDENTITY' END) AS key_resolution_source,
+      (UPPER(NULLIF(BTRIM(fact.source_payload_json->>'item_type'),''))='OVERPAYMENT_RECOVERY'
+          AND UPPER(NULLIF(BTRIM(fact.source_payload_json->>'key_resolution_source'),''))=
+            'FINANCE_ITEM_AUTHORITY')
+        OR (fact.fact_family='RESERVATION_COMPONENT'
+          AND case_authority.evidence_count=1
+          AND case_authority.distinct_case_type_count=1
+          AND case_authority.case_type='OVERPAYMENT') AS is_signed_non_charge_recovery
     FROM private.banking_pay_workbench_economic_build_facts fact
     JOIN build_authority build ON build.id=fact.build_id
+    LEFT JOIN sealed_finance_case_authority case_authority
+      ON case_authority.build_id=fact.build_id
+     AND case_authority.candidate_id=fact.candidate_id
+     AND case_authority.finance_case_id=fact.finance_case_id
     WHERE fact.fact_family IN ('FROZEN_SETTLED_COMPONENT','PAY_STATE_FALLBACK',
         'RESERVATION_COMPONENT')
       AND fact.candidate_id=p_candidate_id AND fact.timesheet_id IS NOT NULL
@@ -739,16 +768,36 @@ AS $function$
   ), nested_evidence_preferred AS MATERIALIZED (
     SELECT normalized.*
     FROM nested_evidence_digest normalized
-    WHERE NOT (normalized.evidence_origin='CASE_COMPONENT'
-      AND EXISTS(
-        SELECT 1 FROM nested_evidence_digest specific
-        WHERE specific.fact_identity=normalized.fact_identity
-          AND specific.evidence_container_identity IS NOT DISTINCT FROM
-            normalized.evidence_container_identity
-          AND specific.evidence_origin='CASE_BUCKET_RESOLUTION'
-          AND specific.bucket_code IS NOT NULL
-          AND specific.allocation_claimed
-          AND specific.allocated_amount_ex_vat IS NOT NULL))
+    WHERE NOT (
+      (normalized.evidence_origin='CASE_COMPONENT'
+        AND EXISTS(
+          SELECT 1 FROM nested_evidence_digest specific
+          WHERE specific.fact_identity=normalized.fact_identity
+            AND specific.evidence_container_identity IS NOT DISTINCT FROM
+              normalized.evidence_container_identity
+            AND specific.evidence_origin='CASE_BUCKET_RESOLUTION'
+            AND specific.bucket_code IS NOT NULL
+            AND specific.allocation_claimed
+            AND specific.allocated_amount_ex_vat IS NOT NULL))
+      OR (normalized.evidence_origin='TOP_LEVEL_SOURCE_BASIS'
+        AND normalized.allocation_claimed
+        AND normalized.allocated_amount_ex_vat IS NOT NULL
+        AND EXISTS(
+          SELECT 1 FROM nested_evidence_digest specific
+          WHERE specific.fact_identity=normalized.fact_identity
+            AND specific.evidence_origin IN
+              ('CASE_BUCKET_RESOLUTION','CORRECTION_BUCKET_RESOLUTION')
+            AND specific.allocation_claimed
+            AND specific.allocated_amount_ex_vat IS NOT NULL
+            AND (
+              (normalized.direct_physical_bucket_key IS NOT NULL
+                AND specific.direct_physical_bucket_key=
+                  normalized.direct_physical_bucket_key)
+              OR (normalized.component_member_identity IS NOT NULL
+                AND normalized.bucket_code IS NOT NULL
+                AND specific.component_member_identity=
+                  normalized.component_member_identity
+                AND specific.bucket_code=normalized.bucket_code)))))
   ), nested_evidence_deduped AS MATERIALIZED (
     SELECT ranked.*
     FROM (
@@ -1245,6 +1294,16 @@ AS $function$
   ), synthetic_component_sources AS MATERIALIZED (
     SELECT * FROM synthetic_baseline_sources
     UNION ALL SELECT * FROM truth_residual_sources
+  ), synthetic_component_authorities AS MATERIALIZED (
+    SELECT source.timesheet_id,source.economic_key_type,source.economic_key_value,
+      source.physical_bucket_key,
+      COALESCE(jsonb_agg(DISTINCT authority.value ORDER BY authority.value)
+        FILTER(WHERE authority.value IS NOT NULL),'[]'::jsonb) AS match_authorities
+    FROM synthetic_component_sources source
+    LEFT JOIN LATERAL jsonb_array_elements_text(
+      COALESCE(source.match_authorities,'[]'::jsonb)) authority(value) ON true
+    GROUP BY source.timesheet_id,source.economic_key_type,source.economic_key_value,
+      source.physical_bucket_key
   ), synthetic_bucket_attributed AS MATERIALIZED (
     SELECT source.timesheet_id,source.economic_key_type,source.economic_key_value,
       source.physical_bucket_key,
@@ -1282,14 +1341,13 @@ AS $function$
       MIN(source.conversion_context_digest) AS conversion_context_digest,
       (array_agg(source.source_basis_json ORDER BY source.is_residual DESC,
         source.revision_identity))[1] AS source_basis_json,
-      COALESCE(jsonb_agg(DISTINCT authority.value ORDER BY authority.value)
-        FILTER(WHERE authority.value IS NOT NULL), '[]'::jsonb)
-        AS match_authorities,BOOL_OR(source.is_residual) AS is_residual
+      COALESCE(authority.match_authorities,'[]'::jsonb) AS match_authorities,
+      BOOL_OR(source.is_residual) AS is_residual
     FROM synthetic_component_sources source
-    LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(source.match_authorities,'[]'::jsonb))
-      authority(value) ON true
+    LEFT JOIN synthetic_component_authorities authority
+      USING(timesheet_id,economic_key_type,economic_key_value,physical_bucket_key)
     GROUP BY source.timesheet_id,source.economic_key_type,source.economic_key_value,
-      source.physical_bucket_key
+      source.physical_bucket_key,authority.match_authorities
   ), physical_amount_rows AS MATERIALIZED (
     SELECT bucket.timesheet_id,UPPER(BTRIM(bucket.economic_key_type)) AS economic_key_type,
       BTRIM(bucket.economic_key_value) AS economic_key_value,

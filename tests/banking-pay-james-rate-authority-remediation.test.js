@@ -172,6 +172,31 @@ test('signed finance recovery is non-allocative sealed movement evidence, not ne
     /parent\.is_signed_non_charge_recovery IS NOT TRUE[\s\S]*RATE_AUTHORITY_PARENT_SOURCE_CHARGE_MISSING/);
 });
 
+test('direct reservations reuse exact sealed finance-case recovery authority', () => {
+  assert.match(helper,
+    /sealed_finance_case_authority AS MATERIALIZED \([\s\S]*fact\.fact_family='FINANCE_CASE_IDENTITY'/);
+  assert.match(helper,
+    /COUNT\(\*\)::integer AS evidence_count[\s\S]*COUNT\(DISTINCT UPPER\(NULLIF\(BTRIM\(fact\.source_payload_json->>'case_type'\),''\)\)\)::integer/);
+  assert.match(helper,
+    /fact\.fact_family='RESERVATION_COMPONENT'[\s\S]*case_authority\.evidence_count=1[\s\S]*case_authority\.distinct_case_type_count=1[\s\S]*case_authority\.case_type='OVERPAYMENT'/);
+  assert.match(helper,
+    /THEN 'FINANCE_CASE_IDENTITY' END\) AS key_resolution_source/);
+  assert.match(helper,
+    /synthetic_component_authorities AS MATERIALIZED \([\s\S]*jsonb_agg\(DISTINCT authority\.value ORDER BY authority\.value\)/);
+  assert.doesNotMatch(helper,
+    /synthetic_bucket_attributed AS MATERIALIZED \([\s\S]*?FROM synthetic_component_sources source\s+LEFT JOIN LATERAL jsonb_array_elements_text[\s\S]{0,180}\sGROUP BY source\.timesheet_id/);
+});
+
+test('specific sealed bucket evidence supersedes only the same top-level physical identity', () => {
+  assert.match(helper,
+    /normalized\.evidence_origin='TOP_LEVEL_SOURCE_BASIS'[\s\S]*specific\.evidence_origin IN\s*\('CASE_BUCKET_RESOLUTION','CORRECTION_BUCKET_RESOLUTION'\)/);
+  assert.match(helper,
+    /normalized\.direct_physical_bucket_key IS NOT NULL[\s\S]*specific\.direct_physical_bucket_key=\s*normalized\.direct_physical_bucket_key/);
+  assert.match(helper,
+    /normalized\.component_member_identity IS NOT NULL[\s\S]*normalized\.bucket_code IS NOT NULL[\s\S]*specific\.component_member_identity=\s*normalized\.component_member_identity[\s\S]*specific\.bucket_code=normalized\.bucket_code/);
+  assert.ok(helper.includes('RATE_AUTHORITY_NESTED_AMOUNT_OVERCONSUMED'));
+});
+
 test('zero-outstanding sealed buckets remain audit evidence but are not required modal components', () => {
   assert.match(helper,
     /AS builder_component_expected[\s\S]*FROM bucket_builder_delta delta/);
