@@ -20,6 +20,14 @@ const currentPreviewPagePath = path.join(
   '20072026_0117_banking_pay_preview_selection_revision.sql'
 );
 const currentPreviewPageSql = fs.readFileSync(currentPreviewPagePath, 'utf8');
+const currentBatchOverlaySql = fs.readFileSync(path.join(
+  repeatableDir,
+  '09082026_0825_pay_workbench_patch_preview_after_batch_mutation.sql'
+), 'utf8');
+const currentDraftScopeSeedSql = fs.readFileSync(path.join(
+  repeatableDir,
+  '21072026_1235_46_pay_workbench_prepare_draft_scope_seed.sql'
+), 'utf8');
 
 function functionBody(source, qualifiedName) {
   const startPattern = new RegExp(
@@ -71,6 +79,8 @@ test('candidate preview excludes rows reserved by an active draft or later payme
   assert.match(body, /active_item\.finance_component_id::text/);
   assert.match(body, /active_item\.finance_case_id::text/);
   assert.match(body, /active_item\.frozen_component_snapshot_json->>'canonical_correction_key'/);
+  assert.match(body, /active_item\.frozen_source_basis_json->>'linked_timesheet_id'/);
+  assert.match(body, /active_item\.frozen_component_snapshot_json#>>'\{source_basis_json,linked_timesheet_id\}'/);
   assert.match(body, /'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/);
 });
 
@@ -89,6 +99,14 @@ test('paged Ready to Pay count and rows use the same active-batch exclusion', ()
   assert.match(body, /active_batch\.cancelled_at_utc IS NULL/);
   assert.match(body, /active_batch_item\.finance_component_id::text/);
   assert.match(body, /active_batch_item\.finance_case_id::text/);
+  assert.equal(
+    (body.match(/active_batch_item\.frozen_source_basis_json->>'linked_timesheet_id'/g) || []).length,
+    4
+  );
+  assert.equal(
+    (body.match(/active_batch_item\.frozen_component_snapshot_json#>>'\{source_basis_json,linked_timesheet_id\}'/g) || []).length,
+    4
+  );
   assert.match(body, /'DRAFT'[\s\S]*'EXECUTING'[\s\S]*'AUTHORISED_FOR_PAYMENT'/);
   assert.match(
     body,
@@ -145,12 +163,14 @@ test('the historical candidate-preview owner is superseded by one later exact re
   ]);
 });
 
-test('draft cancellation still restores preview eligibility in the batch overlay function', () => {
+test('current batch overlay resolves the sealed linked-timesheet legacy shape and still restores cancellation eligibility', () => {
   const body = functionBody(
-    historicalFunctionsSql,
+    currentBatchOverlaySql,
     'public.pay_workbench_patch_preview_after_batch_mutation'
   );
 
+  assert.match(body, /batch_item\.frozen_source_basis_json->>'linked_timesheet_id'/);
+  assert.match(body, /batch_item\.frozen_component_snapshot_json#>>'\{source_basis_json,linked_timesheet_id\}'/);
   assert.match(
     body,
     /v_is_cancel_delete := v_operation_type IN \('DRAFT_DELETE', 'DRAFT_CANCEL'\)/
@@ -158,4 +178,21 @@ test('draft cancellation still restores preview eligibility in the batch overlay
   assert.match(body, /'post_draft_unavailable', false/);
   assert.match(body, /'post_draft_overlay_active', false/);
   assert.match(body, /'post_draft_overlay_operation_type', v_operation_type/);
+});
+
+test('draft seed independently rejects rows already frozen into an active batch', () => {
+  const body = functionBody(
+    currentDraftScopeSeedSql,
+    'public.pay_workbench_prepare_draft_scope_seed'
+  );
+
+  assert.match(body, /AS post_draft_overlay_unavailable/);
+  assert.match(body, /FROM public\.pay_batch_items AS active_item/);
+  assert.match(body, /active_candidate\.candidate_id = preview_row\.candidate_id/);
+  assert.match(body, /active_batch\.cancelled_at_utc IS NULL/);
+  assert.match(body, /active_item\.frozen_source_basis_json->>'linked_timesheet_id'/);
+  assert.match(body, /active_item\.frozen_component_snapshot_json#>>'\{source_basis_json,linked_timesheet_id\}'/);
+  assert.match(body, /active_item\.finance_component_id::text/);
+  assert.match(body, /active_item\.finance_case_id::text/);
+  assert.match(body, /COALESCE\(selected_candidate\.post_draft_overlay_unavailable, false\) IS TRUE/);
 });

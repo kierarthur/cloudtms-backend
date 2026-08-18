@@ -586,12 +586,91 @@ BEGIN
         ''
       ) AS policy_x_authority_scope,
       (
-        LOWER(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_applied', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
-        AND (
-          UPPER(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_operation_type', ''))) IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE')
-          OR LOWER(BTRIM(COALESCE(preview_row.row_json->>'selected', 'true'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
-          OR UPPER(BTRIM(COALESCE(preview_row.row_json->>'selection_state', preview_row.selection_state, ''))) <> 'SELECTED'
-          OR UPPER(BTRIM(COALESCE(preview_row.row_json->>'status', preview_row.status, ''))) <> 'READY'
+        (
+          LOWER(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_applied', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on')
+          AND (
+            UPPER(BTRIM(COALESCE(preview_row.row_json->>'post_draft_overlay_operation_type', ''))) IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE')
+            OR LOWER(BTRIM(COALESCE(preview_row.row_json->>'selected', 'true'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+            OR UPPER(BTRIM(COALESCE(preview_row.row_json->>'selection_state', preview_row.selection_state, ''))) <> 'SELECTED'
+            OR UPPER(BTRIM(COALESCE(preview_row.row_json->>'status', preview_row.status, ''))) <> 'READY'
+          )
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM public.pay_batch_items AS active_item
+          JOIN public.pay_batch_candidates AS active_candidate
+            ON active_candidate.id = active_item.pay_batch_candidate_id
+          JOIN public.pay_batches AS active_batch
+            ON active_batch.id = active_candidate.pay_batch_id
+          WHERE active_candidate.candidate_id = preview_row.candidate_id
+            AND COALESCE(active_item.is_voided, false) = false
+            AND active_batch.cancelled_at_utc IS NULL
+            AND UPPER(BTRIM(COALESCE(active_batch.status, ''))) IN (
+              'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM', 'PARTIAL',
+              'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+              'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+            )
+            AND (
+              (
+                COALESCE(
+                  active_item.timesheet_id,
+                  CASE
+                    WHEN UPPER(BTRIM(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                     AND NULLIF(BTRIM(COALESCE(active_item.frozen_source_basis_json->>'timesheet_id', '')), '')
+                       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                      THEN BTRIM(active_item.frozen_source_basis_json->>'timesheet_id')::uuid
+                    ELSE NULL::uuid
+                  END,
+                  CASE
+                    WHEN UPPER(BTRIM(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                     AND NULLIF(BTRIM(COALESCE(active_item.frozen_source_basis_json->>'linked_timesheet_id', '')), '')
+                       ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                      THEN BTRIM(active_item.frozen_source_basis_json->>'linked_timesheet_id')::uuid
+                    ELSE NULL::uuid
+                  END,
+                  CASE
+                    WHEN UPPER(BTRIM(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                     AND NULLIF(BTRIM(COALESCE(
+                       active_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}',
+                       ''
+                     )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                      THEN BTRIM(
+                        active_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}'
+                      )::uuid
+                    ELSE NULL::uuid
+                  END
+                ) = preview_row.timesheet_id
+                AND (
+                  (
+                    NULLIF(BTRIM(COALESCE(active_item.frozen_component_key_type, '')), '') IS NOT NULL
+                    AND NULLIF(BTRIM(COALESCE(active_item.frozen_component_key_value, '')), '') IS NOT NULL
+                    AND UPPER(BTRIM(active_item.frozen_component_key_type))
+                      = UPPER(BTRIM(COALESCE(preview_row.key_type, preview_row.row_json->>'key_type', '')))
+                    AND BTRIM(active_item.frozen_component_key_value)
+                      = BTRIM(COALESCE(preview_row.key_value, preview_row.row_json->>'key_value', ''))
+                  )
+                  OR (
+                    NULLIF(BTRIM(COALESCE(active_item.frozen_component_key_type, '')), '') IS NULL
+                    AND NULLIF(BTRIM(COALESCE(active_item.frozen_component_key_value, '')), '') IS NULL
+                  )
+                )
+              )
+              OR active_item.finance_component_id::text
+                = NULLIF(BTRIM(COALESCE(preview_row.row_json->>'finance_component_id', '')), '')
+              OR active_item.finance_case_id::text
+                = NULLIF(BTRIM(COALESCE(preview_row.row_json->>'finance_case_id', '')), '')
+              OR (
+                NULLIF(BTRIM(COALESCE(preview_row.row_json->>'canonical_correction_key', '')), '') IS NOT NULL
+                AND NULLIF(BTRIM(COALESCE(
+                  active_item.frozen_component_snapshot_json->>'canonical_correction_key',
+                  active_item.frozen_resolution_payload_json->>'canonical_correction_key',
+                  ''
+                )), '') = NULLIF(BTRIM(COALESCE(
+                  preview_row.row_json->>'canonical_correction_key',
+                  ''
+                )), '')
+              )
+            )
         )
       ) AS post_draft_overlay_unavailable,
       (

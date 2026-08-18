@@ -641,4 +641,55 @@ BEGIN
 END;
 $preconstraint_fixture$;
 
+DO $generated_resolution_audit_timestamp_fixture$
+DECLARE
+  v_before jsonb := jsonb_build_object(
+    'id','13082026-1942-4000-8000-000000000099',
+    'source_amount',220.00,
+    'remaining_source_amount',220.00,
+    'saved_resolution_result_json',jsonb_build_object(
+      'amount_only_resolution_reused',true,
+      'amount_only_resolution_reused_at_utc','2026-08-18T17:00:00Z',
+      'source_remaining_amount_ex_vat',220.00,
+      'target_remaining_amount_ex_vat',242.50,
+      'target_source_ratio',1.102272727273
+    )
+  );
+  v_capture jsonb;
+  v_execute jsonb;
+  v_economic_change jsonb;
+BEGIN
+  v_capture := private.pay_workbench_finance_effect_normalise_row_v1(
+    'pay_finance_case_components','UPDATE',
+    jsonb_set(v_before,
+      '{saved_resolution_result_json,amount_only_resolution_reused_at_utc}',
+      to_jsonb('2026-08-18T17:01:00Z'::text),false),
+    v_before
+  );
+  v_execute := private.pay_workbench_finance_effect_normalise_row_v1(
+    'pay_finance_case_components','UPDATE',
+    jsonb_set(v_before,
+      '{saved_resolution_result_json,amount_only_resolution_reused_at_utc}',
+      to_jsonb('2026-08-18T17:02:00Z'::text),false),
+    v_before
+  );
+  IF v_capture IS DISTINCT FROM v_execute THEN
+    RAISE EXCEPTION 'GENERATED_RESOLUTION_AUDIT_TIMESTAMP_NOT_NORMALISED';
+  END IF;
+
+  v_economic_change := private.pay_workbench_finance_effect_normalise_row_v1(
+    'pay_finance_case_components','UPDATE',
+    jsonb_set(
+      jsonb_set(v_before,'{remaining_source_amount}','221.00'::jsonb,false),
+      '{saved_resolution_result_json,amount_only_resolution_reused_at_utc}',
+      to_jsonb('2026-08-18T17:02:00Z'::text),false
+    ),
+    v_before
+  );
+  IF v_capture IS NOT DISTINCT FROM v_economic_change THEN
+    RAISE EXCEPTION 'GENERATED_RESOLUTION_NORMALISER_MASKED_ECONOMIC_CHANGE';
+  END IF;
+END;
+$generated_resolution_audit_timestamp_fixture$;
+
 ROLLBACK;

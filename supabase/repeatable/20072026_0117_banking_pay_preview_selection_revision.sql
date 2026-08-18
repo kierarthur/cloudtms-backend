@@ -223,8 +223,34 @@ BEGIN
           )
           AND (
             (
-              active_batch_item.timesheet_id IS NOT NULL
-              AND active_batch_item.timesheet_id = preview_count_row.timesheet_id
+              COALESCE(
+                active_batch_item.timesheet_id,
+                CASE
+                  WHEN UPPER(BTRIM(COALESCE(active_batch_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                   AND NULLIF(BTRIM(COALESCE(active_batch_item.frozen_source_basis_json->>'timesheet_id', '')), '')
+                     ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN BTRIM(active_batch_item.frozen_source_basis_json->>'timesheet_id')::uuid
+                  ELSE NULL::uuid
+                END,
+                CASE
+                  WHEN UPPER(BTRIM(COALESCE(active_batch_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                   AND NULLIF(BTRIM(COALESCE(active_batch_item.frozen_source_basis_json->>'linked_timesheet_id', '')), '')
+                     ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN BTRIM(active_batch_item.frozen_source_basis_json->>'linked_timesheet_id')::uuid
+                  ELSE NULL::uuid
+                END,
+                CASE
+                  WHEN UPPER(BTRIM(COALESCE(active_batch_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                   AND NULLIF(BTRIM(COALESCE(
+                     active_batch_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}',
+                     ''
+                   )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN BTRIM(
+                      active_batch_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}'
+                    )::uuid
+                  ELSE NULL::uuid
+                END
+              ) = preview_count_row.timesheet_id
               AND UPPER(BTRIM(COALESCE(active_batch_item.frozen_component_key_type, '')))
                 = UPPER(BTRIM(COALESCE(preview_count_row.key_type, preview_count_row.row_json->>'key_type', '')))
               AND BTRIM(COALESCE(active_batch_item.frozen_component_key_value, ''))
@@ -372,8 +398,34 @@ BEGIN
               )
               AND (
                 (
-                  active_batch_item.timesheet_id IS NOT NULL
-                  AND active_batch_item.timesheet_id = preview_row.timesheet_id
+                  COALESCE(
+                    active_batch_item.timesheet_id,
+                    CASE
+                      WHEN UPPER(BTRIM(COALESCE(active_batch_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                       AND NULLIF(BTRIM(COALESCE(active_batch_item.frozen_source_basis_json->>'timesheet_id', '')), '')
+                         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        THEN BTRIM(active_batch_item.frozen_source_basis_json->>'timesheet_id')::uuid
+                      ELSE NULL::uuid
+                    END,
+                    CASE
+                      WHEN UPPER(BTRIM(COALESCE(active_batch_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                       AND NULLIF(BTRIM(COALESCE(active_batch_item.frozen_source_basis_json->>'linked_timesheet_id', '')), '')
+                         ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        THEN BTRIM(active_batch_item.frozen_source_basis_json->>'linked_timesheet_id')::uuid
+                      ELSE NULL::uuid
+                    END,
+                    CASE
+                      WHEN UPPER(BTRIM(COALESCE(active_batch_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                       AND NULLIF(BTRIM(COALESCE(
+                         active_batch_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}',
+                         ''
+                       )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        THEN BTRIM(
+                          active_batch_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}'
+                        )::uuid
+                      ELSE NULL::uuid
+                    END
+                  ) = preview_row.timesheet_id
                   AND UPPER(BTRIM(COALESCE(active_batch_item.frozen_component_key_type, '')))
                     = UPPER(BTRIM(COALESCE(preview_row.key_type, preview_row.row_json->>'key_type', '')))
                   AND BTRIM(COALESCE(active_batch_item.frozen_component_key_value, ''))

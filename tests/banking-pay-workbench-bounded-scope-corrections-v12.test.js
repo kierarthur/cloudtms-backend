@@ -308,6 +308,8 @@ test('D15 expected effects are sealed then independently observed', () => {
   assert.match(correctionMigration, /'EXPECTED_FINANCE_EFFECT'/);
   assert.match(effectNormaliser, /GENERATED_NON_NULL/);
   assert.match(effectNormaliser, /PAY_WORKBENCH_EXPECTED_EFFECT_LIFECYCLE_TIMESTAMP_MISMATCH/);
+  assert.match(effectNormaliser, /amount_only_resolution_reused_at_utc/);
+  assert.match(effectNormaliser, /v_relation='pay_finance_case_components'[\s\S]*v_operation='UPDATE'[\s\S]*saved_resolution_result_json/);
   assert.match(markCandidate, /private\.pay_workbench_finance_effect_normalise_row_v1/);
   assert.match(markFinance, /private\.pay_workbench_finance_effect_normalise_row_v1/);
   assert.match(transition, /private\.pay_workbench_finance_effect_normalise_row_v1/);
@@ -324,4 +326,3 @@ test('D15 expected effects are sealed then independently observed', () => {
   assert.match(transition, /expected\.proposed IS TRUE[\s\S]*expected\.observed IS NOT TRUE/);
   assert.equal((triggers.match(/CREATE TRIGGER trg_bpay_wb_observe_/g) || []).length, 9);
 });
-

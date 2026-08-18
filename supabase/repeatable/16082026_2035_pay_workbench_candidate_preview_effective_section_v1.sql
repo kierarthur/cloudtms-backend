@@ -248,8 +248,34 @@ BEGIN
           )
           AND (
             (
-              active_item.timesheet_id IS NOT NULL
-              AND active_item.timesheet_id = preview_row.timesheet_id
+              COALESCE(
+                active_item.timesheet_id,
+                CASE
+                  WHEN pg_catalog.upper(pg_catalog.btrim(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                   AND NULLIF(pg_catalog.btrim(COALESCE(active_item.frozen_source_basis_json->>'timesheet_id', '')), '')
+                     ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN pg_catalog.btrim(active_item.frozen_source_basis_json->>'timesheet_id')::uuid
+                  ELSE NULL::uuid
+                END,
+                CASE
+                  WHEN pg_catalog.upper(pg_catalog.btrim(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                   AND NULLIF(pg_catalog.btrim(COALESCE(active_item.frozen_source_basis_json->>'linked_timesheet_id', '')), '')
+                     ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN pg_catalog.btrim(active_item.frozen_source_basis_json->>'linked_timesheet_id')::uuid
+                  ELSE NULL::uuid
+                END,
+                CASE
+                  WHEN pg_catalog.upper(pg_catalog.btrim(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+                   AND NULLIF(pg_catalog.btrim(COALESCE(
+                     active_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}',
+                     ''
+                   )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                    THEN pg_catalog.btrim(
+                      active_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}'
+                    )::uuid
+                  ELSE NULL::uuid
+                END
+              ) = preview_row.timesheet_id
               AND (
                 (
                   NULLIF(pg_catalog.btrim(COALESCE(active_item.frozen_component_key_type, '')), '') IS NOT NULL

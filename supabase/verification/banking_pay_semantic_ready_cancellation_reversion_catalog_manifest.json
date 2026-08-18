@@ -85,7 +85,7 @@
     {
       "schema": "public", "name": "pay_workbench_prepare_draft_scope_seed",
       "identity_arguments": "p_operation_id uuid, p_workbench_session_id uuid, p_actor_user_id uuid, p_selected_preview_row_ids jsonb, p_pay_channel_scope text, p_same_week_paye_override_json jsonb",
-      "definition_sha256": "7d2444cdcb166d8b12036e2d37b6ad4adcee04134506b3a4410e80037d7be4d2",
+      "definition_sha256": "36e242fb406949ffe4112288d34a271bb32c4a5b61cd883c8e3fc7cb2ed2ecf7",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -108,7 +108,7 @@
     {
       "schema": "public", "name": "pay_workbench_patch_preview_after_batch_mutation",
       "identity_arguments": "p_session_id uuid, p_pay_batch_id uuid, p_operation_type text, p_actor_user_id uuid, p_options_json jsonb",
-      "definition_sha256": "3805390cf9cff54aad74b3dd356270dc0acbcb78c0ab753ab2bca0aaaf582a2c",
+      "definition_sha256": "06d2eea9f896fd5801c9bb55c493ff76fea47f8c021dda1d8b1b20aaea2e1a4b",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -167,7 +167,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_get_preview_page",
       "identity_arguments": "p_session_id uuid, p_section text, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "4df91265a42ba133b20eadda5102c11c311196719138dc2711d5770dfbd1e9d3",
+      "definition_sha256": "bc1737e853421085061f84d0dc95d91655f640fee1800cc54b6dd83d277f6f0e",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
@@ -481,7 +481,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_get_candidate_preview",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "f44ff4031fd2a77c0c849def23c8bc52e6a376cb9e55333c930d237b994627c0",
+      "definition_sha256": "3515759449180d5808d203d81cd169ce31d3c899f666e67e906f0b3a8f0e1106",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

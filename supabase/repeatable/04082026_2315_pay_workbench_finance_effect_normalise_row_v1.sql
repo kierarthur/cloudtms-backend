@@ -33,6 +33,31 @@ BEGIN
   END IF;
 
   v_row:=v_row-'created_at'-'created_at_utc'-'updated_at'-'updated_at_utc'-'event_at_utc';
+
+  -- Component sync refreshes this one nested audit timestamp whenever an
+  -- existing amount-only resolution remains reusable. Capture and execute run
+  -- in separate transactions, so their generated instants must be attested as
+  -- the same non-economic transition. Keep every sibling amount, ratio,
+  -- fingerprint and resolution field exact.
+  IF v_relation='pay_finance_case_components'
+     AND v_operation='UPDATE'
+     AND jsonb_typeof(v_row->'saved_resolution_result_json')='object'
+     AND LOWER(COALESCE(
+       v_row#>>'{saved_resolution_result_json,amount_only_resolution_reused}',
+       'false'
+     )) IN ('true','t','1','yes','y','on')
+     AND NULLIF(BTRIM(COALESCE(
+       v_row#>>'{saved_resolution_result_json,amount_only_resolution_reused_at_utc}',
+       ''
+     )), '') IS NOT NULL THEN
+    v_row:=jsonb_set(
+      v_row,
+      ARRAY['saved_resolution_result_json','amount_only_resolution_reused_at_utc'],
+      to_jsonb('__GENERATED_NON_NULL__'::text),
+      false
+    );
+  END IF;
+
   IF v_operation='INSERT' THEN
     v_row:=v_row-'id'-'finance_case_id'-'finance_component_id';
 
