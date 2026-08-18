@@ -1,6 +1,6 @@
 # Candidate Daily Phase 3 implementation authority
 
-Date: 17 August 2026  
+Date: 18 August 2026
 Scope: Availability API and NEW MASTER ROTA server-side coexistence source  
 Environment authority: TEST preparation only
 
@@ -16,11 +16,13 @@ New authority: signed Apps Script -> CloudTMS Worker requests
 CloudTMS canonical storage/read authority: TEST Supabase behind the Worker
 ```
 
-The corrected R12 source is complete, unredacted and installed in both TEST Google projects. Availability API is deployed as version 216 and NEW MASTER ROTA as version 102. Installation and deployment occurred with `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED=false`; no signed bridge request or Candidate Daily business-data mutation was authorised. Independent R12 operation-level review and a separately controlled enablement/proving window remain required.
+The corrected R12 source is complete, unredacted and installed in both TEST Google projects. Availability API is deployed as version 216 and NEW MASTER ROTA as version 102. R14 corrected aggregate item-outcome handling and received independent GO. R15 adds automatic exact first-generation source binding in repository source only. R15 has not been installed in Google, installed in Supabase, pushed or deployed. Both Google bridge switches remain false and no TEST Candidate Daily business data was changed while this pack was built.
 
 > R12 controlling correction: the R11 Availability write adapter was independently rejected because it mirrored deferred rows, copied rejected rows into mixed commands and deleted non-terminal `STATUS_CHECK` operations. Sections 11-13 below supersede any earlier wording that could permit those outcomes.
 
 ## 2. Absolute disabled-state invariant
+
+The disabled invariant remains the immediate rollback proof, but it is not the product purpose of R15. R15 acceptance is the enabled coexistence path serving both the old app and the new app from one canonical generation.
 
 Only the case-insensitive value `true` enables the bridge. With `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED` missing or false:
 
@@ -76,7 +78,8 @@ The existing `_postAvailabilityEvent` call remains first. Its exact result is ca
 Only `AVAILABILITY_UPDATE_END` emits a CloudTMS generation. Other existing event calls remain legacy-only. The generation builder:
 
 - reads the existing 14 Availability headers from columns G onward;
-- resolves each candidate through `Public ID - Credentially` without transmitting it;
+- resolves the existing Google-generated `CID1-...` global key and the separate versioned source HMAC from `Public ID - Credentially` without transmitting the raw public ID;
+- submits both safe identities in the same signed generation item so PostgreSQL can bind first use without a manual source-link bootstrap;
 - treats EmailHistory as booked-shift source truth;
 - uses existing shift/notes time parsing and rejects an unresolvable booked time instead of inventing one;
 - derives stable booking fallback identity only when the existing booking reference is absent;
@@ -134,9 +137,10 @@ error_code
 correlation_id
 operation_id
 duration_ms
+rejection_items
 ```
 
-They contain no mobile number, email, public ID, raw request body, HMAC secret, signature, token or Sheet row payload.
+`rejection_items` is present only for a terminal Master generation aggregate and contains bounded numeric item indexes plus approved safe error codes. Logs contain no mobile number, email, public ID, raw request body, HMAC secret, signature, token or Sheet row payload.
 
 ## 10. Unchanged and later-gated boundaries
 
@@ -152,8 +156,11 @@ Unchanged:
 
 Later-gated:
 
-- live Google source installation/deployment is complete with the bridge false; live enabled transport/projection/effect proving remains gated;
-- real TEST source-link bootstrap;
+- independent review of the exact R15 source, SQL, Worker contract and evidence;
+- R15 repository publication, TEST SQL installation and Candidate Worker deployment after that GO;
+- R15 Master source installation and a new disabled Google version only after the repository/runtime authority is current;
+- live enabled transport/projection/effect proving remains gated;
+- real first-generation automatic source-link proof for an existing Candidate with an exact admin-entered CID1 key;
 - enabled parity/latency/quota/outage/recovery soak;
 - projection scheduling;
 - Phase 4 Candidate Daily UI;
@@ -173,7 +180,7 @@ The factual authority for an Availability mirror is the completed legacy result,
 
 The rota-busy branch remains deferred and non-authoritative. It preserves the exact existing queued browser response and performs no CloudTMS work. `_flushPendingWrites()` revalidates the queue, performs the existing value and background writes, records only the exact successful rows, releases the legacy write lock and only then mirrors those written rows. A failed or rejected Sheet row is never mirrored.
 
-## 12. R12 closed response-disposition authority
+## 12. R12 Availability closed response-disposition authority
 
 HTTP status alone is not terminal authority. The adapter consumes a closed route-specific triple:
 
@@ -181,7 +188,7 @@ HTTP status alone is not terminal authority. The adapter consumes a closed route
 HTTP status + error_code + retry_class
 ```
 
-- `2xx` plus `ok:true` is terminal success.
+- For the Availability command/status routes covered by R12, `2xx` plus `ok:true` is terminal success. This statement does not govern the Master aggregate generation route; Sections 14 and 17 govern that route.
 - An approved `DO_NOT_RETRY` or `REFRESH` triple is an explicit terminal rejection, is bounded-logged and may clear the operation.
 - `STATUS_CHECK`, `RETRY_SAME_KEY`, `RETRY_AFTER`, transport uncertainty and any malformed/unrecognised 4xx preserve the exact operation and enter status-first recovery.
 - Only status-route `404 / NOT_FOUND / DO_NOT_RETRY` is authoritative not-found.
@@ -212,10 +219,14 @@ Every manifest freezes the exact body hash and byte count. Reassembly verifies b
 
 Rota result ownership is closed:
 
-- `2xx` plus `ok:true` advances that exact frozen batch;
+- `2xx` plus `ok:true` is only a candidate aggregate result, not automatic batch success;
+- the result must contain a structurally valid `batch_receipt_id` and exactly one outcome for every submitted item index;
+- indexes must be unique, in range and complete, and every outcome status must be recognised;
+- only an aggregate whose every outcome is `COMMITTED` or `REPLAYED` advances that exact frozen batch;
+- a known `REJECTED` outcome is an explicit terminal item rejection, records only its bounded index and safe error code, and can never emit mirror completion;
 - exact `409 / BATCH_IN_PROGRESS / STATUS_CHECK` retains the batch;
 - exact `409 / SOURCE_EVENT_CONFLICT / DO_NOT_RETRY` and `422 / GENERATION_INCOMPLETE / DO_NOT_RETRY` are explicit terminal rejections and never completion;
-- transport errors, `429`, `5xx`, malformed responses and every unknown triple retain the batch.
+- transport errors, `429`, `5xx`, malformed or incomplete aggregates, unknown outcome statuses/error codes and every unknown triple retain the batch.
 
 When any pending event exists, a later accepted legacy update first replays that exact event. It cannot generate a new timestamp, body, batch ID, key or correlation ID. The seven-day replacement rule is removed. Overall completion is logged only after every frozen batch succeeds.
 
@@ -223,14 +234,159 @@ When any pending event exists, a later accepted legacy update first replays that
 
 The product owner explicitly decided that the first enabled TEST exercise is not technically limited to one candidate. `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED=true` applies to the normal eligible TEST population. Kier Arthur is the named first observational journey because the product owner has the legacy phone app; Kier is not hard-coded and is not an authority boundary.
 
-Therefore R13 introduces no candidate allowlist property and no candidate-specific identifier in source. Before enablement, every eligible source row must nevertheless have an exact, unambiguous TEST source link because the database remains the identity authority. Any missing or ambiguous link remains a fail-closed signed-route result; the Apps Script must not nominate a replacement candidate.
+Therefore the source contains no candidate allowlist property and no candidate-specific identifier. R15 removes the separate pre-enable source-link bootstrap: each first generation carries its exact Google-generated CID1 key and separate versioned source HMAC. PostgreSQL either binds them to exactly one active existing Candidate or rejects that indexed item. Apps Script never nominates a Candidate UUID.
 
 This later-controlling product decision supersedes earlier wording that described a one-candidate or one-cohort technical gate. It does not enable the bridge, enable Candidate features, change the database, or authorise production.
 
-## 16. Existing global key and new-app-only onboarding
+## 16. Existing global key and automatic first-generation onboarding
 
 The global Candidate key is generated by the certified Master Rota code from the normalized `Public ID - Credentially`: Crockford Base32 encodes the normalized public ID and a four-character HMAC-SHA256 checksum is appended under the `CID1-` prefix. The resulting `CID1-...` value—not the raw Credentially Public ID—is what the CloudTMS administrator enters on the Candidate record. It must resolve to exactly one existing CloudTMS Candidate UUID. That rule applies equally to a candidate who used the temporary legacy app and to a candidate who registers only in the new Candidate App after the legacy browser has been retired.
 
-The CID1 key is a controlled mapping value, not a secret and not the signed Daily runtime identity. The runtime Google bridge does not transmit or query it on every request. A controlled onboarding/bootstrap step validates the Google-originated CID1 mapping against the administrator-entered Candidate value, derives the separate non-reversible `GOOGLE_CREDENTIALLY_PUBLIC_ID` HMAC from the same normalized public ID, and binds that HMAC to the same Candidate UUID in `private.candidate_daily_source_links`. It must never create or replace a Candidate row. No match, multiple matches, checksum/mapping disagreement, duplicate source ownership or conflicting source history fails closed for operator resolution.
+The CID1 key is a controlled mapping value, not a secret and not the signed Daily runtime identity. R15 transmits that safe key in each frozen Master generation item alongside the separate non-reversible `GOOGLE_CREDENTIALLY_PUBLIC_ID` HMAC and source-key version. The database validates the Google-originated CID1 value against `public.candidates.key_norm`, resolves exactly one active existing Candidate UUID and creates the HMAC source link only if that exact identity has no conflicting owner. It must never create or replace a Candidate row. No match, multiple matches, duplicate HMAC ownership, a different active PRIMARY source or cross-Candidate history fails closed.
 
-The current R13 implementation proves this design boundary but does not perform the TEST bootstrap. Enabled proving therefore remains blocked until the admin onboarding path is independently verified for both a legacy-coexistence candidate and a new-app-only candidate.
+This applies identically to a legacy-coexistence candidate and to a new-app-only candidate. The only admin action is entering the already-generated CID1 value on the correct existing Candidate. There is no separate source-link bootstrap or per-candidate allowlist.
+
+## 17. R14 aggregate outcome authority
+
+Independent R13 review proved a bounded integration mismatch: the Worker and installed TEST RPC legitimately return HTTP 200 with `ok:true` while one or more indexed generation outcomes are `REJECTED`. The R13 helper examined only the top-level envelope and could therefore delete the frozen operation and log overall completion after a partial rejection.
+
+R14 makes the current Worker/database aggregate contract controlling. `ctmsP3_masterContractDisposition_` receives the submitted item count and validates the complete aggregate before permitting success:
+
+1. `json.result` must be an object;
+2. `batch_receipt_id` must be a structurally valid UUID;
+3. `outcomes` must contain exactly the submitted item count;
+4. every index must be an integer, unique, in range and collectively complete;
+5. every status must be `COMMITTED`, `REPLAYED` or `REJECTED`;
+6. only all-`COMMITTED`/`REPLAYED` aggregates are successful;
+7. `REJECTED` is terminal only for the installed closed code catalogue: `SOURCE_EVENT_CONFLICT`, `GENERATION_INCOMPLETE`, `IDENTITY_LINK_MISSING`, `IDENTITY_LINK_AMBIGUOUS`, `IDENTITY_LINK_CONFLICT` and `CANDIDATE_DAILY_NOT_READY`;
+8. malformed, incomplete, duplicate-index, unknown-status and unknown-error aggregates preserve the exact frozen operation.
+
+Terminal item rejection clears the frozen event through the existing explicit terminal path, emits `ROTA_GENERATION_TERMINAL_REJECTION` with bounded item indexes and safe codes, and never emits `ROTA_GENERATION_MIRROR_COMPLETE`. The existing top-level 409/422 handling remains as defensive compatibility authority.
+
+This is a Master-helper-only correction. Availability source, legacy Master seam, Worker routes, database definitions, source links, Candidate records, feature flags, entitlements, triggers, finance, Banking Pay and production are unchanged. The active Google versions remain Availability 216 and Master 102; R14 must not be copied or deployed until independent GO.
+
+## 18. R15 automatic first-generation source-link authority
+
+R15 makes the first valid Master generation the sole automatic source-link bootstrap. Every generation item contains the exact `candidate_global_key`, `candidate_source_hmac` and `source_hmac_key_version=1` as factual identity inputs covered by the batch request hash.
+
+Inside one indexed item subtransaction PostgreSQL:
+
+1. takes deterministic advisory locks for every global-key and source-HMAC identity in the batch;
+2. locks and resolves exactly one active existing Candidate whose normalized `key_norm` equals the supplied CID1 value;
+3. creates the missing initial `GOOGLE_PRIMARY` authority scope without enabling an entitlement;
+4. creates one PRIMARY `GOOGLE_CREDENTIALLY_PUBLIC_ID` source link if and only if ownership is unambiguous and conflict-free;
+5. validates and commits the complete fourteen-day generation;
+6. rolls the new scope/link back if that same generation item rejects.
+
+Exact replay returns the same generation and does not add another link. Concurrent different-batch first attempts for the same factual source converge to one link, one scope and one generation. A later Master generation reuses those owners. Missing, inactive, duplicate or conflicting Candidate/source identity returns an indexed terminal rejection and never creates a Candidate.
+
+The resulting canonical generation has two deliberately separate consumers:
+
+```text
+Bridge-enabled legacy Availability app
+  -> signed source HMAC
+  -> the linked Candidate UUID
+  -> canonical generation tiles
+
+New Candidate app
+  -> authenticated Candidate UUID
+  -> the same canonical generation tiles
+```
+
+The new Candidate app remains additionally gated by the existing controlled authority transition, entitlement and global feature flag. R15 creates none of those activation permissions. Master continues publishing to the Availability system first even after the temporary legacy phone UI is retired, because Availability and Emergency remain retained consumers until separately replaced.
+
+## 19. R16 identity-integrity and installation-gate authority
+
+R16 preserves automatic first-generation binding but closes every R15 assurance finding before publication or installation.
+
+### 19.1 Normalized active CID1 ownership is a database invariant
+
+The database, rather than the generation RPC alone, owns uniqueness of `upper(btrim(key_norm))` for active valid CID1 Candidate keys. Installation first performs a non-disclosing duplicate preflight and then creates a functional partial unique index. Case variants, leading/trailing-space variants and activation of a normalized duplicate cannot coexist as active owners. Existing noncanonical-but-unique CID1 storage remains resolvable without rewriting Candidate data.
+
+### 19.2 A source HMAC has one Candidate owner across all history
+
+For the tuple `environment + source_system + hmac_key_version + identifier_hmac`, every source-link state and validity period is authoritative history. `PRIMARY`, `OVERLAP`, `RETIRED`, `REJECTED`, expired and future-valid rows all prevent assignment to another Candidate. A same-Candidate non-current historical identity is not silently reactivated by first generation; rotation or repair remains a separately controlled authority.
+
+The invariant is enforced for every insert and identity-changing update by a database trigger using the same deterministic `SOURCE` advisory-lock namespace as first generation, plus an all-history unique lookup index. A conflict leaves no partial scope, link or generation.
+
+### 19.3 Privileged installation is atomic and closed
+
+The R16 first-generation repeatable is one transaction. The private `SECURITY DEFINER` binder is revoked from `PUBLIC`, `anon`, `authenticated` and `service_role` immediately after its definition, before the public RPC replacement is parsed or installed. Final authority is:
+
+```text
+private binder: no caller role execute
+private history guard: no caller role execute
+public generation RPC: service_role execute only
+```
+
+The nontransactional `psql -f` runner cannot expose an intermediate committed helper because the complete repeatable commits as one unit.
+
+### 19.4 Terminal identity conflict is closed at both response layers
+
+Master treats both indexed HTTP-200 `REJECTED / IDENTITY_LINK_CONFLICT` and top-level `409 / IDENTITY_LINK_CONFLICT / DO_NOT_RETRY` as terminal rejection. Either path clears only the exact frozen terminal operation, emits bounded safe rejection information, and never emits `ROTA_GENERATION_MIRROR_COMPLETE`.
+
+### 19.5 Dual-consumer proof must execute the accepted gates
+
+The qualifying runtime journey may not manufacture success through direct authority-scope or entitlement writes. It must publish first generation, prove the legacy source-HMAC read, execute the real reconciliation/readiness path, call `candidate_daily_authority_transition_atomic_v1` with independent actor/approver and exact generation/cursors, prove its durable transition and entitlement receipts, then prove the Candidate-UUID read of the same generation. The Candidate read must fail before transition and succeed only afterwards. The entire fixture rolls back.
+
+### 19.6 Database installation is gated by both TEST engines
+
+The Supabase migration job has an explicit dependency on the reusable Candidate database runtime matrix for the same commit. PostgreSQL 17.6 and 18.1 must both pass the exact ordered Candidate migration/repeatable/runtime and concurrency chain before TEST mutation can begin. A separate concurrently running workflow is not a gate.
+
+R16 adds no manual bootstrap, Candidate creation, Candidate identity update, entitlement outside the controlled transition, feature enablement, authority cutover, frontend change, Google trigger change, finance, Banking Pay, payment/provider action or production authority. Availability 216 and Master 102 remain active, both Google bridge flags remain false, and R16 remains an unpublished review candidate until independent GO.
+
+## 20. R17 authority-transition source-identity integration
+
+Independent R16 review accepted every R16 identity-integrity and installation correction but proved that the pre-existing Office authority-transition RPC did not yet compose safely with the new all-history source-identity guard. R17 is the bounded successor authority.
+
+### 20.1 Source-identity conflict is an item result, not a batch abort
+
+`public.candidate_daily_authority_transition_atomic_v1` is a durable multi-item operation. R17 adds `IDENTITY_LINK_CONFLICT` to its closed per-item exception catalogue. A conflicting item now returns `REJECTED / IDENTITY_LINK_CONFLICT` under its original zero-based item index. The batch receipt completes with HTTP authority 200, successful siblings retain their committed results, and exact replay returns the stored terminal body with the same receipt. The function never converts an expected source-identity conflict into an all-or-nothing transaction abort.
+
+This rule is order-independent. It applies to a single conflict, valid-then-conflict and conflict-then-valid batches. A conflict creates no source link, transition or entitlement side effect for the rejected item.
+
+### 20.2 One cross-writer lock hierarchy
+
+R16 generation binding already acquires a deterministic `SOURCE` advisory lock before it locks or creates Candidate authority scope. R17 makes the Office transition writer use the same order:
+
+```text
+1. validate the outer batch envelope and durable receipt identity;
+2. derive every syntactically safe source-link lock identity;
+3. deduplicate and sort those identities;
+4. acquire pg_advisory_xact_lock(hashtextextended(identity,0)) for each SOURCE identity;
+5. lock Candidate authority scopes in Candidate UUID order;
+6. process the batch items under their existing item subtransactions.
+```
+
+The lock namespace is exactly `environment + ':SOURCE:' + hmac_key_version + ':' + identifier_hmac`. It is byte-identical to the R16 source-link history trigger namespace. Trigger reacquisition by the same transaction is therefore safe. A generation writer and Office transition can no longer form the previous `SOURCE -> scope` versus `scope -> SOURCE` wait cycle.
+
+Multiple transitions presenting the same source identities in different item orders acquire the same sorted lock sequence. Item order remains the response-index authority; lock order does not reorder results.
+
+### 20.3 Malformed source identities remain per-item validation
+
+The prelock phase considers only a source-link object with a 64-character lower-case hexadecimal identifier HMAC and a positive decimal key-version string that is no longer than ten digits and no greater than the PostgreSQL integer maximum. It performs no integer cast.
+
+Missing, malformed, out-of-range or otherwise invalid source-link values bypass prelocking and reach the existing item validation block, which records `VALIDATION_FAILED` under that item index. A malformed sibling cannot abort or erase another item.
+
+### 20.4 Transactional replacement and caller boundary
+
+R17 installs one complete later repeatable owning only the existing eight-argument public authority-transition function. The file is wrapped in `BEGIN/COMMIT`, retains `SECURITY DEFINER` with an empty search path, revokes `PUBLIC`, `anon` and `authenticated`, and grants execute only to `service_role` when that role exists.
+
+The public signature, context policy, receipt/idempotency rules, Candidate transition rules, reconciliation barriers, independent-approver rule, entitlement ownership and response schema remain unchanged.
+
+### 20.5 Required executable evidence
+
+R17 qualification requires all of the following on PostgreSQL 17.6 and 18.1 before any TEST migration:
+
+1. one conflicting item is durably indexed and exactly replayable;
+2. valid-then-conflict preserves the valid sibling;
+3. conflict-then-valid preserves the valid sibling;
+4. malformed source-link data is indexed as `VALIDATION_FAILED` without a prelock cast error;
+5. a transition with no source link retains its established `NO_CHANGE` behaviour;
+6. an actual first-generation call and actual authority-transition call using the same Candidate/source/scope complete without SQLSTATE `40P01`;
+7. two transition batches presenting the same two source identities in opposite input order complete without deadlock; and
+8. the existing complete Candidate runtime and concurrency chain remains green.
+
+AV-325 through AV-333 are later-controlling over R16 wherever authority-transition conflict containment or cross-writer lock order is concerned.
+
+R17 does not change Worker request/response fields, Apps Script, Google projects, Candidate frontend, Office frontend, Candidate creation, ordinary Candidate identity management, Daily feature flags, entitlements outside the existing transition, Emergency, finance, Banking Pay, payments, providers or production. Availability 216 and Master 102 remain active and both Google bridge flags remain false. R17 remains an unpublished, uninstalled review candidate until independent GO.

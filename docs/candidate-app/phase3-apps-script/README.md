@@ -1,8 +1,8 @@
 # CloudTMS Candidate Daily Phase 3 Apps Script source
 
-Date: 17 August 2026  
+Date: 18 August 2026
 Environment: TEST preparation only  
-Live Google status: **R12 is installed and deployed with the bridge flag false: Availability API version 216; NEW MASTER ROTA version 102. Controlled enablement is not part of this package.**
+Live Google status: **Availability API version 216 and NEW MASTER ROTA version 102 remain active with the bridge false. The inherited R16 Apps Script source is the current copy/paste-ready authority and is unchanged by R17; it has not been installed or deployed. Controlled enablement is not part of this package.**
 
 This directory contains complete, unredacted and copy/paste-ready source for the two existing Google Apps Script projects. It implements the narrow server-side coexistence bridge without redesigning the temporary legacy browser.
 
@@ -56,7 +56,7 @@ c3ae9c480a97ad2771312f5f453adbe7049c07219f89624f75df543d319fa0a8
 
 ## Candidate identity connection
 
-The existing Master Rota `Candidate_ID` authority transforms normalized `Public ID - Credentially` into `CID1-<Crockford Base32 payload><4-character keyed checksum>`. A CloudTMS administrator enters that exact generated CID1 value on the matching Candidate record; the raw Credentially Public ID is not entered in CloudTMS. During controlled onboarding, the separate non-reversible source HMAC derived from the same normalized Public ID is bound to that existing Candidate UUID for signed Daily runtime requests. CID1 and the source HMAC are deliberately different authorities.
+The existing Master Rota `Candidate_ID` authority transforms normalized `Public ID - Credentially` into `CID1-<Crockford Base32 payload><4-character keyed checksum>`. A CloudTMS administrator enters that exact generated CID1 value on the matching Candidate record; the raw Credentially Public ID is not entered in CloudTMS. R15 sends the safe CID1 key, the separate non-reversible source HMAC and source-key version in the first signed generation. PostgreSQL automatically binds the HMAC to that one existing Candidate in the same item transaction as generation. CID1 and the source HMAC remain deliberately different authorities.
 
 ## Binding invariant
 
@@ -109,7 +109,38 @@ The operator installed the TEST transport key ID on both Candidate Worker layers
 - multi-batch completion is recorded only after every frozen batch succeeds;
 - persisted corruption fails closed and cannot silently create a new event.
 
-There is no candidate-specific runtime allowlist. The product owner chose population-wide TEST enablement; Kier Arthur is the first observational legacy-phone journey only. Both bridges remain false in the installed state covered by this package.
+## R14 generation outcome contract correction
+
+- HTTP 200 with `ok:true` is not automatically successful;
+- the helper validates a UUID batch receipt, exact outcome count and a complete unique in-range index set;
+- the frozen batch advances only when every outcome is `COMMITTED` or `REPLAYED`;
+- an approved `REJECTED` item produces bounded terminal-rejection logging and never mirror completion;
+- malformed, incomplete, duplicate-index, unknown-status and unknown-error aggregates retain the exact frozen operation;
+- tests construct the aggregate through the current Worker success-envelope builder, not only top-level error approximations.
+
+## R15 automatic first-generation source linking
+
+- there is no separate manual source-link bootstrap;
+- the Master helper uses the certified existing `buildCandidateIdFromPublicId_` authority and never transmits the raw public ID;
+- each generation item carries `candidate_global_key`, `candidate_source_hmac` and `source_hmac_key_version=1`;
+- PostgreSQL resolves exactly one active existing Candidate by the normalized CID1 value and creates one PRIMARY source link plus the initial `GOOGLE_PRIMARY` scope atomically with generation;
+- missing, inactive, duplicate and conflicting mappings reject the indexed item without creating a Candidate or leaving a partial link/scope;
+- concurrent first generation converges to one link, scope and generation;
+- the bridge-enabled legacy app reads by source HMAC and the new app reads by Candidate UUID, both from the same canonical generation.
+
+There is no candidate-specific runtime allowlist. The product owner chose population-wide TEST enablement; Kier Arthur is the first observational legacy-phone journey only. R15 remains undeployed and both currently installed Google bridges remain false.
+
+## R16 identity-integrity correction
+
+- automatic first-generation binding remains the normal path; there is still no manual source-link bootstrap;
+- PostgreSQL owns normalized active CID1 uniqueness and all-history versioned source-HMAC ownership;
+- retired, rejected, expired, future-valid and same-Candidate non-current HMAC history cannot be silently rebound or reactivated;
+- the private binder is transactionally installed with immediate caller-role revocation;
+- Master treats top-level `409 / IDENTITY_LINK_CONFLICT / DO_NOT_RETRY` as terminal, with no mirror-complete log;
+- the qualifying new-app read runs through the real reconciliation and authority-transition RPC;
+- TEST migration is gated by exact-commit PostgreSQL 17.6 and 18.1 success.
+
+R16 is the copy/paste-ready Google source authority accepted for the R17 publication/install sequence. R17 changes no Google source. It has not been installed in either Google project. Active versions remain Availability 216 and Master 102 and both bridge flags remain false.
 
 ## Enabled coexistence behaviour
 

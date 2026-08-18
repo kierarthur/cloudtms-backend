@@ -31,7 +31,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  candidate-db-runtime:
+    name: Candidate PostgreSQL 17.6 and 18.1 pre-migration gate
+    uses: ./.github/workflows/candidate-db-runtime.yml
+
   migrate:
+    needs: candidate-db-runtime
     runs-on: ubuntu-latest
 
     env:
@@ -231,6 +236,7 @@ jobs:
           # a prerequisite after this block records it in the same ledger.
           PRE_REPEATABLE_MIGRATIONS=(
             "supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql"
+            "supabase/migrations/18082026_0802_candidate_daily_identity_integrity.sql"
           )
           for f in "${PRE_REPEATABLE_MIGRATIONS[@]}"; do
             base="$(basename "$f")"

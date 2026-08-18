@@ -4947,6 +4947,15 @@ paths:
                   - type: object
                     properties:
                       error_code:
+                        const: IDENTITY_LINK_CONFLICT
+                      retry_class:
+                        const: DO_NOT_RETRY
+                    required:
+                    - error_code
+                    - retry_class
+                  - type: object
+                    properties:
+                      error_code:
                         const: BATCH_IN_PROGRESS
                       retry_class:
                         const: STATUS_CHECK
@@ -8873,7 +8882,9 @@ components:
     RotaGenerationItem:
       type: object
       required:
+      - candidate_global_key
       - candidate_source_hmac
+      - source_hmac_key_version
       - source_event_id
       - source_revision
       - source_hash
@@ -8882,8 +8893,14 @@ components:
       - source_event_time
       - item_key
       properties:
+        candidate_global_key:
+          type: string
+          pattern: ^CID1-[0-9A-HJKMNP-TV-Z]{5,160}$
         candidate_source_hmac:
           $ref: '#/components/schemas/SourceHmac'
+        source_hmac_key_version:
+          type: integer
+          const: 1
         source_event_id:
           type: string
           minLength: 8

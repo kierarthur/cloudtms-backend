@@ -5,6 +5,7 @@ import test from 'node:test';
 
 const enabled = process.env.CANDIDATE_DAILY_POSTGRES_CHAIN === '1';
 const container = String(process.env.CANDIDATE_DAILY_PG_CONTAINER || '').trim();
+const port = String(process.env.CANDIDATE_DAILY_PG_PORT || process.env.PGPORT || '5432');
 
 function psqlCommand() {
   if (container) {
@@ -16,7 +17,7 @@ function psqlCommand() {
   }
   return {
     command: 'psql',
-    args: ['-X', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres',
+    args: ['-X', '-h', '127.0.0.1', '-p', port, '-U', 'postgres', '-d', 'postgres',
       '-tA', '-v', 'ON_ERROR_STOP=1']
   };
 }

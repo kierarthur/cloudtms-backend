@@ -21,6 +21,17 @@ var CTMS_P3_MASTER_REQUEST_BYTES_ = 245760;
 var CTMS_P3_MASTER_PROPERTY_VALUE_BYTES_ = 7000;
 var CTMS_P3_MASTER_STORE_BYTES_ = 480000;
 var CTMS_P3_MASTER_ULID_ALPHABET_ = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+var CTMS_P3_MASTER_UUID_RE_ = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+var CTMS_P3_MASTER_GLOBAL_CANDIDATE_KEY_RE_ = /^CID1-[0-9A-HJKMNP-TV-Z]{5,160}$/;
+var CTMS_P3_MASTER_SOURCE_HMAC_KEY_VERSION_ = 1;
+var CTMS_P3_MASTER_TERMINAL_ITEM_ERRORS_ = {
+  SOURCE_EVENT_CONFLICT: true,
+  GENERATION_INCOMPLETE: true,
+  IDENTITY_LINK_MISSING: true,
+  IDENTITY_LINK_AMBIGUOUS: true,
+  IDENTITY_LINK_CONFLICT: true,
+  CANDIDATE_DAILY_NOT_READY: true
+};
 
 function ctmsP3_masterIsEnabled_() {
   var value = PropertiesService.getScriptProperties()
@@ -125,6 +136,13 @@ function ctmsP3_masterCorrelation_() {
 function ctmsP3_masterLog_(event, facts) {
   if (!ctmsP3_masterIsEnabled_()) return;
   var safe = facts || {};
+  var rejectionItems = Array.isArray(safe.rejection_items)
+    ? safe.rejection_items.slice(0, CTMS_P3_MASTER_ITEM_LIMIT_).map(function (item) {
+      return {
+        index: Number(item && item.index),
+        error_code: String(item && item.error_code || '')
+      };
+    }) : [];
   console.log(JSON.stringify({
     system: 'CANDIDATE_DAILY_PHASE3',
     event: String(event || 'UNKNOWN'),
@@ -132,7 +150,8 @@ function ctmsP3_masterLog_(event, facts) {
     error_code: String(safe.error_code || ''),
     correlation_id: String(safe.correlation_id || ''),
     operation_id: String(safe.operation_id || ''),
-    duration_ms: Number(safe.duration_ms || 0)
+    duration_ms: Number(safe.duration_ms || 0),
+    rejection_items: rejectionItems
   }));
 }
 
@@ -211,6 +230,18 @@ function ctmsP3_masterSourceHmac_(publicId) {
     canonical,
     ctmsP3_masterProperty_('CLOUDTMS_CANDIDATE_SOURCE_HMAC_SECRET')
   );
+}
+
+function ctmsP3_masterGlobalCandidateKey_(publicId) {
+  if (typeof buildCandidateIdFromPublicId_ !== 'function') {
+    throw new Error('CTMS_GLOBAL_CANDIDATE_KEY_AUTHORITY_MISSING');
+  }
+  var key = String(buildCandidateIdFromPublicId_(String(publicId || '').trim()) || '')
+    .trim().toUpperCase();
+  if (!CTMS_P3_MASTER_GLOBAL_CANDIDATE_KEY_RE_.test(key)) {
+    throw new Error('CTMS_GLOBAL_CANDIDATE_KEY_INVALID');
+  }
+  return key;
 }
 
 function ctmsP3_masterDate_(value, timezone) {
@@ -320,6 +351,7 @@ function ctmsP3_masterBuildGenerationItems_(runId) {
     var telephoneDigits = String(candidateRows[candidateIndex][3] || '').replace(/\D/g, '');
     var avRowIndex = availabilityByTelephone[telephoneDigits];
     if (!publicId || avRowIndex == null) continue;
+    var candidateGlobalKey = ctmsP3_masterGlobalCandidateKey_(publicId);
     var sourceHmac = ctmsP3_masterSourceHmac_(publicId);
     var occupant = (String(candidateRows[candidateIndex][0] || '') + ' '
       + String(candidateRows[candidateIndex][1] || '')).toLowerCase().trim();
@@ -350,13 +382,17 @@ function ctmsP3_masterBuildGenerationItems_(runId) {
       return day;
     });
     var itemFacts = {
+      candidate_global_key: candidateGlobalKey,
       candidate_source_hmac: sourceHmac,
+      source_hmac_key_version: CTMS_P3_MASTER_SOURCE_HMAC_KEY_VERSION_,
       window_start: headers[0].ymd,
       days: days
     };
     var sourceHash = ctmsP3_masterSha_(JSON.stringify(itemFacts));
     items.push({
+      candidate_global_key: candidateGlobalKey,
       candidate_source_hmac: sourceHmac,
+      source_hmac_key_version: CTMS_P3_MASTER_SOURCE_HMAC_KEY_VERSION_,
       source_event_id: 'master-rota.' + safeRun,
       source_revision: 'phase3.' + sourceHash,
       source_hash: sourceHash,
@@ -584,15 +620,50 @@ function ctmsP3_masterPersistEvent_(items) {
   }
 }
 
-function ctmsP3_masterContractDisposition_(result) {
+function ctmsP3_masterGenerationOutcomeAuthority_(result, expectedItemCount) {
+  var invalid = { valid: false, rejection_items: [] };
+  if (!result || !result.json || result.json.ok !== true
+      || !Number.isInteger(expectedItemCount) || expectedItemCount < 1
+      || expectedItemCount > CTMS_P3_MASTER_ITEM_LIMIT_) return invalid;
+  var body = result.json.result;
+  if (!body || typeof body !== 'object' || Array.isArray(body)
+      || !CTMS_P3_MASTER_UUID_RE_.test(String(body.batch_receipt_id || ''))
+      || !Array.isArray(body.outcomes) || body.outcomes.length !== expectedItemCount) return invalid;
+  var seen = {};
+  var rejectionItems = [];
+  for (var position = 0; position < body.outcomes.length; position++) {
+    var outcome = body.outcomes[position];
+    if (!outcome || typeof outcome !== 'object' || Array.isArray(outcome)
+        || !Number.isInteger(outcome.index) || outcome.index < 0
+        || outcome.index >= expectedItemCount || seen[String(outcome.index)]) return invalid;
+    seen[String(outcome.index)] = true;
+    var status = String(outcome.status || '');
+    if (status === 'COMMITTED' || status === 'REPLAYED') continue;
+    if (status !== 'REJECTED') return invalid;
+    var errorCode = String(outcome.error_code || '');
+    if (!CTMS_P3_MASTER_TERMINAL_ITEM_ERRORS_[errorCode]) return invalid;
+    rejectionItems.push({ index: outcome.index, error_code: errorCode });
+  }
+  for (var expectedIndex = 0; expectedIndex < expectedItemCount; expectedIndex++) {
+    if (!seen[String(expectedIndex)]) return invalid;
+  }
+  return { valid: true, rejection_items: rejectionItems };
+}
+
+function ctmsP3_masterContractDisposition_(result, expectedItemCount) {
   if (result && result.http_code >= 200 && result.http_code < 300
-      && result.json && result.json.ok === true) return 'SUCCESS';
+      && result.json && result.json.ok === true) {
+    var authority = ctmsP3_masterGenerationOutcomeAuthority_(result, expectedItemCount);
+    if (!authority.valid) return 'PRESERVE';
+    return authority.rejection_items.length ? 'TERMINAL_REJECTION' : 'SUCCESS';
+  }
   if (!result || result.uncertain === true) return 'PRESERVE';
   var body = result.json;
   if (!body || body.ok !== false || typeof body.error_code !== 'string'
       || typeof body.retry_class !== 'string') return 'PRESERVE';
   var triple = String(result.http_code) + ':' + body.error_code + ':' + body.retry_class;
   if (triple === '409:SOURCE_EVENT_CONFLICT:DO_NOT_RETRY'
+      || triple === '409:IDENTITY_LINK_CONFLICT:DO_NOT_RETRY'
       || triple === '422:GENERATION_INCOMPLETE:DO_NOT_RETRY') return 'TERMINAL_REJECTION';
   if (triple === '409:BATCH_IN_PROGRESS:STATUS_CHECK') return 'PRESERVE';
   return 'PRESERVE';
@@ -605,7 +676,10 @@ function ctmsP3_masterPublishState_(state) {
     state.manifest.idempotency_key,
     state.manifest.correlation_id
   );
-  return { result: result, disposition: ctmsP3_masterContractDisposition_(result) };
+  return {
+    result: result,
+    disposition: ctmsP3_masterContractDisposition_(result, state.body.items.length)
+  };
 }
 
 function ctmsP3_masterRecoverPending_() {
@@ -618,11 +692,17 @@ function ctmsP3_masterRecoverPending_() {
       return { had_pending: true, resolved: false, result: published.result };
     }
     if (published.disposition === 'TERMINAL_REJECTION') {
+      var rejectionAuthority = ctmsP3_masterGenerationOutcomeAuthority_(
+        published.result, state.body.items.length
+      );
+      var itemRejections = rejectionAuthority.valid ? rejectionAuthority.rejection_items : [];
       ctmsP3_masterLog_('ROTA_GENERATION_TERMINAL_REJECTION', {
         status: String(published.result.http_code),
-        error_code: String(published.result.json && published.result.json.error_code || ''),
+        error_code: itemRejections.length ? 'GENERATION_ITEM_REJECTED'
+          : String(published.result.json && published.result.json.error_code || ''),
         correlation_id: state.manifest.correlation_id,
-        operation_id: state.manifest.idempotency_key
+        operation_id: state.manifest.idempotency_key,
+        rejection_items: itemRejections
       });
       ctmsP3_masterClearAllPending_(index);
       return { had_pending: true, resolved: true, terminal_rejection: true };

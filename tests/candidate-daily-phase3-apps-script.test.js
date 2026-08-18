@@ -603,6 +603,11 @@ test('Master Rota generation builder emits every eligible TEST row without a can
     },
     SH_AVAIL: 'Availability',
     COLOR_BLOCKED: '#ccffcc',
+    buildCandidateIdFromPublicId_(publicId) {
+      return String(publicId).startsWith('second-')
+        ? 'CID1-TVWXYZ0123456789'
+        : 'CID1-ABCDEFGHJKMNPQRS';
+    },
     getShiftWindow(rawDate, shiftLabel) {
       const [day, month, year] = rawDate.split('/').map(Number);
       const match = shiftLabel.match(/(\d{2})(\d{2})-(\d{2})(\d{2})/);
@@ -619,7 +624,10 @@ test('Master Rota generation builder emits every eligible TEST row without a can
   assert.equal(plain[0].days[0].booked, true);
   assert.equal(plain[0].days[0].booking_id, 'BOOK-1');
   assert.match(plain[0].source_hash, /^[0-9a-f]{64}$/);
+  assert.equal(plain[0].candidate_global_key, 'CID1-ABCDEFGHJKMNPQRS');
+  assert.equal(plain[1].candidate_global_key, 'CID1-TVWXYZ0123456789');
   assert.match(plain[0].candidate_source_hmac, /^[0-9a-f]{64}$/);
+  assert.equal(plain[0].source_hmac_key_version, 1);
   assert.match(plain[0].item_key, /^[A-Za-z0-9._~-]{8,160}$/);
   const serialized = JSON.stringify(plain);
   assert.equal(serialized.includes('public-id-not-transmitted'), false);

@@ -88,7 +88,9 @@ function context(initial = {}) {
 
 function item(index, payloadBytes = 32) {
   return {
+    candidate_global_key: `CID1-ABCDEFGHJKMNPQRS${index}`,
     candidate_source_hmac: crypto.createHash('sha256').update(`candidate-${index}`).digest('hex'),
+    source_hmac_key_version: 1,
     source_event_id: `master-rota.test-${index}`,
     source_revision: `phase3.${'a'.repeat(64)}`,
     source_hash: 'b'.repeat(64),
@@ -100,8 +102,23 @@ function item(index, payloadBytes = 32) {
   };
 }
 
-function success() {
-  return { http_code: 200, json: { ok: true, result: {} }, uncertain: false };
+function success(itemCount = 1, status = 'COMMITTED') {
+  return {
+    http_code: 200,
+    json: {
+      ok: true,
+      result: {
+        batch_receipt_id: '00000000-0000-4000-8000-000000000900',
+        outcomes: Array.from({ length: itemCount }, (_, index) => ({
+          index,
+          status,
+          generation_id: `00000000-0000-4000-8000-${String(800 + index).padStart(12, '0')}`,
+          generation_version: index + 1
+        }))
+      }
+    },
+    uncertain: false
+  };
 }
 
 function statusInProgress() {
@@ -202,7 +219,7 @@ test('uncertainty and a later event reuse the exact body, batch, key and correla
   const calls = [];
   sandbox.ctmsP3_masterSignedPost_ = (_path, body, key, correlation) => {
     calls.push({ body: JSON.stringify(body), key, correlation });
-    return calls.length === 1 ? statusInProgress() : success();
+    return calls.length === 1 ? statusInProgress() : success(body.items.length);
   };
   assert.equal(sandbox.ctmsP3_masterRecoverPending_().resolved, false);
   const originalNow = sandbox.Date.now;
@@ -214,8 +231,11 @@ test('uncertainty and a later event reuse the exact body, batch, key and correla
 test('two-batch event does not complete until every frozen batch succeeds', () => {
   const { sandbox, properties, logs } = context();
   sandbox.ctmsP3_masterPersistEvent_(Array.from({ length: 51 }, (_, i) => item(i)));
-  const responses = [success(), statusInProgress(), success()];
-  sandbox.ctmsP3_masterSignedPost_ = () => responses.shift();
+  let requestNumber = 0;
+  sandbox.ctmsP3_masterSignedPost_ = (_path, body) => {
+    requestNumber += 1;
+    return requestNumber === 2 ? statusInProgress() : success(body.items.length);
+  };
   assert.equal(sandbox.ctmsP3_masterRecoverPending_().resolved, false);
   const pending = JSON.parse(properties.values.get('CTMS_P3_ROTA_PENDING_INDEX'));
   assert.equal(pending.manifest_keys.length, 1);
@@ -227,6 +247,7 @@ test('two-batch event does not complete until every frozen batch succeeds', () =
 
 for (const terminal of [
   { http_code: 409, json: { ok: false, error_code: 'SOURCE_EVENT_CONFLICT', retry_class: 'DO_NOT_RETRY' }, uncertain: false },
+  { http_code: 409, json: { ok: false, error_code: 'IDENTITY_LINK_CONFLICT', retry_class: 'DO_NOT_RETRY' }, uncertain: false },
   { http_code: 422, json: { ok: false, error_code: 'GENERATION_INCOMPLETE', retry_class: 'DO_NOT_RETRY' }, uncertain: false }
 ]) {
   test(`${terminal.json.error_code} is an explicit terminal rejection, not success`, () => {
@@ -247,7 +268,10 @@ test('corrupt chunk fails closed and cannot be replaced with a newer event', () 
   const manifest = JSON.parse(properties.values.get(index.manifest_keys[0]));
   properties.values.set(manifest.body_prefix + '1', 'corrupt');
   let network = 0;
-  sandbox.ctmsP3_masterSignedPost_ = () => { network += 1; return success(); };
+  sandbox.ctmsP3_masterSignedPost_ = (_path, body) => {
+    network += 1;
+    return success(body.items.length);
+  };
   assert.throws(() => sandbox.ctmsP3_masterRecoverPending_(), /CTMS_PENDING_BODY_CORRUPT/);
   assert.equal(network, 0);
   assert.equal(properties.values.has('CTMS_P3_ROTA_PENDING_INDEX'), true);
@@ -261,7 +285,10 @@ test('a later accepted legacy event recovers pending state and does not build a 
   let builds = 0;
   let posts = 0;
   sandbox.ctmsP3_masterBuildGenerationItems_ = () => { builds += 1; return [item(2)]; };
-  sandbox.ctmsP3_masterSignedPost_ = () => { posts += 1; return success(); };
+  sandbox.ctmsP3_masterSignedPost_ = (_path, body) => {
+    posts += 1;
+    return success(body.items.length);
+  };
   sandbox.ctmsP3_masterMirrorLegacyEvent_('AVAILABILITY_UPDATE_END', { runId: 'new-run' }, { httpCode: 200 });
   assert.equal(posts, 1);
   assert.equal(builds, 0);

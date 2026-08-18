@@ -28,6 +28,7 @@ const DAILY_ERROR_MESSAGES = Object.freeze({
   GENERATION_INCOMPLETE: 'The supplied rota generation is incomplete.',
   IDEMPOTENCY_KEY_REUSED: 'This operation key was already used for a different request.',
   IDENTITY_LINK_AMBIGUOUS: 'The source identity matches more than one Candidate.',
+  IDENTITY_LINK_CONFLICT: 'The source identity conflicts with an existing Candidate link.',
   IDENTITY_LINK_MISSING: 'The source identity is not linked to a Candidate.',
   INTERNAL_ERROR: 'CloudTMS could not complete the request.',
   LEASE_CONFLICT: 'Another worker currently owns this operation.',
@@ -161,6 +162,7 @@ const OPERATION_ERROR_TRIPLES = Object.freeze({
   googleAvailabilityLegacyTimesheetAuthorisationStatus: [errorTriple(404, 'NOT_FOUND', 'DO_NOT_RETRY')],
   googleAvailabilityPublishRotaGenerations: [
     errorTriple(409, 'SOURCE_EVENT_CONFLICT', 'DO_NOT_RETRY'),
+    errorTriple(409, 'IDENTITY_LINK_CONFLICT', 'DO_NOT_RETRY'),
     errorTriple(409, 'BATCH_IN_PROGRESS', 'STATUS_CHECK'),
     errorTriple(422, 'GENERATION_INCOMPLETE', 'DO_NOT_RETRY')
   ],

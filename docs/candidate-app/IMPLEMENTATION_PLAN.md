@@ -710,11 +710,13 @@ Phase 3 R12 is implemented, installed and versioned in both TEST Google projects
 2. re-export and compare the installed R12 Google Head/deployment/trigger authority before enablement;
 3. confirm the installed versions remain Availability API 216 and NEW MASTER ROTA 102 with the bridge flag false;
 4. independently prove exact disabled legacy behaviour and zero bridge side effects;
-5. bootstrap only approved TEST source links under Phase 4 authority;
-6. enable one bounded cohort and prove signed generation/tile/write parity;
+5. after independent GO and exact R17 PostgreSQL 17.6/18.1 success, publish/install the complete R16 automatic first-generation authority together with the later effective R17 authority-transition definition; retain normalized active-CID1 uniqueness, all-history source-HMAC ownership, transaction-safe private ACLs, SOURCE-before-scope locking and indexed source-conflict containment; do not manually pre-populate source links;
+6. enable the normal eligible TEST population and prove that each first valid generation binds exactly one existing CID1 Candidate, while conflicts fail closed;
 7. prove lost response, outage/recovery, quota, latency and lock contention;
 8. prove projection delivered/deferred overlay behaviour;
 9. keep effects, entitlements and all Candidate feature flags disabled;
-10. issue a separate Phase 3 GO before starting Phase 4 UI or Phase 5 cutover.
+10. prove the enabled old Availability app reads by source HMAC and the new Candidate app reads the same canonical generation by Candidate UUID only after the real reconciliation and controlled authority-transition gates;
+11. require PostgreSQL 17.6 and 18.1 exact-commit runtime/concurrency success as an explicit prerequisite of every TEST safe migration carrying this authority;
+12. issue a separate Phase 3 GO before starting Phase 4 UI or Phase 5 cutover.
 
 The later phases remain full-product phases, not Daily-only completion: Phase 4 implements the full responsive Candidate app; Phase 5 performs controlled TEST cutover; Phase 6 completes Emergency, specialist services, messages/content, Past Shifts and approval acceptance; Phase 7 performs gradual rollout and separately approved legacy-browser/adapter retirement. Availability, Emergency and Master Rota remain until their own later migration.

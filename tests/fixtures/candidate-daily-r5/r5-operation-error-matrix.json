@@ -1155,6 +1155,11 @@
           "error_code": "GENERATION_INCOMPLETE",
           "retry_class": "DO_NOT_RETRY",
           "status": 422
+        },
+        {
+          "error_code": "IDENTITY_LINK_CONFLICT",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
         }
       ],
       "method": "POST",

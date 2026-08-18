@@ -29,8 +29,9 @@ declare
   v_definition_count integer;
   v_table_count integer;
 begin
-  insert into public.candidates(id,email,display_name,first_name,last_name,active)
-  values(v_candidate,'candidate-daily-r8@example.invalid','Candidate Daily R8','Candidate','Daily R8',true);
+  insert into public.candidates(id,email,display_name,first_name,last_name,active,key_norm)
+  values(v_candidate,'candidate-daily-r8@example.invalid','Candidate Daily R8','Candidate','Daily R8',true,
+    'CID1-ABCDEFGHJKMNPQRS');
 
   insert into private.candidate_daily_authority_scopes(environment,candidate_id,authority_mode)
   values('TEST',v_candidate,'GOOGLE_PRIMARY');
@@ -54,7 +55,8 @@ begin
     'source_row_hash',repeat(to_hex((n % 15)+1),64)
   ) order by n) into v_days from generate_series(0,13) n;
   v_item := jsonb_build_object(
-    'candidate_source_hmac',v_source_hmac,'source_event_id','rota-event-r8-0001',
+    'candidate_global_key','CID1-ABCDEFGHJKMNPQRS','candidate_source_hmac',v_source_hmac,
+    'source_hmac_key_version',1,'source_event_id','rota-event-r8-0001',
     'source_revision','revision-1','source_hash',repeat('c',64),'window_start','2026-08-17',
     'days',v_days,'source_event_time','2026-08-17T00:00:00Z','item_key','rota-item-r8-0001'
   );
@@ -142,7 +144,8 @@ begin
 
   -- A new generation removes the overlay; proof retreats and the same row is woken for projection.
   v_item := jsonb_build_object(
-    'candidate_source_hmac',v_source_hmac,'source_event_id','rota-event-r8-0002',
+    'candidate_global_key','CID1-ABCDEFGHJKMNPQRS','candidate_source_hmac',v_source_hmac,
+    'source_hmac_key_version',1,'source_event_id','rota-event-r8-0002',
     'source_revision','revision-2','source_hash',repeat('d',64),'window_start','2026-08-17',
     'days',v_days,'source_event_time','2026-08-17T00:01:00Z','item_key','rota-item-r8-0002'
   );

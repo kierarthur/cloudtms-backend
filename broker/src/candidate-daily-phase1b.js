@@ -16,6 +16,7 @@ const ITEM_KEY_RE = /^[A-Za-z0-9._~-]{8,160}$/;
 const IDEMPOTENCY_RE = /^[A-Za-z0-9._~:+\-/]{16,128}$/;
 const CORRELATION_RE = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/;
 const SOURCE_HMAC_RE = /^[a-f0-9]{64}$/;
+const GLOBAL_CANDIDATE_KEY_RE = /^CID1-[0-9A-HJKMNP-TV-Z]{5,160}$/;
 const OPAQUE_TOKEN_RE = /^[A-Za-z0-9._~-]{16,512}$/;
 const LEGACY_VALUES = new Set(['', 'N/A', 'LD', 'N', 'LD/N']);
 const PREFERENCES = new Set(['PENDING', 'NOT_AVAILABLE', 'LONG_DAY', 'NIGHT', 'LONG_DAY_OR_NIGHT']);
@@ -54,6 +55,7 @@ const ERROR_MAP = Object.freeze({
   GENERATION_INCOMPLETE: [422, 'DO_NOT_RETRY'],
   IDEMPOTENCY_KEY_REUSED: [409, 'DO_NOT_RETRY'],
   IDENTITY_LINK_AMBIGUOUS: [409, 'DO_NOT_RETRY'],
+  IDENTITY_LINK_CONFLICT: [409, 'DO_NOT_RETRY'],
   IDENTITY_LINK_MISSING: [409, 'STATUS_CHECK'],
   LEASE_CONFLICT: [409, 'STATUS_CHECK'],
   LEASE_EXPIRED_STATUS_REQUIRED: [409, 'STATUS_CHECK'],
@@ -296,9 +298,12 @@ function validateRotaGenerations(body) {
   if (!exactKeys(body, ['batch_request_id', 'items']) || !UUID_RE.test(body.batch_request_id)
       || !Array.isArray(body.items) || body.items.length < 1 || body.items.length > 50) return false;
   const keys = new Set();
-  return body.items.every((item) => exactKeys(item, ['candidate_source_hmac', 'source_event_id', 'source_revision',
-    'source_hash', 'window_start', 'days', 'source_event_time', 'item_key'])
-    && validateSourceHmac(item.candidate_source_hmac) && boundedString(item.source_event_id, 8, 160)
+  return body.items.every((item) => exactKeys(item, ['candidate_global_key', 'candidate_source_hmac',
+    'source_hmac_key_version', 'source_event_id', 'source_revision', 'source_hash', 'window_start', 'days',
+    'source_event_time', 'item_key'])
+    && GLOBAL_CANDIDATE_KEY_RE.test(item.candidate_global_key)
+    && validateSourceHmac(item.candidate_source_hmac) && item.source_hmac_key_version === 1
+    && boundedString(item.source_event_id, 8, 160)
     && boundedString(item.source_revision, 1, 160) && SHA256_RE.test(item.source_hash)
     && DATE_RE.test(item.window_start) && isoDateTime(item.source_event_time) && ITEM_KEY_RE.test(item.item_key)
     && !keys.has(item.item_key) && Boolean(keys.add(item.item_key))

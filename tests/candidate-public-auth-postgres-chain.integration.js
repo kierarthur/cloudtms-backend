@@ -20,8 +20,10 @@ const {
   derivePasswordVerifier, passwordVerificationProof, createAccessToken
 } = candidateAppBackendInternals;
 
-function psqlArguments(sql) {
-  const args = ['-X', '-h', '127.0.0.1', '-U', 'postgres', '-d', 'postgres', '-tA',
+function psqlArguments(sql, inContainer = false) {
+  const port = inContainer ? '5432'
+    : String(process.env.CANDIDATE_AUTH_PG_PORT || process.env.PGPORT || '5432');
+  const args = ['-X', '-h', '127.0.0.1', '-p', port, '-U', 'postgres', '-d', 'postgres', '-tA',
     '-v', 'ON_ERROR_STOP=1'];
   args.push('-c', sql);
   return args;
@@ -34,7 +36,7 @@ function psql(sql, payload = null) {
   const container = String(process.env.CANDIDATE_AUTH_PG_CONTAINER || '').trim();
   const command = container ? 'docker' : 'psql';
   const args = container
-    ? ['exec', container, 'psql', ...psqlArguments(renderedSql)]
+    ? ['exec', container, 'psql', ...psqlArguments(renderedSql, true)]
     : psqlArguments(renderedSql);
   const result = spawnSync(command, args, { encoding: 'utf8', env: process.env });
   if (result.status !== 0) {
@@ -50,7 +52,7 @@ function psqlAsync(sql, payload = null) {
   const container = String(process.env.CANDIDATE_AUTH_PG_CONTAINER || '').trim();
   const command = container ? 'docker' : 'psql';
   const args = container
-    ? ['exec', container, 'psql', ...psqlArguments(renderedSql)]
+    ? ['exec', container, 'psql', ...psqlArguments(renderedSql, true)]
     : psqlArguments(renderedSql);
   return new Promise((resolve, reject) => {
     execFile(command, args, {

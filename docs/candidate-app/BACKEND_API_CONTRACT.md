@@ -201,7 +201,7 @@ The temporary legacy browser does not call these routes. The only new caller is 
 | POST | `/candidate-system/v1/google-availability/legacy/tiles` | Read canonical Daily tiles for one signed legacy source and merge them into the already-built Availability envelope. |
 | POST | `/candidate-system/v1/google-availability/legacy/availability` | Mirror one already-accepted legacy Availability change under a caller-owned idempotency key. |
 | POST | `/candidate-system/v1/google-availability/legacy/availability-status` | Recover the exact durable Availability-change result before any retry. |
-| POST | `/candidate-system/v1/google-availability/rota-generations` | Publish complete fourteen-day Master Rota source generations in batches of at most fifty candidates. |
+| POST | `/candidate-system/v1/google-availability/rota-generations` | Publish complete fourteen-day Master Rota source generations in batches of at most fifty candidates; first use binds the safe CID1 key and separate source HMAC to one existing Candidate atomically with generation. |
 | POST | `/candidate-system/v1/google-availability/projection/claim` | Claim a bounded Google Availability projection lease. |
 | POST | `/candidate-system/v1/google-availability/projection/complete` | Record delivered, deferred-overlay or retry outcome for the exact lease. |
 | POST | `/candidate-system/v1/google-availability/effects/claim` | Claim an existing external-effect receipt; installation alone invokes no provider. |
@@ -212,11 +212,15 @@ With `CLOUDTMS_CANDIDATE_BRIDGE_ENABLED` missing or false, none of these routes 
 
 Master Rota always publishes to the existing Availability system first. Only an accepted `AVAILABILITY_UPDATE_END` is mirrored to CloudTMS, and the mirror never replaces the Availability publication. Availability, Emergency and Master Rota remain retained services after retirement of the temporary legacy browser until each is separately migrated and accepted.
 
-The Phase 3 source package adds no route, RPC, schema or Worker implementation. It consumes the already-frozen Phase 1B/Phase 2 contract and remains dark until the later controlled Google installation/proving gate.
+R15 retains the same route and five-argument RPC signature but extends the closed generation item with `candidate_global_key`, `candidate_source_hmac` and `source_hmac_key_version`. The R15 repeatable owns exact first-generation binding and the Phase 1B adapter validates those fields before invoking it.
+
+R16 does not change that route, item schema or RPC signature. It strengthens database ownership below the contract: the normalized active CID1 is unique, the versioned source HMAC cannot move between Candidates across any historical state, and non-current same-Candidate history is not automatically reactivated. `IDENTITY_LINK_CONFLICT` is closed in both accepted forms: an indexed HTTP-200 rejected outcome and top-level `409 / IDENTITY_LINK_CONFLICT / DO_NOT_RETRY`. Neither form may produce mirror completion.
+
+R17 changes no HTTP route, request field, response envelope, Worker adapter or OpenAPI schema. It integrates the existing Office authority-transition RPC with the R16 database invariant: source locks are acquired before Candidate scope locks, and a source-history conflict is contained as the existing indexed `REJECTED / IDENTITY_LINK_CONFLICT` item outcome inside a completed durable transition batch. Exact replay returns the stored aggregate body. Malformed source-link input retains the indexed `VALIDATION_FAILED` contract rather than becoming a pre-lock database exception.
 
 The route strings, HTTP method, HMAC header names and request bodies above are used verbatim by the installed Apps Script helpers. The public Candidate broker maps the public `/candidate-system/v1` prefix to the private service binding, where the private Candidate Worker validates the closed body schema and invokes the existing Phase 2 RPC owner. R12 installs this contract with the bridge false; the later enabled Google proving gate must still demonstrate the complete signed chain from the deployed Google projects.
 
-The operator installed the TEST transport key ID on both Candidate Worker layers and the matching signing secret only on the private verifier, while installing the same transport pair in both Google projects. A separate source-identity secret is shared only by the two Google projects and the controlled source-link bootstrap. Secret values are not in source or evidence. R12 keeps the bridge false throughout installation and deployment; enabled signed-route proof remains separately gated.
+The operator installed the TEST transport key ID on both Candidate Worker layers and the matching signing secret only on the private verifier, while installing the same transport pair in both Google projects. A separate source-identity secret is shared only by the two Google projects. CloudTMS receives only the derived source HMAC; automatic first-generation binding never receives the secret or raw public ID. Secret values are not in source or evidence. Enabled signed-route proof remains separately gated.
 
 ## Mixed private-Worker writer overlap
 
