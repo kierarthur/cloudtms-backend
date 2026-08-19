@@ -2278,7 +2278,9 @@ END IF;
     'reset_payout_count', v_reset_payout_count,
     'cancelled_mail_count', v_cancelled_mail_count,
     'communications_cancelled', v_cancelled_mail_count,
-    'communications_review_required', v_communications_review_required_count,
+    'communications_review_required', v_communications_review_required_count
+  )
+  || jsonb_build_object(
     'candidate_scope_contract_version', v_candidate_scope_contract_version,
     'candidate_scope_hash_version', v_candidate_scope_hash_version,
     'source_row_count_semantics', v_source_row_count_semantics,

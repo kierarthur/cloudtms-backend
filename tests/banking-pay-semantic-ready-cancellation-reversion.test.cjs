@@ -28,6 +28,8 @@ const expand = read('supabase', 'repeatable',
   '04082026_1208_pay_payment_correction_expand_work.sql');
 const processChunk = read('supabase', 'repeatable',
   '04082026_1209_pay_payment_correction_process_chunk.sql');
+const preBankCancelApply = read('supabase', 'repeatable',
+  '04082026_1158_pay_pre_bank_cancel_apply_work_item.sql');
 const patch = read('supabase', 'repeatable',
   '09082026_0825_pay_workbench_patch_preview_after_batch_mutation.sql');
 const cancelSafe = read('supabase', 'repeatable',
@@ -88,6 +90,36 @@ const executionRefreshOwnerControls = read('supabase', 'migrations',
   '13082026_1253_banking_pay_execution_refresh_owner_bridge_controls.sql');
 const operationReleaseLease = read('supabase', 'repeatable',
   '05082026_0915_banking_pay_operation_release_lease.sql');
+
+function countTopLevelCallArguments(source, openParenIndex) {
+  let depth = 1;
+  let argumentCount = 1;
+  let inString = false;
+
+  for (let index = openParenIndex + 1; index < source.length; index += 1) {
+    const character = source[index];
+    if (inString) {
+      if (character === "'" && source[index + 1] === "'") {
+        index += 1;
+      } else if (character === "'") {
+        inString = false;
+      }
+      continue;
+    }
+    if (character === "'") {
+      inString = true;
+    } else if (character === '(') {
+      depth += 1;
+    } else if (character === ')') {
+      depth -= 1;
+      if (depth === 0) return argumentCount;
+    } else if (character === ',' && depth === 1) {
+      argumentCount += 1;
+    }
+  }
+
+  throw new Error('Unterminated SQL function call');
+}
 
 test('semantic V3 and cancellation controls install disabled with a fail-closed dependency', () => {
   for (const setting of [
@@ -919,4 +951,25 @@ test('completed cancellation emits one durable request-level success alert in ne
     /ORDER BY detailed_alerts\.sort_at_utc DESC NULLS LAST,\s*detailed_alerts\.severity_rank DESC/,
   );
   assert.match(broker, /'BATCH_CANCELLATION_SUCCESS'/);
+});
+
+test('pre-bank cancellation result serialization stays below the PostgreSQL argument ceiling', () => {
+  const assignmentStart = preBankCancelApply.indexOf('v_result := jsonb_build_object(');
+  const assignmentEnd = preBankCancelApply.indexOf(
+    'UPDATE public.pay_payment_correction_work_items AS applied_work_item',
+    assignmentStart,
+  );
+  assert.ok(assignmentStart >= 0 && assignmentEnd > assignmentStart);
+
+  const assignment = preBankCancelApply.slice(assignmentStart, assignmentEnd);
+  const callPattern = /jsonb_build_object\s*\(/g;
+  const argumentCounts = [];
+  for (const match of assignment.matchAll(callPattern)) {
+    const openParenIndex = match.index + match[0].lastIndexOf('(');
+    argumentCounts.push(countTopLevelCallArguments(assignment, openParenIndex));
+  }
+
+  assert.deepEqual(argumentCounts, [54, 58, 18]);
+  assert.ok(argumentCounts.every((count) => count <= 100));
+  assert.match(assignment, /\)\s*\|\|\s*jsonb_build_object\s*\(/);
 });

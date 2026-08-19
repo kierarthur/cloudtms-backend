@@ -827,7 +827,7 @@
       "schema": "public",
       "name": "pay_pre_bank_cancel_apply_work_item",
       "identity_arguments": "p_work_item_id uuid, p_actor_user_id uuid",
-      "definition_sha256": "3dfad8de619564e9c5dc6915f609e7b1da6ced86f25ed691a1765769772637b8",
+      "definition_sha256": "026ace84cc320562ea9d08631b68f9517dbcdbb3a3c9165b40bdcd1c087a6d22",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
