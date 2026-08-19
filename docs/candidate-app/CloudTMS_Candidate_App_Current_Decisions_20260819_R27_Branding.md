@@ -2,7 +2,7 @@
 
 **Authority date:** 19 August 2026  
 **Current implementation boundary:** Candidate Daily Phase 3 R26 / R18E final assurance closure plus the R27 branding decision  
-**Decision range:** complete historical authority through AV-501
+**Decision range:** complete historical authority through AV-522
 
 ## Authority and format
 
