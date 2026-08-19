@@ -951,11 +951,11 @@ BEGIN
         END;
 
         -- Current Payment Status and immutable preparation must interpret the
-        -- reviewed status filter identically.  Provider/settlement states that
-        -- are not actionable have already made v_action_allowed false.  For the
-        -- remaining page-local candidate, preserve the Current Payment Status
-        -- precedence for prior correction outcomes before no-money eligibility.
+        -- reviewed status filter identically.  A fresh Draft retry uses the
+        -- exact current diagnostic above; other actions preserve historical
+        -- correction outcomes before no-money eligibility.
         v_effective_display_state := CASE
+            WHEN v_requested_action = 'DRAFT_CANCEL' AND v_action_allowed THEN 'ACTIVE'
             WHEN v_candidate.latest_work_status = 'BLOCKED' THEN 'BLOCKED'
             WHEN v_candidate.latest_work_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE') THEN 'FAILED'
             WHEN COALESCE((v_diagnostic ->> 'can_no_money_unwind')::boolean, false) THEN 'NOT_PAID'

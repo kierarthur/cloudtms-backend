@@ -137,6 +137,10 @@ function preparedDraftCancellationEligible(fixture) {
   return diagnosticCanPreProviderCancel(fixture);
 }
 
+function statusPageDraftCancellationEligible(fixture) {
+  return diagnosticCanPreProviderCancel(fixture);
+}
+
 function nonEmptyProviderValue(value) {
   if (value === null || value === undefined) return false;
   if (Array.isArray(value)) return value.length > 0;
@@ -683,8 +687,36 @@ test('Draft retry still uses the same provider and full-scope authority while te
     'failed-retryable-work',
     'local-full',
   ]);
-  assert.match(statusPage, /WHEN v_batch\.status = 'DRAFT' AND pre_provider_cancel_eligible/);
+  const reviewedDraft = fixtures.filter(statusPageDraftCancellationEligible).map(({ id }) => id).sort();
+  assert.deepEqual(reviewedDraft, preparedDraft);
+
+  const eligibilityStart = statusPage.indexOf('candidate_release_eligibility_index AS MATERIALIZED');
+  const eligibilityEnd = statusPage.indexOf('candidate_classified_index AS MATERIALIZED', eligibilityStart);
+  const eligibility = statusPage.slice(eligibilityStart, eligibilityEnd);
+  assert.match(
+    eligibility,
+    /v_batch\.status = 'DRAFT'[\s\S]*latest_work_status IS DISTINCT FROM 'BLOCKED'[\s\S]*latest_work_status IS DISTINCT FROM 'FAILED_FINAL'[\s\S]*latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'/
+  );
+
+  const candidateClassifiedStart = statusPage.indexOf('candidate_classified_index AS MATERIALIZED');
+  const candidateClassifiedEnd = statusPage.indexOf('candidate_filtered_index AS MATERIALIZED', candidateClassifiedStart);
+  const candidateClassified = statusPage.slice(candidateClassifiedStart, candidateClassifiedEnd);
+  const mainClassifiedStart = statusPage.indexOf('), classified AS (');
+  const mainClassifiedEnd = statusPage.indexOf('), filtered AS (', mainClassifiedStart);
+  const mainClassified = statusPage.slice(mainClassifiedStart, mainClassifiedEnd);
+  for (const classification of [candidateClassified, mainClassified]) {
+    const activeRetry = classification.indexOf("WHEN v_batch.status = 'DRAFT'");
+    const blockedHistory = classification.indexOf("latest_work_status = 'BLOCKED'");
+    const draftAction = classification.indexOf("THEN ARRAY['DRAFT_CANCEL']::text[]");
+    const hiddenHistory = classification.indexOf("latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE')");
+    assert.ok(activeRetry >= 0 && activeRetry < blockedHistory);
+    assert.ok(draftAction >= 0 && draftAction < hiddenHistory);
+  }
+
+  assert.match(statusPage, /plain_blocker'[\s\S]*NOT \([\s\S]*v_batch\.status = 'DRAFT'[\s\S]*pre_provider_cancel_eligible/);
+  assert.match(statusPage, /failure_reason'[\s\S]*NOT \([\s\S]*v_batch\.status = 'DRAFT'[\s\S]*pre_provider_cancel_eligible/);
   assert.match(selectionPrepare, /WHEN v_requested_action = 'DRAFT_CANCEL'[\s\S]*can_pre_provider_cancel/);
+  assert.match(selectionPrepare, /v_effective_display_state := CASE[\s\S]*WHEN v_requested_action = 'DRAFT_CANCEL' AND v_action_allowed THEN 'ACTIVE'[\s\S]*latest_work_status = 'BLOCKED'/);
 });
 
 test('status readers expose only safe selection and actor-tailored progress contracts', () => {

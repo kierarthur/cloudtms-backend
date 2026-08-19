@@ -1134,9 +1134,17 @@ BEGIN
                   AND candidate_provider_precedence_index.provider_outcome_unknown IS NOT TRUE
                   AND candidate_provider_precedence_index.provider_outage IS NOT TRUE
                   AND candidate_provider_precedence_index.terminal_no_money IS NOT TRUE
-                  AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'BLOCKED'
-                  AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
-                  AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
+                  -- A terminal historical attempt is audit evidence, not current
+                  -- Draft authority.  A fresh Draft retry must still pass every
+                  -- provider, frozen-scope, carry-forward and completeness fence.
+                  AND (
+                    v_batch.status = 'DRAFT'
+                    OR (
+                      candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'BLOCKED'
+                      AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_FINAL'
+                      AND candidate_provider_precedence_index.latest_work_status IS DISTINCT FROM 'FAILED_RETRYABLE'
+                    )
+                  )
                   AND candidate_provider_precedence_index.manual_carry_forward_blocked IS NOT TRUE
                   AND candidate_provider_precedence_index.carry_forward_freshness_blocked IS NOT TRUE
                   AND candidate_provider_precedence_index.complete_candidate_instruction_scope
@@ -1151,6 +1159,7 @@ BEGIN
                  WHEN removed AND released THEN 'RELEASED'
                  WHEN removed THEN 'CANCELLED'
                  WHEN paid_or_settled THEN 'SETTLED'
+                 WHEN v_batch.status = 'DRAFT' AND pre_provider_cancel_eligible THEN 'ACTIVE'
                  WHEN latest_work_status = 'BLOCKED' THEN 'BLOCKED'
                  WHEN latest_work_status IN ('FAILED_FINAL','FAILED_RETRYABLE') THEN 'FAILED'
                  WHEN canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'BLOCKED'
@@ -1162,10 +1171,10 @@ BEGIN
                CASE
                  WHEN removed OR paid_or_settled THEN ARRAY[]::text[]
                  WHEN v_batch_terminal THEN ARRAY[]::text[]
-                 WHEN latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
-                 WHEN canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY[]::text[]
                  WHEN v_batch.status = 'DRAFT' AND pre_provider_cancel_eligible
                    THEN ARRAY['DRAFT_CANCEL']::text[]
+                 WHEN latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
+                 WHEN canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY[]::text[]
                  WHEN v_batch.status = 'DRAFT' THEN ARRAY[]::text[]
                  WHEN release_failed_payment_eligible THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
                  WHEN ambiguous AND has_resolution_context THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
@@ -1176,6 +1185,7 @@ BEGIN
                END AS available_actions,
                pg_catalog.round(reviewed_payment_amount * 100)::bigint AS original_payment_amount_pence,
                 CASE WHEN removed THEN 70 WHEN paid_or_settled THEN 60
+                     WHEN v_batch.status = 'DRAFT' AND pre_provider_cancel_eligible THEN 10
                      WHEN latest_work_status = 'BLOCKED' THEN 50
                      WHEN canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 50
                      WHEN release_failed_payment_eligible THEN 40
@@ -1520,6 +1530,7 @@ BEGIN
                    WHEN base.removed AND base.released THEN 'RELEASED'
                    WHEN base.removed THEN 'CANCELLED'
                     WHEN base.paid_or_settled THEN 'SETTLED'
+                    WHEN v_batch.status = 'DRAFT' AND base.pre_provider_cancel_eligible THEN 'ACTIVE'
                     WHEN base.latest_work_status = 'BLOCKED' THEN 'BLOCKED'
                     WHEN base.latest_work_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE') THEN 'FAILED'
                     WHEN base.canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 'BLOCKED'
@@ -1531,10 +1542,10 @@ BEGIN
                   CASE
                       WHEN base.removed OR base.paid_or_settled THEN ARRAY[]::text[]
                       WHEN v_batch_terminal THEN ARRAY[]::text[]
-                      WHEN base.latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
-                      WHEN base.canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY[]::text[]
                       WHEN v_batch.status = 'DRAFT' AND base.pre_provider_cancel_eligible
                         THEN ARRAY['DRAFT_CANCEL']::text[]
+                      WHEN base.latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE') THEN ARRAY[]::text[]
+                      WHEN base.canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN ARRAY[]::text[]
                       WHEN v_batch.status = 'DRAFT' THEN ARRAY[]::text[]
                      WHEN base.release_failed_payment_eligible THEN ARRAY['RELEASE_FAILED_PAYMENT']::text[]
                     WHEN base.ambiguous AND base.has_resolution_context THEN ARRAY['RESOLVE_PAYMENT_STATUS']::text[]
@@ -1550,6 +1561,7 @@ BEGIN
                CASE
                     WHEN base.removed THEN 70
                     WHEN base.paid_or_settled THEN 60
+                    WHEN v_batch.status = 'DRAFT' AND base.pre_provider_cancel_eligible THEN 10
                     WHEN base.latest_work_status = 'BLOCKED' THEN 50
                     WHEN base.canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER' THEN 50
                      WHEN base.release_failed_payment_eligible THEN 40
@@ -1713,8 +1725,18 @@ BEGIN
                     'plain_blocker', CASE
                         WHEN page_rows.paid_or_settled THEN 'Paid or settled payments cannot be cancelled.'
                         WHEN page_rows.payment_display_state = 'AMBIGUOUS' THEN 'The bank payment status must be resolved before continuing.'
-                        WHEN page_rows.latest_work_status = 'BLOCKED' THEN 'This payment could not be changed because its status or source ownership changed.'
-                        WHEN page_rows.latest_work_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE') THEN 'CloudTMS could not complete this payment change.'
+                        WHEN NOT (
+                               v_batch.status = 'DRAFT'
+                               AND coalesce(page_rows.pre_provider_cancel_eligible, false)
+                             )
+                             AND page_rows.latest_work_status = 'BLOCKED'
+                            THEN 'This payment could not be changed because its status or source ownership changed.'
+                        WHEN NOT (
+                               v_batch.status = 'DRAFT'
+                               AND coalesce(page_rows.pre_provider_cancel_eligible, false)
+                             )
+                             AND page_rows.latest_work_status IN ('FAILED_FINAL', 'FAILED_RETRYABLE')
+                            THEN 'CloudTMS could not complete this payment change.'
                         WHEN page_rows.canonical_provider_state = 'PROVIDER_OUTAGE_RETRY_LATER'
                             THEN 'The bank is temporarily unavailable. This payment cannot be changed until provider status is rechecked.'
                         WHEN page_rows.terminal_no_money AND page_rows.release_failed_payment_eligible IS NOT TRUE
@@ -1778,7 +1800,11 @@ BEGIN
                     'work_status', page_rows.latest_work_status,
                     'attempt_count', page_rows.attempt_count,
                     'failure_reason', CASE
-                        WHEN page_rows.latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE')
+                        WHEN NOT (
+                               v_batch.status = 'DRAFT'
+                               AND coalesce(page_rows.pre_provider_cancel_eligible, false)
+                             )
+                             AND page_rows.latest_work_status IN ('BLOCKED', 'FAILED_FINAL', 'FAILED_RETRYABLE')
                             THEN CASE
                                 WHEN page_rows.latest_work_status = 'BLOCKED' THEN 'This payment could not be changed because its status or source ownership changed.'
                                 ELSE 'CloudTMS could not complete this payment change.'

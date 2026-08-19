@@ -321,7 +321,7 @@
       "schema": "public",
       "name": "pay_batch_payment_status_page_v1",
       "identity_arguments": "p_pay_batch_id uuid, p_actor_user_id uuid, p_filter_json jsonb, p_sort_key text, p_sort_direction text, p_limit integer, p_cursor_json jsonb",
-      "definition_sha256": "4bbc0a066d637cdf7908f17ff25383b742a090fe12d44cbe0b332b2fc48a6420",
+      "definition_sha256": "14ef0f93702c8d07a3cce7f572a0a0e9f5da677b61c473e557cb4a52859052dd",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -738,7 +738,7 @@
       "schema": "public",
       "name": "pay_payment_correction_selection_prepare_chunk_v1",
       "identity_arguments": "p_correction_request_id uuid, p_operation_id uuid, p_cursor_json jsonb, p_limit integer, p_worker_id text, p_actor_user_id uuid",
-      "definition_sha256": "8bb8703c4e8f7abcfb62cf68fd76a7e6e57bac4668648de61788b0202bde910b",
+      "definition_sha256": "784e3ee63dd7783a969c4c03956d3a021c441aaf94f9df0f328d643cdefaba42",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
