@@ -25,6 +25,7 @@ on:
       - "tests/daily-canonical-authority.test.mjs"
       - "broker/src/daily-canonical-authority.js"
       - "broker/src/daily-schedule-authority.js"
+      - ".github/workflows/candidate-db-runtime.yml"
       - ".github/workflows/supabase-migrate.yml"
   workflow_dispatch: {}
 
@@ -52,10 +53,25 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install psql
+      - name: Ensure PostgreSQL client is available
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          set -euo pipefail
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get update -qq \
+              -o Acquire::Retries=3 \
+              -o Acquire::http::Timeout=30 \
+              -o Acquire::https::Timeout=30
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get install -y -qq \
+              -o Acquire::Retries=3 \
+              postgresql-client
+          psql --version
 
       - name: Verify Banking Pay function source authority
         run: |
