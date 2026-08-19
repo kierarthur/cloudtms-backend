@@ -35,6 +35,7 @@ DECLARE
     v_page_candidate_count integer := 0;
     v_page_active_item_count integer := 0;
     v_page_source_row_count integer := 0;
+    v_page_matching_queued_count integer := 0;
     v_page_amount_pence bigint := 0;
     v_page_hash text;
     v_selection_hash text;
@@ -47,6 +48,7 @@ DECLARE
     v_total_candidate_count integer;
     v_total_active_item_count integer;
     v_total_source_row_count integer;
+    v_total_matching_queued_count integer;
     v_total_amount numeric(14,2);
     v_has_more boolean := false;
     v_candidate record;
@@ -54,6 +56,7 @@ DECLARE
     v_item_ids uuid[];
     v_item_count integer;
     v_source_row_count integer;
+    v_matching_queued_count integer := 0;
     v_amount numeric(14,2);
     v_candidate_scope_hash text;
     v_shared_instruction_scope_hash text;
@@ -95,6 +98,11 @@ DECLARE
     v_cancel_reversion_page_authorities_v3 jsonb := '{}'::jsonb;
     v_cancel_reversion_page_authority_hash text;
     v_candidate_pre_request_authority jsonb := '{}'::jsonb;
+    v_candidate_scope_contract_version integer := 1;
+    v_candidate_scope_hash_version integer := 1;
+    v_source_row_count_semantics text := 'FINANCIAL_AND_QUEUED_COMMUNICATIONS';
+    v_communication_cleanup_contract_version integer := NULL::integer;
+    v_candidate_scope_contract_raw text;
 BEGIN
     IF p_correction_request_id IS NULL OR p_operation_id IS NULL THEN
         RAISE EXCEPTION 'PAYMENT_CORRECTION_SELECTION_IDENTIFIERS_REQUIRED'
@@ -154,6 +162,69 @@ BEGIN
                       'code', 'REQUEST_NOT_PLANNING',
                       'correction_request_id', p_correction_request_id
                   )::text;
+    END IF;
+
+    -- Candidate-scope V2 is explicit durable authority for newly prepared
+    -- requests. A request that already has materialised membership but no
+    -- marker remains legacy V1; it is never reinterpreted by deployment date.
+    v_candidate_scope_contract_raw := NULLIF(
+        pg_catalog.btrim(COALESCE(v_request.plan_json->>'candidate_scope_contract_version', '')),
+        ''
+    );
+
+    IF v_candidate_scope_contract_raw IS NULL THEN
+        IF v_request.status = 'PLANNING'
+           AND NOT EXISTS (
+               SELECT 1
+               FROM public.pay_payment_correction_request_candidates AS existing_member
+               WHERE existing_member.correction_request_id = v_request.id
+           )
+           AND NOT EXISTS (
+               SELECT 1
+               FROM public.banking_pay_operation_chunks AS existing_chunk
+               WHERE existing_chunk.operation_id = p_operation_id
+                 AND existing_chunk.phase = 'PREPARE_SELECTION'
+                 AND existing_chunk.chunk_type = 'CANDIDATE_SCOPE'
+           ) THEN
+            v_candidate_scope_contract_version := 2;
+        ELSE
+            v_candidate_scope_contract_version := 1;
+        END IF;
+    ELSIF v_candidate_scope_contract_raw IN ('1', '2') THEN
+        v_candidate_scope_contract_version := v_candidate_scope_contract_raw::integer;
+    ELSE
+        RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED'
+            USING ERRCODE = 'P0001',
+                  DETAIL = pg_catalog.jsonb_build_object(
+                      'code', 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED',
+                      'candidate_scope_contract_version', v_candidate_scope_contract_raw,
+                      'correction_request_id', v_request.id
+                  )::text;
+    END IF;
+
+    v_candidate_scope_hash_version := v_candidate_scope_contract_version;
+    v_source_row_count_semantics := CASE
+        WHEN v_candidate_scope_contract_version = 2 THEN 'FINANCIAL_ONLY'
+        ELSE 'FINANCIAL_AND_QUEUED_COMMUNICATIONS'
+    END;
+    v_communication_cleanup_contract_version := CASE
+        WHEN v_candidate_scope_contract_version = 2 THEN 1
+        ELSE NULL::integer
+    END;
+
+    IF v_request.status = 'PLANNING'
+       AND v_request.plan_json->>'candidate_scope_contract_version' IS NULL THEN
+        UPDATE public.pay_payment_correction_requests AS versioned_request
+        SET plan_json = COALESCE(versioned_request.plan_json, '{}'::jsonb)
+              || pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+                   'candidate_scope_contract_version', v_candidate_scope_contract_version,
+                   'candidate_scope_hash_version', v_candidate_scope_hash_version,
+                   'source_row_count_semantics', v_source_row_count_semantics,
+                   'communication_cleanup_contract_version', v_communication_cleanup_contract_version
+                 )),
+            updated_at_utc = pg_catalog.clock_timestamp()
+        WHERE versioned_request.id = v_request.id
+        RETURNING versioned_request.* INTO v_request;
     END IF;
 
     v_actor_user_id := COALESCE(p_actor_user_id, v_request.requested_by_user_id);
@@ -796,21 +867,30 @@ BEGIN
             UNION ALL SELECT pg_catalog.count(*) FROM public.banking_pay_operation_transfer_scope AS source_row WHERE source_row.pay_batch_id = v_batch.id AND (source_row.pay_bank_transfer_id IN (SELECT transfer_id.id FROM transfer_ids AS transfer_id) OR source_row.transfer_group_key IN (SELECT transfer_group.transfer_group_key FROM transfer_groups AS transfer_group))
             UNION ALL SELECT pg_catalog.count(*) FROM public.banking_pay_operation_transfer_scope_items AS source_row WHERE source_row.pay_batch_item_id IN (SELECT scope_item.id FROM financial_scope_items AS scope_item)
             UNION ALL SELECT pg_catalog.count(*) FROM public.pay_batch_paye_net_inputs AS source_row WHERE source_row.pay_batch_candidate_id = v_candidate.pay_batch_candidate_id
-            UNION ALL SELECT pg_catalog.count(*)
-              FROM public.mail_outbox AS source_row
-              CROSS JOIN LATERAL (
-                  SELECT public._pay_payment_correction_mail_scope_match(
-                      source_row.id, v_batch.id, v_candidate_selection_json,
-                      v_candidate_selected_scope_json, false
-                  ) AS match_result
-              ) AS mail_match
-              WHERE pg_catalog.upper(pg_catalog.btrim(COALESCE(source_row.status::text, ''))) = 'QUEUED'
-                AND pg_catalog.lower(pg_catalog.concat_ws('|', source_row.type, source_row.email_type, source_row.context_kind, source_row.reference, COALESCE(source_row.payment_scope_json::text, '{}'))) LIKE ANY (ARRAY['%remittance%', '%payout%', '%pay_batch%', '%finance_payout%'])
-                AND COALESCE(NULLIF(mail_match.match_result->>'matched', '')::boolean, false)
         )
         SELECT COALESCE(pg_catalog.sum(source_count.row_count), 0)::integer
         INTO v_source_row_count
         FROM source_counts AS source_count;
+
+        -- Communications are observed independently. V1 retains the exact
+        -- historical combined-count/hash semantics. V2 deliberately keeps
+        -- volatile delivery state outside the financial scope contract.
+        SELECT pg_catalog.count(*)::integer
+        INTO v_matching_queued_count
+        FROM public.mail_outbox AS source_row
+        CROSS JOIN LATERAL (
+            SELECT public._pay_payment_correction_mail_scope_match(
+                source_row.id, v_batch.id, v_candidate_selection_json,
+                v_candidate_selected_scope_json, false
+            ) AS match_result
+        ) AS mail_match
+        WHERE pg_catalog.upper(pg_catalog.btrim(COALESCE(source_row.status::text, ''))) = 'QUEUED'
+          AND pg_catalog.lower(pg_catalog.concat_ws('|', source_row.type, source_row.email_type, source_row.context_kind, source_row.reference, COALESCE(source_row.payment_scope_json::text, '{}'))) LIKE ANY (ARRAY['%remittance%', '%payout%', '%pay_batch%', '%finance_payout%'])
+          AND COALESCE(NULLIF(mail_match.match_result->>'matched', '')::boolean, false);
+
+        IF v_candidate_scope_contract_version = 1 THEN
+            v_source_row_count := v_source_row_count + v_matching_queued_count;
+        END IF;
 
         IF v_item_count > v_max_items_per_candidate
            OR v_source_row_count > v_max_source_rows_per_candidate THEN
@@ -894,7 +974,7 @@ BEGIN
 
         v_candidate_scope_hash := private.pay_payment_correction_sha256_v1(
             pg_catalog.jsonb_build_object(
-                'version', 1,
+                'version', v_candidate_scope_hash_version,
                 'pay_batch_candidate_id', v_candidate.pay_batch_candidate_id,
                 'candidate_id', v_candidate.candidate_id,
                 'requested_action', v_requested_action,
@@ -932,7 +1012,14 @@ BEGIN
                 'eligibility_code', v_eligibility_code,
                 'cancellation_reversion_pre_request_authority_digest',
                   v_candidate_pre_request_authority->>'authority_digest'
-            )
+            ) || CASE
+                WHEN v_candidate_scope_contract_version = 2 THEN
+                    pg_catalog.jsonb_build_object(
+                        'contract', 'PAYMENT_CORRECTION_CANDIDATE_SCOPE_V2',
+                        'source_row_count_semantics', 'FINANCIAL_ONLY'
+                    )
+                ELSE '{}'::jsonb
+            END
         );
 
         -- Boundary-independent audit chain.  Each candidate contributes one
@@ -1082,6 +1169,7 @@ BEGIN
             v_page_candidate_count := v_page_candidate_count + 1;
             v_page_active_item_count := v_page_active_item_count + v_item_count;
             v_page_source_row_count := v_page_source_row_count + v_source_row_count;
+            v_page_matching_queued_count := v_page_matching_queued_count + v_matching_queued_count;
             v_page_amount_pence := v_page_amount_pence
                 + pg_catalog.round(v_amount * 100)::bigint;
         END IF;
@@ -1132,7 +1220,17 @@ BEGIN
                 WHERE member_row.correction_request_id = v_request.id
                   AND member_row.selection_ordinal > v_start_ordinal
             )
-        )
+        ) || CASE
+            WHEN v_candidate_scope_contract_version = 2 THEN
+                pg_catalog.jsonb_build_object(
+                    'candidate_scope_contract_version', 2,
+                    'candidate_scope_hash_version', 2,
+                    'source_row_count_semantics', 'FINANCIAL_ONLY',
+                    'communication_cleanup_contract_version', 1,
+                    'page_matching_queued_count_observed', v_page_matching_queued_count
+                )
+            ELSE '{}'::jsonb
+        END
     );
     v_sequence_no := v_page_sequence_no;
 
@@ -1175,6 +1273,11 @@ BEGIN
             'scanned_candidate_count', v_scanned_candidate_count,
             'page_active_item_count', v_page_active_item_count,
             'page_source_row_count', v_page_source_row_count,
+            'page_matching_queued_count_observed', v_page_matching_queued_count,
+            'candidate_scope_contract_version', v_candidate_scope_contract_version,
+            'candidate_scope_hash_version', v_candidate_scope_hash_version,
+            'source_row_count_semantics', v_source_row_count_semantics,
+            'communication_cleanup_contract_version', v_communication_cleanup_contract_version,
             'page_amount_pence', v_page_amount_pence,
             'selected_chain_hash', v_selected_chain_hash,
             'unselected_chain_hash', v_unselected_chain_hash,
@@ -1256,11 +1359,13 @@ BEGIN
         COALESCE(pg_catalog.sum((page_chunk.result_json->>'page_candidate_count')::integer), 0)::integer,
         COALESCE(pg_catalog.sum((page_chunk.result_json->>'page_active_item_count')::integer), 0)::integer,
         COALESCE(pg_catalog.sum((page_chunk.result_json->>'page_source_row_count')::integer), 0)::integer,
+        COALESCE(pg_catalog.sum(COALESCE((page_chunk.result_json->>'page_matching_queued_count_observed')::integer, 0)), 0)::integer,
         (COALESCE(pg_catalog.sum((page_chunk.result_json->>'page_amount_pence')::bigint), 0)::numeric / 100)::numeric(14,2)
     INTO
         v_total_candidate_count,
         v_total_active_item_count,
         v_total_source_row_count,
+        v_total_matching_queued_count,
         v_total_amount
     FROM public.banking_pay_operation_chunks AS page_chunk
     WHERE page_chunk.operation_id = v_operation.id
@@ -1405,7 +1510,16 @@ BEGIN
                 'selected_chain_hash', v_selected_chain_hash,
                 'unselected_chain_hash', v_unselected_chain_hash,
                 'prepare_page_count', v_page_sequence_no
-            )
+            ) || CASE
+                WHEN v_candidate_scope_contract_version = 2 THEN
+                    pg_catalog.jsonb_build_object(
+                        'candidate_scope_contract_version', 2,
+                        'candidate_scope_hash_version', 2,
+                        'source_row_count_semantics', 'FINANCIAL_ONLY',
+                        'communication_cleanup_contract_version', 1
+                    )
+                ELSE '{}'::jsonb
+            END
         );
 
         v_plan_json := pg_catalog.jsonb_build_object(
@@ -1425,7 +1539,17 @@ BEGIN
             'requested_explicit_hash', v_requested_explicit_hash,
             'unselected_scope_hash_before', v_unselected_scope_hash_before,
             'selection_ready_at_utc', pg_catalog.clock_timestamp()
-        );
+        ) || CASE
+            WHEN v_candidate_scope_contract_version = 2 THEN
+                pg_catalog.jsonb_build_object(
+                    'candidate_scope_contract_version', 2,
+                    'candidate_scope_hash_version', 2,
+                    'source_row_count_semantics', 'FINANCIAL_ONLY',
+                    'communication_cleanup_contract_version', 1,
+                    'matching_queued_count_observed', v_total_matching_queued_count
+                )
+            ELSE '{}'::jsonb
+        END;
         v_plan_hash := private.pay_payment_correction_sha256_v1(v_plan_json);
 
         UPDATE public.pay_payment_correction_requests AS ready_request
@@ -1447,6 +1571,9 @@ BEGIN
                     'selected_candidate_count', v_total_candidate_count,
                     'selected_active_item_count', v_total_active_item_count,
                     'selected_source_row_count', v_total_source_row_count,
+                    'matching_queued_count_observed', v_total_matching_queued_count,
+                    'candidate_scope_contract_version', v_candidate_scope_contract_version,
+                    'source_row_count_semantics', v_source_row_count_semantics,
                     'selected_amount_pence', pg_catalog.round(v_total_amount * 100)::bigint,
                     'selection_hash', v_selection_hash,
                     'phase', 'AWAITING_REAUTHENTICATION'
@@ -1475,6 +1602,9 @@ BEGIN
                     'prepared_candidate_count', v_total_candidate_count,
                     'prepared_active_item_count', v_total_active_item_count,
                     'prepared_source_row_count', v_total_source_row_count,
+                    'matching_queued_count_observed', v_total_matching_queued_count,
+                    'candidate_scope_contract_version', v_candidate_scope_contract_version,
+                    'source_row_count_semantics', v_source_row_count_semantics,
                     'prepared_amount_pence', pg_catalog.round(v_total_amount * 100)::bigint,
                     'phase', 'PREPARE_SELECTION'
                 ),
@@ -1497,6 +1627,11 @@ BEGIN
         'page_candidate_count', v_page_candidate_count,
         'page_active_item_count', v_page_active_item_count,
         'page_source_row_count', v_page_source_row_count,
+        'page_matching_queued_count_observed', v_page_matching_queued_count,
+        'candidate_scope_contract_version', v_candidate_scope_contract_version,
+        'candidate_scope_hash_version', v_candidate_scope_hash_version,
+        'source_row_count_semantics', v_source_row_count_semantics,
+        'communication_cleanup_contract_version', v_communication_cleanup_contract_version,
         'page_amount_pence', v_page_amount_pence,
         'page_hash', v_page_hash,
         'selection_hash', v_selection_hash,

@@ -143,6 +143,8 @@ DECLARE
   v_bootstrap_id uuid;
   v_reservation_order_contract constant text:='RESERVATION_COMPONENT_SOURCE_KEY_C_V1';
   v_is_fresh_reservation_cursor boolean:=false;
+  v_correction_scope_issue_request_id uuid;
+  v_correction_scope_issue_code text;
 BEGIN
   IF v_build_id IS NULL OR v_attempt_id IS NULL OR v_attempt_nonce IS NULL
      OR jsonb_typeof(v_cursor)<>'object' OR p_session_id IS NULL OR p_candidate_id IS NULL THEN
@@ -561,6 +563,252 @@ BEGIN
       WHERE v_last_source_key IS NULL OR source.source_key>v_last_source_key
       ORDER BY source.source_key LIMIT v_fact_limit+1;
     ELSIF v_fact_family='RESERVATION_COMPONENT' THEN
+      -- One server-owned projection resolves every financially open correction
+      -- request for this candidate. Durable request-candidate membership is the
+      -- primary frozen authority; work items, when present, must agree exactly.
+      -- Only requests with no durable membership may use the already-valid
+      -- legacy envelope/helper path. BLOCKED remains financially open.
+      SELECT correction_request.id,
+             'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED'
+      INTO v_correction_scope_issue_request_id, v_correction_scope_issue_code
+      FROM public.pay_payment_correction_requests AS correction_request
+      WHERE correction_request.status IN (
+          'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED'
+        )
+        AND correction_request.correction_kind IN (
+          'PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY'
+        )
+        AND NULLIF(BTRIM(COALESCE(
+              correction_request.plan_json->>'candidate_scope_contract_version',''
+            )), '') IS NOT NULL
+        AND correction_request.plan_json->>'candidate_scope_contract_version' NOT IN ('1','2')
+        AND EXISTS (
+          SELECT 1
+          FROM public.pay_batch_candidates AS request_candidate
+          WHERE request_candidate.pay_batch_id=correction_request.pay_batch_id
+            AND request_candidate.candidate_id=p_candidate_id
+        )
+      ORDER BY correction_request.id::text
+      LIMIT 1;
+
+      IF v_correction_scope_issue_request_id IS NOT NULL THEN
+        RAISE EXCEPTION '%', v_correction_scope_issue_code
+          USING ERRCODE='P0001', DETAIL=jsonb_build_object(
+            'code',v_correction_scope_issue_code,
+            'correction_request_id',v_correction_scope_issue_request_id,
+            'candidate_id',p_candidate_id
+          )::text;
+      END IF;
+
+      v_correction_scope_issue_request_id:=NULL::uuid;
+      v_correction_scope_issue_code:=NULL::text;
+
+      SELECT correction_request.id,
+             'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH'
+      INTO v_correction_scope_issue_request_id, v_correction_scope_issue_code
+      FROM public.pay_payment_correction_requests AS correction_request
+      JOIN public.pay_payment_correction_request_candidates AS request_member
+        ON request_member.correction_request_id=correction_request.id
+      JOIN public.pay_batch_candidates AS request_candidate
+        ON request_candidate.id=request_member.pay_batch_candidate_id
+       AND request_candidate.pay_batch_id=correction_request.pay_batch_id
+       AND request_candidate.candidate_id=p_candidate_id
+      WHERE correction_request.status IN (
+          'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED'
+        )
+        AND correction_request.correction_kind IN (
+          'PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY'
+        )
+        AND (
+          request_member.pay_batch_item_ids IS NULL
+          OR cardinality(request_member.pay_batch_item_ids)<>request_member.active_item_count
+          OR EXISTS (
+            SELECT 1
+            FROM unnest(request_member.pay_batch_item_ids) AS frozen_item(pay_batch_item_id)
+            LEFT JOIN public.pay_batch_items AS item_row
+              ON item_row.id=frozen_item.pay_batch_item_id
+             AND item_row.pay_batch_candidate_id=request_member.pay_batch_candidate_id
+            WHERE item_row.id IS NULL
+          )
+          OR (
+            EXISTS (
+              SELECT 1
+              FROM public.pay_payment_correction_work_items AS any_work
+              WHERE any_work.correction_request_id=correction_request.id
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM public.pay_payment_correction_work_items AS matching_work
+              WHERE matching_work.correction_request_id=correction_request.id
+                AND matching_work.pay_batch_candidate_id=request_member.pay_batch_candidate_id
+            )
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM public.pay_payment_correction_work_items AS work_item
+            WHERE work_item.correction_request_id=correction_request.id
+              AND work_item.pay_batch_candidate_id=request_member.pay_batch_candidate_id
+              AND (
+                work_item.pay_batch_id IS DISTINCT FROM correction_request.pay_batch_id
+                OR work_item.candidate_id IS DISTINCT FROM p_candidate_id
+                OR work_item.selection_hash IS DISTINCT FROM request_member.candidate_scope_hash
+                OR work_item.selection_json->>'expected_item_count'
+                     IS DISTINCT FROM request_member.active_item_count::text
+                OR work_item.selection_json->'expected_pay_batch_item_ids'
+                     IS DISTINCT FROM to_jsonb(request_member.pay_batch_item_ids)
+              )
+          )
+        )
+      ORDER BY correction_request.id::text
+      LIMIT 1;
+
+      IF v_correction_scope_issue_request_id IS NOT NULL THEN
+        RAISE EXCEPTION '%', v_correction_scope_issue_code
+          USING ERRCODE='P0001', DETAIL=jsonb_build_object(
+            'code',v_correction_scope_issue_code,
+            'correction_request_id',v_correction_scope_issue_request_id,
+            'candidate_id',p_candidate_id
+          )::text;
+      END IF;
+
+      v_correction_scope_issue_request_id:=NULL::uuid;
+      v_correction_scope_issue_code:=NULL::text;
+
+      -- A no-membership request may use only a helper-compatible envelope or
+      -- the helper's existing narrow whole-Draft compatibility contract.
+      SELECT fallback_request.id,
+             'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISSING'
+      INTO v_correction_scope_issue_request_id, v_correction_scope_issue_code
+      FROM (
+        SELECT correction_request.*,
+          CASE
+            WHEN jsonb_typeof(correction_request.plan_json->'selected_pay_batch_item_ids')='array'
+              THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
+                ||jsonb_build_object(
+                  'pay_batch_item_ids',correction_request.plan_json->'selected_pay_batch_item_ids',
+                  'expected_pay_batch_item_ids',correction_request.plan_json->'selected_pay_batch_item_ids')
+            WHEN jsonb_typeof(correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}')='array'
+              THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
+                ||jsonb_build_object(
+                  'pay_batch_item_ids',correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}',
+                  'expected_pay_batch_item_ids',correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}')
+            WHEN jsonb_typeof(correction_request.plan_json#>'{selection,pay_batch_item_ids}')='array'
+              THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
+                ||jsonb_build_object(
+                  'pay_batch_item_ids',correction_request.plan_json#>'{selection,pay_batch_item_ids}',
+                  'expected_pay_batch_item_ids',correction_request.plan_json#>'{selection,pay_batch_item_ids}')
+            ELSE COALESCE(correction_request.selection_json,'{}'::jsonb)
+          END AS resolved_selection_json
+        FROM public.pay_payment_correction_requests AS correction_request
+        WHERE correction_request.status IN (
+            'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED'
+          )
+          AND correction_request.correction_kind IN (
+            'PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY'
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM public.pay_payment_correction_request_candidates AS any_member
+            WHERE any_member.correction_request_id=correction_request.id
+          )
+          AND EXISTS (
+            SELECT 1 FROM public.pay_batch_candidates AS request_candidate
+            WHERE request_candidate.pay_batch_id=correction_request.pay_batch_id
+              AND request_candidate.candidate_id=p_candidate_id
+          )
+      ) AS fallback_request
+      WHERE NOT (
+        upper(NULLIF(BTRIM(COALESCE(fallback_request.resolved_selection_json->>'scope_type','')),''))
+          IN ('BATCH','CANDIDATES','TRANSFER','UMBRELLA_PAYMENT_GROUP')
+        OR (
+          upper(BTRIM(COALESCE(fallback_request.resolved_selection_json->>'requested_action','')))='DRAFT_CANCEL'
+          AND upper(BTRIM(COALESCE(fallback_request.resolved_selection_json->>'mode','')))='ALL_MATCHING'
+          AND COALESCE(fallback_request.resolved_selection_json->>'source_context','')='pay_batch_cancel'
+          AND COALESCE(fallback_request.resolved_selection_json->'filter_json','{}'::jsonb)='{}'::jsonb
+          AND COALESCE(fallback_request.resolved_selection_json->'exclusions','[]'::jsonb)='[]'::jsonb
+        )
+      )
+      ORDER BY fallback_request.id::text
+      LIMIT 1;
+
+      IF v_correction_scope_issue_request_id IS NOT NULL THEN
+        RAISE EXCEPTION '%', v_correction_scope_issue_code
+          USING ERRCODE='P0001', DETAIL=jsonb_build_object(
+            'code',v_correction_scope_issue_code,
+            'correction_request_id',v_correction_scope_issue_request_id,
+            'candidate_id',p_candidate_id
+          )::text;
+      END IF;
+
+      DROP TABLE IF EXISTS pg_temp._bpay_wb_open_correction_scope_v1;
+      CREATE TEMP TABLE _bpay_wb_open_correction_scope_v1 ON COMMIT DROP AS
+      WITH open_requests AS MATERIALIZED (
+        SELECT correction_request.*
+        FROM public.pay_payment_correction_requests AS correction_request
+        WHERE correction_request.status IN (
+            'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED'
+          )
+          AND correction_request.correction_kind IN (
+            'PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY'
+          )
+      ), membership_scope AS MATERIALIZED (
+        SELECT request_row.id AS correction_request_id,
+               frozen_item.pay_batch_item_id
+        FROM open_requests AS request_row
+        JOIN public.pay_payment_correction_request_candidates AS request_member
+          ON request_member.correction_request_id=request_row.id
+        JOIN public.pay_batch_candidates AS request_candidate
+          ON request_candidate.id=request_member.pay_batch_candidate_id
+         AND request_candidate.pay_batch_id=request_row.pay_batch_id
+         AND request_candidate.candidate_id=p_candidate_id
+        CROSS JOIN LATERAL unnest(request_member.pay_batch_item_ids)
+          AS frozen_item(pay_batch_item_id)
+      ), fallback_requests AS MATERIALIZED (
+        SELECT request_row.*,
+          CASE
+            WHEN jsonb_typeof(request_row.plan_json->'selected_pay_batch_item_ids')='array'
+              THEN COALESCE(request_row.selection_json,'{}'::jsonb)
+                ||jsonb_build_object(
+                  'pay_batch_item_ids',request_row.plan_json->'selected_pay_batch_item_ids',
+                  'expected_pay_batch_item_ids',request_row.plan_json->'selected_pay_batch_item_ids')
+            WHEN jsonb_typeof(request_row.plan_json#>'{selection,selected_pay_batch_item_ids}')='array'
+              THEN COALESCE(request_row.selection_json,'{}'::jsonb)
+                ||jsonb_build_object(
+                  'pay_batch_item_ids',request_row.plan_json#>'{selection,selected_pay_batch_item_ids}',
+                  'expected_pay_batch_item_ids',request_row.plan_json#>'{selection,selected_pay_batch_item_ids}')
+            WHEN jsonb_typeof(request_row.plan_json#>'{selection,pay_batch_item_ids}')='array'
+              THEN COALESCE(request_row.selection_json,'{}'::jsonb)
+                ||jsonb_build_object(
+                  'pay_batch_item_ids',request_row.plan_json#>'{selection,pay_batch_item_ids}',
+                  'expected_pay_batch_item_ids',request_row.plan_json#>'{selection,pay_batch_item_ids}')
+            ELSE COALESCE(request_row.selection_json,'{}'::jsonb)
+          END AS resolved_selection_json
+        FROM open_requests AS request_row
+        WHERE NOT EXISTS (
+          SELECT 1 FROM public.pay_payment_correction_request_candidates AS any_member
+          WHERE any_member.correction_request_id=request_row.id
+        )
+      ), fallback_scope AS MATERIALIZED (
+        SELECT fallback_request.id AS correction_request_id,
+               selected_item.pay_batch_item_id
+        FROM fallback_requests AS fallback_request
+        JOIN LATERAL public._pay_payment_correction_selected_items(
+          fallback_request.pay_batch_id,
+          fallback_request.resolved_selection_json,
+          false
+        ) AS selected_item ON selected_item.pay_batch_id=fallback_request.pay_batch_id
+        WHERE selected_item.candidate_id=p_candidate_id
+      )
+      SELECT DISTINCT resolved_scope.correction_request_id,
+             resolved_scope.pay_batch_item_id
+      FROM (
+        SELECT * FROM membership_scope
+        UNION ALL
+        SELECT * FROM fallback_scope
+      ) AS resolved_scope;
+
+      CREATE INDEX ON pg_temp._bpay_wb_open_correction_scope_v1(pay_batch_item_id);
+      CREATE INDEX ON pg_temp._bpay_wb_open_correction_scope_v1(correction_request_id,pay_batch_item_id);
+
       INSERT INTO pg_temp._bpay_wb_fact_page_v1
       SELECT reservation.id::text,md5('RESERVATION:'||reservation.id::text),
         authority.resolved_timesheet_id,authority.owner_ids,'pay_advance_reservations',reservation.id,
@@ -719,40 +967,8 @@ BEGIN
             public._pay_batch_status_is_active_reservation(batch_row.status)
             OR EXISTS (
               SELECT 1
-              FROM public.pay_payment_correction_requests correction_request
-              JOIN LATERAL public._pay_payment_correction_selected_items(
-                correction_request.pay_batch_id,
-                CASE
-                  WHEN jsonb_typeof(correction_request.plan_json->'selected_pay_batch_item_ids')='array'
-                    THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
-                      ||jsonb_build_object(
-                        'pay_batch_item_ids',correction_request.plan_json->'selected_pay_batch_item_ids',
-                        'expected_pay_batch_item_ids',
-                          correction_request.plan_json->'selected_pay_batch_item_ids')
-                  WHEN jsonb_typeof(correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}')='array'
-                    THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
-                      ||jsonb_build_object(
-                        'pay_batch_item_ids',
-                          correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}',
-                        'expected_pay_batch_item_ids',
-                          correction_request.plan_json#>'{selection,selected_pay_batch_item_ids}')
-                  WHEN jsonb_typeof(correction_request.plan_json#>'{selection,pay_batch_item_ids}')='array'
-                    THEN COALESCE(correction_request.selection_json,'{}'::jsonb)
-                      ||jsonb_build_object(
-                        'pay_batch_item_ids',
-                          correction_request.plan_json#>'{selection,pay_batch_item_ids}',
-                        'expected_pay_batch_item_ids',
-                          correction_request.plan_json#>'{selection,pay_batch_item_ids}')
-                  ELSE COALESCE(correction_request.selection_json,'{}'::jsonb)
-                END,
-                false
-              ) selected_item ON selected_item.pay_batch_id=correction_request.pay_batch_id
-              WHERE correction_request.pay_batch_id=batch_candidate.pay_batch_id
-                AND correction_request.status IN (
-                  'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')
-                AND correction_request.correction_kind IN (
-                  'PRE_BANK_CANCEL','NO_MONEY_UNWIND','MANUAL_EVIDENCE_NO_MONEY')
-                AND selected_item.pay_batch_item_id=item.id
+              FROM pg_temp._bpay_wb_open_correction_scope_v1 AS correction_scope
+              WHERE correction_scope.pay_batch_item_id=item.id
             )
             OR EXISTS (
               SELECT 1
@@ -833,15 +1049,10 @@ BEGIN
             FROM public.pay_batch_item_breakdowns breakdown
             WHERE breakdown.pay_batch_item_id=candidate.pay_batch_item_id),'[]'::jsonb)
             AS breakdowns,
-          COALESCE((SELECT jsonb_agg(correction_request.id::text ORDER BY correction_request.id)
-            FROM public.pay_payment_correction_requests correction_request
-            JOIN LATERAL public._pay_payment_correction_selected_items(
-              correction_request.pay_batch_id,COALESCE(correction_request.selection_json,'{}'::jsonb),false
-            ) selected_item ON selected_item.pay_batch_id=correction_request.pay_batch_id
-            WHERE correction_request.pay_batch_id=candidate.pay_batch_id
-              AND selected_item.pay_batch_item_id=candidate.pay_batch_item_id
-              AND correction_request.status IN (
-                'REQUESTED','AWAITING_AUTHORISATION','AUTHORISED','EXPANDED','PROCESSING','BLOCKED')),
+          COALESCE((SELECT jsonb_agg(correction_scope.correction_request_id::text
+                                    ORDER BY correction_scope.correction_request_id::text)
+            FROM pg_temp._bpay_wb_open_correction_scope_v1 AS correction_scope
+            WHERE correction_scope.pay_batch_item_id=candidate.pay_batch_item_id),
             '[]'::jsonb) AS open_correction_request_ids
         FROM active_item_candidates candidate
         LEFT JOIN active_item_component_summary component

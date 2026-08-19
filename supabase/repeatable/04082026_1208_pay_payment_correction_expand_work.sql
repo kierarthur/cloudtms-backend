@@ -33,6 +33,9 @@ DECLARE
   v_fast_draft_result jsonb := '{}'::jsonb;
   v_fast_draft_after_candidate_id uuid := NULL::uuid;
   v_candidate_id uuid;
+  v_candidate_scope_contract_version integer := 1;
+  v_candidate_scope_contract_raw text;
+  v_source_row_count_semantics text := 'FINANCIAL_AND_QUEUED_COMMUNICATIONS';
 BEGIN
   IF p_correction_request_id IS NULL THEN
     RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
@@ -119,6 +122,35 @@ BEGIN
   v_requested_action := coalesce(
     v_request.plan_json->>'requested_action', v_request.selection_json->>'requested_action'
   );
+
+  v_candidate_scope_contract_raw := NULLIF(
+    BTRIM(COALESCE(v_request.plan_json->>'candidate_scope_contract_version', '')),
+    ''
+  );
+  IF v_candidate_scope_contract_raw IS NULL OR v_candidate_scope_contract_raw = '1' THEN
+    v_candidate_scope_contract_version := 1;
+    v_source_row_count_semantics := 'FINANCIAL_AND_QUEUED_COMMUNICATIONS';
+  ELSIF v_candidate_scope_contract_raw = '2' THEN
+    v_candidate_scope_contract_version := 2;
+    v_source_row_count_semantics := 'FINANCIAL_ONLY';
+    IF v_request.plan_json->>'candidate_scope_hash_version' IS DISTINCT FROM '2'
+       OR v_request.plan_json->>'source_row_count_semantics' IS DISTINCT FROM 'FINANCIAL_ONLY'
+       OR v_request.plan_json->>'communication_cleanup_contract_version' IS DISTINCT FROM '1' THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH',
+          'correction_request_id', p_correction_request_id,
+          'candidate_scope_contract_version', v_candidate_scope_contract_raw
+        )::text;
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+        'code', 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED',
+        'correction_request_id', p_correction_request_id,
+        'candidate_scope_contract_version', v_candidate_scope_contract_raw
+      )::text;
+  END IF;
 
   SELECT COALESCE(settings_row.banking_pay_draft_overlay_fast_cancel_v1_enabled,false)
   INTO v_fast_draft_enabled
@@ -414,13 +446,22 @@ BEGIN
         'candidate_scope_hash_pre_request_authority_digest',
           resolved.candidate_scope_hash_pre_request_authority_digest,
         'cancellation_reversion_start_authority_v2',resolved.start_authority
-      ),
+      ) || CASE WHEN v_candidate_scope_contract_version = 2 THEN
+        pg_catalog.jsonb_build_object(
+          'candidate_scope_contract_version', 2,
+          'candidate_scope_hash_version', 2,
+          'source_row_count_semantics', v_source_row_count_semantics,
+          'communication_cleanup_contract_version', 1
+        )
+      ELSE '{}'::jsonb END,
       resolved.candidate_scope_hash,
       'PENDING', 0, NULL, NULL, NULL, v_now, NULL,
       pg_catalog.jsonb_build_object(
         'created_by', 'pay_payment_correction_expand_work',
          'selection_ordinal', resolved.selection_ordinal,
-         'candidate_scope_hash', resolved.candidate_scope_hash
+         'candidate_scope_hash', resolved.candidate_scope_hash,
+         'candidate_scope_contract_version', v_candidate_scope_contract_version,
+         'source_row_count_semantics', v_source_row_count_semantics
       )
     FROM resolved
     ON CONFLICT (correction_request_id, work_kind, selection_hash) DO NOTHING
@@ -483,6 +524,35 @@ BEGIN
         WHERE member_row.correction_request_id = p_correction_request_id
       )
     ) AS membership_difference;
+
+    v_mismatch_count := v_mismatch_count + (
+      SELECT pg_catalog.count(*)::integer
+      FROM public.pay_payment_correction_work_items AS work_row
+      JOIN public.pay_payment_correction_request_candidates AS member_row
+        ON member_row.correction_request_id = work_row.correction_request_id
+       AND member_row.pay_batch_candidate_id = work_row.pay_batch_candidate_id
+      JOIN public.pay_batch_candidates AS candidate_row
+        ON candidate_row.id = member_row.pay_batch_candidate_id
+       AND candidate_row.pay_batch_id = v_request.pay_batch_id
+      WHERE work_row.correction_request_id = p_correction_request_id
+        AND (
+          work_row.candidate_id IS DISTINCT FROM candidate_row.candidate_id
+          OR work_row.selection_hash IS DISTINCT FROM member_row.candidate_scope_hash
+          OR work_row.selection_json->>'expected_item_count'
+               IS DISTINCT FROM member_row.active_item_count::text
+          OR work_row.selection_json->'expected_pay_batch_item_ids'
+               IS DISTINCT FROM pg_catalog.to_jsonb(member_row.pay_batch_item_ids)
+          OR (
+            v_candidate_scope_contract_version = 2
+            AND (
+              work_row.selection_json->>'candidate_scope_contract_version' IS DISTINCT FROM '2'
+              OR work_row.selection_json->>'candidate_scope_hash_version' IS DISTINCT FROM '2'
+              OR work_row.selection_json->>'source_row_count_semantics' IS DISTINCT FROM 'FINANCIAL_ONLY'
+              OR work_row.selection_json->>'communication_cleanup_contract_version' IS DISTINCT FROM '1'
+            )
+          )
+        )
+    );
 
     IF v_child_count < 1 OR v_child_count <> v_work_count OR v_mismatch_count <> 0 THEN
       RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_MEMBERSHIP_MISMATCH'

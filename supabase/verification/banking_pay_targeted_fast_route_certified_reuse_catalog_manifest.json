@@ -497,7 +497,7 @@
       "schema": "public",
       "name": "pay_workbench_fail_job",
       "identity_arguments": "p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer",
-      "definition_sha256": "acda87d8ac36cf8655d7bb9c1f1286f7b97861bcd0c10e1ee2af7ecc216d475b",
+      "definition_sha256": "2750d5b1e12c23bd08ab0b6691b02bdae59c655d51413f3b60ae3f2792a785ad",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [
@@ -526,7 +526,7 @@
       "schema": "private",
       "name": "pay_workbench_candidate_source_build_chunk_legacy_v1",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_payload_json jsonb, p_limit integer",
-      "definition_sha256": "fe121067a4a1ae9d285b73c7e53e326eef516cfd0f91155ea3a541fee07dfcb2",
+      "definition_sha256": "3dea503e2c8a326ecfe04ba32630cf0b8ceb7e3f2c63df58052c5de9aabb082b",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

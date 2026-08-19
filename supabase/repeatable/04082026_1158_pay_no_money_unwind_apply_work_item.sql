@@ -100,6 +100,14 @@ DECLARE
   v_current_source_row_count integer := 0;
   v_capacity_selected_scope_json jsonb := '{}'::jsonb;
   v_current_candidate_scope_hash text;
+  v_candidate_scope_contract_version integer := 1;
+  v_candidate_scope_contract_raw text;
+  v_candidate_scope_hash_version integer := 1;
+  v_source_row_count_semantics text := 'FINANCIAL_AND_QUEUED_COMMUNICATIONS';
+  v_matching_queued_count integer := 0;
+  v_unsafe_queued_count integer := 0;
+  v_already_sent_untouched_count integer := 0;
+  v_other_terminal_untouched_count integer := 0;
 BEGIN
   PERFORM public._imp_debug_audit(
     p_actor_user_id,
@@ -232,6 +240,43 @@ BEGIN
     WHERE blocked_work_kind.id = p_work_item_id;
 
     RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+  END IF;
+
+  v_candidate_scope_contract_raw := NULLIF(BTRIM(COALESCE(
+    v_work_item.selection_json->>'candidate_scope_contract_version',
+    v_request.plan_json->>'candidate_scope_contract_version',
+    ''
+  )), '');
+  IF v_candidate_scope_contract_raw IS NULL OR v_candidate_scope_contract_raw = '1' THEN
+    v_candidate_scope_contract_version := 1;
+    v_candidate_scope_hash_version := 1;
+    v_source_row_count_semantics := 'FINANCIAL_AND_QUEUED_COMMUNICATIONS';
+  ELSIF v_candidate_scope_contract_raw = '2' THEN
+    v_candidate_scope_contract_version := 2;
+    v_candidate_scope_hash_version := 2;
+    v_source_row_count_semantics := 'FINANCIAL_ONLY';
+    IF v_request.plan_json->>'candidate_scope_contract_version' IS DISTINCT FROM '2'
+       OR v_work_item.selection_json->>'candidate_scope_contract_version' IS DISTINCT FROM '2'
+       OR v_request.plan_json->>'candidate_scope_hash_version' IS DISTINCT FROM '2'
+       OR v_work_item.selection_json->>'candidate_scope_hash_version' IS DISTINCT FROM '2'
+       OR v_request.plan_json->>'source_row_count_semantics' IS DISTINCT FROM 'FINANCIAL_ONLY'
+       OR v_work_item.selection_json->>'source_row_count_semantics' IS DISTINCT FROM 'FINANCIAL_ONLY'
+       OR v_request.plan_json->>'communication_cleanup_contract_version' IS DISTINCT FROM '1'
+       OR v_work_item.selection_json->>'communication_cleanup_contract_version' IS DISTINCT FROM '1' THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH'
+        USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+          'code', 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH',
+          'work_item_id', p_work_item_id,
+          'correction_request_id', v_request.id
+        )::text;
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED'
+      USING ERRCODE = 'P0001', DETAIL = jsonb_build_object(
+        'code', 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED',
+        'work_item_id', p_work_item_id,
+        'candidate_scope_contract_version', v_candidate_scope_contract_raw
+      )::text;
   END IF;
 
   DROP TABLE IF EXISTS pg_temp._tmp_no_money_unwind_selected;
@@ -666,7 +711,13 @@ END IF;
 
   DROP TABLE IF EXISTS pg_temp._tmp_no_money_capacity_mail_scope;
   CREATE TEMP TABLE _tmp_no_money_capacity_mail_scope ON COMMIT DROP AS
-  SELECT mail_row.id AS mail_outbox_id
+  SELECT
+    mail_row.id AS mail_outbox_id,
+    mail_match.match_result,
+    COALESCE(NULLIF(mail_match.match_result->>'safe_to_cancel', '')::boolean, false) AS safe_to_cancel,
+    COALESCE(NULLIF(mail_match.match_result->>'requires_review', '')::boolean, false) AS requires_review,
+    COALESCE(mail_match.match_result->>'match_kind', 'NONE') AS match_kind,
+    COALESCE(mail_match.match_result->>'match_confidence', 'NONE') AS match_confidence
   FROM public.mail_outbox AS mail_row
   CROSS JOIN LATERAL (
     SELECT public._pay_payment_correction_mail_scope_match(
@@ -679,6 +730,67 @@ END IF;
     AND COALESCE(NULLIF(mail_match.match_result->>'matched', '')::boolean, false);
 
   PERFORM 1 FROM public.mail_outbox AS locked_mail JOIN pg_temp._tmp_no_money_capacity_mail_scope AS capacity_mail ON capacity_mail.mail_outbox_id = locked_mail.id FOR UPDATE OF locked_mail;
+
+  SELECT
+    pg_catalog.count(*) FILTER (
+      WHERE upper(btrim(COALESCE(locked_mail.status::text, ''))) = 'QUEUED'
+    )::integer,
+    pg_catalog.count(*) FILTER (
+      WHERE upper(btrim(COALESCE(locked_mail.status::text, ''))) = 'QUEUED'
+        AND NOT (
+          COALESCE(capacity_mail.safe_to_cancel, false)
+          AND (
+            capacity_mail.match_confidence = 'EXACT'
+            OR (v_is_whole_batch_work_item AND capacity_mail.match_kind = 'WHOLE_BATCH')
+          )
+        )
+    )::integer
+  INTO v_matching_queued_count, v_unsafe_queued_count
+  FROM pg_temp._tmp_no_money_capacity_mail_scope AS capacity_mail
+  JOIN public.mail_outbox AS locked_mail
+    ON locked_mail.id = capacity_mail.mail_outbox_id;
+
+  IF v_candidate_scope_contract_version = 2 THEN
+    SELECT
+      pg_catalog.count(*) FILTER (
+        WHERE upper(btrim(COALESCE(mail_row.status::text, ''))) = 'SENT'
+      )::integer,
+      pg_catalog.count(*) FILTER (
+        WHERE upper(btrim(COALESCE(mail_row.status::text, ''))) NOT IN ('QUEUED', 'SENT')
+      )::integer
+    INTO v_already_sent_untouched_count, v_other_terminal_untouched_count
+    FROM public.mail_outbox AS mail_row
+    CROSS JOIN LATERAL (
+      SELECT public._pay_payment_correction_mail_scope_match(
+        mail_row.id, v_work_item.pay_batch_id, v_work_item.selection_json,
+        v_capacity_selected_scope_json, false
+      ) AS match_result
+    ) AS mail_match
+    WHERE lower(concat_ws('|', mail_row.type, mail_row.email_type, mail_row.context_kind, mail_row.reference, COALESCE(mail_row.payment_scope_json::text, '{}'))) LIKE ANY (ARRAY['%remittance%', '%payout%', '%pay_batch%', '%finance_payout%'])
+      AND COALESCE(NULLIF(mail_match.match_result->>'matched', '')::boolean, false);
+
+    IF v_unsafe_queued_count > 0 THEN
+      v_blocker := jsonb_build_object(
+        'code', 'COMMUNICATION_CLEANUP_UNSAFE',
+        'message', 'Queued payment communications could not be bound safely to the reviewed cancellation scope.',
+        'unsafe_queued_count', v_unsafe_queued_count
+      );
+      UPDATE public.pay_payment_correction_work_items AS communication_blocked_work
+      SET status = 'BLOCKED', locked_at_utc = NULL, locked_by = NULL,
+          processed_at_utc = v_now, last_error = v_blocker->>'message',
+          result_json = COALESCE(communication_blocked_work.result_json, '{}'::jsonb)
+            || jsonb_build_object(
+              'ok', false,
+              'status', 'BLOCKED',
+              'blocker', v_blocker,
+              'candidate_scope_contract_version', 2,
+              'communication_cleanup_contract_version', 1,
+              'processed_at_utc', v_now
+            )
+      WHERE communication_blocked_work.id = p_work_item_id;
+      RETURN jsonb_build_object('ok', false, 'status', 'BLOCKED', 'blocker', v_blocker);
+    END IF;
+  END IF;
   PERFORM 1
   FROM public.pay_batch_items AS locked_instruction_items
   LEFT JOIN public.pay_bank_transfers AS instruction_transfer ON instruction_transfer.id = locked_instruction_items.pay_bank_transfer_id
@@ -725,12 +837,15 @@ END IF;
     UNION ALL SELECT count(*) FROM public.banking_pay_operation_transfer_scope AS source_row WHERE source_row.pay_batch_id = v_work_item.pay_batch_id AND (source_row.pay_bank_transfer_id IN (SELECT transfer_id.id FROM transfer_ids AS transfer_id) OR source_row.transfer_group_key IN (SELECT transfer_group.transfer_group_key FROM transfer_groups AS transfer_group))
     UNION ALL SELECT count(*) FROM public.banking_pay_operation_transfer_scope_items AS source_row WHERE source_row.pay_batch_item_id IN (SELECT scope_item.id FROM financial_scope_items AS scope_item)
     UNION ALL SELECT count(*) FROM public.pay_batch_paye_net_inputs AS source_row WHERE source_row.pay_batch_candidate_id = v_work_item.pay_batch_candidate_id
-    UNION ALL SELECT count(*) FROM pg_temp._tmp_no_money_capacity_mail_scope
   ) SELECT COALESCE(sum(source_count.row_count), 0)::integer INTO v_current_source_row_count FROM source_counts AS source_count;
+
+  IF v_candidate_scope_contract_version = 1 THEN
+    v_current_source_row_count := v_current_source_row_count + v_matching_queued_count;
+  END IF;
 
   SELECT private.pay_payment_correction_sha256_v1(
     jsonb_build_object(
-      'version', 1,
+      'version', v_candidate_scope_hash_version,
       'pay_batch_candidate_id', v_work_item.pay_batch_candidate_id,
       'candidate_id', v_work_item.candidate_id,
       'requested_action', COALESCE(v_request.plan_json->>'requested_action', v_request.selection_json->>'requested_action'),
@@ -762,7 +877,12 @@ END IF;
           v_work_item.selection_json->>'candidate_scope_hash_pre_request_authority_digest',
           v_work_item.selection_json->'cancellation_reversion_pre_request_authority'->>'authority_digest'
         )
-    )
+    ) || CASE WHEN v_candidate_scope_contract_version = 2 THEN
+      jsonb_build_object(
+        'contract', 'PAYMENT_CORRECTION_CANDIDATE_SCOPE_V2',
+        'source_row_count_semantics', 'FINANCIAL_ONLY'
+      )
+    ELSE '{}'::jsonb END
   ) INTO v_current_candidate_scope_hash
   FROM public.pay_batch_candidates AS candidate_scope
   WHERE candidate_scope.id = v_work_item.pay_batch_candidate_id;
@@ -2166,6 +2286,14 @@ v_notice_queue_result := public.pay_payment_return_admin_notice_queue(
     'cancelled_mail_count', v_cancelled_mail_count,
     'communications_cancelled', v_cancelled_mail_count,
     'communications_review_required', v_communications_review_required_count,
+    'candidate_scope_contract_version', v_candidate_scope_contract_version,
+    'source_row_count_semantics', v_source_row_count_semantics,
+    'communication_cleanup_contract_version', CASE
+      WHEN v_candidate_scope_contract_version = 2 THEN 1 ELSE NULL::integer END,
+    'matching_queued_count', v_matching_queued_count,
+    'already_sent_untouched_count', v_already_sent_untouched_count,
+    'other_terminal_untouched_count', v_other_terminal_untouched_count,
+    'unsafe_queued_count', v_unsafe_queued_count,
     'mail_scope_matching', v_mail_scope_matching,
     'summary_refresh_candidate_count', v_summary_refresh_candidate_count,
     'active_batch_item_count_after', COALESCE(v_active_batch_item_count_after, 0),
@@ -2220,6 +2348,17 @@ v_notice_group_id := NULLIF(v_notice_queue_result->>'notice_group_id', '')::uuid
     'cancelled_mail_count', v_cancelled_mail_count,
     'communications_cancelled', v_cancelled_mail_count,
     'communications_review_required', v_communications_review_required_count,
+    'candidate_scope_contract_version', v_candidate_scope_contract_version,
+    'candidate_scope_hash_version', v_candidate_scope_hash_version,
+    'source_row_count_semantics', v_source_row_count_semantics,
+    'communication_cleanup_contract_version', CASE
+      WHEN v_candidate_scope_contract_version = 2 THEN 1 ELSE NULL::integer END,
+    'matching_queued_count', v_matching_queued_count,
+    'cancelled_queued_count', v_cancelled_mail_count,
+    'already_sent_untouched_count', v_already_sent_untouched_count,
+    'other_terminal_untouched_count', v_other_terminal_untouched_count,
+    'unsafe_queued_count', v_unsafe_queued_count,
+    'communication_review_required', v_unsafe_queued_count > 0,
     'mail_scope_matching', v_mail_scope_matching,
     'dirty_candidate_count', v_dirty_candidate_count,
     'freshness_dirtied', COALESCE(v_dirty_candidate_count, 0) > 0,
