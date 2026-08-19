@@ -1,7 +1,7 @@
 # CloudTMS Candidate App — current cumulative decisions
 
 **Authority date:** 19 August 2026  
-**Current implementation boundary:** Candidate Daily Phase 3 R25 / R18E assurance closure  
+**Current implementation boundary:** Candidate Daily Phase 3 R26 / R18E final assurance closure plus the R27 branding decision  
 **Decision range:** complete historical authority through AV-501
 
 ## Authority and format
