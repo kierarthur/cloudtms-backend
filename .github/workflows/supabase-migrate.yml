@@ -20,6 +20,7 @@ on:
       - "tests/16082026_0102_banking_pay_case_resolution_convergence_verification.sql"
       - "tests/banking-pay-recovery-authority.test.cjs"
       - "tests/banking-pay-catalog-preapply-gate.test.cjs"
+      - "tests/banking-pay-migration-runtime-gate-stability.test.cjs"
       - "tests/candidate-app-db-rpc-contract.test.cjs"
       - "tests/daily-canonical-authority.test.mjs"
       - "broker/src/daily-canonical-authority.js"
@@ -68,7 +69,8 @@ jobs:
             tests/banking-pay-finalise-residual-fast-route.test.cjs \
             tests/banking-pay-finance-resolution-cancel-authority.test.cjs \
             tests/banking-pay-recovery-authority.test.cjs \
-            tests/banking-pay-catalog-preapply-gate.test.cjs
+            tests/banking-pay-catalog-preapply-gate.test.cjs \
+            tests/banking-pay-migration-runtime-gate-stability.test.cjs
 
       - name: Verify Candidate App DB/RPC authority
         run: |
@@ -378,6 +380,9 @@ jobs:
 
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
             -f tests/15082026_1520_banking_pay_runtime_remediation_verification.sql
+          # This wrapper contains definition checks and rollback-only fixtures.
+          # The separate live James build diagnostic is deliberately manual so
+          # mutable TEST lifecycle state cannot fail an unrelated deployment.
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
             -f tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \

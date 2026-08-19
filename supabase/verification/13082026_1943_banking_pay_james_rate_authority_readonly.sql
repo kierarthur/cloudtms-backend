@@ -19,6 +19,9 @@ BEGIN
   JOIN private.banking_pay_workbench_economic_build_scope scope_row
     ON scope_row.build_id=build.id
   WHERE build.candidate_id='6e8493ae-c207-497e-8d83-0b518753f590'::uuid
+    AND build.status='COMPLETE'
+    AND build.private_stage='COMPLETE'
+    AND build.completed_at_utc IS NOT NULL
     AND scope_row.timesheet_id=ANY(ARRAY[
       '0ed36e08-3073-4dbc-a90b-f247dc3e62e4'::uuid,
       '60548d68-50fd-4951-99ff-7fe17d778930'::uuid,

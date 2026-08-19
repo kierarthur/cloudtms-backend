@@ -1,7 +1,10 @@
--- Runtime contract checks for James physical rate authority.
--- Run only against TEST after the four James runtime repeatables are installed.
+-- Deterministic runtime contract checks for James physical rate authority.
+-- Run against TEST after the four James runtime repeatables are installed.
+-- The live James build diagnostic remains available separately at
+-- supabase/verification/13082026_1943_banking_pay_james_rate_authority_readonly.sql.
+-- It is intentionally not part of this migration gate because mutable TEST
+-- build lifecycle state must not block an unrelated database deployment.
 \set ON_ERROR_STOP on
-\ir ../supabase/verification/13082026_1943_banking_pay_james_rate_authority_readonly.sql
 
 DO $verification$
 DECLARE
