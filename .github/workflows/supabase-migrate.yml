@@ -19,6 +19,7 @@ on:
       - "tests/15082026_1520_banking_pay_runtime_remediation_verification.sql"
       - "tests/16082026_0102_banking_pay_case_resolution_convergence_verification.sql"
       - "tests/banking-pay-recovery-authority.test.cjs"
+      - "tests/banking-pay-catalog-preapply-gate.test.cjs"
       - "tests/candidate-app-db-rpc-contract.test.cjs"
       - "tests/daily-canonical-authority.test.mjs"
       - "broker/src/daily-canonical-authority.js"
@@ -66,7 +67,8 @@ jobs:
             tests/banking-pay-source-publication-draft-cancel-fast-path.test.js \
             tests/banking-pay-finalise-residual-fast-route.test.cjs \
             tests/banking-pay-finance-resolution-cancel-authority.test.cjs \
-            tests/banking-pay-recovery-authority.test.cjs
+            tests/banking-pay-recovery-authority.test.cjs \
+            tests/banking-pay-catalog-preapply-gate.test.cjs
 
       - name: Verify Candidate App DB/RPC authority
         run: |
@@ -308,6 +310,30 @@ jobs:
             REPEATABLE_LEDGER_HASHES["__BOOTSTRAPPED__"]="v1"
             REPEATABLE_BOOTSTRAP_COMPLETE="v1"
             echo "BASELINE complete for unchanged repeatables."
+          fi
+
+          # Rehearse every pending Banking Pay catalog-owned repeatable in one
+          # rollback-only transaction. This proves the saved SQL compiles to
+          # the manifest fingerprint before that repeatable definition or its
+          # content-hash ledger update can persist in the target database.
+          REP_FILES_PENDING=()
+          for f in "${REP_FILES_SORTED[@]}"; do
+            base="$(basename "$f")"
+            content_hash="$(repeatable_hash "$f")"
+            installed_hash="${REPEATABLE_LEDGER_HASHES[$base]:-}"
+            if [[ "$installed_hash" != "$content_hash" ]]; then
+              REP_FILES_PENDING+=("$f")
+            fi
+          done
+
+          if [[ "${#REP_FILES_PENDING[@]}" -gt 0 ]]; then
+            CATALOG_PREFLIGHT_SQL="$(mktemp)"
+            node supabase/verification/generate_banking_pay_catalog_preapply_check.mjs \
+              "${CATALOG_PREFLIGHT_SQL}" "${REP_FILES_PENDING[@]}"
+            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f "${CATALOG_PREFLIGHT_SQL}"
+            rm -f "${CATALOG_PREFLIGHT_SQL}"
+          else
+            echo "No pending repeatables require a catalog pre-apply rehearsal."
           fi
 
           for f in "${REP_FILES_SORTED[@]}"; do
