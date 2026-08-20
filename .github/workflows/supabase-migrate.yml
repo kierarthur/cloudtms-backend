@@ -15,6 +15,7 @@ on:
       - "tests/banking-pay-source-publication-draft-cancel-fast-path.test.js"
       - "tests/banking-pay-finalise-residual-fast-route.test.cjs"
       - "tests/banking-pay-finance-resolution-cancel-authority.test.cjs"
+      - "tests/banking-pay-active-draft-preview-exclusion.test.cjs"
       - "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql"
       - "tests/15082026_1520_banking_pay_runtime_remediation_verification.sql"
       - "tests/16082026_0102_banking_pay_case_resolution_convergence_verification.sql"
@@ -84,6 +85,7 @@ jobs:
             tests/banking-pay-source-publication-draft-cancel-fast-path.test.js \
             tests/banking-pay-finalise-residual-fast-route.test.cjs \
             tests/banking-pay-finance-resolution-cancel-authority.test.cjs \
+            tests/banking-pay-active-draft-preview-exclusion.test.cjs \
             tests/banking-pay-recovery-authority.test.cjs \
             tests/banking-pay-catalog-preapply-gate.test.cjs \
             tests/banking-pay-migration-runtime-gate-stability.test.cjs

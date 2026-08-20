@@ -4696,6 +4696,10 @@ begin
           fcrr.active_snooze_note,
           round(coalesce(fcrr.due_amount_ex_vat, 0), 2) as due_amount_ex_vat,
           coalesce(finance_due_meta.nominal_due_amount_ex_vat, 0) as nominal_due_amount_ex_vat,
+          round(coalesce(finance_case_baseline.outstanding_amount, 0), 2)
+            as recovery_source_outstanding_ex_vat,
+          round(coalesce(finance_case_baseline.active_reserved_amount, 0), 2)
+            as recovery_active_reserved_ex_vat,
           finance_due_meta.recovery_created_at_utc as semantic_recovery_sort_at_utc,
           fcrr.is_blocked as case_is_blocked,
           (
@@ -4845,6 +4849,9 @@ begin
             and round(coalesce(fcrr.due_amount_ex_vat,0),2) > 0
           ) as draftable
         from finance_case_resolution_rollup fcrr
+        left join finance_case_baseline_scope finance_case_baseline
+          on finance_case_baseline.finance_case_id = fcrr.finance_case_id
+         and finance_case_baseline.candidate_id = fcrr.candidate_id
         left join lateral (
           select
             round(coalesce(max(fcrrb.nominal_due_amount), 0), 2) as nominal_due_amount_ex_vat,
@@ -5780,6 +5787,24 @@ begin
               'advanced_override_id', null,
               'advanced_reason', null
             )
+            || case
+              when fcl.line_type = 'OVERPAYMENT_RECOVERY' then jsonb_build_object(
+                'recovery_residual_contract_version', 1,
+                'recovery_source_outstanding_ex_vat', round(
+                  coalesce(fcl.recovery_source_outstanding_ex_vat, 0),
+                  2
+                ),
+                'recovery_active_reserved_ex_vat', round(
+                  coalesce(fcl.recovery_active_reserved_ex_vat, 0),
+                  2
+                ),
+                'recovery_residual_outstanding_ex_vat', round(
+                  coalesce(fcl.nominal_due_amount_ex_vat, 0),
+                  2
+                )
+              )
+              else '{}'::jsonb
+            end
             || jsonb_build_object(
               'resolution_state', case
                 when fcl.finance_resolution_clearability_state = 'RESOLVED_AND_CLEARABLE' then 'RESOLVED'

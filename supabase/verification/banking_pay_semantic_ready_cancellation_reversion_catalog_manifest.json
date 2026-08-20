@@ -3,7 +3,7 @@
   "contract": "CloudTMS Banking Pay semantic Ready-to-Pay and certified cancellation reversion",
   "project": "test-cloudtms",
   "project_ref": "yakevhtttcsljosbdpov",
-  "function_count": 48,
+  "function_count": 49,
   "functions": [
     {
       "schema": "public", "name": "_ctms_materialise_candidate_correction_residuals_v1",
@@ -167,13 +167,22 @@
     {
       "schema": "public", "name": "pay_workbench_session_get_preview_page",
       "identity_arguments": "p_session_id uuid, p_section text, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "bc1737e853421085061f84d0dc95d91655f640fee1800cc54b6dd83d277f6f0e",
+      "definition_sha256": "99309bf519fa791b05249f74fc0c3de2079006f9eed64fd3dbf3e6ca25486b48",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
       "source_files": ["supabase/repeatable/20072026_0117_banking_pay_preview_selection_revision.sql"]
+    },
+    {
+      "schema": "private", "name": "pay_workbench_preview_recovery_residual_is_current_v1",
+      "identity_arguments": "p_row_status text, p_row_candidate_id uuid, p_expected_candidate_id uuid, p_finance_case_id uuid, p_row_json jsonb, p_current_active_reserved_ex_vat numeric, p_current_active_reservation_count integer, p_exact_active_item_overlap boolean",
+      "definition_sha256": "4317bb7fbf6fd222fc26133fa08c931b2a9d23f0cc60ff71522ff930f59d344a",
+      "owner": "postgres", "security_definer": false,
+      "proconfig": ["search_path=\"\""],
+      "expanded_acl": [{"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}],
+      "source_files": ["supabase/repeatable/20082026_1502_pay_workbench_preview_recovery_residual_current_v1.sql"]
     },
     {
       "schema": "public", "name": "pay_workbench_session_set_selected_rows",
@@ -481,7 +490,7 @@
     {
       "schema": "public", "name": "pay_workbench_session_get_candidate_preview",
       "identity_arguments": "p_session_id uuid, p_candidate_id uuid, p_cursor_json jsonb, p_limit integer",
-      "definition_sha256": "3515759449180d5808d203d81cd169ce31d3c899f666e67e906f0b3a8f0e1106",
+      "definition_sha256": "7e669a4dd7d00e332207161460444ced8d71045c1549ef837e8e8b19d25aab2b",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},

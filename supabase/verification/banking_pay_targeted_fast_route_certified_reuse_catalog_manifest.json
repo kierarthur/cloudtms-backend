@@ -673,7 +673,7 @@
       "schema": "public",
       "name": "pay_preview_candidate_build_canonical_lines",
       "identity_arguments": "p_context_json jsonb, p_candidate_id uuid",
-      "definition_sha256": "0fd2ea2fb663a0a59f38c1cc2b7d95fbf23ce0f959702cb32d0f0a2e8a8927e6",
+      "definition_sha256": "9216d9e6c3c73514149dc20e93b75648c42ffd6850b0eaff2fbe4764e713c0b5",
       "owner": "postgres",
       "security_definer": true,
       "proconfig": [

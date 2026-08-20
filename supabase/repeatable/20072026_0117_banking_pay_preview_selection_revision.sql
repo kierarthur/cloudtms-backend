@@ -2,6 +2,8 @@
 -- Exposes the authoritative shared-session revision used by the frontend
 -- immediately before draft creation. This changes no economic or frozen-batch logic.
 
+\ir 20082026_1502_pay_workbench_preview_recovery_residual_current_v1.sql
+
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_get_preview_page(p_session_id uuid, p_section text, p_cursor_json jsonb DEFAULT '{}'::jsonb, p_limit integer DEFAULT 100)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -24,6 +26,7 @@ DECLARE
   v_raw_count integer := 0;
   v_known_count integer := 0;
   v_selected_eligible_count integer := 0;
+  v_eligible_row_ids uuid[] := ARRAY[]::uuid[];
   v_next_cursor jsonb := NULL::jsonb;
 BEGIN
   IF p_session_id IS NULL THEN
@@ -111,6 +114,355 @@ BEGIN
     v_last_id := (v_cursor_json->>'last_id')::uuid;
   END IF;
 
+  -- Resolve the complete eligible identity set once.  The count and returned
+  -- page are both derived from this array, so Cases/Ready/Blocked cannot drift
+  -- through duplicated reader predicates.
+  WITH session_preview_rows AS MATERIALIZED (
+    SELECT
+      preview_row.*,
+      UPPER(BTRIM(COALESCE(
+        preview_row.row_json->>'line_type',
+        preview_row.row_json#>>'{preview_contract,line_type}',
+        ''
+      ))) AS authority_line_type,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(
+          preview_row.row_json->>'finance_case_id', ''
+        )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN BTRIM(preview_row.row_json->>'finance_case_id')::uuid
+        ELSE NULL::uuid
+      END AS typed_finance_case_id,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(
+          preview_row.row_json->>'finance_component_id', ''
+        )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN BTRIM(preview_row.row_json->>'finance_component_id')::uuid
+        ELSE NULL::uuid
+      END AS typed_finance_component_id,
+      CASE
+        WHEN NULLIF(BTRIM(COALESCE(
+          preview_row.row_json->>'post_draft_overlay_pay_batch_id', ''
+        )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN BTRIM(preview_row.row_json->>'post_draft_overlay_pay_batch_id')::uuid
+        ELSE NULL::uuid
+      END AS typed_overlay_pay_batch_id
+    FROM public.banking_pay_workbench_preview_rows AS preview_row
+    WHERE preview_row.session_id = p_session_id
+      AND preview_row.session_version = v_session_row.version
+  ), owned_recovery_cases AS MATERIALIZED (
+    SELECT DISTINCT
+      preview_row.candidate_id,
+      preview_row.typed_finance_case_id AS finance_case_id
+    FROM session_preview_rows AS preview_row
+    JOIN public.pay_advances AS finance_case
+      ON finance_case.id = preview_row.typed_finance_case_id
+     AND finance_case.candidate_id = preview_row.candidate_id
+    WHERE preview_row.authority_line_type = 'OVERPAYMENT_RECOVERY'
+      AND preview_row.status = 'READY'
+  ), recovery_reservation_totals AS MATERIALIZED (
+    SELECT
+      recovery_case.candidate_id,
+      recovery_case.finance_case_id,
+      ROUND(COALESCE(SUM(reservation.reserved_amount), 0), 2)
+        AS current_active_reserved_ex_vat,
+      COUNT(reservation.id)::integer AS current_active_reservation_count
+    FROM owned_recovery_cases AS recovery_case
+    LEFT JOIN public.pay_advance_reservations AS reservation
+      ON reservation.finance_case_id = recovery_case.finance_case_id
+     AND UPPER(BTRIM(COALESCE(reservation.status, '')))
+          IN ('RESERVED', 'COMMITTED')
+    GROUP BY recovery_case.candidate_id, recovery_case.finance_case_id
+  ), active_item_overlap_rows AS MATERIALIZED (
+    SELECT DISTINCT preview_row.id
+    FROM session_preview_rows AS preview_row
+    JOIN public.pay_batch_candidates AS active_candidate
+      ON active_candidate.candidate_id = preview_row.candidate_id
+    JOIN public.pay_batches AS active_batch
+      ON active_batch.id = active_candidate.pay_batch_id
+     AND active_batch.cancelled_at_utc IS NULL
+     AND UPPER(BTRIM(COALESCE(active_batch.status, ''))) IN (
+       'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM', 'PARTIAL',
+       'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+       'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+     )
+    JOIN public.pay_batch_items AS active_item
+      ON active_item.pay_batch_candidate_id = active_candidate.id
+     AND COALESCE(active_item.is_voided, false) = false
+     AND (
+       (
+         COALESCE(
+           active_item.timesheet_id,
+           CASE
+             WHEN UPPER(BTRIM(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+              AND NULLIF(BTRIM(COALESCE(
+                active_item.frozen_source_basis_json->>'timesheet_id', ''
+              )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               THEN BTRIM(active_item.frozen_source_basis_json->>'timesheet_id')::uuid
+             ELSE NULL::uuid
+           END,
+           CASE
+             WHEN UPPER(BTRIM(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+              AND NULLIF(BTRIM(COALESCE(
+                active_item.frozen_source_basis_json->>'linked_timesheet_id', ''
+              )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               THEN BTRIM(active_item.frozen_source_basis_json->>'linked_timesheet_id')::uuid
+             ELSE NULL::uuid
+           END,
+           CASE
+             WHEN UPPER(BTRIM(COALESCE(active_item.item_type, ''))) = 'OVERPAYMENT_RECOVERY'
+              AND NULLIF(BTRIM(COALESCE(
+                active_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}',
+                ''
+              )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+               THEN BTRIM(
+                 active_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}'
+               )::uuid
+             ELSE NULL::uuid
+           END
+         ) = preview_row.timesheet_id
+         AND (
+           (
+             NULLIF(BTRIM(COALESCE(active_item.frozen_component_key_type, '')), '') IS NOT NULL
+             AND NULLIF(BTRIM(COALESCE(active_item.frozen_component_key_value, '')), '') IS NOT NULL
+             AND UPPER(BTRIM(active_item.frozen_component_key_type))
+               = UPPER(BTRIM(COALESCE(
+                 preview_row.key_type, preview_row.row_json->>'key_type', ''
+               )))
+             AND BTRIM(active_item.frozen_component_key_value)
+               = BTRIM(COALESCE(
+                 preview_row.key_value, preview_row.row_json->>'key_value', ''
+               ))
+           )
+           OR (
+             NULLIF(BTRIM(COALESCE(active_item.frozen_component_key_type, '')), '') IS NULL
+             AND NULLIF(BTRIM(COALESCE(active_item.frozen_component_key_value, '')), '') IS NULL
+           )
+         )
+       )
+       OR active_item.finance_component_id = preview_row.typed_finance_component_id
+       OR active_item.finance_case_id = preview_row.typed_finance_case_id
+       OR (
+         NULLIF(BTRIM(COALESCE(
+           preview_row.row_json->>'canonical_correction_key', ''
+         )), '') IS NOT NULL
+         AND NULLIF(BTRIM(COALESCE(
+           active_item.frozen_component_snapshot_json->>'canonical_correction_key',
+           active_item.frozen_resolution_payload_json->>'canonical_correction_key',
+           ''
+         )), '') = NULLIF(BTRIM(COALESCE(
+           preview_row.row_json->>'canonical_correction_key', ''
+         )), '')
+       )
+     )
+  ), strict_recovery_siblings AS MATERIALIZED (
+    SELECT
+      recovery_sibling.id,
+      recovery_sibling.candidate_id,
+      recovery_sibling.timesheet_id
+    FROM session_preview_rows AS recovery_sibling
+    WHERE recovery_sibling.status = 'READY'
+      AND recovery_sibling.authority_line_type = 'OVERPAYMENT_RECOVERY'
+
+    UNION
+
+    SELECT DISTINCT
+      recovery_sibling.id,
+      recovery_sibling.candidate_id,
+      recovery_sibling.timesheet_id
+    FROM session_preview_rows AS recovery_sibling
+    JOIN public.pay_batches AS frozen_recovery_batch
+      ON frozen_recovery_batch.id = recovery_sibling.typed_overlay_pay_batch_id
+     AND frozen_recovery_batch.cancelled_at_utc IS NULL
+     AND UPPER(BTRIM(COALESCE(frozen_recovery_batch.status, ''))) IN (
+       'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM', 'PARTIAL',
+       'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+       'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+     )
+    JOIN public.pay_batch_candidates AS frozen_recovery_candidate
+      ON frozen_recovery_candidate.pay_batch_id = frozen_recovery_batch.id
+     AND frozen_recovery_candidate.candidate_id = recovery_sibling.candidate_id
+    JOIN public.pay_batch_items AS frozen_recovery_item
+      ON frozen_recovery_item.pay_batch_candidate_id = frozen_recovery_candidate.id
+     AND COALESCE(frozen_recovery_item.is_voided, false) = false
+     AND UPPER(BTRIM(COALESCE(frozen_recovery_item.item_type, '')))
+          = 'OVERPAYMENT_RECOVERY'
+     AND frozen_recovery_item.finance_case_id = recovery_sibling.typed_finance_case_id
+     AND frozen_recovery_item.finance_component_id = recovery_sibling.typed_finance_component_id
+     AND UPPER(BTRIM(COALESCE(
+       frozen_recovery_item.frozen_component_key_type, ''
+     ))) = UPPER(BTRIM(COALESCE(
+       recovery_sibling.key_type, recovery_sibling.row_json->>'key_type', ''
+     )))
+     AND BTRIM(COALESCE(frozen_recovery_item.frozen_component_key_value, ''))
+          = BTRIM(COALESCE(
+              recovery_sibling.key_value, recovery_sibling.row_json->>'key_value', ''
+            ))
+     AND COALESCE(
+       frozen_recovery_item.timesheet_id,
+       CASE
+         WHEN NULLIF(BTRIM(COALESCE(
+           frozen_recovery_item.frozen_source_basis_json->>'timesheet_id', ''
+         )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           THEN BTRIM(
+             frozen_recovery_item.frozen_source_basis_json->>'timesheet_id'
+           )::uuid
+         ELSE NULL::uuid
+       END,
+       CASE
+         WHEN NULLIF(BTRIM(COALESCE(
+           frozen_recovery_item.frozen_source_basis_json->>'linked_timesheet_id', ''
+         )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           THEN BTRIM(
+             frozen_recovery_item.frozen_source_basis_json->>'linked_timesheet_id'
+           )::uuid
+         ELSE NULL::uuid
+       END,
+       CASE
+         WHEN NULLIF(BTRIM(COALESCE(
+           frozen_recovery_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}',
+           ''
+         )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+           THEN BTRIM(
+             frozen_recovery_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}'
+           )::uuid
+         ELSE NULL::uuid
+       END
+     ) = recovery_sibling.timesheet_id
+    WHERE recovery_sibling.status = 'SUPERSEDED'
+      AND recovery_sibling.authority_line_type = 'OVERPAYMENT_RECOVERY'
+      AND recovery_sibling.timesheet_id IS NOT NULL
+      AND COALESCE(LOWER(BTRIM(COALESCE(
+        recovery_sibling.row_json->>'post_draft_unavailable', ''
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on'), false)
+      AND COALESCE(LOWER(BTRIM(COALESCE(
+        recovery_sibling.row_json->>'post_draft_overlay_applied', ''
+      ))) IN ('true', 't', '1', 'yes', 'y', 'on'), false)
+      AND LOWER(BTRIM(COALESCE(
+        recovery_sibling.row_json->>'post_draft_overlay_active', 'true'
+      ))) NOT IN ('false', 'f', '0', 'no', 'n', 'off')
+      AND UPPER(BTRIM(COALESCE(
+        recovery_sibling.row_json->>'post_draft_overlay_operation_type', ''
+      ))) IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE')
+      AND recovery_sibling.typed_finance_case_id IS NOT NULL
+      AND recovery_sibling.typed_finance_component_id IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(
+        recovery_sibling.key_type, recovery_sibling.row_json->>'key_type', ''
+      )), '') IS NOT NULL
+      AND NULLIF(BTRIM(COALESCE(
+        recovery_sibling.key_value, recovery_sibling.row_json->>'key_value', ''
+      )), '') IS NOT NULL
+  ), preview_authority AS MATERIALIZED (
+    SELECT
+      preview_row.*,
+      COALESCE(reservation_total.current_active_reserved_ex_vat, 0)::numeric
+        AS current_active_reserved_ex_vat,
+      COALESCE(reservation_total.current_active_reservation_count, 0)::integer
+        AS current_active_reservation_count,
+      (active_overlap.id IS NOT NULL) AS exact_active_item_overlap,
+      CASE
+        WHEN preview_row.authority_line_type = 'OVERPAYMENT_RECOVERY' THEN
+          private.pay_workbench_preview_recovery_residual_is_current_v1(
+            preview_row.status,
+            preview_row.candidate_id,
+            finance_case.candidate_id,
+            finance_case.id,
+            preview_row.row_json,
+            COALESCE(reservation_total.current_active_reserved_ex_vat, 0),
+            COALESCE(reservation_total.current_active_reservation_count, 0),
+            active_overlap.id IS NOT NULL
+          )
+        ELSE true
+      END AS recovery_residual_is_current
+    FROM session_preview_rows AS preview_row
+    LEFT JOIN public.pay_advances AS finance_case
+      ON finance_case.id = preview_row.typed_finance_case_id
+     AND finance_case.candidate_id = preview_row.candidate_id
+    LEFT JOIN recovery_reservation_totals AS reservation_total
+      ON reservation_total.candidate_id = preview_row.candidate_id
+     AND reservation_total.finance_case_id = preview_row.typed_finance_case_id
+    LEFT JOIN active_item_overlap_rows AS active_overlap
+      ON active_overlap.id = preview_row.id
+  ), eligible_rows AS (
+    SELECT preview_row.id, preview_row.selected
+    FROM preview_authority AS preview_row
+    WHERE LOWER(private.pay_workbench_preview_effective_section_v1(
+      preview_row.section, preview_row.row_json
+    )) = v_resolved_section
+      AND preview_row.status = 'READY'
+      AND NOT (
+        COALESCE(LOWER(BTRIM(COALESCE(
+          preview_row.row_json->>'post_draft_unavailable', ''
+        ))) IN ('true', 't', '1', 'yes', 'y', 'on'), false)
+        OR (
+          COALESCE(LOWER(BTRIM(COALESCE(
+            preview_row.row_json->>'post_draft_overlay_applied', ''
+          ))) IN ('true', 't', '1', 'yes', 'y', 'on'), false)
+          AND UPPER(BTRIM(COALESCE(
+            preview_row.row_json->>'post_draft_overlay_operation_type', ''
+          ))) IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE')
+          AND LOWER(BTRIM(COALESCE(
+            preview_row.row_json->>'post_draft_overlay_active', 'true'
+          ))) NOT IN ('false', 'f', '0', 'no', 'n', 'off')
+        )
+      )
+      AND preview_row.recovery_residual_is_current
+      AND NOT (
+        preview_row.authority_line_type = 'OVERPAYMENT_RECOVERY'
+        AND private.pay_workbench_preview_effective_section_v1(
+          preview_row.section, preview_row.row_json
+        ) <> 'cases_resolutions'
+        AND preview_row.typed_finance_case_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM session_preview_rows AS actionable_sibling
+          WHERE actionable_sibling.candidate_id = preview_row.candidate_id
+            AND actionable_sibling.id <> preview_row.id
+            AND actionable_sibling.status = 'READY'
+            AND actionable_sibling.authority_line_type = 'OVERPAYMENT_RECOVERY'
+            AND actionable_sibling.typed_finance_case_id = preview_row.typed_finance_case_id
+            AND private.pay_workbench_preview_effective_section_v1(
+              actionable_sibling.section, actionable_sibling.row_json
+            ) = 'cases_resolutions'
+        )
+      )
+      AND NOT (
+        preview_row.authority_line_type = 'TIMESHEET_PAYMENT'
+        AND UPPER(BTRIM(COALESCE(
+          preview_row.row_json->>'presentation_reason', ''
+        ))) = 'NEGATIVE_ORDINARY_PRESENTATION_ONLY'
+        AND preview_row.timesheet_id IS NOT NULL
+        AND EXISTS (
+          SELECT 1
+          FROM strict_recovery_siblings AS recovery_sibling
+          WHERE recovery_sibling.candidate_id = preview_row.candidate_id
+            AND recovery_sibling.id <> preview_row.id
+            AND recovery_sibling.timesheet_id = preview_row.timesheet_id
+        )
+      )
+      AND (
+        preview_row.exact_active_item_overlap IS NOT TRUE
+        OR (
+          preview_row.authority_line_type = 'OVERPAYMENT_RECOVERY'
+          AND preview_row.recovery_residual_is_current
+          AND CASE
+            WHEN jsonb_typeof(
+              preview_row.row_json->'recovery_active_reserved_ex_vat'
+            ) = 'number'
+              THEN (preview_row.row_json->>'recovery_active_reserved_ex_vat')::numeric > 0
+            ELSE false
+          END
+        )
+      )
+  )
+  SELECT
+    COALESCE(ARRAY_AGG(eligible_row.id ORDER BY eligible_row.id), ARRAY[]::uuid[]),
+    COUNT(*)::integer,
+    COUNT(*) FILTER (WHERE eligible_row.selected IS TRUE)::integer
+  INTO v_eligible_row_ids, v_known_count, v_selected_eligible_count
+  FROM eligible_rows AS eligible_row;
+
+  IF false THEN
+
   SELECT
     COUNT(*)::integer,
     COUNT(*) FILTER (WHERE preview_count_row.selected IS TRUE)::integer
@@ -174,13 +526,122 @@ BEGIN
           AND recovery_sibling.session_version = preview_count_row.session_version
           AND recovery_sibling.candidate_id = preview_count_row.candidate_id
           AND recovery_sibling.id <> preview_count_row.id
-          AND recovery_sibling.status = 'READY'
           AND recovery_sibling.timesheet_id = preview_count_row.timesheet_id
           AND UPPER(BTRIM(COALESCE(
             recovery_sibling.row_json->>'line_type',
             recovery_sibling.row_json#>>'{preview_contract,line_type}',
             ''
           ))) = 'OVERPAYMENT_RECOVERY'
+          AND (
+            recovery_sibling.status = 'READY'
+            OR (
+              recovery_sibling.status = 'SUPERSEDED'
+              AND COALESCE(
+                LOWER(BTRIM(COALESCE(
+                  recovery_sibling.row_json->>'post_draft_unavailable', ''
+                ))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+                false
+              )
+              AND COALESCE(
+                LOWER(BTRIM(COALESCE(
+                  recovery_sibling.row_json->>'post_draft_overlay_applied', ''
+                ))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+                false
+              )
+              AND LOWER(BTRIM(COALESCE(
+                recovery_sibling.row_json->>'post_draft_overlay_active', 'true'
+              ))) NOT IN ('false', 'f', '0', 'no', 'n', 'off')
+              AND UPPER(BTRIM(COALESCE(
+                recovery_sibling.row_json->>'post_draft_overlay_operation_type', ''
+              ))) IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE')
+              AND NULLIF(BTRIM(COALESCE(
+                recovery_sibling.row_json->>'post_draft_overlay_pay_batch_id', ''
+              )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              AND NULLIF(BTRIM(COALESCE(
+                recovery_sibling.row_json->>'finance_case_id', ''
+              )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              AND NULLIF(BTRIM(COALESCE(
+                recovery_sibling.row_json->>'finance_component_id', ''
+              )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              AND NULLIF(BTRIM(COALESCE(
+                recovery_sibling.key_type, recovery_sibling.row_json->>'key_type', ''
+              )), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(
+                recovery_sibling.key_value, recovery_sibling.row_json->>'key_value', ''
+              )), '') IS NOT NULL
+              AND EXISTS (
+                SELECT 1
+                FROM public.pay_batch_items AS frozen_recovery_item
+                JOIN public.pay_batch_candidates AS frozen_recovery_candidate
+                  ON frozen_recovery_candidate.id = frozen_recovery_item.pay_batch_candidate_id
+                JOIN public.pay_batches AS frozen_recovery_batch
+                  ON frozen_recovery_batch.id = frozen_recovery_candidate.pay_batch_id
+                WHERE frozen_recovery_batch.id = BTRIM(
+                        recovery_sibling.row_json->>'post_draft_overlay_pay_batch_id'
+                      )::uuid
+                  AND frozen_recovery_candidate.candidate_id = recovery_sibling.candidate_id
+                  AND COALESCE(frozen_recovery_item.is_voided, false) = false
+                  AND UPPER(BTRIM(COALESCE(
+                    frozen_recovery_item.item_type, ''
+                  ))) = 'OVERPAYMENT_RECOVERY'
+                  AND frozen_recovery_batch.cancelled_at_utc IS NULL
+                  AND UPPER(BTRIM(COALESCE(
+                    frozen_recovery_batch.status, ''
+                  ))) IN (
+                    'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM', 'PARTIAL',
+                    'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+                    'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+                  )
+                  AND frozen_recovery_item.finance_case_id = BTRIM(
+                        recovery_sibling.row_json->>'finance_case_id'
+                      )::uuid
+                  AND frozen_recovery_item.finance_component_id = BTRIM(
+                        recovery_sibling.row_json->>'finance_component_id'
+                      )::uuid
+                  AND UPPER(BTRIM(COALESCE(
+                    frozen_recovery_item.frozen_component_key_type, ''
+                  ))) = UPPER(BTRIM(COALESCE(
+                    recovery_sibling.key_type, recovery_sibling.row_json->>'key_type', ''
+                  )))
+                  AND BTRIM(COALESCE(
+                    frozen_recovery_item.frozen_component_key_value, ''
+                  )) = BTRIM(COALESCE(
+                    recovery_sibling.key_value, recovery_sibling.row_json->>'key_value', ''
+                  ))
+                  AND COALESCE(
+                    frozen_recovery_item.timesheet_id,
+                    CASE
+                      WHEN NULLIF(BTRIM(COALESCE(
+                        frozen_recovery_item.frozen_source_basis_json->>'timesheet_id', ''
+                      )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        THEN BTRIM(
+                          frozen_recovery_item.frozen_source_basis_json->>'timesheet_id'
+                        )::uuid
+                      ELSE NULL::uuid
+                    END,
+                    CASE
+                      WHEN NULLIF(BTRIM(COALESCE(
+                        frozen_recovery_item.frozen_source_basis_json->>'linked_timesheet_id', ''
+                      )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        THEN BTRIM(
+                          frozen_recovery_item.frozen_source_basis_json->>'linked_timesheet_id'
+                        )::uuid
+                      ELSE NULL::uuid
+                    END,
+                    CASE
+                      WHEN NULLIF(BTRIM(COALESCE(
+                        frozen_recovery_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}',
+                        ''
+                      )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                        THEN BTRIM(
+                          frozen_recovery_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}'
+                        )::uuid
+                      ELSE NULL::uuid
+                    END
+                  ) = recovery_sibling.timesheet_id
+              )
+            )
+          )
       )
     )
     AND (
@@ -268,6 +729,7 @@ BEGIN
           )
       )
     );
+  END IF;
 
   WITH page_rows AS (
     SELECT page_source.*,
@@ -291,7 +753,11 @@ BEGIN
         preview_row.status,
         preview_row.session_version
       FROM public.banking_pay_workbench_preview_rows AS preview_row
-      WHERE preview_row.session_id = p_session_id
+      WHERE preview_row.id = ANY(v_eligible_row_ids)
+        AND (
+          true
+          OR (
+            preview_row.session_id = p_session_id
         AND preview_row.session_version = v_session_row.version
         AND LOWER(private.pay_workbench_preview_effective_section_v1(
           preview_row.section, preview_row.row_json
@@ -349,13 +815,122 @@ BEGIN
               AND recovery_sibling.session_version = preview_row.session_version
               AND recovery_sibling.candidate_id = preview_row.candidate_id
               AND recovery_sibling.id <> preview_row.id
-              AND recovery_sibling.status = 'READY'
               AND recovery_sibling.timesheet_id = preview_row.timesheet_id
               AND UPPER(BTRIM(COALESCE(
                 recovery_sibling.row_json->>'line_type',
                 recovery_sibling.row_json#>>'{preview_contract,line_type}',
                 ''
               ))) = 'OVERPAYMENT_RECOVERY'
+              AND (
+                recovery_sibling.status = 'READY'
+                OR (
+                  recovery_sibling.status = 'SUPERSEDED'
+                  AND COALESCE(
+                    LOWER(BTRIM(COALESCE(
+                      recovery_sibling.row_json->>'post_draft_unavailable', ''
+                    ))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+                    false
+                  )
+                  AND COALESCE(
+                    LOWER(BTRIM(COALESCE(
+                      recovery_sibling.row_json->>'post_draft_overlay_applied', ''
+                    ))) IN ('true', 't', '1', 'yes', 'y', 'on'),
+                    false
+                  )
+                  AND LOWER(BTRIM(COALESCE(
+                    recovery_sibling.row_json->>'post_draft_overlay_active', 'true'
+                  ))) NOT IN ('false', 'f', '0', 'no', 'n', 'off')
+                  AND UPPER(BTRIM(COALESCE(
+                    recovery_sibling.row_json->>'post_draft_overlay_operation_type', ''
+                  ))) IN ('DRAFT_CREATE', 'PAYMENT_EXECUTE', 'PAYMENT_SETTLE')
+                  AND NULLIF(BTRIM(COALESCE(
+                    recovery_sibling.row_json->>'post_draft_overlay_pay_batch_id', ''
+                  )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                  AND NULLIF(BTRIM(COALESCE(
+                    recovery_sibling.row_json->>'finance_case_id', ''
+                  )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                  AND NULLIF(BTRIM(COALESCE(
+                    recovery_sibling.row_json->>'finance_component_id', ''
+                  )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                  AND NULLIF(BTRIM(COALESCE(
+                    recovery_sibling.key_type, recovery_sibling.row_json->>'key_type', ''
+                  )), '') IS NOT NULL
+                  AND NULLIF(BTRIM(COALESCE(
+                    recovery_sibling.key_value, recovery_sibling.row_json->>'key_value', ''
+                  )), '') IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1
+                    FROM public.pay_batch_items AS frozen_recovery_item
+                    JOIN public.pay_batch_candidates AS frozen_recovery_candidate
+                      ON frozen_recovery_candidate.id = frozen_recovery_item.pay_batch_candidate_id
+                    JOIN public.pay_batches AS frozen_recovery_batch
+                      ON frozen_recovery_batch.id = frozen_recovery_candidate.pay_batch_id
+                    WHERE frozen_recovery_batch.id = BTRIM(
+                            recovery_sibling.row_json->>'post_draft_overlay_pay_batch_id'
+                          )::uuid
+                      AND frozen_recovery_candidate.candidate_id = recovery_sibling.candidate_id
+                      AND COALESCE(frozen_recovery_item.is_voided, false) = false
+                      AND UPPER(BTRIM(COALESCE(
+                        frozen_recovery_item.item_type, ''
+                      ))) = 'OVERPAYMENT_RECOVERY'
+                      AND frozen_recovery_batch.cancelled_at_utc IS NULL
+                      AND UPPER(BTRIM(COALESCE(
+                        frozen_recovery_batch.status, ''
+                      ))) IN (
+                        'DRAFT', 'DRAFT_CREATED', 'READY', 'WAITING_BANK_CONFIRM', 'PARTIAL',
+                        'FAILED', 'BLOCKED_FUNDS', 'SCHEDULED', 'EXECUTING',
+                        'AWAITING_AUTHORISATION', 'AUTHORISED_FOR_PAYMENT'
+                      )
+                      AND frozen_recovery_item.finance_case_id = BTRIM(
+                            recovery_sibling.row_json->>'finance_case_id'
+                          )::uuid
+                      AND frozen_recovery_item.finance_component_id = BTRIM(
+                            recovery_sibling.row_json->>'finance_component_id'
+                          )::uuid
+                      AND UPPER(BTRIM(COALESCE(
+                        frozen_recovery_item.frozen_component_key_type, ''
+                      ))) = UPPER(BTRIM(COALESCE(
+                        recovery_sibling.key_type, recovery_sibling.row_json->>'key_type', ''
+                      )))
+                      AND BTRIM(COALESCE(
+                        frozen_recovery_item.frozen_component_key_value, ''
+                      )) = BTRIM(COALESCE(
+                        recovery_sibling.key_value, recovery_sibling.row_json->>'key_value', ''
+                      ))
+                      AND COALESCE(
+                        frozen_recovery_item.timesheet_id,
+                        CASE
+                          WHEN NULLIF(BTRIM(COALESCE(
+                            frozen_recovery_item.frozen_source_basis_json->>'timesheet_id', ''
+                          )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            THEN BTRIM(
+                              frozen_recovery_item.frozen_source_basis_json->>'timesheet_id'
+                            )::uuid
+                          ELSE NULL::uuid
+                        END,
+                        CASE
+                          WHEN NULLIF(BTRIM(COALESCE(
+                            frozen_recovery_item.frozen_source_basis_json->>'linked_timesheet_id', ''
+                          )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            THEN BTRIM(
+                              frozen_recovery_item.frozen_source_basis_json->>'linked_timesheet_id'
+                            )::uuid
+                          ELSE NULL::uuid
+                        END,
+                        CASE
+                          WHEN NULLIF(BTRIM(COALESCE(
+                            frozen_recovery_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}',
+                            ''
+                          )), '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                            THEN BTRIM(
+                              frozen_recovery_item.frozen_component_snapshot_json#>>'{source_basis_json,linked_timesheet_id}'
+                            )::uuid
+                          ELSE NULL::uuid
+                        END
+                      ) = recovery_sibling.timesheet_id
+                  )
+                )
+              )
           )
         )
         AND (
@@ -441,6 +1016,8 @@ BEGIN
                   ''
                 )), '') = NULLIF(BTRIM(COALESCE(preview_row.row_json->>'canonical_correction_key', '')), '')
               )
+          )
+        )
           )
         )
         AND (
