@@ -1,4 +1,18 @@
 import { signCandidatePrivateRequest } from '../../broker/src/candidate-service-auth.js';
+import { signCandidateRouteContext } from '../../broker/src/candidate-route-context.js';
+import {
+  candidateDataPlaneRegistryEntry
+} from './candidate-data-plane-registry.generated.js';
+import {
+  handleMyTmsGoogleControlRequest,
+  isMyTmsGoogleControlPath
+} from './mytms-google-control.js';
+import {
+  CandidateControlPlaneError,
+  controlPlaneEnabled,
+  controlPlaneRpc,
+  globalAuthCutoverEnabled
+} from './control-plane-client.js';
 import {
   CANDIDATE_DAILY_BOOTSTRAP_ROUTE,
   boundedBodyLength,
@@ -47,6 +61,13 @@ const SHA256_RE = /^[0-9a-f]{64}$/i;
 const MAX_IDEMPOTENCY_KEY_BYTES = 200;
 const PUBLIC_CREDENTIAL_VERSION_CONTRACT = 'CANDIDATE_PUBLIC_CREDENTIAL_VERSIONS_V1';
 const PUBLIC_PHONE_BINDING_CONTRACT = 'CANDIDATE_PUBLIC_PHONE_BINDING_V1';
+const GLOBAL_ACCESS_TTL_SECONDS = 15 * 60;
+const GLOBAL_REFRESH_TTL_DAYS = 30;
+const GLOBAL_REFRESH_ABSOLUTE_TTL_DAYS = 90;
+const GLOBAL_CHALLENGE_TTL_MINUTES = 30;
+const GLOBAL_VERIFICATION_RECEIPT_TTL_MINUTES = 30;
+const AGENCY_CHOICE_TTL_SECONDS = 5 * 60;
+const ROUTE_CONTEXT_TTL_SECONDS = 5 * 60;
 const DEVICE_CIPHERTEXT_MAGIC = new Uint8Array([0x43, 0x54, 0x50]);
 const CREDENTIAL_AUTHORITIES = Object.freeze({
   access: Object.freeze({
@@ -79,6 +100,16 @@ const CREDENTIAL_AUTHORITIES = Object.freeze({
     secret: 'CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_SECRET',
     version: 'CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_KEY_VERSION',
     readers: 'CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_READ_KEY_VERSIONS'
+  }),
+  agencyChoice: Object.freeze({
+    secret: 'MYTMS_AGENCY_CHOICE_TOKEN_SECRET',
+    version: 'MYTMS_AGENCY_CHOICE_TOKEN_KEY_VERSION',
+    readers: 'MYTMS_AGENCY_CHOICE_TOKEN_READ_KEY_VERSIONS'
+  }),
+  globalChallenge: Object.freeze({
+    secret: 'MYTMS_GLOBAL_CHALLENGE_TOKEN_SECRET',
+    version: 'MYTMS_GLOBAL_CHALLENGE_TOKEN_KEY_VERSION',
+    readers: 'MYTMS_GLOBAL_CHALLENGE_TOKEN_READ_KEY_VERSIONS'
   })
 });
 
@@ -271,6 +302,88 @@ async function hmacSha256Bytes(secret, purpose, value) {
   );
   const bytes = value instanceof Uint8Array ? value : encoder.encode(String(value == null ? '' : value));
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, bytes));
+}
+
+function randomOpaqueToken(byteLength = 32) {
+  if (!Number.isSafeInteger(byteLength) || byteLength < 16 || byteLength > 128) {
+    throw new CandidateBrokerError(500, 'CANDIDATE_RANDOM_TOKEN_INVALID');
+  }
+  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(byteLength)));
+}
+
+async function deterministicControlToken(env, purpose, identity, byteLength = 32) {
+  const bytes = await hmacSha256Bytes(
+    env.MYTMS_CONTROL_PLANE_TOKEN_DERIVATION_SECRET,
+    `mytms-control-plane-token-v1:${purpose}`,
+    `${environmentName(env)}:${identity}`
+  );
+  return base64UrlEncode(bytes.slice(0, byteLength));
+}
+
+async function controlPlaneActorIdentityHmac(env, value) {
+  return bytesToHex(await hmacSha256Bytes(
+    env.MYTMS_CONTROL_PLANE_ACTOR_IDENTITY_SECRET,
+    'mytms-control-plane-actor-identity-v1',
+    `${environmentName(env)}:${text(value).toLowerCase()}`
+  ));
+}
+
+async function deriveGlobalPasswordDigest(password, metadata) {
+  const secret = String(password == null ? '' : password);
+  const parameters = isObject(metadata?.parameters) ? metadata.parameters : {};
+  const iterations = Number(parameters.iterations);
+  const lengthBytes = Number(parameters.length_bytes);
+  const salt = hexToBytes(metadata?.password_salt_hex);
+  if (secret.length < 12 || secret.length > 512
+      || text(metadata?.credential_scheme) !== 'PBKDF2-HMAC-SHA256'
+      || Number(metadata?.scheme_version) !== 1
+      || upper(parameters.hash) !== 'SHA-256'
+      || iterations !== 100000 || lengthBytes !== 32
+      || !salt || salt.length < 16 || salt.length > 128
+      || !SHA256_RE.test(text(metadata?.credential_authority_sha256_hex))) {
+    throw new CandidateBrokerError(401, 'CANDIDATE_LOGIN_INVALID');
+  }
+  const imported = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret), 'PBKDF2', false, ['deriveBits']
+  );
+  return bytesToHex(await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, imported, lengthBytes * 8
+  ));
+}
+
+function globalSessionTimes(now = new Date(), absoluteExpiry = null) {
+  const absolute = absoluteExpiry ? new Date(absoluteExpiry) : new Date(
+    now.getTime() + GLOBAL_REFRESH_ABSOLUTE_TTL_DAYS * 86400000
+  );
+  const refreshExpiry = new Date(Math.min(
+    now.getTime() + GLOBAL_REFRESH_TTL_DAYS * 86400000,
+    absolute.getTime()
+  ));
+  if (!Number.isFinite(absolute.getTime()) || absolute <= now || refreshExpiry <= now) {
+    throw new CandidateBrokerError(401, 'CANDIDATE_SESSION_INVALID');
+  }
+  return {
+    issued_at_utc: now.toISOString(),
+    expires_at_utc: refreshExpiry.toISOString(),
+    absolute_expires_at_utc: absolute.toISOString()
+  };
+}
+
+function globalSessionContext(access, env) {
+  if (access?.authority !== 'CONTROL_PLANE'
+      || !UUID_RE.test(text(access.global_account_id))
+      || !UUID_RE.test(text(access.global_session_id))
+      || !Number.isSafeInteger(Number(access.session_epoch))
+      || Number(access.session_epoch) < 1) {
+    throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+  }
+  return {
+    account_id: text(access.global_account_id).toLowerCase(),
+    session_id: text(access.global_session_id).toLowerCase(),
+    session_epoch: Number(access.session_epoch),
+    actor_identity_hmac: null,
+    environment: environmentName(env)
+  };
 }
 
 function configuredKeyVersion(env, authority) {
@@ -580,9 +693,17 @@ async function openPublicAccessToken(token, env) {
   );
   const payload = opened?.payload;
   const now = Math.floor(Date.now() / 1000);
+  const localAuthority = text(payload?.internal_access_token) && text(payload?.public_session_id);
+  const controlPlaneAuthority = payload?.authority === 'CONTROL_PLANE'
+    && UUID_RE.test(text(payload.global_account_id))
+    && UUID_RE.test(text(payload.global_session_id))
+    && UUID_RE.test(text(payload.public_session_id))
+    && Number.isSafeInteger(Number(payload.session_epoch)) && Number(payload.session_epoch) > 0
+    && Number.isFinite(Date.parse(payload.absolute_expires_at_utc || ''))
+    && Date.parse(payload.absolute_expires_at_utc) > Date.now();
   if (!payload || payload.typ !== 'candidate_broker_access' || payload.aud !== 'cloudtms-candidate-public'
       || payload.env !== environmentName(env) || Number(payload.exp) <= now
-      || !text(payload.internal_access_token) || !text(payload.public_session_id)) {
+      || (!localAuthority && !controlPlaneAuthority)) {
     throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
   }
   return { ...payload, _broker_access_key_version: opened.key_version };
@@ -596,9 +717,19 @@ async function openPublicRefresh(body, env) {
   );
   const payload = opened?.payload;
   const now = Math.floor(Date.now() / 1000);
+  const localAuthority = text(payload?.internal_refresh_token) && UUID_RE.test(text(payload?.internal_session_id));
+  const controlPlaneAuthority = payload?.authority === 'CONTROL_PLANE'
+    && text(payload?.control_plane_refresh_token)
+    && UUID_RE.test(text(payload?.global_account_id))
+    && UUID_RE.test(text(payload?.global_session_id))
+    && UUID_RE.test(text(payload?.public_session_id))
+    && Number.isSafeInteger(Number(payload?.session_epoch)) && Number(payload.session_epoch) > 0
+    && Number.isSafeInteger(Number(payload?.rotation)) && Number(payload.rotation) >= 0
+    && Number.isFinite(Date.parse(payload?.absolute_expires_at_utc || ''))
+    && Date.parse(payload.absolute_expires_at_utc) > Date.now();
   if (!payload || payload.typ !== 'candidate_broker_refresh' || payload.aud !== 'cloudtms-candidate-refresh'
       || payload.env !== environmentName(env) || Number(payload.exp) <= now
-      || !text(payload.internal_refresh_token) || !text(payload.internal_session_id)
+      || (!localAuthority && !controlPlaneAuthority)
       || !text(payload.public_session_id)
       || (body.session_id && text(body.session_id) !== payload.public_session_id)) {
     throw new CandidateBrokerError(401, 'CANDIDATE_SESSION_INVALID');
@@ -730,8 +861,11 @@ async function forwardPrivateSystem(request, env, routeDefinition = null) {
   return env.CLOUDTMS_PRIVATE.fetch(await signCandidatePrivateRequest(unsigned, env));
 }
 
-async function forwardPrivate(request, env, { authorization = '', body = undefined, timeoutMs = null } = {}) {
-  if (!env.CLOUDTMS_PRIVATE || typeof env.CLOUDTMS_PRIVATE.fetch !== 'function') {
+async function forwardPrivate(request, env, {
+  authorization = '', body = undefined, timeoutMs = null, federated = null
+} = {}) {
+  const destination = federated?.route?.registryEntry?.binding || env.CLOUDTMS_PRIVATE;
+  if (!destination || typeof destination.fetch !== 'function') {
     throw new CandidateBrokerError(503, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');
   }
   const path = privatePath(new URL(request.url).pathname);
@@ -746,6 +880,12 @@ async function forwardPrivate(request, env, { authorization = '', body = undefin
     ? (hasBody ? await boundedBodyBytes(request, maximumBytes) : undefined)
     : JSON.stringify(body);
   const headers = privateRequestHeaders(request, authorization);
+  if (federated) {
+    const signedRoute = await routeContextForPrivate(federated.access, federated.route, env);
+    headers.set('x-cloudtms-route-context', signedRoute.envelope);
+    headers.set('x-cloudtms-route-context-sha256', signedRoute.sha256);
+    if (federated.projectSession !== false) headers.delete('authorization');
+  }
   if (body !== undefined) headers.set('content-type', 'application/json');
   const unsigned = new Request(url.toString(), {
     method: request.method,
@@ -756,7 +896,7 @@ async function forwardPrivate(request, env, { authorization = '', body = undefin
       ? { signal: AbortSignal.timeout(timeoutMs) }
       : {})
   });
-  return env.CLOUDTMS_PRIVATE.fetch(await signCandidatePrivateRequest(unsigned, env));
+  return destination.fetch(await signCandidatePrivateRequest(unsigned, env));
 }
 
 async function responseJson(response, maximumBytes = MAX_PUBLIC_JSON_BYTES) {
@@ -970,6 +1110,156 @@ async function wrapPrivateSession(response, env, publicSessionId = null) {
   return jsonResponse(response.status, safe);
 }
 
+async function candidateControlPlaneRpc(env, schema, functionName, args, options = {}) {
+  try {
+    return await controlPlaneRpc(env, schema, functionName, args, options);
+  } catch (error) {
+    if (error instanceof CandidateControlPlaneError) {
+      throw new CandidateBrokerError(error.status, error.code);
+    }
+    throw new CandidateBrokerError(503, 'DEPENDENCY_UNAVAILABLE');
+  }
+}
+
+async function deterministicControlUuid(env, purpose, identity) {
+  return uuidFromBytes(await hmacSha256Bytes(
+    env.MYTMS_CONTROL_PLANE_TOKEN_DERIVATION_SECRET,
+    `mytms-control-plane-uuid-v1:${purpose}`,
+    `${environmentName(env)}:${identity}`
+  ));
+}
+
+function controlPlaneResultError(result, fallback = 'CONTROL_PLANE_REQUEST_REJECTED') {
+  if (result?.ok !== false) return null;
+  const code = text(result.error_code) || fallback;
+  const status = code.includes('THROTTLE') || code.includes('LIMIT') ? 429
+    : code.includes('CONFLICT') || code.includes('STALE') ? 409
+      : code.includes('INVALID') || code.includes('REUSE') || code.includes('REVOKED') ? 401
+        : 400;
+  return new CandidateBrokerError(status, code);
+}
+
+async function wrapGlobalSession(result, env, refreshToken, route = null) {
+  const accountId = text(result?.account_id).toLowerCase();
+  const globalSessionId = text(result?.session_id).toLowerCase();
+  const issuedAt = Date.parse(result?.issued_at_utc || '');
+  const expiresAt = Date.parse(result?.expires_at_utc || '');
+  const absoluteExpiresAt = Date.parse(result?.absolute_expires_at_utc || '');
+  const rotation = Number(result?.rotation);
+  const sessionEpoch = Number(result?.session_epoch);
+  if (!UUID_RE.test(accountId) || !UUID_RE.test(globalSessionId)
+      || !Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)
+      || !Number.isFinite(absoluteExpiresAt) || expiresAt <= issuedAt
+      || absoluteExpiresAt < expiresAt || absoluteExpiresAt <= Date.now()
+      || !Number.isSafeInteger(rotation) || rotation < 0
+      || !Number.isSafeInteger(sessionEpoch) || sessionEpoch < 1
+      || !text(refreshToken)) {
+    throw new CandidateBrokerError(502, 'CONTROL_PLANE_SESSION_INVALID');
+  }
+  const versions = assertPublicCredentialSecrets(env, currentPublicCredentialVersions(env));
+  const publicSessionId = await publicSessionIdForPrivate(
+    env, globalSessionId, versions.public_session_key_version
+  );
+  const issuedAtSeconds = Math.floor(issuedAt / 1000);
+  const common = {
+    authority: 'CONTROL_PLANE',
+    global_account_id: accountId,
+    global_session_id: globalSessionId,
+    session_epoch: sessionEpoch,
+    absolute_expires_at_utc: new Date(absoluteExpiresAt).toISOString(),
+    public_session_id: publicSessionId,
+    public_session_key_version: versions.public_session_key_version
+  };
+  const accessToken = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.access, 'candidate-broker-access-v1',
+    {
+      typ: 'candidate_broker_access', aud: 'cloudtms-candidate-public', env: environmentName(env),
+      ...common, rotation, iat: issuedAtSeconds, exp: issuedAtSeconds + GLOBAL_ACCESS_TTL_SECONDS
+    }, versions.access_key_version
+  );
+  const publicRefreshToken = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.refresh, 'candidate-broker-refresh-v1',
+    {
+      typ: 'candidate_broker_refresh', aud: 'cloudtms-candidate-refresh', env: environmentName(env),
+      ...common, rotation, control_plane_refresh_token: refreshToken,
+      iat: issuedAtSeconds, exp: Math.floor(absoluteExpiresAt / 1000)
+    }, versions.refresh_key_version
+  );
+  const safe = {
+    ok: true,
+    access_token: accessToken,
+    access_token_type: 'Bearer',
+    refresh_token: publicRefreshToken,
+    session_id: publicSessionId,
+    rotation,
+    access_expires_in_seconds: GLOBAL_ACCESS_TTL_SECONDS,
+    issued_at_utc: new Date(issuedAt).toISOString(),
+    expires_at_utc: new Date(expiresAt).toISOString(),
+    absolute_expires_at_utc: new Date(absoluteExpiresAt).toISOString(),
+    selection_required: route ? false : Boolean(result.selection_required),
+    selected_candidate_id: route ? text(route.local_candidate_id).toLowerCase() : null
+  };
+  if (route) {
+    safe.agency_context = {
+      display_name: text(route.agency_display_name),
+      environment_label: text(route.environment_label),
+      membership_generation: Number(route.membership_generation),
+      session_epoch: sessionEpoch
+    };
+  }
+  return jsonResponse(200, safe);
+}
+
+async function resolveControlPlaneRoute(access, env, correlationId) {
+  const context = globalSessionContext(access, env);
+  const result = await candidateControlPlaneRpc(
+    env, 'control', 'agency_route_context_resolve_v1',
+    { p_global_session_context: context, p_correlation_id: correlationId }
+  );
+  const resultError = controlPlaneResultError(result, 'AGENCY_CONTEXT_STALE');
+  if (resultError) throw resultError;
+  if (upper(result.environment_label) !== environmentName(env)
+      || text(result.global_account_id).toLowerCase() !== context.account_id
+      || text(result.global_session_id).toLowerCase() !== context.session_id
+      || Number(result.session_epoch) !== context.session_epoch) {
+    throw new CandidateBrokerError(409, 'AGENCY_CONTEXT_STALE');
+  }
+  const entry = candidateDataPlaneRegistryEntry(result.registry_binding_key, env);
+  if (!entry || entry.environment !== environmentName(env)) {
+    throw new CandidateBrokerError(503, 'AGENCY_ROUTE_UNAVAILABLE');
+  }
+  return { ...result, registryEntry: entry };
+}
+
+async function routeContextForPrivate(access, route, env, now = new Date()) {
+  const expiresAt = new Date(Math.min(
+    Number(access.exp) * 1000,
+    now.getTime() + ROUTE_CONTEXT_TTL_SECONDS * 1000
+  ));
+  if (expiresAt <= now) throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+  return signCandidateRouteContext({
+    v: 1,
+    aud: 'candidate-private-api',
+    environment: environmentName(env),
+    global_account_id: access.global_account_id,
+    global_session_id: access.global_session_id,
+    membership_id: route.membership_id,
+    membership_generation: Number(route.membership_generation),
+    agency_id: route.agency_id,
+    agency_candidate_id: route.local_candidate_id,
+    data_plane_id: route.data_plane_id,
+    route_version: Number(route.route_version),
+    session_epoch: Number(route.session_epoch),
+    issued_at_utc: now.toISOString(),
+    expires_at_utc: expiresAt.toISOString(),
+    key_version: route.registryEntry.keyVersion
+  }, {
+    secret: route.registryEntry.routeContextSecret,
+    keyVersion: route.registryEntry.keyVersion,
+    nowMilliseconds: now.getTime()
+  });
+}
+
 async function wrapSelectedCandidateAccess(response, env, existingAccess) {
   if (!response.ok) return publicSafePrivateResponse(response);
   const source = await responseJson(response);
@@ -1022,7 +1312,9 @@ function samePublicPhoneBinding(left, right) {
       === (right.device_binding_sha256 == null ? null : text(right.device_binding_sha256));
 }
 
-async function wrapPhoneHandoff(response, env, access, request, expectedBinding = null) {
+async function wrapPhoneHandoff(
+  response, env, access, request, expectedBinding = null, federatedRoute = null
+) {
   if (!response.ok) return publicSafePrivateResponse(response);
   const source = await responseJson(response);
   const internalToken = text(source.manager_handoff_token);
@@ -1050,6 +1342,18 @@ async function wrapPhoneHandoff(response, env, access, request, expectedBinding 
       public_session_id: access.public_session_id,
       device_id_sha256: binding.device_binding_sha256,
       internal_manager_token: internalToken,
+      ...(federatedRoute ? { federated_route: {
+        global_account_id: access.global_account_id,
+        global_session_id: access.global_session_id,
+        membership_id: federatedRoute.membership_id,
+        membership_generation: Number(federatedRoute.membership_generation),
+        agency_id: federatedRoute.agency_id,
+        local_candidate_id: federatedRoute.local_candidate_id,
+        data_plane_id: federatedRoute.data_plane_id,
+        route_version: Number(federatedRoute.route_version),
+        session_epoch: Number(federatedRoute.session_epoch),
+        registry_binding_key: federatedRoute.registry_binding_key
+      } } : {}),
       iat: Math.floor(issuedAt / 1000), exp: Math.floor(expiresAt / 1000)
     },
     handoffKeyVersion
@@ -1058,6 +1362,36 @@ async function wrapPhoneHandoff(response, env, access, request, expectedBinding 
   delete safe.public_broker_binding;
   delete safe.broker_handoff_key_version;
   return jsonResponse(response.status, safe);
+}
+
+async function managerForwardContext(request, env, correlationId) {
+  const authorization = await managerAuthorization(request, env);
+  const supplied = bearerToken(request);
+  const opened = await openVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.manager, 'candidate-broker-phone-handoff-v1', supplied
+  );
+  const handoffRoute = opened?.payload?.federated_route;
+  if (!handoffRoute) return { authorization, federated: null };
+  if (!globalAuthCutoverEnabled(env)) {
+    throw new CandidateBrokerError(401, 'MANAGER_PHONE_HANDOFF_SESSION_MISMATCH');
+  }
+  const access = await openPublicAccessToken(
+    text(request.headers.get('x-candidate-session-token')), env
+  );
+  const route = await resolveControlPlaneRoute(access, env, correlationId);
+  const exact = [
+    'global_account_id','global_session_id','membership_id','agency_id',
+    'local_candidate_id','data_plane_id','registry_binding_key'
+  ].every((name) => text(handoffRoute[name]).toLowerCase() === text(
+    name === 'global_account_id' ? access.global_account_id
+      : name === 'global_session_id' ? access.global_session_id
+        : route[name]
+  ).toLowerCase())
+    && Number(handoffRoute.membership_generation) === Number(route.membership_generation)
+    && Number(handoffRoute.route_version) === Number(route.route_version)
+    && Number(handoffRoute.session_epoch) === Number(route.session_epoch);
+  if (!exact) throw new CandidateBrokerError(401, 'MANAGER_PHONE_HANDOFF_ROUTE_MISMATCH');
+  return { authorization, federated: { access, route, projectSession: false } };
 }
 
 async function managerAuthorization(request, env) {
@@ -1257,10 +1591,731 @@ function isUnauthenticatedPublicAuthPath(path) {
   return UNAUTHENTICATED_PUBLIC_AUTH_PATHS.has(path);
 }
 
+async function controlPlaneAgenciesInternal(access, env, correlationId) {
+  const result = await candidateControlPlaneRpc(
+    env, 'control', 'account_agencies_get_v1',
+    {
+      p_global_session_context: globalSessionContext(access, env),
+      p_correlation_id: correlationId
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'AGENCY_CONTEXT_INVALID');
+  if (resultError) throw resultError;
+  const memberships = Array.isArray(result.memberships_internal) ? result.memberships_internal : [];
+  return { ...result, memberships_internal: memberships };
+}
+
+async function agencyChoiceToken(access, membership, env, now = new Date()) {
+  const keyVersion = configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.agencyChoice);
+  const expiresAt = new Date(now.getTime() + AGENCY_CHOICE_TTL_SECONDS * 1000);
+  const token = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.agencyChoice, 'mytms-agency-choice-v1',
+    {
+      typ: 'mytms_agency_choice', aud: 'cloudtms-candidate-orchestrator',
+      env: environmentName(env), global_account_id: access.global_account_id,
+      global_session_id: access.global_session_id, session_epoch: Number(access.session_epoch),
+      membership_id: membership.membership_id,
+      membership_generation: Number(membership.membership_generation),
+      agency_id: membership.agency_id, data_plane_id: membership.data_plane_id,
+      route_version_id: membership.route_version_id, route_version: Number(membership.route_version),
+      iat: Math.floor(now.getTime() / 1000), exp: Math.floor(expiresAt.getTime() / 1000)
+    }, keyVersion
+  );
+  return { token, expires_at_utc: expiresAt.toISOString() };
+}
+
+async function publicAgencyChoices(access, agencyResult, env) {
+  const agencies = [];
+  for (const membership of agencyResult.memberships_internal) {
+    const choice = await agencyChoiceToken(access, membership, env);
+    agencies.push({
+      agency_choice_token: choice.token,
+      display_name: text(membership.display_name),
+      environment_label: text(membership.environment_label),
+      membership_generation: Number(membership.membership_generation),
+      expires_at_utc: choice.expires_at_utc
+    });
+  }
+  return {
+    ok: true,
+    context_version: 1,
+    selection_required: agencies.length > 1,
+    auto_select: agencies.length === 1,
+    agencies
+  };
+}
+
+async function openAgencyChoice(token, access, env) {
+  const opened = await openVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.agencyChoice, 'mytms-agency-choice-v1', token
+  );
+  const choice = opened?.payload;
+  const now = Math.floor(Date.now() / 1000);
+  if (!choice || choice.typ !== 'mytms_agency_choice'
+      || choice.aud !== 'cloudtms-candidate-orchestrator'
+      || choice.env !== environmentName(env) || Number(choice.exp) <= now
+      || choice.global_account_id !== access.global_account_id
+      || choice.global_session_id !== access.global_session_id
+      || Number(choice.session_epoch) !== Number(access.session_epoch)
+      || !UUID_RE.test(text(choice.membership_id))
+      || !UUID_RE.test(text(choice.data_plane_id))
+      || !UUID_RE.test(text(choice.route_version_id))
+      || !Number.isSafeInteger(Number(choice.membership_generation))
+      || Number(choice.membership_generation) < 1) {
+    throw new CandidateBrokerError(403, 'AGENCY_NOT_PERMITTED');
+  }
+  return choice;
+}
+
+async function issueControlPlaneAgencySession(access, choiceToken, idempotencyKey, env, correlationId) {
+  if (!UUID_RE.test(text(idempotencyKey))) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  const choice = await openAgencyChoice(choiceToken, access, env);
+  const identity = `${access.global_session_id}:${choice.membership_id}:${idempotencyKey}`;
+  const now = new Date();
+  const times = globalSessionTimes(now, access.absolute_expires_at_utc);
+  const refreshToken = await deterministicControlToken(env, 'agency-session-refresh', identity);
+  const newSessionId = await deterministicControlUuid(env, 'agency-session', identity);
+  const context = {
+    ...globalSessionContext(access, env),
+    actor_identity_hmac: await controlPlaneActorIdentityHmac(env, access.global_account_id),
+    selected_membership_id: choice.membership_id,
+    selected_membership_generation: Number(choice.membership_generation),
+    selected_data_plane_id: choice.data_plane_id,
+    selected_route_version_id: choice.route_version_id,
+    new_session_id: newSessionId,
+    new_refresh_token_hash_hex: await sha256Hex(refreshToken),
+    new_rotation: Number(access.rotation) + 1,
+    issued_at_utc: times.issued_at_utc,
+    expires_at_utc: times.expires_at_utc,
+    choice_token_sha256_hex: await sha256Hex(choiceToken),
+    choice_expires_at_utc: new Date(Number(choice.exp) * 1000).toISOString()
+  };
+  const result = await candidateControlPlaneRpc(
+    env, 'control', 'agency_session_issue_v1',
+    {
+      p_global_session_context: context,
+      p_choice_token: choiceToken,
+      p_idempotency_key: text(idempotencyKey).toLowerCase(),
+      p_correlation_id: correlationId
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'AGENCY_CONTEXT_INVALID');
+  if (resultError) throw resultError;
+  const route = { ...result };
+  const entry = candidateDataPlaneRegistryEntry(route.registry_binding_key, env);
+  if (!entry || entry.environment !== environmentName(env)) {
+    throw new CandidateBrokerError(503, 'AGENCY_ROUTE_UNAVAILABLE');
+  }
+  route.registryEntry = entry;
+  return {
+    result: {
+      ...result,
+      account_id: access.global_account_id,
+      rotation: Number(access.rotation) + 1,
+      absolute_expires_at_utc: times.absolute_expires_at_utc,
+      selection_required: false
+    },
+    refreshToken,
+    route
+  };
+}
+
+async function finalizeControlPlaneSession(
+  result, refreshToken, requestedCandidateId, replayIdentity, env, correlationId
+) {
+  const access = {
+    authority: 'CONTROL_PLANE', global_account_id: result.account_id,
+    global_session_id: result.session_id, session_epoch: Number(result.session_epoch),
+    rotation: Number(result.rotation), absolute_expires_at_utc: result.absolute_expires_at_utc,
+    exp: Math.floor(Date.parse(result.issued_at_utc) / 1000) + GLOBAL_ACCESS_TTL_SECONDS
+  };
+  const agencyResult = await controlPlaneAgenciesInternal(access, env, correlationId);
+  let selectedMembership = null;
+  if (requestedCandidateId) {
+    const matches = agencyResult.memberships_internal.filter(
+      membership => text(membership.local_candidate_id).toLowerCase() === requestedCandidateId
+    );
+    if (matches.length !== 1) {
+      throw new CandidateBrokerError(403, 'CANDIDATE_SELECTION_NOT_ALLOWED');
+    }
+    selectedMembership = matches[0];
+  } else if (agencyResult.memberships_internal.length === 1) {
+    selectedMembership = agencyResult.memberships_internal[0];
+  }
+  if (selectedMembership) {
+    const choice = await agencyChoiceToken(access, selectedMembership, env);
+    const selectionKey = await deterministicControlUuid(
+      env, 'session-auto-selection', replayIdentity
+    );
+    const selected = await issueControlPlaneAgencySession(
+      access, choice.token, selectionKey, env, correlationId
+    );
+    return wrapGlobalSession(selected.result, env, selected.refreshToken, selected.route);
+  }
+  return wrapGlobalSession({
+    ...result, selection_required: agencyResult.memberships_internal.length !== 1
+  }, env, refreshToken);
+}
+
+async function globalPasswordProof(env, password, identity) {
+  const keyVersion = Number(env.MYTMS_GLOBAL_PASSWORD_KEY_VERSION || 1);
+  if (!Number.isSafeInteger(keyVersion) || keyVersion < 1 || keyVersion > 65535) {
+    throw new CandidateBrokerError(503, 'CONTROL_PLANE_CONFIGURATION_UNAVAILABLE');
+  }
+  const saltBytes = (await hmacSha256Bytes(
+    env.MYTMS_CONTROL_PLANE_TOKEN_DERIVATION_SECRET,
+    'mytms-global-password-salt-v1',
+    `${environmentName(env)}:${identity}`
+  )).slice(0, 16);
+  const passwordSaltHex = bytesToHex(saltBytes);
+  const parameters = { hash: 'SHA-256', iterations: 100000, length_bytes: 32 };
+  const passwordDigestHex = await deriveGlobalPasswordDigest(password, {
+    credential_scheme: 'PBKDF2-HMAC-SHA256', scheme_version: 1,
+    password_salt_hex: passwordSaltHex, parameters,
+    credential_authority_sha256_hex: '0'.repeat(64)
+  });
+  return {
+    credential_scheme: 'PBKDF2-HMAC-SHA256', scheme_version: 1,
+    password_salt_hex: passwordSaltHex, password_digest_hex: passwordDigestHex,
+    parameters, key_version: keyVersion
+  };
+}
+
+async function deliverControlPlaneChallenge(
+  request, result, email, purpose, token, deterministicOutboxKey, env, correlationId
+) {
+  const binding = env.MYTMS_IDENTITY_DELIVERY;
+  if (!binding || typeof binding.fetch !== 'function') {
+    throw new CandidateBrokerError(503, 'CANDIDATE_IDENTITY_DELIVERY_UNAVAILABLE');
+  }
+  const deliveryRequest = new Request(
+    'https://cloudtms-identity-delivery.internal/private/mytms-control/v1/auth/challenge-delivery',
+    {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'x-request-id': correlationId,
+        'x-forwarded-public-origin': text(request.headers.get('origin'))
+      },
+      body: JSON.stringify({
+        challenge_id: text(result.challenge_id).toLowerCase(), email, purpose, token,
+        expires_at_utc: result.expires_at_utc,
+        deterministic_outbox_key: deterministicOutboxKey
+      })
+    }
+  );
+  const response = await binding.fetch(await signCandidatePrivateRequest(deliveryRequest, env));
+  if (![200, 202].includes(response.status)) {
+    throw new CandidateBrokerError(503, 'CANDIDATE_IDENTITY_DELIVERY_UNAVAILABLE');
+  }
+}
+
+async function handleControlPlaneChallenge(request, path, env, correlationId) {
+  const started = Date.now();
+  const body = await boundedJson(request.clone());
+  const email = text(body.email).toLowerCase();
+  const purpose = upper(body.purpose || 'ACTIVATE');
+  const idempotencyKey = text(body.idempotency_key);
+  const isResend = path.endsWith('/resend');
+  if (!EMAIL_RE.test(email) || !['ACTIVATE', 'RESET', 'RECOVERY'].includes(purpose)
+      || (isResend && !UUID_RE.test(text(body.challenge_id)))) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_CHALLENGE_REQUEST_INVALID');
+  }
+  if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  const semanticHash = await sha256Hex(canonicalJson({
+    email, purpose, challenge_id: isResend ? text(body.challenge_id).toLowerCase() : null
+  }));
+  const replayIdentity = `${isResend ? 'resend' : 'start'}:${idempotencyKey}`;
+  const challengeId = isResend
+    ? text(body.challenge_id).toLowerCase()
+    : await deterministicControlUuid(env, 'global-challenge', replayIdentity);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + GLOBAL_CHALLENGE_TTL_MINUTES * 60_000);
+  const tokenKeyVersion = configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.globalChallenge);
+  const token = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.globalChallenge, 'mytms-global-challenge-v1',
+    {
+      typ: 'mytms_global_challenge', aud: 'cloudtms-global-identity',
+      env: environmentName(env), challenge_id: challengeId, email, purpose,
+      iat: Math.floor(now.getTime() / 1000), exp: Math.floor(expiresAt.getTime() / 1000)
+    }, tokenKeyVersion
+  );
+  const deterministicOutboxKey = `MYTMS_AUTH_${(
+    await sha256Hex(`${environmentName(env)}:${purpose}:${challengeId}:${idempotencyKey}`)
+  ).slice(0, 40)}`;
+  let result;
+  try {
+    result = await candidateControlPlaneRpc(
+      env, 'identity', isResend ? 'global_challenge_resend_v1' : 'global_challenge_start_v1',
+      isResend ? {
+        p_internal_context: {
+          token_hash_hex: await sha256Hex(token), token_key_version: tokenKeyVersion,
+          deterministic_outbox_key: deterministicOutboxKey,
+          request_semantic_hash_hex: semanticHash,
+          actor_identity_hmac: await controlPlaneActorIdentityHmac(env, email),
+          expected_email: email, expected_purpose: purpose,
+          expires_at_utc: expiresAt.toISOString(), minimum_interval_seconds: 60,
+          maximum_resends: 5
+        },
+        p_challenge_id: challengeId, p_idempotency_key: idempotencyKey,
+        p_correlation_id: correlationId, p_now_utc: now.toISOString()
+      } : {
+        p_internal_context: {
+          challenge_id: challengeId, token_hash_hex: await sha256Hex(token),
+          token_key_version: tokenKeyVersion,
+          deterministic_outbox_key: deterministicOutboxKey,
+          request_semantic_hash_hex: semanticHash,
+          actor_identity_hmac: await controlPlaneActorIdentityHmac(env, email),
+          expires_at_utc: expiresAt.toISOString()
+        },
+        p_email: email, p_purpose: purpose,
+        p_idempotency_key: await deterministicControlUuid(
+          env, 'global-challenge-idempotency', idempotencyKey
+        ),
+        p_correlation_id: correlationId
+      }
+    );
+  } catch (error) {
+    if (error instanceof CandidateBrokerError && error.code === 'IDEMPOTENCY_CONFLICT') {
+      throw new CandidateBrokerError(409, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
+    }
+    throw error;
+  }
+  if (result?.ok === false) {
+    const mappings = {
+      GLOBAL_CHALLENGE_RESEND_TOO_SOON: 'CANDIDATE_CHALLENGE_RESEND_TOO_SOON',
+      GLOBAL_CHALLENGE_RESEND_LIMIT: 'CANDIDATE_CHALLENGE_RESEND_LIMIT'
+    };
+    const mapped = mappings[text(result.error_code)];
+    if (mapped) {
+      const retryAfter = Number(result.retry_after_seconds || 0);
+      const headers = Number.isSafeInteger(retryAfter) && retryAfter > 0
+        ? { 'retry-after': String(retryAfter) } : {};
+      return jsonResponse(429, {
+        ok: false, error_code: mapped,
+        details: {
+          ...(Number.isSafeInteger(retryAfter) && retryAfter > 0
+            ? { retry_after_seconds: retryAfter } : {}),
+          terminal: result.terminal === true
+        }
+      }, headers);
+    }
+    throw new CandidateBrokerError(401, 'CANDIDATE_CHALLENGE_INVALID');
+  }
+  if (result?.deliver_email === true) {
+    if (text(result.challenge_id).toLowerCase() !== challengeId) {
+      throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
+    }
+    await deliverControlPlaneChallenge(
+      request, result, email, purpose, token, deterministicOutboxKey, env, correlationId
+    );
+  }
+  const remaining = ENUMERATION_SAFE_MINIMUM_MS - (Date.now() - started);
+  if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
+  return jsonResponse(202, { ok: true, accepted: true });
+}
+
+async function handleControlPlaneChallengeVerify(request, env, correlationId) {
+  const body = await boundedJson(request.clone());
+  const email = text(body.email).toLowerCase();
+  const purpose = upper(body.purpose || 'ACTIVATE');
+  const token = text(body.token);
+  const idempotencyKey = text(body.idempotency_key);
+  if (!EMAIL_RE.test(email) || !['ACTIVATE', 'RESET', 'RECOVERY'].includes(purpose)
+      || !token || token.length > 4096
+      || !idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_CHALLENGE_REQUEST_INVALID');
+  }
+  const opened = await openVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.globalChallenge, 'mytms-global-challenge-v1', token
+  );
+  const challenge = opened?.payload;
+  const now = new Date();
+  if (!challenge || challenge.typ !== 'mytms_global_challenge'
+      || challenge.aud !== 'cloudtms-global-identity'
+      || challenge.env !== environmentName(env)
+      || challenge.email !== email || challenge.purpose !== purpose
+      || !UUID_RE.test(text(challenge.challenge_id))
+      || Number(challenge.exp) <= Math.floor(now.getTime() / 1000)
+      || (body.challenge_id
+        && text(body.challenge_id).toLowerCase() !== text(challenge.challenge_id).toLowerCase())) {
+    throw new CandidateBrokerError(401, 'CANDIDATE_CHALLENGE_INVALID');
+  }
+  const challengeId = text(challenge.challenge_id).toLowerCase();
+  const verificationReceipt = await deterministicControlToken(
+    env, 'global-verification-receipt', challengeId
+  );
+  const receiptExpiresAt = new Date(
+    now.getTime() + GLOBAL_VERIFICATION_RECEIPT_TTL_MINUTES * 60_000
+  );
+  const result = await candidateControlPlaneRpc(
+    env, 'identity', 'global_challenge_verify_v1',
+    {
+      p_internal_context: {
+        verification_receipt_hash_hex: await sha256Hex(verificationReceipt),
+        verification_receipt_expires_at_utc: receiptExpiresAt.toISOString(),
+        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, email)
+      },
+      p_challenge_id: challengeId, p_token: token,
+      p_idempotency_key: idempotencyKey, p_correlation_id: correlationId,
+      p_now_utc: now.toISOString()
+    }
+  );
+  if (result?.ok !== true) {
+    const status = text(result?.error_code) === 'GLOBAL_CHALLENGE_ATTEMPT_LIMIT' ? 429 : 401;
+    throw new CandidateBrokerError(status, 'CANDIDATE_CHALLENGE_INVALID');
+  }
+  return jsonResponse(200, {
+    ok: true, challenge_id: challengeId, purpose,
+    expires_at_utc: text(result.expires_at_utc)
+  });
+}
+
+async function handleControlPlanePasswordComplete(request, env, correlationId) {
+  const body = await boundedJson(request.clone());
+  const challengeId = text(body.challenge_id).toLowerCase();
+  const idempotencyKey = text(body.idempotency_key);
+  const requestedCandidateId = body.selected_candidate_id
+    ? text(body.selected_candidate_id).toLowerCase() : '';
+  if (!UUID_RE.test(challengeId)
+      || (requestedCandidateId && !UUID_RE.test(requestedCandidateId))
+      || !idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_PASSWORD_REQUEST_INVALID');
+  }
+  const passwordProof = await globalPasswordProof(
+    env, body.password, `complete:${challengeId}:${idempotencyKey}`
+  );
+  const semanticHash = await sha256Hex(canonicalJson({
+    challenge_id: challengeId, selected_candidate_id: requestedCandidateId || null,
+    password_digest_hex: passwordProof.password_digest_hex,
+    device_id: body.device_id ? await sha256Hex(text(body.device_id)) : null,
+    platform: text(body.platform).slice(0, 80) || null
+  }));
+  const replayIdentity = `${challengeId}:${idempotencyKey}:${semanticHash}`;
+  const now = new Date();
+  const times = globalSessionTimes(now);
+  const refreshToken = await deterministicControlToken(
+    env, 'password-complete-refresh', replayIdentity
+  );
+  const verificationReceipt = await deterministicControlToken(
+    env, 'global-verification-receipt', challengeId
+  );
+  const result = await candidateControlPlaneRpc(
+    env, 'identity', 'global_password_complete_v1',
+    {
+      p_internal_context: {
+        family_id: await deterministicControlUuid(env, 'password-complete-family', replayIdentity),
+        session_id: await deterministicControlUuid(env, 'password-complete-session', replayIdentity),
+        refresh_token_hash_hex: await sha256Hex(refreshToken),
+        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, challengeId),
+        ...times
+      },
+      p_challenge_id: challengeId, p_verification_receipt: verificationReceipt,
+      p_password_proof: passwordProof, p_idempotency_key: idempotencyKey,
+      p_correlation_id: correlationId, p_now_utc: now.toISOString()
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'CANDIDATE_PASSWORD_REQUEST_INVALID');
+  if (resultError) throw resultError;
+  return finalizeControlPlaneSession(
+    result, refreshToken, requestedCandidateId, replayIdentity, env, correlationId
+  );
+}
+
+async function handleControlPlanePasswordChange(request, access, env, correlationId) {
+  const body = await boundedJson(request.clone());
+  const idempotencyKey = text(body.idempotency_key);
+  if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  const context = globalSessionContext(access, env);
+  const metadata = await candidateControlPlaneRpc(
+    env, 'identity', 'global_session_metadata_v1',
+    { p_global_session_context: context, p_correlation_id: correlationId }
+  );
+  const currentDigest = await deriveGlobalPasswordDigest(body.current_password, metadata);
+  const newProof = await globalPasswordProof(
+    env, body.password, `change:${access.global_account_id}:${idempotencyKey}`
+  );
+  const result = await candidateControlPlaneRpc(
+    env, 'identity', 'global_password_change_v1',
+    {
+      p_global_session_context: {
+        ...context,
+        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, access.global_account_id)
+      },
+      p_current_password_proof: {
+        presented_digest_hex: currentDigest,
+        credential_authority_sha256_hex: metadata.credential_authority_sha256_hex
+      },
+      p_new_password_proof: newProof, p_idempotency_key: idempotencyKey,
+      p_correlation_id: correlationId, p_now_utc: new Date().toISOString()
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'CURRENT_PASSWORD_INVALID');
+  if (resultError) throw resultError;
+  return jsonResponse(200, {
+    ok: true, account_id: text(result.account_id).toLowerCase(),
+    session_version: Number(result.session_version)
+  });
+}
+
+async function handleControlPlaneLogin(request, env, correlationId) {
+  const body = await boundedJson(request.clone());
+  const email = text(body.email).toLowerCase();
+  const idempotencyKey = text(body.idempotency_key);
+  const requestedCandidateId = body.selected_candidate_id
+    ? text(body.selected_candidate_id).toLowerCase() : '';
+  if (!EMAIL_RE.test(email) || !idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_LOGIN_INVALID');
+  }
+  if (requestedCandidateId && !UUID_RE.test(requestedCandidateId)) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_LOGIN_INVALID');
+  }
+  let metadata = await candidateControlPlaneRpc(
+    env, 'identity', 'global_login_metadata_v1',
+    { p_email: email, p_correlation_id: correlationId }
+  );
+  if (metadata.found !== true) {
+    const dummySalt = (await sha256Hex(`mytms-global-login-dummy:${email}`)).slice(0, 32);
+    metadata = {
+      credential_scheme: 'PBKDF2-HMAC-SHA256', scheme_version: 1,
+      password_salt_hex: dummySalt,
+      parameters: { hash: 'SHA-256', iterations: 100000, length_bytes: 32 },
+      credential_authority_sha256_hex: await sha256Hex(`mytms-global-login-dummy-authority:${email}`)
+    };
+  }
+  const presentedDigest = await deriveGlobalPasswordDigest(body.password, metadata);
+  const semanticHash = await sha256Hex(canonicalJson({
+    email, presented_digest_hex: presentedDigest,
+    credential_authority_sha256_hex: metadata.credential_authority_sha256_hex
+  }));
+  const identity = `${email}:${idempotencyKey}:${semanticHash}`;
+  const now = new Date();
+  const times = globalSessionTimes(now);
+  const refreshToken = await deterministicControlToken(env, 'login-refresh', identity);
+  const internalContext = {
+    family_id: await deterministicControlUuid(env, 'login-family', identity),
+    session_id: await deterministicControlUuid(env, 'login-session', identity),
+    refresh_token_hash_hex: await sha256Hex(refreshToken),
+    request_semantic_hash_hex: semanticHash,
+    actor_identity_hmac: await controlPlaneActorIdentityHmac(env, email),
+    ...times
+  };
+  const result = await candidateControlPlaneRpc(
+    env, 'identity', 'global_login_v1',
+    {
+      p_internal_context: internalContext,
+      p_email: email,
+      p_password_proof: {
+        presented_digest_hex: presentedDigest,
+        credential_authority_sha256_hex: metadata.credential_authority_sha256_hex
+      },
+      p_device_context: {},
+      p_idempotency_key: idempotencyKey,
+      p_correlation_id: correlationId,
+      p_now_utc: times.issued_at_utc
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'CANDIDATE_LOGIN_INVALID');
+  if (resultError) throw new CandidateBrokerError(401, 'CANDIDATE_LOGIN_INVALID');
+  return finalizeControlPlaneSession(
+    result, refreshToken, requestedCandidateId, identity, env, correlationId
+  );
+}
+
+async function handleControlPlaneRefresh(request, body, refresh, env, correlationId) {
+  const idempotencyKey = text(body.idempotency_key);
+  if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  const identity = `${refresh.global_session_id}:${refresh.rotation}:${idempotencyKey}`;
+  const now = new Date();
+  const times = globalSessionTimes(now, refresh.absolute_expires_at_utc);
+  const newRefreshToken = await deterministicControlToken(env, 'refresh-rotation', identity);
+  const result = await candidateControlPlaneRpc(
+    env, 'identity', 'global_refresh_v1',
+    {
+      p_internal_context: {
+        new_session_id: await deterministicControlUuid(env, 'refresh-session', identity),
+        new_refresh_token_hash_hex: await sha256Hex(newRefreshToken),
+        expires_at_utc: times.expires_at_utc,
+        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, refresh.global_account_id)
+      },
+      p_refresh_token_hash: `\\x${await sha256Hex(refresh.control_plane_refresh_token)}`,
+      p_presented_rotation: Number(refresh.rotation),
+      p_idempotency_key: idempotencyKey,
+      p_correlation_id: correlationId,
+      p_now_utc: times.issued_at_utc
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'CANDIDATE_SESSION_INVALID');
+  if (resultError) throw resultError;
+  const access = {
+    authority: 'CONTROL_PLANE', global_account_id: result.account_id,
+    global_session_id: result.session_id, session_epoch: Number(result.session_epoch),
+    rotation: Number(result.rotation), absolute_expires_at_utc: result.absolute_expires_at_utc,
+    exp: Math.floor(Date.parse(result.issued_at_utc) / 1000) + GLOBAL_ACCESS_TTL_SECONDS
+  };
+  let route = null;
+  if (result.selected_membership_id) route = await resolveControlPlaneRoute(access, env, correlationId);
+  return wrapGlobalSession(result, env, newRefreshToken, route);
+}
+
+async function handleControlPlaneLogout(request, access, env, correlationId) {
+  const body = await boundedJson(request.clone());
+  const idempotencyKey = text(body.idempotency_key);
+  if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  const result = await candidateControlPlaneRpc(
+    env, 'identity', 'global_logout_v1',
+    {
+      p_global_session_context: {
+        ...globalSessionContext(access, env),
+        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, access.global_account_id)
+      },
+      p_idempotency_key: idempotencyKey,
+      p_correlation_id: correlationId,
+      p_now_utc: new Date().toISOString()
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'CANDIDATE_SESSION_INVALID');
+  if (resultError) throw resultError;
+  return jsonResponse(200, { ok: true, status: 'REVOKED' });
+}
+
+async function handleControlPlaneInvitationInspect(request, env, correlationId) {
+  const started = Date.now();
+  const body = await boundedJson(request.clone());
+  const token = text(body.invitation_token);
+  if (token.length < 32 || token.length > 4096) {
+    throw new CandidateBrokerError(400, 'INVITATION_INVALID');
+  }
+  const result = await candidateControlPlaneRpc(
+    env, 'control', 'invitation_inspect_v1',
+    {
+      p_token_hash: `\\x${await sha256Hex(token)}`,
+      p_now_utc: new Date().toISOString(),
+      p_correlation_id: correlationId
+    }
+  );
+  const remaining = ENUMERATION_SAFE_MINIMUM_MS - (Date.now() - started);
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+  const state = text(result.state);
+  const nextStep = text(result.next_step);
+  if (!['VALID','EXPIRED','SUPERSEDED','CONSUMED','REVOKED','UNAVAILABLE'].includes(state)
+      || !['AUTHENTICATE','VERIFY_EMAIL','ACCEPT','NONE'].includes(nextStep)) {
+    throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
+  }
+  return jsonResponse(200, {
+    ok: true, state, next_step: nextStep,
+    ...(state === 'VALID' && text(result.agency_display_name)
+      ? { agency_display_name: text(result.agency_display_name) } : {})
+  });
+}
+
+async function handleControlPlaneInvitationAccept(request, access, env, correlationId) {
+  const body = await boundedJson(request.clone());
+  const token = text(body.invitation_token);
+  const idempotencyKey = text(body.idempotency_key);
+  if (token.length < 32 || token.length > 4096 || !UUID_RE.test(idempotencyKey)) {
+    throw new CandidateBrokerError(400, 'INVITATION_INVALID');
+  }
+  const sessionContext = globalSessionContext(access, env);
+  const metadata = await candidateControlPlaneRpc(
+    env, 'identity', 'global_session_metadata_v1',
+    { p_global_session_context: sessionContext, p_correlation_id: correlationId }
+  );
+  const verifiedEmails = Array.isArray(metadata.verified_emails) ? metadata.verified_emails : [];
+  if (!verifiedEmails.length) {
+    throw new CandidateBrokerError(403, 'EMAIL_VERIFICATION_REQUIRED');
+  }
+  const result = await candidateControlPlaneRpc(
+    env, 'control', 'invitation_accept_v1',
+    {
+      p_verified_context: {
+        account_id: access.global_account_id,
+        verified_emails: verifiedEmails,
+        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, access.global_account_id)
+      },
+      p_token_hash: `\\x${await sha256Hex(token)}`,
+      p_idempotency_key: idempotencyKey.toLowerCase(),
+      p_correlation_id: correlationId
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'INVITATION_CONFLICT');
+  if (resultError) throw resultError;
+  const state = text(result.state);
+  if (!['ACTIVE','ALREADY_ACTIVE','PENDING_ADMIN_REVIEW'].includes(state)) {
+    throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
+  }
+  return jsonResponse(200, {
+    ok: true, state,
+    membership_generation: Number(result.membership_generation),
+    idempotent_replay: result.idempotent_replay === true
+  });
+}
+
+async function controlPlaneDeviceCiphertext(env, provider, token, keyVersion) {
+  const envelope = await sealVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.deviceEncryption,
+    'mytms-control-plane-device-token-v1',
+    { provider, token }, keyVersion
+  );
+  return bytesToHex(encoder.encode(envelope));
+}
+
+async function handleControlPlaneDeviceRegistration(body, access, env, correlationId) {
+  const provider = upper(body.push_provider);
+  const idempotencyKey = text(body.idempotency_key);
+  if (!['APNS', 'FCM', 'WEB_PUSH'].includes(provider)) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_PUSH_PROVIDER_INVALID');
+  }
+  if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  const encryptionKeyVersion = configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.deviceEncryption);
+  const identityKeyVersion = configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.deviceIdentity);
+  const identityHmac = await deviceTokenIdentity(
+    env, provider, body.push_token, '', identityKeyVersion
+  );
+  const ciphertext = await controlPlaneDeviceCiphertext(
+    env, provider, text(body.push_token), encryptionKeyVersion
+  );
+  const result = await candidateControlPlaneRpc(
+    env, 'identity', 'device_registration_upsert_v1',
+    {
+      p_global_session_context: {
+        ...globalSessionContext(access, env),
+        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, access.global_account_id)
+      },
+      p_provider: provider,
+      p_token_identity_hmac: identityHmac,
+      p_token_ciphertext: `\\x${ciphertext}`,
+      p_encryption_key_version: encryptionKeyVersion,
+      p_identity_key_version: identityKeyVersion,
+      p_idempotency_key: idempotencyKey,
+      p_correlation_id: correlationId,
+      p_now_utc: new Date().toISOString()
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'DEVICE_REGISTRATION_INVALID');
+  if (resultError) throw resultError;
+  return jsonResponse(200, { ok: true, status: text(result.status), provider });
+}
+
 export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
   const id = requestId(request);
   const url = new URL(request.url);
   const path = url.pathname;
+  if (isMyTmsGoogleControlPath(path)) {
+    return handleMyTmsGoogleControlRequest(request, env);
+  }
   const systemRoute = isCandidateDailySystemPath(path);
   if (systemRoute) {
     const suppliedCorrelationId = text(request.headers.get('x-correlation-id'));
@@ -1318,13 +2373,105 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
     }
     await rateLimitRequest(request, env, path, managerRoute);
 
+    if (candidateRoute && controlPlaneEnabled(env)
+        && path === `${PUBLIC_CANDIDATE_PREFIX}/invitations/inspect`) {
+      if (request.method !== 'POST') throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+      return withCors(await handleControlPlaneInvitationInspect(request, env, id), origin);
+    }
+
+    if (candidateRoute && controlPlaneEnabled(env)
+        && path === `${PUBLIC_CANDIDATE_PREFIX}/invitations/accept`) {
+      if (request.method !== 'POST') throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+      if (!globalAuthCutoverEnabled(env)) {
+        throw new CandidateBrokerError(503, 'CONTROL_PLANE_AUTH_OPERATION_UNAVAILABLE');
+      }
+      const access = await openPublicAccess(request, env);
+      if (access.authority !== 'CONTROL_PLANE') {
+        throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+      }
+      return withCors(
+        await handleControlPlaneInvitationAccept(request, access, env, id), origin
+      );
+    }
+
+    if (candidateRoute && globalAuthCutoverEnabled(env)
+        && path === `${PUBLIC_CANDIDATE_PREFIX}/auth/login`) {
+      return withCors(await handleControlPlaneLogin(request, env, id), origin);
+    }
+
+    if (candidateRoute && controlPlaneEnabled(env)
+        && path === `${PUBLIC_CANDIDATE_PREFIX}/account/agencies`) {
+      if (request.method !== 'GET') throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+      const access = await openPublicAccess(request, env);
+      if (access.authority !== 'CONTROL_PLANE') {
+        throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+      }
+      const agencies = await controlPlaneAgenciesInternal(access, env, id);
+      if (!agencies.memberships_internal.length) {
+        throw new CandidateBrokerError(403, 'NO_ACTIVE_AGENCY_MEMBERSHIP');
+      }
+      return withCors(jsonResponse(200, await publicAgencyChoices(access, agencies, env)), origin);
+    }
+
+    if (candidateRoute && controlPlaneEnabled(env)
+        && path === `${PUBLIC_CANDIDATE_PREFIX}/account/agency-session`) {
+      if (request.method !== 'POST') throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+      const access = await openPublicAccess(request, env);
+      if (access.authority !== 'CONTROL_PLANE') {
+        throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+      }
+      const body = await boundedJson(request.clone());
+      const selected = await issueControlPlaneAgencySession(
+        access, text(body.agency_choice_token), text(body.idempotency_key), env, id
+      );
+      return withCors(
+        await wrapGlobalSession(selected.result, env, selected.refreshToken, selected.route), origin
+      );
+    }
+
     if (candidateRoute && isChallengeStartPath(path)) {
+      if (globalAuthCutoverEnabled(env)) {
+        if (request.method !== 'POST') {
+          throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+        }
+        return withCors(
+          await handleControlPlaneChallenge(request, path, env, id), origin
+        );
+      }
       return withCors(await enumerationSafeChallenge(request, env, path), origin);
+    }
+
+    if (candidateRoute && globalAuthCutoverEnabled(env)
+        && path === `${PUBLIC_CANDIDATE_PREFIX}/auth/challenge/verify`) {
+      if (request.method !== 'POST') {
+        throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+      }
+      return withCors(
+        await handleControlPlaneChallengeVerify(request, env, id), origin
+      );
+    }
+
+    if (candidateRoute && globalAuthCutoverEnabled(env)
+        && path === `${PUBLIC_CANDIDATE_PREFIX}/auth/password/complete`) {
+      if (request.method !== 'POST') {
+        throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+      }
+      return withCors(
+        await handleControlPlanePasswordComplete(request, env, id), origin
+      );
     }
 
     if (candidateRoute && path === `${PUBLIC_CANDIDATE_PREFIX}/auth/refresh`) {
       const body = await boundedJson(request.clone());
       const refresh = await openPublicRefresh(body, env);
+      if (globalAuthCutoverEnabled(env) && refresh.authority === 'CONTROL_PLANE') {
+        return withCors(
+          await handleControlPlaneRefresh(request, body, refresh, env, id), origin
+        );
+      }
+      if (globalAuthCutoverEnabled(env) || refresh.authority === 'CONTROL_PLANE') {
+        throw new CandidateBrokerError(401, 'CANDIDATE_SESSION_INVALID');
+      }
       const credentialVersions = currentPublicCredentialVersions(env);
       credentialVersions.public_session_key_version = Number(
         refresh.public_session_key_version || credentialVersions.public_session_key_version
@@ -1342,6 +2489,9 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
     }
 
     if (candidateRoute && isSessionCreationPath(path)) {
+      if (globalAuthCutoverEnabled(env)) {
+        throw new CandidateBrokerError(503, 'CONTROL_PLANE_AUTH_OPERATION_UNAVAILABLE');
+      }
       const body = await boundedJson(request.clone());
       const credentialVersions = assertPublicCredentialSecrets(
         env, currentPublicCredentialVersions(env)
@@ -1352,21 +2502,66 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
     }
 
     if (candidateRoute && isUnauthenticatedPublicAuthPath(path)) {
+      if (globalAuthCutoverEnabled(env)) {
+        throw new CandidateBrokerError(503, 'CONTROL_PLANE_AUTH_OPERATION_UNAVAILABLE');
+      }
       return withCors(await publicSafePrivateResponse(await forwardPrivate(request, env)), origin);
     }
 
     if (managerRoute) {
       enforceManagerMethod(path, request.method);
+      const managerContext = await managerForwardContext(request, env, id);
       return withCors(await publicSafePrivateResponse(await forwardPrivate(request, env, {
-        authorization: await managerAuthorization(request, env)
+        authorization: managerContext.authorization,
+        federated: managerContext.federated
       })), origin);
     }
 
     let access = null;
     let authorization = '';
+    let federated = null;
     try {
       access = await openPublicAccess(request, env);
-      authorization = `Bearer ${access.internal_access_token}`;
+      if (access.authority === 'CONTROL_PLANE') {
+        if (!globalAuthCutoverEnabled(env)) {
+          throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+        }
+        if (path === `${PUBLIC_CANDIDATE_PREFIX}/auth/logout`) {
+          return withCors(await handleControlPlaneLogout(request, access, env, id), origin);
+        }
+        if (path === `${PUBLIC_CANDIDATE_PREFIX}/account/password`) {
+          if (request.method !== 'POST') {
+            throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+          }
+          return withCors(
+            await handleControlPlanePasswordChange(request, access, env, id), origin
+          );
+        }
+        const route = await resolveControlPlaneRoute(access, env, id);
+        federated = { access, route };
+        if (path === `${PUBLIC_CANDIDATE_PREFIX}/account/select-candidate`) {
+          const body = await boundedJson(request.clone());
+          const selectedCandidateId = text(body.selected_candidate_id || body.candidate_id).toLowerCase();
+          if (!UUID_RE.test(selectedCandidateId)
+              || selectedCandidateId !== text(route.local_candidate_id).toLowerCase()) {
+            throw new CandidateBrokerError(403, 'CANDIDATE_SELECTION_NOT_ALLOWED');
+          }
+          return withCors(jsonResponse(200, {
+            ok: true,
+            access_token: bearerToken(request),
+            session_id: access.public_session_id,
+            selected_candidate_id: selectedCandidateId,
+            access_expires_in_seconds: Math.max(0, Number(access.exp) - Math.floor(Date.now() / 1000)),
+            issued_at_utc: new Date(Number(access.iat) * 1000).toISOString(),
+            idempotent_replay: true
+          }), origin);
+        }
+      } else {
+        if (globalAuthCutoverEnabled(env)) {
+          throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
+        }
+        authorization = `Bearer ${access.internal_access_token}`;
+      }
     } catch (error) {
       if (!path.includes('/uploads/')) throw error;
       authorization = await managerAuthorization(request, env);
@@ -1385,6 +2580,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       await applyRateLimit(env, bindingName, [`candidate:${access.public_session_id}`]);
       const response = await forwardPrivate(request, env, {
         authorization,
+        federated,
         timeoutMs: route.deadlineMs
       });
       return withCors(await publicSafeDailyResponse(response, dailyCorrelationId, route), origin);
@@ -1392,6 +2588,11 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
 
     if (path === `${PUBLIC_CANDIDATE_PREFIX}/account/push-token`) {
       const body = await boundedJson(request.clone());
+      if (federated) {
+        return withCors(
+          await handleControlPlaneDeviceRegistration(body, access, env, id), origin
+        );
+      }
       const provider = upper(body.push_provider);
       if (!['APNS', 'FCM', 'WEB_PUSH'].includes(provider)) {
         throw new CandidateBrokerError(400, 'CANDIDATE_PUSH_PROVIDER_INVALID');
@@ -1413,6 +2614,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       }
       const response = await forwardPrivate(request, env, {
         authorization,
+        federated,
         body: {
           ...body,
           push_provider: provider,
@@ -1439,6 +2641,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       authoritySecretForVersion(env, CREDENTIAL_AUTHORITIES.manager, brokerHandoffKeyVersion);
       response = await forwardPrivate(request, env, {
         authorization,
+        federated,
         body: {
           ...body,
           payload: {
@@ -1449,13 +2652,15 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
         }
       });
     } else {
-      response = await forwardPrivate(request, env, { authorization });
+      response = await forwardPrivate(request, env, { authorization, federated });
     }
     if (path === `${PUBLIC_CANDIDATE_PREFIX}/account/select-candidate`) {
       return withCors(await wrapSelectedCandidateAccess(response, env, access), origin);
     }
     if (phoneAction) {
-      return withCors(await wrapPhoneHandoff(response, env, access, request, phoneBinding), origin);
+      return withCors(await wrapPhoneHandoff(
+        response, env, access, request, phoneBinding, federated?.route || null
+      ), origin);
     }
     if (dailyBootstrap && !response.ok) {
       return withCors(await publicSafeDailyResponse(

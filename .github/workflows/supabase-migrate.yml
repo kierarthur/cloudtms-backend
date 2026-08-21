@@ -259,6 +259,7 @@ jobs:
           PRE_REPEATABLE_MIGRATIONS=(
             "supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql"
             "supabase/migrations/18082026_0802_candidate_daily_identity_integrity.sql"
+            "supabase/migrations/21082026_1757_candidate_federated_session_projection.sql"
           )
           for f in "${PRE_REPEATABLE_MIGRATIONS[@]}"; do
             base="$(basename "$f")"

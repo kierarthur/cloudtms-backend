@@ -1,0 +1,201 @@
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import test from 'node:test';
+
+import { candidateDailySignedMessageBytes, parseCandidateDailyRawTarget } from '../broker/src/candidate-daily-hmac-v1.js';
+import { sha256Hex } from '../broker/src/candidate-daily-contract-v1.js';
+import { verifyMyTmsGoogleControlRequest } from '../broker/src/mytms-google-control-hmac.js';
+import {
+  signMyTmsGoogleRouteContext,
+  verifyMyTmsGoogleRouteContext
+} from '../broker/src/mytms-google-route-context.js';
+import { signCandidatePrivateRequest, verifyCandidatePrivateRequest } from '../broker/src/candidate-service-auth.js';
+import { myTmsGoogleControlInternals } from '../candidate-broker/src/mytms-google-control.js';
+
+const IDS = Object.freeze({
+  integration: '30000000-0000-4000-8000-000000000001',
+  agency: '30000000-0000-4000-8000-000000000002',
+  plane: '30000000-0000-4000-8000-000000000003',
+  route: '30000000-0000-4000-8000-000000000004',
+  operation: '30000000-0000-4000-8000-000000000005'
+});
+
+function env(overrides = {}) {
+  return {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST', CANDIDATE_AGENCY_ID: IDS.agency,
+    CANDIDATE_DATA_PLANE_ID: IDS.plane, CANDIDATE_ROUTE_VERSION: '7',
+    CANDIDATE_ROUTE_CONTEXT_SECRET: 'synthetic-google-route-secret',
+    CANDIDATE_GOOGLE_ROUTE_CONTEXT_KEY_VERSION: '1',
+    CANDIDATE_PRIVATE_SERVICE_SECRET: 'synthetic-private-service-secret',
+    CANDIDATE_DAILY_GOOGLE_HMAC_PRIMARY_KEY_ID: 'synthetic-google-v1',
+    CANDIDATE_DAILY_GOOGLE_HMAC_PRIMARY_SECRET: 'synthetic-google-hmac-secret',
+    ...overrides
+  };
+}
+
+function nonceStore() {
+  const values = new Set();
+  return {
+    async put(key) {
+      if (values.has(key)) return null;
+      values.add(key);
+      return { key };
+    }
+  };
+}
+
+async function hmacRequest(method, url, body = null, overrides = {}) {
+  const environment = env();
+  const rawBody = body == null ? new Uint8Array() : new TextEncoder().encode(JSON.stringify(body));
+  const target = parseCandidateDailyRawTarget(`${new URL(url).pathname}${new URL(url).search}`);
+  const timestamp = String(overrides.timestamp || Math.floor(Date.now() / 1000));
+  const nonce = overrides.nonce || 'abcdefghijklmnopqrstuv';
+  const correlationId = overrides.correlationId || '01K35Y7N7ER4QY5F7M8D9P0Q1R';
+  const idempotencyKey = method === 'POST' ? (overrides.idempotencyKey || 'google-control-test-key-0001') : '';
+  const contentSha256 = await sha256Hex(rawBody);
+  const fields = {
+    method, normalizedPath: target.normalizedPath, normalizedQuery: target.normalizedQuery,
+    timestamp, nonce, contentSha256, idempotencyKey, correlationId,
+    keyId: environment.CANDIDATE_DAILY_GOOGLE_HMAC_PRIMARY_KEY_ID
+  };
+  const message = candidateDailySignedMessageBytes(fields, rawBody);
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(environment.CANDIDATE_DAILY_GOOGLE_HMAC_PRIMARY_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const signature = Array.from(new Uint8Array(await crypto.subtle.sign('HMAC', key, message)),
+    byte => byte.toString(16).padStart(2, '0')).join('');
+  return new Request(url, {
+    method,
+    headers: {
+      ...(method === 'POST' ? { 'content-type': 'application/json; charset=utf-8' } : {}),
+      'content-length': String(rawBody.byteLength),
+      'x-cloudtms-key-id': fields.keyId, 'x-cloudtms-signature-version': 'v1',
+      'x-cloudtms-timestamp': timestamp, 'x-cloudtms-nonce': nonce,
+      'x-cloudtms-content-sha256': contentSha256, 'x-cloudtms-signature': signature,
+      'x-correlation-id': correlationId, ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {})
+    },
+    body: rawBody.byteLength ? rawBody : undefined
+  });
+}
+
+function googleContext() {
+  return {
+    integration_key: 'master_test', project_identity_hmac: '1'.repeat(64),
+    principal_fingerprint: '2'.repeat(64), actor_identity_hmac: '3'.repeat(64),
+    source_revision: 'R48_CAPTURE_AUTHORITY_AND_SETTLEMENT_V1'
+  };
+}
+
+test('Google data-plane route context selects exactly one deployment and service auth v3 binds it', async () => {
+  const now = Date.now();
+  const environment = env();
+  const signed = await signMyTmsGoogleRouteContext({
+    environment: 'TEST', integration_id: IDS.integration, agency_id: IDS.agency,
+    data_plane_id: IDS.plane, route_version_id: IDS.route, route_version: 7,
+    target_generation: 4, operation_id: IDS.operation,
+    issued_at_utc: new Date(now).toISOString(),
+    expires_at_utc: new Date(now + 240_000).toISOString(), key_version: 1
+  }, environment.CANDIDATE_ROUTE_CONTEXT_SECRET, now);
+  const unsigned = new Request('https://private.invalid/private/mytms-google-data/v1/candidates/match', {
+    method: 'POST', headers: {
+      'content-type': 'application/json',
+      'x-cloudtms-google-route-context': signed.envelope,
+      'x-cloudtms-google-route-context-sha256': signed.sha256
+    }, body: '{}'
+  });
+  const serviceSigned = await signCandidatePrivateRequest(unsigned, environment);
+  assert.equal(serviceSigned.headers.get('x-cloudtms-service-version'), 'candidate-private-v3');
+  assert.equal(await verifyCandidatePrivateRequest(serviceSigned.clone(), environment), true);
+  assert.equal((await verifyMyTmsGoogleRouteContext(serviceSigned, environment, now)).context.operation_id, IDS.operation);
+
+  const changed = new Headers(serviceSigned.headers);
+  changed.set('x-cloudtms-google-route-context-sha256', '0'.repeat(64));
+  assert.equal(await verifyCandidatePrivateRequest(new Request(serviceSigned, { headers: changed }), environment), false);
+  assert.equal(await verifyMyTmsGoogleRouteContext(unsigned, { ...environment, CANDIDATE_AGENCY_ID: IDS.integration }, now), null);
+});
+
+test('private Google-control HMAC accepts canonical POST and GET, rejects replay and changed body', async () => {
+  const environment = env({ R2: nonceStore() });
+  const preflightBody = {
+    google_context: googleContext(), operation_id: IDS.operation,
+    request_hash: '4'.repeat(64), reservation_token: 'r'.repeat(64),
+    candidate_code: 'CID1-ABCDE', surname: 'Example', email: 'person@example.test',
+    mobile: '+447700900111', google_source_identity_hmac: '5'.repeat(64), source_hmac_key_version: 1
+  };
+  const request = await hmacRequest('POST',
+    'https://broker.invalid/private/google-control/v1/candidates/provisioning/preflight', preflightBody);
+  const verified = await verifyMyTmsGoogleControlRequest(request.clone(), environment);
+  assert.equal(verified.ok, true);
+  assert.equal(verified.route, 'PROVISIONING_PREFLIGHT');
+  assert.deepEqual(verified.googleContext.integration_key, 'master_test');
+  assert.equal((await verifyMyTmsGoogleControlRequest(request.clone(), environment)).status, 401);
+
+  const statusUrl = new URL(`https://broker.invalid/private/google-control/v1/candidates/provisioning/${IDS.operation}`);
+  for (const [name, value] of Object.entries(googleContext())) statusUrl.searchParams.set(name, value);
+  const getRequest = await hmacRequest('GET', statusUrl.toString(), null, { nonce: 'abcdefghijklmnopqrstuw' });
+  const getVerified = await verifyMyTmsGoogleControlRequest(getRequest, environment);
+  assert.equal(getVerified.ok, true);
+  assert.equal(getVerified.route, 'PROVISIONING_STATUS');
+
+  const statusWithoutLength = new URL(`https://broker.invalid/private/google-control/v1/target-switches/${IDS.operation}`);
+  for (const [name, value] of Object.entries(googleContext())) statusWithoutLength.searchParams.set(name, value);
+  const signedWithoutLength = await hmacRequest('GET', statusWithoutLength.toString(), null, {
+    nonce: 'abcdefghijklmnopqrstux'
+  });
+  const noLengthHeaders = new Headers(signedWithoutLength.headers);
+  noLengthHeaders.delete('content-length');
+  const noLengthVerified = await verifyMyTmsGoogleControlRequest(
+    new Request(signedWithoutLength, { headers: noLengthHeaders }), environment
+  );
+  assert.equal(noLengthVerified.ok, true);
+  assert.equal(noLengthVerified.route, 'TARGET_SWITCH_STATUS');
+
+  const changedBody = new Request(request, { body: JSON.stringify({ ...preflightBody, surname: 'Changed' }) });
+  assert.equal((await verifyMyTmsGoogleControlRequest(changedBody, env({ R2: nonceStore() }))).status, 401);
+});
+
+test('public response scrubber never emits internal route, binding or Candidate identifiers', () => {
+  const safe = myTmsGoogleControlInternals.safeResult({
+    ok: true, state: 'RESERVED', operation_id: IDS.operation,
+    candidate_code: 'CID1-ABCDE', reservation_token: 'safe-return-token',
+    local_candidate_id: IDS.integration, agency_id: IDS.agency, data_plane_id: IDS.plane,
+    route_version_id: IDS.route, registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST',
+    internal_only: true
+  }, '01K35Y7N7ER4QY5F7M8D9P0Q1R');
+  assert.equal(safe.state, 'RESERVED');
+  assert.equal(safe.local_candidate_id, undefined);
+  assert.equal(safe.agency_id, undefined);
+  assert.equal(safe.data_plane_id, undefined);
+  assert.equal(safe.registry_binding_key, undefined);
+});
+
+test('target-switch drain facts use one recursively sorted canonical JSON authority', async () => {
+  const facts = {
+    uncertain_effect_count: 0,
+    nested: { z: true, a: ['x', 2, null] },
+    active_effect_count: 0,
+    drain_snapshot_hash_hex: '6'.repeat(64)
+  };
+  const expected = '{"active_effect_count":0,"drain_snapshot_hash_hex":"'
+    + '6'.repeat(64)
+    + '","nested":{"a":["x",2,null],"z":true},"uncertain_effect_count":0}';
+  assert.equal(myTmsGoogleControlInternals.canonicalJson(facts), expected);
+  assert.equal(await sha256Hex(new TextEncoder().encode(expected)),
+    await sha256Hex(new TextEncoder().encode(myTmsGoogleControlInternals.canonicalJson(facts))));
+});
+
+test('agency match SQL is read-only, exact, CID1-canonical and service-role only', async () => {
+  const source = await readFile(new URL(
+    '../supabase/repeatable/21082026_2231_candidate_google_provisioning_match_v1.sql', import.meta.url
+  ), 'utf8');
+  assert.match(source, /c\.active is true/);
+  assert.match(source, /\^CID1-\[0-9A-HJKMNP-TV-Z\]\{5,160\}\$/);
+  assert.match(source, /c\.last_name/);
+  assert.match(source, /c\.email/);
+  assert.match(source, /c\.phone/);
+  assert.match(source, /min\(c\.id::text\)::uuid/i);
+  assert.doesNotMatch(source, /\b(?:insert|update|delete|alter|drop|truncate)\s+(?:into\s+)?public\.candidates\b/i);
+  assert.match(source, /revoke all .* public,anon,authenticated/is);
+  assert.match(source, /grant execute .* service_role/is);
+});

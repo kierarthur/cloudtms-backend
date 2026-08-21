@@ -31,9 +31,9 @@ async function importHmacKey(secret, usage) {
   );
 }
 
-function canonicalServiceRequest({ method, requestTarget, timestamp, nonce, environment, bodySha256, authorizationSha256, headersSha256 }) {
+function canonicalServiceRequest({ version = 'candidate-private-v1', method, requestTarget, timestamp, nonce, environment, bodySha256, authorizationSha256, headersSha256 }) {
   return [
-    'cloudtms-candidate-private-v1',
+    `cloudtms-${version}`,
     String(method || '').toUpperCase(),
     requestTarget,
     timestamp,
@@ -45,13 +45,25 @@ function canonicalServiceRequest({ method, requestTarget, timestamp, nonce, envi
   ].join('\n');
 }
 
-async function signedHeadersSha256(request) {
-  return sha256Hex([
+async function signedHeadersSha256(request, version = 'candidate-private-v1') {
+  const values = [
     request.headers.get('content-type') || '',
     request.headers.get('idempotency-key') || '',
     request.headers.get('x-request-id') || '',
     request.headers.get('x-cloudtms-public-client') || ''
-  ].join('\n'));
+  ];
+  if (version === 'candidate-private-v2') {
+    values.push(
+      request.headers.get('x-cloudtms-route-context') || '',
+      request.headers.get('x-cloudtms-route-context-sha256') || ''
+    );
+  } else if (version === 'candidate-private-v3') {
+    values.push(
+      request.headers.get('x-cloudtms-google-route-context') || '',
+      request.headers.get('x-cloudtms-google-route-context-sha256') || ''
+    );
+  }
+  return sha256Hex(values.join('\n'));
 }
 
 async function requestBodySha256(request) {
@@ -66,9 +78,22 @@ export async function signCandidatePrivateRequest(request, env) {
   const nonce = crypto.randomUUID();
   const bodySha256 = await requestBodySha256(request);
   const authorizationSha256 = await sha256Hex(request.headers.get('authorization') || '');
-  const headersSha256 = await signedHeadersSha256(request);
+  const hasRouteContext = request.headers.has('x-cloudtms-route-context');
+  const hasRouteContextDigest = request.headers.has('x-cloudtms-route-context-sha256');
+  const hasGoogleRouteContext = request.headers.has('x-cloudtms-google-route-context');
+  const hasGoogleRouteContextDigest = request.headers.has('x-cloudtms-google-route-context-sha256');
+  if (hasRouteContext !== hasRouteContextDigest) {
+    throw new Error('CANDIDATE_ROUTE_CONTEXT_HEADERS_INCOMPLETE');
+  }
+  if (hasGoogleRouteContext !== hasGoogleRouteContextDigest || (hasRouteContext && hasGoogleRouteContext)) {
+    throw new Error('CANDIDATE_ROUTE_CONTEXT_HEADERS_INCOMPLETE');
+  }
+  const version = hasGoogleRouteContext ? 'candidate-private-v3'
+    : hasRouteContext ? 'candidate-private-v2' : 'candidate-private-v1';
+  const headersSha256 = await signedHeadersSha256(request, version);
   const url = new URL(request.url);
   const canonical = canonicalServiceRequest({
+    version,
     method: request.method,
     requestTarget: `${url.pathname}${url.search}`,
     timestamp,
@@ -84,7 +109,7 @@ export async function signCandidatePrivateRequest(request, env) {
     encoder.encode(canonical)
   ));
   const headers = new Headers(request.headers);
-  headers.set('x-cloudtms-service-version', 'candidate-private-v1');
+  headers.set('x-cloudtms-service-version', version);
   headers.set('x-cloudtms-service-environment', environment);
   headers.set('x-cloudtms-service-timestamp', timestamp);
   headers.set('x-cloudtms-service-nonce', nonce);
@@ -107,7 +132,16 @@ function hexToBytes(value) {
 
 export async function verifyCandidatePrivateRequest(request, env, nowSeconds = Math.floor(Date.now() / 1000)) {
   try {
-    if (request.headers.get('x-cloudtms-service-version') !== 'candidate-private-v1') return false;
+    const version = request.headers.get('x-cloudtms-service-version');
+    if (!['candidate-private-v1', 'candidate-private-v2', 'candidate-private-v3'].includes(version)) return false;
+    const hasRouteContext = request.headers.has('x-cloudtms-route-context');
+    const hasRouteContextDigest = request.headers.has('x-cloudtms-route-context-sha256');
+    const hasGoogleRouteContext = request.headers.has('x-cloudtms-google-route-context');
+    const hasGoogleRouteContextDigest = request.headers.has('x-cloudtms-google-route-context-sha256');
+    if (hasRouteContext !== hasRouteContextDigest) return false;
+    if (hasGoogleRouteContext !== hasGoogleRouteContextDigest || (hasRouteContext && hasGoogleRouteContext)) return false;
+    if ((version === 'candidate-private-v2') !== hasRouteContext
+        || (version === 'candidate-private-v3') !== hasGoogleRouteContext) return false;
     const environment = requiredText(env.CANDIDATE_APP_ENVIRONMENT, 'CANDIDATE_ENVIRONMENT_REQUIRED').toUpperCase();
     if (!['TEST', 'LIVE'].includes(environment)) return false;
     if (request.headers.get('x-cloudtms-service-environment') !== environment) return false;
@@ -123,12 +157,13 @@ export async function verifyCandidatePrivateRequest(request, env, nowSeconds = M
     const actualAuthorizationSha256 = await sha256Hex(request.headers.get('authorization') || '');
     if (suppliedAuthorizationSha256 !== actualAuthorizationSha256) return false;
     const suppliedHeadersSha256 = request.headers.get('x-cloudtms-service-headers-sha256') || '';
-    const actualHeadersSha256 = await signedHeadersSha256(request);
+    const actualHeadersSha256 = await signedHeadersSha256(request, version);
     if (suppliedHeadersSha256 !== actualHeadersSha256) return false;
     const signature = hexToBytes(request.headers.get('x-cloudtms-service-signature'));
     if (!signature) return false;
     const url = new URL(request.url);
     const canonical = canonicalServiceRequest({
+      version,
       method: request.method,
       requestTarget: `${url.pathname}${url.search}`,
       timestamp,

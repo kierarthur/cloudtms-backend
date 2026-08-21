@@ -46,6 +46,19 @@ import {
   mapCanonicalDailyScheduleToIso
 } from './daily-schedule-authority.js';
 import { handleCandidateAppRequest } from './candidate-app-backend.js';
+import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
+import {
+  adoptMyTmsCandidate,
+  getMyTmsCandidateStatus,
+  getMyTmsOfficeSettings,
+  MyTmsOfficeError,
+  previewMyTmsTemplate,
+  queueMyTmsIdentityChallenge,
+  recordMyTmsInvitationOutboxOutcome,
+  reserveAndQueueMyTmsInvitation,
+  setMyTmsMembershipState,
+  setMyTmsOfficeSettings
+} from './mytms-office-control.js';
 import { candidatePaperProviderAuthorityCurrent } from './candidate-paper-provider-authority.js';
 import { candidateManagerProviderAuthorityCurrent } from './candidate-manager-provider-authority.js';
 import {
@@ -126971,6 +126984,31 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return new Date(ms).toISOString();
   };
 
+  const recordMyTmsOutcomeSafe = async (row, outcome, providerMessageId = null) => {
+    try {
+      const result = await recordMyTmsInvitationOutboxOutcome(
+        env, row, outcome, providerMessageId
+      );
+      if (result?.applicable && !result.recorded) {
+        errors.push({
+          id: row?.id || null,
+          error: 'MYTMS_INVITATION_DELIVERY_RECEIPT_NOT_RECORDED',
+          mytms_delivery_receipt_failed: true
+        });
+      }
+    } catch (error) {
+      if (String(row?.context_kind || '').trim().toUpperCase() === 'MYTMS_INVITATION') {
+        errors.push({
+          id: row?.id || null,
+          error: 'MYTMS_INVITATION_DELIVERY_RECEIPT_FAILED',
+          error_code: MYTMS_OFFICE_SAFE_ERROR_CODES.has(String(error?.code || '').toUpperCase())
+            ? String(error.code).toUpperCase() : 'DEPENDENCY_UNAVAILABLE',
+          mytms_delivery_receipt_failed: true
+        });
+      }
+    }
+  };
+
   const leaseMinutes = 5;
   const attemptLeaseToken =
     (globalThis.crypto && typeof globalThis.crypto.randomUUID === 'function')
@@ -127009,7 +127047,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
   };
 
-  const patchClaimedRowFailed = async (rowId, msg, currentLeaseToken) => {
+  const patchClaimedRowFailed = async (
+    rowId, msg, currentLeaseToken, myTmsOutcome = 'FAILED'
+  ) => {
     const rows = await patchMailOutboxRows(
       `id=eq.${enc(rowId)}&attempt_lease_token=eq.${enc(currentLeaseToken)}&sent_at=is.null`,
       {
@@ -127022,7 +127062,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         attempt_lease_expires_at_utc: null
       }
     );
-    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    const updatedRow = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    if (updatedRow) await recordMyTmsOutcomeSafe(updatedRow, myTmsOutcome);
+    return updatedRow;
   };
 
   const patchClaimedRowSent = async (rowId, providerMessageId, currentLeaseToken) => {
@@ -127042,7 +127084,11 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
         attempt_lease_expires_at_utc: null
       }
     );
-    return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    const updatedRow = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+    if (updatedRow) {
+      await recordMyTmsOutcomeSafe(updatedRow, 'PROVIDER_ACCEPTED', providerMessageId);
+    }
+    return updatedRow;
   };
 
   const markTimesheetQueryDeliverySent = async (row) => {
@@ -127382,7 +127428,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     if (!res || !res.ok) {
       const errMsg = String((res && res.body) || (res && `HTTP ${res.status}`) || 'Provider transport failure');
       for (const rowId of rowIds) {
-        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken, 'DELIVERY_UNCERTAIN'
+        ).catch(() => null);
         if (!updatedRow) continue;
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
@@ -127407,7 +127455,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
     if (!Array.isArray(results) || results.length === 0) {
       const errMsg = 'Provider returned no per-item results (cannot reconcile)';
       for (const rowId of rowIds) {
-        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken, 'DELIVERY_UNCERTAIN'
+        ).catch(() => null);
         if (!updatedRow) continue;
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
@@ -127439,7 +127489,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 
       if (!r) {
         const errMsg = 'PROVIDER_RESULT_MISSING_FOR_ITEM';
-        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken, 'DELIVERY_UNCERTAIN'
+        ).catch(() => null);
         if (!updatedRow) continue;
         failed += 1;
         errors.push({ id: rowId, error: errMsg });
@@ -127495,7 +127547,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 
       if (isFailed) {
         const errMsg = String(r?.error || r?.body || r?.message || 'Provider failed');
-        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken
+        ).catch(() => null);
         if (!updatedRow) continue;
 
         failed += 1;
@@ -127511,7 +127565,9 @@ async function drainEmailOutboxOnce(env, { limit, types } = {}) {
 
       {
         const errMsg = String(r?.error || r?.body || r?.message || 'Unknown provider status');
-        const updatedRow = await patchClaimedRowFailed(rowId, errMsg, currentLeaseToken).catch(() => null);
+        const updatedRow = await patchClaimedRowFailed(
+          rowId, errMsg, currentLeaseToken, 'DELIVERY_UNCERTAIN'
+        ).catch(() => null);
         if (!updatedRow) continue;
 
         failed += 1;
@@ -133464,6 +133520,125 @@ const normalizePayExportCsvFormatJson = (raw) => {
 
   return out;
 };
+
+const MYTMS_OFFICE_SAFE_ERROR_CODES = new Set([
+  'MYTMS_OFFICE_CONFIGURATION_UNAVAILABLE', 'MYTMS_OFFICE_CONTROL_DISABLED',
+  'MYTMS_OFFICE_PERMISSION_DENIED', 'MYTMS_TEMPLATE_TOO_LARGE',
+  'MYTMS_OFFICE_DATA_PLANE_UNAVAILABLE', 'MYTMS_OFFICE_RESPONSE_INVALID',
+  'MYTMS_SETTINGS_REQUEST_INVALID', 'MYTMS_ACTIVATION_NOT_AUTHORIZED',
+  'MYTMS_CANDIDATE_ID_INVALID', 'MYTMS_INVITATION_DELIVERY_DISABLED',
+  'MYTMS_CANDIDATE_NOT_FOUND', 'MYTMS_ACTION_STALE',
+  'MYTMS_SETTINGS_VERSION_CONFLICT', 'MYTMS_INVITATION_REQUEST_INVALID',
+  'MYTMS_INVITATION_LINK_UNAVAILABLE', 'MYTMS_INVITATION_TEMPLATE_UNAVAILABLE',
+  'MYTMS_OUTBOX_UNAVAILABLE', 'MYTMS_INVITATION_DELIVERY_CONFLICT',
+  'MYTMS_IDENTITY_DELIVERY_DISABLED', 'MYTMS_IDENTITY_DELIVERY_INVALID',
+  'MYTMS_IDENTITY_DELIVERY_UNAVAILABLE', 'CONTROL_PLANE_DISABLED',
+  'MYTMS_ADOPTION_REQUEST_INVALID', 'MYTMS_MEMBERSHIP_REQUEST_INVALID',
+  'MYTMS_MEMBERSHIP_ADMIN_DISABLED', 'MYTMS_MEMBERSHIP_LINK_UNAVAILABLE',
+  'CONTROL_PLANE_CONFIGURATION_UNAVAILABLE', 'CONTROL_PLANE_AUTH_FAILED',
+  'CONTROL_PLANE_REQUEST_REJECTED', 'CONTROL_PLANE_RESPONSE_INVALID',
+  'DEPENDENCY_UNAVAILABLE', 'IDEMPOTENCY_CONFLICT'
+]);
+
+function myTmsOfficeFailure(error) {
+  const rawStatus = Number(error?.status);
+  const status = [400, 401, 403, 404, 409, 413, 429, 502, 503].includes(rawStatus)
+    ? rawStatus : 500;
+  const rawCode = String(error?.code || error?.message || '').trim().toUpperCase();
+  const errorCode = MYTMS_OFFICE_SAFE_ERROR_CODES.has(rawCode)
+    ? rawCode : 'MYTMS_OFFICE_REQUEST_FAILED';
+  return new Response(JSON.stringify({ ok: false, error_code: errorCode }), {
+    status,
+    headers: {
+      ...JSON_HEADERS,
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff'
+    }
+  });
+}
+
+async function requireMyTmsOfficeAdmin(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) throw new MyTmsOfficeError(401, 'MYTMS_OFFICE_PERMISSION_DENIED');
+  return user;
+}
+
+async function handleMyTmsOfficeSettings(env, req, action) {
+  try {
+    const user = await requireMyTmsOfficeAdmin(env, req);
+    if (action === 'GET') return ok(await getMyTmsOfficeSettings(env, user));
+    const body = await parseJSONBody(req);
+    if (!body) throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
+    if (action === 'SET') return ok(await setMyTmsOfficeSettings(env, user, body));
+    if (action === 'PREVIEW') return ok(await previewMyTmsTemplate(env, user, body));
+    throw new MyTmsOfficeError(404, 'MYTMS_OFFICE_REQUEST_FAILED');
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
+
+async function handleMyTmsCandidateStatus(env, req, candidateId) {
+  try {
+    const user = await requireMyTmsOfficeAdmin(env, req);
+    return ok(await getMyTmsCandidateStatus(env, user, candidateId));
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
+
+async function handleMyTmsCandidateInvitation(env, req, candidateId) {
+  try {
+    const user = await requireMyTmsOfficeAdmin(env, req);
+    const body = await parseJSONBody(req);
+    if (!body) throw new MyTmsOfficeError(400, 'MYTMS_INVITATION_REQUEST_INVALID');
+    return ok(await reserveAndQueueMyTmsInvitation(env, user, candidateId, body));
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
+
+async function handleMyTmsCandidateAdoption(env, req, candidateId) {
+  try {
+    const user = await requireMyTmsOfficeAdmin(env, req);
+    const body = await parseJSONBody(req);
+    if (!body) throw new MyTmsOfficeError(400, 'MYTMS_ADOPTION_REQUEST_INVALID');
+    return ok(await adoptMyTmsCandidate(env, user, candidateId, body));
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
+
+async function handleMyTmsMembershipState(env, req, membershipId) {
+  try {
+    const user = await requireMyTmsOfficeAdmin(env, req);
+    const body = await parseJSONBody(req);
+    if (!body) throw new MyTmsOfficeError(400, 'MYTMS_MEMBERSHIP_REQUEST_INVALID');
+    return ok(await setMyTmsMembershipState(env, user, membershipId, body));
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
+
+async function handleMyTmsIdentityChallengeDelivery(env, req) {
+  try {
+    if (!await verifyCandidatePrivateRequest(req, env)) {
+      return myTmsOfficeFailure(new MyTmsOfficeError(401, 'MYTMS_OFFICE_PERMISSION_DENIED'));
+    }
+    const body = await parseJSONBody(req);
+    if (!body) throw new MyTmsOfficeError(400, 'MYTMS_IDENTITY_DELIVERY_INVALID');
+    const result = await queueMyTmsIdentityChallenge(env, body);
+    return new Response(JSON.stringify(result), {
+      status: 202,
+      headers: {
+        ...JSON_HEADERS,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff'
+      }
+    });
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
 
 async function handleGetSettings(env, req) {
   const user = await requireUser(env, req, ['admin']);
@@ -193612,6 +193787,11 @@ export default {
     const url = new URL(req.url);
     const p = url.pathname;
 
+    if (req.method === 'POST'
+        && p === '/private/mytms-control/v1/auth/challenge-delivery') {
+      return handleMyTmsIdentityChallengeDelivery(env, req);
+    }
+
     const candidateAppResponse = await handleCandidateAppRequest(
       req,
       env,
@@ -194537,6 +194717,27 @@ if (req.method === 'POST' && p === '/api/timesheets/bulk-authorise-import-eviden
 // Settings (singleton)
 if (req.method === 'GET' && p === '/api/settings/defaults')           return handleGetSettings(env, req);
 if (req.method === 'PUT' && p === '/api/settings/defaults')           return handleUpdateSettings(env, req);
+if (req.method === 'GET' && p === '/api/mytms/settings')              return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'GET'));
+if (req.method === 'PUT' && p === '/api/mytms/settings')              return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'SET'));
+if (req.method === 'POST' && p === '/api/mytms/settings/preview')     return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'PREVIEW'));
+{
+  const myTmsStatus = matchPath(p, '/api/mytms/candidates/:id/status');
+  if (myTmsStatus && req.method === 'GET') {
+    return withCORS(env, req, await handleMyTmsCandidateStatus(env, req, myTmsStatus.id));
+  }
+  const myTmsInvitation = matchPath(p, '/api/mytms/candidates/:id/invitations');
+  if (myTmsInvitation && req.method === 'POST') {
+    return withCORS(env, req, await handleMyTmsCandidateInvitation(env, req, myTmsInvitation.id));
+  }
+  const myTmsAdoption = matchPath(p, '/api/mytms/candidates/:id/adopt');
+  if (myTmsAdoption && req.method === 'POST') {
+    return withCORS(env, req, await handleMyTmsCandidateAdoption(env, req, myTmsAdoption.id));
+  }
+  const myTmsMembership = matchPath(p, '/api/mytms/memberships/:id/state');
+  if (myTmsMembership && req.method === 'POST') {
+    return withCORS(env, req, await handleMyTmsMembershipState(env, req, myTmsMembership.id));
+  }
+}
 if (req.method === 'GET'   && p === '/api/settings/finance-windows') return handleSettingsFinanceWindows(env, req);
 if (req.method === 'POST'  && p === '/api/settings/finance-windows') return handleSettingsFinanceWindows(env, req);
 
