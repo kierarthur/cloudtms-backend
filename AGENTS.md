@@ -118,6 +118,12 @@ Do not proceed with the write until the user explicitly approves it in the curre
 
 ## SQL file naming and placement
 
+### Mandatory database release process
+
+Before any database, migration, RPC, view, trigger, RLS, grant, or Supabase schema work, read and follow `docs/DATABASE_RELEASE_BIBLE.md`. Run `npm run db:check` before editing and again before handoff or publication. Use `npm run db:new:migration -- --name=<name>` for new one-time changes and `npm run db:new:repeatable -- --name=<name>` for replacement function/view authority. After a new migration is complete and reviewed, append its immutable hash with `npm run db:lock:update`; that command must refuse to re-lock changed or missing older migrations. Never edit an older one-time migration or manually repair release ledgers/hashes. Push workflows verify source only; database changes use the manual protected `Database Release` PLAN/APPLY workflow. This rule applies to every future chat and agent.
+
+The Candidate/MyTMS boundary in `supabase/release/protected-boundary-lock.json` is frozen. If proposed work needs to alter one of those files or named objects, stop and coordinate before editing. All Banking Pay changes must also preserve Policy X.
+
 Every new SQL file must use the filename format `DDMMYYYY_HHMM_name.sql`; the filename must always begin with the date and 24-hour time in that exact order. Use the current UK date and time, and use a short descriptive `snake_case` name.
 
 * Save one-time database migrations in `supabase\migrations`.

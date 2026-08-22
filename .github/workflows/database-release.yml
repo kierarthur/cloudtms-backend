@@ -1,0 +1,114 @@
+name: Database Release (manual and protected)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Exact target environment
+        required: true
+        type: choice
+        options: [TEST, LIVE]
+      mode:
+        description: NEW blank install, UPGRADE managed DB, or ADOPT exact existing authority
+        required: true
+        type: choice
+        options: [UPGRADE, NEW, ADOPT]
+      phase:
+        description: PLAN is read-only; APPLY performs the reviewed plan
+        required: true
+        type: choice
+        options: [PLAN, APPLY]
+      customer_key:
+        description: Optional non-secret tenant key for a dedicated customer database
+        required: false
+        type: string
+      approval:
+        description: For APPLY only, enter APPLY <ENV> <MODE> <40-character commit SHA>
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudtms-database-release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  source-gate:
+    name: Prove repository release authority
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run db:check
+      - run: node --test tests/database-release-system.test.mjs
+      - id: commit
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: ${{ inputs.phase }} ${{ inputs.mode }} ${{ inputs.environment }}
+    needs: source-gate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}
+    env:
+      CLOUDTMS_DATABASE_URL: ${{ secrets.CLOUDTMS_DATABASE_URL || (inputs.environment == 'TEST' && secrets.SUPABASE_DB_URL_TEST) || (inputs.environment == 'LIVE' && secrets.SUPABASE_DB_URL) }}
+      CLOUDTMS_EXPECTED_PROJECT_REF: ${{ vars.CLOUDTMS_PROJECT_REF }}
+      CLOUDTMS_ENVIRONMENT: ${{ inputs.environment }}
+      CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
+      CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
+      CLOUDTMS_RELEASE_APPROVAL: ${{ inputs.approval }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.source-gate.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+          sudo timeout 180 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq
+          sudo timeout 180 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq postgresql-client
+          command -v psql >/dev/null 2>&1
+      - name: Validate protected target configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_PROJECT_REF:-}" || { echo "Missing protected CLOUDTMS_PROJECT_REF variable"; exit 1; }
+          if [[ "${{ inputs.phase }}" == "APPLY" ]]; then
+            expected="APPLY ${{ inputs.environment }} ${{ inputs.mode }} ${{ needs.source-gate.outputs.commit }}"
+            [[ "${CLOUDTMS_RELEASE_APPROVAL:-}" == "$expected" ]] || { echo "Exact APPLY approval phrase does not match this commit"; exit 1; }
+          fi
+      - name: Read-only release plan
+        run: npm run db:plan -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
+      - name: Apply verified release
+        if: inputs.phase == 'APPLY'
+        run: npm run db:apply -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
+      - name: Release evidence
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### CloudTMS database release"
+            echo "- Phase: ${{ inputs.phase }}"
+            echo "- Mode: ${{ inputs.mode }}"
+            echo "- Environment: ${{ inputs.environment }}"
+            echo "- Commit: ${{ needs.source-gate.outputs.commit }}"
+            echo "- Protected GitHub Environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,39 @@
+{
+  "formatVersion": 1,
+  "releaseId": "20260822-test-authority",
+  "contractPath": "supabase/release/current-contract.json",
+  "controlPlaneMigration": "supabase/migrations/22082026_1507_cloudtms_database_release_control_plane.sql",
+  "bootstrapFile": "supabase/baseline/22082026_1506_cloudtms_new_database_bootstrap.sql",
+  "baselineFiles": [
+    "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_01.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_02.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_03.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_04.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_05.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_06.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_07.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_08.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_09.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_10.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_11.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_12.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_13.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_14.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_15.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_16.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_17.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_18.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_19.sql",
+    "supabase/baseline/22082026_1503_cloudtms_test_routines_20.sql",
+    "supabase/baseline/22082026_1504_cloudtms_test_views_and_triggers.sql",
+    "supabase/baseline/22082026_1501_cloudtms_test_structural_finishing.sql",
+    "supabase/baseline/22082026_1505_cloudtms_test_acl_baseline.sql"
+  ],
+  "verificationFiles": [
+    "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
+    "supabase/verification/22082026_1402_candidate_named_legacy_security_verification.sql",
+    "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql"
+  ]
+}

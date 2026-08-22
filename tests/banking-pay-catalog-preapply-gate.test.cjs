@@ -7,7 +7,7 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 const generator = path.join(root, 'supabase', 'verification', 'generate_banking_pay_catalog_preapply_check.mjs');
-const workflowPath = path.join(root, '.github', 'workflows', 'supabase-migrate.yml');
+const releaseEnginePath = path.join(root, 'scripts', 'cloudtms-db-release.mjs');
 
 test('catalog-owned pending repeatables are rehearsed in a rollback-only transaction', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'banking-pay-catalog-preapply-'));
@@ -37,14 +37,15 @@ test('catalog-owned pending repeatables are rehearsed in a rollback-only transac
   }
 });
 
-test('migration workflow runs the rollback-only catalog rehearsal before repeatable application', () => {
-  const workflow = fs.readFileSync(workflowPath, 'utf8');
-  const collectIndex = workflow.indexOf('REP_FILES_PENDING=()');
-  const generatorIndex = workflow.indexOf('generate_banking_pay_catalog_preapply_check.mjs');
-  const applyIndex = workflow.indexOf('echo "APPLY new/changed repeatable: $base"');
+test('release engine runs the rollback-only catalog rehearsal before changed repeatables', () => {
+  const engine = fs.readFileSync(releaseEnginePath, 'utf8');
+  const collectIndex = engine.indexOf('const pendingRepeatables = current.repeatables.filter');
+  const generatorIndex = engine.indexOf('runBankingPayCatalogPreapply(pendingRepeatables.map');
+  const applyIndex = engine.indexOf('for (const item of pendingRepeatables)');
 
-  assert.ok(collectIndex >= 0, 'workflow must collect pending repeatables');
-  assert.ok(generatorIndex > collectIndex, 'workflow must generate the pre-apply rehearsal after collecting pending repeatables');
-  assert.ok(applyIndex > generatorIndex, 'workflow must pass the pre-apply rehearsal before applying repeatables');
-  assert.match(workflow, /psql "\$DB_URL" -v ON_ERROR_STOP=1 -X -q -f "\$\{CATALOG_PREFLIGHT_SQL\}"/);
+  assert.ok(collectIndex >= 0, 'release engine must collect changed repeatables');
+  assert.ok(generatorIndex > collectIndex, 'release engine must run the catalog rehearsal after collection');
+  assert.ok(applyIndex > generatorIndex, 'catalog rehearsal must pass before applying changed repeatables');
+  assert.match(engine, /generate_banking_pay_catalog_preapply_check\.mjs/);
+  assert.match(engine, /psql\(\{ file: output \}\)/);
 });

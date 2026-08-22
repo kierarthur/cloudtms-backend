@@ -69,5 +69,6 @@ test('R16 safe migration cannot start before both exact Candidate PostgreSQL eng
   assert.match(candidateWorkflow, /candidate-daily-r16-identity-integrity-concurrency\.integration\.js/);
   assert.match(migrateWorkflow, /candidate-db-runtime:[\s\S]*uses:\s*\.\/\.github\/workflows\/candidate-db-runtime\.yml/);
   assert.match(migrateWorkflow, /migrate:[\s\S]*needs:\s*candidate-db-runtime/);
-  assert.match(migrateWorkflow, /PRE_REPEATABLE_MIGRATIONS=[\s\S]*18082026_0802_candidate_daily_identity_integrity\.sql/);
+  assert.match(migrateWorkflow, /Database source verification \(no deploy\)/);
+  assert.match(migrateWorkflow, /npm run db:check/);
 });

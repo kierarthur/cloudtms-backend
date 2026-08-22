@@ -3,65 +3,31 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
-const workflow = fs.readFileSync(
-  path.resolve(__dirname, '../.github/workflows/supabase-migrate.yml'),
-  'utf8'
-);
+const root = path.resolve(__dirname, '..');
+const engine = fs.readFileSync(path.join(root, 'scripts', 'cloudtms-db-release.mjs'), 'utf8');
+const library = fs.readFileSync(path.join(root, 'scripts', 'cloudtms-db-release-lib.mjs'), 'utf8');
+const pushWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'supabase-migrate.yml'), 'utf8');
 
-test('Supabase deployment applies only new or content-changed repeatables', () => {
-  assert.match(workflow, /create table if not exists public\.schema_repeatables/);
-  assert.match(workflow, /content_sha256 text not null/);
-  assert.match(
-    workflow,
-    /tablename not in \('schema_migrations', 'schema_repeatables'\)/,
-    'ledger tables must not make a genuinely empty database look pre-populated'
-  );
-  assert.match(workflow, /sha256sum "\$1"/);
-  assert.match(workflow, /declare -A REPEATABLE_LEDGER_HASHES/);
-  assert.match(workflow, /select filename, content_sha256/);
-  assert.doesNotMatch(
-    workflow,
-    /repeatable_ledger_hash \(\)/,
-    'unchanged files must not cause one database query per repeatable'
-  );
-  assert.match(workflow, /SKIP unchanged repeatable/);
-  assert.match(workflow, /APPLY new\/changed repeatable/);
-  assert.match(
-    workflow,
-    /apply_file "\$f"\s+record_repeatable_hash "\$base" "\$content_hash"/,
-    'a repeatable hash must be recorded only after the file applies successfully'
-  );
-  assert.doesNotMatch(
-    workflow,
-    /for f in "\$\{REP_FILES_SORTED\[@\]\}"; do\s+echo "APPLY repeatable:[\s\S]*apply_file "\$f"\s+done/,
-    'unchanged repeatables must not be replayed wholesale'
-  );
+test('repeatable deployment is closure-hashed and applies only changed authority', () => {
+  assert.match(library, /export function closureFor/);
+  assert.match(library, /Recursive SQL include cycle/);
+  assert.match(library, /Buffer\.concat\(ordered\.flatMap/);
+  assert.match(engine, /private\.cloudtms_repeatable_ledger/);
+  assert.match(engine, /const pendingRepeatables = current\.repeatables\.filter/);
+  assert.match(engine, /for \(const item of pendingRepeatables\)/);
+  assert.doesNotMatch(engine, /for \(const item of current\.repeatables\)[\s\S]*psql\(\{ file: item\.path \}\)/);
 });
 
-test('first hash-ledger run is fail-closed and bootstraps only unchanged source', () => {
-  assert.match(workflow, /fetch-depth: 0/);
-  assert.match(workflow, /BEFORE_SHA: \$\{\{ github\.event\.before \|\| '' \}\}/);
-  assert.match(workflow, /BOOTSTRAP_EXISTING_REPEATABLES=false/);
-  assert.match(
-    workflow,
-    /REPEATABLE_BOOTSTRAP_COMPLETE="\$\{REPEATABLE_LEDGER_HASHES\[__BOOTSTRAPPED__\]:-\}"/
-  );
-  assert.match(workflow, /values \('__BOOTSTRAPPED__', 'v1', now\(\)\)/);
-  assert.match(workflow, /GITHUB_EVENT_NAME[^]*!= "push"/);
-  assert.match(workflow, /Cannot safely bootstrap repeatable hashes/);
-  assert.match(workflow, /git diff --quiet "\$\{BEFORE_SHA\}" "\$\{GITHUB_SHA\}"/);
-  assert.match(workflow, /BOOTSTRAP_SQL="\$\(mktemp\)"/);
-  assert.match(workflow, /BASELINE complete for unchanged repeatables/);
+test('migration authority is immutable and adoption cannot blind-bootstrap drift', () => {
+  assert.match(engine, /migration-lock\.json/);
+  assert.match(engine, /Installed migration hash mismatch/);
+  assert.match(engine, /Installed migration is absent from repository/);
+  assert.match(engine, /mode === 'ADOPT'[\s\S]*compareExpected\(release\.contractPath\)/);
+  assert.doesNotMatch(engine, /git diff --quiet/);
+  assert.doesNotMatch(engine, /BOOTSTRAP_EXISTING_REPEATABLES/);
 });
 
-test('unchanged migrations are also checked from one loaded ledger', () => {
-  assert.match(workflow, /declare -A MIGRATION_LEDGER_NAMES/);
-  assert.match(workflow, /select filename\s+from public\.schema_migrations/);
-  assert.match(workflow, /already="\$\{MIGRATION_LEDGER_NAMES\[\$base\]:-\}"/);
-  assert.doesNotMatch(
-    workflow,
-    /select 1 from public\.schema_migrations where filename/,
-    'the workflow must not query PostgreSQL once for every unchanged migration'
-  );
-  assert.match(workflow, /MIGRATION_BOOTSTRAP_SQL="\$\(mktemp\)"/);
+test('ordinary pushes verify source but cannot mutate a database', () => {
+  assert.match(pushWorkflow, /npm run db:check/);
+  assert.doesNotMatch(pushWorkflow, /CLOUDTMS_DATABASE_URL|DB_URL|psql|supabase db push/);
 });

@@ -115,8 +115,7 @@ test('Candidate runtime workflow installs Phase 2 schema then RPCs before depend
   assert.ok(r9RuntimeIndex > testIndex && r9ConcurrencyIndex > r9RuntimeIndex);
   assert.match(workflow, /node --test --test-concurrency=1 tests\/candidate-auth-mixed-version-concurrency\.test\.js/);
   assert.match(workflow, /CANDIDATE_DAILY_POSTGRES_CHAIN=1[\s\\]+node --test tests\/candidate-daily-authority-transition-concurrency\.integration\.js/);
-  const prerequisiteIndex = safeMigration.indexOf('PRE_REPEATABLE_MIGRATIONS=(');
-  const prerequisiteFileIndex = safeMigration.indexOf('supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql', prerequisiteIndex);
-  const repeatablePassIndex = safeMigration.indexOf('for f in "${REP_FILES_SORTED[@]}"; do', prerequisiteFileIndex);
-  assert.ok(prerequisiteIndex > 0 && prerequisiteFileIndex > prerequisiteIndex && repeatablePassIndex > prerequisiteFileIndex);
+  assert.match(safeMigration, /Database source verification \(no deploy\)/);
+  assert.match(safeMigration, /npm run db:check/);
+  assert.doesNotMatch(safeMigration, /CLOUDTMS_DATABASE_URL|SUPABASE_DB_URL/);
 });
