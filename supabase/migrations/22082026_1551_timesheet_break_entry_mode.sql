@@ -36,7 +36,7 @@ comment on column public.contracts.timesheet_break_entry_mode is
 do $verification$
 begin
   if (
-    select array_agg(e.enumlabel order by e.enumsortorder)
+    select array_agg(e.enumlabel::text order by e.enumsortorder)
     from pg_type t
     join pg_namespace n on n.oid = t.typnamespace
     join pg_enum e on e.enumtypid = t.oid
