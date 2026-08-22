@@ -114888,13 +114888,10 @@ async function applyWeeklyHoursCorrections(env, {
   ));
 
   if (contractIds.length) {
-    const key =
-      env.SUPABASE_SERVICE_ROLE_KEY ||
-      env.SUPABASE_SERVICE_KEY ||
-      env.SUPABASE_ANON_KEY;
+    const key = env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!env.SUPABASE_URL || !key) {
-      throw new Error('applyWeeklyHoursCorrections: missing SUPABASE_URL or service key for contract self_bill lookup');
+      throw new Error('applyWeeklyHoursCorrections: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY for contract self_bill lookup');
     }
 
     const inList = contractIds.map(encodeURIComponent).join(',');

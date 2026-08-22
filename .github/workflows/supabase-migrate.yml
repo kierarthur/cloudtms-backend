@@ -407,4 +407,12 @@ jobs:
           psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
             -f tests/16082026_0102_banking_pay_case_resolution_convergence_verification.sql
 
+          # Re-assert the fail-closed browser boundary after every repeatable and
+          # one-time migration. The Candidate/MyTMS verifier is the controlling
+          # App-Ready boundary and must continue to pass unchanged.
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+            -f supabase/verification/22082026_1302_general_browser_isolation_verification.sql
+          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q \
+            -f supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql
+
           echo "Done."
