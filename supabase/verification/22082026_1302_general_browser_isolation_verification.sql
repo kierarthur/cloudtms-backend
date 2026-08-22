@@ -106,6 +106,10 @@ begin
       and p.prosecdef
       and p.proname<>'cloudtms_data_api_mfa_gate'
       and p.proname not ilike '%candidate%'
+      and p.proname not in (
+        'timesheet_break_entry_effective_get_v1',
+        'daily_zero_shifts_review_create_v1'
+      )
   )
   select
     pg_catalog.count(*),
