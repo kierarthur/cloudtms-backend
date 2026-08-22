@@ -27,6 +27,10 @@ const serviceRoleBoundaryNames = new Set([
   'pay_workbench_session_clone_eligibility_v1',
   'pay_workbench_session_recompute_progress_counters',
   'pay_workbench_session_set_selected_rows',
+  'pay_workbench_enqueue_candidate_refresh',
+  'pay_preview_candidate_build_finance_case_baseline',
+  'pay_preview_candidate_build_canonical_lines',
+  'pay_preview_candidate_build_summary_fragment',
 ]);
 
 function catalogEntries(manifest) {
@@ -53,7 +57,6 @@ test('Banking Pay catalogue manifests preserve the general browser-isolation bou
       if (
         entry.schema !== 'public'
         || entry.security_definer !== true
-        || entry.name.toLowerCase().includes('candidate')
         || entry.name === 'cloudtms_data_api_mfa_gate'
       ) {
         continue;
@@ -77,6 +80,6 @@ test('Banking Pay catalogue manifests preserve the general browser-isolation bou
   assert.deepEqual(
     [...checkedServiceRoleNames].sort(),
     [...serviceRoleBoundaryNames].sort(),
-    'all 16 browser-isolated Banking Pay catalogue functions must remain covered'
+    'all 20 browser-isolated Banking Pay catalogue functions must remain covered'
   );
 });

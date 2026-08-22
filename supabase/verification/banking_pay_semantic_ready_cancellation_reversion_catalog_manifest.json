@@ -61,7 +61,6 @@
       "definition_sha256": "b2e714f6af8da1250d0197c1866f4af02d1c89e0a775bb6cb1bb113f5ec2a137",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],

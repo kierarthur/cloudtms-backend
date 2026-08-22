@@ -367,12 +367,6 @@
       ],
       "expanded_acl": [
         {
-          "grantee": "authenticated",
-          "grantor": "postgres",
-          "is_grantable": false,
-          "privilege_type": "EXECUTE"
-        },
-        {
           "grantee": "postgres",
           "grantor": "postgres",
           "is_grantable": false,
@@ -629,12 +623,6 @@
       ],
       "expanded_acl": [
         {
-          "grantee": "authenticated",
-          "grantor": "postgres",
-          "is_grantable": false,
-          "privilege_type": "EXECUTE"
-        },
-        {
           "grantee": "postgres",
           "grantor": "postgres",
           "is_grantable": false,
@@ -669,12 +657,6 @@
         "plpgsql_check.fatal_errors=off"
       ],
       "expanded_acl": [
-        {
-          "grantee": "authenticated",
-          "grantor": "postgres",
-          "is_grantable": false,
-          "privilege_type": "EXECUTE"
-        },
         {
           "grantee": "postgres",
           "grantor": "postgres",
