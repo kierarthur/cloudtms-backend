@@ -28,7 +28,6 @@
       "definition_sha256": "83fbc69805a7a4066385dcea1fd3cfa7cc015bf1d885ca82d353eb9cada8f43c",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
@@ -51,9 +50,6 @@
       "definition_sha256": "1188d1421590cc45f0cb144c4f73135a1863a67eb0642b7e04845dbe28469cb2",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
-        {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"anon","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
@@ -99,7 +95,6 @@
       "definition_sha256": "ffe1c3815d078c2d03eb3875e98a7672b03b993e0b01709ac6eee855431d3924",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
@@ -111,7 +106,6 @@
       "definition_sha256": "06d2eea9f896fd5801c9bb55c493ff76fea47f8c021dda1d8b1b20aaea2e1a4b",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
@@ -190,7 +184,6 @@
       "definition_sha256": "602ee90a3eb35a958d0ba48c47fada1a6b7bb6d85fc7e612c585120011b9367f",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
@@ -362,7 +355,6 @@
       "definition_sha256": "ffcee44c5e17076fbb2764dea5c7b23dd50236a81e402bf0d16d7d3629821ccb",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public, pg_temp"],
       "expanded_acl": [
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
@@ -396,9 +388,6 @@
       "definition_sha256": "9a2dc312996574822c1742cdc760219e6d5263793f9f325f5586d51acaa1a347",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public", "plpgsql_check.mode=disabled"],
       "expanded_acl": [
-        {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"anon","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
@@ -413,9 +402,6 @@
       "definition_sha256": "8972c7224c49d6dbf6d11886af6b3490d8c40368e5a0dda2f1fdb7a60a5cc56f",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
-        {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"anon","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
@@ -427,9 +413,6 @@
       "definition_sha256": "620b46dfca3e2eaa20d12a34af63463ae71788d20369b5794863de76c5e1019a",
       "owner": "postgres", "security_definer": true, "proconfig": ["search_path=public"],
       "expanded_acl": [
-        {"grantee":"PUBLIC","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"anon","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
-        {"grantee":"authenticated","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"postgres","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"},
         {"grantee":"service_role","grantor":"postgres","is_grantable":false,"privilege_type":"EXECUTE"}
       ],
