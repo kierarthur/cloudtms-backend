@@ -69,6 +69,14 @@ test('release engine has fail-closed NEW, ADOPT, and UPGRADE gates', () => {
   assert.doesNotMatch(source, /__BOOTSTRAPPED__|marking existing migrations/);
 });
 
+test('contract export normalises null ACLs to one-dimensional effective defaults', () => {
+  const source = read('supabase/release/export_contract.sql');
+  assert.doesNotMatch(source, /aclexplode\(coalesce\([^)]*,\s*'\{\}'::aclitem\[\]\)\)/s);
+  assert.match(source, /acldefault\([\s\S]*c\.relowner/);
+  assert.match(source, /acldefault\('f'::"char", p\.proowner\)/);
+  assert.match(source, /acldefault\('n'::"char", n\.nspowner\)/);
+});
+
 test('Bible preserves Policy X and protected security boundary', () => {
   const bible = read('docs/DATABASE_RELEASE_BIBLE.md');
   assert.match(bible, /post-draft uses frozen batch artifacts only/);

@@ -54,7 +54,13 @@ relation_contract as (
           ) order by (case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end) collate "C",
                      a.privilege_type collate "C", a.is_grantable
         )
-        from pg_catalog.aclexplode(coalesce(c.relacl, '{}'::aclitem[])) a
+        from pg_catalog.aclexplode(coalesce(
+          c.relacl,
+          pg_catalog.acldefault(
+            case when c.relkind = 'S' then 'S'::"char" else 'r'::"char" end,
+            c.relowner
+          )
+        )) a
       ), '[]'::jsonb),
       'columns', coalesce((
         select jsonb_agg(
@@ -140,7 +146,10 @@ routine_contract as (
           ) order by (case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end) collate "C",
                      a.privilege_type collate "C", a.is_grantable
         )
-        from pg_catalog.aclexplode(coalesce(p.proacl, '{}'::aclitem[])) a
+        from pg_catalog.aclexplode(coalesce(
+          p.proacl,
+          pg_catalog.acldefault('f'::"char", p.proowner)
+        )) a
       ), '[]'::jsonb),
       'definition_sha256', pg_catalog.encode(
         extensions.digest(
@@ -209,7 +218,10 @@ schema_contract as (
           ) order by (case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end) collate "C",
                      a.privilege_type collate "C", a.is_grantable
         )
-        from pg_catalog.aclexplode(coalesce(n.nspacl, '{}'::aclitem[])) a
+        from pg_catalog.aclexplode(coalesce(
+          n.nspacl,
+          pg_catalog.acldefault('n'::"char", n.nspowner)
+        )) a
       ), '[]'::jsonb)
     ) order by n.nspname collate "C"
   ) as value
@@ -230,7 +242,10 @@ default_acl_contract as (
           ) order by (case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end) collate "C",
                      a.privilege_type collate "C", a.is_grantable
         )
-        from pg_catalog.aclexplode(coalesce(d.defaclacl, '{}'::aclitem[])) a
+        from pg_catalog.aclexplode(coalesce(
+          d.defaclacl,
+          pg_catalog.acldefault(d.defaclobjtype, d.defaclrole)
+        )) a
       ), '[]'::jsonb)
     ) order by pg_catalog.pg_get_userbyid(d.defaclrole) collate "C",
                n.nspname collate "C", d.defaclobjtype
