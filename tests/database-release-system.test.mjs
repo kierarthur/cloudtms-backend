@@ -67,6 +67,8 @@ test('release engine has fail-closed NEW, ADOPT, and UPGRADE gates', () => {
   assert.match(source, /Installed migration hash mismatch/);
   assert.match(source, /Database contract differs in/);
   assert.doesNotMatch(source, /__BOOTSTRAPPED__|marking existing migrations/);
+  assert.match(source, /mode === 'NEW'[\s\S]*runBankingPayCatalogPreapply\(current\.repeatables\.map/);
+  assert.match(source, /mode === 'NEW'[\s\S]*for \(const item of current\.repeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
 });
 
 test('contract export normalises null ACLs to one-dimensional effective defaults', () => {

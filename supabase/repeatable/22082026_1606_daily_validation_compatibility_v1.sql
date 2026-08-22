@@ -1,6 +1,10 @@
 -- Daily Validation format compatibility, zero-shift declaration authority,
 -- and the office-owned break-entry presentation resolver.
 
+\set ON_ERROR_STOP on
+
+begin;
+
 create or replace function public.timesheet_break_entry_effective_get_v1(
   p_client_id uuid,
   p_contract_id uuid default null,
@@ -221,3 +225,5 @@ $function$;
 alter function public.daily_zero_shifts_review_create_v1(uuid,date,date,uuid,text) owner to postgres;
 revoke all on function public.daily_zero_shifts_review_create_v1(uuid,date,date,uuid,text) from public,anon,authenticated;
 grant execute on function public.daily_zero_shifts_review_create_v1(uuid,date,date,uuid,text) to service_role;
+
+commit;

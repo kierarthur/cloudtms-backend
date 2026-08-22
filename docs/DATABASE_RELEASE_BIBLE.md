@@ -22,7 +22,7 @@ This system changes database definitions only. It does not copy or replace custo
 
 ### NEW
 
-Use only for a genuinely blank Supabase application database. The release tool proves that `public`/`private` contain no CloudTMS relations, installs the signed schema-only baseline, creates release-control tables, creates a fresh database identity, installs safe system defaults, generates a fresh local HMAC secret in that database, runs security verification, and compares the result with the approved contract. It copies no application rows from TEST.
+Use only for a genuinely blank Supabase application database. The release tool proves that `public`/`private` contain no CloudTMS relations, installs the signed schema-only baseline, reapplies every current repeatable authority, creates release-control tables, creates a fresh database identity, installs safe system defaults, generates a fresh local HMAC secret in that database, runs security verification, and compares the result with the approved contract. It copies no application rows from TEST.
 
 ### ADOPT
 
