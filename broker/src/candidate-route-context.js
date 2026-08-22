@@ -177,6 +177,8 @@ export async function verifyCandidateRouteContext(request, env, nowMilliseconds 
     const payloadBytes = base64UrlDecode(parts[1]);
     const signature = base64UrlDecode(parts[2]);
     if (!payloadBytes || !signature || signature.length !== 32) return null;
+    if (base64UrlEncode(payloadBytes) !== parts[1]
+        || base64UrlEncode(signature) !== parts[2]) return null;
     const context = normalizedRouteContext(JSON.parse(decoder.decode(payloadBytes)));
     if (canonicalJson(context) !== decoder.decode(payloadBytes)
         || context.v !== 1 || context.aud !== 'candidate-private-api'
@@ -221,6 +223,8 @@ export async function candidateFederatedIdentityHmac(secret, environment, identi
 
 export const candidateRouteContextInternals = Object.freeze({
   acceptedRouteContextVersions,
+  base64UrlDecode,
+  base64UrlEncode,
   canonicalJson,
   normalizedRouteContext,
   routeContextCanonical,

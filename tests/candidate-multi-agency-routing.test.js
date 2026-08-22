@@ -86,6 +86,25 @@ test('signed route context is canonical, deployment-bound and tamper-evident', a
   assert.equal(verified.context.membership_generation, 3);
   assert.equal(verified.context.session_epoch, 12);
 
+  const envelopeParts = signed.envelope.split('.');
+  const base64UrlAlphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const finalSignatureIndex = base64UrlAlphabet.indexOf(envelopeParts[2].at(-1));
+  assert.equal(finalSignatureIndex % 4, 0);
+  const nonCanonicalSignature = `${envelopeParts[2].slice(0, -1)}${
+    base64UrlAlphabet[finalSignatureIndex + 1]
+  }`;
+  const nonCanonicalEnvelope = `${envelopeParts[0]}.${envelopeParts[1]}.${nonCanonicalSignature}`;
+  const nonCanonicalRequest = new Request(request, { headers: {
+    ...Object.fromEntries(request.headers),
+    'x-cloudtms-route-context': nonCanonicalEnvelope,
+    'x-cloudtms-route-context-sha256': await candidateRouteContextInternals.sha256Hex(nonCanonicalEnvelope)
+  } });
+  assert.equal(
+    await verifyCandidateRouteContext(nonCanonicalRequest, env, now.getTime()),
+    null,
+    'non-canonical base64url must not provide an alternate spelling of a signed route context'
+  );
+
   assert.equal(await verifyCandidateRouteContext(request, {
     ...env, CANDIDATE_AGENCY_ID: '20000000-0000-4000-8000-000000000004'
   }, now.getTime()), null);

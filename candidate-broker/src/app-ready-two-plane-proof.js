@@ -226,8 +226,14 @@ async function privateCases(operation, target, other, env) {
     (entry) => entry.data_plane_dispatch_required && entry.operation_id !== operation.operation_id
   );
   const wrongOperation = await signedContext(alternate, target, env);
-  const forgedEnvelope = `${positive.signed.envelope.slice(0, -1)}${
-    positive.signed.envelope.endsWith('A') ? 'B' : 'A'
+  const envelopeParts = positive.signed.envelope.split('.');
+  const forgedSignature = candidateRouteContextInternals.base64UrlDecode(envelopeParts[2]);
+  if (!forgedSignature || forgedSignature.length !== 32) {
+    throw new AppReadyProofError(502, 'APP_READY_ROUTE_CONTEXT_FORGE_FAILED');
+  }
+  forgedSignature[0] ^= 1;
+  const forgedEnvelope = `${envelopeParts[0]}.${envelopeParts[1]}.${
+    candidateRouteContextInternals.base64UrlEncode(forgedSignature)
   }`;
   return {
     registry: positive.registry,
