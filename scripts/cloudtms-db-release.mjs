@@ -184,8 +184,8 @@ function applyRelease() {
     activeReleaseId = releaseId;
     // The immutable baseline is the starting snapshot. Reapply every current
     // repeatable so NEW also installs replacements added after that snapshot.
-    // This is safe because repeatables are complete, idempotent authorities.
-    runBankingPayCatalogPreapply(current.repeatables.map(item => item.path));
+    // This is safe because NEW is a proved-empty database, repeatables are
+    // complete idempotent authorities, and the final contract/verifiers gate it.
     for (const item of current.repeatables) psql({ file: item.path });
     recordInventory(releaseId);
   } else if (mode === 'ADOPT') {
