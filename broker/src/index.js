@@ -73,6 +73,11 @@ import {
 } from './import-review-follow-up.js';
 import { normalisePostgresTimestampIso } from './timestamp-normalisation.js';
 import {
+  detectDailyRosterFormatFromRows,
+  normalizeNhspDailyBreakMinutes,
+  resolveNhspActualColumnIndexes
+} from './daily-roster-compat.js';
+import {
   evaluateTestCsvExecutionBypass,
   evaluateTestFutureStandardPaymentBypass,
   evaluateTestPaymentReversalBypass,
@@ -346,7 +351,7 @@ const CLIENT_SETTINGS_CREATE_FIELDS = new Set([
   'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'opt_in_email',
   'opt_in_sms', 'opt_in_whatsapp', 'healthroster_import_auto_authorise',
   'nhsp_import_auto_authorise', 'reversal_complete_financials_date',
-  'reversal_replacement_financials_date'
+  'reversal_replacement_financials_date', 'timesheet_break_entry_mode'
 ]);
 
 async function createClientWithSettingsAtomic(env, user, data) {
@@ -7310,6 +7315,18 @@ function toYmd(d) {
 function ymdCompact(ymd) { return (ymd || '').replace(/-/g, ''); }
 function clampBool(v, def=false){ return v === true || v === 'true' ? true : v === false || v === 'false' ? false : def; }
 
+function normalizeTimesheetBreakEntryMode(value, { nullable = true } = {}) {
+  if (value == null || String(value).trim() === '' || String(value).trim().toUpperCase() === 'INHERIT') {
+    if (nullable) return null;
+    return 'START_END_TIMES';
+  }
+  const mode = String(value).trim().toUpperCase();
+  if (!['START_END_TIMES', 'DURATION_MINUTES'].includes(mode)) {
+    throw new Error('timesheet_break_entry_mode must be START_END_TIMES or DURATION_MINUTES');
+  }
+  return mode;
+}
+
 /** Compute week-ending for a given date and weekEndingWeekday (0=Sun..6=Sat) */
 function computeWeekEnding(ymd, weekEndingWeekday=0) {
   const d = new Date(ymd + 'T00:00:00Z');
@@ -7705,6 +7722,12 @@ async function handleContractsCreate(env, req) {
   } catch (error) {
     return withCORS(env, req, badRequest(error?.message || 'Invalid timesheet-query email override'));
   }
+  let timesheetBreakEntryMode;
+  try {
+    timesheetBreakEntryMode = normalizeTimesheetBreakEntryMode(body.timesheet_break_entry_mode, { nullable: true });
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'Invalid break-entry mode'));
+  }
 
   // Insert contract
   const res = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts`, {
@@ -7758,6 +7781,7 @@ async function handleContractsCreate(env, req) {
       mileage_charge_rate,
       send_ts_queries_to_different_email: queryEmailOverride.send_ts_queries_to_different_email,
       ts_queries_alt_email_address: queryEmailOverride.ts_queries_alt_email_address,
+      timesheet_break_entry_mode: timesheetBreakEntryMode,
       created_at: nowIso(),
       updated_at: nowIso()
     })
@@ -10615,6 +10639,17 @@ async function handleContractsGet(env, req, contractId) {
   };
 
   const warnings = await computePayMethodWarnings(env, contractOut);
+  let break_entry = null;
+  try {
+    const rawBreakEntry = await sbRpc(env, 'timesheet_break_entry_effective_get_v1', {
+      p_client_id: contract.client_id,
+      p_contract_id: contract.id,
+      p_as_of_date: null
+    }, { timeoutMs: 8000 });
+    break_entry = unwrapRpcJsonb(rawBreakEntry, 'timesheet_break_entry_effective_get_v1');
+  } catch (error) {
+    break_entry = { applicable: false, mode: null, source: 'UNAVAILABLE', reason: 'RESOLUTION_FAILED' };
+  }
 
   return withCORS(
     env,
@@ -10626,7 +10661,8 @@ async function handleContractsGet(env, req, contractId) {
       warnings,
       finance,
       margins,
-      query_email
+      query_email,
+      break_entry
     })
   );
 }
@@ -10836,6 +10872,16 @@ async function handleContractsUpdate(env, req, contractId) {
 
   if ('hr_attach_to_invoice' in body)   patch.hr_attach_to_invoice = boolOrNull(body.hr_attach_to_invoice, !!current.hr_attach_to_invoice);
   if ('ts_attach_to_invoice' in body)   patch.ts_attach_to_invoice = boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice);
+  if ('timesheet_break_entry_mode' in body) {
+    try {
+      patch.timesheet_break_entry_mode = normalizeTimesheetBreakEntryMode(
+        body.timesheet_break_entry_mode,
+        { nullable: true }
+      );
+    } catch (error) {
+      return withCORS(env, req, badRequest(error?.message || 'Invalid break-entry mode'));
+    }
+  }
 
   const eff_is_nhsp = Object.prototype.hasOwnProperty.call(patch, 'is_nhsp') ? patch.is_nhsp : current.is_nhsp;
   const eff_autoprocess_hr = Object.prototype.hasOwnProperty.call(patch, 'autoprocess_hr') ? patch.autoprocess_hr : current.autoprocess_hr;
@@ -11582,6 +11628,14 @@ async function handleContractsReplace(env, req, contractId) {
   } catch (error) {
     return withCORS(env, req, badRequest(error?.message || 'Invalid timesheet-query email override'));
   }
+  let replacementBreakEntryMode;
+  try {
+    replacementBreakEntryMode = Object.prototype.hasOwnProperty.call(body, 'timesheet_break_entry_mode')
+      ? normalizeTimesheetBreakEntryMode(body.timesheet_break_entry_mode, { nullable: true })
+      : (current.timesheet_break_entry_mode ?? null);
+  } catch (error) {
+    return withCORS(env, req, badRequest(error?.message || 'Invalid break-entry mode'));
+  }
 
   const patch = {
     candidate_id: ('candidate_id' in body ? body.candidate_id : current.candidate_id),
@@ -11607,6 +11661,7 @@ async function handleContractsReplace(env, req, contractId) {
 
     hr_attach_to_invoice:  ('hr_attach_to_invoice' in body)  ? boolOrNull(body.hr_attach_to_invoice, !!current.hr_attach_to_invoice) : (current.hr_attach_to_invoice ?? null),
     ts_attach_to_invoice:  ('ts_attach_to_invoice' in body)  ? boolOrNull(body.ts_attach_to_invoice, !!current.ts_attach_to_invoice) : (current.ts_attach_to_invoice ?? null),
+    timesheet_break_entry_mode: replacementBreakEntryMode,
 
     pay_method_snapshot: String(body.pay_method_snapshot||current.pay_method_snapshot).toUpperCase(),
 
@@ -11971,6 +12026,7 @@ async function handleContractsDuplicate(env, req, contractId) {
       group_nightsat_sunbh: copyBoolOrNull(src.group_nightsat_sunbh),
       hr_attach_to_invoice: copyBoolOrNull(src.hr_attach_to_invoice),
       ts_attach_to_invoice: copyBoolOrNull(src.ts_attach_to_invoice),
+      timesheet_break_entry_mode: src.timesheet_break_entry_mode ?? null,
 
       // NEW: reference and email routing fields (contract-level)
       reference_number_required_to_issue_invoice: copyBoolOrNull(src.reference_number_required_to_issue_invoice),
@@ -20614,6 +20670,17 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
       };
     } catch (error) {
       return withCORS(env, req, badRequest(error?.message || 'Invalid successor timesheet-query email override'));
+    }
+  }
+
+  if (successorOverrides && Object.prototype.hasOwnProperty.call(successorOverrides, 'timesheet_break_entry_mode')) {
+    try {
+      successorOverrides.timesheet_break_entry_mode = normalizeTimesheetBreakEntryMode(
+        successorOverrides.timesheet_break_entry_mode,
+        { nullable: true }
+      );
+    } catch (error) {
+      return withCORS(env, req, badRequest(error?.message || 'Invalid successor break-entry mode'));
     }
   }
 
@@ -107579,101 +107646,79 @@ function parseNhspHtmlTableToRows(html) {
   return rows;
 }
 
-// ─────────────────────────────────────────────────────────────
-// Main NHSP parser: handles both HTML “fake xls” and real Excel
-// ─────────────────────────────────────────────────────────────
-async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Europe/London' }) {
-  console.log('[NHSP_PARSE_VERSION]', 'v2026-03-30-dst-utc-range-fix');
-  console.log('[NHSP_PARSE] start', { import_id, file_key, tz });
+async function readDailyRosterRows(env, fileKey) {
+  const bytes = await r2GetBytes(env, fileKey);
+  if (!bytes || !bytes.length) throw new Error('DAILY_ROSTER_FILE_EMPTY');
 
-  // ─────────────────────────────────────────────────────────────
-  // 0) Load bytes from R2
-  // ─────────────────────────────────────────────────────────────
-  const u8 = await r2GetBytes(env, file_key);
-  if (!u8 || !u8.length) {
-    console.warn('[NHSP_PARSE] no file bytes', { import_id, file_key });
-    return {
-      status: 'PARSED',
-      rows_total: 0,
-      rows_parsed: 0,
-      rows_skipped: 0,
-      notes: 'No bytes returned from R2',
-      header_rows: [],
-      header_columns: []
-    };
-  }
-
-  const text = new TextDecoder('utf-8').decode(u8);
+  const text = new TextDecoder('utf-8').decode(bytes);
   const sniff = text.slice(0, 2048).toLowerCase();
-
   const looksLikeHtml =
     sniff.replace(/^[\uFEFF\s]+/, '').startsWith('<table') ||
     sniff.includes('<table') ||
     sniff.includes('<html') ||
     sniff.startsWith('<!doctype html');
 
-  let rows = [];
-  let wb;
-
-  // ─────────────────────────────────────────────────────────────
-  // 1) Parse workbook → rows[] (HTML or real XLS)
-  // ─────────────────────────────────────────────────────────────
   if (looksLikeHtml) {
-    if (typeof parseNhspHtmlTableToRows === 'function') {
-      rows = parseNhspHtmlTableToRows(text);
-      console.log('[NHSP_PARSE] using HTML <table> parser', {
-        import_id,
-        file_key,
-        length: Array.isArray(rows) ? rows.length : 0
-      });
-    } else {
-      try {
-        console.log('[NHSP_PARSE] HTML-like .xls but parseNhspHtmlTableToRows not defined; falling back to SheetJS', {
-          import_id,
-          file_key
-        });
+    const htmlRows = parseNhspHtmlTableToRows(text);
+    if (!htmlRows.length) throw new Error('DAILY_ROSTER_WORKBOOK_EMPTY');
+    return htmlRows;
+  }
 
-        wb = XLSX.read(text, { type: 'string' });
+  let workbook;
+  try {
+    workbook = XLSX.read(bytes, { type: 'array' });
+  } catch {
+    throw new Error('DAILY_ROSTER_WORKBOOK_UNREADABLE');
+  }
 
-        if (wb.SheetNames && wb.SheetNames.length) {
-          const sheet = wb.Sheets[wb.SheetNames[0]];
-          rows = XLSX.utils.sheet_to_json(sheet, {
-            header: 1,
-            raw: true,
-            defval: ''
-          }) || [];
-        } else {
-          rows = [];
-        }
-      } catch (err) {
-        console.warn('[NHSP_PARSE] SheetJS HTML read failed and no HTML helper available', {
-          import_id,
-          file_key,
-          err: err?.message || String(err)
-        });
-        rows = [];
-      }
-    }
-  } else {
+  if (!workbook?.SheetNames?.length) throw new Error('DAILY_ROSTER_WORKBOOK_EMPTY');
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' }) || [];
+  if (!rows.length) throw new Error('DAILY_ROSTER_WORKBOOK_EMPTY');
+  return rows;
+}
+
+async function detectDailyRosterFormat(env, fileKey) {
+  const rows = await readDailyRosterRows(env, fileKey);
+  const detection = detectDailyRosterFormatFromRows(rows);
+  if (!detection.format) throw new Error(detection.errorCode || 'DAILY_ROSTER_FORMAT_UNSUPPORTED');
+  return { format: detection.format, rows };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Main NHSP parser: handles both HTML “fake xls” and real Excel
+// ─────────────────────────────────────────────────────────────
+async function parseNhspWorkbookIntoHrRows(env, {
+  import_id,
+  file_key,
+  tz = 'Europe/London',
+  daily_client_id = null,
+  preloaded_rows = null
+}) {
+  const dailyClientIdNorm = String(daily_client_id || '').trim();
+  console.log('[NHSP_PARSE_VERSION]', 'v2026-03-30-dst-utc-range-fix');
+  console.log('[NHSP_PARSE] start', { import_id, file_key, tz, mode: dailyClientIdNorm ? 'DAILY_ADAPTER' : 'WEEKLY' });
+
+  // Daily detection already parsed the workbook. Weekly imports keep the
+  // existing load path through the same shared reader.
+  let rows = Array.isArray(preloaded_rows) ? preloaded_rows : [];
+  if (!rows.length) {
     try {
-      wb = XLSX.read(u8, { type: 'array' });
-
-      if (wb.SheetNames && wb.SheetNames.length) {
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet, {
-          header: 1,
-          raw: true,
-          defval: ''
-        }) || [];
-      } else {
-        rows = [];
+      rows = await readDailyRosterRows(env, file_key);
+    } catch (error) {
+      if (daily_client_id) throw error;
+      if (String(error?.message || '') === 'DAILY_ROSTER_FILE_EMPTY') {
+        console.warn('[NHSP_PARSE] no file bytes', { import_id, file_key });
+        return {
+          status: 'PARSED',
+          rows_total: 0,
+          rows_parsed: 0,
+          rows_skipped: 0,
+          notes: 'No bytes returned from R2',
+          header_rows: [],
+          header_columns: []
+        };
       }
-    } catch (err) {
-      console.warn('[NHSP_PARSE] binary XLSX read failed', {
-        import_id,
-        file_key,
-        err: err?.message || String(err)
-      });
       rows = [];
     }
   }
@@ -108163,16 +108208,24 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   const assignmentColIdx = findColByAliasesFn(headerRowForFind, assignmentAliases, 6, (h) => h.includes('assign'));
 
   // Prefer the SECOND occurrence of Start/End/Break (the ACTUAL block), with the same fallbacks as before.
-  const startColIdx = findNthColByAliases(headerRowForFind, startAliases, 11, (h) => h.includes('start'), 2);
-  const endColIdx = findNthColByAliases(headerRowForFind, endAliases, 12, (h) => (h.includes('end') || h.includes('finish')), 2);
-  const breakColIdx = findNthColByAliases(headerRowForFind, breakAliases, 13, (h) => h.includes('break'), 2);
+  let startColIdx = findNthColByAliases(headerRowForFind, startAliases, 11, (h) => h.includes('start'), 2);
+  let endColIdx = findNthColByAliases(headerRowForFind, endAliases, 12, (h) => (h.includes('end') || h.includes('finish')), 2);
+  let breakColIdx = findNthColByAliases(headerRowForFind, breakAliases, 13, (h) => h.includes('break'), 2);
 
-  const hoursColIdx = findColByAliasesFn(
+  let hoursColIdx = findColByAliasesFn(
     headerRowForFind,
     hoursAliases,
     -1,
     (h) => h.includes('hours') && (h.includes('worked') || h.includes('actual'))
   );
+
+  if (daily_client_id) {
+    const actualColumns = resolveNhspActualColumnIndexes(rows);
+    startColIdx = actualColumns.start;
+    endColIdx = actualColumns.end;
+    breakColIdx = actualColumns.break;
+    hoursColIdx = actualColumns.total;
+  }
 
   console.log('[NHSP_PARSE] columns_resolved', {
     import_id,
@@ -108227,13 +108280,16 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     const startHhmm = excelTimeToHhmm(rawStart);
     const endHhmm = excelTimeToHhmm(rawEnd);
 
-    // Preserve legacy behaviour: treat break as numeric minutes if possible; else 0
-    const breakMins = Number(rawBreak || 0) || 0;
-
     if (!workDateYmd || !staffName || !startHhmm || !endHhmm) {
       rows_skipped++;
       continue;
     }
+
+    // Weekly retains its legacy coercion. Daily is strict for supplied values,
+    // while an empty NHSP break is explicitly zero minutes.
+    const breakMins = dailyClientIdNorm
+      ? normalizeNhspDailyBreakMinutes(rawBreak)
+      : (Number(rawBreak || 0) || 0);
 
     const resolvedUtcRange = resolveShiftUtcRange(workDateYmd, startHhmm, endHhmm, tz);
     const startUtcIso = resolvedUtcRange.startUtcIso;
@@ -108266,7 +108322,9 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
     const refStr = normalizeStr(rawRef);
 
-    const keyParts = [workDateYmd, staffNorm, trustNorm, wardNorm, refStr, uniqueId];
+    const keyParts = dailyClientIdNorm
+      ? [workDateYmd, staffNorm, dailyClientIdNorm, wardNorm, refStr, uniqueId]
+      : [workDateYmd, staffNorm, trustNorm, wardNorm, refStr, uniqueId];
     const external_row_key = normalizeKeyParts(keyParts);
 
     // ✅ Preserve the full row as raw_columns aligned to header width (nCols), padded with blanks
@@ -108276,13 +108334,15 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
     );
 
     const payload_json = {
-      type: 'NHSP_WEEKLY',
+      type: dailyClientIdNorm ? 'HEALTHROSTER_DAILY' : 'NHSP_WEEKLY',
       staff_name: staffName,
       worker_name: staffName,
       work_date: workDateYmd,
+      date_local: dailyClientIdNorm ? workDateYmd : undefined,
       date_raw: rawDate,
       reference: refStr,
       ref_num: refStr,
+      request_id: dailyClientIdNorm ? refStr : undefined,
       unique_id: uniqueId,
 
       // write both keys for stability
@@ -108291,19 +108351,28 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
 
       trust: trust,
       client: trust,
+      client_id: dailyClientIdNorm || undefined,
       ward: ward,
+      unit: dailyClientIdNorm ? ward : undefined,
+      grade_raw: dailyClientIdNorm ? assignment : undefined,
 
       start_local: startHhmm,
       end_local: endHhmm,
+      start_time_local: dailyClientIdNorm ? startHhmm : undefined,
+      end_time_local: dailyClientIdNorm ? endHhmm : undefined,
       break_mins: breakMins,
+      break_minutes: dailyClientIdNorm ? breakMins : undefined,
+      break_evidence_supplied: dailyClientIdNorm ? true : undefined,
+      break_inferred_from_worked_hours: dailyClientIdNorm ? false : undefined,
       start_utc: startUtcIso,
       end_utc: endUtcIso,
 
       hours_worked: hoursWorked,
+      actual_hours: dailyClientIdNorm ? hoursWorked : undefined,
       raw_columns
     };
 
-    const roleType = inferRoleTypeEnum(assignment, ward);
+    const roleType = inferRoleTypeEnum(assignment, dailyClientIdNorm ? staffName : ward);
 
     hrRowsPayload.push({
       import_id,
@@ -108313,13 +108382,13 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
       end_time_local: endHhmm,
       staff_norm: staffNorm || null,
       role_type: roleType,
-      unit_raw: trust || null,
-      unit_hint: ward || null,
-      agency_raw: 'NHSP',
+      unit_raw: dailyClientIdNorm ? (ward || null) : (trust || null),
+      unit_hint: dailyClientIdNorm ? null : (ward || null),
+      agency_raw: dailyClientIdNorm ? 'HEALTHROSTER_DAILY' : 'NHSP',
       external_row_key,
       payload_json,
       staff_raw: staffName || null,
-      assignment_grade_norm: null,
+      assignment_grade_norm: dailyClientIdNorm ? (assignment ? assignment.toLowerCase() : null) : null,
       hours_worked: (typeof hoursWorked === 'number') ? hoursWorked : null
     });
 
@@ -108351,6 +108420,7 @@ async function parseNhspWorkbookIntoHrRows(env, { import_id, file_key, tz = 'Eur
   console.log('[NHSP_PARSE] done', { import_id, rows_total, rows_parsed, rows_skipped });
 
   return {
+    input_format: dailyClientIdNorm ? 'NHSP' : undefined,
     rows_total,
     rows_parsed,
     rows_skipped,
@@ -108399,6 +108469,65 @@ async function currentHealthRosterEligibility(env, clientId) {
   };
 }
 
+async function handleDailyZeroShiftsReviewCreate(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await parseJSONBody(req).catch(() => null);
+  const clientId = String(body?.client_id || '').trim();
+  const coverageStartDate = String(body?.coverage_start_date || '').trim();
+  const coverageEndDate = String(body?.coverage_end_date || '').trim();
+  const ymd = /^\d{4}-\d{2}-\d{2}$/;
+  if (!clientId || !ymd.test(coverageStartDate) || !ymd.test(coverageEndDate)) {
+    return withCORS(env, req, badRequest('client_id, coverage_start_date and coverage_end_date are required'));
+  }
+
+  const startMs = Date.parse(`${coverageStartDate}T00:00:00Z`);
+  const endMs = Date.parse(`${coverageEndDate}T00:00:00Z`);
+  const inclusiveDays = Number.isFinite(startMs) && Number.isFinite(endMs)
+    ? Math.floor((endMs - startMs) / 86400000) + 1
+    : 0;
+  if (inclusiveDays < 1 || inclusiveDays > 366) {
+    return withCORS(env, req, badRequest('The Daily Validation period must be between 1 and 366 inclusive days.'));
+  }
+
+  try {
+    const eligibility = await currentHealthRosterEligibility(env, clientId);
+    if (!eligibility.exists) return withCORS(env, req, badRequest('The selected Daily Client was not found.'));
+    if (!eligibility.eligible) {
+      return withCORS(env, req, badRequest('The selected client is not currently enabled for Daily Validation.'));
+    }
+
+    const raw = await sbRpc(env, 'daily_zero_shifts_review_create_v1', {
+      p_client_id: clientId,
+      p_coverage_start_date: coverageStartDate,
+      p_coverage_end_date: coverageEndDate,
+      p_actor_user_id: user.id,
+      p_tz_assumption: 'Europe/London'
+    }, { timeoutMs: 30000 });
+    const result = unwrapRpcJsonb(raw, 'daily_zero_shifts_review_create_v1');
+    return withCORS(env, req, ok(result));
+  } catch (error) {
+    const message = String(error?.message || error || 'Daily zero-shifts declaration failed');
+    if (message.includes('DAILY_ZERO_DECLARATION_SCOPE_TOO_LARGE')) {
+      return withCORS(env, req, badRequest(
+        'This period contains more than 500 Daily timesheets. Split it into a shorter date range.'
+      ));
+    }
+    if (message.includes('OVERLAP_CONFLICT')) {
+      return withCORS(env, req, new Response(JSON.stringify({
+        ok: false,
+        error: 'DAILY_ZERO_DECLARATION_OVERLAP_CONFLICT',
+        message: 'An unfinished Daily Validation review already overlaps this client and period.'
+      }), { status: 409, headers: JSON_HEADERS }));
+    }
+    if (message.includes('DAILY_ZERO_DECLARATION_') || message.includes('IMPORT_REVIEW_')) {
+      return withCORS(env, req, badRequest(message));
+    }
+    return withCORS(env, req, serverError('Unable to create the no-shifts Daily Validation review.'));
+  }
+}
+
 async function handleImportHrRotaParse(env, req) {
   const LOG = (typeof wranglerimportlog !== 'undefined' && wranglerimportlog === true);
   const enc = encodeURIComponent;
@@ -108406,7 +108535,7 @@ async function handleImportHrRotaParse(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
 
-  // Expect JSON: { file_r2_key, original_name, client_id, [tz_assumption], [parse_summary_json] }
+  // Expect JSON: { file_r2_key, original_name, client_id, [tz_assumption] }
   const body = await parseJSONBody(req).catch(() => null);
   if (!body) {
     return withCORS(env, req, badRequest('Invalid JSON body'));
@@ -108422,12 +108551,12 @@ async function handleImportHrRotaParse(env, req) {
   }
 
   if (!filename) {
-    return withCORS(env, req, badRequest('original_name or file_key is required for HR rota import'));
+    return withCORS(env, req, badRequest('original_name or file_key is required for Daily Validation import'));
   }
 
   // ✅ REQUIRED: client_id (daily is client-scoped like weekly Mode A)
   if (!clientId) {
-    return withCORS(env, req, badRequest('client_id is required for HealthRoster daily import'));
+    return withCORS(env, req, badRequest('client_id is required for Daily Validation import'));
   }
 
   // Validate against the same current-setting rule used by the client picker.
@@ -108437,10 +108566,24 @@ async function handleImportHrRotaParse(env, req) {
       return withCORS(env, req, badRequest(`client_id ${clientId} not found`));
     }
     if (!eligibility.eligible) {
-      return withCORS(env, req, badRequest(`client_id ${clientId} is not currently enabled for HealthRoster`));
+      return withCORS(env, req, badRequest(`client_id ${clientId} is not currently enabled for Daily Validation`));
     }
   } catch (e) {
     return withCORS(env, req, badRequest(`Failed to validate client_id: ${e?.message || String(e)}`));
+  }
+
+  let detectedDailyFormat;
+  let detectedRows;
+  try {
+    const detected = await detectDailyRosterFormat(env, fileKey);
+    detectedDailyFormat = detected.format;
+    detectedRows = detected.rows;
+  } catch (error) {
+    const code = String(error?.message || 'DAILY_ROSTER_FORMAT_UNSUPPORTED');
+    const message = code === 'DAILY_ROSTER_FORMAT_AMBIGUOUS'
+      ? 'The Daily Validation file matches more than one supported format.'
+      : 'The Daily Validation file is not a supported HealthRoster or NHSP format.';
+    return withCORS(env, req, badRequest(`${code}: ${message}`));
   }
 
   if (LOG) {
@@ -108449,6 +108592,7 @@ async function handleImportHrRotaParse(env, req) {
       filename,
       file_key: fileKey,
       client_id: clientId,
+      input_format: detectedDailyFormat,
       tz_assumption: tzAssump
     }));
   }
@@ -108467,12 +108611,16 @@ async function handleImportHrRotaParse(env, req) {
   };
   const parseSummaryJson = {
     ...defaultSummary,
-    ...(body.parse_summary_json || {})
+    input_format: detectedDailyFormat
   };
 
   let sourceEvidence;
   try {
-    sourceEvidence = await importReviewSourceEvidenceFromR2(env, fileKey, `${IMPORT_REVIEW_PARSER_VERSION}:HR_DAILY`);
+    sourceEvidence = await importReviewSourceEvidenceFromR2(
+      env,
+      fileKey,
+      `${IMPORT_REVIEW_PARSER_VERSION}:HR_DAILY:${detectedDailyFormat === 'NHSP' ? 'NHSP_ADAPTER_V1' : 'HEALTHROSTER_V1'}`
+    );
     const replay = await findImportStageReplay(env, {
       sourceSystem: 'HEALTHROSTER_DAILY', fileKey, clientId, sourceEvidence
     });
@@ -108568,15 +108716,25 @@ async function handleImportHrRotaParse(env, req) {
     }));
   }
 
-  // Parse the workbook into hr_rows with DAILY rota semantics
+  // Parse the workbook into the existing Daily canonical row contract.
   let parseResult;
   try {
-    parseResult = await parseHealthRosterWorkbookIntoHrRows(env, {
-      import_id: importId,
-      file_key: fileKey,
-      client_id: clientId,                              // ✅ always set
-      tz: imp.tz_assumption || tzAssump || 'Europe/London'
-    });
+    if (detectedDailyFormat === 'NHSP') {
+      parseResult = await parseNhspWorkbookIntoHrRows(env, {
+        import_id: importId,
+        file_key: fileKey,
+        daily_client_id: clientId,
+        preloaded_rows: detectedRows,
+        tz: imp.tz_assumption || tzAssump || 'Europe/London'
+      });
+    } else {
+      parseResult = await parseHealthRosterWorkbookIntoHrRows(env, {
+        import_id: importId,
+        file_key: fileKey,
+        client_id: clientId,
+        tz: imp.tz_assumption || tzAssump || 'Europe/London'
+      });
+    }
   } catch (e) {
     if (LOG) {
       console.error('[HR_DAILY_IMPORT]', JSON.stringify({
@@ -108592,7 +108750,11 @@ async function handleImportHrRotaParse(env, req) {
         err: e?.message || String(e)
       });
     }
-    return withCORS(env, req, serverError(`Failed to parse HealthRoster rota workbook: ${e?.message || e}`));
+    return withCORS(
+      env,
+      req,
+      serverError(`Failed to parse ${detectedDailyFormat} Daily Validation workbook: ${e?.message || e}`)
+    );
   }
 
   const mergedSummary = {
@@ -108638,6 +108800,7 @@ async function handleImportHrRotaParse(env, req) {
 
   return withCORS(env, req, ok({
     import_id: importId,
+    input_format: detectedDailyFormat,
     source_file_sha256: sourceEvidence.source_file_sha256,
     parser_version: sourceEvidence.parser_version,
     parse_summary_json: mergedSummary
@@ -109794,6 +109957,7 @@ async function parseHealthRosterWorkbookIntoHrRows(
   }
 
   return {
+    input_format: isDailyRota ? 'HEALTHROSTER' : undefined,
     rows_total,
     rows_parsed,
     rows_skipped,
@@ -137193,6 +137357,7 @@ async function handleGetClient(env, req, clientId) {
           'no_timesheet_required','group_nightsat_sunbh',
           'auto_invoice_default',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+          'timesheet_break_entry_mode',
 
           // ✅ NEW: client comms opt-ins (DB-backed)
           'opt_in_email','opt_in_sms','opt_in_whatsapp',
@@ -137449,6 +137614,7 @@ async function handleUpdateClient(env, req, clientId) {
           'day_start','day_end','night_start','night_end','sat_start','sat_end','sun_start','sun_end','bh_start','bh_end',
           'bh_source','bh_list','bh_feed_url',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
+          'timesheet_break_entry_mode',
 
           // manual adjustment email routing
           'send_manual_invoices_to_different_email',
@@ -137512,6 +137678,16 @@ async function handleUpdateClient(env, req, clientId) {
     }
     if ('group_nightsat_sunbh' in data || 'group_nightsat_sunbh' in csInput) {
       csInput.group_nightsat_sunbh = asBool(csInput.group_nightsat_sunbh ?? data.group_nightsat_sunbh);
+    }
+    if ('timesheet_break_entry_mode' in data || 'timesheet_break_entry_mode' in csInput) {
+      try {
+        csInput.timesheet_break_entry_mode = normalizeTimesheetBreakEntryMode(
+          csInput.timesheet_break_entry_mode ?? data.timesheet_break_entry_mode,
+          { nullable: false }
+        );
+      } catch (error) {
+        return withCORS(env, req, badRequest(error?.message || 'Invalid break-entry mode'));
+      }
     }
 
     if ('send_manual_invoices_to_different_email' in data || 'send_manual_invoices_to_different_email' in csInput) {
@@ -137587,6 +137763,7 @@ async function handleUpdateClient(env, req, clientId) {
       autoprocess_hr,
       hr_attach_to_invoice,
       ts_attach_to_invoice,
+      timesheet_break_entry_mode,
 
       // ensure these never fall into clients table patch
       send_manual_invoices_to_different_email,
@@ -143357,6 +143534,7 @@ async function handleClientsGet(env, req, clientId) {
           'auto_invoice_default',
           'requires_hr',
           'autoprocess_hr',
+          'timesheet_break_entry_mode',
           'hr_attach_to_invoice',
           'ts_attach_to_invoice',
 
@@ -143396,7 +143574,19 @@ async function handleClientsGet(env, req, clientId) {
     ? Number(client_settings.week_ending_weekday)
     : (Number.isInteger(Number(client.week_ending_weekday)) ? Number(client.week_ending_weekday) : 0);
 
-  return withCORS(env, req, ok({ ...client, week_ending_weekday, client_settings }));
+  let break_entry = null;
+  try {
+    const rawBreakEntry = await sbRpc(env, 'timesheet_break_entry_effective_get_v1', {
+      p_client_id: client.id,
+      p_contract_id: null,
+      p_as_of_date: null
+    }, { timeoutMs: 8000 });
+    break_entry = unwrapRpcJsonb(rawBreakEntry, 'timesheet_break_entry_effective_get_v1');
+  } catch {
+    break_entry = { applicable: false, mode: null, source: 'UNAVAILABLE', reason: 'RESOLUTION_FAILED' };
+  }
+
+  return withCORS(env, req, ok({ ...client, week_ending_weekday, client_settings, break_entry }));
 }
 
 
@@ -156887,6 +157077,20 @@ function canonicalizeClientSettingsServer(beforeCs, csInput) {
     out.default_submission_mode = (d === 'MANUAL' || d === 'ELECTRONIC') ? d : 'ELECTRONIC';
   } else {
     out.default_submission_mode = 'ELECTRONIC';
+  }
+
+  if (Object.prototype.hasOwnProperty.call(in0, 'timesheet_break_entry_mode')) {
+    out.timesheet_break_entry_mode = normalizeTimesheetBreakEntryMode(
+      in0.timesheet_break_entry_mode,
+      { nullable: false }
+    );
+  } else if (Object.prototype.hasOwnProperty.call(before, 'timesheet_break_entry_mode')) {
+    out.timesheet_break_entry_mode = normalizeTimesheetBreakEntryMode(
+      before.timesheet_break_entry_mode,
+      { nullable: false }
+    );
+  } else {
+    out.timesheet_break_entry_mode = 'START_END_TIMES';
   }
 
   // ✅ NEW: invoice_consolidation_mode
@@ -194997,6 +195201,9 @@ if (req.method === 'POST' && p === '/api/healthroster/weekly/qr-reissue-batch') 
           // NEW: HR rota daily import/preview/apply
       if (req.method === 'POST' && p === '/api/imports/hr-rota/parse') {
         return handleImportHrRotaParse(env, req);
+      }
+      if (req.method === 'POST' && p === '/api/imports/daily-validation/zero-shifts') {
+        return handleDailyZeroShiftsReviewCreate(env, req);
       }
       {
         const rotaPrev = matchPath(p, '/api/imports/hr-rota/:import_id/preview');

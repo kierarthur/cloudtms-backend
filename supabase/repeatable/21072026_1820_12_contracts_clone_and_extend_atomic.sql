@@ -80,6 +80,7 @@ declare
   v_succ_ts_queries_alt_email_address text;
   v_succ_is_ad_hoc boolean;
   v_succ_default_submission_mode public.submission_mode_enum;
+  v_succ_timesheet_break_entry_mode public.timesheet_break_entry_mode_enum;
 
   -- std_hours derivation scratch
   v_day_key text;
@@ -1122,6 +1123,17 @@ begin
     v_succ_default_submission_mode := v_cur.default_submission_mode;
   end if;
 
+  if (v_ov ? 'timesheet_break_entry_mode') then
+    if jsonb_typeof(v_ov->'timesheet_break_entry_mode')='null' then
+      v_succ_timesheet_break_entry_mode:=null;
+    else
+      v_succ_timesheet_break_entry_mode:=
+        nullif(btrim(v_ov->>'timesheet_break_entry_mode'),'')::public.timesheet_break_entry_mode_enum;
+    end if;
+  else
+    v_succ_timesheet_break_entry_mode:=v_cur.timesheet_break_entry_mode;
+  end if;
+
   if (v_ov ? 'week_ending_weekday_snapshot') and nullif(btrim(v_ov->>'week_ending_weekday_snapshot'), '') is not null then
     v_wew_succ := (v_ov->>'week_ending_weekday_snapshot')::int;
   else
@@ -1158,7 +1170,8 @@ begin
           'succ_send_ts_queries_to_different_email', case when v_succ_send_ts_queries_to_different_email is null then null else v_succ_send_ts_queries_to_different_email end,
           'succ_ts_queries_alt_email_address', coalesce(v_succ_ts_queries_alt_email_address,''),
           'succ_is_ad_hoc', coalesce(v_succ_is_ad_hoc,false),
-          'succ_default_submission_mode', coalesce(v_succ_default_submission_mode::text,'')
+          'succ_default_submission_mode', coalesce(v_succ_default_submission_mode::text,''),
+          'succ_timesheet_break_entry_mode',v_succ_timesheet_break_entry_mode
         ),
         'overrides_keys', (
           select coalesce(jsonb_agg(k), '[]'::jsonb)
@@ -1303,7 +1316,8 @@ begin
     manual_invoices_alt_email_address,
     send_ts_queries_to_different_email,
     ts_queries_alt_email_address,
-    is_ad_hoc
+    is_ad_hoc,
+    timesheet_break_entry_mode
   ) values (
     v_succ_candidate_id,
     v_succ_client_id,
@@ -1344,7 +1358,8 @@ begin
     v_succ_manual_invoices_alt_email_address,
     v_succ_send_ts_queries_to_different_email,
     v_succ_ts_queries_alt_email_address,
-    v_succ_is_ad_hoc
+    v_succ_is_ad_hoc,
+    v_succ_timesheet_break_entry_mode
   )
   returning c.* into v_succ;
 
@@ -2125,7 +2140,8 @@ begin
       'display_site', v_succ.display_site,
       'ward_hint', v_succ.ward_hint,
       'start_date', v_succ.start_date,
-      'end_date', v_succ.end_date
+      'end_date', v_succ.end_date,
+      'timesheet_break_entry_mode',v_succ.timesheet_break_entry_mode
     ),
     'closed_at', v_close_to,
     'split', case

@@ -33,6 +33,7 @@ declare
   v_validation_contract_count integer:=0;
   v_route_ineligible_count integer:=0;
   v_unresolved_row_count integer:=0;
+  v_declared_zero_shifts boolean:=false;
 begin
   perform public._import_review_assert_actor_v1(p_actor_user_id);
   if p_import_id is null or v_page<1 or v_page>20 or v_size not in (25,50,75,100,500) then
@@ -45,11 +46,21 @@ begin
      or nullif(btrim(coalesce(v_import.parser_version,'')),'') is null then
     raise exception 'IMPORT_REVIEW_STAGING_EVIDENCE_REQUIRED' using errcode='55000';
   end if;
+  v_declared_zero_shifts:=upper(coalesce(v_import.import_scope,''))='HR_DAILY'
+    and coalesce((v_import.parse_summary_json->>'declared_zero_shifts')::boolean,false);
 
   select count(*),min(r.date_local),max(r.date_local)
     into v_row_count,v_from,v_to
   from public.hr_rows r where r.import_id=p_import_id;
-  if v_row_count=0 or v_from is null or v_to is null then
+  if v_declared_zero_shifts then
+    if v_row_count<>0 or v_import.file_r2_key is not null
+       or v_import.coverage_start_date is null or v_import.coverage_end_date is null
+       or v_import.coverage_start_date>v_import.coverage_end_date then
+      raise exception 'DAILY_ZERO_DECLARATION_INVALID' using errcode='55000';
+    end if;
+    v_from:=v_import.coverage_start_date;
+    v_to:=v_import.coverage_end_date;
+  elsif v_row_count=0 or v_from is null or v_to is null then
     raise exception 'IMPORT_REVIEW_STAGED_ROWS_REQUIRED' using errcode='55000';
   end if;
   if v_row_count>5000 then
@@ -147,8 +158,22 @@ begin
       'resolved_display_name',c.name,
       'resolved',m.client_id is not null
     ) order by lower(coalesce(c.name,m.client_label)),m.client_key),'[]'::jsonb)
-    into v_clients
+  into v_clients
   from mapped m left join public.clients c on c.id=m.client_id;
+
+  if v_declared_zero_shifts then
+    select jsonb_build_array(jsonb_build_object(
+      'source_client_key','client:'||c.id::text,
+      'source_display_label',c.name,
+      'client_id',c.id,
+      'resolved_display_name',c.name,
+      'resolved',true
+    )) into v_clients
+    from public.clients c where c.id=v_import.client_id;
+    if v_clients is null then
+      raise exception 'DAILY_ZERO_DECLARATION_CLIENT_NOT_FOUND' using errcode='P0002';
+    end if;
+  end if;
 
   if jsonb_array_length(v_clients)>100 then
     raise exception 'IMPORT_REVIEW_STAGED_CLIENT_LIMIT_EXCEEDED' using errcode='54000';

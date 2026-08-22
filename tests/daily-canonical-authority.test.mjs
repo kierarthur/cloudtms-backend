@@ -6,6 +6,18 @@ import {
   buildCandidateDailyPatchFromFrozenInput,
   mapCanonicalDailyScheduleToIso
 } from '../broker/src/daily-schedule-authority.js';
+import {
+  detectDailyRosterFormatFromRows,
+  normalizeNhspDailyBreakMinutes,
+  resolveNhspActualColumnIndexes
+} from '../broker/src/daily-roster-compat.js';
+
+const nhspDailyRows = [
+  ['Timesheets Previously Released'],
+  ['Date', 'Ref', 'Staff', 'Unique ID', 'Trust', 'Ward', 'Assignment', 'Contract', '', '', '', 'Actual', '', '', ''],
+  ['', '', '', '', '', '', '', 'Start', 'End', 'Break (Minutes)', 'Total', 'Start', 'End', 'Break (Minutes)', 'Total'],
+  ['22/08/2026', 'REF-1', 'Example Worker', 'N-1', 'Source Trust', 'Ward A', 'RN', '07:00', '15:00', 60, 7, '08:00', '16:30', 30, 8]
+];
 
 const baseSnapshotInput = (overrides = {}) => ({
   env: {},
@@ -219,6 +231,75 @@ test('canonical local schedule mapping records no-break without inventing times'
   assert.equal(mapped.break_end_iso, null);
   assert.equal(mapped.normalized_schedule_json.no_break, true);
   assert.equal(mapped.net_worked_minutes, 600);
+});
+
+test('Daily format detection maps all four NHSP values from the Actual group', () => {
+  const detected = detectDailyRosterFormatFromRows(nhspDailyRows);
+  assert.equal(detected.format, 'NHSP');
+  assert.deepEqual(detected.matches, ['NHSP']);
+  const actual = resolveNhspActualColumnIndexes(nhspDailyRows);
+  assert.deepEqual(actual, {
+    start: 11,
+    end: 12,
+    break: 13,
+    total: 14,
+    groupIndex: 1,
+    subIndex: 2
+  });
+  assert.deepEqual(actual, resolveNhspActualColumnIndexes(nhspDailyRows));
+  assert.equal(nhspDailyRows[3][actual.start], '08:00');
+  assert.equal(nhspDailyRows[3][actual.end], '16:30');
+  assert.equal(nhspDailyRows[3][actual.break], 30);
+  assert.equal(nhspDailyRows[3][actual.total], 8);
+});
+
+test('Daily detection is content-based, strict, and independent of filenames', () => {
+  const healthRosterRows = [[
+    'Request ID', 'Date', 'Staff Name', 'Unit', 'Grade', 'Start Time', 'End Time', 'Actual Break', 'Actual Hours'
+  ]];
+  assert.equal(detectDailyRosterFormatFromRows(healthRosterRows).format, 'HEALTHROSTER');
+  assert.equal(
+    detectDailyRosterFormatFromRows([...nhspDailyRows, healthRosterRows[0]]).errorCode,
+    'DAILY_ROSTER_FORMAT_AMBIGUOUS'
+  );
+  assert.equal(
+    detectDailyRosterFormatFromRows([['anything else']]).errorCode,
+    'DAILY_ROSTER_FORMAT_UNSUPPORTED'
+  );
+});
+
+test('NHSP Daily blank break is explicit zero and malformed Actual break fails closed', () => {
+  assert.equal(normalizeNhspDailyBreakMinutes(''), 0);
+  assert.equal(normalizeNhspDailyBreakMinutes(null), 0);
+  assert.equal(normalizeNhspDailyBreakMinutes('45'), 45);
+  assert.throws(() => normalizeNhspDailyBreakMinutes('not minutes'), /NHSP_DAILY_BREAK_INVALID/);
+  assert.throws(() => normalizeNhspDailyBreakMinutes(-1), /NHSP_DAILY_BREAK_INVALID/);
+});
+
+test('Daily compatibility SQL keeps bounds, revoked-row exclusion, replay, and break inheritance fail closed', async () => {
+  const [compatibilitySql, coreSql, migrationSql, indexSource] = await Promise.all([
+    readFile(new URL('../supabase/repeatable/22082026_1606_daily_validation_compatibility_v1.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/repeatable/21072026_1820_00_import_review_internal_core.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../broker/src/index.js', import.meta.url), 'utf8')
+  ]);
+  assert.match(compatibilitySql, /p_coverage_end_date-p_coverage_start_date>365/);
+  assert.match(compatibilitySql, /_import_review_effective_authority_core_v1\('HR_DAILY',null,p_client_id,v_today\)/);
+  assert.match(compatibilitySql, /v_target_count,0\)>500/);
+  assert.match(compatibilitySql, /pg_advisory_xact_lock/);
+  assert.match(compatibilitySql, /coverage_operation_key=v_operation_key for update/);
+  assert.match(compatibilitySql, /overrideclientsettings,false[\s\S]*timesheet_break_entry_mode is not null/);
+  assert.match(compatibilitySql, /CONTRACT_CLIENT_MISMATCH/);
+  assert.match(compatibilitySql, /effective_from is null or cs\.effective_from<=v_as_of/);
+  assert.ok(
+    (coreSql.match(/ts\.is_current and ts\.revoked_at is null/g) || []).length >= 3,
+    'all Daily missing-source branches must exclude revoked current versions'
+  );
+  assert.match(migrationSql, /START_END_TIMES/);
+  assert.match(migrationSql, /DURATION_MINUTES/);
+  assert.match(indexSource, /daily_client_id: clientId/);
+  assert.match(indexSource, /agency_raw: dailyClientIdNorm \? 'HEALTHROSTER_DAILY' : 'NHSP'/);
+  assert.match(indexSource, /p_as_of_date: null/);
 });
 
 test('structural single-owner and QR convergence invariants are present', async () => {
