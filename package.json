@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "node --test tests/*.test.js",
+    "test": "npm run candidate:bindings:check && node --test tests/*.test.js",
+    "candidate:bindings:generate": "node scripts/generate-candidate-data-plane-registry.mjs",
+    "candidate:bindings:check": "node scripts/generate-candidate-data-plane-registry.mjs --check",
     "test:candidate-boundary": "node --test tests/candidate-app-backend.test.js tests/candidate-broker-boundary.test.js",
     "check:candidate-broker": "wrangler deploy --dry-run --config candidate-broker/wrangler.jsonc",
     "check:candidate-private-api": "wrangler deploy --dry-run --config candidate-private-api/wrangler.jsonc",

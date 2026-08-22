@@ -2,6 +2,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA256_RE = /^[0-9a-f]{64}$/;
+const OPERATION_ID_RE = /^[A-Za-z][A-Za-z0-9]{2,99}$/;
 const MAX_CONTEXT_LIFETIME_SECONDS = 5 * 60;
 const MAX_CLOCK_SKEW_SECONDS = 120;
 
@@ -79,11 +80,18 @@ function exactUuid(value, code) {
   return output;
 }
 
+function exactOperationId(value, code) {
+  const output = text(value);
+  if (!OPERATION_ID_RE.test(output)) throw new Error(code);
+  return output;
+}
+
 function normalizedRouteContext(input) {
   if (!isObject(input)) throw new Error('CANDIDATE_ROUTE_CONTEXT_INVALID');
   return {
     v: positiveInteger(input.v, 'CANDIDATE_ROUTE_CONTEXT_VERSION_INVALID'),
     aud: requiredText(input.aud, 'CANDIDATE_ROUTE_CONTEXT_AUDIENCE_INVALID'),
+    operation_id: exactOperationId(input.operation_id, 'CANDIDATE_ROUTE_CONTEXT_OPERATION_INVALID'),
     environment: requiredText(input.environment, 'CANDIDATE_ROUTE_CONTEXT_ENVIRONMENT_INVALID').toUpperCase(),
     global_account_id: exactUuid(input.global_account_id, 'CANDIDATE_ROUTE_CONTEXT_ACCOUNT_INVALID'),
     global_session_id: exactUuid(input.global_session_id, 'CANDIDATE_ROUTE_CONTEXT_SESSION_INVALID'),

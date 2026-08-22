@@ -50,6 +50,7 @@ function routeContext(now = new Date('2026-08-21T16:00:00.000Z')) {
   return {
     v: 1,
     aud: 'candidate-private-api',
+    operation_id: 'getCandidateBootstrap',
     environment: 'TEST',
     global_account_id: IDS.account,
     global_session_id: IDS.session,

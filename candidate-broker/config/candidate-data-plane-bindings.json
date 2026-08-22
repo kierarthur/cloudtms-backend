@@ -1,0 +1,22 @@
+{
+  "contract_version": "CANDIDATE_DATA_PLANE_BINDING_REGISTRY_V1",
+  "registry_version": 1,
+  "entries": [
+    {
+      "registry_binding_key": "CANDIDATE_DATA_PLANE_CLOUDTMS_TEST",
+      "environment": "TEST",
+      "key_version": 1,
+      "worker_binding": "CLOUDTMS_PRIVATE",
+      "route_secret_variable": "CANDIDATE_DATA_PLANE_CLOUDTMS_TEST_ROUTE_CONTEXT_SECRET",
+      "service_name": "test-cloudtms-candidate-private-api"
+    },
+    {
+      "registry_binding_key": "CANDIDATE_DATA_PLANE_SYNTHETIC_SECOND",
+      "environment": "TEST",
+      "key_version": 1,
+      "worker_binding": "CANDIDATE_SYNTHETIC_SECOND_PRIVATE",
+      "route_secret_variable": "CANDIDATE_DATA_PLANE_SYNTHETIC_SECOND_ROUTE_CONTEXT_SECRET",
+      "service_name": "test-cloudtms-candidate-synthetic-private-api"
+    }
+  ]
+}

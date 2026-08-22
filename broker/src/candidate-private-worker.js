@@ -16,6 +16,11 @@ import {
   verifyMyTmsGoogleControlRequest
 } from './mytms-google-control-hmac.js';
 import { verifyMyTmsGoogleRouteContext } from './mytms-google-route-context.js';
+import { candidateOperationForRequest } from '../../candidate-broker/src/candidate-operation-policy.js';
+import {
+  handleCandidateAppReadyPrivateProbe,
+  PRIVATE_APP_READY_PROOF_PATH
+} from './candidate-app-ready-private-proof.js';
 
 const PRIVATE_CANDIDATE_PREFIX = '/private/candidate-app/v1';
 const PRIVATE_MANAGER_PREFIX = '/private/candidate-manager/v1';
@@ -61,6 +66,19 @@ function federatedConfigurationAvailable(env) {
     && String(env.CANDIDATE_ROUTE_CONTEXT_SECRET || '').trim()
     && String(env.CANDIDATE_FEDERATED_IDENTITY_SECRET || '').trim()
   );
+}
+
+function privateCandidateOperation(request) {
+  const url = new URL(request.url);
+  let path = url.pathname;
+  if (path.startsWith(PRIVATE_CANDIDATE_PREFIX)) {
+    path = `/candidate-app/v1${path.slice(PRIVATE_CANDIDATE_PREFIX.length)}`;
+  } else if (path.startsWith(PRIVATE_MANAGER_PREFIX)) {
+    path = `/candidate-manager/v1${path.slice(PRIVATE_MANAGER_PREFIX.length)}`;
+  } else if (path.startsWith(PRIVATE_SYSTEM_PREFIX)) {
+    path = `/candidate-system/v1${path.slice(PRIVATE_SYSTEM_PREFIX.length)}`;
+  }
+  return candidateOperationForRequest(request.method, path);
 }
 
 async function consumeServiceNonce(request, env) {
@@ -225,7 +243,8 @@ export default {
       || path.startsWith(PRIVATE_MANAGER_PREFIX)
       || path.startsWith(PRIVATE_SYSTEM_PREFIX)
       || path.startsWith(PRIVATE_GOOGLE_CONTROL_PREFIX)
-      || path.startsWith(PRIVATE_GOOGLE_DATA_PREFIX);
+      || path.startsWith(PRIVATE_GOOGLE_DATA_PREFIX)
+      || path === PRIVATE_APP_READY_PROOF_PATH;
     if (!privateRoute) return json(404, { ok: false, error_code: 'CANDIDATE_PRIVATE_ROUTE_NOT_FOUND' });
     if (!await verifyCandidatePrivateRequest(request, env)) {
       return json(401, { ok: false, error_code: 'CANDIDATE_PRIVATE_SERVICE_AUTH_REQUIRED' });
@@ -235,6 +254,9 @@ export default {
     }
     if (!await consumeServiceNonce(request, env)) {
       return json(401, { ok: false, error_code: 'CANDIDATE_PRIVATE_SERVICE_REPLAY_REJECTED' });
+    }
+    if (path === PRIVATE_APP_READY_PROOF_PATH) {
+      return handleCandidateAppReadyPrivateProbe(request, env);
     }
     if (path.startsWith(PRIVATE_GOOGLE_CONTROL_PREFIX)) {
       if (request.headers.has('x-cloudtms-route-context')
@@ -278,6 +300,11 @@ export default {
       routeContext = await verifyCandidateRouteContext(request, env);
       if (!routeContext) {
         return json(401, { ok: false, error_code: 'CANDIDATE_ROUTE_CONTEXT_INVALID' });
+      }
+      const operation = privateCandidateOperation(request);
+      if (!operation?.data_plane_dispatch_required
+          || operation.operation_id !== routeContext.context.operation_id) {
+        return json(401, { ok: false, error_code: 'CANDIDATE_ROUTE_CONTEXT_OPERATION_INVALID' });
       }
       if (path.startsWith(PRIVATE_SYSTEM_PREFIX)) {
         return json(401, { ok: false, error_code: 'CANDIDATE_ROUTE_CONTEXT_AUDIENCE_INVALID' });
@@ -344,5 +371,6 @@ export const candidatePrivateWorkerInternals = Object.freeze({
   federatedConfigurationAvailable,
   projectFederatedRequest,
   handleGoogleDataMatch,
-  boundedObject
+  boundedObject,
+  privateCandidateOperation
 });

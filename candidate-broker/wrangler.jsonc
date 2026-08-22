@@ -7,6 +7,10 @@
   "workers_dev": true,
   "vars": {
     "CANDIDATE_APP_ENVIRONMENT": "TEST",
+    "CANDIDATE_APP_READY_PROOF_ENABLED": "TRUE",
+    "MYTMS_CONTROL_PLANE_ENABLED": "TRUE",
+    "MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED": "FALSE",
+    "MYTMS_CONTROL_PLANE_URL": "https://pixmhpngcfxuhoilzptk.supabase.co",
     "CANDIDATE_ALLOWED_ORIGINS": "https://testmode.arthur-rai.co.uk",
     "CANDIDATE_ALLOW_NATIVE_CLIENTS": "true",
     "CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION": "1",
@@ -26,6 +30,10 @@
     {
       "binding": "CLOUDTMS_PRIVATE",
       "service": "test-cloudtms-candidate-private-api"
+    },
+    {
+      "binding": "CANDIDATE_SYNTHETIC_SECOND_PRIVATE",
+      "service": "test-cloudtms-candidate-synthetic-private-api"
     }
   ],
   "ratelimits": [
@@ -67,6 +75,11 @@
     {
       "name": "CANDIDATE_DAILY_SYSTEM_RATE_LIMIT",
       "namespace_id": "71008",
+      "simple": { "limit": 120, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_APP_READY_PROOF_RATE_LIMIT",
+      "namespace_id": "71009",
       "simple": { "limit": 120, "period": 60 }
     }
   ],

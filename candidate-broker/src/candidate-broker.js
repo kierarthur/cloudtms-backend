@@ -3,6 +3,11 @@ import { signCandidateRouteContext } from '../../broker/src/candidate-route-cont
 import {
   candidateDataPlaneRegistryEntry
 } from './candidate-data-plane-registry.generated.js';
+import { candidateOperationForRequest } from './candidate-operation-policy.js';
+import {
+  APP_READY_TWO_PLANE_PROOF_PATH,
+  handleAppReadyTwoPlaneProof
+} from './app-ready-two-plane-proof.js';
 import {
   handleMyTmsGoogleControlRequest,
   isMyTmsGoogleControlPath
@@ -869,6 +874,7 @@ async function forwardPrivate(request, env, {
     throw new CandidateBrokerError(503, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');
   }
   const path = privatePath(new URL(request.url).pathname);
+  const operation = candidateOperationForRequest(request.method, new URL(request.url).pathname);
   const url = new URL(request.url);
   url.protocol = 'https:';
   url.hostname = 'cloudtms-candidate-private.internal';
@@ -881,7 +887,12 @@ async function forwardPrivate(request, env, {
     : JSON.stringify(body);
   const headers = privateRequestHeaders(request, authorization);
   if (federated) {
-    const signedRoute = await routeContextForPrivate(federated.access, federated.route, env);
+    if (!operation?.data_plane_dispatch_required) {
+      throw new CandidateBrokerError(500, 'CANDIDATE_OPERATION_POLICY_INVALID');
+    }
+    const signedRoute = await routeContextForPrivate(
+      federated.access, federated.route, operation.operation_id, env
+    );
     headers.set('x-cloudtms-route-context', signedRoute.envelope);
     headers.set('x-cloudtms-route-context-sha256', signedRoute.sha256);
     if (federated.projectSession !== false) headers.delete('authorization');
@@ -1231,7 +1242,7 @@ async function resolveControlPlaneRoute(access, env, correlationId) {
   return { ...result, registryEntry: entry };
 }
 
-async function routeContextForPrivate(access, route, env, now = new Date()) {
+async function routeContextForPrivate(access, route, operationId, env, now = new Date()) {
   const expiresAt = new Date(Math.min(
     Number(access.exp) * 1000,
     now.getTime() + ROUTE_CONTEXT_TTL_SECONDS * 1000
@@ -1240,6 +1251,7 @@ async function routeContextForPrivate(access, route, env, now = new Date()) {
   return signCandidateRouteContext({
     v: 1,
     aud: 'candidate-private-api',
+    operation_id: operationId,
     environment: environmentName(env),
     global_account_id: access.global_account_id,
     global_session_id: access.global_session_id,
@@ -2313,6 +2325,18 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
   const id = requestId(request);
   const url = new URL(request.url);
   const path = url.pathname;
+  if (path === APP_READY_TWO_PLANE_PROOF_PATH) {
+    try {
+      const ip = text(request.headers.get('cf-connecting-ip')) || 'unknown-ip';
+      await applyRateLimit(env, 'CANDIDATE_APP_READY_PROOF_RATE_LIMIT', [
+        `ip:${ip}`,
+        `page:${ip}:${url.searchParams.get('page') || '1'}`
+      ]);
+      return handleAppReadyTwoPlaneProof(request, env);
+    } catch (error) {
+      return errorResponse(error, id);
+    }
+  }
   if (isMyTmsGoogleControlPath(path)) {
     return handleMyTmsGoogleControlRequest(request, env);
   }
