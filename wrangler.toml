@@ -124,6 +124,7 @@ head_sampling_rate = 1
 # ============================================================
 [env.test]
 name = "test-cloudtms-backend"
+preview_urls = false
 
 # FIX: ensure Browser Rendering binding exists in the test environment
 [env.test.browser]

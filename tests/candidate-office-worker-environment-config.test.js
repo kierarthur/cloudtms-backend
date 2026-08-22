@@ -15,6 +15,8 @@ test('normal TEST Worker supplies the Candidate Office environment authority', (
 });
 
 test('normal TEST Worker installs MyTMS Office control disabled-first', () => {
+  assert.match(wrangler, /\[env\.test\]\s*\r?\nname\s*=\s*"test-cloudtms-backend"\s*\r?\npreview_urls\s*=\s*false/);
+  assert.equal((wrangler.match(/^preview_urls\s*=/gm) || []).length, 1);
   const expected = new Map([
     ['MYTMS_CONTROL_PLANE_ENABLED', 'TRUE'],
     ['MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED', 'FALSE'],
