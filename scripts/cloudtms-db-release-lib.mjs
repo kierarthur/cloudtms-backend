@@ -81,6 +81,8 @@ export function verifyIntegrity() {
   const actual = inventory();
   const lock = readJson('supabase/release/migration-lock.json');
   const protectedLock = readJson('supabase/release/protected-boundary-lock.json');
+  const release = readJson('supabase/release/current-release.json');
+  const baselineRepeatableLock = readJson(release.baselineRepeatableLock);
   const failures = [];
   const expectedMigrations = new Map(lock.migrations.map(x => [x.path, x.sha256]));
   for (const item of actual.migrations) {
@@ -93,6 +95,14 @@ export function verifyIntegrity() {
     const absolute = path.join(repoRoot, item.path);
     if (!fs.existsSync(absolute)) failures.push(`Protected file missing: ${item.path}`);
     else if (sha256(fs.readFileSync(absolute)) !== item.sha256) failures.push(`Protected boundary changed: ${item.path}`);
+  }
+  const currentRepeatablePaths = new Set(actual.repeatables.map(item => item.path));
+  const baselinePaths = new Set();
+  for (const item of baselineRepeatableLock.repeatables || []) {
+    if (baselinePaths.has(item.path)) failures.push(`Duplicate baseline repeatable: ${item.path}`);
+    baselinePaths.add(item.path);
+    if (!currentRepeatablePaths.has(item.path)) failures.push(`Baseline repeatable missing: ${item.path}`);
+    if (!/^[a-f0-9]{64}$/.test(String(item.sha256 || ''))) failures.push(`Baseline repeatable hash invalid: ${item.path}`);
   }
   if (failures.length) throw new Error(failures.join('\n'));
   return actual;

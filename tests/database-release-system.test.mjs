@@ -28,6 +28,7 @@ test('migration immutability and protected Candidate boundary pass', () => {
   const current = verifyIntegrity();
   const lock = readJson('supabase/release/migration-lock.json');
   assert.equal(current.migrations.length, lock.migrations.length);
+  assert.equal(readJson('supabase/release/baseline-repeatable-lock.json').repeatables.length, 298);
   assert.equal(readJson('supabase/release/protected-boundary-lock.json').files.length, 5);
 });
 
@@ -67,7 +68,7 @@ test('release engine has fail-closed NEW, ADOPT, and UPGRADE gates', () => {
   assert.match(source, /Installed migration hash mismatch/);
   assert.match(source, /Database contract differs in/);
   assert.doesNotMatch(source, /__BOOTSTRAPPED__|marking existing migrations/);
-  assert.match(source, /mode === 'NEW'[\s\S]*for \(const item of current\.repeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
+  assert.match(source, /mode === 'NEW'[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*for \(const item of pendingRepeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
 });
 
 test('contract export normalises null ACLs to one-dimensional effective defaults', () => {

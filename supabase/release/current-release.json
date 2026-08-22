@@ -2,6 +2,7 @@
   "formatVersion": 1,
   "releaseId": "20260822-test-authority",
   "contractPath": "supabase/release/current-contract.json",
+  "baselineRepeatableLock": "supabase/release/baseline-repeatable-lock.json",
   "controlPlaneMigration": "supabase/migrations/22082026_1507_cloudtms_database_release_control_plane.sql",
   "bootstrapFile": "supabase/baseline/22082026_1506_cloudtms_new_database_bootstrap.sql",
   "baselineFiles": [

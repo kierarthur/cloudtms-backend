@@ -182,11 +182,17 @@ function applyRelease() {
     psql({ file: release.bootstrapFile, variables: { cloudtms_environment: environment } });
     recordRelease({ releaseId, mode, status: 'APPLYING', expectedHash, installedHash: expectedHash });
     activeReleaseId = releaseId;
-    // The immutable baseline is the starting snapshot. Reapply every current
-    // repeatable so NEW also installs replacements added after that snapshot.
-    // This is safe because NEW is a proved-empty database, repeatables are
-    // complete idempotent authorities, and the final contract/verifiers gate it.
-    for (const item of current.repeatables) psql({ file: item.path });
+    // The immutable baseline already contains its signed routine snapshot.
+    // Install only repeatables added or changed since that snapshot; replaying
+    // retired historical roots could temporarily revive superseded authority.
+    const baselineRepeatables = new Map(
+      readJson(release.baselineRepeatableLock).repeatables.map(item => [item.path, item.sha256])
+    );
+    const pendingRepeatables = current.repeatables.filter(
+      item => baselineRepeatables.get(item.path) !== item.sha256
+    );
+    runBankingPayCatalogPreapply(pendingRepeatables.map(item => item.path));
+    for (const item of pendingRepeatables) psql({ file: item.path });
     recordInventory(releaseId);
   } else if (mode === 'ADOPT') {
     const pre = compareExpected(release.contractPath);
