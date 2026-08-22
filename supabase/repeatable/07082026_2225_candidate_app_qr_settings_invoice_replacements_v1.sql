@@ -671,8 +671,7 @@ BEGIN
       'opt_in_sms',
       'opt_in_whatsapp',
       'healthroster_import_auto_authorise',
-      'nhsp_import_auto_authorise',
-      'timesheet_break_entry_mode'
+      'nhsp_import_auto_authorise'
       )
       OR (v_candidate_settings_enabled AND supplied_field.field_name IN (
       'candidate_expenses_require_separate_timesheet',
@@ -779,8 +778,7 @@ BEGIN
       'healthroster_import_auto_authorise',
       'nhsp_import_auto_authorise',
       'reversal_complete_financials_date',
-      'reversal_replacement_financials_date',
-      'timesheet_break_entry_mode'
+      'reversal_replacement_financials_date'
     ]::text[] || CASE WHEN v_candidate_settings_enabled THEN ARRAY[
       'candidate_electronic_auto_authorise',
       'candidate_expenses_require_separate_timesheet',
@@ -1118,7 +1116,6 @@ BEGIN
       nhsp_import_auto_authorise,
       reversal_complete_financials_date,
       reversal_replacement_financials_date,
-      timesheet_break_entry_mode,
       candidate_electronic_auto_authorise,
       candidate_expenses_require_separate_timesheet,
       candidate_paper_submission_enabled,
@@ -1247,10 +1244,6 @@ BEGIN
         THEN v_settings_input.reversal_replacement_financials_date
         ELSE NULL::public.correction_financials_date_basis_enum
       END,
-      COALESCE(
-        v_settings_input.timesheet_break_entry_mode,
-        'START_END_TIMES'::public.timesheet_break_entry_mode_enum
-      ),
       CASE WHEN v_candidate_settings_enabled AND v_settings_payload ? 'candidate_electronic_auto_authorise'
         THEN v_settings_input.candidate_electronic_auto_authorise
         ELSE NULL::boolean END,

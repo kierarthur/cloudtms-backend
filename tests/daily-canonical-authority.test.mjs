@@ -277,9 +277,9 @@ test('NHSP Daily blank break is explicit zero and malformed Actual break fails c
 });
 
 test('Daily compatibility SQL keeps bounds, revoked-row exclusion, replay, and break inheritance fail closed', async () => {
-  const [compatibilitySql, coreSql, migrationSql, indexSource] = await Promise.all([
+  const [compatibilitySql, authoritySql, migrationSql, indexSource] = await Promise.all([
     readFile(new URL('../supabase/repeatable/22082026_1606_daily_validation_compatibility_v1.sql', import.meta.url), 'utf8'),
-    readFile(new URL('../supabase/repeatable/21072026_1820_00_import_review_internal_core.sql', import.meta.url), 'utf8'),
+    readFile(new URL('../supabase/repeatable/22082026_1706_daily_validation_compatibility_authorities_v1.sql', import.meta.url), 'utf8'),
     readFile(new URL('../supabase/migrations/22082026_1551_timesheet_break_entry_mode.sql', import.meta.url), 'utf8'),
     readFile(new URL('../broker/src/index.js', import.meta.url), 'utf8')
   ]);
@@ -292,7 +292,7 @@ test('Daily compatibility SQL keeps bounds, revoked-row exclusion, replay, and b
   assert.match(compatibilitySql, /CONTRACT_CLIENT_MISMATCH/);
   assert.match(compatibilitySql, /effective_from is null or cs\.effective_from<=v_as_of/);
   assert.ok(
-    (coreSql.match(/ts\.is_current and ts\.revoked_at is null/g) || []).length >= 3,
+    (authoritySql.match(/ts\.is_current and ts\.revoked_at is null/g) || []).length >= 3,
     'all Daily missing-source branches must exclude revoked current versions'
   );
   assert.match(migrationSql, /START_END_TIMES/);

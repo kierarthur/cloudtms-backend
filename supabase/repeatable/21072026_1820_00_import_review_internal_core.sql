@@ -137,39 +137,24 @@ as $function$
       and (cs.effective_from is null or cs.effective_from<=x.today_london)
     order by cs.effective_from desc nulls last,cs.updated_at desc nulls last,cs.id desc
     limit 1
-  ), active_daily_override as (
-    select bool_or(coalesce(c.autoprocess_hr,false)) route_enabled,
-      max(c.updated_at) contract_updated_at
-    from public.contracts c,context x
-    where p_contract_id is null
-      and c.client_id=p_client_id
-      and coalesce(c.overrideclientsettings,false)
-      and c.start_date<=x.today_london
-      and (c.end_date is null or c.end_date>=x.today_london)
   ), effective as (
-    select x.route,x.today_london,c.id contract_id,
-      coalesce(c.updated_at,ado.contract_updated_at) contract_updated_at,
+    select x.route,x.today_london,c.id contract_id,c.updated_at contract_updated_at,
       cs.id client_settings_id,cs.effective_from client_settings_effective_from,
       cs.updated_at client_settings_updated_at,
       case when coalesce(c.overrideclientsettings,false) and c.is_nhsp is not null then c.is_nhsp
         else coalesce(cs.is_nhsp,false) end is_nhsp,
       case when coalesce(c.overrideclientsettings,false) and c.autoprocess_hr is not null then c.autoprocess_hr
-        when c.id is null and x.route in ('HR_DAILY','HEALTHROSTER_DAILY')
-          and coalesce(ado.route_enabled,false) then true
         else coalesce(cs.autoprocess_hr,false) end autoprocess_hr,
       case when coalesce(c.overrideclientsettings,false) and c.requires_hr is not null then c.requires_hr
         else coalesce(cs.requires_hr,false) end requires_hr,
       case when coalesce(c.overrideclientsettings,false) and c.no_timesheet_required is not null then c.no_timesheet_required
         else coalesce(cs.no_timesheet_required,false) end no_timesheet_required,
-      case when c.id is null and x.route in ('HR_DAILY','HEALTHROSTER_DAILY')
-        and coalesce(ado.route_enabled,false) then 'ACTIVE_CONTRACT_OVERRIDE'
-        when coalesce(c.overrideclientsettings,false) and (
+      case when coalesce(c.overrideclientsettings,false) and (
         c.is_nhsp is not null or c.autoprocess_hr is not null or c.requires_hr is not null
         or c.no_timesheet_required is not null) then 'CONTRACT_OVERRIDE' else 'CLIENT_SETTINGS_CURRENT' end basis
     from context x
     left join contract_row c on true
     left join current_setting cs on true
-    left join active_daily_override ado on true
   ), decision as (
     select e.*,
       case when e.route='NHSP' then e.is_nhsp
@@ -2683,30 +2668,6 @@ begin
   ) on commit drop;
   truncate pg_temp.import_review_catalog_v1;
 
-  if exists (
-    select 1 from public.hr_imports hi
-    where hi.id=p_import_id
-      and upper(coalesce(hi.import_scope,''))='HR_DAILY'
-      and coalesce((hi.parse_summary_json->>'declared_zero_shifts')::boolean,false)
-  ) then
-    select count(distinct t.timesheet_id) into v_count
-    from public.hr_imports i
-    join public.v_timesheets_daily_match t
-      on (t.worked_start_iso at time zone 'Europe/London')::date
-        between i.coverage_start_date and i.coverage_end_date
-    join public.timesheets ts on ts.timesheet_id=t.timesheet_id
-      and ts.is_current and ts.revoked_at is null
-    where i.id=p_import_id
-      and t.sheet_scope::text='DAILY'
-      and (i.client_id is null or t.client_id=i.client_id)
-      and (not exists(select 1 from public.import_review_scope_clients sc where sc.import_id=i.id)
-        or exists(select 1 from public.import_review_scope_clients sc where sc.import_id=i.id and sc.client_id=t.client_id));
-    if coalesce(v_count,0)>500 then
-      raise exception 'DAILY_ZERO_DECLARATION_SCOPE_TOO_LARGE' using errcode='54000',
-        detail=jsonb_build_object('supported_maximum',500,'target_count',v_count)::text;
-    end if;
-  end if;
-
   insert into pg_temp.import_review_catalog_v1
   with import_row as (
     select hi.* from public.hr_imports hi where hi.id=p_import_id
@@ -3760,7 +3721,7 @@ begin
         t.timesheet_id,t.candidate_id,t.client_id,(t.worked_start_iso at time zone 'Europe/London')::date,
         coalesce(t.reference_number,''))) issue_fingerprint
     from public.v_timesheets_daily_match t
-    join public.timesheets ts on ts.timesheet_id=t.timesheet_id and ts.is_current and ts.revoked_at is null
+    join public.timesheets ts on ts.timesheet_id=t.timesheet_id and ts.is_current
     join public.candidates c on c.id=t.candidate_id
     join public.clients cl on cl.id=t.client_id
     join i on true
@@ -3820,7 +3781,7 @@ begin
   with i as (select * from public.hr_imports where id=p_import_id), missing as (
     select t.*,ts.contract_id,public._import_review_timesheet_protection_core_v1(t.timesheet_id) protection
     from public.v_timesheets_daily_match t
-    join public.timesheets ts on ts.timesheet_id=t.timesheet_id and ts.is_current and ts.revoked_at is null
+    join public.timesheets ts on ts.timesheet_id=t.timesheet_id and ts.is_current
     join i on true
     where (upper(i.source_system::text)='HEALTHROSTER_DAILY' or upper(coalesce(i.import_scope,'')) like '%DAILY%')
       and i.coverage_mode in ('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES')
@@ -3854,7 +3815,7 @@ begin
   with i as (select * from public.hr_imports where id=p_import_id), missing as (
     select t.*,ts.contract_id,public._import_review_timesheet_protection_core_v1(t.timesheet_id) protection
     from public.v_timesheets_daily_match t
-    join public.timesheets ts on ts.timesheet_id=t.timesheet_id and ts.is_current and ts.revoked_at is null
+    join public.timesheets ts on ts.timesheet_id=t.timesheet_id and ts.is_current
     join i on true
     where (upper(i.source_system::text)='HEALTHROSTER_DAILY' or upper(coalesce(i.import_scope,'')) like '%DAILY%')
       and i.coverage_mode in ('COMPLETE_ALL','COMPLETE_SELECTED_CANDIDATES')
