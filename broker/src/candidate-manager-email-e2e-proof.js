@@ -1,6 +1,5 @@
 import {
-  candidateAppBackendInternals,
-  handleCandidateAppRequest
+  candidateAppBackendInternals
 } from './candidate-app-backend.js';
 import { controlPlaneRpc } from '../../candidate-broker/src/control-plane-client.js';
 import { getMyTmsOfficeSettings } from './mytms-office-control.js';
@@ -24,6 +23,10 @@ export const CANDIDATE_MANAGER_EMAIL_E2E_IDS = Object.freeze({
 });
 
 const SYNTHETIC_MARKER = 'MYTMS_MANAGER_EMAIL_E2E_PROOF_V1';
+const TEST_CANDIDATE_BROKER_ORIGIN =
+  'https://test-cloudtms-candidate-broker.kier-88a.workers.dev';
+const SYNTHETIC_CANDIDATE_EMAIL = 'mytms-e2e-candidate@example.test';
+const SYNTHETIC_CANDIDATE_PASSWORD = 'Synthetic-Manager-Proof-Only-2026!';
 const MAX_JSON_BYTES = 256 * 1024;
 const CANDIDATE_SIGNATURE_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
@@ -227,32 +230,29 @@ async function seedFixture(env, recipient, baseline, now = new Date()) {
       submission_mode_snapshot: 'ELECTRONIC'
     }
   });
+  const password = await candidateAppBackendInternals.derivePasswordVerifier(
+    SYNTHETIC_CANDIDATE_PASSWORD
+  );
   await agencyRest(env, 'candidate_app_accounts', '', {
     method: 'POST', prefer: 'return=minimal',
     body: {
       id: ids.account, environment: 'TEST',
-      email_normalized: 'mytms-e2e-candidate@example.test', status: 'ACTIVE',
-      password_scheme: 'PBKDF2-HMAC-SHA256', password_scheme_version: 1,
-      password_salt: `\\x${'41'.repeat(16)}`,
-      password_digest: `\\x${'42'.repeat(32)}`,
+      email_normalized: SYNTHETIC_CANDIDATE_EMAIL, status: 'ACTIVE',
+      password_scheme: password.scheme, password_scheme_version: password.scheme_version,
+      password_salt: `\\x${password.salt_hex}`,
+      password_digest: `\\x${password.digest_hex}`,
+      password_params_json: password.params,
       password_changed_at_utc: now.toISOString()
-    }
-  });
-  await agencyRest(env, 'candidate_app_sessions', '', {
-    method: 'POST', prefer: 'return=minimal',
-    body: {
-      id: ids.session, account_id: ids.account, environment: 'TEST',
-      selected_candidate_id: ids.candidate, status: 'ACTIVE', rotation: 0,
-      refresh_token_hash: `\\x${'43'.repeat(32)}`,
-      expires_at_utc: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      absolute_expires_at_utc: new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000).toISOString()
     }
   });
   return dates;
 }
 
-async function candidateRequest(env, deps, ctx, token, path, method, body = null, bytes = null) {
-  const headers = new Headers({ authorization: `Bearer ${token}` });
+async function candidateRequest(token, path, method, body = null, bytes = null) {
+  const headers = new Headers({
+    'x-cloudtms-client': 'android',
+    ...(token ? { authorization: `Bearer ${token}` } : {})
+  });
   let requestBody;
   if (bytes) {
     headers.set('content-type', 'image/png');
@@ -262,9 +262,10 @@ async function candidateRequest(env, deps, ctx, token, path, method, body = null
     headers.set('content-type', 'application/json; charset=utf-8');
     requestBody = JSON.stringify(body);
   }
-  const response = await handleCandidateAppRequest(new Request(`https://private.test${path}`, {
-    method, headers, ...(requestBody == null ? {} : { body: requestBody })
-  }), env, ctx, deps);
+  const response = await fetch(`${TEST_CANDIDATE_BROKER_ORIGIN}${path}`, {
+    method, headers, ...(requestBody == null ? {} : { body: requestBody }),
+    signal: AbortSignal.timeout(30_000)
+  });
   const payload = await boundedJson(response);
   if (!response || !response.ok || !payload || payload.ok === false) {
     throw new Error(`E2E_CANDIDATE_STEP_FAILED:${response?.status || 500}:${payload?.error_code || 'UNKNOWN'}`);
@@ -279,12 +280,16 @@ function candidateSignatureBytes() {
 
 async function runJourneyToOutbox(env, ctx, deps, recipient, dates) {
   const ids = CANDIDATE_MANAGER_EMAIL_E2E_IDS;
-  const session = {
-    session_id: ids.session, rotation: 0,
-    issued_at_utc: new Date().toISOString()
-  };
-  const token = await candidateAppBackendInternals.createAccessToken(env, session);
-  await candidateRequest(env, deps, ctx, token, '/candidate-app/v1/workflows', 'POST', {
+  const login = await candidateRequest(null, '/candidate-app/v1/auth/login', 'POST', {
+    email: SYNTHETIC_CANDIDATE_EMAIL,
+    password: SYNTHETIC_CANDIDATE_PASSWORD,
+    selected_candidate_id: ids.candidate,
+    idempotency_key: ids.session,
+    platform: 'SYNTHETIC_TEST_PROOF'
+  });
+  const token = text(login.access_token);
+  if (!token) throw new Error('E2E_CANDIDATE_LOGIN_TOKEN_MISSING');
+  await candidateRequest(token, '/candidate-app/v1/workflows', 'POST', {
     workflow_id: ids.workflow, idempotency_key: ids.createKey,
     workflow: {
       workflow_kind: 'CONTRACT_HOURS', scope: 'WEEKLY', route: 'ELECTRONIC',
@@ -295,7 +300,7 @@ async function runJourneyToOutbox(env, ctx, deps, recipient, dates) {
   });
   const signature = candidateSignatureBytes();
   const prepared = await candidateRequest(
-    env, deps, ctx, token,
+    token,
     `/candidate-app/v1/workflows/${ids.workflow}/components/prepare`, 'POST', {
       generation: 1,
       component_kind: 'CANDIDATE_SIGNATURE', document_role: 'CANDIDATE_SIGNATURE',
@@ -303,14 +308,10 @@ async function runJourneyToOutbox(env, ctx, deps, recipient, dates) {
       idempotency_key: ids.candidateSignatureKey
     }
   );
-  await candidateRequest(env, deps, ctx, token, prepared.upload.url, 'PUT', null, signature);
+  await candidateRequest(token, prepared.upload.url, 'PUT', null, signature);
 
-  const background = [];
-  const submitContext = {
-    waitUntil(promise) { background.push(Promise.resolve(promise)); }
-  };
   await candidateRequest(
-    env, deps, submitContext, token,
+    token,
     `/candidate-app/v1/workflows/${ids.workflow}/actions/worker-submit`, 'POST', {
       generation: 1, idempotency_key: ids.submitKey,
       candidate_signature_component_id: prepared.component_id,
@@ -324,10 +325,15 @@ async function runJourneyToOutbox(env, ctx, deps, recipient, dates) {
       }
     }
   );
-  await Promise.all(background);
-
-  const workflowRows = await agencyRest(env, 'candidate_submission_workflows',
-    `id=eq.${ids.workflow}&select=id,state,generation`);
+  let workflowRows = [];
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    workflowRows = await agencyRest(env, 'candidate_submission_workflows',
+      `id=eq.${ids.workflow}&select=id,state,generation`);
+    if (Array.isArray(workflowRows) && workflowRows.length === 1
+        && workflowRows[0].state === 'READY_FOR_MANAGER_APPROVAL'
+        && Number(workflowRows[0].generation) === 2) break;
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
   if (!Array.isArray(workflowRows) || workflowRows.length !== 1
       || workflowRows[0].state !== 'READY_FOR_MANAGER_APPROVAL'
       || Number(workflowRows[0].generation) !== 2) {
@@ -335,26 +341,33 @@ async function runJourneyToOutbox(env, ctx, deps, recipient, dates) {
   }
 
   const approval = await candidateRequest(
-    env, deps, ctx, token,
+    token,
     `/candidate-app/v1/workflows/${ids.workflow}/actions/create-email-approval-request`, 'POST', {
       generation: 2, idempotency_key: ids.managerEmailKey,
       manager_email: recipient
     }
   );
-  const managerToken = await candidateAppBackendInternals.deterministicOpaqueToken(
-    env.CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET,
-    'candidate-email-handoff-v1', ids.workflow, 2,
-    'CREATE_EMAIL_APPROVAL_REQUEST', ids.managerEmailKey, recipient, 'INITIAL'
-  );
   const origin = await controlPlaneRpc(env, 'control', 'manager_review_origin_resolve_v1', {
     p_agency_id: text(env.MYTMS_OFFICE_AGENCY_ID),
-    p_environment: 'TEST'
+    p_environment_label: 'TEST'
   });
   const publicOrigin = text(origin?.manager_review_public_origin).replace(/\/$/, '');
   if (!/^https:\/\/[^/]+$/i.test(publicOrigin)) throw new Error('E2E_MANAGER_ORIGIN_UNAVAILABLE');
+  const outboxId = text(approval.mail_outbox_id).toLowerCase();
+  if (!/^[0-9a-f-]{36}$/.test(outboxId)) throw new Error('E2E_MANAGER_OUTBOX_UNAVAILABLE');
+  const outboxRows = await agencyRest(env, 'mail_outbox',
+    `id=eq.${encodeURIComponent(outboxId)}&select=body_text`);
+  if (!Array.isArray(outboxRows) || outboxRows.length !== 1) {
+    throw new Error('E2E_MANAGER_OUTBOX_UNAVAILABLE');
+  }
+  const escapedOrigin = publicOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const managerLink = text(outboxRows[0].body_text).match(
+    new RegExp(`${escapedOrigin}/manager/timesheet/${ids.workflow}#token=[^\\s]+`)
+  )?.[0] || '';
+  if (!managerLink) throw new Error('E2E_MANAGER_LINK_UNAVAILABLE');
   return {
     approval,
-    managerUrl: `${publicOrigin}/manager/timesheet/${ids.workflow}#token=${encodeURIComponent(managerToken)}`
+    managerUrl: managerLink
   };
 }
 
