@@ -26,10 +26,26 @@ function validDate(year, month, day) {
 
 export function sqlFiles(relativeDir) {
   const absolute = path.join(repoRoot, relativeDir);
-  return fs.readdirSync(absolute, { withFileTypes: true })
+  const diskFiles = fs.readdirSync(absolute, { withFileTypes: true })
     .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.sql'))
-    .map(entry => path.posix.join(relativeDir.replaceAll('\\', '/'), entry.name))
+    .map(entry => path.posix.join(relativeDir.replaceAll('\\', '/'), entry.name));
+  const tracked = spawnSync('git', ['ls-files', '-z', '--', relativeDir], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  if (tracked.status !== 0) throw new Error(`Cannot enumerate committed SQL paths under ${relativeDir}`);
+  const trackedFiles = tracked.stdout
+    .split('\0')
+    .filter(file => file && file.toLowerCase().endsWith('.sql'));
+  const trackedByCaseFoldedPath = new Map(trackedFiles.map(file => [file.toLowerCase(), file]));
+  const untrackedFiles = diskFiles.filter(file => !trackedByCaseFoldedPath.has(file.toLowerCase()));
+  return [...trackedFiles, ...untrackedFiles]
     .sort((a, b) => sqlDateKey(a).localeCompare(sqlDateKey(b)) || a.localeCompare(b));
+}
+
+export function canonicalSqlBytes(relativeFile) {
+  const bytes = fs.readFileSync(path.join(repoRoot, relativeFile));
+  return Buffer.from(bytes.toString('utf8').replaceAll('\r\n', '\n'), 'utf8');
 }
 
 export function closureFor(relativeFile, allowedRoot = 'supabase/repeatable') {
@@ -45,7 +61,7 @@ export function closureFor(relativeFile, allowedRoot = 'supabase/repeatable') {
     if (active.has(normal)) throw new Error(`Recursive SQL include cycle: ${normal}`);
     if (!fs.existsSync(absolute)) throw new Error(`Missing SQL include: ${normal}`);
     active.add(normal);
-    const bytes = fs.readFileSync(absolute);
+    const bytes = canonicalSqlBytes(normal);
     ordered.push({ path: normal, bytes });
     const text = bytes.toString('utf8');
     for (const line of text.split(/\r?\n/)) {
@@ -62,7 +78,7 @@ export function closureFor(relativeFile, allowedRoot = 'supabase/repeatable') {
 }
 
 export function inventory() {
-  const migrations = sqlFiles('supabase/migrations').map(p => ({ path: p, sha256: sha256(fs.readFileSync(path.join(repoRoot, p))) }));
+  const migrations = sqlFiles('supabase/migrations').map(p => ({ path: p, sha256: sha256(canonicalSqlBytes(p)) }));
   const repeatables = sqlFiles('supabase/repeatable').map(p => ({ path: p, ...closureFor(p) }));
   return { migrations, repeatables };
 }

@@ -4,6 +4,12 @@
   "main": "index.js",
   "scripts": {
     "test": "npm run candidate:bindings:check && node --test tests/*.test.js",
+    "security:toolchain": "node scripts/verify-approved-toolchain.mjs",
+    "security:dependencies": "node scripts/verify-backend-dependency-security.mjs",
+    "security:secrets": "node scripts/verify-source-secret-safety.mjs",
+    "security:audit:prod": "npm audit --omit=dev --audit-level=high",
+    "security:audit:all": "npm audit --audit-level=high",
+    "security:verify": "npm run security:toolchain && npm run security:dependencies && npm run security:secrets && npm run security:audit:prod && npm run security:audit:all",
     "candidate:bindings:generate": "node scripts/generate-candidate-data-plane-registry.mjs",
     "candidate:bindings:check": "node scripts/generate-candidate-data-plane-registry.mjs --check",
     "test:candidate-boundary": "node --test tests/candidate-app-backend.test.js tests/candidate-broker-boundary.test.js",
@@ -36,14 +42,22 @@
   "homepage": "https://github.com/kierarthur/cloudtms-backend#readme",
   "description": "",
   "type": "module",
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0",
+    "npm": ">=11.0.0 <12.0.0"
+  },
   "dependencies": {
-    "@cloudflare/puppeteer": "^1.0.4",
+    "@cloudflare/puppeteer": "1.4.0",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "sanitize-html": "2.17.7",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
-    "wrangler": "^4.43.0"
+    "wrangler": "4.125.0"
+  },
+  "overrides": {
+    "@puppeteer/browsers": "3.2.1"
   }
 }

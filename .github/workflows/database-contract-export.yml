@@ -21,12 +21,17 @@ jobs:
       CLOUDTMS_ENVIRONMENT: TEST
       CLOUDTMS_RELEASE_MODE: UPGRADE
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
-      - run: npm ci
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+      - run: npm ci --engine-strict
+      - run: npm run security:dependencies
       - name: Install PostgreSQL client
         shell: bash
         run: |

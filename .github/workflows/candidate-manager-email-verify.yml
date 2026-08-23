@@ -12,6 +12,11 @@ on:
       - "tests/candidate-**"
       - "package.json"
       - "package-lock.json"
+      - ".node-version"
+      - ".npmrc"
+      - "scripts/verify-approved-toolchain.mjs"
+      - "scripts/verify-backend-dependency-security.mjs"
+      - "scripts/verify-source-secret-safety.mjs"
       - ".github/workflows/candidate-manager-email-verify.yml"
   workflow_dispatch:
 
@@ -29,16 +34,24 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: .node-version
           cache: npm
 
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --engine-strict
+
+      - name: Enforce dependency and source security
+        run: npm run security:verify
 
       - name: Verify complete backend source
         run: npm test

@@ -76,7 +76,17 @@ jobs:
       PGUSER: postgres
       PGDATABASE: postgres
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
 
       - name: Ensure PostgreSQL client is available
         timeout-minutes: 5
@@ -99,7 +109,10 @@ jobs:
           psql --version
 
       - name: Install backend dependencies for real-chain verification
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund --engine-strict
+
+      - name: Verify the locked dependency authority
+        run: npm run security:dependencies
 
       - name: Install Candidate authority and run all runtime suites
         shell: bash

@@ -9,6 +9,13 @@ on:
       - "tests/database-release-system.test.mjs"
       - "docs/DATABASE_RELEASE_BIBLE.md"
       - "AGENTS.md"
+      - "package.json"
+      - "package-lock.json"
+      - ".node-version"
+      - ".npmrc"
+      - "scripts/verify-approved-toolchain.mjs"
+      - "scripts/verify-backend-dependency-security.mjs"
+      - "scripts/verify-source-secret-safety.mjs"
       - ".github/workflows/supabase-migrate.yml"
       - ".github/workflows/database-release.yml"
   pull_request:
@@ -38,12 +45,17 @@ jobs:
     needs: candidate-db-runtime
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          node-version-file: .node-version
           cache: npm
-      - run: npm ci
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+      - run: npm ci --engine-strict
+      - run: npm run security:verify
       - run: npm run db:check
       - run: node --test tests/database-release-system.test.mjs
       - name: Verify retained catalogue and runtime authority artifacts

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  closureFor, inventory, readJson, repoRoot, sqlDateKey, verifyIntegrity,
+  canonicalSqlBytes, closureFor, inventory, readJson, repoRoot, sha256, sqlDateKey, verifyIntegrity,
 } from '../scripts/cloudtms-db-release-lib.mjs';
 
 const read = relative => fs.readFileSync(path.join(repoRoot, relative), 'utf8');
@@ -22,6 +22,13 @@ test('inventory covers uppercase legacy SQL and recursive repeatable closures', 
   const withIncludes = current.repeatables.find(x => x.paths.length > 1);
   assert.ok(withIncludes, 'expected a repeatable with included support pages');
   assert.equal(closureFor(withIncludes.path).sha256, withIncludes.sha256);
+});
+
+test('migration identity is stable across Windows checkout line endings', () => {
+  const relative = 'supabase/migrations/20260218_smoke_once_only.sql';
+  const lock = readJson('supabase/release/migration-lock.json').migrations.find(item => item.path === relative);
+  assert.ok(lock);
+  assert.equal(sha256(canonicalSqlBytes(relative)), lock.sha256);
 });
 
 test('migration immutability and protected Candidate boundary pass', () => {
