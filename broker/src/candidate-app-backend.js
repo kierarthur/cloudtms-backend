@@ -12,6 +12,7 @@ import {
 } from './candidate-daily-phase1b.js';
 import { isCandidateDailyPath } from './candidate-daily-contract-v1.js';
 import { controlPlaneRpc } from '../../candidate-broker/src/control-plane-client.js';
+import { verifyCandidatePaperQrViaAdapter } from './mytms-manager-control-adapter.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -83,6 +84,9 @@ const CONFLICT_ERROR_CODES = new Set([
   'CANDIDATE_PAPER_RETURN_PAGE_DUPLICATE',
   'CANDIDATE_PAPER_WORKFLOW_CONFLICT',
   'CANDIDATE_PAPER_OUTBOX_CONFLICT',
+  'CANDIDATE_BREAK_ENTRY_CONTEXT_STALE',
+  'CANDIDATE_PAPER_QR_PROOF_STALE',
+  'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
   'MANAGER_REVIEW_MANIFEST_MISMATCH'
 ]);
 
@@ -104,6 +108,8 @@ const COMPONENT_MEDIA_TYPES = Object.freeze({
   MILEAGE_FORM: ['image/png', 'image/jpeg', 'application/pdf'],
   SIGNED_RETURN: ['image/png', 'image/jpeg', 'application/pdf']
 });
+const PAPER_RETURN_PROOF_VERSION = 'CANDIDATE_PAPER_RETURN_PROOF_V1';
+const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
 
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
   'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
@@ -660,6 +666,14 @@ function errorResponse(error, correlationId, office = false) {
     CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT: 'Another Candidate PAPER workflow must be resolved before continuing.',
     CANDIDATE_REJECTION_SCOPE_CONFLICT: 'CloudTMS could not establish one safe rejection scope.',
     CANDIDATE_IDEMPOTENCY_CONFLICT: 'This operation key has already been used for a different request.',
+    CANDIDATE_BREAK_ENTRY_CONTEXT_STALE: 'The break-entry setting changed. Refresh the timesheet before submitting it.',
+    CANDIDATE_BREAK_ENTRY_MODE_MISMATCH: 'Use the break-entry format shown for this timesheet.',
+    CANDIDATE_BREAK_ENTRY_NOT_APPLICABLE: 'Break entry is not available for this timesheet route.',
+    CANDIDATE_BREAK_ENTRY_REQUIRED: 'Enter the break for each worked period, or confirm that no break was taken.',
+    CANDIDATE_PAPER_QR_UNREADABLE: 'The timesheet QR code could not be read. Take a clearer photograph of the full page.',
+    CANDIDATE_PAPER_QR_PROOF_MISMATCH: 'The photographed timesheet does not match this submission.',
+    CANDIDATE_PAPER_QR_PROOF_FORBIDDEN: 'A QR code is not expected on this supporting page.',
+    CANDIDATE_PAPER_QR_PROOF_STALE: 'The returned-paper upload changed. Start the upload again.',
     METHOD_NOT_ALLOWED: 'This operation does not support that HTTP method.'
   };
   const body = {
@@ -1764,6 +1778,95 @@ function retireManagerEmailRoutes(env, deps, routes, ctx) {
   else retirement.catch(() => null);
 }
 
+function exactKeys(value, required, optional = []) {
+  if (!isObject(value)) return false;
+  const permitted = new Set([...required, ...optional]);
+  const keys = Object.keys(value);
+  return required.every((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && keys.every((key) => permitted.has(key));
+}
+
+async function validateCandidatePaperReturnProof(env, deps, access, workflowId, generation, body) {
+  const proof = body.signed_return_proof;
+  if (!exactKeys(proof, [
+    'proof_contract_version', 'paper_return_manifest_sha256',
+    'paper_return_page_key', 'detected_qr_count'
+  ], ['qr_text'])) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_REQUIRED');
+  }
+  if (proof.proof_contract_version !== PAPER_RETURN_PROOF_VERSION
+      || !SHA256_RE.test(text(proof.paper_return_manifest_sha256))
+      || text(proof.paper_return_page_key) !== text(body.paper_return_page_key)
+      || !Number.isSafeInteger(proof.detected_qr_count)
+      || proof.detected_qr_count < 0 || proof.detected_qr_count > 1) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_INVALID');
+  }
+  let decodedToken = null;
+  if (proof.detected_qr_count === 1) {
+    if (!text(proof.qr_text)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+    }
+    try {
+      decodedToken = (await verifyCandidatePaperQrViaAdapter(env, proof.qr_text)).tok;
+    } catch (error) {
+      const code = text(error?.code || error?.message);
+      if (code === 'TSQ1_SIGNING_SECRET_MISSING') {
+        throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_CONFIGURATION_UNAVAILABLE');
+      }
+      throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+    }
+  } else if (Object.prototype.hasOwnProperty.call(proof, 'qr_text')) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_INVALID');
+  }
+  const result = await rpcCall(deps, 'candidate_paper_return_proof_validate_v1', {
+    p_session_id: access.session_id,
+    p_environment: access.environment || environmentName(env),
+    p_workflow_id: workflowId,
+    p_expected_generation: generation,
+    p_manifest_sha256_hex: text(proof.paper_return_manifest_sha256).toLowerCase(),
+    p_page_key: text(proof.paper_return_page_key),
+    p_qr_token: decodedToken,
+    p_qr_token_sha256_hex: null,
+    p_now_utc: new Date().toISOString()
+  });
+  if (result?.proof_contract_version !== PAPER_RETURN_PROOF_VERSION
+      || result?.workflow_id !== workflowId
+      || Number(result?.workflow_generation) !== generation
+      || result?.paper_return_page_key !== text(proof.paper_return_page_key)
+      || !SHA256_RE.test(text(result?.proof_receipt_sha256))
+      || (result?.qr_required === true && !SHA256_RE.test(text(result?.qr_token_sha256)))) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_PROOF_UNAVAILABLE');
+  }
+  if (result.qr_required === true && proof.detected_qr_count !== 1) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+  }
+  if (result.qr_required !== true && proof.detected_qr_count !== 0) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_FORBIDDEN');
+  }
+  return result;
+}
+
+async function revalidateCandidatePaperReturnProof(env, deps, ticket, sessionId) {
+  if (!ticket.paper_return_proof) return;
+  const proof = ticket.paper_return_proof;
+  const result = await rpcCall(deps, 'candidate_paper_return_proof_validate_v1', {
+    p_session_id: sessionId,
+    p_environment: ticket.env,
+    p_workflow_id: ticket.workflow_id,
+    p_expected_generation: Number(ticket.generation),
+    p_manifest_sha256_hex: proof.paper_return_manifest_sha256,
+    p_page_key: proof.paper_return_page_key,
+    p_qr_token: null,
+    p_qr_token_sha256_hex: proof.qr_token_sha256 || null,
+    p_now_utc: new Date().toISOString()
+  });
+  if (result?.proof_receipt_sha256 !== proof.proof_receipt_sha256
+      || result?.paper_return_page_key !== proof.paper_return_page_key
+      || Boolean(result?.qr_required) !== Boolean(proof.qr_required)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_QR_PROOF_STALE');
+  }
+}
+
 async function handleComponentPrepare(request, env, deps, workflowId, owner = 'candidate') {
   const body = await readJson(request);
   const generation = requireInteger(body.generation, 'WORKFLOW_VERSION_MISMATCH', 1);
@@ -1780,8 +1883,11 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   let authority = null;
   let captureMethod = null;
   let expectedContentSha256 = null;
+  let candidateAccess = null;
+  let paperReturnProof = null;
   if (owner === 'candidate') {
     const access = await verifyCandidateAccess(request, env);
+    candidateAccess = access;
     sessionId = access.session_id;
     ownerId = access.session_id;
   } else if (owner === 'manager') {
@@ -1806,6 +1912,13 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     ownerId = requireUuid(user.id, 'OFFICE_AUTH_REQUIRED');
     authority = { authority_kind: 'MANAGER_PHONE' };
     captureMethod = 'DRAW';
+  }
+  if (owner === 'candidate' && componentKind === 'SIGNED_RETURN') {
+    paperReturnProof = await validateCandidatePaperReturnProof(
+      env, deps, candidateAccess, workflowId, generation, body
+    );
+  } else if (Object.prototype.hasOwnProperty.call(body, 'signed_return_proof')) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_FORBIDDEN');
   }
   let approvalRequestId = body.approval_request_id ? requireUuid(body.approval_request_id) : null;
   if (owner === 'office') {
@@ -1836,6 +1949,9 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     } : {}),
     ...(captureMethod ? { manager_signature_capture_method: captureMethod } : {}),
     ...(expectedContentSha256 ? { expected_source_content_sha256_hex: expectedContentSha256 } : {})
+    ,...(paperReturnProof ? {
+      paper_return_proof_receipt_sha256: paperReturnProof.proof_receipt_sha256
+    } : {})
   };
   const idempotencyKey = owner === 'office'
     ? requireOfficeIdempotency(body.idempotency_key)
@@ -1865,6 +1981,14 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     completion_idempotency_key: `${idempotencyKey}:complete`,
     ...(expectedContentSha256 ? { expected_content_sha256: expectedContentSha256 } : {}),
     ...(captureMethod ? { capture_method: captureMethod } : {}),
+    ...(paperReturnProof ? { paper_return_proof: {
+      proof_contract_version: PAPER_RETURN_PROOF_VERSION,
+      paper_return_manifest_sha256: paperReturnProof.paper_return_manifest_sha256,
+      paper_return_page_key: paperReturnProof.paper_return_page_key,
+      qr_required: paperReturnProof.qr_required === true,
+      qr_token_sha256: paperReturnProof.qr_token_sha256 || null,
+      proof_receipt_sha256: paperReturnProof.proof_receipt_sha256
+    } } : {}),
     ...(authority?.authority_kind === 'MANAGER_EMAIL' ? {
       manager_route_ticket_id: authority.manager_route_ticket_id,
       route_revision: authority.route_revision,
@@ -1943,6 +2067,7 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
   if (ticket.expected_content_sha256 && digest !== ticket.expected_content_sha256) {
     throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_MISMATCH');
   }
+  await revalidateCandidatePaperReturnProof(env, deps, ticket, owner.session_id);
   const stored = await bucket.put(ticket.key, bytes, {
     onlyIf: { etagDoesNotMatch: '*' },
     httpMetadata: { contentType }, customMetadata: {
@@ -1950,7 +2075,8 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
       component_id: ticket.component_id, media_type: contentType,
       byte_size: String(bytes.byteLength), sha256: digest,
       authority_kind: ticket.authority_kind,
-      capture_method: ticket.capture_method || ''
+      capture_method: ticket.capture_method || '',
+      paper_return_proof_receipt_sha256: ticket.paper_return_proof?.proof_receipt_sha256 || ''
     }
   });
   if (!stored) {
@@ -2093,6 +2219,100 @@ function segmentBreak(segment) {
     break_minutes: Math.round(minutes),
     break_display_mode: breakStart && breakEnd ? 'EXPLICIT_INTERVAL' : minutes > 0 ? 'MINUTES_ONLY' : 'NONE'
   };
+}
+
+function normaliseAdaptiveBreakEntry(entry, expectedMode) {
+  if (!isObject(entry) || !exactKeys(entry, ['kind'], [
+    'break_start', 'break_end', 'calculated_break_minutes', 'break_minutes', 'no_break'
+  ])) {
+    throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+  }
+  const kind = upper(entry.kind);
+  if (kind === 'NO_BREAK') {
+    if (entry.no_break !== true || Number(entry.break_minutes) !== 0
+        || Object.prototype.hasOwnProperty.call(entry, 'break_start')
+        || Object.prototype.hasOwnProperty.call(entry, 'break_end')
+        || Object.prototype.hasOwnProperty.call(entry, 'calculated_break_minutes')) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+    }
+    return { no_break: true, break_minutes: 0 };
+  }
+  if (kind === 'START_END_TIMES' && expectedMode === 'START_END_TIMES') {
+    const start = hhmm(entry.break_start);
+    const end = hhmm(entry.break_end);
+    const calculated = intervalMinutes(start, end);
+    if (!start || !end || calculated < 1 || !Number.isSafeInteger(entry.calculated_break_minutes)
+        || entry.calculated_break_minutes !== calculated
+        || Object.prototype.hasOwnProperty.call(entry, 'break_minutes')
+        || Object.prototype.hasOwnProperty.call(entry, 'no_break')) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+    }
+    return { break_start: start, break_end: end, break_minutes: calculated };
+  }
+  if (kind === 'DURATION_MINUTES' && expectedMode === 'DURATION_MINUTES') {
+    if (!Number.isSafeInteger(entry.break_minutes) || entry.break_minutes < 1
+        || entry.break_minutes > 24 * 60
+        || Object.prototype.hasOwnProperty.call(entry, 'break_start')
+        || Object.prototype.hasOwnProperty.call(entry, 'break_end')
+        || Object.prototype.hasOwnProperty.call(entry, 'calculated_break_minutes')
+        || Object.prototype.hasOwnProperty.call(entry, 'no_break')) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+    }
+    return { break_minutes: entry.break_minutes };
+  }
+  throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_MODE_MISMATCH');
+}
+
+function normaliseCandidateBreakSubmission(factualSubmission, context) {
+  const facts = structuredClone(isObject(factualSubmission) ? factualSubmission : {});
+  if (context?.applicable !== true) {
+    const owners = [facts, facts.hours_submission, facts.timesheet_patch_json,
+      facts.hours_submission?.timesheet_patch_json].filter(isObject);
+    const hasAdaptiveEntry = owners.some(owner => (
+      Object.prototype.hasOwnProperty.call(owner, 'break_entry')
+      || ['actual_schedule_json', 'schedule_json'].some(key => (
+        Array.isArray(owner[key]) && owner[key].some(segment => (
+          isObject(segment) && Object.prototype.hasOwnProperty.call(segment, 'break_entry')
+        ))
+      ))
+    ));
+    if (Object.prototype.hasOwnProperty.call(facts, 'break_entry_context') || hasAdaptiveEntry) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_NOT_APPLICABLE');
+    }
+    return facts;
+  }
+  const supplied = facts.break_entry_context;
+  if (!exactKeys(supplied, ['context_version', 'context_token', 'mode'])
+      || supplied.context_version !== BREAK_ENTRY_CONTEXT_VERSION
+      || supplied.context_token !== context.context_token
+      || supplied.mode !== context.mode) {
+    throw new CandidateHttpError(409, 'CANDIDATE_BREAK_ENTRY_CONTEXT_STALE');
+  }
+  delete facts.break_entry_context;
+  let seen = 0;
+  const normaliseArray = (segments) => segments.map((segment) => {
+    if (!isObject(segment) || !Object.prototype.hasOwnProperty.call(segment, 'break_entry')) {
+      throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_REQUIRED');
+    }
+    const result = { ...segment, ...normaliseAdaptiveBreakEntry(segment.break_entry, context.mode) };
+    delete result.break_entry;
+    seen += 1;
+    return result;
+  });
+  const owners = [facts, facts.hours_submission, facts.timesheet_patch_json,
+    facts.hours_submission?.timesheet_patch_json].filter(isObject);
+  for (const owner of owners) {
+    for (const key of ['actual_schedule_json', 'schedule_json']) {
+      if (Array.isArray(owner[key])) owner[key] = normaliseArray(owner[key]);
+    }
+  }
+  if (seen === 0 && Object.prototype.hasOwnProperty.call(facts, 'break_entry')) {
+    Object.assign(facts, normaliseAdaptiveBreakEntry(facts.break_entry, context.mode));
+    delete facts.break_entry;
+    seen = 1;
+  }
+  if (seen === 0) throw new CandidateHttpError(400, 'CANDIDATE_BREAK_ENTRY_REQUIRED');
+  return facts;
 }
 
 function scheduleFromImmutable(workflow, timesheet) {
@@ -2730,6 +2950,12 @@ function managerAgencyId(env) {
     'MANAGER_ROUTE_CONFIGURATION_UNAVAILABLE');
 }
 
+function escapeManagerMailHtml(value) {
+  return String(value == null ? '' : value)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
 async function candidateManagerMail(env, deps, token, workflowId, managerEmail, kind = 'INITIAL', workflowKind = '') {
   const environment = environmentName(env);
   const agencyId = managerAgencyId(env);
@@ -2745,6 +2971,15 @@ async function candidateManagerMail(env, deps, token, workflowId, managerEmail, 
   }
   const link = `${origin}/manager/timesheet/${encodeURIComponent(workflowId)}#token=${encodeURIComponent(token)}`;
   const submissionType = upper(workflowKind) === 'CONTRACT_EXPENSE' ? 'EXPENSE_CLAIM' : 'TIMESHEET';
+  const workflow = await workflowRow(env, workflowId);
+  const candidate = await restOne(env, 'candidates',
+    `id=eq.${encodeURIComponent(requireUuid(workflow.candidate_id, 'CANDIDATE_WORKFLOW_NOT_FOUND'))}`
+    + '&select=id,display_name,first_name,last_name');
+  const candidateName = text(candidate?.display_name
+    || `${candidate?.first_name || ''} ${candidate?.last_name || ''}`).trim();
+  if (!candidateName || candidateName.length > 200) {
+    throw new CandidateHttpError(503, 'MANAGER_EMAIL_CANDIDATE_NAME_UNAVAILABLE');
+  }
   const template = templateAuthority?.templates?.[submissionType]?.[kind];
   if (!isObject(template) || template.include_link !== true || !text(template.subject)
       || !text(template.body_text) || !text(template.body_html) || !text(template.button_text)
@@ -2755,12 +2990,14 @@ async function candidateManagerMail(env, deps, token, workflowId, managerEmail, 
   }
   const expiryText = 'This secure link expires seven days after it is issued.';
   const safeLink = link.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const submissionLabel = submissionType === 'EXPENSE_CLAIM' ? 'expense claim' : 'timesheet';
+  const actionText = `${template.button_text} ${candidateName} ${submissionLabel}`;
   return {
     manager_email: normaliseEmail(managerEmail),
     mail: {
       to: normaliseEmail(managerEmail), subject: template.subject,
-      body_text: `${template.body_text}\n\n${expiryText}\n\n${template.button_text}: ${link}`,
-      body_html: `${template.body_html}<p>${expiryText}</p><p><a href="${safeLink}" rel="noopener noreferrer">${template.button_text}</a></p>`,
+      body_text: `${template.body_text}\n\n${expiryText}\n\n${actionText}: ${link}`,
+      body_html: `${template.body_html}<p>${expiryText}</p><p><a href="${safeLink}" rel="noopener noreferrer">${escapeManagerMailHtml(actionText)}</a></p>`,
       manager_template_version: templateAuthority.version,
       manager_template_sha256: templateAuthority.semantic_sha256_hex,
       manager_origin_version: originAuthority.settings_version,
@@ -3269,7 +3506,7 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
     })));
   }
   if (kind === 'detail') {
-    return jsonResponse(200, await rpcCall(deps, 'candidate_app_timesheet_detail_v1', candidateRpcArgs(access, env, {
+    return jsonResponse(200, await rpcCall(deps, 'candidate_app_timesheet_detail_v2', candidateRpcArgs(access, env, {
       p_timesheet_id: params.timesheetId ? requireUuid(params.timesheetId) : null,
       p_contract_week_id: params.contractWeekId ? requireUuid(params.contractWeekId)
         : (url.searchParams.get('contract_week_id') ? requireUuid(url.searchParams.get('contract_week_id')) : null),
@@ -3425,11 +3662,19 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       return jsonResponse(200, withoutInternalRenderContracts(replay));
     }
     const workflow = await workflowRow(env, workflowId);
+    const breakContext = await rpcCall(deps, 'candidate_break_entry_context_get_v1',
+      candidateRpcArgs(access, env, { p_workflow_id: workflowId }));
+    const normalisedSubmissionFacts = normaliseCandidateBreakSubmission(
+      submissionFacts, breakContext
+    );
     const approvalRoute = requestedApprovalRoute || upper(workflow.route);
     payload = {
       ...payload,
-      immutable_submission: await prepareImmutableSubmission(env, deps, workflow, body, mutationKey),
+      immutable_submission: await prepareImmutableSubmission(
+        env, deps, workflow, { ...body, immutable_submission: normalisedSubmissionFacts }, mutationKey
+      ),
       submission_request_identity: submissionRequestIdentity,
+      break_entry_context: breakContext,
       candidate_signature_component_id: signatureComponentId,
       candidate_signed_at_utc: new Date(candidateSignedAtUtc).toISOString(),
       approval_route: approvalRoute,
@@ -5857,6 +6102,8 @@ export const candidateAppBackendInternals = Object.freeze({
   forbiddenFinancialKeys,
   segmentBreak,
   explicitNoBreak,
+  normaliseAdaptiveBreakEntry,
+  normaliseCandidateBreakSubmission,
   deferBackground,
   finaliseReceivedPaperReturn,
   buildOfficialPresentationSnapshot,

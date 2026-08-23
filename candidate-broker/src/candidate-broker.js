@@ -782,6 +782,104 @@ async function boundedBodyBytes(request, maximumBytes) {
   return bytes;
 }
 
+function hasExactKeys(value, required, optional = []) {
+  if (!isObject(value)) return false;
+  const allowed = new Set([...required, ...optional]);
+  const keys = Object.keys(value);
+  return required.every(name => Object.prototype.hasOwnProperty.call(value, name))
+    && keys.every(name => allowed.has(name));
+}
+
+function validateAdaptiveBreakEntry(value) {
+  if (!isObject(value) || !hasExactKeys(value, ['kind'], [
+    'break_start', 'break_end', 'calculated_break_minutes', 'break_minutes', 'no_break'
+  ])) throw new CandidateBrokerError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+  const kind = upper(value.kind);
+  const permitted = kind === 'START_END_TIMES'
+    ? typeof value.break_start === 'string' && typeof value.break_end === 'string'
+      && Number.isSafeInteger(value.calculated_break_minutes)
+      && !Object.prototype.hasOwnProperty.call(value, 'break_minutes')
+      && !Object.prototype.hasOwnProperty.call(value, 'no_break')
+    : kind === 'DURATION_MINUTES'
+      ? Number.isSafeInteger(value.break_minutes)
+        && !Object.prototype.hasOwnProperty.call(value, 'break_start')
+        && !Object.prototype.hasOwnProperty.call(value, 'break_end')
+        && !Object.prototype.hasOwnProperty.call(value, 'calculated_break_minutes')
+        && !Object.prototype.hasOwnProperty.call(value, 'no_break')
+      : kind === 'NO_BREAK'
+        ? value.no_break === true && value.break_minutes === 0
+          && !Object.prototype.hasOwnProperty.call(value, 'break_start')
+          && !Object.prototype.hasOwnProperty.call(value, 'break_end')
+          && !Object.prototype.hasOwnProperty.call(value, 'calculated_break_minutes')
+        : false;
+  if (!permitted) throw new CandidateBrokerError(400, 'CANDIDATE_BREAK_ENTRY_INVALID');
+}
+
+function validateCandidateFinalisationBody(path, body) {
+  if (!isObject(body)) throw new CandidateBrokerError(400, 'INVALID_JSON');
+  if (/^\/candidate-app\/v1\/workflows\/[0-9a-f-]+\/components\/prepare$/i.test(path)) {
+    if (upper(body.component_kind) !== 'SIGNED_RETURN') {
+      if (Object.prototype.hasOwnProperty.call(body, 'signed_return_proof')) {
+        throw new CandidateBrokerError(400, 'CANDIDATE_PAPER_QR_PROOF_FORBIDDEN');
+      }
+      return body;
+    }
+    const proof = body.signed_return_proof;
+    if (!hasExactKeys(proof, [
+      'proof_contract_version', 'paper_return_manifest_sha256',
+      'paper_return_page_key', 'detected_qr_count'
+    ], ['qr_text']) || proof.proof_contract_version !== 'CANDIDATE_PAPER_RETURN_PROOF_V1'
+        || !/^[0-9a-f]{64}$/i.test(text(proof.paper_return_manifest_sha256))
+        || text(proof.paper_return_page_key) !== text(body.paper_return_page_key)
+        || !Number.isSafeInteger(proof.detected_qr_count)
+        || proof.detected_qr_count < 0 || proof.detected_qr_count > 1
+        || (proof.detected_qr_count === 1
+          ? text(proof.qr_text).length < 20 || text(proof.qr_text).length > 4096
+          : Object.prototype.hasOwnProperty.call(proof, 'qr_text'))) {
+      throw new CandidateBrokerError(400, 'CANDIDATE_PAPER_QR_PROOF_INVALID');
+    }
+    return body;
+  }
+  if (!/^\/candidate-app\/v1\/workflows\/[0-9a-f-]+\/actions\/worker-submit$/i.test(path)) {
+    return body;
+  }
+  const immutable = body.immutable_submission;
+  if (!isObject(immutable)) return body;
+  if (Object.prototype.hasOwnProperty.call(immutable, 'break_entry_context')) {
+    const context = immutable.break_entry_context;
+    if (!hasExactKeys(context, ['context_version', 'context_token', 'mode'])
+        || context.context_version !== 'CANDIDATE_BREAK_ENTRY_V1'
+        || !/^[0-9a-f]{64}$/i.test(text(context.context_token))
+        || !['START_END_TIMES', 'DURATION_MINUTES'].includes(upper(context.mode))) {
+      throw new CandidateBrokerError(400, 'CANDIDATE_BREAK_ENTRY_CONTEXT_INVALID');
+    }
+  }
+  const owners = [immutable, immutable.hours_submission, immutable.timesheet_patch_json,
+    immutable.hours_submission?.timesheet_patch_json].filter(isObject);
+  for (const owner of owners) {
+    if (Object.prototype.hasOwnProperty.call(owner, 'break_entry')) {
+      validateAdaptiveBreakEntry(owner.break_entry);
+    }
+    for (const key of ['actual_schedule_json', 'schedule_json']) {
+      if (Array.isArray(owner[key])) {
+        for (const segment of owner[key]) {
+          if (isObject(segment) && Object.prototype.hasOwnProperty.call(segment, 'break_entry')) {
+            validateAdaptiveBreakEntry(segment.break_entry);
+          }
+        }
+      }
+    }
+  }
+  return body;
+}
+
+async function candidateFinalisationTransportBody(request, path) {
+  const applies = /^\/candidate-app\/v1\/workflows\/[0-9a-f-]+\/components\/prepare$/i.test(path)
+    || /^\/candidate-app\/v1\/workflows\/[0-9a-f-]+\/actions\/worker-submit$/i.test(path);
+  if (!applies || request.method !== 'POST') return null;
+  return validateCandidateFinalisationBody(path, await boundedJson(request.clone()));
+}
+
 function privatePath(publicPath) {
   if (publicPath.startsWith(PUBLIC_CANDIDATE_PREFIX)) {
     return `${PRIVATE_CANDIDATE_PREFIX}${publicPath.slice(PUBLIC_CANDIDATE_PREFIX.length)}`;
@@ -2835,6 +2933,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       return withCors(await publicSafePrivateResponse(response), origin);
     }
 
+    const finalisationBody = await candidateFinalisationTransportBody(request, path);
     const phoneAction = /\/workflows\/[0-9a-f-]+\/actions\/select-phone-approval$/i.test(path);
     let phoneBinding = null;
     let response;
@@ -2858,7 +2957,9 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
         }
       });
     } else {
-      response = await forwardPrivate(request, env, { authorization, federated });
+      response = await forwardPrivate(request, env, {
+        authorization, federated, ...(finalisationBody ? { body: finalisationBody } : {})
+      });
     }
     if (path === `${PUBLIC_CANDIDATE_PREFIX}/account/select-candidate`) {
       return withCors(await wrapSelectedCandidateAccess(response, env, access), origin);
@@ -2918,6 +3019,7 @@ export const candidateBrokerInternals = Object.freeze({
   candidateDailySystemRateKeys,
   publicSafePrivateResponse,
   publicSafeDailyResponse,
+  validateCandidateFinalisationBody,
   validateCandidateDailyTransport,
   wrapPrivateSession
 });

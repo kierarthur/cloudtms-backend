@@ -328,11 +328,11 @@ export async function previewMyTmsManagerEmailTemplate(env, user, request) {
     TIMESHEET: templatesForType, EXPENSE_CLAIM: structuredClone(templatesForType)
   }).TIMESHEET[selectedKind];
   const expiry = template.include_link
-    ? '<p>This secure link expires seven days after it is issued.</p><p><strong>Review and approve</strong></p>'
+    ? '<p>This secure link expires seven days after it is issued.</p><p><strong>Review and approve Kier Arthur timesheet</strong></p>'
     : '';
   return {
     ok: true, template, preview_html: `${template.body_html}${expiry}`,
-    preview_text: `${template.body_text}${template.include_link ? '\n\nThis secure link expires seven days after it is issued.\n\nReview and approve' : ''}`,
+    preview_text: `${template.body_text}${template.include_link ? '\n\nThis secure link expires seven days after it is issued.\n\nReview and approve Kier Arthur timesheet' : ''}`,
     sanitizer_policy_version: MANAGER_SANITIZER_POLICY_VERSION,
     semantic_sha256_hex: await sha256Hex(canonicalJson(template))
   };

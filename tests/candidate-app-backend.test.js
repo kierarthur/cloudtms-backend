@@ -475,7 +475,7 @@ test('timesheet detail aliases pass one exact server identity to the shared deta
       assert.equal(response.status, 200);
     }
     assert.equal(rpcCalls.length, 2);
-    assert.equal(rpcCalls[0].name, 'candidate_app_timesheet_detail_v1');
+    assert.equal(rpcCalls[0].name, 'candidate_app_timesheet_detail_v2');
     assert.equal(rpcCalls[0].args.p_contract_week_id, contractWeekId);
     assert.equal(rpcCalls[0].args.p_workflow_id, null);
     assert.equal(rpcCalls[1].args.p_contract_week_id, null);
@@ -604,7 +604,10 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
     });
     if (value.includes('candidate_app_sessions')) return Response.json([session]);
     if (value.includes('candidate_submission_workflows')) return Response.json([{
-      id: workflowId, workflow_kind: 'CONTRACT_HOURS'
+      id: workflowId, workflow_kind: 'CONTRACT_HOURS', candidate_id: candidateId
+    }]);
+    if (value.includes('/candidates?')) return Response.json([{
+      id: candidateId, display_name: 'Kier Arthur', first_name: 'Kier', last_name: 'Arthur'
     }]);
     if (value.includes('candidate_approval_requests')) {
       return Response.json([{
@@ -662,6 +665,10 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
     assert.equal(calls[0].args.p_payload.mutation_replay_semantic_payload.approval_token_hash_hex, undefined);
     assert.equal(calls[1].args.p_action, 'REMIND');
     assert.match(calls[1].args.p_payload.mail.subject, /^Reminder:/);
+    assert.match(calls[1].args.p_payload.mail.body_text,
+      /Review and approve Kier Arthur timesheet:/);
+    assert.match(calls[1].args.p_payload.mail.body_html,
+      />Review and approve Kier Arthur timesheet<\/a>/);
     assert.match(calls[1].args.p_payload.approval_token_hash_hex, /^[0-9a-f]{64}$/);
 
     const missingReason = await handleCandidateAppRequest(request('cancel', {
@@ -1381,7 +1388,12 @@ test('office reminder batch execute remains one browser operation with server-ow
       manager_review_origin_semantic_sha256_hex: 'a'.repeat(64)
     });
     if (value.includes('candidate_submission_workflows')) return Response.json([{
-      id: workflowId, workflow_kind: 'CONTRACT_HOURS'
+      id: workflowId, workflow_kind: 'CONTRACT_HOURS',
+      candidate_id: '00000000-0000-4000-8000-000000000236'
+    }]);
+    if (value.includes('/candidates?')) return Response.json([{
+      id: '00000000-0000-4000-8000-000000000236', display_name: 'Kier Arthur',
+      first_name: 'Kier', last_name: 'Arthur'
     }]);
     assert.match(value, /candidate_approval_requests/);
     return Response.json([{

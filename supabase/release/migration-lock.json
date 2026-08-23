@@ -739,6 +739,10 @@
       "sha256": "d1623feb5fcaaac7d73b6c0cb1bd8adbd3b8318faa17c187e07dd93cd5f782a8"
     },
     {
+      "path": "supabase/migrations/23082026_1337_manager_email_candidate_identity_defaults.sql",
+      "sha256": "37ae95afec1d5c11a7f61ea127538910360d194fb0457f57c209c3414c0bd389"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

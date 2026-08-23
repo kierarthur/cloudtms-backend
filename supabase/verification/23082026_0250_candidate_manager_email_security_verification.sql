@@ -82,7 +82,16 @@ begin
      or v_settings->>'sanitizer_policy_version'<>'MANAGER_EMAIL_SAFE_HTML_V1'
      or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(v_settings->'templates'->'TIMESHEET'))<>5
      or (select pg_catalog.count(*) from pg_catalog.jsonb_object_keys(v_settings->'templates'->'EXPENSE_CLAIM'))<>5
-     or (select pg_catalog.count(*) from public.candidate_manager_email_template_versions)<>1
+     or (select pg_catalog.count(*) from public.candidate_manager_email_template_versions)<1
+     or not exists (
+       select 1
+       from public.settings_defaults settings
+       join public.candidate_manager_email_template_versions history
+         on history.version=settings.candidate_manager_email_templates_version
+        and history.templates_json=settings.candidate_manager_email_templates_json
+        and history.semantic_sha256=settings.candidate_manager_email_templates_sha256
+       where settings.id=1
+     )
   then raise exception 'CANDIDATE_MANAGER_EMAIL_TEMPLATE_AUTHORITY_INVALID'; end if;
 end
 $verification$;

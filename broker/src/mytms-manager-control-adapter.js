@@ -3,9 +3,12 @@ import {
   signCandidatePrivateRequest,
   verifyCandidatePrivateRequest
 } from './candidate-service-auth.js';
+import { verifyTsq1String } from './timesheet-qr-payload.js';
 
 export const MYTMS_MANAGER_CONTROL_ADAPTER_PATH =
   '/private/mytms-control/v1/manager-route-rpc';
+export const MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH =
+  '/private/mytms-control/v1/paper-qr-verify';
 
 const ALLOWED_FUNCTIONS = new Set([
   'manager_email_route_register_v1',
@@ -123,6 +126,66 @@ export async function handleMyTmsManagerControlAdapter(request, env) {
     const status = errorCode === 'MYTMS_MANAGER_CONTROL_OPERATION_NOT_ALLOWED' ? 403 : 503;
     return json(status, { ok: false, error_code: errorCode });
   }
+}
+
+export async function handleMyTmsPaperQrVerifyAdapter(request, env) {
+  if (request.method !== 'POST'
+      || new URL(request.url).pathname !== MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH) {
+    return json(404, { ok: false, error_code: 'MYTMS_PAPER_QR_ROUTE_NOT_FOUND' });
+  }
+  try {
+    if (!await verifyCandidatePrivateRequest(request, adapterAuthEnv(env))
+        || !await consumeAdapterNonce(request, env)) {
+      return json(401, { ok: false, error_code: 'MYTMS_PAPER_QR_AUTHORITY_INVALID' });
+    }
+    const body = await boundedJson(request);
+    if (!body || typeof body !== 'object' || Array.isArray(body)
+        || Object.keys(body).join(',') !== 'qr_text'
+        || text(body.qr_text).length < 20 || text(body.qr_text).length > 4096) {
+      return json(400, { ok: false, error_code: 'MYTMS_PAPER_QR_REQUEST_INVALID' });
+    }
+    const verified = await verifyTsq1String(body.qr_text, env);
+    return json(200, { ok: true, result: verified });
+  } catch (error) {
+    const candidate = text(error?.code || error?.message || error).toUpperCase();
+    const errorCode = /^[A-Z][A-Z0-9_]{2,100}$/.test(candidate)
+      ? candidate : 'MYTMS_PAPER_QR_UNAVAILABLE';
+    const status = ['TSQ1_FORMAT_INVALID', 'TSQ1_SIGNATURE_INVALID', 'TSQ1_PAYLOAD_INVALID']
+      .includes(errorCode) ? 400 : 503;
+    return json(status, { ok: false, error_code: errorCode });
+  }
+}
+
+export async function verifyCandidatePaperQrViaAdapter(env, qrText) {
+  if (text(env.QR_SIGNING_SECRET)) return verifyTsq1String(qrText, env);
+  const binding = env.MYTMS_MANAGER_CONTROL_ADAPTER;
+  if (!binding || typeof binding.fetch !== 'function') {
+    throw Object.assign(new Error('TSQ1_SIGNING_SECRET_MISSING'), {
+      code: 'TSQ1_SIGNING_SECRET_MISSING'
+    });
+  }
+  const unsigned = new Request(
+    `https://cloudtms-manager-control.internal${MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ qr_text: text(qrText) })
+    }
+  );
+  const response = await binding.fetch(await signCandidatePrivateRequest(
+    unsigned, adapterAuthEnv(env)
+  ));
+  const payload = await boundedJson(response);
+  if (!response.ok || payload?.ok !== true
+      || payload?.result?.v !== 1 || !text(payload?.result?.tok)) {
+    const code = text(payload?.error_code).toUpperCase();
+    throw Object.assign(new Error(/^[A-Z][A-Z0-9_]{2,100}$/.test(code)
+      ? code : 'MYTMS_PAPER_QR_UNAVAILABLE'), {
+      code: /^[A-Z][A-Z0-9_]{2,100}$/.test(code)
+        ? code : 'MYTMS_PAPER_QR_UNAVAILABLE'
+    });
+  }
+  return Object.freeze({ v: 1, tok: text(payload.result.tok) });
 }
 
 export async function managerControlPlaneRpc(env, schema, functionName, args) {

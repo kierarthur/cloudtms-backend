@@ -11,6 +11,16 @@ function base64Url(bytes) {
     .replace(/=+$/g, '');
 }
 
+function fromBase64Url(value) {
+  const source = String(value || '');
+  if (!/^[A-Za-z0-9_-]+$/.test(source)) throw new Error('TSQ1_FORMAT_INVALID');
+  const padded = source.replace(/-/g, '+').replace(/_/g, '/')
+    + '='.repeat((4 - (source.length % 4)) % 4);
+  let binary;
+  try { binary = atob(padded); } catch { throw new Error('TSQ1_FORMAT_INVALID'); }
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+}
+
 export function buildTsq1Payload({ qr_token: qrToken }) {
   const token = String(qrToken || '').trim();
   if (!token) {
@@ -58,4 +68,40 @@ export async function buildTsq1String(payload, env = {}) {
   const payloadBase64Url = base64Url(textEncoder.encode(JSON.stringify(normalised)));
   const signatureBase64Url = await signTsq1(payloadBase64Url, env);
   return `TSQ1.${payloadBase64Url}.${signatureBase64Url}`;
+}
+
+export async function verifyTsq1String(value, env = {}) {
+  const raw = String(value || '').trim();
+  if (raw.length < 20 || raw.length > 4096) {
+    throw Object.assign(new Error('TSQ1_FORMAT_INVALID'), { code: 'TSQ1_FORMAT_INVALID' });
+  }
+  const parts = raw.split('.');
+  if (parts.length !== 3 || parts[0] !== 'TSQ1') {
+    throw Object.assign(new Error('TSQ1_FORMAT_INVALID'), { code: 'TSQ1_FORMAT_INVALID' });
+  }
+  const secret = String(env.QR_SIGNING_SECRET || '').trim();
+  if (!secret) {
+    throw Object.assign(new Error('TSQ1_SIGNING_SECRET_MISSING'), {
+      code: 'TSQ1_SIGNING_SECRET_MISSING'
+    });
+  }
+  const key = await crypto.subtle.importKey(
+    'raw', textEncoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
+  );
+  const valid = await crypto.subtle.verify(
+    'HMAC', key, fromBase64Url(parts[2]), textEncoder.encode(`TSQ1.${parts[1]}`)
+  );
+  if (!valid) {
+    throw Object.assign(new Error('TSQ1_SIGNATURE_INVALID'), { code: 'TSQ1_SIGNATURE_INVALID' });
+  }
+  let payload;
+  try { payload = JSON.parse(new TextDecoder().decode(fromBase64Url(parts[1]))); }
+  catch { throw Object.assign(new Error('TSQ1_PAYLOAD_INVALID'), { code: 'TSQ1_PAYLOAD_INVALID' }); }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)
+      || Object.keys(payload).sort().join(',') !== 'tok,v'
+      || payload.v !== 1 || typeof payload.tok !== 'string'
+      || payload.tok.trim() !== payload.tok || payload.tok.length < 16 || payload.tok.length > 512) {
+    throw Object.assign(new Error('TSQ1_PAYLOAD_INVALID'), { code: 'TSQ1_PAYLOAD_INVALID' });
+  }
+  return Object.freeze({ v: 1, tok: payload.tok });
 }

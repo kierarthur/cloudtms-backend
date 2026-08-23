@@ -53,9 +53,11 @@ import {
 import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import {
   handleMyTmsManagerControlAdapter,
+  handleMyTmsPaperQrVerifyAdapter,
   managerControlPlaneRpc,
   purgeMyTmsManagerControlAdapterNonces,
-  MYTMS_MANAGER_CONTROL_ADAPTER_PATH
+  MYTMS_MANAGER_CONTROL_ADAPTER_PATH,
+  MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH
 } from './mytms-manager-control-adapter.js';
 import {
   adoptMyTmsCandidate,
@@ -194028,6 +194030,10 @@ export default {
 
     if (req.method === 'POST' && p === MYTMS_MANAGER_CONTROL_ADAPTER_PATH) {
       return handleMyTmsManagerControlAdapter(req, env);
+    }
+
+    if (req.method === 'POST' && p === MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH) {
+      return handleMyTmsPaperQrVerifyAdapter(req, env);
     }
 
     const candidateAppResponse = await handleCandidateAppRequest(

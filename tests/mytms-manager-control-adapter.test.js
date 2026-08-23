@@ -3,12 +3,15 @@ import test from 'node:test';
 
 import {
   handleMyTmsManagerControlAdapter,
+  handleMyTmsPaperQrVerifyAdapter,
   managerControlPlaneRpc,
   purgeMyTmsManagerControlAdapterNonces,
+  verifyCandidatePaperQrViaAdapter,
   MYTMS_MANAGER_CONTROL_ADAPTER_PATH,
   myTmsManagerControlAdapterInternals
 } from '../broker/src/mytms-manager-control-adapter.js';
 import { signCandidatePrivateRequest } from '../broker/src/candidate-service-auth.js';
+import { buildTsq1String } from '../broker/src/timesheet-qr-payload.js';
 
 function testEnv() {
   const nonces = new Set();
@@ -119,4 +122,39 @@ test('manager control adapter removes only expired adapter nonces', async () => 
   };
   await purgeMyTmsManagerControlAdapterNonces(env, 2000);
   assert.deepEqual(deleted, ['mytms-manager-control-adapter-nonces/test/1000-old']);
+});
+
+test('private Candidate QR verification reuses the agency backend secret owner', async () => {
+  const serviceEnv = testEnv();
+  serviceEnv.QR_SIGNING_SECRET = 'unit-test-existing-qr-signing-secret';
+  const qrText = await buildTsq1String({ v: 1, tok: 'paper-return-token-0001' }, serviceEnv);
+  const clientEnv = {
+    CANDIDATE_APP_ENVIRONMENT: serviceEnv.CANDIDATE_APP_ENVIRONMENT,
+    MYTMS_MANAGER_CONTROL_ADAPTER_SECRET: serviceEnv.MYTMS_MANAGER_CONTROL_ADAPTER_SECRET,
+    MYTMS_MANAGER_CONTROL_ADAPTER: {
+      fetch: (request) => handleMyTmsPaperQrVerifyAdapter(request, serviceEnv)
+    }
+  };
+
+  const verified = await verifyCandidatePaperQrViaAdapter(clientEnv, qrText);
+  assert.deepEqual(verified, { v: 1, tok: 'paper-return-token-0001' });
+  assert.equal(Object.hasOwn(clientEnv, 'QR_SIGNING_SECRET'), false);
+});
+
+test('private Candidate QR verification fails closed on a forged QR', async () => {
+  const serviceEnv = testEnv();
+  serviceEnv.QR_SIGNING_SECRET = 'unit-test-existing-qr-signing-secret';
+  const qrText = await buildTsq1String({ v: 1, tok: 'paper-return-token-0001' }, serviceEnv);
+  const clientEnv = {
+    CANDIDATE_APP_ENVIRONMENT: serviceEnv.CANDIDATE_APP_ENVIRONMENT,
+    MYTMS_MANAGER_CONTROL_ADAPTER_SECRET: serviceEnv.MYTMS_MANAGER_CONTROL_ADAPTER_SECRET,
+    MYTMS_MANAGER_CONTROL_ADAPTER: {
+      fetch: (request) => handleMyTmsPaperQrVerifyAdapter(request, serviceEnv)
+    }
+  };
+
+  await assert.rejects(
+    verifyCandidatePaperQrViaAdapter(clientEnv, `${qrText.slice(0, -1)}A`),
+    /TSQ1_SIGNATURE_INVALID/
+  );
 });
