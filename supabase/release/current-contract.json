@@ -1172,6 +1172,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "_candidate_manager_terminal_mail_payload_v1(p_mail jsonb, p_mail_kind text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d995a8241fe35b82dbfcaf56e662edb9915ee54443c2a12654d92d60ae2c8c73"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, private"
       ],
       "schema": "private",
@@ -1602,7 +1621,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "068139ca63dfe3d5f3ca1480014c8d5624616d5e02d470fc5c338e9db81afec2"
+      "definition_sha256": "e9f8b35a87af4faacdf14d0cbdd08956393a3023bf02b1d7aa25b7269b58dcc9"
     },
     {
       "acl": [
@@ -1716,7 +1735,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "adaec97c5a67fa75d8ab26909d27cfe182a9a6b19a786c9737780c810991dc58"
+      "definition_sha256": "a7b6936d083d76947ec2f3cbd6d08504d2808c7be55378ef4002f8010a72e751"
     },
     {
       "acl": [
@@ -10212,6 +10231,126 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_manager_email_route_receipt_commit_v1(p_environment text, p_workflow_id uuid, p_approval_request_id uuid, p_request_generation integer, p_credential_generation integer, p_mail_outbox_id uuid, p_manager_token_hash_hex text, p_manager_route_ticket_id uuid, p_route_revision bigint, p_registration_receipt_sha256_hex text, p_route_semantic_sha256_hex text, p_mail_kind text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "943a224282ebc798959338a88b05c738769bd715bc3831c7eff802032b99c452"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_manager_email_route_receipt_retire_v1(p_workflow_id uuid, p_approval_request_id uuid, p_reason_code text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6fe6160d3a45c9815df9a424d8106e39e1d8e50972ccce35afb24d6abc67eccb"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_manager_email_settings_get_v1()",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "8b2813aadb2bd3cd687014b26d1be7a21ad502a12006eac3744ada0d84676bae"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_manager_email_settings_reset_v1(p_expected_version bigint, p_actor_identity_hmac_hex text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8c62b2ad0434ad7e6aebea8f3dbb132f6f6dee8d5a38dea60a66e3e2c687aef2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_manager_email_settings_set_v1(p_expected_version bigint, p_templates jsonb, p_sanitizer_policy_version text, p_actor_identity_hmac_hex text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "2fd77e791936ed867f25449958d0af697c0ad861b89c73a4a5d69683438d2430"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
@@ -10387,7 +10526,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "764e9bc6c0b1babc61ac4624cf7250a2ea373aef99412120f93d74f627ec9c00"
+      "definition_sha256": "5db2ea0df310311a08636bff8a834896c0b33c7dafeebe6d3bf3fdb85c6eb05e"
     },
     {
       "acl": [
@@ -11378,7 +11517,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "cb543a6ead0d8ebe1dfa36a3b86044689410b5aa60cd9d9b58c0262b5daa0592"
+      "definition_sha256": "f3034a307d47fc172fe3884ad6dd20798a16489e566991fadfb0b6d7a41bf377"
     },
     {
       "acl": [
@@ -47754,9 +47893,22 @@
           "not_null": false,
           "position": 33,
           "generated": ""
+        },
+        {
+          "name": "current_manager_route_receipt_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 34,
+          "generated": ""
         }
       ],
       "indexes": [
+        {
+          "name": "candidate_approval_requests_current_route_receipt_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_approval_requests_current_route_receipt_uq ON public.candidate_approval_requests USING btree (current_manager_route_receipt_id) WHERE (current_manager_route_receipt_id IS NOT NULL)"
+        },
         {
           "name": "candidate_approval_requests_one_live_uq",
           "definition": "CREATE UNIQUE INDEX candidate_approval_requests_one_live_uq ON public.candidate_approval_requests USING btree (workflow_id, workflow_generation) WHERE (state = 'PENDING'::text)"
@@ -47781,6 +47933,14 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "candidate_approval_requests_current_manager_route_receipt__fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (current_manager_route_receipt_id) REFERENCES candidate_manager_email_route_receipts(route_receipt_id) ON DELETE RESTRICT"
+        },
         {
           "name": "candidate_approval_requests_email_ck",
           "type": "c",
@@ -50346,6 +50506,602 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_manager_email_route_receipts",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "route_receipt_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "position": 1,
+          "generated": ""
+        },
+        {
+          "name": "workflow_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 2,
+          "generated": ""
+        },
+        {
+          "name": "approval_request_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 3,
+          "generated": ""
+        },
+        {
+          "name": "request_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 4,
+          "generated": ""
+        },
+        {
+          "name": "credential_generation",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 5,
+          "generated": ""
+        },
+        {
+          "name": "mail_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 6,
+          "generated": ""
+        },
+        {
+          "name": "manager_token_hash_snapshot",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 7,
+          "generated": ""
+        },
+        {
+          "name": "manager_route_ticket_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 8,
+          "generated": ""
+        },
+        {
+          "name": "route_revision",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 9,
+          "generated": ""
+        },
+        {
+          "name": "registration_receipt_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 10,
+          "generated": ""
+        },
+        {
+          "name": "route_semantic_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 11,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 12,
+          "generated": ""
+        },
+        {
+          "name": "state",
+          "type": "text",
+          "default": "'REGISTERED'::text",
+          "identity": "",
+          "not_null": true,
+          "position": 13,
+          "generated": ""
+        },
+        {
+          "name": "failure_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 14,
+          "generated": ""
+        },
+        {
+          "name": "registered_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 15,
+          "generated": ""
+        },
+        {
+          "name": "current_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 16,
+          "generated": ""
+        },
+        {
+          "name": "retired_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 17,
+          "generated": ""
+        },
+        {
+          "name": "created_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "position": 18,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "position": 19,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_manager_email_route_approval_request_id_credentia_key",
+          "definition": "CREATE UNIQUE INDEX candidate_manager_email_route_approval_request_id_credentia_key ON public.candidate_manager_email_route_receipts USING btree (approval_request_id, credential_generation)"
+        },
+        {
+          "name": "candidate_manager_email_route_one_current_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_manager_email_route_one_current_uq ON public.candidate_manager_email_route_receipts USING btree (approval_request_id) WHERE (state = 'CURRENT'::text)"
+        },
+        {
+          "name": "candidate_manager_email_route_r_workflow_id_idempotency_key_key",
+          "definition": "CREATE UNIQUE INDEX candidate_manager_email_route_r_workflow_id_idempotency_key_key ON public.candidate_manager_email_route_receipts USING btree (workflow_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_manager_email_route_receipts_pkey ON public.candidate_manager_email_route_receipts USING btree (route_receipt_id)"
+        },
+        {
+          "name": "candidate_manager_email_route_ticket_idx",
+          "definition": "CREATE INDEX candidate_manager_email_route_ticket_idx ON public.candidate_manager_email_route_receipts USING btree (manager_route_ticket_id, route_revision)"
+        },
+        {
+          "name": "candidate_manager_email_route_workflow_idx",
+          "definition": "CREATE INDEX candidate_manager_email_route_workflow_idx ON public.candidate_manager_email_route_receipts USING btree (workflow_id, state, request_generation, credential_generation)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_manager_email_route_approval_request_id_credentia_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (approval_request_id, credential_generation)"
+        },
+        {
+          "name": "candidate_manager_email_route_manager_token_hash_snapshot_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(manager_token_hash_snapshot) = 32)"
+        },
+        {
+          "name": "candidate_manager_email_route_r_workflow_id_idempotency_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (workflow_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_manager_email_route_recei_credential_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (credential_generation >= 1)"
+        },
+        {
+          "name": "candidate_manager_email_route_recei_route_semantic_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(route_semantic_sha256) = 32)"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_approval_request_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (approval_request_id) REFERENCES candidate_approval_requests(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = 'REGISTERED'::text AND current_at_utc IS NULL AND retired_at_utc IS NULL OR state = 'CURRENT'::text AND current_at_utc IS NOT NULL AND retired_at_utc IS NULL OR (state = ANY (ARRAY['RETIRED'::text, 'FAILED'::text])) AND retired_at_utc IS NOT NULL)"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_failure_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (failure_code IS NULL OR failure_code ~ '^[A-Z][A-Z0-9_]{2,99}$'::text)"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(idempotency_key)) >= 1 AND char_length(btrim(idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_mail_kind_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (mail_kind = ANY (ARRAY['INITIAL'::text, 'REMINDER'::text, 'RENEWAL'::text, 'WITHDRAWAL'::text, 'CANCELLATION'::text]))"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (route_receipt_id)"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_request_generation_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (request_generation >= 1)"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_route_revision_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (route_revision >= 1)"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_state_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (state = ANY (ARRAY['REGISTERED'::text, 'CURRENT'::text, 'RETIRED'::text, 'FAILED'::text]))"
+        },
+        {
+          "name": "candidate_manager_email_route_receipts_workflow_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (workflow_id) REFERENCES candidate_submission_workflows(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_manager_email_route_registration_receipt_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(registration_receipt_sha256) = 32)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_manager_email_template_versions",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "template_version_id",
+          "type": "uuid",
+          "default": "gen_random_uuid()",
+          "identity": "",
+          "not_null": true,
+          "position": 1,
+          "generated": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 2,
+          "generated": ""
+        },
+        {
+          "name": "templates_json",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 3,
+          "generated": ""
+        },
+        {
+          "name": "sanitizer_policy_version",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 4,
+          "generated": ""
+        },
+        {
+          "name": "semantic_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 5,
+          "generated": ""
+        },
+        {
+          "name": "actor_identity_hmac",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 6,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 7,
+          "generated": ""
+        },
+        {
+          "name": "reason_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 8,
+          "generated": ""
+        },
+        {
+          "name": "recorded_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "position": 9,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_manager_email_template_versions_idempotency_key_key",
+          "definition": "CREATE UNIQUE INDEX candidate_manager_email_template_versions_idempotency_key_key ON public.candidate_manager_email_template_versions USING btree (idempotency_key)"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_manager_email_template_versions_pkey ON public.candidate_manager_email_template_versions USING btree (template_version_id)"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_version_key",
+          "definition": "CREATE UNIQUE INDEX candidate_manager_email_template_versions_version_key ON public.candidate_manager_email_template_versions USING btree (version)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_manager_email_template_vers_actor_identity_hmac_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actor_identity_hmac IS NULL OR octet_length(actor_identity_hmac) = 32)"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(idempotency_key)) >= 1 AND char_length(btrim(idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_idempotency_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (idempotency_key)"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (template_version_id)"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_reason_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason_code = ANY (ARRAY['BOOTSTRAP'::text, 'OFFICE_SAVE'::text, 'OFFICE_RESET'::text]))"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_semantic_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(semantic_sha256) = 32)"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (version >= 1)"
+        },
+        {
+          "name": "candidate_manager_email_template_versions_version_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (version)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
         },
         {
           "grantee": "service_role",
@@ -51171,6 +51927,42 @@
           "not_null": false,
           "position": 44,
           "generated": ""
+        },
+        {
+          "name": "manager_signature_capture_method",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 45,
+          "generated": ""
+        },
+        {
+          "name": "expected_source_content_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 46,
+          "generated": ""
+        },
+        {
+          "name": "validated_image_width",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 47,
+          "generated": ""
+        },
+        {
+          "name": "validated_image_height",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 48,
+          "generated": ""
         }
       ],
       "indexes": [
@@ -51226,6 +52018,22 @@
       "options": [],
       "force_rls": true,
       "constraints": [
+        {
+          "name": "candidate_submission_compone_expected_source_content_sha2_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (expected_source_content_sha256 IS NULL OR octet_length(expected_source_content_sha256) = 32)"
+        },
+        {
+          "name": "candidate_submission_compone_manager_signature_capture_me_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (manager_signature_capture_method IS NULL OR (manager_signature_capture_method = ANY (ARRAY['DRAW'::text, 'UPLOAD'::text])))"
+        },
         {
           "name": "candidate_submission_components_approval_request_fk",
           "type": "f",
@@ -51441,6 +52249,22 @@
           "validated": true,
           "deferrable": false,
           "definition": "FOREIGN KEY (timesheet_id) REFERENCES timesheets(timesheet_id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_submission_components_validated_image_height_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (validated_image_height IS NULL OR validated_image_height >= 1 AND validated_image_height <= 10000)"
+        },
+        {
+          "name": "candidate_submission_components_validated_image_width_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (validated_image_width IS NULL OR validated_image_width >= 1 AND validated_image_width <= 10000)"
         },
         {
           "name": "candidate_submission_components_workflow_component_uq",
@@ -82589,6 +83413,60 @@
           "not_null": true,
           "position": 210,
           "generated": ""
+        },
+        {
+          "name": "candidate_manager_email_templates_json",
+          "type": "jsonb",
+          "default": "'{\"TIMESHEET\": {\"INITIAL\": {\"subject\": \"Timesheet approval required\", \"body_html\": \"<p>Please review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.</p>\", \"body_text\": \"Please review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.\", \"button_text\": \"Review and approve\", \"include_link\": true}, \"RENEWAL\": {\"subject\": \"New timesheet approval link\", \"body_html\": \"<p>A new secure link has been issued because the previous link expired. Please review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.</p>\", \"body_text\": \"A new secure link has been issued because the previous link expired. Please review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.\", \"button_text\": \"Review and approve\", \"include_link\": true}, \"REMINDER\": {\"subject\": \"Reminder: timesheet approval required\", \"body_html\": \"<p>This is a reminder to review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.</p>\", \"body_text\": \"This is a reminder to review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.\", \"button_text\": \"Review and approve\", \"include_link\": true}, \"WITHDRAWAL\": {\"subject\": \"Timesheet approval request withdrawn\", \"body_html\": \"<p>The approval request for this timesheet has been withdrawn. The previous secure link is no longer valid. No further action is required.</p>\", \"body_text\": \"The approval request for this timesheet has been withdrawn. The previous secure link is no longer valid. No further action is required.\", \"button_text\": null, \"include_link\": false}, \"CANCELLATION\": {\"subject\": \"Timesheet approval request cancelled\", \"body_html\": \"<p>The approval request for this timesheet has been cancelled. The previous secure link is no longer valid. No further action is required.</p>\", \"body_text\": \"The approval request for this timesheet has been cancelled. The previous secure link is no longer valid. No further action is required.\", \"button_text\": null, \"include_link\": false}}, \"EXPENSE_CLAIM\": {\"INITIAL\": {\"subject\": \"Expense approval required\", \"body_html\": \"<p>Please review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.</p>\", \"body_text\": \"Please review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.\", \"button_text\": \"Review and approve\", \"include_link\": true}, \"RENEWAL\": {\"subject\": \"New expense approval link\", \"body_html\": \"<p>A new secure link has been issued because the previous link expired. Please review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.</p>\", \"body_text\": \"A new secure link has been issued because the previous link expired. Please review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.\", \"button_text\": \"Review and approve\", \"include_link\": true}, \"REMINDER\": {\"subject\": \"Reminder: expense approval required\", \"body_html\": \"<p>This is a reminder to review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.</p>\", \"body_text\": \"This is a reminder to review every page of the submitted documents. You can approve or refuse the complete submission using the secure link below.\", \"button_text\": \"Review and approve\", \"include_link\": true}, \"WITHDRAWAL\": {\"subject\": \"Expense approval request withdrawn\", \"body_html\": \"<p>The approval request for this expense claim has been withdrawn. The previous secure link is no longer valid. No further action is required.</p>\", \"body_text\": \"The approval request for this expense claim has been withdrawn. The previous secure link is no longer valid. No further action is required.\", \"button_text\": null, \"include_link\": false}, \"CANCELLATION\": {\"subject\": \"Expense approval request cancelled\", \"body_html\": \"<p>The approval request for this expense claim has been cancelled. The previous secure link is no longer valid. No further action is required.</p>\", \"body_text\": \"The approval request for this expense claim has been cancelled. The previous secure link is no longer valid. No further action is required.\", \"button_text\": null, \"include_link\": false}}, \"schema_version\": \"CANDIDATE_MANAGER_EMAIL_TEMPLATES_V1\"}'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "position": 211,
+          "generated": ""
+        },
+        {
+          "name": "candidate_manager_email_templates_version",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "position": 212,
+          "generated": ""
+        },
+        {
+          "name": "candidate_manager_email_sanitizer_policy_version",
+          "type": "text",
+          "default": "'MANAGER_EMAIL_SAFE_HTML_V1'::text",
+          "identity": "",
+          "not_null": true,
+          "position": 213,
+          "generated": ""
+        },
+        {
+          "name": "candidate_manager_email_templates_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 214,
+          "generated": ""
+        },
+        {
+          "name": "candidate_manager_email_templates_updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "position": 215,
+          "generated": ""
+        },
+        {
+          "name": "candidate_manager_email_templates_updated_by_hmac",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 216,
+          "generated": ""
         }
       ],
       "indexes": [
@@ -83207,6 +84085,38 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (candidate_hours_deviation_pct >= 0::numeric AND candidate_hours_deviation_pct <= 500::numeric)"
+        },
+        {
+          "name": "settings_defaults_candidate_manager_email_templates_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(candidate_manager_email_templates_json) = 'object'::text AND (candidate_manager_email_templates_json ->> 'schema_version'::text) = 'CANDIDATE_MANAGER_EMAIL_TEMPLATES_V1'::text AND candidate_manager_email_templates_json ? 'TIMESHEET'::text AND candidate_manager_email_templates_json ? 'EXPENSE_CLAIM'::text)"
+        },
+        {
+          "name": "settings_defaults_candidate_manager_email_templates_hash_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(candidate_manager_email_templates_sha256) = 32)"
+        },
+        {
+          "name": "settings_defaults_candidate_manager_email_templates_updat_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_manager_email_templates_updated_by_hmac IS NULL OR octet_length(candidate_manager_email_templates_updated_by_hmac) = 32)"
+        },
+        {
+          "name": "settings_defaults_candidate_manager_email_templates_versi_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_manager_email_templates_version >= 1)"
         },
         {
           "name": "settings_defaults_comms_adaptors_json_is_object_chk",
