@@ -945,7 +945,10 @@ async function responseJson(response, maximumBytes = MAX_PUBLIC_JSON_BYTES) {
 async function publicSafePrivateResponse(response) {
   if (response.status < 400) {
     const headers = new Headers();
-    for (const name of ['content-type', 'content-length', 'content-disposition', 'cache-control', 'x-correlation-id']) {
+    for (const name of [
+      'content-type', 'content-length', 'content-disposition', 'cache-control',
+      'x-correlation-id', 'x-cloudtms-content-sha256'
+    ]) {
       const value = response.headers.get(name);
       if (value) headers.set(name, value);
     }

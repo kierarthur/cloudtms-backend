@@ -115,14 +115,17 @@ test('browser preflight is exact-origin and never wildcard', async () => {
   assert.notEqual(response.headers.get('access-control-allow-origin'), '*');
 });
 
-test('cross-origin manager documents expose only the immutable digest and request identity headers', () => {
-  const response = candidateBrokerInternals.withCors(new Response('bytes', {
+test('cross-origin manager documents preserve and expose only the immutable digest and request identity headers', async () => {
+  const safe = await candidateBrokerInternals.publicSafePrivateResponse(new Response('bytes', {
     headers: {
       'content-type': 'image/png',
       'x-cloudtms-content-sha256': 'a'.repeat(64),
       'x-private-routing-secret': 'must-not-be-exposed'
     }
-  }), 'https://mytms-manager-review-test.kier-88a.workers.dev');
+  }));
+  const response = candidateBrokerInternals.withCors(
+    safe, 'https://mytms-manager-review-test.kier-88a.workers.dev'
+  );
   assert.equal(
     response.headers.get('access-control-expose-headers'),
     'x-cloudtms-content-sha256, x-request-id'
@@ -131,6 +134,8 @@ test('cross-origin manager documents expose only the immutable digest and reques
     response.headers.get('access-control-allow-origin'),
     'https://mytms-manager-review-test.kier-88a.workers.dev'
   );
+  assert.equal(response.headers.get('x-cloudtms-content-sha256'), 'a'.repeat(64));
+  assert.equal(response.headers.get('x-private-routing-secret'), null);
   assert.doesNotMatch(response.headers.get('access-control-expose-headers'), /private/i);
 });
 
