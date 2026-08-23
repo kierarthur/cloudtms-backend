@@ -1715,9 +1715,16 @@ async function assertManagerRouteResult(env, result, authority) {
   }
 }
 
-function completeManagerEmailRoute(env, authority, ctx) {
+function routedManagerControlRpc(env, deps, schema, functionName, args) {
+  return typeof deps?.controlPlaneRpc === 'function'
+    ? deps.controlPlaneRpc(schema, functionName, args)
+    : controlPlaneRpc(env, schema, functionName, args);
+}
+
+function completeManagerEmailRoute(env, deps, authority, ctx) {
   if (authority?.authority_kind !== 'MANAGER_EMAIL') return;
-  const completion = controlPlaneRpc(env, 'control', 'manager_email_route_transition_v1', {
+  const completion = routedManagerControlRpc(
+    env, deps, 'control', 'manager_email_route_transition_v1', {
     p_transition: {
       manager_route_ticket_id: authority.manager_route_ticket_id,
       expected_route_revision: authority.route_revision,
@@ -1743,10 +1750,10 @@ async function currentManagerEmailRouteTickets(env, workflowId) {
   }
 }
 
-function retireManagerEmailRoutes(env, routes, ctx) {
+function retireManagerEmailRoutes(env, deps, routes, ctx) {
   if (!Array.isArray(routes) || !routes.length) return;
-  const retirement = Promise.allSettled(routes.map(route => controlPlaneRpc(
-    env, 'control', 'manager_email_route_transition_v1', {
+  const retirement = Promise.allSettled(routes.map(route => routedManagerControlRpc(
+    env, deps, 'control', 'manager_email_route_transition_v1', {
       p_transition: {
         manager_route_ticket_id: route.manager_route_ticket_id,
         expected_route_revision: Number(route.route_revision), target_state: 'RETIRED'
@@ -2727,7 +2734,7 @@ async function candidateManagerMail(env, deps, token, workflowId, managerEmail, 
   const environment = environmentName(env);
   const agencyId = managerAgencyId(env);
   const [originAuthority, templateAuthority] = await Promise.all([
-    controlPlaneRpc(env, 'control', 'manager_review_origin_resolve_v1', {
+    routedManagerControlRpc(env, deps, 'control', 'manager_review_origin_resolve_v1', {
       p_agency_id: agencyId, p_environment_label: environment
     }),
     deps.rpc('candidate_manager_email_settings_get_v1', {})
@@ -2811,7 +2818,8 @@ async function registerManagerEmailRoute(env, deps, {
     expires_at_utc: expiresAtUtc
   };
   const semanticSha256 = await sha256Hex(canonicalJson(registrationFacts));
-  const route = await controlPlaneRpc(env, 'control', 'manager_email_route_register_v1', {
+  const route = await routedManagerControlRpc(
+    env, deps, 'control', 'manager_email_route_register_v1', {
     p_registration: {
       ...registrationFacts, authority_kind: 'MANAGER_EMAIL',
       credential_key_version: 1, semantic_sha256_hex: semanticSha256,
@@ -3571,7 +3579,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       mailKind: pendingManagerRoute.mailKind, expiresAtUtc: approval.expires_at_utc, mutationKey
     });
   }
-  if (dbAction === 'CANCEL') retireManagerEmailRoutes(env, managerRoutesToRetire, ctx);
+  if (dbAction === 'CANCEL') retireManagerEmailRoutes(env, deps, managerRoutesToRetire, ctx);
   if (dbAction === 'SELECT_PHONE_APPROVAL') {
     return jsonResponse(201, await phoneTokenForWorkflowResult(
       env, result, workflowId, generation, mutationKey
@@ -3725,7 +3733,7 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
   ));
   if (routeAuthority) await assertManagerRouteResult(env, result, routeAuthority);
   if (['EMAIL_APPROVE', 'PHONE_APPROVE', 'MANAGER_REFUSE'].includes(dbAction)) {
-    completeManagerEmailRoute(env, routeAuthority, ctx);
+    completeManagerEmailRoute(env, deps, routeAuthority, ctx);
   }
   if (['EMAIL_APPROVE', 'PHONE_APPROVE'].includes(dbAction) && result?.final_render_contract) {
     const work = (async () => {
@@ -4976,7 +4984,7 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
     });
   }
   if (dbAction === 'MANAGER_REQUEST_CANCEL') {
-    retireManagerEmailRoutes(env, managerRoutesToRetire, ctx);
+    retireManagerEmailRoutes(env, deps, managerRoutesToRetire, ctx);
   }
   if (dbAction === 'PHONE_APPROVE' && result?.final_render_contract) {
     const work = (async () => {

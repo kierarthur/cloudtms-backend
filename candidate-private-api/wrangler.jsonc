@@ -33,6 +33,12 @@
       "preview_bucket_name": "test-cloudtms-preview"
     }
   ],
+  "services": [
+    {
+      "binding": "MYTMS_MANAGER_CONTROL_ADAPTER",
+      "service": "test-cloudtms-backend"
+    }
+  ],
   "triggers": {
     "crons": ["* * * * *"]
   },

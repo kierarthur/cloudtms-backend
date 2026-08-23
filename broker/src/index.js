@@ -52,6 +52,12 @@ import {
 } from './candidate-manager-email-e2e-proof.js';
 import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import {
+  handleMyTmsManagerControlAdapter,
+  managerControlPlaneRpc,
+  purgeMyTmsManagerControlAdapterNonces,
+  MYTMS_MANAGER_CONTROL_ADAPTER_PATH
+} from './mytms-manager-control-adapter.js';
+import {
   adoptMyTmsCandidate,
   getMyTmsCandidateStatus,
   getMyTmsManagerEmailSettings,
@@ -193980,6 +193986,8 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
   return {
     routeAudience,
     rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+    controlPlaneRpc: (schema, functionName, args) =>
+      managerControlPlaneRpc(env, schema, functionName, args),
     requireOfficeUser: (request, roles) => requireUser(env, request, roles),
     buildWeeklySubmission: ({ workflow, factualSubmission, mutationKey }) =>
       buildCandidateWeeklySubmissionThroughCanonicalAuthority(env, { workflow, factualSubmission, mutationKey }),
@@ -194016,6 +194024,10 @@ export default {
     if (req.method === 'POST'
         && p === '/private/mytms-control/v1/auth/challenge-delivery') {
       return handleMyTmsIdentityChallengeDelivery(env, req);
+    }
+
+    if (req.method === 'POST' && p === MYTMS_MANAGER_CONTROL_ADAPTER_PATH) {
+      return handleMyTmsManagerControlAdapter(req, env);
     }
 
     const candidateAppResponse = await handleCandidateAppRequest(
@@ -196421,6 +196433,7 @@ if (req.method === 'POST' && p === '/api/users') {
 /// Cron handler for TSFIN queue processing + Auto-invoice + Email outbox drain
 // Cron handler for TSFIN queue processing + Auto-invoice + TS PDF + INVOICE PDF + Email outbox drain
 async scheduled(event, env, ctx) {
+  ctx.waitUntil(purgeMyTmsManagerControlAdapterNonces(env));
   const maxBatches      = parseInt(env.TSFIN_MAX_BATCHES || '10', 10);
   const batchSize       = parseInt(env.TSFIN_BATCH_SIZE  || '50', 10);
 
