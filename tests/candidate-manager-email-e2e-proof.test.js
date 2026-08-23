@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
@@ -62,6 +63,14 @@ test('manager email E2E proof diagnostics redact every credential-shaped value',
   assert.match(diagnostic, /\[email\]/);
 });
 
+test('manager email E2E storage cleanup accepts only bounded internal object keys', () => {
+  assert.equal(candidateManagerEmailE2EProofInternals.boundedStorageKey('candidate/proof/file.pdf'),
+    'candidate/proof/file.pdf');
+  assert.equal(candidateManagerEmailE2EProofInternals.boundedStorageKey('/absolute/file.pdf'), null);
+  assert.equal(candidateManagerEmailE2EProofInternals.boundedStorageKey('../escape/file.pdf'), null);
+  assert.equal(candidateManagerEmailE2EProofInternals.boundedStorageKey(`candidate/${'a'.repeat(1025)}`), null);
+});
+
 test('manager email E2E proof accepts only the current routed manager outbox shape', async () => {
   const originalFetch = globalThis.fetch;
   const outboxId = 'f1000000-0000-4000-8000-000000000009';
@@ -96,5 +105,20 @@ test('manager email E2E proof accepts only the current routed manager outbox sha
     assert.equal(result.managerUrl.includes('#token=opaque-proof-token'), true);
   } finally {
     globalThis.fetch = originalFetch;
+  }
+});
+
+test('every manager terminal transaction retires its agency route receipt atomically', () => {
+  const transition = readFileSync(new URL(
+    '../supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  for (const reason of [
+    'MANAGER_APPROVED', 'MANAGER_REFUSED', 'APPROVAL_REQUEST_CANCELLED',
+    'WORKFLOW_CANCELLED', 'WORKFLOW_SUPERSEDED'
+  ]) {
+    assert.match(transition, new RegExp(
+      'candidate_manager_email_route_receipt_retire_v1\\([\\s\\S]{0,320}' + reason
+    ));
   }
 });

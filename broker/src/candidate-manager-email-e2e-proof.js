@@ -326,6 +326,56 @@ async function renderPendingReview(env, deps) {
   }
 }
 
+function boundedStorageKey(value) {
+  const key = text(value);
+  return key && key.length <= 1024 && !key.startsWith('/') && !key.includes('..')
+    && !/[\x00-\x1f\x7f]/.test(key) ? key : null;
+}
+
+async function cleanupSyntheticStorage(env) {
+  const ids = CANDIDATE_MANAGER_EMAIL_E2E_IDS;
+  if (!env.R2 || typeof env.R2.delete !== 'function') {
+    throw new Error('E2E_STORAGE_CONFIGURATION_UNAVAILABLE');
+  }
+  const [clients, candidates, contracts, accounts, workflows, components, timesheets] = await Promise.all([
+    agencyRest(env, 'clients', `id=eq.${ids.client}&select=id,name`),
+    agencyRest(env, 'candidates', `id=eq.${ids.candidate}&select=id,email,key_norm`),
+    agencyRest(env, 'contracts', `id=eq.${ids.contract}&select=id,candidate_id,client_id`),
+    agencyRest(env, 'candidate_app_accounts', `id=eq.${ids.account}&select=id,email_normalized`),
+    agencyRest(env, 'candidate_submission_workflows',
+      `id=eq.${ids.workflow}&select=id,account_id,candidate_id,contract_id`),
+    agencyRest(env, 'candidate_submission_components',
+      `workflow_id=eq.${ids.workflow}&select=id,storage_key,review_storage_key,final_signed_storage_key`),
+    agencyRest(env, 'timesheets',
+      `candidate_workflow_id=eq.${ids.workflow}&select=timesheet_id,contract_id,candidate_workflow_id,r2_nurse_key,r2_auth_key,manual_pdf_r2_key,qr_r2_key`)
+  ]);
+  if (clients?.length !== 1 || clients[0].name !== 'Synthetic MyTMS manager email proof client'
+      || candidates?.length !== 1 || candidates[0].email !== SYNTHETIC_CANDIDATE_EMAIL
+      || candidates[0].key_norm !== 'MYTMS-E2E-CANDIDATE'
+      || contracts?.length !== 1 || text(contracts[0].candidate_id).toLowerCase() !== ids.candidate
+      || text(contracts[0].client_id).toLowerCase() !== ids.client
+      || accounts?.length !== 1 || accounts[0].email_normalized !== SYNTHETIC_CANDIDATE_EMAIL
+      || workflows?.length !== 1 || text(workflows[0].account_id).toLowerCase() !== ids.account
+      || text(workflows[0].candidate_id).toLowerCase() !== ids.candidate
+      || text(workflows[0].contract_id).toLowerCase() !== ids.contract
+      || !Array.isArray(components) || components.length < 1 || components.length > 20
+      || !Array.isArray(timesheets) || timesheets.length > 2
+      || timesheets.some(row => text(row.contract_id).toLowerCase() !== ids.contract
+        || text(row.candidate_workflow_id).toLowerCase() !== ids.workflow)) {
+    throw new Error('E2E_STORAGE_FIXTURE_IDENTITY_INVALID');
+  }
+  const rawKeys = [
+    ...components.flatMap(row => [row.storage_key, row.review_storage_key, row.final_signed_storage_key]),
+    ...timesheets.flatMap(row => [row.r2_nurse_key, row.r2_auth_key, row.manual_pdf_r2_key, row.qr_r2_key])
+  ].filter(Boolean);
+  const validatedKeys = rawKeys.map(boundedStorageKey);
+  if (validatedKeys.some(key => !key)) throw new Error('E2E_STORAGE_KEY_SET_INVALID');
+  const keys = [...new Set(validatedKeys)];
+  if (!keys.length || keys.length > 32) throw new Error('E2E_STORAGE_KEY_SET_INVALID');
+  await env.R2.delete(keys);
+  return { ok: true, deleted_storage_object_count: keys.length };
+}
+
 export async function handleCandidateManagerEmailE2EProof(request, env, ctx, deps, user) {
   if (request.method !== 'POST'
       || new URL(request.url).pathname !== CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH) {
@@ -357,6 +407,15 @@ export async function handleCandidateManagerEmailE2EProof(request, env, ctx, dep
         provider_send_performed: result.providerSendPerformed
       });
     }
+    if (action === 'CLEANUP_STORAGE') {
+      const result = await cleanupSyntheticStorage(env);
+      return json(200, {
+        ...result,
+        contract_version: SYNTHETIC_MARKER,
+        workflow_id: CANDIDATE_MANAGER_EMAIL_E2E_IDS.workflow,
+        provider_send_performed: false
+      });
+    }
     if (action !== 'SEED') throw new Error('E2E_PROOF_ACTION_INVALID');
     await exactRowsAbsent(env);
     const baseline = await settingsBaseline(env);
@@ -384,6 +443,8 @@ export const candidateManagerEmailE2EProofInternals = Object.freeze({
   boundedJson,
   candidateSignatureBytes,
   controlSettings,
+  boundedStorageKey,
+  cleanupSyntheticStorage,
   exactRowsAbsent,
   managerLinkFromOutbox,
   proofDates,

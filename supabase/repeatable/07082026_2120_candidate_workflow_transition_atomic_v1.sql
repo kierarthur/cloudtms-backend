@@ -3854,6 +3854,9 @@ begin
     update public.candidate_approval_requests set
       state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
     where workflow_id=v_workflow.id and id<>v_approval.id and state='PENDING';
+    perform public.candidate_manager_email_route_receipt_retire_v1(
+      v_workflow.id,v_approval.id,'MANAGER_APPROVED',p_now_utc
+    );
     update public.candidate_submission_components set manager_approved_at_utc=p_now_utc
     where id=any(v_approval.required_component_ids);
     update public.candidate_submission_workflows set
@@ -4056,6 +4059,9 @@ begin
     update public.candidate_approval_requests set
       state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
     where workflow_id=v_workflow.id and id<>v_approval.id and state='PENDING';
+    perform public.candidate_manager_email_route_receipt_retire_v1(
+      v_workflow.id,v_approval.id,'MANAGER_REFUSED',p_now_utc
+    );
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,'state','REFUSED',
       'generation',v_workflow.generation,'approval_request_id',v_approval.id,
       'approval_request_generation',v_approval.request_generation,
@@ -4243,6 +4249,9 @@ begin
     v_manager_retirement_result:=private._candidate_manager_mail_retire_v1(
       v_workflow.id,v_workflow.generation,array[v_approval.id],
       'APPROVAL_REQUEST_CANCELLED',p_now_utc
+    );
+    perform public.candidate_manager_email_route_receipt_retire_v1(
+      v_workflow.id,v_approval.id,'APPROVAL_REQUEST_CANCELLED',p_now_utc
     );
     update public.candidate_approval_requests set
       state='CANCELLED',cancelled_at_utc=p_now_utc,updated_at_utc=p_now_utc
@@ -4555,6 +4564,13 @@ begin
         case when v_action='CANCEL' then 'WORKFLOW_CANCELLED' else 'WORKFLOW_SUPERSEDED' end,
         p_now_utc
       );
+      foreach v_manager_withdrawal_request_id in array v_manager_request_ids loop
+        perform public.candidate_manager_email_route_receipt_retire_v1(
+          v_workflow.id,v_manager_withdrawal_request_id,
+          case when v_action='CANCEL' then 'WORKFLOW_CANCELLED' else 'WORKFLOW_SUPERSEDED' end,
+          p_now_utc
+        );
+      end loop;
     end if;
     update public.candidate_approval_requests set
       state=case when v_action='CANCEL' then 'CANCELLED' else 'SUPERSEDED' end,
