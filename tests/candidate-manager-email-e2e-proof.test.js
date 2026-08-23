@@ -10,7 +10,8 @@ import {
 
 test('manager email E2E proof is a fixed TEST-only admin harness outside the 63 operations', async () => {
   assert.equal(CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH,
-    '/api/candidate-app/manager-email-e2e-proof/start');
+    '/api/manager-email-e2e-proof/start');
+  assert.equal(CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH.startsWith('/api/candidate-app/'), false);
   assert.equal(new Set(Object.values(CANDIDATE_MANAGER_EMAIL_E2E_IDS)).size,
     Object.keys(CANDIDATE_MANAGER_EMAIL_E2E_IDS).length);
   assert.equal(candidateManagerEmailE2EProofInternals.proofEnabled({

@@ -5,7 +5,7 @@ import {
 import { controlPlaneRpc } from '../../candidate-broker/src/control-plane-client.js';
 
 export const CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH =
-  '/api/candidate-app/manager-email-e2e-proof/start';
+  '/api/manager-email-e2e-proof/start';
 
 export const CANDIDATE_MANAGER_EMAIL_E2E_IDS = Object.freeze({
   actor: 'f1000000-0000-4000-8000-000000000001',
