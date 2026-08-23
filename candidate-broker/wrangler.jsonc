@@ -16,7 +16,7 @@
     "MYTMS_CONTROL_PLANE_ENABLED": "TRUE",
     "MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED": "FALSE",
     "MYTMS_CONTROL_PLANE_URL": "https://pixmhpngcfxuhoilzptk.supabase.co",
-    "CANDIDATE_ALLOWED_ORIGINS": "https://testmode.arthur-rai.co.uk",
+    "CANDIDATE_ALLOWED_ORIGINS": "https://testmode.arthur-rai.co.uk,https://mytms-manager-review-test.kier-88a.workers.dev",
     "CANDIDATE_ALLOW_NATIVE_CLIENTS": "true",
     "CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION": "1",
     "CANDIDATE_BROKER_ACCESS_TOKEN_READ_KEY_VERSIONS": "1",

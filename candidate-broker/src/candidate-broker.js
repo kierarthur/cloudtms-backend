@@ -217,6 +217,7 @@ function withCors(response, origin) {
   headers.set('x-frame-options', 'DENY');
   if (origin) {
     headers.set('access-control-allow-origin', origin);
+    headers.set('access-control-expose-headers', 'x-cloudtms-component-sha256, x-request-id');
     headers.append('vary', 'Origin');
   }
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
@@ -2863,6 +2864,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
 
 export const candidateBrokerInternals = Object.freeze({
   allowedOrigins,
+  withCors,
   assertPublicCredentialSecrets,
   authorityReadVersions,
   authoritySecretForVersion,

@@ -28,8 +28,15 @@ test('public broker source has no Supabase, R2 or CloudTMS business-authority de
   const privateConfig = JSON.parse(await readFile(
     new URL('../candidate-private-api/wrangler.jsonc', import.meta.url), 'utf8'
   ));
+  const publicConfig = JSON.parse(await readFile(
+    new URL('../candidate-broker/wrangler.jsonc', import.meta.url), 'utf8'
+  ));
   assert.equal(privateConfig.workers_dev, false);
   assert.equal(Object.prototype.hasOwnProperty.call(privateConfig.vars, 'SUPABASE_SERVICE_ROLE_KEY'), false);
+  assert.deepEqual(
+    publicConfig.vars.CANDIDATE_ALLOWED_ORIGINS.split(','),
+    ['https://testmode.arthur-rai.co.uk', 'https://mytms-manager-review-test.kier-88a.workers.dev']
+  );
 });
 
 function limiter(success = true) {
@@ -104,6 +111,25 @@ test('browser preflight is exact-origin and never wildcard', async () => {
   assert.equal(response.status, 204);
   assert.equal(response.headers.get('access-control-allow-origin'), ORIGIN);
   assert.notEqual(response.headers.get('access-control-allow-origin'), '*');
+});
+
+test('cross-origin manager documents expose only the immutable digest and request identity headers', () => {
+  const response = candidateBrokerInternals.withCors(new Response('bytes', {
+    headers: {
+      'content-type': 'image/png',
+      'x-cloudtms-component-sha256': 'a'.repeat(64),
+      'x-private-routing-secret': 'must-not-be-exposed'
+    }
+  }), 'https://mytms-manager-review-test.kier-88a.workers.dev');
+  assert.equal(
+    response.headers.get('access-control-expose-headers'),
+    'x-cloudtms-component-sha256, x-request-id'
+  );
+  assert.equal(
+    response.headers.get('access-control-allow-origin'),
+    'https://mytms-manager-review-test.kier-88a.workers.dev'
+  );
+  assert.doesNotMatch(response.headers.get('access-control-expose-headers'), /private/i);
 });
 
 test('public wrapping secrets and database-safe device versions are proved before private mutation', async () => {
