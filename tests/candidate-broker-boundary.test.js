@@ -119,13 +119,13 @@ test('cross-origin manager documents expose only the immutable digest and reques
   const response = candidateBrokerInternals.withCors(new Response('bytes', {
     headers: {
       'content-type': 'image/png',
-      'x-cloudtms-component-sha256': 'a'.repeat(64),
+      'x-cloudtms-content-sha256': 'a'.repeat(64),
       'x-private-routing-secret': 'must-not-be-exposed'
     }
   }), 'https://mytms-manager-review-test.kier-88a.workers.dev');
   assert.equal(
     response.headers.get('access-control-expose-headers'),
-    'x-cloudtms-component-sha256, x-request-id'
+    'x-cloudtms-content-sha256, x-request-id'
   );
   assert.equal(
     response.headers.get('access-control-allow-origin'),
