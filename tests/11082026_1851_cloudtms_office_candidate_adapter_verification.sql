@@ -47,6 +47,17 @@ declare
   ));
   v_paper_manifest_hash text;
   v_paper_attempt_token text;
+  v_manager_request_cancel_payload jsonb:=jsonb_build_object(
+    'reason_note','Office is selecting a different approval method.',
+    'manager_terminal_mail',jsonb_build_object(
+      'subject','Timesheet approval request withdrawn',
+      'body_text','The approval request for this timesheet has been withdrawn. No further action is required.',
+      'body_html','<p>The approval request for this timesheet has been withdrawn. No further action is required.</p>',
+      'manager_template_version',1,
+      'manager_template_sha256',repeat('e2',32),
+      'manager_submission_type','TIMESHEET'
+    )
+  );
 begin
   if has_function_privilege('anon','public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz)','execute')
      or has_function_privilege('authenticated','public.cloudtms_office_candidate_adapter_v1(text,uuid,text,jsonb,timestamptz)','execute')
@@ -484,7 +495,7 @@ begin
         'workflow_action','MANAGER_REQUEST_CANCEL',
         'approval_request_id',v_request,'approval_request_generation',1,
         'idempotency_key','ad510000-0000-4000-8000-000000000013',
-        'payload',jsonb_build_object('reason_note','Office is selecting a different approval method.')
+        'payload',v_manager_request_cancel_payload
       ),v_now+interval '2 minutes'
     );
   exception when sqlstate '40001' then
@@ -505,7 +516,7 @@ begin
       'workflow_action','MANAGER_REQUEST_CANCEL',
       'approval_request_id',v_request,'approval_request_generation',1,
       'idempotency_key','ad510000-0000-4000-8000-000000000014',
-      'payload',jsonb_build_object('reason_note','Office is selecting a different approval method.')
+      'payload',v_manager_request_cancel_payload
     ),v_now+interval '3 minutes'
   );
   if v_result->>'state'<>'READY_FOR_MANAGER_APPROVAL'
