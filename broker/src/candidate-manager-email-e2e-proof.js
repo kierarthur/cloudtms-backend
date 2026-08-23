@@ -23,8 +23,6 @@ export const CANDIDATE_MANAGER_EMAIL_E2E_IDS = Object.freeze({
 });
 
 const SYNTHETIC_MARKER = 'MYTMS_MANAGER_EMAIL_E2E_PROOF_V1';
-const TEST_CANDIDATE_BROKER_ORIGIN =
-  'https://test-cloudtms-candidate-broker.kier-88a.workers.dev';
 const SYNTHETIC_CANDIDATE_EMAIL = 'mytms-e2e-candidate@example.test';
 const SYNTHETIC_CANDIDATE_PASSWORD = 'Synthetic-Manager-Proof-Only-2026!';
 const MAX_JSON_BYTES = 256 * 1024;
@@ -161,6 +159,7 @@ async function settingsBaseline(env) {
   const flags = row.candidate_app_feature_flags_json;
   if (row.candidate_app_environment !== 'TEST' || row.candidate_app_system_actor_user_id != null
       || !flags || typeof flags !== 'object' || Array.isArray(flags)
+      || flags.candidate_account_registration !== false
       || flags.candidate_app_writes !== false || flags.candidate_manager_approval !== false) {
     throw new Error('E2E_DISABLED_BASELINE_REQUIRED');
   }
@@ -172,6 +171,7 @@ async function seedFixture(env, recipient, baseline, now = new Date()) {
   const dates = proofDates(now);
   const flags = {
     ...baseline.candidate_app_feature_flags_json,
+    candidate_account_registration: true,
     candidate_app_writes: true,
     candidate_manager_approval: true
   };
@@ -248,117 +248,29 @@ async function seedFixture(env, recipient, baseline, now = new Date()) {
   return dates;
 }
 
-async function candidateRequest(token, path, method, body = null, bytes = null) {
-  const headers = new Headers({
-    'x-cloudtms-client': 'android',
-    ...(token ? { authorization: `Bearer ${token}` } : {})
-  });
-  let requestBody;
-  if (bytes) {
-    headers.set('content-type', 'image/png');
-    headers.set('content-length', String(bytes.byteLength));
-    requestBody = bytes;
-  } else if (body != null) {
-    headers.set('content-type', 'application/json; charset=utf-8');
-    requestBody = JSON.stringify(body);
-  }
-  const response = await fetch(`${TEST_CANDIDATE_BROKER_ORIGIN}${path}`, {
-    method, headers, ...(requestBody == null ? {} : { body: requestBody }),
-    signal: AbortSignal.timeout(30_000)
-  });
-  const payload = await boundedJson(response);
-  if (!response || !response.ok || !payload || payload.ok === false) {
-    throw new Error(`E2E_CANDIDATE_STEP_FAILED:${response?.status || 500}:${payload?.error_code || 'UNKNOWN'}`);
-  }
-  return payload;
-}
-
 function candidateSignatureBytes() {
   const binary = atob(CANDIDATE_SIGNATURE_PNG_BASE64);
   return Uint8Array.from(binary, character => character.charCodeAt(0));
 }
 
-async function runJourneyToOutbox(env, ctx, deps, recipient, dates) {
+async function managerLinkFromOutbox(env, outboxId) {
   const ids = CANDIDATE_MANAGER_EMAIL_E2E_IDS;
-  const login = await candidateRequest(null, '/candidate-app/v1/auth/login', 'POST', {
-    email: SYNTHETIC_CANDIDATE_EMAIL,
-    password: SYNTHETIC_CANDIDATE_PASSWORD,
-    selected_candidate_id: ids.candidate,
-    idempotency_key: ids.session,
-    platform: 'SYNTHETIC_TEST_PROOF'
-  });
-  const token = text(login.access_token);
-  if (!token) throw new Error('E2E_CANDIDATE_LOGIN_TOKEN_MISSING');
-  await candidateRequest(token, '/candidate-app/v1/workflows', 'POST', {
-    workflow_id: ids.workflow, idempotency_key: ids.createKey,
-    workflow: {
-      workflow_kind: 'CONTRACT_HOURS', scope: 'WEEKLY', route: 'ELECTRONIC',
-      contract_id: ids.contract, contract_week_id: ids.contractWeek,
-      week_ending_date: dates.weekEnding,
-      input_snapshot: { source: SYNTHETIC_MARKER }
-    }
-  });
-  const signature = candidateSignatureBytes();
-  const prepared = await candidateRequest(
-    token,
-    `/candidate-app/v1/workflows/${ids.workflow}/components/prepare`, 'POST', {
-      generation: 1,
-      component_kind: 'CANDIDATE_SIGNATURE', document_role: 'CANDIDATE_SIGNATURE',
-      media_type: 'image/png', byte_size: signature.byteLength,
-      idempotency_key: ids.candidateSignatureKey
-    }
-  );
-  await candidateRequest(token, prepared.upload.url, 'PUT', null, signature);
-
-  await candidateRequest(
-    token,
-    `/candidate-app/v1/workflows/${ids.workflow}/actions/worker-submit`, 'POST', {
-      generation: 1, idempotency_key: ids.submitKey,
-      candidate_signature_component_id: prepared.component_id,
-      candidate_signed_at_utc: new Date().toISOString(),
-      approval_route: 'EMAIL',
-      immutable_submission: {
-        actual_schedule_json: [{
-          date: dates.workDate, start: '09:00', end: '17:00',
-          break_minutes: 30, ref_num: 'MYTMS-E2E-PROOF'
-        }]
-      }
-    }
-  );
-  let workflowRows = [];
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    workflowRows = await agencyRest(env, 'candidate_submission_workflows',
-      `id=eq.${ids.workflow}&select=id,state,generation`);
-    if (Array.isArray(workflowRows) && workflowRows.length === 1
-        && workflowRows[0].state === 'READY_FOR_MANAGER_APPROVAL'
-        && Number(workflowRows[0].generation) === 2) break;
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
-  if (!Array.isArray(workflowRows) || workflowRows.length !== 1
-      || workflowRows[0].state !== 'READY_FOR_MANAGER_APPROVAL'
-      || Number(workflowRows[0].generation) !== 2) {
-    throw new Error('E2E_REVIEW_DOCUMENT_NOT_READY');
-  }
-
-  const approval = await candidateRequest(
-    token,
-    `/candidate-app/v1/workflows/${ids.workflow}/actions/create-email-approval-request`, 'POST', {
-      generation: 2, idempotency_key: ids.managerEmailKey,
-      manager_email: recipient
-    }
-  );
   const origin = await controlPlaneRpc(env, 'control', 'manager_review_origin_resolve_v1', {
     p_agency_id: text(env.MYTMS_OFFICE_AGENCY_ID),
     p_environment_label: 'TEST'
   });
   const publicOrigin = text(origin?.manager_review_public_origin).replace(/\/$/, '');
   if (!/^https:\/\/[^/]+$/i.test(publicOrigin)) throw new Error('E2E_MANAGER_ORIGIN_UNAVAILABLE');
-  const outboxId = text(approval.mail_outbox_id).toLowerCase();
-  if (!/^[0-9a-f-]{36}$/.test(outboxId)) throw new Error('E2E_MANAGER_OUTBOX_UNAVAILABLE');
+  const checkedOutboxId = text(outboxId).toLowerCase();
+  if (!/^[0-9a-f-]{36}$/.test(checkedOutboxId)) throw new Error('E2E_MANAGER_OUTBOX_UNAVAILABLE');
   const outboxRows = await agencyRest(env, 'mail_outbox',
-    `id=eq.${encodeURIComponent(outboxId)}&select=body_text`);
+    `id=eq.${encodeURIComponent(checkedOutboxId)}&select=body_text,status,email_type,payment_scope_json`);
   if (!Array.isArray(outboxRows) || outboxRows.length !== 1) {
     throw new Error('E2E_MANAGER_OUTBOX_UNAVAILABLE');
+  }
+  if (text(outboxRows[0].payment_scope_json?.workflow_id).toLowerCase() !== ids.workflow
+      || text(outboxRows[0].email_type).toUpperCase() !== 'CANDIDATE_MANAGER_INITIAL') {
+    throw new Error('E2E_MANAGER_OUTBOX_MISMATCH');
   }
   const escapedOrigin = publicOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const managerLink = text(outboxRows[0].body_text).match(
@@ -366,8 +278,8 @@ async function runJourneyToOutbox(env, ctx, deps, recipient, dates) {
   )?.[0] || '';
   if (!managerLink) throw new Error('E2E_MANAGER_LINK_UNAVAILABLE');
   return {
-    approval,
-    managerUrl: managerLink
+    managerUrl: managerLink,
+    providerSendPerformed: text(outboxRows[0].status).toUpperCase() === 'SENT'
   };
 }
 
@@ -380,18 +292,31 @@ export async function handleCandidateManagerEmailE2EProof(request, env, ctx, dep
     return json(404, { ok: false, error_code: 'E2E_PROOF_DISABLED' });
   }
   try {
+    const body = await boundedJson(request);
+    const action = text(body?.action || 'SEED').toUpperCase();
     const { recipient } = await controlSettings(env, user);
+    if (action === 'LOOKUP') {
+      const result = await managerLinkFromOutbox(env, body?.mail_outbox_id);
+      return json(200, {
+        ok: true,
+        contract_version: SYNTHETIC_MARKER,
+        workflow_id: CANDIDATE_MANAGER_EMAIL_E2E_IDS.workflow,
+        manager_url: result.managerUrl,
+        provider_send_performed: result.providerSendPerformed
+      });
+    }
+    if (action !== 'SEED') throw new Error('E2E_PROOF_ACTION_INVALID');
     await exactRowsAbsent(env);
     const baseline = await settingsBaseline(env);
     const dates = await seedFixture(env, recipient, baseline);
-    const result = await runJourneyToOutbox(env, ctx, deps, recipient, dates);
     return json(201, {
       ok: true,
       contract_version: SYNTHETIC_MARKER,
       workflow_id: CANDIDATE_MANAGER_EMAIL_E2E_IDS.workflow,
-      approval_request_id: result.approval.approval_request_id,
-      mail_outbox_id: result.approval.mail_outbox_id,
-      manager_url: result.managerUrl,
+      candidate_id: CANDIDATE_MANAGER_EMAIL_E2E_IDS.candidate,
+      week_ending_date: dates.weekEnding,
+      work_date: dates.workDate,
+      candidate_proof_ready: true,
       provider_send_performed: false,
       disabled_state_restoration_required: true
     });
@@ -408,9 +333,9 @@ export const candidateManagerEmailE2EProofInternals = Object.freeze({
   candidateSignatureBytes,
   controlSettings,
   exactRowsAbsent,
+  managerLinkFromOutbox,
   proofDates,
   proofEnabled,
-  runJourneyToOutbox,
   seedFixture,
   settingsBaseline
 });
