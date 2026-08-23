@@ -274,12 +274,15 @@ async function managerLinkFromOutbox(env, outboxId) {
   const checkedOutboxId = text(outboxId).toLowerCase();
   if (!/^[0-9a-f-]{36}$/.test(checkedOutboxId)) throw new Error('E2E_MANAGER_OUTBOX_UNAVAILABLE');
   const outboxRows = await agencyRest(env, 'mail_outbox',
-    `id=eq.${encodeURIComponent(checkedOutboxId)}&select=body_text,status,email_type,payment_scope_json`);
+    `id=eq.${encodeURIComponent(checkedOutboxId)}&select=body_text,status,email_type,context_kind,context_id,payment_scope_json`);
   if (!Array.isArray(outboxRows) || outboxRows.length !== 1) {
     throw new Error('E2E_MANAGER_OUTBOX_UNAVAILABLE');
   }
-  if (text(outboxRows[0].payment_scope_json?.workflow_id).toLowerCase() !== ids.workflow
-      || text(outboxRows[0].email_type).toUpperCase() !== 'CANDIDATE_MANAGER_INITIAL') {
+  if (text(outboxRows[0].context_kind).toUpperCase() !== 'CANDIDATE_WORKFLOW'
+      || text(outboxRows[0].context_id).toLowerCase() !== ids.workflow
+      || text(outboxRows[0].payment_scope_json?.candidate_manager_workflow_id).toLowerCase() !== ids.workflow
+      || text(outboxRows[0].payment_scope_json?.candidate_manager_mail_kind).toUpperCase() !== 'INITIAL'
+      || text(outboxRows[0].email_type).toUpperCase() !== 'CANDIDATE_APP_TRANSACTIONAL') {
     throw new Error('E2E_MANAGER_OUTBOX_MISMATCH');
   }
   const escapedOrigin = publicOrigin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

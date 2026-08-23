@@ -61,3 +61,40 @@ test('manager email E2E proof diagnostics redact every credential-shaped value',
   assert.match(diagnostic, /\[sha256\]/);
   assert.match(diagnostic, /\[email\]/);
 });
+
+test('manager email E2E proof accepts only the current routed manager outbox shape', async () => {
+  const originalFetch = globalThis.fetch;
+  const outboxId = 'f1000000-0000-4000-8000-000000000009';
+  globalThis.fetch = async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.endsWith('/rest/v1/rpc/manager_review_origin_resolve_v1')) {
+      return Response.json({ manager_review_public_origin: 'https://manager.test.invalid' });
+    }
+    assert.match(url, new RegExp(`/rest/v1/mail_outbox\\?id=eq\\.${outboxId}`));
+    return Response.json([{
+      body_text: `Review and approve: https://manager.test.invalid/manager/timesheet/${CANDIDATE_MANAGER_EMAIL_E2E_IDS.workflow}#token=opaque-proof-token`,
+      status: 'QUEUED',
+      email_type: 'CANDIDATE_APP_TRANSACTIONAL',
+      context_kind: 'CANDIDATE_WORKFLOW',
+      context_id: CANDIDATE_MANAGER_EMAIL_E2E_IDS.workflow,
+      payment_scope_json: {
+        candidate_manager_workflow_id: CANDIDATE_MANAGER_EMAIL_E2E_IDS.workflow,
+        candidate_manager_mail_kind: 'INITIAL'
+      }
+    }]);
+  };
+  try {
+    const result = await candidateManagerEmailE2EProofInternals.managerLinkFromOutbox({
+      MYTMS_CONTROL_PLANE_ENABLED: 'TRUE',
+      MYTMS_CONTROL_PLANE_URL: 'https://control.test.invalid',
+      MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-only-control-key',
+      MYTMS_OFFICE_AGENCY_ID: 'f1000000-0000-4000-8000-000000000010',
+      SUPABASE_URL: 'https://agency.test.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-only-agency-key'
+    }, outboxId);
+    assert.equal(result.providerSendPerformed, false);
+    assert.equal(result.managerUrl.includes('#token=opaque-proof-token'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
