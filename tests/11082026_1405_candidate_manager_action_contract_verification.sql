@@ -31,6 +31,17 @@ declare
   v_reminder_token_hash bytea:=extensions.digest('reminder-manager-token','sha256');
   v_count integer;
   v_mail_count integer;
+  v_cancel_payload jsonb:=jsonb_build_object(
+    'reason_note','I entered the wrong week.',
+    'manager_terminal_mail',jsonb_build_object(
+      'subject','Timesheet approval request cancelled',
+      'body_text','The approval request for this timesheet has been cancelled. No further action is required.',
+      'body_html','<p>The approval request for this timesheet has been cancelled. No further action is required.</p>',
+      'manager_template_version',1,
+      'manager_template_sha256',repeat('e1',32),
+      'manager_submission_type','TIMESHEET'
+    )
+  );
 begin
   insert into public.clients(id,name) values(v_client,'Manager action contract client');
   insert into public.client_settings(
@@ -195,7 +206,7 @@ begin
   end;
   v_result:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'CANCEL',1,
-    jsonb_build_object('reason_note','I entered the wrong week.'),
+    v_cancel_payload,
     'manager-action-cancel',v_now+interval '1 minute'
   );
   if v_result->>'state'<>'CANCELLED'
@@ -204,9 +215,9 @@ begin
     raise exception 'reasoned cancellation result incomplete: %',v_result;
   end if;
   select count(*) into v_count from public.mail_outbox
-  where deterministic_outbox_key='CANDIDATE_MANAGER_WITHDRAWAL_V1:'||v_request::text||':1'
-    and payment_scope_json->>'candidate_manager_mail_kind'='WITHDRAWAL';
-  if v_count<>1 then raise exception 'accepted manager mail did not create one withdrawal'; end if;
+  where deterministic_outbox_key='CANDIDATE_MANAGER_CANCELLATION_V1:'||v_request::text||':1'
+    and payment_scope_json->>'candidate_manager_mail_kind'='CANCELLATION';
+  if v_count<>1 then raise exception 'accepted manager mail did not create one cancellation notice'; end if;
   if not exists(
     select 1 from public.audit_events
     where object_type='candidate_submission_workflow'
@@ -217,15 +228,15 @@ begin
 
   v_result:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'CANCEL',1,
-    jsonb_build_object('reason_note','I entered the wrong week.'),
+    v_cancel_payload,
     'manager-action-cancel',v_now+interval '2 minutes'
   );
   if not coalesce((v_result->>'idempotent_replay')::boolean,false) then
     raise exception 'cancellation replay was not idempotent: %',v_result;
   end if;
   select count(*) into v_count from public.mail_outbox
-  where deterministic_outbox_key='CANDIDATE_MANAGER_WITHDRAWAL_V1:'||v_request::text||':1';
-  if v_count<>1 then raise exception 'cancellation replay duplicated withdrawal'; end if;
+  where deterministic_outbox_key='CANDIDATE_MANAGER_CANCELLATION_V1:'||v_request::text||':1';
+  if v_count<>1 then raise exception 'cancellation replay duplicated the cancellation notice'; end if;
 end;
 $manager_action_contract$;
 
