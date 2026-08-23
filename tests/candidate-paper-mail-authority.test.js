@@ -22,6 +22,9 @@ const invoiceCompleteSource = read(
 const claimSource = read(
   'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql'
 );
+const managerClaimGuardSource = read(
+  'supabase/repeatable/23082026_0822_candidate_manager_email_claim_route_guard_v1.sql'
+);
 const workflowSource = read(
   'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql'
 );
@@ -249,4 +252,21 @@ test('Candidate mail claim revalidates current workflow generation, route, state
   assert.match(sql, /workflow\.state='AWAITING_PAPER_RETURN'/i);
   assert.match(sql, /encode\(workflow\.paper_return_manifest_sha256,'hex'\)/i);
   assert.match(sql, /candidate_paper_generation_retired/i);
+});
+
+test('manager mail claim revalidates the protected route through one service-only guard', () => {
+  const claim = functionBody(claimSource, 'public.email_outbox_claim_ready_batch');
+  const guard = functionBody(
+    managerClaimGuardSource,
+    'private._candidate_manager_email_claim_route_current_v1'
+  );
+  assert.match(claim, /private\._candidate_manager_email_claim_route_current_v1\(/i);
+  assert.doesNotMatch(claim, /from\s+public\.candidate_manager_email_route_receipts/i);
+  assert.match(guard, /security definer/i);
+  assert.match(guard, /set search_path\s*=\s*pg_catalog, public, private, pg_temp/i);
+  assert.match(guard, /from public\.candidate_manager_email_route_receipts/i);
+  assert.match(managerClaimGuardSource,
+    /revoke all on function private\._candidate_manager_email_claim_route_current_v1[\s\S]*from public,anon,authenticated,service_role/i);
+  assert.match(managerClaimGuardSource,
+    /grant execute on function private\._candidate_manager_email_claim_route_current_v1[\s\S]*to service_role/i);
 });

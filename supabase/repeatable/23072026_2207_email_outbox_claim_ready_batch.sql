@@ -119,23 +119,14 @@ begin
               and lower(coalesce(
                     mo.payment_scope_json->>'candidate_manager_route_registration_sha256',''))
                 ~ '^[0-9a-f]{64}$'
-              and exists (
-                select 1
-                from public.candidate_manager_email_route_receipts route_receipt
-                where route_receipt.route_receipt_id=
-                      (mo.payment_scope_json->>'candidate_manager_route_receipt_id')::uuid
-                  and route_receipt.manager_route_ticket_id=
-                      (mo.payment_scope_json->>'candidate_manager_route_ticket_id')::uuid
-                  and route_receipt.route_revision=
-                      (mo.payment_scope_json->>'candidate_manager_route_revision')::bigint
-                  and encode(route_receipt.registration_receipt_sha256,'hex')=
-                      lower(mo.payment_scope_json->>'candidate_manager_route_registration_sha256')
-                  and route_receipt.workflow_id=mo.context_id
-                  and route_receipt.approval_request_id=
-                      (mo.payment_scope_json->>'candidate_approval_request_id')::uuid
-                  and route_receipt.request_generation=
-                      (mo.payment_scope_json->>'candidate_approval_request_generation')::integer
-                  and route_receipt.state='CURRENT'
+              and private._candidate_manager_email_claim_route_current_v1(
+                (mo.payment_scope_json->>'candidate_manager_route_receipt_id')::uuid,
+                (mo.payment_scope_json->>'candidate_manager_route_ticket_id')::uuid,
+                (mo.payment_scope_json->>'candidate_manager_route_revision')::bigint,
+                mo.payment_scope_json->>'candidate_manager_route_registration_sha256',
+                mo.context_id,
+                (mo.payment_scope_json->>'candidate_approval_request_id')::uuid,
+                (mo.payment_scope_json->>'candidate_approval_request_generation')::integer
               )
             )
           )
