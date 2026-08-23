@@ -1422,3 +1422,24 @@ test('normal CloudTMS Worker rejects public Candidate routes before global prefl
   assert.equal(response.status, 404);
   assert.equal(response.headers.get('access-control-allow-origin'), null);
 });
+
+test('public broker logs only a closed private failure code while preserving public masking', async () => {
+  const originalError = console.error;
+  const entries = [];
+  console.error = (...args) => entries.push(args);
+  try {
+    const response = await candidateBrokerInternals.publicSafePrivateResponse(Response.json({
+      ok: false,
+      error_code: 'MANAGER_REVIEW_PRIVATE_DIAGNOSTIC',
+      detail: 'must-not-be-logged'
+    }, { status: 503 }));
+    assert.equal(response.status, 502);
+    assert.equal((await response.json()).error_code, 'CANDIDATE_PRIVATE_API_UNAVAILABLE');
+    assert.deepEqual(entries, [[
+      '[candidate-broker] private request failed',
+      { status: 503, error_code: 'MANAGER_REVIEW_PRIVATE_DIAGNOSTIC' }
+    ]]);
+  } finally {
+    console.error = originalError;
+  }
+});

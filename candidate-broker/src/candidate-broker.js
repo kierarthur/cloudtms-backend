@@ -961,6 +961,14 @@ async function publicSafePrivateResponse(response) {
     source = {};
   }
   const status = response.status >= 500 ? 502 : response.status;
+  if (response.status >= 500) {
+    const candidate = text(source.error_code).toUpperCase();
+    console.error('[candidate-broker] private request failed', {
+      status: response.status,
+      error_code: /^[A-Z][A-Z0-9_]{2,100}$/.test(candidate)
+        ? candidate : 'CANDIDATE_PRIVATE_API_UNAVAILABLE'
+    });
+  }
   const headers = {};
   const retryAfter = response.headers.get('retry-after');
   if (retryAfter && /^\d{1,9}$/.test(retryAfter)) headers['retry-after'] = retryAfter;
@@ -2905,6 +2913,7 @@ export const candidateBrokerInternals = Object.freeze({
   sha256Hex,
   forwardPrivateSystem,
   candidateDailySystemRateKeys,
+  publicSafePrivateResponse,
   publicSafeDailyResponse,
   validateCandidateDailyTransport,
   wrapPrivateSession
