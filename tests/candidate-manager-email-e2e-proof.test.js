@@ -46,3 +46,18 @@ test('manager email E2E proof date fixture is one bounded weekly submission', ()
   assert.ok(signature.byteLength > 32);
   assert.deepEqual(Array.from(signature.slice(0, 8)), [137, 80, 78, 71, 13, 10, 26, 10]);
 });
+
+test('manager email E2E proof diagnostics redact every credential-shaped value', () => {
+  const diagnostic = candidateManagerEmailE2EProofInternals.safeProofDiagnostic(new Error(
+    'failed https://example.test/path#token=secret for f1000000-0000-4000-8000-000000000008 '
+    + `${'a'.repeat(64)} and private@example.test`
+  ));
+  assert.equal(diagnostic.includes('secret'), false);
+  assert.equal(diagnostic.includes('f1000000'), false);
+  assert.equal(diagnostic.includes('private@example.test'), false);
+  assert.equal(diagnostic.includes('a'.repeat(64)), false);
+  assert.match(diagnostic, /\[url\]/);
+  assert.match(diagnostic, /\[uuid\]/);
+  assert.match(diagnostic, /\[sha256\]/);
+  assert.match(diagnostic, /\[email\]/);
+});

@@ -33,6 +33,16 @@ function text(value) {
   return String(value == null ? '' : value).trim();
 }
 
+function safeProofDiagnostic(error) {
+  return text(error?.message || error)
+    .replace(/https?:\/\/[^\s]+/gi, '[url]')
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi, '[uuid]')
+    .replace(/[0-9a-f]{64}/gi, '[sha256]')
+    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[email]')
+    .replace(/#token=[^\s]+/gi, '#token=[redacted]')
+    .slice(0, 300) || 'UNKNOWN';
+}
+
 function json(status, body) {
   return new Response(JSON.stringify(body), {
     status,
@@ -283,6 +293,36 @@ async function managerLinkFromOutbox(env, outboxId) {
   };
 }
 
+async function renderPendingReview(env, deps) {
+  const ids = CANDIDATE_MANAGER_EMAIL_E2E_IDS;
+  const rows = await agencyRest(env, 'candidate_submission_workflows',
+    `id=eq.${ids.workflow}&select=id,state,generation,last_mutation_response_json`);
+  if (!Array.isArray(rows) || rows.length !== 1
+      || text(rows[0].state).toUpperCase() !== 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT'
+      || Number(rows[0].generation) !== 2) {
+    throw new Error('E2E_REVIEW_RENDER_STATE_INVALID');
+  }
+  const renderContract = rows[0].last_mutation_response_json?.render_contract;
+  if (!renderContract || !Array.isArray(renderContract.components)
+      || renderContract.components.length !== 1
+      || text(renderContract.workflow_id).toLowerCase() !== ids.workflow
+      || Number(renderContract.workflow_generation) !== 2) {
+    throw new Error('E2E_REVIEW_RENDER_CONTRACT_INVALID');
+  }
+  try {
+    const rendered = await candidateAppBackendInternals.renderAndRegister(
+      env, deps, renderContract, 'REVIEW'
+    );
+    return { ok: true, rendered_count: rendered.length };
+  } catch (error) {
+    return {
+      ok: false,
+      error_code: 'E2E_REVIEW_RENDER_FAILED',
+      error_diagnostic: safeProofDiagnostic(error)
+    };
+  }
+}
+
 export async function handleCandidateManagerEmailE2EProof(request, env, ctx, deps, user) {
   if (request.method !== 'POST'
       || new URL(request.url).pathname !== CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH) {
@@ -295,6 +335,15 @@ export async function handleCandidateManagerEmailE2EProof(request, env, ctx, dep
     const body = await boundedJson(request);
     const action = text(body?.action || 'SEED').toUpperCase();
     const { recipient } = await controlSettings(env, user);
+    if (action === 'RENDER') {
+      const result = await renderPendingReview(env, deps);
+      return json(result.ok ? 200 : 409, {
+        ...result,
+        contract_version: SYNTHETIC_MARKER,
+        workflow_id: CANDIDATE_MANAGER_EMAIL_E2E_IDS.workflow,
+        provider_send_performed: false
+      });
+    }
     if (action === 'LOOKUP') {
       const result = await managerLinkFromOutbox(env, body?.mail_outbox_id);
       return json(200, {
@@ -336,6 +385,8 @@ export const candidateManagerEmailE2EProofInternals = Object.freeze({
   managerLinkFromOutbox,
   proofDates,
   proofEnabled,
+  renderPendingReview,
+  safeProofDiagnostic,
   seedFixture,
   settingsBaseline
 });
