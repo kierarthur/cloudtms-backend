@@ -742,6 +742,79 @@ test('Candidate workflow mutation requires a caller key and an exact WORKER_SUBM
   }
 });
 
+test('pending WORKER_SUBMIT replay resumes review rendering without exposing the internal contract', async () => {
+  const sessionId = '00000000-0000-4000-8000-0000000000b1';
+  const accountId = '00000000-0000-4000-8000-0000000000b2';
+  const candidateId = '00000000-0000-4000-8000-0000000000b3';
+  const workflowId = '00000000-0000-4000-8000-0000000000b4';
+  const componentId = '00000000-0000-4000-8000-0000000000b5';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    session_id: sessionId, id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const background = [];
+  globalThis.fetch = async url => {
+    if (String(url).includes('candidate_app_sessions')) return Response.json([session]);
+    throw new Error('synthetic render dependency unavailable');
+  };
+  console.error = () => {};
+  const deps = {
+    routeAudience: 'PRIVATE',
+    async rpc() {
+      return {
+        ok: true,
+        idempotent_replay: true,
+        state: 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+        workflow_id: workflowId,
+        generation: 2,
+        render_contract: {
+          components: [{
+            workflow_id: workflowId,
+            workflow_generation: 2,
+            component_id: componentId,
+            render_input_sha256: '0'.repeat(64)
+          }]
+        }
+      };
+    }
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/worker-submit`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 1,
+          idempotency_key: 'worker-submit-render-replay',
+          candidate_signed_at_utc: '2026-08-23T06:35:47.104Z',
+          immutable_submission: { worked_minutes: 450 }
+        })
+      }
+    ), env, { waitUntil(promise) { background.push(promise); } }, deps);
+    assert.equal(response.status, 202);
+    const body = await response.json();
+    assert.equal(body.idempotent_replay, true);
+    assert.equal(body.review_rendering_accepted, true);
+    assert.equal(body.render_contract, undefined);
+    assert.equal(background.length, 1);
+    assert.deepEqual(await background[0], { ok: false, error_code: 'CANDIDATE_REQUEST_FAILED' });
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+});
+
 test('Candidate HTTP boundary ignores unrelated routes and fails protected routes closed', async () => {
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',

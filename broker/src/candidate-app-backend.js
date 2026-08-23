@@ -3393,7 +3393,20 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       env, deps, access, workflowId, dbAction, generation, mutationKey,
       { submission_request_identity: submissionRequestIdentity }
     );
-    if (replay) return jsonResponse(200, replay);
+    if (replay) {
+      if (replay.render_contract) {
+        const work = renderAndRegister(env, deps, replay.render_contract, 'REVIEW');
+        const deferred = deferBackground(ctx, work, 'review-render-replay', {
+          workflow_id: workflowId, generation
+        });
+        if (deferred !== true) await deferred;
+        return jsonResponse(202, {
+          ...withoutInternalRenderContracts(replay),
+          review_rendering_accepted: true
+        });
+      }
+      return jsonResponse(200, withoutInternalRenderContracts(replay));
+    }
     const workflow = await workflowRow(env, workflowId);
     const approvalRoute = requestedApprovalRoute || upper(workflow.route);
     payload = {
