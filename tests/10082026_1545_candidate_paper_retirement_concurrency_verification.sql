@@ -254,4 +254,8 @@ delete from public.candidates
 where id='b5200000-0000-4000-8000-000000000001';
 drop function public._candidate_paper_amend_race_probe_v1();
 drop function public._candidate_paper_release_race_probe_v1();
+update public.settings_defaults
+set candidate_app_feature_flags_json=candidate_app_feature_flags_json
+  ||'{"candidate_app_writes":false,"candidate_paper_qr":false,"candidate_notifications":false}'::jsonb
+where id=1;
 commit;
