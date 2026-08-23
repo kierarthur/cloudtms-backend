@@ -39,6 +39,26 @@ function json(status, body) {
   });
 }
 
+async function privateFailureDiagnostic(response) {
+  if (!(response instanceof Response) || response.status < 500) return null;
+  let source = {};
+  try {
+    const declared = Number(response.headers.get('content-length') || 0);
+    if (declared > 4096) throw new Error('response too large');
+    const bytes = new Uint8Array(await response.clone().arrayBuffer());
+    if (bytes.byteLength > 4096) throw new Error('response too large');
+    source = bytes.byteLength ? JSON.parse(new TextDecoder().decode(bytes)) : {};
+  } catch {
+    source = {};
+  }
+  const candidate = String(source?.error_code || '').trim().toUpperCase();
+  return {
+    status: response.status,
+    error_code: /^[A-Z][A-Z0-9_]{2,100}$/.test(candidate)
+      ? candidate : 'CANDIDATE_PRIVATE_FAILURE_UNCLASSIFIED'
+  };
+}
+
 function requiredConfigurationAvailable(env) {
   return Boolean(
     String(env.CANDIDATE_APP_ENVIRONMENT || '').trim()
@@ -386,6 +406,8 @@ export default {
       createCandidatePrivateDependencies(env, 'PRIVATE')
     );
     if (!response) return json(404, { ok: false, error_code: 'CANDIDATE_PRIVATE_ROUTE_NOT_FOUND' });
+    const failure = await privateFailureDiagnostic(response);
+    if (failure) console.error('[candidate-private] request failed', failure);
     const headers = new Headers(response.headers);
     headers.delete('access-control-allow-origin');
     headers.delete('access-control-allow-credentials');
@@ -418,5 +440,6 @@ export const candidatePrivateWorkerInternals = Object.freeze({
   managerRouteRequest,
   handleGoogleDataMatch,
   boundedObject,
+  privateFailureDiagnostic,
   privateCandidateOperation
 });
