@@ -33,6 +33,8 @@ test('public broker source has no Supabase, R2 or CloudTMS business-authority de
   ));
   assert.equal(privateConfig.workers_dev, false);
   assert.equal(Object.prototype.hasOwnProperty.call(privateConfig.vars, 'SUPABASE_SERVICE_ROLE_KEY'), false);
+  assert.equal(publicConfig.workers_dev, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(publicConfig, 'routes'), false);
   assert.deepEqual(
     publicConfig.vars.CANDIDATE_ALLOWED_ORIGINS.split(','),
     ['https://testmode.arthur-rai.co.uk', 'https://mytms-manager-review-test.kier-88a.workers.dev']
