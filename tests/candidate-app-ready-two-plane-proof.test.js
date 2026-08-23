@@ -36,7 +36,10 @@ function fixture(key, plane) {
     fixture_key: key,
     agency_id: plane.agency_id,
     data_plane_id: plane.data_plane_id,
+    route_version_id: key === 'DATA_PLANE_A'
+      ? '00000000-0000-4000-8000-000000000105' : '00000000-0000-4000-8000-000000000205',
     route_version: 1,
+    binding_manifest_generation: 1,
     global_account_id: key === 'DATA_PLANE_A'
       ? '00000000-0000-4000-8000-000000000101' : '00000000-0000-4000-8000-000000000201',
     global_session_id: key === 'DATA_PLANE_A'
@@ -96,8 +99,55 @@ async function route(operation, data, plane, overrides = {}) {
   }, { secret: plane.route_secret, keyVersion: 1 });
 }
 
+async function managerEmailRoute(operation, data, plane, overrides = {}) {
+  const now = new Date();
+  return signCandidateRouteContext({
+    v: 2,
+    typ: 'cloudtms-route-context-v2',
+    aud: 'candidate-private-api',
+    authority_kind: 'MANAGER_EMAIL',
+    operation_id: operation.operation_id,
+    environment: 'TEST',
+    agency_id: data.agency_id,
+    data_plane_id: data.data_plane_id,
+    route_version_id: data.route_version_id,
+    route_version: data.route_version,
+    binding_manifest_generation: data.binding_manifest_generation,
+    manager_route_ticket_id: '00000000-0000-4000-8000-00000000a101',
+    route_revision: 1,
+    workflow_route_hmac: 'a'.repeat(64),
+    approval_request_route_hmac: 'b'.repeat(64),
+    request_generation: 1,
+    credential_generation: 1,
+    issued_at_utc: now.toISOString(),
+    expires_at_utc: new Date(now.getTime() + 240_000).toISOString(),
+    nonce: '00000000-0000-4000-8000-00000000a102',
+    key_version: 1,
+    ...overrides
+  }, { secret: plane.route_secret, keyVersion: 1 });
+}
+
 async function probeRequest(operation, plane, data) {
   const signedRoute = await route(operation, data, plane);
+  const unsigned = new Request('https://private.invalid/private/app-ready/v1/route-probe', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-cloudtms-route-context': signedRoute.envelope,
+      'x-cloudtms-route-context-sha256': signedRoute.sha256
+    },
+    body: JSON.stringify({
+      operation_id: operation.operation_id,
+      method: operation.method,
+      path: operation.path,
+      cases: [{ case_id: 'positive', envelope: signedRoute.envelope, sha256: signedRoute.sha256 }]
+    })
+  });
+  return signCandidatePrivateRequest(unsigned, workerEnv(plane));
+}
+
+async function managerProbeRequest(operation, plane, data) {
+  const signedRoute = await managerEmailRoute(operation, data, plane);
   const unsigned = new Request('https://private.invalid/private/app-ready/v1/route-probe', {
     method: 'POST',
     headers: {
@@ -128,6 +178,12 @@ test('closed backend operation policy is byte-semantically attested and classifi
   assert.ok(CANDIDATE_OPERATION_POLICY.every((entry) => (
     entry.client_agency_selector_allowed === false && entry.preserves_business_rpc_meaning === true
   )));
+  assert.equal(CANDIDATE_OPERATION_POLICY.filter(
+    (entry) => entry.isolation_proof_class === 'MANAGER_CREDENTIAL_ROUTED_DATA_PLANE'
+  ).length, 6);
+  assert.equal(CANDIDATE_OPERATION_POLICY.filter(
+    (entry) => entry.isolation_proof_class === 'TYPED_AUTHORITY_ROUTED_DATA_PLANE'
+  ).length, 1);
 });
 
 test('closed binding catalogue deterministically matches the broker service-binding configuration', async () => {
@@ -160,6 +216,34 @@ test('control-plane matrix cases are complete, closed and never accept a client 
   assert.equal(neutral.find((entry) => entry.case_id.endsWith('_neutral')).context, null);
 });
 
+test('manager EMAIL proof uses v2 server-owned route authority for all six manager operations and shared upload', () => {
+  const fixtures = [fixture('DATA_PLANE_A', PRIMARY), fixture('DATA_PLANE_B', SYNTHETIC)];
+  assert.deepEqual(appReadyTwoPlaneProofInternals.managerEmailOperationIds, [
+    'startManagerReview',
+    'streamManagerReviewDocument',
+    'recordManagerReviewProgress',
+    'prepareManagerSignature',
+    'approveManagerReview',
+    'refuseManagerReview',
+    'uploadCandidateComponent'
+  ]);
+  for (const operationId of appReadyTwoPlaneProofInternals.managerEmailOperationIds) {
+    const operation = candidateOperationById(operationId);
+    const context = appReadyTwoPlaneProofInternals.managerEmailFixtureContext(operation, fixtures[0]);
+    const cases = appReadyTwoPlaneProofInternals.controlCases(operation, fixtures, 'MANAGER_EMAIL');
+    assert.equal(context.v, 2);
+    assert.equal(context.typ, 'cloudtms-route-context-v2');
+    assert.equal(context.authority_kind, 'MANAGER_EMAIL');
+    assert.equal(context.operation_id, operationId);
+    assert.equal(context.route_version_id, fixtures[0].route_version_id);
+    assert.equal(context.binding_manifest_generation, fixtures[0].binding_manifest_generation);
+    assert.equal(cases.length, 11);
+    assert.ok(cases.some((entry) => entry.case_id.endsWith('_wrong_route_id')));
+    assert.ok(cases.some((entry) => entry.case_id.endsWith('_stale_binding')));
+    assert.ok(cases.some((entry) => entry.case_id.endsWith('_wrong_authority')));
+  }
+});
+
 test('real TEST private Worker accepts only the signed primary proof context before business RPC', async () => {
   const operation = candidateOperationById('getCandidateBootstrap');
   const data = fixture('DATA_PLANE_A', PRIMARY);
@@ -171,6 +255,24 @@ test('real TEST private Worker accepts only the signed primary proof context bef
   assert.equal(body.ok, true);
   assert.equal(body.proof_class, 'REAL_TEST_DATA_PLANE');
   assert.deepEqual(body.results, [{ case_id: 'positive', accepted: true }]);
+});
+
+test('real and synthetic private proof adapters accept signed manager EMAIL v2 route context without business RPC', async () => {
+  const operation = candidateOperationById('startManagerReview');
+  const primaryData = fixture('DATA_PLANE_A', PRIMARY);
+  const syntheticData = fixture('DATA_PLANE_B', SYNTHETIC);
+  const [primaryResponse, syntheticResponse] = await Promise.all([
+    candidatePrivateWorker.fetch(
+      await managerProbeRequest(operation, PRIMARY, primaryData), workerEnv(PRIMARY), { waitUntil() {} }
+    ),
+    syntheticPrivateWorker.fetch(
+      await managerProbeRequest(operation, SYNTHETIC, syntheticData), workerEnv(SYNTHETIC)
+    )
+  ]);
+  assert.equal(primaryResponse.status, 200);
+  assert.equal(syntheticResponse.status, 200);
+  assert.deepEqual((await primaryResponse.json()).results, [{ case_id: 'positive', accepted: true }]);
+  assert.deepEqual((await syntheticResponse.json()).results, [{ case_id: 'positive', accepted: true }]);
 });
 
 test('synthetic Worker is service-authenticated, replay guarded and contains no business adapter', async () => {

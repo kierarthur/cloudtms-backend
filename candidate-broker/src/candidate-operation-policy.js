@@ -37,7 +37,7 @@ function closedPolicy() {
 export const CANDIDATE_OPERATION_POLICY = closedPolicy();
 export const CANDIDATE_OPERATION_POLICY_VERSION = candidateOperationPolicy.version;
 export const CANDIDATE_OPERATION_POLICY_SEMANTIC_SHA256 =
-  '921f867e4990537c982610fbdde0327775061ea03ecd9b10d75aa6b97fb7ebd3';
+  '43d3ea72395354bdac311a29ec15fd290694c1ee128050e48d309ed6a782a478';
 
 const BY_ID = new Map(CANDIDATE_OPERATION_POLICY.map((entry) => [entry.operation_id, entry]));
 

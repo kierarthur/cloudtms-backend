@@ -460,12 +460,17 @@
       "surface": "CANDIDATE_APP",
       "app_client_included": true,
       "authority_class": "AGENCY_DATA_PLANE",
-      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "route_selection_owner": "AUTHORITY_DEPENDENT_SERVER_RESOLUTION",
       "agency_context_required": true,
       "agency_route_required": true,
       "data_plane_dispatch_required": true,
       "client_agency_selector_allowed": false,
-      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "isolation_proof_class": "TYPED_AUTHORITY_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "CANDIDATE_SESSION",
+        "MANAGER_EMAIL",
+        "MANAGER_PHONE"
+      ],
       "preserves_business_rpc_meaning": true
     },
     {
@@ -505,12 +510,16 @@
       "surface": "MANAGER_HANDOFF",
       "app_client_included": true,
       "authority_class": "AGENCY_DATA_PLANE",
-      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "route_selection_owner": "SERVER_CREDENTIAL_RESOLVER",
       "agency_context_required": true,
       "agency_route_required": true,
       "data_plane_dispatch_required": true,
       "client_agency_selector_allowed": false,
-      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "isolation_proof_class": "MANAGER_CREDENTIAL_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "MANAGER_EMAIL",
+        "MANAGER_PHONE"
+      ],
       "preserves_business_rpc_meaning": true
     },
     {
@@ -520,12 +529,16 @@
       "surface": "MANAGER_HANDOFF",
       "app_client_included": true,
       "authority_class": "AGENCY_DATA_PLANE",
-      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "route_selection_owner": "SERVER_CREDENTIAL_RESOLVER",
       "agency_context_required": true,
       "agency_route_required": true,
       "data_plane_dispatch_required": true,
       "client_agency_selector_allowed": false,
-      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "isolation_proof_class": "MANAGER_CREDENTIAL_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "MANAGER_EMAIL",
+        "MANAGER_PHONE"
+      ],
       "preserves_business_rpc_meaning": true
     },
     {
@@ -535,12 +548,16 @@
       "surface": "MANAGER_HANDOFF",
       "app_client_included": true,
       "authority_class": "AGENCY_DATA_PLANE",
-      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "route_selection_owner": "SERVER_CREDENTIAL_RESOLVER",
       "agency_context_required": true,
       "agency_route_required": true,
       "data_plane_dispatch_required": true,
       "client_agency_selector_allowed": false,
-      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "isolation_proof_class": "MANAGER_CREDENTIAL_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "MANAGER_EMAIL",
+        "MANAGER_PHONE"
+      ],
       "preserves_business_rpc_meaning": true
     },
     {
@@ -550,12 +567,16 @@
       "surface": "MANAGER_HANDOFF",
       "app_client_included": true,
       "authority_class": "AGENCY_DATA_PLANE",
-      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "route_selection_owner": "SERVER_CREDENTIAL_RESOLVER",
       "agency_context_required": true,
       "agency_route_required": true,
       "data_plane_dispatch_required": true,
       "client_agency_selector_allowed": false,
-      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "isolation_proof_class": "MANAGER_CREDENTIAL_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "MANAGER_EMAIL",
+        "MANAGER_PHONE"
+      ],
       "preserves_business_rpc_meaning": true
     },
     {
@@ -565,12 +586,16 @@
       "surface": "MANAGER_HANDOFF",
       "app_client_included": true,
       "authority_class": "AGENCY_DATA_PLANE",
-      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "route_selection_owner": "SERVER_CREDENTIAL_RESOLVER",
       "agency_context_required": true,
       "agency_route_required": true,
       "data_plane_dispatch_required": true,
       "client_agency_selector_allowed": false,
-      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "isolation_proof_class": "MANAGER_CREDENTIAL_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "MANAGER_EMAIL",
+        "MANAGER_PHONE"
+      ],
       "preserves_business_rpc_meaning": true
     },
     {
@@ -580,12 +605,16 @@
       "surface": "MANAGER_HANDOFF",
       "app_client_included": true,
       "authority_class": "AGENCY_DATA_PLANE",
-      "route_selection_owner": "CONTROL_PLANE_SESSION",
+      "route_selection_owner": "SERVER_CREDENTIAL_RESOLVER",
       "agency_context_required": true,
       "agency_route_required": true,
       "data_plane_dispatch_required": true,
       "client_agency_selector_allowed": false,
-      "isolation_proof_class": "SESSION_ROUTED_DATA_PLANE",
+      "isolation_proof_class": "MANAGER_CREDENTIAL_ROUTED_DATA_PLANE",
+      "allowed_authority_kinds": [
+        "MANAGER_EMAIL",
+        "MANAGER_PHONE"
+      ],
       "preserves_business_rpc_meaning": true
     },
     {

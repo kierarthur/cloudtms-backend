@@ -11,9 +11,19 @@ import { candidateDataPlaneRegistryEntry } from './candidate-data-plane-registry
 import { controlPlaneRpc } from './control-plane-client.js';
 
 export const APP_READY_TWO_PLANE_PROOF_PATH = '/__app-ready/v1/two-plane-matrix';
+export const MANAGER_EMAIL_TWO_PLANE_PROOF_PATH = '/__app-ready/v1/manager-email-two-plane-matrix';
 const PAGE_SIZE = 9;
 const MAX_RESPONSE_BYTES = 256 * 1024;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MANAGER_EMAIL_OPERATION_IDS = Object.freeze([
+  'startManagerReview',
+  'streamManagerReviewDocument',
+  'recordManagerReviewProgress',
+  'prepareManagerSignature',
+  'approveManagerReview',
+  'refuseManagerReview',
+  'uploadCandidateComponent'
+]);
 
 class AppReadyProofError extends Error {
   constructor(status, code) {
@@ -49,7 +59,7 @@ function mutateUuid(value) {
   return `${source[0] === '0' ? '1' : '0'}${source.slice(1)}`;
 }
 
-function fixtureContext(operation, fixture, now = new Date(), overrides = {}) {
+function candidateFixtureContext(operation, fixture, now = new Date(), overrides = {}) {
   return {
     v: 1,
     aud: 'candidate-private-api',
@@ -71,15 +81,56 @@ function fixtureContext(operation, fixture, now = new Date(), overrides = {}) {
   };
 }
 
-async function signedContext(operation, fixture, env, overrides = {}) {
+function managerEmailFixtureContext(operation, fixture, now = new Date(), overrides = {}) {
+  const fixtureSuffix = fixture.fixture_key === 'DATA_PLANE_A' ? 'a' : 'b';
+  return {
+    v: 2,
+    typ: 'cloudtms-route-context-v2',
+    aud: 'candidate-private-api',
+    authority_kind: 'MANAGER_EMAIL',
+    operation_id: operation.operation_id,
+    environment: 'TEST',
+    agency_id: text(fixture.agency_id).toLowerCase(),
+    data_plane_id: text(fixture.data_plane_id).toLowerCase(),
+    route_version_id: text(fixture.route_version_id).toLowerCase(),
+    route_version: Number(fixture.route_version),
+    binding_manifest_generation: Number(fixture.binding_manifest_generation),
+    manager_route_ticket_id: `00000000-0000-4000-8000-00000000${fixtureSuffix}101`,
+    route_revision: 1,
+    workflow_route_hmac: fixtureSuffix.repeat(64),
+    approval_request_route_hmac: fixtureSuffix === 'a' ? 'c'.repeat(64) : 'd'.repeat(64),
+    request_generation: 1,
+    credential_generation: 1,
+    issued_at_utc: now.toISOString(),
+    expires_at_utc: new Date(now.getTime() + 4 * 60 * 1000).toISOString(),
+    nonce: crypto.randomUUID(),
+    key_version: 1,
+    ...overrides
+  };
+}
+
+function usesManagerEmailProof(operation, authorityKind = null) {
+  return authorityKind === 'MANAGER_EMAIL'
+    || operation.isolation_proof_class === 'MANAGER_CREDENTIAL_ROUTED_DATA_PLANE';
+}
+
+function fixtureContext(operation, fixture, now = new Date(), overrides = {}, authorityKind = null) {
+  return usesManagerEmailProof(operation, authorityKind)
+    ? managerEmailFixtureContext(operation, fixture, now, overrides)
+    : candidateFixtureContext(operation, fixture, now, overrides);
+}
+
+async function signedContext(operation, fixture, env, overrides = {}, authorityKind = null) {
   const registry = candidateDataPlaneRegistryEntry(fixture.registry_binding_key, env);
   if (!registry) throw new AppReadyProofError(503, 'APP_READY_BINDING_UNAVAILABLE');
   return {
     registry,
-    signed: await signCandidateRouteContext(fixtureContext(operation, fixture, new Date(), overrides), {
+    signed: await signCandidateRouteContext(
+      fixtureContext(operation, fixture, new Date(), overrides, authorityKind), {
       secret: registry.routeContextSecret,
       keyVersion: registry.keyVersion
-    })
+      }
+    )
   };
 }
 
@@ -153,7 +204,7 @@ function controlCase(caseId, operation, fixture, context, extra = {}) {
   };
 }
 
-function controlCases(operation, fixtures) {
+function controlCases(operation, fixtures, authorityKind = null) {
   if (!operation.data_plane_dispatch_required) {
     return [
       controlCase('neutral', operation, null, null),
@@ -163,7 +214,26 @@ function controlCases(operation, fixtures) {
   }
   const fixture = fixtures[0];
   const other = fixtures[1];
-  const valid = fixtureContext(operation, fixture);
+  const managerEmail = usesManagerEmailProof(operation, authorityKind);
+  const valid = fixtureContext(operation, fixture, new Date(), {}, authorityKind);
+  if (managerEmail) {
+    return [
+      controlCase('positive_a', operation, fixture, valid),
+      controlCase('positive_b', operation, other,
+        fixtureContext(operation, other, new Date(), {}, authorityKind)),
+      controlCase('stale_route', operation, fixture, { ...valid, route_version: valid.route_version + 1 }),
+      controlCase('wrong_agency', operation, fixture, { ...valid, agency_id: other.agency_id }),
+      controlCase('wrong_plane', operation, fixture, { ...valid, data_plane_id: other.data_plane_id }),
+      controlCase('wrong_route_id', operation, fixture, { ...valid, route_version_id: other.route_version_id }),
+      controlCase('stale_binding', operation, fixture, {
+        ...valid, binding_manifest_generation: valid.binding_manifest_generation + 1
+      }),
+      controlCase('wrong_authority', operation, fixture, { ...valid, authority_kind: 'MANAGER_PHONE' }),
+      controlCase('wrong_audience', operation, fixture, { ...valid, aud: 'wrong-audience' }),
+      controlCase('missing', operation, fixture, null),
+      controlCase('selector', operation, fixture, valid, { client_selector_present: true })
+    ];
+  }
   return [
     controlCase('positive_a', operation, fixture, valid),
     controlCase('positive_b', operation, other, fixtureContext(operation, other)),
@@ -216,12 +286,16 @@ function expectedPrivateCases(map) {
     && map.get('missing') === false);
 }
 
-async function privateCases(operation, target, other, env) {
-  const positive = await signedContext(operation, target, env);
-  const wrongPlane = await signedContext(operation, other, env);
-  const wrongAgency = await signedContext(operation, target, env, { agency_id: other.agency_id });
-  const wrongDataPlane = await signedContext(operation, target, env, { data_plane_id: other.data_plane_id });
-  const staleRoute = await signedContext(operation, target, env, { route_version: Number(target.route_version) + 1 });
+async function privateCases(operation, target, other, env, authorityKind = null) {
+  const positive = await signedContext(operation, target, env, {}, authorityKind);
+  const wrongPlane = await signedContext(operation, other, env, {}, authorityKind);
+  const wrongAgency = await signedContext(operation, target, env, { agency_id: other.agency_id }, authorityKind);
+  const wrongDataPlane = await signedContext(
+    operation, target, env, { data_plane_id: other.data_plane_id }, authorityKind
+  );
+  const staleRoute = await signedContext(
+    operation, target, env, { route_version: Number(target.route_version) + 1 }, authorityKind
+  );
   const alternate = CANDIDATE_OPERATION_POLICY.find(
     (entry) => entry.data_plane_dispatch_required && entry.operation_id !== operation.operation_id
   );
@@ -254,10 +328,11 @@ async function privateCases(operation, target, other, env) {
   };
 }
 
-async function dispatchRow(operation, fixtures, controlResults, env) {
+async function dispatchRow(operation, fixtures, controlResults, env, authorityKind = null) {
+  const managerEmail = usesManagerEmailProof(operation, authorityKind);
   const [a, b] = await Promise.all([
-    privateCases(operation, fixtures[0], fixtures[1], env),
-    privateCases(operation, fixtures[1], fixtures[0], env)
+    privateCases(operation, fixtures[0], fixtures[1], env, authorityKind),
+    privateCases(operation, fixtures[1], fixtures[0], env, authorityKind)
   ]);
   const responses = await Promise.all([
     sendPrivateProbe(a.registry, operation, a.outer, a.cases, env),
@@ -271,15 +346,23 @@ async function dispatchRow(operation, fixtures, controlResults, env) {
   const privateB = expectedPrivateCases(privateCaseMap(bProbe, fixtures[1]));
   const controlPositive = controlAccepted(controlResults, operation, 'positive_a', true)
     && controlAccepted(controlResults, operation, 'positive_b', true);
-  const controlCandidate = controlAccepted(controlResults, operation, 'wrong_candidate', false);
-  const controlMembership = controlAccepted(controlResults, operation, 'wrong_membership', false);
-  const controlSession = controlAccepted(controlResults, operation, 'wrong_session_epoch', false);
+  const controlCandidate = managerEmail
+    || controlAccepted(controlResults, operation, 'wrong_candidate', false);
+  const controlMembership = managerEmail
+    || controlAccepted(controlResults, operation, 'wrong_membership', false);
+  const controlSession = managerEmail
+    || controlAccepted(controlResults, operation, 'wrong_session_epoch', false);
   const controlStale = controlAccepted(controlResults, operation, 'stale_route', false);
   const controlWrongPlane = controlAccepted(controlResults, operation, 'wrong_agency', false)
     && controlAccepted(controlResults, operation, 'wrong_plane', false)
     && controlAccepted(controlResults, operation, 'wrong_audience', false)
     && controlAccepted(controlResults, operation, 'missing', false)
-    && controlAccepted(controlResults, operation, 'selector', false);
+    && controlAccepted(controlResults, operation, 'selector', false)
+    && (!managerEmail || (
+      controlAccepted(controlResults, operation, 'wrong_route_id', false)
+      && controlAccepted(controlResults, operation, 'stale_binding', false)
+      && controlAccepted(controlResults, operation, 'wrong_authority', false)
+    ));
   const outageIsolation = aFault.status === 503 && bFault.status === 503
     && aFault.body?.error_code === 'APP_READY_PROBE_SIMULATED_UNAVAILABLE'
     && bFault.body?.error_code === 'APP_READY_PROBE_SIMULATED_UNAVAILABLE'
@@ -297,9 +380,10 @@ async function dispatchRow(operation, fixtures, controlResults, env) {
     positive_result: controlPositive && privateA && privateB ? 'PASS' : 'FAIL',
     wrong_plane_result: controlWrongPlane && privateA && privateB ? 'PASS' : 'FAIL',
     stale_context_result: controlStale && privateA && privateB ? 'PASS' : 'FAIL',
-    wrong_candidate_result: controlCandidate ? 'PASS' : 'FAIL',
-    wrong_membership_result: controlMembership ? 'PASS' : 'FAIL',
-    wrong_session_epoch_result: controlSession ? 'PASS' : 'FAIL',
+    wrong_candidate_result: managerEmail ? 'NOT_APPLICABLE' : (controlCandidate ? 'PASS' : 'FAIL'),
+    wrong_membership_result: managerEmail ? 'NOT_APPLICABLE' : (controlMembership ? 'PASS' : 'FAIL'),
+    wrong_session_epoch_result: managerEmail ? 'NOT_APPLICABLE' : (controlSession ? 'PASS' : 'FAIL'),
+    manager_route_identity_result: managerEmail ? (controlWrongPlane ? 'PASS' : 'FAIL') : 'NOT_APPLICABLE',
     semantic_integrity_result: semanticIntegrity ? 'PASS' : 'FAIL',
     outage_isolation_result: outageIsolation ? 'PASS' : 'FAIL',
     fallback_observed: false,
@@ -340,7 +424,10 @@ function exactFixtures(catalogue) {
   const fixtures = [...catalogue.fixtures].sort((left, right) => left.fixture_key.localeCompare(right.fixture_key));
   if (fixtures[0].fixture_key !== 'DATA_PLANE_A' || fixtures[1].fixture_key !== 'DATA_PLANE_B'
       || fixtures[0].proof_class !== 'REAL_TEST_DATA_PLANE'
-      || fixtures[1].proof_class !== 'SYNTHETIC_NON_BUSINESS_FIXTURE') {
+      || fixtures[1].proof_class !== 'SYNTHETIC_NON_BUSINESS_FIXTURE'
+      || fixtures.some((fixture) => !UUID_RE.test(text(fixture.route_version_id))
+        || !Number.isSafeInteger(Number(fixture.binding_manifest_generation))
+        || Number(fixture.binding_manifest_generation) < 1)) {
     throw new AppReadyProofError(503, 'APP_READY_ROUTE_FIXTURES_UNAVAILABLE');
   }
   return fixtures;
@@ -398,9 +485,59 @@ export async function handleAppReadyTwoPlaneProof(request, env) {
   }
 }
 
+export async function handleManagerEmailTwoPlaneProof(request, env) {
+  try {
+    if (!proofEnabled(env)) throw new AppReadyProofError(404, 'APP_READY_PROOF_DISABLED');
+    if (request.method !== 'GET') throw new AppReadyProofError(405, 'APP_READY_PROOF_METHOD_INVALID');
+    const url = new URL(request.url);
+    if ([...url.searchParams.keys()].length) {
+      throw new AppReadyProofError(400, 'APP_READY_PROOF_SELECTOR_FORBIDDEN');
+    }
+    const catalogue = await controlPlaneRpc(
+      env, 'control', 'app_ready_route_fixture_catalogue_v1',
+      { p_policy_semantic_sha256: CANDIDATE_OPERATION_POLICY_SEMANTIC_SHA256 }
+    );
+    const fixtures = exactFixtures(catalogue);
+    const operations = MANAGER_EMAIL_OPERATION_IDS.map((operationId) => (
+      CANDIDATE_OPERATION_POLICY.find((operation) => operation.operation_id === operationId)
+    ));
+    if (operations.some((operation) => !operation?.data_plane_dispatch_required)) {
+      throw new AppReadyProofError(503, 'APP_READY_MANAGER_POLICY_INVALID');
+    }
+    const cases = operations.flatMap((operation) => controlCases(operation, fixtures, 'MANAGER_EMAIL'));
+    const validation = await controlPlaneRpc(
+      env, 'control', 'app_ready_route_matrix_validate_v1',
+      { p_policy_semantic_sha256: CANDIDATE_OPERATION_POLICY_SEMANTIC_SHA256, p_cases: cases }
+    );
+    const controlResults = controlResultMap(validation);
+    const rows = await Promise.all(operations.map((operation) => (
+      dispatchRow(operation, fixtures, controlResults, env, 'MANAGER_EMAIL')
+    )));
+    const passed = rows.length === MANAGER_EMAIL_OPERATION_IDS.length
+      && rows.every((row) => row.result === 'PASS' && row.fallback_observed === false);
+    return json(passed ? 200 : 503, {
+      ok: passed,
+      status: passed ? 'MANAGER_EMAIL_MATRIX_PASSED' : 'MANAGER_EMAIL_MATRIX_FAILED',
+      proof_contract: 'CLOUDTMS_MANAGER_EMAIL_TWO_PLANE_ROUTE_CONTEXT_V2',
+      policy_version: 2,
+      policy_semantic_sha256: CANDIDATE_OPERATION_POLICY_SEMANTIC_SHA256,
+      operation_count: MANAGER_EMAIL_OPERATION_IDS.length,
+      row_count: rows.length,
+      rows
+    });
+  } catch (error) {
+    return json(error instanceof AppReadyProofError ? error.status : 503, {
+      ok: false,
+      error_code: error instanceof AppReadyProofError ? error.code : 'APP_READY_PROOF_UNAVAILABLE'
+    });
+  }
+}
+
 export const appReadyTwoPlaneProofInternals = Object.freeze({
   controlCases,
   fixtureContext,
+  managerEmailFixtureContext,
+  managerEmailOperationIds: MANAGER_EMAIL_OPERATION_IDS,
   mutateUuid,
   proofEnabled
 });

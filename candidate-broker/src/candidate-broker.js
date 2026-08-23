@@ -6,7 +6,9 @@ import {
 import { candidateOperationForRequest } from './candidate-operation-policy.js';
 import {
   APP_READY_TWO_PLANE_PROOF_PATH,
-  handleAppReadyTwoPlaneProof
+  handleAppReadyTwoPlaneProof,
+  handleManagerEmailTwoPlaneProof,
+  MANAGER_EMAIL_TWO_PLANE_PROOF_PATH
 } from './app-ready-two-plane-proof.js';
 import {
   handleMyTmsGoogleControlRequest,
@@ -2488,6 +2490,18 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
         `page:${ip}:${url.searchParams.get('page') || '1'}`
       ]);
       return handleAppReadyTwoPlaneProof(request, env);
+    } catch (error) {
+      return errorResponse(error, id);
+    }
+  }
+  if (path === MANAGER_EMAIL_TWO_PLANE_PROOF_PATH) {
+    try {
+      const ip = text(request.headers.get('cf-connecting-ip')) || 'unknown-ip';
+      await applyRateLimit(env, 'CANDIDATE_APP_READY_PROOF_RATE_LIMIT', [
+        `ip:${ip}`,
+        `manager-email:${ip}`
+      ]);
+      return handleManagerEmailTwoPlaneProof(request, env);
     } catch (error) {
       return errorResponse(error, id);
     }
