@@ -383,7 +383,9 @@ begin
     jsonb_build_object(
       'approval_token_hash_hex',v_token_hex,
       'component_kind','MANAGER_SIGNATURE','document_role','MANAGER_SIGNATURE',
-      'storage_key','manager-binding/live.png','media_type','image/png','byte_size',128
+      'storage_key','manager-binding/live.png','media_type','image/png','byte_size',128,
+      'manager_signature_capture_method','DRAW',
+      'expected_source_content_sha256_hex',repeat('b3',32)
     ),'manager-binding:live-prepare',v_now
   );
   v_signature:=(v_response->>'component_id')::uuid;
