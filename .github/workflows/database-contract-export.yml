@@ -1,0 +1,56 @@
+name: Database contract export (TEST read-only)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudtms-database-contract-export-test
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Export data-free TEST catalogue contract
+    runs-on: ubuntu-latest
+    environment: database-test
+    env:
+      CLOUDTMS_DATABASE_URL: ${{ secrets.CLOUDTMS_DATABASE_URL || secrets.SUPABASE_DB_URL_TEST }}
+      CLOUDTMS_EXPECTED_PROJECT_REF: ${{ vars.CLOUDTMS_PROJECT_REF }}
+      CLOUDTMS_ENVIRONMENT: TEST
+      CLOUDTMS_RELEASE_MODE: UPGRADE
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+          sudo timeout 180 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq
+          sudo timeout 180 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq postgresql-client
+          command -v psql >/dev/null 2>&1
+      - name: Validate protected TEST target without mutation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_PROJECT_REF:-}" || { echo "Missing protected CLOUDTMS_PROJECT_REF variable"; exit 1; }
+          npm run db:plan -- --environment=TEST --mode=UPGRADE
+      - name: Export data-free catalogue contract
+        run: npm run db:contract:export
+      - name: Upload exact contract artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudtms-test-database-contract-${{ github.sha }}
+          path: supabase/release/current-contract.json
+          if-no-files-found: error
+          retention-days: 7
