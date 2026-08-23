@@ -6,7 +6,9 @@ const read = (relative) => readFileSync(new URL(`../${relative}`, import.meta.ur
 const migration = read('supabase/migrations/22082026_1402_candidate_named_legacy_relation_isolation.sql');
 const repeatable = read('supabase/repeatable/22082026_1402_candidate_named_security_definer_browser_isolation.sql');
 const verification = read('supabase/verification/22082026_1402_candidate_named_legacy_security_verification.sql');
+const currentVerification = read('supabase/verification/23082026_0400_candidate_named_security_verification_v2.sql');
 const workflow = read('.github/workflows/supabase-migrate.yml');
+const currentRelease = read('supabase/release/current-release.json');
 
 const relations = [
   'banking_pay_snapshot_candidate_state',
@@ -47,10 +49,19 @@ test('Candidate-named SECURITY DEFINER functions are reclosed after earlier repe
 
 test('the exact security verifier is mandatory after every migration workflow', () => {
   const general = workflow.indexOf('22082026_1302_general_browser_isolation_verification.sql');
-  const candidateNamed = workflow.indexOf('22082026_1402_candidate_named_legacy_security_verification.sql');
+  const protectedCandidateNamed = workflow.indexOf('22082026_1402_candidate_named_legacy_security_verification.sql');
+  const candidateNamed = workflow.indexOf('23082026_0400_candidate_named_security_verification_v2.sql');
   const candidateApp = workflow.indexOf('22082026_0952_candidate_mytms_browser_isolation_verification.sql');
   assert.ok(general >= 0);
+  assert.ok(protectedCandidateNamed > general);
   assert.ok(candidateNamed > general);
+  assert.ok(candidateApp > protectedCandidateNamed);
   assert.ok(candidateApp > candidateNamed);
   assert.match(verification, /cloudtms_data_api_mfa_gate/);
+  assert.match(currentVerification, /v_count<>90/i);
+  assert.match(currentVerification, /v_service_missing<>7/i);
+  assert.match(currentVerification, /v_browser_executable<>0/i);
+  assert.match(currentVerification, /d9282ff2fc8eb09f98b4b3f6fe967237/i);
+  assert.match(currentRelease, /23082026_0400_candidate_named_security_verification_v2\.sql/);
+  assert.doesNotMatch(currentRelease, /22082026_1402_candidate_named_legacy_security_verification\.sql/);
 });
