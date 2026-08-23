@@ -36,6 +36,7 @@
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
     "supabase/verification/22082026_1712_daily_validation_compatibility_security_verification.sql",
     "supabase/verification/22082026_1402_candidate_named_legacy_security_verification.sql",
-    "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql"
+    "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
+    "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql"
   ]
 }

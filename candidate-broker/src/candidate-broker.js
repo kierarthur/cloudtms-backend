@@ -309,6 +309,20 @@ async function hmacSha256Bytes(secret, purpose, value) {
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, bytes));
 }
 
+async function managerEmailCredentialHmac(env, credential) {
+  const secret = text(env.MYTMS_MANAGER_ROUTE_HMAC_SECRET);
+  if (secret.length < 32) {
+    throw new CandidateBrokerError(503, 'MANAGER_ROUTE_CONFIGURATION_UNAVAILABLE');
+  }
+  const key = await crypto.subtle.importKey(
+    'raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  return bytesToHex(await crypto.subtle.sign(
+    'HMAC', key,
+    encoder.encode(`manager-email-credential-v1\u001f${canonicalJson(credential)}`)
+  ));
+}
+
 function randomOpaqueToken(byteLength = 32) {
   if (!Number.isSafeInteger(byteLength) || byteLength < 16 || byteLength > 128) {
     throw new CandidateBrokerError(500, 'CANDIDATE_RANDOM_TOKEN_INVALID');
@@ -891,7 +905,8 @@ async function forwardPrivate(request, env, {
       throw new CandidateBrokerError(500, 'CANDIDATE_OPERATION_POLICY_INVALID');
     }
     const signedRoute = await routeContextForPrivate(
-      federated.access, federated.route, operation.operation_id, env
+      federated.access, federated.route, operation.operation_id, env,
+      new Date(), federated.authorityKind || 'CANDIDATE_SESSION'
     );
     headers.set('x-cloudtms-route-context', signedRoute.envelope);
     headers.set('x-cloudtms-route-context-sha256', signedRoute.sha256);
@@ -1242,7 +1257,127 @@ async function resolveControlPlaneRoute(access, env, correlationId) {
   return { ...result, registryEntry: entry };
 }
 
-async function routeContextForPrivate(access, route, operationId, env, now = new Date()) {
+async function resolveManagerEmailRoute(credential, operationId, env) {
+  if (!controlPlaneEnabled(env)) {
+    throw new CandidateBrokerError(503, 'MANAGER_ROUTE_UNAVAILABLE');
+  }
+  let result;
+  try {
+    result = await candidateControlPlaneRpc(
+      env, 'control', 'manager_email_route_resolve_v1', {
+        p_resolution: {
+          environment_label: environmentName(env),
+          credential_hmac_hex: await managerEmailCredentialHmac(env, credential),
+          credential_key_version: 1,
+          operation_id: operationId
+        }
+      }
+    );
+  } catch (error) {
+    if (['DEPENDENCY_UNAVAILABLE', 'CONTROL_PLANE_DISABLED',
+      'CONTROL_PLANE_CONFIGURATION_UNAVAILABLE', 'MANAGER_ROUTE_NOT_CALLABLE'
+    ].includes(error?.code)) {
+      throw new CandidateBrokerError(503, 'MANAGER_ROUTE_UNAVAILABLE');
+    }
+    throw new CandidateBrokerError(401, 'MANAGER_SECURE_LINK_INVALID');
+  }
+  const resultError = controlPlaneResultError(result, 'MANAGER_SECURE_LINK_INVALID');
+  if (resultError) throw resultError;
+  const entry = candidateDataPlaneRegistryEntry(result.registry_binding_key, env);
+  if (result.authority_kind !== 'MANAGER_EMAIL'
+      || upper(result.environment_label) !== environmentName(env)
+      || !UUID_RE.test(text(result.agency_id))
+      || !UUID_RE.test(text(result.data_plane_id))
+      || !UUID_RE.test(text(result.route_version_id))
+      || !UUID_RE.test(text(result.manager_route_ticket_id))
+      || !SHA256_RE.test(text(result.workflow_route_hmac_hex))
+      || !SHA256_RE.test(text(result.approval_request_route_hmac_hex))
+      || !Number.isSafeInteger(Number(result.route_version)) || Number(result.route_version) < 1
+      || !Number.isSafeInteger(Number(result.binding_manifest_generation))
+      || Number(result.binding_manifest_generation) < 1
+      || !Number.isSafeInteger(Number(result.route_revision)) || Number(result.route_revision) < 1
+      || !Number.isSafeInteger(Number(result.request_generation))
+      || Number(result.request_generation) < 1
+      || !Number.isSafeInteger(Number(result.credential_generation))
+      || Number(result.credential_generation) < 1
+      || !entry || entry.environment !== environmentName(env)) {
+    throw new CandidateBrokerError(503, 'MANAGER_ROUTE_UNAVAILABLE');
+  }
+  return { ...result, registryEntry: entry };
+}
+
+async function routeContextForPrivate(
+  access, route, operationId, env, now = new Date(), authorityKind = 'CANDIDATE_SESSION'
+) {
+  if (authorityKind === 'MANAGER_EMAIL') {
+    const routeExpiresAt = Date.parse(text(route.expires_at_utc));
+    const expiresAt = new Date(Math.min(
+      routeExpiresAt,
+      now.getTime() + ROUTE_CONTEXT_TTL_SECONDS * 1000
+    ));
+    if (!Number.isFinite(routeExpiresAt) || expiresAt <= now) {
+      throw new CandidateBrokerError(401, 'MANAGER_SECURE_LINK_INVALID');
+    }
+    return signCandidateRouteContext({
+      v: 2,
+      typ: 'cloudtms-route-context-v2',
+      aud: 'candidate-private-api',
+      authority_kind: 'MANAGER_EMAIL',
+      operation_id: operationId,
+      environment: environmentName(env),
+      agency_id: route.agency_id,
+      data_plane_id: route.data_plane_id,
+      route_version_id: route.route_version_id,
+      route_version: Number(route.route_version),
+      binding_manifest_generation: Number(route.binding_manifest_generation),
+      manager_route_ticket_id: route.manager_route_ticket_id,
+      route_revision: Number(route.route_revision),
+      workflow_route_hmac: text(route.workflow_route_hmac_hex).toLowerCase(),
+      approval_request_route_hmac: text(route.approval_request_route_hmac_hex).toLowerCase(),
+      request_generation: Number(route.request_generation),
+      credential_generation: Number(route.credential_generation),
+      issued_at_utc: now.toISOString(),
+      expires_at_utc: expiresAt.toISOString(),
+      nonce: crypto.randomUUID(),
+      key_version: route.registryEntry.keyVersion
+    }, {
+      secret: route.registryEntry.routeContextSecret,
+      keyVersion: route.registryEntry.keyVersion,
+      nowMilliseconds: now.getTime()
+    });
+  }
+  if (authorityKind === 'MANAGER_PHONE') {
+    const expiresAt = new Date(Math.min(
+      Number(access.exp) * 1000,
+      now.getTime() + ROUTE_CONTEXT_TTL_SECONDS * 1000
+    ));
+    if (expiresAt <= now) throw new CandidateBrokerError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
+    return signCandidateRouteContext({
+      v: 2,
+      typ: 'cloudtms-route-context-v2',
+      aud: 'candidate-private-api',
+      authority_kind: 'MANAGER_PHONE',
+      operation_id: operationId,
+      environment: environmentName(env),
+      global_account_id: access.global_account_id,
+      global_session_id: access.global_session_id,
+      membership_id: route.membership_id,
+      membership_generation: Number(route.membership_generation),
+      agency_id: route.agency_id,
+      agency_candidate_id: route.local_candidate_id,
+      data_plane_id: route.data_plane_id,
+      route_version: Number(route.route_version),
+      session_epoch: Number(route.session_epoch),
+      issued_at_utc: now.toISOString(),
+      expires_at_utc: expiresAt.toISOString(),
+      nonce: crypto.randomUUID(),
+      key_version: route.registryEntry.keyVersion
+    }, {
+      secret: route.registryEntry.routeContextSecret,
+      keyVersion: route.registryEntry.keyVersion,
+      nowMilliseconds: now.getTime()
+    });
+  }
   const expiresAt = new Date(Math.min(
     Number(access.exp) * 1000,
     now.getTime() + ROUTE_CONTEXT_TTL_SECONDS * 1000
@@ -1379,11 +1514,27 @@ async function wrapPhoneHandoff(
 async function managerForwardContext(request, env, correlationId) {
   const authorization = await managerAuthorization(request, env);
   const supplied = bearerToken(request);
+  const operation = candidateOperationForRequest(request.method, new URL(request.url).pathname);
+  if (!operation?.data_plane_dispatch_required) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_OPERATION_POLICY_INVALID');
+  }
   const opened = await openVersionedEnvelope(
     env, CREDENTIAL_AUTHORITIES.manager, 'candidate-broker-phone-handoff-v1', supplied
   );
   const handoffRoute = opened?.payload?.federated_route;
-  if (!handoffRoute) return { authorization, federated: null };
+  if (!opened?.payload) {
+    const route = await resolveManagerEmailRoute(supplied, operation.operation_id, env);
+    return {
+      authorization,
+      federated: { access: null, route, projectSession: false, authorityKind: 'MANAGER_EMAIL' }
+    };
+  }
+  if (!handoffRoute) {
+    if (globalAuthCutoverEnabled(env)) {
+      throw new CandidateBrokerError(401, 'MANAGER_PHONE_HANDOFF_ROUTE_MISMATCH');
+    }
+    return { authorization, federated: null };
+  }
   if (!globalAuthCutoverEnabled(env)) {
     throw new CandidateBrokerError(401, 'MANAGER_PHONE_HANDOFF_SESSION_MISMATCH');
   }
@@ -1403,7 +1554,10 @@ async function managerForwardContext(request, env, correlationId) {
     && Number(handoffRoute.route_version) === Number(route.route_version)
     && Number(handoffRoute.session_epoch) === Number(route.session_epoch);
   if (!exact) throw new CandidateBrokerError(401, 'MANAGER_PHONE_HANDOFF_ROUTE_MISMATCH');
-  return { authorization, federated: { access, route, projectSession: false } };
+  return {
+    authorization,
+    federated: { access, route, projectSession: false, authorityKind: 'MANAGER_PHONE' }
+  };
 }
 
 async function managerAuthorization(request, env) {
@@ -2588,7 +2742,9 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       }
     } catch (error) {
       if (!path.includes('/uploads/')) throw error;
-      authorization = await managerAuthorization(request, env);
+      const managerContext = await managerForwardContext(request, env, id);
+      authorization = managerContext.authorization;
+      federated = managerContext.federated;
     }
 
     if (dailyCandidateRoute) {

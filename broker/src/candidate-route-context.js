@@ -86,7 +86,13 @@ function exactOperationId(value, code) {
   return output;
 }
 
-function normalizedRouteContext(input) {
+function exactSha256(value, code) {
+  const output = text(value).toLowerCase();
+  if (!SHA256_RE.test(output)) throw new Error(code);
+  return output;
+}
+
+function normalizedCandidateRouteContext(input) {
   if (!isObject(input)) throw new Error('CANDIDATE_ROUTE_CONTEXT_INVALID');
   return {
     v: positiveInteger(input.v, 'CANDIDATE_ROUTE_CONTEXT_VERSION_INVALID'),
@@ -108,6 +114,75 @@ function normalizedRouteContext(input) {
     expires_at_utc: requiredText(input.expires_at_utc, 'CANDIDATE_ROUTE_CONTEXT_EXPIRES_AT_INVALID'),
     key_version: positiveInteger(input.key_version, 'CANDIDATE_ROUTE_CONTEXT_KEY_VERSION_INVALID')
   };
+}
+
+function normalizedManagerRouteContext(input) {
+  if (!isObject(input)) throw new Error('CANDIDATE_ROUTE_CONTEXT_INVALID');
+  const authorityKind = requiredText(
+    input.authority_kind, 'CANDIDATE_ROUTE_CONTEXT_AUTHORITY_INVALID'
+  ).toUpperCase();
+  const common = {
+    v: positiveInteger(input.v, 'CANDIDATE_ROUTE_CONTEXT_VERSION_INVALID'),
+    typ: requiredText(input.typ, 'CANDIDATE_ROUTE_CONTEXT_TYPE_INVALID'),
+    aud: requiredText(input.aud, 'CANDIDATE_ROUTE_CONTEXT_AUDIENCE_INVALID'),
+    authority_kind: authorityKind,
+    operation_id: exactOperationId(input.operation_id, 'CANDIDATE_ROUTE_CONTEXT_OPERATION_INVALID'),
+    environment: requiredText(input.environment, 'CANDIDATE_ROUTE_CONTEXT_ENVIRONMENT_INVALID').toUpperCase(),
+    agency_id: exactUuid(input.agency_id, 'CANDIDATE_ROUTE_CONTEXT_AGENCY_INVALID'),
+    data_plane_id: exactUuid(input.data_plane_id, 'CANDIDATE_ROUTE_CONTEXT_DATA_PLANE_INVALID'),
+    route_version: positiveInteger(input.route_version, 'CANDIDATE_ROUTE_CONTEXT_ROUTE_VERSION_INVALID'),
+    issued_at_utc: requiredText(input.issued_at_utc, 'CANDIDATE_ROUTE_CONTEXT_ISSUED_AT_INVALID'),
+    expires_at_utc: requiredText(input.expires_at_utc, 'CANDIDATE_ROUTE_CONTEXT_EXPIRES_AT_INVALID'),
+    nonce: exactUuid(input.nonce, 'CANDIDATE_ROUTE_CONTEXT_NONCE_INVALID'),
+    key_version: positiveInteger(input.key_version, 'CANDIDATE_ROUTE_CONTEXT_KEY_VERSION_INVALID')
+  };
+  if (authorityKind === 'MANAGER_EMAIL') {
+    return {
+      ...common,
+      route_version_id: exactUuid(input.route_version_id, 'CANDIDATE_ROUTE_CONTEXT_ROUTE_VERSION_ID_INVALID'),
+      binding_manifest_generation: positiveInteger(
+        input.binding_manifest_generation, 'CANDIDATE_ROUTE_CONTEXT_BINDING_GENERATION_INVALID'
+      ),
+      manager_route_ticket_id: exactUuid(
+        input.manager_route_ticket_id, 'CANDIDATE_ROUTE_CONTEXT_MANAGER_TICKET_INVALID'
+      ),
+      route_revision: positiveInteger(input.route_revision, 'CANDIDATE_ROUTE_CONTEXT_ROUTE_REVISION_INVALID'),
+      workflow_route_hmac: exactSha256(
+        input.workflow_route_hmac, 'CANDIDATE_ROUTE_CONTEXT_WORKFLOW_HMAC_INVALID'
+      ),
+      approval_request_route_hmac: exactSha256(
+        input.approval_request_route_hmac, 'CANDIDATE_ROUTE_CONTEXT_REQUEST_HMAC_INVALID'
+      ),
+      request_generation: positiveInteger(
+        input.request_generation, 'CANDIDATE_ROUTE_CONTEXT_REQUEST_GENERATION_INVALID'
+      ),
+      credential_generation: positiveInteger(
+        input.credential_generation, 'CANDIDATE_ROUTE_CONTEXT_CREDENTIAL_GENERATION_INVALID'
+      )
+    };
+  }
+  if (authorityKind === 'MANAGER_PHONE') {
+    return {
+      ...common,
+      global_account_id: exactUuid(input.global_account_id, 'CANDIDATE_ROUTE_CONTEXT_ACCOUNT_INVALID'),
+      global_session_id: exactUuid(input.global_session_id, 'CANDIDATE_ROUTE_CONTEXT_SESSION_INVALID'),
+      membership_id: exactUuid(input.membership_id, 'CANDIDATE_ROUTE_CONTEXT_MEMBERSHIP_INVALID'),
+      membership_generation: positiveInteger(
+        input.membership_generation, 'CANDIDATE_ROUTE_CONTEXT_MEMBERSHIP_GENERATION_INVALID'
+      ),
+      agency_candidate_id: exactUuid(
+        input.agency_candidate_id, 'CANDIDATE_ROUTE_CONTEXT_CANDIDATE_INVALID'
+      ),
+      session_epoch: positiveInteger(input.session_epoch, 'CANDIDATE_ROUTE_CONTEXT_SESSION_EPOCH_INVALID')
+    };
+  }
+  throw new Error('CANDIDATE_ROUTE_CONTEXT_AUTHORITY_INVALID');
+}
+
+function normalizedRouteContext(input) {
+  return Number(input?.v) === 2
+    ? normalizedManagerRouteContext(input)
+    : normalizedCandidateRouteContext(input);
 }
 
 function validateRouteContextTimes(context, nowMilliseconds) {
@@ -139,8 +214,8 @@ function acceptedRouteContextVersions(env) {
   return new Set(configured.length ? configured : [1]);
 }
 
-function routeContextCanonical(payloadBase64Url) {
-  return `cloudtms-candidate-route-context-v1\n${payloadBase64Url}`;
+function routeContextCanonical(payloadBase64Url, version = 1) {
+  return `cloudtms-candidate-route-context-v${version}\n${payloadBase64Url}`;
 }
 
 export async function signCandidateRouteContext(input, options = {}) {
@@ -148,18 +223,20 @@ export async function signCandidateRouteContext(input, options = {}) {
     options.keyVersion ?? input?.key_version ?? 1,
     'CANDIDATE_ROUTE_CONTEXT_KEY_VERSION_INVALID'
   );
-  const context = normalizedRouteContext({ ...input, v: 1, key_version: keyVersion });
-  if (context.v !== 1 || context.aud !== 'candidate-private-api'
-      || !['TEST', 'LIVE'].includes(context.environment)) {
+  const version = Number(input?.v) === 2 ? 2 : 1;
+  const context = normalizedRouteContext({ ...input, v: version, key_version: keyVersion });
+  if (![1, 2].includes(context.v) || context.aud !== 'candidate-private-api'
+      || !['TEST', 'LIVE'].includes(context.environment)
+      || (context.v === 2 && context.typ !== 'cloudtms-route-context-v2')) {
     throw new Error('CANDIDATE_ROUTE_CONTEXT_INVALID');
   }
   validateRouteContextTimes(context, options.nowMilliseconds ?? Date.now());
   const payloadBase64Url = base64UrlEncode(encoder.encode(canonicalJson(context)));
   const signature = new Uint8Array(await crypto.subtle.sign(
     'HMAC', await importHmacKey(options.secret, ['sign']),
-    encoder.encode(routeContextCanonical(payloadBase64Url))
+    encoder.encode(routeContextCanonical(payloadBase64Url, version))
   ));
-  const envelope = `v1.${payloadBase64Url}.${base64UrlEncode(signature)}`;
+  const envelope = `v${version}.${payloadBase64Url}.${base64UrlEncode(signature)}`;
   return {
     context,
     envelope,
@@ -173,7 +250,8 @@ export async function verifyCandidateRouteContext(request, env, nowMilliseconds 
     const suppliedDigest = text(request.headers.get('x-cloudtms-route-context-sha256')).toLowerCase();
     if (!envelope || !SHA256_RE.test(suppliedDigest) || await sha256Hex(envelope) !== suppliedDigest) return null;
     const parts = envelope.split('.');
-    if (parts.length !== 3 || parts[0] !== 'v1') return null;
+    if (parts.length !== 3 || !['v1', 'v2'].includes(parts[0])) return null;
+    const version = Number(parts[0].slice(1));
     const payloadBytes = base64UrlDecode(parts[1]);
     const signature = base64UrlDecode(parts[2]);
     if (!payloadBytes || !signature || signature.length !== 32) return null;
@@ -181,12 +259,13 @@ export async function verifyCandidateRouteContext(request, env, nowMilliseconds 
         || base64UrlEncode(signature) !== parts[2]) return null;
     const context = normalizedRouteContext(JSON.parse(decoder.decode(payloadBytes)));
     if (canonicalJson(context) !== decoder.decode(payloadBytes)
-        || context.v !== 1 || context.aud !== 'candidate-private-api'
+        || context.v !== version || context.aud !== 'candidate-private-api'
+        || (version === 2 && context.typ !== 'cloudtms-route-context-v2')
         || !acceptedRouteContextVersions(env).has(context.key_version)) return null;
     validateRouteContextTimes(context, nowMilliseconds);
     const validSignature = await crypto.subtle.verify(
       'HMAC', await importHmacKey(routeContextSecretForVersion(env, context.key_version), ['verify']),
-      signature, encoder.encode(routeContextCanonical(parts[1]))
+      signature, encoder.encode(routeContextCanonical(parts[1], version))
     );
     if (!validSignature) return null;
     const expectedEnvironment = requiredText(

@@ -561,7 +561,11 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
     CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
-    CANDIDATE_APP_PUBLIC_URL: 'https://candidate.test.invalid',
+    CANDIDATE_AGENCY_ID: '00000000-0000-4000-8000-000000000099',
+    MYTMS_MANAGER_ROUTE_HMAC_SECRET: 'test-only-manager-route-secret-material',
+    MYTMS_CONTROL_PLANE_ENABLED: 'true',
+    MYTMS_CONTROL_PLANE_URL: 'https://control.test.invalid',
+    MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-control-service-key',
     SUPABASE_URL: 'https://test.example.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
   };
@@ -573,13 +577,25 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
   };
   const token = await createAccessToken(env, session);
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async url => {
-    const value = String(url);
+  globalThis.fetch = async input => {
+    const value = input instanceof Request ? input.url : String(input);
+    if (value.includes('/rpc/manager_review_origin_resolve_v1')) return Response.json({
+      ok: true, manager_review_public_origin: 'https://manager.test.invalid', settings_version: 1,
+      manager_review_origin_semantic_sha256_hex: 'a'.repeat(64)
+    });
+    if (value.includes('/rpc/manager_email_route_register_v1')) return Response.json({
+      ok: true, manager_route_ticket_id: '00000000-0000-4000-8000-000000000096',
+      route_revision: 1, registration_receipt_sha256_hex: 'b'.repeat(64)
+    });
     if (value.includes('candidate_app_sessions')) return Response.json([session]);
+    if (value.includes('candidate_submission_workflows')) return Response.json([{
+      id: workflowId, workflow_kind: 'CONTRACT_HOURS'
+    }]);
     if (value.includes('candidate_approval_requests')) {
       return Response.json([{
         id: approvalRequestId, request_generation: 2,
-        manager_email_normalized: 'manager@example.test'
+        manager_email_normalized: 'manager@example.test', resend_count: 1,
+        expires_at_utc: '2099-01-01T00:00:00.000Z', token_hash: 'c'.repeat(64)
       }]);
     }
     throw new Error(`unexpected fetch ${value}`);
@@ -587,7 +603,29 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
   const calls = [];
   const deps = {
     routeAudience: 'PRIVATE',
-    async rpc(name, args) { calls.push({ name, args }); return { ok: true, state: 'AWAITING_MANAGER_APPROVAL' }; }
+    async rpc(name, args) {
+      if (name === 'candidate_manager_email_settings_get_v1') return {
+        ok: true, version: 1, semantic_sha256_hex: 'd'.repeat(64),
+        templates: { TIMESHEET: {
+          REMINDER: {
+            subject: 'Reminder: timesheet approval required', body_text: 'Please review every page.',
+            body_html: '<p>Please review every page.</p>', button_text: 'Review and approve', include_link: true
+          },
+          CANCELLATION: {
+            subject: 'Timesheet approval request cancelled',
+            body_text: 'This approval request has been cancelled. No further action is required.',
+            body_html: '<p>This approval request has been cancelled. No further action is required.</p>',
+            button_text: null, include_link: false
+          }
+        } }
+      };
+      if (name === 'candidate_manager_email_route_receipt_commit_v1') return { ok: true };
+      calls.push({ name, args });
+      return {
+        ok: true, state: 'AWAITING_MANAGER_APPROVAL', approval_request_id: approvalRequestId,
+        mail_outbox_id: '00000000-0000-4000-8000-000000000097'
+      };
+    }
   };
   const request = (action, body) => new Request(
     `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/${action}`,
@@ -1032,6 +1070,15 @@ test('office cancel manager request maps to request-only authority and preserves
       return { id: actorId, role: 'admin' };
     },
     async rpc(name, args) {
+      if (name === 'candidate_manager_email_settings_get_v1') return {
+        ok: true, version: 1, semantic_sha256_hex: 'd'.repeat(64),
+        templates: { TIMESHEET: { WITHDRAWAL: {
+          subject: 'Timesheet approval request withdrawn',
+          body_text: 'This approval request has been withdrawn. No further action is required.',
+          body_html: '<p>This approval request has been withdrawn. No further action is required.</p>',
+          button_text: null, include_link: false
+        } } }
+      };
       calls.push({ name, args });
       return { ok: true, state: 'READY_FOR_MANAGER_APPROVAL', claim_cancelled: false };
     }
@@ -1212,6 +1259,13 @@ test('office reminder batch execute remains one browser operation with server-ow
     routeAudience: 'OFFICE',
     async requireOfficeUser() { return { id: actorId }; },
     async rpc(name, args) {
+      if (name === 'candidate_manager_email_settings_get_v1') return {
+        ok: true, version: 1, semantic_sha256_hex: 'd'.repeat(64),
+        templates: { TIMESHEET: { REMINDER: {
+          subject: 'Reminder: timesheet approval required', body_text: 'Please review every page.',
+          body_html: '<p>Please review every page.</p>', button_text: 'Review and approve', include_link: true
+        } } }
+      };
       rpcCalls.push({ name, args });
       if (args.p_action === 'REMINDER_BATCH_REPLAY') return replayFound
         ? { ok: true, found: true, idempotent_replay: true, batch_id: batchId, status: 'COMPLETED', items: [] }
@@ -1232,8 +1286,16 @@ test('office reminder batch execute remains one browser operation with server-ow
     }
   };
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async url => {
-    assert.match(String(url), /candidate_approval_requests/);
+  globalThis.fetch = async input => {
+    const value = input instanceof Request ? input.url : String(input);
+    if (value.includes('/rpc/manager_review_origin_resolve_v1')) return Response.json({
+      ok: true, manager_review_public_origin: 'https://manager.test.invalid', settings_version: 1,
+      manager_review_origin_semantic_sha256_hex: 'a'.repeat(64)
+    });
+    if (value.includes('candidate_submission_workflows')) return Response.json([{
+      id: workflowId, workflow_kind: 'CONTRACT_HOURS'
+    }]);
+    assert.match(value, /candidate_approval_requests/);
     return Response.json([{
       id: requestId, workflow_id: workflowId, workflow_generation: 2,
       request_generation: 3, method: 'EMAIL', manager_email_normalized: 'manager@example.test'
@@ -1252,7 +1314,11 @@ test('office reminder batch execute remains one browser operation with server-ow
       CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid',
       SUPABASE_SERVICE_ROLE_KEY: 'placeholder',
       CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'office-reminder-secret',
-      CANDIDATE_APP_PUBLIC_URL: 'https://candidate.example.test'
+      CANDIDATE_AGENCY_ID: '00000000-0000-4000-8000-000000000239',
+      MYTMS_MANAGER_ROUTE_HMAC_SECRET: 'test-only-manager-route-secret-material',
+      MYTMS_CONTROL_PLANE_ENABLED: 'true',
+      MYTMS_CONTROL_PLANE_URL: 'https://control.test.invalid',
+      MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-control-service-key'
     }, {}, deps);
     assert.equal(response.status, 202);
     assert.equal(rpcCalls.length, 3, 'one replay probe, preview and batch execute RPC are expected');
@@ -1733,6 +1799,7 @@ test('component upload tickets are encrypted and do not disclose the R2 key', as
   const env = { CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-secret-material' };
   const storageKey = 'candidate-app/test/workflow/source/private-object.pdf';
   const ticket = await uploadTicket(env, {
+    authority_kind: 'CANDIDATE_SESSION',
     workflow_id: '00000000-0000-4000-8000-000000000001',
     key: storageKey,
     owner: 'candidate'

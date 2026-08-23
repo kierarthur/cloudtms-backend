@@ -96,7 +96,7 @@ begin
           upper(coalesce(mo.payment_scope_json->>'candidate_mail_authority',''))
             ='MANAGER_APPROVAL_V1'
           and upper(coalesce(mo.payment_scope_json->>'candidate_manager_mail_kind',''))
-            in ('INITIAL','REMINDER','RENEWAL','WITHDRAWAL')
+            in ('INITIAL','REMINDER','RENEWAL','WITHDRAWAL','CANCELLATION')
           and lower(coalesce(mo.payment_scope_json->>'candidate_manager_mail_retired','false'))
             in ('false','f','0','no')
           and coalesce(mo.payment_scope_json->>'candidate_manager_workflow_id','') ~*
@@ -107,6 +107,38 @@ begin
             '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           and coalesce(mo.payment_scope_json->>'candidate_approval_request_generation','')
             ~ '^[1-9][0-9]{0,8}$'
+          and (
+            upper(mo.payment_scope_json->>'candidate_manager_mail_kind') in ('WITHDRAWAL','CANCELLATION')
+            or (
+              coalesce(mo.payment_scope_json->>'candidate_manager_route_receipt_id','') ~*
+                '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              and coalesce(mo.payment_scope_json->>'candidate_manager_route_ticket_id','') ~*
+                '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+              and coalesce(mo.payment_scope_json->>'candidate_manager_route_revision','')
+                ~ '^[1-9][0-9]{0,18}$'
+              and lower(coalesce(
+                    mo.payment_scope_json->>'candidate_manager_route_registration_sha256',''))
+                ~ '^[0-9a-f]{64}$'
+              and exists (
+                select 1
+                from public.candidate_manager_email_route_receipts route_receipt
+                where route_receipt.route_receipt_id=
+                      (mo.payment_scope_json->>'candidate_manager_route_receipt_id')::uuid
+                  and route_receipt.manager_route_ticket_id=
+                      (mo.payment_scope_json->>'candidate_manager_route_ticket_id')::uuid
+                  and route_receipt.route_revision=
+                      (mo.payment_scope_json->>'candidate_manager_route_revision')::bigint
+                  and encode(route_receipt.registration_receipt_sha256,'hex')=
+                      lower(mo.payment_scope_json->>'candidate_manager_route_registration_sha256')
+                  and route_receipt.workflow_id=mo.context_id
+                  and route_receipt.approval_request_id=
+                      (mo.payment_scope_json->>'candidate_approval_request_id')::uuid
+                  and route_receipt.request_generation=
+                      (mo.payment_scope_json->>'candidate_approval_request_generation')::integer
+                  and route_receipt.state='CURRENT'
+              )
+            )
+          )
           and mo.context_kind='CANDIDATE_WORKFLOW'
           and mo.context_id=(mo.payment_scope_json->>'candidate_manager_workflow_id')::uuid
           and exists (
@@ -134,7 +166,7 @@ begin
                   and workflow.review_manifest_sha256=request_row.review_manifest_sha256
                 )
                 or (
-                  upper(mo.payment_scope_json->>'candidate_manager_mail_kind')='WITHDRAWAL'
+                  upper(mo.payment_scope_json->>'candidate_manager_mail_kind') in ('WITHDRAWAL','CANCELLATION')
                   and request_row.state in ('CANCELLED','SUPERSEDED','EXPIRED','REFUSED')
                 )
               )

@@ -72,7 +72,7 @@ begin
   end if;
   if upper(coalesce(v_scope->>'candidate_mail_authority',''))='MANAGER_APPROVAL_V1' then
     if upper(coalesce(v_scope->>'candidate_manager_mail_kind','')) not in (
-         'INITIAL','REMINDER','RENEWAL','WITHDRAWAL'
+         'INITIAL','REMINDER','RENEWAL','WITHDRAWAL','CANCELLATION'
        )
        or coalesce(v_scope->>'candidate_manager_workflow_id','')
           !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
@@ -96,7 +96,7 @@ begin
     if not found then
       raise exception 'CANDIDATE_MANAGER_MAIL_SCOPE_INVALID' using errcode='40001';
     end if;
-    if upper(v_scope->>'candidate_manager_mail_kind')='WITHDRAWAL' then
+    if upper(v_scope->>'candidate_manager_mail_kind') in ('WITHDRAWAL','CANCELLATION') then
       if v_request.state not in ('CANCELLED','SUPERSEDED','EXPIRED','REFUSED') then
         raise exception 'CANDIDATE_MANAGER_WITHDRAWAL_NOT_READY' using errcode='40001';
       end if;
@@ -1650,6 +1650,10 @@ declare
   v_expense_category text;
   v_requested_media_type text;
   v_requested_byte_size bigint;
+  v_manager_capture_method text;
+  v_expected_source_digest bytea;
+  v_verified_image_width integer;
+  v_verified_image_height integer;
   v_review_ordinal integer;
   v_has_expenses boolean:=false;
   v_has_mileage boolean:=false;
@@ -1681,6 +1685,7 @@ declare
   v_provider_lease_token text;
   v_provider_permit_expires_at timestamptz;
   v_manager_mail public.mail_outbox%rowtype;
+  v_manager_route_receipt public.candidate_manager_email_route_receipts%rowtype;
   v_manager_mail_kind text;
   v_manager_provider_accepted_at timestamptz;
   v_manager_pending_mail_count integer:=0;
@@ -2762,6 +2767,15 @@ begin
     exception when invalid_text_representation or numeric_value_out_of_range then
       raise exception 'CANDIDATE_COMPONENT_SIZE_INVALID' using errcode='22023';
     end;
+    v_manager_capture_method:=nullif(upper(btrim(coalesce(
+      v_payload->>'manager_signature_capture_method',''
+    ))),'');
+    if nullif(v_payload->>'expected_source_content_sha256_hex','') is not null then
+      if (v_payload->>'expected_source_content_sha256_hex') !~ '^[0-9a-fA-F]{64}$' then
+        raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
+      end if;
+      v_expected_source_digest:=decode(v_payload->>'expected_source_content_sha256_hex','hex');
+    end if;
     select * into v_component from public.candidate_submission_components
     where workflow_id=v_workflow.id and upload_idempotency_key=p_idempotency_key;
     if found then
@@ -2776,6 +2790,8 @@ begin
          or v_component.expense_category is distinct from v_expense_category
          or lower(v_component.media_type) is distinct from v_requested_media_type
          or v_component.byte_size is distinct from v_requested_byte_size
+         or v_component.manager_signature_capture_method is distinct from v_manager_capture_method
+         or v_component.expected_source_content_sha256 is distinct from v_expected_source_digest
          or v_component.paper_return_page_key is distinct from v_paper_page_key then
         raise exception 'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT' using errcode='23505';
       end if;
@@ -2785,7 +2801,11 @@ begin
         'storage_key',v_component.storage_key,'media_type',v_component.media_type,
         'byte_size',v_component.byte_size,'component_kind',v_component.component_kind,
         'document_role',v_component.document_role,'expense_category',v_component.expense_category,
-        'paper_return_page_key',v_component.paper_return_page_key,'state',v_component.state);
+        'paper_return_page_key',v_component.paper_return_page_key,'state',v_component.state)
+        ||case when v_component.component_kind='MANAGER_SIGNATURE' then jsonb_build_object(
+          'approval_request_id',v_component.approval_request_id,
+          'approval_request_generation',v_approval.request_generation
+        ) else '{}'::jsonb end;
       if v_mutation_request_sha256 is not null then
         perform private._candidate_workflow_mutation_receipt_v1(
           v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
@@ -2837,6 +2857,14 @@ begin
     ),false) then
       raise exception 'CANDIDATE_COMPONENT_TYPE_INVALID' using errcode='22023';
     end if;
+    if v_component_kind='MANAGER_SIGNATURE'
+       and (coalesce(v_manager_capture_method,'') not in ('DRAW','UPLOAD')
+         or (v_is_public_manager_action and v_expected_source_digest is null)) then
+      raise exception 'MANAGER_SIGNATURE_CAPTURE_METHOD_INVALID' using errcode='22023';
+    elsif v_component_kind<>'MANAGER_SIGNATURE'
+       and (v_manager_capture_method is not null or v_expected_source_digest is not null) then
+      raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
+    end if;
     if v_component_kind in ('CANDIDATE_SIGNATURE','MILEAGE_FORM','EXPENSE_EVIDENCE')
        and v_workflow.state<>'WORKER_DRAFT' then
       raise exception 'CANDIDATE_COMPONENT_AMENDMENT_REQUIRED' using errcode='55000';
@@ -2884,7 +2912,8 @@ begin
       workflow_id,workflow_generation,component_no,approval_request_id,timesheet_id,component_kind,expense_category,
       document_role,state,source_component_id,storage_key,media_type,byte_size,source_content_sha256,
       upload_idempotency_key,immutable_at_utc,
-      required,review_ordinal,review_render_state,final_signed_render_state,paper_return_page_key,created_at_utc
+      required,review_ordinal,review_render_state,final_signed_render_state,paper_return_page_key,
+      manager_signature_capture_method,expected_source_content_sha256,created_at_utc
     ) values (
       v_workflow.id,v_workflow.generation,v_component_no,
       case when v_component_kind='MANAGER_SIGNATURE' then v_approval.id else null end,
@@ -2898,6 +2927,7 @@ begin
       v_source_component.source_content_sha256,p_idempotency_key,
       case when v_source_component.id is null then null else p_now_utc end,
       false,null,'NOT_REQUIRED','NOT_REQUIRED',v_paper_page_key,
+      v_manager_capture_method,v_expected_source_digest,
       p_now_utc
     ) returning * into v_component;
     v_response:=jsonb_build_object('ok',true,'idempotent_replay',false,'component_id',v_component.id,
@@ -2905,7 +2935,11 @@ begin
       'storage_key',v_component.storage_key,'media_type',v_component.media_type,
       'byte_size',v_component.byte_size,'component_kind',v_component.component_kind,
       'document_role',v_component.document_role,'expense_category',v_component.expense_category,
-      'paper_return_page_key',v_component.paper_return_page_key,'state',v_component.state);
+      'paper_return_page_key',v_component.paper_return_page_key,'state',v_component.state)
+      ||case when v_component.component_kind='MANAGER_SIGNATURE' then jsonb_build_object(
+        'approval_request_id',v_component.approval_request_id,
+        'approval_request_generation',v_approval.request_generation
+      ) else '{}'::jsonb end;
     perform private._candidate_workflow_mutation_receipt_v1(
       v_workflow.id,p_idempotency_key,v_mutation_request_sha256,v_action,
       v_mutation_channel,v_mutation_actor_identity,v_response,p_now_utc
@@ -2948,6 +2982,25 @@ begin
       raise exception 'CANDIDATE_COMPONENT_DIGEST_INVALID' using errcode='22023';
     end if;
     v_digest:=decode(v_payload->>'source_content_sha256_hex','hex');
+    if v_component.expected_source_content_sha256 is not null
+       and v_component.expected_source_content_sha256<>v_digest then
+      raise exception 'CANDIDATE_COMPONENT_DIGEST_MISMATCH' using errcode='22023';
+    end if;
+    v_manager_capture_method:=nullif(upper(btrim(coalesce(
+      v_payload->>'manager_signature_capture_method',''
+    ))),'');
+    begin
+      v_verified_image_width:=nullif(v_payload->>'verified_image_width','')::integer;
+      v_verified_image_height:=nullif(v_payload->>'verified_image_height','')::integer;
+    exception when invalid_text_representation or numeric_value_out_of_range then
+      raise exception 'CANDIDATE_COMPONENT_MEDIA_INVALID' using errcode='22023';
+    end;
+    if v_component.component_kind='MANAGER_SIGNATURE'
+       and (v_manager_capture_method is distinct from v_component.manager_signature_capture_method
+         or v_verified_image_width not between 1 and 10000
+         or v_verified_image_height not between 1 and 10000) then
+      raise exception 'MANAGER_SIGNATURE_CAPTURE_METHOD_INVALID' using errcode='22023';
+    end if;
     if (v_component.component_kind in ('CANDIDATE_SIGNATURE','MANAGER_SIGNATURE')
           and lower(coalesce(v_payload->>'verified_media_type',v_component.media_type,''))
             not in ('image/jpeg','image/png','image/webp'))
@@ -2981,6 +3034,8 @@ begin
       state='IMMUTABLE',source_content_sha256=v_digest,
       byte_size=coalesce(nullif(v_payload->>'verified_byte_size','')::bigint,byte_size),
       media_type=coalesce(nullif(lower(v_payload->>'verified_media_type'),''),media_type),
+      validated_image_width=case when component_kind='MANAGER_SIGNATURE' then v_verified_image_width else validated_image_width end,
+      validated_image_height=case when component_kind='MANAGER_SIGNATURE' then v_verified_image_height else validated_image_height end,
       immutable_at_utc=p_now_utc
     where id=v_component.id and state='PENDING' returning * into v_component;
     if not found then
@@ -3579,7 +3634,8 @@ begin
     end if;
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
       'state','AWAITING_MANAGER_APPROVAL','generation',v_workflow.generation,
-      'approval_request_id',v_approval.id,'method',v_approval.method,
+      'approval_request_id',v_approval.id,'approval_request_generation',v_approval.request_generation,
+      'method',v_approval.method,
       'review_manifest_sha256',encode(v_approval.review_manifest_sha256,'hex'),
       'issued_at_utc',v_approval.created_at_utc,
       'expires_at_utc',v_approval.expires_at_utc,'mail_outbox_id',v_mail_id);
@@ -3638,14 +3694,24 @@ begin
     end if;
     update public.candidate_approval_requests set
       review_started_at_utc=coalesce(review_started_at_utc,p_now_utc),updated_at_utc=p_now_utc
-    where id=v_approval.id;
+    where id=v_approval.id returning * into v_approval;
+    select count(*) into v_reviewed_count from unnest(v_approval.required_component_ids) u(id)
+    where v_approval.review_progress_json ? u.id::text;
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
       'workflow_generation',v_workflow.generation,'approval_request_id',v_approval.id,
+      'approval_request_generation',v_approval.request_generation,
+      'workflow_kind',v_workflow.workflow_kind,
       'method',v_approval.method,'expires_at_utc',v_approval.expires_at_utc,
       'manifest_sha256',encode(v_approval.review_manifest_sha256,'hex'),
       'page_count',coalesce((select sum(coalesce(c.review_page_count,1))
         from public.candidate_submission_components c where c.id=any(v_approval.required_component_ids)),0),
-      'ordered_components',v_approval.required_component_manifest_json,
+      'ordered_components',(select coalesce(jsonb_agg(
+        component.value||jsonb_build_object(
+          'viewed',v_approval.review_progress_json ? (component.value->>'component_id')
+        ) order by (component.value->>'ordinal')::integer
+      ),'[]'::jsonb) from jsonb_array_elements(v_approval.required_component_manifest_json) component),
+      'reviewed_count',v_reviewed_count,
+      'all_pages_viewed',v_reviewed_count=cardinality(v_approval.required_component_ids),
       'manager_identity_requirements',jsonb_build_object('name_required',true,'position_required',true,'signature_required',true),
       'can_approve',true,'can_refuse',true);
     if v_mutation_request_sha256 is not null then
@@ -3678,6 +3744,11 @@ begin
     if lower(coalesce(v_payload->>'manifest_sha256_hex',''))<>encode(v_approval.review_manifest_sha256,'hex') then
       raise exception 'MANAGER_REVIEW_MANIFEST_MISMATCH' using errcode='40001';
     end if;
+    select count(*) into v_reviewed_count from unnest(v_approval.required_component_ids) u(id)
+    where v_approval.review_progress_json ? u.id::text;
+    if coalesce(nullif(v_payload->>'progress_version','')::integer,-1)<>v_reviewed_count then
+      raise exception 'MANAGER_REVIEW_PROGRESS_CONFLICT' using errcode='40001';
+    end if;
     select * into v_component from public.candidate_submission_components
     where id=nullif(v_payload->>'component_id','')::uuid
       and id=any(v_approval.required_component_ids)
@@ -3700,8 +3771,11 @@ begin
     where v_approval.review_progress_json ? u.id::text;
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
       'generation',v_workflow.generation,'approval_request_id',v_approval.id,
+      'approval_request_generation',v_approval.request_generation,
       'component_id',v_component.id,'reviewed_count',v_reviewed_count,
-      'required_count',cardinality(v_approval.required_component_ids));
+      'required_count',cardinality(v_approval.required_component_ids),
+      'progress_version',v_reviewed_count,
+      'all_pages_viewed',v_reviewed_count=cardinality(v_approval.required_component_ids));
     update public.candidate_submission_workflows set
       last_mutation_idempotency_key=p_idempotency_key,last_mutation_response_json=v_response,
       updated_at_utc=p_now_utc where id=v_workflow.id;
@@ -3744,7 +3818,11 @@ begin
       raise exception 'MANAGER_REVIEW_COMPONENT_NOT_REVIEWED' using errcode='55000';
     end if;
     if nullif(btrim(coalesce(v_payload->>'manager_name','')),'') is null
-       or nullif(btrim(coalesce(v_payload->>'manager_position','')),'') is null then
+       or nullif(btrim(coalesce(v_payload->>'manager_position','')),'') is null
+       or pg_catalog.length(btrim(v_payload->>'manager_name'))>200
+       or pg_catalog.length(btrim(v_payload->>'manager_position'))>200
+       or coalesce(v_payload->>'attestation_version','')<>'MANAGER_APPROVAL_ATTESTATION_V1'
+       or coalesce((v_payload->>'attestation_accepted')::boolean,false)<>true then
       raise exception 'MANAGER_SIGNATURE_REQUIRED' using errcode='22023';
     end if;
     select * into v_signature_component from public.candidate_submission_components
@@ -3776,7 +3854,8 @@ begin
       v_workflow.id,v_workflow.generation,'FINAL_SIGNED');
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
       'state',v_workflow.state,'generation',v_workflow.generation,
-      'approval_request_id',v_approval.id,'approved_at_utc',v_approval.approved_at_utc,
+      'approval_request_id',v_approval.id,'approval_request_generation',v_approval.request_generation,
+      'approved_at_utc',v_approval.approved_at_utc,
       'final_render_contract',v_render_contract);
     update public.candidate_submission_workflows set last_mutation_response_json=v_response
     where id=v_workflow.id;
@@ -3953,7 +4032,8 @@ begin
     if v_approval.expires_at_utc<=p_now_utc then
       raise exception 'MANAGER_APPROVAL_REQUEST_EXPIRED' using errcode='28000';
     end if;
-    if nullif(btrim(coalesce(v_payload->>'reason','')),'') is null then
+    if nullif(btrim(coalesce(v_payload->>'reason','')),'') is null
+       or pg_catalog.length(btrim(v_payload->>'reason'))>1000 then
       raise exception 'MANAGER_REFUSAL_REASON_REQUIRED' using errcode='22023';
     end if;
     update public.candidate_approval_requests set
@@ -3963,7 +4043,9 @@ begin
       state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
     where workflow_id=v_workflow.id and id<>v_approval.id and state='PENDING';
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,'state','REFUSED',
-      'generation',v_workflow.generation,'rejection_scope','COMPLETE_ELECTRONIC_TRANSACTION');
+      'generation',v_workflow.generation,'approval_request_id',v_approval.id,
+      'approval_request_generation',v_approval.request_generation,
+      'refused_at_utc',p_now_utc,'rejection_scope','COMPLETE_ELECTRONIC_TRANSACTION');
     update public.candidate_submission_workflows set
       state='REFUSED',rejection_reason=btrim(v_payload->>'reason'),
       rejection_scope='COMPLETE_ELECTRONIC_TRANSACTION',last_mutation_idempotency_key=p_idempotency_key,
@@ -4160,10 +4242,9 @@ begin
       and state<>'SUPERSEDED';
     if coalesce((v_manager_retirement_result->>'withdrawal_required')::boolean,false) then
       perform private._candidate_queue_mail_v1(
-        jsonb_build_object(
-          'subject','Timesheet approval request withdrawn',
-          'body_text','The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.',
-          'body_html','<p>The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.</p>',
+        private._candidate_manager_terminal_mail_payload_v1(
+          v_payload->'manager_terminal_mail','WITHDRAWAL'
+        )||jsonb_build_object(
           'payment_scope_json',jsonb_build_object(
             'candidate_mail_authority','MANAGER_APPROVAL_V1',
             'candidate_manager_mail_kind','WITHDRAWAL',
@@ -4171,6 +4252,9 @@ begin
             'candidate_manager_workflow_generation',v_workflow.generation,
             'candidate_approval_request_id',v_approval.id,
             'candidate_approval_request_generation',v_approval.request_generation,
+            'candidate_manager_template_version',(v_payload->'manager_terminal_mail'->>'manager_template_version')::bigint,
+            'candidate_manager_template_sha256',v_payload->'manager_terminal_mail'->>'manager_template_sha256',
+            'candidate_manager_submission_type',v_payload->'manager_terminal_mail'->>'manager_submission_type',
             'candidate_manager_mail_retired',false
           )
         ),v_approval.manager_email_normalized,
@@ -4255,7 +4339,7 @@ begin
     v_manager_mail_kind:=upper(coalesce(
       v_manager_mail.payment_scope_json->>'candidate_manager_mail_kind',''
     ));
-    if v_manager_mail_kind not in ('INITIAL','REMINDER','RENEWAL','WITHDRAWAL')
+    if v_manager_mail_kind not in ('INITIAL','REMINDER','RENEWAL','WITHDRAWAL','CANCELLATION')
        or coalesce(v_manager_mail.payment_scope_json->>'candidate_approval_request_id','')
           !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
        or coalesce(v_manager_mail.payment_scope_json->>'candidate_approval_request_generation','')
@@ -4278,7 +4362,29 @@ begin
     if not found then
       raise exception 'CANDIDATE_MANAGER_PROVIDER_MAIL_STALE' using errcode='40001';
     end if;
-    if v_manager_mail_kind='WITHDRAWAL' then
+    if v_manager_mail_kind in ('INITIAL','REMINDER','RENEWAL') then
+      select route_receipt.* into v_manager_route_receipt
+      from public.candidate_manager_email_route_receipts route_receipt
+      where route_receipt.route_receipt_id=v_approval.current_manager_route_receipt_id
+        and route_receipt.workflow_id=v_workflow.id
+        and route_receipt.approval_request_id=v_approval.id
+        and route_receipt.request_generation=v_approval.request_generation
+        and route_receipt.manager_token_hash_snapshot=v_approval.token_hash
+        and route_receipt.state='CURRENT'
+        and route_receipt.route_receipt_id::text=
+              v_manager_mail.payment_scope_json->>'candidate_manager_route_receipt_id'
+        and route_receipt.manager_route_ticket_id::text=
+              v_manager_mail.payment_scope_json->>'candidate_manager_route_ticket_id'
+        and route_receipt.route_revision::text=
+              v_manager_mail.payment_scope_json->>'candidate_manager_route_revision'
+        and pg_catalog.encode(route_receipt.registration_receipt_sha256,'hex')=
+              v_manager_mail.payment_scope_json->>'candidate_manager_route_registration_sha256'
+      for update;
+      if not found then
+        raise exception 'CANDIDATE_MANAGER_ROUTE_RECEIPT_NOT_CURRENT' using errcode='40001';
+      end if;
+    end if;
+    if v_manager_mail_kind in ('WITHDRAWAL','CANCELLATION') then
       if v_approval.state not in ('CANCELLED','SUPERSEDED','EXPIRED','REFUSED') then
         raise exception 'CANDIDATE_MANAGER_PROVIDER_MAIL_STALE' using errcode='40001';
       end if;
@@ -4457,22 +4563,24 @@ begin
           and request_row.state='CANCELLED';
         if found then
           perform private._candidate_queue_mail_v1(
-            jsonb_build_object(
-              'subject','Timesheet approval request withdrawn',
-              'body_text','The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.',
-              'body_html','<p>The approval request for this timesheet has been withdrawn by CloudTMS. No further action is required.</p>',
+            private._candidate_manager_terminal_mail_payload_v1(
+              v_payload->'manager_terminal_mail','CANCELLATION'
+            )||jsonb_build_object(
               'payment_scope_json',jsonb_build_object(
                 'candidate_mail_authority','MANAGER_APPROVAL_V1',
-                'candidate_manager_mail_kind','WITHDRAWAL',
+                'candidate_manager_mail_kind','CANCELLATION',
                 'candidate_manager_workflow_id',v_workflow.id,
                 'candidate_manager_workflow_generation',v_workflow.generation,
                 'candidate_approval_request_id',v_approval.id,
                 'candidate_approval_request_generation',v_approval.request_generation,
+                'candidate_manager_template_version',(v_payload->'manager_terminal_mail'->>'manager_template_version')::bigint,
+                'candidate_manager_template_sha256',v_payload->'manager_terminal_mail'->>'manager_template_sha256',
+                'candidate_manager_submission_type',v_payload->'manager_terminal_mail'->>'manager_submission_type',
                 'candidate_manager_mail_retired',false
               )
             ),v_approval.manager_email_normalized,
-            'CANDIDATE_MANAGER_WITHDRAWAL_V1:'||v_approval.id::text||':'||v_workflow.generation::text,
-            'candidate-manager-withdrawal:'||v_approval.id::text,v_workflow.id,p_now_utc
+            'CANDIDATE_MANAGER_CANCELLATION_V1:'||v_approval.id::text||':'||v_workflow.generation::text,
+            'candidate-manager-cancellation:'||v_approval.id::text,v_workflow.id,p_now_utc
           );
           v_manager_withdrawal_count:=v_manager_withdrawal_count+1;
         end if;

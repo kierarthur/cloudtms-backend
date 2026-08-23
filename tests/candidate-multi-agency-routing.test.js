@@ -119,6 +119,46 @@ test('signed route context is canonical, deployment-bound and tamper-evident', a
   assert.equal(await verifyCandidateRouteContext(tampered, env, now.getTime()), null);
 });
 
+test('manager EMAIL route context v2 is canonical, deployment-bound and authority-closed', async () => {
+  const now = new Date('2026-08-21T16:00:00.000Z');
+  const env = routeEnvironment();
+  const context = {
+    v: 2, typ: 'cloudtms-route-context-v2', aud: 'candidate-private-api',
+    authority_kind: 'MANAGER_EMAIL', operation_id: 'startManagerReview', environment: 'TEST',
+    agency_id: IDS.agency, data_plane_id: IDS.dataPlane,
+    route_version_id: '10000000-0000-4000-8000-000000000007', route_version: 7,
+    binding_manifest_generation: 1,
+    manager_route_ticket_id: '10000000-0000-4000-8000-000000000008', route_revision: 2,
+    workflow_route_hmac: 'a'.repeat(64), approval_request_route_hmac: 'b'.repeat(64),
+    request_generation: 3, credential_generation: 2,
+    issued_at_utc: now.toISOString(),
+    expires_at_utc: new Date(now.getTime() + 5 * 60_000).toISOString(),
+    nonce: '10000000-0000-4000-8000-000000000009', key_version: 1
+  };
+  const signed = await signCandidateRouteContext(context, {
+    secret: env.CANDIDATE_ROUTE_CONTEXT_SECRET, keyVersion: 1, nowMilliseconds: now.getTime()
+  });
+  const request = new Request('https://private.invalid/private/candidate-manager/v1/workflows/x/start', {
+    headers: {
+      'x-cloudtms-route-context': signed.envelope,
+      'x-cloudtms-route-context-sha256': signed.sha256
+    }
+  });
+  const verified = await verifyCandidateRouteContext(request, env, now.getTime());
+  assert.equal(verified.context.authority_kind, 'MANAGER_EMAIL');
+  assert.equal(verified.context.manager_route_ticket_id, context.manager_route_ticket_id);
+  assert.equal(verified.context.binding_manifest_generation, 1);
+  await assert.rejects(
+    signCandidateRouteContext({ ...context, authority_kind: 'MANAGER_BROWSER' }, {
+      secret: env.CANDIDATE_ROUTE_CONTEXT_SECRET, keyVersion: 1, nowMilliseconds: now.getTime()
+    }),
+    /CANDIDATE_ROUTE_CONTEXT_AUTHORITY_INVALID/
+  );
+  assert.equal(await verifyCandidateRouteContext(request, {
+    ...env, CANDIDATE_DATA_PLANE_ID: '20000000-0000-4000-8000-000000000006'
+  }, now.getTime()), null);
+});
+
 test('service-auth v2 binds both route headers while v1 remains exact and rejects injection', async () => {
   const now = new Date();
   const env = routeEnvironment();
@@ -438,6 +478,102 @@ test('synthetic second-agency route reaches only its closed non-LIVE fixture bin
     assert.deepEqual(await response.json(), { ok: true, source: 'synthetic-second' });
     assert.equal(primaryCalls, 0);
     assert.equal(syntheticCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('manager EMAIL credential resolves centrally and reaches only its exact private plane', async () => {
+  const originalFetch = globalThis.fetch;
+  const workflowId = '50000000-0000-4000-8000-000000000011';
+  const syntheticAgency = '50000000-0000-4000-8000-000000000004';
+  const syntheticPlane = '50000000-0000-4000-8000-000000000006';
+  let primaryCalls = 0;
+  let syntheticCalls = 0;
+  const privateEnv = routeEnvironment({
+    CANDIDATE_AGENCY_ID: syntheticAgency,
+    CANDIDATE_DATA_PLANE_ID: syntheticPlane,
+    CANDIDATE_ROUTE_VERSION: '1',
+    CANDIDATE_ROUTE_CONTEXT_SECRET: 'test-synthetic-route-secret'
+  });
+  const env = orchestratorEnvironment(async () => {
+    primaryCalls += 1;
+    return Response.json({ ok: false });
+  }, async request => {
+    syntheticCalls += 1;
+    assert.equal(await verifyCandidatePrivateRequest(request.clone(), privateEnv), true);
+    const route = await verifyCandidateRouteContext(request, privateEnv);
+    assert.equal(route.context.authority_kind, 'MANAGER_EMAIL');
+    assert.equal(route.context.operation_id, 'startManagerReview');
+    assert.equal(route.context.manager_route_ticket_id,
+      '50000000-0000-4000-8000-000000000012');
+    assert.equal(request.headers.get('authorization'), 'Bearer manager-email-opaque-credential');
+    return Response.json({ ok: true, source: 'synthetic-manager-email' });
+  });
+  env.MYTMS_MANAGER_ROUTE_HMAC_SECRET = 'test-manager-route-hmac-secret-that-is-not-live';
+  env.CANDIDATE_BROKER_MANAGER_HANDOFF_SECRET = 'test-manager-phone-secret-that-is-not-live';
+  globalThis.fetch = async request => {
+    assert.equal(new URL(request.url).pathname, '/rest/v1/rpc/manager_email_route_resolve_v1');
+    const body = await request.json();
+    assert.equal(body.p_resolution.operation_id, 'startManagerReview');
+    assert.match(body.p_resolution.credential_hmac_hex, /^[0-9a-f]{64}$/);
+    return Response.json({
+      ok: true, authority_kind: 'MANAGER_EMAIL', environment_label: 'TEST',
+      agency_id: syntheticAgency, data_plane_id: syntheticPlane,
+      registry_binding_key: 'CANDIDATE_DATA_PLANE_SYNTHETIC_SECOND',
+      route_version_id: '50000000-0000-4000-8000-000000000007', route_version: 1,
+      binding_manifest_generation: 1,
+      manager_route_ticket_id: '50000000-0000-4000-8000-000000000012', route_revision: 1,
+      workflow_route_hmac_hex: 'c'.repeat(64), approval_request_route_hmac_hex: 'd'.repeat(64),
+      request_generation: 1, credential_generation: 1,
+      expires_at_utc: new Date(Date.now() + 7 * 86400_000).toISOString()
+    });
+  };
+  try {
+    const response = await handleCandidateBrokerRequest(new Request(
+      `https://candidate-api.test.example/candidate-manager/v1/workflows/${workflowId}/start`, {
+        headers: {
+          origin: 'https://candidate.test.example',
+          authorization: 'Bearer manager-email-opaque-credential',
+          'cf-connecting-ip': '192.0.2.23'
+        }
+      }
+    ), env);
+    assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
+    assert.deepEqual(await response.json(), { ok: true, source: 'synthetic-manager-email' });
+    assert.equal(primaryCalls, 0);
+    assert.equal(syntheticCalls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('manager EMAIL route failure has zero default-plane fallback', async () => {
+  const originalFetch = globalThis.fetch;
+  let privateCalls = 0;
+  const env = orchestratorEnvironment(async () => {
+    privateCalls += 1;
+    return Response.json({ ok: true });
+  }, async () => {
+    privateCalls += 1;
+    return Response.json({ ok: true });
+  });
+  env.MYTMS_MANAGER_ROUTE_HMAC_SECRET = 'test-manager-route-hmac-secret-that-is-not-live';
+  env.CANDIDATE_BROKER_MANAGER_HANDOFF_SECRET = 'test-manager-phone-secret-that-is-not-live';
+  globalThis.fetch = async () => Response.json(
+    { message: 'MANAGER_SECURE_LINK_INVALID', code: '28000' }, { status: 401 }
+  );
+  try {
+    const response = await handleCandidateBrokerRequest(new Request(
+      'https://candidate-api.test.example/candidate-manager/v1/workflows/50000000-0000-4000-8000-000000000011/start', {
+        headers: {
+          origin: 'https://candidate.test.example', authorization: 'Bearer invalid-manager-link',
+          'cf-connecting-ip': '192.0.2.24'
+        }
+      }
+    ), env);
+    assert.equal(response.status, 401);
+    assert.equal(privateCalls, 0);
   } finally {
     globalThis.fetch = originalFetch;
   }

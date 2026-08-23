@@ -11,6 +11,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SHA256_RE = /^[a-f0-9]{64}$/;
 const SANITIZER_POLICY_VERSION = 'MYTMS_EMAIL_HTML_V1_SANITIZE_HTML_2_17_7';
+const MANAGER_SANITIZER_POLICY_VERSION = 'MANAGER_EMAIL_SAFE_HTML_V1';
+const MANAGER_SUBMISSION_TYPES = Object.freeze(['TIMESHEET', 'EXPENSE_CLAIM']);
+const MANAGER_MAIL_KINDS = Object.freeze([
+  'INITIAL', 'REMINDER', 'RENEWAL', 'WITHDRAWAL', 'CANCELLATION'
+]);
+const MANAGER_LINK_MAIL_KINDS = new Set(['INITIAL', 'REMINDER', 'RENEWAL']);
 const MAX_JSON_BYTES = 256 * 1024;
 
 export class MyTmsOfficeError extends Error {
@@ -156,6 +162,34 @@ export function sanitizeMyTmsEmailHtml(raw) {
   });
 }
 
+export function sanitizeManagerEmailHtml(raw) {
+  const source = String(raw == null ? '' : raw);
+  if (!source || source.length > 50_000) {
+    throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
+  }
+  if (/<(?:a|img|svg|iframe|form|script|style)\b|\b(?:href|src|on\w+)\s*=|https?:\/\//i.test(source)) {
+    throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
+  }
+  const sanitized = sanitizeHtml(source, {
+    allowedTags: [
+      'p', 'br', 'strong', 'b', 'em', 'i', 'u', 's', 'ul', 'ol', 'li',
+      'h1', 'h2', 'h3', 'blockquote', 'div', 'span', 'table', 'thead',
+      'tbody', 'tr', 'td', 'th'
+    ],
+    allowedAttributes: {
+      td: ['colspan', 'rowspan', 'align'], th: ['colspan', 'rowspan', 'align'],
+      p: ['align'], div: ['align'], h1: ['align'], h2: ['align'], h3: ['align']
+    },
+    allowedSchemes: [], allowProtocolRelative: false, enforceHtmlBoundary: true,
+    disallowedTagsMode: 'discard',
+    nonTextTags: ['script', 'style', 'textarea', 'option', 'xmp', 'noembed', 'noframes']
+  }).trim();
+  if (!sanitized || /<(?:a|img|svg|iframe|form|script|style)\b|\b(?:href|src|on\w+)\s*=|https?:\/\//i.test(sanitized)) {
+    throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
+  }
+  return sanitized;
+}
+
 function supabaseHeaders(env, prefer = '') {
   const key = text(env.SUPABASE_SERVICE_ROLE_KEY);
   if (!key || !text(env.SUPABASE_URL)) {
@@ -181,6 +215,166 @@ async function boundedJson(response) {
   } catch {
     throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
   }
+}
+
+async function agencyRpc(env, rpcName, parameters = {}) {
+  const base = text(env.SUPABASE_URL).replace(/\/$/, '');
+  const response = await fetch(`${base}/rest/v1/rpc/${encodeURIComponent(rpcName)}`, {
+    method: 'POST', headers: supabaseHeaders(env), body: JSON.stringify(parameters)
+  });
+  const result = await boundedJson(response);
+  if (!response.ok) {
+    const code = upper(result?.message);
+    if (code === 'MYTMS_SETTINGS_VERSION_CONFLICT') {
+      throw new MyTmsOfficeError(409, code);
+    }
+    if (code.startsWith('CANDIDATE_MANAGER_EMAIL_SETTINGS_')) {
+      throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
+    }
+    throw new MyTmsOfficeError(503, 'MYTMS_MANAGER_SETTINGS_UNAVAILABLE');
+  }
+  if (!isObject(result) || result.ok !== true) {
+    throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+  }
+  return result;
+}
+
+function exactObjectKeys(value, expected) {
+  return isObject(value)
+    && Object.keys(value).sort().join('|') === [...expected].sort().join('|');
+}
+
+function normalizeManagerTemplates(value) {
+  if (!exactObjectKeys(value, ['schema_version', ...MANAGER_SUBMISSION_TYPES])
+      || value.schema_version !== 'CANDIDATE_MANAGER_EMAIL_TEMPLATES_V1') {
+    throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
+  }
+  const output = { schema_version: value.schema_version };
+  for (const submissionType of MANAGER_SUBMISSION_TYPES) {
+    const sourceType = value[submissionType];
+    if (!exactObjectKeys(sourceType, MANAGER_MAIL_KINDS)) {
+      throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
+    }
+    output[submissionType] = {};
+    for (const kind of MANAGER_MAIL_KINDS) {
+      const source = sourceType[kind];
+      if (!exactObjectKeys(source, ['subject', 'body_text', 'body_html', 'button_text', 'include_link'])) {
+        throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
+      }
+      const subject = text(source.subject);
+      const bodyText = text(source.body_text);
+      const bodyHtml = sanitizeManagerEmailHtml(source.body_html);
+      const expectsLink = MANAGER_LINK_MAIL_KINDS.has(kind);
+      const buttonText = source.button_text == null ? null : text(source.button_text);
+      if (!subject || subject.length > 240 || !bodyText || bodyText.length > 20_000
+          || /\{\{|\}\}|https?:\/\//i.test(`${subject}\n${bodyText}`)
+          || source.include_link !== expectsLink
+          || (expectsLink && (!buttonText || buttonText.length > 80))
+          || (!expectsLink && buttonText !== null)) {
+        throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
+      }
+      output[submissionType][kind] = {
+        subject, body_text: bodyText, body_html: bodyHtml,
+        button_text: buttonText, include_link: expectsLink
+      };
+    }
+  }
+  return output;
+}
+
+export async function getMyTmsManagerEmailSettings(env, user) {
+  assertOfficeControlEnabled(env);
+  const id = agencyId(env);
+  const context = await officeContext(env, user, ['MYTMS_SETTINGS_READ']);
+  const [agencyTemplates, managerOrigin] = await Promise.all([
+    agencyRpc(env, 'candidate_manager_email_settings_get_v1'),
+    controlPlaneRpc(env, 'control', 'manager_review_origin_get_v1', {
+      p_office_context: context, p_agency_id: id
+    })
+  ]);
+  return {
+    ok: true,
+    agency_templates: normalizeManagerTemplates(agencyTemplates.templates),
+    agency_template_version: Number(agencyTemplates.version),
+    agency_template_semantic_sha256_hex: text(agencyTemplates.semantic_sha256_hex),
+    agency_template_sanitizer_policy_version: text(agencyTemplates.sanitizer_policy_version),
+    agency_template_updated_at_utc: agencyTemplates.updated_at_utc || null,
+    manager_origin: {
+      public_origin: text(managerOrigin.manager_review_public_origin) || null,
+      state: upper(managerOrigin.manager_review_origin_state) || 'UNCONFIGURED',
+      settings_version: Number(managerOrigin.settings_version),
+      semantic_sha256_hex: text(managerOrigin.manager_review_origin_semantic_sha256_hex) || null,
+      verified_at_utc: managerOrigin.manager_review_origin_verified_at_utc || null,
+      ownership: 'PLATFORM'
+    }
+  };
+}
+
+export async function previewMyTmsManagerEmailTemplate(env, user, request) {
+  assertOfficeControlEnabled(env);
+  await officeContext(env, user, ['MYTMS_SETTINGS_READ']);
+  const source = isObject(request) ? request : {};
+  const selectedKind = MANAGER_MAIL_KINDS.includes(upper(source.kind)) ? upper(source.kind) : 'INITIAL';
+  const templatesForType = Object.fromEntries(MANAGER_MAIL_KINDS.map(kind => [kind,
+    kind === selectedKind ? source.template : {
+      subject: 'Preview placeholder', body_text: 'Preview placeholder.',
+      body_html: '<p>Preview placeholder.</p>',
+      button_text: MANAGER_LINK_MAIL_KINDS.has(kind) ? 'Review and approve' : null,
+      include_link: MANAGER_LINK_MAIL_KINDS.has(kind)
+    }
+  ]));
+  const template = normalizeManagerTemplates({
+    schema_version: 'CANDIDATE_MANAGER_EMAIL_TEMPLATES_V1',
+    TIMESHEET: templatesForType, EXPENSE_CLAIM: structuredClone(templatesForType)
+  }).TIMESHEET[selectedKind];
+  const expiry = template.include_link
+    ? '<p>This secure link expires seven days after it is issued.</p><p><strong>Review and approve</strong></p>'
+    : '';
+  return {
+    ok: true, template, preview_html: `${template.body_html}${expiry}`,
+    preview_text: `${template.body_text}${template.include_link ? '\n\nThis secure link expires seven days after it is issued.\n\nReview and approve' : ''}`,
+    sanitizer_policy_version: MANAGER_SANITIZER_POLICY_VERSION,
+    semantic_sha256_hex: await sha256Hex(canonicalJson(template))
+  };
+}
+
+export async function setMyTmsManagerEmailTemplates(env, user, request) {
+  assertOfficeControlEnabled(env);
+  const source = isObject(request) ? request : {};
+  const expectedVersion = Number(source.expected_version);
+  const idempotencyKey = text(source.idempotency_key);
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+      || !idempotencyKey || idempotencyKey.length > 200) {
+    throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
+  }
+  const context = await officeContext(env, user, ['MYTMS_SETTINGS_WRITE']);
+  const templates = normalizeManagerTemplates(source.templates);
+  return agencyRpc(env, 'candidate_manager_email_settings_set_v1', {
+    p_expected_version: expectedVersion,
+    p_templates: templates,
+    p_sanitizer_policy_version: MANAGER_SANITIZER_POLICY_VERSION,
+    p_actor_identity_hmac_hex: context.actor_identity_hmac,
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+export async function resetMyTmsManagerEmailTemplates(env, user, request) {
+  assertOfficeControlEnabled(env);
+  const source = isObject(request) ? request : {};
+  const expectedVersion = Number(source.expected_version);
+  const idempotencyKey = text(source.idempotency_key);
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+      || !idempotencyKey || idempotencyKey.length > 200) {
+    throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
+  }
+  const context = await officeContext(env, user, ['MYTMS_SETTINGS_WRITE']);
+  return agencyRpc(env, 'candidate_manager_email_settings_reset_v1', {
+    p_expected_version: expectedVersion,
+    p_actor_identity_hmac_hex: context.actor_identity_hmac,
+    p_idempotency_key: idempotencyKey,
+    p_now_utc: new Date().toISOString()
+  });
 }
 
 async function localCandidate(env, candidateId) {
@@ -246,13 +440,36 @@ export async function setMyTmsOfficeSettings(env, user, request) {
       || !idempotencyKey || idempotencyKey.length > 200) {
     throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
   }
-  for (const field of [
+  const activationFields = [
     'invitation_email_enabled', 'access_reminder_enabled', 'provisioning_enabled',
     'membership_admin_enabled', 'google_target_switch_enabled', 'push_delivery_enabled'
-  ]) {
-    if (settings[field] === true && !activationAllowed(env, field)) {
-      throw new MyTmsOfficeError(403, 'MYTMS_ACTIVATION_NOT_AUTHORIZED');
+  ];
+  for (const field of activationFields) {
+    if (Object.hasOwn(settings, field)) {
+      if (settings[field] === true && !activationAllowed(env, field)) {
+        throw new MyTmsOfficeError(403, 'MYTMS_ACTIVATION_NOT_AUTHORIZED');
+      }
+      throw new MyTmsOfficeError(403, 'MYTMS_PLATFORM_SETTING_READ_ONLY');
     }
+  }
+  const agencyEditableFields = new Set([
+    'invitation_subject', 'invitation_html_sanitized', 'invitation_text',
+    'access_reminder_subject', 'access_reminder_html_sanitized', 'access_reminder_text',
+    'invitation_expiry_seconds', 'resend_minimum_seconds', 'maximum_resends'
+  ]);
+  if (Object.keys(settings).some(field => !agencyEditableFields.has(field))) {
+    throw new MyTmsOfficeError(403, 'MYTMS_PLATFORM_SETTING_READ_ONLY');
+  }
+  const invitationExpiry = Number(settings.invitation_expiry_seconds);
+  const resendMinimum = Number(settings.resend_minimum_seconds);
+  const maximumResends = Number(settings.maximum_resends);
+  if ((Object.hasOwn(settings, 'invitation_expiry_seconds')
+        && (!Number.isSafeInteger(invitationExpiry) || invitationExpiry < 86_400 || invitationExpiry > 604_800))
+      || (Object.hasOwn(settings, 'resend_minimum_seconds')
+        && (!Number.isSafeInteger(resendMinimum) || resendMinimum < 900 || resendMinimum > 86_400))
+      || (Object.hasOwn(settings, 'maximum_resends')
+        && (!Number.isSafeInteger(maximumResends) || maximumResends < 0 || maximumResends > 5))) {
+    throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
   }
   if (Object.hasOwn(settings, 'invitation_html_sanitized')) {
     settings.invitation_html_sanitized = sanitizeMyTmsEmailHtml(

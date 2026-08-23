@@ -11,6 +11,7 @@ import {
   handleCandidateDailyPhase1bRequest
 } from './candidate-daily-phase1b.js';
 import { isCandidateDailyPath } from './candidate-daily-contract-v1.js';
+import { controlPlaneRpc } from '../../candidate-broker/src/control-plane-client.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -21,7 +22,7 @@ const CANDIDATE_PREFIX = '/candidate-app/v1';
 const MANAGER_PREFIX = '/candidate-manager/v1';
 const MAX_JSON_BYTES = 1024 * 1024;
 const MAX_COMPONENT_BYTES = 15 * 1024 * 1024;
-const MAX_IMAGE_DIMENSION = 12000;
+const MAX_IMAGE_DIMENSION = 10000;
 const MAX_IMAGE_PIXELS = 40_000_000;
 const ACCESS_TTL_SECONDS = 15 * 60;
 const REFRESH_TTL_DAYS = 30;
@@ -191,6 +192,12 @@ function isObject(value) {
 function requireUuid(value, code = 'INVALID_UUID') {
   const out = text(value);
   if (!UUID_RE.test(out)) throw new CandidateHttpError(400, code);
+  return out;
+}
+
+function requireSha256(value, code = 'INVALID_SHA256') {
+  const out = text(value).replace(/^\\x/i, '').toLowerCase();
+  if (!SHA256_RE.test(out)) throw new CandidateHttpError(400, code);
   return out;
 }
 
@@ -1635,8 +1642,8 @@ function preparedUploadContract(result, expected) {
 
 async function uploadTicket(env, payload) {
   const now = Math.floor(Date.now() / 1000);
-  return sealEnvelope(env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET, 'candidate-component-upload-v1', {
-    typ: 'candidate_component_upload', aud: 'cloudtms-candidate-upload',
+  return sealEnvelope(env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET, 'candidate-component-upload-v2', {
+    typ: 'candidate_component_upload', aud: 'cloudtms-component-upload-v2',
     iat: now, exp: now + 10 * 60, nonce: crypto.randomUUID(), ...payload
   });
 }
@@ -1644,14 +1651,110 @@ async function uploadTicket(env, payload) {
 async function verifyUploadTicket(env, value) {
   const payload = await openEnvelope(
     env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET,
-    'candidate-component-upload-v1',
+    'candidate-component-upload-v2',
     value
   );
-  if (!payload || payload.typ !== 'candidate_component_upload' || payload.aud !== 'cloudtms-candidate-upload'
+  if (!payload || payload.typ !== 'candidate_component_upload'
+      || payload.aud !== 'cloudtms-component-upload-v2'
+      || !['CANDIDATE_SESSION', 'MANAGER_EMAIL', 'MANAGER_PHONE'].includes(payload.authority_kind)
       || Number(payload.exp) <= Math.floor(Date.now() / 1000)) {
     throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
   }
   return payload;
+}
+
+function managerRouteAuthority(request) {
+  const authorityKind = upper(request.headers.get('x-cloudtms-manager-route-authority'));
+  if (!['MANAGER_EMAIL', 'MANAGER_PHONE'].includes(authorityKind)) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  if (authorityKind === 'MANAGER_PHONE') return { authority_kind: authorityKind };
+  const authority = {
+    authority_kind: authorityKind,
+    manager_route_ticket_id: text(request.headers.get('x-cloudtms-manager-route-ticket')).toLowerCase(),
+    route_revision: Number(request.headers.get('x-cloudtms-manager-route-revision')),
+    workflow_route_hmac: text(request.headers.get('x-cloudtms-manager-route-workflow-hmac')).toLowerCase(),
+    approval_request_route_hmac: text(request.headers.get('x-cloudtms-manager-route-request-hmac')).toLowerCase(),
+    request_generation: Number(request.headers.get('x-cloudtms-manager-route-request-generation')),
+    credential_generation: Number(request.headers.get('x-cloudtms-manager-route-credential-generation'))
+  };
+  if (!UUID_RE.test(authority.manager_route_ticket_id)
+      || !Number.isSafeInteger(authority.route_revision) || authority.route_revision < 1
+      || !SHA256_RE.test(authority.workflow_route_hmac)
+      || !SHA256_RE.test(authority.approval_request_route_hmac)
+      || !Number.isSafeInteger(authority.request_generation) || authority.request_generation < 1
+      || !Number.isSafeInteger(authority.credential_generation)
+      || authority.credential_generation < 1) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  return authority;
+}
+
+async function assertManagerRouteWorkflow(env, workflowId, authority) {
+  if (authority.authority_kind !== 'MANAGER_EMAIL') return;
+  const expected = await requestHmacSha256(
+    managerRouteHmacSecret(env), 'manager-email-workflow-v1', workflowId
+  );
+  if (expected !== authority.workflow_route_hmac) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+}
+
+async function assertManagerRouteResult(env, result, authority) {
+  if (authority?.authority_kind !== 'MANAGER_EMAIL') return;
+  const requestId = requireUuid(
+    result?.approval_request_id, 'MANAGER_ROUTE_CONTEXT_INVALID'
+  );
+  const expected = await requestHmacSha256(
+    managerRouteHmacSecret(env), 'manager-email-request-v1', requestId
+  );
+  if (expected !== authority.approval_request_route_hmac
+      || Number(result?.approval_request_generation || result?.request_generation)
+        !== authority.request_generation) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+}
+
+function completeManagerEmailRoute(env, authority, ctx) {
+  if (authority?.authority_kind !== 'MANAGER_EMAIL') return;
+  const completion = controlPlaneRpc(env, 'control', 'manager_email_route_transition_v1', {
+    p_transition: {
+      manager_route_ticket_id: authority.manager_route_ticket_id,
+      expected_route_revision: authority.route_revision,
+      target_state: 'COMPLETED'
+    }
+  });
+  if (ctx && typeof ctx.waitUntil === 'function') {
+    ctx.waitUntil(completion.catch(() => null));
+  } else {
+    completion.catch(() => null);
+  }
+}
+
+async function currentManagerEmailRouteTickets(env, workflowId) {
+  try {
+    const rows = await restRows(env, 'candidate_manager_email_route_receipts',
+      `workflow_id=eq.${encodeURIComponent(requireUuid(workflowId))}&state=eq.CURRENT`
+      + '&select=manager_route_ticket_id,route_revision&limit=100');
+    return rows.filter(row => UUID_RE.test(text(row.manager_route_ticket_id))
+      && Number.isSafeInteger(Number(row.route_revision)) && Number(row.route_revision) >= 1);
+  } catch {
+    return [];
+  }
+}
+
+function retireManagerEmailRoutes(env, routes, ctx) {
+  if (!Array.isArray(routes) || !routes.length) return;
+  const retirement = Promise.allSettled(routes.map(route => controlPlaneRpc(
+    env, 'control', 'manager_email_route_transition_v1', {
+      p_transition: {
+        manager_route_ticket_id: route.manager_route_ticket_id,
+        expected_route_revision: Number(route.route_revision), target_state: 'RETIRED'
+      }
+    }
+  )));
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(retirement);
+  else retirement.catch(() => null);
 }
 
 async function handleComponentPrepare(request, env, deps, workflowId, owner = 'candidate') {
@@ -1667,19 +1770,35 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   let sessionId = null;
   let approvalTokenHash = null;
   let ownerId = null;
+  let authority = null;
+  let captureMethod = null;
+  let expectedContentSha256 = null;
   if (owner === 'candidate') {
     const access = await verifyCandidateAccess(request, env);
     sessionId = access.session_id;
     ownerId = access.session_id;
   } else if (owner === 'manager') {
+    authority = managerRouteAuthority(request);
+    await assertManagerRouteWorkflow(env, workflowId, authority);
     const managerToken = bearerToken(request);
     if (!managerToken) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
     approvalTokenHash = await sha256Hex(managerToken);
     ownerId = approvalTokenHash;
+    captureMethod = upper(body.capture_method);
+    if (!['DRAW', 'UPLOAD'].includes(captureMethod)
+        || (authority.authority_kind === 'MANAGER_PHONE' && captureMethod !== 'DRAW')) {
+      throw new CandidateHttpError(400, 'MANAGER_SIGNATURE_CAPTURE_METHOD_INVALID');
+    }
+    expectedContentSha256 = text(body.content_sha256).toLowerCase();
+    if (!SHA256_RE.test(expectedContentSha256)) {
+      throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_INVALID');
+    }
   } else if (owner === 'office') {
     const user = await deps.requireOfficeUser(request, ['admin']);
     if (!user) throw new CandidateHttpError(401, 'OFFICE_AUTH_REQUIRED');
     ownerId = requireUuid(user.id, 'OFFICE_AUTH_REQUIRED');
+    authority = { authority_kind: 'MANAGER_PHONE' };
+    captureMethod = 'DRAW';
   }
   let approvalRequestId = body.approval_request_id ? requireUuid(body.approval_request_id) : null;
   if (owner === 'office') {
@@ -1707,7 +1826,9 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     ...(owner === 'office' ? { service_phone_approval: true, actor_user_id: ownerId } : {}),
     ...(approvalTokenHash ? {
       approval_token_hash_hex: approvalTokenHash
-    } : {})
+    } : {}),
+    ...(captureMethod ? { manager_signature_capture_method: captureMethod } : {}),
+    ...(expectedContentSha256 ? { expected_source_content_sha256_hex: expectedContentSha256 } : {})
   };
   const idempotencyKey = owner === 'office'
     ? requireOfficeIdempotency(body.idempotency_key)
@@ -1717,6 +1838,9 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     p_action: 'COMPONENT_PREPARE', p_expected_generation: generation, p_payload: payload,
     p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
   });
+  if (authority?.authority_kind === 'MANAGER_EMAIL') {
+    await assertManagerRouteResult(env, result, authority);
+  }
   const authoritative = preparedUploadContract(result, {
     media_type: mediaType, byte_size: byteSize, component_kind: componentKind,
     document_role: payload.document_role, expense_category: payload.expense_category,
@@ -1725,35 +1849,67 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   });
   const componentId = authoritative.component_id;
   const ticket = await uploadTicket(env, {
-    env: environment, owner, owner_id: ownerId, workflow_id: workflowId,
+    env: environment,
+    authority_kind: authority?.authority_kind || 'CANDIDATE_SESSION',
+    owner, owner_id: ownerId, workflow_id: workflowId,
     candidate_session_id: null,
     generation: authoritative.workflow_generation, component_id: componentId, component_kind: authoritative.component_kind,
     key: authoritative.storage_key, media_type: authoritative.media_type, byte_size: authoritative.byte_size,
-    completion_idempotency_key: `${idempotencyKey}:complete`
+    completion_idempotency_key: `${idempotencyKey}:complete`,
+    ...(expectedContentSha256 ? { expected_content_sha256: expectedContentSha256 } : {}),
+    ...(captureMethod ? { capture_method: captureMethod } : {}),
+    ...(authority?.authority_kind === 'MANAGER_EMAIL' ? {
+      manager_route_ticket_id: authority.manager_route_ticket_id,
+      route_revision: authority.route_revision,
+      workflow_route_hmac: authority.workflow_route_hmac,
+      approval_request_route_hmac: authority.approval_request_route_hmac,
+      request_generation: authority.request_generation,
+      credential_generation: authority.credential_generation
+    } : {})
   });
   return jsonResponse(result.idempotent_replay === true ? 200 : 201, {
     ok: true, workflow_id: workflowId, generation: authoritative.workflow_generation, component_id: componentId,
     idempotent_replay: result.idempotent_replay === true,
     upload: {
       method: 'PUT', url: `${owner === 'office' ? '/api/candidate-app' : CANDIDATE_PREFIX}/uploads/${encodeURIComponent(ticket)}`,
-      media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600
+      media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600,
+      ...(expectedContentSha256 ? { expected_content_sha256: expectedContentSha256 } : {})
     }
   });
 }
 
 async function authenticateUploadOwner(request, env, deps, ticket) {
   if (ticket.owner === 'candidate') {
+    if (ticket.authority_kind !== 'CANDIDATE_SESSION'
+        || request.headers.has('x-cloudtms-manager-route-authority')) {
+      throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+    }
     const access = await verifyCandidateAccess(request, env);
     if (access.session_id !== ticket.owner_id) throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
     return { session_id: access.session_id, approval_token_hash_hex: null };
   }
   if (ticket.owner === 'manager') {
+    const authority = managerRouteAuthority(request);
+    if (authority.authority_kind !== ticket.authority_kind) {
+      throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_AUDIENCE_MISMATCH');
+    }
+    if (authority.authority_kind === 'MANAGER_EMAIL') {
+      const exact = [
+        'manager_route_ticket_id', 'route_revision', 'workflow_route_hmac',
+        'approval_request_route_hmac', 'request_generation', 'credential_generation'
+      ].every((name) => String(authority[name]) === String(ticket[name]));
+      if (!exact) throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_AUDIENCE_MISMATCH');
+      await assertManagerRouteWorkflow(env, ticket.workflow_id, authority);
+    }
     const managerToken = bearerToken(request);
     const digest = managerToken ? await sha256Hex(managerToken) : '';
     if (!digest || digest !== ticket.owner_id) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
     return { session_id: null, approval_token_hash_hex: digest };
   }
   if (ticket.owner === 'office') {
+    if (ticket.authority_kind !== 'MANAGER_PHONE') {
+      throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_AUDIENCE_MISMATCH');
+    }
     const user = await deps.requireOfficeUser(request, ['admin']);
     if (!user || user.id !== ticket.owner_id) throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
     return { session_id: ticket.candidate_session_id || null, approval_token_hash_hex: null };
@@ -1777,12 +1933,17 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
   const bucket = env.R2;
   if (!bucket || typeof bucket.put !== 'function') throw new CandidateHttpError(503, 'CANDIDATE_STORAGE_UNAVAILABLE');
   const digest = await sha256Hex(bytes);
+  if (ticket.expected_content_sha256 && digest !== ticket.expected_content_sha256) {
+    throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_MISMATCH');
+  }
   const stored = await bucket.put(ticket.key, bytes, {
     onlyIf: { etagDoesNotMatch: '*' },
     httpMetadata: { contentType }, customMetadata: {
       purpose: 'candidate-component', workflow_id: ticket.workflow_id,
       component_id: ticket.component_id, media_type: contentType,
-      byte_size: String(bytes.byteLength), sha256: digest
+      byte_size: String(bytes.byteLength), sha256: digest,
+      authority_kind: ticket.authority_kind,
+      capture_method: ticket.capture_method || ''
     }
   });
   if (!stored) {
@@ -1803,6 +1964,9 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
     p_payload: {
       component_id: ticket.component_id, source_content_sha256_hex: digest,
         verified_byte_size: bytes.byteLength, verified_media_type: contentType,
+        ...(ticket.capture_method ? { manager_signature_capture_method: ticket.capture_method } : {}),
+        ...(validated.width ? { verified_image_width: validated.width } : {}),
+        ...(validated.height ? { verified_image_height: validated.height } : {}),
         ...(ticket.owner === 'office' ? { service_phone_approval: true, actor_user_id: ticket.owner_id } : {}),
       ...(owner.approval_token_hash_hex ? { approval_token_hash_hex: owner.approval_token_hash_hex } : {})
     }, p_idempotency_key: ticket.completion_idempotency_key,
@@ -2539,22 +2703,125 @@ function forbiddenFinancialKeys(value, path = '') {
   return hits;
 }
 
-function candidateManagerMail(request, env, token, workflowId, managerEmail, kind = 'INITIAL') {
-  const origin = publicAppBase(request, env);
+function managerRouteHmacSecret(env) {
+  const secret = text(env.MYTMS_MANAGER_ROUTE_HMAC_SECRET);
+  if (secret.length < 32) throw new CandidateHttpError(503, 'MANAGER_ROUTE_CONFIGURATION_UNAVAILABLE');
+  return secret;
+}
+
+function managerAgencyId(env) {
+  return requireUuid(env.CANDIDATE_AGENCY_ID || env.MYTMS_OFFICE_AGENCY_ID,
+    'MANAGER_ROUTE_CONFIGURATION_UNAVAILABLE');
+}
+
+async function candidateManagerMail(env, deps, token, workflowId, managerEmail, kind = 'INITIAL', workflowKind = '') {
+  const environment = environmentName(env);
+  const agencyId = managerAgencyId(env);
+  const [originAuthority, templateAuthority] = await Promise.all([
+    controlPlaneRpc(env, 'control', 'manager_review_origin_resolve_v1', {
+      p_agency_id: agencyId, p_environment_label: environment
+    }),
+    deps.rpc('candidate_manager_email_settings_get_v1', {})
+  ]);
+  const origin = text(originAuthority?.manager_review_public_origin).replace(/\/$/, '');
+  if (!/^https:\/\/[A-Za-z0-9.-]+(?::\d{1,5})?$/.test(origin)) {
+    throw new CandidateHttpError(503, 'MANAGER_REVIEW_ORIGIN_UNAVAILABLE');
+  }
   const link = `${origin}/manager/timesheet/${encodeURIComponent(workflowId)}#token=${encodeURIComponent(token)}`;
-  const reminder = kind === 'REMINDER';
-  const renewal = kind === 'RENEWAL';
-  const subject = reminder
-    ? 'Reminder: timesheet approval required'
-    : renewal ? 'Renewed timesheet approval request' : 'Timesheet approval required';
+  const submissionType = upper(workflowKind) === 'CONTRACT_EXPENSE' ? 'EXPENSE_CLAIM' : 'TIMESHEET';
+  const template = templateAuthority?.templates?.[submissionType]?.[kind];
+  if (!isObject(template) || template.include_link !== true || !text(template.subject)
+      || !text(template.body_text) || !text(template.body_html) || !text(template.button_text)
+      || /<(?:a|script|style|iframe|form)\b|\b(?:href|src)\s*=|https?:\/\//i.test(template.body_html)
+      || template.subject.length > 240 || template.body_text.length > 20_000
+      || template.body_html.length > 50_000 || template.button_text.length > 80) {
+    throw new CandidateHttpError(503, 'MANAGER_EMAIL_TEMPLATE_UNAVAILABLE');
+  }
+  const expiryText = 'This secure link expires seven days after it is issued.';
+  const safeLink = link.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
   return {
     manager_email: normaliseEmail(managerEmail),
     mail: {
-      to: normaliseEmail(managerEmail), subject,
-      body_text: `${reminder ? 'This is a reminder to ' : renewal ? 'Please use this renewed link to ' : 'Please '}review every page and approve or refuse the timesheet.\n\n${link}`,
-      body_html: `<p>${reminder ? 'This is a reminder to ' : renewal ? 'Please use this renewed link to ' : 'Please '}review every page and approve or refuse the timesheet.</p><p><a href="${link}">Review timesheet</a></p>`
+      to: normaliseEmail(managerEmail), subject: template.subject,
+      body_text: `${template.body_text}\n\n${expiryText}\n\n${template.button_text}: ${link}`,
+      body_html: `${template.body_html}<p>${expiryText}</p><p><a href="${safeLink}" rel="noopener noreferrer">${template.button_text}</a></p>`,
+      manager_template_version: templateAuthority.version,
+      manager_template_sha256: templateAuthority.semantic_sha256_hex,
+      manager_origin_version: originAuthority.settings_version,
+      manager_origin_sha256: originAuthority.manager_review_origin_semantic_sha256_hex,
+      manager_submission_type: submissionType
     }
   };
+}
+
+async function candidateManagerTerminalMail(deps, kind, workflowKind = '') {
+  const mailKind = upper(kind);
+  if (!['WITHDRAWAL', 'CANCELLATION'].includes(mailKind)) {
+    throw new CandidateHttpError(500, 'MANAGER_EMAIL_TEMPLATE_UNAVAILABLE');
+  }
+  const templateAuthority = await deps.rpc('candidate_manager_email_settings_get_v1', {});
+  const submissionType = upper(workflowKind) === 'CONTRACT_EXPENSE' ? 'EXPENSE_CLAIM' : 'TIMESHEET';
+  const template = templateAuthority?.templates?.[submissionType]?.[mailKind];
+  if (!isObject(template) || template.include_link !== false || !text(template.subject)
+      || !text(template.body_text) || !text(template.body_html) || template.button_text !== null
+      || /<(?:a|img|svg|script|style|iframe|form)\b|\b(?:href|src|on\w+)\s*=|https?:\/\//i.test(template.body_html)
+      || template.subject.length > 240 || template.body_text.length > 20_000
+      || template.body_html.length > 50_000) {
+    throw new CandidateHttpError(503, 'MANAGER_EMAIL_TEMPLATE_UNAVAILABLE');
+  }
+  return {
+    subject: template.subject, body_text: template.body_text, body_html: template.body_html,
+    manager_template_version: templateAuthority.version,
+    manager_template_sha256: templateAuthority.semantic_sha256_hex,
+    manager_submission_type: submissionType
+  };
+}
+
+async function registerManagerEmailRoute(env, deps, {
+  workflowId, approvalRequestId, requestGeneration, credentialGeneration,
+  mailOutboxId, managerToken, mailKind, expiresAtUtc, mutationKey
+}) {
+  const secret = managerRouteHmacSecret(env);
+  const environment = environmentName(env);
+  const agencyId = managerAgencyId(env);
+  const credentialHmac = await requestHmacSha256(secret, 'manager-email-credential-v1', managerToken);
+  const workflowHmac = await requestHmacSha256(secret, 'manager-email-workflow-v1', workflowId);
+  const requestHmac = await requestHmacSha256(secret, 'manager-email-request-v1', approvalRequestId);
+  const idempotencyHmac = await requestHmacSha256(
+    secret, 'manager-email-route-idempotency-v1',
+    { workflow_id: workflowId, approval_request_id: approvalRequestId, mail_kind: mailKind,
+      mutation_key: mutationKey }
+  );
+  const issuedAtUtc = new Date().toISOString();
+  const registrationFacts = {
+    contract_version: 'MANAGER_EMAIL_ROUTE_REGISTRATION_V1', environment_label: environment,
+    agency_id: agencyId, credential_hmac_hex: credentialHmac,
+    workflow_route_hmac_hex: workflowHmac,
+    approval_request_route_hmac_hex: requestHmac, request_generation: requestGeneration,
+    credential_generation: credentialGeneration, mail_kind: mailKind,
+    expires_at_utc: expiresAtUtc
+  };
+  const semanticSha256 = await sha256Hex(canonicalJson(registrationFacts));
+  const route = await controlPlaneRpc(env, 'control', 'manager_email_route_register_v1', {
+    p_registration: {
+      ...registrationFacts, authority_kind: 'MANAGER_EMAIL',
+      credential_key_version: 1, semantic_sha256_hex: semanticSha256,
+      idempotency_key_hmac_hex: idempotencyHmac, issued_at_utc: issuedAtUtc
+    },
+    p_now_utc: issuedAtUtc
+  });
+  const receipt = await deps.rpc('candidate_manager_email_route_receipt_commit_v1', {
+    p_environment: environment, p_workflow_id: workflowId,
+    p_approval_request_id: approvalRequestId, p_request_generation: requestGeneration,
+    p_credential_generation: credentialGeneration, p_mail_outbox_id: mailOutboxId,
+    p_manager_token_hash_hex: await sha256Hex(managerToken),
+    p_manager_route_ticket_id: route.manager_route_ticket_id,
+    p_route_revision: route.route_revision,
+    p_registration_receipt_sha256_hex: route.registration_receipt_sha256_hex,
+    p_route_semantic_sha256_hex: semanticSha256, p_mail_kind: mailKind,
+    p_idempotency_key: mutationKey, p_now_utc: issuedAtUtc
+  });
+  return { route, receipt };
 }
 
 function renderContracts(value) {
@@ -3099,6 +3366,8 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     ));
   }
   let payload = isObject(body.payload) ? structuredClone(body.payload) : {};
+  let pendingManagerRoute = null;
+  let replayResult = null;
   delete payload.mutation_replay_probe_only;
   delete payload.mutation_replay_semantic_payload;
   if (dbAction === 'WORKER_SUBMIT') {
@@ -3204,7 +3473,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     const replay = await probeWorkflowMutationReplay(
       env, deps, access, workflowId, dbAction, generation, mutationKey, replaySemanticPayload
     );
-    if (replay) return jsonResponse(200, replay);
+    replayResult = replay;
     if (dbAction === 'RENEW' || dbAction === 'REMIND') {
       const approval = await restOne(env, 'candidate_approval_requests',
         `id=eq.${encodeURIComponent(approvalRequestId)}`
@@ -3226,26 +3495,61 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       'candidate-email-handoff-v1', workflowId, generation, dbAction, mutationKey,
       normalisedManagerEmail, approvalIdentity
     );
-    payload = {
-      ...payload,
-      ...candidateManagerMail(request, env, managerToken, workflowId, normalisedManagerEmail, mailKind),
-      approval_token_hash_hex: await sha256Hex(managerToken)
-    };
+    if (!replay) {
+      const managerWorkflow = await workflowRow(env, workflowId);
+      payload = {
+        ...payload,
+        ...await candidateManagerMail(
+          env, deps, managerToken, workflowId, normalisedManagerEmail, mailKind,
+          managerWorkflow.workflow_kind
+        ),
+        approval_token_hash_hex: await sha256Hex(managerToken)
+      };
+    }
+    pendingManagerRoute = { managerToken, mailKind };
   } else if (dbAction === 'CANCEL') {
     const reasonNote = text(
       body.reason_note || body.reason || payload.reason_note || payload.reason
     ).trim();
     if (!reasonNote) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
     if (reasonNote.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_INVALID');
+    const managerWorkflow = await workflowRow(env, workflowId);
+    const emailApprovals = await restRows(env, 'candidate_approval_requests',
+      `workflow_id=eq.${encodeURIComponent(workflowId)}&method=eq.EMAIL`
+      + '&state=in.(PENDING,APPROVED)&select=id&limit=1');
     payload = {
       ...payload,
       reason_note: reasonNote,
-      reason_code: text(body.reason_code || payload.reason_code).trim().toUpperCase() || null
+      reason_code: text(body.reason_code || payload.reason_code).trim().toUpperCase() || null,
+      ...(emailApprovals.length ? {
+        manager_terminal_mail: await candidateManagerTerminalMail(
+          deps, 'CANCELLATION', managerWorkflow.workflow_kind
+        )
+      } : {})
     };
   }
-  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
-    access, env, workflowId, dbAction, generation, payload, mutationKey
-  ));
+  const managerRoutesToRetire = dbAction === 'CANCEL'
+    ? await currentManagerEmailRouteTickets(env, workflowId) : [];
+  const result = replayResult || await rpcCall(
+    deps, 'candidate_workflow_transition_atomic_v1',
+    workflowActionArgs(access, env, workflowId, dbAction, generation, payload, mutationKey)
+  );
+  if (pendingManagerRoute) {
+    const approvalRequestId = requireUuid(result?.approval_request_id, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    const mailOutboxId = requireUuid(result?.mail_outbox_id, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    const approval = await restOne(env, 'candidate_approval_requests',
+      `id=eq.${encodeURIComponent(approvalRequestId)}&workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + '&select=id,request_generation,resend_count,expires_at_utc,token_hash');
+    if (!approval) throw new CandidateHttpError(503, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    const credentialGeneration = pendingManagerRoute.mailKind === 'REMINDER'
+      ? Number(approval.resend_count) + 1 : 1;
+    await registerManagerEmailRoute(env, deps, {
+      workflowId, approvalRequestId, requestGeneration: Number(approval.request_generation),
+      credentialGeneration, mailOutboxId, managerToken: pendingManagerRoute.managerToken,
+      mailKind: pendingManagerRoute.mailKind, expiresAtUtc: approval.expires_at_utc, mutationKey
+    });
+  }
+  if (dbAction === 'CANCEL') retireManagerEmailRoutes(env, managerRoutesToRetire, ctx);
   if (dbAction === 'SELECT_PHONE_APPROVAL') {
     return jsonResponse(201, await phoneTokenForWorkflowResult(
       env, result, workflowId, generation, mutationKey
@@ -3291,8 +3595,91 @@ async function managerTokenContext(request, env) {
   return { token, token_hash_hex: await sha256Hex(token), environment: environmentName(env) };
 }
 
+function managerSubmissionType(workflowKind) {
+  const kind = upper(workflowKind);
+  if (kind === 'CONTRACT_EXPENSE') return 'EXPENSE_CLAIM';
+  if (kind === 'CONTRACT_COMBINED') return 'COMBINED';
+  return 'TIMESHEET';
+}
+
+function managerStartResult(result, routeAuthority) {
+  const components = (Array.isArray(result?.ordered_components) ? result.ordered_components : [])
+    .map((component) => ({
+      component_id: requireUuid(component?.component_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+      ordinal: requireInteger(component?.ordinal, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1),
+      component_kind: text(component?.component_kind),
+      media_type: normaliseMediaType(component?.media_type),
+      byte_size: requireInteger(component?.byte_size, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1),
+      content_sha256: requireSha256(component?.content_sha256, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+      viewed: component?.viewed === true
+    }));
+  const reviewedCount = Number(result?.reviewed_count || 0);
+  if (!components.length || !Number.isSafeInteger(reviewedCount) || reviewedCount < 0
+      || reviewedCount > components.length) {
+    throw new CandidateHttpError(409, 'MANAGER_REVIEW_DOCUMENT_NOT_READY');
+  }
+  return {
+    ok: true,
+    workflow_id: requireUuid(result?.workflow_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+    workflow_generation: requireInteger(
+      result?.workflow_generation, 'MANAGER_REVIEW_DOCUMENT_NOT_READY', 1
+    ),
+    approval_request_id: requireUuid(
+      result?.approval_request_id, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'
+    ),
+    authority_kind: routeAuthority?.authority_kind || (upper(result?.method) === 'PHONE'
+      ? 'MANAGER_PHONE' : 'MANAGER_EMAIL'),
+    submission_type: managerSubmissionType(result?.workflow_kind),
+    expires_at_utc: new Date(result?.expires_at_utc).toISOString(),
+    manifest_sha256: requireSha256(result?.manifest_sha256, 'MANAGER_REVIEW_DOCUMENT_NOT_READY'),
+    page_count: components.length,
+    ordered_components: components,
+    reviewed_count: reviewedCount,
+    all_pages_viewed: reviewedCount === components.length,
+    can_approve: result?.can_approve === true,
+    can_refuse: result?.can_refuse === true
+  };
+}
+
+function managerProgressResult(result) {
+  const requiredCount = requireInteger(result?.required_count, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1);
+  const reviewedCount = requireInteger(result?.reviewed_count, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1);
+  return {
+    ok: true,
+    workflow_id: requireUuid(result?.workflow_id, 'MANAGER_REVIEW_PROGRESS_CONFLICT'),
+    generation: requireInteger(result?.generation, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1),
+    approval_request_id: requireUuid(
+      result?.approval_request_id, 'MANAGER_REVIEW_PROGRESS_CONFLICT'
+    ),
+    component_id: requireUuid(result?.component_id, 'MANAGER_REVIEW_PROGRESS_CONFLICT'),
+    reviewed_count: reviewedCount,
+    required_count: requiredCount,
+    progress_version: requireInteger(
+      result?.progress_version, 'MANAGER_REVIEW_PROGRESS_CONFLICT', 1
+    ),
+    all_pages_viewed: reviewedCount === requiredCount
+  };
+}
+
+function managerTerminalResult(result, action) {
+  const approved = action === 'approve';
+  const completedAt = approved ? result?.approved_at_utc : result?.refused_at_utc;
+  return {
+    ok: true,
+    workflow_id: requireUuid(result?.workflow_id, 'MANAGER_APPROVAL_REQUEST_NOT_READY'),
+    generation: requireInteger(result?.generation, 'MANAGER_APPROVAL_REQUEST_NOT_READY', 1),
+    state: approved ? 'APPROVED' : 'REFUSED',
+    completed_at_utc: new Date(completedAt).toISOString(),
+    finalisation_state: approved ? 'FINALISATION_PENDING' : 'NOT_APPLICABLE',
+    idempotent_replay: result?.idempotent_replay === true
+  };
+}
+
 async function handleManagerAction(request, env, deps, workflowId, action, ctx) {
   const auth = await managerTokenContext(request, env);
+  const routeAuthority = request.headers.has('x-cloudtms-manager-route-authority')
+    ? managerRouteAuthority(request) : null;
+  if (routeAuthority) await assertManagerRouteWorkflow(env, workflowId, routeAuthority);
   const body = request.method === 'GET' ? {} : await readJson(request);
   const mutationKey = request.method === 'GET'
     ? `manager-start:${workflowId}:${auth.token_hash_hex}`
@@ -3314,6 +3701,10 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
     null, env, workflowId, dbAction, generation, payload, mutationKey
   ));
+  if (routeAuthority) await assertManagerRouteResult(env, result, routeAuthority);
+  if (['EMAIL_APPROVE', 'PHONE_APPROVE', 'MANAGER_REFUSE'].includes(dbAction)) {
+    completeManagerEmailRoute(env, routeAuthority, ctx);
+  }
   if (['EMAIL_APPROVE', 'PHONE_APPROVE'].includes(dbAction) && result?.final_render_contract) {
     const work = (async () => {
       await renderAndRegister(env, deps, result.final_render_contract, 'FINAL');
@@ -3324,11 +3715,12 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
       generation: result.generation
     });
     if (deferred !== true) await deferred;
-    return jsonResponse(202, {
-      ...withoutInternalRenderContracts(result),
-      final_rendering_accepted: true,
-      finalisation_pending: true
-    });
+    return jsonResponse(202, managerTerminalResult(result, action));
+  }
+  if (action === 'start') return jsonResponse(200, managerStartResult(result, routeAuthority));
+  if (action === 'progress') return jsonResponse(200, managerProgressResult(result));
+  if (action === 'approve' || action === 'refuse') {
+    return jsonResponse(200, managerTerminalResult(result, action));
   }
   return jsonResponse(200, result);
 }
@@ -3345,10 +3737,14 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
       `id=eq.${encodeURIComponent(componentId)}&workflow_id=eq.${encodeURIComponent(workflowId)}&select=*`);
   } else if (owner === 'manager') {
     const auth = await managerTokenContext(request, env);
+    const routeAuthority = request.headers.has('x-cloudtms-manager-route-authority')
+      ? managerRouteAuthority(request) : null;
+    if (routeAuthority) await assertManagerRouteWorkflow(env, workflowId, routeAuthority);
     const manifest = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
       null, env, workflowId, 'BEGIN_MANAGER_REVIEW', null,
       { approval_token_hash_hex: auth.token_hash_hex }, `manager-document:${workflowId}:${componentId}`
     ));
+    if (routeAuthority) await assertManagerRouteResult(env, manifest, routeAuthority);
     const allowedIds = (Array.isArray(manifest?.ordered_components) ? manifest.ordered_components : [])
       .map((entry) => text(entry?.component_id || entry?.id));
     if (!allowedIds.includes(componentId)) {
@@ -3384,7 +3780,11 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
       'content-length': String(stored.bytes.byteLength),
       'cache-control': 'private, no-store',
       'content-disposition': 'inline; filename="timesheet-document"',
-      'x-content-type-options': 'nosniff'
+      'x-content-type-options': 'nosniff',
+      ...(owner === 'manager' ? {
+        'x-cloudtms-component-id': component.id,
+        'x-cloudtms-content-sha256': hash
+      } : {})
     }
   });
 }
@@ -4414,7 +4814,7 @@ async function exactOfficeApproval(env, workflowId, workflowGeneration, requestI
   return approval;
 }
 
-async function officeManagerMutationPayload(request, env, action, body, workflow, approval, idempotencyKey) {
+async function officeManagerMutationPayload(request, env, deps, action, body, workflow, approval, idempotencyKey) {
   if (action === 'REMIND' || action === 'RENEW') {
     if (upper(approval.method) !== 'EMAIL') {
       throw new CandidateHttpError(409, 'MANAGER_APPROVAL_METHOD_MISMATCH');
@@ -4424,17 +4824,25 @@ async function officeManagerMutationPayload(request, env, action, body, workflow
       'cloudtms-office-manager-action-v1', action, workflow.id, workflow.generation,
       approval.id, approval.request_generation, idempotencyKey
     );
-    return {
-      ...candidateManagerMail(request, env, managerToken, workflow.id,
-        approval.manager_email_normalized, action === 'REMIND' ? 'REMINDER' : 'RENEWAL'),
+    const result = {
+      ...await candidateManagerMail(env, deps, managerToken, workflow.id,
+        approval.manager_email_normalized, action === 'REMIND' ? 'REMINDER' : 'RENEWAL',
+        workflow.workflow_kind),
       approval_token_hash_hex: await sha256Hex(managerToken)
     };
+    Object.defineProperty(result, '__managerRouteToken', { value: managerToken, enumerable: false });
+    return result;
   }
   if (action === 'MANAGER_REQUEST_CANCEL') {
     const reason = text(body.reason || body.reason_note);
     if (!reason) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_REQUIRED');
     if (reason.length > 1000) throw new CandidateHttpError(400, 'CANDIDATE_CANCELLATION_REASON_INVALID');
-    return { reason_note: reason, reason_code: upper(body.reason_code) || null };
+    return {
+      reason_note: reason, reason_code: upper(body.reason_code) || null,
+      manager_terminal_mail: await candidateManagerTerminalMail(
+        deps, 'WITHDRAWAL', workflow.workflow_kind
+      )
+    };
   }
   if (action === 'BEGIN_MANAGER_REVIEW' || action === 'CANCEL_MANAGER_HANDOFF') return {};
   if (action === 'RECORD_REVIEW_PROGRESS') {
@@ -4516,8 +4924,10 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
     env, workflow.id, generation, approvalId, approvalGeneration
   );
   const payload = await officeManagerMutationPayload(
-    request, env, dbAction, body, workflow, approval, idempotencyKey
+    request, env, deps, dbAction, body, workflow, approval, idempotencyKey
   );
+  const managerRoutesToRetire = dbAction === 'MANAGER_REQUEST_CANCEL'
+    ? await currentManagerEmailRouteTickets(env, workflow.id) : [];
   const result = await officeAdapter(deps, env, user.id, 'WORKFLOW_ACTION_EXECUTE', {
     workflow_id: workflow.id,
     generation,
@@ -4527,6 +4937,25 @@ async function handleOfficeWorkflowAction(request, env, deps, workflowId, action
     idempotency_key: idempotencyKey,
     payload
   });
+  if (payload.__managerRouteToken) {
+    const currentApprovalId = requireUuid(result?.approval_request_id, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    const current = await restOne(env, 'candidate_approval_requests',
+      `id=eq.${encodeURIComponent(currentApprovalId)}&workflow_id=eq.${encodeURIComponent(workflow.id)}`
+      + '&select=id,request_generation,resend_count,expires_at_utc');
+    if (!current) throw new CandidateHttpError(503, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    await registerManagerEmailRoute(env, deps, {
+      workflowId: workflow.id, approvalRequestId: current.id,
+      requestGeneration: Number(current.request_generation),
+      credentialGeneration: dbAction === 'REMIND' ? Number(current.resend_count) + 1 : 1,
+      mailOutboxId: requireUuid(result?.mail_outbox_id, 'MANAGER_ROUTE_REGISTRATION_FAILED'),
+      managerToken: payload.__managerRouteToken,
+      mailKind: dbAction === 'REMIND' ? 'REMINDER' : 'RENEWAL',
+      expiresAtUtc: current.expires_at_utc, mutationKey: idempotencyKey
+    });
+  }
+  if (dbAction === 'MANAGER_REQUEST_CANCEL') {
+    retireManagerEmailRoutes(env, managerRoutesToRetire, ctx);
+  }
   if (dbAction === 'PHONE_APPROVE' && result?.final_render_contract) {
     const work = (async () => {
       await renderAndRegister(env, deps, result.final_render_contract, 'FINAL', user.id);
@@ -4875,6 +5304,7 @@ async function handleOfficeReminderBatch(request, env, deps, operation, batchId 
     `id=in.(${approvalIds.map(encodeURIComponent).join(',')})&select=*`) : [];
   const approvalsById = new Map(approvals.map(row => [text(row.id), row]));
   const reminders = [];
+  const managerRouteInputs = new Map();
   for (const item of (Array.isArray(currentPreview.items) ? currentPreview.items : [])) {
     if (item?.eligible !== true) {
       reminders.push({ ...item, eligible: false });
@@ -4891,12 +5321,17 @@ async function handleOfficeReminderBatch(request, env, deps, operation, batchId 
       'cloudtms-office-manager-reminder-batch-v1', batchKey, item.workflow_id,
       item.workflow_generation, approval.id, approval.request_generation
     );
+    const managerWorkflow = await workflowRow(env, item.workflow_id);
+    managerRouteInputs.set(text(item.workflow_id), {
+      managerToken,
+      mutationKey: `office-reminder-batch:${batchKey}:${item.workflow_id}:${item.approval_request_generation}`
+    });
     reminders.push({
       ...item,
       eligible: true,
       payload: {
-        ...candidateManagerMail(request, env, managerToken, item.workflow_id,
-          approval.manager_email_normalized, 'REMINDER'),
+        ...await candidateManagerMail(env, deps, managerToken, item.workflow_id,
+          approval.manager_email_normalized, 'REMINDER', managerWorkflow.workflow_kind),
         approval_token_hash_hex: await sha256Hex(managerToken)
       }
     });
@@ -4905,6 +5340,27 @@ async function handleOfficeReminderBatch(request, env, deps, operation, batchId 
     ...clientRequest,
     reminders
   });
+  for (const item of (Array.isArray(result?.items) ? result.items : [])) {
+    if (upper(item?.outcome) !== 'QUEUED') continue;
+    const routeInput = managerRouteInputs.get(text(item.workflow_id));
+    const mutation = item?.result;
+    if (!routeInput || !isObject(mutation)) {
+      throw new CandidateHttpError(503, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    }
+    const current = await restOne(env, 'candidate_approval_requests',
+      `id=eq.${encodeURIComponent(item.approval_request_id)}`
+      + `&workflow_id=eq.${encodeURIComponent(item.workflow_id)}`
+      + '&select=id,request_generation,resend_count,expires_at_utc');
+    if (!current) throw new CandidateHttpError(503, 'MANAGER_ROUTE_REGISTRATION_FAILED');
+    await registerManagerEmailRoute(env, deps, {
+      workflowId: item.workflow_id, approvalRequestId: current.id,
+      requestGeneration: Number(current.request_generation),
+      credentialGeneration: Number(current.resend_count) + 1,
+      mailOutboxId: requireUuid(mutation.mail_outbox_id, 'MANAGER_ROUTE_REGISTRATION_FAILED'),
+      managerToken: routeInput.managerToken, mailKind: 'REMINDER',
+      expiresAtUtc: current.expires_at_utc, mutationKey: routeInput.mutationKey
+    });
+  }
   return jsonResponse(202, {
     ...result,
     retry_after_ms: 1000,

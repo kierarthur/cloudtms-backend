@@ -16,6 +16,7 @@ on:
       - 'supabase/migrations/18082026_0802_candidate_daily_identity_integrity.sql'
       - 'supabase/migrations/21082026_1757_candidate_federated_session_projection.sql'
       - 'supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql'
+      - 'supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql'
       - 'supabase/repeatable/07082026_20*_candidate_*.sql'
       - 'supabase/repeatable/07082026_21*_candidate_*.sql'
       - 'supabase/repeatable/07082026_22*_candidate_*.sql'
@@ -32,6 +33,8 @@ on:
       - 'supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql'
       - 'supabase/repeatable/26072026_1947_invoice_batch_issue_candidate_rows_v1.sql'
       - 'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql'
+      - 'supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql'
+      - 'supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql'
       - 'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql'
       - 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql'
       - 'tests/*candidate*runtime_verification.sql'
@@ -119,6 +122,7 @@ jobs:
             supabase/migrations/18082026_0802_candidate_daily_identity_integrity.sql
             supabase/migrations/21082026_1757_candidate_federated_session_projection.sql
             supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql
+            supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql
             supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql
             supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql
             supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql
@@ -129,6 +133,7 @@ jobs:
             supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql
             supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql
             supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql
+            supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql
             supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql
             supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql
             supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql
@@ -190,6 +195,7 @@ jobs:
             tests/18082026_0807_candidate_daily_r16_identity_integrity_runtime_verification.sql
             tests/18082026_1105_candidate_daily_r17_authority_transition_source_identity_runtime_verification.sql
             tests/21082026_2345_candidate_federated_membership_runtime_verification.sql
+            supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql
           )
           for file in "${suites[@]}"; do apply_sql "$file"; done
 

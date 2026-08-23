@@ -7,6 +7,8 @@ import { candidateManagerProviderAuthorityCurrent } from '../broker/src/candidat
 const workflowId = 'b5500000-0000-4000-8000-000000000001';
 const requestId = 'b5500000-0000-4000-8000-000000000002';
 const outboxId = 'b5500000-0000-4000-8000-000000000003';
+const routeReceiptId = 'b5500000-0000-4000-8000-000000000004';
+const routeTicketId = 'b5500000-0000-4000-8000-000000000005';
 const lease = 'manager-provider-lease';
 const now = '2026-08-11T12:00:00.000Z';
 
@@ -20,6 +22,10 @@ function claimedRow(scopePatch = {}) {
       candidate_manager_workflow_generation: 4,
       candidate_approval_request_id: requestId,
       candidate_approval_request_generation: 2,
+      candidate_manager_route_receipt_id: routeReceiptId,
+      candidate_manager_route_ticket_id: routeTicketId,
+      candidate_manager_route_revision: 1,
+      candidate_manager_route_registration_sha256: 'a'.repeat(64),
       candidate_manager_mail_retired: false,
       ...scopePatch
     }
@@ -109,6 +115,26 @@ test('withdrawal permit remains bound to its terminal request generation', async
       mail_outbox_id: outboxId,
       manager_mail_kind: 'WITHDRAWAL',
       provider_submit_permit: true
+    } }
+  });
+  assert.equal(result.authorised, true);
+  assert.equal(JSON.parse(calls[1].options.body).p_expected_generation, null);
+});
+
+test('cancellation permit is a no-link terminal message and uses no active route receipt', async () => {
+  const { result, calls } = await check({
+    claimed: claimedRow({
+      candidate_manager_mail_kind: 'CANCELLATION',
+      candidate_manager_route_receipt_id: null,
+      candidate_manager_route_ticket_id: null,
+      candidate_manager_route_revision: null,
+      candidate_manager_route_registration_sha256: null
+    }),
+    fixture: { rpcResult: {
+      ok: true, workflow_id: workflowId, generation: 5,
+      approval_request_id: requestId, approval_request_generation: 2,
+      approval_workflow_generation: 4, mail_outbox_id: outboxId,
+      manager_mail_kind: 'CANCELLATION', provider_submit_permit: true
     } }
   });
   assert.equal(result.authorised, true);

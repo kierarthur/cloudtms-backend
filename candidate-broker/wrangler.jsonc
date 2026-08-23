@@ -6,6 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  "routes": [
+    { "pattern": "testmode.arthur-rai.co.uk/candidate-manager/v1/*", "zone_name": "arthur-rai.co.uk" },
+    { "pattern": "testmode.arthur-rai.co.uk/candidate-app/v1/uploads/*", "zone_name": "arthur-rai.co.uk" }
+  ],
   "vars": {
     "CANDIDATE_APP_ENVIRONMENT": "TEST",
     "CANDIDATE_APP_READY_PROOF_ENABLED": "TRUE",

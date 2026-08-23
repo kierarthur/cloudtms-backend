@@ -181,6 +181,25 @@ async function projectFederatedRequest(request, env, routeContext) {
   return new Request(request, { headers });
 }
 
+function managerRouteRequest(request, routeContext, authorityOverride = null) {
+  const context = routeContext.context;
+  const authorityKind = authorityOverride || context.authority_kind;
+  const headers = new Headers(request.headers);
+  for (const name of Array.from(headers.keys())) {
+    if (name.startsWith('x-cloudtms-manager-route-')) headers.delete(name);
+  }
+  headers.set('x-cloudtms-manager-route-authority', authorityKind);
+  if (authorityKind === 'MANAGER_EMAIL') {
+    headers.set('x-cloudtms-manager-route-ticket', context.manager_route_ticket_id);
+    headers.set('x-cloudtms-manager-route-revision', String(context.route_revision));
+    headers.set('x-cloudtms-manager-route-workflow-hmac', context.workflow_route_hmac);
+    headers.set('x-cloudtms-manager-route-request-hmac', context.approval_request_route_hmac);
+    headers.set('x-cloudtms-manager-route-request-generation', String(context.request_generation));
+    headers.set('x-cloudtms-manager-route-credential-generation', String(context.credential_generation));
+  }
+  return new Request(request, { headers });
+}
+
 async function boundedObject(request, maximumBytes = 128 * 1024) {
   const declared = Number(request.headers.get('content-length') || 0);
   if (declared > maximumBytes) throw new Error('MYTMS_GOOGLE_REQUEST_INVALID');
@@ -292,6 +311,11 @@ export default {
     }
     const hasRouteContext = request.headers.has('x-cloudtms-route-context')
       || request.headers.has('x-cloudtms-route-context-sha256');
+    if (Array.from(request.headers.keys()).some(
+      name => name.startsWith('x-cloudtms-manager-route-')
+    )) {
+      return json(401, { ok: false, error_code: 'CANDIDATE_ROUTE_CONTEXT_INVALID' });
+    }
     let routeContext = null;
     if (hasRouteContext) {
       if (!federatedConfigurationAvailable(env)) {
@@ -309,7 +333,28 @@ export default {
       if (path.startsWith(PRIVATE_SYSTEM_PREFIX)) {
         return json(401, { ok: false, error_code: 'CANDIDATE_ROUTE_CONTEXT_AUDIENCE_INVALID' });
       }
-      if (path.startsWith(PRIVATE_CANDIDATE_PREFIX)) {
+      const authorityKind = routeContext.context.authority_kind || 'CANDIDATE_SESSION';
+      const managerAuthority = ['MANAGER_EMAIL', 'MANAGER_PHONE'].includes(authorityKind);
+      const sharedManagerUpload = path.startsWith(`${PRIVATE_CANDIDATE_PREFIX}/uploads/`);
+      const legacyPhoneAuthority = routeContext.context.v === 1
+        && request.headers.has('authorization')
+        && (path.startsWith(PRIVATE_MANAGER_PREFIX) || sharedManagerUpload);
+      if (path.startsWith(PRIVATE_MANAGER_PREFIX)) {
+        if (!(managerAuthority || legacyPhoneAuthority)) {
+          return json(401, { ok: false, error_code: 'CANDIDATE_ROUTE_CONTEXT_AUDIENCE_INVALID' });
+        }
+        request = managerRouteRequest(
+          request, routeContext, legacyPhoneAuthority ? 'MANAGER_PHONE' : null
+        );
+      } else if (path.startsWith(PRIVATE_CANDIDATE_PREFIX)
+          && (managerAuthority || legacyPhoneAuthority)) {
+        if (!sharedManagerUpload) {
+          return json(401, { ok: false, error_code: 'CANDIDATE_ROUTE_CONTEXT_AUDIENCE_INVALID' });
+        }
+        request = managerRouteRequest(
+          request, routeContext, legacyPhoneAuthority ? 'MANAGER_PHONE' : null
+        );
+      } else if (path.startsWith(PRIVATE_CANDIDATE_PREFIX)) {
         try {
           request = await projectFederatedRequest(request, env, routeContext);
         } catch {
@@ -370,6 +415,7 @@ export const candidatePrivateWorkerInternals = Object.freeze({
   federatedRoutingEnabled,
   federatedConfigurationAvailable,
   projectFederatedRequest,
+  managerRouteRequest,
   handleGoogleDataMatch,
   boundedObject,
   privateCandidateOperation

@@ -32,13 +32,22 @@ export async function candidateManagerProviderAuthorityCurrent({
   const workflowGeneration = Number(scope.candidate_manager_workflow_generation);
   const requestId = text(scope.candidate_approval_request_id);
   const requestGeneration = Number(scope.candidate_approval_request_generation);
+  const routeReceiptId = text(scope.candidate_manager_route_receipt_id);
+  const routeTicketId = text(scope.candidate_manager_route_ticket_id);
+  const routeRevision = Number(scope.candidate_manager_route_revision);
+  const routeRegistrationSha256 = text(scope.candidate_manager_route_registration_sha256);
   const outboxId = text(claimedRow && claimedRow.id);
   const leaseToken = text(currentLeaseToken);
   if (!env || !text(env.SUPABASE_URL) || !outboxId || !leaseToken
-      || !['INITIAL', 'REMINDER', 'RENEWAL', 'WITHDRAWAL'].includes(kind)
+      || !['INITIAL', 'REMINDER', 'RENEWAL', 'WITHDRAWAL', 'CANCELLATION'].includes(kind)
       || !uuid(workflowId) || !uuid(requestId)
       || !Number.isSafeInteger(workflowGeneration) || workflowGeneration < 1
       || !Number.isSafeInteger(requestGeneration) || requestGeneration < 1
+      || (['INITIAL', 'REMINDER', 'RENEWAL'].includes(kind) && (
+        !uuid(routeReceiptId) || !uuid(routeTicketId)
+        || !Number.isSafeInteger(routeRevision) || routeRevision < 1
+        || !/^[0-9a-f]{64}$/.test(routeRegistrationSha256)
+      ))
       || scope.candidate_manager_mail_retired === true) {
     return { candidate_bound: true, authorised: false, reason: 'CANDIDATE_MANAGER_PROVIDER_BINDING_INVALID' };
   }
@@ -63,7 +72,7 @@ export async function candidateManagerProviderAuthorityCurrent({
         p_environment: environment,
         p_workflow_id: workflowId,
         p_action: 'MANAGER_PROVIDER_SUBMIT_PERMIT',
-        p_expected_generation: kind === 'WITHDRAWAL' ? null : workflowGeneration,
+        p_expected_generation: ['WITHDRAWAL', 'CANCELLATION'].includes(kind) ? null : workflowGeneration,
         p_payload: {
           service_manager_provider_submit_permit: true,
           mail_outbox_id: outboxId,

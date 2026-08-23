@@ -206,6 +206,7 @@ begin
       'required',c.required,
       'content_sha256',case when c.review_content_sha256 is null then null else encode(c.review_content_sha256,'hex') end,
       'media_type',c.review_media_type,
+      'byte_size',c.review_byte_size,
       'page_count',c.review_page_count,
       'render_input_sha256',case when c.review_render_input_sha256 is null then null else encode(c.review_render_input_sha256,'hex') end,
       'renderer_contract_version',c.review_renderer_contract_version,

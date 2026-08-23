@@ -5,11 +5,15 @@ import cloudTmsWorker from '../broker/src/index.js';
 import { signCandidatePrivateRequest } from '../broker/src/candidate-service-auth.js';
 import {
   adoptMyTmsCandidate,
+  getMyTmsManagerEmailSettings,
   MyTmsOfficeError,
   myTmsOfficeInternals,
   previewMyTmsTemplate,
+  previewMyTmsManagerEmailTemplate,
   queueMyTmsIdentityChallenge,
   sanitizeMyTmsEmailHtml,
+  sanitizeManagerEmailHtml,
+  setMyTmsManagerEmailTemplates,
   setMyTmsMembershipState,
   setMyTmsOfficeSettings
 } from '../broker/src/mytms-office-control.js';
@@ -27,6 +31,20 @@ function officeEnvironment(overrides = {}) {
     MYTMS_OFFICE_AGENCY_ID: IDS.agency,
     MYTMS_OFFICE_ACTOR_IDENTITY_SECRET: 'test-office-actor-secret-not-live',
     ...overrides
+  };
+}
+
+function managerTemplates() {
+  const kinds = ['INITIAL', 'REMINDER', 'RENEWAL', 'WITHDRAWAL', 'CANCELLATION'];
+  const type = Object.fromEntries(kinds.map(kind => [kind, {
+    subject: `${kind} subject`, body_text: `${kind} plain text.`,
+    body_html: `<p>${kind} safe HTML.</p>`,
+    button_text: ['INITIAL', 'REMINDER', 'RENEWAL'].includes(kind) ? 'Review and approve' : null,
+    include_link: ['INITIAL', 'REMINDER', 'RENEWAL'].includes(kind)
+  }]));
+  return {
+    schema_version: 'CANDIDATE_MANAGER_EMAIL_TEMPLATES_V1',
+    TIMESHEET: structuredClone(type), EXPENSE_CLAIM: structuredClone(type)
   };
 }
 
@@ -62,6 +80,133 @@ test('template preview is admin-context-bound and returns sanitizer identity', a
   assert.match(result.sanitized_content_sha256_hex, /^[a-f0-9]{64}$/);
   assert.doesNotMatch(result.sanitized_html, /script|bad\(\)/i);
   assert.match(result.sanitized_html, /\{\{candidate_name\}\}/);
+});
+
+test('manager template sanitizer never permits agency-authored links or active content', () => {
+  assert.equal(sanitizeManagerEmailHtml('<p><strong>Review safely</strong></p>'), '<p><strong>Review safely</strong></p>');
+  assert.throws(
+    () => sanitizeManagerEmailHtml('<p>Review</p><a href="https://wrong.example">Wrong link</a>'),
+    error => error instanceof MyTmsOfficeError && error.code === 'MYTMS_MANAGER_TEMPLATE_INVALID'
+  );
+});
+
+test('manager template preview appends server-owned link wording but never a real credential', async () => {
+  const result = await previewMyTmsManagerEmailTemplate(
+    officeEnvironment(), { id: IDS.challenge },
+    { kind: 'INITIAL', template: managerTemplates().TIMESHEET.INITIAL }
+  );
+  assert.equal(result.ok, true);
+  assert.match(result.preview_html, /expires seven days/i);
+  assert.match(result.preview_html, /Review and approve/);
+  assert.doesNotMatch(result.preview_html, /token=|href=/i);
+});
+
+test('manager settings combine agency templates with read-only platform origin authority', async () => {
+  const originalFetch = globalThis.fetch;
+  const templates = managerTemplates();
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    const requestUrl = url instanceof Request ? url.url : String(url);
+    calls.push(requestUrl);
+    if (requestUrl.includes('/rpc/candidate_manager_email_settings_get_v1')) {
+      return Response.json({
+        ok: true, templates, version: 3,
+        sanitizer_policy_version: 'MANAGER_EMAIL_SAFE_HTML_V1',
+        semantic_sha256_hex: 'a'.repeat(64), updated_at_utc: '2026-08-23T01:00:00Z'
+      });
+    }
+    if (requestUrl.includes('/rpc/manager_review_origin_get_v1')) {
+      return Response.json({
+        ok: true, settings_version: 8,
+        manager_review_public_origin: 'https://testmode.arthur-rai.co.uk',
+        manager_review_origin_state: 'TEST_READY',
+        manager_review_origin_semantic_sha256_hex: 'b'.repeat(64),
+        manager_review_origin_verified_at_utc: '2026-08-23T01:00:00Z'
+      });
+    }
+    throw new Error('unexpected manager settings request');
+  };
+  try {
+    const result = await getMyTmsManagerEmailSettings(officeEnvironment({
+      SUPABASE_URL: 'https://agency.test.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-agency-service-role',
+      MYTMS_CONTROL_PLANE_URL: 'https://control.test.invalid',
+      MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-control-service-role'
+    }), { id: IDS.challenge });
+    assert.equal(result.agency_template_version, 3);
+    assert.equal(result.manager_origin.ownership, 'PLATFORM');
+    assert.equal(result.manager_origin.public_origin, 'https://testmode.arthur-rai.co.uk');
+    assert.equal(calls.length, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('manager template save is exact, versioned and rejects unknown objects before database access', async () => {
+  const originalFetch = globalThis.fetch;
+  let captured;
+  globalThis.fetch = async (url, init) => {
+    captured = { url: String(url), body: JSON.parse(init.body) };
+    return Response.json({
+      ok: true, templates: captured.body.p_templates, version: 4,
+      sanitizer_policy_version: 'MANAGER_EMAIL_SAFE_HTML_V1',
+      semantic_sha256_hex: 'c'.repeat(64), updated_at_utc: '2026-08-23T01:01:00Z'
+    });
+  };
+  const env = officeEnvironment({
+    SUPABASE_URL: 'https://agency.test.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-agency-service-role'
+  });
+  try {
+    const result = await setMyTmsManagerEmailTemplates(env, { id: IDS.challenge }, {
+      expected_version: 3, idempotency_key: 'manager-settings-save-1',
+      templates: managerTemplates()
+    });
+    assert.equal(result.version, 4);
+    assert.match(captured.url, /candidate_manager_email_settings_set_v1$/);
+    assert.equal(captured.body.p_expected_version, 3);
+    assert.equal(captured.body.p_idempotency_key, 'manager-settings-save-1');
+    assert.equal(Object.hasOwn(captured.body, 'p_semantic_sha256_hex'), false);
+    await assert.rejects(
+      setMyTmsManagerEmailTemplates(env, { id: IDS.challenge }, {
+        expected_version: 4, idempotency_key: 'manager-settings-save-2',
+        templates: { ...managerTemplates(), unexpected: true }
+      }),
+      error => error instanceof MyTmsOfficeError && error.code === 'MYTMS_MANAGER_TEMPLATE_INVALID'
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('agency settings writes reject platform-owned fields and enforce invitation safety bounds', async () => {
+  await assert.rejects(
+    setMyTmsOfficeSettings(officeEnvironment(), { id: IDS.challenge }, {
+      expected_version: 1, idempotency_key: 'platform-field',
+      settings: { android_store_url: 'https://store.example' }
+    }),
+    error => error instanceof MyTmsOfficeError && error.code === 'MYTMS_PLATFORM_SETTING_READ_ONLY'
+  );
+  await assert.rejects(
+    setMyTmsOfficeSettings(officeEnvironment(), { id: IDS.challenge }, {
+      expected_version: 1, idempotency_key: 'unsafe-expiry',
+      settings: { invitation_expiry_seconds: 60 }
+    }),
+    error => error instanceof MyTmsOfficeError && error.code === 'MYTMS_SETTINGS_REQUEST_INVALID'
+  );
+  for (const [idempotencyKey, settings] of [
+    ['expiry-over-seven-days', { invitation_expiry_seconds: 604_801 }],
+    ['resend-under-fifteen-minutes', { resend_minimum_seconds: 899 }],
+    ['resend-over-one-day', { resend_minimum_seconds: 86_401 }],
+    ['more-than-five-resends', { maximum_resends: 6 }]
+  ]) {
+    await assert.rejects(
+      setMyTmsOfficeSettings(officeEnvironment(), { id: IDS.challenge }, {
+        expected_version: 1, idempotency_key: idempotencyKey, settings
+      }),
+      error => error instanceof MyTmsOfficeError && error.code === 'MYTMS_SETTINGS_REQUEST_INVALID'
+    );
+  }
 });
 
 test('dangerous feature activation is rejected unless separately authorised', async () => {
@@ -199,6 +344,7 @@ test('identity challenge delivery queues only through a deterministic TEST outbo
 test('Office MyTMS routes retain existing admin authentication', async () => {
   for (const [url, method, body] of [
     ['https://office.test.example/api/mytms/settings', 'GET', undefined],
+    ['https://office.test.example/api/mytms/manager-email-settings', 'GET', undefined],
     [`https://office.test.example/api/mytms/candidates/${IDS.challenge}/adopt`, 'POST', '{}'],
     [`https://office.test.example/api/mytms/memberships/${IDS.outbox}/state`, 'POST', '{}']
   ]) {
