@@ -22,6 +22,7 @@ const {
   preparedUploadContract,
   expenseSummaryDisplayLines,
   mileageJourneyRows,
+  officialPeriodWithShiftLines,
   paperPackIdentity,
   passwordVerificationProof,
   candidatePaperDeliveryGeneration,
@@ -47,6 +48,20 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+test('Candidate official period adds shift lines without mutating frozen week-day authority', () => {
+  const period = officialPeriodWithShiftLines('2026-08-23', [{
+    date: '2026-08-21',
+    display_start_local: '09:00',
+    display_end_local: '17:00',
+    segment_id: 'synthetic-segment'
+  }]);
+  assert.equal(period.days.length, 7);
+  assert.equal(period.days.find((day) => day.date === '2026-08-21').shift_lines.length, 1);
+  assert.equal(period.days.find((day) => day.date === '2026-08-21').shift_lines[0].display_order, 1);
+  assert.equal(period.days.filter((day) => day.date !== '2026-08-21')
+    .every((day) => day.shift_lines.length === 0), true);
+});
 
 function noLogoBranding(agencyName = 'Configured Agency') {
   const base = {

@@ -2292,6 +2292,18 @@ async function signatureAsset(env, componentId, fallbackKey = null, fallbackHash
   };
 }
 
+function officialPeriodWithShiftLines(endDate, lines) {
+  const period = buildOfficialWeekPeriod(endDate);
+  return {
+    ...period,
+    days: period.days.map((day) => ({
+      ...day,
+      shift_lines: lines.filter((line) => line.date === day.date)
+        .map((line, index) => ({ ...line, display_order: index + 1 }))
+    }))
+  };
+}
+
 async function buildOfficialCandidateModel(env, contract, state, phase) {
   const { workflow, timesheet, candidate, client, contract: contractRow } = state;
   const frozen = parseJson(workflow.immutable_submission_json, {}) || {};
@@ -2305,13 +2317,10 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
   }
   const endDate = text(workflow.week_ending_date || workflow.work_date || timesheet?.week_ending_date).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) throw new CandidateHttpError(409, 'CANDIDATE_RENDER_DATE_INVALID');
-  const period = buildOfficialWeekPeriod(endDate);
   const rawSchedule = scheduleFromImmutable(workflow, timesheet);
   const lines = rawSchedule.map(scheduleLine).filter((line) => line.date && line.display_start_local && line.display_end_local);
   lines.sort((a, b) => a.date.localeCompare(b.date) || a.display_start_local.localeCompare(b.display_start_local) || a.segment_id.localeCompare(b.segment_id));
-  for (const day of period.days) {
-    day.shift_lines = lines.filter((line) => line.date === day.date).map((line, index) => ({ ...line, display_order: index + 1 }));
-  }
+  const period = officialPeriodWithShiftLines(endDate, lines);
   const paidMinutes = lines.reduce((sum, line) => sum + Number(line.paid_minutes || 0), 0);
   const candidateSignatureId = workflow.candidate_signature_component_id;
   const candidateSignature = await signatureAsset(env, candidateSignatureId);
@@ -5853,6 +5862,7 @@ export const candidateAppBackendInternals = Object.freeze({
   preparedUploadContract,
   expenseSummaryDisplayLines,
   mileageJourneyRows,
+  officialPeriodWithShiftLines,
   paperPackIdentity,
   candidatePaperDeliveryGeneration,
   candidatePaperCompleteReceipt,
