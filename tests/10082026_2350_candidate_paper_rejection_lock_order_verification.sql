@@ -454,4 +454,8 @@ drop function public._candidate_reject_expense_lock_probe_v1(text,numeric);
 drop function public._candidate_reject_hours_lock_probe_v1(text,numeric);
 drop function public._candidate_rejection_lock_cleanup_v1();
 drop function public._candidate_rejection_lock_fixture_v1();
+update public.settings_defaults
+set candidate_app_feature_flags_json=candidate_app_feature_flags_json
+  ||'{"candidate_app_writes":false,"candidate_paper_qr":false,"candidate_notifications":false,"candidate_route_confirmation":false}'::jsonb
+where id=1;
 commit;
