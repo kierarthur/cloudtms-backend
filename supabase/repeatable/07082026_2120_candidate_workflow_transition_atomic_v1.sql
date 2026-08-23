@@ -2857,9 +2857,14 @@ begin
     ),false) then
       raise exception 'CANDIDATE_COMPONENT_TYPE_INVALID' using errcode='22023';
     end if;
+    if v_component_kind='MANAGER_SIGNATURE' and v_approval.method='PHONE'
+       and v_manager_capture_method is null then
+      v_manager_capture_method:='DRAW';
+    end if;
     if v_component_kind='MANAGER_SIGNATURE'
        and (coalesce(v_manager_capture_method,'') not in ('DRAW','UPLOAD')
-         or (v_is_public_manager_action and v_expected_source_digest is null)) then
+         or (v_is_public_manager_action and v_approval.method='EMAIL'
+           and v_expected_source_digest is null)) then
       raise exception 'MANAGER_SIGNATURE_CAPTURE_METHOD_INVALID' using errcode='22023';
     elsif v_component_kind<>'MANAGER_SIGNATURE'
        and (v_manager_capture_method is not null or v_expected_source_digest is not null) then
@@ -2989,6 +2994,10 @@ begin
     v_manager_capture_method:=nullif(upper(btrim(coalesce(
       v_payload->>'manager_signature_capture_method',''
     ))),'');
+    if v_component.component_kind='MANAGER_SIGNATURE' and v_approval.method='PHONE'
+       and v_manager_capture_method is null then
+      v_manager_capture_method:='DRAW';
+    end if;
     begin
       v_verified_image_width:=nullif(v_payload->>'verified_image_width','')::integer;
       v_verified_image_height:=nullif(v_payload->>'verified_image_height','')::integer;
@@ -2997,8 +3006,10 @@ begin
     end;
     if v_component.component_kind='MANAGER_SIGNATURE'
        and (v_manager_capture_method is distinct from v_component.manager_signature_capture_method
-         or v_verified_image_width not between 1 and 10000
-         or v_verified_image_height not between 1 and 10000) then
+         or (v_approval.method='EMAIL' and (
+           v_verified_image_width not between 1 and 10000
+           or v_verified_image_height not between 1 and 10000
+         ))) then
       raise exception 'MANAGER_SIGNATURE_CAPTURE_METHOD_INVALID' using errcode='22023';
     end if;
     if (v_component.component_kind in ('CANDIDATE_SIGNATURE','MANAGER_SIGNATURE')
@@ -3746,7 +3757,8 @@ begin
     end if;
     select count(*) into v_reviewed_count from unnest(v_approval.required_component_ids) u(id)
     where v_approval.review_progress_json ? u.id::text;
-    if coalesce(nullif(v_payload->>'progress_version','')::integer,-1)<>v_reviewed_count then
+    if (v_approval.method='EMAIL' or nullif(v_payload->>'progress_version','') is not null)
+       and coalesce(nullif(v_payload->>'progress_version','')::integer,-1)<>v_reviewed_count then
       raise exception 'MANAGER_REVIEW_PROGRESS_CONFLICT' using errcode='40001';
     end if;
     select * into v_component from public.candidate_submission_components
@@ -3821,8 +3833,10 @@ begin
        or nullif(btrim(coalesce(v_payload->>'manager_position','')),'') is null
        or pg_catalog.length(btrim(v_payload->>'manager_name'))>200
        or pg_catalog.length(btrim(v_payload->>'manager_position'))>200
-       or coalesce(v_payload->>'attestation_version','')<>'MANAGER_APPROVAL_ATTESTATION_V1'
-       or coalesce((v_payload->>'attestation_accepted')::boolean,false)<>true then
+       or (v_approval.method='EMAIL' and (
+         coalesce(v_payload->>'attestation_version','')<>'MANAGER_APPROVAL_ATTESTATION_V1'
+         or coalesce((v_payload->>'attestation_accepted')::boolean,false)<>true
+       )) then
       raise exception 'MANAGER_SIGNATURE_REQUIRED' using errcode='22023';
     end if;
     select * into v_signature_component from public.candidate_submission_components

@@ -323,7 +323,8 @@ test('manager reminder renewal cancellation and detail actions use one provider-
   const reads = sql.reads;
   assert.match(workflow, /v_action='REMIND'[\s\S]*approval_token_hash_hex[\s\S]*manager_mail\.status='SENT'[\s\S]*provider_status[\s\S]*interval '24 hours'[\s\S]*token_hash=v_token_hash[\s\S]*candidate_manager_mail_kind','REMINDER'/i);
   assert.match(workflow, /v_action='RENEW'[\s\S]*v_approval\.state='PENDING'[\s\S]*expires_at_utc<=p_now_utc[\s\S]*state='EXPIRED'[\s\S]*v_approval\.state<>'EXPIRED'[\s\S]*candidate_manager_mail_kind','RENEWAL'/i);
-  assert.match(workflow, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*CANDIDATE_CANCELLATION_REASON_REQUIRED[\s\S]*_candidate_manager_mail_retire_v1[\s\S]*candidate_manager_mail_kind','WITHDRAWAL'[\s\S]*cancellation_reason[\s\S]*manager_withdrawal_count/i);
+  assert.match(workflow, /v_action='MANAGER_REQUEST_CANCEL'[\s\S]*CANDIDATE_CANCELLATION_REASON_REQUIRED[\s\S]*_candidate_manager_mail_retire_v1[\s\S]*candidate_manager_mail_kind','WITHDRAWAL'[\s\S]*cancellation_reason[\s\S]*manager_withdrawal_count/i);
+  assert.match(workflow, /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*CANDIDATE_CANCELLATION_REASON_REQUIRED[\s\S]*_candidate_manager_mail_retire_v1[\s\S]*candidate_manager_mail_kind','CANCELLATION'[\s\S]*cancellation_reason[\s\S]*manager_withdrawal_count/i);
   assert.match(reads, /_candidate_timesheet_action_contract_v1[\s\S]*provider_accepted_at_utc[\s\S]*SEND_MANAGER_REMINDER[\s\S]*REQUEST_APPROVAL_AGAIN[\s\S]*DOWNLOAD_PAPER_DOCUMENTS[\s\S]*RETRY_FINALISATION/i);
   assert.doesNotMatch(reads, /'code','CONTINUE_WORKFLOW'/i);
 });
@@ -379,6 +380,9 @@ test('workflow gates manager review and finalisation on registered official docu
   assert.match(workflow, /review_manifest_sha256/);
   assert.match(workflow, /required_component_ids/);
   assert.match(workflow, /final_signed_render_state='READY'/i);
+  assert.match(workflow, /v_component_kind='MANAGER_SIGNATURE' and v_approval\.method='PHONE'[\s\S]*v_manager_capture_method:='DRAW'/i);
+  assert.match(workflow, /v_approval\.method='EMAIL' or nullif\(v_payload->>'progress_version',''\) is not null/i);
+  assert.match(workflow, /v_approval\.method='EMAIL'[\s\S]*MANAGER_APPROVAL_ATTESTATION_V1/i);
 });
 
 test('rejected resubmission is source-bound, transaction-owned and request-aware', () => {
