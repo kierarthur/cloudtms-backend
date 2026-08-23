@@ -1130,6 +1130,30 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_manager_email_claim_route_current_v1(p_route_receipt_id uuid, p_manager_route_ticket_id uuid, p_route_revision bigint, p_registration_receipt_sha256_hex text, p_workflow_id uuid, p_approval_request_id uuid, p_request_generation integer)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "b3f2f04b719427459e38c7b468c7bf44f3b08d243ecdab81cdb332099f8f2525"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
         }
       ],
       "owner": "postgres",
@@ -10526,7 +10550,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5db2ea0df310311a08636bff8a834896c0b33c7dafeebe6d3bf3fdb85c6eb05e"
+      "definition_sha256": "dd94e164e5ef25c39e25507a1cd88f5cbccbc3222dcc749212cdb5af731ea5d4"
     },
     {
       "acl": [
@@ -11517,7 +11541,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "f3034a307d47fc172fe3884ad6dd20798a16489e566991fadfb0b6d7a41bf377"
+      "definition_sha256": "466a4235b4fed1b84ba17cdf949943c65101c00bae1db92361e07a09e1841809"
     },
     {
       "acl": [
