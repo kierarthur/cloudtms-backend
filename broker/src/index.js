@@ -46,6 +46,10 @@ import {
   mapCanonicalDailyScheduleToIso
 } from './daily-schedule-authority.js';
 import { handleCandidateAppRequest } from './candidate-app-backend.js';
+import {
+  CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH,
+  handleCandidateManagerEmailE2EProof
+} from './candidate-manager-email-e2e-proof.js';
 import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import {
   adoptMyTmsCandidate,
@@ -194055,6 +194059,14 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
       // Me
       if (req.method === 'GET' && p === '/api/me') {
         return handleMe(env, req);
+      }
+
+      if (req.method === 'POST' && p === CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH) {
+        const user = await requireUser(env, req, ['admin']);
+        if (!user) return withCORS(env, req, unauthorized());
+        return withCORS(env, req, await handleCandidateManagerEmailE2EProof(
+          req, env, ctx, createCandidatePrivateDependencies(env, 'PRIVATE')
+        ));
       }
 
       const invoiceAsyncResponse = await handleInvoiceAsyncHttpRequest(req, env, ctx, {
