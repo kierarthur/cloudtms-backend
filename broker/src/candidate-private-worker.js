@@ -77,13 +77,19 @@ function federatedRoutingEnabled(env) {
   return String(env.CANDIDATE_FEDERATED_ROUTING_ENABLED || '').trim().toUpperCase() === 'TRUE';
 }
 
-function federatedConfigurationAvailable(env) {
+function federatedRouteConfigurationAvailable(env) {
   return Boolean(
     federatedRoutingEnabled(env)
     && String(env.CANDIDATE_AGENCY_ID || '').trim()
     && String(env.CANDIDATE_DATA_PLANE_ID || '').trim()
     && String(env.CANDIDATE_ROUTE_VERSION || '').trim()
     && String(env.CANDIDATE_ROUTE_CONTEXT_SECRET || '').trim()
+  );
+}
+
+function federatedConfigurationAvailable(env) {
+  return Boolean(
+    federatedRouteConfigurationAvailable(env)
     && String(env.CANDIDATE_FEDERATED_IDENTITY_SECRET || '').trim()
   );
 }
@@ -338,7 +344,7 @@ export default {
     }
     let routeContext = null;
     if (hasRouteContext) {
-      if (!federatedConfigurationAvailable(env)) {
+      if (!federatedRouteConfigurationAvailable(env)) {
         return json(503, { ok: false, error_code: 'CANDIDATE_FEDERATED_ROUTING_UNAVAILABLE' });
       }
       routeContext = await verifyCandidateRouteContext(request, env);
@@ -375,6 +381,9 @@ export default {
           request, routeContext, legacyPhoneAuthority ? 'MANAGER_PHONE' : null
         );
       } else if (path.startsWith(PRIVATE_CANDIDATE_PREFIX)) {
+        if (!federatedConfigurationAvailable(env)) {
+          return json(503, { ok: false, error_code: 'CANDIDATE_FEDERATED_ROUTING_UNAVAILABLE' });
+        }
         try {
           request = await projectFederatedRequest(request, env, routeContext);
         } catch {
@@ -435,6 +444,7 @@ export const candidatePrivateWorkerInternals = Object.freeze({
   purgeCandidateDailySystemNonces,
   purgeMyTmsGoogleControlNonces,
   federatedRoutingEnabled,
+  federatedRouteConfigurationAvailable,
   federatedConfigurationAvailable,
   projectFederatedRequest,
   managerRouteRequest,
