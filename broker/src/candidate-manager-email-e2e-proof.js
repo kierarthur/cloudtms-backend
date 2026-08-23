@@ -3,6 +3,7 @@ import {
   handleCandidateAppRequest
 } from './candidate-app-backend.js';
 import { controlPlaneRpc } from '../../candidate-broker/src/control-plane-client.js';
+import { getMyTmsOfficeSettings } from './mytms-office-control.js';
 
 export const CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH =
   '/api/manager-email-e2e-proof/start';
@@ -92,33 +93,16 @@ async function agencyRest(env, table, query = '', options = {}) {
   return payload;
 }
 
-async function controlSettings(env) {
-  const base = text(env.MYTMS_CONTROL_PLANE_URL).replace(/\/$/, '');
-  const key = text(env.MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY);
+async function controlSettings(env, user) {
   const agencyId = text(env.MYTMS_OFFICE_AGENCY_ID).toLowerCase();
-  if (!/^https:\/\/[^/]+$/i.test(base) || !key
-      || !/^[0-9a-f-]{36}$/.test(agencyId)) {
+  if (!/^[0-9a-f-]{36}$/.test(agencyId)) {
     throw new Error('E2E_CONTROL_CONFIGURATION_UNAVAILABLE');
   }
-  const query = new URLSearchParams({
-    agency_id: `eq.${agencyId}`,
-    select: 'agency_id,test_recipient_allowlist_json'
-  });
-  const response = await fetch(`${base}/rest/v1/agency_app_settings?${query}`, {
-    headers: {
-      apikey: key,
-      authorization: `Bearer ${key}`,
-      accept: 'application/json',
-      'accept-profile': 'control',
-      'x-client-info': 'cloudtms-manager-email-e2e-proof-v1'
-    },
-    signal: AbortSignal.timeout(8_000)
-  });
-  const rows = await boundedJson(response);
-  if (!response.ok || !Array.isArray(rows) || rows.length !== 1) {
+  const settings = await getMyTmsOfficeSettings(env, user);
+  if (!settings || settings.ok !== true) {
     throw new Error('E2E_CONTROL_SETTINGS_UNAVAILABLE');
   }
-  const allowlist = rows[0].test_recipient_allowlist_json;
+  const allowlist = settings.test_recipient_allowlist;
   if (!Array.isArray(allowlist) || allowlist.length !== 1) {
     throw new Error('E2E_TEST_RECIPIENT_ALLOWLIST_MUST_CONTAIN_EXACTLY_ONE_ADDRESS');
   }
@@ -374,7 +358,7 @@ async function runJourneyToOutbox(env, ctx, deps, recipient, dates) {
   };
 }
 
-export async function handleCandidateManagerEmailE2EProof(request, env, ctx, deps) {
+export async function handleCandidateManagerEmailE2EProof(request, env, ctx, deps, user) {
   if (request.method !== 'POST'
       || new URL(request.url).pathname !== CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH) {
     return json(404, { ok: false, error_code: 'E2E_PROOF_ROUTE_NOT_FOUND' });
@@ -383,7 +367,7 @@ export async function handleCandidateManagerEmailE2EProof(request, env, ctx, dep
     return json(404, { ok: false, error_code: 'E2E_PROOF_DISABLED' });
   }
   try {
-    const { recipient } = await controlSettings(env);
+    const { recipient } = await controlSettings(env, user);
     await exactRowsAbsent(env);
     const baseline = await settingsBaseline(env);
     const dates = await seedFixture(env, recipient, baseline);

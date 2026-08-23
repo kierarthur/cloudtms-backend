@@ -194065,7 +194065,7 @@ if (req.method === 'POST' && p === '/api/timesheets/lifecycle-affected-rows') {
         const user = await requireUser(env, req, ['admin']);
         if (!user) return withCORS(env, req, unauthorized());
         return withCORS(env, req, await handleCandidateManagerEmailE2EProof(
-          req, env, ctx, createCandidatePrivateDependencies(env, 'PRIVATE')
+          req, env, ctx, createCandidatePrivateDependencies(env, 'PRIVATE'), user
         ));
       }
 
