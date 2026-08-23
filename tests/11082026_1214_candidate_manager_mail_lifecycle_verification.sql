@@ -82,6 +82,18 @@ begin
     ),'manager@example.test','MANAGER-MAIL-INITIAL-1','manager-mail-initial',
     v_workflow,v_now
   );
+  select count(*) into v_count
+  from public.email_outbox_claim_ready_batch(10,'manager-unregistered-lease',5)
+  where id=v_mail;
+  if v_count<>0 then
+    raise exception 'manager invitation was claimable before route registration';
+  end if;
+  perform public.candidate_manager_email_route_receipt_commit_v1(
+    'TEST',v_workflow,v_request,1,1,v_mail,
+    encode(extensions.digest('request-one','sha256'),'hex'),
+    'ac140000-0000-0000-0000-000000000013',1,
+    repeat('c1',32),repeat('d1',32),'INITIAL','manager-mail-route-one',v_now
+  );
   select * into v_claim from public.email_outbox_claim_ready_batch(10,'manager-live-lease',5)
   where id=v_mail;
   if not found then raise exception 'current manager invitation was not claimable'; end if;
@@ -101,6 +113,9 @@ begin
   update public.candidate_approval_requests
   set state='CANCELLED',cancelled_at_utc=v_now,updated_at_utc=v_now
   where id=v_request;
+  perform public.candidate_manager_email_route_receipt_retire_v1(
+    v_workflow,v_request,'TEST_REQUEST_CANCELLED',v_now
+  );
   if not coalesce((select (payment_scope_json->>'candidate_manager_mail_retired')::boolean
       from public.mail_outbox where id=v_mail),false)
      or (select scheduled_for_utc from public.mail_outbox where id=v_mail)<>'infinity'::timestamptz then
@@ -190,6 +205,12 @@ begin
         'candidate_manager_mail_retired',false
       )
     ),'manager@example.test','MANAGER-MAIL-PERMIT','manager-mail-permit',v_workflow,v_now
+  );
+  perform public.candidate_manager_email_route_receipt_commit_v1(
+    'TEST',v_workflow,v_request_permit,4,4,v_mail,
+    encode(extensions.digest('request-permit','sha256'),'hex'),
+    'ac140000-0000-0000-0000-000000000014',4,
+    repeat('c4',32),repeat('d4',32),'RENEWAL','manager-mail-route-permit',v_now
   );
   select * into v_claim from public.email_outbox_claim_ready_batch(10,'manager-permit-lease',5)
   where id=v_mail;
