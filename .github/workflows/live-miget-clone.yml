@@ -91,6 +91,9 @@ jobs:
             if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin noinherit; end if;
             if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin noinherit; end if;
             if not exists(select 1 from pg_roles where rolname='authenticator') then create role authenticator nologin noinherit; end if;
+            -- Inert compatibility identities required only to parse historical aclitem[] snapshot data.
+            if not exists(select 1 from pg_roles where rolname='postgres') then create role postgres nologin noinherit; end if;
+            if not exists(select 1 from pg_roles where rolname='supabase_admin') then create role supabase_admin nologin noinherit; end if;
           end
           $roles$;
           grant anon, authenticated, service_role to current_user;

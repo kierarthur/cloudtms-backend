@@ -97,6 +97,9 @@ test('one-time LIVE provider clone is protected, source-read-only and destinatio
   assert.match(workflow, /Exact table row-count verification failed/);
   assert.match(workflow, /Exact sequence-state verification failed/);
   assert.doesNotMatch(workflow, /service_role[^\n]*bypassrls|alter role service_role bypassrls/i);
+  assert.match(workflow, /create role postgres nologin noinherit/);
+  assert.match(workflow, /create role supabase_admin nologin noinherit/);
+  assert.doesNotMatch(workflow, /create role (?:postgres|supabase_admin)[^\n]*(?:^|[^a-z])login\b/im);
   assert.doesNotMatch(workflow, /actions\/upload-artifact/);
 });
 
