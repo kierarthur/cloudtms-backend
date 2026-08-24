@@ -95,6 +95,7 @@ test('one-time LIVE provider clone is protected, source-read-only and destinatio
   assert.match(workflow, /pg_restore[^\n]*--no-owner[^\n]*--no-privileges[^\n]*--exit-on-error/);
   assert.match(workflow, /Exact table row-count verification failed/);
   assert.match(workflow, /Exact sequence-state verification failed/);
+  assert.doesNotMatch(workflow, /service_role[^\n]*bypassrls|alter role service_role bypassrls/i);
   assert.doesNotMatch(workflow, /actions\/upload-artifact/);
 });
 
