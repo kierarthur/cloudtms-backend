@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  canonicalSqlBytes, closureFor, inventory, mapGeneratedAclBaselineSql, mapLogicalPostgresOwnerSql,
+  canonicalSqlBytes, closureFor, deadlockRetryCountForFile, inventory,
+  mapGeneratedAclBaselineSql, mapLogicalPostgresOwnerSql,
   readJson, repoRoot, sha256, sqlDateKey,
   validateTarget, verifyIntegrity,
 } from '../scripts/cloudtms-db-release-lib.mjs';
@@ -31,6 +32,14 @@ test('migration identity is stable across Windows checkout line endings', () => 
   const lock = readJson('supabase/release/migration-lock.json').migrations.find(item => item.path === relative);
   assert.ok(lock);
   assert.equal(sha256(canonicalSqlBytes(relative)), lock.sha256);
+});
+
+test('deadlock retries are limited to an immutable transaction-safe migration', () => {
+  const providerOwnerMigration =
+    'supabase/migrations/24082026_0232_miget_provider_owner_defaults.sql';
+  assert.equal(deadlockRetryCountForFile(providerOwnerMigration), 3);
+  assert.equal(deadlockRetryCountForFile('supabase/migrations/20260218_smoke_once_only.sql'), 0);
+  assert.match(read(providerOwnerMigration), /begin;[\s\S]*\\ir \.\.\/baseline\/[\s\S]*commit;/);
 });
 
 test('migration immutability and protected Candidate boundary pass', () => {

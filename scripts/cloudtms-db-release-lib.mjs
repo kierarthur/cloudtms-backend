@@ -30,6 +30,27 @@ export function mapGeneratedAclBaselineSql(source) {
     .replace(/,\s*authenticator(?=\s*[,;])/g, '');
 }
 
+const DEADLOCK_RETRY_SAFE_FILES = new Map([
+  [
+    'supabase/migrations/24082026_0232_miget_provider_owner_defaults.sql',
+    'c323ff65c84dae66a5bd9a4b9da83fa48af0b5df91e2424f31d9bd95b5db7f1d',
+  ],
+]);
+
+export function deadlockRetryCountForFile(file) {
+  const absolute = path.isAbsolute(file) ? file : path.join(repoRoot, file);
+  const relative = path.relative(repoRoot, absolute).replaceAll('\\', '/');
+  const expectedSha256 = DEADLOCK_RETRY_SAFE_FILES.get(relative);
+  if (!expectedSha256) return 0;
+  const actualSha256 = sha256(
+    Buffer.from(fs.readFileSync(absolute, 'utf8').replaceAll('\r\n', '\n'), 'utf8'),
+  );
+  if (actualSha256 !== expectedSha256) {
+    throw new Error(`Deadlock-retry-safe SQL changed: ${relative}`);
+  }
+  return 3;
+}
+
 function copyLogicalOwnerSqlTree(source, destination) {
   fs.mkdirSync(destination, { recursive: true });
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
@@ -214,20 +235,30 @@ export function psql({ file, sql, variables = {}, quiet = true }) {
   const args = [databaseUrl(), '-X', '-v', 'ON_ERROR_STOP=1'];
   if (quiet) args.push('-q');
   for (const [key, value] of Object.entries(variables)) args.push('-v', `${key}=${value}`);
+  const absoluteFile = file ? (path.isAbsolute(file) ? file : path.join(repoRoot, file)) : null;
+  const deadlockRetries = absoluteFile ? deadlockRetryCountForFile(absoluteFile) : 0;
   if (file) args.push('-f', executableSqlFile(file));
   if (sql) args.push('-At');
-  const result = spawnSync(bin, args, {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    maxBuffer: 256 * 1024 * 1024,
-    input: sql ? mapLogicalPostgresOwnerSql(sql) : undefined,
-    env: { ...process.env, PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT || '15' },
-  });
-  if (result.status !== 0) {
+  for (let attempt = 0; ; attempt += 1) {
+    const result = spawnSync(bin, args, {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      maxBuffer: 256 * 1024 * 1024,
+      input: sql ? mapLogicalPostgresOwnerSql(sql) : undefined,
+      env: { ...process.env, PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT || '15' },
+    });
+    if (result.status === 0) return result.stdout.trim();
     const detail = result.stderr || result.stdout || result.error?.message || `exit ${result.status}`;
-    throw new Error(`Database command failed${file ? ` for ${file}` : ''}: ${String(detail).trim()}`);
+    const canRetry = attempt < deadlockRetries && /deadlock detected/i.test(String(detail));
+    if (!canRetry) {
+      throw new Error(`Database command failed${file ? ` for ${file}` : ''}: ${String(detail).trim()}`);
+    }
+    const delayMs = [7_000, 19_000, 41_000][attempt];
+    console.warn(
+      `Retrying transaction-safe SQL file after PostgreSQL deadlock (${attempt + 1}/${deadlockRetries}): ${file}`,
+    );
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delayMs);
   }
-  return result.stdout.trim();
 }
 
 export function exportContract() {
