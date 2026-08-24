@@ -73,6 +73,12 @@ Current Miget identities are: project `01a02ef7-18d1-7a96-9ea2-63df1bf06adc`; po
 
 For installed-source proof, the agency database uses `private.cloudtms_migration_ledger` and `private.cloudtms_repeatable_ledger`; MyTMS uses `public.schema_migrations` and `public.schema_repeatables`. The MCP ledger tool branches by database target. The authoritative agency mutation route is the protected manual `.github/workflows/database-release.yml`, backed by `scripts/cloudtms-db-release.mjs`; normal push workflows are source checks only. Current-runtime inspection must not be redirected to either former Supabase project.
 
+### Safe UPGRADE and NEW-database requests
+
+Treat `CLOUDTMS PLAN UPGRADE <exact target>` and `CLOUDTMS PLAN NEW DATABASE <agency>` as the canonical requests for the Miget installation/release system. Both are read-only planning requests: inspect the exact target, report the precise pending migrations and new/changed repeatables plus required PostgREST, gateway, Worker and configuration work, and stop before mutation. A vague request containing “upgrade”, “new database”, “prepare”, or “what is missing” never authorises APPLY, provisioning, deployment, paid-resource creation, secret changes, feature activation or resource reallocation.
+
+Current LIVE's first deliberate schema promotion uses `LEGACY_UPGRADE`; moving its hosting to Miget did not perform that upgrade. A managed database uses `UPGRADE`, and a proved-blank database uses `NEW`. APPLY requires the user to name the exact target and previously reviewed locked plan in the current task, explicitly authorise APPLY, and provide the protected workflow's exact commit-bound approval phrase. Never extend an APPLY to another database or operational stage by inference.
+
 ## Secrets and sensitive data
 
 Do not print, log, echo, expose, commit, or include in reports:

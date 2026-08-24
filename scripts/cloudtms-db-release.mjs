@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   canonicalContractHash, contractDifference, databaseUrl, exportContract, inventory,
-  legacyUpgradeInventory, psql, readJson, repoRoot, shellGitHead, validateTarget,
+  formatPlanSection, legacyUpgradeInventory, psql, readJson, repoRoot, shellGitHead, validateTarget,
   verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
 
@@ -380,6 +380,37 @@ try {
         + `${legacy.pendingMigrations.length} pending migrations, `
         + `${legacy.pendingRepeatables.length} repeatables.`,
       );
+      console.log(formatPlanSection('PENDING MIGRATIONS', legacy.pendingMigrations));
+      console.log(formatPlanSection(
+        'PENDING/CHANGED REPEATABLES',
+        legacy.pendingRepeatables,
+        'closure_sha256',
+      ));
+    }
+    if (mode === 'UPGRADE') {
+      const current = inventory();
+      const customerKey = options['customer-key'] ?? process.env.CLOUDTMS_CUSTOMER_KEY ?? '';
+      const identity = psql({ sql: `select environment || '|' || coalesce(customer_key,'') from private.cloudtms_database_identity where singleton;` });
+      if (identity !== `${environment}|${customerKey}`) {
+        throw new Error('Installed database identity does not match requested target');
+      }
+      const installedMigrations = assertUpgradeLedger(current);
+      const installedRepeatables = new Map(JSON.parse(psql({ sql: `select coalesce(jsonb_agg(jsonb_build_object('path',path,'sha256',closure_sha256)),'[]'::jsonb)::text from private.cloudtms_repeatable_ledger;` }) || '[]').map(item => [item.path, item.sha256]));
+      const pendingMigrations = current.migrations.filter(item => !installedMigrations.has(item.path));
+      const pendingRepeatables = current.repeatables.filter(
+        item => installedRepeatables.get(item.path) !== item.sha256,
+      );
+      console.log(
+        `READ-ONLY UPGRADE PLAN: ${installedMigrations.size} installed migrations, `
+        + `${pendingMigrations.length} pending migrations, `
+        + `${pendingRepeatables.length} pending/changed repeatables.`,
+      );
+      console.log(formatPlanSection('PENDING MIGRATIONS', pendingMigrations));
+      console.log(formatPlanSection(
+        'PENDING/CHANGED REPEATABLES',
+        pendingRepeatables,
+        'closure_sha256',
+      ));
     }
     if (mode === 'NEW') {
       const count = Number(psql({ sql: `select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p','v','S');` }));

@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   canonicalSqlBytes, closureFor, deadlockRetryCountForFile, inventory,
-  legacyUpgradeInventory,
+  formatPlanSection, legacyUpgradeInventory,
   mapGeneratedAclBaselineSql, mapLogicalPostgresOwnerSql,
   readJson, repoRoot, sha256, sqlDateKey,
   validateTarget, verifyIntegrity,
@@ -213,6 +213,27 @@ test('legacy upgrade inventory accepts only an exact historical subset and one b
     () => legacyUpgradeInventory(current, ['__BOOTSTRAPPED__', '01012026_first.sql', '01012026_first.sql']),
     /duplicate/,
   );
+});
+
+test('read-only release plans render every exact pending authority path and hash', () => {
+  assert.equal(formatPlanSection('PENDING MIGRATIONS', []), 'PENDING MIGRATIONS: none');
+  assert.equal(
+    formatPlanSection('PENDING MIGRATIONS', [
+      { path: 'supabase/migrations/24082026_example.sql', sha256: 'a'.repeat(64) },
+    ]),
+    `PENDING MIGRATIONS:\n- supabase/migrations/24082026_example.sql sha256=${'a'.repeat(64)}`,
+  );
+  assert.equal(
+    formatPlanSection('PENDING/CHANGED REPEATABLES', [
+      { path: 'supabase/repeatable/example.sql', sha256: 'b'.repeat(64) },
+    ], 'closure_sha256'),
+    `PENDING/CHANGED REPEATABLES:\n- supabase/repeatable/example.sql closure_sha256=${'b'.repeat(64)}`,
+  );
+
+  const engine = read('scripts/cloudtms-db-release.mjs');
+  assert.match(engine, /mode === 'UPGRADE'[\s\S]*assertUpgradeLedger\(current\)/);
+  assert.match(engine, /mode === 'UPGRADE'[\s\S]*PENDING MIGRATIONS/);
+  assert.match(engine, /mode === 'UPGRADE'[\s\S]*PENDING\/CHANGED REPEATABLES/);
 });
 
 test('contract export normalises null ACLs to one-dimensional effective defaults', () => {

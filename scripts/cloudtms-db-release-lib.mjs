@@ -210,6 +210,14 @@ export function legacyUpgradeInventory(current, legacyFilenames) {
   };
 }
 
+export function formatPlanSection(title, items, hashLabel = 'sha256') {
+  if (items.length === 0) return `${title}: none`;
+  return [
+    `${title}:`,
+    ...items.map(item => `- ${item.path} ${hashLabel}=${item.sha256}`),
+  ].join('\n');
+}
+
 export function readJson(relativePath) {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'));
 }
