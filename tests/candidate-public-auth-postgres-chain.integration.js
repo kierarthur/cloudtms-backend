@@ -321,7 +321,7 @@ test('real private handlers and PostgreSQL keep one winner across mixed auth wri
     if (path.endsWith('/candidate_app_accounts')) return Response.json([]);
     if (path.endsWith('/mail_outbox') && init.method === 'POST') {
       const body = JSON.parse(init.body);
-      const match = String(body.body_text).match(/#token=([^\s]+)/);
+      const match = String(body.body_text).match(/#token=([^&\s]+)/);
       assert.ok(match, 'real-chain challenge mail omitted its token');
       challengeMailTokens.push(decodeURIComponent(match[1]));
       return Response.json(challengeMailTokens.length === 1 ? [{}] : []);
