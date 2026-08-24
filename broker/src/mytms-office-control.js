@@ -527,23 +527,38 @@ async function internalCandidateStatus(env, user, candidate) {
     p_correlation_id: crypto.randomUUID(), p_now_utc: new Date().toISOString()
   });
   const settings = await getMyTmsOfficeSettings(env, user);
-  const actionCode = text(result.action_code);
-  const featureEnabled = actionCode === 'SEND_ACCESS_REMINDER'
-    ? settings.access_reminder_enabled === true
-    : ['INVITE_TO_MYTMS', 'RESEND_INVITATION'].includes(actionCode)
-      ? settings.invitation_email_enabled === true : false;
-  const action = {
-    code: actionCode || 'NONE',
+  const makeAction = (requestedCode) => {
+    const code = text(requestedCode) || 'NONE';
+    const membershipAction = ['CANCEL_INVITATION','CANCEL_PENDING_MEMBERSHIP','REVOKE_MEMBERSHIP']
+      .includes(code);
+    const featureEnabled = membershipAction
+      ? settings.membership_admin_enabled === true
+        && activationAllowed(env, 'membership_admin_enabled')
+      : code === 'SEND_ACCESS_REMINDER'
+        ? settings.access_reminder_enabled === true
+        : ['INVITE_TO_MYTMS', 'RESEND_INVITATION'].includes(code)
+          ? settings.invitation_email_enabled === true : false;
+    return {
+      code,
     label: ({
       INVITE_TO_MYTMS: 'Invite to MyTMS',
-      RESEND_INVITATION: 'Resend App Invitation',
-      SEND_ACCESS_REMINDER: 'Send MyTMS Access Reminder'
-    })[actionCode] || '',
+      RESEND_INVITATION: 'Resend invitation',
+      SEND_ACCESS_REMINDER: 'Send MyTMS Access Reminder',
+      CANCEL_INVITATION: 'Cancel invitation',
+      CANCEL_PENDING_MEMBERSHIP: 'Cancel pending membership',
+      REVOKE_MEMBERSHIP: 'Revoke MyTMS access'
+      })[code] || '',
     enabled: featureEnabled,
     disabled_reason_code: featureEnabled ? null
-      : actionCode === 'NONE' ? text(result.reason_code || 'NO_ACTION_AVAILABLE')
-        : 'MYTMS_INVITATION_DELIVERY_DISABLED'
+        : code === 'NONE' ? text(result.reason_code || 'NO_ACTION_AVAILABLE')
+        : membershipAction ? 'MYTMS_MEMBERSHIP_ADMIN_DISABLED'
+          : 'MYTMS_INVITATION_DELIVERY_DISABLED'
+    };
   };
+  const action = makeAction(text(result.action_code));
+  const actions = action.code === 'CANCEL_INVITATION'
+    ? [makeAction('RESEND_INVITATION'), action]
+    : action.code === 'NONE' ? [] : [action];
   return {
     ok: true, agency_display_name: text(env.MYTMS_OFFICE_AGENCY_DISPLAY_NAME) || 'CloudTMS',
     candidate_id: candidate?.id || null,
@@ -552,8 +567,10 @@ async function internalCandidateStatus(env, user, candidate) {
     state: text(result.state || 'INELIGIBLE'),
     delivery_state: text(result.delivery_state) || null,
     invitation_generation: Number(result.invitation_generation || 0) || null,
+    membership_id: UUID_RE.test(text(result.membership_id))
+      ? text(result.membership_id).toLowerCase() : null,
     membership_generation: Number(result.membership_generation || 0) || null,
-    settings_version: Number(settings.version), action
+    settings_version: Number(settings.version), action, actions
   };
 }
 
@@ -656,12 +673,11 @@ export async function setMyTmsMembershipState(env, user, membershipId, request) 
   assertOfficeControlEnabled(env);
   const source = isObject(request) ? request : {};
   const candidateId = text(source.candidate_id).toLowerCase();
-  const globalAccountId = text(source.global_account_id).toLowerCase();
   const transition = upper(source.transition);
   const expectedGeneration = Number(source.expected_generation);
   const idempotencyKey = text(source.idempotency_key);
   if (!UUID_RE.test(text(membershipId)) || !UUID_RE.test(candidateId)
-      || !UUID_RE.test(globalAccountId) || !['ACTIVATE', 'DISABLE', 'REVOKE'].includes(transition)
+      || !['ACTIVATE', 'DISABLE', 'REVOKE'].includes(transition)
       || !Number.isSafeInteger(expectedGeneration) || expectedGeneration < 1
       || !idempotencyKey || idempotencyKey.length > 200) {
     throw new MyTmsOfficeError(400, 'MYTMS_MEMBERSHIP_REQUEST_INVALID');
@@ -673,11 +689,6 @@ export async function setMyTmsMembershipState(env, user, membershipId, request) 
   }
   const candidate = await localCandidate(env, candidateId);
   if (!candidate) throw new MyTmsOfficeError(404, 'MYTMS_CANDIDATE_NOT_FOUND');
-  if (transition === 'ACTIVATE') {
-    await setAgencyLocalMembershipLink(
-      env, candidate, globalAccountId, membershipId, expectedGeneration + 1, 'ACTIVE'
-    );
-  }
   const result = await controlPlaneRpc(env, 'control', 'membership_state_set_v1', {
     p_office_context: await officeContext(env, user, ['MYTMS_MEMBERSHIP_MANAGE']),
     p_agency_id: agencyId(env), p_membership_id: text(membershipId).toLowerCase(),
@@ -691,11 +702,14 @@ export async function setMyTmsMembershipState(env, user, membershipId, request) 
     throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
   }
   const state = text(result.state);
-  if (transition !== 'ACTIVATE') {
-    await setAgencyLocalMembershipLink(
-      env, candidate, globalAccountId, membershipId, Number(result.generation), state
-    );
+  const globalAccountId = text(result.global_account_id_internal).toLowerCase();
+  if (!UUID_RE.test(globalAccountId)
+      || text(result.local_candidate_id_internal).toLowerCase() !== candidateId) {
+    throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
   }
+  await setAgencyLocalMembershipLink(
+    env, candidate, globalAccountId, membershipId, Number(result.generation), state
+  );
   return {
     ok: true, status: text(result.status), state,
     membership_generation: Number(result.generation),
@@ -827,12 +841,13 @@ export async function reserveAndQueueMyTmsInvitation(env, user, candidateId, req
   const candidate = await localCandidate(env, candidateId);
   if (!candidate) throw new MyTmsOfficeError(404, 'MYTMS_CANDIDATE_NOT_FOUND');
   const status = await internalCandidateStatus(env, user, candidate);
-  const intentForAction = {
-    INVITE_TO_MYTMS: 'INVITE', RESEND_INVITATION: 'RESEND',
-    SEND_ACCESS_REMINDER: 'ACCESS_REMINDER'
-  }[status.action.code];
-  if (!status.action.enabled || intentForAction !== intent) {
-    throw new MyTmsOfficeError(409, status.action.disabled_reason_code || 'MYTMS_ACTION_STALE');
+  const matchingAction = (Array.isArray(status.actions) ? status.actions : [status.action])
+    .find((candidateAction) => ({
+      INVITE_TO_MYTMS: 'INVITE', RESEND_INVITATION: 'RESEND',
+      SEND_ACCESS_REMINDER: 'ACCESS_REMINDER'
+    })[candidateAction?.code] === intent);
+  if (!matchingAction?.enabled) {
+    throw new MyTmsOfficeError(409, matchingAction?.disabled_reason_code || 'MYTMS_ACTION_STALE');
   }
   const settings = await getMyTmsOfficeSettings(env, user);
   if (Number(source.expected_settings_version) !== Number(settings.version)) {

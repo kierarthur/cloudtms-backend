@@ -14,7 +14,7 @@ test('normal TEST Worker supplies the Candidate Office environment authority', (
   assert.equal((testEnvironment.match(/^CANDIDATE_APP_ENVIRONMENT\s*=/gm) || []).length, 1);
 });
 
-test('normal TEST Worker installs MyTMS Office control disabled-first', () => {
+test('normal TEST Worker installs only the expressly authorised MyTMS TEST controls', () => {
   assert.match(wrangler, /\[env\.test\]\s*\r?\nname\s*=\s*"test-cloudtms-backend"\s*\r?\ncompatibility_flags\s*=\s*\["nodejs_compat",\s*"global_fetch_strictly_public"\]\s*\r?\npreview_urls\s*=\s*false/);
   assert.equal((wrangler.match(/^preview_urls\s*=/gm) || []).length, 1);
   const expected = new Map([
@@ -30,7 +30,7 @@ test('normal TEST Worker installs MyTMS Office control disabled-first', () => {
     ['MYTMS_IDENTITY_WEB_ORIGIN', 'https://mycloudtms.arthur-rai.co.uk'],
     ['MYTMS_GOOGLE_PROVISIONING_ACTIVATION_AUTHORIZED', 'FALSE'],
     ['MYTMS_GOOGLE_SWITCH_ACTIVATION_AUTHORIZED', 'FALSE'],
-    ['MYTMS_MEMBERSHIP_ADMIN_ACTIVATION_AUTHORIZED', 'FALSE'],
+    ['MYTMS_MEMBERSHIP_ADMIN_ACTIVATION_AUTHORIZED', 'TRUE'],
     ['MYTMS_PUSH_DELIVERY_ACTIVATION_AUTHORIZED', 'FALSE']
   ]);
   for (const [name, value] of expected) {

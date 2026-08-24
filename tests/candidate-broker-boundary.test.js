@@ -390,7 +390,7 @@ test('challenge start hides Candidate eligibility and account state', async () =
     })
   }), env);
   assert.equal(response.status, 202);
-  assert.deepEqual(await response.json(), { ok: true, accepted: true });
+  assert.deepEqual(await response.json(), { ok: true, accepted: true, next_step: 'CHECK_EMAIL' });
 });
 
 test('public challenge contract rejects invalid keys, preserves conflicts, and masks only eligibility', async () => {
@@ -456,7 +456,7 @@ test('public challenge contract rejects invalid keys, preserves conflicts, and m
     }
   ), ineligibleEnv);
   assert.equal(ineligible.status, 202);
-  assert.deepEqual(await ineligible.json(), { ok: true, accepted: true });
+  assert.deepEqual(await ineligible.json(), { ok: true, accepted: true, next_step: 'CHECK_EMAIL' });
 
   const outageEnv = brokerEnvironment(async () => Response.json(
     { ok: false, error_code: 'PRIVATE_FAILURE' }, { status: 503 }

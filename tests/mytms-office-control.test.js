@@ -5,6 +5,7 @@ import cloudTmsWorker from '../broker/src/index.js';
 import { signCandidatePrivateRequest } from '../broker/src/candidate-service-auth.js';
 import {
   adoptMyTmsCandidate,
+  getMyTmsCandidateStatus,
   getMyTmsManagerEmailSettings,
   MyTmsOfficeError,
   myTmsOfficeInternals,
@@ -236,6 +237,50 @@ test('all material activation gates are disabled by default', () => {
   }
 });
 
+test('an open invitation offers both resend and cancellation without weakening either gate', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (request) => {
+    const url = request instanceof Request ? request.url : String(request);
+    if (url.includes('/rest/v1/candidates?')) {
+      return Response.json([{
+        id: IDS.challenge, email: 'candidate@example.test', display_name: 'Test Candidate',
+        first_name: 'Test', last_name: 'Candidate', key_norm: 'CID1-ABCDE', active: true
+      }]);
+    }
+    if (url.includes('/rpc/candidate_mytms_status_get_v1')) {
+      return Response.json({
+        ok: true, state: 'PENDING', action_code: 'CANCEL_INVITATION',
+        delivery_state: 'PROVIDER_ACCEPTED', invitation_generation: 2,
+        membership_id: IDS.outbox, membership_generation: 3, internal_only: true
+      });
+    }
+    if (url.includes('/rpc/agency_app_settings_get_v1')) {
+      return Response.json({
+        ok: true, version: 4, membership_admin_enabled: true,
+        invitation_email_enabled: true, access_reminder_enabled: true
+      });
+    }
+    throw new Error(`unexpected request ${url}`);
+  };
+  try {
+    const result = await getMyTmsCandidateStatus(officeEnvironment({
+      SUPABASE_URL: 'https://miget-agency-gateway.test.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-miget-postgrest-role-not-live',
+      MYTMS_CONTROL_PLANE_URL: 'https://control-plane.test.invalid',
+      MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-control-plane-role-not-live',
+      MYTMS_OFFICE_INVITATION_ACTIVATION_AUTHORIZED: 'TRUE',
+      MYTMS_MEMBERSHIP_ADMIN_ACTIVATION_AUTHORIZED: 'TRUE'
+    }), { id: IDS.challenge }, IDS.challenge);
+    assert.deepEqual(result.actions.map(({ code, enabled }) => ({ code, enabled })), [
+      { code: 'RESEND_INVITATION', enabled: true },
+      { code: 'CANCEL_INVITATION', enabled: true }
+    ]);
+    assert.equal(result.action.code, 'CANCEL_INVITATION');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('adoption and membership mutation stop at the disabled-first admin gate', async () => {
   const originalFetch = globalThis.fetch;
   let calls = 0;
@@ -273,6 +318,80 @@ test('adoption and membership mutation stop at the disabled-first admin gate', a
         && error.code === 'MYTMS_MEMBERSHIP_ADMIN_DISABLED'
     );
     assert.equal(calls, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('membership revocation commits centrally before the Miget agency projection and trusts no browser account id', async () => {
+  const originalFetch = globalThis.fetch;
+  const membershipId = IDS.outbox;
+  const globalAccountId = '10000000-0000-4000-8000-000000000045';
+  const calls = [];
+  globalThis.fetch = async (request, init = {}) => {
+    const url = request instanceof Request ? request.url : String(request);
+    const method = request instanceof Request ? request.method : String(init.method || 'GET');
+    const body = method !== 'GET'
+      ? request instanceof Request ? await request.clone().json() : JSON.parse(String(init.body || '{}'))
+      : null;
+    if (url.includes('/rpc/agency_app_settings_get_v1')) {
+      calls.push('SETTINGS');
+      return Response.json({
+        ok: true, version: 3, membership_admin_enabled: true,
+        invitation_email_enabled: true, access_reminder_enabled: true
+      });
+    }
+    if (url.includes('/rest/v1/candidates?')) {
+      calls.push('CANDIDATE');
+      return Response.json([{
+        id: IDS.challenge, email: 'candidate@example.test', display_name: 'Test Candidate',
+        first_name: 'Test', last_name: 'Candidate', key_norm: 'CID1-ABCDE', active: true
+      }]);
+    }
+    if (url.includes('/rpc/membership_state_set_v1')) {
+      calls.push('CENTRAL_REVOKE');
+      assert.equal(body.p_membership_id, membershipId);
+      assert.equal(body.p_transition, 'REVOKE');
+      assert.equal(Object.hasOwn(body, 'global_account_id'), false);
+      return Response.json({
+        ok: true, status: 'REVOKED', state: 'REVOKED', generation: 5,
+        global_account_id_internal: globalAccountId,
+        local_candidate_id_internal: IDS.challenge,
+        idempotent_replay: false, internal_only: true
+      });
+    }
+    if (url.includes('/rpc/candidate_app_federated_membership_link_set_v1')) {
+      calls.push('AGENCY_PROJECTION');
+      assert.equal(body.p_membership_id, membershipId);
+      assert.equal(body.p_membership_generation, 5);
+      assert.equal(body.p_candidate_id, IDS.challenge);
+      assert.equal(body.p_target_state, 'REVOKED');
+      return Response.json({ ok: true, status: 'UPDATED' });
+    }
+    throw new Error(`unexpected request ${url}`);
+  };
+  const env = officeEnvironment({
+    MYTMS_CONTROL_PLANE_URL: 'https://control-plane.test.invalid',
+    MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-control-plane-role-not-live',
+    MYTMS_MEMBERSHIP_ADMIN_ACTIVATION_AUTHORIZED: 'TRUE',
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_FEDERATED_IDENTITY_SECRET: 'test-federated-identity-secret-not-live',
+    SUPABASE_URL: 'https://miget-agency-gateway.test.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-miget-postgrest-role-not-live'
+  });
+  try {
+    const result = await setMyTmsMembershipState(
+      env, { id: IDS.challenge }, membershipId,
+      {
+        candidate_id: IDS.challenge, transition: 'REVOKE', expected_generation: 4,
+        idempotency_key: 'membership-revoke-central-first', reason: 'Office access revoked'
+      }
+    );
+    assert.deepEqual(result, {
+      ok: true, status: 'REVOKED', state: 'REVOKED',
+      membership_generation: 5, idempotent_replay: false
+    });
+    assert.deepEqual(calls, ['SETTINGS', 'CANDIDATE', 'CENTRAL_REVOKE', 'AGENCY_PROJECTION']);
   } finally {
     globalThis.fetch = originalFetch;
   }

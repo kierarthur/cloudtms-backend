@@ -1862,7 +1862,7 @@ async function enumerationSafeChallenge(request, env, path) {
     }
   }
   await delay();
-  return jsonResponse(202, { ok: true, accepted: true });
+  return jsonResponse(202, { ok: true, accepted: true, next_step: 'CHECK_EMAIL' });
 }
 
 function isUnauthenticatedPublicAuthPath(path) {
@@ -1880,7 +1880,13 @@ async function controlPlaneAgenciesInternal(access, env, correlationId) {
   const resultError = controlPlaneResultError(result, 'AGENCY_CONTEXT_INVALID');
   if (resultError) throw resultError;
   const memberships = Array.isArray(result.memberships_internal) ? result.memberships_internal : [];
-  return { ...result, memberships_internal: memberships };
+  const pendingInvitations = Array.isArray(result.pending_invitations_internal)
+    ? result.pending_invitations_internal : [];
+  return {
+    ...result,
+    memberships_internal: memberships,
+    pending_invitations_internal: pendingInvitations
+  };
 }
 
 async function agencyChoiceToken(access, membership, env, now = new Date()) {
@@ -1914,13 +1920,71 @@ async function publicAgencyChoices(access, agencyResult, env) {
       expires_at_utc: choice.expires_at_utc
     });
   }
+  const pendingInvitations = [];
+  for (const invitation of agencyResult.pending_invitations_internal || []) {
+    const now = new Date();
+    const configuredExpiry = new Date(now.getTime() + AGENCY_CHOICE_TTL_SECONDS * 1000);
+    const invitationExpiry = new Date(text(invitation.expires_at_utc));
+    const expiresAt = text(invitation.state) === 'PENDING_ACCEPTANCE'
+      && Number.isFinite(invitationExpiry.getTime()) && invitationExpiry < configuredExpiry
+      ? invitationExpiry : configuredExpiry;
+    const keyVersion = configuredKeyVersion(env, CREDENTIAL_AUTHORITIES.agencyChoice);
+    const token = await sealVersionedEnvelope(
+      env, CREDENTIAL_AUTHORITIES.agencyChoice, 'mytms-pending-invitation-offer-v1',
+      {
+        typ: 'mytms_pending_invitation_offer', aud: 'cloudtms-candidate-orchestrator',
+        env: environmentName(env), global_account_id: access.global_account_id,
+        global_session_id: access.global_session_id, session_epoch: Number(access.session_epoch),
+        invitation_id: invitation.invitation_id,
+        invitation_generation: Number(invitation.invitation_generation),
+        membership_id: invitation.membership_id,
+        membership_generation: Number(invitation.membership_generation),
+        agency_id: invitation.agency_id, state: text(invitation.state),
+        iat: Math.floor(now.getTime() / 1000), exp: Math.floor(expiresAt.getTime() / 1000)
+      }, keyVersion
+    );
+    pendingInvitations.push({
+      invitation_offer_token: token,
+      display_name: text(invitation.display_name),
+      environment_label: text(invitation.environment_label),
+      membership_generation: Number(invitation.membership_generation),
+      state: text(invitation.state),
+      expires_at_utc: expiresAt.toISOString()
+    });
+  }
   return {
     ok: true,
-    context_version: 1,
-    selection_required: agencies.length > 1,
-    auto_select: agencies.length === 1,
-    agencies
+    context_version: 2,
+    selection_required: pendingInvitations.length > 0 || agencies.length !== 1,
+    auto_select: pendingInvitations.length === 0 && agencies.length === 1,
+    agencies,
+    pending_invitations: pendingInvitations
   };
+}
+
+async function openPendingInvitationOffer(token, access, env) {
+  const opened = await openVersionedEnvelope(
+    env, CREDENTIAL_AUTHORITIES.agencyChoice, 'mytms-pending-invitation-offer-v1', token
+  );
+  const offer = opened?.payload;
+  const now = Math.floor(Date.now() / 1000);
+  if (!offer || offer.typ !== 'mytms_pending_invitation_offer'
+      || offer.aud !== 'cloudtms-candidate-orchestrator'
+      || offer.env !== environmentName(env) || Number(offer.exp) <= now
+      || offer.global_account_id !== access.global_account_id
+      || offer.global_session_id !== access.global_session_id
+      || Number(offer.session_epoch) !== Number(access.session_epoch)
+      || !UUID_RE.test(text(offer.invitation_id))
+      || !UUID_RE.test(text(offer.membership_id))
+      || !UUID_RE.test(text(offer.agency_id))
+      || !Number.isSafeInteger(Number(offer.invitation_generation))
+      || Number(offer.invitation_generation) < 1
+      || !Number.isSafeInteger(Number(offer.membership_generation))
+      || Number(offer.membership_generation) < 1
+      || !['PENDING_ACCEPTANCE','ACCEPTED_WAITING_ROUTE'].includes(text(offer.state))) {
+    throw new CandidateBrokerError(403, 'INVITATION_CONFLICT');
+  }
+  return offer;
 }
 
 async function openAgencyChoice(token, access, env) {
@@ -2019,7 +2083,13 @@ async function finalizeControlPlaneSession(
       throw new CandidateBrokerError(403, 'CANDIDATE_SELECTION_NOT_ALLOWED');
     }
     selectedMembership = matches[0];
-  } else if (agencyResult.memberships_internal.length === 1) {
+  } else if (result.invitation_acceptance_internal?.membership_id_internal) {
+    selectedMembership = agencyResult.memberships_internal.find(
+      membership => text(membership.membership_id).toLowerCase()
+        === text(result.invitation_acceptance_internal.membership_id_internal).toLowerCase()
+    ) || null;
+  } else if (agencyResult.pending_invitations_internal.length === 0
+      && agencyResult.memberships_internal.length === 1) {
     selectedMembership = agencyResult.memberships_internal[0];
   }
   if (selectedMembership) {
@@ -2033,7 +2103,9 @@ async function finalizeControlPlaneSession(
     return wrapGlobalSession(selected.result, env, selected.refreshToken, selected.route);
   }
   return wrapGlobalSession({
-    ...result, selection_required: agencyResult.memberships_internal.length !== 1
+    ...result,
+    selection_required: agencyResult.pending_invitations_internal.length > 0
+      || agencyResult.memberships_internal.length !== 1
   }, env, refreshToken);
 }
 
@@ -2094,18 +2166,25 @@ async function handleControlPlaneChallenge(request, path, env, correlationId) {
   const started = Date.now();
   const body = await boundedJson(request.clone());
   const email = text(body.email).toLowerCase();
+  const invitationToken = text(body.invitation_token);
   const purpose = upper(body.purpose || 'ACTIVATE');
   const idempotencyKey = text(body.idempotency_key);
   const isResend = path.endsWith('/resend');
-  if (!EMAIL_RE.test(email) || !['ACTIVATE', 'RESET', 'RECOVERY'].includes(purpose)
-      || (isResend && !UUID_RE.test(text(body.challenge_id)))) {
+  const directInvitation = !isResend && invitationToken.length >= 32;
+  if ((!directInvitation && !EMAIL_RE.test(email))
+      || (directInvitation && (invitationToken.length > 2048 || purpose !== 'ACTIVATE'))
+      || !['ACTIVATE', 'RESET', 'RECOVERY'].includes(purpose)
+      || (isResend && (!UUID_RE.test(text(body.challenge_id)) || invitationToken))) {
     throw new CandidateBrokerError(400, 'CANDIDATE_CHALLENGE_REQUEST_INVALID');
   }
   if (!idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
     throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
   }
+  const invitationTokenHash = directInvitation ? await sha256Hex(invitationToken) : '';
   const semanticHash = await sha256Hex(canonicalJson({
-    email, purpose, challenge_id: isResend ? text(body.challenge_id).toLowerCase() : null
+    email: directInvitation ? null : email,
+    invitation_token_sha256: directInvitation ? invitationTokenHash : null,
+    purpose, challenge_id: isResend ? text(body.challenge_id).toLowerCase() : null
   }));
   const replayIdentity = `${isResend ? 'resend' : 'start'}:${idempotencyKey}`;
   const challengeId = isResend
@@ -2118,16 +2197,44 @@ async function handleControlPlaneChallenge(request, path, env, correlationId) {
     env, CREDENTIAL_AUTHORITIES.globalChallenge, 'mytms-global-challenge-v1',
     {
       typ: 'mytms_global_challenge', aud: 'cloudtms-global-identity',
-      env: environmentName(env), challenge_id: challengeId, email, purpose,
+      env: environmentName(env), challenge_id: challengeId,
+      email: directInvitation ? null : email, purpose,
       iat: Math.floor(now.getTime() / 1000), exp: Math.floor(expiresAt.getTime() / 1000)
     }, tokenKeyVersion
   );
-  const deterministicOutboxKey = `MYTMS_AUTH_${(
+  const deterministicOutboxKey = `${directInvitation ? 'MYTMS_INVITE_SETUP' : 'MYTMS_AUTH'}_${(
     await sha256Hex(`${environmentName(env)}:${purpose}:${challengeId}:${idempotencyKey}`)
   ).slice(0, 40)}`;
   let result;
   try {
-    result = await candidateControlPlaneRpc(
+    if (directInvitation) {
+      const verificationReceipt = await deterministicControlToken(
+        env, 'global-verification-receipt', challengeId
+      );
+      const receiptExpiresAt = new Date(
+        now.getTime() + GLOBAL_VERIFICATION_RECEIPT_TTL_MINUTES * 60_000
+      );
+      result = await candidateControlPlaneRpc(
+        env, 'identity', 'global_invitation_challenge_start_v1',
+        {
+          p_internal_context: {
+            invitation_token_hash_hex: invitationTokenHash,
+            challenge_id: challengeId,
+            token_hash_hex: await sha256Hex(token), token_key_version: tokenKeyVersion,
+            deterministic_outbox_key: deterministicOutboxKey,
+            request_semantic_hash_hex: semanticHash,
+            verification_receipt_hash_hex: await sha256Hex(verificationReceipt),
+            verification_receipt_expires_at_utc: receiptExpiresAt.toISOString(),
+            actor_identity_hmac: await controlPlaneActorIdentityHmac(env, invitationTokenHash),
+            expires_at_utc: receiptExpiresAt.toISOString()
+          },
+          p_idempotency_key: await deterministicControlUuid(
+            env, 'invitation-challenge-idempotency', idempotencyKey
+          ),
+          p_correlation_id: correlationId
+        }
+      );
+    } else result = await candidateControlPlaneRpc(
       env, 'identity', isResend ? 'global_challenge_resend_v1' : 'global_challenge_start_v1',
       isResend ? {
         p_internal_context: {
@@ -2184,6 +2291,19 @@ async function handleControlPlaneChallenge(request, path, env, correlationId) {
     }
     throw new CandidateBrokerError(401, 'CANDIDATE_CHALLENGE_INVALID');
   }
+  if (directInvitation) {
+    if (result?.direct_setup !== true || result?.deliver_email !== false
+        || text(result.challenge_id).toLowerCase() !== challengeId
+        || !text(result.agency_display_name)) {
+      throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
+    }
+    return jsonResponse(202, {
+      ok: true, accepted: true, next_step: 'SET_PASSWORD',
+      challenge_id: challengeId,
+      agency_display_name: text(result.agency_display_name),
+      expires_at_utc: text(result.expires_at_utc)
+    });
+  }
   if (result?.deliver_email === true) {
     if (text(result.challenge_id).toLowerCase() !== challengeId) {
       throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
@@ -2194,7 +2314,7 @@ async function handleControlPlaneChallenge(request, path, env, correlationId) {
   }
   const remaining = ENUMERATION_SAFE_MINIMUM_MS - (Date.now() - started);
   if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining));
-  return jsonResponse(202, { ok: true, accepted: true });
+  return jsonResponse(202, { ok: true, accepted: true, next_step: 'CHECK_EMAIL' });
 }
 
 async function handleControlPlaneChallengeVerify(request, env, correlationId) {
@@ -2257,10 +2377,12 @@ async function handleControlPlanePasswordComplete(request, env, correlationId) {
   const body = await boundedJson(request.clone());
   const challengeId = text(body.challenge_id).toLowerCase();
   const idempotencyKey = text(body.idempotency_key);
+  const invitationToken = text(body.invitation_token);
   const requestedCandidateId = body.selected_candidate_id
     ? text(body.selected_candidate_id).toLowerCase() : '';
   if (!UUID_RE.test(challengeId)
       || (requestedCandidateId && !UUID_RE.test(requestedCandidateId))
+      || (invitationToken && (invitationToken.length < 32 || invitationToken.length > 2048))
       || !idempotencyKey || idempotencyKey.length > MAX_IDEMPOTENCY_KEY_BYTES) {
     throw new CandidateBrokerError(400, 'CANDIDATE_PASSWORD_REQUEST_INVALID');
   }
@@ -2269,6 +2391,7 @@ async function handleControlPlanePasswordComplete(request, env, correlationId) {
   );
   const semanticHash = await sha256Hex(canonicalJson({
     challenge_id: challengeId, selected_candidate_id: requestedCandidateId || null,
+    invitation_token_sha256: invitationToken ? await sha256Hex(invitationToken) : null,
     password_digest_hex: passwordProof.password_digest_hex,
     device_id: body.device_id ? await sha256Hex(text(body.device_id)) : null,
     platform: text(body.platform).slice(0, 80) || null
@@ -2282,21 +2405,35 @@ async function handleControlPlanePasswordComplete(request, env, correlationId) {
   const verificationReceipt = await deterministicControlToken(
     env, 'global-verification-receipt', challengeId
   );
-  const result = await candidateControlPlaneRpc(
-    env, 'identity', 'global_password_complete_v1',
-    {
+  let result;
+  try {
+    result = await candidateControlPlaneRpc(
+      env, 'identity', 'global_password_complete_v1',
+      {
       p_internal_context: {
         family_id: await deterministicControlUuid(env, 'password-complete-family', replayIdentity),
         session_id: await deterministicControlUuid(env, 'password-complete-session', replayIdentity),
         refresh_token_hash_hex: await sha256Hex(refreshToken),
         actor_identity_hmac: await controlPlaneActorIdentityHmac(env, challengeId),
+        ...(invitationToken ? {
+          accept_invitation_token_hash_hex: await sha256Hex(invitationToken),
+          invitation_accept_idempotency_key: await deterministicControlUuid(
+            env, 'password-complete-invitation-accept', `${challengeId}:${idempotencyKey}`
+          )
+        } : {}),
         ...times
       },
       p_challenge_id: challengeId, p_verification_receipt: verificationReceipt,
       p_password_proof: passwordProof, p_idempotency_key: idempotencyKey,
-      p_correlation_id: correlationId, p_now_utc: now.toISOString()
+        p_correlation_id: correlationId, p_now_utc: now.toISOString()
+      }
+    );
+  } catch (error) {
+    if (error instanceof CandidateBrokerError && error.code === 'INVITATION_REQUIRED') {
+      throw new CandidateBrokerError(403, 'CANDIDATE_INVITATION_REQUIRED');
     }
-  );
+    throw error;
+  }
   const resultError = controlPlaneResultError(result, 'CANDIDATE_PASSWORD_REQUEST_INVALID');
   if (resultError) throw resultError;
   return finalizeControlPlaneSession(
@@ -2487,12 +2624,12 @@ async function handleControlPlaneInvitationInspect(request, env, correlationId) 
   const state = text(result.state);
   const nextStep = text(result.next_step);
   if (!['VALID','EXPIRED','SUPERSEDED','CONSUMED','REVOKED','UNAVAILABLE'].includes(state)
-      || !['AUTHENTICATE','VERIFY_EMAIL','ACCEPT','NONE'].includes(nextStep)) {
+      || !['SIGN_IN','CREATE_ACCOUNT','ACCEPT','NONE'].includes(nextStep)) {
     throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
   }
   return jsonResponse(200, {
     ok: true, state, next_step: nextStep,
-    ...(state === 'VALID' && text(result.agency_display_name)
+    ...(['VALID','CONSUMED'].includes(state) && text(result.agency_display_name)
       ? { agency_display_name: text(result.agency_display_name) } : {})
   });
 }
@@ -2500,8 +2637,12 @@ async function handleControlPlaneInvitationInspect(request, env, correlationId) 
 async function handleControlPlaneInvitationAccept(request, access, env, correlationId) {
   const body = await boundedJson(request.clone());
   const token = text(body.invitation_token);
+  const offerToken = text(body.invitation_offer_token);
   const idempotencyKey = text(body.idempotency_key);
-  if (token.length < 32 || token.length > 4096 || !UUID_RE.test(idempotencyKey)) {
+  if (Boolean(token) === Boolean(offerToken)
+      || (token && (token.length < 32 || token.length > 4096))
+      || (offerToken && (offerToken.length < 32 || offerToken.length > 4096))
+      || !UUID_RE.test(idempotencyKey)) {
     throw new CandidateBrokerError(400, 'INVITATION_INVALID');
   }
   const sessionContext = globalSessionContext(access, env);
@@ -2513,29 +2654,64 @@ async function handleControlPlaneInvitationAccept(request, access, env, correlat
   if (!verifiedEmails.length) {
     throw new CandidateBrokerError(403, 'EMAIL_VERIFICATION_REQUIRED');
   }
-  const result = await candidateControlPlaneRpc(
-    env, 'control', 'invitation_accept_v1',
-    {
-      p_verified_context: {
-        account_id: access.global_account_id,
-        verified_emails: verifiedEmails,
-        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, access.global_account_id)
-      },
-      p_token_hash: `\\x${await sha256Hex(token)}`,
-      p_idempotency_key: idempotencyKey.toLowerCase(),
-      p_correlation_id: correlationId
-    }
-  );
+  const verifiedContext = {
+    account_id: access.global_account_id,
+    verified_emails: verifiedEmails,
+    actor_identity_hmac: await controlPlaneActorIdentityHmac(env, access.global_account_id)
+  };
+  let result;
+  if (offerToken) {
+    const offer = await openPendingInvitationOffer(offerToken, access, env);
+    result = await candidateControlPlaneRpc(
+      env, 'control', 'invitation_offer_accept_v1',
+      {
+        p_verified_context: verifiedContext,
+        p_invitation_id: text(offer.invitation_id).toLowerCase(),
+        p_membership_id: text(offer.membership_id).toLowerCase(),
+        p_expected_membership_generation: Number(offer.membership_generation),
+        p_idempotency_key: idempotencyKey.toLowerCase(),
+        p_correlation_id: correlationId
+      }
+    );
+  } else {
+    result = await candidateControlPlaneRpc(
+      env, 'control', 'invitation_accept_with_context_v2',
+      {
+        p_verified_context: verifiedContext,
+        p_token_hash: `\\x${await sha256Hex(token)}`,
+        p_idempotency_key: idempotencyKey.toLowerCase(),
+        p_correlation_id: correlationId
+      }
+    );
+  }
   const resultError = controlPlaneResultError(result, 'INVITATION_CONFLICT');
   if (resultError) throw resultError;
   const state = text(result.state);
   if (!['ACTIVE','ALREADY_ACTIVE','PENDING_ADMIN_REVIEW'].includes(state)) {
     throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
   }
+  let publicChoice;
+  if (['ACTIVE','ALREADY_ACTIVE'].includes(state) && result.membership_id_internal) {
+    const agencies = await controlPlaneAgenciesInternal(access, env, correlationId);
+    const membership = agencies.memberships_internal.find(
+      entry => text(entry.membership_id).toLowerCase()
+        === text(result.membership_id_internal).toLowerCase()
+    );
+    if (!membership) throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
+    const choice = await agencyChoiceToken(access, membership, env);
+    publicChoice = {
+      agency_choice_token: choice.token,
+      display_name: text(membership.display_name),
+      environment_label: text(membership.environment_label),
+      membership_generation: Number(membership.membership_generation),
+      expires_at_utc: choice.expires_at_utc
+    };
+  }
   return jsonResponse(200, {
     ok: true, state,
     membership_generation: Number(result.membership_generation),
-    idempotent_replay: result.idempotent_replay === true
+    idempotent_replay: result.idempotent_replay === true,
+    ...(publicChoice ? { agency_choice: publicChoice } : {})
   });
 }
 
@@ -2709,9 +2885,6 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
         throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
       }
       const agencies = await controlPlaneAgenciesInternal(access, env, id);
-      if (!agencies.memberships_internal.length) {
-        throw new CandidateBrokerError(403, 'NO_ACTIVE_AGENCY_MEMBERSHIP');
-      }
       return withCors(jsonResponse(200, await publicAgencyChoices(access, agencies, env)), origin);
     }
 

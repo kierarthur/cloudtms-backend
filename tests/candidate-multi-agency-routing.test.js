@@ -848,7 +848,102 @@ test('multi-agency choice, session issue and refresh preserve sealed absolute ex
   }
 });
 
-test('global challenge token closes token-only verification and password completion without leaking internals', async () => {
+test('an existing account receives a sealed pending invitation, accepts once and gets an immediate agency choice', async () => {
+  const originalFetch = globalThis.fetch;
+  const env = orchestratorEnvironment(async () => {
+    throw new Error('pending invitation control must not call an agency business plane');
+  });
+  const accessToken = await centralAccessToken(env);
+  const pendingMembership = '51000000-0000-4000-8000-000000000003';
+  const pendingAgency = '51000000-0000-4000-8000-000000000004';
+  const invitationId = '51000000-0000-4000-8000-000000000043';
+  let accepted = false;
+  const seen = [];
+  globalThis.fetch = async request => {
+    const operation = new URL(request.url).pathname.split('/').pop();
+    seen.push(operation);
+    const args = await request.json();
+    if (operation === 'global_session_metadata_v1') {
+      return Response.json({
+        ok: true, account_id: IDS.account, verified_emails: ['candidate@example.test'], internal_only: true
+      });
+    }
+    if (operation === 'account_agencies_get_v1') {
+      const memberships = [{
+        membership_id: IDS.membership, membership_generation: 3,
+        agency_id: IDS.agency, display_name: 'Existing Agency', environment_label: 'TEST',
+        local_candidate_id: IDS.candidate, data_plane_id: IDS.dataPlane,
+        registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST',
+        route_version_id: '51000000-0000-4000-8000-000000000007', route_version: 7
+      }];
+      if (accepted) memberships.push({
+        membership_id: pendingMembership, membership_generation: 5,
+        agency_id: pendingAgency, display_name: 'New Inviting Agency', environment_label: 'TEST',
+        local_candidate_id: '51000000-0000-4000-8000-000000000005',
+        data_plane_id: '51000000-0000-4000-8000-000000000006',
+        registry_binding_key: 'CANDIDATE_DATA_PLANE_SYNTHETIC_SECOND',
+        route_version_id: '51000000-0000-4000-8000-000000000008', route_version: 1
+      });
+      return Response.json({
+        ok: true, memberships_internal: memberships,
+        pending_invitations_internal: accepted ? [] : [{
+          invitation_id: invitationId, invitation_generation: 2,
+          membership_id: pendingMembership, membership_generation: 4,
+          agency_id: pendingAgency, display_name: 'New Inviting Agency',
+          environment_label: 'TEST', state: 'PENDING_ACCEPTANCE',
+          expires_at_utc: new Date(Date.now() + 3600_000).toISOString()
+        }], internal_only: true
+      });
+    }
+    if (operation === 'invitation_offer_accept_v1') {
+      assert.equal(args.p_invitation_id, invitationId);
+      assert.equal(args.p_membership_id, pendingMembership);
+      assert.equal(args.p_expected_membership_generation, 4);
+      accepted = true;
+      return Response.json({
+        ok: true, state: 'ACTIVE', membership_generation: 5,
+        membership_id_internal: pendingMembership, agency_id_internal: pendingAgency,
+        idempotent_replay: false, internal_only: true
+      });
+    }
+    throw new Error(`unexpected operation ${operation}`);
+  };
+  try {
+    const choicesResponse = await handleCandidateBrokerRequest(protectedBrowserRequest(
+      accessToken, {}, '/candidate-app/v1/account/agencies'
+    ), env);
+    assert.equal(choicesResponse.status, 200);
+    const choices = await choicesResponse.json();
+    assert.equal(choices.pending_invitations.length, 1);
+    assert.equal(choices.pending_invitations[0].display_name, 'New Inviting Agency');
+    assert.equal(Object.hasOwn(choices.pending_invitations[0], 'invitation_id'), false);
+
+    const acceptedResponse = await handleCandidateBrokerRequest(new Request(
+      'https://candidate-api.test.example/candidate-app/v1/invitations/accept', {
+        method: 'POST', headers: {
+          origin: 'https://candidate.test.example', authorization: `Bearer ${accessToken}`,
+          'cf-connecting-ip': '192.0.2.32', 'content-type': 'application/json'
+        }, body: JSON.stringify({
+          invitation_offer_token: choices.pending_invitations[0].invitation_offer_token,
+          idempotency_key: '51000000-0000-4000-8000-000000000099'
+        })
+      }
+    ), env);
+    assert.equal(acceptedResponse.status, 200, JSON.stringify(await acceptedResponse.clone().json()));
+    const acceptedBody = await acceptedResponse.json();
+    assert.equal(acceptedBody.state, 'ACTIVE');
+    assert.equal(acceptedBody.agency_choice.display_name, 'New Inviting Agency');
+    assert.equal(Object.hasOwn(acceptedBody, 'membership_id_internal'), false);
+    assert.deepEqual(seen, [
+      'account_agencies_get_v1', 'global_session_metadata_v1',
+      'invitation_offer_accept_v1', 'account_agencies_get_v1'
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('First registration creates a verified account but leaves the named invitation for one explicit acceptance', async () => {
   const originalFetch = globalThis.fetch;
   let delivered = null;
   const privateEnv = routeEnvironment();
@@ -906,26 +1001,12 @@ test('global challenge token closes token-only verification and password complet
     }
     if (operation === 'account_agencies_get_v1') {
       return Response.json({
-        ok: true, memberships_internal: [{
+        ok: true, memberships_internal: [], pending_invitations_internal: [{
+          invitation_id: IDS.challenge, invitation_generation: 1,
           membership_id: IDS.membership, membership_generation: 3,
           agency_id: IDS.agency, display_name: 'CloudTMS TEST', environment_label: 'TEST',
-          local_candidate_id: IDS.candidate, data_plane_id: IDS.dataPlane,
-          registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST',
-          route_version_id: '60000000-0000-4000-8000-000000000007', route_version: 7
+          state: 'PENDING_ACCEPTANCE', expires_at_utc: new Date(Date.now() + 300_000).toISOString()
         }], internal_only: true
-      });
-    }
-    if (operation === 'agency_session_issue_v1') {
-      return Response.json({
-        ok: true, session_id: args.p_global_session_context.new_session_id,
-        session_epoch: 2, membership_id: IDS.membership, membership_generation: 3,
-        agency_id: IDS.agency, agency_display_name: 'CloudTMS TEST', environment_label: 'TEST',
-        local_candidate_id: IDS.candidate, data_plane_id: IDS.dataPlane,
-        registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST',
-        route_version_id: '60000000-0000-4000-8000-000000000007', route_version: 7,
-        issued_at_utc: args.p_global_session_context.issued_at_utc,
-        expires_at_utc: args.p_global_session_context.expires_at_utc,
-        internal_only: true
       });
     }
     throw new Error(`unexpected operation ${operation}`);
@@ -946,7 +1027,7 @@ test('global challenge token closes token-only verification and password complet
       }
     ), env);
     assert.equal(start.status, 202);
-    assert.deepEqual(await start.json(), { ok: true, accepted: true });
+    assert.deepEqual(await start.json(), { ok: true, accepted: true, next_step: 'CHECK_EMAIL' });
     assert.ok(delivered);
 
     const verify = await handleCandidateBrokerRequest(publicRequest(
@@ -967,14 +1048,153 @@ test('global challenge token closes token-only verification and password complet
     assert.equal(complete.status, 200, JSON.stringify(await complete.clone().json()));
     const session = await complete.json();
     assert.equal(session.access_token_type, 'Bearer');
-    assert.equal(session.selected_candidate_id, IDS.candidate);
-    assert.equal(session.selection_required, false);
+    assert.equal(session.selected_candidate_id, null);
+    assert.equal(session.selection_required, true);
+    assert.equal(Object.hasOwn(session, 'agency_context'), false);
     assert.equal(Object.hasOwn(session, 'registry_binding_key'), false);
-    assert.equal(Object.hasOwn(session.agency_context, 'agency_id'), false);
     assert.deepEqual(seen, [
       'global_challenge_start_v1', 'global_challenge_verify_v1',
-      'global_password_complete_v1', 'account_agencies_get_v1',
-      'agency_session_issue_v1'
+      'global_password_complete_v1', 'account_agencies_get_v1'
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('password completion fails closed when no invitation or membership can authorize registration', async () => {
+  const originalFetch = globalThis.fetch;
+  const env = orchestratorEnvironment(async () => {
+    throw new Error('unauthorized registration must not reach an agency data plane');
+  });
+  globalThis.fetch = async request => {
+    const operation = new URL(request.url).pathname.split('/').pop();
+    assert.equal(operation, 'global_password_complete_v1');
+    return Response.json({ message: 'INVITATION_REQUIRED' }, { status: 400 });
+  };
+  try {
+    const response = await handleCandidateBrokerRequest(new Request(
+      'https://candidate-api.test.example/candidate-app/v1/auth/password/complete', {
+        method: 'POST', headers: {
+          origin: 'https://candidate.test.example', 'cf-connecting-ip': '192.0.2.34',
+          'content-type': 'application/json'
+        }, body: JSON.stringify({
+          challenge_id: '10000000-0000-4000-8000-000000000020', password: 'not-a-real-password',
+          idempotency_key: 'registration-without-invitation-proof'
+        })
+      }
+    ), env);
+    assert.equal(response.status, 403, JSON.stringify(await response.clone().json()));
+    assert.equal((await response.json()).error_code, 'CANDIDATE_INVITATION_REQUIRED');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a valid invitation creates an account without a second email and enters the accepted agency', async () => {
+  const originalFetch = globalThis.fetch;
+  const env = orchestratorEnvironment(async () => {
+    throw new Error('direct invitation setup must not call an agency business plane');
+  });
+  env.MYTMS_IDENTITY_DELIVERY = {
+    async fetch() { throw new Error('direct invitation setup must not send another email'); }
+  };
+  const invitationToken = 'direct-invitation-token-that-proves-email-possession';
+  const routeVersionId = '61000000-0000-4000-8000-000000000007';
+  let challengeId;
+  const seen = [];
+  globalThis.fetch = async request => {
+    const operation = new URL(request.url).pathname.split('/').pop();
+    seen.push(operation);
+    const args = await request.json();
+    if (operation === 'global_invitation_challenge_start_v1') {
+      challengeId = args.p_internal_context.challenge_id;
+      assert.match(args.p_internal_context.invitation_token_hash_hex, /^[a-f0-9]{64}$/);
+      assert.equal(JSON.stringify(args).includes(invitationToken), false);
+      return Response.json({
+        ok: true, accepted: true, direct_setup: true, deliver_email: false,
+        challenge_id: challengeId, agency_display_name: 'Arthur Rai Medical Services Limited',
+        expires_at_utc: args.p_internal_context.expires_at_utc,
+        internal_only: true
+      });
+    }
+    if (operation === 'global_password_complete_v1') {
+      assert.equal(args.p_challenge_id, challengeId);
+      assert.match(args.p_internal_context.accept_invitation_token_hash_hex, /^[a-f0-9]{64}$/);
+      assert.equal(JSON.stringify(args).includes(invitationToken), false);
+      return Response.json({
+        ok: true, account_id: IDS.account,
+        session_id: args.p_internal_context.session_id,
+        family_id: args.p_internal_context.family_id, rotation: 0, session_epoch: 1,
+        issued_at_utc: args.p_now_utc,
+        expires_at_utc: args.p_internal_context.expires_at_utc,
+        absolute_expires_at_utc: args.p_internal_context.absolute_expires_at_utc,
+        selection_required: true,
+        invitation_acceptance_internal: {
+          state: 'ACTIVE', membership_id_internal: IDS.membership,
+          agency_id_internal: IDS.agency, membership_generation: 4
+        },
+        internal_only: true
+      });
+    }
+    if (operation === 'account_agencies_get_v1') {
+      return Response.json({
+        ok: true,
+        memberships_internal: [{
+          membership_id: IDS.membership, membership_generation: 4,
+          agency_id: IDS.agency, display_name: 'Arthur Rai Medical Services Limited', environment_label: 'TEST',
+          local_candidate_id: IDS.candidate, data_plane_id: IDS.dataPlane,
+          registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST',
+          route_version_id: routeVersionId, route_version: 7
+        }], pending_invitations_internal: [], internal_only: true
+      });
+    }
+    if (operation === 'agency_session_issue_v1') {
+      assert.equal(args.p_global_session_context.selected_membership_id, IDS.membership);
+      return Response.json({
+        ok: true, session_id: args.p_global_session_context.new_session_id,
+        session_epoch: 2, membership_id: IDS.membership, membership_generation: 4,
+        agency_id: IDS.agency, agency_display_name: 'Arthur Rai Medical Services Limited',
+        environment_label: 'TEST', local_candidate_id: IDS.candidate,
+        data_plane_id: IDS.dataPlane, registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST',
+        route_version_id: routeVersionId, route_version: 7,
+        issued_at_utc: args.p_global_session_context.issued_at_utc,
+        expires_at_utc: args.p_global_session_context.expires_at_utc,
+        internal_only: true
+      });
+    }
+    throw new Error(`unexpected operation ${operation}`);
+  };
+  const request = (path, body) => new Request(`https://candidate-api.test.example${path}`, {
+    method: 'POST', headers: {
+      origin: 'https://candidate.test.example', 'cf-connecting-ip': '192.0.2.31',
+      'content-type': 'application/json'
+    }, body: JSON.stringify(body)
+  });
+  try {
+    const started = await handleCandidateBrokerRequest(request(
+      '/candidate-app/v1/auth/challenge/start', {
+        invitation_token: invitationToken, purpose: 'ACTIVATE',
+        idempotency_key: 'direct-invitation-start-proof'
+      }
+    ), env);
+    assert.equal(started.status, 202, JSON.stringify(await started.clone().json()));
+    const startedBody = await started.json();
+    assert.equal(startedBody.next_step, 'SET_PASSWORD');
+    assert.equal(startedBody.agency_display_name, 'Arthur Rai Medical Services Limited');
+
+    const completed = await handleCandidateBrokerRequest(request(
+      '/candidate-app/v1/auth/password/complete', {
+        challenge_id: startedBody.challenge_id, invitation_token: invitationToken,
+        password: 'not-a-real-password', idempotency_key: 'direct-invitation-complete-proof'
+      }
+    ), env);
+    assert.equal(completed.status, 200, JSON.stringify(await completed.clone().json()));
+    const session = await completed.json();
+    assert.equal(session.selection_required, false);
+    assert.equal(session.agency_context.display_name, 'Arthur Rai Medical Services Limited');
+    assert.deepEqual(seen, [
+      'global_invitation_challenge_start_v1', 'global_password_complete_v1',
+      'account_agencies_get_v1', 'agency_session_issue_v1'
     ]);
   } finally {
     globalThis.fetch = originalFetch;
@@ -1082,7 +1302,7 @@ test('public invitation inspection is enumeration-safe and never exposes control
     assert.match(args.p_token_hash, /^\\x[a-f0-9]{64}$/);
     assert.equal(JSON.stringify(args).includes(invitationToken), false);
     return Response.json({
-      ok: true, state: 'VALID', next_step: 'AUTHENTICATE',
+      ok: true, state: 'VALID', next_step: 'SIGN_IN',
       agency_display_name: 'CloudTMS TEST',
       agency_id: IDS.agency, membership_id: IDS.membership,
       internal_only: true
@@ -1099,7 +1319,7 @@ test('public invitation inspection is enumeration-safe and never exposes control
     ), env);
     assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
     assert.deepEqual(await response.json(), {
-      ok: true, state: 'VALID', next_step: 'AUTHENTICATE',
+      ok: true, state: 'VALID', next_step: 'SIGN_IN',
       agency_display_name: 'CloudTMS TEST'
     });
   } finally {
@@ -1125,7 +1345,7 @@ test('invitation acceptance requires verified email and returns only the closed 
         ok: true, account_id: IDS.account, verified_emails: [...verifiedEmails], internal_only: true
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
-    if (operation === 'invitation_accept_v1') {
+    if (operation === 'invitation_accept_with_context_v2') {
       const args = await request.json();
       assert.deepEqual(args.p_verified_context.verified_emails, ['candidate@example.test']);
       assert.equal(args.p_idempotency_key, idempotencyKey);
@@ -1133,8 +1353,21 @@ test('invitation acceptance requires verified email and returns only the closed 
       assert.equal(JSON.stringify(args).includes(invitationToken), false);
       return Response.json({
         ok: true, state: 'ACTIVE', membership_generation: 4,
-        idempotent_replay: false, membership_id: IDS.membership,
-        agency_id: IDS.agency, internal_only: true
+        idempotent_replay: false, membership_id_internal: IDS.membership,
+        agency_id_internal: IDS.agency, internal_only: true
+      });
+    }
+    if (operation === 'account_agencies_get_v1') {
+      return Response.json({
+        ok: true,
+        memberships_internal: [{
+          membership_id: IDS.membership, membership_generation: 4,
+          agency_id: IDS.agency, display_name: 'CloudTMS TEST', environment_label: 'TEST',
+          local_candidate_id: IDS.candidate, data_plane_id: IDS.dataPlane,
+          registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST',
+          route_version_id: '80000000-0000-4000-8000-000000000007', route_version: 7
+        }],
+        pending_invitations_internal: [], internal_only: true
       });
     }
     throw new Error(`unexpected operation ${operation}`);
@@ -1159,11 +1392,16 @@ test('invitation acceptance requires verified email and returns only the closed 
     verifiedEmails = ['candidate@example.test'];
     const accepted = await handleCandidateBrokerRequest(request(), env);
     assert.equal(accepted.status, 200, JSON.stringify(await accepted.clone().json()));
-    assert.deepEqual(await accepted.json(), {
-      ok: true, state: 'ACTIVE', membership_generation: 4, idempotent_replay: false
-    });
+    const acceptedBody = await accepted.json();
+    assert.equal(acceptedBody.ok, true);
+    assert.equal(acceptedBody.state, 'ACTIVE');
+    assert.equal(acceptedBody.membership_generation, 4);
+    assert.equal(acceptedBody.idempotent_replay, false);
+    assert.equal(acceptedBody.agency_choice.display_name, 'CloudTMS TEST');
+    assert.match(acceptedBody.agency_choice.agency_choice_token, /^v4\.1\./);
     assert.deepEqual(seen, [
-      'global_session_metadata_v1', 'global_session_metadata_v1', 'invitation_accept_v1'
+      'global_session_metadata_v1', 'global_session_metadata_v1',
+      'invitation_accept_with_context_v2', 'account_agencies_get_v1'
     ]);
   } finally {
     globalThis.fetch = originalFetch;
