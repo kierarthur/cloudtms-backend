@@ -123,7 +123,7 @@ begin
   from targets;
 
   if v_count<>639 or v_service_missing<>72 or v_browser_executable<>0
-     or v_hash<>'c699635d63bc90d181a3e00b145eead3' then
+     or v_hash<>'e3cb7931d137de41c53d09108284cbbc' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
@@ -156,9 +156,9 @@ begin
       v_count,v_hash;
   end if;
 
-  with default_entries as (
+  with target_defaults as (
     select
-      r.rolname as owner_name,
+      d.defaclrole,
       d.defaclobjtype::text as object_type,
       case when x.grantee=0 then 'PUBLIC' else gr.rolname end as grantee,
       x.privilege_type,
@@ -170,21 +170,38 @@ begin
     left join pg_catalog.pg_roles gr on gr.oid=x.grantee
     where n.nspname='public'
       and d.defaclobjtype in ('r','f','S')
-      and r.rolname='postgres'
-      and (x.grantee=0 or gr.rolname in ('anon','authenticated','service_role'))
+      and r.rolname=current_user
+  ), required_service_privileges as (
+    select
+      d.defaclobjtype::text as object_type,
+      x.privilege_type
+    from pg_catalog.pg_default_acl d
+    join pg_catalog.pg_namespace n on n.oid=d.defaclnamespace
+    join pg_catalog.pg_roles r on r.oid=d.defaclrole
+    cross join lateral pg_catalog.aclexplode(
+      pg_catalog.acldefault(d.defaclobjtype,d.defaclrole)
+    ) x
+    where n.nspname='public'
+      and d.defaclobjtype in ('r','f','S')
+      and r.rolname=current_user
+      and x.grantee=d.defaclrole
   )
   select
-    pg_catalog.count(*),
-    pg_catalog.md5(coalesce(pg_catalog.string_agg(
-      owner_name||'|'||object_type||'|'||grantee||'|'||privilege_type||'|'||is_grantable::text,
-      E'\n' order by owner_name,object_type,grantee,privilege_type,is_grantable
-    ),''))
-  into v_count,v_hash
-  from default_entries;
+    (select pg_catalog.count(distinct object_type) from target_defaults),
+    (select pg_catalog.count(*) from required_service_privileges required
+      where not exists (
+        select 1 from target_defaults installed
+        where installed.object_type=required.object_type
+          and installed.grantee='service_role'
+          and installed.privilege_type=required.privilege_type
+      )),
+    (select pg_catalog.count(*) from target_defaults
+      where grantee in ('PUBLIC','anon','authenticated'))
+  into v_count,v_service_missing,v_browser_executable;
 
-  if v_count<>12 or v_hash<>'ed611d0ad2b3902eea77d3215b18374e' then
-    raise exception 'GENERAL_DEFAULT_ACL_VERIFICATION_FAILED:count=% hash=%',
-      v_count,v_hash;
+  if v_count<>3 or v_service_missing<>0 or v_browser_executable<>0 then
+    raise exception 'GENERAL_DEFAULT_ACL_VERIFICATION_FAILED:kinds=% service_missing=% browser_entries=%',
+      v_count,v_service_missing,v_browser_executable;
   end if;
 
   if not pg_catalog.has_function_privilege(

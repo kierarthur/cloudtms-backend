@@ -10,6 +10,10 @@ app_namespaces as (
   from pg_catalog.pg_namespace
   where nspname in ('public', 'private')
 ),
+contract_role_names as (
+  select oid, case when rolname=current_user then 'postgres' else rolname end as logical_name
+  from pg_catalog.pg_roles
+),
 extensions_contract as (
   select jsonb_agg(
     jsonb_build_object('name', e.extname, 'schema', n.nspname)
@@ -41,17 +45,17 @@ relation_contract as (
       'schema', n.nspname,
       'name', c.relname,
       'kind', c.relkind,
-      'owner', pg_catalog.pg_get_userbyid(c.relowner),
+      'owner', (select logical_name from contract_role_names where oid=c.relowner),
       'rls', c.relrowsecurity,
       'force_rls', c.relforcerowsecurity,
       'options', coalesce(to_jsonb(c.reloptions), '[]'::jsonb),
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'grantee', case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end,
+            'grantee', case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end,
             'privilege', a.privilege_type,
             'grantable', a.is_grantable
-          ) order by (case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end) collate "C",
+          ) order by (case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end) collate "C",
                      a.privilege_type collate "C", a.is_grantable
         )
         from pg_catalog.aclexplode(coalesce(
@@ -132,7 +136,7 @@ routine_contract as (
     jsonb_build_object(
       'schema', n.nspname,
       'identity', p.proname || '(' || pg_catalog.pg_get_function_identity_arguments(p.oid) || ')',
-      'owner', pg_catalog.pg_get_userbyid(p.proowner),
+      'owner', (select logical_name from contract_role_names where oid=p.proowner),
       'security_definer', p.prosecdef,
       'volatility', p.provolatile,
       'parallel', p.proparallel,
@@ -140,10 +144,10 @@ routine_contract as (
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'grantee', case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end,
+            'grantee', case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end,
             'privilege', a.privilege_type,
             'grantable', a.is_grantable
-          ) order by (case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end) collate "C",
+          ) order by (case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end) collate "C",
                      a.privilege_type collate "C", a.is_grantable
         )
         from pg_catalog.aclexplode(coalesce(
@@ -195,7 +199,13 @@ policy_contract as (
       'table', tablename,
       'name', policyname,
       'permissive', permissive,
-      'roles', to_jsonb(roles),
+      'roles', coalesce((
+        select jsonb_agg(
+          case when role_name::text=current_user then 'postgres' else role_name::text end
+          order by ordinality
+        )
+        from pg_catalog.unnest(roles) with ordinality as policy_role(role_name,ordinality)
+      ), '[]'::jsonb),
       'command', cmd,
       'using', qual,
       'check', with_check
@@ -208,14 +218,14 @@ schema_contract as (
   select jsonb_agg(
     jsonb_build_object(
       'schema', n.nspname,
-      'owner', pg_catalog.pg_get_userbyid(n.nspowner),
+      'owner', (select logical_name from contract_role_names where oid=n.nspowner),
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'grantee', case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end,
+            'grantee', case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end,
             'privilege', a.privilege_type,
             'grantable', a.is_grantable
-          ) order by (case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end) collate "C",
+          ) order by (case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end) collate "C",
                      a.privilege_type collate "C", a.is_grantable
         )
         from pg_catalog.aclexplode(coalesce(
@@ -230,16 +240,16 @@ schema_contract as (
 default_acl_contract as (
   select jsonb_agg(
     jsonb_build_object(
-      'owner', pg_catalog.pg_get_userbyid(d.defaclrole),
+      'owner', owner_role.logical_name,
       'schema', n.nspname,
       'kind', d.defaclobjtype,
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'grantee', case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end,
+            'grantee', case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end,
             'privilege', a.privilege_type,
             'grantable', a.is_grantable
-          ) order by (case when a.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end) collate "C",
+          ) order by (case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end) collate "C",
                      a.privilege_type collate "C", a.is_grantable
         )
         from pg_catalog.aclexplode(coalesce(
@@ -247,12 +257,13 @@ default_acl_contract as (
           pg_catalog.acldefault(d.defaclobjtype, d.defaclrole)
         )) a
       ), '[]'::jsonb)
-    ) order by pg_catalog.pg_get_userbyid(d.defaclrole) collate "C",
+    ) order by owner_role.logical_name collate "C",
                n.nspname collate "C", d.defaclobjtype
   ) as value
   from pg_catalog.pg_default_acl d
   join app_namespaces n on n.oid = d.defaclnamespace
-  where pg_catalog.pg_get_userbyid(d.defaclrole) = 'postgres'
+  join contract_role_names owner_role on owner_role.oid=d.defaclrole
+  where owner_role.logical_name = 'postgres'
 )
 select jsonb_build_object(
   'contract_version', 1,

@@ -58,10 +58,10 @@ test('the exact security verifier is mandatory after every migration workflow', 
   assert.ok(candidateApp > protectedCandidateNamed);
   assert.ok(candidateApp > candidateNamed);
   assert.match(verification, /cloudtms_data_api_mfa_gate/);
-  assert.match(currentVerification, /v_count<>90/i);
-  assert.match(currentVerification, /v_service_missing<>7/i);
+  assert.match(currentVerification, /v_count<>98/i);
+  assert.match(currentVerification, /v_service_missing<>8/i);
   assert.match(currentVerification, /v_browser_executable<>0/i);
-  assert.match(currentVerification, /d9282ff2fc8eb09f98b4b3f6fe967237/i);
+  assert.match(currentVerification, /619d9616ca5e01982de1f664cc897efc/i);
   assert.match(currentRelease, /23082026_0400_candidate_named_security_verification_v2\.sql/);
   assert.doesNotMatch(currentRelease, /22082026_1402_candidate_named_legacy_security_verification\.sql/);
 });

@@ -70,6 +70,10 @@ jobs:
       CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
       CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
       CLOUDTMS_RELEASE_APPROVAL: ${{ inputs.approval }}
+      # The repository's logical `postgres` owner maps to the authenticated
+      # provider database owner. On Supabase this is a no-op; on Miget it avoids
+      # requiring membership in the platform-reserved postgres superuser role.
+      CLOUDTMS_LOGICAL_POSTGRES_OWNER: CURRENT_USER
     steps:
       - uses: actions/checkout@v6
         with:

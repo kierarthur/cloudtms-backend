@@ -1,10 +1,76 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+let logicalOwnerSqlRoot;
+
+export function mapLogicalPostgresOwnerSql(source) {
+  const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
+  if (!mode) return source;
+  if (mode !== 'CURRENT_USER') {
+    throw new Error('CLOUDTMS_LOGICAL_POSTGRES_OWNER must be CURRENT_USER when set');
+  }
+  return String(source)
+    .replace(/\bowner\s+to\s+(?:"postgres"|postgres)(?=\s*;)/gi, 'OWNER TO CURRENT_USER')
+    .replace(
+      /\balter\s+default\s+privileges\s+for\s+role\s+(?:"postgres"|postgres)/gi,
+      'ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER',
+    );
+}
+
+export function mapGeneratedAclBaselineSql(source) {
+  return mapLogicalPostgresOwnerSql(source)
+    .replace(/"postgres"/g, 'CURRENT_USER')
+    .replace(/^grant EXECUTE on function public\.cloudtms_data_api_mfa_gate\(\) to "authenticator";\r?\n/gm, '')
+    .replace(/,\s*authenticator(?=\s*[,;])/g, '');
+}
+
+function copyLogicalOwnerSqlTree(source, destination) {
+  fs.mkdirSync(destination, { recursive: true });
+  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = path.join(source, entry.name);
+    const destinationPath = path.join(destination, entry.name);
+    if (entry.isDirectory()) copyLogicalOwnerSqlTree(sourcePath, destinationPath);
+    else if (entry.isFile() && entry.name.toLowerCase().endsWith('.sql')) {
+      fs.writeFileSync(
+        destinationPath,
+        entry.name === '22082026_1505_cloudtms_test_acl_baseline.sql'
+          ? mapGeneratedAclBaselineSql(fs.readFileSync(sourcePath, 'utf8'))
+          : mapLogicalPostgresOwnerSql(fs.readFileSync(sourcePath, 'utf8')),
+      );
+    }
+  }
+}
+
+function executableSqlFile(file) {
+  const mode = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER || '';
+  const absolute = path.isAbsolute(file) ? file : path.join(repoRoot, file);
+  if (!mode) return absolute;
+  mapLogicalPostgresOwnerSql('');
+  const authorityRoot = path.join(repoRoot, 'supabase');
+  const relative = path.relative(authorityRoot, absolute);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    const source = fs.readFileSync(absolute, 'utf8');
+    const mapped = mapLogicalPostgresOwnerSql(source);
+    if (mapped !== source) {
+      throw new Error('Logical owner mapping is limited to SQL authority under supabase/');
+    }
+    return absolute;
+  }
+  if (!logicalOwnerSqlRoot) {
+    logicalOwnerSqlRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cloudtms-logical-owner-'));
+    copyLogicalOwnerSqlTree(authorityRoot, path.join(logicalOwnerSqlRoot, 'supabase'));
+    process.once('exit', () => {
+      try { fs.rmSync(logicalOwnerSqlRoot, { recursive: true, force: true }); } catch {}
+    });
+  }
+  return path.join(logicalOwnerSqlRoot, 'supabase', relative);
+}
 
 export function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
@@ -148,13 +214,13 @@ export function psql({ file, sql, variables = {}, quiet = true }) {
   const args = [databaseUrl(), '-X', '-v', 'ON_ERROR_STOP=1'];
   if (quiet) args.push('-q');
   for (const [key, value] of Object.entries(variables)) args.push('-v', `${key}=${value}`);
-  if (file) args.push('-f', path.isAbsolute(file) ? file : path.join(repoRoot, file));
+  if (file) args.push('-f', executableSqlFile(file));
   if (sql) args.push('-At');
   const result = spawnSync(bin, args, {
     cwd: repoRoot,
     encoding: 'utf8',
     maxBuffer: 256 * 1024 * 1024,
-    input: sql || undefined,
+    input: sql ? mapLogicalPostgresOwnerSql(sql) : undefined,
     env: { ...process.env, PGCONNECT_TIMEOUT: process.env.PGCONNECT_TIMEOUT || '15' },
   });
   if (result.status !== 0) {

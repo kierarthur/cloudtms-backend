@@ -3,7 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  canonicalSqlBytes, closureFor, inventory, readJson, repoRoot, sha256, sqlDateKey, validateTarget, verifyIntegrity,
+  canonicalSqlBytes, closureFor, inventory, mapGeneratedAclBaselineSql, mapLogicalPostgresOwnerSql,
+  readJson, repoRoot, sha256, sqlDateKey,
+  validateTarget, verifyIntegrity,
 } from '../scripts/cloudtms-db-release-lib.mjs';
 
 const read = relative => fs.readFileSync(path.join(repoRoot, relative), 'utf8');
@@ -67,6 +69,39 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.match(workflow, /Read-only release plan/);
   assert.match(workflow, /if: inputs\.phase == 'APPLY'/);
   assert.match(workflow, /APPLY \$\{\{ inputs\.environment \}\} \$\{\{ inputs\.mode \}\}/);
+  assert.match(workflow, /CLOUDTMS_LOGICAL_POSTGRES_OWNER:\s*CURRENT_USER/);
+});
+
+test('provider database owner mapping is explicit, bounded and fail closed', () => {
+  const previous = process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;
+  try {
+    process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER = 'CURRENT_USER';
+    assert.equal(
+      mapLogicalPostgresOwnerSql('alter function public.example() owner to postgres;'),
+      'alter function public.example() OWNER TO CURRENT_USER;',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql('alter function public.example() owner to "postgres";'),
+      'alter function public.example() OWNER TO CURRENT_USER;',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql('alter default privileges for role "postgres" in schema public grant execute on functions to service_role;'),
+      'ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER in schema public grant execute on functions to service_role;',
+    );
+    assert.equal(
+      mapGeneratedAclBaselineSql('grant execute on function public.example() to "postgres";'),
+      'grant execute on function public.example() to CURRENT_USER;',
+    );
+    assert.equal(
+      mapGeneratedAclBaselineSql('revoke all on function private.example() from PUBLIC, authenticator, supabase_admin;'),
+      'revoke all on function private.example() from PUBLIC, supabase_admin;',
+    );
+    process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER = 'UNSAFE_ROLE';
+    assert.throws(() => mapLogicalPostgresOwnerSql('select 1;'), /must be CURRENT_USER/);
+  } finally {
+    if (previous === undefined) delete process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER;
+    else process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER = previous;
+  }
 });
 
 test('hosted target validation accepts a provider-neutral database locator and fails closed', () => {
@@ -98,6 +133,8 @@ test('contract export normalises null ACLs to one-dimensional effective defaults
   assert.match(source, /acldefault\([\s\S]*c\.relowner/);
   assert.match(source, /acldefault\('f'::"char", p\.proowner\)/);
   assert.match(source, /acldefault\('n'::"char", n\.nspowner\)/);
+  assert.match(source, /when rolname=current_user then 'postgres'/);
+  assert.match(source, /owner_role\.logical_name = 'postgres'/);
 });
 
 test('Bible preserves Policy X and protected security boundary', () => {

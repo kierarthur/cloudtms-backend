@@ -25,7 +25,7 @@ begin
       p.oid,
       p.prosecdef,
       p.proconfig,
-      owner_role.rolname as owner_name,
+      p.proowner as owner_oid,
       language_row.lanname as language_name,
       pg_catalog.pg_get_function_result(p.oid) as result_type,
       pg_catalog.has_function_privilege('service_role',p.oid,'EXECUTE') as service_execute,
@@ -47,7 +47,7 @@ begin
     pg_catalog.count(*) filter (
       where oid is null
          or not prosecdef
-         or owner_name<>'postgres'
+         or owner_oid<>(select oid from pg_catalog.pg_roles where rolname=current_user)
          or language_name<>'plpgsql'
          or result_type<>'jsonb'
          or proconfig is distinct from expected_config

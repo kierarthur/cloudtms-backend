@@ -38,7 +38,8 @@ begin
       'candidate_manager_email_settings_reset_v1'
     )
     and (
-      not p.prosecdef or pg_catalog.pg_get_userbyid(p.proowner)<>'postgres'
+      not p.prosecdef
+      or p.proowner<>(select oid from pg_catalog.pg_roles where rolname=current_user)
       or not exists (
         select 1 from pg_catalog.unnest(coalesce(p.proconfig,array[]::text[])) cfg(setting)
         where cfg.setting like 'search_path=%'
