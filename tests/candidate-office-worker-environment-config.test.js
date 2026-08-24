@@ -23,7 +23,6 @@ test('normal TEST Worker installs only the expressly authorised MyTMS TEST contr
     ['MYTMS_CONTROL_PLANE_URL', 'https://cloudtms-mytms-miget-gateway.kier-88a.workers.dev'],
     ['MYTMS_OFFICE_CONTROL_ENABLED', 'TRUE'],
     ['MYTMS_OFFICE_AGENCY_ID', '6d0aadb2-ddc8-4ee4-ab37-871bae4a0d88'],
-    ['MYTMS_OFFICE_AGENCY_DISPLAY_NAME', 'CloudTMS'],
     ['MYTMS_OFFICE_INVITATION_ACTIVATION_AUTHORIZED', 'TRUE'],
     ['MYTMS_OFFICE_INVITATION_DELIVERY_ENABLED', 'TRUE'],
     ['MYTMS_IDENTITY_DELIVERY_ENABLED', 'TRUE'],
@@ -37,6 +36,10 @@ test('normal TEST Worker installs only the expressly authorised MyTMS TEST contr
     assert.match(testEnvironment, new RegExp(`^${name}\\s*=\\s*"${value.replaceAll('.', '\\.')}"\\s*$`, 'm'));
     assert.equal((testEnvironment.match(new RegExp(`^${name}\\s*=`, 'gm')) || []).length, 1);
   }
+  assert.equal(
+    /^MYTMS_OFFICE_AGENCY_DISPLAY_NAME\s*=/m.test(testEnvironment), false,
+    'the agency display name must come from agency settings_defaults, not Worker configuration'
+  );
   assert.match(
     testEnvironment,
     /^ALLOWED_ORIGINS\s*=\s*"[^"]*https:\/\/mycloudtms\.arthur-rai\.co\.uk[^"]*"\s*$/m

@@ -12,6 +12,7 @@ import {
   previewMyTmsTemplate,
   previewMyTmsManagerEmailTemplate,
   queueMyTmsIdentityChallenge,
+  reserveAndQueueMyTmsInvitation,
   sanitizeMyTmsEmailHtml,
   sanitizeManagerEmailHtml,
   setMyTmsManagerEmailTemplates,
@@ -260,6 +261,9 @@ test('an open invitation offers both resend and cancellation without weakening e
         invitation_email_enabled: true, access_reminder_enabled: true
       });
     }
+    if (url.includes('/rest/v1/settings_defaults?')) {
+      return Response.json([{ agency_name: 'Arthur Rai Medical Services Limited' }]);
+    }
     throw new Error(`unexpected request ${url}`);
   };
   try {
@@ -276,6 +280,130 @@ test('an open invitation offers both resend and cancellation without weakening e
       { code: 'CANCEL_INVITATION', enabled: true }
     ]);
     assert.equal(result.action.code, 'CANCEL_INVITATION');
+    assert.equal(result.agency_display_name, 'Arthur Rai Medical Services Limited');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate invitation identity comes only from agency settings and propagates to control and mail', async () => {
+  const originalFetch = globalThis.fetch;
+  const invitationId = '10000000-0000-4000-8000-000000000043';
+  const calls = [];
+  let outboxBody = null;
+  globalThis.fetch = async (request, init = {}) => {
+    const url = request instanceof Request ? request.url : String(request);
+    const method = request instanceof Request ? request.method : String(init.method || 'GET');
+    const body = method === 'GET' ? null
+      : request instanceof Request ? await request.clone().json() : JSON.parse(String(init.body || '{}'));
+    if (url.includes('/rest/v1/candidates?')) {
+      return Response.json([{
+        id: IDS.challenge, email: 'candidate@example.test', display_name: 'Test Candidate',
+        first_name: 'Test', last_name: 'Candidate', key_norm: 'CID1-ABCDE', active: true
+      }]);
+    }
+    if (url.includes('/rest/v1/settings_defaults?')) {
+      calls.push('AGENCY_SETTINGS');
+      return Response.json([{ agency_name: 'Arthur Rai Medical Services Limited' }]);
+    }
+    if (url.includes('/rpc/candidate_mytms_status_get_v1')) {
+      return Response.json({ ok: true, state: 'NOT_INVITED', action_code: 'INVITE_TO_MYTMS' });
+    }
+    if (url.includes('/rpc/agency_app_settings_get_v1')) {
+      return Response.json({
+        ok: true, version: 4, invitation_email_enabled: true, access_reminder_enabled: false,
+        membership_admin_enabled: true, invitation_expiry_seconds: 604800,
+        planned_test_web_origin: 'https://mycloudtms.arthur-rai.co.uk',
+        invitation_subject: 'Join {{agency_name}} on MyTMS',
+        invitation_html_sanitized: '<p>{{agency_name}} has invited {{candidate_name}}.</p><p><a href="{{mytms_invitation_url}}">Join MyTMS</a></p>',
+        invitation_text: '{{agency_name}} has invited {{candidate_name}}. {{mytms_invitation_url}}'
+      });
+    }
+    if (url.includes('/rpc/invitation_reserve_v1')) {
+      calls.push('CONTROL_RESERVE');
+      assert.equal(body.p_office_context.agency_display_name, 'Arthur Rai Medical Services Limited');
+      assert.equal(Object.hasOwn(body.p_office_context, 'MYTMS_OFFICE_AGENCY_DISPLAY_NAME'), false);
+      return Response.json({
+        ok: true, status: 'RESERVED', invitation_id: invitationId, generation: 1,
+        idempotent_replay: false
+      });
+    }
+    if (url.includes('/rest/v1/mail_outbox?on_conflict=')) {
+      calls.push('AGENCY_OUTBOX');
+      outboxBody = body;
+      return Response.json([{ id: IDS.outbox }], { status: 201 });
+    }
+    if (url.includes('/rpc/invitation_delivery_record_v1')) {
+      calls.push('CONTROL_DELIVERY');
+      return Response.json({ ok: true, status: 'RECORDED' });
+    }
+    throw new Error(`unexpected request ${url}`);
+  };
+  try {
+    const result = await reserveAndQueueMyTmsInvitation(officeEnvironment({
+      SUPABASE_URL: 'https://miget-agency-gateway.test.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-miget-postgrest-role-not-live',
+      MYTMS_CONTROL_PLANE_URL: 'https://control-plane.test.invalid',
+      MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-control-plane-role-not-live',
+      MYTMS_OFFICE_INVITATION_ACTIVATION_AUTHORIZED: 'TRUE',
+      MYTMS_OFFICE_INVITATION_DELIVERY_ENABLED: 'TRUE',
+      MYTMS_INVITATION_TOKEN_SECRET: 'test-invitation-token-secret-not-live'
+    }), { id: IDS.challenge }, IDS.challenge, {
+      intent: 'INVITE', idempotency_key: IDS.outbox, expected_settings_version: 4
+    });
+    assert.equal(result.status, 'OUTBOX_ACCEPTED');
+    assert.match(outboxBody.subject, /Arthur Rai Medical Services Limited/);
+    assert.match(outboxBody.body_html, /Arthur Rai Medical Services Limited/);
+    assert.match(outboxBody.body_text, /Arthur Rai Medical Services Limited/);
+    assert.doesNotMatch(`${outboxBody.subject}\n${outboxBody.body_html}\n${outboxBody.body_text}`, /CloudTMS/);
+    assert.deepEqual(calls, [
+      'AGENCY_SETTINGS', 'CONTROL_RESERVE', 'AGENCY_OUTBOX', 'CONTROL_DELIVERY'
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('missing agency identity fails closed before invitation reservation or outbox creation', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (request) => {
+    const url = request instanceof Request ? request.url : String(request);
+    calls.push(url);
+    if (url.includes('/rest/v1/candidates?')) {
+      return Response.json([{
+        id: IDS.challenge, email: 'candidate@example.test', display_name: 'Test Candidate',
+        first_name: 'Test', last_name: 'Candidate', key_norm: 'CID1-ABCDE', active: true
+      }]);
+    }
+    if (url.includes('/rpc/candidate_mytms_status_get_v1')) {
+      return Response.json({ ok: true, state: 'NOT_INVITED', action_code: 'INVITE_TO_MYTMS' });
+    }
+    if (url.includes('/rpc/agency_app_settings_get_v1')) {
+      return Response.json({
+        ok: true, version: 4, invitation_email_enabled: true,
+        access_reminder_enabled: false, membership_admin_enabled: true
+      });
+    }
+    if (url.includes('/rest/v1/settings_defaults?')) {
+      return Response.json([{ agency_name: '   ' }]);
+    }
+    throw new Error(`invitation authority must not be reached: ${url}`);
+  };
+  try {
+    await assert.rejects(
+      getMyTmsCandidateStatus(officeEnvironment({
+        SUPABASE_URL: 'https://miget-agency-gateway.test.invalid',
+        SUPABASE_SERVICE_ROLE_KEY: 'test-miget-postgrest-role-not-live',
+        MYTMS_CONTROL_PLANE_URL: 'https://control-plane.test.invalid',
+        MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-control-plane-role-not-live'
+      }), { id: IDS.challenge }, IDS.challenge),
+      (error) => error instanceof MyTmsOfficeError
+        && error.status === 503
+        && error.code === 'MYTMS_AGENCY_PRESENTATION_UNAVAILABLE'
+    );
+    assert.equal(calls.some((url) => url.includes('/rpc/invitation_reserve_v1')), false);
+    assert.equal(calls.some((url) => url.includes('/rest/v1/mail_outbox?')), false);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -283,10 +411,10 @@ test('an open invitation offers both resend and cancellation without weakening e
 
 test('adoption and membership mutation stop at the disabled-first admin gate', async () => {
   const originalFetch = globalThis.fetch;
-  let calls = 0;
+  const calls = [];
   globalThis.fetch = async request => {
-    calls += 1;
     const url = request instanceof Request ? request.url : String(request);
+    calls.push(url);
     if (url.includes('/rpc/agency_app_settings_get_v1')) {
       return Response.json({
         ok: true, version: 1, membership_admin_enabled: false,
@@ -317,7 +445,7 @@ test('adoption and membership mutation stop at the disabled-first admin gate', a
       error => error instanceof MyTmsOfficeError
         && error.code === 'MYTMS_MEMBERSHIP_ADMIN_DISABLED'
     );
-    assert.equal(calls, 2);
+    assert.equal(calls.some((url) => /adopt|membership_(?:transition|state)/i.test(url)), false);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -391,6 +391,24 @@ async function localCandidate(env, candidateId) {
   return Array.isArray(rows) && rows.length === 1 ? rows[0] : null;
 }
 
+async function agencyDisplayNameFromSettings(env) {
+  const base = text(env.SUPABASE_URL).replace(/\/$/, '');
+  const response = await fetch(
+    `${base}/rest/v1/settings_defaults?id=eq.1&select=agency_name&limit=1`,
+    { headers: supabaseHeaders(env) }
+  );
+  if (!response.ok) {
+    throw new MyTmsOfficeError(503, 'MYTMS_OFFICE_DATA_PLANE_UNAVAILABLE');
+  }
+  const rows = await boundedJson(response);
+  const agencyDisplayName = text(Array.isArray(rows) && rows.length === 1
+    ? rows[0]?.agency_name : '');
+  if (agencyDisplayName.length < 1 || agencyDisplayName.length > 160) {
+    throw new MyTmsOfficeError(503, 'MYTMS_AGENCY_PRESENTATION_UNAVAILABLE');
+  }
+  return agencyDisplayName;
+}
+
 function publicSettings(result) {
   if (!isObject(result) || result.ok !== true) {
     throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
@@ -526,7 +544,10 @@ async function internalCandidateStatus(env, user, candidate) {
     },
     p_correlation_id: crypto.randomUUID(), p_now_utc: new Date().toISOString()
   });
-  const settings = await getMyTmsOfficeSettings(env, user);
+  const [settings, agencyDisplayName] = await Promise.all([
+    getMyTmsOfficeSettings(env, user),
+    agencyDisplayNameFromSettings(env)
+  ]);
   const makeAction = (requestedCode) => {
     const code = text(requestedCode) || 'NONE';
     const membershipAction = ['CANCEL_INVITATION','CANCEL_PENDING_MEMBERSHIP','REVOKE_MEMBERSHIP']
@@ -560,7 +581,7 @@ async function internalCandidateStatus(env, user, candidate) {
     ? [makeAction('RESEND_INVITATION'), action]
     : action.code === 'NONE' ? [] : [action];
   return {
-    ok: true, agency_display_name: text(env.MYTMS_OFFICE_AGENCY_DISPLAY_NAME) || 'CloudTMS',
+    ok: true, agency_display_name: agencyDisplayName,
     candidate_id: candidate?.id || null,
     candidate_display_name: text(candidate?.display_name),
     candidate_email: email || null,
@@ -738,7 +759,9 @@ async function invitationToken(env, candidateId, intent, requestKey) {
   ));
 }
 
-async function insertInvitationOutbox(env, user, candidate, invitation, settings, token) {
+async function insertInvitationOutbox(
+  env, user, candidate, invitation, settings, token, agencyDisplayName
+) {
   const intent = upper(invitation.intent);
   const origin = text(settings.planned_test_web_origin).replace(/\/$/, '');
   let parsedOrigin;
@@ -750,7 +773,17 @@ async function insertInvitationOutbox(env, user, candidate, invitation, settings
   // never sent to the public static host, CDN or ordinary request logs.
   const link = `${origin}/invite#token=${encodeURIComponent(token)}`;
   const reminder = intent === 'ACCESS_REMINDER';
-  const subject = text(reminder ? settings.access_reminder_subject : settings.invitation_subject);
+  const candidateName = candidate.display_name
+    || `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim();
+  const plainValues = {
+    candidate_name: candidateName,
+    agency_name: agencyDisplayName,
+    mytms_invitation_url: link
+  };
+  const subject = text(mergeTemplate(
+    reminder ? settings.access_reminder_subject : settings.invitation_subject,
+    plainValues
+  ));
   const htmlTemplate = reminder
     ? settings.access_reminder_html_sanitized : settings.invitation_html_sanitized;
   const textTemplate = reminder ? settings.access_reminder_text : settings.invitation_text;
@@ -758,16 +791,12 @@ async function insertInvitationOutbox(env, user, candidate, invitation, settings
     throw new MyTmsOfficeError(503, 'MYTMS_INVITATION_TEMPLATE_UNAVAILABLE');
   }
   const values = {
-    candidate_name: escapeHtml(candidate.display_name || `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim()),
-    agency_name: escapeHtml(text(env.MYTMS_OFFICE_AGENCY_DISPLAY_NAME) || 'CloudTMS'),
+    candidate_name: escapeHtml(candidateName),
+    agency_name: escapeHtml(agencyDisplayName),
     mytms_invitation_url: escapeHtml(link)
   };
   const bodyHtml = sanitizeMyTmsEmailHtml(mergeTemplate(htmlTemplate, values));
-  const bodyText = mergeTemplate(textTemplate, {
-    candidate_name: candidate.display_name || `${candidate.first_name || ''} ${candidate.last_name || ''}`.trim(),
-    agency_name: text(env.MYTMS_OFFICE_AGENCY_DISPLAY_NAME) || 'CloudTMS',
-    mytms_invitation_url: link
-  });
+  const bodyText = mergeTemplate(textTemplate, plainValues);
   const semanticHash = await sha256Hex(canonicalJson({
     invitation_id: invitation.invitation_id, generation: invitation.generation,
     to: text(candidate.email).toLowerCase(), subject, body_html: bodyHtml, body_text: bodyText
@@ -858,12 +887,14 @@ export async function reserveAndQueueMyTmsInvitation(env, user, candidateId, req
   const requestSemanticHash = await sha256Hex(canonicalJson({
     agency_id: agencyId(env), candidate_id: candidate.id,
     destination: text(candidate.email).toLowerCase(), intent,
-    settings_version: Number(settings.version)
+    settings_version: Number(settings.version),
+    agency_display_name: status.agency_display_name
   }));
   const actor = await officeContext(env, user, ['MYTMS_INVITATION_MANAGE'], {
     invitation_token_hash_hex: await sha256Hex(token),
     request_semantic_hash_hex: requestSemanticHash,
-    expires_at_utc: expiresAt.toISOString()
+    expires_at_utc: expiresAt.toISOString(),
+    agency_display_name: status.agency_display_name
   });
   const invitation = await controlPlaneRpc(env, 'control', 'invitation_reserve_v1', {
     p_office_context: actor, p_agency_id: agencyId(env),
@@ -879,7 +910,8 @@ export async function reserveAndQueueMyTmsInvitation(env, user, candidateId, req
     };
   }
   const queued = await insertInvitationOutbox(
-    env, user, candidate, { ...invitation, intent }, settings, token
+    env, user, candidate, { ...invitation, intent }, settings, token,
+    status.agency_display_name
   );
   try {
     await recordInvitationDelivery(
