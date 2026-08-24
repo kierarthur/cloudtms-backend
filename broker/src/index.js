@@ -89,6 +89,7 @@ import {
   reconcileTimesheetQueryDeliveryAfterProviderAcceptance
 } from './import-review-follow-up.js';
 import { normalisePostgresTimestampIso } from './timestamp-normalisation.js';
+import { normaliseMigetPostgrestRequest } from './miget-postgrest-compat.js';
 import {
   detectDailyRosterFormatFromRows,
   normalizeNhspDailyBreakMinutes,
@@ -135,6 +136,13 @@ import {
   buildTsq1String as buildTsq1StringShared,
   signTsq1 as signTsq1Shared
 } from './timesheet-qr-payload.js';
+
+// Provider compatibility boundary: current CloudTMS business code keeps its
+// established /rest/v1 table and RPC URLs. Only direct requests to a Miget
+// PostgREST application have that Supabase path prefix removed.
+async function fetch(input, init) {
+  return globalThis.fetch(normaliseMigetPostgrestRequest(input), init);
+}
 
 const textEncoder = new TextEncoder();
 
