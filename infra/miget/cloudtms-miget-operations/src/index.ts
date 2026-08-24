@@ -7,17 +7,19 @@ import { z } from "zod";
 interface Env {
   HYPERDRIVE: Hyperdrive;
   MYTMS_HYPERDRIVE: Hyperdrive;
+  LIVE_HYPERDRIVE: Hyperdrive;
   MIGET_API_TOKEN: string;
   MIGET_MCP_ROUTE_TOKEN: string;
   MIGET_POSTGRES_SERVICE_ID: string;
   MYTMS_MIGET_POSTGRES_SERVICE_ID: string;
+  LIVE_MIGET_POSTGRES_SERVICE_ID: string;
   MIGET_POSTGREST_ORIGIN: string;
 }
 
 const MIGET_API_BASE = "https://app.miget.com/api/v1";
 const POSTGREST_PREFIX = "/rest/v1";
 const MAX_RESPONSE_BYTES = 1_048_576;
-const DATABASE_TARGET = z.enum(["agency_test", "mytms_test"]);
+const DATABASE_TARGET = z.enum(["agency_test", "mytms_test", "agency_live"]);
 type DatabaseTarget = z.infer<typeof DATABASE_TARGET>;
 
 const READ_ONLY_ANNOTATIONS = {
@@ -138,7 +140,11 @@ async function withReadOnlyDatabase<T>(
   database: DatabaseTarget,
   query: (client: Client) => Promise<T>,
 ): Promise<T> {
-  const hyperdrive = database === "mytms_test" ? env.MYTMS_HYPERDRIVE : env.HYPERDRIVE;
+  const hyperdrive = database === "mytms_test"
+    ? env.MYTMS_HYPERDRIVE
+    : database === "agency_live"
+      ? env.LIVE_HYPERDRIVE
+      : env.HYPERDRIVE;
   const client = new Client({
     connectionString: hyperdrive.connectionString,
     application_name: `cloudtms-chatgpt-miget-${database}`,
@@ -185,7 +191,7 @@ function createServer(env: Env): McpServer {
       ]);
       return resultContent({
         authenticated: true,
-        scope: "cloudtms-test",
+        scope: "cloudtms-miget-estate",
         projects: safeCollection(projects),
         resources: safeCollection(resources),
         services: safeCollection(services),
@@ -198,7 +204,7 @@ function createServer(env: Env): McpServer {
     {
       title: "Inspect a CloudTMS Miget PostgreSQL service",
       description:
-        "Read-only. Inspects either the CloudTMS agency TEST PostgreSQL service or the MyTMS TEST control-plane service. Passwords, connection strings, and other secret fields are never returned.",
+        "Read-only. Inspects the CloudTMS agency TEST, MyTMS TEST control-plane, or CloudTMS agency LIVE PostgreSQL service. Passwords, connection strings, and other secret fields are never returned.",
       inputSchema: z.object({
         database: DATABASE_TARGET.default("agency_test"),
       }),
@@ -207,7 +213,9 @@ function createServer(env: Env): McpServer {
     async ({ database }) => {
       const serviceId = database === "mytms_test"
         ? env.MYTMS_MIGET_POSTGRES_SERVICE_ID
-        : env.MIGET_POSTGRES_SERVICE_ID;
+        : database === "agency_live"
+          ? env.LIVE_MIGET_POSTGRES_SERVICE_ID
+          : env.MIGET_POSTGRES_SERVICE_ID;
       const service = await migetGet(env, `/services/${serviceId}`);
       const records = safeCollection(service);
       return resultContent({
@@ -244,7 +252,7 @@ function createServer(env: Env): McpServer {
     {
       title: "Summarize a CloudTMS Miget PostgreSQL catalog",
       description:
-        "Read-only PostgreSQL catalog inspection for either agency_test or mytms_test. Returns database version and counts of non-system functions, triggers, RLS policies, relations, and installed extensions. It cannot execute caller-supplied SQL.",
+        "Read-only PostgreSQL catalog inspection for agency_test, mytms_test, or agency_live. Returns database version and counts of non-system functions, triggers, RLS policies, relations, and installed extensions. It cannot execute caller-supplied SQL.",
       inputSchema: z.object({
         database: DATABASE_TARGET.default("agency_test"),
       }),
@@ -292,7 +300,7 @@ function createServer(env: Env): McpServer {
     {
       title: "List and search CloudTMS Miget PostgreSQL RPCs",
       description:
-        "Read-only PostgreSQL catalog inspection for either agency_test or mytms_test. Lists or searches non-system functions and procedures with signatures, result types, languages, volatility, and SECURITY DEFINER status. Results are paginated; no caller-supplied SQL is accepted.",
+        "Read-only PostgreSQL catalog inspection for agency_test, mytms_test, or agency_live. Lists or searches non-system functions and procedures with signatures, result types, languages, volatility, and SECURITY DEFINER status. Results are paginated; no caller-supplied SQL is accepted.",
       inputSchema: z.object({
         database: DATABASE_TARGET.default("agency_test"),
         schema: z.string().trim().min(1).max(63).optional(),
@@ -356,7 +364,7 @@ function createServer(env: Env): McpServer {
     {
       title: "Get a CloudTMS Miget PostgreSQL RPC definition",
       description:
-        "Read-only PostgreSQL catalog inspection for either agency_test or mytms_test. Returns exact pg_get_functiondef output for a named non-system function or procedure, including overload signatures. It cannot execute the function or caller-supplied SQL.",
+        "Read-only PostgreSQL catalog inspection for agency_test, mytms_test, or agency_live. Returns exact pg_get_functiondef output for a named non-system function or procedure, including overload signatures. It cannot execute the function or caller-supplied SQL.",
       inputSchema: z.object({
         database: DATABASE_TARGET.default("agency_test"),
         schema: z.string().trim().min(1).max(63),
@@ -402,7 +410,7 @@ function createServer(env: Env): McpServer {
     {
       title: "Inspect CloudTMS database release ledgers",
       description:
-        "Read-only inspection of the protected migration and repeatable ledgers for agency_test or mytms_test. Returns counts and the most recent installed paths/hashes without accepting caller-supplied SQL.",
+        "Read-only inspection of the protected migration and repeatable ledgers for agency_test, mytms_test, or agency_live. Returns counts and the most recent installed paths/hashes without accepting caller-supplied SQL.",
       inputSchema: z.object({
         database: DATABASE_TARGET.default("agency_test"),
         limit: z.number().int().min(1).max(100).default(25),
@@ -682,7 +690,7 @@ export default {
         ok: true,
         service: "cloudtms-miget-gateway",
         version: "1.0.0",
-        databases: ["agency_test", "mytms_test"],
+        databases: ["agency_test", "mytms_test", "agency_live"],
       });
     }
     if (url.pathname === POSTGREST_PREFIX || url.pathname.startsWith(`${POSTGREST_PREFIX}/`)) {
