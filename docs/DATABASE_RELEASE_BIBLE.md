@@ -72,6 +72,8 @@ Repository paths under `supabase/` are retained as historical source-layout name
 
 The PostgREST database URI must retain `options=-c%20pg_show_plans.is_enabled%3Doff`. Miget preloads `pg_show_plans`; allowing its collector on CloudTMS PostgREST sessions caused repeated memory warnings and severe complex-RPC latency. PostgreSQL query diagnostics use the repository-controlled `pg_stat_statements` extension migration instead. Prove both settings after every new database, restore, service resize, or PostgREST redeployment.
 
+Miget's `service_role` is not a PostgreSQL `BYPASSRLS` role. Migration `24082026_1519_miget_service_role_rls_compatibility.sql` creates the explicit `cloudtms_miget_service_owner_all` policy for every existing RLS-enabled public table, preserving the practical service-role behaviour expected by the Worker while leaving SQL grants as the independent table-access boundary. Any later migration that enables RLS on a new public table must create and verify that policy in the same change. After a restore or release, verify the policy catalog and perform a real PostgREST service-role lookup; a direct owner query alone cannot detect this failure mode.
+
 ## GitHub Environment setup
 
 Create protected environments named `database-test` and `database-live`. Each holds:

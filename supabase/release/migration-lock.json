@@ -751,6 +751,10 @@
       "sha256": "10911787f3ac05fd136be1a4e5886e375b8dae45a76a25aa712e9e635c3932dd"
     },
     {
+      "path": "supabase/migrations/24082026_1519_miget_service_role_rls_compatibility.sql",
+      "sha256": "258fa9cac035d3bcc9aa0ba0c3af7c29d90783daa4499aaaab38e5e0769e6516"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
