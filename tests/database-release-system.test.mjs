@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  canonicalSqlBytes, closureFor, inventory, readJson, repoRoot, sha256, sqlDateKey, verifyIntegrity,
+  canonicalSqlBytes, closureFor, inventory, readJson, repoRoot, sha256, sqlDateKey, validateTarget, verifyIntegrity,
 } from '../scripts/cloudtms-db-release-lib.mjs';
 
 const read = relative => fs.readFileSync(path.join(repoRoot, relative), 'utf8');
@@ -61,11 +61,25 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.doesNotMatch(workflow, /\npush:/);
   assert.match(workflow, /database-live/);
   assert.match(workflow, /database-test/);
-  assert.match(workflow, /secrets\.CLOUDTMS_DATABASE_URL/);
-  assert.match(workflow, /secrets\.SUPABASE_DB_URL_TEST/);
+  assert.match(workflow, /secrets\.MIGET_DATABASE_URL_TEST/);
+  assert.match(workflow, /vars\.MIGET_DATABASE_TARGET_TEST/);
+  assert.doesNotMatch(workflow, /secrets\.SUPABASE_DB_URL_TEST/);
   assert.match(workflow, /Read-only release plan/);
   assert.match(workflow, /if: inputs\.phase == 'APPLY'/);
   assert.match(workflow, /APPLY \$\{\{ inputs\.environment \}\} \$\{\{ inputs\.mode \}\}/);
+});
+
+test('hosted target validation accepts a provider-neutral database locator and fails closed', () => {
+  const previousUrl = process.env.CLOUDTMS_DATABASE_URL;
+  try {
+    process.env.CLOUDTMS_DATABASE_URL = 'postgresql://automation:secret@postgres.example/cloudtms_test_clone?sslmode=require';
+    assert.doesNotThrow(() => validateTarget('TEST', 'cloudtms_test_clone'));
+    assert.throws(() => validateTarget('TEST', 'another_database'), /CLOUDTMS_EXPECTED_TARGET/);
+    assert.throws(() => validateTarget('TEST', ''), /CLOUDTMS_EXPECTED_TARGET/);
+  } finally {
+    if (previousUrl === undefined) delete process.env.CLOUDTMS_DATABASE_URL;
+    else process.env.CLOUDTMS_DATABASE_URL = previousUrl;
+  }
 });
 
 test('release engine has fail-closed NEW, ADOPT, and UPGRADE gates', () => {

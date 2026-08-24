@@ -130,7 +130,7 @@ export function databaseUrl() {
   return value;
 }
 
-export function validateTarget(environment, expectedProjectRef) {
+export function validateTarget(environment, expectedTarget) {
   if (!['TEST', 'LIVE'].includes(environment)) throw new Error('Environment must be TEST or LIVE');
   const url = new URL(databaseUrl());
   const local = ['localhost', '127.0.0.1', '::1', 'host.docker.internal'].includes(url.hostname);
@@ -138,9 +138,9 @@ export function validateTarget(environment, expectedProjectRef) {
     if (process.env.CLOUDTMS_ALLOW_LOCAL !== '1') throw new Error('Local database requires CLOUDTMS_ALLOW_LOCAL=1');
     return;
   }
-  if (!expectedProjectRef) throw new Error('CLOUDTMS_EXPECTED_PROJECT_REF is required for hosted targets');
-  const locator = `${url.hostname}|${decodeURIComponent(url.username)}`;
-  if (!locator.includes(expectedProjectRef)) throw new Error('Database URL does not match CLOUDTMS_EXPECTED_PROJECT_REF');
+  if (!expectedTarget) throw new Error('CLOUDTMS_EXPECTED_TARGET is required for hosted targets');
+  const locator = `${url.hostname}|${decodeURIComponent(url.username)}|${decodeURIComponent(url.pathname)}`;
+  if (!locator.includes(expectedTarget)) throw new Error('Database URL does not match CLOUDTMS_EXPECTED_TARGET');
 }
 
 export function psql({ file, sql, variables = {}, quiet = true }) {

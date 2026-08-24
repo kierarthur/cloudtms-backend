@@ -15,12 +15,12 @@ test('normal TEST Worker supplies the Candidate Office environment authority', (
 });
 
 test('normal TEST Worker installs MyTMS Office control disabled-first', () => {
-  assert.match(wrangler, /\[env\.test\]\s*\r?\nname\s*=\s*"test-cloudtms-backend"\s*\r?\npreview_urls\s*=\s*false/);
+  assert.match(wrangler, /\[env\.test\]\s*\r?\nname\s*=\s*"test-cloudtms-backend"\s*\r?\ncompatibility_flags\s*=\s*\["nodejs_compat",\s*"global_fetch_strictly_public"\]\s*\r?\npreview_urls\s*=\s*false/);
   assert.equal((wrangler.match(/^preview_urls\s*=/gm) || []).length, 1);
   const expected = new Map([
     ['MYTMS_CONTROL_PLANE_ENABLED', 'TRUE'],
     ['MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED', 'FALSE'],
-    ['MYTMS_CONTROL_PLANE_URL', 'https://pixmhpngcfxuhoilzptk.supabase.co'],
+    ['MYTMS_CONTROL_PLANE_URL', 'https://cloudtms-mytms-miget-gateway.kier-88a.workers.dev'],
     ['MYTMS_OFFICE_CONTROL_ENABLED', 'TRUE'],
     ['MYTMS_OFFICE_AGENCY_ID', '6d0aadb2-ddc8-4ee4-ab37-871bae4a0d88'],
     ['MYTMS_OFFICE_AGENCY_DISPLAY_NAME', 'CloudTMS'],

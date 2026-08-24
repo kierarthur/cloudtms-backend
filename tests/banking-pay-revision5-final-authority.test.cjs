@@ -147,9 +147,11 @@ test('cancellation mutation routes fail closed and proof binding uses the locked
 });
 
 test('repeatable runner applies only new or content-changed files', () => {
-  const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'supabase-migrate.yml'), 'utf8');
-  assert.match(workflow, /if \[\[ "\$installed_hash" == "\$content_hash" \]\]; then[\s\S]+?SKIP unchanged repeatable/);
-  assert.match(workflow, /APPLY new\/changed repeatable/);
-  assert.doesNotMatch(workflow, /REAPPLY_AFTER_EARLIER_CHANGE/);
-  assert.doesNotMatch(workflow, /REAPPLY unchanged later repeatable after earlier authority change/);
+  const releaseEngine = fs.readFileSync(path.join(root, 'scripts', 'cloudtms-db-release.mjs'), 'utf8');
+  assert.match(releaseEngine, /const installedRepeatables = new Map/);
+  assert.match(releaseEngine, /current\.repeatables\.filter\(item => installedRepeatables\.get\(item\.path\) !== item\.sha256\)/);
+  assert.match(releaseEngine, /for \(const item of pendingRepeatables\) \{[\s\S]+?psql\(\{ file: item\.path \}\)/);
+  assert.match(releaseEngine, /on conflict\(path\) do update set closure_sha256=excluded\.closure_sha256/);
+  assert.doesNotMatch(releaseEngine, /REAPPLY_AFTER_EARLIER_CHANGE/);
+  assert.doesNotMatch(releaseEngine, /REAPPLY unchanged later repeatable after earlier authority change/);
 });

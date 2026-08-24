@@ -163,7 +163,13 @@ function applyRelease() {
   const environment = required('environment', process.env.CLOUDTMS_ENVIRONMENT);
   const mode = required('mode', process.env.CLOUDTMS_RELEASE_MODE);
   if (!['NEW', 'UPGRADE', 'ADOPT'].includes(mode)) throw new Error('mode must be NEW, UPGRADE, or ADOPT');
-  validateTarget(environment, options['expected-project-ref'] ?? process.env.CLOUDTMS_EXPECTED_PROJECT_REF);
+  validateTarget(
+    environment,
+    options['expected-target']
+      ?? options['expected-project-ref']
+      ?? process.env.CLOUDTMS_EXPECTED_TARGET
+      ?? process.env.CLOUDTMS_EXPECTED_PROJECT_REF,
+  );
   const approval = process.env.CLOUDTMS_RELEASE_APPROVAL;
   const expectedApproval = `APPLY ${environment} ${mode} ${shellGitHead()}`;
   if (approval !== expectedApproval) throw new Error(`Approval mismatch. Required exact phrase: ${expectedApproval}`);
@@ -246,7 +252,13 @@ try {
     verifyIntegrity();
     const environment = required('environment', process.env.CLOUDTMS_ENVIRONMENT);
     const mode = required('mode', process.env.CLOUDTMS_RELEASE_MODE);
-    validateTarget(environment, options['expected-project-ref'] ?? process.env.CLOUDTMS_EXPECTED_PROJECT_REF);
+    validateTarget(
+      environment,
+      options['expected-target']
+        ?? options['expected-project-ref']
+        ?? process.env.CLOUDTMS_EXPECTED_TARGET
+        ?? process.env.CLOUDTMS_EXPECTED_PROJECT_REF,
+    );
     const release = readJson('supabase/release/current-release.json');
     if (mode === 'ADOPT') compareExpected(release.contractPath);
     if (mode === 'NEW') {

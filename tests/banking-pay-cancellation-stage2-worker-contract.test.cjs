@@ -213,7 +213,7 @@ test('paid-after-release acknowledgement is a separate exact Finance route', () 
 
 test('integrity checker is read-only TEST support only and rejects repair', () => {
   const body = functionBody('handleBankingPayCorrectionIntegrityV1');
-  assert.match(body, /yakevhtttcsljosbdpov\.supabase\.co/);
+  assert.match(body, /codex-cloudtms-miget-gateway\.kier-88a\.workers\.dev/);
   assert.match(body, /INTEGRITY_CHECK_REPAIR_PROHIBITED/);
   assert.match(body, /Number\.isInteger\(maxCandidates\)/);
   assert.equal((body.match(/sbRpc\(/g) || []).length, 1);

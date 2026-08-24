@@ -1,0 +1,23 @@
+{
+  "name": "cloudtms-miget-operations",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler types --config wrangler.jsonc && tsc --noEmit",
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "deploy:dry": "wrangler deploy --config wrangler.jsonc --dry-run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.0.0",
+    "agents": "0.21.0",
+    "pg": "8.23.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/pg": "8.23.1",
+    "typescript": "5.9.3",
+    "wrangler": "4.125.0"
+  }
+}

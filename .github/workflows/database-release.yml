@@ -64,8 +64,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}
     env:
-      CLOUDTMS_DATABASE_URL: ${{ secrets.CLOUDTMS_DATABASE_URL || (inputs.environment == 'TEST' && secrets.SUPABASE_DB_URL_TEST) || (inputs.environment == 'LIVE' && secrets.SUPABASE_DB_URL) }}
-      CLOUDTMS_EXPECTED_PROJECT_REF: ${{ vars.CLOUDTMS_PROJECT_REF }}
+      CLOUDTMS_DATABASE_URL: ${{ (inputs.environment == 'TEST' && secrets.MIGET_DATABASE_URL_TEST) || (inputs.environment == 'LIVE' && (secrets.CLOUDTMS_DATABASE_URL || secrets.SUPABASE_DB_URL)) }}
+      CLOUDTMS_EXPECTED_TARGET: ${{ (inputs.environment == 'TEST' && vars.MIGET_DATABASE_TARGET_TEST) || (inputs.environment == 'LIVE' && vars.CLOUDTMS_PROJECT_REF) }}
       CLOUDTMS_ENVIRONMENT: ${{ inputs.environment }}
       CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
       CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
@@ -85,6 +85,7 @@ jobs:
       - run: npm ci --engine-strict
       - run: npm run security:dependencies
       - name: Install PostgreSQL client
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
@@ -92,15 +93,22 @@ jobs:
             psql --version
             exit 0
           fi
-          sudo timeout 180 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 update -qq
-          sudo timeout 180 apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 install -y -qq postgresql-client
-          command -v psql >/dev/null 2>&1
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get update -qq \
+              -o Acquire::Retries=3 \
+              -o Acquire::http::Timeout=30 \
+              -o Acquire::https::Timeout=30
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get install -y -qq \
+              -o Acquire::Retries=3 \
+              postgresql-client
+          psql --version
       - name: Validate protected target configuration
         shell: bash
         run: |
           set -euo pipefail
           test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
-          test -n "${CLOUDTMS_EXPECTED_PROJECT_REF:-}" || { echo "Missing protected CLOUDTMS_PROJECT_REF variable"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
           if [[ "${{ inputs.phase }}" == "APPLY" ]]; then
             expected="APPLY ${{ inputs.environment }} ${{ inputs.mode }} ${{ needs.source-gate.outputs.commit }}"
             [[ "${CLOUDTMS_RELEASE_APPROVAL:-}" == "$expected" ]] || { echo "Exact APPLY approval phrase does not match this commit"; exit 1; }

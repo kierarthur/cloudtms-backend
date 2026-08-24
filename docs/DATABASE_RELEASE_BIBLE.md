@@ -9,7 +9,7 @@ This system changes database definitions only. It does not copy or replace custo
 ## Non-negotiable boundaries
 
 - Never run an unreviewed release against LIVE. `PLAN` is read-only. `APPLY` requires the protected `database-live` GitHub Environment and the exact phrase `APPLY LIVE <MODE> <COMMIT_SHA>`.
-- The configured database URL must contain the protected Supabase project reference in its host or username. Free-form target URLs are not accepted through the workflow.
+- The configured hosted database URL must contain the protected provider-neutral target locator in its host, username, or database path. Free-form target URLs are not accepted through the workflow.
 - One-time migrations are immutable. Their path and SHA-256 are locked in `supabase/release/migration-lock.json`; changing or removing an existing migration fails CI.
 - Repeatables are re-applied only when the SHA-256 of their complete recursive `\ir` include graph changes. Included support pages are part of the authority.
 - Never mark a populated database as migrated merely because it has tables. Existing databases enter control only through `ADOPT`, after an exact read-only contract comparison.
@@ -22,7 +22,7 @@ This system changes database definitions only. It does not copy or replace custo
 
 ### NEW
 
-Use only for a genuinely blank Supabase application database. The release tool proves that `public`/`private` contain no CloudTMS relations, installs the signed schema-only baseline, applies repeatable authorities added or changed since that signed baseline, creates release-control tables, creates a fresh database identity, installs safe system defaults, generates a fresh local HMAC secret in that database, runs security verification, and compares the result with the approved contract. It copies no application rows from TEST.
+Use only for a genuinely blank PostgreSQL application database. The release tool proves that `public`/`private` contain no CloudTMS relations, installs the signed schema-only baseline, applies repeatable authorities added or changed since that signed baseline, creates release-control tables, creates a fresh database identity, installs safe system defaults, generates a fresh local HMAC secret in that database, runs security verification, and compares the result with the approved contract. It copies no application rows from TEST.
 
 ### ADOPT
 
@@ -40,7 +40,7 @@ Use for a database already carrying `private.cloudtms_database_identity` and the
 2. Create a schema/data migration with `npm run db:new:migration -- --name=<short_snake_case_name>`, or a complete replacement RPC/view authority with `npm run db:new:repeatable -- --name=<short_snake_case_name>`.
 3. Implement the smallest reviewed change. Never modify an older migration. Function files must contain complete `CREATE OR REPLACE` definitions and preserve their owner, `SECURITY DEFINER`/invoker status, controlled `search_path`, and grants.
 4. After the new migration is complete and reviewed, run `npm run db:lock:update`. This only appends new migration hashes; it refuses to rewrite, remove, or re-lock an existing migration.
-5. Test in a disposable local Supabase/PostgreSQL database. For a DB-only TEST correction explicitly authorised by the user, install to TEST first, verify it, then ensure the exact installed definition and canonical hash are represented in the repository before publication.
+5. Test in a disposable local PostgreSQL database. For a DB-only TEST correction explicitly authorised by the user, install to TEST first, verify it, then ensure the exact installed definition and canonical hash are represented in the repository before publication.
 6. Refresh the approved contract only from a verified disposable rebuild containing the intended source: `npm run db:contract:export`.
 7. Run `npm run db:check`, the database-release tests, all existing repository tests, the exact security verifiers, and a clean `NEW` replay. Do not publish a change that requires manual ledger repair.
 8. Pushes run source verification only. They never alter a database.
@@ -50,7 +50,7 @@ Use for a database already carrying `private.cloudtms_database_identity` and the
 
 ### Upgrade TEST
 
-Run the manual workflow with `environment=TEST`, normally `mode=UPGRADE`, and `phase=PLAN`. If it passes, rerun the same commit with `phase=APPLY` and the displayed exact approval phrase. The protected `database-test` Environment supplies the database URL and project reference.
+Run the manual workflow with `environment=TEST`, normally `mode=UPGRADE`, and `phase=PLAN`. If it passes, rerun the same commit with `phase=APPLY` and the displayed exact approval phrase. The protected `database-test` Environment supplies the Miget database URL and target locator.
 
 ### Upgrade existing LIVE for the first time
 
@@ -58,19 +58,19 @@ Do not guess that LIVE equals TEST. First run `environment=LIVE`, `mode=ADOPT`, 
 
 ### Create a database for a new client
 
-Create the Supabase project and configure its GitHub Environment with the exact database secret and project-ref variable. Run `NEW/PLAN`; it must prove blank. Then run `NEW/APPLY` with the exact commit-bound phrase and optional non-secret customer key. Configure tenant data and enable features only in separate, reviewed onboarding work.
+Create the isolated PostgreSQL service/database and configure its GitHub Environment with the exact database secret and provider-neutral target-locator variable. Run `NEW/PLAN`; it must prove blank. Then run `NEW/APPLY` with the exact commit-bound phrase and optional non-secret customer key. Configure tenant data and enable features only in separate, reviewed onboarding work.
 
 ## GitHub Environment setup
 
 Create protected environments named `database-test` and `database-live`. Each holds:
 
-- secret `CLOUDTMS_DATABASE_URL`;
-- variable `CLOUDTMS_PROJECT_REF`;
+- TEST secret `MIGET_DATABASE_URL_TEST`; LIVE retains its existing protected secret until LIVE migration is separately authorised;
+- TEST variable `MIGET_DATABASE_TARGET_TEST`; LIVE retains its existing protected target variable until that migration;
 - required reviewers and branch/tag restrictions appropriate to the environment.
 
 LIVE must require a human reviewer. Do not store a production URL as a repository-wide fallback secret. A new dedicated client database should use its own protected Environment before its first release.
 
-The existing repository predates this control plane and already has encrypted `SUPABASE_DB_URL_TEST` and `SUPABASE_DB_URL` repository secrets. The manual release job accepts those exact names only as a transitional fallback when the selected Environment does not yet contain `CLOUDTMS_DATABASE_URL`; GitHub does not permit an existing secret value to be read and copied administratively. The Environment gate, project-reference check, branch restriction and LIVE reviewer still apply. When each database URL is next deliberately supplied by its owner, store it as that Environment's `CLOUDTMS_DATABASE_URL`, verify a `PLAN`, then remove the corresponding repository fallback and workflow expression in a separately reviewed hardening change.
+TEST no longer accepts the legacy `SUPABASE_DB_URL_TEST` fallback. Its protected Environment must supply `MIGET_DATABASE_URL_TEST` and `MIGET_DATABASE_TARGET_TEST`, and the release engine verifies the locator against the actual hosted URL before any plan or apply. LIVE retains its existing protected/fallback configuration until LIVE migration is separately authorised; this TEST hardening must not repoint or mutate LIVE.
 
 ## Contract and evidence
 
@@ -82,7 +82,7 @@ Every successful apply records commit, mode, expected/installed contract hashes,
 
 Stop without applying when any of these is true:
 
-- target project reference or environment is absent/mismatched;
+- target locator or environment is absent/mismatched;
 - `NEW` finds an application relation;
 - `ADOPT` finds any contract difference;
 - an installed migration hash differs or its repository file is missing;

@@ -47,9 +47,19 @@ Worker: codex-cloudtms-backend
 R2 bucket: test-cloudtms-preview
 KV namespace: cloudtms-codex-sessions
 KV namespace id: 6f3888a777f844959e35f4b2fb0dce9b
-Supabase: TEST project only
+Database: Miget TEST through `codex-cloudtms-miget-gateway` only
 Crons: disabled
 ```
+
+Normal TEST and the isolated patch Worker must not route database traffic to the legacy Supabase TEST project. The logical environment names `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` may remain for compatibility, but their TEST values must target the Miget gateway and matching PostgREST JWT.
+
+For every Miget CloudTMS/MyTMS PostgREST app, append `options=-c%20pg_show_plans.is_enabled%3Doff` to `PGRST_DB_URI`, preserving all other URI components and credentials. Miget currently preloads `pg_show_plans`; leaving it enabled caused repeated `not enough memory to append new query plans` warnings and multi-second complex-RPC latency. Redeploy and prove a new PostgREST session has the collector disabled, the warning flood is absent, and an exact real RPC passes a timing benchmark. After any resource resize, independently verify the live limits plus PostgreSQL memory settings instead of trusting the control-plane allocation alone.
+
+The permanent read-only auditor is the connected ChatGPT custom connector **CloudTMS Miget Operations**, backed by `infra/miget/cloudtms-miget-operations` and the Cloudflare Worker `codex-cloudtms-miget-gateway`. New auditors must use `agency_test` for the CloudTMS TEST database and `mytms_test` for the MyTMS control database. Run `miget_verify_codex_parity_route`, `miget_list_infrastructure`, `miget_inspect_postgres`, `miget_db_catalog_summary`, `miget_db_release_ledger`, `miget_db_security_audit`, `miget_db_performance_summary`, `miget_db_list_rpcs`, and `miget_db_get_rpc_definition`. These are fixed read-only operations; never give an auditor a route that accepts arbitrary SQL. Anonymous MCP access must fail with `401`, and no tool may return a token, password, connection string, raw query text, or sensitive row payload.
+
+Current TEST Miget identities are: project `01a02ef7-18d1-7a96-9ea2-63df1bf06adc`; pooled resource `migetuq4` / `01a02ef7-1977-79bd-ad56-7e86927d5f81`; agency PostgreSQL `01a02f5a-2bee-7db2-910d-a7e71f11ba0a` / database `cloudtms_test_clone`; agency PostgREST `01a02ff2-4d37-77f8-b440-a20655129ee1`; MyTMS PostgreSQL `01a03045-5d5a-7892-b555-704ba6edc733` / database `uofvkfi5`; MyTMS PostgREST `01a0306a-90cd-7bbf-80bc-8fa77c5486f1`; Hyperdrive `11c78f14afea494c9d5e8d8ad57d41a2` (agency) and `7e979a8127c84c319dfc2ecf488aa903` (MyTMS). Reverify state through Miget rather than treating this list as a substitute for runtime evidence.
+
+For installed-source proof, the agency database uses `private.cloudtms_migration_ledger` and `private.cloudtms_repeatable_ledger`; MyTMS uses `public.schema_migrations` and `public.schema_repeatables`. The MCP ledger tool branches by database target. The authoritative agency mutation route is the protected manual `.github/workflows/database-release.yml`, backed by `scripts/cloudtms-db-release.mjs`; normal push workflows are source checks only. Current-runtime inspection must not be redirected to either former Supabase project.
 
 ## Secrets and sensitive data
 
@@ -144,13 +154,13 @@ Before changing or publishing any SQL function that is covered by a catalogue ma
 
 ## TEST-only diagnostic RPC
 
-The TEST Supabase project has a diagnostic RPC:
+The Miget TEST clone has a provider-neutral diagnostic RPC:
 
 ```text
 public.codex_debug_select_sql(p_sql text, p_limit integer default 100)
 ```
 
-Codex may use this RPC only for TEST-only read-only diagnostics through Supabase REST:
+Codex may use this RPC only for TEST-only read-only diagnostics through the Miget compatibility gateway/PostgREST:
 
 ```text
 /rest/v1/rpc/codex_debug_select_sql
@@ -282,7 +292,7 @@ Use:
 R2 bucket: test-cloudtms-preview
 KV binding: SESSIONS
 KV namespace id: 6f3888a777f844959e35f4b2fb0dce9b
-Supabase URL: TEST Supabase only
+Logical Supabase URL: Miget TEST gateway only
 Crons: disabled
 ```
 

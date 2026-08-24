@@ -23,7 +23,7 @@ binding = "BROWSER"
 # =========================
 [vars]
 # Safe defaults for local/dev. Real deploys should always use --env.
-SUPABASE_URL = "https://yakevhtttcsljosbdpov.supabase.co"
+SUPABASE_URL = "https://codex-cloudtms-miget-gateway.kier-88a.workers.dev"
 ALLOWED_ORIGINS = "http://localhost:3000,https://kierarthur.github.io"
 COOKIE_SAME_SITE = "None"
 COOKIE_PARTITIONED = "false"
@@ -124,6 +124,7 @@ head_sampling_rate = 1
 # ============================================================
 [env.test]
 name = "test-cloudtms-backend"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]
 preview_urls = false
 
 # FIX: ensure Browser Rendering binding exists in the test environment
@@ -131,11 +132,11 @@ preview_urls = false
 binding = "BROWSER"
 
 [env.test.vars]
-SUPABASE_URL = "https://yakevhtttcsljosbdpov.supabase.co"
+SUPABASE_URL = "https://codex-cloudtms-miget-gateway.kier-88a.workers.dev"
 CANDIDATE_APP_ENVIRONMENT = "TEST"
 MYTMS_CONTROL_PLANE_ENABLED = "TRUE"
 MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED = "FALSE"
-MYTMS_CONTROL_PLANE_URL = "https://pixmhpngcfxuhoilzptk.supabase.co"
+MYTMS_CONTROL_PLANE_URL = "https://cloudtms-mytms-miget-gateway.kier-88a.workers.dev"
 MYTMS_OFFICE_CONTROL_ENABLED = "TRUE"
 MYTMS_OFFICE_AGENCY_ID = "6d0aadb2-ddc8-4ee4-ab37-871bae4a0d88"
 MYTMS_OFFICE_AGENCY_DISPLAY_NAME = "CloudTMS"

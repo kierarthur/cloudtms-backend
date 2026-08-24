@@ -51478,7 +51478,7 @@ async function handleBankingPayCorrectionIntegrityV1(env, req, user, correctionR
   } catch (error) { return bankingPayCorrectionBodyErrorResponse(env, req, error); }
   let projectHost = '';
   try { projectHost = new URL(String(env?.SUPABASE_URL || '')).hostname.toLowerCase(); } catch {}
-  if (String(actor.actor?.role || '').trim().toLowerCase() !== 'admin' || projectHost !== 'yakevhtttcsljosbdpov.supabase.co') {
+  if (String(actor.actor?.role || '').trim().toLowerCase() !== 'admin' || projectHost !== 'codex-cloudtms-miget-gateway.kier-88a.workers.dev') {
     return bankingPayCancellationResponse(env, req, 403, { ok: false, code: 'INTEGRITY_CHECK_TEST_SUPPORT_ONLY', message: 'The cancellation integrity checker is restricted to TEST support administrators.' });
   }
   if (body.repair != null || body.repair_mode != null || body.apply_repairs != null) {
@@ -72709,12 +72709,43 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       return candidates.find((candidate) => candidate && candidate.ok === true) || candidates[0] || null;
     };
 
+    // These reads are independent and were previously executed one after another.
+    // Run them together so the Miget/PostgREST network latency is paid once rather
+    // than serially. They remain read-only and retain the same individual error
+    // handling below.
+    const [payStateSettled, summarySettled, validationsSettled, shiftsSettled] =
+      await Promise.allSettled([
+        sbRpc(env, 'timesheet_pay_state', {
+          p_timesheet_id: currentTimesheetId,
+          p_actor_user_id: user.id
+        }),
+        sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
+            `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+            `&select=*` +
+            `&limit=1`
+        ),
+        sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
+            `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+            `&select=*` +
+            `&order=validated_at_utc.desc,created_at.desc`
+        ),
+        sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
+            `?timesheet_id=eq.${enc(currentTimesheetId)}` +
+            `&select=*` +
+            `&order=work_date.asc,start_utc.asc`
+        )
+      ]);
+
     let payState = null;
     try {
-      const ps0 = await sbRpc(env, 'timesheet_pay_state', {
-        p_timesheet_id: currentTimesheetId,
-        p_actor_user_id: user.id
-      });
+      if (payStateSettled.status === 'rejected') throw payStateSettled.reason;
+      const ps0 = payStateSettled.value;
 
       const ps = unwrapTimesheetPayStateRpc(ps0);
       if (ps && typeof ps === 'object' && !Array.isArray(ps) && ps.ok === true) {
@@ -72850,13 +72881,8 @@ async function handleTimesheetDetails(env, req, timesheetId) {
     // ─────────────────────────────────────────────────────────────
     let summaryRow = null;
     try {
-      const { rows: sRows } = await sbFetch(
-        env,
-        `${env.SUPABASE_URL}/rest/v1/v_timesheets_summary` +
-          `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-          `&select=*` +
-          `&limit=1`
-      );
+      if (summarySettled.status === 'rejected') throw summarySettled.reason;
+      const { rows: sRows } = summarySettled.value;
       summaryRow = sRows?.[0] || null;
     } catch {
       summaryRow = null;
@@ -72923,30 +72949,23 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       resolvedImportAuthoritative = await resolveImportAuthoritative(env, {
         timesheet_id: currentTimesheetId,
         contract_week_id: contractWeekId,
-        contract_id: effective.contract_id || contractWeek?.contract_id || ts.contract_id || null
+        contract_id: effective.contract_id || contractWeek?.contract_id || ts.contract_id || null,
+        summary_row: summaryRow,
+        contract_week_row: contractWeek,
+        timesheet_row: ts
       });
     } catch {
       resolvedImportAuthoritative = null;
     }
 
     // Validation rows (most recent first)
-    const { rows: valRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/timesheet_validations` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&select=*` +
-        `&order=validated_at_utc.desc,created_at.desc`
-    );
+    if (validationsSettled.status === 'rejected') throw validationsSettled.reason;
+    const { rows: valRows } = validationsSettled.value;
     const validations = valRows || [];
 
     // Linked nhsp_shifts (if any)
-    const { rows: shiftRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/nhsp_shifts` +
-        `?timesheet_id=eq.${enc(currentTimesheetId)}` +
-        `&select=*` +
-        `&order=work_date.asc,start_utc.asc`
-    );
+    if (shiftsSettled.status === 'rejected') throw shiftsSettled.reason;
+    const { rows: shiftRows } = shiftsSettled.value;
     const shifts = shiftRows || [];
 
     // ───────────────────── Policy snapshot (SQL-first; avoids broken loadPolicy) ─────────────────────
@@ -103208,6 +103227,9 @@ async function resolveImportAuthoritative(env, input = {}) {
   const timesheet_id     = input.timesheet_id ? String(input.timesheet_id).trim() : null;
   const contract_week_id = input.contract_week_id ? String(input.contract_week_id).trim() : null;
   let contract_id        = input.contract_id ? String(input.contract_id).trim() : null;
+  const preloadedSummaryRow = (input.summary_row && typeof input.summary_row === 'object')
+    ? input.summary_row
+    : null;
 
   const toBool = (v) => {
     if (v === true) return true;
@@ -103370,15 +103392,22 @@ async function resolveImportAuthoritative(env, input = {}) {
     };
   };
 
-  let contractWeekFacts = null;
-  let timesheetFacts = null;
+  let contractWeekFacts = (input.contract_week_row && typeof input.contract_week_row === 'object')
+    ? input.contract_week_row
+    : null;
+  let timesheetFacts = (input.timesheet_row && typeof input.timesheet_row === 'object')
+    ? input.timesheet_row
+    : null;
 
-  if (contract_week_id) {
+  if (!contract_id && contractWeekFacts?.contract_id) contract_id = String(contractWeekFacts.contract_id).trim();
+  if (!contract_id && timesheetFacts?.contract_id) contract_id = String(timesheetFacts.contract_id).trim();
+
+  if (!contractWeekFacts && contract_week_id) {
     contractWeekFacts = await loadContractWeekFacts(contract_week_id);
     if (!contract_id && contractWeekFacts?.contract_id) contract_id = String(contractWeekFacts.contract_id).trim();
   }
 
-  if (timesheet_id) {
+  if (!timesheetFacts && timesheet_id) {
     timesheetFacts = await loadTimesheetFacts(timesheet_id);
     if (!contract_id && timesheetFacts?.contract_id) contract_id = String(timesheetFacts.contract_id).trim();
     if (!contractWeekFacts) {
@@ -103406,9 +103435,12 @@ async function resolveImportAuthoritative(env, input = {}) {
         `&limit=1`;
     }
 
-    if (api) {
-      const { rows } = await sbFetch(env, api);
-      const r = (rows && rows[0]) || null;
+    if (api || preloadedSummaryRow) {
+      let r = preloadedSummaryRow;
+      if (!r && api) {
+        const { rows } = await sbFetch(env, api);
+        r = (rows && rows[0]) || null;
+      }
 
       if (r) {
         const route_type = toUpper(r.route_type);

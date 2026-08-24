@@ -16,8 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: database-test
     env:
-      CLOUDTMS_DATABASE_URL: ${{ secrets.CLOUDTMS_DATABASE_URL || secrets.SUPABASE_DB_URL_TEST }}
-      CLOUDTMS_EXPECTED_PROJECT_REF: ${{ vars.CLOUDTMS_PROJECT_REF }}
+      CLOUDTMS_DATABASE_URL: ${{ secrets.MIGET_DATABASE_URL_TEST }}
+      CLOUDTMS_EXPECTED_TARGET: ${{ vars.MIGET_DATABASE_TARGET_TEST }}
       CLOUDTMS_ENVIRONMENT: TEST
       CLOUDTMS_RELEASE_MODE: UPGRADE
     steps:
@@ -48,7 +48,7 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
-          test -n "${CLOUDTMS_EXPECTED_PROJECT_REF:-}" || { echo "Missing protected CLOUDTMS_PROJECT_REF variable"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
           npm run db:plan -- --environment=TEST --mode=UPGRADE
       - name: Export data-free catalogue contract
         run: npm run db:contract:export

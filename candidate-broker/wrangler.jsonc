@@ -3,7 +3,7 @@
   "name": "test-cloudtms-candidate-broker",
   "main": "src/index.js",
   "compatibility_date": "2026-08-09",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   "workers_dev": true,
   "preview_urls": false,
   "vars": {
@@ -11,7 +11,7 @@
     "CANDIDATE_APP_READY_PROOF_ENABLED": "TRUE",
     "MYTMS_CONTROL_PLANE_ENABLED": "TRUE",
     "MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED": "FALSE",
-    "MYTMS_CONTROL_PLANE_URL": "https://pixmhpngcfxuhoilzptk.supabase.co",
+    "MYTMS_CONTROL_PLANE_URL": "https://cloudtms-mytms-miget-gateway.kier-88a.workers.dev",
     "CANDIDATE_ALLOWED_ORIGINS": "https://testmode.arthur-rai.co.uk,https://mytms-manager-review-test.kier-88a.workers.dev",
     "CANDIDATE_ALLOW_NATIVE_CLIENTS": "true",
     "CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION": "1",
