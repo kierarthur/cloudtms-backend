@@ -112,7 +112,12 @@ jobs:
             -e DATABASE_URL="$DESTINATION_DATABASE_URL" \
             --mount type=bind,src="$work",dst=/work \
             postgres:18 \
-            sh -ec 'pg_restore --dbname="$DATABASE_URL" --no-owner --no-privileges --exit-on-error --jobs=2 /work/live.dump'
+            sh -ec '
+              pg_restore --list /work/live.dump > /work/live.list
+              sed -i -E "/ SCHEMA - public /s/^/;/" /work/live.list
+              grep -Eq "^;.* SCHEMA - public " /work/live.list
+              pg_restore --dbname="$DATABASE_URL" --no-owner --no-privileges --exit-on-error --jobs=2 --use-list=/work/live.list /work/live.dump
+            '
 
           cat > "$work/post_restore.sql" <<'SQL'
           \set ON_ERROR_STOP on

@@ -92,7 +92,8 @@ test('one-time LIVE provider clone is protected, source-read-only and destinatio
   assert.match(workflow, /secrets\.CLOUDTMS_DATABASE_URL \|\| secrets\.SUPABASE_DB_URL/);
   assert.match(workflow, /Miget LIVE destination is not blank/);
   assert.match(workflow, /pg_dump[^\n]*--no-owner[^\n]*--no-privileges[^\n]*--schema=public[^\n]*--schema=maintenance/);
-  assert.match(workflow, /pg_restore[^\n]*--no-owner[^\n]*--no-privileges[^\n]*--exit-on-error/);
+  assert.match(workflow, /sed -i -E[^\n]*SCHEMA - public/);
+  assert.match(workflow, /pg_restore[^\n]*--no-owner[^\n]*--no-privileges[^\n]*--exit-on-error[^\n]*--use-list/);
   assert.match(workflow, /Exact table row-count verification failed/);
   assert.match(workflow, /Exact sequence-state verification failed/);
   assert.doesNotMatch(workflow, /service_role[^\n]*bypassrls|alter role service_role bypassrls/i);
