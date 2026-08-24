@@ -127,7 +127,25 @@ jobs:
           revoke all on schema public, maintenance from public, anon, authenticated;
           grant usage on schema public, maintenance to service_role;
           grant usage on schema extensions to service_role;
-          grant execute on all functions in schema extensions to service_role;
+          do $extension_grants$
+          declare
+            extension_function regprocedure;
+          begin
+            for extension_function in
+              select p.oid::regprocedure
+              from pg_proc p
+              join pg_depend d
+                on d.classid = 'pg_proc'::regclass
+               and d.objid = p.oid
+               and d.deptype = 'e'
+              join pg_extension e on e.oid = d.refobjid
+              where e.extname in ('pgcrypto', 'uuid-ossp')
+              order by p.oid::regprocedure::text
+            loop
+              execute format('grant execute on function %s to service_role', extension_function);
+            end loop;
+          end
+          $extension_grants$;
           revoke all on all tables in schema public, maintenance from public, anon, authenticated;
           revoke all on all sequences in schema public, maintenance from public, anon, authenticated;
           revoke all on all functions in schema public, maintenance from public, anon, authenticated;

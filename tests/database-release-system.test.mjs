@@ -100,6 +100,8 @@ test('one-time LIVE provider clone is protected, source-read-only and destinatio
   assert.match(workflow, /create role postgres nologin noinherit/);
   assert.match(workflow, /create role supabase_admin nologin noinherit/);
   assert.doesNotMatch(workflow, /create role (?:postgres|supabase_admin)[^\n]*(?:^|[^a-z])login\b/im);
+  assert.match(workflow, /where e\.extname in \('pgcrypto', 'uuid-ossp'\)/);
+  assert.doesNotMatch(workflow, /grant execute on all functions in schema extensions/i);
   assert.doesNotMatch(workflow, /actions\/upload-artifact/);
 });
 
