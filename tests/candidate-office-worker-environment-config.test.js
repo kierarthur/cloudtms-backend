@@ -19,14 +19,15 @@ test('normal TEST Worker installs MyTMS Office control disabled-first', () => {
   assert.equal((wrangler.match(/^preview_urls\s*=/gm) || []).length, 1);
   const expected = new Map([
     ['MYTMS_CONTROL_PLANE_ENABLED', 'TRUE'],
-    ['MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED', 'FALSE'],
+    ['MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED', 'TRUE'],
     ['MYTMS_CONTROL_PLANE_URL', 'https://cloudtms-mytms-miget-gateway.kier-88a.workers.dev'],
     ['MYTMS_OFFICE_CONTROL_ENABLED', 'TRUE'],
     ['MYTMS_OFFICE_AGENCY_ID', '6d0aadb2-ddc8-4ee4-ab37-871bae4a0d88'],
     ['MYTMS_OFFICE_AGENCY_DISPLAY_NAME', 'CloudTMS'],
-    ['MYTMS_OFFICE_INVITATION_ACTIVATION_AUTHORIZED', 'FALSE'],
-    ['MYTMS_OFFICE_INVITATION_DELIVERY_ENABLED', 'FALSE'],
-    ['MYTMS_IDENTITY_DELIVERY_ENABLED', 'FALSE'],
+    ['MYTMS_OFFICE_INVITATION_ACTIVATION_AUTHORIZED', 'TRUE'],
+    ['MYTMS_OFFICE_INVITATION_DELIVERY_ENABLED', 'TRUE'],
+    ['MYTMS_IDENTITY_DELIVERY_ENABLED', 'TRUE'],
+    ['MYTMS_IDENTITY_WEB_ORIGIN', 'https://mycloudtms.arthur-rai.co.uk'],
     ['MYTMS_GOOGLE_PROVISIONING_ACTIVATION_AUTHORIZED', 'FALSE'],
     ['MYTMS_GOOGLE_SWITCH_ACTIVATION_AUTHORIZED', 'FALSE'],
     ['MYTMS_MEMBERSHIP_ADMIN_ACTIVATION_AUTHORIZED', 'FALSE'],
@@ -36,5 +37,8 @@ test('normal TEST Worker installs MyTMS Office control disabled-first', () => {
     assert.match(testEnvironment, new RegExp(`^${name}\\s*=\\s*"${value.replaceAll('.', '\\.')}"\\s*$`, 'm'));
     assert.equal((testEnvironment.match(new RegExp(`^${name}\\s*=`, 'gm')) || []).length, 1);
   }
-  assert.doesNotMatch(testEnvironment, /^MYTMS_IDENTITY_WEB_ORIGIN\s*=/m);
+  assert.match(
+    testEnvironment,
+    /^ALLOWED_ORIGINS\s*=\s*"[^"]*https:\/\/mycloudtms\.arthur-rai\.co\.uk[^"]*"\s*$/m
+  );
 });

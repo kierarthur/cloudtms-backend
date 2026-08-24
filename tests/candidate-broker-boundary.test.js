@@ -37,7 +37,16 @@ test('public broker source has no Supabase, R2 or CloudTMS business-authority de
   assert.equal(Object.prototype.hasOwnProperty.call(publicConfig, 'routes'), false);
   assert.deepEqual(
     publicConfig.vars.CANDIDATE_ALLOWED_ORIGINS.split(','),
-    ['https://testmode.arthur-rai.co.uk', 'https://mytms-manager-review-test.kier-88a.workers.dev']
+    [
+      'https://testmode.arthur-rai.co.uk',
+      'https://mycloudtms.arthur-rai.co.uk',
+      'https://mytms-manager-review-test.kier-88a.workers.dev'
+    ]
+  );
+  assert.equal(publicConfig.vars.MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED, 'TRUE');
+  assert.deepEqual(
+    publicConfig.services.find(service => service.binding === 'MYTMS_IDENTITY_DELIVERY'),
+    { binding: 'MYTMS_IDENTITY_DELIVERY', service: 'test-cloudtms-backend' }
   );
 });
 

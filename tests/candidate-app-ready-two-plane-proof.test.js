@@ -198,7 +198,12 @@ test('closed binding catalogue deterministically matches the broker service-bind
   for (const entry of catalogue.entries) {
     assert.equal(configured.get(entry.worker_binding), entry.service_name);
   }
-  assert.equal(configured.size, catalogue.entries.length);
+  const configuredDataPlanes = new Map(
+    [...configured].filter(([binding]) => binding !== 'MYTMS_IDENTITY_DELIVERY')
+  );
+  assert.equal(configuredDataPlanes.size, catalogue.entries.length);
+  assert.equal(configured.get('MYTMS_IDENTITY_DELIVERY'), 'test-cloudtms-backend');
+  assert.ok(!catalogue.entries.some((entry) => entry.worker_binding === 'MYTMS_IDENTITY_DELIVERY'));
 });
 
 test('control-plane matrix cases are complete, closed and never accept a client selector', () => {

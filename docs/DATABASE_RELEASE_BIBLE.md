@@ -64,17 +64,25 @@ Do not guess that LIVE equals TEST. First run `environment=LIVE`, `mode=ADOPT`, 
 
 Create the isolated PostgreSQL service/database and configure its GitHub Environment with the exact database secret and provider-neutral target-locator variable. Run `NEW/PLAN`; it must prove blank. Then run `NEW/APPLY` with the exact commit-bound phrase and optional non-secret customer key. Configure tenant data and enable features only in separate, reviewed onboarding work.
 
+## Miget runtime profile
+
+Each agency remains an isolated PostgreSQL service with independent credentials and an independent PostgREST application. Those services may share one Miget Resource, but only CPU is pooled dynamically: every PostgreSQL service, PostgREST app, and administration app still needs an explicit RAM allocation, and every database/volume needs an explicit storage allocation. Allocations must fit within the purchased Resource and must not be oversubscribed. Never reduce an operational database or PostgREST allocation to fund an optional administration UI.
+
+Repository paths under `supabase/` are retained as historical source-layout names; they are provider-neutral release artifacts and do not make Supabase the runtime authority. Logical Worker variables named `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` may also remain for compatibility, but their deployed values must resolve only to the intended Miget/PostgREST route and its matching JWT.
+
+The PostgREST database URI must retain `options=-c%20pg_show_plans.is_enabled%3Doff`. Miget preloads `pg_show_plans`; allowing its collector on CloudTMS PostgREST sessions caused repeated memory warnings and severe complex-RPC latency. PostgreSQL query diagnostics use the repository-controlled `pg_stat_statements` extension migration instead. Prove both settings after every new database, restore, service resize, or PostgREST redeployment.
+
 ## GitHub Environment setup
 
 Create protected environments named `database-test` and `database-live`. Each holds:
 
-- TEST secret `MIGET_DATABASE_URL_TEST`; LIVE retains its existing protected secret until LIVE migration is separately authorised;
-- TEST variable `MIGET_DATABASE_TARGET_TEST`; LIVE retains its existing protected target variable until that migration;
+- TEST secret `MIGET_DATABASE_URL_TEST` and LIVE secret `MIGET_DATABASE_URL_LIVE`;
+- TEST variable `MIGET_DATABASE_TARGET_TEST` and LIVE variable `MIGET_DATABASE_TARGET_LIVE`;
 - required reviewers and branch/tag restrictions appropriate to the environment.
 
 LIVE must require a human reviewer. Do not store a production URL as a repository-wide fallback secret. A new dedicated client database should use its own protected Environment before its first release.
 
-TEST no longer accepts the legacy `SUPABASE_DB_URL_TEST` fallback. Its protected Environment must supply `MIGET_DATABASE_URL_TEST` and `MIGET_DATABASE_TARGET_TEST`, and the release engine verifies the locator against the actual hosted URL before any plan or apply. LIVE retains its existing protected/fallback configuration until LIVE migration is separately authorised; this TEST hardening must not repoint or mutate LIVE.
+Neither TEST nor LIVE accepts a legacy Supabase database-URL fallback. Each protected Environment must supply its matching Miget URL and target locator, and the release engine verifies that locator against the actual hosted URL before any plan or apply. Migrating LIVE hosting does not authorise upgrading LIVE to the TEST schema: the historical LIVE database remains on its current schema until a separately reviewed `LEGACY_UPGRADE` PLAN/APPLY is approved.
 
 ## Contract and evidence
 

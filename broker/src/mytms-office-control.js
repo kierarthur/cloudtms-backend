@@ -732,7 +732,9 @@ async function insertInvitationOutbox(env, user, candidate, invitation, settings
   if (!parsedOrigin || parsedOrigin.protocol !== 'https:' || parsedOrigin.origin !== origin) {
     throw new MyTmsOfficeError(503, 'MYTMS_INVITATION_LINK_UNAVAILABLE');
   }
-  const link = `${origin}/invite?token=${encodeURIComponent(token)}`;
+  // Keep the bearer in the URL fragment so it is captured by the app but is
+  // never sent to the public static host, CDN or ordinary request logs.
+  const link = `${origin}/invite#token=${encodeURIComponent(token)}`;
   const reminder = intent === 'ACCESS_REMINDER';
   const subject = text(reminder ? settings.access_reminder_subject : settings.invitation_subject);
   const htmlTemplate = reminder
@@ -941,7 +943,14 @@ export async function queueMyTmsIdentityChallenge(env, request, user = null) {
   if (!origin || origin.protocol !== 'https:' || origin.origin !== linkOrigin) {
     throw new MyTmsOfficeError(503, 'MYTMS_IDENTITY_DELIVERY_UNAVAILABLE');
   }
-  const link = `${linkOrigin}/auth/verify?token=${encodeURIComponent(token)}`;
+  const challengePath = purpose === 'ACTIVATE'
+    ? '/candidate/activate'
+    : '/candidate/reset-password';
+  // The Candidate app owns the two purpose-specific routes. Keep both the
+  // bearer and its opaque challenge identity in the fragment so GitHub Pages
+  // never receives either value in an HTTP request.
+  const link = `${linkOrigin}${challengePath}#token=${encodeURIComponent(token)}`
+    + `&challenge=${encodeURIComponent(challengeId)}`;
   const bodyHtml = sanitizeMyTmsEmailHtml(
     `<p>Use the secure link below to continue setting up or recovering your MyTMS access.</p>`
       + `<p><a href="${escapeHtml(link)}">Continue to MyTMS</a></p>`

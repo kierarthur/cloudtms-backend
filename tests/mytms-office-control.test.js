@@ -334,7 +334,14 @@ test('identity challenge delivery queues only through a deterministic TEST outbo
     assert.equal(captured.body.context_kind, 'MYTMS_IDENTITY_CHALLENGE');
     assert.equal(captured.body.context_id, IDS.challenge);
     assert.equal(captured.body.deterministic_outbox_key, `mytms:identity:${IDS.challenge}`);
-    assert.match(captured.body.body_html, /https:\/\/mytms\.test\.example\/auth\/verify\?token=/);
+    assert.match(
+      captured.body.body_html,
+      new RegExp(
+        `https:\\/\\/mytms\\.test\\.example\\/candidate\\/activate#token=`
+          + `[^&]+&amp;challenge=${IDS.challenge}`
+      )
+    );
+    assert.doesNotMatch(captured.body.body_html, /[?&]token=/);
     assert.doesNotMatch(captured.body.body_html, /javascript:|onerror|<script/i);
   } finally {
     globalThis.fetch = originalFetch;
