@@ -1,0 +1,15 @@
+{
+  "name": "cloudtms-live-postgrest-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "wrangler types --config wrangler.jsonc && tsc --noEmit",
+    "deploy": "wrangler deploy --config wrangler.jsonc",
+    "deploy:dry": "wrangler deploy --config wrangler.jsonc --dry-run"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "wrangler": "4.125.0"
+  }
+}

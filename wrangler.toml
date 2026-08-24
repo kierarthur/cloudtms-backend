@@ -280,7 +280,7 @@ name = "cloudtms"
 binding = "BROWSER"
 
 [env.production.vars]
-SUPABASE_URL = "https://zojgukxyyklcyjbyyqlz.supabase.co"
+SUPABASE_URL = "https://cloudtms-live-miget-gateway.kier-88a.workers.dev"
 ALLOWED_ORIGINS = "https://cloudtms.arthur-rai.co.uk,https://kierarthur.github.io"
 COOKIE_SAME_SITE = "None"
 PRESIGN_EXPIRES_SECONDS = "600"

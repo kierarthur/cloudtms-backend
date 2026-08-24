@@ -1,0 +1,207 @@
+name: LIVE provider clone to Miget (one-time and protected)
+
+on:
+  workflow_dispatch:
+    inputs:
+      approval:
+        description: Enter CLONE LIVE TO MIGET followed by the exact Miget service UUID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudtms-live-provider-clone
+  cancel-in-progress: false
+
+jobs:
+  clone:
+    name: Read-only Supabase LIVE clone into blank Miget LIVE
+    runs-on: ubuntu-latest
+    environment: database-live
+    timeout-minutes: 90
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.CLOUDTMS_DATABASE_URL || secrets.SUPABASE_DB_URL }}
+      DESTINATION_DATABASE_URL: ${{ secrets.MIGET_DATABASE_URL_LIVE }}
+      SOURCE_EXPECTED_TARGET: ${{ vars.CLOUDTMS_PROJECT_REF }}
+      DESTINATION_EXPECTED_TARGET: ${{ vars.MIGET_DATABASE_TARGET_LIVE }}
+      DESTINATION_SERVICE_UUID: 01a03205-8273-7159-952e-47029c786995
+    steps:
+      - name: Validate protected source, destination and approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "${SOURCE_DATABASE_URL:-}" || { echo "Missing protected LIVE source URL"; exit 1; }
+          test -n "${DESTINATION_DATABASE_URL:-}" || { echo "Missing protected Miget LIVE destination URL"; exit 1; }
+          test -n "${SOURCE_EXPECTED_TARGET:-}" || { echo "Missing protected LIVE source locator"; exit 1; }
+          test -n "${DESTINATION_EXPECTED_TARGET:-}" || { echo "Missing protected Miget LIVE destination locator"; exit 1; }
+          expected="CLONE LIVE TO MIGET ${DESTINATION_SERVICE_UUID}"
+          test "${{ inputs.approval }}" = "$expected" || { echo "Exact clone approval phrase does not match"; exit 1; }
+          node --input-type=module <<'NODE'
+          const source = new URL(process.env.SOURCE_DATABASE_URL);
+          const destination = new URL(process.env.DESTINATION_DATABASE_URL);
+          const sourceLocator = `${source.hostname}|${decodeURIComponent(source.username)}|${decodeURIComponent(source.pathname)}`;
+          const destinationLocator = `${destination.hostname}|${decodeURIComponent(destination.username)}|${decodeURIComponent(destination.pathname)}`;
+          if (!sourceLocator.includes(process.env.SOURCE_EXPECTED_TARGET)) throw new Error('LIVE source locator mismatch');
+          if (!destinationLocator.includes(process.env.DESTINATION_EXPECTED_TARGET)) throw new Error('Miget LIVE destination locator mismatch');
+          if (source.hostname === destination.hostname && source.pathname === destination.pathname) throw new Error('Source and destination resolve to the same database');
+          NODE
+
+      - name: Clone only CloudTMS application schemas and verify exact row/sequence state
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          work="${RUNNER_TEMP}/cloudtms-live-miget-clone"
+          install -d -m 700 "$work"
+          trap 'find "$work" -type f -exec shred -u {} + 2>/dev/null || rm -rf "$work"' EXIT
+
+          docker pull postgres:18
+
+          cat > "$work/blank_guard.sql" <<'SQL'
+          select count(*)
+          from pg_class c
+          join pg_namespace n on n.oid=c.relnamespace
+          where n.nspname in ('public','maintenance')
+            and c.relkind in ('r','p','v','m','f');
+          SQL
+          destination_relations="$({
+            docker run --rm \
+              -e DATABASE_URL="$DESTINATION_DATABASE_URL" \
+              --mount type=bind,src="$work",dst=/work \
+              postgres:18 \
+              sh -ec 'psql "$DATABASE_URL" -X -Atv ON_ERROR_STOP=1 -f /work/blank_guard.sql'
+          })"
+          test "$destination_relations" = "0" || { echo "Miget LIVE destination is not blank"; exit 1; }
+
+          docker run --rm \
+            -e DATABASE_URL="$SOURCE_DATABASE_URL" \
+            -e PGOPTIONS="-c default_transaction_read_only=on" \
+            --mount type=bind,src="$work",dst=/work \
+            postgres:18 \
+            sh -ec 'umask 077; pg_dump "$DATABASE_URL" --format=custom --compress=6 --no-owner --no-privileges --schema=public --schema=maintenance --file=/work/live.dump'
+
+          cat > "$work/pre_restore.sql" <<'SQL'
+          \set ON_ERROR_STOP on
+          do $roles$
+          begin
+            if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin noinherit; end if;
+            if not exists(select 1 from pg_roles where rolname='authenticated') then create role authenticated nologin noinherit; end if;
+            if not exists(select 1 from pg_roles where rolname='service_role') then create role service_role nologin noinherit bypassrls; end if;
+            if not exists(select 1 from pg_roles where rolname='authenticator') then create role authenticator nologin noinherit; end if;
+          end
+          $roles$;
+          alter role service_role bypassrls;
+          grant anon, authenticated, service_role to current_user;
+          create schema if not exists extensions authorization current_user;
+          create extension if not exists pgcrypto with schema extensions;
+          create extension if not exists "uuid-ossp" with schema extensions;
+          create extension if not exists pg_stat_statements with schema extensions;
+          create extension if not exists btree_gist with schema public;
+          create extension if not exists pg_trgm with schema public;
+          SQL
+
+          docker run --rm \
+            -e DATABASE_URL="$DESTINATION_DATABASE_URL" \
+            --mount type=bind,src="$work",dst=/work \
+            postgres:18 \
+            sh -ec 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f /work/pre_restore.sql'
+
+          docker run --rm \
+            -e DATABASE_URL="$DESTINATION_DATABASE_URL" \
+            --mount type=bind,src="$work",dst=/work \
+            postgres:18 \
+            sh -ec 'pg_restore --dbname="$DATABASE_URL" --no-owner --no-privileges --exit-on-error --jobs=2 /work/live.dump'
+
+          cat > "$work/post_restore.sql" <<'SQL'
+          \set ON_ERROR_STOP on
+          revoke all on schema public, maintenance from public, anon, authenticated;
+          grant usage on schema public, maintenance to service_role;
+          grant usage on schema extensions to service_role;
+          grant execute on all functions in schema extensions to service_role;
+          revoke all on all tables in schema public, maintenance from public, anon, authenticated;
+          revoke all on all sequences in schema public, maintenance from public, anon, authenticated;
+          revoke all on all functions in schema public, maintenance from public, anon, authenticated;
+          grant all on all tables in schema public, maintenance to service_role;
+          grant all on all sequences in schema public, maintenance to service_role;
+          grant execute on all functions in schema public, maintenance to service_role;
+          alter default privileges for role current_user in schema public revoke all on tables from public, anon, authenticated;
+          alter default privileges for role current_user in schema public revoke all on sequences from public, anon, authenticated;
+          alter default privileges for role current_user in schema public revoke all on functions from public, anon, authenticated;
+          alter default privileges for role current_user in schema public grant all on tables to service_role;
+          alter default privileges for role current_user in schema public grant all on sequences to service_role;
+          alter default privileges for role current_user in schema public grant execute on functions to service_role;
+          SQL
+
+          docker run --rm \
+            -e DATABASE_URL="$DESTINATION_DATABASE_URL" \
+            --mount type=bind,src="$work",dst=/work \
+            postgres:18 \
+            sh -ec 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f /work/post_restore.sql'
+
+          cat > "$work/row_counts.sql" <<'SQL'
+          \set ON_ERROR_STOP on
+          \pset format unaligned
+          \pset tuples_only on
+          \pset fieldsep '|'
+          select format('select %L, count(*) from %I.%I;', schemaname||'.'||tablename, schemaname, tablename)
+          from pg_tables
+          where schemaname in ('public','maintenance')
+          order by schemaname, tablename
+          \gexec
+          SQL
+
+          cat > "$work/sequence_state.sql" <<'SQL'
+          \set ON_ERROR_STOP on
+          \pset format unaligned
+          \pset tuples_only on
+          \pset fieldsep '|'
+          select format('select %L, last_value, is_called from %I.%I;', schemaname||'.'||sequencename, schemaname, sequencename)
+          from pg_sequences
+          where schemaname in ('public','maintenance')
+          order by schemaname, sequencename
+          \gexec
+          SQL
+
+          for side in source destination; do
+            if test "$side" = source; then
+              database_url="$SOURCE_DATABASE_URL"
+              pgoptions="-c default_transaction_read_only=on"
+            else
+              database_url="$DESTINATION_DATABASE_URL"
+              pgoptions=""
+            fi
+            docker run --rm \
+              -e DATABASE_URL="$database_url" \
+              -e PGOPTIONS="$pgoptions" \
+              --mount type=bind,src="$work",dst=/work \
+              postgres:18 \
+              sh -ec "psql \"\$DATABASE_URL\" -X -v ON_ERROR_STOP=1 -f /work/row_counts.sql" \
+              > "$work/${side}-rows.txt"
+            docker run --rm \
+              -e DATABASE_URL="$database_url" \
+              -e PGOPTIONS="$pgoptions" \
+              --mount type=bind,src="$work",dst=/work \
+              postgres:18 \
+              sh -ec "psql \"\$DATABASE_URL\" -X -v ON_ERROR_STOP=1 -f /work/sequence_state.sql" \
+              > "$work/${side}-sequences.txt"
+          done
+
+          cmp -s "$work/source-rows.txt" "$work/destination-rows.txt" || { echo "Exact table row-count verification failed"; exit 1; }
+          cmp -s "$work/source-sequences.txt" "$work/destination-sequences.txt" || { echo "Exact sequence-state verification failed"; exit 1; }
+
+          row_manifest_sha="$(sha256sum "$work/destination-rows.txt" | cut -d' ' -f1)"
+          sequence_manifest_sha="$(sha256sum "$work/destination-sequences.txt" | cut -d' ' -f1)"
+          dump_sha="$(sha256sum "$work/live.dump" | cut -d' ' -f1)"
+          {
+            echo "### LIVE Supabase to Miget clone"
+            echo "- Source access: pg_dump read-only"
+            echo "- Destination service: ${DESTINATION_SERVICE_UUID}"
+            echo "- Application schemas: public, maintenance"
+            echo "- Exact table row-count manifest: ${row_manifest_sha}"
+            echo "- Exact sequence-state manifest: ${sequence_manifest_sha}"
+            echo "- Ephemeral dump SHA-256: ${dump_sha}"
+            echo "- Dump artifact retained: no"
+          } >> "$GITHUB_STEP_SUMMARY"

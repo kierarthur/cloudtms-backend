@@ -74,11 +74,28 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.match(workflow, /database-test/);
   assert.match(workflow, /secrets\.MIGET_DATABASE_URL_TEST/);
   assert.match(workflow, /vars\.MIGET_DATABASE_TARGET_TEST/);
+  assert.match(workflow, /secrets\.MIGET_DATABASE_URL_LIVE/);
+  assert.match(workflow, /vars\.MIGET_DATABASE_TARGET_LIVE/);
   assert.doesNotMatch(workflow, /secrets\.SUPABASE_DB_URL_TEST/);
+  assert.doesNotMatch(workflow, /inputs\.environment == 'LIVE'[\s\S]{0,200}secrets\.(?:CLOUDTMS_DATABASE_URL|SUPABASE_DB_URL)/);
   assert.match(workflow, /Read-only release plan/);
   assert.match(workflow, /if: inputs\.phase == 'APPLY'/);
   assert.match(workflow, /APPLY \$\{\{ inputs\.environment \}\} \$\{\{ inputs\.mode \}\}/);
   assert.match(workflow, /CLOUDTMS_LOGICAL_POSTGRES_OWNER:\s*CURRENT_USER/);
+});
+
+test('one-time LIVE provider clone is protected, source-read-only and destination-blank-only', () => {
+  const workflow = read('.github/workflows/live-miget-clone.yml');
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /environment:\s*database-live/);
+  assert.match(workflow, /secrets\.MIGET_DATABASE_URL_LIVE/);
+  assert.match(workflow, /secrets\.CLOUDTMS_DATABASE_URL \|\| secrets\.SUPABASE_DB_URL/);
+  assert.match(workflow, /Miget LIVE destination is not blank/);
+  assert.match(workflow, /pg_dump[^\n]*--no-owner[^\n]*--no-privileges[^\n]*--schema=public[^\n]*--schema=maintenance/);
+  assert.match(workflow, /pg_restore[^\n]*--no-owner[^\n]*--no-privileges[^\n]*--exit-on-error/);
+  assert.match(workflow, /Exact table row-count verification failed/);
+  assert.match(workflow, /Exact sequence-state verification failed/);
+  assert.doesNotMatch(workflow, /actions\/upload-artifact/);
 });
 
 test('provider database owner mapping is explicit, bounded and fail closed', () => {

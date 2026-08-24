@@ -64,8 +64,8 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}
     env:
-      CLOUDTMS_DATABASE_URL: ${{ (inputs.environment == 'TEST' && secrets.MIGET_DATABASE_URL_TEST) || (inputs.environment == 'LIVE' && (secrets.CLOUDTMS_DATABASE_URL || secrets.SUPABASE_DB_URL)) }}
-      CLOUDTMS_EXPECTED_TARGET: ${{ (inputs.environment == 'TEST' && vars.MIGET_DATABASE_TARGET_TEST) || (inputs.environment == 'LIVE' && vars.CLOUDTMS_PROJECT_REF) }}
+      CLOUDTMS_DATABASE_URL: ${{ (inputs.environment == 'TEST' && secrets.MIGET_DATABASE_URL_TEST) || (inputs.environment == 'LIVE' && secrets.MIGET_DATABASE_URL_LIVE) }}
+      CLOUDTMS_EXPECTED_TARGET: ${{ (inputs.environment == 'TEST' && vars.MIGET_DATABASE_TARGET_TEST) || (inputs.environment == 'LIVE' && vars.MIGET_DATABASE_TARGET_LIVE) }}
       CLOUDTMS_ENVIRONMENT: ${{ inputs.environment }}
       CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
       CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
