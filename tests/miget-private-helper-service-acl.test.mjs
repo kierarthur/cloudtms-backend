@@ -20,6 +20,6 @@ test('Miget provider-owner ACL repair is narrow, data-free, and verified', () =>
 
 test('protected releases execute the service-role route-guard verifier', () => {
   assert.ok(release.verificationFiles.includes(
-    'supabase/verification/23082026_0822_candidate_manager_email_claim_route_guard_verification.sql'
+    'supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql'
   ));
 });

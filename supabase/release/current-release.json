@@ -43,6 +43,6 @@
     "supabase/verification/23082026_0400_candidate_named_security_verification_v2.sql",
     "supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql",
     "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql",
-    "supabase/verification/23082026_0822_candidate_manager_email_claim_route_guard_verification.sql"
+    "supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql"
   ]
 }
