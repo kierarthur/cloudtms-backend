@@ -74,6 +74,8 @@ The PostgREST database URI must retain `options=-c%20pg_show_plans.is_enabled%3D
 
 Miget's `service_role` is not a PostgreSQL `BYPASSRLS` role. Migration `24082026_1519_miget_service_role_rls_compatibility.sql` creates the explicit `cloudtms_miget_service_owner_all` policy for every existing RLS-enabled public table, preserving the practical service-role behaviour expected by the Worker while leaving SQL grants as the independent table-access boundary. Any later migration that enables RLS on a new public table must create and verify that policy in the same change. After a restore or release, verify the policy catalog and perform a real PostgREST service-role lookup; a direct owner query alone cannot detect this failure mode.
 
+A provider-owner ACL baseline can also remove an explicit `service_role` grant from a private helper even while the public PostgREST RPC remains executable. That failure happens inside a `SECURITY INVOKER` RPC before its work row is leased, so a scheduler can look healthy while the operation remains queued. NEW and UPGRADE releases must execute every role-specific route-guard verifier after the final repeatables are installed. For the email drain this includes `23082026_0822_candidate_manager_email_claim_route_guard_verification.sql`, which proves that `service_role` can execute `_candidate_manager_email_claim_route_current_v1`; never repair this by granting browser roles access to `private`.
+
 ## GitHub Environment setup
 
 Create protected environments named `database-test` and `database-live`. Each holds:
