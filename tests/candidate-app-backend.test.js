@@ -40,6 +40,13 @@ const {
   renderExpensePage,
   routeMatch,
   safeFinalisationResult,
+  safeCandidateWorkflowPolicy,
+  safeExpensePlacement,
+  normaliseCandidateWorkflowCreatePayload,
+  safeCandidateNotificationPreferences,
+  safeCandidateNotification,
+  requireCandidateNotificationPreferences,
+  safePaperReturnPages,
   safeQrPackResponse,
   segmentBreak,
   uploadTicket,
@@ -48,6 +55,55 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+test('Candidate expense placement closes the controlling RPC response', () => {
+  const anchor = '00000000-0000-4000-8000-000000000071';
+  const week = '00000000-0000-4000-8000-000000000072';
+  assert.deepEqual(safeExpensePlacement({
+    ok: true,
+    placement: 'CREATE_CARRIER',
+    reason_code: 'NO_SAFE_CARRIER',
+    anchor_timesheet_id: anchor,
+    anchor_contract_week_id: week,
+    capabilities: {
+      can_edit_expenses: true,
+      private_database_flag: true
+    }
+  }), {
+    ok: true,
+    placement: 'CREATE_CARRIER',
+    reason_code: 'NO_SAFE_CARRIER',
+    anchor_timesheet_id: anchor,
+    anchor_contract_week_id: week,
+    target_timesheet_id: null,
+    target_contract_week_id: null,
+    target_record_role: null,
+    capabilities: {
+      can_use_same_record: false,
+      can_reuse_carrier: false,
+      can_create_carrier: true,
+      can_edit_expenses: true,
+      requires_carrier: true
+    }
+  });
+  assert.throws(
+    () => safeExpensePlacement({ placement: 'CREATE_CARRIER' }),
+    /CANDIDATE_EXPENSE_PLACEMENT_INVALID/
+  );
+});
+
+test('Candidate workflow creation maps the public timesheet identity to server-owned routing', () => {
+  const timesheetId = '00000000-0000-4000-8000-000000000073';
+  assert.equal(normaliseCandidateWorkflowCreatePayload({
+    workflow_kind: 'DAILY', timesheet_id: timesheetId
+  }).target_timesheet_id, timesheetId);
+  assert.equal(normaliseCandidateWorkflowCreatePayload({
+    workflow_kind: 'CONTRACT_EXPENSE', timesheet_id: timesheetId
+  }).anchor_timesheet_id, timesheetId);
+  assert.equal(normaliseCandidateWorkflowCreatePayload({
+    workflow_kind: 'CONTRACT_COMBINED', timesheet_id: timesheetId
+  }).anchor_timesheet_id, undefined);
+});
 
 test('Candidate official period adds shift lines without mutating frozen week-day authority', () => {
   const period = officialPeriodWithShiftLines('2026-08-23', [{
@@ -61,6 +117,131 @@ test('Candidate official period adds shift lines without mutating frozen week-da
   assert.equal(period.days.find((day) => day.date === '2026-08-21').shift_lines[0].display_order, 1);
   assert.equal(period.days.filter((day) => day.date !== '2026-08-21')
     .every((day) => day.shift_lines.length === 0), true);
+});
+
+test('Candidate notification preferences map installed legacy names to the closed app contract', () => {
+  assert.deepEqual(safeCandidateNotificationPreferences({
+    push: false,
+    manager_approval: true,
+    manager_refusal: false,
+    office_rejection: false,
+    authorisation: true,
+    payment: false,
+    resubmission_required: true
+  }), {
+    push: false,
+    manager_approval_updates: false,
+    timesheet_expense_attention: false,
+    authorisation: true,
+    payment: false,
+    approval_reminders: true,
+    resubmission_required: true
+  });
+});
+
+test('Candidate notification preference writes require the exact closed boolean map', () => {
+  const current = safeCandidateNotificationPreferences(undefined);
+  assert.deepEqual(requireCandidateNotificationPreferences(current), current);
+  assert.throws(
+    () => requireCandidateNotificationPreferences({ ...current, email: true }),
+    /CANDIDATE_NOTIFICATION_PREFERENCES_INVALID/
+  );
+  assert.throws(
+    () => requireCandidateNotificationPreferences({ ...current, payment: 'yes' }),
+    /CANDIDATE_NOTIFICATION_PREFERENCES_INVALID/
+  );
+});
+
+test('Candidate notification projection closes internal database payloads and links', () => {
+  const notification = safeCandidateNotification({
+    id: '00000000-0000-4000-8000-000000000061',
+    workflow_id: '00000000-0000-4000-8000-000000000062',
+    timesheet_id: '00000000-0000-4000-8000-000000000063',
+    event_type: 'PAPER_PACK_READY',
+    template_key: 'candidate-paper-pack-ready-v1',
+    template_params: { page_count: 4, workflow_generation: 2, internal_note: 'never return' },
+    deep_link_json: {
+      type: 'paper_pack',
+      timesheet_id: '00000000-0000-4000-8000-000000000063',
+      workflow_id: '00000000-0000-4000-8000-000000000062',
+      workflow_generation: 2,
+      private_service: 'never return'
+    },
+    state: 'UNREAD', created_at_utc: '2026-08-23T10:00:00.000Z', read_at_utc: null
+  });
+  assert.deepEqual(notification, {
+    id: '00000000-0000-4000-8000-000000000061',
+    event_type: 'PAPER_PACK_READY',
+    template_key: 'candidate-paper-pack-ready-v1',
+    payload_json: {
+      state: 'PAPER_PACK_READY', candidate_status_code: 'PAPER_PACK_READY',
+      message: 'Your printed signing documents are ready.',
+      occurred_at_utc: '2026-08-23T10:00:00.000Z',
+      workflow_id: '00000000-0000-4000-8000-000000000062',
+      timesheet_id: '00000000-0000-4000-8000-000000000063'
+    },
+    deep_link_json: {
+      destination: 'TIMESHEET_DETAIL',
+      workflow_id: '00000000-0000-4000-8000-000000000062',
+      timesheet_id: '00000000-0000-4000-8000-000000000063'
+    },
+    state: 'UNREAD', created_at_utc: '2026-08-23T10:00:00.000Z', read_at_utc: null
+  });
+  assert.equal(JSON.stringify(notification).includes('internal_note'), false);
+  assert.equal(JSON.stringify(notification).includes('private_service'), false);
+  assert.equal(JSON.stringify(notification).includes('workflow_generation'), false);
+});
+
+test('Candidate notification feed is scoped to the selected candidate and reads template_params', async () => {
+  const sessionId = '00000000-0000-4000-8000-000000000064';
+  const accountId = '00000000-0000-4000-8000-000000000065';
+  const candidateId = '00000000-0000-4000-8000-000000000066';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.example.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const session = {
+    id: sessionId, session_id: sessionId, account_id: accountId,
+    selected_candidate_id: candidateId, environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  let notificationRequest = null;
+  globalThis.fetch = async url => {
+    const value = String(url);
+    if (value.includes('/candidate_app_sessions?')) return Response.json([session]);
+    if (value.includes('/candidate_notifications?')) {
+      notificationRequest = value;
+      return Response.json([{
+        id: '00000000-0000-4000-8000-000000000067', workflow_id: null,
+        timesheet_id: '00000000-0000-4000-8000-000000000068',
+        event_type: 'AUTHORISED', template_key: 'candidate-submission-finalised-v1',
+        template_params: { auto_authorised: true },
+        deep_link_json: { type: 'timesheet', timesheet_id: '00000000-0000-4000-8000-000000000068' },
+        state: 'UNREAD', created_at_utc: '2026-08-23T11:00:00.000Z', read_at_utc: null
+      }]);
+    }
+    throw new Error(`unexpected request ${value}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      'https://private.test/candidate-app/v1/notifications',
+      { headers: { authorization: `Bearer ${token}` } }
+    ), env, {}, { routeAudience: 'PRIVATE' });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.notifications[0].payload_json.message, 'Your timesheet has been authorised.');
+    assert.equal(body.notifications[0].deep_link_json.destination, 'TIMESHEET_DETAIL');
+    assert.match(notificationRequest, new RegExp(`candidate_id=eq\\.${candidateId}`));
+    assert.match(notificationRequest, /template_params/);
+    assert.doesNotMatch(notificationRequest, /payload_json/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 function noLogoBranding(agencyName = 'Configured Agency') {
@@ -187,6 +368,7 @@ test('challenge replay validates changed factual input before reconstructing its
 
 test('challenge replay reads its recorded token version across writer rollback and honours reader retirement', async () => {
   const originalFetch = globalThis.fetch;
+  let queuedMail = null;
   const key = 'challenge-version-rollback-key';
   const email = 'rollback@example.test';
   const versionTwoSecret = 'challenge-version-two-secret';
@@ -224,10 +406,15 @@ test('challenge replay reads its recorded token version across writer rollback a
     SUPABASE_URL: 'https://test.supabase.invalid',
     SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
   };
-  globalThis.fetch = async () => Response.json([{}]);
+  globalThis.fetch = async (_url, init) => {
+    queuedMail = JSON.parse(String(init?.body || '{}'));
+    return Response.json([{}]);
+  };
   try {
     const readable = await handleCandidateAppRequest(request(), rolledBackEnv, {}, deps);
     assert.equal(readable.status, 202, JSON.stringify(await readable.clone().json()));
+    assert.match(queuedMail.body_text, /\/candidate\/activate#token=[^&\s]+&challenge=00000000-0000-4000-8000-000000000043/);
+    assert.match(queuedMail.body_html, /\/candidate\/activate#token=[^&"]+&amp;challenge=00000000-0000-4000-8000-000000000043/);
 
     const retired = await handleCandidateAppRequest(request(), {
       ...rolledBackEnv, CANDIDATE_CHALLENGE_TOKEN_READ_KEY_VERSIONS: '1'
@@ -1895,6 +2082,64 @@ test('paper pack responses never expose an R2 storage identity', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(safe, 'recipient_email'), false);
 });
 
+test('workflow creation policy exposes only app-safe approval choices', () => {
+  const safe = safeCandidateWorkflowPolicy({
+    client_id: '00000000-0000-4000-8000-000000000001',
+    paper_submission_enabled: true,
+    allow_daily_manager_authorise_on_phone: true,
+    allow_daily_manager_authorise_by_email: false,
+    manager_approval_policy: {
+      mode: 'OVERRIDE',
+      approved_emails: ['manager@example.test'],
+      approved_domains: ['example.test'],
+      allow_free_business_email: false,
+      private_rule: 'must-not-leak'
+    },
+    policy_fingerprint: 'a'.repeat(64)
+  });
+  assert.deepEqual(safe, {
+    paper_submission_enabled: true,
+    allow_daily_manager_authorise_on_phone: true,
+    allow_daily_manager_authorise_by_email: false,
+    manager_approval_policy: {
+      approved_emails: ['manager@example.test'],
+      approved_domains: ['example.test'],
+      allow_free_business_email: false
+    }
+  });
+  assert.equal('client_id' in safe, false);
+  assert.equal('mode' in safe.manager_approval_policy, false);
+  assert.equal('private_rule' in safe.manager_approval_policy, false);
+});
+
+test('paper return pages expose the frozen order and QR requirement without source hashes', () => {
+  const sourceComponentId = '00000000-0000-4000-8000-000000000011';
+  const safe = safePaperReturnPages({ pages: [
+    { page_key: 'HOURS_TIMESHEET', component_kind: 'HOURS_TIMESHEET' },
+    {
+      page_key: `MILEAGE_FORM:${sourceComponentId}`,
+      component_kind: 'MILEAGE_FORM', expense_category: 'MILEAGE',
+      source_component_id: sourceComponentId, source_content_sha256: 'a'.repeat(64)
+    }
+  ] });
+  assert.deepEqual(safe, [{
+    ordinal: 1, page_key: 'HOURS_TIMESHEET', component_kind: 'HOURS_TIMESHEET',
+    expense_category: null, source_component_id: null, qr_required: true
+  }, {
+    ordinal: 2, page_key: `MILEAGE_FORM:${sourceComponentId}`,
+    component_kind: 'MILEAGE_FORM', expense_category: 'MILEAGE',
+    source_component_id: sourceComponentId, qr_required: false
+  }]);
+  assert.equal('source_content_sha256' in safe[1], false);
+});
+
+test('paper return page projection fails closed for malformed manifest members', () => {
+  assert.throws(
+    () => safePaperReturnPages({ pages: [{ page_key: 'HOURS_TIMESHEET' }] }),
+    error => error?.code === 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE'
+  );
+});
+
 test('component upload tickets are encrypted and do not disclose the R2 key', async () => {
   const env = { CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-secret-material' };
   const storageKey = 'candidate-app/test/workflow/source/private-object.pdf';
@@ -2002,7 +2247,7 @@ test('paper mileage form preserves the approved labels and UK week-ending format
       official_presentation: { worker: { first_name: 'Test', surname: 'Worker' }, client: { name: 'Test Client' } },
       expense_submission: {
         canonical_tsfin_snapshot: { mileage_units: 18, travel_pay_ex_vat: 10, accommodation_pay_ex_vat: 100, expenses_pay_ex_vat: 110 },
-        mileage_journeys: [{ post_code_from: 'AA1 1AA', cost_code_to: 'WARD-1', miles: 18 }]
+        mileage_journeys: [{ post_code_from: 'AA1 1AA', post_code_to: 'BB2 2BB', miles: 18 }]
       }
     }
   };
@@ -2010,13 +2255,104 @@ test('paper mileage form preserves the approved labels and UK week-ending format
   const pdf = await PDFDocument.load(bytes);
   assert.equal(pdf.getPageCount(), 1);
   assert.equal(mileageJourneyRows(workflow)[0].post_code_from, 'AA1 1AA');
+  assert.equal(mileageJourneyRows(workflow)[0].post_code_to, 'BB2 2BB');
   assert.deepEqual(expenseSummaryDisplayLines(workflow), {
     lines: ['Mileage: 18 miles', 'Accommodation: £100.00', 'Travel: £10.00'],
     total: '£110.00'
   });
   const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
-  for (const label of ['Mileage Claim Form for week ending', 'Post Code from', 'Cost Code To', 'Number of miles', 'Total mileage', 'Manager signature']) {
+  for (const label of ['Mileage Claim Form for week ending', 'Post Code from', 'Post Code To', 'Number of miles', 'Total mileage', 'Manager signature']) {
     assert.equal(source.includes(label), true);
+  }
+});
+
+test('Candidate mileage form actions prepare the exact PDF and queue one registered-email attachment', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-000000000091',
+    session_id: '00000000-0000-4000-8000-000000000091',
+    account_id: '00000000-0000-4000-8000-000000000092',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000093',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflow = {
+    id: '00000000-0000-4000-8000-000000000094',
+    account_id: session.account_id,
+    candidate_id: session.selected_candidate_id,
+    environment: 'TEST', generation: 1, state: 'DRAFT',
+    workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'ELECTRONIC',
+    week_ending_date: '2026-08-30', contract_id: null,
+    target_timesheet_id: null, anchor_timesheet_id: null
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async put() { return { etag: 'created' }; },
+      async head() { return null; }
+    }
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  const outboxWrites = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const target = new URL(String(url));
+    const method = String(init.method || 'GET').toUpperCase();
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    if (target.pathname.endsWith('/candidates')) {
+      return Response.json([{ id: session.selected_candidate_id, first_name: 'Test', last_name: 'Worker' }]);
+    }
+    if (target.pathname.endsWith('/settings_defaults')) {
+      return Response.json([{ agency_name: 'Configured Agency', agency_logo: null }]);
+    }
+    if (target.pathname.endsWith('/candidate_app_accounts')) {
+      return Response.json([{ id: session.account_id, email_normalized: 'candidate@example.test' }]);
+    }
+    if (target.pathname.endsWith('/mail_outbox') && method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      outboxWrites.push(body);
+      return Response.json([{ id: '00000000-0000-4000-8000-000000000095', status: 'QUEUED' }]);
+    }
+    throw new Error(`Unexpected TEST request ${method} ${target.pathname}`);
+  };
+  const request = (action, key) => new Request(
+    `https://private.test/candidate-app/v1/workflows/${workflow.id}/actions/${action}`,
+    {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ generation: 1, idempotency_key: key, mileage_units: 100 })
+    }
+  );
+  try {
+    const prepared = await handleCandidateAppRequest(
+      request('mileage-form-prepare', '00000000-0000-4000-8000-000000000096'),
+      env, {}, { routeAudience: 'PRIVATE' }
+    );
+    assert.equal(prepared.status, 200);
+    const preparedBody = await prepared.json();
+    assert.equal(preparedBody.mileage_form_state, 'PREPARED');
+    assert.match(preparedBody.mileage_form_sha256, /^[0-9a-f]{64}$/);
+    const preparedPdf = await PDFDocument.load(Buffer.from(preparedBody.mileage_form_content_base64, 'base64'));
+    assert.equal(preparedPdf.getPageCount(), 1);
+    assert.equal(outboxWrites.length, 0);
+
+    const emailed = await handleCandidateAppRequest(
+      request('mileage-form-email', '00000000-0000-4000-8000-000000000097'),
+      env, {}, { routeAudience: 'PRIVATE' }
+    );
+    assert.equal(emailed.status, 202);
+    assert.equal((await emailed.json()).mileage_form_state, 'EMAIL_QUEUED');
+    assert.equal(outboxWrites.length, 1);
+    assert.equal(outboxWrites[0].to, 'candidate@example.test');
+    assert.equal(outboxWrites[0].attachments.length, 1);
+    assert.equal(outboxWrites[0].attachments[0].content_type, 'application/pdf');
+    assert.match(outboxWrites[0].attachments[0].r2_key, /\/mileage-form\/[0-9a-f]{64}\.pdf$/);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 

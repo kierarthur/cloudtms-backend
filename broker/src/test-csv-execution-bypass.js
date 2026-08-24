@@ -1,4 +1,4 @@
-const TEST_SUPABASE_URL = 'https://yakevhtttcsljosbdpov.supabase.co';
+const TEST_SUPABASE_URL = 'https://codex-cloudtms-miget-gateway.kier-88a.workers.dev';
 const TEST_FRONTEND_ORIGIN = 'https://testmode.arthur-rai.co.uk';
 const TEST_2FA_BYPASS_EMAIL = 'test@arthur-rai.co.uk';
 

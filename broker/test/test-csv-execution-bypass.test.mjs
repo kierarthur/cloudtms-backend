@@ -16,7 +16,7 @@ import {
 const userId = '11111111-1111-4111-8111-111111111111';
 const testUser = { id: userId, email: 'test@arthur-rai.co.uk' };
 const testEnv = {
-  SUPABASE_URL: 'https://yakevhtttcsljosbdpov.supabase.co',
+  SUPABASE_URL: 'https://codex-cloudtms-miget-gateway.kier-88a.workers.dev',
   ALLOWED_ORIGINS: 'https://testmode.arthur-rai.co.uk,https://kierarthur.github.io',
   TEST_CSV_EXECUTION_2FA_BYPASS_ENABLED: 'ENABLED',
   TEST_CSV_EXECUTION_2FA_BYPASS_USER_ID: userId

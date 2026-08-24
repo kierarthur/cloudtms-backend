@@ -204,6 +204,36 @@ test('R8 specialist seam passes only typed facts and reconstructs a closed succe
   assert.equal((await response.json()).result.preview_text, 'Expected arrival 09:30.');
 });
 
+test('R8 retained candidate-message read requires one closed platform and returns an acknowledgement token', async () => {
+  let observed;
+  const response = await handleCandidateDailyPhase1bRequest(request(
+    '/candidate-app/v1/daily/content/candidate-message?platform=ANDROID'
+  ), access, {}, {
+    async candidateDailySpecialist(input) {
+      observed = input;
+      return { result: {
+        kind: 'candidate-message', title: 'Welcome (Android)', html: '<p>Welcome</p>',
+        message_token: 'message-token-1234567890', message_kind: 'WELCOME', acknowledgement_mode: 'ALL',
+        appInfo: { version: 'test', buildTs: '2026-08-23' }
+      } };
+    }
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(observed.input, { kind: 'candidate-message', platform: 'ANDROID' });
+  assert.equal((await response.json()).result.acknowledgement_mode, 'ALL');
+
+  for (const path of [
+    '/candidate-app/v1/daily/content/candidate-message',
+    '/candidate-app/v1/daily/content/candidate-message?platform=ANDROID&platform=WEB',
+    '/candidate-app/v1/daily/content/candidate-message?platform=UNKNOWN'
+  ]) {
+    const invalid = await handleCandidateDailyPhase1bRequest(request(path), access, {}, {
+      async candidateDailySpecialist() { throw new Error('must not run'); }
+    });
+    assert.equal(invalid.status, 400);
+  }
+});
+
 test('R8 specialist seam rejects unapproved request keys and malformed provider responses', async () => {
   const invalid = await handleCandidateDailyPhase1bRequest(request('/candidate-app/v1/daily/running-late/options', {
     method: 'POST', headers: { 'content-type': 'application/json' },

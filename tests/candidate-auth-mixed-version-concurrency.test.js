@@ -96,11 +96,14 @@ async function runChallengeRace({ isResend, winnerVersion, firstMailVersion }) {
   globalThis.fetch = async (url, init = {}) => {
     assert.equal(init.method, 'POST');
     const payload = JSON.parse(init.body);
-    const tokenMatch = String(payload.body_text).match(/#token=([^\s]+)/);
-    assert.ok(tokenMatch, 'challenge mail must contain its delivery token');
+    const linkMatch = String(payload.body_text).match(/https:\/\/[^\s]+/);
+    assert.ok(linkMatch, 'challenge mail must contain its secure link');
+    const fragment = new URL(linkMatch[0]).hash.slice(1);
+    const deliveryToken = new URLSearchParams(fragment).get('token');
+    assert.ok(deliveryToken, 'challenge mail must contain its delivery token');
     mailWrites.push({
       version: Number(new URL(url).hostname.match(/worker-v(\d+)/)?.[1]),
-      token: decodeURIComponent(tokenMatch[1])
+      token: deliveryToken
     });
     return Response.json(mailWrites.length === 1 ? [{}] : []);
   };

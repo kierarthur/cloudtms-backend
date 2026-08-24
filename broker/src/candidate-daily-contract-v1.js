@@ -593,6 +593,27 @@ function normalizeCohortDisplay(item) {
     && (item.subject_token === undefined || OPAQUE_TOKEN_RE.test(item.subject_token)) ? { ...item } : null;
 }
 
+function normalizeEmergencyContactDisplay(item) {
+  return exactObjectKeys(item, ['display_name', 'role', 'callable_mobile', 'subject_token'],
+    ['display_name', 'role', 'callable_mobile'])
+    && stringValue(item.display_name, 1, 160) && stringValue(item.role, 1, 100)
+    && stringValue(item.callable_mobile, 7, 32) && /^[+0-9 ()-]+$/.test(item.callable_mobile)
+    && (item.subject_token === undefined || OPAQUE_TOKEN_RE.test(item.subject_token)) ? { ...item } : null;
+}
+
+function normalizeEmergencyContactGroups(source) {
+  if (!exactObjectKeys(source, ['current', 'previous', 'next'])
+      || !['current', 'previous', 'next'].every((key) => Array.isArray(source[key]) && source[key].length <= 100)) {
+    return null;
+  }
+  const output = {};
+  for (const key of ['current', 'previous', 'next']) {
+    output[key] = source[key].map(normalizeEmergencyContactDisplay);
+    if (output[key].some((entry) => entry === null)) return null;
+  }
+  return output;
+}
+
 function normalizeCandidateEffectResult(source) {
   if (!exactObjectKeys(source, ['effect_key', 'operation', 'status', 'created_at', 'updated_at', 'safe_message'],
     ['effect_key', 'operation', 'status', 'created_at', 'updated_at']) || !OPAQUE_TOKEN_RE.test(source.effect_key)
@@ -662,11 +683,21 @@ function normalizeCandidateDailyResult(operationId, source) {
   if (operationId === 'getCandidateDailyTiles') return normalizeDailyTilesResult(source);
   if (operationId === 'getCandidateDailyPastShifts') return normalizePastShiftsResult(source);
   if (operationId === 'getCandidateDailyContent') {
-    return exactObjectKeys(source, ['kind', 'title', 'html', 'appInfo'])
-      && ['hospital-addresses', 'accommodation-contacts'].includes(source.kind)
-      && stringValue(source.title, 1, 160) && stringValue(source.html, 0, 200000)
-      && exactObjectKeys(source.appInfo, ['version', 'buildTs'])
-      && stringValue(source.appInfo.version, 0, 80) && stringValue(source.appInfo.buildTs, 0, 80)
+    const appInfoValid = exactObjectKeys(source.appInfo, ['version', 'buildTs'])
+      && stringValue(source.appInfo.version, 0, 80) && stringValue(source.appInfo.buildTs, 0, 80);
+    if (!appInfoValid) return null;
+    if (['hospital-addresses', 'accommodation-contacts'].includes(source.kind)) {
+      return exactObjectKeys(source, ['kind', 'title', 'html', 'appInfo'])
+        && stringValue(source.title, 1, 160) && stringValue(source.html, 0, 200000)
+        ? { ...source, appInfo: { ...source.appInfo } } : null;
+    }
+    return exactObjectKeys(source,
+      ['kind', 'title', 'html', 'message_token', 'message_kind', 'acknowledgement_mode', 'appInfo'])
+      && source.kind === 'candidate-message'
+      && stringValue(source.title, 1, 160) && stringValue(source.html, 1, 200000)
+      && OPAQUE_TOKEN_RE.test(source.message_token)
+      && ['WELCOME', 'ALERT'].includes(source.message_kind)
+      && source.acknowledgement_mode === 'ALL'
       ? { ...source, appInfo: { ...source.appInfo } } : null;
   }
   if (operationId === 'getCandidateDailyEmergencyWindow') {
@@ -675,18 +706,21 @@ function normalizeCandidateDailyResult(operationId, source) {
         || !Array.isArray(source.shifts) || source.shifts.length > 20) return null;
     const shifts = source.shifts.map((item) => {
       if (!exactObjectKeys(item, ['emergency_shift_token', 'date', 'starts_at', 'ends_at', 'display_label',
-        'allowed_issues', 'dna_subjects'], ['emergency_shift_token', 'date', 'starts_at', 'ends_at',
-        'display_label', 'allowed_issues']) || !OPAQUE_TOKEN_RE.test(item.emergency_shift_token)
+        'allowed_issues', 'colleague_groups', 'dna_subjects'], ['emergency_shift_token', 'date', 'starts_at', 'ends_at',
+        'display_label', 'allowed_issues', 'colleague_groups']) || !OPAQUE_TOKEN_RE.test(item.emergency_shift_token)
         || !DATE_RE.test(item.date) || !dateTimeValue(item.starts_at) || !dateTimeValue(item.ends_at)
         || !stringValue(item.display_label, 1, 256) || !Array.isArray(item.allowed_issues)
         || item.allowed_issues.length < 1 || item.allowed_issues.length > 4
         || new Set(item.allowed_issues).size !== item.allowed_issues.length
         || !item.allowed_issues.every((value) => ['RUNNING_LATE', 'CANNOT_ATTEND', 'LEAVE_EARLY', 'DNA'].includes(value))) return null;
+      const colleagueGroups = normalizeEmergencyContactGroups(item.colleague_groups);
+      if (!colleagueGroups) return null;
       const dnaSubjects = item.dna_subjects === undefined ? undefined
         : Array.isArray(item.dna_subjects) && item.dna_subjects.length <= 100
-          ? item.dna_subjects.map(normalizeCohortDisplay) : null;
+          ? item.dna_subjects.map(normalizeEmergencyContactDisplay) : null;
       if (dnaSubjects === null || dnaSubjects?.some((entry) => entry === null)) return null;
-      return { ...item, ...(dnaSubjects !== undefined ? { dna_subjects: dnaSubjects } : {}) };
+      return { ...item, colleague_groups: colleagueGroups,
+        ...(dnaSubjects !== undefined ? { dna_subjects: dnaSubjects } : {}) };
     });
     return shifts.some((item) => item === null) ? null : { ...source, shifts };
   }

@@ -220,9 +220,15 @@ function validateSpecialistRequest(request, route, url, body) {
       ? { cursor, limit } : null;
   }
   if (operationId === 'getCandidateDailyContent') {
-    if (!noQueryParameters(url)) return null;
     const kind = decodeURIComponent(url.pathname.split('/').pop() || '');
-    return ['hospital-addresses', 'accommodation-contacts'].includes(kind) ? { kind } : null;
+    if (['hospital-addresses', 'accommodation-contacts'].includes(kind)) {
+      return noQueryParameters(url) ? { kind } : null;
+    }
+    if (kind !== 'candidate-message') return null;
+    if ([...url.searchParams.keys()].some((key) => key !== 'platform')
+        || url.searchParams.getAll('platform').length !== 1) return null;
+    const platform = url.searchParams.get('platform');
+    return ['IOS', 'ANDROID', 'WEB'].includes(platform) ? { kind, platform } : null;
   }
   if (operationId === 'getCandidateDailyEmergencyWindow') {
     return noQueryParameters(url) ? {} : null;

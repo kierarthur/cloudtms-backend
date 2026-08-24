@@ -454,7 +454,7 @@ begin
       'scope','WEEKLY','route',case when v_route_family='QR' then 'PAPER' else 'ELECTRONIC' end,
       'contract_id',v_week.contract_id,'contract_week_id',v_week.id,
       'week_ending_date',v_week.week_ending_date,
-      'anchor_timesheet_id',case when v_code='ADD_EXPENSES' then p_action->'timesheet_id' else null end
+      'timesheet_id',case when v_code='ADD_EXPENSES' then p_action->'timesheet_id' else null end
     )));
     v_inputs:='[{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb;
   elsif v_code in ('RESUBMIT_TIMESHEET','RESUBMIT_TIMESHEET_AND_EXPENSES','RESUBMIT_EXPENSE_CLAIM','REVIEW_AND_RESUBMIT') then
@@ -463,6 +463,12 @@ begin
   elsif v_method='POST' then
     if p_action ? 'workflow_generation' then
       v_fixed:=jsonb_build_object('generation',p_action->'workflow_generation');
+    end if;
+    if v_code in ('SEND_MANAGER_REMINDER','REQUEST_APPROVAL_AGAIN') then
+      v_fixed:=v_fixed||jsonb_strip_nulls(jsonb_build_object(
+        'approval_request_id',p_action->'approval_request_id',
+        'approval_request_generation',p_action->'approval_request_generation'
+      ));
     end if;
     v_inputs:=case v_code
       when 'DISCARD_EXPENSE_CLAIM' then '[{"name":"reason_note","type":"string","required":true},{"name":"idempotency_key","type":"uuid","required":true}]'::jsonb

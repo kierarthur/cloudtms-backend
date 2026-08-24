@@ -416,6 +416,19 @@ test('NO_WORK_THIS_WEEK asks only for genuine user input', () => {
   assert.doesNotMatch(invocation, /when 'NO_WORK_THIS_WEEK' then '[^']*expected_row_signature/i);
 });
 
+test('expense workflow action uses the public contract timesheet identity', () => {
+  const invocation = privateDefinition(sql.reads, '_candidate_action_invocation_v1');
+  assert.match(invocation, /'timesheet_id',case when v_code='ADD_EXPENSES' then p_action->'timesheet_id'/i);
+  assert.doesNotMatch(invocation, /'anchor_timesheet_id',case when v_code='ADD_EXPENSES'/i);
+});
+
+test('manager reminder and renewal action envelopes retain the locked request generation', () => {
+  const invocation = privateDefinition(sql.reads, '_candidate_action_invocation_v1');
+  assert.match(invocation, /v_code in \('SEND_MANAGER_REMINDER','REQUEST_APPROVAL_AGAIN'\)/i);
+  assert.match(invocation, /'approval_request_id',p_action->'approval_request_id'/i);
+  assert.match(invocation, /'approval_request_generation',p_action->'approval_request_generation'/i);
+});
+
 test('candidate read contracts expose readiness metadata but never review or final storage keys', () => {
   const detail = definition(sql.reads, 'candidate_app_timesheet_detail_v1');
   assert.match(detail, /review_document_ready/);
@@ -579,6 +592,8 @@ test('the targeted correction pass enforces exact categories, complete economics
   assert.match(workflow, /prior_fin\.authorised_at_utc is not null/i);
   assert.match(sql.helpers, /IMPORT_MANDATORY/);
   assert.match(sql.helpers, /v_role='IMPORT_HOURS' or \(v_separate and v_role='HOURS_ONLY'\)/i);
+  assert.match(sql.helpers, /'can_edit_hours'[\s\S]*not v_import/i);
+  assert.match(sql.helpers, /'can_edit_expenses'[\s\S]*\('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS'\)/i);
   assert.match(sql.managerReviewSchema, /paper_return_manifest_json jsonb/i);
   assert.match(sql.managerReviewSchema, /paper_return_manifest_sha256 bytea/i);
   assert.match(sql.managerReviewSchema, /paper_return_page_key text/i);

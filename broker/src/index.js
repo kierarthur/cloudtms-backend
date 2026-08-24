@@ -46,6 +46,7 @@ import {
   mapCanonicalDailyScheduleToIso
 } from './daily-schedule-authority.js';
 import { handleCandidateAppRequest } from './candidate-app-backend.js';
+import { createCandidateDailySpecialist } from './candidate-daily-specialist.js';
 import {
   CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH,
   handleCandidateManagerEmailE2EProof
@@ -194017,9 +194018,11 @@ function matchPath(pathname, pattern) {
 }
 
 export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE') {
+  const candidateRpc = (functionName, args, options) => sbRpc(env, functionName, args, options);
   return {
     routeAudience,
-    rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+    rpc: candidateRpc,
+    candidateDailySpecialist: createCandidateDailySpecialist(env, candidateRpc),
     controlPlaneRpc: (schema, functionName, args) =>
       managerControlPlaneRpc(env, schema, functionName, args),
     requireOfficeUser: (request, roles) => requireUser(env, request, roles),

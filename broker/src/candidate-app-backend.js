@@ -114,7 +114,8 @@ const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
   'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
   'CREATE_EMAIL_APPROVAL_REQUEST', 'PAPER_PREPARE', 'PAPER_RETURN', 'REMIND',
-  'RENEW', 'CANCEL', 'SUPERSEDE', 'CANCEL_MANAGER_HANDOFF', 'RETRY_FINALISATION'
+  'RENEW', 'CANCEL', 'SUPERSEDE', 'CANCEL_MANAGER_HANDOFF', 'RETRY_FINALISATION',
+  'MILEAGE_FORM_PREPARE', 'MILEAGE_FORM_EMAIL'
 ]);
 
 const ROUTE_INTERVENTION_REASONS = new Set([
@@ -288,6 +289,50 @@ function normaliseEmail(value) {
 
 function normaliseMediaType(value) {
   return text(value).split(';')[0].trim().toLowerCase();
+}
+
+const CANDIDATE_NOTIFICATION_PREFERENCE_KEYS = Object.freeze([
+  'push',
+  'manager_approval_updates',
+  'timesheet_expense_attention',
+  'authorisation',
+  'payment',
+  'approval_reminders',
+  'resubmission_required'
+]);
+
+function safeCandidateNotificationPreferences(value) {
+  const source = isObject(value) ? value : {};
+  const valueOrDefault = (key, legacyKeys = []) => {
+    if (typeof source[key] === 'boolean') return source[key];
+    const legacy = legacyKeys.map(name => source[name]).filter(item => typeof item === 'boolean');
+    return legacy.length ? legacy.every(Boolean) : true;
+  };
+  return {
+    push: valueOrDefault('push'),
+    manager_approval_updates: valueOrDefault(
+      'manager_approval_updates', ['manager_approval', 'manager_refusal']
+    ),
+    timesheet_expense_attention: valueOrDefault(
+      'timesheet_expense_attention', ['office_rejection']
+    ),
+    authorisation: valueOrDefault('authorisation'),
+    payment: valueOrDefault('payment'),
+    approval_reminders: valueOrDefault('approval_reminders'),
+    resubmission_required: valueOrDefault('resubmission_required')
+  };
+}
+
+function requireCandidateNotificationPreferences(value) {
+  if (!isObject(value)
+      || Object.keys(value).length !== CANDIDATE_NOTIFICATION_PREFERENCE_KEYS.length
+      || !CANDIDATE_NOTIFICATION_PREFERENCE_KEYS.every(key => typeof value[key] === 'boolean')
+      || !Object.keys(value).every(key => CANDIDATE_NOTIFICATION_PREFERENCE_KEYS.includes(key))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_PREFERENCES_INVALID');
+  }
+  return Object.fromEntries(
+    CANDIDATE_NOTIFICATION_PREFERENCE_KEYS.map(key => [key, value[key]])
+  );
 }
 
 function hex(bytes) {
@@ -901,13 +946,14 @@ async function finaliseReceivedPaperReturn(result, finalise) {
 async function queueChallengeMail(env, request, result, purpose, email, token) {
   const purposeText = purpose === 'ACTIVATE' ? 'activate your Candidate App account' : 'reset your Candidate App password';
   const route = purpose === 'ACTIVATE' ? 'activate' : 'reset-password';
-  const link = `${publicAppBase(request, env)}/candidate/${route}#token=${encodeURIComponent(token)}`;
+  const link = `${publicAppBase(request, env)}/candidate/${route}#token=${encodeURIComponent(token)}&challenge=${encodeURIComponent(result.challenge_id)}`;
+  const htmlLink = link.replaceAll('&', '&amp;');
   const subject = purpose === 'ACTIVATE' ? 'Activate your CloudTMS Candidate App account' : 'Reset your CloudTMS Candidate App password';
   const bodyText = `Use the secure link below to ${purposeText}.\n\n${link}\n\nThis link expires at ${result.expires_at_utc}. If you did not request this, no action is required.`;
   const deterministicKey = `CANDIDATE_AUTH_${purpose}:${result.challenge_id}`;
   return restWrite(env, 'mail_outbox', 'POST', 'on_conflict=deterministic_outbox_key', {
     type: 'TIMESHEET_GENERAL', to: email, subject,
-    body_html: `<p>Use the secure link below to ${purposeText}.</p><p><a href="${link}">${subject}</a></p><p>This link expires at ${result.expires_at_utc}. If you did not request this, no action is required.</p>`,
+    body_html: `<p>Use the secure link below to ${purposeText}.</p><p><a href="${htmlLink}">${subject}</a></p><p>This link expires at ${result.expires_at_utc}. If you did not request this, no action is required.</p>`,
     body_text: bodyText, attachments: [], status: 'QUEUED',
     reference: `candidate-auth:${purpose.toLowerCase()}:${result.challenge_id}`,
     recipient_kind: 'CANDIDATE', context_kind: 'CANDIDATE_AUTH', context_id: null,
@@ -1380,7 +1426,9 @@ async function handleAccountAction(request, env, deps, action, routeIdentity = {
     selectedCandidateId = requireUuid(body.selected_candidate_id, 'CANDIDATE_SELECTION_NOT_ALLOWED');
     requestIdentity = { ...requestIdentity, selected_candidate_id: selectedCandidateId };
   } else if (action === 'SET_NOTIFICATION_PREFERENCES') {
-    if (!isObject(body.notification_preferences)) throw new CandidateHttpError(400, 'CANDIDATE_NOTIFICATION_PREFERENCES_INVALID');
+    body.notification_preferences = requireCandidateNotificationPreferences(
+      body.notification_preferences
+    );
     requestIdentity = { ...requestIdentity, notification_preferences: body.notification_preferences };
   } else if (action === 'MARK_NOTIFICATION_READ') {
     const notificationId = requireUuid(
@@ -3098,6 +3146,101 @@ function safeQrPackResponse(value) {
   };
 }
 
+function safeCandidateWorkflowPolicy(value) {
+  const source = isObject(value) ? value : {};
+  const manager = isObject(source.manager_approval_policy)
+    ? source.manager_approval_policy : {};
+  const textArray = (input) => Array.isArray(input)
+    ? input.map(item => text(item).trim()).filter(Boolean) : [];
+  return {
+    paper_submission_enabled: source.paper_submission_enabled === true,
+    allow_daily_manager_authorise_on_phone:
+      source.allow_daily_manager_authorise_on_phone === true,
+    allow_daily_manager_authorise_by_email:
+      source.allow_daily_manager_authorise_by_email === true,
+    manager_approval_policy: {
+      approved_emails: textArray(manager.approved_emails),
+      approved_domains: textArray(manager.approved_domains),
+      allow_free_business_email: manager.allow_free_business_email === true
+    }
+  };
+}
+
+function safeExpensePlacement(value) {
+  const source = isObject(value) ? value : {};
+  const placement = upper(source.placement);
+  if (!['BLOCKED', 'SAME_RECORD', 'REUSE_CARRIER', 'CREATE_CARRIER'].includes(placement)) {
+    throw new CandidateHttpError(502, 'CANDIDATE_EXPENSE_PLACEMENT_INVALID');
+  }
+  const anchorContractWeekId = text(source.anchor_contract_week_id);
+  if (!UUID_RE.test(anchorContractWeekId)) {
+    throw new CandidateHttpError(502, 'CANDIDATE_EXPENSE_PLACEMENT_INVALID');
+  }
+  const capabilities = isObject(source.capabilities) ? source.capabilities : {};
+  const anchorTimesheetId = text(source.anchor_timesheet_id);
+  const targetTimesheetId = text(source.target_timesheet_id);
+  const targetContractWeekId = text(source.target_contract_week_id);
+  const idempotencyKey = text(source.idempotency_key);
+  return {
+    ok: true,
+    placement,
+    reason_code: text(source.reason_code) || null,
+    anchor_timesheet_id: UUID_RE.test(anchorTimesheetId) ? anchorTimesheetId : null,
+    anchor_contract_week_id: anchorContractWeekId,
+    target_timesheet_id: UUID_RE.test(targetTimesheetId) ? targetTimesheetId : null,
+    target_contract_week_id: UUID_RE.test(targetContractWeekId) ? targetContractWeekId : null,
+    target_record_role: text(source.target_record_role) || null,
+    capabilities: {
+      can_use_same_record: placement === 'SAME_RECORD',
+      can_reuse_carrier: placement === 'REUSE_CARRIER',
+      can_create_carrier: placement === 'CREATE_CARRIER',
+      can_edit_expenses: capabilities.can_edit_expenses === true,
+      requires_carrier: capabilities.requires_carrier === true
+        || placement === 'REUSE_CARRIER' || placement === 'CREATE_CARRIER'
+    },
+    ...(typeof source.idempotent_replay === 'boolean'
+      ? { idempotent_replay: source.idempotent_replay } : {}),
+    ...(UUID_RE.test(idempotencyKey) ? { idempotency_key: idempotencyKey } : {})
+  };
+}
+
+function normaliseCandidateWorkflowCreatePayload(value) {
+  const supplied = isObject(value) ? value : {};
+  const workflowKind = upper(supplied.workflow_kind);
+  const timesheetId = UUID_RE.test(text(supplied.timesheet_id))
+    ? text(supplied.timesheet_id) : null;
+  return {
+    ...supplied,
+    ...(timesheetId && workflowKind === 'DAILY' && !supplied.target_timesheet_id
+      ? { target_timesheet_id: timesheetId } : {}),
+    ...(timesheetId && workflowKind === 'CONTRACT_EXPENSE' && !supplied.anchor_timesheet_id
+      ? { anchor_timesheet_id: timesheetId } : {})
+  };
+}
+
+function safePaperReturnPages(value) {
+  const source = isObject(value) ? value : {};
+  const pages = Array.isArray(source.pages) ? source.pages : [];
+  return pages.map((page, index) => {
+    if (!isObject(page) || !text(page.page_key).trim() || !text(page.component_kind).trim()) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
+    const componentKind = upper(page.component_kind);
+    const pageKey = text(page.page_key).trim();
+    const sourceComponentId = page.source_component_id == null
+      ? null : requireUuid(page.source_component_id, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    return {
+      ordinal: index + 1,
+      page_key: pageKey,
+      component_kind: componentKind,
+      expense_category: page.expense_category == null
+        ? null : upper(page.expense_category),
+      source_component_id: sourceComponentId,
+      qr_required: componentKind === 'HOURS_TIMESHEET' && pageKey === 'HOURS_TIMESHEET'
+    };
+  });
+}
+
 async function bindCandidatePaperOutbox(env, workflow, timesheetId, pack) {
   if (pack?.recipient_available !== true || pack?.queued !== true) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE');
@@ -3482,7 +3625,11 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
       p_expected_rotation: access.rotation
     }));
     const correlationId = candidateBootstrapCorrelation(request);
-    return jsonResponse(200, composeCandidateBootstrapPhase1b(bootstrap), {
+    const response = composeCandidateBootstrapPhase1b(bootstrap);
+    response.notification_preferences = safeCandidateNotificationPreferences(
+      response.notification_preferences
+    );
+    return jsonResponse(200, response, {
       'x-correlation-id': correlationId
     });
   }
@@ -3540,40 +3687,47 @@ async function handleExpensePlacement(request, env, deps, timesheetId, createCar
   const body = await readJson(request);
   const anchorTimesheetId = requireUuid(timesheetId);
   if (createCarrier) {
-    return jsonResponse(200, await rpcCall(deps, 'expense_carrier_resolve_or_create_atomic_v1', {
+    const result = await rpcCall(deps, 'expense_carrier_resolve_or_create_atomic_v1', {
       p_candidate_id: requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED'),
       p_environment: access.environment,
       p_anchor_timesheet_id: anchorTimesheetId,
       p_expected_row_signature: text(body.expected_row_signature) || null,
       p_idempotency_key: requireCandidateIdempotency(body.idempotency_key),
       p_now_utc: new Date().toISOString()
-    }));
+    });
+    return jsonResponse(200, safeExpensePlacement(result));
   }
   const proposedClaim = isObject(body.proposed_claim) ? body.proposed_claim : {};
   const forbidden = forbiddenFinancialKeys(proposedClaim);
   if (forbidden.length) {
     throw new CandidateHttpError(400, 'CANDIDATE_FINANCIAL_AUTHORITY_FORBIDDEN', { fields: forbidden.slice(0, 20) });
   }
-  return jsonResponse(200, await rpcCall(deps, 'expense_placement_resolve_v1', {
+  const result = await rpcCall(deps, 'expense_placement_resolve_v1', {
     p_candidate_id: requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED'),
     p_environment: access.environment,
     p_anchor_timesheet_id: anchorTimesheetId,
     p_contract_week_id: body.contract_week_id ? requireUuid(body.contract_week_id) : null,
     p_proposed_claim: proposedClaim,
     p_now_utc: new Date().toISOString()
-  }));
+  });
+  return jsonResponse(200, safeExpensePlacement(result));
 }
 
 async function handleWorkflowCreate(request, env, deps) {
   const access = await verifyCandidateAccess(request, env);
   const body = await readJson(request);
   const workflowId = body.workflow_id ? requireUuid(body.workflow_id) : crypto.randomUUID();
-  const payload = isObject(body.workflow) ? body.workflow : body;
+  const payload = normaliseCandidateWorkflowCreatePayload(
+    isObject(body.workflow) ? body.workflow : body
+  );
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
     access, env, workflowId, 'CREATE', null, payload,
     requireCandidateIdempotency(body.idempotency_key)
   ));
-  return jsonResponse(201, result);
+  return jsonResponse(201, {
+    ...result,
+    policy: safeCandidateWorkflowPolicy(result?.policy)
+  });
 }
 
 async function handleWorkflowResubmit(request, env, deps, workflowId) {
@@ -3584,7 +3738,10 @@ async function handleWorkflowResubmit(request, env, deps, workflowId) {
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
     access, env, workflowId, 'RESUBMIT_REJECTED', generation, {}, idempotencyKey
   ));
-  return jsonResponse(201, result);
+  return jsonResponse(201, {
+    ...result,
+    policy: safeCandidateWorkflowPolicy(result?.policy)
+  });
 }
 
 async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey) {
@@ -3600,6 +3757,147 @@ async function prepareImmutableSubmission(env, deps, workflow, body, mutationKey
   };
 }
 
+function pdfBase64(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function escapeCandidateMailHtml(value) {
+  return text(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[character]);
+}
+
+async function candidateMileageFormArtifact(env, workflow, mileageUnits) {
+  const presentation = await buildOfficialPresentationSnapshot(env, workflow);
+  const formWorkflow = {
+    ...workflow,
+    immutable_submission_json: {
+      expense_claim: { mileage_units: mileageUnits, total_mileage: mileageUnits },
+      official_presentation: presentation
+    }
+  };
+  const bytes = await mileageClaimFormBytes(env, formWorkflow, null, presentation);
+  const semanticSha256 = await sha256Hex(JSON.stringify({
+    contract_version: 'CANDIDATE_MILEAGE_CLAIM_FORM_V1',
+    workflow_id: workflow.id,
+    workflow_generation: Number(workflow.generation),
+    week_ending_date: workflow.week_ending_date,
+    mileage_units: mileageUnits,
+    branding_contract_sha256: presentation.branding?.branding_contract_sha256
+  }));
+  const storageKey = `candidate-app/${environmentName(env).toLowerCase()}/${workflow.id}/${workflow.generation}`
+    + `/mileage-form/${semanticSha256}.pdf`;
+  const stored = await immutablePut(env, storageKey, bytes, 'application/pdf', {
+    purpose: 'candidate-mileage-claim-form',
+    workflow_id: workflow.id,
+    workflow_generation: String(workflow.generation),
+    semantic_sha256: semanticSha256,
+    page_count: '1'
+  });
+  return {
+    bytes,
+    storage_key: storageKey,
+    sha256: stored.sha256,
+    semantic_sha256: semanticSha256,
+    filename: `Mileage_Claim_Form_${text(workflow.week_ending_date).slice(0, 10)}.pdf`,
+    candidate_name: `${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim(),
+    agency_name: text(presentation.branding?.agency_name) || 'CloudTMS agency',
+    idempotent_replay: stored.created !== true
+  };
+}
+
+async function handleCandidateMileageFormAction(env, workflow, access, body, dbAction) {
+  if (workflow.account_id !== access.account_id || workflow.candidate_id !== access.selected_candidate_id) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  if (Number(workflow.generation) !== Number(body.generation)) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  if (!['DRAFT', 'REJECTED'].includes(upper(workflow.state))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_WORKFLOW_NOT_MUTABLE');
+  }
+  if (!['CONTRACT_COMBINED', 'CONTRACT_EXPENSE'].includes(upper(workflow.workflow_kind))) {
+    throw new CandidateHttpError(400, 'CANDIDATE_EXPENSE_CLAIM_NOT_ALLOWED');
+  }
+  const mileageUnits = Number(body.mileage_units ?? body.payload?.mileage_units);
+  if (!Number.isFinite(mileageUnits) || mileageUnits <= 0 || mileageUnits > 1_000_000) {
+    throw new CandidateHttpError(400, 'CANDIDATE_MILEAGE_UNITS_INVALID');
+  }
+  const artifact = await candidateMileageFormArtifact(env, workflow, mileageUnits);
+  const common = {
+    ok: true,
+    workflow_id: workflow.id,
+    generation: Number(workflow.generation),
+    state: workflow.state,
+    idempotent_replay: artifact.idempotent_replay,
+    mileage_form_state: dbAction === 'MILEAGE_FORM_EMAIL' ? 'EMAIL_QUEUED' : 'PREPARED',
+    mileage_form_filename: artifact.filename,
+    mileage_form_sha256: artifact.sha256,
+    mileage_form_byte_size: artifact.bytes.byteLength
+  };
+  if (dbAction === 'MILEAGE_FORM_PREPARE') {
+    return { ...common, mileage_form_content_base64: pdfBase64(artifact.bytes) };
+  }
+  const account = await restOne(env, 'candidate_app_accounts',
+    `id=eq.${encodeURIComponent(workflow.account_id)}`
+    + `&environment=eq.${encodeURIComponent(environmentName(env))}`
+    + '&status=eq.ACTIVE&select=id,email_normalized');
+  if (!text(account?.email_normalized)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REGISTERED_EMAIL_NOT_AVAILABLE');
+  }
+  const email = normaliseEmail(account?.email_normalized);
+  const safeAgency = escapeCandidateMailHtml(artifact.agency_name);
+  const safeCandidate = escapeCandidateMailHtml(artifact.candidate_name || 'Candidate');
+  const bodyText = `${artifact.agency_name} has prepared the attached Mileage Claim Form for ${artifact.candidate_name || 'the Candidate'}.\n\n`
+    + `Week ending: ${ukDate(workflow.week_ending_date)}\nTotal mileage: ${mileageUnits} miles\n\n`
+    + 'Complete the journey details and obtain the required manager signature before returning the form in MyTMS.';
+  const deterministicKey = `CANDIDATE_MILEAGE_FORM:${workflow.id}:${workflow.generation}:${artifact.semantic_sha256}`;
+  const outbox = await restWrite(env, 'mail_outbox', 'POST', 'on_conflict=deterministic_outbox_key', {
+    type: 'TIMESHEET_GENERAL', to: email,
+    subject: `Mileage Claim Form for week ending ${ukDate(workflow.week_ending_date)}`,
+    body_html: `<p>${safeAgency} has prepared the attached Mileage Claim Form for ${safeCandidate}.</p>`
+      + `<p>Week ending: ${escapeCandidateMailHtml(ukDate(workflow.week_ending_date))}<br>`
+      + `Total mileage: ${escapeCandidateMailHtml(mileageUnits)} miles</p>`
+      + '<p>Complete the journey details and obtain the required manager signature before returning the form in MyTMS.</p>',
+    body_text: bodyText,
+    attachments: [{
+      r2_key: artifact.storage_key,
+      filename: artifact.filename,
+      content_type: 'application/pdf',
+      sha256: artifact.sha256,
+      size_bytes: artifact.bytes.byteLength,
+      page_count: 1
+    }],
+    status: 'QUEUED',
+    reference: `candidate-mileage-form:${workflow.id}:${workflow.generation}`,
+    recipient_kind: 'CANDIDATE',
+    context_kind: 'CANDIDATE_WORKFLOW',
+    context_id: workflow.id,
+    email_type: 'CANDIDATE_APP_TRANSACTIONAL',
+    scheduled_for_utc: new Date().toISOString(),
+    next_attempt_at_utc: new Date().toISOString(),
+    deterministic_outbox_key: deterministicKey,
+    payment_scope_json: {
+      candidate_mail_authority: 'CANDIDATE_MILEAGE_FORM_V1',
+      candidate_workflow_id: workflow.id,
+      candidate_workflow_generation: Number(workflow.generation),
+      mileage_form_semantic_sha256: artifact.semantic_sha256
+    }
+  }, 'resolution=ignore-duplicates,return=representation');
+  const durable = outbox || await restOne(env, 'mail_outbox',
+    `deterministic_outbox_key=eq.${encodeURIComponent(deterministicKey)}&select=id,status`);
+  if (!durable?.id || !['QUEUED', 'CLAIMED', 'SENT'].includes(upper(durable.status))) {
+    throw new CandidateHttpError(503, 'CANDIDATE_MILEAGE_FORM_EMAIL_NOT_QUEUED');
+  }
+  return {
+    ...common,
+    idempotent_replay: artifact.idempotent_replay || !outbox,
+    mail_outbox_id: durable.id
+  };
+}
+
 async function handleWorkflowAction(request, env, deps, workflowId, action, ctx) {
   const access = await verifyCandidateAccess(request, env);
   const body = await readJson(request);
@@ -3609,6 +3907,11 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
   let dbAction = upper(action.replace(/-/g, '_'));
   if (!CANDIDATE_WORKFLOW_ACTIONS.has(dbAction) && dbAction !== 'COMPONENT_SUPERSEDE') {
     throw new CandidateHttpError(400, 'CANDIDATE_WORKFLOW_ACTION_INVALID');
+  }
+  if (dbAction === 'MILEAGE_FORM_PREPARE' || dbAction === 'MILEAGE_FORM_EMAIL') {
+    const workflow = await workflowRow(env, workflowId);
+    return jsonResponse(dbAction === 'MILEAGE_FORM_EMAIL' ? 202 : 200,
+      await handleCandidateMileageFormAction(env, workflow, access, body, dbAction));
   }
   if (dbAction === 'RETRY_FINALISATION') {
     const workflow = await workflowRow(env, workflowId);
@@ -3840,6 +4143,13 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     const workflow = await workflowRow(env, workflowId);
     const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
     if (!timesheetId) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+    const paperReturnPages = safePaperReturnPages(
+      parseJson(workflow.paper_return_manifest_json, {})
+    );
+    if (!paperReturnPages.length
+        || paperReturnPages.length !== Number(result?.paper_return_page_count)) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
     const pack = result?.paper_pack;
     const outboxBinding = await bindCandidatePaperOutbox(env, workflow, timesheetId, pack);
     if (deps.nudgeQrPack) await deps.nudgeQrPack({ pack, timesheetId, ctx });
@@ -3848,7 +4158,8 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       ...publicResult,
       paper_pack_queued: pack?.queued === true,
       paper_pack: safeQrPackResponse(pack),
-      paper_pack_email_bound: outboxBinding.bound
+      paper_pack_email_bound: outboxBinding.bound,
+      paper_return_pages: paperReturnPages
     });
   }
   if (dbAction === 'PAPER_RETURN' && result?.state === 'RECEIVED') {
@@ -4076,27 +4387,19 @@ async function appendPdfBytes(target, sourceBytes) {
 }
 
 function mileageJourneyRows(workflow) {
-  const { expenseSubmission, claim } = expenseClaim(workflow);
+  const { expenseSubmission } = expenseClaim(workflow);
   const source = [expenseSubmission.mileage_journeys, expenseSubmission.journeys, expenseSubmission.mileage_entries]
     .find(Array.isArray) || [];
   const rows = source.slice(0, 10).map((journey) => ({
     post_code_from: text(journey?.post_code_from || journey?.postcode_from || journey?.from_postcode),
-    cost_code_to: text(journey?.cost_code_to || journey?.to_cost_code || journey?.to),
+    post_code_to: text(journey?.post_code_to || journey?.postcode_to || journey?.to_postcode),
     miles: text(journey?.number_of_miles ?? journey?.miles ?? journey?.mileage_units)
   }));
-  if (!rows.length) {
-    const fallback = {
-      post_code_from: text(expenseSubmission.post_code_from || expenseSubmission.postcode_from || claim.post_code_from),
-      cost_code_to: text(expenseSubmission.cost_code_to || claim.cost_code_to),
-      miles: text(claim.mileage_units || expenseSubmission.mileage_units)
-    };
-    if (fallback.post_code_from || fallback.cost_code_to || fallback.miles) rows.push(fallback);
-  }
-  while (rows.length < 10) rows.push({ post_code_from: '', cost_code_to: '', miles: '' });
+  while (rows.length < 10) rows.push({ post_code_from: '', post_code_to: '', miles: '' });
   return rows;
 }
 
-async function mileageClaimFormBytes(env, workflow, brandingOverride = null) {
+async function mileageClaimFormBytes(env, workflow, brandingOverride = null, presentationOverride = null) {
   const pdf = await PDFDocument.create({ updateMetadata: false });
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -4109,7 +4412,7 @@ async function mileageClaimFormBytes(env, workflow, brandingOverride = null) {
     x: 34, y: 795, size: 16, font: bold, color: rgb(1, 1, 1)
   });
   const immutable = parseJson(workflow.immutable_submission_json, {}) || {};
-  const presentation = parseJson(immutable.official_presentation, {}) || {};
+  const presentation = presentationOverride || parseJson(immutable.official_presentation, {}) || {};
   const { expenseSubmission, claim } = expenseClaim(workflow);
   page.drawText(`Candidate: ${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim(), {
     x: 42, y: 755, size: 10, font: regular, color: rgb(0.07, 0.14, 0.24)
@@ -4119,7 +4422,7 @@ async function mileageClaimFormBytes(env, workflow, brandingOverride = null) {
   });
   const columns = [
     { label: 'Post Code from', x: 42, width: 180 },
-    { label: 'Cost Code To', x: 222, width: 180 },
+    { label: 'Post Code To', x: 222, width: 180 },
     { label: 'Number of miles', x: 402, width: 151 }
   ];
   const headerY = 712;
@@ -4130,7 +4433,7 @@ async function mileageClaimFormBytes(env, workflow, brandingOverride = null) {
   const journeys = mileageJourneyRows(workflow);
   journeys.forEach((journey, index) => {
     const y = headerY - ((index + 1) * 38);
-    const values = [journey.post_code_from, journey.cost_code_to, journey.miles];
+    const values = [journey.post_code_from, journey.post_code_to, journey.miles];
     columns.forEach((column, columnIndex) => {
       page.drawRectangle({ x: column.x, y, width: column.width, height: 38, borderColor: rgb(0.35, 0.42, 0.5), borderWidth: 0.8 });
       if (values[columnIndex]) page.drawText(values[columnIndex].slice(0, 26), { x: column.x + 8, y: y + 13, size: 9, font: regular });
@@ -4898,8 +5201,71 @@ async function handleCandidateNoWork(request, env, deps, contractWeekId) {
   })));
 }
 
+const CANDIDATE_NOTIFICATION_COPY = Object.freeze({
+  MANAGER_APPROVED: 'Your submission has been approved by the manager.',
+  MANAGER_REFUSED: 'Your submission was refused by the manager. Open it to review what to do next.',
+  AUTHORISED: 'Your timesheet has been authorised.',
+  SUBMISSION_RECEIVED: 'Your submission has been received.',
+  OFFICE_REJECTED: 'Your submission needs changes. Open it to review what to do next.',
+  PAPER_PACK_READY: 'Your printed signing documents are ready.',
+  RESUBMISSION_REQUIRED: 'A timesheet needs to be submitted again.'
+});
+
+function optionalUuid(value) {
+  const candidate = text(value);
+  return UUID_RE.test(candidate) ? candidate : null;
+}
+
+function safeCandidateNotification(row) {
+  const source = isObject(row) ? row : {};
+  const parameters = isObject(source.template_params) ? source.template_params : {};
+  const storedLink = isObject(source.deep_link_json) ? source.deep_link_json : {};
+  const eventType = upper(source.event_type);
+  const storedType = text(storedLink.type).toLowerCase();
+  const workflowId = optionalUuid(source.workflow_id) || optionalUuid(storedLink.workflow_id)
+    || optionalUuid(parameters.workflow_id);
+  const timesheetId = optionalUuid(source.timesheet_id) || optionalUuid(storedLink.timesheet_id)
+    || optionalUuid(parameters.timesheet_id);
+  const contractWeekId = optionalUuid(storedLink.contract_week_id)
+    || optionalUuid(parameters.contract_week_id);
+  let destination = 'HOME';
+  if (storedType === 'daily') destination = 'DAILY';
+  else if (storedType === 'account') destination = 'ACCOUNT';
+  else if (storedType === 'workflow' && workflowId) destination = 'WORKFLOW_DETAIL';
+  else if ((storedType === 'timesheet' || storedType === 'paper_pack') && timesheetId) {
+    destination = 'TIMESHEET_DETAIL';
+  } else if (workflowId) destination = 'WORKFLOW_DETAIL';
+  else if (timesheetId || contractWeekId) destination = 'TIMESHEET_DETAIL';
+
+  const payload = {
+    state: eventType || 'UPDATE',
+    candidate_status_code: eventType || 'UPDATE',
+    message: CANDIDATE_NOTIFICATION_COPY[eventType] || 'There is a new update in MyTMS.',
+    occurred_at_utc: source.created_at_utc
+  };
+  if (workflowId) payload.workflow_id = workflowId;
+  if (timesheetId) payload.timesheet_id = timesheetId;
+  if (contractWeekId) payload.contract_week_id = contractWeekId;
+
+  const deepLink = { destination };
+  if (workflowId) deepLink.workflow_id = workflowId;
+  if (timesheetId) deepLink.timesheet_id = timesheetId;
+  if (contractWeekId) deepLink.contract_week_id = contractWeekId;
+  return {
+    id: source.id,
+    event_type: eventType || 'UPDATE',
+    template_key: text(source.template_key) || 'candidate-update-v1',
+    payload_json: payload,
+    deep_link_json: deepLink,
+    state: upper(source.state) || 'UNREAD',
+    created_at_utc: source.created_at_utc,
+    read_at_utc: source.read_at_utc || null
+  };
+}
+
 async function handleNotifications(request, env, deps) {
   const access = await verifyCandidateAccess(request, env);
+  const candidateId = requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
   const url = new URL(request.url);
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') || 50)));
   const cursor = text(url.searchParams.get('cursor'));
@@ -4912,10 +5278,11 @@ async function handleNotifications(request, env, deps) {
     cursorFilter = `&or=(created_at_utc.lt.${encodeURIComponent(createdAt)},and(created_at_utc.eq.${encodeURIComponent(createdAt)},id.lt.${encodeURIComponent(id)}))`;
   }
   const rows = await restRows(env, 'candidate_notifications',
-    `account_id=eq.${encodeURIComponent(access.account_id)}${cursorFilter}`
-    + `&select=id,event_type,template_key,payload_json,deep_link_json,state,created_at_utc,read_at_utc&order=created_at_utc.desc,id.desc&limit=${limit + 1}`);
+    `account_id=eq.${encodeURIComponent(access.account_id)}`
+    + `&candidate_id=eq.${encodeURIComponent(candidateId)}${cursorFilter}`
+    + `&select=id,workflow_id,timesheet_id,event_type,template_key,template_params,deep_link_json,state,created_at_utc,read_at_utc&order=created_at_utc.desc,id.desc&limit=${limit + 1}`);
   const hasMore = rows.length > limit;
-  const page = rows.slice(0, limit);
+  const page = rows.slice(0, limit).map(safeCandidateNotification);
   const tail = page[page.length - 1];
   return jsonResponse(200, {
     ok: true, notifications: page,
@@ -6113,6 +6480,13 @@ export const candidateAppBackendInternals = Object.freeze({
   withoutInternalRenderContracts,
   safeFinalisationResult,
   safeQrPackResponse,
+  safeCandidateWorkflowPolicy,
+  safeExpensePlacement,
+  normaliseCandidateWorkflowCreatePayload,
+  safeCandidateNotificationPreferences,
+  safeCandidateNotification,
+  requireCandidateNotificationPreferences,
+  safePaperReturnPages,
   immutablePut,
   preparedUploadContract,
   expenseSummaryDisplayLines,
