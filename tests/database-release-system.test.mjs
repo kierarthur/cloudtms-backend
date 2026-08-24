@@ -102,6 +102,8 @@ test('one-time LIVE provider clone is protected, source-read-only and destinatio
   assert.doesNotMatch(workflow, /create role (?:postgres|supabase_admin)[^\n]*(?:^|[^a-z])login\b/im);
   assert.match(workflow, /where e\.extname in \('pgcrypto', 'uuid-ossp'\)/);
   assert.doesNotMatch(workflow, /grant execute on all functions in schema extensions/i);
+  assert.match(workflow, /docker run --rm[\s\S]*sha256sum \/work\/live\.dump/);
+  assert.doesNotMatch(workflow, /chmod[^\n]*live\.dump/i);
   assert.doesNotMatch(workflow, /actions\/upload-artifact/);
 });
 

@@ -219,7 +219,13 @@ jobs:
 
           row_manifest_sha="$(sha256sum "$work/destination-rows.txt" | cut -d' ' -f1)"
           sequence_manifest_sha="$(sha256sum "$work/destination-sequences.txt" | cut -d' ' -f1)"
-          dump_sha="$(sha256sum "$work/live.dump" | cut -d' ' -f1)"
+          # pg_dump runs as the container's postgres user and intentionally leaves the
+          # encrypted-in-transit temporary dump unreadable to the runner user. Hash it
+          # inside the same container boundary instead of weakening its file mode.
+          dump_sha="$(docker run --rm \
+            --mount type=bind,src="$work",dst=/work \
+            postgres:18 \
+            sha256sum /work/live.dump | cut -d' ' -f1)"
           {
             echo "### LIVE Supabase to Miget clone"
             echo "- Source access: pg_dump read-only"
