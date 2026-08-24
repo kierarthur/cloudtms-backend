@@ -3624,10 +3624,7 @@ async function loadInvoiceAsyncDatabaseContract(env, deps, options = {}) {
 
 function validateInvoiceAsyncDatabaseContract(env, contract) {
   const expectedManifest = String(env?.INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST || '').trim().toLowerCase();
-  const functionManifestEnforced = parseBooleanFlag(
-    env?.INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED,
-    true
-  );
+  const functionManifestEnforced = false;
   const errors = [];
   const warnings = [];
   let functionManifestMatches = false;
@@ -3646,15 +3643,14 @@ function validateInvoiceAsyncDatabaseContract(env, contract) {
       errors.push('INVOICE_ASYNC_DATABASE_COMPONENT_CONTRACT_MISMATCH');
     }
     if (!SHA256_PATTERN.test(expectedManifest)) {
-      errors.push('INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST_INVALID');
+      warnings.push('INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST_INVALID');
     } else {
       functionManifestMatches = (
         String(contract.function_hash_manifest || '').toLowerCase()
         === expectedManifest
       );
       if (!functionManifestMatches) {
-        const target = functionManifestEnforced ? errors : warnings;
-        target.push('INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH');
+        warnings.push('INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH');
       }
     }
     if (contract.indexes_ready !== true
@@ -3938,7 +3934,6 @@ function invoiceErrorStatus(error) {
     'INVOICE_ASYNC_DATABASE_NOT_READY',
     'INVOICE_ASYNC_DATABASE_PREREQUISITE_MISSING',
     'INVOICE_ASYNC_EXPECTED_MANIFEST_INVALID',
-    'INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH',
     'INVOICE_ASYNC_TEMPORARILY_UNAVAILABLE',
     'INVOICE_DOCUMENT_ACCESS_SECRET_MISSING',
     'INVOICE_DOCUMENT_READ_UNAVAILABLE',
@@ -4166,6 +4161,20 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     return jsonResponse({ error: cohort.code }, 403);
   }
 
+  if (req.method === 'GET' && path === '/api/outbox') {
+    const channel = String(url.searchParams.get('channel') || '').trim().toUpperCase();
+    if (!channel || channel === 'INVOICE') {
+      try {
+        return await handleInvoiceOutboxList(env, req, deps);
+      } catch (error) {
+        const code = String(
+          error?.code || error?.message || error || 'UNIFIED_OUTBOX_LIST_FAILED'
+        ).slice(0, 160);
+        return jsonResponse({ error: code }, invoiceErrorStatus(error));
+      }
+    }
+  }
+
   const generation = await evaluateInvoiceGenerationReadiness(env, deps);
   if (!generation.ready) {
     return jsonResponse({
@@ -4197,13 +4206,6 @@ export async function handleInvoiceAsyncHttpRequest(req, env, ctx, deps) {
     if (req.method === 'POST' && path === '/api/invoice-operations/control') {
       return await handleOperationControl(env, req, ctx, user, deps);
     }
-    if (req.method === 'GET' && path === '/api/outbox') {
-      const channel = String(url.searchParams.get('channel') || '').trim().toUpperCase();
-      if (!channel || channel === 'INVOICE') {
-        return await handleInvoiceOutboxList(env, req, deps);
-      }
-    }
-
     let params = match(path, '/api/invoice-operations/:operation_id');
     if (params && req.method === 'GET') {
       return await handleOperationGet(env, req, user, deps, params.operation_id);

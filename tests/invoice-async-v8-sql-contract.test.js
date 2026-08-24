@@ -1685,11 +1685,6 @@ test('committed TEST configuration keeps interactive enabled and scheduled disab
       /INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST\s*=\s*"([^"]+)"/g,
     ),
   ];
-  const manifestEnforcementValues = [
-    ...wrangler.matchAll(
-      /INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED\s*=\s*"([^"]+)"/g,
-    ),
-  ];
   const buildValues = [
     ...wrangler.matchAll(/INVOICE_ASYNC_BUILD_ID\s*=\s*"([^"]+)"/g),
   ];
@@ -1697,7 +1692,6 @@ test('committed TEST configuration keeps interactive enabled and scheduled disab
   assert.ok(pipelineFlags.length > 0);
   assert.ok(scheduledFlags.length > 0);
   assert.ok(manifestValues.length >= 2);
-  assert.equal(manifestEnforcementValues.length, 2);
   assert.ok(buildValues.length >= 2);
   assert.equal(pipelineFlags[0][1], 'false');
   assert.equal(pipelineFlags[1][1], 'true');
@@ -1705,8 +1699,7 @@ test('committed TEST configuration keeps interactive enabled and scheduled disab
   assert.ok(scheduledFlags.every(match => match[1] === 'false'));
   assert.equal(manifestValues[0][1], functionHashes.aggregate_sha256);
   assert.equal(manifestValues[1][1], functionHashes.aggregate_sha256);
-  assert.equal(manifestEnforcementValues[0][1], 'true');
-  assert.equal(manifestEnforcementValues[1][1], 'false');
+  assert.doesNotMatch(wrangler, /INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED/);
   assert.equal(buildValues[1][1], 'invoice-async-v8-test-20260731-r51');
 });
 

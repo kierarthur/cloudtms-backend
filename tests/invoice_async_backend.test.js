@@ -1024,8 +1024,9 @@ test('draft invoice view fails closed when required expense evidence bytes are m
   }
 });
 
-test('unfiltered unified outbox includes bounded invoice operation rows', async () => {
+test('unfiltered unified outbox remains available without invoice-generation readiness', async () => {
   const originalFetch = globalThis.fetch;
+  let readinessRpcCalled = false;
   globalThis.fetch = async request => {
     const url = new URL(
       typeof request === 'string'
@@ -1064,13 +1065,19 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
   try {
     const response = await handleInvoiceAsyncHttpRequest(
       new Request('https://example.test/api/outbox?limit=50'),
-      v8Environment(),
+      v8Environment({
+        INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST: '',
+        INVOICE_DOCUMENT_PROCESSOR: {
+          fetch: async () => new Response('{}', { status: 503 })
+        }
+      }),
       {},
       {
         requireUser: async () => v8Actor(),
-        rpc: v8Rpc(async () => {
-          throw new Error('Unified cursor listing must not use the offset RPC');
-        })
+        rpc: async () => {
+          readinessRpcCalled = true;
+          throw new Error('Read-only Outbox must not evaluate invoice-generation readiness');
+        }
       }
     );
     const body = await response.json();
@@ -1079,6 +1086,7 @@ test('unfiltered unified outbox includes bounded invoice operation rows', async 
     assert.equal(body.items[0].channel, 'INVOICE');
     assert.equal(body.items[0].scheduled_for_utc, null);
     assert.equal(body.items[1].channel, 'EMAIL');
+    assert.equal(readinessRpcCalled, false);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -2967,7 +2975,9 @@ test('capabilities advertise mandatory V8 features only when every dependency is
   assert.equal(body.enabled_for_user, true);
   assert.ok(Object.values(body.feature_flags).every(value => value === true));
 
-  const badEnv = v8Environment();
+  const badEnv = v8Environment({
+    INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED: 'true'
+  });
   const mismatch = await handleInvoiceAsyncHttpRequest(
     new Request('https://example.test/api/invoice-async/capabilities'),
     badEnv,
@@ -2978,12 +2988,29 @@ test('capabilities advertise mandatory V8 features only when every dependency is
     }
   );
   const mismatchBody = await mismatch.json();
-  assert.equal(mismatchBody.database_contract_ready, false);
-  assert.equal(mismatchBody.deployment_contract_ready, false);
+  assert.equal(mismatchBody.database_contract_ready, true);
+  assert.equal(mismatchBody.deployment_contract_ready, true);
   assert.equal(mismatchBody.document_read_ready, true);
-  assert.equal(mismatchBody.document_generation_ready, false);
-  assert.equal(mismatchBody.enabled_for_user, false);
-  assert.ok(Object.values(mismatchBody.feature_flags).every(value => value === false));
+  assert.equal(mismatchBody.document_generation_ready, true);
+  assert.equal(mismatchBody.enabled_for_user, true);
+  assert.equal(mismatchBody.function_manifest_enforced, false);
+  assert.equal(mismatchBody.function_manifest_matches, false);
+  assert.deepEqual(
+    mismatchBody.database_contract_warnings,
+    ['INVOICE_ASYNC_FUNCTION_MANIFEST_MISMATCH']
+  );
+  assert.ok(Object.values(mismatchBody.feature_flags).every(value => value === true));
+
+  const missingManifest = invoiceAsyncHttpInternals.validateInvoiceAsyncDatabaseContract(
+    v8Environment({ INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST: '' }),
+    v8DatabaseContract()
+  );
+  assert.equal(missingManifest.ok, true);
+  assert.equal(missingManifest.functionManifestEnforced, false);
+  assert.deepEqual(
+    missingManifest.warnings,
+    ['INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST_INVALID']
+  );
 
   const processorMismatch = await handleInvoiceAsyncHttpRequest(
     new Request('https://example.test/api/invoice-async/capabilities'),

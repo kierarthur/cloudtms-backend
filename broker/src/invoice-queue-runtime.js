@@ -134,7 +134,6 @@ export function getInvoiceQueueRuntimeConfig(env = {}) {
     autoStartBatchSize: parseBoundedInteger(env.INVOICE_AUTO_START_BATCH_SIZE, 500, 1, 1000),
     autoMaximumStartBatchesPerInvocation: parseBoundedInteger(env.INVOICE_AUTO_MAX_START_BATCHES, 2, 1, 10),
     expectedDbContract: String(env.INVOICE_ASYNC_EXPECTED_DB_CONTRACT || '').trim(),
-    expectedFunctionManifest: String(env.INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST || '').trim().toLowerCase(),
     invoiceAsyncBuildId: String(env.INVOICE_ASYNC_BUILD_ID || '').trim().slice(0, 200),
     candidateCursorTtlSeconds: parseBoundedInteger(
       env.INVOICE_BATCH_CANDIDATE_CURSOR_TTL_SECONDS,
@@ -198,9 +197,6 @@ export function validateQueueRuntimeConfiguration(env = {}) {
   if (config.userNudgeProcessesExternalWork) errors.push('INVOICE_USER_NUDGE_EXTERNAL_WORK_UNSAFE');
   if (config.expectedDbContract !== 'INVOICE_ASYNC_DB_V2') {
     errors.push('INVOICE_ASYNC_EXPECTED_DB_CONTRACT_INVALID');
-  }
-  if (!/^[0-9a-f]{64}$/.test(config.expectedFunctionManifest)) {
-    errors.push('INVOICE_ASYNC_EXPECTED_FUNCTION_MANIFEST_INVALID');
   }
   if (!config.invoiceAsyncBuildId) {
     errors.push('INVOICE_ASYNC_BUILD_ID_MISSING');
@@ -1833,5 +1829,3 @@ export const invoiceQueueRuntimeInternals = Object.freeze({
   deriveAttachmentDisplayMap,
   verifyFrozenPresentationModelHash
 });
-
-

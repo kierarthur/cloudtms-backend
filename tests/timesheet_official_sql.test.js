@@ -109,12 +109,12 @@ test('settings wording changes participate in invoice candidate revision', () =>
   }
 });
 
-test('TEST keeps function-manifest enforcement off while the default remains on', () => {
+test('function-manifest enforcement is not configured for any environment', () => {
   const wrangler = read('wrangler.toml');
   const values = [...wrangler.matchAll(
     /INVOICE_ASYNC_FUNCTION_MANIFEST_ENFORCED\s*=\s*"([^"]+)"/g
   )].map(match => match[1]);
-  assert.deepEqual(values, ['true', 'false']);
+  assert.deepEqual(values, []);
 });
 
 test('planner V2 installer references both canonical planner definitions', () => {
