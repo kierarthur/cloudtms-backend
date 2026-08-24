@@ -170,6 +170,46 @@ export function inventory() {
   return { migrations, repeatables };
 }
 
+export function legacyUpgradeInventory(current, legacyFilenames) {
+  const repositoryByFilename = new Map();
+  for (const item of current.migrations) {
+    const filename = path.posix.basename(item.path);
+    if (repositoryByFilename.has(filename)) {
+      throw new Error(`Repository migration filename is ambiguous: ${filename}`);
+    }
+    repositoryByFilename.set(filename, item);
+  }
+  const installed = new Set();
+  let bootstrapMarkers = 0;
+  for (const rawFilename of legacyFilenames) {
+    const filename = String(rawFilename || '');
+    if (filename === '__BOOTSTRAPPED__') {
+      bootstrapMarkers += 1;
+      continue;
+    }
+    if (!repositoryByFilename.has(filename)) {
+      throw new Error(`Legacy installed migration is absent from repository: ${filename}`);
+    }
+    if (installed.has(filename)) {
+      throw new Error(`Legacy migration ledger contains a duplicate: ${filename}`);
+    }
+    installed.add(filename);
+  }
+  if (bootstrapMarkers !== 1) {
+    throw new Error('Legacy migration ledger must contain exactly one __BOOTSTRAPPED__ marker');
+  }
+  if (installed.size === 0) {
+    throw new Error('Legacy migration ledger contains no installed repository migrations');
+  }
+  return {
+    installedCount: installed.size,
+    pendingMigrations: current.migrations.filter(
+      item => !installed.has(path.posix.basename(item.path)),
+    ),
+    pendingRepeatables: current.repeatables,
+  };
+}
+
 export function readJson(relativePath) {
   return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'));
 }

@@ -9,10 +9,10 @@ on:
         type: choice
         options: [TEST, LIVE]
       mode:
-        description: NEW blank install, UPGRADE managed DB, or ADOPT exact existing authority
+        description: NEW blank, UPGRADE managed, ADOPT exact, or one-time LEGACY_UPGRADE
         required: true
         type: choice
-        options: [UPGRADE, NEW, ADOPT]
+        options: [UPGRADE, NEW, ADOPT, LEGACY_UPGRADE]
       phase:
         description: PLAN is read-only; APPLY performs the reviewed plan
         required: true

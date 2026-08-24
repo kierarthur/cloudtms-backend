@@ -5,7 +5,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
   canonicalContractHash, contractDifference, databaseUrl, exportContract, inventory,
-  psql, readJson, repoRoot, shellGitHead, validateTarget, verifyIntegrity, writeJson,
+  legacyUpgradeInventory, psql, readJson, repoRoot, shellGitHead, validateTarget,
+  verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
@@ -157,12 +158,70 @@ function assertUpgradeLedger(current) {
   return new Set(rows.map(row => row.path));
 }
 
+function legacyUpgradeState(current, environment) {
+  if (environment !== 'LIVE') throw new Error('LEGACY_UPGRADE is restricted to LIVE');
+  const migrationLedgerPresent = psql({
+    sql: `select (to_regclass('public.schema_migrations') is not null)::text;`,
+  }) === 'true';
+  if (!migrationLedgerPresent) throw new Error('LEGACY_UPGRADE requires public.schema_migrations');
+  const repeatableLedgerPresent = psql({
+    sql: `select (to_regclass('public.schema_repeatables') is not null)::text;`,
+  }) === 'true';
+  if (repeatableLedgerPresent) {
+    throw new Error('LEGACY_UPGRADE refuses a database with an ambiguous public repeatable ledger');
+  }
+  const identityTablePresent = psql({
+    sql: `select (to_regclass('private.cloudtms_database_identity') is not null)::text;`,
+  }) === 'true';
+  if (identityTablePresent) {
+    const identityCount = Number(psql({
+      sql: `select count(*) from private.cloudtms_database_identity;`,
+    }));
+    if (identityCount !== 0) {
+      throw new Error('LEGACY_UPGRADE refuses a database already carrying managed identity');
+    }
+  }
+  const legacyFilenames = JSON.parse(psql({
+    sql: `select coalesce(jsonb_agg(filename order by filename), '[]'::jsonb)::text from public.schema_migrations;`,
+  }) || '[]');
+  return legacyUpgradeInventory(current, legacyFilenames);
+}
+
+function adoptLegacyInventoryAtomically({ releaseId, environment, customerKey, expectedHash, current, evidence }) {
+  const migrationValues = current.migrations.map(
+    item => `(${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)})`,
+  ).join(',');
+  const repeatableValues = current.repeatables.map(
+    item => `(${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)})`,
+  ).join(',');
+  psql({ sql: `
+    begin;
+    insert into private.cloudtms_database_identity(singleton, environment, customer_key)
+    values (true, ${sqlLiteral(environment)}, ${customerKey ? sqlLiteral(customerKey) : 'null'});
+    insert into private.cloudtms_database_releases(
+      release_id, git_commit, repository_contract_sha256, installed_contract_sha256,
+      install_mode, status, completed_at_utc, evidence_json
+    ) values (
+      ${sqlLiteral(releaseId)}, ${sqlLiteral(shellGitHead())}, ${sqlLiteral(expectedHash)},
+      ${sqlLiteral(expectedHash)}, 'LEGACY_UPGRADE', 'VERIFIED', pg_catalog.clock_timestamp(),
+      ${sqlLiteral(JSON.stringify(evidence))}::jsonb
+    );
+    insert into private.cloudtms_migration_ledger(path,content_sha256,first_release_id)
+    values ${migrationValues};
+    insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id)
+    values ${repeatableValues};
+    commit;
+  ` });
+}
+
 function applyRelease() {
   verifyIntegrity();
   const release = readJson('supabase/release/current-release.json');
   const environment = required('environment', process.env.CLOUDTMS_ENVIRONMENT);
   const mode = required('mode', process.env.CLOUDTMS_RELEASE_MODE);
-  if (!['NEW', 'UPGRADE', 'ADOPT'].includes(mode)) throw new Error('mode must be NEW, UPGRADE, or ADOPT');
+  if (!['NEW', 'UPGRADE', 'ADOPT', 'LEGACY_UPGRADE'].includes(mode)) {
+    throw new Error('mode must be NEW, UPGRADE, ADOPT, or LEGACY_UPGRADE');
+  }
   validateTarget(
     environment,
     options['expected-target']
@@ -179,7 +238,34 @@ function applyRelease() {
   const current = inventory();
   const releaseId = `${release.releaseId}-${mode.toLowerCase()}-${shellGitHead().slice(0, 12)}`;
 
-  if (mode === 'NEW') {
+  if (mode === 'LEGACY_UPGRADE') {
+    const legacy = legacyUpgradeState(current, environment);
+    for (const item of legacy.pendingMigrations) {
+      psql({ file: item.path });
+      psql({
+        sql: `insert into public.schema_migrations(filename) values (${sqlLiteral(path.basename(item.path))});`,
+      });
+    }
+    runBankingPayCatalogPreapply(legacy.pendingRepeatables.map(item => item.path));
+    for (const item of legacy.pendingRepeatables) psql({ file: item.path });
+    runVerifiers();
+    const verified = compareExpected(release.contractPath);
+    adoptLegacyInventoryAtomically({
+      releaseId,
+      environment,
+      customerKey,
+      expectedHash,
+      current,
+      evidence: {
+        legacyInstalledMigrations: legacy.installedCount,
+        appliedMigrations: legacy.pendingMigrations.length,
+        appliedRepeatables: legacy.pendingRepeatables.length,
+        verificationFiles: release.verificationFiles,
+      },
+    });
+    console.log(`VERIFIED LEGACY_UPGRADE release ${releaseId} for ${environment}.`);
+    return;
+  } else if (mode === 'NEW') {
     const count = Number(psql({ sql: `select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p','v','S');` }));
     if (count !== 0) throw new Error(`NEW requires an empty application schema; found ${count} objects`);
     for (const file of release.baselineFiles) psql({ file });
@@ -260,7 +346,18 @@ try {
         ?? process.env.CLOUDTMS_EXPECTED_PROJECT_REF,
     );
     const release = readJson('supabase/release/current-release.json');
+    if (!['NEW', 'UPGRADE', 'ADOPT', 'LEGACY_UPGRADE'].includes(mode)) {
+      throw new Error('mode must be NEW, UPGRADE, ADOPT, or LEGACY_UPGRADE');
+    }
     if (mode === 'ADOPT') compareExpected(release.contractPath);
+    if (mode === 'LEGACY_UPGRADE') {
+      const legacy = legacyUpgradeState(inventory(), environment);
+      console.log(
+        `READ-ONLY LEGACY_UPGRADE PLAN: ${legacy.installedCount} installed migrations, `
+        + `${legacy.pendingMigrations.length} pending migrations, `
+        + `${legacy.pendingRepeatables.length} repeatables.`,
+      );
+    }
     if (mode === 'NEW') {
       const count = Number(psql({ sql: `select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind in ('r','p','v','S');` }));
       if (count !== 0) throw new Error(`NEW requires an empty application schema; found ${count} objects`);

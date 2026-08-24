@@ -4,6 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import {
   canonicalSqlBytes, closureFor, deadlockRetryCountForFile, inventory,
+  legacyUpgradeInventory,
   mapGeneratedAclBaselineSql, mapLogicalPostgresOwnerSql,
   readJson, repoRoot, sha256, sqlDateKey,
   validateTarget, verifyIntegrity,
@@ -82,6 +83,7 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.match(workflow, /if: inputs\.phase == 'APPLY'/);
   assert.match(workflow, /APPLY \$\{\{ inputs\.environment \}\} \$\{\{ inputs\.mode \}\}/);
   assert.match(workflow, /CLOUDTMS_LOGICAL_POSTGRES_OWNER:\s*CURRENT_USER/);
+  assert.match(workflow, /LEGACY_UPGRADE/);
 });
 
 test('one-time LIVE provider clone is protected, source-read-only and destination-blank-only', () => {
@@ -152,14 +154,45 @@ test('hosted target validation accepts a provider-neutral database locator and f
   }
 });
 
-test('release engine has fail-closed NEW, ADOPT, and UPGRADE gates', () => {
+test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy upgrade gates', () => {
   const source = read('scripts/cloudtms-db-release.mjs');
   assert.match(source, /NEW requires an empty application schema/);
   assert.match(source, /mode === 'ADOPT'/);
   assert.match(source, /Installed migration hash mismatch/);
   assert.match(source, /Database contract differs in/);
-  assert.doesNotMatch(source, /__BOOTSTRAPPED__|marking existing migrations/);
+  assert.match(source, /LEGACY_UPGRADE is restricted to LIVE/);
+  assert.match(source, /refuses a database already carrying managed identity/);
+  assert.match(source, /adoptLegacyInventoryAtomically/);
+  assert.doesNotMatch(source, /marking existing migrations/);
   assert.match(source, /mode === 'NEW'[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*for \(const item of pendingRepeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
+});
+
+test('legacy upgrade inventory accepts only an exact historical subset and one bootstrap marker', () => {
+  const current = {
+    migrations: [
+      { path: 'supabase/migrations/01012026_first.sql', sha256: 'a'.repeat(64) },
+      { path: 'supabase/migrations/02012026_second.sql', sha256: 'b'.repeat(64) },
+    ],
+    repeatables: [{ path: 'supabase/repeatable/current.sql', sha256: 'c'.repeat(64) }],
+  };
+  const planned = legacyUpgradeInventory(current, ['__BOOTSTRAPPED__', '01012026_first.sql']);
+  assert.equal(planned.installedCount, 1);
+  assert.deepEqual(planned.pendingMigrations.map(item => item.path), [
+    'supabase/migrations/02012026_second.sql',
+  ]);
+  assert.equal(planned.pendingRepeatables.length, 1);
+  assert.throws(
+    () => legacyUpgradeInventory(current, ['__BOOTSTRAPPED__', 'unknown.sql']),
+    /absent from repository/,
+  );
+  assert.throws(
+    () => legacyUpgradeInventory(current, ['01012026_first.sql']),
+    /exactly one __BOOTSTRAPPED__/,
+  );
+  assert.throws(
+    () => legacyUpgradeInventory(current, ['__BOOTSTRAPPED__', '01012026_first.sql', '01012026_first.sql']),
+    /duplicate/,
+  );
 });
 
 test('contract export normalises null ACLs to one-dimensional effective defaults', () => {

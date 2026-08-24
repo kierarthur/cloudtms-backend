@@ -18,7 +18,7 @@ This system changes database definitions only. It does not copy or replace custo
 - Preserve the Candidate/MyTMS boundary locked by `supabase/release/protected-boundary-lock.json`. The protected files may not be removed, renamed, duplicated, weakened, or rewritten. The three security verifiers must pass after every release.
 - Candidate features, communications, invitations, and autonomous Workbench activity remain disabled on a new database until separately reviewed and deliberately enabled.
 
-## The three supported modes
+## The four supported modes
 
 ### NEW
 
@@ -33,6 +33,10 @@ If the contract differs, stop. Investigate and create a reviewed upgrade or a ne
 ### UPGRADE
 
 Use for a database already carrying `private.cloudtms_database_identity` and the private release ledgers. The tool validates its environment/customer identity, proves that every installed migration still has its original hash, applies only pending one-time migrations, applies only changed recursive repeatable closures, reruns the security verifiers, and requires the installed contract to match the approved contract before recording `VERIFIED`.
+
+### LEGACY_UPGRADE
+
+Use only for the one-time transition of the existing LIVE database when its historical `public.schema_migrations` ledger is valid but its schema is older than the current repository contract. `PLAN` is read-only and requires exactly one historical bootstrap marker, at least one installed repository migration, no unknown or duplicate migration names, no ambiguous public repeatable ledger, no managed database identity, and the protected LIVE target. `APPLY` installs only repository migrations absent from the historical ledger, records each successful legacy migration for resumability, applies the current repeatable authority, runs every security verifier, and requires an exact current contract match. Only after those checks pass does one transaction create the LIVE identity and complete private migration/repeatable/release ledgers. It never runs against TEST, never mutates the former Supabase source, and never performs a blind baseline.
 
 ## Normal developer workflow
 
@@ -54,7 +58,7 @@ Run the manual workflow with `environment=TEST`, normally `mode=UPGRADE`, and `p
 
 ### Upgrade existing LIVE for the first time
 
-Do not guess that LIVE equals TEST. First run `environment=LIVE`, `mode=ADOPT`, `phase=PLAN`. If the read-only contract differs, stop and review the generated difference; an upgrade plan must be produced from the actual LIVE catalogue. If it matches, an approved `ADOPT/APPLY` installs only the control metadata. Subsequent releases use `UPGRADE`.
+Do not guess that LIVE equals TEST. First run `environment=LIVE`, `mode=ADOPT`, `phase=PLAN`. If the read-only contract differs, stop and review the generated difference. For the existing valid historical migration ledger, use `LEGACY_UPGRADE/PLAN`, review its exact installed/pending counts, and then run the protected commit-bound `LEGACY_UPGRADE/APPLY`. If ADOPT matches instead, an approved `ADOPT/APPLY` installs only the control metadata. All subsequent releases use `UPGRADE`.
 
 ### Create a database for a new client
 
