@@ -260,7 +260,7 @@ function applyRelease() {
 
   if (mode === 'LEGACY_UPGRADE') {
     const legacy = legacyUpgradeState(current, environment);
-    psql({ file: release.legacyUpgradeBootstrapFile });
+    for (const file of release.legacyUpgradeBootstrapFiles) psql({ file });
     for (const item of legacy.pendingMigrations) {
       psql({ file: item.path });
       psql({
@@ -282,7 +282,7 @@ function applyRelease() {
         legacyInstalledMigrations: legacy.installedCount,
         appliedMigrations: legacy.pendingMigrations.length,
         appliedRepeatables: legacy.pendingRepeatables.length,
-        legacyUpgradeBootstrapFile: release.legacyUpgradeBootstrapFile,
+        legacyUpgradeBootstrapFiles: release.legacyUpgradeBootstrapFiles,
         verificationFiles: release.verificationFiles,
       },
     });

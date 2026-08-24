@@ -4,7 +4,10 @@
   "contractPath": "supabase/release/current-contract.json",
   "baselineRepeatableLock": "supabase/release/baseline-repeatable-lock.json",
   "controlPlaneMigration": "supabase/migrations/22082026_1507_cloudtms_database_release_control_plane.sql",
-  "legacyUpgradeBootstrapFile": "supabase/release/24082026_1128_legacy_upgrade_trigger_shims.sql",
+  "legacyUpgradeBootstrapFiles": [
+    "supabase/repeatable/08042026_1151_newtablesbanking.sql",
+    "supabase/release/24082026_1128_legacy_upgrade_trigger_shims.sql"
+  ],
   "bootstrapFile": "supabase/baseline/22082026_1506_cloudtms_new_database_bootstrap.sql",
   "baselineFiles": [
     "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",

@@ -163,7 +163,7 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.match(source, /LEGACY_UPGRADE is restricted to LIVE/);
   assert.match(source, /refuses a database already carrying managed identity/);
   assert.match(source, /adoptLegacyInventoryAtomically/);
-  assert.match(source, /release\.legacyUpgradeBootstrapFile/);
+  assert.match(source, /release\.legacyUpgradeBootstrapFiles/);
   assert.match(source, /assertLegacyTransitionShimsReplaced\(\)/);
   assert.match(source, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.doesNotMatch(source, /marking existing migrations/);
@@ -172,11 +172,14 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
 
 test('legacy transition bootstrap is bounded and must be replaced before adoption', () => {
   const release = readJson('supabase/release/current-release.json');
-  assert.equal(
-    release.legacyUpgradeBootstrapFile,
+  assert.deepEqual(release.legacyUpgradeBootstrapFiles, [
+    'supabase/repeatable/08042026_1151_newtablesbanking.sql',
     'supabase/release/24082026_1128_legacy_upgrade_trigger_shims.sql',
-  );
-  const bootstrap = read(release.legacyUpgradeBootstrapFile);
+  ]);
+  const schemaBootstrap = read(release.legacyUpgradeBootstrapFiles[0]);
+  assert.match(schemaBootstrap, /CREATE TABLE IF NOT EXISTS public\.banking_pay_workbench_sessions/);
+  assert.match(schemaBootstrap, /Safe to rerun/);
+  const bootstrap = read(release.legacyUpgradeBootstrapFiles[1]);
   assert.match(bootstrap, /to_regprocedure/);
   assert.match(bootstrap, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.match(bootstrap, /return OLD/);
