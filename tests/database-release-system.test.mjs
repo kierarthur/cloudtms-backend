@@ -163,8 +163,25 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.match(source, /LEGACY_UPGRADE is restricted to LIVE/);
   assert.match(source, /refuses a database already carrying managed identity/);
   assert.match(source, /adoptLegacyInventoryAtomically/);
+  assert.match(source, /release\.legacyUpgradeBootstrapFile/);
+  assert.match(source, /assertLegacyTransitionShimsReplaced\(\)/);
+  assert.match(source, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.doesNotMatch(source, /marking existing migrations/);
   assert.match(source, /mode === 'NEW'[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*for \(const item of pendingRepeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
+});
+
+test('legacy transition bootstrap is bounded and must be replaced before adoption', () => {
+  const release = readJson('supabase/release/current-release.json');
+  assert.equal(
+    release.legacyUpgradeBootstrapFile,
+    'supabase/release/24082026_1128_legacy_upgrade_trigger_shims.sql',
+  );
+  const bootstrap = read(release.legacyUpgradeBootstrapFile);
+  assert.match(bootstrap, /to_regprocedure/);
+  assert.match(bootstrap, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
+  assert.match(bootstrap, /return OLD/);
+  assert.match(bootstrap, /return NEW/);
+  assert.doesNotMatch(bootstrap, /insert\s+into|update\s+public\.|delete\s+from|truncate/i);
 });
 
 test('legacy upgrade inventory accepts only an exact historical subset and one bootstrap marker', () => {

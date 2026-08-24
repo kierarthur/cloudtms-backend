@@ -81,6 +81,26 @@ function runVerifiers() {
   for (const file of release.verificationFiles) psql({ file });
 }
 
+function assertLegacyTransitionShimsReplaced() {
+  const remaining = Number(psql({
+    sql: `
+      select count(*)
+      from pg_catalog.pg_proc p
+      join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public'
+        and p.proname in (
+          'pay_workbench_mark_candidate_dirty',
+          'pay_workbench_mark_finance_case_dirty',
+          'pay_workbench_mark_contract_client_dirty'
+        )
+        and p.prosrc like '%CLOUDTMS_LEGACY_TRANSITION_SHIM%';
+    `,
+  }));
+  if (remaining !== 0) {
+    throw new Error(`LEGACY_UPGRADE transition shim replacement failed for ${remaining} function(s)`);
+  }
+}
+
 function runBankingPayCatalogPreapply(pendingRepeatables) {
   if (pendingRepeatables.length === 0) return;
   const tempRoot = path.resolve(os.tmpdir());
@@ -240,6 +260,7 @@ function applyRelease() {
 
   if (mode === 'LEGACY_UPGRADE') {
     const legacy = legacyUpgradeState(current, environment);
+    psql({ file: release.legacyUpgradeBootstrapFile });
     for (const item of legacy.pendingMigrations) {
       psql({ file: item.path });
       psql({
@@ -248,6 +269,7 @@ function applyRelease() {
     }
     runBankingPayCatalogPreapply(legacy.pendingRepeatables.map(item => item.path));
     for (const item of legacy.pendingRepeatables) psql({ file: item.path });
+    assertLegacyTransitionShimsReplaced();
     runVerifiers();
     const verified = compareExpected(release.contractPath);
     adoptLegacyInventoryAtomically({
@@ -260,6 +282,7 @@ function applyRelease() {
         legacyInstalledMigrations: legacy.installedCount,
         appliedMigrations: legacy.pendingMigrations.length,
         appliedRepeatables: legacy.pendingRepeatables.length,
+        legacyUpgradeBootstrapFile: release.legacyUpgradeBootstrapFile,
         verificationFiles: release.verificationFiles,
       },
     });
