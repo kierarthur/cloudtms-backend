@@ -44,6 +44,10 @@ test('public broker source has no Supabase, R2 or CloudTMS business-authority de
     ]
   );
   assert.equal(publicConfig.vars.MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED, 'TRUE');
+  assert.equal(publicConfig.vars.MYTMS_AGENCY_CHOICE_TOKEN_KEY_VERSION, '1');
+  assert.equal(publicConfig.vars.MYTMS_AGENCY_CHOICE_TOKEN_READ_KEY_VERSIONS, '1');
+  assert.equal(publicConfig.vars.MYTMS_GLOBAL_CHALLENGE_TOKEN_KEY_VERSION, '1');
+  assert.equal(publicConfig.vars.MYTMS_GLOBAL_CHALLENGE_TOKEN_READ_KEY_VERSIONS, '1');
   assert.deepEqual(
     publicConfig.services.find(service => service.binding === 'MYTMS_IDENTITY_DELIVERY'),
     { binding: 'MYTMS_IDENTITY_DELIVERY', service: 'test-cloudtms-backend' }
