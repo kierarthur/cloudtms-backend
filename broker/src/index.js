@@ -139137,6 +139137,30 @@ async function patchTsfinCommon(env, req, timesheetId, patch) {
     );
   }
 
+  const officeExpenseRoute = classifyBulkAuthoriseRow(
+    {
+      ...classificationContext,
+      timesheet: currentTs,
+      contract_week: cw
+    },
+    before,
+    summary
+  );
+  const officeExpenseRouteFamily = String(officeExpenseRoute?.route_family || '').trim().toUpperCase();
+  const isExpenseValueMutation = !!(patch.expenses || patch.mileage);
+  if (isExpenseValueMutation && officeExpenseRouteFamily !== 'MANUAL_NON_QR') {
+    logTsfinSaveDiag('blocked_non_manual_expense_edit', {
+      status: 409,
+      current_timesheet_id: currentTimesheetId,
+      contract_week_id: cw?.id || null,
+      route_family: officeExpenseRouteFamily || null
+    });
+    return blockedResponse(
+      'OFFICE_EXPENSES_MANUAL_ROUTE_REQUIRED',
+      'QR and Electronic timesheet expense values are managed through MyTMS. Switch the timesheet to Manual before amending them in CloudTMS.'
+    );
+  }
+
   const lineTypeU = String(classificationContext?.line_type || '').toUpperCase();
   const sheetScopeU = String(classificationContext?.sheet_scope || '').toUpperCase();
   const segmentOnlyTarget =
@@ -165218,8 +165242,8 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
     expected_row_signature_present: !!expectedRowSignature
   });
 
-  // Load contract_week. The schedule draft path remains MANUAL-only, but an
-  // expenses-only draft may be saved for any supported unprocessed planned week.
+  // Load contract_week. Office schedule and expense-value draft changes are
+  // MANUAL-only; Candidate/MyApp submission routes are separate from this handler.
   const cw = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?id=eq.${enc(weekId)}&select=id,contract_id,week_ending_date,timesheet_id,submission_mode_snapshot,planned_schedule_json,totals_json,status,additional_seq,is_adjustment`
@@ -165442,6 +165466,14 @@ async function handleContractWeekManualDraftUpsert(env, req, weekId) {
         weeklySource === 'HEALTHROSTER'
       )
     );
+
+    if (mode !== 'MANUAL') {
+      return withCORS(env, req, new Response(JSON.stringify({
+        error: 'OFFICE_EXPENSES_MANUAL_ROUTE_REQUIRED',
+        error_code: 'OFFICE_EXPENSES_MANUAL_ROUTE_REQUIRED',
+        message: 'QR and Electronic planned-week expense values are managed through MyTMS. Switch the week to Manual before amending them in CloudTMS.'
+      }), { status: 409, headers: JSON_HEADERS }));
+    }
 
     if (status === 'CANCELLED' || status === 'CANCELED') {
       return withCORS(env, req, badRequest('Expenses cannot be edited directly for this row.'));
