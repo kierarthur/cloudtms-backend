@@ -12,6 +12,8 @@ const homeSql = fs.readFileSync(path.join(process.cwd(), 'supabase', 'repeatable
   '25082026_1616_candidate_home_daily_read_v1.sql'), 'utf8');
 const homeRuntimeCorrectionSql = fs.readFileSync(path.join(process.cwd(), 'supabase', 'repeatable',
   '25082026_2024_candidate_nullif_runtime_correction_v1.sql'), 'utf8');
+const homeNotificationRuntimeSql = fs.readFileSync(path.join(process.cwd(), 'supabase', 'repeatable',
+  '25082026_2043_candidate_home_notification_runtime_v1.sql'), 'utf8');
 const correlationId = `0${'A'.repeat(25)}`;
 
 function rpcRecorder(resultForPrimary = { outcomes: [{ status: 'COMMITTED' }] }) {
@@ -70,6 +72,13 @@ test('latest Home, bootstrap and DAILY authority never schema-qualifies PostgreS
   assert.doesNotMatch(homeRuntimeCorrectionSql, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
   assert.match(homeRuntimeCorrectionSql, /if nullif\(v_context->>'selected_candidate_id',''\) is not null/i);
   assert.match(homeRuntimeCorrectionSql, /coalesce\(v_tiles,'\[\]'::jsonb\)/i);
+});
+
+test('latest Home notification summary uses the installed account-scoped notification contract', () => {
+  assert.match(homeNotificationRuntimeSql, /create or replace function private\._candidate_home_summary_v1/i);
+  assert.match(homeNotificationRuntimeSql, /from public\.candidate_notifications n[\s\S]*where n\.account_id=p_account_id and n\.state='UNREAD'/i);
+  assert.doesNotMatch(homeNotificationRuntimeSql, /candidate_notifications n[\s\S]{0,160}n\.environment/i);
+  assert.doesNotMatch(homeNotificationRuntimeSql, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
 test('a completed projection retries activation only for safely visible outcomes', async () => {
