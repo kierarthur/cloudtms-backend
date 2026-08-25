@@ -652,9 +652,8 @@ function unwrapRpc(value, name = '') {
 
 function knownErrorCode(error) {
   if (error instanceof CandidateHttpError) return error.code;
-  const source = `${text(error?.code)} ${text(error?.message)}`.toUpperCase();
-  const matches = source.match(/[A-Z][A-Z0-9_]{2,}/g) || [];
-  const preferred = matches.find((value) => (
+  const preferredFrom = (source) => (text(source).toUpperCase()
+    .match(/[A-Z][A-Z0-9_]{2,}/g) || []).find((value) => (
     value.startsWith('CANDIDATE_') || value.startsWith('MANAGER_') ||
     value.startsWith('WORKFLOW_') || value.startsWith('ROUTE_') ||
     value.startsWith('TIMESHEET_') || value === 'IDEMPOTENCY_CONFLICT' ||
@@ -662,7 +661,19 @@ function knownErrorCode(error) {
     value === 'PAY_CHANNEL_ISSUE' || value === 'PAY_METHOD_MISSING' ||
     value === 'EXPENSE_INVOICE_EMAIL_REQUIRED'
   ));
-  return preferred || 'CANDIDATE_REQUEST_FAILED';
+  // PostgREST supplies the database's closed error in its structured JSON.
+  // Prefer that authority over an RPC function name embedded earlier in the
+  // transport error string (for example candidate_app_bootstrap_v1).
+  for (const source of [
+    error?.json?.message,
+    error?.json?.details,
+    error?.json?.hint,
+    error?.code
+  ]) {
+    const preferred = preferredFrom(source);
+    if (preferred) return preferred;
+  }
+  return preferredFrom(error?.message) || 'CANDIDATE_REQUEST_FAILED';
 }
 
 const OFFICE_ERROR_ALIASES = Object.freeze({
@@ -6509,6 +6520,7 @@ export const candidateAppBackendInternals = Object.freeze({
   renderContracts,
   routeMatch,
   officeErrorCode,
+  knownErrorCode,
   managerActionMethods: MANAGER_ACTION_METHODS,
   environmentName
 });

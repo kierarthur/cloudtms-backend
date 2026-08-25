@@ -36,6 +36,7 @@ const {
   candidateDocumentBranding,
   createAccessToken,
   mileageClaimFormBytes,
+  knownErrorCode,
   officeErrorCode,
   renderExpensePage,
   routeMatch,
@@ -55,6 +56,19 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+test('Candidate RPC failures prefer the database closed code over the transport function name', () => {
+  const error = new Error(
+    'RPC candidate_app_bootstrap_v1 failed 400: {"message":"CANDIDATE_FEATURE_DISABLED"}'
+  );
+  error.json = {
+    code: '42501',
+    message: 'CANDIDATE_FEATURE_DISABLED',
+    details: null,
+    hint: null
+  };
+  assert.equal(knownErrorCode(error), 'CANDIDATE_FEATURE_DISABLED');
+});
 
 test('Candidate expense placement closes the controlling RPC response', () => {
   const anchor = '00000000-0000-4000-8000-000000000071';
