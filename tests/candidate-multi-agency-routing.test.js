@@ -16,6 +16,7 @@ import {
   candidateDataPlaneRegistryEntry
 } from '../candidate-broker/src/candidate-data-plane-registry.generated.js';
 import {
+  controlPlaneClientInternals,
   controlPlaneEnabled,
   globalAuthCutoverEnabled
 } from '../candidate-broker/src/control-plane-client.js';
@@ -31,6 +32,33 @@ const IDS = Object.freeze({
   agency: '10000000-0000-4000-8000-000000000004',
   candidate: '10000000-0000-4000-8000-000000000005',
   dataPlane: '10000000-0000-4000-8000-000000000006'
+});
+
+test('control-plane failure diagnostics expose only bounded non-secret routing facts', () => {
+  const diagnostic = controlPlaneClientInternals.safeControlPlaneDiagnostic(
+    404,
+    'identity',
+    'global_invitation_challenge_start_v1',
+    {
+      code: 'PGRST202',
+      message: 'sensitive upstream message',
+      details: 'sensitive upstream details',
+      hint: 'sensitive upstream hint'
+    }
+  );
+  assert.deepEqual(diagnostic, {
+    status: 404,
+    schema: 'identity',
+    function_name: 'global_invitation_challenge_start_v1',
+    upstream_code: 'PGRST202'
+  });
+  assert.equal(JSON.stringify(diagnostic).includes('sensitive'), false);
+  assert.equal(
+    controlPlaneClientInternals.safeControlPlaneDiagnostic(
+      400, 'identity', 'global_invitation_challenge_start_v1', { code: 'unsafe free text' }
+    ).upstream_code,
+    'UNCLASSIFIED'
+  );
 });
 
 function routeEnvironment(overrides = {}) {

@@ -77,6 +77,18 @@ function safeControlPlaneError(status, body) {
   return status >= 500 ? 'DEPENDENCY_UNAVAILABLE' : 'CONTROL_PLANE_REQUEST_REJECTED';
 }
 
+function safeControlPlaneDiagnostic(status, schema, functionName, body) {
+  const upstreamCode = text(body?.code).toUpperCase();
+  return Object.freeze({
+    status,
+    schema,
+    function_name: functionName,
+    upstream_code: /^(?:PGRST\d{3}|[0-9A-Z]{5})$/.test(upstreamCode)
+      ? upstreamCode
+      : 'UNCLASSIFIED'
+  });
+}
+
 export async function controlPlaneRpc(env, schema, functionName, args, options = {}) {
   if (!controlPlaneEnabled(env)) {
     throw new CandidateControlPlaneError(503, 'CONTROL_PLANE_DISABLED');
@@ -110,6 +122,10 @@ export async function controlPlaneRpc(env, schema, functionName, args, options =
   }
   const body = await boundedJson(response);
   if (!response.ok) {
+    console.warn(
+      'Candidate control-plane RPC rejected',
+      safeControlPlaneDiagnostic(response.status, schema, functionName, body)
+    );
     throw new CandidateControlPlaneError(
       response.status >= 500 ? 503 : response.status,
       safeControlPlaneError(response.status, body)
@@ -124,5 +140,6 @@ export async function controlPlaneRpc(env, schema, functionName, args, options =
 export const controlPlaneClientInternals = Object.freeze({
   boundedJson,
   controlPlaneConfiguration,
+  safeControlPlaneDiagnostic,
   safeControlPlaneError
 });
