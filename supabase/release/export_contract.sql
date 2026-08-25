@@ -52,19 +52,26 @@ relation_contract as (
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'grantee', case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end,
-            'privilege', a.privilege_type,
-            'grantable', a.is_grantable
-          ) order by (case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end) collate "C",
-                     a.privilege_type collate "C", a.is_grantable
+            'grantee', expanded_acl.grantee,
+            'privilege', expanded_acl.privilege,
+            'grantable', expanded_acl.grantable
+          ) order by expanded_acl.grantee collate "C",
+                     expanded_acl.privilege collate "C", expanded_acl.grantable
         )
-        from pg_catalog.aclexplode(coalesce(
-          c.relacl,
-          pg_catalog.acldefault(
-            case when c.relkind = 'S' then 'S'::"char" else 'r'::"char" end,
-            c.relowner
-          )
-        )) a
+        from (
+          select distinct
+            case when a.grantee = 0 then 'PUBLIC'
+              else (select logical_name from contract_role_names where oid=a.grantee) end as grantee,
+            a.privilege_type as privilege,
+            a.is_grantable as grantable
+          from pg_catalog.aclexplode(coalesce(
+            c.relacl,
+            pg_catalog.acldefault(
+              case when c.relkind = 'S' then 'S'::"char" else 'r'::"char" end,
+              c.relowner
+            )
+          )) a
+        ) expanded_acl
       ), '[]'::jsonb),
       'columns', coalesce((
         select jsonb_agg(
@@ -144,16 +151,23 @@ routine_contract as (
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'grantee', case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end,
-            'privilege', a.privilege_type,
-            'grantable', a.is_grantable
-          ) order by (case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end) collate "C",
-                     a.privilege_type collate "C", a.is_grantable
+            'grantee', expanded_acl.grantee,
+            'privilege', expanded_acl.privilege,
+            'grantable', expanded_acl.grantable
+          ) order by expanded_acl.grantee collate "C",
+                     expanded_acl.privilege collate "C", expanded_acl.grantable
         )
-        from pg_catalog.aclexplode(coalesce(
-          p.proacl,
-          pg_catalog.acldefault('f'::"char", p.proowner)
-        )) a
+        from (
+          select distinct
+            case when a.grantee = 0 then 'PUBLIC'
+              else (select logical_name from contract_role_names where oid=a.grantee) end as grantee,
+            a.privilege_type as privilege,
+            a.is_grantable as grantable
+          from pg_catalog.aclexplode(coalesce(
+            p.proacl,
+            pg_catalog.acldefault('f'::"char", p.proowner)
+          )) a
+        ) expanded_acl
       ), '[]'::jsonb),
       'definition_sha256', pg_catalog.encode(
         extensions.digest(
@@ -222,16 +236,23 @@ schema_contract as (
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'grantee', case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end,
-            'privilege', a.privilege_type,
-            'grantable', a.is_grantable
-          ) order by (case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end) collate "C",
-                     a.privilege_type collate "C", a.is_grantable
+            'grantee', expanded_acl.grantee,
+            'privilege', expanded_acl.privilege,
+            'grantable', expanded_acl.grantable
+          ) order by expanded_acl.grantee collate "C",
+                     expanded_acl.privilege collate "C", expanded_acl.grantable
         )
-        from pg_catalog.aclexplode(coalesce(
-          n.nspacl,
-          pg_catalog.acldefault('n'::"char", n.nspowner)
-        )) a
+        from (
+          select distinct
+            case when a.grantee = 0 then 'PUBLIC'
+              else (select logical_name from contract_role_names where oid=a.grantee) end as grantee,
+            a.privilege_type as privilege,
+            a.is_grantable as grantable
+          from pg_catalog.aclexplode(coalesce(
+            n.nspacl,
+            pg_catalog.acldefault('n'::"char", n.nspowner)
+          )) a
+        ) expanded_acl
       ), '[]'::jsonb)
     ) order by n.nspname collate "C"
   ) as value
@@ -246,16 +267,23 @@ default_acl_contract as (
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'grantee', case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end,
-            'privilege', a.privilege_type,
-            'grantable', a.is_grantable
-          ) order by (case when a.grantee = 0 then 'PUBLIC' else (select logical_name from contract_role_names where oid=a.grantee) end) collate "C",
-                     a.privilege_type collate "C", a.is_grantable
+            'grantee', expanded_acl.grantee,
+            'privilege', expanded_acl.privilege,
+            'grantable', expanded_acl.grantable
+          ) order by expanded_acl.grantee collate "C",
+                     expanded_acl.privilege collate "C", expanded_acl.grantable
         )
-        from pg_catalog.aclexplode(coalesce(
-          d.defaclacl,
-          pg_catalog.acldefault(d.defaclobjtype, d.defaclrole)
-        )) a
+        from (
+          select distinct
+            case when a.grantee = 0 then 'PUBLIC'
+              else (select logical_name from contract_role_names where oid=a.grantee) end as grantee,
+            a.privilege_type as privilege,
+            a.is_grantable as grantable
+          from pg_catalog.aclexplode(coalesce(
+            d.defaclacl,
+            pg_catalog.acldefault(d.defaclobjtype, d.defaclrole)
+          )) a
+        ) expanded_acl
       ), '[]'::jsonb)
     ) order by owner_role.logical_name collate "C",
                n.nspname collate "C", d.defaclobjtype

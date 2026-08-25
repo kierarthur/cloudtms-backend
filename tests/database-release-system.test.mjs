@@ -242,6 +242,8 @@ test('contract export normalises null ACLs to one-dimensional effective defaults
   assert.match(source, /acldefault\([\s\S]*c\.relowner/);
   assert.match(source, /acldefault\('f'::"char", p\.proowner\)/);
   assert.match(source, /acldefault\('n'::"char", n\.nspowner\)/);
+  assert.equal((source.match(/select distinct\s+case when a\.grantee = 0 then 'PUBLIC'/gi) || []).length, 4);
+  assert.equal((source.match(/\) expanded_acl/g) || []).length, 4);
   assert.match(source, /when rolname=current_user then 'postgres'/);
   assert.match(source, /owner_role\.logical_name = 'postgres'/);
 });

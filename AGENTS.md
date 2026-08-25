@@ -182,6 +182,8 @@ For every new Candidate-named `SECURITY DEFINER` function, update and locally te
 
 Installed-state security verifiers must distinguish one-time bootstrap evidence from permanent operational invariants. Once TEST activation is explicitly authorised, a permanent release verifier must not require empty business tables or require every Candidate feature flag to be false. It must continue to prove the TEST environment, valid typed configuration, RLS, grants, browser isolation, function security and every other durable safety boundary. Put bootstrap-only empty/disabled assertions in a separately invoked bootstrap proof, not in every later UPGRADE.
 
+Any migration or repeatable that changes a contracted relation, routine, trigger, policy, grant or default ACL must have an exact generated contract diff reviewed and committed before protected APPLY. `npm run db:check` alone is not contract-drift proof. Generate from a verified disposable PostgreSQL 17 rebuild before publication; if an already-started TEST release exposes previously unrecorded installed drift, use the protected read-only TEST contract-export workflow, review every changed object, and stop on anything outside the intended source. Contract export must deduplicate ACL entries after mapping Miget's physical owner and the logical repository owner to `postgres`, so provider-normalisation collisions cannot create false drift.
+
 ## TEST-only diagnostic RPC
 
 The Miget TEST clone has a provider-neutral diagnostic RPC:
