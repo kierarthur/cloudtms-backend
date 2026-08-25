@@ -232,7 +232,7 @@ function preflight(request, env) {
   const allowedMethods = new Set(['GET', 'POST', 'PATCH', 'PUT', 'OPTIONS']);
   if (!allowedMethods.has(method)) throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
   const allowedHeaders = new Set([
-    'authorization', 'content-type', 'idempotency-key', 'x-request-id', 'x-cloudtms-client',
+    'authorization', 'cache-control', 'content-type', 'idempotency-key', 'x-request-id', 'x-cloudtms-client',
     'x-candidate-session-token', 'x-candidate-device-id'
   ]);
   const requestedHeaders = text(request.headers.get('access-control-request-headers'))

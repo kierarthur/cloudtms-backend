@@ -128,6 +128,40 @@ test('browser preflight is exact-origin and never wildcard', async () => {
   assert.notEqual(response.headers.get('access-control-allow-origin'), '*');
 });
 
+test('MyTMS web invitation preflight accepts the app no-store request header and remains closed', async () => {
+  const invitationOrigin = 'https://mycloudtms.arthur-rai.co.uk';
+  const env = brokerEnvironment(async () => Response.json({ ok: true }));
+  env.CANDIDATE_ALLOWED_ORIGINS = invitationOrigin;
+
+  const accepted = await handleCandidateBrokerRequest(new Request(
+    'https://candidate-api.test.example/candidate-app/v1/invitations/inspect', {
+      method: 'OPTIONS',
+      headers: {
+        origin: invitationOrigin,
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'cache-control,content-type'
+      }
+    }
+  ), env);
+  assert.equal(accepted.status, 204);
+  assert.equal(accepted.headers.get('access-control-allow-origin'), invitationOrigin);
+  assert.match(accepted.headers.get('access-control-allow-headers'), /(?:^|,\s*)cache-control(?:,|$)/);
+  assert.notEqual(accepted.headers.get('access-control-allow-origin'), '*');
+
+  const rejected = await handleCandidateBrokerRequest(new Request(
+    'https://candidate-api.test.example/candidate-app/v1/invitations/inspect', {
+      method: 'OPTIONS',
+      headers: {
+        origin: invitationOrigin,
+        'access-control-request-method': 'POST',
+        'access-control-request-headers': 'cache-control,content-type,x-private-internal'
+      }
+    }
+  ), env);
+  assert.equal(rejected.status, 403);
+  assert.equal((await rejected.json()).error_code, 'CANDIDATE_HEADER_NOT_ALLOWED');
+});
+
 test('cross-origin manager documents preserve and expose only the immutable digest and request identity headers', async () => {
   const safe = await candidateBrokerInternals.publicSafePrivateResponse(new Response('bytes', {
     headers: {
