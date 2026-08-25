@@ -231,6 +231,13 @@ async function agencyRpc(env, rpcName, parameters = {}) {
     if (code.startsWith('CANDIDATE_MANAGER_EMAIL_SETTINGS_')) {
       throw new MyTmsOfficeError(400, 'MYTMS_MANAGER_TEMPLATE_INVALID');
     }
+    if (code === 'CANDIDATE_HOME_ANNOUNCEMENT_INVALID'
+        || code === 'CANDIDATE_HOME_ANNOUNCEMENT_REQUEST_INVALID') {
+      throw new MyTmsOfficeError(400, 'MYTMS_HOME_ANNOUNCEMENT_INVALID');
+    }
+    if (code === 'CANDIDATE_HOME_ANNOUNCEMENT_IDEMPOTENCY_CONFLICT') {
+      throw new MyTmsOfficeError(409, 'IDEMPOTENCY_CONFLICT');
+    }
     throw new MyTmsOfficeError(503, 'MYTMS_MANAGER_SETTINGS_UNAVAILABLE');
   }
   if (!isObject(result) || result.ok !== true) {
@@ -375,6 +382,92 @@ export async function resetMyTmsManagerEmailTemplates(env, user, request) {
     p_idempotency_key: idempotencyKey,
     p_now_utc: new Date().toISOString()
   });
+}
+
+function publicHomeAnnouncement(result) {
+  if (!isObject(result) || result.ok !== true) {
+    throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+  }
+  const announcementText = String(result.announcement_text == null
+    ? '' : result.announcement_text);
+  const version = Number(result.version);
+  const semanticHash = text(result.semantic_sha256_hex).toLowerCase();
+  if (announcementText.length > 600 || !Number.isSafeInteger(version) || version < 1
+      || !SHA256_RE.test(semanticHash)) {
+    throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+  }
+  return {
+    ok: true,
+    announcement_text: announcementText,
+    version,
+    semantic_sha256_hex: semanticHash,
+    updated_at_utc: result.updated_at_utc || null,
+    idempotent_replay: result.idempotent_replay === true
+  };
+}
+
+export async function getMyTmsHomeAnnouncementSettings(env, user) {
+  assertOfficeControlEnabled(env);
+  await officeContext(env, user, ['MYTMS_SETTINGS_READ']);
+  return publicHomeAnnouncement(
+    await agencyRpc(env, 'candidate_home_announcement_settings_get_v1')
+  );
+}
+
+export async function previewMyTmsHomeAnnouncement(env, user, request) {
+  assertOfficeControlEnabled(env);
+  await officeContext(env, user, ['MYTMS_SETTINGS_READ']);
+  const source = isObject(request) ? request : {};
+  return publicHomeAnnouncement({
+    ...await agencyRpc(env, 'candidate_home_announcement_settings_preview_v1', {
+      p_announcement_text: String(source.announcement_text == null
+        ? '' : source.announcement_text)
+    }),
+    version: 1,
+    updated_at_utc: null
+  });
+}
+
+export async function setMyTmsHomeAnnouncement(env, user, request) {
+  assertOfficeControlEnabled(env);
+  const source = isObject(request) ? request : {};
+  const expectedVersion = Number(source.expected_version);
+  const idempotencyKey = text(source.idempotency_key);
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+      || idempotencyKey.length < 16 || idempotencyKey.length > 200) {
+    throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
+  }
+  const context = await officeContext(env, user, ['MYTMS_SETTINGS_WRITE']);
+  return publicHomeAnnouncement(await agencyRpc(
+    env, 'candidate_home_announcement_settings_set_v1', {
+      p_expected_version: expectedVersion,
+      p_announcement_text: String(source.announcement_text == null
+        ? '' : source.announcement_text),
+      p_actor_identity_hmac_hex: context.actor_identity_hmac,
+      p_idempotency_key: idempotencyKey,
+      p_now_utc: new Date().toISOString()
+    }
+  ));
+}
+
+export async function resetMyTmsHomeAnnouncement(env, user, request) {
+  assertOfficeControlEnabled(env);
+  const source = isObject(request) ? request : {};
+  const expectedVersion = Number(source.expected_version);
+  const idempotencyKey = text(source.idempotency_key);
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+      || idempotencyKey.length < 16 || idempotencyKey.length > 200) {
+    throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
+  }
+  const context = await officeContext(env, user, ['MYTMS_SETTINGS_WRITE']);
+  return publicHomeAnnouncement(await agencyRpc(
+    env, 'candidate_home_announcement_settings_reset_v1', {
+      p_expected_version: expectedVersion,
+      p_actor_identity_hmac_hex: context.actor_identity_hmac,
+      p_idempotency_key: idempotencyKey,
+      p_now_utc: new Date().toISOString()
+    }
+  ));
 }
 
 async function localCandidate(env, candidateId) {

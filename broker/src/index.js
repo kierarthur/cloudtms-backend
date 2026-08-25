@@ -63,16 +63,20 @@ import {
 import {
   adoptMyTmsCandidate,
   getMyTmsCandidateStatus,
+  getMyTmsHomeAnnouncementSettings,
   getMyTmsManagerEmailSettings,
   getMyTmsOfficeSettings,
   MyTmsOfficeError,
   previewMyTmsManagerEmailTemplate,
+  previewMyTmsHomeAnnouncement,
   previewMyTmsTemplate,
   queueMyTmsIdentityChallenge,
   recordMyTmsInvitationOutboxOutcome,
   resetMyTmsManagerEmailTemplates,
+  resetMyTmsHomeAnnouncement,
   reserveAndQueueMyTmsInvitation,
   setMyTmsManagerEmailTemplates,
+  setMyTmsHomeAnnouncement,
   setMyTmsMembershipState,
   setMyTmsOfficeSettings
 } from './mytms-office-control.js';
@@ -133754,6 +133758,7 @@ const MYTMS_OFFICE_SAFE_ERROR_CODES = new Set([
   'MYTMS_ADOPTION_REQUEST_INVALID', 'MYTMS_MEMBERSHIP_REQUEST_INVALID',
   'MYTMS_MEMBERSHIP_ADMIN_DISABLED', 'MYTMS_MEMBERSHIP_LINK_UNAVAILABLE',
   'MYTMS_MANAGER_TEMPLATE_INVALID', 'MYTMS_MANAGER_SETTINGS_UNAVAILABLE',
+  'MYTMS_HOME_ANNOUNCEMENT_INVALID',
   'MYTMS_PLATFORM_SETTING_READ_ONLY',
   'CONTROL_PLANE_CONFIGURATION_UNAVAILABLE', 'CONTROL_PLANE_AUTH_FAILED',
   'CONTROL_PLANE_REQUEST_REJECTED', 'CONTROL_PLANE_RESPONSE_INVALID',
@@ -133806,6 +133811,21 @@ async function handleMyTmsManagerEmailSettings(env, req, action) {
     if (action === 'SET_TEMPLATES') return ok(await setMyTmsManagerEmailTemplates(env, user, body));
     if (action === 'RESET_TEMPLATES') return ok(await resetMyTmsManagerEmailTemplates(env, user, body));
     if (action === 'PREVIEW') return ok(await previewMyTmsManagerEmailTemplate(env, user, body));
+    throw new MyTmsOfficeError(404, 'MYTMS_OFFICE_REQUEST_FAILED');
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
+
+async function handleMyTmsHomeAnnouncement(env, req, action) {
+  try {
+    const user = await requireMyTmsOfficeAdmin(env, req);
+    if (action === 'GET') return ok(await getMyTmsHomeAnnouncementSettings(env, user));
+    const body = await parseJSONBody(req);
+    if (!body) throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
+    if (action === 'PREVIEW') return ok(await previewMyTmsHomeAnnouncement(env, user, body));
+    if (action === 'SET') return ok(await setMyTmsHomeAnnouncement(env, user, body));
+    if (action === 'RESET') return ok(await resetMyTmsHomeAnnouncement(env, user, body));
     throw new MyTmsOfficeError(404, 'MYTMS_OFFICE_REQUEST_FAILED');
   } catch (error) {
     return myTmsOfficeFailure(error);
@@ -195019,6 +195039,10 @@ if (req.method === 'GET' && p === '/api/mytms/manager-email-settings') return wi
 if (req.method === 'PUT' && p === '/api/mytms/manager-email-settings/templates') return withCORS(env, req, await handleMyTmsManagerEmailSettings(env, req, 'SET_TEMPLATES'));
 if (req.method === 'POST' && p === '/api/mytms/manager-email-settings/templates/reset') return withCORS(env, req, await handleMyTmsManagerEmailSettings(env, req, 'RESET_TEMPLATES'));
 if (req.method === 'POST' && p === '/api/mytms/manager-email-settings/preview') return withCORS(env, req, await handleMyTmsManagerEmailSettings(env, req, 'PREVIEW'));
+if (req.method === 'GET' && p === '/api/mytms/home-announcement') return withCORS(env, req, await handleMyTmsHomeAnnouncement(env, req, 'GET'));
+if (req.method === 'POST' && p === '/api/mytms/home-announcement/preview') return withCORS(env, req, await handleMyTmsHomeAnnouncement(env, req, 'PREVIEW'));
+if (req.method === 'PUT' && p === '/api/mytms/home-announcement') return withCORS(env, req, await handleMyTmsHomeAnnouncement(env, req, 'SET'));
+if (req.method === 'POST' && p === '/api/mytms/home-announcement/reset') return withCORS(env, req, await handleMyTmsHomeAnnouncement(env, req, 'RESET'));
 {
   const myTmsStatus = matchPath(p, '/api/mytms/candidates/:id/status');
   if (myTmsStatus && req.method === 'GET') {

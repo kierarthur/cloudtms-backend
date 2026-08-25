@@ -430,6 +430,7 @@ async function invokeSystemRpc(verification, env, deps) {
   if (!validateSystemBody(route.operationId, body)) throw new Error('VALIDATION_FAILED');
   const common = systemContext(env);
   let result;
+  let firstReadyActivation = null;
   switch (route.operationId) {
     case 'googleAvailabilityLegacyTiles': {
       const source = await rpc(deps, 'candidate_daily_tiles_get_v1', {
@@ -485,6 +486,10 @@ async function invokeSystemRpc(verification, env, deps) {
         p_internal_context: common, p_batch_request_id: body.batch_request_id,
         p_idempotency_key: idempotencyKey, p_items: body.items, p_correlation_id: correlationId
       });
+      firstReadyActivation = {
+        p_candidate_source_hmacs: [...new Set(body.items.map((item) => item.candidate_source_hmac))],
+        p_projection_outbox_ids: []
+      };
       break;
     case 'googleAvailabilityApplySheetEdits':
       result = await rpc(deps, RPC_BY_OPERATION[route.operationId], {
@@ -504,6 +509,12 @@ async function invokeSystemRpc(verification, env, deps) {
         p_internal_context: common, p_batch_request_id: body.batch_request_id,
         p_idempotency_key: idempotencyKey, p_items: body.items, p_correlation_id: correlationId
       });
+      firstReadyActivation = {
+        p_candidate_source_hmacs: [],
+        p_projection_outbox_ids: [...new Set(body.items
+          .filter((item) => ['DELIVERED', 'DEFERRED_OVERLAY'].includes(item.outcome))
+          .map((item) => item.outbox_id))]
+      };
       break;
     case 'googleAvailabilityReadSyncStatus':
       result = await rpc(deps, RPC_BY_OPERATION[route.operationId], {
@@ -516,6 +527,11 @@ async function invokeSystemRpc(verification, env, deps) {
         p_internal_context: systemContext(env, 'RECONCILIATION'), p_batch_request_id: body.batch_request_id,
         p_idempotency_key: idempotencyKey, p_observations: body.observations, p_correlation_id: correlationId
       });
+      firstReadyActivation = {
+        p_candidate_source_hmacs: [...new Set(body.observations
+          .map((item) => item.candidate_source_hmac))],
+        p_projection_outbox_ids: []
+      };
       break;
     case 'googleAvailabilityEffectClaim':
       result = await rpc(deps, RPC_BY_OPERATION[route.operationId], {
@@ -542,6 +558,15 @@ async function invokeSystemRpc(verification, env, deps) {
       break;
     default:
       throw new Error('VALIDATION_FAILED');
+  }
+  if (firstReadyActivation
+      && (firstReadyActivation.p_candidate_source_hmacs.length > 0
+        || firstReadyActivation.p_projection_outbox_ids.length > 0)) {
+    await rpc(deps, 'candidate_daily_system_policy_activate_ready_v1', {
+      p_internal_context: systemContext(env, 'FIRST_READY_ACTIVATION'),
+      ...firstReadyActivation,
+      p_correlation_id: correlationId
+    });
   }
   const cleaned = cleanReplay(result);
   return successResponse(route, correlationId, cleaned.result, cleaned.replay);
