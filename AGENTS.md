@@ -186,6 +186,8 @@ Installed-state security verifiers must distinguish one-time bootstrap evidence 
 
 Any migration or repeatable that changes a contracted relation, routine, trigger, policy, grant or default ACL must have an exact generated contract diff reviewed and committed before protected APPLY. `npm run db:check` alone is not contract-drift proof. Generate from a verified disposable PostgreSQL 17 rebuild before publication; if an already-started TEST release exposes previously unrecorded installed drift, use the protected read-only TEST contract-export workflow, review every changed object, and stop on anything outside the intended source. Contract export must deduplicate ACL entries after mapping Miget's physical owner and the logical repository owner to `postgres`, so provider-normalisation collisions cannot create false drift.
 
+A green protected PLAN is not proof that `supabase/release/current-contract.json` describes a changed migration or repeatable: PLAN deliberately does not install pending definitions. Before the first APPLY, prove the generated contract from a disposable PostgreSQL 17 rebuild of the exact commit and include the reviewed contract file in that same commit. Never use APPLY as the mechanism for discovering a stale contract. If an APPLY has already installed the intended definition but stopped before recording `VERIFIED` solely because the approved contract was stale, do not edit ledgers or reapply source blindly: run the protected read-only contract export at that exact installed source, prove the object-by-object diff is limited to the intended definitions, commit that data-free contract, rerun PLAN, and then rerun APPLY.
+
 ## TEST-only diagnostic RPC
 
 The Miget TEST clone has a provider-neutral diagnostic RPC:

@@ -46,9 +46,12 @@ Use only for the one-time transition of the existing LIVE database when its hist
 4. After the new migration is complete and reviewed, run `npm run db:lock:update`. This only appends new migration hashes; it refuses to rewrite, remove, or re-lock an existing migration.
 5. Test in a disposable local PostgreSQL database. For a DB-only TEST correction explicitly authorised by the user, install to TEST first, verify it, then ensure the exact installed definition and canonical hash are represented in the repository before publication.
 6. Refresh the approved contract only from a verified disposable rebuild containing the intended source: `npm run db:contract:export`.
+   A successful protected PLAN does not replace this step because PLAN does not install pending definitions. The reviewed generated contract must be committed with the source change before the first APPLY; do not use APPLY to discover a stale contract.
 7. Run `npm run db:check`, the database-release tests, all existing repository tests, the exact security verifiers, and a clean `NEW` replay. Do not publish a change that requires manual ledger repair.
 8. Pushes run source verification only. They never alter a database.
 9. Use **Database Release (manual and protected)**. Run `PLAN` first. Review the exact commit and outcome. Run `APPLY` only after the appropriate GitHub Environment approval.
+
+If an APPLY has already installed the intended definition but stops before recording `VERIFIED` only because the approved contract is stale, do not touch the ledgers and do not guess the contract. Run the protected read-only TEST contract export at the exact installed source, compare every object against the repository contract, require the diff to contain only the intended definitions, commit the exported data-free contract, then rerun PLAN and APPLY against that new exact commit.
 
 ## One-button operations
 
