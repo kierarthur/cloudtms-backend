@@ -759,6 +759,10 @@
       "sha256": "90524c2b8f29013c3a91fb6ec0c42282d6fd51496b33109a42b3ebb833f1d88c"
     },
     {
+      "path": "supabase/migrations/25082026_1614_candidate_home_announcement_settings.sql",
+      "sha256": "ddb98791680530824fed2b9c3f6c43c69f19306f463d479c71be14077bbf52d8"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

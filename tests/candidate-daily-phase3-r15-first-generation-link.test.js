@@ -97,6 +97,9 @@ test('R15 Worker passes the frozen identity facts unchanged to the existing five
   }, { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {
     async rpc(name, args) {
       calls.push({ name, args });
+      if (name === 'candidate_daily_system_policy_activate_ready_v1') {
+        return { ok: true, policy_version: 'CANDIDATE_FIRST_READY_ACTIVATION_V1', outcomes: [] };
+      }
       return {
         batch_receipt_id: '00000000-0000-4000-8000-000000000152',
         outcomes: [{
@@ -109,11 +112,14 @@ test('R15 Worker passes the frozen identity facts unchanged to the existing five
     }
   });
   assert.equal(response.status, 200);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
   assert.equal(calls[0].name, 'candidate_daily_rota_generation_publish_atomic_v1');
   assert.deepEqual(calls[0].args.p_items, body.items);
   assert.equal(calls[0].args.p_items[0].candidate_global_key, body.items[0].candidate_global_key);
   assert.equal(calls[0].args.p_items[0].candidate_source_hmac, body.items[0].candidate_source_hmac);
+  assert.equal(calls[1].name, 'candidate_daily_system_policy_activate_ready_v1');
+  assert.deepEqual(calls[1].args.p_candidate_source_hmacs, [body.items[0].candidate_source_hmac]);
+  assert.deepEqual(calls[1].args.p_projection_outbox_ids, []);
 });
 
 test('R15 database authority links only one existing active CID1 Candidate and never creates a Candidate', () => {

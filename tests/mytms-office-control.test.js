@@ -6,16 +6,19 @@ import { signCandidatePrivateRequest } from '../broker/src/candidate-service-aut
 import {
   adoptMyTmsCandidate,
   getMyTmsCandidateStatus,
+  getMyTmsHomeAnnouncementSettings,
   getMyTmsManagerEmailSettings,
   MyTmsOfficeError,
   myTmsOfficeInternals,
   previewMyTmsTemplate,
   previewMyTmsManagerEmailTemplate,
+  previewMyTmsHomeAnnouncement,
   queueMyTmsIdentityChallenge,
   reserveAndQueueMyTmsInvitation,
   sanitizeMyTmsEmailHtml,
   sanitizeManagerEmailHtml,
   setMyTmsManagerEmailTemplates,
+  setMyTmsHomeAnnouncement,
   setMyTmsMembershipState,
   setMyTmsOfficeSettings
 } from '../broker/src/mytms-office-control.js';
@@ -179,6 +182,54 @@ test('manager template save is exact, versioned and rejects unknown objects befo
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+test('Candidate Home announcement read, preview and save stay agency-owned and versioned', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push({ url: String(url), body });
+    if (String(url).endsWith('candidate_home_announcement_settings_get_v1')) {
+      return Response.json({ ok: true, announcement_text: 'Welcome.', version: 2, semantic_sha256_hex: 'a'.repeat(64), updated_at_utc: '2026-08-25T10:00:00Z' });
+    }
+    if (String(url).endsWith('candidate_home_announcement_settings_preview_v1')) {
+      return Response.json({ ok: true, announcement_text: String(body.p_announcement_text).trim(), semantic_sha256_hex: 'b'.repeat(64) });
+    }
+    if (String(url).endsWith('candidate_home_announcement_settings_set_v1')) {
+      return Response.json({ ok: true, announcement_text: body.p_announcement_text, version: 3, semantic_sha256_hex: 'c'.repeat(64), updated_at_utc: body.p_now_utc });
+    }
+    throw new Error('unexpected Home announcement request');
+  };
+  const env = officeEnvironment({
+    SUPABASE_URL: 'https://agency.test.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-agency-service-role'
+  });
+  try {
+    const current = await getMyTmsHomeAnnouncementSettings(env, { id: IDS.challenge });
+    assert.equal(current.announcement_text, 'Welcome.');
+    assert.equal(current.version, 2);
+    const preview = await previewMyTmsHomeAnnouncement(env, { id: IDS.challenge }, { announcement_text: '  Christmas timesheets close on 21 December.  ' });
+    assert.equal(preview.announcement_text, 'Christmas timesheets close on 21 December.');
+    const saved = await setMyTmsHomeAnnouncement(env, { id: IDS.challenge }, {
+      expected_version: 2, idempotency_key: 'home-announcement-save-0001',
+      announcement_text: preview.announcement_text
+    });
+    assert.equal(saved.version, 3);
+    assert.equal(calls[2].body.p_expected_version, 2);
+    assert.match(calls[2].body.p_actor_identity_hmac_hex, /^[a-f0-9]{64}$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate Home announcement rejects unsafe Office requests before database access', async () => {
+  await assert.rejects(
+    setMyTmsHomeAnnouncement(officeEnvironment(), { id: IDS.challenge }, {
+      expected_version: 1, idempotency_key: 'short', announcement_text: 'Message'
+    }),
+    error => error instanceof MyTmsOfficeError && error.code === 'MYTMS_SETTINGS_REQUEST_INVALID'
+  );
 });
 
 test('agency settings writes reject platform-owned fields and enforce invitation safety bounds', async () => {
@@ -599,6 +650,7 @@ test('Office MyTMS routes retain existing admin authentication', async () => {
   for (const [url, method, body] of [
     ['https://office.test.example/api/mytms/settings', 'GET', undefined],
     ['https://office.test.example/api/mytms/manager-email-settings', 'GET', undefined],
+    ['https://office.test.example/api/mytms/home-announcement', 'GET', undefined],
     [`https://office.test.example/api/mytms/candidates/${IDS.challenge}/adopt`, 'POST', '{}'],
     [`https://office.test.example/api/mytms/memberships/${IDS.outbox}/state`, 'POST', '{}']
   ]) {

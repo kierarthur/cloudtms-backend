@@ -242,8 +242,12 @@ async function boundedObject(request, maximumBytes = 128 * 1024) {
 }
 
 async function handleGoogleDataMatch(request, env, routeContext) {
+  const path = new URL(request.url).pathname;
   if (request.method !== 'POST'
-      || new URL(request.url).pathname !== `${PRIVATE_GOOGLE_DATA_PREFIX}/candidates/match`) {
+      || ![
+        `${PRIVATE_GOOGLE_DATA_PREFIX}/candidates/match`,
+        `${PRIVATE_GOOGLE_DATA_PREFIX}/candidates/attach`
+      ].includes(path)) {
     return json(404, { ok: false, error_code: 'MYTMS_GOOGLE_DATA_ROUTE_NOT_FOUND' });
   }
   let body;
@@ -256,18 +260,33 @@ async function handleGoogleDataMatch(request, env, routeContext) {
     return json(401, { ok: false, error_code: 'MYTMS_GOOGLE_ROUTE_CONTEXT_INVALID' });
   }
   try {
-    const result = await createCandidatePrivateDependencies(env, 'PRIVATE').rpc(
-      'candidate_google_provisioning_match_v1',
-      {
+    const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE');
+    const internalContext = {
+      route_context_verified: true,
+      audience: path.endsWith('/attach') ? 'GOOGLE_PROVISIONING_ATTACH' : 'GOOGLE_PROVISIONING_MATCH',
+      environment: routeContext.context.environment,
+      agency_id: routeContext.context.agency_id,
+      data_plane_id: routeContext.context.data_plane_id,
+      route_version_id: routeContext.context.route_version_id,
+      target_generation: routeContext.context.target_generation,
+      integration_id: routeContext.context.integration_id
+    };
+    const result = path.endsWith('/attach')
+      ? await dependencies.rpc('candidate_google_provisioning_attach_v1', {
+        p_internal_context: internalContext,
+        p_local_candidate_id: body.local_candidate_id,
+        p_candidate_code: body.candidate_code,
+        p_surname: body.surname,
+        p_email: body.email,
+        p_mobile: body.mobile,
+        p_google_source_identity_hmac: body.google_source_identity_hmac,
+        p_source_hmac_key_version: body.source_hmac_key_version,
+        p_correlation_id: body.correlation_id,
+        p_now_utc: new Date().toISOString()
+      })
+      : await dependencies.rpc('candidate_google_provisioning_match_v1', {
         p_internal_context: {
-          route_context_verified: true,
-          audience: 'GOOGLE_PROVISIONING_MATCH',
-          environment: routeContext.context.environment,
-          agency_id: routeContext.context.agency_id,
-          data_plane_id: routeContext.context.data_plane_id,
-          route_version_id: routeContext.context.route_version_id,
-          target_generation: routeContext.context.target_generation,
-          integration_id: routeContext.context.integration_id
+          ...internalContext
         },
         p_candidate_code: body.candidate_code,
         p_surname: body.surname,
@@ -276,8 +295,7 @@ async function handleGoogleDataMatch(request, env, routeContext) {
         p_google_source_identity_hmac: body.google_source_identity_hmac,
         p_source_hmac_key_version: body.source_hmac_key_version,
         p_correlation_id: body.correlation_id
-      }
-    );
+      });
     return json(200, result);
   } catch {
     return json(503, { ok: false, error_code: 'MYTMS_GOOGLE_DATA_DEPENDENCY_UNAVAILABLE' });

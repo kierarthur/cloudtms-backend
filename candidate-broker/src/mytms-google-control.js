@@ -190,7 +190,69 @@ async function exactCandidateMatch(verified, env) {
   if (!response.ok || match.ok !== true || !['EXACT', 'NO_MATCH', 'AMBIGUOUS'].includes(match.match_state)) {
     throw new MyTmsGoogleControlError(503, text(match.error_code) || 'MYTMS_GOOGLE_MATCH_UNAVAILABLE');
   }
-  return { match, target, operationId };
+  return { match, target, registry, operationId };
+}
+
+async function attachCandidateCode(verified, env, commitContext, rowFacts) {
+  const operationId = uuid(verified.body.operation_id);
+  const { match, target, registry } = await exactCandidateMatch({
+    ...verified,
+    body: {
+      operation_id: operationId,
+      candidate_code: text(commitContext.candidate_code),
+      surname: text(rowFacts.surname),
+      email: text(rowFacts.email),
+      mobile: text(rowFacts.mobile),
+      google_source_identity_hmac: text(rowFacts.google_source_identity_hmac),
+      source_hmac_key_version: rowFacts.source_hmac_key_version
+    }
+  }, env);
+  if (match.match_state !== 'EXACT'
+      || text(match.local_candidate_id).toLowerCase() !== text(commitContext.local_candidate_id).toLowerCase()
+      || text(target.agency_id).toLowerCase() !== text(commitContext.agency_id).toLowerCase()) {
+    throw new MyTmsGoogleControlError(409, 'MYTMS_GOOGLE_IDENTITY_CHANGED');
+  }
+  const now = Date.now();
+  const routeContext = await signMyTmsGoogleRouteContext({
+    environment: target.environment,
+    integration_id: target.integration_id,
+    agency_id: target.agency_id,
+    data_plane_id: target.data_plane_id,
+    route_version_id: target.route_version_id,
+    route_version: target.route_version,
+    target_generation: target.target_generation,
+    operation_id: operationId,
+    issued_at_utc: new Date(now).toISOString(),
+    expires_at_utc: new Date(now + 4 * 60_000).toISOString(),
+    key_version: registry.keyVersion
+  }, registry.routeContextSecret, now);
+  const attachBody = {
+    operation_id: operationId,
+    local_candidate_id: text(commitContext.local_candidate_id),
+    candidate_code: text(commitContext.candidate_code),
+    surname: text(rowFacts.surname), email: text(rowFacts.email), mobile: text(rowFacts.mobile),
+    google_source_identity_hmac: text(rowFacts.google_source_identity_hmac).toLowerCase(),
+    source_hmac_key_version: integer(rowFacts.source_hmac_key_version, 1),
+    correlation_id: verified.correlation_id
+  };
+  const raw = JSON.stringify(attachBody);
+  const headers = new Headers({
+    'content-type': 'application/json; charset=utf-8',
+    'content-length': String(new TextEncoder().encode(raw).byteLength),
+    'x-cloudtms-public-client': 'mytms-google-orchestrator',
+    'x-cloudtms-google-route-context': routeContext.envelope,
+    'x-cloudtms-google-route-context-sha256': routeContext.sha256
+  });
+  const unsigned = new Request(
+    'https://cloudtms-candidate-private.internal/private/mytms-google-data/v1/candidates/attach',
+    { method: 'POST', headers, body: raw, redirect: 'manual', signal: AbortSignal.timeout(8_000) }
+  );
+  const response = await registry.binding.fetch(await signCandidatePrivateRequest(unsigned, env));
+  const result = await boundedJson(response);
+  if (!response.ok || result.ok !== true || !['ATTACHED', 'UNCHANGED'].includes(text(result.state))) {
+    throw new MyTmsGoogleControlError(response.status, text(result.error_code) || 'MYTMS_GOOGLE_LINK_UNAVAILABLE');
+  }
+  return result;
 }
 
 function requestHash(body) {
@@ -229,12 +291,17 @@ async function provisioningCommit(verified, env) {
     { p_google_context: verified.google_context, p_operation_id: operationId, p_now_utc: now }
   );
   if (commitContext.ok !== true) return commitContext;
+  const rowFacts = object(body.google_row_facts);
+  if (text(rowFacts.candidate_code) !== text(commitContext.candidate_code)) {
+    throw new MyTmsGoogleControlError(409, 'MYTMS_GOOGLE_LINK_CONFLICT');
+  }
+  await attachCandidateCode(verified, env, commitContext, rowFacts);
   return controlPlaneRpc(env, 'google_control', 'provisioning_commit_v1', {
     p_google_context: verified.google_context,
     p_operation_id: operationId,
     p_reservation_token: text(body.reservation_token),
     p_request_hash: requestHash(body),
-    p_google_row_facts: object(body.google_row_facts),
+    p_google_row_facts: rowFacts,
     p_agency_link_facts: {
       local_candidate_id: commitContext.local_candidate_id,
       candidate_code: commitContext.candidate_code
@@ -365,6 +432,6 @@ export async function handleMyTmsGoogleControlRequest(request, env) {
 }
 
 export const myTmsGoogleControlInternals = Object.freeze({
-  boundedBytes, boundedJson, canonicalJson, dispatch, exactCandidateMatch, forwardedHeaders,
+  attachCandidateCode, boundedBytes, boundedJson, canonicalJson, dispatch, exactCandidateMatch, forwardedHeaders,
   operatorContext, pathUuid, requestHash, safeResult, targetForGoogleContext
 });

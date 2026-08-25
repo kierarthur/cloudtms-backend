@@ -185,9 +185,111 @@ test('target-switch drain facts use one recursively sorted canonical JSON author
     await sha256Hex(new TextEncoder().encode(myTmsGoogleControlInternals.canonicalJson(facts))));
 });
 
-test('agency match SQL is read-only, exact, CID1-canonical and service-role only', async () => {
+test('Google CID attach re-proves the exact Candidate and route before one private write', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  const environment = env({
+    MYTMS_CONTROL_PLANE_ENABLED: 'TRUE',
+    MYTMS_CONTROL_PLANE_URL: 'https://control.example.test',
+    MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-only-service-role-key',
+    CANDIDATE_DATA_PLANE_CLOUDTMS_TEST_ROUTE_CONTEXT_SECRET: 'exact-data-plane-route-secret',
+    CLOUDTMS_PRIVATE: {
+      async fetch(request) {
+        const path = new URL(request.url).pathname;
+        const body = JSON.parse(await request.text());
+        calls.push({ path, body });
+        if (path.endsWith('/candidates/match')) {
+          return new Response(JSON.stringify({
+            ok: true, match_state: 'EXACT', candidate_code_state: 'UNASSIGNED',
+            local_candidate_id: IDS.integration
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        if (path.endsWith('/candidates/attach')) {
+          return new Response(JSON.stringify({
+            ok: true, state: 'ATTACHED', local_candidate_id: IDS.integration,
+            candidate_code: 'CID1-ABCDE', idempotent_replay: false
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        return new Response('{}', { status: 404 });
+      }
+    }
+  });
+  globalThis.fetch = async (request) => {
+    assert.match(new URL(request.url).pathname, /integration_target_resolve_v1$/);
+    return new Response(JSON.stringify({
+      ok: true, state: 'ACTIVE', environment: 'TEST', integration_id: IDS.integration,
+      agency_id: IDS.agency, data_plane_id: IDS.plane, route_version_id: IDS.route,
+      route_version: 7, target_generation: 4,
+      registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST'
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const result = await myTmsGoogleControlInternals.attachCandidateCode({
+      body: { operation_id: IDS.operation }, google_context: googleContext(),
+      correlation_id: '01K35Y7N7ER4QY5F7M8D9P0Q1R'
+    }, environment, {
+      agency_id: IDS.agency, local_candidate_id: IDS.integration,
+      candidate_code: 'CID1-ABCDE'
+    }, {
+      surname: 'Example', email: 'person@example.test', mobile: '447700900111',
+      google_source_identity_hmac: '5'.repeat(64), source_hmac_key_version: 1
+    });
+    assert.equal(result.state, 'ATTACHED');
+    assert.deepEqual(calls.map(({ path }) => path), [
+      '/private/mytms-google-data/v1/candidates/match',
+      '/private/mytms-google-data/v1/candidates/attach'
+    ]);
+    assert.equal(calls[1].body.local_candidate_id, IDS.integration);
+    assert.equal(calls[1].body.candidate_code, 'CID1-ABCDE');
+    assert.equal(calls[1].body.surname, 'Example');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Google CID attach fails closed when the exact Candidate changes before commit', async () => {
+  const originalFetch = globalThis.fetch;
+  let attachCalls = 0;
+  const environment = env({
+    MYTMS_CONTROL_PLANE_ENABLED: 'TRUE',
+    MYTMS_CONTROL_PLANE_URL: 'https://control.example.test',
+    MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-only-service-role-key',
+    CANDIDATE_DATA_PLANE_CLOUDTMS_TEST_ROUTE_CONTEXT_SECRET: 'exact-data-plane-route-secret',
+    CLOUDTMS_PRIVATE: {
+      async fetch(request) {
+        if (new URL(request.url).pathname.endsWith('/candidates/attach')) attachCalls += 1;
+        return new Response(JSON.stringify({ ok: true, match_state: 'NO_MATCH' }), {
+          status: 200, headers: { 'content-type': 'application/json' }
+        });
+      }
+    }
+  });
+  globalThis.fetch = async () => new Response(JSON.stringify({
+    ok: true, state: 'ACTIVE', environment: 'TEST', integration_id: IDS.integration,
+    agency_id: IDS.agency, data_plane_id: IDS.plane, route_version_id: IDS.route,
+    route_version: 7, target_generation: 4,
+    registry_binding_key: 'CANDIDATE_DATA_PLANE_CLOUDTMS_TEST'
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  try {
+    await assert.rejects(() => myTmsGoogleControlInternals.attachCandidateCode({
+      body: { operation_id: IDS.operation }, google_context: googleContext(),
+      correlation_id: '01K35Y7N7ER4QY5F7M8D9P0Q1R'
+    }, environment, {
+      agency_id: IDS.agency, local_candidate_id: IDS.integration,
+      candidate_code: 'CID1-ABCDE'
+    }, {
+      surname: 'Example', email: 'person@example.test', mobile: '447700900111',
+      google_source_identity_hmac: '5'.repeat(64), source_hmac_key_version: 1
+    }), (error) => error?.code === 'MYTMS_GOOGLE_IDENTITY_CHANGED');
+    assert.equal(attachCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('agency identity SQL matches exactly and attaches only to a blank or identical CID', async () => {
   const source = await readFile(new URL(
-    '../supabase/repeatable/21082026_2231_candidate_google_provisioning_match_v1.sql', import.meta.url
+    '../supabase/repeatable/25082026_1704_candidate_google_identity_link_v2.sql', import.meta.url
   ), 'utf8');
   assert.match(source, /c\.active is true/);
   assert.match(source, /\^CID1-\[0-9A-HJKMNP-TV-Z\]\{5,160\}\$/);
@@ -195,7 +297,10 @@ test('agency match SQL is read-only, exact, CID1-canonical and service-role only
   assert.match(source, /c\.email/);
   assert.match(source, /c\.phone/);
   assert.match(source, /min\(c\.id::text\)::uuid/i);
-  assert.doesNotMatch(source, /\b(?:insert|update|delete|alter|drop|truncate)\s+(?:into\s+)?public\.candidates\b/i);
+  assert.match(source, /set key_norm=v_code,updated_at=p_now_utc/i);
+  assert.match(source, /nullif\(pg_catalog\.btrim\(pg_catalog\.coalesce\(c\.key_norm,''\)\),''\) is null/i);
+  assert.match(source, /elsif v_existing=v_code then/i);
+  assert.match(source, /GOOGLE_PROVISIONING_CID_CONFLICT/);
   assert.match(source, /revoke all .* public,anon,authenticated/is);
   assert.match(source, /grant execute .* service_role/is);
 });
