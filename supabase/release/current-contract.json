@@ -1190,6 +1190,19 @@
         "postgres",
         "service_role"
       ],
+      "table": "candidate_home_announcement_versions",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
       "table": "candidate_job_titles",
       "using": "true",
       "schema": "public",
@@ -3401,6 +3414,44 @@
       "volatility": "i",
       "security_definer": false,
       "definition_sha256": "89dcd7a9388ca54042c0d721617297583554934818d384ae325e19fd28a6fd33"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "_candidate_home_announcement_normalize_v1(p_text text)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "a77b19ddb4409f9afd2439cde57daf2e37475f70f9b192bb47dff16405c68ee0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "_candidate_home_summary_v1(p_environment text, p_account_id uuid, p_candidate_id uuid, p_daily_capability jsonb, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "db46ee11897ce1df0e994fa1f666535b88abef7b2702e091858efd184d26a706"
     },
     {
       "acl": [
@@ -11947,14 +11998,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=pg_catalog, public, private, pg_temp"
+        "search_path=\"\""
       ],
       "schema": "public",
       "identity": "candidate_app_bootstrap_v1(p_session_id uuid, p_environment text, p_expected_rotation integer, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "388b5c8bf32a9864ae9f8e872e3f2a4b3847b73e9ea8dd4ba7af77cf8274c9b3"
+      "definition_sha256": "7a0f81f41f3bfdc3c9bfc1affbe84542b2686af9f8d0763f1abf6558c0475c92"
     },
     {
       "acl": [
@@ -12574,11 +12625,35 @@
         "search_path=\"\""
       ],
       "schema": "public",
+      "identity": "candidate_daily_system_policy_activate_ready_v1(p_internal_context jsonb, p_candidate_source_hmacs jsonb, p_projection_outbox_ids jsonb, p_correlation_id text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4183a0fa61fdb6f143f9e5d5d9011c408365419fa7bd2562d08c6e6cf95a10a2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
       "identity": "candidate_daily_tiles_get_v1(p_internal_context jsonb, p_from date, p_days integer)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "a45722647ce94c6d0e69565f08d26bfc2612d849acc170cfe830e19a47858394"
+      "definition_sha256": "f52ac406393c5540dac8c1e57c73d12eea1d91a84822fc249285f382121d3921"
     },
     {
       "acl": [
@@ -12646,11 +12721,131 @@
         "search_path=\"\""
       ],
       "schema": "public",
+      "identity": "candidate_google_provisioning_attach_v1(p_internal_context jsonb, p_local_candidate_id uuid, p_candidate_code text, p_surname text, p_email text, p_mobile text, p_google_source_identity_hmac text, p_source_hmac_key_version integer, p_correlation_id text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6121dcaebd94443587ac05c5d107c9ca6c85481b40d3a5ab6c6212c0ba831289"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
       "identity": "candidate_google_provisioning_match_v1(p_internal_context jsonb, p_candidate_code text, p_surname text, p_email text, p_mobile text, p_google_source_identity_hmac text, p_source_hmac_key_version integer, p_correlation_id text)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "10b5b1639383acf495a0c25093628c07f1da7424aa530d4a15f0036e53521f72"
+      "definition_sha256": "30330888b78006fa1b7e4fd4b6e129100d7dccd155ae3391e0b6a69ce2aa27a7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_home_announcement_settings_get_v1()",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "4922c5e0335cbbcc5064799e65b1af5dad2cc14355e8425377708b87eaed03ab"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_home_announcement_settings_preview_v1(p_announcement_text text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "4d29d87ede8cd3cd9b294ce45606cc9252437155c6465b396113e1508894ad83"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_home_announcement_settings_reset_v1(p_expected_version bigint, p_actor_identity_hmac_hex text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ee74dfae2210422b8f3b14f7b2c8d0a038fe4134e15d4b22f5a2e439b8cd6a1f"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_home_announcement_settings_set_v1(p_expected_version bigint, p_announcement_text text, p_actor_identity_hmac_hex text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "1dbf0610b04fff7b6cfd028a401a12cc9681ab7c51f57148854c97a033a60bb5"
     },
     {
       "acl": [
@@ -25441,11 +25636,6 @@
     },
     {
       "acl": [
-        {
-          "grantee": "postgres",
-          "grantable": false,
-          "privilege": "EXECUTE"
-        },
         {
           "grantee": "postgres",
           "grantable": false,
@@ -52664,6 +52854,199 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (availability_version > 0)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_home_announcement_versions",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 1,
+          "generated": ""
+        },
+        {
+          "name": "announcement_text",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 2,
+          "generated": ""
+        },
+        {
+          "name": "semantic_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 3,
+          "generated": ""
+        },
+        {
+          "name": "actor_identity_hmac",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 4,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 5,
+          "generated": ""
+        },
+        {
+          "name": "reason_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 6,
+          "generated": ""
+        },
+        {
+          "name": "recorded_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "position": 7,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_home_announcement_versions_idempotency_key_key",
+          "definition": "CREATE UNIQUE INDEX candidate_home_announcement_versions_idempotency_key_key ON public.candidate_home_announcement_versions USING btree (idempotency_key)"
+        },
+        {
+          "name": "candidate_home_announcement_versions_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_home_announcement_versions_pkey ON public.candidate_home_announcement_versions USING btree (version)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_home_announcement_versions_actor_identity_hmac_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actor_identity_hmac IS NULL OR octet_length(actor_identity_hmac) = 32)"
+        },
+        {
+          "name": "candidate_home_announcement_versions_announcement_text_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(announcement_text) <= 600)"
+        },
+        {
+          "name": "candidate_home_announcement_versions_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(idempotency_key)) >= 1 AND char_length(btrim(idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_home_announcement_versions_idempotency_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (idempotency_key)"
+        },
+        {
+          "name": "candidate_home_announcement_versions_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (version)"
+        },
+        {
+          "name": "candidate_home_announcement_versions_reason_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason_code = ANY (ARRAY['INSTALL_DEFAULT'::text, 'OFFICE_SAVE'::text, 'OFFICE_RESET'::text]))"
+        },
+        {
+          "name": "candidate_home_announcement_versions_semantic_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(semantic_sha256) = 32)"
+        },
+        {
+          "name": "candidate_home_announcement_versions_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (version >= 1)"
         }
       ],
       "view_definition_sha256": null
@@ -85870,6 +86253,51 @@
           "not_null": false,
           "position": 203,
           "generated": ""
+        },
+        {
+          "name": "candidate_home_announcement_text",
+          "type": "text",
+          "default": "''::text",
+          "identity": "",
+          "not_null": true,
+          "position": 204,
+          "generated": ""
+        },
+        {
+          "name": "candidate_home_announcement_version",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "position": 205,
+          "generated": ""
+        },
+        {
+          "name": "candidate_home_announcement_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "position": 206,
+          "generated": ""
+        },
+        {
+          "name": "candidate_home_announcement_updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "position": 207,
+          "generated": ""
+        },
+        {
+          "name": "candidate_home_announcement_updated_by_hmac",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "position": 208,
+          "generated": ""
         }
       ],
       "indexes": [
@@ -86488,6 +86916,38 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (candidate_hours_deviation_pct >= 0::numeric AND candidate_hours_deviation_pct <= 500::numeric)"
+        },
+        {
+          "name": "settings_defaults_candidate_home_announcement_actor_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_home_announcement_updated_by_hmac IS NULL OR octet_length(candidate_home_announcement_updated_by_hmac) = 32)"
+        },
+        {
+          "name": "settings_defaults_candidate_home_announcement_sha256_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(candidate_home_announcement_sha256) = 32)"
+        },
+        {
+          "name": "settings_defaults_candidate_home_announcement_text_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(candidate_home_announcement_text) <= 600)"
+        },
+        {
+          "name": "settings_defaults_candidate_home_announcement_version_chk",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_home_announcement_version >= 1)"
         },
         {
           "name": "settings_defaults_candidate_manager_email_templates_ck",
