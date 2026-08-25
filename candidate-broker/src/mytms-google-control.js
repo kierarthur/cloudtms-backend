@@ -311,6 +311,36 @@ async function provisioningCommit(verified, env) {
   });
 }
 
+async function integrationHeartbeat(verified, env) {
+  const body = object(verified.body);
+  const requestedRole = upper(body.project_role);
+  if (!['MASTER', 'AVAILABILITY'].includes(requestedRole)) {
+    throw new MyTmsGoogleControlError(400, 'MYTMS_GOOGLE_PROJECT_ROLE_INVALID');
+  }
+  const now = new Date();
+  const identity = await controlPlaneRpc(
+    env, 'google_control', 'integration_identity_authenticate_v1',
+    { p_google_context: verified.google_context, p_now_utc: now.toISOString() }
+  );
+  if (upper(identity.project_role) !== requestedRole) {
+    throw new MyTmsGoogleControlError(401, 'SYSTEM_AUTH_FAILED');
+  }
+  return controlPlaneRpc(env, 'google_control', 'worker_heartbeat_v1', {
+    p_google_context: verified.google_context,
+    p_capability_facts: {
+      schema: 1,
+      project_role: requestedRole,
+      source_revision: verified.google_context.source_revision,
+      transport_authority: 'SIGNED_GOOGLE_CONTROL_HMAC_V1',
+      candidate_provisioning: requestedRole === 'MASTER',
+      daily_availability: requestedRole === 'AVAILABILITY'
+    },
+    p_expires_at_utc: new Date(now.getTime() + 45 * 60_000).toISOString(),
+    p_correlation_id: verified.correlation_id,
+    p_now_utc: now.toISOString()
+  });
+}
+
 function pathUuid(path, suffix = '') {
   const escaped = suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = new RegExp(`^${PREFIX}/(?:candidates/provisioning|target-switches)/([0-9a-f-]{36})${escaped}$`, 'i').exec(path);
@@ -382,6 +412,7 @@ async function targetSwitchTransition(verified, env) {
 
 async function dispatch(verified, env) {
   switch (verified.route) {
+    case 'INTEGRATION_HEARTBEAT': return integrationHeartbeat(verified, env);
     case 'PROVISIONING_PREFLIGHT': return provisioningPreflight(verified, env);
     case 'PROVISIONING_COMMIT': return provisioningCommit(verified, env);
     case 'PROVISIONING_STATUS':
@@ -408,7 +439,7 @@ function safeResult(result, correlationId) {
   for (const key of [
     'state', 'status', 'error_code', 'operation_id', 'candidate_code', 'reservation_token',
     'idempotent_replay', 'switch_id', 'generation', 'expires_at_utc',
-    'attestation_count', 'current_project_attested'
+    'attestation_count', 'current_project_attested', 'project_role'
   ]) if (source[key] !== undefined) safe[key] = source[key];
   return safe;
 }
@@ -433,5 +464,5 @@ export async function handleMyTmsGoogleControlRequest(request, env) {
 
 export const myTmsGoogleControlInternals = Object.freeze({
   attachCandidateCode, boundedBytes, boundedJson, canonicalJson, dispatch, exactCandidateMatch, forwardedHeaders,
-  operatorContext, pathUuid, requestHash, safeResult, targetForGoogleContext
+  integrationHeartbeat, operatorContext, pathUuid, requestHash, safeResult, targetForGoogleContext
 });

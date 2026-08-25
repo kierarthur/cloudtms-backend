@@ -155,6 +155,85 @@ test('private Google-control HMAC accepts canonical POST and GET, rejects replay
   assert.equal((await verifyMyTmsGoogleControlRequest(changedBody, env({ R2: nonceStore() }))).status, 401);
 });
 
+test('private Google-control HMAC accepts only the closed integration heartbeat route', async () => {
+  const request = await hmacRequest('POST',
+    'https://broker.invalid/private/google-control/v1/integrations/heartbeat', {
+      google_context: googleContext(), project_role: 'MASTER'
+    }, { nonce: 'abcdefghijklmnopqrstu1' });
+  const verified = await verifyMyTmsGoogleControlRequest(request, env({ R2: nonceStore() }));
+  assert.equal(verified.ok, true);
+  assert.equal(verified.route, 'INTEGRATION_HEARTBEAT');
+});
+
+test('integration heartbeat authenticates identity before recording server-owned capability facts', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (request) => {
+    const path = new URL(request.url).pathname;
+    const body = JSON.parse(await request.text());
+    calls.push({ path, body });
+    if (path.endsWith('/integration_identity_authenticate_v1')) {
+      return new Response(JSON.stringify({
+        integration_id: IDS.integration, integration_status: 'DISABLED', project_role: 'MASTER',
+        source_revision: googleContext().source_revision, internal_only: true
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (path.endsWith('/worker_heartbeat_v1')) {
+      return new Response(JSON.stringify({
+        ok: true, status: 'RECORDED', expires_at_utc: body.p_expires_at_utc
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    return new Response('{}', { status: 404, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const result = await myTmsGoogleControlInternals.integrationHeartbeat({
+      body: { project_role: 'MASTER' }, google_context: googleContext(),
+      correlation_id: '01K35Y7N7ER4QY5F7M8D9P0Q1R'
+    }, {
+      MYTMS_CONTROL_PLANE_ENABLED: 'TRUE',
+      MYTMS_CONTROL_PLANE_URL: 'https://control.example.test',
+      MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-only-service-role-key'
+    });
+    assert.equal(result.status, 'RECORDED');
+    assert.equal(calls.length, 2);
+    assert.match(calls[0].path, /integration_identity_authenticate_v1$/);
+    assert.match(calls[1].path, /worker_heartbeat_v1$/);
+    assert.deepEqual(calls[1].body.p_capability_facts, {
+      schema: 1, project_role: 'MASTER',
+      source_revision: googleContext().source_revision,
+      transport_authority: 'SIGNED_GOOGLE_CONTROL_HMAC_V1',
+      candidate_provisioning: true, daily_availability: false
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('integration heartbeat rejects a project-role substitution before registration write', async () => {
+  const originalFetch = globalThis.fetch;
+  let heartbeatCalls = 0;
+  globalThis.fetch = async (request) => {
+    if (new URL(request.url).pathname.endsWith('/worker_heartbeat_v1')) heartbeatCalls += 1;
+    return new Response(JSON.stringify({
+      integration_id: IDS.integration, integration_status: 'DISABLED', project_role: 'AVAILABILITY',
+      source_revision: googleContext().source_revision, internal_only: true
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await assert.rejects(() => myTmsGoogleControlInternals.integrationHeartbeat({
+      body: { project_role: 'MASTER' }, google_context: googleContext(),
+      correlation_id: '01K35Y7N7ER4QY5F7M8D9P0Q1R'
+    }, {
+      MYTMS_CONTROL_PLANE_ENABLED: 'TRUE',
+      MYTMS_CONTROL_PLANE_URL: 'https://control.example.test',
+      MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-only-service-role-key'
+    }), (error) => error?.code === 'SYSTEM_AUTH_FAILED');
+    assert.equal(heartbeatCalls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('public response scrubber never emits internal route, binding or Candidate identifiers', () => {
   const safe = myTmsGoogleControlInternals.safeResult({
     ok: true, state: 'RESERVED', operation_id: IDS.operation,
