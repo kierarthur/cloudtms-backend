@@ -56,7 +56,9 @@ test('first-ready policy reuses the sole locked transition and retains every saf
 test('Home announcement validation uses callable PostgreSQL string functions', () => {
   assert.match(homeSql, /pg_catalog\.strpos\(v_text,'<'\)>0/i);
   assert.match(homeSql, /pg_catalog\.strpos\(v_text,'>'\)>0/i);
+  assert.match(homeSql, /pg_catalog\.date_part\('dow',/i);
   assert.doesNotMatch(homeSql, /pg_catalog\.position\s*\(/i);
+  assert.doesNotMatch(homeSql, /pg_catalog\.extract\s*\(/i);
 });
 
 test('a completed projection retries activation only for safely visible outcomes', async () => {
