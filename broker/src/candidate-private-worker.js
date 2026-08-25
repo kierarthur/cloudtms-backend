@@ -40,7 +40,7 @@ function json(status, body) {
 }
 
 async function privateFailureDiagnostic(response) {
-  if (!(response instanceof Response) || response.status < 500) return null;
+  if (!(response instanceof Response) || response.status < 400) return null;
   let source = {};
   try {
     const declared = Number(response.headers.get('content-length') || 0);
@@ -60,7 +60,7 @@ async function privateFailureDiagnostic(response) {
 }
 
 function requiredConfigurationAvailable(env) {
-  return Boolean(
+  const baseConfigurationAvailable = Boolean(
     String(env.CANDIDATE_APP_ENVIRONMENT || '').trim()
     && String(env.CANDIDATE_APP_PUBLIC_URL || '').trim()
     && String(env.SUPABASE_URL || '').trim()
@@ -71,6 +71,9 @@ function requiredConfigurationAvailable(env) {
     && String(env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET || '').trim()
     && env.R2 && typeof env.R2.put === 'function'
   );
+  if (!baseConfigurationAvailable) return false;
+  return !federatedRoutingEnabled(env)
+    || Boolean(String(env.CANDIDATE_FEDERATED_IDENTITY_SECRET || '').trim());
 }
 
 function federatedRoutingEnabled(env) {
@@ -416,7 +419,10 @@ export default {
     );
     if (!response) return json(404, { ok: false, error_code: 'CANDIDATE_PRIVATE_ROUTE_NOT_FOUND' });
     const failure = await privateFailureDiagnostic(response);
-    if (failure) console.error('[candidate-private] request failed', failure);
+    if (failure) {
+      const report = failure.status >= 500 ? console.error : console.warn;
+      report('[candidate-private] request failed', failure);
+    }
     const headers = new Headers(response.headers);
     headers.delete('access-control-allow-origin');
     headers.delete('access-control-allow-credentials');

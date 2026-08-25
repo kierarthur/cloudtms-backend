@@ -69,6 +69,13 @@ No secret has a fallback to the normal CloudTMS session secret. Required secret 
 - `CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET`
 - `CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET`
 - `CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET`
+- `CANDIDATE_FEDERATED_IDENTITY_SECRET` whenever `CANDIDATE_FEDERATED_ROUTING_ENABLED=TRUE`
+
+The normal backend and the real private Candidate Worker must hold the same agency-specific
+`CANDIDATE_FEDERATED_IDENTITY_SECRET`. It is the one-way identity-projection authority used
+after a global MyTMS account selects that agency. Private readiness must fail while federated
+routing is enabled and this binding is missing; a healthy service-binding probe must never
+mask a login route that cannot create its agency projection.
 
 TEST and LIVE must use unrelated values. Missing environment or secrets fail closed. Secret values must be set through Worker secret bindings and must never be committed.
 

@@ -27,6 +27,42 @@ test('private Candidate failure diagnostics reject unclosed values and ignore no
   ), null);
 });
 
+test('private Candidate failure diagnostics safely classify closed client failures', async () => {
+  const result = await candidatePrivateWorkerInternals.privateFailureDiagnostic(Response.json({
+    error_code: 'CANDIDATE_FEATURE_DISABLED',
+    private_details: { candidate_email: 'must-not-appear' }
+  }, { status: 400 }));
+  assert.deepEqual(result, {
+    status: 400,
+    error_code: 'CANDIDATE_FEATURE_DISABLED'
+  });
+  assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
+});
+
+test('federated Candidate readiness requires identity-projection authority', () => {
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_APP_PUBLIC_URL: 'https://mycloudtms.example.test',
+    SUPABASE_URL: 'https://miget-gateway.example.test',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-only-service-role-key',
+    CANDIDATE_PRIVATE_SERVICE_SECRET: 'test-only-private-service-secret',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret',
+    CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET: 'test-only-challenge-secret',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret',
+    CANDIDATE_FEDERATED_ROUTING_ENABLED: 'TRUE',
+    R2: { put() {} }
+  };
+  assert.equal(candidatePrivateWorkerInternals.requiredConfigurationAvailable(env), false);
+  assert.equal(candidatePrivateWorkerInternals.requiredConfigurationAvailable({
+    ...env,
+    CANDIDATE_FEDERATED_IDENTITY_SECRET: 'test-only-identity-secret'
+  }), true);
+  assert.equal(candidatePrivateWorkerInternals.requiredConfigurationAvailable({
+    ...env,
+    CANDIDATE_FEDERATED_ROUTING_ENABLED: 'FALSE'
+  }), true);
+});
+
 test('manager routing does not require Candidate identity-projection authority', () => {
   const env = {
     CANDIDATE_APP_ENVIRONMENT: 'TEST',
