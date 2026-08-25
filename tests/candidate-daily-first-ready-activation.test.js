@@ -8,6 +8,8 @@ import { candidateDailyPhase1bInternals } from '../broker/src/candidate-daily-ph
 
 const sql = fs.readFileSync(path.join(process.cwd(), 'supabase', 'repeatable',
   '25082026_1721_candidate_daily_first_ready_activation_v1.sql'), 'utf8');
+const homeSql = fs.readFileSync(path.join(process.cwd(), 'supabase', 'repeatable',
+  '25082026_1616_candidate_home_daily_read_v1.sql'), 'utf8');
 const correlationId = `0${'A'.repeat(25)}`;
 
 function rpcRecorder(resultForPrimary = { outcomes: [{ status: 'COMMITTED' }] }) {
@@ -49,6 +51,12 @@ test('first-ready policy reuses the sole locked transition and retains every saf
   assert.match(sql, /entitlement_enabled',true/i);
   assert.doesNotMatch(sql, /insert\s+into\s+public\.candidates|update\s+public\.candidates/i);
   assert.match(sql, /revoke all on function[\s\S]*from public,anon,authenticated/i);
+});
+
+test('Home announcement validation uses callable PostgreSQL string functions', () => {
+  assert.match(homeSql, /pg_catalog\.strpos\(v_text,'<'\)>0/i);
+  assert.match(homeSql, /pg_catalog\.strpos\(v_text,'>'\)>0/i);
+  assert.doesNotMatch(homeSql, /pg_catalog\.position\s*\(/i);
 });
 
 test('a completed projection retries activation only for safely visible outcomes', async () => {

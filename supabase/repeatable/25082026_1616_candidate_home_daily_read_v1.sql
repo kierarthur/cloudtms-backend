@@ -12,8 +12,8 @@ declare
   );
 begin
   if pg_catalog.char_length(v_text)>600
-     or pg_catalog.position('<' in v_text)>0
-     or pg_catalog.position('>' in v_text)>0
+     or pg_catalog.strpos(v_text,'<')>0
+     or pg_catalog.strpos(v_text,'>')>0
      or pg_catalog.regexp_replace(v_text,E'[\n\t]','','g')~'[[:cntrl:]]'
   then
     raise exception using errcode='22023',message='CANDIDATE_HOME_ANNOUNCEMENT_INVALID';
