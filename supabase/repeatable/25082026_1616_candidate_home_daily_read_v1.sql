@@ -199,7 +199,7 @@ begin
         (p_now_utc at time zone 'Europe/London')::date
         +pg_catalog.mod(
           pg_catalog.coalesce(c.week_ending_weekday_snapshot,effective_client.week_ending_weekday,0)
-          -pg_catalog.extract(dow from (p_now_utc at time zone 'Europe/London')::date)::integer+7,
+          -pg_catalog.date_part('dow',(p_now_utc at time zone 'Europe/London')::date)::integer+7,
           7
         )
       )::date as current_week_ending_date
@@ -300,7 +300,7 @@ begin
         select ((p_now_utc at time zone 'Europe/London')::date
           +pg_catalog.mod(
             pg_catalog.coalesce(c.week_ending_weekday_snapshot,effective_client.week_ending_weekday,0)
-            -pg_catalog.extract(dow from (p_now_utc at time zone 'Europe/London')::date)::integer+7,
+            -pg_catalog.date_part('dow',(p_now_utc at time zone 'Europe/London')::date)::integer+7,
             7
           ))::date as current_week_ending_date
       ) entitlement_window
