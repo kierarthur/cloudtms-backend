@@ -61,22 +61,13 @@ begin
       ))
   ) then raise exception 'CANDIDATE_MANAGER_EMAIL_BROWSER_FUNCTION_PRIVILEGE'; end if;
 
-  if exists(select 1 from public.candidate_manager_email_route_receipts)
-     or exists(select 1 from public.candidate_approval_requests where current_manager_route_receipt_id is not null)
-     or exists(select 1 from public.candidate_submission_components where manager_signature_capture_method is not null)
-     or exists(
-       select 1 from public.mail_outbox
-       where context_kind='CANDIDATE_WORKFLOW' and payment_scope_json ? 'candidate_manager_mail_kind'
-     )
-  then raise exception 'CANDIDATE_MANAGER_EMAIL_INSTALL_NOT_INERT'; end if;
-
   if (select candidate_app_environment from public.settings_defaults where id=1)<>'TEST'
      or exists (
        select 1 from public.settings_defaults s,
          lateral pg_catalog.jsonb_each(s.candidate_app_feature_flags_json) f
-       where s.id=1 and f.value='true'::jsonb
+       where s.id=1 and pg_catalog.jsonb_typeof(f.value)<>'boolean'
      )
-  then raise exception 'CANDIDATE_MANAGER_EMAIL_DISABLED_STATE_INVALID'; end if;
+  then raise exception 'CANDIDATE_MANAGER_EMAIL_OPERATIONAL_TEST_STATE_INVALID'; end if;
 
   v_settings:=public.candidate_manager_email_settings_get_v1();
   if v_settings->>'ok'<>'true'

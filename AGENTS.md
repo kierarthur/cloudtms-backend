@@ -180,6 +180,8 @@ Before changing or publishing any SQL function that is covered by a catalogue ma
 
 For every new Candidate-named `SECURITY DEFINER` function, update and locally test the exact Candidate security inventory in `supabase/verification/23082026_0400_candidate_named_security_verification_v2.sql` in the same change. The expected function count, service-missing count, browser-executable count, and complete catalog fingerprint must all be reconciled from a real PostgreSQL 17 verification result; never leave the verifier pinned to the previous function set. Also compile every changed repeatable in disposable PostgreSQL 17 before protected APPLY so PostgreSQL-only syntax errors are caught before the release reaches Miget.
 
+Installed-state security verifiers must distinguish one-time bootstrap evidence from permanent operational invariants. Once TEST activation is explicitly authorised, a permanent release verifier must not require empty business tables or require every Candidate feature flag to be false. It must continue to prove the TEST environment, valid typed configuration, RLS, grants, browser isolation, function security and every other durable safety boundary. Put bootstrap-only empty/disabled assertions in a separately invoked bootstrap proof, not in every later UPGRADE.
+
 ## TEST-only diagnostic RPC
 
 The Miget TEST clone has a provider-neutral diagnostic RPC:
