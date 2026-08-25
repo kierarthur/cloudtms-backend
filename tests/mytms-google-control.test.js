@@ -289,7 +289,7 @@ test('Google CID attach fails closed when the exact Candidate changes before com
 
 test('agency identity SQL matches exactly and attaches only to a blank or identical CID', async () => {
   const source = await readFile(new URL(
-    '../supabase/repeatable/25082026_1704_candidate_google_identity_link_v2.sql', import.meta.url
+    '../supabase/repeatable/25082026_2028_candidate_google_conditional_runtime_correction_v1.sql', import.meta.url
   ), 'utf8');
   assert.match(source, /c\.active is true/);
   assert.match(source, /\^CID1-\[0-9A-HJKMNP-TV-Z\]\{5,160\}\$/);
@@ -298,9 +298,10 @@ test('agency identity SQL matches exactly and attaches only to a blank or identi
   assert.match(source, /c\.phone/);
   assert.match(source, /min\(c\.id::text\)::uuid/i);
   assert.match(source, /set key_norm=v_code,updated_at=p_now_utc/i);
-  assert.match(source, /nullif\(pg_catalog\.btrim\(pg_catalog\.coalesce\(c\.key_norm,''\)\),''\) is null/i);
+  assert.match(source, /nullif\(pg_catalog\.btrim\(coalesce\(c\.key_norm,''\)\),''\) is null/i);
   assert.match(source, /elsif v_existing=v_code then/i);
   assert.match(source, /GOOGLE_PROVISIONING_CID_CONFLICT/);
   assert.match(source, /revoke all .* public,anon,authenticated/is);
   assert.match(source, /grant execute .* service_role/is);
+  assert.doesNotMatch(source, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });

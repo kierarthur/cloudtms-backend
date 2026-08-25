@@ -10,6 +10,8 @@ const sql = fs.readFileSync(path.join(process.cwd(), 'supabase', 'repeatable',
   '25082026_1721_candidate_daily_first_ready_activation_v1.sql'), 'utf8');
 const homeSql = fs.readFileSync(path.join(process.cwd(), 'supabase', 'repeatable',
   '25082026_1616_candidate_home_daily_read_v1.sql'), 'utf8');
+const homeRuntimeCorrectionSql = fs.readFileSync(path.join(process.cwd(), 'supabase', 'repeatable',
+  '25082026_2024_candidate_nullif_runtime_correction_v1.sql'), 'utf8');
 const correlationId = `0${'A'.repeat(25)}`;
 
 function rpcRecorder(resultForPrimary = { outcomes: [{ status: 'COMMITTED' }] }) {
@@ -59,6 +61,15 @@ test('Home announcement validation uses callable PostgreSQL string functions', (
   assert.match(homeSql, /pg_catalog\.date_part\('dow',/i);
   assert.doesNotMatch(homeSql, /pg_catalog\.position\s*\(/i);
   assert.doesNotMatch(homeSql, /pg_catalog\.extract\s*\(/i);
+});
+
+test('latest Home, bootstrap and DAILY authority never schema-qualifies PostgreSQL conditional syntax', () => {
+  assert.match(homeRuntimeCorrectionSql, /create or replace function public\.candidate_app_bootstrap_v1/i);
+  assert.match(homeRuntimeCorrectionSql, /create or replace function private\._candidate_home_summary_v1/i);
+  assert.match(homeRuntimeCorrectionSql, /create or replace function public\.candidate_daily_tiles_get_v1/i);
+  assert.doesNotMatch(homeRuntimeCorrectionSql, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
+  assert.match(homeRuntimeCorrectionSql, /if nullif\(v_context->>'selected_candidate_id',''\) is not null/i);
+  assert.match(homeRuntimeCorrectionSql, /coalesce\(v_tiles,'\[\]'::jsonb\)/i);
 });
 
 test('a completed projection retries activation only for safely visible outcomes', async () => {
