@@ -178,6 +178,8 @@ Before changing or publishing any SQL function that is covered by a catalogue ma
 * Do not guess a manifest hash when canonical compilation or verification is unavailable. Stop and report the missing proof.
 * After publishing, require the current workflow to pass and recheck the installed TEST definition and manifest hash before declaring deployment complete.
 
+For every new Candidate-named `SECURITY DEFINER` function, update and locally test the exact Candidate security inventory in `supabase/verification/23082026_0400_candidate_named_security_verification_v2.sql` in the same change. The expected function count, service-missing count, browser-executable count, and complete catalog fingerprint must all be reconciled from a real PostgreSQL 17 verification result; never leave the verifier pinned to the previous function set. Also compile every changed repeatable in disposable PostgreSQL 17 before protected APPLY so PostgreSQL-only syntax errors are caught before the release reaches Miget.
+
 ## TEST-only diagnostic RPC
 
 The Miget TEST clone has a provider-neutral diagnostic RPC:
