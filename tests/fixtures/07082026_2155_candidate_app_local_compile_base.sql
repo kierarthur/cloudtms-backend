@@ -439,7 +439,6 @@ create table public.timesheet_evidence (
   display_name text,
   storage_key text not null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
   created_by uuid,
   document_asset_id uuid,
   processing_state text not null default 'DISCOVERED'

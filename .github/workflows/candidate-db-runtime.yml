@@ -138,6 +138,7 @@ jobs:
             supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql
             supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql
             supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql
+            supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql
             supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql
             supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql
             supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql

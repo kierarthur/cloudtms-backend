@@ -4,6 +4,14 @@ import fs from 'node:fs';
 
 const backend = fs.readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
 const sql = fs.readFileSync(new URL('../supabase/repeatable/01082026_1622_contract_week_manual_draft_upsert_atomic_v1.sql', import.meta.url), 'utf8');
+const evidenceSignatureCompatibility = fs.readFileSync(
+  new URL('../supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql', import.meta.url),
+  'utf8'
+);
+const candidateRuntimeFixture = fs.readFileSync(
+  new URL('./fixtures/07082026_2155_candidate_app_local_compile_base.sql', import.meta.url),
+  'utf8'
+);
 
 const section = (startMarker, endMarker) => {
   const start = backend.indexOf(startMarker);
@@ -24,6 +32,19 @@ test('planned manual details returns a guarded contract-week authority and expli
   assert.match(source, /planned_contract_week_authority_complete:\s*true/);
   assert.match(source, /planned_contract_week_authority_contract_week_id:\s*cw\.id/);
   assert.match(source, /can_process:\s*canProcessPlannedManualWeek/);
+});
+
+test('planned lifecycle signature uses the real evidence timestamp contract', () => {
+  assert.match(evidenceSignatureCompatibility, /'updated_at',\s*e\.created_at/i);
+  assert.match(evidenceSignatureCompatibility, /order\s+by\s+e\.created_at\s*,\s*e\.id/i);
+  assert.doesNotMatch(evidenceSignatureCompatibility, /e\.updated_at/i);
+
+  const evidenceTable = candidateRuntimeFixture.slice(
+    candidateRuntimeFixture.toLowerCase().indexOf('create table public.timesheet_evidence'),
+    candidateRuntimeFixture.toLowerCase().indexOf('create table public.invoice_operations')
+  );
+  assert.match(evidenceTable, /created_at\s+timestamptz/i);
+  assert.doesNotMatch(evidenceTable, /updated_at\s+timestamptz/i);
 });
 
 test('planned draft save is atomic and fails closed without the expected signature', () => {
