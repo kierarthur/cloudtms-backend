@@ -7674,12 +7674,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public, extensions, pg_temp"
       ],
       "schema": "public",
@@ -7687,7 +7681,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "a771ae0f3e60bd10f436c53b75c6ee818cf47bca92eba52da35c44aa690c9a5a"
+      "definition_sha256": "154c65657036c250793c20e257ffdb03d013c0e663e22d4544b5a0b61a68ea80"
     },
     {
       "acl": [
@@ -7775,12 +7769,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public, extensions, pg_temp"
       ],
       "schema": "public",
@@ -7788,7 +7776,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "3cfc016c4d1ac58d7a346d0f6d8e5d8ece01651fcfece6a33a9acbf7425da909"
+      "definition_sha256": "bd6ba99b6ac3c6823d6f1c47f8375e06d7d7d9291082b0d835cc9c4e94c70a9b"
     },
     {
       "acl": [
@@ -9838,12 +9826,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -9851,7 +9833,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "6d4ff72a71d933170e8d8e632555d9bb0e04adf50557cd110062e56c1d9fe3d1"
+      "definition_sha256": "9e5b2d43d64f0686e0a6b708310500b80983044ed44e196c4dbb95b69c23e2c0"
     },
     {
       "acl": [
@@ -10115,20 +10097,13 @@
         }
       ],
       "owner": "postgres",
-      "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off"
-      ],
+      "config": [],
       "schema": "public",
       "identity": "_pay_week_start_monday(p_date date)",
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "962c5ce482985d76e70fe79b5c7405e6152a030c65556f265419151e63098b8b"
+      "definition_sha256": "6cd98a850d797efa357003b05ea83f930ba89a49afcea970ff5cf6d143bdd038"
     },
     {
       "acl": [
@@ -18816,12 +18791,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public, extensions, pg_temp"
       ],
       "schema": "public",
@@ -18829,7 +18798,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8467cbd259cdbd5ee66c1e1ff2476215d6305f36c4f2b74ffedaf5264c50e15d"
+      "definition_sha256": "e983dfaa4e0ea992fa3bd2c6e275b5d098f6310350e3905cff989f9551fbf498"
     },
     {
       "acl": [
@@ -19906,12 +19875,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -19919,7 +19882,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "095295b1f61f30dc9b1249a9710e86ffc7040c40be14efabd5cb719e889943b0"
+      "definition_sha256": "b37577d15f0a12e4ad2326bfc17019e16d391eb2c5bc7f46f6eeeb994ebc3cc1"
     },
     {
       "acl": [
@@ -20683,12 +20646,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -20696,7 +20653,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "5e14a405ae36173533b38e0fa9b795c91e820fd37192c8ec8268b01498bd7b9f"
+      "definition_sha256": "b24c836b61635f27d35084c4b2f5fcbcc00668f17ed695fd66baaf7a6b42a63a"
     },
     {
       "acl": [
@@ -20713,12 +20670,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -20726,7 +20677,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "001bd929169615ce9b11429c9a1f7e7d169f4f8c2520245e3ea6a36b091eea26"
+      "definition_sha256": "7ecd15aeaf8f0e21f5d834ba8603bcf8956e8452c5efdc4a7203ae178a633d3f"
     },
     {
       "acl": [
@@ -20791,12 +20742,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -20804,7 +20749,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e0c52093ef1b379baad869237d6afb8ad6076df86aa24eb400719213d55ceb55"
+      "definition_sha256": "9547482a07ba519e2d477348ba90612f221361a372743d3520bb2a554178c016"
     },
     {
       "acl": [
@@ -22863,12 +22808,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -22876,7 +22815,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "20f05c8ff470920a578ceed7003b23001d37ea888cd99f04f1ac7c1204597812"
+      "definition_sha256": "1f95c906b67f841d9b711dd8f8d126534c048aa2e6441c3ccd1a52df7f0acbda"
     },
     {
       "acl": [
@@ -23157,12 +23096,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -23170,7 +23103,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2438d9f100be49a7b2a00fd44dba44f6ae166795879293e6f42e3f0f4d84bcb6"
+      "definition_sha256": "49eadca5ec046e445d6f0bebdc347eca5a607c63cb21a56cf181b21341e400d7"
     },
     {
       "acl": [
@@ -23321,12 +23254,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -23334,7 +23261,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "48c74c546a2653726bac0b9618074373692f810953e08563cbe5bdeb62a3eff8"
+      "definition_sha256": "6adba3cac49e0f6c4c91bbf1c766393b50f8fcb6efaa839155506ca36ed2cb7e"
     },
     {
       "acl": [
@@ -23404,12 +23331,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -23417,7 +23338,7 @@
       "parallel": "u",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "0d956997c41aafbb689d76e06de86829466bec909d13f6ece5dd8023136c4291"
+      "definition_sha256": "aed0190c2e306707e7c4d4c119d8f94136325a016b6a09b1e3c7469113ad4b21"
     },
     {
       "acl": [
@@ -23674,12 +23595,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public"
       ],
       "schema": "public",
@@ -23687,7 +23602,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "475fce62fce91dc9549370469bccdabf2eac5af132a48cdba3215392d3ef8b57"
+      "definition_sha256": "34822c62acd98416e8207a64b68b79cd33b559d8102285d1c9613ce27104c1e7"
     },
     {
       "acl": [
@@ -24525,12 +24440,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public, extensions, pg_temp"
       ],
       "schema": "public",
@@ -24538,7 +24447,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "8eb16477819755f1cb4464fd51336466d180c0a6777c4c711dc5b8aeccccd2a1"
+      "definition_sha256": "4b3e403373a1eb004a061edc196ee56d5b5b8c7199a6bab49e9459534e7e3fb9"
     },
     {
       "acl": [
@@ -26860,12 +26769,6 @@
       ],
       "owner": "postgres",
       "config": [
-        "plpgsql_check.constants_tracing=off",
-        "plpgsql_check.cursors_leaks=off",
-        "plpgsql_check.fatal_errors=off",
-        "plpgsql_check.profiler=off",
-        "plpgsql_check.strict_cursors_leaks=off",
-        "plpgsql_check.tracer=off",
         "search_path=public, extensions, pg_temp"
       ],
       "schema": "public",
@@ -26873,7 +26776,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "95af40e6b3fb78812c76db18808b38232b57de5109a2ab2389df956a17c51d6d"
+      "definition_sha256": "f758ea8d6e0fcc16163bc6a3b5cc77026bf97c0f21b1b5099b9d4336f7a576c6"
     },
     {
       "acl": [

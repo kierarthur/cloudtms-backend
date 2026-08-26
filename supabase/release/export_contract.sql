@@ -147,13 +147,13 @@ routine_contract as (
       'volatility', p.provolatile,
       'parallel', p.proparallel,
       -- plpgsql_check is development instrumentation and is not installed by
-      -- every PostgreSQL provider. Its disabled per-function GUC is excluded
+      -- every PostgreSQL provider. Its routine-local settings are excluded
       -- from the provider-neutral application contract; search_path and every
       -- other routine configuration remain authoritative.
       'config', coalesce((
         select jsonb_agg(config_value order by config_value collate "C")
         from pg_catalog.unnest(coalesce(p.proconfig, array[]::text[])) config_value
-        where config_value <> 'plpgsql_check.mode=disabled'
+        where config_value !~ '^plpgsql_check[.]'
       ), '[]'::jsonb),
       'acl', coalesce((
         select jsonb_agg(
@@ -184,10 +184,11 @@ routine_contract as (
         extensions.digest(
           pg_catalog.convert_to(
             pg_catalog.replace(
-              pg_catalog.replace(
+              pg_catalog.regexp_replace(
                 pg_catalog.pg_get_functiondef(p.oid),
-                E'\n SET "plpgsql_check.mode" TO ''disabled''',
-                ''
+                E'\n SET "plpgsql_check\\.[^"]+" TO ''[^'']*''',
+                '',
+                'g'
               ),
               E'\r\n',
               E'\n'
