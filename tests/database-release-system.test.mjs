@@ -82,8 +82,28 @@ test('manual release is dispatch-only, environment-protected, and two phase', ()
   assert.match(workflow, /Read-only release plan/);
   assert.match(workflow, /if: inputs\.phase == 'APPLY'/);
   assert.match(workflow, /APPLY \$\{\{ inputs\.environment \}\} \$\{\{ inputs\.mode \}\}/);
+  assert.match(workflow, /inputs\.environment.*TEST.*inputs\.mode.*UPGRADE/s);
+  assert.match(workflow, /standing managed TEST UPGRADE authority/i);
+  assert.match(workflow, /GITHUB_REPOSITORY.*kierarthur\/cloudtms-backend/);
+  assert.match(workflow, /GITHUB_REF.*refs\/heads\/test/);
+  assert.match(workflow, /CLOUDTMS_RELEASE_APPROVAL=\$expected/);
+  assert.match(workflow, /CLOUDTMS_RELEASE_REQUESTED_APPROVAL/);
+  assert.doesNotMatch(workflow, /CLOUDTMS_RELEASE_APPROVAL:\s*\$\{\{ inputs\.approval \}\}/);
   assert.match(workflow, /CLOUDTMS_LOGICAL_POSTGRES_OWNER:\s*CURRENT_USER/);
   assert.match(workflow, /LEGACY_UPGRADE/);
+});
+
+test('standing database authority is limited to managed TEST UPGRADE', () => {
+  const workflow = read('.github/workflows/database-release.yml');
+  const authorityStart = workflow.indexOf('Using standing managed TEST UPGRADE authority');
+  assert.notEqual(authorityStart, -1);
+  const authorityBlock = workflow.slice(Math.max(0, authorityStart - 900), authorityStart + 500);
+  assert.match(authorityBlock, /inputs\.environment.*TEST/s);
+  assert.match(authorityBlock, /inputs\.mode.*UPGRADE/s);
+  assert.match(authorityBlock, /GITHUB_REPOSITORY/);
+  assert.match(authorityBlock, /GITHUB_REF/);
+  assert.doesNotMatch(authorityBlock, /LIVE.*standing managed TEST UPGRADE/s);
+  assert.match(workflow, /else[\s\S]*CLOUDTMS_RELEASE_REQUESTED_APPROVAL[\s\S]*Exact APPLY approval phrase/);
 });
 
 test('one-time LIVE provider clone is protected, source-read-only and destination-blank-only', () => {

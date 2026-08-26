@@ -53,7 +53,7 @@ Use only for the one-time transition of the existing LIVE database when its hist
    The `NEW` replay installs the immutable structural/routine baseline, executes the current disabled-first bootstrap, then applies every locked migration after the release control-plane anchor before installing only repeatables added or changed since the baseline snapshot. A clean database must therefore finish at the same current contract as `UPGRADE`; never omit post-baseline migrations or persist a temporary bootstrap default merely to make the initial insert pass.
    `NEW` then runs its explicit portable verifier set. Data-dependent regression fixtures that require historical TEST business rows remain mandatory for `UPGRADE` but must not be run against an intentionally empty new agency; the `NEW` verifier set must still include every browser-isolation, RLS/ACL, Candidate/MyTMS, private-helper and rollback-contained first-use verifier.
 8. Pushes run source verification only. They never alter a database.
-9. Use **Database Release (manual and protected)**. Run `PLAN` first. Review the exact commit and outcome. Run `APPLY` only after the appropriate GitHub Environment approval.
+9. Use **Database Release (manual and protected)**. Every APPLY job runs its exact read-only plan after the source gate and before mutation. Managed `TEST` + `UPGRADE` has standing owner authority and does not require a separately typed commit phrase; the workflow generates the engine's exact commit-bound approval internally only for the canonical `test` branch head. LIVE, NEW, ADOPT and LEGACY_UPGRADE continue to require the appropriate protected Environment and exact user-supplied approval.
 
 If an APPLY has already installed the intended definition but stops before recording `VERIFIED` only because the approved contract is stale, do not touch the ledgers and do not guess the contract. Run the protected read-only TEST contract export at the exact installed source, compare every object against the repository contract, require the diff to contain only the intended definitions, commit the exported data-free contract, then rerun PLAN and APPLY against that new exact commit.
 
@@ -61,7 +61,7 @@ If an APPLY has already installed the intended definition but stops before recor
 
 ### Upgrade TEST
 
-Run the manual workflow with `environment=TEST`, normally `mode=UPGRADE`, and `phase=PLAN`. If it passes, rerun the same commit with `phase=APPLY` and the displayed exact approval phrase. The protected `database-test` Environment supplies the Miget database URL and target locator.
+For a read-only preview, run the manual workflow with `environment=TEST`, `mode=UPGRADE`, and `phase=PLAN`. For an authorised managed TEST correction, dispatch `phase=APPLY` without asking the owner for another phrase. The APPLY job source-gates the exact current `test` branch head, runs the read-only plan first, then generates the exact commit-bound engine approval internally. It must fail closed if the repository, branch, environment or mode differs. The protected `database-test` Environment supplies the Miget database URL and target locator.
 
 ### Upgrade existing LIVE for the first time
 
@@ -91,7 +91,7 @@ Create protected environments named `database-test` and `database-live`. Each ho
 - TEST variable `MIGET_DATABASE_TARGET_TEST` and LIVE variable `MIGET_DATABASE_TARGET_LIVE`;
 - required reviewers and branch/tag restrictions appropriate to the environment.
 
-LIVE must require a human reviewer. Do not store a production URL as a repository-wide fallback secret. A new dedicated client database should use its own protected Environment before its first release.
+Managed TEST UPGRADE has standing owner authority and must not require a human reviewer or typed approval phrase; its exact source, target and safety gates remain machine-enforced. LIVE must require a human reviewer. NEW, ADOPT and LEGACY_UPGRADE must retain their exact commit-bound user approval. Do not store a production URL as a repository-wide fallback secret. A new dedicated client database should use its own protected Environment before its first release.
 
 Neither TEST nor LIVE accepts a legacy Supabase database-URL fallback. Each protected Environment must supply its matching Miget URL and target locator, and the release engine verifies that locator against the actual hosted URL before any plan or apply. Migrating LIVE hosting does not authorise upgrading LIVE to the TEST schema: the historical LIVE database remains on its current schema until a separately reviewed `LEGACY_UPGRADE` PLAN/APPLY is approved.
 

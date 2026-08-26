@@ -23,7 +23,7 @@ on:
         required: false
         type: string
       approval:
-        description: For APPLY only, enter APPLY <ENV> <MODE> <40-character commit SHA>
+        description: Required for APPLY except managed TEST UPGRADE, which uses standing TEST authority
         required: false
         type: string
 
@@ -69,7 +69,7 @@ jobs:
       CLOUDTMS_ENVIRONMENT: ${{ inputs.environment }}
       CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
       CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
-      CLOUDTMS_RELEASE_APPROVAL: ${{ inputs.approval }}
+      CLOUDTMS_RELEASE_REQUESTED_APPROVAL: ${{ inputs.approval }}
       # The repository's logical `postgres` owner maps to the authenticated
       # provider database owner. On Supabase this is a no-op; on Miget it avoids
       # requiring membership in the platform-reserved postgres superuser role.
@@ -115,7 +115,14 @@ jobs:
           test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
           if [[ "${{ inputs.phase }}" == "APPLY" ]]; then
             expected="APPLY ${{ inputs.environment }} ${{ inputs.mode }} ${{ needs.source-gate.outputs.commit }}"
-            [[ "${CLOUDTMS_RELEASE_APPROVAL:-}" == "$expected" ]] || { echo "Exact APPLY approval phrase does not match this commit"; exit 1; }
+            if [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" ]]; then
+              [[ "${GITHUB_REPOSITORY}" == "kierarthur/cloudtms-backend" ]] || { echo "Standing TEST UPGRADE authority is restricted to the canonical repository"; exit 1; }
+              [[ "${GITHUB_REF}" == "refs/heads/test" ]] || { echo "Standing TEST UPGRADE authority is restricted to the test branch head"; exit 1; }
+              echo "Using standing managed TEST UPGRADE authority for the exact source-gated commit."
+            else
+              [[ "${CLOUDTMS_RELEASE_REQUESTED_APPROVAL:-}" == "$expected" ]] || { echo "Exact APPLY approval phrase does not match this commit"; exit 1; }
+            fi
+            echo "CLOUDTMS_RELEASE_APPROVAL=$expected" >> "$GITHUB_ENV"
           fi
       - name: Read-only release plan
         run: npm run db:plan -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
@@ -133,4 +140,5 @@ jobs:
             echo "- Environment: ${{ inputs.environment }}"
             echo "- Commit: ${{ needs.source-gate.outputs.commit }}"
             echo "- Protected GitHub Environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}"
+            echo "- Authority: ${{ inputs.environment == 'TEST' && inputs.mode == 'UPGRADE' && 'standing managed TEST UPGRADE' || 'exact commit-bound approval' }}"
           } >> "$GITHUB_STEP_SUMMARY"
