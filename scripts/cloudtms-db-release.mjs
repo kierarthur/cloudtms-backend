@@ -76,9 +76,19 @@ function compareExpected(expectedPath) {
   return { actual, sha256: canonicalContractHash(actual) };
 }
 
-function runVerifiers() {
+function verificationFilesForMode(release, mode) {
+  if (mode === 'NEW') {
+    if (!Array.isArray(release.newVerificationFiles) || release.newVerificationFiles.length === 0) {
+      throw new Error('NEW verification file set is missing or empty');
+    }
+    return release.newVerificationFiles;
+  }
+  return release.verificationFiles;
+}
+
+function runVerifiers(mode) {
   const release = readJson('supabase/release/current-release.json');
-  for (const file of release.verificationFiles) psql({ file });
+  for (const file of verificationFilesForMode(release, mode)) psql({ file });
 }
 
 function assertLegacyTransitionShimsReplaced() {
@@ -270,7 +280,7 @@ function applyRelease() {
     runBankingPayCatalogPreapply(legacy.pendingRepeatables.map(item => item.path));
     for (const item of legacy.pendingRepeatables) psql({ file: item.path });
     assertLegacyTransitionShimsReplaced();
-    runVerifiers();
+    runVerifiers(mode);
     const verified = compareExpected(release.contractPath);
     adoptLegacyInventoryAtomically({
       releaseId,
@@ -283,7 +293,7 @@ function applyRelease() {
         appliedMigrations: legacy.pendingMigrations.length,
         appliedRepeatables: legacy.pendingRepeatables.length,
         legacyUpgradeBootstrapFiles: release.legacyUpgradeBootstrapFiles,
-        verificationFiles: release.verificationFiles,
+        verificationFiles: verificationFilesForMode(release, mode),
       },
     });
     console.log(`VERIFIED LEGACY_UPGRADE release ${releaseId} for ${environment}.`);
@@ -297,6 +307,17 @@ function applyRelease() {
     psql({ file: release.bootstrapFile, variables: { cloudtms_environment: environment } });
     recordRelease({ releaseId, mode, status: 'APPLYING', expectedHash, installedHash: expectedHash });
     activeReleaseId = releaseId;
+    // The immutable baseline contains every migration before the release
+    // control-plane anchor. Apply every later locked migration in chronological
+    // order so a new agency receives the same current schema as UPGRADE.
+    const controlPlaneIndex = current.migrations.findIndex(
+      item => item.path === release.controlPlaneMigration,
+    );
+    if (controlPlaneIndex < 0) {
+      throw new Error(`Control-plane migration is missing from inventory: ${release.controlPlaneMigration}`);
+    }
+    const postBaselineMigrations = current.migrations.slice(controlPlaneIndex + 1);
+    for (const item of postBaselineMigrations) psql({ file: item.path });
     // The immutable baseline already contains its signed routine snapshot.
     // Install only repeatables added or changed since that snapshot; replaying
     // retired historical roots could temporarily revive superseded authority.
@@ -335,9 +356,9 @@ function applyRelease() {
       psql({ sql: `insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id) values (${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)}) on conflict(path) do update set closure_sha256=excluded.closure_sha256,last_release_id=excluded.last_release_id,applied_at_utc=clock_timestamp();` });
     }
   }
-  runVerifiers();
+  runVerifiers(mode);
   const verified = compareExpected(release.contractPath);
-  recordRelease({ releaseId, mode, status: 'VERIFIED', expectedHash, installedHash: verified.sha256, evidence: { verificationFiles: release.verificationFiles } });
+  recordRelease({ releaseId, mode, status: 'VERIFIED', expectedHash, installedHash: verified.sha256, evidence: { verificationFiles: verificationFilesForMode(release, mode) } });
   activeReleaseId = null;
   console.log(`VERIFIED ${mode} release ${releaseId} for ${environment}.`);
 }

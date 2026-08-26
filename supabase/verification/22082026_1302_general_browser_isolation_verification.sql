@@ -122,8 +122,8 @@ begin
   into v_count,v_service_missing,v_browser_executable,v_hash
   from targets;
 
-  if v_count<>639 or v_service_missing<>72 or v_browser_executable<>0
-     or v_hash<>'e3cb7931d137de41c53d09108284cbbc' then
+  if v_count<>643 or v_service_missing<>72 or v_browser_executable<>0
+     or v_hash<>'75f739b00ade24f0c83d5aceec00d51b' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

@@ -99,7 +99,7 @@ begin
   from targets;
 
   if v_count<>104 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'9f08427cd9a238c71b70b9f880a2dd60' then
+     or v_hash<>'ea648373456749528848b1051b90acf4' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

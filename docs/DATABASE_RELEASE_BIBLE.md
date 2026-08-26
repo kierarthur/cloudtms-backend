@@ -48,6 +48,8 @@ Use only for the one-time transition of the existing LIVE database when its hist
 6. Refresh the approved contract only from a verified disposable rebuild containing the intended source: `npm run db:contract:export`.
    A successful protected PLAN does not replace this step because PLAN does not install pending definitions. The reviewed generated contract must be committed with the source change before the first APPLY; do not use APPLY to discover a stale contract.
 7. Run `npm run db:check`, the database-release tests, all existing repository tests, the exact security verifiers, and a clean `NEW` replay. Do not publish a change that requires manual ledger repair.
+   The `NEW` replay installs the immutable structural/routine baseline, executes the current disabled-first bootstrap, then applies every locked migration after the release control-plane anchor before installing only repeatables added or changed since the baseline snapshot. A clean database must therefore finish at the same current contract as `UPGRADE`; never omit post-baseline migrations or persist a temporary bootstrap default merely to make the initial insert pass.
+   `NEW` then runs its explicit portable verifier set. Data-dependent regression fixtures that require historical TEST business rows remain mandatory for `UPGRADE` but must not be run against an intentionally empty new agency; the `NEW` verifier set must still include every browser-isolation, RLS/ACL, Candidate/MyTMS, private-helper and rollback-contained first-use verifier.
 8. Pushes run source verification only. They never alter a database.
 9. Use **Database Release (manual and protected)**. Run `PLAN` first. Review the exact commit and outcome. Run `APPLY` only after the appropriate GitHub Environment approval.
 

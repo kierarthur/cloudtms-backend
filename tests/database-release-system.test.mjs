@@ -167,7 +167,12 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.match(source, /assertLegacyTransitionShimsReplaced\(\)/);
   assert.match(source, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.doesNotMatch(source, /marking existing migrations/);
-  assert.match(source, /mode === 'NEW'[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*for \(const item of pendingRepeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
+  assert.match(source, /mode === 'NEW'[\s\S]*controlPlaneIndex[\s\S]*postBaselineMigrations[\s\S]*for \(const item of postBaselineMigrations\) psql\(\{ file: item\.path \}\)[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*for \(const item of pendingRepeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
+  assert.match(source, /mode === 'NEW'[\s\S]*release\.newVerificationFiles/);
+  const release = readJson('supabase/release/current-release.json');
+  assert.ok(release.verificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));
+  assert.ok(!release.newVerificationFiles.some(file => file.includes('banking_pay_james_rate_authority_runtime_verification')));
+  assert.ok(release.newVerificationFiles.includes('supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql'));
 });
 
 test('legacy transition bootstrap is bounded and must be replaced before adoption', () => {

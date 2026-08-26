@@ -137564,6 +137564,105 @@ async function handleCreateClient(env, req) {
   }
 }
 
+function managerAuthoriserPolicyErrorResponse(env, req, error, fallbackCode) {
+  const raw = String(error?.json?.message || error?.message || fallbackCode || 'CANDIDATE_MANAGER_AUTHORISER_FAILED');
+  const code = raw.match(/[A-Z][A-Z0-9_]{4,}/)?.[0] || fallbackCode || 'CANDIDATE_MANAGER_AUTHORISER_FAILED';
+  const conflict = /VERSION_CONFLICT|IDEMPOTENCY_CONFLICT|STALE/.test(code);
+  const missing = /NOT_FOUND/.test(code);
+  const messages = {
+    CANDIDATE_MANAGER_RESTRICTED_POLICY_EMPTY: 'Add at least one approved email address or domain before restricting authorisers.',
+    CANDIDATE_MANAGER_CONTRACT_ONLY_EMPTY: 'Add at least one Contract email address or domain before excluding Client authorisers.',
+    CANDIDATE_MANAGER_INHERIT_HAS_ADDITIONS: 'Choose the additive Contract option before adding Contract authorisers.',
+    CANDIDATE_MANAGER_APPROVED_EMAIL_INVALID: 'Enter a valid business email address.',
+    CANDIDATE_MANAGER_APPROVED_DOMAIN_INVALID: 'Enter a valid email domain, such as @berkshire.nhs.uk.',
+    CANDIDATE_MANAGER_AUTHORISER_VERSION_CONFLICT: 'These authoriser settings changed elsewhere. Reload them and try again.',
+    CANDIDATE_MANAGER_AUTHORISER_IDEMPOTENCY_CONFLICT: 'This save request no longer matches the authoriser settings. Review and save again.'
+  };
+  return withCORS(env, req, new Response(JSON.stringify({
+    ok: false,
+    error_code: code,
+    message: messages[code] || (missing ? 'The requested Client or Contract could not be found.' : 'The authoriser settings were not changed.')
+  }), { status: missing ? 404 : (conflict ? 409 : 400), headers: JSON_HEADERS }));
+}
+
+async function handleClientManagerAuthoriserPolicyGet(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  try {
+    const raw = await sbRpc(env, 'client_manager_authoriser_policy_get_v1', { p_client_id: clientId }, { timeoutMs: 10000 });
+    return withCORS(env, req, ok(unwrapRpcJsonb(raw, 'client_manager_authoriser_policy_get_v1')));
+  } catch (error) {
+    return managerAuthoriserPolicyErrorResponse(env, req, error, 'CANDIDATE_MANAGER_AUTHORISER_READ_FAILED');
+  }
+}
+
+async function handleClientManagerAuthoriserPolicyUpdate(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const body = await parseJSONBody(req);
+  const allowedBodyKeys = new Set(['expected_settings_updated_at', 'policy', 'request_key']);
+  const allowedPolicyKeys = new Set(['approved_emails', 'approved_domains', 'allow_free_business_email']);
+  if (!body || Array.isArray(body) || Object.keys(body).some((key) => !allowedBodyKeys.has(key))
+      || !body.policy || typeof body.policy !== 'object' || Array.isArray(body.policy)
+      || Object.keys(body.policy).some((key) => !allowedPolicyKeys.has(key))) {
+    return withCORS(env, req, badRequest('Only the manager authoriser policy can be changed here.'));
+  }
+  if (!body || !body.expected_settings_updated_at || !body.policy || String(body.request_key || '').trim().length < 16) {
+    return withCORS(env, req, badRequest('The current settings version, policy and stable request key are required.'));
+  }
+  try {
+    const raw = await sbRpc(env, 'client_manager_authoriser_policy_update_v1', {
+      p_client_id: clientId,
+      p_expected_settings_updated_at: body.expected_settings_updated_at,
+      p_policy: body.policy,
+      p_actor_user_id: user.id,
+      p_idempotency_key: String(body.request_key).trim()
+    }, { timeoutMs: 12000 });
+    return withCORS(env, req, ok(unwrapRpcJsonb(raw, 'client_manager_authoriser_policy_update_v1')));
+  } catch (error) {
+    return managerAuthoriserPolicyErrorResponse(env, req, error, 'CANDIDATE_MANAGER_AUTHORISER_UPDATE_FAILED');
+  }
+}
+
+async function handleContractManagerAuthoriserPolicyGet(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  try {
+    const raw = await sbRpc(env, 'contract_manager_authoriser_policy_get_v1', { p_contract_id: contractId }, { timeoutMs: 10000 });
+    return withCORS(env, req, ok(unwrapRpcJsonb(raw, 'contract_manager_authoriser_policy_get_v1')));
+  } catch (error) {
+    return managerAuthoriserPolicyErrorResponse(env, req, error, 'CANDIDATE_MANAGER_AUTHORISER_READ_FAILED');
+  }
+}
+
+async function handleContractManagerAuthoriserPolicyUpdate(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+  const body = await parseJSONBody(req);
+  const allowedBodyKeys = new Set(['expected_contract_updated_at', 'policy', 'request_key']);
+  const allowedPolicyKeys = new Set(['mode', 'approved_emails', 'approved_domains']);
+  if (!body || Array.isArray(body) || Object.keys(body).some((key) => !allowedBodyKeys.has(key))
+      || !body.policy || typeof body.policy !== 'object' || Array.isArray(body.policy)
+      || Object.keys(body.policy).some((key) => !allowedPolicyKeys.has(key))) {
+    return withCORS(env, req, badRequest('Only the Contract manager authoriser policy can be changed here.'));
+  }
+  if (!body || !body.expected_contract_updated_at || !body.policy || String(body.request_key || '').trim().length < 16) {
+    return withCORS(env, req, badRequest('The current Contract version, policy and stable request key are required.'));
+  }
+  try {
+    const raw = await sbRpc(env, 'contract_manager_authoriser_policy_update_v1', {
+      p_contract_id: contractId,
+      p_expected_contract_updated_at: body.expected_contract_updated_at,
+      p_policy: body.policy,
+      p_actor_user_id: user.id,
+      p_idempotency_key: String(body.request_key).trim()
+    }, { timeoutMs: 12000 });
+    return withCORS(env, req, ok(unwrapRpcJsonb(raw, 'contract_manager_authoriser_policy_update_v1')));
+  } catch (error) {
+    return managerAuthoriserPolicyErrorResponse(env, req, error, 'CANDIDATE_MANAGER_AUTHORISER_UPDATE_FAILED');
+  }
+}
+
 async function handleUpdateClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -195151,6 +195250,11 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
         const clientDetails = matchPath(p, '/api/clients/:id/details');
         if (clientDetails && req.method === 'GET')                          return handleGetClient(env, req, clientDetails.id);
       }
+      {
+        const managerAuthorisers = matchPath(p, '/api/clients/:id/manager-authorisers');
+        if (managerAuthorisers && req.method === 'GET') return handleClientManagerAuthoriserPolicyGet(env, req, managerAuthorisers.id);
+        if (managerAuthorisers && req.method === 'PUT') return handleClientManagerAuthoriserPolicyUpdate(env, req, managerAuthorisers.id);
+      }
 {
   const m = matchPath(p, '/api/summary-typeahead/:section');
   if (m && req.method === 'POST') return handleSummaryTypeAheadLookup(env, req, m.section);
@@ -195927,6 +196031,11 @@ if (req.method === 'GET' && p === '/api/mailshots') {
       if (req.method === 'GET' && p === '/api/contracts/finance-globals') return handleContractsFinanceGlobals(env, req);
 // Contracts count (for Summary footer totals)
 if (req.method === 'GET' && p === '/api/contracts/count') return handleContractsCount(env, req);
+      {
+        const managerAuthorisers = matchPath(p, '/api/contracts/:id/manager-authorisers');
+        if (managerAuthorisers && req.method === 'GET') return handleContractManagerAuthoriserPolicyGet(env, req, managerAuthorisers.id);
+        if (managerAuthorisers && req.method === 'PUT') return handleContractManagerAuthoriserPolicyUpdate(env, req, managerAuthorisers.id);
+      }
 
       {
         const m = matchPath(p, '/api/contracts/:id/duplicate');
