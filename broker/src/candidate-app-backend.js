@@ -4239,6 +4239,36 @@ async function managerTokenContext(request, env) {
   return { token, token_hash_hex: await sha256Hex(token), environment: environmentName(env) };
 }
 
+async function managerDocumentReadContext(request, env, workflowId) {
+  const auth = await managerTokenContext(request, env);
+  const workflow = await workflowRow(env, workflowId);
+  if (upper(workflow.environment) !== auth.environment) {
+    throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
+  }
+  const tokenHash = encodeURIComponent(`\\x${auth.token_hash_hex}`);
+  const approval = await restOne(env, 'candidate_approval_requests',
+    `workflow_id=eq.${encodeURIComponent(workflow.id)}`
+    + `&workflow_generation=eq.${encodeURIComponent(workflow.generation)}`
+    + '&method=in.(EMAIL,PHONE)&state=eq.PENDING'
+    + `&token_hash=eq.${tokenHash}`
+    + '&select=id,workflow_id,workflow_generation,request_generation,method,state,expires_at_utc,'
+    + 'review_manifest_sha256,required_component_ids,required_component_manifest_json');
+  if (!approval) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
+  if (!Number.isFinite(Date.parse(approval.expires_at_utc))
+      || Date.parse(approval.expires_at_utc) <= Date.now()) {
+    throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_EXPIRED');
+  }
+  const approvalManifest = text(approval.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  const workflowManifest = text(workflow.review_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  if (!SHA256_RE.test(approvalManifest) || approvalManifest !== workflowManifest) {
+    throw new CandidateHttpError(409, 'MANAGER_APPROVAL_REQUEST_SUPERSEDED');
+  }
+  const allowedIds = (Array.isArray(approval.required_component_ids)
+    ? approval.required_component_ids : [])
+    .map((entry) => text(entry));
+  return { approval, allowedIds };
+}
+
 function managerSubmissionType(workflowKind) {
   const kind = upper(workflowKind);
   if (kind === 'CONTRACT_EXPENSE') return 'EXPENSE_CLAIM';
@@ -4380,18 +4410,15 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
     component = await restOne(env, 'candidate_submission_components',
       `id=eq.${encodeURIComponent(componentId)}&workflow_id=eq.${encodeURIComponent(workflowId)}&select=*`);
   } else if (owner === 'manager') {
-    const auth = await managerTokenContext(request, env);
     const routeAuthority = request.headers.has('x-cloudtms-manager-route-authority')
       ? managerRouteAuthority(request) : null;
     if (routeAuthority) await assertManagerRouteWorkflow(env, workflowId, routeAuthority);
-    const manifest = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
-      null, env, workflowId, 'BEGIN_MANAGER_REVIEW', null,
-      { approval_token_hash_hex: auth.token_hash_hex }, `manager-document:${workflowId}:${componentId}`
-    ));
-    if (routeAuthority) await assertManagerRouteResult(env, manifest, routeAuthority);
-    const allowedIds = (Array.isArray(manifest?.ordered_components) ? manifest.ordered_components : [])
-      .map((entry) => text(entry?.component_id || entry?.id));
-    if (!allowedIds.includes(componentId)) {
+    const context = await managerDocumentReadContext(request, env, workflowId);
+    if (routeAuthority) await assertManagerRouteResult(env, {
+      approval_request_id: context.approval.id,
+      approval_request_generation: context.approval.request_generation
+    }, routeAuthority);
+    if (!context.allowedIds.includes(componentId)) {
       throw new CandidateHttpError(404, 'CANDIDATE_DOCUMENT_NOT_FOUND');
     }
     component = await restOne(env, 'candidate_submission_components',

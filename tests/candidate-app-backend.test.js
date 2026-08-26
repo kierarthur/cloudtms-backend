@@ -4266,6 +4266,78 @@ test('private manager routes reject wrong HTTP methods before any RPC mutation',
   assert.equal(rpcCalls, 0);
 });
 
+test('manager document reads validate the pending token and immutable manifest without a workflow mutation', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000051';
+  const componentId = '00000000-0000-4000-8000-000000000052';
+  const approvalId = '00000000-0000-4000-8000-000000000053';
+  const handoffToken = 'manager-document-test-token';
+  const tokenHash = createHash('sha256').update(handoffToken).digest('hex');
+  const documentBytes = new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55]);
+  const documentHash = createHash('sha256').update(documentBytes).digest('hex');
+  const manifestHash = 'a'.repeat(64);
+  const requested = [];
+  let rpcCalls = 0;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    requested.push(url);
+    if (url.includes('/candidate_submission_workflows?')) return Response.json([{
+      id: workflowId,
+      environment: 'TEST',
+      generation: 4,
+      review_manifest_sha256: `\\x${manifestHash}`
+    }]);
+    if (url.includes('/candidate_approval_requests?')) return Response.json([{
+      id: approvalId,
+      workflow_id: workflowId,
+      workflow_generation: 4,
+      request_generation: 2,
+      method: 'PHONE',
+      state: 'PENDING',
+      expires_at_utc: '2099-01-01T00:00:00.000Z',
+      review_manifest_sha256: `\\x${manifestHash}`,
+      required_component_ids: [componentId],
+      required_component_manifest_json: []
+    }]);
+    if (url.includes('/candidate_submission_components?')) return Response.json([{
+      id: componentId,
+      workflow_id: workflowId,
+      review_storage_key: 'candidate-app/test/review.pdf',
+      review_content_sha256: `\\x${documentHash}`
+    }]);
+    throw new Error(`unexpected request ${url}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-manager/v1/workflows/${workflowId}/components/${componentId}/document`,
+      { headers: { authorization: `Bearer ${handoffToken}` } }
+    ), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+      R2: {
+        async get(key) {
+          assert.equal(key, 'candidate-app/test/review.pdf');
+          return {
+            httpMetadata: { contentType: 'application/pdf' },
+            async arrayBuffer() { return documentBytes.buffer.slice(0); }
+          };
+        }
+      }
+    }, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { rpcCalls += 1; return {}; }
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), documentBytes);
+    assert.equal(rpcCalls, 0);
+    const approvalRequest = requested.find(url => url.includes('/candidate_approval_requests?')) || '';
+    assert.match(approvalRequest, new RegExp(`token_hash=eq\\.%5Cx${tokenHash}`, 'i'));
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('public Candidate workflow actions exclude service finalisation', async () => {
   const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
   const openapi = await readFile(new URL('../docs/candidate-app/CANDIDATE_API_OPENAPI_V1.yaml', import.meta.url), 'utf8');
