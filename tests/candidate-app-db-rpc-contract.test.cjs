@@ -26,6 +26,7 @@ const all = Object.values(sql).join('\n');
 const codeOnly = all.replace(/^\s*--.*$/gm, '');
 const latestCapabilities = read('supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql');
 const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
+const latestExpenseApply = read('supabase/repeatable/26082026_2121_candidate_expense_category_authority_v2.sql');
 const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
 
 const generatedOffice = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
@@ -275,7 +276,7 @@ test('missing weeks preserve override-aware submission mode and build dated sche
 
 test('expense application is one canonical transaction with locked carrier placement', () => {
   const carrier = definition(sql.expenses, 'expense_carrier_resolve_or_create_atomic_v1');
-  const apply = definition(sql.expenses, 'timesheet_expense_apply_atomic_v1');
+  const apply = definition(latestExpenseApply, 'timesheet_expense_apply_atomic_v1');
   assert.match(carrier, /pg_advisory_xact_lock/);
   assert.match(carrier, /order by cw\.additional_seq,cw\.id for update/i);
   assert.match(sql.expenses, /EXPENSE_CARRIER_AMBIGUOUS/);
@@ -576,13 +577,14 @@ test('existing client create/update RPCs accept and validate the complete candid
 });
 
 test('the targeted correction pass enforces exact categories, complete economics and complete paper returns', () => {
-  const apply = definition(sql.expenses, 'timesheet_expense_apply_atomic_v1');
+  const apply = definition(latestExpenseApply, 'timesheet_expense_apply_atomic_v1');
   const workflow = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
   const finalise = definition(sql.final, 'candidate_submission_finalize_atomic_v1');
   assert.match(sql.foundation, /component_kind='EXPENSE_EVIDENCE' and expense_category is not null[\s\S]*expense_category in \('TRAVEL','ACCOMMODATION','OTHER','MILEAGE'\)/i);
   assert.match(sql.foundation, /component_kind='MILEAGE_FORM' and expense_category is not null and expense_category='MILEAGE'/i);
   assert.match(workflow, /v_component_kind='EXPENSE_EVIDENCE'[\s\S]*v_expense_category in \('TRAVEL','ACCOMMODATION','OTHER','MILEAGE'\)/i);
   assert.doesNotMatch(apply, /component\.expense_category=v_category\s+or\s+component\.expense_category is null/i);
+  assert.match(apply, /expenses_pay_ex_vat[\s\S]*expenses_charge_ex_vat[\s\S]*and \([\s\S]*travel_pay_ex_vat[\s\S]*accommodation_pay_ex_vat[\s\S]*other_pay_ex_vat[\s\S]*\)=0/i);
   for (const field of [
     'expenses_pay_ex_vat','expenses_charge_ex_vat','mileage_units','mileage_pay_ex_vat',
     'mileage_charge_ex_vat','travel_pay_ex_vat','travel_charge_ex_vat',
