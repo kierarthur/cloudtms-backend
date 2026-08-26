@@ -96,7 +96,16 @@ begin
 
   with targets as (
     select
-      p.oid::regprocedure::text as signature,
+      n.nspname||'.'||p.proname||'('||coalesce((
+        select pg_catalog.string_agg(
+          type_namespace.nspname||'.'||argument_type.typname,
+          ',' order by argument.argument_ordinal
+        )
+        from pg_catalog.unnest(p.proargtypes::oid[]) with ordinality
+          as argument(type_oid,argument_ordinal)
+        join pg_catalog.pg_type argument_type on argument_type.oid=argument.type_oid
+        join pg_catalog.pg_namespace type_namespace on type_namespace.oid=argument_type.typnamespace
+      ),'')||')' as signature,
       pg_catalog.has_function_privilege('service_role',p.oid,'EXECUTE') as svc_execute,
       pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE') as anon_execute,
       pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE') as auth_execute
@@ -123,7 +132,7 @@ begin
   from targets;
 
   if v_count<>643 or v_service_missing<>72 or v_browser_executable<>0
-     or v_hash<>'75f739b00ade24f0c83d5aceec00d51b' then
+     or v_hash<>'f0363d2b9ead25d540d5162ca2e4f062' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
