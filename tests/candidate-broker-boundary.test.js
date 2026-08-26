@@ -1192,7 +1192,20 @@ test('same-phone manager handoff is broker sealed and bound to the initiating pu
   assert.equal((await changedDevice.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
   assert.equal((await changedSession.json()).error_code, 'CANDIDATE_IDEMPOTENCY_CONFLICT');
 
-  const manager = await handleCandidateBrokerRequest(browserRequest(
+  for (const client of ['android', 'ios']) {
+    const manager = await handleCandidateBrokerRequest(new Request(
+      `https://candidate-api.test.example/candidate-manager/v1/workflows/${workflowId}/start`, {
+        headers: {
+          authorization: `Bearer ${handoff.manager_handoff_token}`,
+          'x-candidate-session-token': publicAccess,
+          'x-candidate-device-id': 'test-device-a',
+          'x-cloudtms-client': client
+        }
+      }
+    ), env);
+    assert.equal(manager.status, 200, client);
+  }
+  const webManager = await handleCandidateBrokerRequest(browserRequest(
     `/candidate-manager/v1/workflows/${workflowId}/start`, {
       headers: {
         authorization: `Bearer ${handoff.manager_handoff_token}`,
@@ -1201,8 +1214,21 @@ test('same-phone manager handoff is broker sealed and bound to the initiating pu
       }
     }
   ), env);
-  assert.equal(manager.status, 200);
+  assert.equal(webManager.status, 200);
   assert.equal(managerAuthorization, 'Bearer private-phone-manager-token');
+
+  const fakeNativeManager = await handleCandidateBrokerRequest(new Request(
+    `https://candidate-api.test.example/candidate-manager/v1/workflows/${workflowId}/start`, {
+      headers: {
+        authorization: 'Bearer not-a-phone-handoff',
+        'x-candidate-session-token': publicAccess,
+        'x-candidate-device-id': 'test-device-a',
+        'x-cloudtms-client': 'android'
+      }
+    }
+  ), env);
+  assert.equal(fakeNativeManager.status, 403);
+  assert.equal((await fakeNativeManager.json()).error_code, 'MANAGER_BROWSER_ORIGIN_REQUIRED');
 });
 
 test('device registration never forwards the raw push token to CloudTMS private API', async () => {

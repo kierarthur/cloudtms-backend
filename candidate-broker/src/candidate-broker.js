@@ -197,16 +197,35 @@ function allowedOrigins(env) {
   return new Set(values);
 }
 
-function requestOriginContext(request, env, managerRoute) {
+async function requestOriginContext(request, env, managerRoute) {
   const origin = text(request.headers.get('origin'));
   if (origin) {
     if (!allowedOrigins(env).has(origin)) throw new CandidateBrokerError(403, 'CANDIDATE_ORIGIN_NOT_ALLOWED');
     return { origin, client: 'browser' };
   }
-  if (managerRoute) throw new CandidateBrokerError(403, 'MANAGER_BROWSER_ORIGIN_REQUIRED');
   const client = text(request.headers.get('x-cloudtms-client')).toLowerCase();
   if (upper(env.CANDIDATE_ALLOW_NATIVE_CLIENTS) !== 'TRUE' || !['ios', 'android'].includes(client)) {
-    throw new CandidateBrokerError(403, 'CANDIDATE_CLIENT_ORIGIN_REQUIRED');
+    throw new CandidateBrokerError(403, managerRoute
+      ? 'MANAGER_BROWSER_ORIGIN_REQUIRED' : 'CANDIDATE_CLIENT_ORIGIN_REQUIRED');
+  }
+  if (managerRoute) {
+    let opened = null;
+    try {
+      opened = await openVersionedEnvelope(
+        env, CREDENTIAL_AUTHORITIES.manager,
+        'candidate-broker-phone-handoff-v1', bearerToken(request)
+      );
+    } catch {
+      opened = null;
+    }
+    const handoff = opened?.payload;
+    const now = Math.floor(Date.now() / 1000);
+    if (!handoff || handoff.typ !== 'candidate_phone_handoff'
+        || handoff.aud !== 'cloudtms-manager-phone'
+        || handoff.env !== environmentName(env)
+        || Number(handoff.exp) <= now) {
+      throw new CandidateBrokerError(403, 'MANAGER_BROWSER_ORIGIN_REQUIRED');
+    }
   }
   return { origin: '', client };
 }
@@ -2844,7 +2863,7 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       if (dailyBootstrap) dailyRouteDefinition = CANDIDATE_DAILY_BOOTSTRAP_ROUTE;
     }
     if (request.method === 'OPTIONS') return preflight(request, env);
-    origin = requestOriginContext(request, env, managerRoute).origin;
+    origin = (await requestOriginContext(request, env, managerRoute)).origin;
     const declared = Number(request.headers.get('content-length') || 0);
     if (Number.isFinite(declared) && declared > (path.includes('/uploads/') ? MAX_PUBLIC_UPLOAD_BYTES : MAX_PUBLIC_JSON_BYTES)) {
       throw new CandidateBrokerError(413, 'REQUEST_BODY_TOO_LARGE');
