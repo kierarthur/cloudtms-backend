@@ -2888,27 +2888,48 @@ async function handleAuthLogin(env, req) {
 
 
 
+const OFFICE_AUTH_REFRESH_REJECTION_CODES = Object.freeze({
+  COOKIE_MISSING: 'REFRESH_COOKIE_MISSING',
+  TOKEN_INVALID: 'REFRESH_TOKEN_INVALID',
+  CLAIMS_INVALID: 'REFRESH_CLAIMS_INVALID',
+  EXPIRED: 'REFRESH_EXPIRED',
+  SESSION_MISSING: 'REFRESH_SESSION_MISSING',
+  USER_DISABLED: 'REFRESH_USER_DISABLED',
+  SESSION_VERSION_CHANGED: 'REFRESH_SESSION_VERSION_CHANGED'
+});
+
+function officeAuthRefreshRejected(code, message) {
+  const safeCode = String(code || 'REFRESH_REJECTED');
+  try {
+    console.warn(JSON.stringify({ event: 'office_auth_refresh_rejected', code: safeCode }));
+  } catch {}
+  return new Response(JSON.stringify({ error: message, code: safeCode }), {
+    status: 401,
+    headers: { ...JSON_HEADERS, 'cache-control': 'no-store' }
+  });
+}
+
 async function handleAuthRefresh(env, req) {
   const pre = preflightIfNeeded(env, req); if (pre) return pre;
   const cookies = parseCookies(req);
   const raw = cookies[cookieName(env)];
-  if (!raw) return unauthorized('No refresh cookie');
+  if (!raw) return officeAuthRefreshRejected(OFFICE_AUTH_REFRESH_REJECTION_CODES.COOKIE_MISSING, 'No refresh cookie');
 
   const ver = await verifyToken(sessionSecret(env), raw);
-  if (!ver.ok) return unauthorized('Invalid refresh token');
+  if (!ver.ok) return officeAuthRefreshRejected(OFFICE_AUTH_REFRESH_REJECTION_CODES.TOKEN_INVALID, 'Invalid refresh token');
   const { typ, sid, sv, exp } = ver.payload || {};
-  if (typ !== 'refresh' || !sid) return unauthorized('Invalid refresh claims');
-  if ((exp|0) <= Math.floor(Date.now()/1000)) return unauthorized('Refresh expired');
+  if (typ !== 'refresh' || !sid) return officeAuthRefreshRejected(OFFICE_AUTH_REFRESH_REJECTION_CODES.CLAIMS_INVALID, 'Invalid refresh claims');
+  if ((exp|0) <= Math.floor(Date.now()/1000)) return officeAuthRefreshRejected(OFFICE_AUTH_REFRESH_REJECTION_CODES.EXPIRED, 'Refresh expired');
 
   const sess = await kvGetSession(env, sid);
-  if (!sess) return unauthorized('Session not found');
+  if (!sess) return officeAuthRefreshRejected(OFFICE_AUTH_REFRESH_REJECTION_CODES.SESSION_MISSING, 'Session not found');
 
   // Check session_version still valid
   const user = await sbGetUserById(env, sess.user_id);
-  if (!user || user.is_active !== true) return unauthorized('User disabled');
+  if (!user || user.is_active !== true) return officeAuthRefreshRejected(OFFICE_AUTH_REFRESH_REJECTION_CODES.USER_DISABLED, 'User disabled');
   if ((user.session_version|0) !== (sv|0)) {
     await kvDelSession(env, sid);
-    return unauthorized('Session version changed');
+    return officeAuthRefreshRejected(OFFICE_AUTH_REFRESH_REJECTION_CODES.SESSION_VERSION_CHANGED, 'Session version changed');
   }
 
   const access = await mintAccessToken(env, {
