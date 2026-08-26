@@ -24,7 +24,9 @@ const files = {
 const sql = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, read(file)]));
 const all = Object.values(sql).join('\n');
 const codeOnly = all.replace(/^\s*--.*$/gm, '');
+const latestCapabilities = read('supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql');
 const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
+const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
 
 const generatedOffice = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
 const generatedOther = read('supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql');
@@ -595,8 +597,9 @@ test('the targeted correction pass enforces exact categories, complete economics
   assert.match(sql.helpers, /IMPORT_MANDATORY/);
   assert.match(sql.helpers, /v_role='IMPORT_HOURS' or \(v_separate and v_role='HOURS_ONLY'\)/i);
   assert.match(sql.helpers, /'can_edit_hours'[\s\S]*not v_import/i);
-  assert.match(sql.helpers, /'can_edit_expenses'[\s\S]*\('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS'\)[\s\S]*and not v_protected/i);
-  assert.doesNotMatch(sql.helpers, /'can_edit_expenses'[^\n]*v_candidate_mutation_locked/i);
+  assert.match(latestCapabilities, /'can_edit_expenses'[\s\S]*\('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS'\)[\s\S]*v_role='HOURS_ONLY'[\s\S]*v_separate or v_candidate_mutation_locked/i);
+  assert.match(latestCapabilities, /'requires_carrier'[\s\S]*v_role='IMPORT_HOURS'[\s\S]*v_role='HOURS_ONLY'[\s\S]*v_separate or v_candidate_mutation_locked/i);
+  assert.match(latestCapabilities, /notify pgrst, 'reload schema'/i);
   assert.match(sql.managerReviewSchema, /paper_return_manifest_json jsonb/i);
   assert.match(sql.managerReviewSchema, /paper_return_manifest_sha256 bytea/i);
   assert.match(sql.managerReviewSchema, /paper_return_page_key text/i);
@@ -722,6 +725,8 @@ test('route, DAILY and auto-authorisation authority is enforced at every mutatio
   assert.match(noWork, /timesheet_weekly_chain_delete_preview[\s\S]*timesheet_weekly_chain_delete_apply/i);
   assert.match(noWork, /timesheet_archive_transition_v1[\s\S]*WEEKLY_CHAIN_DELETE_PARENT/i);
   assert.doesNotMatch(noWork, /timesheet_standard_delete_preview_v1/i);
+  assert.match(candidateRuntimeWorkflow, /25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1\.sql[\s\S]*26082026_0725_candidate_authorised_hours_expense_anchor_v1\.sql/i);
+  assert.match(candidateRuntimeWorkflow, /07082026_2128_candidate_finalize_reject_no_work_rpcs_v1\.sql[\s\S]*26082026_0659_candidate_no_work_weekly_chain_v1\.sql/i);
 
   assert.match(workflow, /_candidate_daily_entitled_v1[\s\S]*CANDIDATE_DAILY_ENTITLEMENT_REQUIRED/i);
   assert.match(finalise, /_candidate_daily_entitled_v1[\s\S]*CANDIDATE_DAILY_ENTITLEMENT_REQUIRED/i);

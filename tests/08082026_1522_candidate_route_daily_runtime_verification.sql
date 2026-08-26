@@ -137,6 +137,53 @@ begin
 end;
 $function$;
 
+-- The isolated Candidate matrix does not install the much larger Office
+-- deletion bundle. These transaction-local adapters exercise the exact
+-- weekly-chain contract used by Candidate no-work; source tests separately
+-- require the production function to compose the real Office authorities.
+create or replace function public.timesheet_weekly_chain_delete_preview(
+  p_timesheet_id uuid,
+  p_actor_user_id uuid
+)
+returns jsonb
+language sql
+stable
+as $function$
+  select jsonb_build_object(
+    'kind','WEEKLY_CHAIN_DELETE_PREVIEW',
+    'decision','PERMANENT_DELETE',
+    'current_timesheet_id',t.timesheet_id,
+    'timesheet_ids',jsonb_build_array(t.timesheet_id),
+    'contract_week_ids',coalesce((
+      select jsonb_agg(cw.id order by cw.id)
+      from public.contract_weeks cw
+      where cw.timesheet_id=t.timesheet_id
+    ),'[]'::jsonb),
+    'nhsp_shift_ids','[]'::jsonb
+  )
+  from public.timesheets t
+  where t.timesheet_id=p_timesheet_id and t.is_current=true;
+$function$;
+
+create or replace function public.timesheet_weekly_chain_delete_apply(
+  p_timesheet_id uuid,
+  p_actor_user_id uuid,
+  p_timesheet_ids uuid[],
+  p_contract_week_ids uuid[],
+  p_nhsp_shift_ids uuid[],
+  p_expected_row_signature text
+)
+returns jsonb
+language plpgsql
+as $function$
+begin
+  delete from public.timesheets_financials where timesheet_id=any(p_timesheet_ids);
+  delete from public.contract_weeks where id=any(p_contract_week_ids);
+  delete from public.timesheets where timesheet_id=any(p_timesheet_ids);
+  return jsonb_build_object('ok',true,'decision','PERMANENT_DELETE');
+end;
+$function$;
+
 create or replace view public.v_timesheets_summary as
 select t.timesheet_id,
   (t.booking_id like 'HR-%')::boolean as client_hr_validation_required,
@@ -189,6 +236,8 @@ declare
   v_import_ts uuid:='95200000-0000-0000-0000-000000000018';
   v_daily_ts uuid:='95200000-0000-0000-0000-000000000019';
   v_daily_workflow uuid:='95200000-0000-0000-0000-000000000020';
+  v_no_work_week uuid:='95200000-0000-0000-0000-000000000023';
+  v_no_work_ts uuid:='95200000-0000-0000-0000-000000000024';
   v_result jsonb;
   v_issues jsonb;
   v_daily_input jsonb;
@@ -539,17 +588,30 @@ begin
   -- A genuine electronic weekly row uses the authoritative weekly-chain
   -- preview/apply path. This proves the Candidate action removes the complete
   -- eligible weekly chain rather than calling the retired single-row route.
+  insert into public.timesheets(
+    timesheet_id,contract_id,week_ending_date,line_type,submission_mode,sheet_scope,
+    r2_nurse_key,r2_auth_key,job_title_norm,band
+  ) values (
+    v_no_work_ts,v_contract,'2026-08-15','HOURS','ELECTRONIC','WEEKLY',
+    'candidate/no-work','manager/no-work','NURSE','Band 5'
+  );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id
+  ) values (v_no_work_week,v_contract,'2026-08-15',0,'OPEN','ELECTRONIC',v_no_work_ts);
+  insert into public.timesheets_financials(
+    timesheet_id,candidate_id,client_id,total_hours,processing_status,role,band,pay_method
+  ) values (v_no_work_ts,v_candidate,v_client,8,'UNPROCESSED','NURSE','Band 5','PAYE');
   v_result:=public.candidate_no_work_atomic_v1(
-    v_session,'TEST',v_electronic_week,null,'route-daily:electronic-no-work',v_now
+    v_session,'TEST',v_no_work_week,null,'route-daily:electronic-no-work',v_now
   );
   if coalesce((v_result->>'ok')::boolean,false)=false
      or coalesce(v_result->>'candidate_hidden','false')<>'true'
-     or exists(select 1 from public.contract_weeks where id=v_electronic_week)
-     or exists(select 1 from public.timesheets where timesheet_id=v_electronic_ts) then
+     or exists(select 1 from public.contract_weeks where id=v_no_work_week)
+     or exists(select 1 from public.timesheets where timesheet_id=v_no_work_ts) then
     raise exception 'eligible electronic weekly no-work action did not remove the complete chain: %',v_result;
   end if;
   v_result:=public.candidate_no_work_atomic_v1(
-    v_session,'TEST',v_electronic_week,null,'route-daily:electronic-no-work',v_now
+    v_session,'TEST',v_no_work_week,null,'route-daily:electronic-no-work',v_now
   );
   if coalesce((v_result->>'idempotent_replay')::boolean,false)=false then
     raise exception 'eligible electronic weekly no-work action did not replay idempotently: %',v_result;

@@ -1006,10 +1006,7 @@ begin
     'can_edit_hours',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and not v_import,
     -- Imported hours remain immutable, but the Candidate may start the
     -- mandatory separate expense route against that worked-week anchor.
-    -- Authorised hours remain immutable, but can still anchor the separately
-    -- allocated Candidate expense carrier. The placement resolver forbids
-    -- SAME_RECORD when candidate_mutation_locked is true.
-    'can_edit_expenses',v_expense_route_allowed and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS') and not v_protected,
+    'can_edit_expenses',v_expense_route_allowed and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS') and not v_protected and not v_candidate_mutation_locked,
     'can_attach_timesheet',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED') and not v_protected and not v_candidate_mutation_locked and not v_has_timesheet,
     'can_attach_expense_evidence',v_expense_route_allowed and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked,
     'can_attach_mileage_evidence',v_expense_route_allowed and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and v_mileage<>0,

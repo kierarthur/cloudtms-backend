@@ -139,6 +139,7 @@ jobs:
             supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql
             supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql
             supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql
+            supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql
             supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql
             supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql
             supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql
@@ -152,6 +153,7 @@ jobs:
             supabase/repeatable/23082026_0822_candidate_manager_email_claim_route_guard_v1.sql
             supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql
             supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql
+            supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql
             supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql
             supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
             supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql
