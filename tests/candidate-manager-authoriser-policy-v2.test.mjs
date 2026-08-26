@@ -15,6 +15,14 @@ test('manager authoriser policy v2 retains the 63-operation Candidate boundary a
   assert.doesNotMatch(sql, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
+test('manager authoriser policy release refreshes PostgREST and exposes a truthful retryable runtime failure', () => {
+  assert.match(sql, /notify\s+pgrst\s*,\s*'reload schema'/i);
+  assert.match(worker, /upstreamCode\s*===\s*'PGRST202'/);
+  assert.match(worker, /CANDIDATE_MANAGER_AUTHORISER_RUNTIME_UNAVAILABLE/);
+  assert.match(worker, /Authoriser settings are temporarily unavailable\. Please try again\./);
+  assert.match(worker, /status:\s*runtimeUnavailable\s*\?\s*503/);
+});
+
 test('manager authoriser policy v2 closes additive, contract-only, legacy and exact-domain semantics', () => {
   assert.match(sql, /v_mode='EXTEND'/);
   assert.match(sql, /v_mode='CONTRACT_ONLY'/);

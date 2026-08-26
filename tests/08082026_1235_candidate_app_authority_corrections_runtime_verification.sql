@@ -88,10 +88,10 @@ begin
   v_capabilities:=private._candidate_record_capabilities_v1(v_timesheet_one,v_week_one,'{}'::jsonb);
   if coalesce((v_capabilities->>'candidate_mutation_locked')::boolean,false)=false
      or coalesce((v_capabilities->>'can_edit_hours')::boolean,true)=true
-     or coalesce((v_capabilities->>'can_edit_expenses')::boolean,true)=true
+     or coalesce((v_capabilities->>'can_edit_expenses')::boolean,false)=false
      or coalesce((v_capabilities->>'can_attach_timesheet')::boolean,true)=true
      or coalesce((v_capabilities->>'can_process')::boolean,true)=true then
-    raise exception 'authorised record exposed a Candidate App mutation: %',v_capabilities;
+    raise exception 'authorised record did not preserve locked hours plus separate expense entry: %',v_capabilities;
   end if;
   v_placement:=public.expense_placement_resolve_v1(
     v_candidate_one,'TEST',v_timesheet_one,v_week_one,'{}'::jsonb,v_now

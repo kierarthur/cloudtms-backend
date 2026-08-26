@@ -1001,11 +1001,15 @@ begin
     'candidate_hours_submission_allowed',v_hours_route_allowed and not v_protected and not v_candidate_mutation_locked,
     'candidate_expenses_allowed',v_expense_route_allowed and not v_protected,
     'candidate_paper_submission_allowed',v_paper_route_allowed and not v_protected and not v_candidate_mutation_locked,
-    'candidate_no_work_allowed',v_no_work_route_allowed and not v_protected and not v_candidate_mutation_locked,
+    'candidate_no_work_allowed',v_no_work_route_allowed and not v_protected and not v_candidate_mutation_locked
+      and coalesce(v_week.additional_seq,0)=0 and not coalesce(v_week.is_adjustment,false),
     'can_edit_hours',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and not v_import,
     -- Imported hours remain immutable, but the Candidate may start the
     -- mandatory separate expense route against that worked-week anchor.
-    'can_edit_expenses',v_expense_route_allowed and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS') and not v_protected and not v_candidate_mutation_locked,
+    -- Authorised hours remain immutable, but can still anchor the separately
+    -- allocated Candidate expense carrier. The placement resolver forbids
+    -- SAME_RECORD when candidate_mutation_locked is true.
+    'can_edit_expenses',v_expense_route_allowed and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS') and not v_protected,
     'can_attach_timesheet',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED') and not v_protected and not v_candidate_mutation_locked and not v_has_timesheet,
     'can_attach_expense_evidence',v_expense_route_allowed and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked,
     'can_attach_mileage_evidence',v_expense_route_allowed and v_role in ('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and v_mileage<>0,

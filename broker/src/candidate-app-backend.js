@@ -3826,7 +3826,11 @@ async function handleCandidateMileageFormAction(env, workflow, access, body, dbA
   if (Number(workflow.generation) !== Number(body.generation)) {
     throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
   }
-  if (!['DRAFT', 'REJECTED'].includes(upper(workflow.state))) {
+  // Mileage forms belong to the newly-created, still mutable Candidate
+  // workflow. The database authority calls this state WORKER_DRAFT; using a
+  // presentation-only DRAFT label here made every real prepare/email request
+  // fail while the unit fixture passed.
+  if (upper(workflow.state) !== 'WORKER_DRAFT') {
     throw new CandidateHttpError(409, 'CANDIDATE_WORKFLOW_NOT_MUTABLE');
   }
   if (!['CONTRACT_COMBINED', 'CONTRACT_EXPENSE'].includes(upper(workflow.workflow_kind))) {

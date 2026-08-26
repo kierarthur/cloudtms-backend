@@ -2294,7 +2294,7 @@ test('Candidate mileage form actions prepare the exact PDF and queue one registe
     id: '00000000-0000-4000-8000-000000000094',
     account_id: session.account_id,
     candidate_id: session.selected_candidate_id,
-    environment: 'TEST', generation: 1, state: 'DRAFT',
+    environment: 'TEST', generation: 1, state: 'WORKER_DRAFT',
     workflow_kind: 'CONTRACT_EXPENSE', scope: 'WEEKLY', route: 'ELECTRONIC',
     week_ending_date: '2026-08-30', contract_id: null,
     target_timesheet_id: null, anchor_timesheet_id: null

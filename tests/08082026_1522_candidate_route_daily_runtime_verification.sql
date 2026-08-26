@@ -535,6 +535,25 @@ begin
        is distinct from v_before_daily_updated_at then
     raise exception 'stale Candidate DAILY materialisation changed the timesheet before rejection';
   end if;
+
+  -- A genuine electronic weekly row uses the authoritative weekly-chain
+  -- preview/apply path. This proves the Candidate action removes the complete
+  -- eligible weekly chain rather than calling the retired single-row route.
+  v_result:=public.candidate_no_work_atomic_v1(
+    v_session,'TEST',v_electronic_week,null,'route-daily:electronic-no-work',v_now
+  );
+  if coalesce((v_result->>'ok')::boolean,false)=false
+     or coalesce(v_result->>'candidate_hidden','false')<>'true'
+     or exists(select 1 from public.contract_weeks where id=v_electronic_week)
+     or exists(select 1 from public.timesheets where timesheet_id=v_electronic_ts) then
+    raise exception 'eligible electronic weekly no-work action did not remove the complete chain: %',v_result;
+  end if;
+  v_result:=public.candidate_no_work_atomic_v1(
+    v_session,'TEST',v_electronic_week,null,'route-daily:electronic-no-work',v_now
+  );
+  if coalesce((v_result->>'idempotent_replay')::boolean,false)=false then
+    raise exception 'eligible electronic weekly no-work action did not replay idempotently: %',v_result;
+  end if;
 end;
 $route_and_daily_authority$;
 

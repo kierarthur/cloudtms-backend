@@ -137565,8 +137565,14 @@ async function handleCreateClient(env, req) {
 }
 
 function managerAuthoriserPolicyErrorResponse(env, req, error, fallbackCode) {
+  const upstreamCode = String(error?.json?.code || '').trim().toUpperCase();
   const raw = String(error?.json?.message || error?.message || fallbackCode || 'CANDIDATE_MANAGER_AUTHORISER_FAILED');
-  const code = raw.match(/[A-Z][A-Z0-9_]{4,}/)?.[0] || fallbackCode || 'CANDIDATE_MANAGER_AUTHORISER_FAILED';
+  const runtimeUnavailable = upstreamCode === 'PGRST202'
+    || Number(error?.status) === 408
+    || /schema cache|timed out|timeout/i.test(raw);
+  const code = runtimeUnavailable
+    ? 'CANDIDATE_MANAGER_AUTHORISER_RUNTIME_UNAVAILABLE'
+    : (raw.match(/[A-Z][A-Z0-9_]{4,}/)?.[0] || fallbackCode || 'CANDIDATE_MANAGER_AUTHORISER_FAILED');
   const conflict = /VERSION_CONFLICT|IDEMPOTENCY_CONFLICT|STALE/.test(code);
   const missing = /NOT_FOUND/.test(code);
   const messages = {
@@ -137576,13 +137582,14 @@ function managerAuthoriserPolicyErrorResponse(env, req, error, fallbackCode) {
     CANDIDATE_MANAGER_APPROVED_EMAIL_INVALID: 'Enter a valid business email address.',
     CANDIDATE_MANAGER_APPROVED_DOMAIN_INVALID: 'Enter a valid email domain, such as @berkshire.nhs.uk.',
     CANDIDATE_MANAGER_AUTHORISER_VERSION_CONFLICT: 'These authoriser settings changed elsewhere. Reload them and try again.',
-    CANDIDATE_MANAGER_AUTHORISER_IDEMPOTENCY_CONFLICT: 'This save request no longer matches the authoriser settings. Review and save again.'
+    CANDIDATE_MANAGER_AUTHORISER_IDEMPOTENCY_CONFLICT: 'This save request no longer matches the authoriser settings. Review and save again.',
+    CANDIDATE_MANAGER_AUTHORISER_RUNTIME_UNAVAILABLE: 'Authoriser settings are temporarily unavailable. Please try again.'
   };
   return withCORS(env, req, new Response(JSON.stringify({
     ok: false,
     error_code: code,
     message: messages[code] || (missing ? 'The requested Client or Contract could not be found.' : 'The authoriser settings were not changed.')
-  }), { status: missing ? 404 : (conflict ? 409 : 400), headers: JSON_HEADERS }));
+  }), { status: runtimeUnavailable ? 503 : (missing ? 404 : (conflict ? 409 : 400)), headers: JSON_HEADERS }));
 }
 
 async function handleClientManagerAuthoriserPolicyGet(env, req, clientId) {

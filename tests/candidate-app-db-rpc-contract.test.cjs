@@ -24,6 +24,7 @@ const files = {
 const sql = Object.fromEntries(Object.entries(files).map(([key, file]) => [key, read(file)]));
 const all = Object.values(sql).join('\n');
 const codeOnly = all.replace(/^\s*--.*$/gm, '');
+const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
 
 const generatedOffice = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
 const generatedOther = read('supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql');
@@ -484,11 +485,12 @@ test('whole-record rejection clears every active economic/document field and is 
 });
 
 test('candidate no-work composes existing delete/archive authority and replays safely', () => {
-  const noWork = definition(sql.final, 'candidate_no_work_atomic_v1');
+  const noWork = definition(latestNoWork, 'candidate_no_work_atomic_v1');
   assert.match(noWork, /contract_week_delete_planned/);
-  assert.match(noWork, /timesheet_standard_delete_preview_v1/);
-  assert.match(noWork, /timesheet_standard_delete_apply_v1/);
+  assert.match(noWork, /timesheet_weekly_chain_delete_preview/);
+  assert.match(noWork, /timesheet_weekly_chain_delete_apply/);
   assert.match(noWork, /timesheet_archive_transition_v1/);
+  assert.doesNotMatch(noWork, /timesheet_standard_delete_preview_v1/);
   assert.match(noWork, /audit_events[\s\S]*correlation_id=p_idempotency_key[\s\S]*idempotent_replay/i);
 });
 
@@ -593,7 +595,8 @@ test('the targeted correction pass enforces exact categories, complete economics
   assert.match(sql.helpers, /IMPORT_MANDATORY/);
   assert.match(sql.helpers, /v_role='IMPORT_HOURS' or \(v_separate and v_role='HOURS_ONLY'\)/i);
   assert.match(sql.helpers, /'can_edit_hours'[\s\S]*not v_import/i);
-  assert.match(sql.helpers, /'can_edit_expenses'[\s\S]*\('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS'\)/i);
+  assert.match(sql.helpers, /'can_edit_expenses'[\s\S]*\('EXPENSE_ONLY','COMBINED_ALLOWED','FLEXIBLE','IMPORT_HOURS'\)[\s\S]*and not v_protected/i);
+  assert.doesNotMatch(sql.helpers, /'can_edit_expenses'[^\n]*v_candidate_mutation_locked/i);
   assert.match(sql.managerReviewSchema, /paper_return_manifest_json jsonb/i);
   assert.match(sql.managerReviewSchema, /paper_return_manifest_sha256 bytea/i);
   assert.match(sql.managerReviewSchema, /paper_return_page_key text/i);
@@ -708,7 +711,7 @@ test('invoice delivery sends expense stream to the expense email without self-bi
 test('route, DAILY and auto-authorisation authority is enforced at every mutation boundary', () => {
   const workflow = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
   const finalise = definition(sql.final, 'candidate_submission_finalize_atomic_v1');
-  const noWork = definition(sql.final, 'candidate_no_work_atomic_v1');
+  const noWork = definition(latestNoWork, 'candidate_no_work_atomic_v1');
   const page = definition(sql.reads, 'candidate_app_timesheet_page_v1');
 
   assert.match(sql.helpers, /_candidate_route_family_v1/i);
@@ -716,6 +719,9 @@ test('route, DAILY and auto-authorisation authority is enforced at every mutatio
   assert.match(workflow, /_candidate_route_family_v1[\s\S]*CANDIDATE_ROUTE_FAMILY_MISMATCH/i);
   assert.match(finalise, /_candidate_route_family_v1[\s\S]*CANDIDATE_ROUTE_FAMILY_MISMATCH/i);
   assert.match(noWork, /candidate_no_work_allowed[\s\S]*CANDIDATE_NO_WORK_NOT_ALLOWED/i);
+  assert.match(noWork, /timesheet_weekly_chain_delete_preview[\s\S]*timesheet_weekly_chain_delete_apply/i);
+  assert.match(noWork, /timesheet_archive_transition_v1[\s\S]*WEEKLY_CHAIN_DELETE_PARENT/i);
+  assert.doesNotMatch(noWork, /timesheet_standard_delete_preview_v1/i);
 
   assert.match(workflow, /_candidate_daily_entitled_v1[\s\S]*CANDIDATE_DAILY_ENTITLEMENT_REQUIRED/i);
   assert.match(finalise, /_candidate_daily_entitled_v1[\s\S]*CANDIDATE_DAILY_ENTITLEMENT_REQUIRED/i);

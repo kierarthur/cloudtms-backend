@@ -537,4 +537,10 @@ grant execute on function public.client_manager_authoriser_policy_update_v1(uuid
 grant execute on function public.contract_manager_authoriser_policy_update_v1(uuid,timestamptz,jsonb,uuid,text,timestamptz) to service_role;
 grant execute on function private._candidate_policy_resolve_v1(uuid,uuid,date) to service_role;
 
+-- New Office RPCs must become callable through the already-running Miget
+-- PostgREST service as part of the same protected release.  The notification is
+-- delivered only after this transaction commits, so the cache cannot advertise
+-- a definition that was subsequently rolled back.
+notify pgrst, 'reload schema';
+
 commit;
