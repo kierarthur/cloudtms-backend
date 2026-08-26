@@ -3223,8 +3223,20 @@ begin
       end if;
       if abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,other_pay_ex_vat}','')::numeric,0))>0
          or abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,other_charge_ex_vat}','')::numeric,0))>0
-         or abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,expenses_pay_ex_vat}','')::numeric,0))>0
-         or abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,expenses_charge_ex_vat}','')::numeric,0))>0 then
+         or (
+           (
+             abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,expenses_pay_ex_vat}','')::numeric,0))>0
+             or abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,expenses_charge_ex_vat}','')::numeric,0))>0
+           )
+           and (
+             abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,travel_pay_ex_vat}','')::numeric,0))
+             +abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,travel_charge_ex_vat}','')::numeric,0))
+             +abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,accommodation_pay_ex_vat}','')::numeric,0))
+             +abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,accommodation_charge_ex_vat}','')::numeric,0))
+             +abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,other_pay_ex_vat}','')::numeric,0))
+             +abs(coalesce(nullif(v_expense_submission#>>'{canonical_tsfin_snapshot,other_charge_ex_vat}','')::numeric,0))
+           )=0
+         ) then
         v_required_categories:=array_append(v_required_categories,'OTHER');
       end if;
       if v_has_mileage then

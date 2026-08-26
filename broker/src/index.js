@@ -167199,8 +167199,21 @@ async function handleTimesheetQrScan(env, req, ctx = null) {
 
   return withCORS(env, req, badRequest('QR mismatch: unsupported sheet_scope for QR'));
 }
-
-
+function candidateScheduleLocalTimeAliases(segment, fallback = null) {
+  const primary = segment && typeof segment === 'object' ? segment : {};
+  const secondary = fallback && typeof fallback === 'object' ? fallback : {};
+  const firstText = (...values) => {
+    for (const value of values) {
+      const normalized = value == null ? '' : String(value).trim();
+      if (normalized) return normalized;
+    }
+    return '';
+  };
+  return {
+    start: firstText(primary.start, primary.start_time, secondary.start, secondary.start_time),
+    end: firstText(primary.end, primary.end_time, secondary.end, secondary.end_time)
+  };
+}
 
 async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin, options = {}) {
   const pc = payChargeFromContract(contract);
@@ -167261,14 +167274,15 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     const date = _normStr(segObj.date);
 
     // ✅ IMPORTANT: prefer local start/end first (keeps stable IDs aligned to schedule JSON)
+    const localTimes = candidateScheduleLocalTimeAliases(segObj);
     const start =
-      _normStr(segObj.start) ||
+      localTimes.start ||
       _normStr(segObj.start_utc) ||
       _normStr(segObj.start_iso) ||
       _normStr(segObj.startUtc);
 
     const end =
-      _normStr(segObj.end) ||
+      localTimes.end ||
       _normStr(segObj.end_utc) ||
       _normStr(segObj.end_iso) ||
       _normStr(segObj.endUtc);
@@ -167411,8 +167425,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       };
     }
 
-    const startHH = String(seg?.start || '').trim();
-    const endHH = String(seg?.end || '').trim();
+    const { start: startHH, end: endHH } = candidateScheduleLocalTimeAliases(seg);
     if (!startHH || !endHH) {
       return { startUtcIso: null, endUtcIso: null, error: `Shift start/end must both be set for ${date}` };
     }
@@ -167664,9 +167677,14 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
       null;
 
     const s = (v == null) ? '' : String(v).trim();
-    if (!s) return seg;
+    const { start, end } = candidateScheduleLocalTimeAliases(seg, raw);
 
-    return { ...seg, ref_num: s };
+    return {
+      ...seg,
+      ...(start ? { start } : {}),
+      ...(end ? { end } : {}),
+      ...(s ? { ref_num: s } : {})
+    };
   });
 
   if (!actual.length) {
@@ -167970,8 +167988,7 @@ async function buildWeeklyScheduleSegmentsSnapshot(env, ts, cw, contract, curFin
     }
 
     // ✅ Populate BOTH local start/end and UTC ISO start_utc/end_utc (fixes blank QR PDFs + stable preservation)
-    const startLocal = (seg?.start != null) ? String(seg.start).trim() : '';
-    const endLocal = (seg?.end != null) ? String(seg.end).trim() : '';
+    const { start: startLocal, end: endLocal } = candidateScheduleLocalTimeAliases(seg);
     const startLocalMins = parseHHMM(startLocal);
     const endLocalMins = parseHHMM(endLocal);
     const overnight =
@@ -194207,6 +194224,9 @@ export const candidateOfficeSummaryInternals = Object.freeze({
   markCandidateOfficeApplicability,
   markCandidateOfficePayloadApplicability,
   attachCandidateOfficeSummaryProjections
+});
+export const candidateWeeklyScheduleInternals = Object.freeze({
+  candidateScheduleLocalTimeAliases
 });
 // BACKEND — FULL ROUTER ( default) — unchanged routes map but now benefits from updated CORS/sbFetch
 export default {

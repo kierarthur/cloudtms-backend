@@ -676,6 +676,49 @@ function knownErrorCode(error) {
   return preferredFrom(error?.message) || 'CANDIDATE_REQUEST_FAILED';
 }
 
+function safeCandidateTransportDiagnostic(error) {
+  const message = text(error?.json?.message);
+  const localMessage = text(error?.message);
+  const sqlstate = text(error?.json?.code).toUpperCase();
+  let databaseErrorClass = null;
+  let databaseObject = null;
+  const classifiers = [
+    ['FUNCTION_NOT_FOUND', /^function\s+([a-z0-9_.]+)\s*\(/i],
+    ['COLUMN_NOT_FOUND', /^column\s+"?([a-z0-9_.]+)"?\s+does not exist/i],
+    ['RELATION_NOT_FOUND', /^relation\s+"?([a-z0-9_.]+)"?\s+does not exist/i],
+    ['PERMISSION_DENIED', /^permission denied for (?:function|relation|schema)\s+"?([a-z0-9_.]+)"?/i],
+    ['INVALID_INPUT_SYNTAX', /^invalid input syntax for type\s+([a-z0-9_ ]+):/i],
+    ['NOT_NULL_VIOLATION', /^null value in column\s+"?([a-z0-9_.]+)"?/i],
+    ['UNDEFINED_OPERATOR', /^operator does not exist:/i]
+  ];
+  for (const [classification, pattern] of classifiers) {
+    const match = message.match(pattern);
+    if (!match) continue;
+    databaseErrorClass = classification;
+    databaseObject = match[1] ? text(match[1]).toLowerCase() : null;
+    break;
+  }
+  return {
+    error_code: knownErrorCode(error),
+    transport_function: /^[a-z][a-z0-9_]{2,100}$/i.test(text(error?.fn))
+      ? text(error.fn) : null,
+    transport_status: Number.isInteger(Number(error?.status)) ? Number(error.status) : null,
+    database_sqlstate: /^[0-9A-Z]{5}$/.test(sqlstate) ? sqlstate : null,
+    database_error_code: /^[A-Z][A-Z0-9_]{2,100}$/.test(message) ? message : null,
+    database_error_class: databaseErrorClass,
+    database_object: databaseObject,
+    local_error_code: /^[A-Z][A-Z0-9_]{2,100}$/.test(localMessage)
+      ? localMessage : null,
+    local_error_class: error instanceof TypeError ? 'TYPE_ERROR'
+      : error instanceof ReferenceError ? 'REFERENCE_ERROR'
+        : error instanceof RangeError ? 'RANGE_ERROR' : null,
+    local_error_property: text(
+      localMessage.match(/Cannot read properties of (?:undefined|null) \(reading '([a-z0-9_]+)'\)/i)?.[1]
+    ).toLowerCase() || null,
+    source_location: text(error?.stack).match(/candidate-(?:app-backend|private-worker)\.js:(\d+):(\d+)/)?.slice(1).join(':') || null
+  };
+}
+
 const OFFICE_ERROR_ALIASES = Object.freeze({
   IDEMPOTENCY_CONFLICT: 'CANDIDATE_IDEMPOTENCY_CONFLICT',
   ROW_SIGNATURE_MISMATCH: 'CANDIDATE_CONTEXT_STALE',
@@ -6471,6 +6514,11 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     }
     throw new CandidateHttpError(404, 'CANDIDATE_ROUTE_NOT_FOUND');
   } catch (error) {
+    const diagnostic = safeCandidateTransportDiagnostic(error);
+    if (diagnostic.error_code === 'CANDIDATE_REQUEST_FAILED'
+        || diagnostic.database_sqlstate) {
+      console.error('[candidate-app] safe transport failure', diagnostic);
+    }
     return errorResponse(error, correlationId, routeAudience === 'OFFICE');
   }
 }
