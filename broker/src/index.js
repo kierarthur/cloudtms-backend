@@ -147793,6 +147793,28 @@ async function handleHRRows(env, req, importId) {
   }
 }
 
+export function isOfficeFileDownloadKeyAllowed(env, rawKey) {
+  const key = String(rawKey || '').replace(/^\/+/, '').trim();
+  if (!key || key.includes('..')) return false;
+
+  const allowedPrefixes = [
+    'files/',
+    'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
+    'docs-pdf/',
+    'Assets/', 'assets/',
+    'mailshot-template-attachments/'
+  ];
+
+  const candidateEnvironment = String(env?.CANDIDATE_APP_ENVIRONMENT || '')
+    .trim()
+    .toLowerCase();
+  if (/^[a-z0-9][a-z0-9_-]{0,31}$/.test(candidateEnvironment)) {
+    allowedPrefixes.push(`candidate-app/${candidateEnvironment}/`);
+  }
+
+  return allowedPrefixes.some((prefix) => key.startsWith(prefix));
+}
+
 async function handleFilesDownload(env, req) {
   const LOG = true; // set false if you want to reduce console noise
 
@@ -147818,15 +147840,9 @@ async function handleFilesDownload(env, req) {
       return withCORS(env, req, unauthorized());
     }
 
-    // Allow uploaded evidence + other doc prefixes
-    const ALLOWED_PREFIXES = [
-      'files/',                     // evidence uploads
-      'invoices/', 'remittances/', 'paper_ts/', 'signatures/', 'docs/',
-      'docs-pdf/',
-      'Assets/', 'assets/',
-      'mailshot-template-attachments/'
-    ];
-    if (!ALLOWED_PREFIXES.some(p => key.startsWith(p))) {
+    // Allow Office documents plus Candidate evidence from this exact runtime
+    // environment. TEST must never be able to presign or download LIVE keys.
+    if (!isOfficeFileDownloadKeyAllowed(env, key)) {
       if (LOG) console.warn('[FILES][DL] deny: prefix', { key });
       return withCORS(env, req, unauthorized());
     }
@@ -160739,6 +160755,9 @@ async function handleFilePresignDownload(env, req) {
   let key = String(data.key || '').trim();
   key = key.replace(/^\/+/, '');
   if (!key) return withCORS(env, req, badRequest("key is required"));
+  if (!isOfficeFileDownloadKeyAllowed(env, key)) {
+    return withCORS(env, req, unauthorized());
+  }
 
   // ✅ DEFENCE-IN-DEPTH: canonical timesheet PDF keys must be dirty-safe
   const m = key.match(/^docs-pdf\/timesheets\/ts_([0-9a-fA-F-]{36})\.pdf$/);
