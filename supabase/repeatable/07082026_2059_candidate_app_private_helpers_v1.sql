@@ -1001,8 +1001,7 @@ begin
     'candidate_hours_submission_allowed',v_hours_route_allowed and not v_protected and not v_candidate_mutation_locked,
     'candidate_expenses_allowed',v_expense_route_allowed and not v_protected,
     'candidate_paper_submission_allowed',v_paper_route_allowed and not v_protected and not v_candidate_mutation_locked,
-    'candidate_no_work_allowed',v_no_work_route_allowed and not v_protected and not v_candidate_mutation_locked
-      and coalesce(v_week.additional_seq,0)=0 and not coalesce(v_week.is_adjustment,false),
+    'candidate_no_work_allowed',v_no_work_route_allowed and not v_protected and not v_candidate_mutation_locked,
     'can_edit_hours',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and not v_import,
     -- Imported hours remain immutable, but the Candidate may start the
     -- mandatory separate expense route against that worked-week anchor.
