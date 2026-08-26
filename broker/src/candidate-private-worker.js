@@ -10,6 +10,7 @@ import {
 import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import { createCandidatePrivateDependencies } from './index.js';
 import { handleCandidateDailySystemPhase1bRequest } from './candidate-daily-phase1b.js';
+import { candidateCorrelationId } from './candidate-daily-contract-v1.js';
 import { purgeCandidateDailySystemNonces } from './candidate-daily-hmac-v1.js';
 import {
   purgeMyTmsGoogleControlNonces,
@@ -161,7 +162,45 @@ async function removePrivatePrefix(request) {
   });
 }
 
-async function projectFederatedRequest(request, env, routeContext) {
+async function attemptFederatedDailyActivation(request, dependencies, context) {
+  const correlationId = candidateCorrelationId(request);
+  try {
+    const result = await dependencies.rpc('candidate_daily_system_policy_activate_ready_v1', {
+      p_internal_context: {
+        environment: context.environment,
+        candidate_id: context.agency_candidate_id,
+        membership_id: context.membership_id,
+        membership_generation: context.membership_generation,
+        activation_reason: 'FEDERATED_MEMBERSHIP_ACTIVE',
+        system_auth_verified: true,
+        nonce_consumed: true,
+        environment_trusted: true,
+        transition_ready: true,
+        authority_mode_compatible: true,
+        source_scope_ready: true
+      },
+      p_candidate_source_hmacs: [],
+      p_projection_outbox_ids: [],
+      p_correlation_id: correlationId
+    });
+    const outcome = Array.isArray(result?.outcomes)
+      ? result.outcomes.find((item) => item?.candidate_id === context.agency_candidate_id)
+      : null;
+    const status = String(outcome?.status || '');
+    if (!result?.ok || !['ACTIVATED', 'ALREADY_ENABLED', 'NOT_READY'].includes(status)) {
+      throw new Error('CANDIDATE_DAILY_ACTIVATION_RESULT_INVALID');
+    }
+    return status;
+  } catch {
+    console.warn('[candidate-private] Rota activation deferred', {
+      error_code: 'CANDIDATE_DAILY_ACTIVATION_RETRY_PENDING',
+      correlation_id: correlationId
+    });
+    return 'RETRY_PENDING';
+  }
+}
+
+async function projectFederatedRequest(request, env, routeContext, dependencies = null) {
   const now = new Date();
   const context = routeContext.context;
   const identitySecret = env.CANDIDATE_FEDERATED_IDENTITY_SECRET;
@@ -171,7 +210,7 @@ async function projectFederatedRequest(request, env, routeContext) {
   const globalSessionHmac = await candidateFederatedIdentityHmac(
     identitySecret, context.environment, context.global_session_id
   );
-  const deps = createCandidatePrivateDependencies(env, 'PRIVATE');
+  const deps = dependencies || createCandidatePrivateDependencies(env, 'PRIVATE');
   const link = await deps.rpc('candidate_app_federated_membership_link_set_v1', {
     p_internal_context: {
       route_context_verified: true,
@@ -189,6 +228,7 @@ async function projectFederatedRequest(request, env, routeContext) {
   if (!link?.ok || !['LINKED', 'UPDATED'].includes(String(link.status || ''))) {
     throw new Error('CANDIDATE_FEDERATED_MEMBERSHIP_LINK_FAILED');
   }
+  await attemptFederatedDailyActivation(request, deps, context);
   const projection = await deps.rpc('candidate_app_federated_session_project_v1', {
     p_environment: context.environment,
     p_global_account_identity_hmac: `\\x${globalAccountHmac}`,
@@ -470,6 +510,7 @@ export const candidatePrivateWorkerInternals = Object.freeze({
   federatedRoutingEnabled,
   federatedRouteConfigurationAvailable,
   federatedConfigurationAvailable,
+  attemptFederatedDailyActivation,
   projectFederatedRequest,
   managerRouteRequest,
   handleGoogleDataMatch,
