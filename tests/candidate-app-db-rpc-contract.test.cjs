@@ -26,7 +26,7 @@ const all = Object.values(sql).join('\n');
 const codeOnly = all.replace(/^\s*--.*$/gm, '');
 const latestCapabilities = read('supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql');
 const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
-const latestExpenseApply = read('supabase/repeatable/26082026_2121_candidate_expense_category_authority_v2.sql');
+const latestExpenseApply = read('supabase/repeatable/26082026_2225_candidate_expense_finalise_signature_recheck_v3.sql');
 const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
 
 const generatedOffice = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
@@ -285,6 +285,9 @@ test('expense application is one canonical transaction with locked carrier place
   assert.match(apply, /p_actor_user_id=>v_system_actor/i);
   assert.match(apply, /EXPENSE_EVIDENCE_REQUIRED/);
   assert.match(apply, /HOURS_AND_EXPENSES_REQUIRE_SEPARATE_TIMESHEETS/);
+  assert.match(apply, /v_workflow\.workflow_kind='CONTRACT_COMBINED'[\s\S]*timesheet_lifecycle_guard_signature_v1\([\s\S]*v_target_timesheet_id,v_week\.id,false[\s\S]*p_expected_row_signature=>v_apply_expected_row_signature/i);
+  assert.match(apply, /v_apply_expected_row_signature text:=p_expected_row_signature/i);
+  assert.match(apply, /Standalone[\s\S]*expense workflows continue to use the caller's original signature/i);
   assert.doesNotMatch(apply, /insert into public\.timesheets_financials/i);
   assert.match(carrier, /v_anchor_week\.enforce_day_partition,v_anchor_week\.allowed_days_mask/i);
   assert.match(carrier, /v_anchor_week\.split_boundary_date,v_anchor_week\.split_group_key/i);
