@@ -54,6 +54,17 @@ test('public broker source has no Supabase, R2 or CloudTMS business-authority de
   );
 });
 
+test('synthetic private Git build compatibility config cannot drift from its canonical config', async () => {
+  const canonical = JSON.parse(await readFile(
+    new URL('../candidate-synthetic-private-api/wrangler.jsonc', import.meta.url), 'utf8'
+  ));
+  const gitBuild = JSON.parse(await readFile(
+    new URL('../candidate-private-api/wrangler.synthetic.jsonc', import.meta.url), 'utf8'
+  ));
+  assert.deepEqual({ ...gitBuild, main: 'src/index.js' }, canonical);
+  assert.equal(gitBuild.main, '../candidate-synthetic-private-api/src/index.js');
+});
+
 function limiter(success = true) {
   return { async limit() { return { success }; } };
 }
