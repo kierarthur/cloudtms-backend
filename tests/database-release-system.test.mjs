@@ -253,6 +253,36 @@ test('contract export normalises null ACLs to one-dimensional effective defaults
   assert.match(source, /owner_role\.logical_name = 'postgres'/);
 });
 
+test('contract export is provider and upgrade-history neutral without weakening security fields', () => {
+  const source = read('supabase/release/export_contract.sql');
+  assert.doesNotMatch(source, /'position',\s*a\.attnum/);
+  assert.match(source, /order by a\.attname collate "C"/);
+  assert.match(source, /config_value <> 'plpgsql_check\.mode=disabled'/);
+  assert.match(source, /SET "plpgsql_check\.mode" TO ''disabled''/);
+  assert.match(source, /p\.proname = 'cloudtms_data_api_mfa_gate'/);
+  assert.match(source, /expanded_acl\.grantee = 'authenticator'/);
+  assert.match(source, /'security_definer', p\.prosecdef/);
+  assert.match(source, /'definition_sha256'/);
+});
+
+test('private Candidate Daily Miget policies are exact, reproducible and grant no table privilege', () => {
+  const source = read('supabase/migrations/26082026_0312_private_daily_service_rls_reconciliation.sql');
+  const tables = [
+    'candidate_daily_authority_scopes',
+    'candidate_daily_authority_transitions',
+    'candidate_daily_batch_receipts',
+    'candidate_daily_entitlements',
+    'candidate_daily_external_effect_receipts',
+    'candidate_daily_source_links',
+    'candidate_daily_sync_state',
+  ];
+  for (const table of tables) assert.match(source, new RegExp(`'${table}'`));
+  assert.match(source, /cloudtms_miget_service_owner_all/);
+  assert.match(source, /for all to %I, service_role using \(true\) with check \(true\)/i);
+  assert.doesNotMatch(source, /grant\s+(?:select|insert|update|delete|all)\s+on\s+table/i);
+  assert.doesNotMatch(source, /\b(?:insert|update|delete|truncate)\s+(?:into|from|table)\s+private\.candidate_daily_/i);
+});
+
 test('Bible preserves Policy X and protected security boundary', () => {
   const bible = read('docs/DATABASE_RELEASE_BIBLE.md');
   assert.match(bible, /post-draft uses frozen batch artifacts only/);

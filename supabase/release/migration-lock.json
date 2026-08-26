@@ -767,6 +767,10 @@
       "sha256": "60fe571b2a3fadc41f76435fc1df7eb56350b8fb6bfedc46049b233db082b67c"
     },
     {
+      "path": "supabase/migrations/26082026_0312_private_daily_service_rls_reconciliation.sql",
+      "sha256": "f784cd44ebaa4ae5a1108c5d1b4b78d8ccf8c44aa888744e3af245d851ca30fb"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

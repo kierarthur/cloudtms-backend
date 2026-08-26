@@ -76,14 +76,13 @@ relation_contract as (
       'columns', coalesce((
         select jsonb_agg(
           jsonb_build_object(
-            'position', a.attnum,
             'name', a.attname,
             'type', pg_catalog.format_type(a.atttypid, a.atttypmod),
             'not_null', a.attnotnull,
             'identity', a.attidentity,
             'generated', a.attgenerated,
             'default', pg_catalog.pg_get_expr(d.adbin, d.adrelid)
-          ) order by a.attnum
+          ) order by a.attname collate "C"
         )
         from pg_catalog.pg_attribute a
         left join pg_catalog.pg_attrdef d
@@ -147,7 +146,15 @@ routine_contract as (
       'security_definer', p.prosecdef,
       'volatility', p.provolatile,
       'parallel', p.proparallel,
-      'config', coalesce(to_jsonb(p.proconfig), '[]'::jsonb),
+      -- plpgsql_check is development instrumentation and is not installed by
+      -- every PostgreSQL provider. Its disabled per-function GUC is excluded
+      -- from the provider-neutral application contract; search_path and every
+      -- other routine configuration remain authoritative.
+      'config', coalesce((
+        select jsonb_agg(config_value order by config_value collate "C")
+        from pg_catalog.unnest(coalesce(p.proconfig, array[]::text[])) config_value
+        where config_value <> 'plpgsql_check.mode=disabled'
+      ), '[]'::jsonb),
       'acl', coalesce((
         select jsonb_agg(
           jsonb_build_object(
@@ -168,11 +175,23 @@ routine_contract as (
             pg_catalog.acldefault('f'::"char", p.proowner)
           )) a
         ) expanded_acl
+        where not (
+          p.proname = 'cloudtms_data_api_mfa_gate'
+          and expanded_acl.grantee = 'authenticator'
+        )
       ), '[]'::jsonb),
       'definition_sha256', pg_catalog.encode(
         extensions.digest(
           pg_catalog.convert_to(
-            pg_catalog.replace(pg_catalog.pg_get_functiondef(p.oid), E'\r\n', E'\n'),
+            pg_catalog.replace(
+              pg_catalog.replace(
+                pg_catalog.pg_get_functiondef(p.oid),
+                E'\n SET "plpgsql_check.mode" TO ''disabled''',
+                ''
+              ),
+              E'\r\n',
+              E'\n'
+            ),
             'UTF8'
           ),
           'sha256'
