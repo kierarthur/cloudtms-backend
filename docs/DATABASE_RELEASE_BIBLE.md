@@ -17,6 +17,7 @@ This system changes database definitions only. It does not copy or replace custo
 - Preserve CloudTMS Policy X: pre-draft may use live truth; post-draft uses frozen batch artifacts only; `TS_DAY` remains `YYYY-MM-DD`; no post-draft live finance fallback, invented economic-key ladder, or freshness bypass is permitted.
 - Preserve the Candidate/MyTMS boundary locked by `supabase/release/protected-boundary-lock.json`. The protected files may not be removed, renamed, duplicated, weakened, or rewritten. The three security verifiers must pass after every release.
 - Candidate features, communications, invitations, and autonomous Workbench activity remain disabled on a new database until separately reviewed and deliberately enabled.
+- Candidate canonical finalisation requires `settings_defaults.candidate_app_system_actor_user_id`. Migration `26082026_2057_candidate_system_actor_seed.sql` supplies a dedicated inactive, non-payment, non-login technical user only when that setting is null and preserves any existing configured authority. Never point this setting at an ordinary Office login merely to make a submission pass, never copy the generated user ID between agencies or environments, and never enable Candidate writes until `26082026_2058_candidate_system_actor_verification.sql` has passed on the exact target.
 
 ## The four supported modes
 

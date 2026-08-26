@@ -45,7 +45,8 @@
     "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql",
     "supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql",
     "supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql",
-    "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql"
+    "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
+    "supabase/verification/26082026_2058_candidate_system_actor_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
@@ -55,6 +56,7 @@
     "supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql",
     "supabase/verification/24082026_1721_miget_private_helper_service_acl_verification.sql",
     "supabase/verification/26082026_0044_candidate_manager_authoriser_policy_v2_verification.sql",
-    "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql"
+    "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
+    "supabase/verification/26082026_2058_candidate_system_actor_verification.sql"
   ]
 }

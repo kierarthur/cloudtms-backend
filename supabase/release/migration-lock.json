@@ -771,6 +771,10 @@
       "sha256": "f784cd44ebaa4ae5a1108c5d1b4b78d8ccf8c44aa888744e3af245d851ca30fb"
     },
     {
+      "path": "supabase/migrations/26082026_2057_candidate_system_actor_seed.sql",
+      "sha256": "e67824d2930b8b25e36135fd3edd2280cd88da286eb99b18302e1f5373e96661"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
