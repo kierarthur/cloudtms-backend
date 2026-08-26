@@ -380,7 +380,8 @@ const CLIENT_SETTINGS_CREATE_FIELDS = new Set([
   'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'opt_in_email',
   'opt_in_sms', 'opt_in_whatsapp', 'healthroster_import_auto_authorise',
   'nhsp_import_auto_authorise', 'reversal_complete_financials_date',
-  'reversal_replacement_financials_date', 'timesheet_break_entry_mode'
+  'reversal_replacement_financials_date', 'timesheet_break_entry_mode',
+  'candidate_paper_submission_enabled'
 ]);
 
 async function createClientWithSettingsAtomic(env, user, data) {
@@ -7494,6 +7495,13 @@ async function handleContractsCreate(env, req) {
     ? clampBool(body.overrideclientsettings, false)
     : false;
 
+  const candidate_paper_submission_enabled_override =
+    Object.prototype.hasOwnProperty.call(body, 'candidate_paper_submission_enabled_override')
+      ? (body.candidate_paper_submission_enabled_override == null
+          ? null
+          : clampBool(body.candidate_paper_submission_enabled_override, false))
+      : null;
+
   // ✅ NEW: contract.is_ad_hoc (default false)
   const hasIsAdHoc = Object.prototype.hasOwnProperty.call(body, 'is_ad_hoc');
   const is_ad_hoc = hasIsAdHoc ? clampBool(body.is_ad_hoc, false) : false;
@@ -7610,7 +7618,7 @@ async function handleContractsCreate(env, req) {
     const payRefDefault  = !!(clientSettings && clientSettings.pay_reference_required);
     const invRefDefault  = !!(clientSettings && clientSettings.invoice_reference_required);
     const dsmRaw         = String(clientSettings?.default_submission_mode || '').toUpperCase();
-    const dsmFromClient  = ['ELECTRONIC','MANUAL','QR'].includes(dsmRaw) ? dsmRaw : 'ELECTRONIC';
+    const dsmFromClient  = ['ELECTRONIC','MANUAL'].includes(dsmRaw) ? dsmRaw : 'ELECTRONIC';
 
     if (!hasRequireRefToPay)     body.require_reference_to_pay     = payRefDefault;
     if (!hasRequireRefToInvoice) body.require_reference_to_invoice = invRefDefault;
@@ -7622,7 +7630,7 @@ async function handleContractsCreate(env, req) {
   body.require_reference_to_invoice = clampBool(body.require_reference_to_invoice, false);
 
   let defaultSubmissionMode = String(body.default_submission_mode || '').toUpperCase();
-  if (!['ELECTRONIC','MANUAL','QR'].includes(defaultSubmissionMode)) {
+  if (!['ELECTRONIC','MANUAL'].includes(defaultSubmissionMode)) {
     defaultSubmissionMode = 'ELECTRONIC';
   }
 
@@ -7796,6 +7804,7 @@ async function handleContractsCreate(env, req) {
 
       // ✅ NEW: persist overrideclientsettings
       overrideclientsettings,
+      candidate_paper_submission_enabled_override,
 
       // ✅ NEW: persist is_ad_hoc
       is_ad_hoc,
@@ -10862,7 +10871,6 @@ async function handleContractsUpdate(env, req, contractId) {
 
   if ('display_site' in body) patch.display_site = (body.display_site ?? '').toString().trim();
   if ('ward_hint'    in body) patch.ward_hint    = (body.ward_hint ?? '').toString().trim();
-
   // ✅ NEW: contract.is_ad_hoc (persist)
   if ('is_ad_hoc' in body) {
     patch.is_ad_hoc = clampBool(body.is_ad_hoc, !!current.is_ad_hoc);
@@ -10876,8 +10884,8 @@ async function handleContractsUpdate(env, req, contractId) {
 
     let desired = null;
     if (!s || s === 'INHERIT') desired = null;
-    else if (['ELECTRONIC','MANUAL','QR'].includes(s)) desired = s;
-    else return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR (or INHERIT/null to clear)'));
+    else if (['ELECTRONIC','MANUAL'].includes(s)) desired = s;
+    else return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL (or INHERIT/null to clear)'));
 
     const effOverride = Object.prototype.hasOwnProperty.call(patch, 'overrideclientsettings')
       ? !!patch.overrideclientsettings
@@ -11486,7 +11494,7 @@ async function handleContractsReplace(env, req, contractId) {
   const parseDefaultSubmissionMode = (raw) => {
     const s = (raw == null) ? '' : String(raw).trim().toUpperCase();
     if (!s || s === 'INHERIT') return null;
-    if (['ELECTRONIC','MANUAL','QR'].includes(s)) return s;
+    if (['ELECTRONIC','MANUAL'].includes(s)) return s;
     return '__INVALID__';
   };
 
@@ -11523,7 +11531,7 @@ async function handleContractsReplace(env, req, contractId) {
   if ('default_submission_mode' in body) {
     const parsed = parseDefaultSubmissionMode(body.default_submission_mode);
     if (parsed === '__INVALID__') {
-      return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC, MANUAL or QR (or INHERIT/null to clear)'));
+      return withCORS(env, req, badRequest('default_submission_mode must be ELECTRONIC or MANUAL (or INHERIT/null to clear)'));
     }
     desiredDefaultSubmissionMode = parsed;
   }
@@ -11700,7 +11708,6 @@ async function handleContractsReplace(env, req, contractId) {
     is_ad_hoc: isAdHoc,
 
     overrideclientsettings,
-
     is_nhsp:               ('is_nhsp' in body)               ? boolOrNull(body.is_nhsp, !!current.is_nhsp) : (current.is_nhsp ?? null),
     autoprocess_hr:        ('autoprocess_hr' in body)        ? boolOrNull(body.autoprocess_hr, !!current.autoprocess_hr) : (current.autoprocess_hr ?? null),
     requires_hr:           ('requires_hr' in body)           ? boolOrNull(body.requires_hr, !!current.requires_hr) : (current.requires_hr ?? null),
@@ -12067,6 +12074,7 @@ async function handleContractsDuplicate(env, req, contractId) {
 
       // NEW: contract override flag + governed nullable booleans
       overrideclientsettings: !!src.overrideclientsettings,
+      candidate_paper_submission_enabled_override: copyBoolOrNull(src.candidate_paper_submission_enabled_override),
 
       is_nhsp: copyBoolOrNull(src.is_nhsp),
       autoprocess_hr: copyBoolOrNull(src.autoprocess_hr),
@@ -137691,6 +137699,104 @@ async function handleContractManagerAuthoriserPolicyUpdate(env, req, contractId)
   }
 }
 
+function printedTimesheetPolicyErrorResponse(env, req, message, status = 400, errorCode = 'PRINTED_TIMESHEET_POLICY_UPDATE_FAILED') {
+  return withCORS(env, req, new Response(JSON.stringify({
+    ok: false,
+    error_code: errorCode,
+    message
+  }), { status, headers: JSON_HEADERS }));
+}
+
+async function handleClientPrintedTimesheetPolicyUpdate(env, req, clientId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await parseJSONBody(req);
+  const allowedKeys = new Set(['enabled', 'expected_settings_updated_at', 'request_key']);
+  if (!body || Array.isArray(body) || Object.keys(body).some((key) => !allowedKeys.has(key))) {
+    return withCORS(env, req, badRequest('Only the Client printed-timesheet setting can be changed here.'));
+  }
+  if (typeof body.enabled !== 'boolean' || !body.expected_settings_updated_at || String(body.request_key || '').trim().length < 16) {
+    return withCORS(env, req, badRequest('The printed-timesheet setting, current settings version and stable request key are required.'));
+  }
+
+  const current = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?client_id=eq.${enc(clientId)}` +
+      `&select=id,client_id,candidate_paper_submission_enabled,updated_at` +
+      `&order=effective_from.desc,created_at.desc&limit=1`
+  );
+  if (!current) return printedTimesheetPolicyErrorResponse(env, req, 'Client settings were not found. Reload the Client and try again.', 409, 'CLIENT_SETTINGS_VERSION_CONFLICT');
+  if (String(current.updated_at || '') !== String(body.expected_settings_updated_at || '')) {
+    return printedTimesheetPolicyErrorResponse(env, req, 'Client settings changed. Reload and try again.', 409, 'CLIENT_SETTINGS_VERSION_CONFLICT');
+  }
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/client_settings` +
+      `?id=eq.${enc(current.id)}` +
+      `&updated_at=eq.${enc(current.updated_at)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        candidate_paper_submission_enabled: body.enabled,
+        updated_at: nowIso()
+      })
+    }
+  );
+  if (!res.ok) return printedTimesheetPolicyErrorResponse(env, req, 'The Client printed-timesheet setting was not changed.');
+  const rows = await res.json().catch(() => []);
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row) return printedTimesheetPolicyErrorResponse(env, req, 'Client settings changed. Reload and try again.', 409, 'CLIENT_SETTINGS_VERSION_CONFLICT');
+  return withCORS(env, req, ok({ client_settings: row }));
+}
+
+async function handleContractPrintedTimesheetPolicyUpdate(env, req, contractId) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  const body = await parseJSONBody(req);
+  const allowedKeys = new Set(['override', 'expected_contract_updated_at', 'request_key']);
+  if (!body || Array.isArray(body) || Object.keys(body).some((key) => !allowedKeys.has(key))) {
+    return withCORS(env, req, badRequest('Only the Contract printed-timesheet policy can be changed here.'));
+  }
+  const overrideValid = body.override === null || typeof body.override === 'boolean';
+  if (!overrideValid || !body.expected_contract_updated_at || String(body.request_key || '').trim().length < 16) {
+    return withCORS(env, req, badRequest('The printed-timesheet policy, current Contract version and stable request key are required.'));
+  }
+
+  const current = await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?id=eq.${enc(contractId)}` +
+      `&select=id,candidate_paper_submission_enabled_override,updated_at`
+  );
+  if (!current) return withCORS(env, req, notFound('Contract not found'));
+  if (String(current.updated_at || '') !== String(body.expected_contract_updated_at || '')) {
+    return printedTimesheetPolicyErrorResponse(env, req, 'The Contract changed. Reload and try again.', 409, 'CONTRACT_VERSION_CONFLICT');
+  }
+
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/contracts` +
+      `?id=eq.${enc(contractId)}` +
+      `&updated_at=eq.${enc(current.updated_at)}`,
+    {
+      method: 'PATCH',
+      headers: { ...sbHeaders(env), Prefer: 'return=representation' },
+      body: JSON.stringify({
+        candidate_paper_submission_enabled_override: body.override,
+        updated_at: nowIso()
+      })
+    }
+  );
+  if (!res.ok) return printedTimesheetPolicyErrorResponse(env, req, 'The Contract printed-timesheet policy was not changed.');
+  const rows = await res.json().catch(() => []);
+  const row = Array.isArray(rows) ? rows[0] : rows;
+  if (!row) return printedTimesheetPolicyErrorResponse(env, req, 'The Contract changed. Reload and try again.', 409, 'CONTRACT_VERSION_CONFLICT');
+  return withCORS(env, req, ok({ contract: row }));
+}
+
 async function handleUpdateClient(env, req, clientId) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -137856,6 +137962,10 @@ async function handleUpdateClient(env, req, clientId) {
     const csInput = {
       ...((data.client_settings && typeof data.client_settings === 'object') ? data.client_settings : {})
     };
+
+    // Existing Client printed-timesheet policy has its own version-aware route.
+    // Never let a broad Client save rewrite it with unrelated settings.
+    delete csInput.candidate_paper_submission_enabled;
 
     delete csInput.weekly_mode;
     delete csInput.hr_weekly_behaviour;
@@ -195322,6 +195432,10 @@ if (req.method === 'POST' && p === '/api/job-titles')                 return han
         if (managerAuthorisers && req.method === 'GET') return handleClientManagerAuthoriserPolicyGet(env, req, managerAuthorisers.id);
         if (managerAuthorisers && req.method === 'PUT') return handleClientManagerAuthoriserPolicyUpdate(env, req, managerAuthorisers.id);
       }
+      {
+        const printedPolicy = matchPath(p, '/api/clients/:id/printed-timesheet-policy');
+        if (printedPolicy && req.method === 'PATCH') return handleClientPrintedTimesheetPolicyUpdate(env, req, printedPolicy.id);
+      }
 {
   const m = matchPath(p, '/api/summary-typeahead/:section');
   if (m && req.method === 'POST') return handleSummaryTypeAheadLookup(env, req, m.section);
@@ -196102,6 +196216,10 @@ if (req.method === 'GET' && p === '/api/contracts/count') return handleContracts
         const managerAuthorisers = matchPath(p, '/api/contracts/:id/manager-authorisers');
         if (managerAuthorisers && req.method === 'GET') return handleContractManagerAuthoriserPolicyGet(env, req, managerAuthorisers.id);
         if (managerAuthorisers && req.method === 'PUT') return handleContractManagerAuthoriserPolicyUpdate(env, req, managerAuthorisers.id);
+      }
+      {
+        const printedPolicy = matchPath(p, '/api/contracts/:id/printed-timesheet-policy');
+        if (printedPolicy && req.method === 'PATCH') return handleContractPrintedTimesheetPolicyUpdate(env, req, printedPolicy.id);
       }
 
       {
