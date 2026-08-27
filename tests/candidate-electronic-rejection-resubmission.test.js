@@ -15,6 +15,9 @@ const pendingAuthRepair = read(
 const pendingAuthUnlock = read(
   'supabase/migrations/27082026_0459_unlock_repaired_electronic_rejection_replacements.sql'
 );
+const historicalShapeRepair = read(
+  'supabase/migrations/27082026_0514_repair_historical_electronic_rejection_route_and_lifecycle.sql'
+);
 const verification = read(
   'supabase/verification/27082026_0427_candidate_electronic_rejection_resubmission_verification.sql'
 );
@@ -70,6 +73,24 @@ test('one-time repair is limited to empty audited electronic rejection replaceme
   ]) assert.match(pendingAuthUnlock, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(pendingAuthUnlock, /CANDIDATE_ELECTRONIC_REJECTION_REPLACEMENT_UNLOCKED/);
   assert.doesNotMatch(pendingAuthUnlock, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
+
+  for (const required of [
+    "rotation_audit.action='CANDIDATE_ELECTRONIC_REJECTED_VERSION_ROTATED'",
+    "workflow.route in ('PHONE','EMAIL')",
+    "current_timesheet.submission_mode='MANUAL'",
+    "week_row.submission_mode_snapshot='ELECTRONIC'",
+    "financials.processing_status in ('UNPROCESSED','PENDING_AUTH')",
+    "set submission_mode='ELECTRONIC'",
+    "set processing_status='UNPROCESSED'",
+    "coalesce(current_timesheet.actual_schedule_json,'[]'::jsonb) in ('[]'::jsonb,'{}'::jsonb)",
+    'financials.authorised_at_utc is null',
+    'financials.paid_at_utc is null',
+    'financials.locked_by_invoice_id is null',
+    'replacement.replacement_of_workflow_id=workflow.id'
+  ]) assert.match(historicalShapeRepair, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(historicalShapeRepair, /CANDIDATE_ELECTRONIC_REJECTION_REPLACEMENT_REPAIRED/);
+  assert.doesNotMatch(historicalShapeRepair, /rotation_audit\.after_json->>'new_timesheet_id'/);
+  assert.doesNotMatch(historicalShapeRepair, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
 test('installed-state verification and real resubmission regression are release-wired', () => {

@@ -34,7 +34,6 @@ begin
       on rotation_audit.object_type='timesheet'
      and rotation_audit.object_id_text=current_timesheet.timesheet_id::text
      and rotation_audit.action='CANDIDATE_ELECTRONIC_REJECTED_VERSION_ROTATED'
-     and rotation_audit.after_json->>'new_timesheet_id'=current_timesheet.timesheet_id::text
     join public.timesheets_financials financials
       on financials.timesheet_id=current_timesheet.timesheet_id
      and financials.is_current=true
