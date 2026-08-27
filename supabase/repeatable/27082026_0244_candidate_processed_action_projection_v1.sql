@@ -139,11 +139,11 @@ begin
       'INVOICED'::public.contract_week_status_enum,'CANCELLED'::public.contract_week_status_enum
     ),false);
   v_candidate_mutation_locked:=v_fin.authorised_at_utc is not null
-    or v_fin.processing_status in (
+    or coalesce(v_fin.processing_status in (
       'PENDING_AUTH'::public.ts_fin_processing_status_enum,
       'READY_FOR_HR'::public.ts_fin_processing_status_enum,
       'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-    );
+    ),false);
   if v_candidate_mutation_locked then
     v_reasons:=v_reasons||'"CANDIDATE_MUTATION_LOCKED_AUTHORISED"'::jsonb;
   end if;

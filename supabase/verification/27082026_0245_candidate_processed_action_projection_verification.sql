@@ -11,6 +11,7 @@ declare
   v_contract_id uuid:='00000000-0000-4000-8000-00000000f103';
   v_week_id uuid:='00000000-0000-4000-8000-00000000f104';
   v_timesheet_id uuid:='00000000-0000-4000-8000-00000000f105';
+  v_planned_week_id uuid:='00000000-0000-4000-8000-00000000f106';
   v_capabilities jsonb;
   v_actions jsonb;
   v_definition text;
@@ -31,6 +32,31 @@ begin
     v_contract_id,v_candidate_id,v_client_id,current_date-60,current_date+60,
     extract(dow from current_date)::integer,'ELECTRONIC'
   );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id
+  ) values(
+    v_planned_week_id,v_contract_id,current_date-7,0,'PLANNED','ELECTRONIC',null
+  );
+
+  v_capabilities:=private._candidate_record_capabilities_v1(
+    null,v_planned_week_id,'{}'::jsonb
+  );
+  if v_capabilities->'candidate_mutation_locked'<>'false'::jsonb
+     or v_capabilities->'candidate_hours_submission_allowed'<>'true'::jsonb
+     or v_capabilities->'can_edit_hours'<>'true'::jsonb then
+    raise exception 'CANDIDATE_PLANNED_CAPABILITY_PROJECTION_INVALID: %',v_capabilities;
+  end if;
+  v_actions:=private._candidate_timesheet_action_contract_v1(
+    'PLANNED','[]'::jsonb,v_capabilities,null,v_planned_week_id,clock_timestamp()
+  );
+  if v_actions#>>'{primary_action,code}'<>'ENTER_TIMESHEET'
+     or not exists(
+       select 1 from jsonb_array_elements(coalesce(v_actions->'available_actions','[]'::jsonb)) item
+       where item->>'code'='ENTER_TIMESHEET' and coalesce((item->>'enabled')::boolean,false)
+     ) then
+    raise exception 'CANDIDATE_PLANNED_ACTION_PROJECTION_INVALID: %',v_actions;
+  end if;
+
   insert into public.timesheets(
     timesheet_id,contract_id,week_ending_date,line_type,submission_mode,sheet_scope,
     r2_nurse_key,r2_auth_key
