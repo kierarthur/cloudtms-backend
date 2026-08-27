@@ -4640,6 +4640,14 @@ begin
       v_submission_withdrawal_reset:=private._candidate_weekly_withdrawal_reset_v1(
         v_workflow.id,v_cancel_reason,p_now_utc
       );
+    elsif v_action='CANCEL'
+       and v_workflow.scope='DAILY'
+       and v_workflow.workflow_kind='DAILY' then
+      v_submission_withdrawal_reset:=private._candidate_daily_submission_reset_v1(
+        coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id),
+        coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id),
+        v_cancel_reason,v_workflow.candidate_id,'CANDIDATE_WITHDRAWN',p_now_utc
+      );
     end if;
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
       'state',v_action||case when v_action='CANCEL' then 'LED' else 'D' end,

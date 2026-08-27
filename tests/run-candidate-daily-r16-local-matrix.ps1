@@ -1,6 +1,7 @@
 param(
   [string]$Container = '',
-  [int]$Port = 55438
+  [int]$Port = 55438,
+  [switch]$FocusedWithdrawalProof
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +42,7 @@ $installFiles = @(
   'supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql',
   'supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql',
   'supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql',
+  'supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql',
   'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql',
   'supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql',
   'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql',
@@ -101,10 +103,22 @@ $suites = @(
   'tests/17082026_0955_candidate_daily_authority_transition_runtime_verification.sql',
   'tests/18082026_0138_candidate_daily_first_generation_source_link_runtime_verification.sql',
   'tests/18082026_0807_candidate_daily_r16_identity_integrity_runtime_verification.sql',
-  'tests/18082026_1105_candidate_daily_r17_authority_transition_source_identity_runtime_verification.sql'
+  'tests/18082026_1105_candidate_daily_r17_authority_transition_source_identity_runtime_verification.sql',
+  'supabase/verification/27082026_1327_candidate_daily_withdrawal_reset_verification.sql'
 )
 
 foreach ($file in $installFiles) { Invoke-CandidateSqlFile $file }
+if ($FocusedWithdrawalProof) {
+  Invoke-CandidateSqlFile 'supabase/verification/27082026_1327_candidate_daily_withdrawal_reset_verification.sql'
+  if ($Container) {
+    $version = docker exec $Container psql -X -U postgres -d postgres -tAc 'show server_version'
+  } else {
+    $version = psql -X -h 127.0.0.1 -p $Port -U postgres -d postgres -tAc 'show server_version'
+  }
+  if ($LASTEXITCODE -ne 0) { throw 'PostgreSQL version proof failed' }
+  "PostgreSQL=$($version.Trim()) CandidateDailyWithdrawalFirstUse=PASS"
+  return
+}
 foreach ($file in $suites) { Invoke-CandidateSqlFile $file }
 
 $env:CANDIDATE_DAILY_POSTGRES_CHAIN = '1'

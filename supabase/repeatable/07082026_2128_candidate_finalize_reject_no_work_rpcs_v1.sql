@@ -1528,7 +1528,9 @@ begin
     raise exception 'TIMESHEET_MOVED' using errcode='40001';
   end if;
   select * into v_week from public.contract_weeks where timesheet_id=v_timesheet.timesheet_id for update;
-  if not found then raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002'; end if;
+  if not found and v_timesheet.sheet_scope<>'DAILY'::public.timesheet_scope_enum then
+    raise exception 'CANDIDATE_CONTRACT_WEEK_NOT_FOUND' using errcode='P0002';
+  end if;
   select * into v_fin from public.timesheets_financials
   where timesheet_id=v_timesheet.timesheet_id and is_current=true for update;
   if v_fin.authorised_at_utc is not null or v_timesheet.authorised_at_server is not null then
@@ -1597,7 +1599,14 @@ begin
     end if;
   end if;
 
-  if v_qr_backed then
+  if v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum then
+    v_new_timesheet_id:=nullif(
+      private._candidate_daily_submission_reset_v1(
+        v_timesheet.timesheet_id,v_timesheet.timesheet_id,btrim(p_reason),
+        p_actor_user_id,'OFFICE_REJECTED',p_now_utc
+      )->>'current_timesheet_id',''
+    )::uuid;
+  elsif v_qr_backed then
     select * into v_qr_result from public.timesheet_qr_refuse_and_reset(
       v_timesheet.timesheet_id,v_timesheet.timesheet_id,btrim(p_reason),p_actor_user_id
     );
@@ -1619,7 +1628,10 @@ begin
   where timesheet_id=v_new_timesheet_id;
 
   update public.timesheets_financials set
-    processing_status='UNPROCESSED',worked_start_iso=null,worked_end_iso=null,break_start_iso=null,break_end_iso=null,
+    processing_status=case when v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum
+      then 'UNASSIGNED'::public.ts_fin_processing_status_enum
+      else 'UNPROCESSED'::public.ts_fin_processing_status_enum end,
+    worked_start_iso=null,worked_end_iso=null,break_start_iso=null,break_end_iso=null,
     break_minutes=null,hours_day=0,hours_night=0,hours_sat=0,hours_sun=0,hours_bh=0,total_hours=0,
     additional_units_json='{}'::jsonb,additional_pay_ex_vat=0,additional_charge_ex_vat=0,additional_margin_ex_vat=0,
     expenses_pay_ex_vat=0,expenses_charge_ex_vat=0,expenses_description=null,expenses_evidence_r2_key=null,
@@ -1630,8 +1642,10 @@ begin
     authorised_at_utc=null,authorised_by_user_id=null,updated_at=p_now_utc
   where timesheet_id=v_new_timesheet_id and is_current=true;
 
-  update public.contract_weeks set status='OPEN',day_entries_json='[]'::jsonb,
-    totals_json='{}'::jsonb,updated_at=p_now_utc where id=v_week.id;
+  if v_week.id is not null then
+    update public.contract_weeks set status='OPEN',day_entries_json='[]'::jsonb,
+      totals_json='{}'::jsonb,updated_at=p_now_utc where id=v_week.id;
+  end if;
   update public.timesheet_evidence set processing_state='SUPERSEDED'
   where timesheet_id=v_timesheet.timesheet_id and processing_state<>'SUPERSEDED';
   for v_workflow in
@@ -1669,7 +1683,10 @@ begin
   end loop;
   v_response:=jsonb_build_object(
     'ok',true,'old_timesheet_id',v_timesheet.timesheet_id,'timesheet_id',v_new_timesheet_id,
-    'contract_week_id',v_week.id,'contract_week_status','OPEN','processing_status','UNPROCESSED',
+    'scope',case when v_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum then 'DAILY' else 'WEEKLY' end,
+    'contract_week_id',v_week.id,
+    'contract_week_status',case when v_week.id is null then null else 'OPEN' end,
+    'processing_status',case when v_week.id is null then 'UNASSIGNED' else 'UNPROCESSED' end,
     'rejection_scope',v_reject_scope,'qr_reissue_required',v_qr_backed,
     'paper_retirement_receipt',v_paper_retirement_result,
     'idempotency_key',p_idempotency_key
