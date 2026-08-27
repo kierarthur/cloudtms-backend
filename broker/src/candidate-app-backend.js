@@ -2776,8 +2776,10 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
     ? frozenPresentation.worker
     : candidateNameParts(candidate);
   const formVariant = phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW';
-  const signedDate = text(workflow.candidate_signed_at_utc).slice(0, 10) || null;
-  const managerDate = text(workflow.manager_approved_at_utc || contract.manager?.approval_date_utc).slice(0, 10) || null;
+  const signedDate = londonCalendarDate(workflow.candidate_signed_at_utc);
+  const managerDate = londonCalendarDate(
+    workflow.manager_approved_at_utc || contract.manager?.approval_date_utc
+  );
   const branding = await candidateDocumentBranding(env, workflow);
   const model = {
     schema_version: 'TIMESHEET_RENDER_MODEL_V2',
@@ -3091,7 +3093,9 @@ async function renderExpensePage(env, contract, state, phase) {
   if (phase === 'FINAL') {
     page.drawText(`Approved by ${workflow.manager_name || contract.manager?.name || ''}`, { x: 48, y: 116, size: 10, font: bold });
     page.drawText(`Position: ${workflow.manager_position || contract.manager?.position || ''}`, { x: 48, y: 98, size: 9, font: regular });
-    page.drawText(`Approval date: ${text(workflow.manager_approved_at_utc || contract.manager?.approval_date_utc).slice(0, 10)}`, { x: 48, y: 80, size: 9, font: regular });
+    page.drawText(`Approval date: ${londonCalendarDate(
+      workflow.manager_approved_at_utc || contract.manager?.approval_date_utc
+    ) || ''}`, { x: 48, y: 80, size: 9, font: regular });
     const signature = await signatureAsset(env, workflow.manager_signature_component_id, contract.manager?.signature_storage_key, contract.manager?.signature_sha256);
     if (!signature.data?.data_url) throw new CandidateHttpError(409, 'MANAGER_SIGNATURE_REQUIRED');
     const decoded = base64UrlDecode(signature.data.data_url.split(',')[1].replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, ''));
@@ -4616,6 +4620,23 @@ async function handleDocumentStream(request, env, deps, owner, workflowId, compo
 function ukDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(value));
   return match ? `${match[3]}/${match[2]}/${match[1]}` : '-';
+}
+
+function londonCalendarDate(value) {
+  const date = new Date(text(value));
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date).reduce((result, part) => {
+    if (part.type !== 'literal') result[part.type] = part.value;
+    return result;
+  }, {});
+  return parts.year && parts.month && parts.day
+    ? `${parts.year}-${parts.month}-${parts.day}`
+    : null;
 }
 
 async function appendPdfBytes(target, sourceBytes) {
@@ -6736,6 +6757,7 @@ export const candidateAppBackendInternals = Object.freeze({
   preparedCandidateComponentReplay,
   expenseSummaryDisplayLines,
   mileageJourneyRows,
+  londonCalendarDate,
   officialPeriodWithShiftLines,
   paperPackIdentity,
   candidatePaperDeliveryGeneration,

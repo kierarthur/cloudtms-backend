@@ -37,6 +37,7 @@ const {
   candidateDocumentBranding,
   createAccessToken,
   mileageClaimFormBytes,
+  londonCalendarDate,
   knownErrorCode,
   officeErrorCode,
   renderExpensePage,
@@ -70,6 +71,12 @@ test('Candidate RPC failures prefer the database closed code over the transport 
     hint: null
   };
   assert.equal(knownErrorCode(error), 'CANDIDATE_FEATURE_DISABLED');
+});
+
+test('official signature dates use the Europe/London calendar date across midnight BST', () => {
+  assert.equal(londonCalendarDate('2026-08-27T23:30:11.000Z'), '2026-08-28');
+  assert.equal(londonCalendarDate('2026-01-27T23:30:11.000Z'), '2026-01-27');
+  assert.equal(londonCalendarDate('not-a-date'), null);
 });
 
 test('Candidate expense placement closes the controlling RPC response', () => {
