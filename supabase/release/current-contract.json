@@ -3244,6 +3244,30 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_daily_submission_reset_v1(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_reason text, p_actor_user_id uuid, p_event text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "48b699780c35aa8f873184b31eef1d1664da786a8efc57514ee0b434af7941c0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
         }
       ],
       "owner": "postgres",
@@ -4424,7 +4448,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2547b67b19b7a630bb6623f0ecd58a7426551161978f5c5f297c965ebfbc8ab5"
+      "definition_sha256": "4be454e3c0c3c90e340921ddf438059f8c4a28a9cd8a1dfea2dd067b5c379837"
     },
     {
       "acl": [
@@ -13179,7 +13203,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4a4945d9c1359961705b6404dff9f140baad72359a7e7322a8430fdcc2fa7497"
+      "definition_sha256": "c43a7440cbc9f5e2f3cf113bbf18df2b9274f8c5abc97d648c109dcc601b8c6a"
     },
     {
       "acl": [
@@ -13323,7 +13347,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "33ece1b18e12533e6859c941fa51cc80c6d1da272b3fa2af41a0e72272f8923e"
+      "definition_sha256": "d5cda3793315749c400cfa8c8587f4f9ccb1f7b3a08276cafd140172b42dfa21"
     },
     {
       "acl": [
@@ -13347,7 +13371,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f35d35cd27b8623d557a0da202d690990dedb5b36e6d127295a0d5bd24c88f92"
+      "definition_sha256": "b0a01b0f931049abe0dac6389617ebe746323b835d88fab2bb5f52ac192443ad"
     },
     {
       "acl": [
