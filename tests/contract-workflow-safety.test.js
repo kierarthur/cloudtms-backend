@@ -35,6 +35,18 @@ test('Contract replacement uses the same lifecycle locks and preserves week-endi
   assert.match(replace, /Week-ending day cannot be changed after contract weeks have been created/);
 });
 
+test('Contract date boundaries use actual protected work dates rather than whole week edges', () => {
+  const replace = section('async function handleContractsReplace', 'async function handleContractsDelete');
+  assert.match(replace, /select=work_date,status/);
+  assert.match(replace, /nonProtectedStatuses/);
+  assert.match(replace, /minProtectedWorkDate/);
+  assert.match(replace, /maxProtectedWorkDate/);
+  assert.match(replace, /start_date cannot be after earliest protected work date/);
+  assert.match(replace, /end_date cannot be before latest protected work date/);
+  assert.doesNotMatch(replace, /start_date cannot be after start of earliest submitted week/);
+  assert.doesNotMatch(replace, /end_date cannot be before latest submitted week ending/);
+});
+
 test('duplicate Contract supports assigned and vacant copies with optimistic locking and fatal week generation', () => {
   const duplicate = section('async function handleContractsDuplicate', 'async function generateContractWeeksInternal');
   assert.match(duplicate, /expected_source_updated_at/);

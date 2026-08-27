@@ -11736,33 +11736,33 @@ async function handleContractsReplace(env, req, contractId) {
   const newStart = ('start_date' in body) ? toYmd(body.start_date) : current.start_date;
   const newEnd   = ('end_date'   in body) ? toYmd(body.end_date)   : current.end_date;
 
-  let minWE = null, maxWE = null;
+  let minProtectedWorkDate = null, maxProtectedWorkDate = null;
   try {
-    const { rows: minRows } = await sbFetch(
+    const { rows: protectedRows } = await sbFetch(
       env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=week_ending_date` +
-      `&order=week_ending_date.asc&limit=1`
+      `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?contract_id=eq.${enc(contractId)}` +
+      `&select=work_date,status`
     );
-    minWE = (minRows && minRows[0] && minRows[0].week_ending_date) || null;
-
-    const { rows: maxRows } = await sbFetch(
-      env,
-      `${env.SUPABASE_URL}/rest/v1/contract_weeks` +
-      `?contract_id=eq.${enc(contractId)}&timesheet_id=not.is.null&select=week_ending_date` +
-      `&order=week_ending_date.desc&limit=1`
-    );
-    maxWE = (maxRows && maxRows[0] && maxRows[0].week_ending_date) || null;
+    const nonProtectedStatuses = new Set(['DRAFT','VOID','VOIDED','CANCELLED','CANCELED']);
+    for (const row of (protectedRows || [])) {
+      const status = String(row?.status || '').trim().toUpperCase();
+      const workDate = toYmd(row?.work_date);
+      if (!workDate || nonProtectedStatuses.has(status)) continue;
+      if (!minProtectedWorkDate || workDate < minProtectedWorkDate) minProtectedWorkDate = workDate;
+      if (!maxProtectedWorkDate || workDate > maxProtectedWorkDate) maxProtectedWorkDate = workDate;
+    }
   } catch {}
 
-  if (minWE) {
-    const minWeekStart = addDays(minWE, -6);
-    if (newStart > minWeekStart) {
-      return withCORS(env, req, badRequest(`start_date cannot be after start of earliest submitted week (${minWeekStart})`));
-    }
+  if (minProtectedWorkDate && newStart > minProtectedWorkDate) {
+    return withCORS(env, req, badRequest(
+      `start_date cannot be after earliest protected work date (${minProtectedWorkDate})`
+    ));
   }
-  if (maxWE && newEnd < maxWE) {
-    return withCORS(env, req, badRequest(`end_date cannot be before latest submitted week ending (${maxWE})`));
+  if (maxProtectedWorkDate && newEnd < maxProtectedWorkDate) {
+    return withCORS(env, req, badRequest(
+      `end_date cannot be before latest protected work date (${maxProtectedWorkDate})`
+    ));
   }
 
   const hasIsAdHoc = Object.prototype.hasOwnProperty.call(body, 'is_ad_hoc');
