@@ -12311,6 +12311,30 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
+      "identity": "candidate_component_prepare_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "18149ee5dcbfaf94191fc10afb28ffc126152d2beb9e98332c9b3bc2a8d6a164"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
       "identity": "candidate_contract_week_add_missing_atomic_v1(p_session_id uuid, p_environment text, p_contract_id uuid, p_week_ending_date date, p_idempotency_key text, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "v",
