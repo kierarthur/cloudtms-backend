@@ -54,6 +54,7 @@ const {
   uploadTicket,
   validateComponentBytes,
   verifyUploadTicket,
+  authenticateUploadOwner,
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
@@ -2169,6 +2170,87 @@ test('component upload tickets are encrypted and do not disclose the R2 key', as
   const opened = await verifyUploadTicket(env, ticket);
   assert.equal(opened.key, storageKey);
   assert.equal(opened.owner, 'candidate');
+});
+
+test('Candidate upload authority survives a short-lived federated session projection rotation', async () => {
+  const accountId = '00000000-0000-4000-8000-000000000611';
+  const candidateId = '00000000-0000-4000-8000-000000000612';
+  const oldSessionId = '00000000-0000-4000-8000-000000000613';
+  const currentSession = {
+    id: '00000000-0000-4000-8000-000000000614',
+    account_id: accountId,
+    selected_candidate_id: candidateId,
+    environment: 'TEST', status: 'ACTIVE', rotation: 0,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-01T00:00:00.000Z'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([currentSession]);
+    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
+  };
+  try {
+    const token = await createAccessToken(env, { ...currentSession, session_id: currentSession.id });
+    const owner = await authenticateUploadOwner(new Request(
+      'https://private.test/candidate-app/v1/uploads/encrypted', {
+        method: 'PUT', headers: { authorization: `Bearer ${token}` }
+      }
+    ), env, {}, {
+      owner: 'candidate', authority_kind: 'CANDIDATE_SESSION',
+      owner_id: oldSessionId, candidate_account_id: accountId, candidate_id: candidateId
+    });
+    assert.equal(owner.session_id, currentSession.id);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate upload stable binding rejects another Candidate on the same account', async () => {
+  const accountId = '00000000-0000-4000-8000-000000000621';
+  const currentSession = {
+    id: '00000000-0000-4000-8000-000000000622',
+    account_id: accountId,
+    selected_candidate_id: '00000000-0000-4000-8000-000000000623',
+    environment: 'TEST', status: 'ACTIVE', rotation: 0,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-01T00:00:00.000Z'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([currentSession]);
+    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
+  };
+  try {
+    const token = await createAccessToken(env, { ...currentSession, session_id: currentSession.id });
+    await assert.rejects(
+      authenticateUploadOwner(new Request(
+        'https://private.test/candidate-app/v1/uploads/encrypted', {
+          method: 'PUT', headers: { authorization: `Bearer ${token}` }
+        }
+      ), env, {}, {
+        owner: 'candidate', authority_kind: 'CANDIDATE_SESSION',
+        owner_id: currentSession.id, candidate_account_id: accountId,
+        candidate_id: '00000000-0000-4000-8000-000000000624'
+      }),
+      error => error?.code === 'CANDIDATE_UPLOAD_TICKET_INVALID'
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('Candidate component preparation reissues an upload ticket from the exact durable replay without another mutation', async () => {

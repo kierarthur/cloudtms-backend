@@ -2177,6 +2177,10 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     env: environment,
     authority_kind: authority?.authority_kind || 'CANDIDATE_SESSION',
     owner, owner_id: ownerId, workflow_id: workflowId,
+    ...(owner === 'candidate' ? {
+      candidate_account_id: candidateAccess.account_id,
+      candidate_id: candidateAccess.selected_candidate_id
+    } : {}),
     candidate_session_id: null,
     generation: authoritative.workflow_generation, component_id: componentId, component_kind: authoritative.component_kind,
     key: authoritative.storage_key, media_type: authoritative.media_type, byte_size: authoritative.byte_size,
@@ -2218,7 +2222,18 @@ async function authenticateUploadOwner(request, env, deps, ticket) {
       throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
     }
     const access = await verifyCandidateAccess(request, env);
-    if (access.session_id !== ticket.owner_id) throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+    const stableCandidateBinding = UUID_RE.test(text(ticket.candidate_account_id))
+      && UUID_RE.test(text(ticket.candidate_id));
+    if (stableCandidateBinding) {
+      if (access.account_id !== ticket.candidate_account_id
+          || access.selected_candidate_id !== ticket.candidate_id) {
+        throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+      }
+    } else if (access.session_id !== ticket.owner_id) {
+      // Compatibility for upload tickets issued before the stable
+      // account-and-Candidate binding was introduced.
+      throw new CandidateHttpError(401, 'CANDIDATE_UPLOAD_TICKET_INVALID');
+    }
     return { session_id: access.session_id, approval_token_hash_hex: null };
   }
   if (ticket.owner === 'manager') {
@@ -6667,6 +6682,7 @@ export const candidateAppBackendInternals = Object.freeze({
   officialPresentationFromRows,
   uploadTicket,
   verifyUploadTicket,
+  authenticateUploadOwner,
   withoutInternalRenderContracts,
   safeFinalisationResult,
   safeQrPackResponse,
