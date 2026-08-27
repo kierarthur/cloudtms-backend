@@ -20,6 +20,7 @@ const {
   officialPresentationFromRows,
   immutablePut,
   preparedUploadContract,
+  preparedCandidateComponentReplay,
   expenseSummaryDisplayLines,
   mileageJourneyRows,
   officialPeriodWithShiftLines,
@@ -2168,6 +2169,120 @@ test('component upload tickets are encrypted and do not disclose the R2 key', as
   const opened = await verifyUploadTicket(env, ticket);
   assert.equal(opened.key, storageKey);
   assert.equal(opened.owner, 'candidate');
+});
+
+test('Candidate component preparation reissues an upload ticket from the exact durable replay without another mutation', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-000000000401',
+    session_id: '00000000-0000-4000-8000-000000000401',
+    account_id: '00000000-0000-4000-8000-000000000402',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000403',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-000000000404';
+  const componentId = '00000000-0000-4000-8000-000000000405';
+  const idempotencyKey = '00000000-0000-4000-8000-000000000406';
+  const workflow = {
+    id: workflowId, account_id: session.account_id,
+    candidate_id: session.selected_candidate_id,
+    environment: 'TEST', generation: 2, state: 'WORKER_DRAFT'
+  };
+  const component = {
+    id: componentId, workflow_id: workflowId, workflow_generation: 2,
+    component_kind: 'CANDIDATE_SIGNATURE', document_role: 'CANDIDATE_SIGNATURE',
+    expense_category: null, paper_return_page_key: null,
+    storage_key: 'candidate-app/test/workflow/2/source/candidate-signature-original.png',
+    media_type: 'image/png', byte_size: 321, state: 'PENDING',
+    upload_idempotency_key: idempotencyKey, approval_request_id: null,
+    manager_signature_capture_method: null, expected_source_content_sha256: null
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  const reads = [];
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    reads.push(target.pathname);
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([component]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 2, component_kind: 'CANDIDATE_SIGNATURE',
+          document_role: 'CANDIDATE_SIGNATURE', media_type: 'image/png',
+          byte_size: 321, idempotency_key: idempotencyKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { throw new Error('the durable replay must not invoke the mutation RPC'); }
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.idempotent_replay, true);
+    assert.equal(body.component_id, componentId);
+    assert.equal(Object.hasOwn(body.upload, 'storage_key'), false);
+    assert.match(body.upload.url, /^\/candidate-app\/v1\/uploads\//);
+    assert.equal(reads.filter(path => path.endsWith('/candidate_submission_components')).length, 1);
+    assert.equal(reads.filter(path => path.endsWith('/candidate_submission_workflows')).length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate component replay remains bound to the signed-in Candidate and exact immutable upload contract', async () => {
+  const workflowId = '00000000-0000-4000-8000-000000000411';
+  const idempotencyKey = '00000000-0000-4000-8000-000000000412';
+  const component = {
+    id: '00000000-0000-4000-8000-000000000413', workflow_id: workflowId,
+    workflow_generation: 1, component_kind: 'CANDIDATE_SIGNATURE',
+    document_role: 'CANDIDATE_SIGNATURE', expense_category: null,
+    paper_return_page_key: null, storage_key: 'candidate-app/test/original.png',
+    media_type: 'image/png', byte_size: 100, state: 'PENDING',
+    upload_idempotency_key: idempotencyKey, approval_request_id: null,
+    manager_signature_capture_method: null, expected_source_content_sha256: null
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([component]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([{
+      id: workflowId, account_id: '00000000-0000-4000-8000-000000000414',
+      candidate_id: '00000000-0000-4000-8000-000000000415',
+      environment: 'TEST', generation: 1, state: 'WORKER_DRAFT'
+    }]);
+    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
+  };
+  try {
+    await assert.rejects(preparedCandidateComponentReplay(
+      { CANDIDATE_APP_ENVIRONMENT: 'TEST', SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder' },
+      {
+        account_id: '00000000-0000-4000-8000-000000000416',
+        selected_candidate_id: '00000000-0000-4000-8000-000000000415'
+      },
+      workflowId, 1, idempotencyKey, {
+        media_type: 'image/png', byte_size: 100, component_kind: 'CANDIDATE_SIGNATURE',
+        document_role: 'CANDIDATE_SIGNATURE', expense_category: null,
+        paper_return_page_key: null, workflow_generation: 1
+      }
+    ), error => error?.code === 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('component validation accepts one-page PDFs and rejects mixed multi-page evidence', async () => {

@@ -1756,6 +1756,53 @@ function preparedUploadContract(result, expected) {
   return contract;
 }
 
+async function preparedCandidateComponentReplay(
+  env, access, workflowId, generation, idempotencyKey, expected
+) {
+  const component = await restOne(
+    env,
+    'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + `&upload_idempotency_key=eq.${encodeURIComponent(idempotencyKey)}`
+      + '&select=id,workflow_id,workflow_generation,component_kind,document_role,'
+      + 'expense_category,paper_return_page_key,storage_key,media_type,byte_size,state,'
+      + 'upload_idempotency_key,approval_request_id,manager_signature_capture_method,'
+      + 'expected_source_content_sha256'
+  );
+  if (!component) return null;
+
+  const workflow = await restOne(
+    env,
+    'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(workflowId)}`
+      + '&select=id,account_id,candidate_id,environment,generation,state'
+  );
+  if (!workflow
+      || workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id
+      || workflow.environment !== environmentName(env)) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  if (Number(workflow.generation) !== generation) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  if (['FINALISED', 'CANCELLED', 'REJECTED', 'SUPERSEDED'].includes(upper(workflow.state))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_WORKFLOW_NOT_MUTABLE');
+  }
+  if (component.workflow_id !== workflowId
+      || component.upload_idempotency_key !== idempotencyKey
+      || component.approval_request_id != null
+      || component.manager_signature_capture_method != null
+      || component.expected_source_content_sha256 != null) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  const authoritative = preparedUploadContract({
+    ...component,
+    component_id: component.id
+  }, expected);
+  return { ...component, ...authoritative, idempotent_replay: true };
+}
+
 async function uploadTicket(env, payload) {
   const now = Math.floor(Date.now() / 1000);
   return sealEnvelope(env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET, 'candidate-component-upload-v2', {
@@ -2058,7 +2105,18 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   const idempotencyKey = owner === 'office'
     ? requireOfficeIdempotency(body.idempotency_key)
     : requireCandidateIdempotency(body.idempotency_key);
-  const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
+  const expected = {
+    media_type: mediaType, byte_size: byteSize, component_kind: componentKind,
+    document_role: payload.document_role, expense_category: payload.expense_category,
+    paper_return_page_key: payload.paper_return_page_key,
+    workflow_generation: generation
+  };
+  const preparedReplay = owner === 'candidate'
+    ? await preparedCandidateComponentReplay(
+      env, candidateAccess, workflowId, generation, idempotencyKey, expected
+    )
+    : null;
+  const result = preparedReplay || await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
     p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
     p_action: 'COMPONENT_PREPARE', p_expected_generation: generation, p_payload: payload,
     p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
@@ -2066,12 +2124,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   if (authority?.authority_kind === 'MANAGER_EMAIL') {
     await assertManagerRouteResult(env, result, authority);
   }
-  const authoritative = preparedUploadContract(result, {
-    media_type: mediaType, byte_size: byteSize, component_kind: componentKind,
-    document_role: payload.document_role, expense_category: payload.expense_category,
-    paper_return_page_key: payload.paper_return_page_key,
-    workflow_generation: generation
-  });
+  const authoritative = preparedUploadContract(result, expected);
   const componentId = authoritative.component_id;
   const ticket = await uploadTicket(env, {
     env: environment,
@@ -6579,6 +6632,7 @@ export const candidateAppBackendInternals = Object.freeze({
   safePaperReturnPages,
   immutablePut,
   preparedUploadContract,
+  preparedCandidateComponentReplay,
   expenseSummaryDisplayLines,
   mileageJourneyRows,
   officialPeriodWithShiftLines,
