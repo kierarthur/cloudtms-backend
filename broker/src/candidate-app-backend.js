@@ -1759,16 +1759,52 @@ function preparedUploadContract(result, expected) {
 async function preparedCandidateComponentReplay(
   env, access, workflowId, generation, idempotencyKey, expected
 ) {
-  const component = await restOne(
+  const componentSelect = 'id,workflow_id,workflow_generation,component_kind,document_role,'
+    + 'expense_category,paper_return_page_key,storage_key,media_type,byte_size,state,'
+    + 'upload_idempotency_key,approval_request_id,manager_signature_capture_method,'
+    + 'expected_source_content_sha256,source_content_sha256';
+  let component = await restOne(
     env,
     'candidate_submission_components',
     `workflow_id=eq.${encodeURIComponent(workflowId)}`
       + `&upload_idempotency_key=eq.${encodeURIComponent(idempotencyKey)}`
-      + '&select=id,workflow_id,workflow_generation,component_kind,document_role,'
-      + 'expense_category,paper_return_page_key,storage_key,media_type,byte_size,state,'
-      + 'upload_idempotency_key,approval_request_id,manager_signature_capture_method,'
-      + 'expected_source_content_sha256'
+      + `&select=${componentSelect}`
   );
+  let recoveredPendingPrepare = false;
+  if (!component) {
+    // Older builds could lose the locally persisted prepare key after the
+    // database had durably created the component but before the HTTP response
+    // reached the phone. Recover only one exact, still-unuploaded component.
+    // Completed components are deliberately excluded because their immutable
+    // digest cannot be compared until the upload bytes have been supplied.
+    const pending = await restRows(
+      env,
+      'candidate_submission_components',
+      `workflow_id=eq.${encodeURIComponent(workflowId)}`
+        + `&workflow_generation=eq.${generation}`
+        + `&component_kind=eq.${encodeURIComponent(expected.component_kind)}`
+        + `&document_role=eq.${encodeURIComponent(expected.document_role)}`
+        + `&media_type=eq.${encodeURIComponent(expected.media_type)}`
+        + `&byte_size=eq.${expected.byte_size}`
+        + '&state=eq.PENDING&approval_request_id=is.null'
+        + '&manager_signature_capture_method=is.null'
+        + '&expected_source_content_sha256=is.null&source_content_sha256=is.null'
+        + (expected.expense_category == null
+          ? '&expense_category=is.null'
+          : `&expense_category=eq.${encodeURIComponent(expected.expense_category)}`)
+        + (expected.paper_return_page_key == null
+          ? '&paper_return_page_key=is.null'
+          : `&paper_return_page_key=eq.${encodeURIComponent(expected.paper_return_page_key)}`)
+        + `&select=${componentSelect}&limit=2`
+    );
+    if (pending.length > 1) {
+      throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_RECOVERY_AMBIGUOUS');
+    }
+    if (pending.length === 1) {
+      [component] = pending;
+      recoveredPendingPrepare = true;
+    }
+  }
   if (!component) return null;
 
   const workflow = await restOne(
@@ -1790,10 +1826,11 @@ async function preparedCandidateComponentReplay(
     throw new CandidateHttpError(409, 'CANDIDATE_WORKFLOW_NOT_MUTABLE');
   }
   if (component.workflow_id !== workflowId
-      || component.upload_idempotency_key !== idempotencyKey
+      || (!recoveredPendingPrepare && component.upload_idempotency_key !== idempotencyKey)
       || component.approval_request_id != null
       || component.manager_signature_capture_method != null
-      || component.expected_source_content_sha256 != null) {
+      || component.expected_source_content_sha256 != null
+      || (recoveredPendingPrepare && component.source_content_sha256 != null)) {
     throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
   }
   const authoritative = preparedUploadContract({

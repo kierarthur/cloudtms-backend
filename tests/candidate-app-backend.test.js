@@ -2244,6 +2244,79 @@ test('Candidate component preparation reissues an upload ticket from the exact d
   }
 });
 
+test('Candidate component preparation recovers one exact pending component after an older phone loses its prepare key', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-000000000421',
+    session_id: '00000000-0000-4000-8000-000000000421',
+    account_id: '00000000-0000-4000-8000-000000000422',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000423',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-000000000424';
+  const componentId = '00000000-0000-4000-8000-000000000425';
+  const requestKey = '00000000-0000-4000-8000-000000000426';
+  const component = {
+    id: componentId, workflow_id: workflowId, workflow_generation: 3,
+    component_kind: 'CANDIDATE_SIGNATURE', document_role: 'CANDIDATE_SIGNATURE',
+    expense_category: null, paper_return_page_key: null,
+    storage_key: 'candidate-app/test/workflow/3/source/candidate-signature-pending.png',
+    media_type: 'image/png', byte_size: 654, state: 'PENDING',
+    upload_idempotency_key: '00000000-0000-4000-8000-000000000427',
+    approval_request_id: null, manager_signature_capture_method: null,
+    expected_source_content_sha256: null, source_content_sha256: null
+  };
+  const workflow = {
+    id: workflowId, account_id: session.account_id,
+    candidate_id: session.selected_candidate_id,
+    environment: 'TEST', generation: 3, state: 'WORKER_DRAFT'
+  };
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const originalFetch = globalThis.fetch;
+  let componentReads = 0;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      componentReads += 1;
+      return Response.json(target.searchParams.has('upload_idempotency_key') ? [] : [component]);
+    }
+    if (target.pathname.endsWith('/candidate_submission_workflows')) return Response.json([workflow]);
+    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 3, component_kind: 'CANDIDATE_SIGNATURE',
+          document_role: 'CANDIDATE_SIGNATURE', media_type: 'image/png',
+          byte_size: 654, idempotency_key: requestKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc() { throw new Error('pending prepare recovery must not invoke the mutation RPC'); }
+    });
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.idempotent_replay, true);
+    assert.equal(body.component_id, componentId);
+    assert.equal(componentReads, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('Candidate component replay remains bound to the signed-in Candidate and exact immutable upload contract', async () => {
   const workflowId = '00000000-0000-4000-8000-000000000411';
   const idempotencyKey = '00000000-0000-4000-8000-000000000412';
