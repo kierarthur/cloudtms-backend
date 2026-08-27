@@ -12,6 +12,9 @@ const repair = read(
 const pendingAuthRepair = read(
   'supabase/migrations/27082026_0447_repair_pending_auth_electronic_rejection_replacements.sql'
 );
+const pendingAuthUnlock = read(
+  'supabase/migrations/27082026_0459_unlock_repaired_electronic_rejection_replacements.sql'
+);
 const verification = read(
   'supabase/verification/27082026_0427_candidate_electronic_rejection_resubmission_verification.sql'
 );
@@ -52,6 +55,21 @@ test('one-time repair is limited to empty audited electronic rejection replaceme
   assert.doesNotMatch(pendingAuthRepair, /previous_timesheet\.submission_mode='ELECTRONIC'/);
   assert.match(pendingAuthRepair, /CANDIDATE_ELECTRONIC_REJECTION_REPLACEMENT_REPAIRED/);
   assert.doesNotMatch(pendingAuthRepair, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
+
+  for (const required of [
+    "route_repair.action='CANDIDATE_ELECTRONIC_REJECTION_REPLACEMENT_REPAIRED'",
+    "rotation_audit.action='CANDIDATE_ELECTRONIC_REJECTED_VERSION_ROTATED'",
+    "workflow.route in ('PHONE','EMAIL')",
+    "current_timesheet.submission_mode='ELECTRONIC'",
+    "financials.processing_status='PENDING_AUTH'",
+    "set processing_status='UNPROCESSED'",
+    'financials.authorised_at_utc is null',
+    'financials.paid_at_utc is null',
+    'financials.locked_by_invoice_id is null',
+    'replacement.replacement_of_workflow_id=workflow.id'
+  ]) assert.match(pendingAuthUnlock, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(pendingAuthUnlock, /CANDIDATE_ELECTRONIC_REJECTION_REPLACEMENT_UNLOCKED/);
+  assert.doesNotMatch(pendingAuthUnlock, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
 test('installed-state verification and real resubmission regression are release-wired', () => {
@@ -60,4 +78,5 @@ test('installed-state verification and real resubmission regression are release-
   assert.match(runtime, /Electronic rejection replacement was not Candidate-editable/);
   assert.match(matrix, /27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql/);
   assert.match(verification, /financials\.processing_status in \('UNPROCESSED','PENDING_AUTH'\)/);
+  assert.match(verification, /Repaired electronic rejection replacement remains lifecycle-locked/);
 });

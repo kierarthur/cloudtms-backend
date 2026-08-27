@@ -783,6 +783,10 @@
       "sha256": "7057a1c9ba71d07198ea8d1849fa273054835206807b8366177cfd30cb1eb23f"
     },
     {
+      "path": "supabase/migrations/27082026_0459_unlock_repaired_electronic_rejection_replacements.sql",
+      "sha256": "8b5445f193f03b292cfe3cab3c3fea968261157af987833e25a57b3f2c89a2c7"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
