@@ -70486,6 +70486,300 @@ async function handleManualTimesheetQueueStageToContractWeek(env, req, queueId) 
 
 
 
+async function loadContractWeekWithdrawnSubmissionHistory(env, weekId) {
+  const enc = encodeURIComponent;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const asUuid = (value) => {
+    const text = String(value || '').trim();
+    return UUID_RE.test(text) ? text : null;
+  };
+  const cleanStorageKey = (value) => String(value || '').trim().replace(/^\/+/, '');
+  const toTs = (value) => {
+    const raw = value?.uploaded_at_utc || value?.created_at || null;
+    if (!raw) return 0;
+    const parsed = new Date(raw).getTime();
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
+  const contractWeekId = asUuid(weekId);
+  if (!contractWeekId) return [];
+
+  const { rows: cancelledWorkflowRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/candidate_submission_workflows` +
+      `?contract_week_id=eq.${enc(contractWeekId)}` +
+      `&state=eq.CANCELLED` +
+      `&select=id,candidate_id,workflow_kind,anchor_timesheet_id,target_timesheet_id,cancelled_at_utc` +
+      `&order=cancelled_at_utc.desc` +
+      `&limit=100`
+  );
+
+  const workflowRows = Array.isArray(cancelledWorkflowRows) ? cancelledWorkflowRows : [];
+  const historicalIds = Array.from(new Set(
+    workflowRows
+      .flatMap((row) => [asUuid(row?.target_timesheet_id), asUuid(row?.anchor_timesheet_id)])
+      .filter(Boolean)
+  ));
+  if (!historicalIds.length) return [];
+
+  const historicalIdList = historicalIds.map(enc).join(',');
+  const { rows: withdrawnRows } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?timesheet_id=in.(${historicalIdList})` +
+      `&is_current=eq.false` +
+      `&status=eq.REVOKED` +
+      `&select=` +
+        [
+          'timesheet_id',
+          'booking_id',
+          'version',
+          'status',
+          'sheet_scope',
+          'week_ending_date',
+          'submission_mode',
+          'manual_pdf_r2_key',
+          'manual_pdf_rotation_degrees',
+          'generated_pdf_at_utc',
+          'r2_nurse_key',
+          'r2_auth_key',
+          'auth_name',
+          'auth_job_title',
+          'authorised_at_server',
+          'revoked_at',
+          'revoked_reason',
+          'revoked_by',
+          'updated_at'
+        ].join(',') +
+      `&order=version.desc` +
+      `&limit=50`
+  );
+
+  const historicalRows = Array.isArray(withdrawnRows) ? withdrawnRows : [];
+  if (!historicalRows.length) return [];
+
+  const cancellationByTimesheet = {};
+  const candidateIds = new Set();
+  for (const workflowRow of workflowRows) {
+    const candidateId = asUuid(workflowRow?.candidate_id);
+    if (candidateId) candidateIds.add(candidateId);
+    for (const relatedId of [asUuid(workflowRow?.target_timesheet_id), asUuid(workflowRow?.anchor_timesheet_id)]) {
+      if (!relatedId || !historicalIds.includes(relatedId) || cancellationByTimesheet[relatedId]) continue;
+      cancellationByTimesheet[relatedId] = {
+        candidate_id: candidateId,
+        workflow_kind: String(workflowRow?.workflow_kind || '').trim().toUpperCase(),
+        cancelled_at_utc: workflowRow?.cancelled_at_utc || null
+      };
+    }
+  }
+
+  const candidateRequest = candidateIds.size
+    ? sbFetch(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?id=in.(${Array.from(candidateIds).map(enc).join(',')})` +
+          `&select=id,display_name` +
+          `&limit=100`
+      )
+    : Promise.resolve({ rows: [] });
+  const evidenceRequest = sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+      `?timesheet_id=in.(${historicalIdList})` +
+      `&select=id,timesheet_id,kind,display_name,storage_key,created_at,created_by,processing_state` +
+      `&order=created_at.asc` +
+      `&limit=5000`
+  );
+  const [{ rows: candidateRows }, { rows: historicalEvidenceRows }] = await Promise.all([
+    candidateRequest,
+    evidenceRequest
+  ]);
+
+  const candidateDisplayById = {};
+  for (const candidateRow of (candidateRows || [])) {
+    const candidateId = asUuid(candidateRow?.id);
+    const displayName = String(candidateRow?.display_name || '').trim();
+    if (candidateId && displayName) candidateDisplayById[candidateId] = displayName;
+  }
+
+  const evidenceByTimesheet = {};
+  for (const evidenceRow of (historicalEvidenceRows || [])) {
+    const historicalTimesheetId = asUuid(evidenceRow?.timesheet_id);
+    if (!historicalTimesheetId) continue;
+    if (!evidenceByTimesheet[historicalTimesheetId]) evidenceByTimesheet[historicalTimesheetId] = [];
+    evidenceByTimesheet[historicalTimesheetId].push(evidenceRow);
+  }
+
+  const withdrawnSubmissions = [];
+  for (const historical of historicalRows) {
+    const historicalTimesheetId = asUuid(historical?.timesheet_id);
+    if (!historicalTimesheetId) continue;
+    const cancellation = cancellationByTimesheet[historicalTimesheetId] || null;
+    if (!cancellation) continue;
+
+    const version = Number.isFinite(Number(historical?.version)) ? Number(historical.version) : null;
+    const withdrawnAt = historical?.revoked_at || cancellation.cancelled_at_utc || historical?.updated_at || null;
+    const withdrawalScope = cancellation.workflow_kind === 'CONTRACT_COMBINED'
+      ? 'CLAIM'
+      : cancellation.workflow_kind === 'CONTRACT_EXPENSE'
+        ? 'EXPENSES'
+        : 'TIMESHEET';
+    const withdrawnByDisplay = candidateDisplayById[cancellation.candidate_id] || 'Candidate';
+    const historicalEvidence = [];
+    const representedStorageKeys = new Set();
+
+    for (const evidenceRow of (evidenceByTimesheet[historicalTimesheetId] || [])) {
+      const storageKey = cleanStorageKey(evidenceRow?.storage_key);
+      if (storageKey) representedStorageKeys.add(storageKey);
+      historicalEvidence.push({
+        ...(evidenceRow || {}),
+        id: `HISTORY:${historicalTimesheetId}:EVIDENCE:${String(evidenceRow?.id || 'UNKNOWN')}`,
+        historical_evidence_id: evidenceRow?.id || null,
+        timesheet_id: historicalTimesheetId,
+        filename: evidenceRow?.display_name || null,
+        storage_key: storageKey || null,
+        download_storage_key: storageKey || null,
+        uploaded_at_utc: evidenceRow?.created_at || withdrawnAt,
+        uploaded_by_display: 'Candidate submission',
+        system: true,
+        protected: true,
+        withdrawn_history: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        source_badge: 'Withdrawn',
+        meta_json: {
+          withdrawn_history: true,
+          original_processing_state: evidenceRow?.processing_state || null,
+          withdrawn_at: withdrawnAt,
+          version
+        }
+      });
+    }
+
+    const submissionMode = String(historical?.submission_mode || '').trim().toUpperCase();
+    const generatedPdfKey = `docs-pdf/timesheets/ts_${historicalTimesheetId}.pdf`;
+    if (historical?.generated_pdf_at_utc && !representedStorageKeys.has(generatedPdfKey)) {
+      representedStorageKeys.add(generatedPdfKey);
+      historicalEvidence.push({
+        id: `HISTORY:${historicalTimesheetId}:TIMESHEET`,
+        timesheet_id: historicalTimesheetId,
+        kind: 'TIMESHEET',
+        filename: version == null ? 'Withdrawn timesheet.pdf' : `Withdrawn timesheet version ${version}.pdf`,
+        display_name: 'Official withdrawn timesheet',
+        storage_key: generatedPdfKey,
+        download_storage_key: generatedPdfKey,
+        created_at: historical.generated_pdf_at_utc,
+        uploaded_at_utc: historical.generated_pdf_at_utc,
+        uploaded_by_display: 'MyTMS Candidate system',
+        system: true,
+        protected: true,
+        withdrawn_history: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        preview_mode: 'PDF',
+        source_badge: 'Withdrawn',
+        meta_json: { withdrawn_history: true, withdrawn_at: withdrawnAt, submission_mode: submissionMode, version }
+      });
+    }
+
+    const manualPdfKey = cleanStorageKey(historical?.manual_pdf_r2_key);
+    if (manualPdfKey && !representedStorageKeys.has(manualPdfKey)) {
+      representedStorageKeys.add(manualPdfKey);
+      historicalEvidence.push({
+        id: `HISTORY:${historicalTimesheetId}:PRIMARY`,
+        timesheet_id: historicalTimesheetId,
+        kind: 'TIMESHEET',
+        filename: 'Withdrawn primary timesheet file',
+        display_name: 'Withdrawn primary timesheet file',
+        storage_key: manualPdfKey,
+        download_storage_key: manualPdfKey,
+        created_at: withdrawnAt,
+        uploaded_at_utc: withdrawnAt,
+        uploaded_by_display: 'Candidate submission',
+        system: true,
+        protected: true,
+        withdrawn_history: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        preview_mode: 'PRIMARY_ARTIFACT',
+        source_badge: 'Withdrawn',
+        meta_json: {
+          withdrawn_history: true,
+          withdrawn_at: withdrawnAt,
+          manual_pdf_rotation_degrees: Number(historical?.manual_pdf_rotation_degrees || 0),
+          submission_mode: submissionMode,
+          version
+        }
+      });
+    }
+
+    const nurseKey = cleanStorageKey(historical?.r2_nurse_key);
+    const authoriserKey = cleanStorageKey(historical?.r2_auth_key);
+    if (nurseKey || authoriserKey) {
+      historicalEvidence.push({
+        id: `HISTORY:${historicalTimesheetId}:SIGNATURES`,
+        timesheet_id: historicalTimesheetId,
+        kind: 'ELECTRONIC_SIGNATURES',
+        filename: 'Withdrawn electronic signatures',
+        display_name: 'Withdrawn electronic signatures',
+        storage_key: null,
+        created_at: historical?.authorised_at_server || withdrawnAt,
+        uploaded_at_utc: historical?.authorised_at_server || withdrawnAt,
+        uploaded_by_display: 'MyTMS Candidate system',
+        system: true,
+        protected: true,
+        withdrawn_history: true,
+        is_view_only: true,
+        can_delete: false,
+        can_reclassify: false,
+        can_return_to_queue: false,
+        preview_mode: 'SIGNATURES',
+        source_badge: 'Withdrawn',
+        meta_json: {
+          withdrawn_history: true,
+          withdrawn_at: withdrawnAt,
+          authorised_at_server: historical?.authorised_at_server || null,
+          auth_name: historical?.auth_name || null,
+          auth_job_title: historical?.auth_job_title || null,
+          r2_nurse_key: nurseKey || null,
+          r2_auth_key: authoriserKey || null,
+          sheet_scope: historical?.sheet_scope || null,
+          week_ending_date: historical?.week_ending_date || null,
+          version
+        }
+      });
+    }
+
+    historicalEvidence.sort((a, b) => toTs(a) - toTs(b));
+    withdrawnSubmissions.push({
+      timesheet_id: historicalTimesheetId,
+      version,
+      status: 'WITHDRAWN',
+      sheet_scope: historical?.sheet_scope || null,
+      week_ending_date: historical?.week_ending_date || null,
+      withdrawn_at: withdrawnAt,
+      withdrawn_reason: historical?.revoked_reason || null,
+      withdrawn_by: historical?.revoked_by || null,
+      withdrawn_by_display: withdrawnByDisplay,
+      withdrawal_scope: withdrawalScope,
+      auth_name: historical?.auth_name || null,
+      auth_job_title: historical?.auth_job_title || null,
+      authorised_at_server: historical?.authorised_at_server || null,
+      read_only: true,
+      evidence: historicalEvidence
+    });
+  }
+
+  return withdrawnSubmissions;
+}
+
+
 async function handleContractWeekStagedEvidenceList(env, req, weekId) {
   const enc = encodeURIComponent;
 
@@ -70563,9 +70857,20 @@ async function handleContractWeekStagedEvidenceList(env, req, weekId) {
     };
   });
 
+  let withdrawnSubmissions = [];
+  try {
+    withdrawnSubmissions = await loadContractWeekWithdrawnSubmissionHistory(env, weekId);
+  } catch (error) {
+    console.warn('[handleContractWeekStagedEvidenceList] withdrawn history enrichment failed (non-fatal)', {
+      contract_week_id: weekId,
+      error: String(error?.message || error)
+    });
+  }
+
   return withCORS(env, req, ok({
     contract_week_id: weekId,
-    items
+    items,
+    withdrawn_submissions: withdrawnSubmissions
   }));
 }
 
