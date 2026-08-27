@@ -1,6 +1,7 @@
 -- Supersedes the execution of the historical v2 verifier without rewriting it.
--- Adds the service-only Candidate Timesheet Summary cursor to the exact public
--- Candidate RPC inventory; browser execution remains zero.
+-- Adds the service-only Candidate Timesheet Summary cursor and automatic manager
+-- finalisation recovery RPC to the exact public Candidate RPC inventory; browser
+-- execution remains zero.
 
 do $candidate_named_security_verification_v3$
 declare
@@ -105,8 +106,8 @@ begin
   into v_count,v_service_missing,v_browser_executable,v_hash
   from targets;
 
-  if v_count<>106 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'9f0f2392deac61ac53600369f501ab83' then
+  if v_count<>107 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'b43de7a9f6304fdd22f64561c429345a' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
