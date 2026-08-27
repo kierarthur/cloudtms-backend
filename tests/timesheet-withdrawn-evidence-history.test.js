@@ -14,10 +14,19 @@ const handler = source.slice(start, end);
 
 test('withdrawn evidence history is lineage-bound and absent from the legacy array response', () => {
   assert.match(handler, /const bookingId = asUuidStringOrNull\(ts\?\.booking_id\)/);
-  assert.match(handler, /booking_id=eq\.\$\{enc\(bookingId\)\}[\s\S]*is_current=eq\.false[\s\S]*status=eq\.REVOKED[\s\S]*revoked_by=eq\.CANDIDATE/);
+  assert.match(handler, /booking_id=eq\.\$\{enc\(bookingId\)\}[\s\S]*is_current=eq\.false[\s\S]*status=eq\.REVOKED/);
+  assert.match(handler, /candidate_submission_workflows[\s\S]*state=eq\.CANCELLED[\s\S]*target_timesheet_id\.in\.[\s\S]*anchor_timesheet_id\.in\./);
+  assert.match(handler, /if \(!cancellation\) continue/);
   assert.match(handler, /if \(wantMeta && bookingId\)/);
   assert.match(handler, /evidence: all,[\s\S]*withdrawn_submissions: withdrawnSubmissions/);
   assert.match(handler, /return withCORS\(env, req, ok\(all\)\)/);
+});
+
+test('withdrawn history carries a safe Candidate name, scope and reason for Office Issues', () => {
+  assert.match(handler, /candidates[\s\S]*select=id,display_name/);
+  assert.match(handler, /withdrawalScope = cancellation\.workflow_kind === 'CONTRACT_COMBINED'[\s\S]*'CLAIM'[\s\S]*'EXPENSES'[\s\S]*'TIMESHEET'/);
+  assert.match(handler, /withdrawn_by_display: withdrawnByDisplay[\s\S]*withdrawal_scope: withdrawalScope/);
+  assert.match(handler, /withdrawn_reason: historical\?\.revoked_reason \|\| null/);
 });
 
 test('every historical item is audit-only and cannot enter current evidence mutations', () => {

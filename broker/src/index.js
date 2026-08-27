@@ -80498,7 +80498,6 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
             `?booking_id=eq.${enc(bookingId)}` +
             `&is_current=eq.false` +
             `&status=eq.REVOKED` +
-            `&revoked_by=eq.CANDIDATE` +
             `&select=` +
               [
                 'timesheet_id',
@@ -80530,8 +80529,52 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
           .map((row) => asUuidStringOrNull(row?.timesheet_id))
           .filter(Boolean);
         const evidenceByTimesheet = {};
+        const cancellationByTimesheet = {};
+        const candidateDisplayById = {};
 
         if (historicalIds.length) {
+          const historicalIdList = historicalIds.map(enc).join(',');
+          const { rows: cancelledWorkflowRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/candidate_submission_workflows` +
+              `?state=eq.CANCELLED` +
+              `&or=(target_timesheet_id.in.(${historicalIdList}),anchor_timesheet_id.in.(${historicalIdList}))` +
+              `&select=id,candidate_id,workflow_kind,anchor_timesheet_id,target_timesheet_id,cancelled_at_utc` +
+              `&order=cancelled_at_utc.desc` +
+              `&limit=100`
+          );
+
+          const candidateIds = new Set();
+          for (const workflowRow of (cancelledWorkflowRows || [])) {
+            const targetId = asUuidStringOrNull(workflowRow?.target_timesheet_id);
+            const anchorId = asUuidStringOrNull(workflowRow?.anchor_timesheet_id);
+            const candidateId = asUuidStringOrNull(workflowRow?.candidate_id);
+            if (candidateId) candidateIds.add(candidateId);
+            for (const relatedId of [targetId, anchorId]) {
+              if (!relatedId || !historicalIds.includes(relatedId) || cancellationByTimesheet[relatedId]) continue;
+              cancellationByTimesheet[relatedId] = {
+                candidate_id: candidateId,
+                workflow_kind: String(workflowRow?.workflow_kind || '').trim().toUpperCase(),
+                cancelled_at_utc: workflowRow?.cancelled_at_utc || null
+              };
+            }
+          }
+
+          if (candidateIds.size) {
+            const { rows: candidateRows } = await sbFetch(
+              env,
+              `${env.SUPABASE_URL}/rest/v1/candidates` +
+                `?id=in.(${Array.from(candidateIds).map(enc).join(',')})` +
+                `&select=id,display_name` +
+                `&limit=100`
+            );
+            for (const candidateRow of (candidateRows || [])) {
+              const candidateId = asUuidStringOrNull(candidateRow?.id);
+              const displayName = String(candidateRow?.display_name || '').trim();
+              if (candidateId && displayName) candidateDisplayById[candidateId] = displayName;
+            }
+          }
+
           const { rows: historicalEvidenceRows } = await sbFetch(
             env,
             `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
@@ -80552,9 +80595,19 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         for (const historical of historicalRows) {
           const historicalTimesheetId = asUuidStringOrNull(historical?.timesheet_id);
           if (!historicalTimesheetId) continue;
+          const cancellation = cancellationByTimesheet[historicalTimesheetId] || null;
+          // Other historic REVOKED versions (for example internal version rotation)
+          // are not Candidate cancellations and must not be presented as such.
+          if (!cancellation) continue;
 
           const version = Number.isFinite(Number(historical?.version)) ? Number(historical.version) : null;
-          const withdrawnAt = historical?.revoked_at || historical?.updated_at || null;
+          const withdrawnAt = historical?.revoked_at || cancellation.cancelled_at_utc || historical?.updated_at || null;
+          const withdrawalScope = cancellation.workflow_kind === 'CONTRACT_COMBINED'
+            ? 'CLAIM'
+            : cancellation.workflow_kind === 'CONTRACT_EXPENSE'
+              ? 'EXPENSES'
+              : 'TIMESHEET';
+          const withdrawnByDisplay = candidateDisplayById[cancellation.candidate_id] || 'Candidate';
           const historicalEvidence = [];
           const representedStorageKeys = new Set();
 
@@ -80701,6 +80754,8 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
             withdrawn_at: withdrawnAt,
             withdrawn_reason: historical?.revoked_reason || null,
             withdrawn_by: historical?.revoked_by || null,
+            withdrawn_by_display: withdrawnByDisplay,
+            withdrawal_scope: withdrawalScope,
             auth_name: historical?.auth_name || null,
             auth_job_title: historical?.auth_job_title || null,
             authorised_at_server: historical?.authorised_at_server || null,
