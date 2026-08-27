@@ -13,6 +13,8 @@ const officeReject = fs.readFileSync(path.join(root,
   'supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql'), 'utf8');
 const candidateRead = fs.readFileSync(path.join(root,
   'supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql'), 'utf8');
+const routeCapabilities = fs.readFileSync(path.join(root,
+  'supabase/repeatable/27082026_0244_candidate_processed_action_projection_v1.sql'), 'utf8');
 const dailyVerification = fs.readFileSync(path.join(root,
   'supabase/verification/27082026_1327_candidate_daily_withdrawal_reset_verification.sql'), 'utf8');
 const finalAuthority = fs.readFileSync(path.join(root,
@@ -39,6 +41,17 @@ test('manager-approved finalised submissions remain withdrawable until Office pr
     /'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'/i);
   assert.match(actionContract,
     /p_candidate_status_code[\s\S]*not in \('PAID','AUTHORISED','INVOICED_NOT_PAID'\)/i);
+});
+
+test('import-authoritative timesheets remain view-only and can never enter the withdrawal path', () => {
+  assert.match(routeCapabilities,
+    /'can_edit_hours',[\s\S]*not v_import/i);
+  assert.match(workflow,
+    /v_route_authority->>'route_family'='IMPORT_AUTHORITATIVE'[\s\S]*v_workflow_kind<>'CONTRACT_EXPENSE'[\s\S]*CANDIDATE_RECORD_VIEW_ONLY/i);
+  assert.match(workflow,
+    /v_action='CANCEL'[\s\S]*workflow_kind in \('CONTRACT_HOURS','CONTRACT_COMBINED'\)[\s\S]*_candidate_weekly_withdrawal_reset_v1/i);
+  assert.match(workflow,
+    /v_action='CANCEL'[\s\S]*workflow_kind='DAILY'[\s\S]*_candidate_daily_submission_reset_v1/i);
 });
 
 test('weekly withdrawal creates a clean current version without deleting history', () => {

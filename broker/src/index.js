@@ -80484,6 +80484,238 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     };
     all.sort((a, b) => toTs(a) - toTs(b));
 
+    // Withdrawn Candidate submissions are retained on their immutable, non-current
+    // timesheet versions.  Expose them only in the metadata response and only when
+    // the current row has the same authoritative booking lineage.  This keeps old
+    // files auditable without ever mixing them into the current evidence/action set.
+    const withdrawnSubmissions = [];
+    const bookingId = asUuidStringOrNull(ts?.booking_id);
+    if (wantMeta && bookingId) {
+      try {
+        const { rows: withdrawnRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/timesheets` +
+            `?booking_id=eq.${enc(bookingId)}` +
+            `&is_current=eq.false` +
+            `&status=eq.REVOKED` +
+            `&revoked_by=eq.CANDIDATE` +
+            `&select=` +
+              [
+                'timesheet_id',
+                'booking_id',
+                'version',
+                'status',
+                'sheet_scope',
+                'week_ending_date',
+                'submission_mode',
+                'manual_pdf_r2_key',
+                'manual_pdf_rotation_degrees',
+                'generated_pdf_at_utc',
+                'r2_nurse_key',
+                'r2_auth_key',
+                'auth_name',
+                'auth_job_title',
+                'authorised_at_server',
+                'revoked_at',
+                'revoked_reason',
+                'revoked_by',
+                'updated_at'
+              ].join(',') +
+            `&order=version.desc` +
+            `&limit=50`
+        );
+
+        const historicalRows = Array.isArray(withdrawnRows) ? withdrawnRows : [];
+        const historicalIds = historicalRows
+          .map((row) => asUuidStringOrNull(row?.timesheet_id))
+          .filter(Boolean);
+        const evidenceByTimesheet = {};
+
+        if (historicalIds.length) {
+          const { rows: historicalEvidenceRows } = await sbFetch(
+            env,
+            `${env.SUPABASE_URL}/rest/v1/timesheet_evidence` +
+              `?timesheet_id=in.(${historicalIds.map(enc).join(',')})` +
+              `&select=id,timesheet_id,kind,display_name,storage_key,created_at,created_by,processing_state` +
+              `&order=created_at.asc` +
+              `&limit=5000`
+          );
+
+          for (const evidenceRow of (historicalEvidenceRows || [])) {
+            const historicalTimesheetId = asUuidStringOrNull(evidenceRow?.timesheet_id);
+            if (!historicalTimesheetId) continue;
+            if (!evidenceByTimesheet[historicalTimesheetId]) evidenceByTimesheet[historicalTimesheetId] = [];
+            evidenceByTimesheet[historicalTimesheetId].push(evidenceRow);
+          }
+        }
+
+        for (const historical of historicalRows) {
+          const historicalTimesheetId = asUuidStringOrNull(historical?.timesheet_id);
+          if (!historicalTimesheetId) continue;
+
+          const version = Number.isFinite(Number(historical?.version)) ? Number(historical.version) : null;
+          const withdrawnAt = historical?.revoked_at || historical?.updated_at || null;
+          const historicalEvidence = [];
+          const representedStorageKeys = new Set();
+
+          for (const evidenceRow of (evidenceByTimesheet[historicalTimesheetId] || [])) {
+            const storageKey = cleanStorageKey(evidenceRow?.storage_key);
+            if (storageKey) representedStorageKeys.add(storageKey);
+            historicalEvidence.push({
+              ...(evidenceRow || {}),
+              id: `HISTORY:${historicalTimesheetId}:EVIDENCE:${String(evidenceRow?.id || 'UNKNOWN')}`,
+              historical_evidence_id: evidenceRow?.id || null,
+              timesheet_id: historicalTimesheetId,
+              filename: evidenceRow?.display_name || null,
+              storage_key: storageKey || null,
+              download_storage_key: storageKey || null,
+              uploaded_at_utc: evidenceRow?.created_at || withdrawnAt,
+              uploaded_by_display: 'Candidate submission',
+              system: true,
+              protected: true,
+              withdrawn_history: true,
+              is_view_only: true,
+              can_delete: false,
+              can_reclassify: false,
+              can_return_to_queue: false,
+              source_badge: 'Withdrawn',
+              meta_json: {
+                withdrawn_history: true,
+                original_processing_state: evidenceRow?.processing_state || null,
+                withdrawn_at: withdrawnAt,
+                version
+              }
+            });
+          }
+
+          const submissionMode = String(historical?.submission_mode || '').trim().toUpperCase();
+          const generatedPdfKey = `docs-pdf/timesheets/ts_${historicalTimesheetId}.pdf`;
+          if (historical?.generated_pdf_at_utc && !representedStorageKeys.has(generatedPdfKey)) {
+            representedStorageKeys.add(generatedPdfKey);
+            historicalEvidence.push({
+              id: `HISTORY:${historicalTimesheetId}:TIMESHEET`,
+              timesheet_id: historicalTimesheetId,
+              kind: 'TIMESHEET',
+              filename: version == null ? 'Withdrawn timesheet.pdf' : `Withdrawn timesheet version ${version}.pdf`,
+              display_name: 'Official withdrawn timesheet',
+              storage_key: generatedPdfKey,
+              download_storage_key: generatedPdfKey,
+              created_at: historical.generated_pdf_at_utc,
+              uploaded_at_utc: historical.generated_pdf_at_utc,
+              uploaded_by_display: 'MyTMS Candidate system',
+              system: true,
+              protected: true,
+              withdrawn_history: true,
+              is_view_only: true,
+              can_delete: false,
+              can_reclassify: false,
+              can_return_to_queue: false,
+              preview_mode: 'PDF',
+              source_badge: 'Withdrawn',
+              meta_json: {
+                withdrawn_history: true,
+                withdrawn_at: withdrawnAt,
+                submission_mode: submissionMode,
+                version
+              }
+            });
+          }
+
+          const manualPdfKey = cleanStorageKey(historical?.manual_pdf_r2_key);
+          if (manualPdfKey && !representedStorageKeys.has(manualPdfKey)) {
+            representedStorageKeys.add(manualPdfKey);
+            historicalEvidence.push({
+              id: `HISTORY:${historicalTimesheetId}:PRIMARY`,
+              timesheet_id: historicalTimesheetId,
+              kind: 'TIMESHEET',
+              filename: 'Withdrawn primary timesheet file',
+              display_name: 'Withdrawn primary timesheet file',
+              storage_key: manualPdfKey,
+              download_storage_key: manualPdfKey,
+              created_at: withdrawnAt,
+              uploaded_at_utc: withdrawnAt,
+              uploaded_by_display: 'Candidate submission',
+              system: true,
+              protected: true,
+              withdrawn_history: true,
+              is_view_only: true,
+              can_delete: false,
+              can_reclassify: false,
+              can_return_to_queue: false,
+              preview_mode: 'PRIMARY_ARTIFACT',
+              source_badge: 'Withdrawn',
+              meta_json: {
+                withdrawn_history: true,
+                withdrawn_at: withdrawnAt,
+                manual_pdf_rotation_degrees: Number(historical?.manual_pdf_rotation_degrees || 0),
+                submission_mode: submissionMode,
+                version
+              }
+            });
+          }
+
+          const nurseKey = cleanStorageKey(historical?.r2_nurse_key);
+          const authoriserKey = cleanStorageKey(historical?.r2_auth_key);
+          if (nurseKey || authoriserKey) {
+            historicalEvidence.push({
+              id: `HISTORY:${historicalTimesheetId}:SIGNATURES`,
+              timesheet_id: historicalTimesheetId,
+              kind: 'ELECTRONIC_SIGNATURES',
+              filename: 'Withdrawn electronic signatures',
+              display_name: 'Withdrawn electronic signatures',
+              storage_key: null,
+              created_at: historical?.authorised_at_server || withdrawnAt,
+              uploaded_at_utc: historical?.authorised_at_server || withdrawnAt,
+              uploaded_by_display: 'MyTMS Candidate system',
+              system: true,
+              protected: true,
+              withdrawn_history: true,
+              is_view_only: true,
+              can_delete: false,
+              can_reclassify: false,
+              can_return_to_queue: false,
+              preview_mode: 'SIGNATURES',
+              source_badge: 'Withdrawn',
+              meta_json: {
+                withdrawn_history: true,
+                withdrawn_at: withdrawnAt,
+                authorised_at_server: historical?.authorised_at_server || null,
+                auth_name: historical?.auth_name || null,
+                auth_job_title: historical?.auth_job_title || null,
+                r2_nurse_key: nurseKey || null,
+                r2_auth_key: authoriserKey || null,
+                sheet_scope: historical?.sheet_scope || null,
+                week_ending_date: historical?.week_ending_date || null,
+                version
+              }
+            });
+          }
+
+          historicalEvidence.sort((a, b) => toTs(a) - toTs(b));
+          withdrawnSubmissions.push({
+            timesheet_id: historicalTimesheetId,
+            version,
+            status: 'WITHDRAWN',
+            sheet_scope: historical?.sheet_scope || null,
+            week_ending_date: historical?.week_ending_date || null,
+            withdrawn_at: withdrawnAt,
+            withdrawn_reason: historical?.revoked_reason || null,
+            withdrawn_by: historical?.revoked_by || null,
+            auth_name: historical?.auth_name || null,
+            auth_job_title: historical?.auth_job_title || null,
+            authorised_at_server: historical?.authorised_at_server || null,
+            read_only: true,
+            evidence: historicalEvidence
+          });
+        }
+      } catch (error) {
+        console.warn('[handleTimesheetEvidenceList] withdrawn history enrichment failed (non-fatal)', {
+          timesheet_id: currentTsId,
+          error: String(error?.message || error)
+        });
+      }
+    }
+
     if (wantMeta) {
       return withCORS(env, req, ok({
         requested_timesheet_id: resolved.requested_timesheet_id || tsId,
@@ -80499,7 +80731,8 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
           active_operation_id: ts?.active_document_operation_id || null,
           last_error: ts?.last_document_error_json || currentTimesheetDocument?.error_json || null
         },
-        evidence: all
+        evidence: all,
+        withdrawn_submissions: withdrawnSubmissions
       }));
     }
 
