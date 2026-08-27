@@ -35,21 +35,40 @@ begin
      and rotation_audit.object_id_text=current_timesheet.timesheet_id::text
      and rotation_audit.action='CANDIDATE_ELECTRONIC_REJECTED_VERSION_ROTATED'
      and rotation_audit.after_json->>'new_timesheet_id'=current_timesheet.timesheet_id::text
-    join public.timesheets previous_timesheet
-      on previous_timesheet.timesheet_id=
-        case
-          when rotation_audit.before_json->>'old_timesheet_id'
-            ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
-          then (rotation_audit.before_json->>'old_timesheet_id')::uuid
-          else null
-        end
-     and previous_timesheet.submission_mode='ELECTRONIC'
+    join public.timesheets_financials financials
+      on financials.timesheet_id=current_timesheet.timesheet_id
+     and financials.is_current=true
+    join lateral (
+      select workflow.id
+      from public.candidate_submission_workflows workflow
+      where workflow.state='REJECTED'
+        and workflow.contract_week_id=week_row.id
+        and not exists (
+          select 1
+          from public.candidate_submission_workflows replacement
+          where replacement.replacement_of_workflow_id=workflow.id
+        )
+      order by workflow.updated_at_utc desc,workflow.id
+      limit 1
+    ) rejected_workflow on true
     where current_timesheet.is_current=true
       and current_timesheet.submission_mode='MANUAL'
       and current_timesheet.status='RECEIVED'
       and current_timesheet.archived_at_utc is null
       and current_timesheet.authorised_at_server is null
       and week_row.status='OPEN'
+      and week_row.day_entries_json='[]'::jsonb
+      and week_row.totals_json='{}'::jsonb
+      and financials.processing_status in ('UNPROCESSED','PENDING_AUTH')
+      and financials.authorised_at_utc is null
+      and financials.paid_at_utc is null
+      and financials.locked_by_invoice_id is null
+      and coalesce(financials.total_hours,0)=0
+      and coalesce(financials.total_pay_ex_vat,0)=0
+      and coalesce(financials.total_charge_ex_vat,0)=0
+      and coalesce(financials.expenses_pay_ex_vat,0)=0
+      and coalesce(financials.expenses_charge_ex_vat,0)=0
+      and coalesce(financials.mileage_units,0)=0
   ) then
     raise exception 'Unrepaired electronic rejection replacement remains installed';
   end if;

@@ -779,6 +779,10 @@
       "sha256": "f831cfbf8e814619e9c34c1988340fe00a66091ff86a3aa8c2a3f21a5e19df2b"
     },
     {
+      "path": "supabase/migrations/27082026_0447_repair_pending_auth_electronic_rejection_replacements.sql",
+      "sha256": "7057a1c9ba71d07198ea8d1849fa273054835206807b8366177cfd30cb1eb23f"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },
