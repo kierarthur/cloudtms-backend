@@ -28,7 +28,7 @@ const LAYOUTS = Object.freeze([
     detailsHeight: 26,
     declarationMinimumHeight: 31,
     signatureLineZoneHeight: 5.5,
-    signatureOverlayHeight: 8,
+    signatureOverlayHeight: 14,
     additionalRowHeight: 4.8,
     additionalHeaderHeight: 9,
     lineHeight: 3.8,
@@ -46,7 +46,7 @@ const LAYOUTS = Object.freeze([
     detailsHeight: 23,
     declarationMinimumHeight: 27,
     signatureLineZoneHeight: 5,
-    signatureOverlayHeight: 7,
+    signatureOverlayHeight: 12,
     additionalRowHeight: 4.0,
     additionalHeaderHeight: 8,
     lineHeight: 3.2,
@@ -64,7 +64,7 @@ const LAYOUTS = Object.freeze([
     detailsHeight: 21,
     declarationMinimumHeight: 24,
     signatureLineZoneHeight: 4.6,
-    signatureOverlayHeight: 7,
+    signatureOverlayHeight: 10.5,
     additionalRowHeight: 3.45,
     additionalHeaderHeight: 7,
     lineHeight: 2.75,
@@ -1213,6 +1213,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       signature_overlay_independent_of_text_flow: true,
       signature_images_drawn_last: true,
       signature_line_zone_height_mm: layout.signatureLineZoneHeight,
+      signature_overlay_height_mm: layout.signatureOverlayHeight,
       one_page_verified: true
     })
   });

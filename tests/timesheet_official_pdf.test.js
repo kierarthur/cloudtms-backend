@@ -279,6 +279,7 @@ test('declaration capacity accepts an exact nine-line readable fit', async () =>
   assert.equal(rendered.layout_mode, 'NORMAL');
   assert.ok(rendered.render_receipt.declaration_height_mm >= 41);
   assert.equal(rendered.render_receipt.signature_line_zone_height_mm, 5.5);
+  assert.equal(rendered.render_receipt.signature_overlay_height_mm, 14);
 });
 test('signature dates are drawn above their date lines', () => {
   const source = readFileSync(
