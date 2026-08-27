@@ -4,6 +4,10 @@ import test from 'node:test';
 
 const worker = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
 const mailshots = readFileSync(new URL('../supabase/repeatable/04032026_mailshots.sql', import.meta.url), 'utf8');
+const databaseContract = JSON.parse(readFileSync(
+  new URL('../supabase/release/current-contract.json', import.meta.url),
+  'utf8',
+));
 
 test('accepted WATI receiver results are not misclassified as invalid numbers', () => {
   assert.match(worker, /const hasValidityResult = Object\.prototype\.hasOwnProperty\.call\(rr, 'isValidWhatsAppNumber'\);/);
@@ -36,4 +40,16 @@ test('the 750-character cap retains at least 100 characters of wrapper headroom'
 
   assert.equal(fixedWrapperWithConservativeCrLf.length, 172);
   assert.ok(1024 - fixedWrapperWithConservativeCrLf.length - 750 >= 100);
+});
+
+test('the WATI mailshot authority is sealed in the database contract', () => {
+  const routine = databaseContract.routines.find((item) =>
+    item.schema === 'public'
+    && item.identity === 'mailshot_enqueue(p_prepare_json jsonb, p_final_edits_json jsonb, p_delivery_timing_json jsonb, p_actor_user_id uuid)');
+
+  assert.ok(routine, 'mailshot_enqueue must remain in the database contract');
+  assert.equal(
+    routine.definition_sha256,
+    'a21d64d30319bf67ab917830a19c6ec76826363c58ea985e28b689ccf6a094cd',
+  );
 });
