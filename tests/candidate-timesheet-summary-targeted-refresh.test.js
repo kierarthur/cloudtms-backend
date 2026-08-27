@@ -16,6 +16,8 @@ test('Candidate Summary heartbeat is opt-in, cursor-only and index bounded', () 
   assert.match(heartbeat, /revision_row\.revision_seq>v_candidate_summary_cursor/i);
   assert.match(heartbeat, /order by revision_row\.revision_seq,revision_row\.identity_kind,revision_row\.identity_id\s+limit 101/i);
   assert.match(heartbeat, /'candidate_timesheet_summary_cap',100/i);
+  assert.match(heartbeat, /grant execute on function public\.rpc_changes_ping\(jsonb\) to service_role/i);
+  assert.doesNotMatch(heartbeat, /grant execute on function public\.rpc_changes_ping\(jsonb\) to authenticated/i);
   assert.doesNotMatch(heartbeat, /jsonb_array_elements\([^)]*candidate_timesheet_summary/i);
 });
 

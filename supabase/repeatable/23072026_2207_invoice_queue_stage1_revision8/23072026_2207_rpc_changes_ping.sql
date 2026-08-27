@@ -571,4 +571,4 @@ $function$;
 
 revoke all on function public.rpc_changes_ping(jsonb)
   from public,anon,authenticated;
-grant execute on function public.rpc_changes_ping(jsonb) to authenticated,service_role;
+grant execute on function public.rpc_changes_ping(jsonb) to service_role;
