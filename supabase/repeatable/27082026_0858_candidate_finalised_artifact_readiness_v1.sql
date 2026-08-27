@@ -199,7 +199,8 @@ begin
       end as rejection_actionable
   ) rejection_policy
   where w.candidate_id=v_candidate_id and w.contract_id=v_contract.id
-    and w.week_ending_date=v_week.week_ending_date and w.state<>'SUPERSEDED'
+    and w.week_ending_date=v_week.week_ending_date
+    and w.state not in ('CANCELLED','SUPERSEDED')
     and private._candidate_workflow_maps_to_card_v1(w.id,p_timesheet_id,v_week.id);
 
   select jsonb_build_object(
@@ -239,7 +240,7 @@ begin
     and private._candidate_workflow_maps_to_card_v1(
       document_workflow.id,p_timesheet_id,v_week.id
     )
-    and document_workflow.state<>'SUPERSEDED'
+    and document_workflow.state not in ('CANCELLED','SUPERSEDED')
   order by (document_workflow.id=p_workflow_id) desc,document_workflow.updated_at_utc desc
   limit 1;
 

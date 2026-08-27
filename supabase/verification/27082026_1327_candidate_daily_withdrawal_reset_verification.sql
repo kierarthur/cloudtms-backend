@@ -126,11 +126,11 @@ begin
      or (select worked_minutes from public.timesheets where timesheet_id=v_new_timesheet) is not null
      or (select processing_status from public.timesheets_financials where timesheet_id=v_new_timesheet)<>'UNASSIGNED'
      or (select total_hours from public.timesheets_financials where timesheet_id=v_new_timesheet)<>0
+     or (select total_hours from public.timesheets_financials where timesheet_id=v_timesheet)<>8.5
      or exists(select 1 from public.contract_weeks where timesheet_id=v_new_timesheet)
-     or not exists(
+     or exists(
        select 1 from public.ts_financials_outbox
        where timesheet_id=v_new_timesheet
-         and reason='REVOKED'::public.ts_fin_reason_enum
      )
      or not exists(
        select 1 from public.audit_events

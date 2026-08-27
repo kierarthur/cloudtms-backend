@@ -12,7 +12,6 @@ declare
   v_account uuid:=gen_random_uuid();
   v_workflow uuid:=gen_random_uuid();
   v_result jsonb;
-  v_new_timesheet uuid;
   v_system_actor uuid;
 begin
   select candidate_app_system_actor_user_id into v_system_actor
@@ -77,34 +76,23 @@ begin
   v_result:=private._candidate_weekly_withdrawal_reset_v1(
     v_workflow,'I entered the wrong week.',v_now
   );
-  v_new_timesheet:=(v_result->>'current_timesheet_id')::uuid;
-
   if not coalesce((v_result->>'reset')::boolean,false)
-     or v_new_timesheet is null
-     or v_new_timesheet=v_timesheet
-     or v_result->>'draft_submission_mode'<>'MANUAL'
+     or v_result->>'current_timesheet_id' is not null
+     or v_result->>'draft_submission_mode' is not null
      or v_result->>'effective_submission_mode'<>'ELECTRONIC'
      or (select is_current from public.timesheets where timesheet_id=v_timesheet)
      or (select status from public.timesheets where timesheet_id=v_timesheet)<>'REVOKED'
-     or not coalesce((select is_current from public.timesheets where timesheet_id=v_new_timesheet),false)
-     or (select status from public.timesheets where timesheet_id=v_new_timesheet)<>'RECEIVED'
-     or (select submission_mode from public.timesheets where timesheet_id=v_new_timesheet)<>'MANUAL'
-     or (select timesheet_id from public.contract_weeks where id=v_week)<>v_new_timesheet
+     or (select timesheet_id from public.contract_weeks where id=v_week) is not null
      or (select status from public.contract_weeks where id=v_week)<>'OPEN'
      or (select submission_mode_snapshot from public.contract_weeks where id=v_week)<>'ELECTRONIC'
      or (select day_entries_json from public.contract_weeks where id=v_week)<>'[]'::jsonb
      or (select totals_json from public.contract_weeks where id=v_week)<>'{}'::jsonb
-     or (select total_hours from public.timesheets_financials where timesheet_id=v_new_timesheet)<>0
-     or not exists(
-       select 1 from public.ts_financials_outbox
-       where timesheet_id=v_new_timesheet
-         and reason='REVOKED'::public.ts_fin_reason_enum
-     )
+     or (select total_hours from public.timesheets_financials where timesheet_id=v_timesheet)<>8
      or not exists(
        select 1 from public.audit_events
        where object_type='timesheet'
-         and object_id_text=v_new_timesheet::text
-         and action='CANDIDATE_SUBMISSION_WITHDRAWN_VERSION_ROTATED'
+         and object_id_text=v_timesheet::text
+         and action='CANDIDATE_SUBMISSION_WITHDRAWN_TO_CONTRACT_WEEK'
          and actor_user_id=v_system_actor
      ) then
     raise exception 'CANDIDATE_WEEKLY_WITHDRAWAL_RESET_VERIFICATION_FAILED: %',v_result;

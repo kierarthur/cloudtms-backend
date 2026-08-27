@@ -19,6 +19,8 @@ const dailyVerification = fs.readFileSync(path.join(root,
   'supabase/verification/27082026_1327_candidate_daily_withdrawal_reset_verification.sql'), 'utf8');
 const finalAuthority = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql'), 'utf8');
+const currentDetail = fs.readFileSync(path.join(root,
+  'supabase/repeatable/27082026_0858_candidate_finalised_artifact_readiness_v1.sql'), 'utf8');
 
 test('candidate cancellation retires approval authority and resets weekly hours atomically', () => {
   assert.match(workflow,
@@ -54,19 +56,15 @@ test('import-authoritative timesheets remain view-only and can never enter the w
     /v_action='CANCEL'[\s\S]*workflow_kind='DAILY'[\s\S]*_candidate_daily_submission_reset_v1/i);
 });
 
-test('weekly withdrawal creates a clean current version without deleting history', () => {
+test('weekly withdrawal returns to the editable contract week without deleting history', () => {
   assert.match(reset,
-    /is_current=false,[\s\S]*status='REVOKED'[\s\S]*insert into public\.timesheets/i);
+    /is_current=false,[\s\S]*status='REVOKED'[\s\S]*timesheet_id=null,[\s\S]*status='OPEN'/i);
   assert.match(reset,
-    /timesheet_id=v_new_timesheet_id[\s\S]*status='OPEN'[\s\S]*day_entries_json='\[\]'::jsonb[\s\S]*totals_json='\{\}'::jsonb/i);
+    /timesheet_id=null[\s\S]*status='OPEN'[\s\S]*day_entries_json='\[\]'::jsonb[\s\S]*totals_json='\{\}'::jsonb/i);
+  assert.doesNotMatch(reset.slice(0, reset.indexOf('create or replace function private._candidate_daily_submission_reset_v1')),
+    /insert into public\.timesheets\s*\(/i);
   assert.match(reset,
-    /processing_status='UNPROCESSED'[\s\S]*total_hours=0[\s\S]*expenses_pay_ex_vat=0[\s\S]*mileage_units=0/i);
-  assert.match(reset,
-    /'MANUAL',v_current\.line_type[\s\S]*'effective_submission_mode',v_week\.submission_mode_snapshot/i);
-  assert.match(reset,
-    /timesheet_evidence set processing_state='SUPERSEDED'[\s\S]*CANDIDATE_SUBMISSION_WITHDRAWN_VERSION_ROTATED/i);
-  assert.match(reset,
-    /ts_financials_outbox\([\s\S]*'REVOKED'::public\.ts_fin_reason_enum/i);
+    /timesheet_evidence set processing_state='SUPERSEDED'[\s\S]*CANDIDATE_SUBMISSION_WITHDRAWN_TO_CONTRACT_WEEK/i);
   assert.doesNotMatch(reset,
     /ts_financials_outbox\([\s\S]{0,300}'CANDIDATE_(?:WITHDRAWN|REJECTED)'/i);
   assert.doesNotMatch(reset, /\bdelete\s+from\b/i);
@@ -83,7 +81,7 @@ test('Candidate withdrawals use the configured system audit actor and never the 
   assert.match(reset,
     /select settings_row\.candidate_app_system_actor_user_id[\s\S]*from public\.settings_defaults settings_row[\s\S]*public\.tms_users actor_row[\s\S]*btrim\(p_reason\),v_system_actor_user_id/i);
   assert.doesNotMatch(reset,
-    /CANDIDATE_SUBMISSION_WITHDRAWN_VERSION_ROTATED[\s\S]{0,1200}btrim\(p_reason\),v_workflow\.candidate_id/i);
+    /CANDIDATE_SUBMISSION_WITHDRAWN_TO_CONTRACT_WEEK[\s\S]{0,1200}btrim\(p_reason\),v_workflow\.candidate_id/i);
   assert.match(reset,
     /v_event='OFFICE_REJECTED'[\s\S]*where actor_row\.id=p_actor_user_id[\s\S]*else[\s\S]*candidate_app_system_actor_user_id[\s\S]*btrim\(p_reason\),v_audit_actor_user_id/i);
   assert.doesNotMatch(reset,
@@ -100,7 +98,9 @@ test('Daily withdrawal preserves the booked shift while returning a clean editab
   assert.match(reset,
     /null,null,null,null,null,null,null,'\{\}'::jsonb,'\{\}'::jsonb[\s\S]*'ELECTRONIC'/i);
   assert.match(reset,
-    /processing_status='UNASSIGNED'[\s\S]*total_hours=0[\s\S]*expenses_pay_ex_vat=0[\s\S]*mileage_units=0/i);
+    /insert into public\.timesheets_financials\([\s\S]*processing_status,total_hours[\s\S]*'UNASSIGNED',0/i);
+  assert.doesNotMatch(reset,
+    /v_new_timesheet_id[\s\S]{0,500}ts_financials_outbox/i);
   assert.match(reset,
     /CANDIDATE_DAILY_SUBMISSION_WITHDRAWN_VERSION_ROTATED[\s\S]*effective_submission_mode','ELECTRONIC'/i);
   assert.doesNotMatch(reset, /\bdelete\s+from\b/i);
@@ -125,7 +125,7 @@ test('Daily reset is private, browser-inaccessible and has rollback-contained fi
   assert.match(dailyVerification,
     /begin;[\s\S]*_candidate_daily_submission_reset_v1\([\s\S]*scheduled_start_iso[\s\S]*processing_status[\s\S]*rollback;/i);
   assert.match(dailyVerification,
-    /ts_financials_outbox[\s\S]*reason='REVOKED'::public\.ts_fin_reason_enum/i);
+    /exists\([\s\S]*ts_financials_outbox[\s\S]*timesheet_id=v_new_timesheet/i);
 });
 
 test('withdrawal read authority cannot replay obsolete public Candidate reads', () => {
@@ -145,4 +145,11 @@ test('withdrawal read authority cannot replay obsolete public Candidate reads', 
   }
   assert.match(dailyVerification,
     /search_path=""[\s\S]*draft_week\.id[\s\S]*final_signed_document_ready/i);
+});
+
+test('cancelled workflows remain history and never project as the current replacement approval', () => {
+  assert.match(currentDetail,
+    /w\.state not in \('CANCELLED','SUPERSEDED'\)/i);
+  assert.match(currentDetail,
+    /document_workflow\.state not in \('CANCELLED','SUPERSEDED'\)/i);
 });

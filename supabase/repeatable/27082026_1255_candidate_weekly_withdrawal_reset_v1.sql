@@ -16,8 +16,6 @@ declare
   v_week public.contract_weeks%rowtype;
   v_current_count integer:=0;
   v_current_timesheet_id uuid;
-  v_new_timesheet_id uuid;
-  v_new_version integer;
   v_system_actor_user_id uuid;
 begin
   if p_workflow_id is null or nullif(btrim(coalesce(p_reason,'')),'') is null then
@@ -96,7 +94,6 @@ begin
     raise exception 'CANDIDATE_WITHDRAWAL_PROTECTED_HISTORY' using errcode='55000';
   end if;
 
-  v_new_version:=coalesce(v_current.version,1)+1;
   update public.timesheets set
     is_current=false,
     status='REVOKED',
@@ -105,24 +102,8 @@ begin
     updated_at=p_now_utc
   where timesheet_id=v_current.timesheet_id and is_current=true;
 
-  insert into public.timesheets(
-    booking_id,version,is_current,status,contract_id,submission_mode,line_type,sheet_scope,
-    occupant_key_norm,hospital_norm,ward_norm,job_title_norm,shift_label_norm,week_ending_date,
-    worked_start_iso,worked_end_iso,break_start_iso,break_end_iso,break_minutes,actual_schedule_json,
-    additional_units_week,additional_units_per_day,manual_pdf_r2_key,authorised_at_server,
-    reference_number,day_references_json,qr_token,qr_status,qr_payload_json,qr_generated_at,
-    qr_scanned_at,qr_scan_info_json,qr_r2_key,created_at,updated_at
-  ) values (
-    v_current.booking_id,v_new_version,true,'RECEIVED',v_current.contract_id,
-    'MANUAL',v_current.line_type,v_current.sheet_scope,
-    v_current.occupant_key_norm,v_current.hospital_norm,v_current.ward_norm,
-    v_current.job_title_norm,v_current.shift_label_norm,v_current.week_ending_date,
-    null,null,null,null,null,null,'{}'::jsonb,'{}'::jsonb,null,null,null,'{}'::jsonb,
-    null,null,'{}'::jsonb,null,null,'{}'::jsonb,null,p_now_utc,p_now_utc
-  ) returning timesheet_id into v_new_timesheet_id;
-
   update public.contract_weeks set
-    timesheet_id=v_new_timesheet_id,
+    timesheet_id=null,
     status='OPEN',
     day_entries_json='[]'::jsonb,
     totals_json='{}'::jsonb,
@@ -130,32 +111,6 @@ begin
   where id=v_week.id and timesheet_id=v_current.timesheet_id;
   if not found then
     raise exception 'CANDIDATE_WITHDRAWAL_WEEK_MOVED' using errcode='40001';
-  end if;
-
-  if v_fin.id is not null then
-    update public.timesheets_financials set
-      timesheet_id=v_new_timesheet_id,timesheet_version=v_new_version,
-      processing_status='UNPROCESSED',
-      worked_start_iso=null,worked_end_iso=null,break_start_iso=null,break_end_iso=null,
-      break_minutes=null,actual_schedule_json=null,actual_minutes_by_day_json=null,
-      hours_day=0,hours_night=0,hours_sat=0,hours_sun=0,hours_bh=0,total_hours=0,
-      total_pay_ex_vat=0,total_charge_ex_vat=0,margin_ex_vat=0,
-      additional_pay_ex_vat=0,additional_charge_ex_vat=0,additional_margin_ex_vat=0,
-      additional_units_json='{}'::jsonb,
-      expenses_pay_ex_vat=0,expenses_charge_ex_vat=0,expenses_description=null,
-      expenses_evidence_r2_key=null,expenses_evidence_manifest=null,
-      mileage_units=0,mileage_pay_ex_vat=0,mileage_charge_ex_vat=0,
-      mileage_evidence_r2_key=null,mileage_evidence_manifest=null,
-      travel_pay_ex_vat=0,travel_charge_ex_vat=0,
-      accommodation_pay_ex_vat=0,accommodation_charge_ex_vat=0,
-      other_pay_ex_vat=0,other_charge_ex_vat=0,
-      authorised_at_utc=null,authorised_by_user_id=null,updated_at=p_now_utc
-    where id=v_fin.id;
-    insert into public.ts_financials_outbox(
-      timesheet_id,reason,attempt_count,next_attempt_at,last_error,created_at
-    ) values (
-      v_new_timesheet_id,'REVOKED'::public.ts_fin_reason_enum,0,p_now_utc,null,p_now_utc
-    ) on conflict on constraint uq_tsfin_outbox do nothing;
   end if;
 
   update public.timesheet_evidence set processing_state='SUPERSEDED'
@@ -174,7 +129,7 @@ begin
   end if;
 
   perform private._candidate_audit_v1(
-    'timesheet',v_new_timesheet_id::text,'CANDIDATE_SUBMISSION_WITHDRAWN_VERSION_ROTATED',
+    'timesheet',v_current.timesheet_id::text,'CANDIDATE_SUBMISSION_WITHDRAWN_TO_CONTRACT_WEEK',
     jsonb_build_object(
       'old_timesheet_id',v_current.timesheet_id,
       'old_version',v_current.version,
@@ -182,10 +137,9 @@ begin
       'previous_submission_mode',v_current.submission_mode
     ),
     jsonb_build_object(
-      'new_timesheet_id',v_new_timesheet_id,
-      'new_version',v_new_version,
+      'new_timesheet_id',null,
       'contract_week_id',v_week.id,
-      'draft_submission_mode','MANUAL',
+      'draft_submission_mode',null,
       'effective_submission_mode',v_week.submission_mode_snapshot
     ),
     btrim(p_reason),v_system_actor_user_id,null,p_now_utc
@@ -193,10 +147,10 @@ begin
   return jsonb_build_object(
     'reset',true,
     'old_timesheet_id',v_current.timesheet_id,
-    'current_timesheet_id',v_new_timesheet_id,
+    'current_timesheet_id',null,
     'contract_week_id',v_week.id,
-    'timesheet_version',v_new_version,
-    'draft_submission_mode','MANUAL',
+    'timesheet_version',null,
+    'draft_submission_mode',null,
     'effective_submission_mode',v_week.submission_mode_snapshot
   );
 end;
@@ -307,35 +261,19 @@ begin
     v_current.candidate_hint_text,'ELECTRONIC',p_now_utc,p_now_utc
   ) returning timesheet_id into v_new_timesheet_id;
 
-  update public.timesheets_financials set
-    timesheet_id=v_new_timesheet_id,timesheet_version=v_new_version,
-    processing_status='UNASSIGNED',
-    worked_start_iso=null,worked_end_iso=null,break_start_iso=null,break_end_iso=null,
-    break_minutes=null,actual_schedule_json=null,actual_minutes_by_day_json=null,
-    hours_day=0,hours_night=0,hours_sat=0,hours_sun=0,hours_bh=0,total_hours=0,
-    total_pay_ex_vat=0,total_charge_ex_vat=0,margin_ex_vat=0,
-    additional_pay_ex_vat=0,additional_charge_ex_vat=0,additional_margin_ex_vat=0,
-    additional_units_json='{}'::jsonb,
-    expenses_pay_ex_vat=0,expenses_charge_ex_vat=0,expenses_description=null,
-    expenses_evidence_r2_key=null,expenses_evidence_manifest=null,
-    mileage_units=0,mileage_pay_ex_vat=0,mileage_charge_ex_vat=0,
-    mileage_evidence_r2_key=null,mileage_evidence_manifest=null,
-    travel_pay_ex_vat=0,travel_charge_ex_vat=0,
-    accommodation_pay_ex_vat=0,accommodation_charge_ex_vat=0,
-    other_pay_ex_vat=0,other_charge_ex_vat=0,
-    authorised_at_utc=null,authorised_by_user_id=null,updated_at=p_now_utc
-  where id=v_fin.id;
-  if not found then
-    raise exception 'CANDIDATE_DAILY_FINANCIALS_MOVED' using errcode='40001';
-  end if;
-
-  insert into public.ts_financials_outbox(
-    timesheet_id,reason,attempt_count,next_attempt_at,last_error,created_at
+  -- The revoked financial snapshot remains attached to the revoked Timesheet
+  -- so Office can inspect the exact historical hours and values.  The clean
+  -- replacement receives a new unassigned snapshot and is deliberately not
+  -- placed on the processing outbox until the Candidate submits it again.
+  insert into public.timesheets_financials(
+    timesheet_id,timesheet_version,candidate_id,client_id,role,band,pay_method,
+    occupant_key_norm,processing_status,total_hours,
+    hours_day,hours_night,hours_sat,hours_sun,hours_bh
   ) values (
-    v_new_timesheet_id,
-    'REVOKED'::public.ts_fin_reason_enum,
-    0,p_now_utc,null,p_now_utc
-  ) on conflict on constraint uq_tsfin_outbox do nothing;
+    v_new_timesheet_id,v_new_version,v_fin.candidate_id,v_fin.client_id,
+    v_fin.role,v_fin.band,v_fin.pay_method,v_fin.occupant_key_norm,
+    'UNASSIGNED',0,0,0,0,0,0
+  );
 
   update public.timesheet_evidence set processing_state='SUPERSEDED'
   where timesheet_id=v_current.timesheet_id and processing_state<>'SUPERSEDED';
