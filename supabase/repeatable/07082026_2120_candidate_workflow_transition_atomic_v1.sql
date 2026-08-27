@@ -1693,6 +1693,7 @@ declare
   v_manager_withdrawal_request_id uuid;
   v_manager_withdrawal_count integer:=0;
   v_manager_retirement_result jsonb;
+  v_submission_withdrawal_reset jsonb;
   v_cancel_reason text;
   v_cancel_reason_code text;
   v_audit_reason text;
@@ -4633,11 +4634,19 @@ begin
       review_render_state=case when review_render_state='NOT_REQUIRED' then review_render_state else 'SUPERSEDED' end,
       final_signed_render_state=case when final_signed_render_state='NOT_REQUIRED' then final_signed_render_state else 'SUPERSEDED' end
     where workflow_id=v_workflow.id and state not in ('SUPERSEDED','REJECTED');
+    if v_action='CANCEL'
+       and v_workflow.scope='WEEKLY'
+       and v_workflow.workflow_kind in ('CONTRACT_HOURS','CONTRACT_COMBINED') then
+      v_submission_withdrawal_reset:=private._candidate_weekly_withdrawal_reset_v1(
+        v_workflow.id,v_cancel_reason,p_now_utc
+      );
+    end if;
     v_response:=jsonb_build_object('ok',true,'workflow_id',v_workflow.id,
       'state',v_action||case when v_action='CANCEL' then 'LED' else 'D' end,
       'generation',v_next_generation,
       'cancellation_reason',case when v_action='CANCEL' then v_cancel_reason else null end,
       'cancellation_reason_code',case when v_action='CANCEL' then v_cancel_reason_code else null end,
+      'submission_withdrawal_reset',v_submission_withdrawal_reset,
       'manager_withdrawal_count',v_manager_withdrawal_count,
       'manager_mail_retirement',v_manager_retirement_result);
     update public.candidate_submission_workflows set

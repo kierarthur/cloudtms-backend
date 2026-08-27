@@ -31,6 +31,7 @@ declare
   v_reminder_token_hash bytea:=extensions.digest('reminder-manager-token','sha256');
   v_count integer;
   v_mail_count integer;
+  v_reset_timesheet uuid;
   v_cancel_payload jsonb:=jsonb_build_object(
     'reason_note','I entered the wrong week.',
     'manager_terminal_mail',jsonb_build_object(
@@ -211,8 +212,24 @@ begin
   );
   if v_result->>'state'<>'CANCELLED'
      or v_result->>'cancellation_reason'<>'I entered the wrong week.'
-     or (v_result->>'manager_withdrawal_count')::integer<>1 then
+     or (v_result->>'manager_withdrawal_count')::integer<>1
+     or not coalesce((v_result#>>'{submission_withdrawal_reset,reset}')::boolean,false)
+     or v_result#>>'{submission_withdrawal_reset,effective_submission_mode}'<>'ELECTRONIC'
+     or v_result#>>'{submission_withdrawal_reset,draft_submission_mode}'<>'MANUAL' then
     raise exception 'reasoned cancellation result incomplete: %',v_result;
+  end if;
+  v_reset_timesheet:=(v_result#>>'{submission_withdrawal_reset,current_timesheet_id}')::uuid;
+  if v_reset_timesheet is null or v_reset_timesheet=v_timesheet
+     or (select is_current from public.timesheets where timesheet_id=v_timesheet)
+     or (select status from public.timesheets where timesheet_id=v_timesheet)<>'REVOKED'
+     or not coalesce((select is_current from public.timesheets where timesheet_id=v_reset_timesheet),false)
+     or (select status from public.timesheets where timesheet_id=v_reset_timesheet)<>'RECEIVED'
+     or (select submission_mode from public.timesheets where timesheet_id=v_reset_timesheet)<>'MANUAL'
+     or (select timesheet_id from public.contract_weeks where id=v_week)<>v_reset_timesheet
+     or (select status from public.contract_weeks where id=v_week)<>'OPEN'
+     or (select submission_mode_snapshot from public.contract_weeks where id=v_week)<>'ELECTRONIC'
+     or (select total_hours from public.timesheets_financials where timesheet_id=v_reset_timesheet)<>0 then
+    raise exception 'reasoned cancellation did not rotate a clean editable electronic draft: %',v_result;
   end if;
   select count(*) into v_count from public.mail_outbox
   where deterministic_outbox_key='CANDIDATE_MANAGER_CANCELLATION_V1:'||v_request::text||':1'
