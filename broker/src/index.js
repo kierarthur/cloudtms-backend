@@ -58433,13 +58433,22 @@ async function sendViaWatiBulkTemplate(env, watiCfg, rows, opts = {}) {
         }
 
         const localMessageId = rr && (rr.localMessageId || rr.localMessageID || rr.local_message_id) ? String(rr.localMessageId || rr.localMessageID || rr.local_message_id) : null;
-        const isValid = Object.prototype.hasOwnProperty.call(rr, 'isValidWhatsAppNumber')
-          ? (rr.isValidWhatsAppNumber === true)
-          : true;
+        const hasValidityResult = Object.prototype.hasOwnProperty.call(rr, 'isValidWhatsAppNumber');
+        const rawValidityResult = hasValidityResult ? rr.isValidWhatsAppNumber : true;
+        const normalizedValidityResult = typeof rawValidityResult === 'string'
+          ? rawValidityResult.trim().toLowerCase()
+          : rawValidityResult;
+        const isValid = !hasValidityResult ||
+          normalizedValidityResult === true ||
+          normalizedValidityResult === 1 ||
+          normalizedValidityResult === 'true' ||
+          normalizedValidityResult === '1';
         const errs = rr && Array.isArray(rr.errors) ? rr.errors : [];
         const errStr = errs.length ? errs.map(x => String(x)).join('; ').slice(0, 500) : null;
 
-        if (!isValid || errStr) {
+        // A local message ID proves WATI accepted the message, even when its
+        // validity flag is string-typed or contradicts the accepted result.
+        if ((!localMessageId && !isValid) || errStr) {
           const msg = errStr || 'WATI_INVALID_WHATSAPP_NUMBER';
           const updatedRow = await patchFailure(item.id, msg, { wati: rr, full: respJson }).catch(() => null);
           if (!updatedRow) continue;
