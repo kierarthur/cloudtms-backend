@@ -10823,6 +10823,37 @@ async function handleContractsUpdate(env, req, contractId) {
     `${env.SUPABASE_URL}/rest/v1/contract_weeks?contract_id=eq.${enc(contractId)}&select=id&limit=1`
   ));
 
+  const todayYmdForContractLock = toYmd(new Date());
+  const contractHasStarted = hasSubmitted || !!(
+    current.start_date && todayYmdForContractLock && String(current.start_date) <= String(todayYmdForContractLock)
+  );
+  if (contractHasStarted) {
+    const changedCore = [];
+    const normString = (value) => value == null ? '' : String(value).trim();
+    const normUpper = (value) => normString(value).toUpperCase();
+    const normTri = (value) => value == null ? null : clampBool(value, false);
+    const compareString = (key, upper = false) => {
+      if (!Object.prototype.hasOwnProperty.call(body, key)) return;
+      const normalize = upper ? normUpper : normString;
+      if (normalize(body[key]) !== normalize(current[key])) changedCore.push(key);
+    };
+    const compareTri = (key) => {
+      if (!Object.prototype.hasOwnProperty.call(body, key)) return;
+      if (normTri(body[key]) !== normTri(current[key])) changedCore.push(key);
+    };
+    ['candidate_id','client_id','role','band'].forEach((key) => compareString(key));
+    ['pay_method_snapshot','weekly_timesheet_source','default_submission_mode'].forEach((key) => compareString(key, true));
+    [
+      'overrideclientsettings','is_nhsp','autoprocess_hr','requires_hr','no_timesheet_required',
+      'self_bill','daily_calc_of_invoices','group_nightsat_sunbh','auto_invoice'
+    ].forEach(compareTri);
+    if (changedCore.length) {
+      return withCORS(env, req, badRequest(
+        `Core contract details cannot be changed after the contract has started. Blocked fields: ${[...new Set(changedCore)].join(', ')}`
+      ));
+    }
+  }
+
   // ✅ normaliseAdditionalRates is now module-level (shared by create/update/replace/clone)
 
   let schedulePatch = {};
@@ -11536,10 +11567,66 @@ async function handleContractsReplace(env, req, contractId) {
     desiredDefaultSubmissionMode = parsed;
   }
 
+  // Core authority is immutable once a contract has started, even where a
+  // contract has only planned weeks. Compare values rather than rejecting the
+  // presence of unchanged fields so safe edits can still be saved.
+  const todayYmdForContractLock = toYmd(new Date());
+  const contractHasStarted = hasSubmitted || !!(
+    current.start_date && todayYmdForContractLock && String(current.start_date) <= String(todayYmdForContractLock)
+  );
+  if (contractHasStarted) {
+    const changedCore = [];
+    const normString = (value) => value == null ? '' : String(value).trim();
+    const normUpper = (value) => normString(value).toUpperCase();
+    const normTri = (value) => value == null ? null : clampBool(value, false);
+    const compareString = (key, { upper = false } = {}) => {
+      if (!Object.prototype.hasOwnProperty.call(body, key)) return;
+      const normalize = upper ? normUpper : normString;
+      if (normalize(body[key]) !== normalize(current[key])) changedCore.push(key);
+    };
+    const compareTri = (key) => {
+      if (!Object.prototype.hasOwnProperty.call(body, key)) return;
+      if (normTri(body[key]) !== normTri(current[key])) changedCore.push(key);
+    };
+
+    compareString('candidate_id');
+    compareString('client_id');
+    compareString('role');
+    compareString('band');
+    compareString('pay_method_snapshot', { upper: true });
+    compareString('weekly_timesheet_source', { upper: true });
+    [
+      'overrideclientsettings',
+      'is_nhsp',
+      'autoprocess_hr',
+      'requires_hr',
+      'no_timesheet_required',
+      'self_bill',
+      'daily_calc_of_invoices',
+      'group_nightsat_sunbh',
+      'auto_invoice'
+    ].forEach(compareTri);
+
+    if (Object.prototype.hasOwnProperty.call(body, 'default_submission_mode')) {
+      const nextMode = overrideclientsettings ? (desiredDefaultSubmissionMode ?? null) : (current.default_submission_mode ?? null);
+      if ((nextMode ?? null) !== (current.default_submission_mode ?? null)) changedCore.push('default_submission_mode');
+    }
+
+    if (changedCore.length) {
+      return withCORS(env, req, badRequest(
+        `Core contract details cannot be changed after the contract has started. Blocked fields: ${[...new Set(changedCore)].join(', ')}`
+      ));
+    }
+  }
+
   // ---- detect attempted week-ending change (used for safe blocking under submitted TS) ----
   const curWewNum = Number(current.week_ending_weekday_snapshot ?? 0);
   const bodyWewNum = ('week_ending_weekday_snapshot' in body) ? Number(body.week_ending_weekday_snapshot) : curWewNum;
   const attemptedWeekdayChange = ('week_ending_weekday_snapshot' in body) && (Number.isFinite(bodyWewNum)) && (bodyWewNum !== curWewNum);
+
+  if (hasWeeks && attemptedWeekdayChange) {
+    return withCORS(env, req, badRequest('Week-ending day cannot be changed after contract weeks have been created.'));
+  }
 
   if (hasSubmitted) {
     // Treat omitted fields as “no change” (defensive)
@@ -12012,12 +12099,44 @@ async function handleContractsDuplicate(env, req, contractId) {
     return withCORS(env, req, badRequest('count must be an integer between 1 and 10'));
   }
 
+  const assignments = Array.isArray(body?.assignments) ? body.assignments : [];
+  if (assignments.length > count) {
+    return withCORS(env, req, badRequest('assignments cannot contain more entries than count'));
+  }
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const candidateAssignments = Array.from({ length: count }, (_, index) => {
+    const value = assignments[index];
+    if (value == null || String(value).trim() === '') return null;
+    return String(value).trim();
+  });
+  if (candidateAssignments.some(value => value && !uuidPattern.test(value))) {
+    return withCORS(env, req, badRequest('assignments must contain Candidate identifiers or null'));
+  }
+
   // Load source contract
   const src = await sbGetOne(
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
   );
   if (!src) return withCORS(env, req, notFound('Source contract not found'));
+
+  const expectedSourceUpdatedAt = String(body?.expected_source_updated_at || '').trim();
+  if (expectedSourceUpdatedAt && String(src.updated_at || '') !== expectedSourceUpdatedAt) {
+    return withCORS(env, req, conflict('The source Contract changed while this window was open. Reopen it before duplicating.'));
+  }
+
+  const assignedCandidateIds = [...new Set(candidateAssignments.filter(Boolean))];
+  if (assignedCandidateIds.length) {
+    const filter = assignedCandidateIds.map(id => `id.eq.${enc(id)}`).join(',');
+    const { rows: candidates } = await sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates?or=(${filter})&select=id`
+    );
+    const found = new Set((candidates || []).map(row => String(row?.id || '')));
+    if (assignedCandidateIds.some(id => !found.has(id))) {
+      return withCORS(env, req, badRequest('One or more selected Candidates no longer exist'));
+    }
+  }
 
   try {
     console.log('[CONTRACTS][DUPLICATE] source', {
@@ -12031,13 +12150,47 @@ async function handleContractsDuplicate(env, req, contractId) {
 
   const duplicates = [];
 
+  const rollbackDuplicateContracts = async (additionalId = null) => {
+    const rollbackIds = [
+      ...duplicates.map(item => item.id),
+      additionalId
+    ].filter(Boolean);
+    const failures = [];
+    for (const rollbackId of rollbackIds.reverse()) {
+      try {
+        const rollback = await fetch(`${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(rollbackId)}`, {
+          method: 'DELETE',
+          headers: { ...sbHeaders(env), 'Prefer': 'return=minimal' }
+        });
+        if (!rollback.ok) failures.push(rollbackId);
+      } catch {
+        failures.push(rollbackId);
+      }
+    }
+    return failures;
+  };
+
+  const duplicateFailureResponse = async (message, additionalId = null) => {
+    const cleanupFailures = await rollbackDuplicateContracts(additionalId);
+    if (cleanupFailures.length) {
+      console.error('[CONTRACTS][DUPLICATE] rollback incomplete', {
+        source_id: src.id,
+        cleanup_failure_count: cleanupFailures.length
+      });
+      return withCORS(env, req, serverError(
+        'The Contract copies could not be completed and cleanup needs attention. Refresh the Contracts summary before trying again.'
+      ));
+    }
+    return withCORS(env, req, serverError(message));
+  };
+
   // Preserve nullable flags exactly as stored (null remains null)
   const copyBoolOrNull = (v) => (v === null || v === undefined) ? null : !!v;
 
   for (let i = 0; i < count; i++) {
     const payload = {
-      // 🔑 Explicitly unassigned
-      candidate_id: null,
+      // A null assignment deliberately creates an unassigned vacancy.
+      candidate_id: candidateAssignments[i],
       client_id: src.client_id,
 
       role: src.role || null,
@@ -12085,6 +12238,7 @@ async function handleContractsDuplicate(env, req, contractId) {
       hr_attach_to_invoice: copyBoolOrNull(src.hr_attach_to_invoice),
       ts_attach_to_invoice: copyBoolOrNull(src.ts_attach_to_invoice),
       timesheet_break_entry_mode: src.timesheet_break_entry_mode ?? null,
+      candidate_manager_approval_policy_json: src.candidate_manager_approval_policy_json ?? null,
 
       // NEW: reference and email routing fields (contract-level)
       reference_number_required_to_issue_invoice: copyBoolOrNull(src.reference_number_required_to_issue_invoice),
@@ -12109,28 +12263,31 @@ async function handleContractsDuplicate(env, req, contractId) {
     });
     if (!ins.ok) {
       const txt = await ins.text().catch(()=> '');
-      return withCORS(env, req, serverError(`Failed to duplicate contract: ${txt || ins.status}`));
+      return duplicateFailureResponse(`Failed to duplicate contract: ${txt || ins.status}`);
     }
     const j = await ins.json().catch(()=>[]);
     const row = Array.isArray(j) ? j[0] : j;
     if (!row || !row.id) {
-      return withCORS(env, req, serverError('Failed to duplicate contract (no row returned)'));
+      return duplicateFailureResponse('Failed to duplicate contract (no row returned)');
     }
 
-    // Generate weeks for the duplicate (non-fatal if it fails)
+    // Week generation is part of a successful duplicate. A half-created
+    // Contract without its planned weeks is not a valid result.
     try {
       const shouldGenerate = !!row.std_schedule_json || !!row.std_hours_json;
-      if (shouldGenerate && typeof handleContractsGenerateWeeks === 'function') {
-        await handleContractsGenerateWeeks(env, req, row.id);
+      if (shouldGenerate) {
+        await generateContractWeeksInternal(env, row.id);
         console.log('[CONTRACTS][DUPLICATE] generate-weeks ok', { id: row.id });
-      } else if (shouldGenerate) {
-        console.log('[CONTRACTS][DUPLICATE] no internal generate-weeks handler; skipped', { id: row.id });
       }
     } catch (e) {
-      console.warn('[CONTRACTS][DUPLICATE] generate-weeks failed (non-fatal)', {
+      console.warn('[CONTRACTS][DUPLICATE] generate-weeks failed; rolling back new copies', {
         id: row.id,
         error: String(e?.message || e)
       });
+      return duplicateFailureResponse(
+        'The Contract copies could not be completed. No incomplete copies were kept.',
+        row.id
+      );
     }
 
     // ✅ WARN-ONLY schedule clashes: duplicates are created unassigned (candidate_id null),
@@ -20686,6 +20843,11 @@ async function handleContractsCloneAndExtend(env, req, contractId) {
     `${env.SUPABASE_URL}/rest/v1/contracts?id=eq.${enc(contractId)}&select=*`
   );
   if (!cur) return withCORS(env, req, notFound('Contract not found'));
+
+  const expectedSourceUpdatedAt = String(body?.expected_source_updated_at || '').trim();
+  if (expectedSourceUpdatedAt && String(cur.updated_at || '') !== expectedSourceUpdatedAt) {
+    return withCORS(env, req, conflict('The source Contract changed while this extension was being prepared. Reopen it before continuing.'));
+  }
 
   // Inputs (front-end payload + safe defaults)
   const newStart = toYmd(body.new_start_date || cur.end_date);
@@ -138067,11 +138229,38 @@ async function handleContractPrintedTimesheetPolicyUpdate(env, req, contractId) 
     env,
     `${env.SUPABASE_URL}/rest/v1/contracts` +
       `?id=eq.${enc(contractId)}` +
-      `&select=id,candidate_paper_submission_enabled_override,updated_at`
+      `&select=id,start_date,candidate_paper_submission_enabled_override,updated_at`
   );
   if (!current) return withCORS(env, req, notFound('Contract not found'));
   if (String(current.updated_at || '') !== String(body.expected_contract_updated_at || '')) {
     return printedTimesheetPolicyErrorResponse(env, req, 'The Contract changed. Reload and try again.', 409, 'CONTRACT_VERSION_CONFLICT');
+  }
+
+  const currentOverride = current.candidate_paper_submission_enabled_override == null
+    ? null
+    : !!current.candidate_paper_submission_enabled_override;
+  const requestedOverride = body.override == null ? null : !!body.override;
+  if (currentOverride === requestedOverride) {
+    return withCORS(env, req, ok({ contract: current, unchanged: true }));
+  }
+
+  const hasSubmittedTimesheet = !!(await sbGetOne(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/timesheets` +
+      `?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
+  ));
+  const todayYmd = toYmd(new Date());
+  const contractHasStarted = hasSubmittedTimesheet || !!(
+    current.start_date && todayYmd && String(current.start_date) <= String(todayYmd)
+  );
+  if (contractHasStarted) {
+    return printedTimesheetPolicyErrorResponse(
+      env,
+      req,
+      'Printed-timesheet availability cannot be changed after the Contract has started.',
+      409,
+      'CONTRACT_STARTED_FIELD_LOCKED'
+    );
   }
 
   const res = await fetch(

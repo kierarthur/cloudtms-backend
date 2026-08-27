@@ -3168,7 +3168,9 @@ begin
     send_ts_queries_to_different_email,
     ts_queries_alt_email_address,
     is_ad_hoc,
-    timesheet_break_entry_mode
+    timesheet_break_entry_mode,
+    candidate_paper_submission_enabled_override,
+    candidate_manager_approval_policy_json
   ) values (
     v_succ_candidate_id,
     v_succ_client_id,
@@ -3210,7 +3212,9 @@ begin
     v_succ_send_ts_queries_to_different_email,
     v_succ_ts_queries_alt_email_address,
     v_succ_is_ad_hoc,
-    v_succ_timesheet_break_entry_mode
+    v_succ_timesheet_break_entry_mode,
+    v_cur.candidate_paper_submission_enabled_override,
+    v_cur.candidate_manager_approval_policy_json
   )
   returning c.* into v_succ;
 
