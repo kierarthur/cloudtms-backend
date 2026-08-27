@@ -70744,6 +70744,7 @@ async function loadContractWeekWithdrawnSubmissionHistory(env, weekId) {
         meta_json: {
           withdrawn_history: true,
           withdrawn_at: withdrawnAt,
+          booking_id: historical?.booking_id || null,
           authorised_at_server: historical?.authorised_at_server || null,
           auth_name: historical?.auth_name || null,
           auth_job_title: historical?.auth_job_title || null,
@@ -81199,6 +81200,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
               meta_json: {
                 withdrawn_history: true,
                 withdrawn_at: withdrawnAt,
+                booking_id: historical?.booking_id || null,
                 authorised_at_server: historical?.authorised_at_server || null,
                 auth_name: historical?.auth_name || null,
                 auth_job_title: historical?.auth_job_title || null,

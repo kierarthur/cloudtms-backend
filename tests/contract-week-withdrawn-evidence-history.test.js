@@ -32,6 +32,7 @@ test('planned Contract Week returns the same audit-only history shape used by re
   assert.match(helper, /withdrawal_scope: withdrawalScope/);
   assert.match(helper, /display_name: 'Official withdrawn timesheet'/);
   assert.match(helper, /kind: 'ELECTRONIC_SIGNATURES'/);
+  assert.match(helper, /preview_mode: 'SIGNATURES',[\s\S]*booking_id: historical\?\.booking_id \|\| null/);
   assert.match(helper, /protected: true,[\s\S]*withdrawn_history: true,[\s\S]*is_view_only: true/);
   assert.match(helper, /can_delete: false,[\s\S]*can_reclassify: false,[\s\S]*can_return_to_queue: false/);
 });

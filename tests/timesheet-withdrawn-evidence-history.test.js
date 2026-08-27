@@ -38,5 +38,6 @@ test('every historical item is audit-only and cannot enter current evidence muta
 test('the retained official timesheet and signatures are projected as separate viewable history', () => {
   assert.match(handler, /kind: 'TIMESHEET'[\s\S]*display_name: 'Official withdrawn timesheet'[\s\S]*preview_mode: 'PDF'/);
   assert.match(handler, /kind: 'ELECTRONIC_SIGNATURES'[\s\S]*preview_mode: 'SIGNATURES'/);
+  assert.match(handler, /preview_mode: 'SIGNATURES',[\s\S]*booking_id: historical\?\.booking_id \|\| null/);
   assert.match(handler, /r2_nurse_key: nurseKey \|\| null[\s\S]*r2_auth_key: authoriserKey \|\| null/);
 });
