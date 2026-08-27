@@ -15,6 +15,8 @@ const candidateRead = fs.readFileSync(path.join(root,
   'supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql'), 'utf8');
 const dailyVerification = fs.readFileSync(path.join(root,
   'supabase/verification/27082026_1327_candidate_daily_withdrawal_reset_verification.sql'), 'utf8');
+const finalAuthority = fs.readFileSync(path.join(root,
+  'supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql'), 'utf8');
 
 test('candidate cancellation retires approval authority and resets weekly hours atomically', () => {
   assert.match(workflow,
@@ -26,12 +28,17 @@ test('candidate cancellation retires approval authority and resets weekly hours 
 });
 
 test('manager-approved finalised submissions remain withdrawable until Office protection begins', () => {
+  const actionContract = candidateRead.slice(
+    candidateRead.indexOf('create or replace function private._candidate_timesheet_action_contract_v1')
+  );
   assert.match(workflow,
     /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*v_action='SUPERSEDE' and v_workflow\.state='FINALISED'[\s\S]*_candidate_weekly_withdrawal_reset_v1/i);
   assert.match(workflow,
     /v_action in \('CANCEL','SUPERSEDE'\) then\s+if v_workflow\.state in \('CANCELLED','REJECTED','SUPERSEDED'\)\s+or \(v_action='SUPERSEDE' and v_workflow\.state='FINALISED'\)/i);
-  assert.match(candidateRead,
-    /'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'[\s\S]*p_candidate_status_code[\s\S]*not in \('PAID','AUTHORISED','INVOICED_NOT_PAID'\)/i);
+  assert.match(actionContract,
+    /'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'/i);
+  assert.match(actionContract,
+    /p_candidate_status_code[\s\S]*not in \('PAID','AUTHORISED','INVOICED_NOT_PAID'\)/i);
 });
 
 test('weekly withdrawal creates a clean current version without deleting history', () => {
@@ -89,4 +96,23 @@ test('Daily reset is private, browser-inaccessible and has rollback-contained fi
     /grant execute on function private\._candidate_daily_submission_reset_v1\([\s\S]*to service_role/i);
   assert.match(dailyVerification,
     /begin;[\s\S]*_candidate_daily_submission_reset_v1\([\s\S]*scheduled_start_iso[\s\S]*processing_status[\s\S]*rollback;/i);
+});
+
+test('withdrawal read authority cannot replay obsolete public Candidate reads', () => {
+  assert.match(finalAuthority,
+    /\\ir 07082026_2108_candidate_app_read_and_missing_week_rpcs_v1\.sql[\s\S]*\\ir 07082026_2120_candidate_workflow_transition_atomic_v1\.sql/i);
+  for (const currentAuthority of [
+    '25082026_2024_candidate_nullif_runtime_correction_v1.sql',
+    '25082026_2043_candidate_home_notification_runtime_v1.sql',
+    '25082026_2255_candidate_home_actionable_timesheet_count_v1.sql',
+    '26082026_1432_candidate_home_draft_counts_v1.sql',
+    '26082026_1516_candidate_timesheet_card_draft_linkage_v1.sql',
+    '26082026_1537_candidate_home_draft_identity_v1.sql',
+    '27082026_0858_candidate_finalised_artifact_readiness_v1.sql'
+  ]) {
+    assert.ok(finalAuthority.includes(`\\ir ${currentAuthority}`),
+      `Final authority must replay ${currentAuthority}`);
+  }
+  assert.match(dailyVerification,
+    /search_path=""[\s\S]*draft_week\.id[\s\S]*final_signed_document_ready/i);
 });

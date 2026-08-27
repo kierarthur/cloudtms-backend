@@ -534,7 +534,7 @@ begin
     'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
     'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
-    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'
+    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
   )
   order by coalesce((item->>'detail_action_owner')::boolean,false) desc,
     item->>'updated_at_utc' desc,item->>'workflow_id'
@@ -661,7 +661,7 @@ begin
     'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
     'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
-    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
+    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'
   )
   order by coalesce((item->>'detail_action_owner')::boolean,false) desc,
     item->>'updated_at_utc' desc,item->>'workflow_id'
