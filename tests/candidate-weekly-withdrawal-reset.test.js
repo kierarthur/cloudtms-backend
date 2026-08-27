@@ -9,6 +9,8 @@ const workflow = fs.readFileSync(path.join(root,
   'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql'), 'utf8');
 const reset = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql'), 'utf8');
+const nullTargetReset = fs.readFileSync(path.join(root,
+  'supabase/repeatable/27082026_2004_candidate_weekly_withdrawal_null_target_v1.sql'), 'utf8');
 const officeReject = fs.readFileSync(path.join(root,
   'supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql'), 'utf8');
 const candidateRead = fs.readFileSync(path.join(root,
@@ -17,6 +19,8 @@ const routeCapabilities = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_0244_candidate_processed_action_projection_v1.sql'), 'utf8');
 const dailyVerification = fs.readFileSync(path.join(root,
   'supabase/verification/27082026_1327_candidate_daily_withdrawal_reset_verification.sql'), 'utf8');
+const nullTargetVerification = fs.readFileSync(path.join(root,
+  'supabase/verification/27082026_2005_candidate_weekly_null_target_withdrawal_verification.sql'), 'utf8');
 const finalAuthority = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_1436_candidate_withdrawal_read_authority_v1.sql'), 'utf8');
 const currentDetail = fs.readFileSync(path.join(root,
@@ -68,6 +72,22 @@ test('weekly withdrawal returns to the editable contract week without deleting h
   assert.doesNotMatch(reset,
     /ts_financials_outbox\([\s\S]{0,300}'CANDIDATE_(?:WITHDRAWN|REJECTED)'/i);
   assert.doesNotMatch(reset, /\bdelete\s+from\b/i);
+});
+
+test('manager-refused planned weeks without a Timesheet reopen without inventing a target', () => {
+  assert.match(nullTargetReset,
+    /\\ir 26082026_0659_candidate_no_work_weekly_chain_v1\.sql[\s\S]*\\ir 27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql/i);
+  assert.match(nullTargetReset,
+    /coalesce\([\s\S]*v_workflow\.target_timesheet_id[\s\S]*v_workflow\.anchor_timesheet_id[\s\S]*v_week\.timesheet_id[\s\S]*\)/i);
+  assert.match(nullTargetReset,
+    /if v_source_timesheet_id is not null[\s\S]*v_has_source:=true[\s\S]*elsif v_week\.timesheet_id is not null[\s\S]*CANDIDATE_WORKFLOW_TARGET_NOT_FOUND/i);
+  assert.match(nullTargetReset,
+    /timesheet_id=null,[\s\S]*status='OPEN'[\s\S]*day_entries_json='\[\]'::jsonb[\s\S]*totals_json='\{\}'::jsonb/i);
+  assert.match(nullTargetReset,
+    /case when v_has_source then 'timesheet' else 'contract_week' end/i);
+  assert.doesNotMatch(nullTargetReset, /\bdelete\s+from\b/i);
+  assert.match(nullTargetVerification,
+    /begin;[\s\S]*'REFUSED'[\s\S]*null,null[\s\S]*_candidate_weekly_withdrawal_reset_v1[\s\S]*object_type='contract_week'[\s\S]*rollback;/i);
 });
 
 test('withdrawal helper remains private and browser-inaccessible', () => {
