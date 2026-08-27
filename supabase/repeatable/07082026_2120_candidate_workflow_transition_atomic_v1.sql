@@ -4530,7 +4530,8 @@ begin
     );
 
   elsif v_action in ('CANCEL','SUPERSEDE') then
-    if v_workflow.state in ('FINALISED','CANCELLED','REJECTED','SUPERSEDED') then
+    if v_workflow.state in ('CANCELLED','REJECTED','SUPERSEDED')
+       or (v_action='SUPERSEDE' and v_workflow.state='FINALISED') then
       raise exception 'CANDIDATE_WORKFLOW_NOT_CANCELLABLE' using errcode='55000';
     end if;
     if v_action='CANCEL' then

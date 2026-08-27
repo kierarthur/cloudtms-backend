@@ -11,6 +11,8 @@ const reset = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql'), 'utf8');
 const officeReject = fs.readFileSync(path.join(root,
   'supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql'), 'utf8');
+const candidateRead = fs.readFileSync(path.join(root,
+  'supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql'), 'utf8');
 const dailyVerification = fs.readFileSync(path.join(root,
   'supabase/verification/27082026_1327_candidate_daily_withdrawal_reset_verification.sql'), 'utf8');
 
@@ -21,6 +23,15 @@ test('candidate cancellation retires approval authority and resets weekly hours 
     /scope<>'WEEKLY'[\s\S]*workflow_kind not in \('CONTRACT_HOURS','CONTRACT_COMBINED'\)/i);
   assert.match(reset,
     /authorised_at_server is not null[\s\S]*authorised_at_utc is not null[\s\S]*paid_at_utc is not null[\s\S]*locked_by_invoice_id is not null/i);
+});
+
+test('manager-approved finalised submissions remain withdrawable until Office protection begins', () => {
+  assert.match(workflow,
+    /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*v_action='SUPERSEDE' and v_workflow\.state='FINALISED'[\s\S]*_candidate_weekly_withdrawal_reset_v1/i);
+  assert.match(workflow,
+    /v_action in \('CANCEL','SUPERSEDE'\) then\s+if v_workflow\.state in \('CANCELLED','REJECTED','SUPERSEDED'\)\s+or \(v_action='SUPERSEDE' and v_workflow\.state='FINALISED'\)/i);
+  assert.match(candidateRead,
+    /'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'[\s\S]*p_candidate_status_code[\s\S]*not in \('PAID','AUTHORISED','INVOICED_NOT_PAID'\)/i);
 });
 
 test('weekly withdrawal creates a clean current version without deleting history', () => {

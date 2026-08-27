@@ -1,4 +1,27 @@
 -- Rollback-contained first-use proof for Candidate Daily withdrawal/rejection reset.
+do $candidate_submission_withdrawal_boundary_verification$
+declare
+  v_read_definition text;
+  v_transition_definition text;
+begin
+  select pg_get_functiondef(
+    'private._candidate_timesheet_action_contract_v1(text,jsonb,jsonb,uuid,uuid,timestamptz)'::regprocedure
+  ) into v_read_definition;
+  select pg_get_functiondef(
+    'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)'::regprocedure
+  ) into v_transition_definition;
+
+  if position('''FINALISED''' in v_read_definition)=0
+     or position('not in (''PAID'',''AUTHORISED'',''INVOICED_NOT_PAID'')' in v_read_definition)=0
+     or position('v_action=''SUPERSEDE'' and v_workflow.state=''FINALISED''' in v_transition_definition)=0
+     or position('v_action=''CANCEL''' in v_transition_definition)=0
+     or position('_candidate_weekly_withdrawal_reset_v1' in v_transition_definition)=0
+     or position('_candidate_daily_submission_reset_v1' in v_transition_definition)=0 then
+    raise exception 'CANDIDATE_SUBMISSION_WITHDRAWAL_BOUNDARY_INCOMPLETE';
+  end if;
+end;
+$candidate_submission_withdrawal_boundary_verification$;
+
 begin;
 
 do $candidate_daily_withdrawal_reset_verification$

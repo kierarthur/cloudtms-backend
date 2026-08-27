@@ -534,7 +534,7 @@ begin
     'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
     'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED',
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
-    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
+    'AWAITING_PAPER_RETURN','RECEIVED','REFUSED','FINALISED'
   )
   order by coalesce((item->>'detail_action_owner')::boolean,false) desc,
     item->>'updated_at_utc' desc,item->>'workflow_id'
@@ -674,9 +674,9 @@ begin
   end if;
 
   if v_workflow.id is not null then
-    v_cancel_eligible:=v_workflow.state not in (
-      'FINALISED','CANCELLED','REJECTED','SUPERSEDED','EXPIRED'
-    );
+    v_cancel_eligible:=upper(coalesce(p_candidate_status_code,''))
+      not in ('PAID','AUTHORISED','INVOICED_NOT_PAID')
+      and v_workflow.state not in ('CANCELLED','REJECTED','SUPERSEDED','EXPIRED');
     v_cancel_code:=case when v_workflow.workflow_kind='CONTRACT_EXPENSE'
       then 'DISCARD_EXPENSE_CLAIM' else 'CANCEL_ENTIRE_CLAIM_AND_START_AGAIN' end;
     if v_cancel_eligible then
