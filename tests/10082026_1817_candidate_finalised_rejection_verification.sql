@@ -32,6 +32,7 @@ declare
   v_component uuid:=gen_random_uuid();
   v_request uuid:=gen_random_uuid();
   v_replacement_workflow uuid:=gen_random_uuid();
+  v_resubmission_key uuid:=gen_random_uuid();
   v_isolated_expense_timesheet uuid:=gen_random_uuid();
   v_isolated_expense_week uuid:=gen_random_uuid();
   v_isolated_expense_workflow uuid:=gen_random_uuid();
@@ -398,21 +399,20 @@ begin
     raise exception 'Finalised rejection replay duplicated the notification';
   end if;
 
+  if (select submission_mode from public.timesheets where timesheet_id=v_new_timesheet)
+       <>'ELECTRONIC'
+     or (select submission_mode_snapshot from public.contract_weeks where id=v_target_week)
+       <>'ELECTRONIC' then
+    raise exception 'Electronic rejection replacement was not Candidate-editable';
+  end if;
+
   v_result:=public.candidate_workflow_transition_atomic_v1(
-    v_session,'TEST',v_replacement_workflow,'CREATE',1,
-    case when p_separate_expense then jsonb_build_object(
-      'workflow_kind','CONTRACT_EXPENSE','scope','WEEKLY','route','ELECTRONIC',
-      'contract_id',v_contract,'contract_week_id',v_base_week,
-      'anchor_timesheet_id',v_base_timesheet,'week_ending_date',current_date
-    ) else jsonb_build_object(
-      'workflow_kind',p_workflow_kind,'scope','WEEKLY','route','ELECTRONIC',
-      'contract_id',v_contract,'contract_week_id',v_base_week,
-      'target_timesheet_id',v_new_timesheet,'week_ending_date',current_date
-    ) end,
-    'replacement:'||v_replacement_workflow::text,now()
+    v_session,'TEST',v_workflow,'RESUBMIT_REJECTED',3,'{}'::jsonb,
+    v_resubmission_key::text,now()
   );
-  if v_result->>'state'<>'WORKER_DRAFT'
-     or v_result->>'workflow_id'<>v_replacement_workflow::text then
+  v_replacement_workflow:=nullif(v_result->>'workflow_id','')::uuid;
+  if v_result->>'state'<>'WORKER_DRAFT' or v_replacement_workflow is null
+     or v_result->>'rejected_workflow_id'<>v_workflow::text then
     raise exception 'Replacement workflow was not created: %',v_result;
   end if;
   v_page:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,now());

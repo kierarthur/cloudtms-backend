@@ -47,7 +47,8 @@ $installFiles = @(
   'supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql',
   'supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql',
   'supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql',
-  'supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql'
+  'supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql',
+  'supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql'
 )
 
 $suites = @(
