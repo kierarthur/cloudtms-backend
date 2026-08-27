@@ -2308,6 +2308,14 @@ test('new Candidate component preparation uses the narrow authenticated fast-pat
   }
 });
 
+test('Candidate component fast-path refreshes the PostgREST schema cache after installation', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/repeatable/27082026_0740_candidate_component_prepare_fast_path_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql, /grant execute on function public\.candidate_component_prepare_atomic_v1[\s\S]*notify pgrst, 'reload schema';/i);
+});
+
 test('Candidate component preparation recovers one exact pending component after an older phone loses its prepare key', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000421',

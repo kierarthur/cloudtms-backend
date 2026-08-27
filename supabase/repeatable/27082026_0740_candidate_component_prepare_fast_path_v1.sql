@@ -271,3 +271,7 @@ revoke all on function public.candidate_component_prepare_atomic_v1(
 grant execute on function public.candidate_component_prepare_atomic_v1(
   uuid,text,uuid,integer,jsonb,text,timestamptz
 ) to service_role;
+
+-- The service-only RPC is called through PostgREST. Refresh the schema cache in
+-- the same transaction so the newly installed signature is immediately usable.
+notify pgrst, 'reload schema';
