@@ -171,3 +171,40 @@ test('Timesheet Summary embeds a safe row-level error and never starts browser h
   });
   assert.equal(result[1].candidate_office_projection, null);
 });
+
+test('targeted Summary patch exposes only the agreed visible state and current identity', () => {
+  const projection = {
+    current_identity: {
+      row_key: 'row-1',
+      timesheet_id: uuid(1),
+      contract_week_id: uuid(2),
+      row_signature: 'revision-22'
+    },
+    candidate_status: { code: 'FINALISED', label: 'Candidate Submission Complete', tone: 'success' }
+  };
+  const patch = candidateOfficeSummaryInternals.candidateTimesheetSummaryCompactPatch({
+    timesheet_id: uuid(1), contract_week_id: uuid(2),
+    candidate_name: 'must not be repeated', client_name: 'must not be repeated',
+    route_type: 'DAILY_ELECTRONIC', route_display: 'Daily Electronic', route_family: 'ELECTRONIC', sheet_scope: 'DAILY',
+    submission_mode: 'ELECTRONIC', submission_mode_snapshot: 'ELECTRONIC',
+    processing_status: 'AUTHORISED', processing_status_display: 'Authorised for Invoicing',
+    total_hours: 12.5, total_pay_ex_vat: 437.5, margin_ex_vat: 371.87,
+    hidden_financial_payload: { should: 'never leave the Worker' },
+    candidate_office_projection_loaded: true,
+    candidate_office_projection: projection
+  });
+
+  assert.deepEqual(Object.keys(patch).sort(), [
+    'backend_row_signature','candidate_office_projection','candidate_office_projection_error',
+    'candidate_office_projection_loaded','candidate_office_projection_not_applicable','contract_week_id',
+    'current_identity','expected_row_signature','id','margin_ex_vat','processing_status',
+    'processing_status_display','route_display','route_family','route_type','row_signature','sheet_scope',
+    'submission_mode','submission_mode_snapshot','timesheet_id','total_hours','total_pay_ex_vat'
+  ].sort());
+  assert.equal(patch.expected_row_signature, 'revision-22');
+  assert.equal(patch.processing_status_display, 'Authorised for Invoicing');
+  assert.equal(patch.total_hours, 12.5);
+  assert.equal(Object.hasOwn(patch, 'candidate_name'), false);
+  assert.equal(Object.hasOwn(patch, 'client_name'), false);
+  assert.equal(Object.hasOwn(patch, 'hidden_financial_payload'), false);
+});

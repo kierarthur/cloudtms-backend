@@ -84354,6 +84354,115 @@ async function attachCandidateOfficeSummaryProjections(env, actorUserId, rows, r
   return output;
 }
 
+async function readCandidateTimesheetSummaryCursor(env) {
+  try {
+    const raw = await sbRpc(env, 'candidate_timesheet_summary_cursor_v1', {});
+    const payload = unwrapRpcJsonb(raw, 'candidate_timesheet_summary_cursor_v1') || {};
+    const cursor = Number(payload?.cursor);
+    return Number.isSafeInteger(cursor) && cursor >= 0 ? cursor : null;
+  } catch {
+    // A source push can briefly precede its protected database release. Keep
+    // the established Summary response available until the cursor RPC exists.
+    return null;
+  }
+}
+
+function candidateTimesheetSummaryCompactPatch(row) {
+  const currentIdentity = row?.candidate_office_projection?.current_identity || null;
+  const rowSignature = currentIdentity?.row_signature
+    || row?.backend_row_signature || row?.row_signature || row?.expected_row_signature || null;
+  return {
+    id: row?.timesheet_id || row?.contract_week_id || null,
+    timesheet_id: row?.timesheet_id || null,
+    contract_week_id: row?.contract_week_id || null,
+    route_type: row?.route_type ?? null,
+    route_display: row?.route_display ?? null,
+    route_family: row?.route_family ?? null,
+    sheet_scope: row?.sheet_scope ?? null,
+    submission_mode: row?.submission_mode ?? null,
+    submission_mode_snapshot: row?.submission_mode_snapshot ?? null,
+    processing_status: row?.processing_status ?? null,
+    processing_status_display: row?.processing_status_display ?? null,
+    total_hours: row?.total_hours ?? null,
+    total_pay_ex_vat: row?.total_pay_ex_vat ?? null,
+    margin_ex_vat: row?.margin_ex_vat ?? null,
+    current_identity: currentIdentity,
+    backend_row_signature: rowSignature,
+    row_signature: rowSignature,
+    expected_row_signature: rowSignature,
+    candidate_office_projection_loaded: row?.candidate_office_projection_loaded === true,
+    candidate_office_projection_not_applicable: row?.candidate_office_projection_not_applicable === true,
+    candidate_office_projection: row?.candidate_office_projection || null,
+    candidate_office_projection_error: row?.candidate_office_projection_error || null
+  };
+}
+
+async function handleCandidateTimesheetSummaryPatches(env, req) {
+  const user = await requireUser(env, req, ['admin']);
+  if (!user) return withCORS(env, req, unauthorized());
+
+  let body = null;
+  try { body = await parseJSONBody(req); } catch { body = null; }
+  const identities = Array.isArray(body?.identities) ? body.identities : [];
+  if (!identities.length || identities.length > 200) {
+    return withCORS(env, req, badRequest('Candidate Timesheet Summary patch requires 1-200 identities.'));
+  }
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const ids = [];
+  const seen = new Set();
+  const addId = (value) => {
+    const id = String(value || '').trim();
+    if (!uuidPattern.test(id) || seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  for (const identity of identities) {
+    if (!identity || typeof identity !== 'object' || Array.isArray(identity)) continue;
+    addId(identity.timesheet_id || identity.timesheetId);
+    addId(identity.current_timesheet_id || identity.currentTimesheetId);
+    addId(identity.contract_week_id || identity.contractWeekId);
+    addId(identity.identity_id || identity.identityId);
+  }
+  if (!ids.length) return withCORS(env, req, badRequest('Candidate Timesheet Summary identities were invalid.'));
+
+  try {
+    const raw = await sbRpc(env, 'timesheet_summary_lightweight_rows_v1', {
+      p_filters: { ids,limit: Math.min(ids.length,200),offset: 0 }
+    });
+    const rows = Array.isArray(raw)
+      ? raw
+      : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw?.rows) ? raw.rows : []));
+    const projectedRows = await attachCandidateOfficeSummaryProjections(env,user.id,rows);
+    const byTimesheetId = new Map();
+    const byContractWeekId = new Map();
+    for (const row of projectedRows) {
+      const timesheetId = String(row?.timesheet_id || '').trim();
+      const contractWeekId = String(row?.contract_week_id || '').trim();
+      if (timesheetId) byTimesheetId.set(timesheetId,row);
+      if (contractWeekId) byContractWeekId.set(contractWeekId,row);
+    }
+    const patches = identities.map((identity,index) => {
+      const contractWeekId = String(identity?.contract_week_id || identity?.contractWeekId || '').trim();
+      const currentTimesheetId = String(identity?.current_timesheet_id || identity?.currentTimesheetId || '').trim();
+      const timesheetId = String(identity?.timesheet_id || identity?.timesheetId || '').trim();
+      const row = (currentTimesheetId && byTimesheetId.get(currentTimesheetId))
+        || (timesheetId && byTimesheetId.get(timesheetId))
+        || (contractWeekId && byContractWeekId.get(contractWeekId))
+        || null;
+      return {
+        correlation_key: String(identity?.row_key || identity?.rowKey || `row:${index}`),
+        found: !!row,
+        patch: row ? candidateTimesheetSummaryCompactPatch(row) : null
+      };
+    });
+    return withCORS(env, req, ok({ patches,patch_count: patches.filter((item) => item.found).length,requested_identity_count: identities.length }));
+  } catch (error) {
+    console.error('[CANDIDATE_TIMESHEET_SUMMARY_PATCH] failed', { message: error?.message || String(error) });
+    return withCORS(env, req, serverError('Failed to refresh Candidate Timesheet Summary cells.'));
+  }
+}
+
 async function handleTimesheetsSummary(env, req) {
   const user = await requireUser(env, req, ['admin']);
   if (!user) return withCORS(env, req, unauthorized());
@@ -84729,6 +84838,9 @@ async function handleTimesheetsSummary(env, req) {
   };
 
   try {
+    const candidateSummaryCursor = includeCandidateProjection
+      ? await readCandidateTimesheetSummaryCursor(env)
+      : null;
     if (hasPayBatchFilter) {
       const batchFilters = {
         ...baseFilters,
@@ -84767,7 +84879,8 @@ async function handleTimesheetsSummary(env, req) {
         page_size: pageSize,
         count: totalCount,
         total: totalCount,
-        totals: totals || undefined
+        totals: totals || undefined,
+        candidate_timesheet_summary_cursor: candidateSummaryCursor
       }));
     }
 
@@ -84807,7 +84920,8 @@ async function handleTimesheetsSummary(env, req) {
       page,
       page_size: pageSize,
       count: totalCount,
-      totals: totals || undefined
+      totals: totals || undefined,
+      candidate_timesheet_summary_cursor: candidateSummaryCursor
     }));
   } catch (e) {
     return withCORS(env, req, serverError(`Failed to fetch timesheets summary: ${e?.message || e}`));
@@ -195166,7 +195280,8 @@ export const candidateOfficeSummaryInternals = Object.freeze({
   candidateOfficeApplicability,
   markCandidateOfficeApplicability,
   markCandidateOfficePayloadApplicability,
-  attachCandidateOfficeSummaryProjections
+  attachCandidateOfficeSummaryProjections,
+  candidateTimesheetSummaryCompactPatch
 });
 export const candidateWeeklyScheduleInternals = Object.freeze({
   candidateScheduleLocalTimeAliases
@@ -197479,6 +197594,9 @@ if (req.method === 'GET' && p === '/api/comms/by-recipient') {
       }
 
        // Timesheets summary & details (admin)
+      if (req.method === 'POST' && p === '/api/timesheets/candidate-summary-patches') {
+        return handleCandidateTimesheetSummaryPatches(env, req);
+      }
       if (req.method === 'GET'  && p === '/api/timesheets/summary') {
         return handleTimesheetsSummary(env, req);
       }

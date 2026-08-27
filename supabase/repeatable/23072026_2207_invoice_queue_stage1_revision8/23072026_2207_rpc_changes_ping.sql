@@ -28,6 +28,11 @@ DECLARE
   v_app_counter_mode text := 'SKIPPED';
   v_result jsonb := '{}'::jsonb;
   v_service boolean:=coalesce(auth.role(),'')='service_role';
+  v_candidate_summary_watch boolean:=false;
+  v_candidate_summary_cursor bigint:=0;
+  v_candidate_summary_high_watermark bigint:=0;
+  v_candidate_summary_changed_identities jsonb:='[]'::jsonb;
+  v_candidate_summary_overflow boolean:=false;
 BEGIN
   PERFORM public.banking_pay_hot_path_budget_apply('CHANGES_PING');
 
@@ -136,6 +141,12 @@ BEGIN
       'false'
    ))) IN ('true', '1', 'yes', 'y', 'on');
 
+  v_candidate_summary_watch:=lower(btrim(coalesce(
+    v_last_seen->>'__candidate_timesheet_summary_watch',
+    v_last_seen->>'candidate_timesheet_summary_watch',
+    'false'
+  ))) in ('true','1','yes','y','on');
+
 
   IF COALESCE(jsonb_typeof(v_explicit_entity_keys), 'null') = 'array'
      AND jsonb_array_length(v_explicit_entity_keys) > 0 THEN
@@ -241,6 +252,71 @@ BEGIN
     'app_change_counter_mode', v_app_counter_mode,
     'app_change_counter_cap', CASE WHEN v_app_counter_mode = 'EXPLICIT_CAPPED_KEYS' THEN 25 ELSE NULL::integer END
   );
+
+  if v_candidate_summary_watch then
+    select coalesce(max(revision_row.revision_seq),0)
+    into v_candidate_summary_high_watermark
+    from private.candidate_timesheet_summary_revisions as revision_row;
+
+    if coalesce(
+      v_last_seen->>'__candidate_timesheet_summary_cursor',
+      v_last_seen->>'candidate_timesheet_summary_cursor',
+      ''
+    ) ~ '^[0-9]{1,18}$' then
+      v_candidate_summary_cursor:=least(
+        coalesce(
+          v_last_seen->>'__candidate_timesheet_summary_cursor',
+          v_last_seen->>'candidate_timesheet_summary_cursor'
+        )::bigint,
+        v_candidate_summary_high_watermark
+      );
+    else
+      v_candidate_summary_cursor:=v_candidate_summary_high_watermark;
+    end if;
+
+    with bounded_changes as materialized (
+      select
+        revision_row.identity_kind,
+        revision_row.identity_id,
+        revision_row.current_timesheet_id,
+        revision_row.contract_week_id,
+        revision_row.revision_seq
+      from private.candidate_timesheet_summary_revisions as revision_row
+      where revision_row.revision_seq>v_candidate_summary_cursor
+      order by revision_row.revision_seq,revision_row.identity_kind,revision_row.identity_id
+      limit 101
+    ), numbered_changes as (
+      select bounded_changes.*,
+        row_number() over(order by revision_seq,identity_kind,identity_id) as ordinal
+      from bounded_changes
+    )
+    select
+      coalesce(jsonb_agg(jsonb_build_object(
+        'identity_kind',numbered_changes.identity_kind,
+        'identity_id',numbered_changes.identity_id,
+        'timesheet_id',case when numbered_changes.identity_kind='TIMESHEET' then numbered_changes.identity_id end,
+        'contract_week_id',numbered_changes.contract_week_id,
+        'current_timesheet_id',numbered_changes.current_timesheet_id,
+        'revision',numbered_changes.revision_seq
+      ) order by numbered_changes.revision_seq)
+        filter(where numbered_changes.ordinal<=100),'[]'::jsonb),
+      count(*)>100
+    into v_candidate_summary_changed_identities,v_candidate_summary_overflow
+    from numbered_changes;
+
+    v_result:=v_result||jsonb_build_object(
+      'candidate_timesheet_summary_cursor',v_candidate_summary_high_watermark,
+      'candidate_timesheet_summary_changed_identities',v_candidate_summary_changed_identities,
+      'candidate_timesheet_summary_overflow',v_candidate_summary_overflow,
+      'candidate_timesheet_summary_cap',100,
+      'candidate_timesheet_summary',jsonb_build_object(
+        'cursor',v_candidate_summary_high_watermark,
+        'changed_identities',v_candidate_summary_changed_identities,
+        'overflow',v_candidate_summary_overflow,
+        'cap',100
+      )
+    );
+  end if;
 
   IF v_actor_user_id IS NOT NULL THEN
     SELECT

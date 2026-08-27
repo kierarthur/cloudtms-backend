@@ -791,6 +791,10 @@
       "sha256": "7e3b271bf27239426993931f9c461cdefe19841ae0491bcfd53f7764c5ec09f4"
     },
     {
+      "path": "supabase/migrations/27082026_1916_candidate_timesheet_summary_revision.sql",
+      "sha256": "772139b5da9193bfff953ef50198459fd34e1aed7538f08e2697da7d548f90f2"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

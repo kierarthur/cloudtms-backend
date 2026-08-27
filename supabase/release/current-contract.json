@@ -4448,7 +4448,102 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4be454e3c0c3c90e340921ddf438059f8c4a28a9cd8a1dfea2dd067b5c379837"
+      "definition_sha256": "2547b67b19b7a630bb6623f0ecd58a7426551161978f5c5f297c965ebfbc8ab5"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_timesheet_summary_approval_revision_trg_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8924ab3d04f2d5d01130e3ed3035b54187ac80f15f5f43bff529e1ee8bd97ccd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_timesheet_summary_mail_revision_trg_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "35a849bc338919081f9cf599e5ed29de40073cc056bc0f54f9e670a82bca5083"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_timesheet_summary_revision_touch_workflow_v1(p_workflow_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "e27d94570a9cbb2638416c96d1e82577416fc92deaa66da0644937b9d2d327cd"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_timesheet_summary_revision_upsert_v1(p_identity_kind text, p_identity_id uuid, p_current_timesheet_id uuid, p_contract_week_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "f5bf65a0502cfa8e3f92c4622a6c2417e40765f78200aad25ef1a9a4abce2886"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_timesheet_summary_workflow_revision_trg_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "3359393c4b24762fafb89856367b5417d56b43f2d8c76f69b2a1959328da4353"
     },
     {
       "acl": [
@@ -13203,7 +13298,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "c43a7440cbc9f5e2f3cf113bbf18df2b9274f8c5abc97d648c109dcc601b8c6a"
+      "definition_sha256": "4a4945d9c1359961705b6404dff9f140baad72359a7e7322a8430fdcc2fa7497"
     },
     {
       "acl": [
@@ -13348,6 +13443,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "d5cda3793315749c400cfa8c8587f4f9ccb1f7b3a08276cafd140172b42dfa21"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_timesheet_summary_cursor_v1()",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "b38037dd79235fa27d40f8237952ff1d23c39c9240063ad424cd6ac02928445e"
     },
     {
       "acl": [
@@ -24082,7 +24201,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "4d83434e8c26656e2c9670b6d535c7bb685eb778b910e52d740d9008709b917e"
+      "definition_sha256": "27329478ce683a8f23982755196d0b62d32ae9cfb2f095266f3098ae79c62002"
     },
     {
       "acl": [
@@ -27331,6 +27450,13 @@
       "definition": "CREATE TRIGGER candidate_manager_request_mail_guard_v1 BEFORE UPDATE OF state ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION private._candidate_manager_request_mail_guard_v1()"
     },
     {
+      "name": "candidate_timesheet_summary_approval_revision_trg",
+      "table": "candidate_approval_requests",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_approval_revision_trg AFTER INSERT OR DELETE OR UPDATE ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION private._candidate_timesheet_summary_approval_revision_trg_v1()"
+    },
+    {
       "name": "trg_candidate_job_titles_set_updated_at",
       "table": "candidate_job_titles",
       "schema": "public",
@@ -27350,6 +27476,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER candidate_submission_components_immutability_guard BEFORE DELETE OR UPDATE ON candidate_submission_components FOR EACH ROW EXECUTE FUNCTION private._candidate_component_immutability_guard_v1()"
+    },
+    {
+      "name": "candidate_timesheet_summary_workflow_revision_trg",
+      "table": "candidate_submission_workflows",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_workflow_revision_trg AFTER INSERT OR DELETE OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_timesheet_summary_workflow_revision_trg_v1()"
     },
     {
       "name": "candidate_workflow_creation_identity_guard_v1",
@@ -27987,6 +28120,27 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_invoices_set_invoice_no_bi BEFORE INSERT ON invoices FOR EACH ROW EXECUTE FUNCTION trg_invoices_set_invoice_no()"
+    },
+    {
+      "name": "candidate_timesheet_summary_mail_delete_revision_trg",
+      "table": "mail_outbox",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_delete_revision_trg AFTER DELETE ON mail_outbox FOR EACH ROW WHEN (old.payment_scope_json ? 'candidate_workflow_id'::text OR old.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION private._candidate_timesheet_summary_mail_revision_trg_v1()"
+    },
+    {
+      "name": "candidate_timesheet_summary_mail_insert_revision_trg",
+      "table": "mail_outbox",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_insert_revision_trg AFTER INSERT ON mail_outbox FOR EACH ROW WHEN (new.payment_scope_json ? 'candidate_workflow_id'::text OR new.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION private._candidate_timesheet_summary_mail_revision_trg_v1()"
+    },
+    {
+      "name": "candidate_timesheet_summary_mail_update_revision_trg",
+      "table": "mail_outbox",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_update_revision_trg AFTER UPDATE OF payment_scope_json, status, provider_status, sent_at, failed_at, attempt_lease_token, attempt_lease_expires_at_utc ON mail_outbox FOR EACH ROW WHEN (new.payment_scope_json ? 'candidate_workflow_id'::text OR new.payment_scope_json ? 'candidate_manager_workflow_id'::text OR old.payment_scope_json ? 'candidate_workflow_id'::text OR old.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION private._candidate_timesheet_summary_mail_revision_trg_v1()"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_nhsp_shifts_d",
@@ -28998,6 +29152,61 @@
     }
   ],
   "relations": [
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "USAGE"
+        }
+      ],
+      "rls": false,
+      "kind": "S",
+      "name": "candidate_timesheet_summary_revision_seq",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "is_called",
+          "type": "boolean",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "last_value",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "log_cnt",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [],
+      "options": [],
+      "force_rls": false,
+      "constraints": [],
+      "view_definition_sha256": null
+    },
     {
       "acl": [
         {
@@ -34414,6 +34623,144 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (target = 'MASTER_AVAILABILITY_SHEET'::text)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": false,
+      "kind": "r",
+      "name": "candidate_timesheet_summary_revisions",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "changed_at_utc",
+          "type": "timestamp with time zone",
+          "default": "clock_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "contract_week_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "current_timesheet_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "identity_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "identity_kind",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "revision_seq",
+          "type": "bigint",
+          "default": "nextval('private.candidate_timesheet_summary_revision_seq'::regclass)",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_timesheet_summary_revisions_pk",
+          "definition": "CREATE UNIQUE INDEX candidate_timesheet_summary_revisions_pk ON private.candidate_timesheet_summary_revisions USING btree (identity_kind, identity_id)"
+        },
+        {
+          "name": "candidate_timesheet_summary_revisions_seq_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_timesheet_summary_revisions_seq_uq ON private.candidate_timesheet_summary_revisions USING btree (revision_seq)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "candidate_timesheet_summary_revisions_kind_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (identity_kind = ANY (ARRAY['TIMESHEET'::text, 'CONTRACT_WEEK'::text]))"
+        },
+        {
+          "name": "candidate_timesheet_summary_revisions_pk",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (identity_kind, identity_id)"
+        },
+        {
+          "name": "candidate_timesheet_summary_revisions_shape_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (identity_kind = 'TIMESHEET'::text AND current_timesheet_id IS NOT NULL OR identity_kind = 'CONTRACT_WEEK'::text)"
         }
       ],
       "view_definition_sha256": null
