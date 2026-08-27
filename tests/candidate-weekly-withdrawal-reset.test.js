@@ -65,6 +65,10 @@ test('weekly withdrawal creates a clean current version without deleting history
     /'MANUAL',v_current\.line_type[\s\S]*'effective_submission_mode',v_week\.submission_mode_snapshot/i);
   assert.match(reset,
     /timesheet_evidence set processing_state='SUPERSEDED'[\s\S]*CANDIDATE_SUBMISSION_WITHDRAWN_VERSION_ROTATED/i);
+  assert.match(reset,
+    /ts_financials_outbox\([\s\S]*'REVOKED'::public\.ts_fin_reason_enum/i);
+  assert.doesNotMatch(reset,
+    /ts_financials_outbox\([\s\S]{0,300}'CANDIDATE_(?:WITHDRAWN|REJECTED)'/i);
   assert.doesNotMatch(reset, /\bdelete\s+from\b/i);
 });
 
@@ -109,6 +113,8 @@ test('Daily reset is private, browser-inaccessible and has rollback-contained fi
     /grant execute on function private\._candidate_daily_submission_reset_v1\([\s\S]*to service_role/i);
   assert.match(dailyVerification,
     /begin;[\s\S]*_candidate_daily_submission_reset_v1\([\s\S]*scheduled_start_iso[\s\S]*processing_status[\s\S]*rollback;/i);
+  assert.match(dailyVerification,
+    /ts_financials_outbox[\s\S]*reason='REVOKED'::public\.ts_fin_reason_enum/i);
 });
 
 test('withdrawal read authority cannot replay obsolete public Candidate reads', () => {

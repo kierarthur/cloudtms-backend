@@ -153,7 +153,7 @@ begin
     insert into public.ts_financials_outbox(
       timesheet_id,reason,attempt_count,next_attempt_at,last_error,created_at
     ) values (
-      v_new_timesheet_id,'CANDIDATE_WITHDRAWN',0,p_now_utc,null,p_now_utc
+      v_new_timesheet_id,'REVOKED'::public.ts_fin_reason_enum,0,p_now_utc,null,p_now_utc
     ) on conflict on constraint uq_tsfin_outbox do nothing;
   end if;
 
@@ -319,7 +319,7 @@ begin
     timesheet_id,reason,attempt_count,next_attempt_at,last_error,created_at
   ) values (
     v_new_timesheet_id,
-    case when v_event='OFFICE_REJECTED' then 'CANDIDATE_REJECTED' else 'CANDIDATE_WITHDRAWN' end,
+    'REVOKED'::public.ts_fin_reason_enum,
     0,p_now_utc,null,p_now_utc
   ) on conflict on constraint uq_tsfin_outbox do nothing;
 

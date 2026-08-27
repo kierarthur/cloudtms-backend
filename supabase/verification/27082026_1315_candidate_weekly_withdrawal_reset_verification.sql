@@ -88,7 +88,8 @@ begin
      or (select total_hours from public.timesheets_financials where timesheet_id=v_new_timesheet)<>0
      or not exists(
        select 1 from public.ts_financials_outbox
-       where timesheet_id=v_new_timesheet and reason='CANDIDATE_WITHDRAWN'
+       where timesheet_id=v_new_timesheet
+         and reason='REVOKED'::public.ts_fin_reason_enum
      )
      or not exists(
        select 1 from public.audit_events
