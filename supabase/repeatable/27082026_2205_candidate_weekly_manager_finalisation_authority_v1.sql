@@ -2073,7 +2073,6 @@ END;
 $function$;
 
 revoke all on function public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb) from public,anon,authenticated;
-grant execute on function public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb) to authenticated,service_role;
+grant execute on function public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb) to service_role;
 
 commit;
-

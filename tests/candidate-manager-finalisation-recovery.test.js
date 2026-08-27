@@ -18,6 +18,9 @@ test('trusted weekly finalisation remains route-checked without relying on Candi
   assert.match(weeklySql, /IMPORT_AUTHORITATIVE','MANUAL_NON_QR/);
   assert.doesNotMatch(weeklySql, /v_candidate_capability_guard/);
   assert.doesNotMatch(weeklySql, /can_edit_hours/);
+  assert.match(weeklySql, /revoke all[\s\S]*from public,anon,authenticated/i);
+  assert.match(weeklySql, /grant execute[\s\S]*to service_role/i);
+  assert.doesNotMatch(weeklySql, /grant execute[\s\S]*to (?:anon|authenticated)/i);
 });
 
 test('manager finalisation recovery contract is service-only and fail-closed', () => {
