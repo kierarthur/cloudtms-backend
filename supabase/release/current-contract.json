@@ -13270,6 +13270,30 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
+      "identity": "candidate_manager_finalisation_recovery_v1(p_environment text, p_workflow_id uuid, p_expected_generation integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "68eff35a15f35b948efb32b0fea0ef68b334208ced228382e953d12db127e967"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
       "identity": "candidate_missing_week_options_v1(p_session_id uuid, p_environment text, p_contract_id uuid, p_from date, p_to date, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "s",
@@ -14308,7 +14332,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a633c836fcbf98374950358f0db31d6314e2040a621410ed9a430a7f965588c7"
+      "definition_sha256": "89543b82378468b1ae43534f5a4b1a200ffc60ffbef76196398b7f7d6521792f"
     },
     {
       "acl": [
