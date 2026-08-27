@@ -3260,7 +3260,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "099e74a72702a2ea6fbd7b4b258b328bedbc403d03254d2ce747a03903465441"
+      "definition_sha256": "26d74f65792297aa2b9884bc82ad2c506a72df40c878d4531eb4c72ef9562b50"
     },
     {
       "acl": [
@@ -4529,7 +4529,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "aa56f3fd5c1611d6437e729cb2eb390db39fa032e2de681a85419872636bf8d8"
+      "definition_sha256": "881499e1241f9ed6b3f4bb392cbd318a02d4c338a0ea96b749309685ec4e79fa"
     },
     {
       "acl": [
