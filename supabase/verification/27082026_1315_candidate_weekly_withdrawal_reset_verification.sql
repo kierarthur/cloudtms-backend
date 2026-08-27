@@ -13,7 +13,13 @@ declare
   v_workflow uuid:=gen_random_uuid();
   v_result jsonb;
   v_new_timesheet uuid;
+  v_system_actor uuid;
 begin
+  select candidate_app_system_actor_user_id into v_system_actor
+  from public.settings_defaults where id=1;
+  if v_system_actor is null then
+    raise exception 'CANDIDATE_WEEKLY_WITHDRAWAL_SYSTEM_ACTOR_MISSING';
+  end if;
   insert into public.clients(id,name)
   values(v_client,'Candidate withdrawal verification client');
   insert into public.candidates(id,email,active,key_norm)
@@ -25,15 +31,18 @@ begin
   );
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
-    default_submission_mode
+    default_submission_mode,pay_method_snapshot
   ) values(
-    v_contract,v_candidate,v_client,current_date-30,current_date+30,2,'ELECTRONIC'
+    v_contract,v_candidate,v_client,current_date-30,current_date+30,2,'ELECTRONIC','PAYE'
   );
   insert into public.timesheets(
-    timesheet_id,version,is_current,status,contract_id,week_ending_date,
-    line_type,sheet_scope,submission_mode
+    timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
+    version,is_current,status,contract_id,week_ending_date,line_type,sheet_scope,
+    submission_mode
   ) values(
-    v_timesheet,1,true,'RECEIVED',v_contract,current_date,
+    v_timesheet,'WEEKLY-WITHDRAWAL-'||v_timesheet::text,
+    'WITHDRAWAL-VERIFICATION','VERIFICATION-HOSPITAL','VERIFICATION-WARD',
+    'VERIFICATION-JOB',1,true,'RECEIVED',v_contract,current_date,
     'HOURS','WEEKLY','MANUAL'
   );
   insert into public.contract_weeks(
@@ -96,6 +105,7 @@ begin
        where object_type='timesheet'
          and object_id_text=v_new_timesheet::text
          and action='CANDIDATE_SUBMISSION_WITHDRAWN_VERSION_ROTATED'
+         and actor_user_id=v_system_actor
      ) then
     raise exception 'CANDIDATE_WEEKLY_WITHDRAWAL_RESET_VERIFICATION_FAILED: %',v_result;
   end if;

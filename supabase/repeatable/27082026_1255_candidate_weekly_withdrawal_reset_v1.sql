@@ -18,6 +18,7 @@ declare
   v_current_timesheet_id uuid;
   v_new_timesheet_id uuid;
   v_new_version integer;
+  v_system_actor_user_id uuid;
 begin
   if p_workflow_id is null or nullif(btrim(coalesce(p_reason,'')),'') is null then
     raise exception 'CANDIDATE_WITHDRAWAL_RESET_INVALID' using errcode='22023';
@@ -160,6 +161,18 @@ begin
   update public.timesheet_evidence set processing_state='SUPERSEDED'
   where timesheet_id=v_current.timesheet_id and processing_state<>'SUPERSEDED';
 
+  select settings_row.candidate_app_system_actor_user_id
+  into v_system_actor_user_id
+  from public.settings_defaults settings_row
+  where settings_row.id=1;
+  if v_system_actor_user_id is null
+     or not exists(
+       select 1 from public.tms_users actor_row
+       where actor_row.id=v_system_actor_user_id
+     ) then
+    raise exception 'CANDIDATE_SYSTEM_ACTOR_REQUIRED' using errcode='55000';
+  end if;
+
   perform private._candidate_audit_v1(
     'timesheet',v_new_timesheet_id::text,'CANDIDATE_SUBMISSION_WITHDRAWN_VERSION_ROTATED',
     jsonb_build_object(
@@ -175,7 +188,7 @@ begin
       'draft_submission_mode','MANUAL',
       'effective_submission_mode',v_week.submission_mode_snapshot
     ),
-    btrim(p_reason),v_workflow.candidate_id,null,p_now_utc
+    btrim(p_reason),v_system_actor_user_id,null,p_now_utc
   );
   return jsonb_build_object(
     'reset',true,
@@ -216,6 +229,7 @@ declare
   v_fin public.timesheets_financials%rowtype;
   v_new_timesheet_id uuid;
   v_new_version integer;
+  v_audit_actor_user_id uuid;
 begin
   if p_timesheet_id is null
      or p_expected_timesheet_id is null
@@ -326,6 +340,20 @@ begin
   update public.timesheet_evidence set processing_state='SUPERSEDED'
   where timesheet_id=v_current.timesheet_id and processing_state<>'SUPERSEDED';
 
+  if v_event='OFFICE_REJECTED' then
+    select actor_row.id into v_audit_actor_user_id
+    from public.tms_users actor_row
+    where actor_row.id=p_actor_user_id;
+  else
+    select settings_row.candidate_app_system_actor_user_id
+    into v_audit_actor_user_id
+    from public.settings_defaults settings_row
+    where settings_row.id=1;
+  end if;
+  if v_audit_actor_user_id is null then
+    raise exception 'CANDIDATE_SYSTEM_ACTOR_REQUIRED' using errcode='55000';
+  end if;
+
   perform private._candidate_audit_v1(
     'timesheet',v_new_timesheet_id::text,
     case when v_event='OFFICE_REJECTED'
@@ -341,7 +369,7 @@ begin
       'new_version',v_new_version,
       'candidate_submission_route_intent','ELECTRONIC'
     ),
-    btrim(p_reason),p_actor_user_id,null,p_now_utc
+    btrim(p_reason),v_audit_actor_user_id,null,p_now_utc
   );
 
   return jsonb_build_object(

@@ -79,6 +79,17 @@ test('withdrawal helper remains private and browser-inaccessible', () => {
     /grant execute on function private\._candidate_weekly_withdrawal_reset_v1\([\s\S]*to service_role/i);
 });
 
+test('Candidate withdrawals use the configured system audit actor and never the Candidate identity', () => {
+  assert.match(reset,
+    /select settings_row\.candidate_app_system_actor_user_id[\s\S]*from public\.settings_defaults settings_row[\s\S]*public\.tms_users actor_row[\s\S]*btrim\(p_reason\),v_system_actor_user_id/i);
+  assert.doesNotMatch(reset,
+    /CANDIDATE_SUBMISSION_WITHDRAWN_VERSION_ROTATED[\s\S]{0,1200}btrim\(p_reason\),v_workflow\.candidate_id/i);
+  assert.match(reset,
+    /v_event='OFFICE_REJECTED'[\s\S]*where actor_row\.id=p_actor_user_id[\s\S]*else[\s\S]*candidate_app_system_actor_user_id[\s\S]*btrim\(p_reason\),v_audit_actor_user_id/i);
+  assert.doesNotMatch(reset,
+    /CANDIDATE_DAILY_SUBMISSION_WITHDRAWN_VERSION_ROTATED[\s\S]{0,1200}btrim\(p_reason\),p_actor_user_id/i);
+});
+
 test('Daily withdrawal preserves the booked shift while returning a clean editable Daily record', () => {
   assert.match(reset,
     /_candidate_daily_submission_reset_v1\([\s\S]*sheet_scope<>'DAILY'[\s\S]*booking_id/i);
