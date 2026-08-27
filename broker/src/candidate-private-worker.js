@@ -1,7 +1,8 @@
 import {
   candidateAppBackendInternals,
   handleCandidateAppRequest,
-  processPendingCandidatePaperPacks
+  processPendingCandidatePaperPacks,
+  recoverPendingCandidateManagerFinalisations
 } from './candidate-app-backend.js';
 import {
   candidateFederatedIdentityHmac,
@@ -496,6 +497,11 @@ export default {
       env,
       createCandidatePrivateDependencies(env, 'PRIVATE'),
       10
+    ));
+    ctx.waitUntil(recoverPendingCandidateManagerFinalisations(
+      env,
+      createCandidatePrivateDependencies(env, 'PRIVATE'),
+      5
     ));
   }
 };

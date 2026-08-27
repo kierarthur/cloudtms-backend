@@ -3786,6 +3786,44 @@ async function finaliseWorkflow(env, deps, workflowId, generation, idempotencyKe
     : await rpcCall(deps, 'candidate_submission_finalize_atomic_v1', finalisationPayload));
 }
 
+export async function recoverPendingCandidateManagerFinalisations(env, deps, limit = 5) {
+  const boundedLimit = Math.max(1, Math.min(Number(limit) || 5, 10));
+  const environment = environmentName(env);
+  const rows = await restRows(env, 'candidate_submission_workflows',
+    `environment=eq.${encodeURIComponent(environment)}`
+    + '&state=in.(MANAGER_APPROVED_PENDING_FINAL_DOCUMENT,READY_TO_FINALISE)'
+    + '&route=in.(PHONE,EMAIL)'
+    + '&select=id,generation,state,updated_at_utc'
+    + '&order=updated_at_utc.asc'
+    + `&limit=${boundedLimit}`);
+  let recovered = 0;
+  let failed = 0;
+  for (const row of rows) {
+    try {
+      const recovery = await rpcCall(deps, 'candidate_manager_finalisation_recovery_v1', {
+        p_environment: environment,
+        p_workflow_id: requireUuid(row.id, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+        p_expected_generation: requireInteger(row.generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
+        p_now_utc: new Date().toISOString()
+      });
+      await renderAndRegister(env, deps, recovery?.final_render_contract, 'FINAL');
+      await finaliseWorkflow(
+        env,
+        deps,
+        row.id,
+        Number(row.generation),
+        `candidate-system-finalise-recovery:${row.id}:${row.generation}`
+      );
+      recovered += 1;
+    } catch (error) {
+      failed += 1;
+      console.error('[candidate-app] manager finalisation recovery failed',
+        safeCandidateTransportDiagnostic(error));
+    }
+  }
+  return { scanned: rows.length, recovered, failed };
+}
+
 async function handleCandidateRead(request, env, deps, kind, params = {}) {
   const access = await verifyCandidateAccess(request, env);
   const url = new URL(request.url);
