@@ -138665,25 +138665,6 @@ async function handleContractPrintedTimesheetPolicyUpdate(env, req, contractId) 
     return withCORS(env, req, ok({ contract: current, unchanged: true }));
   }
 
-  const hasSubmittedTimesheet = !!(await sbGetOne(
-    env,
-    `${env.SUPABASE_URL}/rest/v1/timesheets` +
-      `?contract_id=eq.${enc(contractId)}&select=timesheet_id&limit=1`
-  ));
-  const todayYmd = toYmd(new Date());
-  const contractHasStarted = hasSubmittedTimesheet || !!(
-    current.start_date && todayYmd && String(current.start_date) <= String(todayYmd)
-  );
-  if (contractHasStarted) {
-    return printedTimesheetPolicyErrorResponse(
-      env,
-      req,
-      'Printed-timesheet availability cannot be changed after the Contract has started.',
-      409,
-      'CONTRACT_STARTED_FIELD_LOCKED'
-    );
-  }
-
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/contracts` +
       `?id=eq.${enc(contractId)}` +
