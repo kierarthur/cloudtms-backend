@@ -1,9 +1,9 @@
--- Repair the historical electronic rejection replacement shape that kept the
--- contract-week snapshot ELECTRONIC while creating the current timesheet as
--- MANUAL.  The earlier repair expected both values to be MANUAL and therefore
--- could not match this installed row.  Eligibility is bounded by the exact
--- rotation audit attached to the current timesheet, an unresolved rejected
--- manager workflow, an open empty week, and zero/protected-free financials.
+-- Unlock the historical electronic rejection replacement whose electronic
+-- route is already preserved by the contract-week snapshot.  The unsigned
+-- current row intentionally remains MANUAL until finalisation writes both
+-- signatures and changes it to ELECTRONIC atomically.  Eligibility is bounded
+-- by the exact rotation audit, an unresolved rejected manager workflow, an
+-- open empty week, and zero/protected-free financials.
 
 do $migration$
 declare
@@ -68,19 +68,6 @@ begin
     order by current_timesheet.timesheet_id,rejected_workflow.id
     for update of current_timesheet,week_row,financials
   loop
-    update public.timesheets
-    set submission_mode='ELECTRONIC',updated_at=clock_timestamp()
-    where timesheet_id=v_row.timesheet_id
-      and is_current=true
-      and status='RECEIVED'
-      and submission_mode='MANUAL'
-      and archived_at_utc is null
-      and authorised_at_server is null;
-    if not found then
-      raise exception 'CANDIDATE_ELECTRONIC_REJECTION_ROUTE_REPAIR_CONFLICT'
-        using errcode='40001';
-    end if;
-
     update public.timesheets_financials
     set processing_status='UNPROCESSED',updated_at=clock_timestamp()
     where id=v_row.financials_id
@@ -102,18 +89,20 @@ begin
       null,'timesheet',v_row.timesheet_id::text,
       'CANDIDATE_ELECTRONIC_REJECTION_REPLACEMENT_REPAIRED',
       jsonb_build_object(
-        'submission_mode','MANUAL',
+        'stored_submission_mode','MANUAL',
+        'effective_submission_mode','ELECTRONIC',
         'processing_status',v_row.prior_processing_status,
         'contract_week_id',v_row.contract_week_id,
         'rejected_workflow_id',v_row.rejected_workflow_id
       ),
       jsonb_build_object(
-        'submission_mode','ELECTRONIC',
+        'stored_submission_mode','MANUAL',
+        'effective_submission_mode','ELECTRONIC',
         'processing_status','UNPROCESSED',
         'contract_week_id',v_row.contract_week_id,
         'rejected_workflow_id',v_row.rejected_workflow_id
       ),
-      'Repair historical electronic rejection replacement route and editable lifecycle',
+      'Unlock historical electronic rejection replacement while preserving the electronic route snapshot',
       'ELECTRONIC-REJECTION-ROUTE-LIFECYCLE-REPAIR:'||v_row.timesheet_id::text,
       clock_timestamp()
     );

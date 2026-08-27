@@ -400,10 +400,10 @@ begin
   end if;
 
   if (select submission_mode from public.timesheets where timesheet_id=v_new_timesheet)
-       <>'ELECTRONIC'
+       <>'MANUAL'
      or (select submission_mode_snapshot from public.contract_weeks where id=v_target_week)
        <>'ELECTRONIC' then
-    raise exception 'Electronic rejection replacement was not Candidate-editable';
+    raise exception 'Electronic rejection replacement did not preserve unsigned draft storage and electronic route authority';
   end if;
 
   v_result:=public.candidate_workflow_transition_atomic_v1(

@@ -25,8 +25,9 @@ const runtime = read('tests/10082026_1817_candidate_finalised_rejection_verifica
 const matrix = read('tests/run-candidate-daily-r16-local-matrix.ps1');
 
 test('electronic rejection creates an editable electronic replacement without weakening history', () => {
-  assert.match(correction, /v_current\.booking_id[\s\S]*?'ELECTRONIC'/);
+  assert.match(correction, /v_current\.booking_id[\s\S]*?'MANUAL'/);
   assert.match(correction, /submission_mode_snapshot='ELECTRONIC'/);
+  assert.match(correction, /'effective_submission_mode','ELECTRONIC'/);
   assert.doesNotMatch(correction, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
   assert.match(correction, /revoke all on function private\._candidate_timesheet_reject_rotate_v1/);
   assert.doesNotMatch(correction, /grant execute on function private\._candidate_timesheet_reject_rotate_v1/);
@@ -80,7 +81,6 @@ test('one-time repair is limited to empty audited electronic rejection replaceme
     "current_timesheet.submission_mode='MANUAL'",
     "week_row.submission_mode_snapshot='ELECTRONIC'",
     "financials.processing_status in ('UNPROCESSED','PENDING_AUTH')",
-    "set submission_mode='ELECTRONIC'",
     "set processing_status='UNPROCESSED'",
     "coalesce(current_timesheet.actual_schedule_json,'[]'::jsonb) in ('[]'::jsonb,'{}'::jsonb)",
     'financials.authorised_at_utc is null',
@@ -88,6 +88,7 @@ test('one-time repair is limited to empty audited electronic rejection replaceme
     'financials.locked_by_invoice_id is null',
     'replacement.replacement_of_workflow_id=workflow.id'
   ]) assert.match(historicalShapeRepair, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.doesNotMatch(historicalShapeRepair, /set\s+submission_mode\s*=\s*'ELECTRONIC'/i);
   assert.match(historicalShapeRepair, /CANDIDATE_ELECTRONIC_REJECTION_REPLACEMENT_REPAIRED/);
   assert.doesNotMatch(historicalShapeRepair, /rotation_audit\.after_json->>'new_timesheet_id'/);
   assert.doesNotMatch(historicalShapeRepair, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
@@ -96,8 +97,8 @@ test('one-time repair is limited to empty audited electronic rejection replaceme
 test('installed-state verification and real resubmission regression are release-wired', () => {
   assert.match(verification, /Unrepaired electronic rejection replacement remains installed/);
   assert.match(runtime, /'RESUBMIT_REJECTED',3,'\{\}'::jsonb/);
-  assert.match(runtime, /Electronic rejection replacement was not Candidate-editable/);
+  assert.match(runtime, /Electronic rejection replacement did not preserve unsigned draft storage and electronic route authority/);
   assert.match(matrix, /27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql/);
-  assert.match(verification, /financials\.processing_status in \('UNPROCESSED','PENDING_AUTH'\)/);
+  assert.match(verification, /financials\.processing_status='PENDING_AUTH'/);
   assert.match(verification, /Repaired electronic rejection replacement remains lifecycle-locked/);
 });

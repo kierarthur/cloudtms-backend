@@ -5,8 +5,8 @@ begin
   select pg_get_functiondef(
     'private._candidate_timesheet_reject_rotate_v1(uuid,uuid,text,uuid,timestamptz)'::regprocedure
   ) into v_definition;
-  if position("'ELECTRONIC'" in v_definition)=0
-     or position("'MANUAL'" in v_definition)>0 then
+  if position('''MANUAL''' in v_definition)=0
+     or position('submission_mode_snapshot=''ELECTRONIC''' in v_definition)=0 then
     raise exception 'Candidate electronic rejection rotation body is not current';
   end if;
 
@@ -58,7 +58,7 @@ begin
       and week_row.status='OPEN'
       and week_row.day_entries_json='[]'::jsonb
       and week_row.totals_json='{}'::jsonb
-      and financials.processing_status in ('UNPROCESSED','PENDING_AUTH')
+      and financials.processing_status='PENDING_AUTH'
       and financials.authorised_at_utc is null
       and financials.paid_at_utc is null
       and financials.locked_by_invoice_id is null
@@ -86,7 +86,7 @@ begin
      and route_repair.action='CANDIDATE_ELECTRONIC_REJECTION_REPLACEMENT_REPAIRED'
     where current_timesheet.is_current=true
       and current_timesheet.status='RECEIVED'
-      and current_timesheet.submission_mode='ELECTRONIC'
+      and current_timesheet.submission_mode='MANUAL'
       and current_timesheet.archived_at_utc is null
       and current_timesheet.authorised_at_server is null
       and week_row.status='OPEN'

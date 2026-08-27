@@ -788,7 +788,7 @@
     },
     {
       "path": "supabase/migrations/27082026_0514_repair_historical_electronic_rejection_route_and_lifecycle.sql",
-      "sha256": "970766e2b63b9416c343e4d97bff7e51efe7638aad0c56359797ae5604b8eb4b"
+      "sha256": "7e3b271bf27239426993931f9c461cdefe19841ae0491bcfd53f7764c5ec09f4"
     },
     {
       "path": "supabase/migrations/remittance_config_table.sql",

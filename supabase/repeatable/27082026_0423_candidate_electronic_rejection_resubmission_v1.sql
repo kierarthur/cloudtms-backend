@@ -1,9 +1,10 @@
 -- Preserve the electronic route when Office rejects a Candidate electronic
 -- submission.  The rejected version remains immutable history; the fresh
--- current version is an empty ELECTRONIC record that the Candidate can edit
--- through RESUBMIT_REJECTED.  The preceding definition accidentally created
--- a MANUAL_NON_QR replacement, so the read contract offered resubmission while
--- the mutation authority correctly refused to edit that manual record.
+-- current version is an unsigned draft that the Candidate can edit through
+-- RESUBMIT_REJECTED.  An unfinished draft cannot be stored as ELECTRONIC
+-- because the canonical timesheet constraint requires both final signature
+-- objects.  The ELECTRONIC contract-week snapshot remains the route authority
+-- until finalisation writes those signatures and switches the row atomically.
 
 create or replace function private._candidate_timesheet_reject_rotate_v1(
   p_timesheet_id uuid,
@@ -51,7 +52,7 @@ begin
     reference_number,day_references_json,qr_token,qr_status,qr_payload_json,qr_generated_at,
     qr_scanned_at,qr_scan_info_json,qr_r2_key,created_at,updated_at
   ) values (
-    v_current.booking_id,v_new_version,true,'RECEIVED',v_current.contract_id,'ELECTRONIC',
+    v_current.booking_id,v_new_version,true,'RECEIVED',v_current.contract_id,'MANUAL',
     v_current.line_type,v_current.sheet_scope,v_current.occupant_key_norm,v_current.hospital_norm,
     v_current.ward_norm,v_current.job_title_norm,v_current.shift_label_norm,v_current.week_ending_date,
     null,null,null,null,null,null,'{}'::jsonb,'{}'::jsonb,null,null,null,null,
@@ -87,7 +88,7 @@ begin
     jsonb_build_object('old_timesheet_id',v_current.timesheet_id,'old_version',v_current.version),
     jsonb_build_object(
       'new_timesheet_id',v_new_timesheet_id,'new_version',v_new_version,
-      'submission_mode','ELECTRONIC'
+      'submission_mode','MANUAL','effective_submission_mode','ELECTRONIC'
     ),btrim(p_reason),p_actor_user_id,null,p_now_utc
   );
   return v_new_timesheet_id;

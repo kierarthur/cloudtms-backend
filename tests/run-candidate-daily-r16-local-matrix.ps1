@@ -31,13 +31,16 @@ $installFiles = @(
   'supabase/migrations/12082026_1355_candidate_auth_mutation_receipt_index.sql',
   'supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql',
   'supabase/migrations/18082026_0802_candidate_daily_identity_integrity.sql',
+  'supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql',
   'supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql',
+  'supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql',
   'supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql',
   'supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql',
   'supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql',
   'supabase/repeatable/18082026_1051_candidate_daily_authority_transition_source_identity_v1.sql',
   'supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql',
   'supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql',
+  'supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql',
   'supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql',
   'supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql',
   'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql',
@@ -48,6 +51,7 @@ $installFiles = @(
   'supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql',
   'supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql',
   'supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql',
+  'supabase/repeatable/27082026_0244_candidate_processed_action_projection_v1.sql',
   'supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql'
 )
 
