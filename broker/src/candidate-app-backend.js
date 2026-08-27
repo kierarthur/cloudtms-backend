@@ -2153,11 +2153,21 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
       env, candidateAccess, workflowId, generation, idempotencyKey, expected
     )
     : null;
-  const result = preparedReplay || await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
-    p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
-    p_action: 'COMPONENT_PREPARE', p_expected_generation: generation, p_payload: payload,
-    p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
-  });
+  const result = preparedReplay || await rpcCall(
+    deps,
+    owner === 'candidate'
+      ? 'candidate_component_prepare_atomic_v1'
+      : 'candidate_workflow_transition_atomic_v1',
+    owner === 'candidate' ? {
+      p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
+      p_expected_generation: generation, p_payload: payload,
+      p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
+    } : {
+      p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
+      p_action: 'COMPONENT_PREPARE', p_expected_generation: generation, p_payload: payload,
+      p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
+    }
+  );
   if (authority?.authority_kind === 'MANAGER_EMAIL') {
     await assertManagerRouteResult(env, result, authority);
   }

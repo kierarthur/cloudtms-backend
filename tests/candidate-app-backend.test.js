@@ -2244,6 +2244,70 @@ test('Candidate component preparation reissues an upload ticket from the exact d
   }
 });
 
+test('new Candidate component preparation uses the narrow authenticated fast-path RPC', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-000000000431',
+    session_id: '00000000-0000-4000-8000-000000000431',
+    account_id: '00000000-0000-4000-8000-000000000432',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000433',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-000000000434';
+  const componentId = '00000000-0000-4000-8000-000000000435';
+  const idempotencyKey = '00000000-0000-4000-8000-000000000436';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([]);
+    throw new Error(`Unexpected TEST request GET ${target.pathname}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 2, component_kind: 'CANDIDATE_SIGNATURE',
+          document_role: 'CANDIDATE_SIGNATURE', media_type: 'image/png',
+          byte_size: 321, idempotency_key: idempotencyKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        return {
+          ok: true, component_id: componentId, workflow_generation: 2,
+          storage_key: 'candidate-app/test/workflow/2/source/candidate-signature.png',
+          media_type: 'image/png', byte_size: 321,
+          component_kind: 'CANDIDATE_SIGNATURE', document_role: 'CANDIDATE_SIGNATURE',
+          expense_category: null, paper_return_page_key: null, state: 'PENDING'
+        };
+      }
+    });
+    assert.equal(response.status, 201);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, 'candidate_component_prepare_atomic_v1');
+    assert.equal(Object.hasOwn(calls[0].args, 'p_action'), false);
+    assert.equal(calls[0].args.p_session_id, session.session_id);
+    assert.equal(calls[0].args.p_expected_generation, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('Candidate component preparation recovers one exact pending component after an older phone loses its prepare key', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000421',
