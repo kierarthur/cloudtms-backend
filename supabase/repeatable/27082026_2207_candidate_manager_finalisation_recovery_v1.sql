@@ -86,4 +86,8 @@ revoke all on function public.candidate_manager_finalisation_recovery_v1(text,uu
 grant execute on function public.candidate_manager_finalisation_recovery_v1(text,uuid,integer,timestamptz)
   to service_role;
 
+-- The scheduled private Worker calls this RPC through Miget PostgREST. Make the
+-- new service-only signature visible as soon as the protected transaction commits.
+notify pgrst, 'reload schema';
+
 commit;

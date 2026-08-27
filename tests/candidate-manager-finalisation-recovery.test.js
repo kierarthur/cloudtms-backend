@@ -32,6 +32,7 @@ test('manager finalisation recovery contract is service-only and fail-closed', (
   assert.match(recoverySql, /revoke all[\s\S]*from public,anon,authenticated/i);
   assert.match(recoverySql, /grant execute[\s\S]*to service_role/i);
   assert.doesNotMatch(recoverySql, /grant execute[\s\S]*to (?:anon|authenticated)/i);
+  assert.match(recoverySql, /notify pgrst, 'reload schema'/i);
 });
 
 test('private scheduler retries only bounded manager finalisations through the service contract', () => {
