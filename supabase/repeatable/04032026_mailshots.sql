@@ -3955,10 +3955,12 @@ declare
 
   v_sms_max int := 1000;
   v_voice_max int := 1200;
-  v_whatsapp_max int := 600;
+  -- The approved WATI wrapper currently consumes at most 172 characters.
+  -- Keep 100 characters of additional wrapper headroom within WATI's
+  -- 1024-character rendered-template limit and round down to 750.
+  v_whatsapp_max int := 750;
 
   v_cfg jsonb;
-  v_cfg_wati jsonb;
   v_cfg_clicksend jsonb;
   v_cfg_scheduling jsonb;
 
@@ -4108,13 +4110,8 @@ begin
   limit 1;
 
   if v_cfg is not null and jsonb_typeof(v_cfg) = 'object' then
-    v_cfg_wati := v_cfg->'wati';
     v_cfg_clicksend := v_cfg->'clicksend';
     v_cfg_scheduling := v_cfg->'scheduling';
-
-    if v_cfg_wati is not null and jsonb_typeof(v_cfg_wati) = 'object' then
-      v_whatsapp_max := coalesce(nullif((v_cfg_wati->>'whatsapp_max_chars')::int, 0), v_whatsapp_max);
-    end if;
 
     if v_cfg_clicksend is not null and jsonb_typeof(v_cfg_clicksend) = 'object' then
       v_sms_max := coalesce(nullif((v_cfg_clicksend->>'sms_max_chars')::int, 0), v_sms_max);
@@ -4508,9 +4505,12 @@ begin
           continue;
         end if;
 
-        v_rendered_message := regexp_replace(v_rendered_message, E'[\\r\\n\\t]+', ' ', 'g');
-        v_rendered_message := regexp_replace(v_rendered_message, '[^A-Za-z ,]+', '', 'g');
-        v_rendered_message := regexp_replace(v_rendered_message, E'\\s+', ' ', 'g');
+        -- WATI permits printable Unicode in template parameter values but
+        -- rejects line breaks and tabs. Preserve letters, numbers,
+        -- punctuation, symbols, URLs, formatting markers and emoji while
+        -- normalising all control/whitespace runs to one ordinary space.
+        v_rendered_message := regexp_replace(v_rendered_message, '[[:cntrl:]]+', ' ', 'g');
+        v_rendered_message := regexp_replace(v_rendered_message, '[[:space:]]+', ' ', 'g');
         v_rendered_message := btrim(v_rendered_message);
 
         if char_length(v_rendered_message) <> v_original_len then
@@ -4518,7 +4518,7 @@ begin
         end if;
 
         if char_length(v_rendered_message) > v_whatsapp_max then
-          v_rendered_message := left(v_rendered_message, v_whatsapp_max);
+          v_rendered_message := rtrim(left(v_rendered_message, v_whatsapp_max));
           v_truncated := true;
         end if;
       elsif v_output_type = 'SMS' then
