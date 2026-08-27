@@ -107,8 +107,8 @@ begin
   into v_count,v_service_missing,v_browser_executable,v_hash
   from targets;
 
-  if v_count<>104 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'95a9d9eb9d4c57e0e334ff947487a50f' then
+  if v_count<>105 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'4166c08c7abd5e9ed638091c182ce2e5' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
