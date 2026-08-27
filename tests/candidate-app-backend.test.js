@@ -2316,6 +2316,22 @@ test('Candidate component fast-path refreshes the PostgREST schema cache after i
   assert.match(sql, /grant execute on function public\.candidate_component_prepare_atomic_v1[\s\S]*notify pgrst, 'reload schema';/i);
 });
 
+test('finalised Candidate detail reads the immutable signed artifact generation', async () => {
+  const sql = await readFile(new URL(
+    '../supabase/repeatable/27082026_0858_candidate_finalised_artifact_readiness_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  assert.match(sql, /create or replace function public\.candidate_app_timesheet_detail_v1/i);
+  assert.match(sql, /state='FINALISED' then greatest\(w\.generation-1,1\) else w\.generation end/i);
+  assert.match(sql, /state='FINALISED' then greatest\(document_workflow\.generation-1,1\) else document_workflow\.generation end/i);
+  assert.doesNotMatch(sql, /review_component\.workflow_generation=w\.generation/i);
+  assert.doesNotMatch(sql, /final_component\.workflow_generation=w\.generation/i);
+  assert.doesNotMatch(sql, /component\.workflow_generation=document_workflow\.generation/i);
+  assert.match(sql, /revoke all on function public\.candidate_app_timesheet_detail_v1[\s\S]*from public,anon,authenticated/i);
+  assert.match(sql, /grant execute on function public\.candidate_app_timesheet_detail_v1[\s\S]*to service_role/i);
+  assert.match(sql, /notify pgrst, 'reload schema';/i);
+});
+
 test('Candidate component preparation recovers one exact pending component after an older phone loses its prepare key', async () => {
   const session = {
     id: '00000000-0000-4000-8000-000000000421',
