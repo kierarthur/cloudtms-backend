@@ -542,7 +542,8 @@ function normalizeDailyTilesResult(source) {
   for (const item of source.tiles) {
     const tileAllowed = ['date', 'display_day', 'display_date', 'booked', 'system_blocked', 'editable',
       'status', 'availability', 'shift_info', 'hospital', 'ward', 'job_title', 'booking_ref', 'shift_type',
-      'booking_id', 'timesheet_authorised', 'timesheet_eligible', 'action_target'];
+      'booking_id', 'timesheet_authorised', 'timesheet_eligible', 'action_target',
+      'shift_starts_at', 'shift_ends_at'];
     const tileRequired = ['date', 'display_day', 'display_date', 'booked', 'system_blocked', 'editable',
       'status', 'availability'];
     if (!exactObjectKeys(item, tileAllowed, tileRequired) || !DATE_RE.test(item.date)
@@ -555,6 +556,13 @@ function normalizeDailyTilesResult(source) {
     }
     for (const key of ['timesheet_authorised', 'timesheet_eligible']) {
       if (item[key] !== undefined && item[key] !== null && typeof item[key] !== 'boolean') return null;
+    }
+    // These existing database timestamps are required for UK-time Rota tiles.
+    // Keep the response closed: accept only optional, timezone-qualified values.
+    for (const key of ['shift_starts_at', 'shift_ends_at']) {
+      if (item[key] !== undefined && item[key] !== null
+          && (!dateTimeValue(item[key])
+            || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(item[key]))) return null;
     }
     const target = item.action_target === undefined ? undefined : normalizeActionTarget(item.action_target);
     if (item.action_target !== undefined && item.action_target !== null && !target) return null;

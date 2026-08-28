@@ -107,6 +107,47 @@ test('R8 tiles dispatch returns exactly fourteen database-owned tiles through th
     { policy: 'CANDIDATE_SURFACE', environment: 'TEST', candidate_id: candidateId });
 });
 
+test('Rota booked shift timestamps survive both private and public response boundaries', async () => {
+  const source = dailyTiles();
+  Object.assign(source.tiles[0], {
+    booked: true, editable: false, status: 'BOOKED',
+    shift_starts_at: '2026-08-17T18:30:00+00:00',
+    shift_ends_at: '2026-08-18T07:00:00+00:00'
+  });
+  Object.assign(source.tiles[1], { shift_starts_at: null, shift_ends_at: null });
+  const privateResponse = await handleCandidateDailyPhase1bRequest(
+    request('/candidate-app/v1/daily/tiles?days=14'), access, {},
+    { async rpc() { return source; } }
+  );
+  assert.equal(privateResponse.status, 200);
+  const route = findCandidateDailyRoute('GET', '/candidate-app/v1/daily/tiles');
+  const publicResponse = await candidateBrokerInternals.publicSafeDailyResponse(privateResponse, correlationId, route);
+  assert.equal(publicResponse.status, 200);
+  const result = (await publicResponse.json()).result;
+  assert.deepEqual(result.tiles, source.tiles);
+  assert.equal(result.tiles.length, 14);
+});
+
+test('Rota time-field validation rejects malformed values and still rejects undeclared fields', () => {
+  const route = findCandidateDailyRoute('GET', '/candidate-app/v1/daily/tiles');
+  const envelope = (result) => rebuildCandidateDailySuccessBody(route, 200,
+    { ok: true, correlation_id: correlationId, result }, correlationId);
+  for (const field of ['shift_starts_at', 'shift_ends_at']) {
+    for (const value of ['', '0900', '2026-08-17', '2026-08-17T09:00:00', 'not-a-date', 123, {}, true]) {
+      const source = dailyTiles();
+      source.tiles[0][field] = value;
+      assert.equal(envelope(source), null, `${field}: ${JSON.stringify(value)}`);
+    }
+    for (const value of ['2026-08-17T09:00:00Z', '2026-08-17T09:00:00.123Z', '2026-08-17T09:00:00+01:00']) {
+      const source = dailyTiles();
+      source.tiles[0][field] = value;
+      assert.ok(envelope(source), `${field}: ${value}`);
+      source.tiles[0].private_source_hmac = 'must-not-leak';
+      assert.equal(envelope(source), null);
+    }
+  }
+});
+
 test('R8 availability command freezes one caller key and emits replay only from the durable owner', async () => {
   const body = JSON.stringify({
     expected_availability_version: 0,
