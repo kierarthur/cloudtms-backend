@@ -6,6 +6,17 @@ const read = p => readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const scope=read('supabase/repeatable/04082026_1219_candidate_pay_method_change_refresh_scope_v1.sql');
 const apply=read('supabase/repeatable/20260221_01_add_tms_ref_num_and_admin_rpcs.sql');
 
+test('replaying the pay-method file retains the current Candidate-delete authorities',()=>{
+  assert.doesNotMatch(apply,/CREATE OR REPLACE FUNCTION public\.candidate_delete_(?:apply|eligibility)\(/i);
+  for(const name of ['eligibility','apply']){
+    assert.ok(apply.includes('\\ir 04082026_1219_candidate_delete_'+name+'.sql'));
+    const source=read('supabase/repeatable/04082026_1219_candidate_delete_'+name+'.sql');
+    assert.match(source,/banking_pay_workbench_(?:jobs|economic_builds)/);
+  }
+  assert.match(apply,/REVOKE ALL ON FUNCTION public\.candidate_delete_eligibility\(uuid\) FROM PUBLIC, anon, authenticated;/);
+  assert.match(apply,/REVOKE ALL ON FUNCTION public\.candidate_delete_apply\(uuid, uuid, text\) FROM PUBLIC, anon, authenticated;/);
+});
+
 test('preview cannot invalidate its own source sequence; only a new confirmed operation invalidates',()=>{
   const invalidation=scope.indexOf('v_scope_invalidation_result:=private.pay_workbench_scope_invalidate_v1(');
   assert.equal(scope.split('v_scope_invalidation_result:=private.pay_workbench_scope_invalidate_v1(').length,2);
