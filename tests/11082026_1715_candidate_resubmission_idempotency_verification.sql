@@ -115,6 +115,20 @@ begin
 end;
 $fixtures$;
 
+-- The refused fixture's contract/date also has another current weekly
+-- Timesheet row which is not the Contract Week authority.  Resubmission must
+-- follow contract_weeks.timesheet_id instead of treating this valid carrier as
+-- an ambiguous replacement target.
+insert into public.timesheets(
+  timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
+  submission_mode,r2_nurse_key,r2_auth_key
+) values(
+  'b7080000-0000-4000-8000-000000000702',
+  'b7080000-0000-4000-8000-000000000004','RESUBMIT-WEEK-2-CARRIER',
+  current_date-7,'HOURS','WEEKLY','ELECTRONIC',
+  'candidate/resubmit/2/carrier','manager/resubmit/2/carrier'
+);
+
 insert into public.timesheets(
   timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
   submission_mode,scheduled_start_iso,scheduled_end_iso,worked_start_iso,worked_end_iso,

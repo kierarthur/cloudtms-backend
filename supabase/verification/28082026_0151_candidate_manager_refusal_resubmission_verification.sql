@@ -15,11 +15,15 @@ begin
   end if;
 
   if position(
-       'current_timesheet.contract_id is not distinct from v_source_workflow.contract_id'
+       'current_week.id=v_source_workflow.contract_week_id'
        in v_transition_definition
      )=0
      or position(
-       'current_timesheet.week_ending_date is not distinct from v_source_workflow.week_ending_date'
+       'current_week.contract_id is not distinct from v_source_workflow.contract_id'
+       in v_transition_definition
+     )=0
+     or position(
+       'current_week.week_ending_date is not distinct from v_source_workflow.week_ending_date'
        in v_transition_definition
      )=0
      or position(
@@ -27,6 +31,17 @@ begin
        in v_transition_definition
      )=0 then
     raise exception 'Candidate manager-refused resubmission does not resolve the current weekly/Daily authority';
+  end if;
+
+  if position(
+       'from public.contract_weeks current_week'
+       in v_transition_definition
+     )=0
+     or position(
+       'on current_timesheet.timesheet_id=current_week.timesheet_id'
+       in v_transition_definition
+     )=0 then
+    raise exception 'Candidate manager-refused weekly resubmission is not bound to the exact Contract Week Timesheet';
   end if;
 
   if position(

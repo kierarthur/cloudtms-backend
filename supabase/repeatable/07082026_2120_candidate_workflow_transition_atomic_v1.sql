@@ -2078,17 +2078,23 @@ begin
 
       -- The refused or rejected submission can legitimately point to a
       -- historical Timesheet revision which has since been retired. Resolve
-      -- the one current weekly authority by the source workflow's immutable
-      -- Contract/week identity instead of requiring that old row to survive.
+      -- the one current weekly authority through the source workflow's exact
+      -- Contract Week.  A contract/week can legitimately own other current
+      -- Timesheet rows (for example an additional or expense carrier), so a
+      -- broad contract/date count would reject an otherwise unambiguous
+      -- resubmission.
       select count(distinct current_timesheet.timesheet_id)::integer,
         min(current_timesheet.timesheet_id::text)::uuid
       into v_current_anchor_count,v_current_anchor_timesheet_id
-      from public.timesheets current_timesheet
-      where current_timesheet.is_current=true
+      from public.contract_weeks current_week
+      join public.timesheets current_timesheet
+        on current_timesheet.timesheet_id=current_week.timesheet_id
+      where current_week.id=v_source_workflow.contract_week_id
+        and current_week.contract_id is not distinct from v_source_workflow.contract_id
+        and current_week.week_ending_date is not distinct from v_source_workflow.week_ending_date
+        and current_timesheet.is_current=true
         and current_timesheet.archived_at_utc is null
-        and current_timesheet.sheet_scope='WEEKLY'::public.timesheet_scope_enum
-        and current_timesheet.contract_id is not distinct from v_source_workflow.contract_id
-        and current_timesheet.week_ending_date is not distinct from v_source_workflow.week_ending_date;
+        and current_timesheet.sheet_scope='WEEKLY'::public.timesheet_scope_enum;
       if v_current_anchor_count<>1 or v_current_anchor_timesheet_id is null then
         raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='55000';
       end if;
