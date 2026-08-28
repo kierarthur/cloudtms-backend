@@ -166,6 +166,8 @@ Before any database, migration, RPC, view, trigger, RLS, grant, or Supabase sche
 
 The Candidate/MyTMS boundary in `supabase/release/protected-boundary-lock.json` is frozen. If proposed work needs to alter one of those files or named objects, stop and coordinate before editing. All Banking Pay changes must also preserve Policy X.
 
+Rota first-use regression (28 August 2026): extract JSON text before concatenating it. Write `prefix || (item->>'key')`, never `prefix || item->>'key'`. The latter can compile inside PL/pgSQL but fail at runtime with `42883` or `22P02`. In Rota publication this rolled back a complete batch when booked/blocked days cleared existing availability; PostgREST surfaced `42883` as HTTP 404 even though the RPC existed. Do not misdiagnose that HTTP status alone as a missing RPC or change credentials. Keep `28082026_1236_candidate_daily_rota_clear_key_verification.sql` mandatory: it exercises blank publication, a mixed linked/unlinked batch, booked and blocked clearing, unchanged dates, exact keys, idempotent replay and service-only ACL, with all fixture rows rolled back.
+
 Every new SQL file must use the filename format `DDMMYYYY_HHMM_name.sql`; the filename must always begin with the date and 24-hour time in that exact order. Use the current UK date and time, and use a short descriptive `snake_case` name.
 
 * Save one-time database migrations in `supabase\migrations`.
