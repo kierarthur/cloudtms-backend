@@ -44,6 +44,39 @@ function rpcRecorder(resultForPrimary = { outcomes: [{ status: 'COMMITTED' }] })
   };
 }
 
+function generationItem(sourceHmac, itemIndex) {
+  const day = (offset) => ({
+    date: `2026-08-${String(1 + offset).padStart(2, '0')}`,
+    booked: false,
+    system_blocked: false,
+    source_row_hash: String(itemIndex + offset + 1).padStart(64, '0').slice(-64)
+  });
+  return {
+    candidate_global_key: `CID1-${String(itemIndex + 1).padStart(8, '0')}`,
+    candidate_source_hmac: sourceHmac,
+    source_hmac_key_version: 1,
+    source_event_id: `generation.event.${itemIndex}`,
+    source_revision: `generation-revision-${itemIndex}`,
+    source_hash: String(itemIndex + 101).padStart(64, '0').slice(-64),
+    window_start: '2026-08-01',
+    days: Array.from({ length: 14 }, (_, offset) => day(offset)),
+    source_event_time: '2026-08-01T09:00:00.000Z',
+    item_key: `generation.item.${itemIndex}`
+  };
+}
+
+function generationVerification(items) {
+  return {
+    route: findCandidateDailyRoute('POST', '/candidate-system/v1/google-availability/rota-generations'),
+    body: {
+      batch_request_id: '00000000-0000-4000-8000-000000000208',
+      items
+    },
+    correlationId,
+    idempotencyKey: 'generation-fixed-key'
+  };
+}
+
 test('first-ready policy reuses the sole locked transition and retains every safety barrier', () => {
   assert.match(sql, /candidate_daily_authority_transition_atomic_v1\s*\(/i);
   assert.match(sql, /expected_day_count<>14[\s\S]*actual_day_count<>14[\s\S]*v_day_count<>14/i);
@@ -104,6 +137,70 @@ test('a completed projection retries activation only for safely visible outcomes
   assert.equal(recorder.calls[0].name, 'candidate_daily_projection_complete_atomic_v1');
   assert.equal(recorder.calls[1].name, 'candidate_daily_system_policy_activate_ready_v1');
   assert.deepEqual(recorder.calls[1].args.p_projection_outbox_ids, [delivered, deferred]);
+});
+
+test('a generation batch containing only unlinked Candidates returns every terminal result without activation', async () => {
+  const items = Array.from({ length: 50 }, (_, index) => generationItem(String(index + 1).padStart(64, 'a').slice(-64), index));
+  const outcomes = items.map((_, index) => ({
+    index,
+    status: 'REJECTED',
+    error_code: 'IDENTITY_LINK_MISSING'
+  }));
+  const recorder = rpcRecorder({
+    batch_receipt_id: '00000000-0000-4000-8000-000000000209',
+    outcomes
+  });
+  const response = await candidateDailyPhase1bInternals.invokeSystemRpc(
+    generationVerification(items),
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' },
+    recorder.deps
+  );
+  assert.equal(response.status, 200);
+  assert.equal(recorder.calls.length, 1);
+  assert.equal(recorder.calls[0].name, 'candidate_daily_rota_generation_publish_atomic_v1');
+  const envelope = JSON.parse(await response.text());
+  assert.equal(envelope.result.outcomes.length, 50);
+  assert.ok(envelope.result.outcomes.every((outcome) => outcome.status === 'REJECTED'
+    && outcome.error_code === 'IDENTITY_LINK_MISSING'));
+});
+
+test('a mixed generation batch activates only Candidates whose generations committed or replayed', async () => {
+  const rejectedHmac = 'a'.repeat(64);
+  const committedHmac = 'b'.repeat(64);
+  const replayedHmac = 'c'.repeat(64);
+  const items = [
+    generationItem(rejectedHmac, 0),
+    generationItem(committedHmac, 1),
+    generationItem(replayedHmac, 2)
+  ];
+  const recorder = rpcRecorder({
+    batch_receipt_id: '00000000-0000-4000-8000-000000000210',
+    outcomes: [
+      { index: 0, status: 'REJECTED', error_code: 'IDENTITY_LINK_MISSING' },
+      {
+        index: 1,
+        status: 'COMMITTED',
+        generation_id: '00000000-0000-4000-8000-000000000211',
+        generation_version: 1
+      },
+      {
+        index: 2,
+        status: 'REPLAYED',
+        generation_id: '00000000-0000-4000-8000-000000000212',
+        generation_version: 2
+      }
+    ]
+  });
+  const response = await candidateDailyPhase1bInternals.invokeSystemRpc(
+    generationVerification(items),
+    { CANDIDATE_APP_ENVIRONMENT: 'TEST' },
+    recorder.deps
+  );
+  assert.equal(response.status, 200);
+  assert.equal(recorder.calls.length, 2);
+  assert.equal(recorder.calls[1].name, 'candidate_daily_system_policy_activate_ready_v1');
+  assert.deepEqual(recorder.calls[1].args.p_candidate_source_hmacs, [committedHmac, replayedHmac]);
+  assert.deepEqual(recorder.calls[1].args.p_projection_outbox_ids, []);
 });
 
 test('a reconciliation retries activation for each unique Candidate identity without changing its result', async () => {

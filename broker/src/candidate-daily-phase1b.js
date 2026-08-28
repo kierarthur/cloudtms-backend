@@ -425,12 +425,23 @@ function cleanReplay(result) {
   return { result: clean, replay };
 }
 
+function committedGenerationSourceHmacs(items, outcomes) {
+  if (!Array.isArray(items) || !Array.isArray(outcomes)) return [];
+  return [...new Set(outcomes
+    .filter((outcome) => isObject(outcome)
+      && safeInteger(outcome.index, 0, items.length - 1)
+      && ['COMMITTED', 'REPLAYED'].includes(outcome.status))
+    .map((outcome) => items[outcome.index]?.candidate_source_hmac)
+    .filter(validateSourceHmac))];
+}
+
 async function invokeSystemRpc(verification, env, deps) {
   const { route, body, correlationId, idempotencyKey } = verification;
   if (!validateSystemBody(route.operationId, body)) throw new Error('VALIDATION_FAILED');
   const common = systemContext(env);
   let result;
   let firstReadyActivation = null;
+  let generationItems = null;
   switch (route.operationId) {
     case 'googleAvailabilityLegacyTiles': {
       const source = await rpc(deps, 'candidate_daily_tiles_get_v1', {
@@ -486,10 +497,7 @@ async function invokeSystemRpc(verification, env, deps) {
         p_internal_context: common, p_batch_request_id: body.batch_request_id,
         p_idempotency_key: idempotencyKey, p_items: body.items, p_correlation_id: correlationId
       });
-      firstReadyActivation = {
-        p_candidate_source_hmacs: [...new Set(body.items.map((item) => item.candidate_source_hmac))],
-        p_projection_outbox_ids: []
-      };
+      generationItems = body.items;
       break;
     case 'googleAvailabilityApplySheetEdits':
       result = await rpc(deps, RPC_BY_OPERATION[route.operationId], {
@@ -559,6 +567,14 @@ async function invokeSystemRpc(verification, env, deps) {
     default:
       throw new Error('VALIDATION_FAILED');
   }
+  const cleaned = cleanReplay(result);
+  const response = successResponse(route, correlationId, cleaned.result, cleaned.replay);
+  if (generationItems) {
+    firstReadyActivation = {
+      p_candidate_source_hmacs: committedGenerationSourceHmacs(generationItems, cleaned.result.outcomes),
+      p_projection_outbox_ids: []
+    };
+  }
   if (firstReadyActivation
       && (firstReadyActivation.p_candidate_source_hmacs.length > 0
         || firstReadyActivation.p_projection_outbox_ids.length > 0)) {
@@ -568,8 +584,7 @@ async function invokeSystemRpc(verification, env, deps) {
       p_correlation_id: correlationId
     });
   }
-  const cleaned = cleanReplay(result);
-  return successResponse(route, correlationId, cleaned.result, cleaned.replay);
+  return response;
 }
 
 export function composeCandidateBootstrapPhase1b(bootstrap) {
