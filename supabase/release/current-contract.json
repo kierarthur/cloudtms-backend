@@ -97170,6 +97170,14 @@
           "generated": ""
         },
         {
+          "name": "recipient_display_name",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "recipient_id",
           "type": "uuid",
           "default": null,
@@ -97248,7 +97256,7 @@
       ],
       "force_rls": false,
       "constraints": [],
-      "view_definition_sha256": "b4957d724060ee402c3e62c46a3401b25b3416d85cbccd44fdf1a41f7056b6fa"
+      "view_definition_sha256": "e94bed596fc194ee86dfe676e525f8448acbffdfb8597ebf2ef4c562d5ef5213"
     },
     {
       "acl": [

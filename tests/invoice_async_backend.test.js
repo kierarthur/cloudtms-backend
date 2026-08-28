@@ -1037,6 +1037,8 @@ test('unfiltered unified outbox remains available without invoice-generation rea
     if (url.pathname === '/rest/v1/invoice_operations') {
       assert.equal(url.searchParams.get('operation_type'), 'neq.OPERATION_CONTROL_REQUEST');
       assert.doesNotMatch(url.searchParams.get('select') || '', /(?:^|,)run_after_utc(?:,|$)/);
+    } else {
+      assert.match(url.searchParams.get('select') || '', /(?:^|,)recipient_display_name(?:,|$)/);
     }
     const rows = url.pathname === '/rest/v1/invoice_operations'
       ? [{
@@ -1052,7 +1054,8 @@ test('unfiltered unified outbox remains available without invoice-generation rea
           channel: 'EMAIL',
           outbox_id: '00000000-0000-4000-8000-000000000032',
           status: 'QUEUED',
-          created_at_utc: '2026-07-24T11:00:00.000Z'
+          created_at_utc: '2026-07-24T11:00:00.000Z',
+          recipient_display_name: 'Candidate Recipient'
         }];
     return new Response(JSON.stringify(rows), {
       status: 200,
@@ -1086,6 +1089,7 @@ test('unfiltered unified outbox remains available without invoice-generation rea
     assert.equal(body.items[0].channel, 'INVOICE');
     assert.equal(body.items[0].scheduled_for_utc, null);
     assert.equal(body.items[1].channel, 'EMAIL');
+    assert.equal(body.items[1].recipient_display_name, 'Candidate Recipient');
     assert.equal(readinessRpcCalled, false);
   } finally {
     globalThis.fetch = originalFetch;

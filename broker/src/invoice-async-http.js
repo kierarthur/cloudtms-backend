@@ -2948,6 +2948,7 @@ function legacyOutboxCursorRow(row) {
     provider_message_id: String(row.provider_message_id || '').slice(0, 240) || null,
     recipient_kind: row.recipient_kind || null,
     recipient_id: row.recipient_id || null,
+    recipient_display_name: String(row.recipient_display_name || '').slice(0, 500) || null,
     context_kind: row.context_kind || null,
     context_id: row.context_id || null,
     scheduled_for_utc: row.scheduled_for_utc || null,
@@ -3092,7 +3093,7 @@ async function loadUnifiedOutboxCursorPage(env, {
   invoiceQuery.searchParams.set('limit', String(perSourceLimit));
 
   const legacyQuery = new URL(`${env.SUPABASE_URL}/rest/v1/v_outbox_unified`);
-  legacyQuery.searchParams.set('select', 'channel,outbox_id,outbox_type,status,delivery_status,created_at_utc,sent_at,delivered_at,read_at,failed_at,to_address,subject,reference,provider_message_id,last_error,recipient_kind,recipient_id,context_kind,context_id,scheduled_for_utc,next_attempt_at_utc');
+  legacyQuery.searchParams.set('select', 'channel,outbox_id,outbox_type,status,delivery_status,created_at_utc,sent_at,delivered_at,read_at,failed_at,to_address,subject,reference,provider_message_id,last_error,recipient_kind,recipient_id,recipient_display_name,context_kind,context_id,scheduled_for_utc,next_attempt_at_utc');
   legacyQuery.searchParams.set('created_at_utc', `lte.${snapshotAt}`);
   applyLegacyOutboxFilters(legacyQuery, { status });
   applyPostgrestAndExpressions(legacyQuery, [
