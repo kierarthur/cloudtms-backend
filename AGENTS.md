@@ -109,6 +109,8 @@ Daily official document proof must include a worked date different from the week
 
 Daily recovery/list regressions (28 August 2026): a non-editable historical Daily record must not resolve break-entry settings that it cannot use; retain exact Client-setting validation for editable records. Keep the rollback-contained `28082026_2203_candidate_daily_inapplicable_break_verification.sql` mandatory in NEW and UPGRADE. Cancelling an interrupted Daily PHONE review must preserve the permitted Daily PHONE route, not reset to the Weekly ELECTRONIC route. The booked-source first-use verifier must cancel/replay/reselect the manager request, preserve the review pack and then complete manager approval and receipt. Do not weaken the existing workflow route constraint or alter finance to repair either defect.
 
+Daily receipt display regressions: an unresolved server-owned Candidate receipt may already have a genuine UNASSIGNED financial snapshot whose hours are zero. Its app display must retain submitted factual minutes while unresolved; resolved, protected and import-owned rows keep the existing financial precedence. Daily list manager status must reuse the exact request/generation decision already supplied by detail, not infer approval from receipt state. Include the pending-zero-snapshot case and before/after financial-row equality in the mandatory booked-source verifier. Required JSON outputs must use null-safe assertions (`IS DISTINCT FROM`); `value <> expected` inside PL/pgSQL `IF` silently accepts a missing/null value and is not an adequate required-field check.
+
 Do not print, log, echo, expose, commit, or include in reports:
 
 * Cloudflare tokens

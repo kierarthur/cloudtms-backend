@@ -576,11 +576,57 @@ begin
 
   v_result:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,100,v_now);
   select item into v_bad from jsonb_array_elements(v_result->'items') item where item->>'timesheet_id'=v_replayed::text;
-  if v_bad is null or v_bad->>'candidate_status_code'<>'RECEIVED'
-    or v_bad->>'manager_approval_state'<>'MANAGER_APPROVED'
-    or (v_bad->>'total_hours')::numeric<>10 or v_bad->>'authorised'<>'false' then
+  if v_bad is null or v_bad->>'candidate_status_code' is distinct from 'RECEIVED'
+    or v_bad->>'manager_approval_state' is distinct from 'MANAGER_APPROVED'
+    or (v_bad->>'total_hours')::numeric is distinct from 10::numeric
+    or v_bad->>'authorised' is distinct from 'false' then
     raise exception 'DAILY_BOOKED_SOURCE_PROOF: manager-approved unresolved receipt not displayed as ordinary received: %',v_bad;
   end if;
+
+  -- The real background writer can produce a genuine UNASSIGNED snapshot
+  -- before Office resolution. Its zero hours must not erase submitted hours
+  -- in the app. Nothing in either read may change that financial snapshot.
+  begin
+    perform public.enqueue_ts_financials_priority(array[v_replayed],'CONTEXT_CHANGED');
+    select id into strict v_resolution_outbox from public.ts_financials_outbox
+      where timesheet_id=v_replayed;
+    v_resolution_snapshot:=jsonb_build_object('timesheet_version',1,
+      'basis','SELF_REPORTED','candidate_id',v_candidate,
+      'candidate_assignment','ASSIGNED','role','UNRESOLVED ROLE',
+      'total_hours',0,'total_pay_ex_vat',0,'total_charge_ex_vat',0,
+      'processing_status','UNASSIGNED','has_rate_issue',true,
+      'has_pay_channel_issue',false,'policy_snapshot_json','{}'::jsonb,
+      'rate_source_refs_json','{}'::jsonb);
+    select to_jsonb(r) into v_result from public.tsfin_write_snapshots_and_complete(
+      jsonb_build_array(jsonb_build_object('timesheet_id',v_replayed,
+        'outbox_id',v_resolution_outbox,'snapshot',v_resolution_snapshot))) r;
+    if v_result->>'ok_count' is distinct from '1'
+      or v_result->>'fail_count' is distinct from '0' then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: pending snapshot fixture failed: %',v_result;
+    end if;
+    select to_jsonb(f) into strict v_documents_before from public.timesheets_financials f
+      where timesheet_id=v_replayed and is_current;
+    v_result:=public.candidate_app_timesheet_detail_v2(v_session,'TEST',v_replayed,null,null,v_now);
+    if (v_result#>>'{hours,total_hours}')::numeric is distinct from 10::numeric
+      or v_result#>>'{manager_review,manager_approval_state}' is distinct from 'APPROVED' then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: pending snapshot hid factual hours or actual approval';
+    end if;
+    v_result:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,100,v_now);
+    select item into v_bad from jsonb_array_elements(v_result->'items') item
+      where item->>'timesheet_id'=v_replayed::text;
+    if v_bad is null or (v_bad->>'total_hours')::numeric is distinct from 10::numeric
+      or v_bad->>'manager_approval_state' is distinct from 'MANAGER_APPROVED' then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: list lost pending receipt hours or approval';
+    end if;
+    select to_jsonb(f) into strict v_documents_after from public.timesheets_financials f
+      where timesheet_id=v_replayed and is_current;
+    if v_documents_after is distinct from v_documents_before then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: display mutated financial state';
+    end if;
+    raise notice 'DAILY_BOOKED_SOURCE_PROOF: PASS pending zero snapshot preserves factual hours and approval in list/detail without financial writes';
+    raise exception 'DAILY_PENDING_SNAPSHOT_ROLLBACK' using errcode='Z9622';
+  exception when sqlstate 'Z9622' then null;
+  end;
 
   -- Exercise the existing Office resolution/write/authorisation owners against
   -- this exact manager-approved receipt. Only disposable fixture mappings and
