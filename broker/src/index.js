@@ -70780,6 +70780,88 @@ async function loadContractWeekWithdrawnSubmissionHistory(env, weekId) {
   return withdrawnSubmissions;
 }
 
+async function loadCandidateManagerRefusalHistory(env, { contractWeekId = null, timesheetIds = [] } = {}) {
+  const enc = encodeURIComponent;
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const asUuid = (value) => {
+    const candidate = String(value || '').trim();
+    return UUID_RE.test(candidate) ? candidate : null;
+  };
+  const weekId = asUuid(contractWeekId);
+  const exactTimesheetIds = Array.from(new Set((Array.isArray(timesheetIds) ? timesheetIds : [])
+    .map(asUuid)
+    .filter(Boolean)));
+  if (!weekId && !exactTimesheetIds.length) return [];
+
+  const identityFilter = weekId
+    ? `contract_week_id=eq.${enc(weekId)}`
+    : `or=(target_timesheet_id.in.(${exactTimesheetIds.map(enc).join(',')}),anchor_timesheet_id.in.(${exactTimesheetIds.map(enc).join(',')}))`;
+  const { rows: workflowRowsRaw } = await sbFetch(
+    env,
+    `${env.SUPABASE_URL}/rest/v1/candidate_submission_workflows` +
+      `?${identityFilter}` +
+      `&state=eq.REFUSED` +
+      `&select=id,candidate_id,workflow_kind,scope,route,rejection_reason,updated_at_utc` +
+      `&order=updated_at_utc.desc` +
+      `&limit=100`
+  );
+  const workflowRows = Array.isArray(workflowRowsRaw) ? workflowRowsRaw : [];
+  if (!workflowRows.length) return [];
+
+  const workflowIds = workflowRows.map((row) => asUuid(row?.id)).filter(Boolean);
+  const candidateIds = Array.from(new Set(workflowRows.map((row) => asUuid(row?.candidate_id)).filter(Boolean)));
+  const [approvalResult, candidateResult] = await Promise.all([
+    sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidate_approval_requests` +
+        `?workflow_id=in.(${workflowIds.map(enc).join(',')})` +
+        `&state=eq.REFUSED` +
+        `&select=workflow_id,method,manager_name,manager_position,manager_email_normalized,refusal_reason,refused_at_utc,updated_at_utc` +
+        `&order=refused_at_utc.desc.nullslast,updated_at_utc.desc` +
+        `&limit=100`
+    ),
+    candidateIds.length ? sbFetch(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidates` +
+        `?id=in.(${candidateIds.map(enc).join(',')})` +
+        `&select=id,display_name` +
+        `&limit=100`
+    ) : Promise.resolve({ rows: [] })
+  ]);
+
+  const latestApprovalByWorkflow = {};
+  for (const approval of (approvalResult?.rows || [])) {
+    const workflowId = asUuid(approval?.workflow_id);
+    if (workflowId && !latestApprovalByWorkflow[workflowId]) latestApprovalByWorkflow[workflowId] = approval;
+  }
+  const candidateDisplayById = {};
+  for (const candidate of (candidateResult?.rows || [])) {
+    const candidateId = asUuid(candidate?.id);
+    const displayName = String(candidate?.display_name || '').trim();
+    if (candidateId && displayName) candidateDisplayById[candidateId] = displayName;
+  }
+
+  return workflowRows.map((workflow) => {
+    const workflowId = asUuid(workflow?.id);
+    const candidateId = asUuid(workflow?.candidate_id);
+    const approval = latestApprovalByWorkflow[workflowId] || {};
+    return {
+      workflow_id: workflowId,
+      workflow_kind: String(workflow?.workflow_kind || '').trim().toUpperCase() || null,
+      scope: String(workflow?.scope || '').trim().toUpperCase() || null,
+      route: String(workflow?.route || '').trim().toUpperCase() || null,
+      candidate_display_name: candidateDisplayById[candidateId] || 'Candidate',
+      method: String(approval?.method || '').trim().toUpperCase() || null,
+      manager_name: String(approval?.manager_name || '').trim() || null,
+      manager_position: String(approval?.manager_position || '').trim() || null,
+      manager_email: String(approval?.manager_email_normalized || '').trim().toLowerCase() || null,
+      refused_at_utc: approval?.refused_at_utc || approval?.updated_at_utc || workflow?.updated_at_utc || null,
+      refusal_reason: String(approval?.refusal_reason || workflow?.rejection_reason || '').trim() || null,
+      read_only: true
+    };
+  });
+}
+
 
 async function handleContractWeekStagedEvidenceList(env, req, weekId) {
   const enc = encodeURIComponent;
@@ -70859,10 +70941,14 @@ async function handleContractWeekStagedEvidenceList(env, req, weekId) {
   });
 
   let withdrawnSubmissions = [];
+  let managerRefusals = [];
   try {
-    withdrawnSubmissions = await loadContractWeekWithdrawnSubmissionHistory(env, weekId);
+    [withdrawnSubmissions, managerRefusals] = await Promise.all([
+      loadContractWeekWithdrawnSubmissionHistory(env, weekId),
+      loadCandidateManagerRefusalHistory(env, { contractWeekId: weekId })
+    ]);
   } catch (error) {
-    console.warn('[handleContractWeekStagedEvidenceList] withdrawn history enrichment failed (non-fatal)', {
+    console.warn('[handleContractWeekStagedEvidenceList] Candidate history enrichment failed (non-fatal)', {
       contract_week_id: weekId,
       error: String(error?.message || error)
     });
@@ -70871,7 +70957,8 @@ async function handleContractWeekStagedEvidenceList(env, req, weekId) {
   return withCORS(env, req, ok({
     contract_week_id: weekId,
     items,
-    withdrawn_submissions: withdrawnSubmissions
+    withdrawn_submissions: withdrawnSubmissions,
+    manager_refusals: managerRefusals
   }));
 }
 
@@ -80957,6 +81044,7 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     // the current row has the same authoritative booking lineage.  This keeps old
     // files auditable without ever mixing them into the current evidence/action set.
     const withdrawnSubmissions = [];
+    let managerRefusals = [];
     const bookingId = asUuidStringOrNull(ts?.booking_id);
     if (wantMeta && bookingId) {
       try {
@@ -81241,6 +81329,19 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     }
 
     if (wantMeta) {
+      try {
+        managerRefusals = await loadCandidateManagerRefusalHistory(env, {
+          timesheetIds: [currentTsId, resolved.requested_timesheet_id || tsId]
+        });
+      } catch (error) {
+        console.warn('[handleTimesheetEvidenceList] manager refusal history enrichment failed (non-fatal)', {
+          timesheet_id: currentTsId,
+          error: String(error?.message || error)
+        });
+      }
+    }
+
+    if (wantMeta) {
       return withCORS(env, req, ok({
         requested_timesheet_id: resolved.requested_timesheet_id || tsId,
         current_timesheet_id: currentTsId,
@@ -81256,7 +81357,8 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
           last_error: ts?.last_document_error_json || currentTimesheetDocument?.error_json || null
         },
         evidence: all,
-        withdrawn_submissions: withdrawnSubmissions
+        withdrawn_submissions: withdrawnSubmissions,
+        manager_refusals: managerRefusals
       }));
     }
 

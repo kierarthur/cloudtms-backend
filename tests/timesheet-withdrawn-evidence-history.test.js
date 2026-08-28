@@ -41,3 +41,8 @@ test('the retained official timesheet and signatures are projected as separate v
   assert.match(handler, /preview_mode: 'SIGNATURES',[\s\S]*booking_id: historical\?\.booking_id \|\| null/);
   assert.match(handler, /r2_nurse_key: nurseKey \|\| null[\s\S]*r2_auth_key: authoriserKey \|\| null/);
 });
+
+test('real Timesheet evidence metadata also includes read-only manager refusal history', () => {
+  assert.match(handler, /loadCandidateManagerRefusalHistory\(env, \{[\s\S]*timesheetIds: \[currentTsId, resolved\.requested_timesheet_id \|\| tsId\]/);
+  assert.match(handler, /evidence: all,[\s\S]*withdrawn_submissions: withdrawnSubmissions,[\s\S]*manager_refusals: managerRefusals/);
+});

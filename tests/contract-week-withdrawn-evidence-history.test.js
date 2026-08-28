@@ -38,7 +38,18 @@ test('planned Contract Week returns the same audit-only history shape used by re
 });
 
 test('staged evidence list includes history separately without merging it into editable items', () => {
-  assert.match(handler, /withdrawnSubmissions = await loadContractWeekWithdrawnSubmissionHistory\(env, weekId\)/);
+  assert.match(handler, /loadContractWeekWithdrawnSubmissionHistory\(env, weekId\)/);
   assert.match(handler, /items,[\s\S]*withdrawn_submissions: withdrawnSubmissions/);
   assert.doesNotMatch(handler, /items\.(?:push|unshift|splice)\([^)]*withdrawn/i);
+});
+
+test('manager refusals are loaded separately with the exact reason and manager route identity', () => {
+  assert.match(helper, /async function loadCandidateManagerRefusalHistory/);
+  assert.match(helper, /state=eq\.REFUSED/);
+  assert.match(helper, /candidate_approval_requests[\s\S]*refusal_reason,refused_at_utc/);
+  assert.match(helper, /candidate_display_name: candidateDisplayById/);
+  assert.match(helper, /manager_email: String\(approval\?\.manager_email_normalized/);
+  assert.match(helper, /refusal_reason: String\(approval\?\.refusal_reason \|\| workflow\?\.rejection_reason/);
+  assert.match(handler, /loadCandidateManagerRefusalHistory\(env, \{ contractWeekId: weekId \}\)/);
+  assert.match(handler, /withdrawn_submissions: withdrawnSubmissions,[\s\S]*manager_refusals: managerRefusals/);
 });
