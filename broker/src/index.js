@@ -29096,10 +29096,31 @@ function normaliseCandidateBreakInput(segment) {
 function buildCandidateDailySubmissionThroughCanonicalAuthority({ workflow, factualSubmission } = {}) {
   const factual = (factualSubmission && typeof factualSubmission === 'object' && !Array.isArray(factualSubmission))
     ? factualSubmission : {};
-  const sourcePatch = (factual.timesheet_patch_json && typeof factual.timesheet_patch_json === 'object')
+  let sourcePatch = (factual.timesheet_patch_json && typeof factual.timesheet_patch_json === 'object')
     ? factual.timesheet_patch_json : factual;
   const actualSchedule = Array.isArray(sourcePatch.actual_schedule_json)
     ? sourcePatch.actual_schedule_json.map(normaliseCandidateBreakInput) : [];
+  // The app sends UK wall-clock schedule fields. Reuse the existing factual
+  // schedule owner; do not require the phone to recreate timezone authority.
+  if (!sourcePatch.worked_start_iso && !sourcePatch.worked_end_iso && actualSchedule.length) {
+    if (actualSchedule.length !== 1) throw new Error('CANDIDATE_DAILY_SINGLE_INTERVAL_REQUIRED');
+    const segment = actualSchedule[0];
+    const workDate = String(workflow?.work_date || '').slice(0, 10);
+    if (!workDate || [segment.date, segment.work_date].some(value => value != null && value !== workDate)) {
+      throw new Error('CANDIDATE_DAILY_SCHEDULE_DATE_MISMATCH');
+    }
+    const mapped = mapCanonicalDailyScheduleToIso({
+      ...segment, date: workDate,
+      start: segment.start_time ?? segment.start,
+      end: segment.end_time ?? segment.end
+    }, { workedDateFallback: workDate, ukLocalToUtcISO });
+    if (mapped.error) throw new Error(mapped.error);
+    sourcePatch = { ...sourcePatch,
+      worked_start_iso: mapped.worked_start_iso, worked_end_iso: mapped.worked_end_iso,
+      break_start_iso: mapped.break_start_iso, break_end_iso: mapped.break_end_iso,
+      break_minutes: mapped.break_minutes
+    };
+  }
   const explicitNoBreak = hasExplicitCandidateZeroBreak(sourcePatch);
   const patch = {
     worked_start_iso: sourcePatch.worked_start_iso || null,

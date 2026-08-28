@@ -103,6 +103,8 @@ Keep `28082026_1858_candidate_daily_booked_source_verification.sql` mandatory in
 
 Daily response tests must include the actual PostgreSQL null-stripped shape of future booked days. Only `break_entry.applicable=false` with `source=NOT_APPLICABLE` may normalize an absent `mode` to explicit null; editable break authority, context proofs and undeclared-field rejection remain strict. Test both private and public response boundaries: a valid future day must not turn an otherwise complete Rota into a false readiness failure.
 
+Daily submission adapter tests must use the actual app's local `actual_schedule_json` (`start_time`/`end_time`) after adaptive-break normalization, not only hand-built `worked_*_iso` fixtures. The Candidate adapter must reuse the unchanged `mapCanonicalDailyScheduleToIso` and `ukLocalToUtcISO` authorities for that factual conversion, retain exact workflow work-date/one-interval checks and prove overnight/DST/break cases. Do not alter financial calculation/Office owners or require the app to duplicate UK timezone authority to repair a payload mismatch. Source or SQL fixture success is not physical PHONE submission proof.
+
 Do not print, log, echo, expose, commit, or include in reports:
 
 * Cloudflare tokens
