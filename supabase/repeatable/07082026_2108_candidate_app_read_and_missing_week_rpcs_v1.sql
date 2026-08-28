@@ -536,15 +536,6 @@ begin
     'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT','READY_TO_FINALISE',
     'AWAITING_PAPER_RETURN','RECEIVED','REFUSED'
   )
-    -- A refusal gets one durable direct replacement.  Once that replacement
-    -- exists, fall through to the ordinary editable-week action instead of
-    -- offering a second resubmission that the lineage guard must reject.
-    and (
-      item->>'state'<>'REFUSED'
-      or not private._candidate_rejection_replaced_v1(
-        nullif(item->>'workflow_id','')::uuid
-      )
-    )
   order by coalesce((item->>'detail_action_owner')::boolean,false) desc,
     item->>'updated_at_utc' desc,item->>'workflow_id'
   limit 1;

@@ -4429,7 +4429,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "8ba3d8d5384b529da7d8b167437e0d6e01c1b0f37a1471e08d34ff90784216d3"
+      "definition_sha256": "4e1854ab11c0d26418368582399cdc55997dd5ab931ba6691ddc9d4f3a9dcce8"
     },
     {
       "acl": [

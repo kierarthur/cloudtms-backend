@@ -31,6 +31,9 @@ const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.ym
 const managerRefusalResubmission = read(
   'supabase/repeatable/28082026_0214_candidate_manager_refusal_resubmission_v1.sql'
 );
+const refusedCardRecovery = read(
+  'supabase/repeatable/28082026_0505_candidate_refused_card_recovery_v1.sql'
+);
 
 const generatedOffice = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
 const generatedOther = read('supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql');
@@ -647,7 +650,7 @@ test('read and placement policy uses all authoritative worked and dated boundari
 test('rejected workflows project through the replacement current version with server-owned recovery scope', () => {
   const page = definition(sql.reads, 'candidate_app_timesheet_page_v1');
   const detail = definition(sql.reads, 'candidate_app_timesheet_detail_v1');
-  const primaryAction = privateDefinition(sql.reads, '_candidate_timesheet_primary_action_v1');
+  const primaryAction = privateDefinition(refusedCardRecovery, '_candidate_timesheet_primary_action_v1');
   const replaced = privateDefinition(managerRefusalResubmission, '_candidate_rejection_replaced_v1');
   assert.match(replaced, /v_rejected\.state not in \('REJECTED','REFUSED'\)/i);
   assert.match(page, /classified\.state='REJECTED'[\s\S]*resolution\.carrier_contract_week_id=classified\.contract_week_id/i);
