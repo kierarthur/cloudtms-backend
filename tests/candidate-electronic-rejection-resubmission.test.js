@@ -24,6 +24,9 @@ const verification = read(
 const managerRefusalVerification = read(
   'supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql'
 );
+const managerRefusalCorrection = read(
+  'supabase/repeatable/28082026_0214_candidate_manager_refusal_resubmission_v1.sql'
+);
 const runtime = read('tests/10082026_1817_candidate_finalised_rejection_verification.sql');
 const resubmissionRuntime = read(
   'tests/11082026_1715_candidate_resubmission_idempotency_verification.sql'
@@ -110,6 +113,11 @@ test('installed-state verification and real resubmission regression are release-
 });
 
 test('manager-refused phone workflows share the guarded resubmission authority', () => {
+  assert.match(
+    managerRefusalCorrection,
+    /v_rejected\.state not in \('REJECTED','REFUSED'\)/i
+  );
+  assert.doesNotMatch(managerRefusalCorrection, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
   assert.match(
     managerRefusalVerification,
     /v_source_workflow\.state not in \(''REJECTED'',''REFUSED''\)/i

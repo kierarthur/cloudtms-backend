@@ -20,14 +20,14 @@ begin
   from public.candidate_submission_workflows workflow
   where workflow.id=p_rejected_workflow_id;
 
-  if not found or v_rejected.state not in ('REJECTED','REFUSED') then
+  if not found or v_rejected.state<>'REJECTED' then
     return false;
   end if;
 
   -- Direct replacement lineage is durable historical truth.  A successor
   -- remains the replacement even if it is later cancelled, expires or is
-  -- superseded; the original rejected or manager-refused workflow must never
-  -- advertise a second impossible direct resubmission.
+  -- superseded; the original rejected workflow must never advertise a second
+  -- impossible direct resubmission.
   if exists(
     select 1
     from public.candidate_submission_workflows direct_replacement
