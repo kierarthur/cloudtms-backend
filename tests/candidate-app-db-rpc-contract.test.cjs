@@ -416,6 +416,11 @@ test('rejected resubmission is source-bound, transaction-owned and request-aware
   assert.match(workflow, /creation_request_sha256 is distinct from v_creation_request_sha256/i);
   assert.match(workflow, /when v_source_workflow\.rejection_scope='COMPLETE_EXPENSE_CLAIM'[\s\S]*then 'CONTRACT_EXPENSE'/i);
   assert.match(workflow, /v_source_workflow\.route='PAPER' then 'PAPER' else 'ELECTRONIC'/i);
+  assert.match(workflow, /current_timesheet\.contract_id is not distinct from v_source_workflow\.contract_id/i);
+  assert.match(workflow, /current_timesheet\.week_ending_date is not distinct from v_source_workflow\.week_ending_date/i);
+  assert.doesNotMatch(workflow, /where source_timesheet\.timesheet_id=coalesce\([\s\S]{0,240}v_source_workflow\.anchor_timesheet_id[\s\S]{0,240}CANDIDATE_WORKFLOW_ANCHOR_MISMATCH/i);
+  assert.match(workflow, /v_source_workflow\.creation_identity_json#>>'\{derived,daily_booking_id\}'/i);
+  assert.match(workflow, /CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='55000'/i);
   assert.match(workflow, /'rejected_workflow_id',v_replacement_of_workflow_id/i);
   assert.match(workflow, /'replacement_workflow_id',v_workflow\.id/i);
   assert.match(workflow, /idempotency_key=btrim\(p_idempotency_key\)[\s\S]*for update/i);

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { candidatePrivateWorkerInternals } from '../broker/src/candidate-private-worker.js';
+import { candidateAppBackendInternals } from '../broker/src/candidate-app-backend.js';
 
 test('private Candidate failure diagnostics expose only a closed error code and status', async () => {
   const result = await candidatePrivateWorkerInternals.privateFailureDiagnostic(Response.json({
@@ -36,6 +37,19 @@ test('private Candidate failure diagnostics safely classify closed client failur
     status: 400,
     error_code: 'CANDIDATE_FEATURE_DISABLED'
   });
+  assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
+});
+
+test('Candidate transport diagnostics retain safe gateway status without response contents', () => {
+  const error = new Error('RPC candidate_workflow_transition_atomic_v1 failed 504: private response omitted');
+  error.status = 504;
+  error.fn = 'candidate_workflow_transition_atomic_v1';
+  error.json = null;
+  error.body = 'must-not-appear';
+  const result = candidateAppBackendInternals.safeCandidateTransportDiagnostic(error);
+  assert.equal(result.transport_function, 'candidate_workflow_transition_atomic_v1');
+  assert.equal(result.transport_status, 504);
+  assert.equal(result.database_sqlstate, null);
   assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
 });
 

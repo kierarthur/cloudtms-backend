@@ -14,6 +14,28 @@ begin
     raise exception 'Candidate manager-refused resubmission authority is not installed';
   end if;
 
+  if position(
+       'current_timesheet.contract_id is not distinct from v_source_workflow.contract_id'
+       in v_transition_definition
+     )=0
+     or position(
+       'current_timesheet.week_ending_date is not distinct from v_source_workflow.week_ending_date'
+       in v_transition_definition
+     )=0
+     or position(
+       'v_source_workflow.creation_identity_json#>>''{derived,daily_booking_id}'''
+       in v_transition_definition
+     )=0 then
+    raise exception 'Candidate manager-refused resubmission does not resolve the current weekly/Daily authority';
+  end if;
+
+  if position(
+       'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH'' using errcode=''55000'''
+       in v_transition_definition
+     )=0 then
+    raise exception 'Candidate manager-refused anchor mismatch remains a retryable serialization failure';
+  end if;
+
   select pg_get_functiondef(
     'private._candidate_rejection_replaced_v1(uuid)'::regprocedure
   ) into v_replacement_definition;

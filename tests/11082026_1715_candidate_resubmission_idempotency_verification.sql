@@ -185,7 +185,7 @@ begin
       'b7080000-0000-4000-8000-000000000301','RESUBMIT_REJECTED',1,
       '{}'::jsonb,'b7080000-0000-4000-8000-000000009000',now()
     );
-  exception when sqlstate '40001' then
+  exception when sqlstate '55000' then
     v_failed:=sqlerrm='WORKFLOW_GENERATION_CONFLICT';
   end;
   if not coalesce(v_failed,false) then
@@ -198,7 +198,7 @@ begin
       'b7080000-0000-4000-8000-000000000301',
       'b7080000-0000-4000-8000-000000009001'
     );
-  exception when sqlstate '40001' then
+  exception when sqlstate '55000' then
     v_failed:=sqlerrm='CANDIDATE_IDEMPOTENCY_CONFLICT';
   end;
   if not coalesce(v_failed,false) then
@@ -253,7 +253,7 @@ begin
       'b7080000-0000-4000-8000-000000000302',
       'b7080000-0000-4000-8000-000000009002'
     );
-  exception when sqlstate '40001' then
+  exception when sqlstate '55000' then
     v_failed:=sqlerrm='CANDIDATE_IDEMPOTENCY_CONFLICT';
   end;
   if not v_failed then raise exception 'cross-source key reuse did not fail closed'; end if;
@@ -389,7 +389,7 @@ begin
     begin
       perform result
       from dblink_get_result('candidate_resubmit_diff_second') as received(result text);
-    exception when sqlstate '40001' then
+    exception when sqlstate '55000' then
       v_second_controlled:=sqlerrm='CANDIDATE_REJECTED_WORKFLOW_ALREADY_REPLACED';
     end;
     perform dblink_disconnect('candidate_resubmit_diff_first');

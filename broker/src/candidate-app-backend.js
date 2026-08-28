@@ -62,6 +62,7 @@ const CONFLICT_ERROR_CODES = new Set([
   'CANDIDATE_PROVIDER_HANDOFF_IN_PROGRESS',
   'CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT',
   'CANDIDATE_REJECTION_SCOPE_CONFLICT',
+  'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH',
   'CANDIDATE_IDEMPOTENCY_CONFLICT',
   'CANDIDATE_ACTION_NOT_ELIGIBLE',
   'CANDIDATE_REQUIRES_UNAUTHORISE',
@@ -764,6 +765,7 @@ function errorResponse(error, correlationId, office = false) {
     CANDIDATE_IMPORT_AUTHORITATIVE: 'The imported record is authoritative and cannot be changed here.',
     CANDIDATE_PAPER_SHARED_SOURCE_WORKFLOW_CONFLICT: 'Another Candidate PAPER workflow must be resolved before continuing.',
     CANDIDATE_REJECTION_SCOPE_CONFLICT: 'CloudTMS could not establish one safe rejection scope.',
+    CANDIDATE_WORKFLOW_ANCHOR_MISMATCH: 'This submission no longer matches the current timesheet. Refresh it before trying again.',
     CANDIDATE_IDEMPOTENCY_CONFLICT: 'This operation key has already been used for a different request.',
     CANDIDATE_BREAK_ENTRY_CONTEXT_STALE: 'The break-entry setting changed. Refresh the timesheet before submitting it.',
     CANDIDATE_BREAK_ENTRY_MODE_MISMATCH: 'Use the break-entry format shown for this timesheet.',
@@ -6717,7 +6719,8 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
   } catch (error) {
     const diagnostic = safeCandidateTransportDiagnostic(error);
     if (diagnostic.error_code === 'CANDIDATE_REQUEST_FAILED'
-        || diagnostic.database_sqlstate) {
+        || diagnostic.database_sqlstate
+        || (diagnostic.transport_function && Number(diagnostic.transport_status) >= 400)) {
       console.error('[candidate-app] safe transport failure', diagnostic);
     }
     return errorResponse(error, correlationId, routeAudience === 'OFFICE');
@@ -6725,6 +6728,7 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
 }
 
 export const candidateAppBackendInternals = Object.freeze({
+  safeCandidateTransportDiagnostic,
   derivePasswordVerifier,
   passwordVerificationProof,
   deterministicOpaqueToken,

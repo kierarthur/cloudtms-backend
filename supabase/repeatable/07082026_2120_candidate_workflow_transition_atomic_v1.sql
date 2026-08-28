@@ -1727,6 +1727,7 @@ declare
   v_creation_request_sha256 bytea;
   v_initial_route text;
   v_source_anchor public.timesheets%rowtype;
+  v_daily_booking_id text;
   v_current_anchor_count integer:=0;
   v_current_anchor_timesheet_id uuid;
   v_paper_failure_code text;
@@ -1950,7 +1951,7 @@ begin
       raise exception 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED' using errcode='22023';
     end if;
     if p_expected_generation is null or p_expected_generation<1 then
-      raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
+      raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='55000';
     end if;
 
     v_creation_request_identity:=jsonb_build_object(
@@ -1986,10 +1987,10 @@ begin
       raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
     end if;
     if v_source_workflow.generation<>p_expected_generation then
-      raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
+      raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='55000';
     end if;
     if v_source_workflow.state not in ('REJECTED','REFUSED') then
-      raise exception 'CANDIDATE_REJECTED_WORKFLOW_NOT_RESUBMITTABLE' using errcode='40001';
+      raise exception 'CANDIDATE_REJECTED_WORKFLOW_NOT_RESUBMITTABLE' using errcode='55000';
     end if;
 
     select * into v_existing_workflow
@@ -2001,7 +2002,7 @@ begin
       if v_existing_workflow.replacement_of_workflow_id is distinct from v_source_workflow.id
          or v_existing_workflow.candidate_id is distinct from v_source_workflow.candidate_id
          or v_existing_workflow.creation_request_sha256 is distinct from v_creation_request_sha256 then
-        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='55000';
       end if;
       return jsonb_build_object(
         'ok',true,'idempotent_replay',true,
@@ -2020,7 +2021,7 @@ begin
     for update;
     if found or private._candidate_rejection_replaced_v1(v_source_workflow.id) then
       raise exception 'CANDIDATE_REJECTED_WORKFLOW_ALREADY_REPLACED'
-        using errcode='40001',detail=case when v_existing_workflow.id is null then null
+        using errcode='55000',detail=case when v_existing_workflow.id is null then null
           else jsonb_build_object('replacement_workflow_id',v_existing_workflow.id)::text end;
     end if;
 
@@ -2028,17 +2029,24 @@ begin
     v_replacement_of_workflow_id:=v_source_workflow.id;
     v_insert_workflow_id:=gen_random_uuid();
     if v_source_workflow.workflow_kind='DAILY' then
+      v_daily_booking_id:=nullif(btrim(coalesce(
+        v_source_workflow.creation_identity_json#>>'{derived,daily_booking_id}',
+        ''
+      )), '');
+      if v_daily_booking_id is null then
+        select nullif(btrim(coalesce(source_timesheet.booking_id,'')),'')
+        into v_daily_booking_id
+        from public.timesheets source_timesheet
+        where source_timesheet.timesheet_id=coalesce(
+          v_source_workflow.target_timesheet_id,v_source_workflow.anchor_timesheet_id
+        );
+      end if;
       select current_timesheet.* into v_daily_timesheet
-      from public.timesheets source_timesheet
-      join public.timesheets current_timesheet
-        on current_timesheet.booking_id=source_timesheet.booking_id
-       and current_timesheet.is_current=true
-       and current_timesheet.archived_at_utc is null
-       and current_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum
-      where source_timesheet.timesheet_id=coalesce(
-        v_source_workflow.target_timesheet_id,v_source_workflow.anchor_timesheet_id
-      )
-        and nullif(btrim(coalesce(source_timesheet.booking_id,'')),'') is not null;
+      from public.timesheets current_timesheet
+      where current_timesheet.booking_id=v_daily_booking_id
+        and current_timesheet.is_current=true
+        and current_timesheet.archived_at_utc is null
+        and current_timesheet.sheet_scope='DAILY'::public.timesheet_scope_enum;
       if not found then
         raise exception 'CANDIDATE_DAILY_SHIFT_NOT_FOUND' using errcode='P0002';
       end if;
@@ -2068,35 +2076,21 @@ begin
       end;
       v_scope:='WEEKLY';
 
-      select source_timesheet.* into v_source_anchor
-      from public.timesheets source_timesheet
-      where source_timesheet.timesheet_id=coalesce(
-        v_source_workflow.anchor_timesheet_id,v_source_workflow.target_timesheet_id
-      );
-      if not found then
-        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
-      end if;
+      -- The refused or rejected submission can legitimately point to a
+      -- historical Timesheet revision which has since been retired. Resolve
+      -- the one current weekly authority by the source workflow's immutable
+      -- Contract/week identity instead of requiring that old row to survive.
       select count(distinct current_timesheet.timesheet_id)::integer,
         min(current_timesheet.timesheet_id::text)::uuid
       into v_current_anchor_count,v_current_anchor_timesheet_id
       from public.timesheets current_timesheet
       where current_timesheet.is_current=true
         and current_timesheet.archived_at_utc is null
-        and current_timesheet.contract_id is not distinct from v_source_anchor.contract_id
-        and current_timesheet.week_ending_date is not distinct from v_source_anchor.week_ending_date
-        and (
-          (
-            nullif(btrim(coalesce(v_source_anchor.booking_id,'')),'') is not null
-            and nullif(btrim(coalesce(current_timesheet.booking_id,'')),'')
-              =nullif(btrim(v_source_anchor.booking_id),'')
-          )
-          or (
-            nullif(btrim(coalesce(v_source_anchor.booking_id,'')),'') is null
-            and current_timesheet.timesheet_id=v_source_anchor.timesheet_id
-          )
-        );
+        and current_timesheet.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+        and current_timesheet.contract_id is not distinct from v_source_workflow.contract_id
+        and current_timesheet.week_ending_date is not distinct from v_source_workflow.week_ending_date;
       if v_current_anchor_count<>1 or v_current_anchor_timesheet_id is null then
-        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='40001';
+        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='55000';
       end if;
       select current_timesheet.* into v_anchor_timesheet
       from public.timesheets current_timesheet
@@ -2413,7 +2407,8 @@ begin
       if v_existing_workflow.candidate_id is distinct from v_candidate_id
          or v_existing_workflow.replacement_of_workflow_id is distinct from v_replacement_of_workflow_id
          or v_existing_workflow.creation_request_sha256 is distinct from v_creation_request_sha256 then
-        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+        raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+          using errcode=case when v_is_rejected_resubmission then '55000' else '40001' end;
       end if;
       if v_is_rejected_resubmission then
         return jsonb_build_object(
@@ -5406,9 +5401,10 @@ exception
     elsif v_constraint_name='candidate_submission_workflows_one_active_expense_uq' then
       raise exception 'CANDIDATE_EXPENSE_CLAIM_ALREADY_ACTIVE' using errcode='23505';
     elsif v_constraint_name='candidate_submission_workflows_account_idempotency_uq' then
-      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT' using errcode='40001';
+      raise exception 'CANDIDATE_IDEMPOTENCY_CONFLICT'
+        using errcode=case when v_is_rejected_resubmission then '55000' else '40001' end;
     elsif v_constraint_name='candidate_submission_workflows_replacement_source_uq' then
-      raise exception 'CANDIDATE_REJECTED_WORKFLOW_ALREADY_REPLACED' using errcode='40001';
+      raise exception 'CANDIDATE_REJECTED_WORKFLOW_ALREADY_REPLACED' using errcode='55000';
     elsif v_constraint_name='candidate_submission_components_paper_return_page_uq' then
       raise exception 'CANDIDATE_PAPER_RETURN_PAGE_DUPLICATE' using errcode='23505';
     end if;
