@@ -305,10 +305,11 @@ begin
     'booked',n<2,'system_blocked',false,'source_row_hash',lpad(to_hex(n+1),64,'0'))
     ||case when n<2 then jsonb_build_object(
       'booking_id','daily-booked-proof-'||n::text,
-      'shift_starts_at',((v_today-1+n)::text||' 21:00:00 Europe/London')::timestamptz,
+      'shift_starts_at',((v_today-1+n)::text||case when n=0 then ' 21:00:00 Europe/London'
+        else ' 00:00:00 Europe/London' end)::timestamptz,
       'shift_ends_at',((v_today+n)::text||' 07:00:00 Europe/London')::timestamptz,
       'hospital','Unresolved hospital','ward','','job_title','Unresolved role',
-      'shift_type','NIGHT','timesheet_eligible',true)
+      'shift_type','NIGHT','timesheet_eligible',false)
       else '{}'::jsonb end order by n) into v_days from generate_series(0,13)n;
   v_result:=public.candidate_daily_rota_generation_publish_atomic_v1(v_context,
     gen_random_uuid(),'daily-booked-proof-'||v_candidate::text,jsonb_build_array(
@@ -342,6 +343,47 @@ begin
      or v_result#>'{tiles,2,action_target}' is not null then
     raise exception 'DAILY_BOOKED_SOURCE_PROOF: read-only booked action target is wrong';
   end if;
+
+  -- MyTMS ignores the legacy time-window flag but still denies future shifts.
+  -- The previous date is over four hours past its finish even just after midnight.
+  begin
+    update public.candidate_daily_rota_days set timesheet_eligible=false,
+      shift_starts_at=((v_today-1)::text||' 07:00 Europe/London')::timestamptz,
+      shift_ends_at=((v_today-1)::text||' 18:00 Europe/London')::timestamptz
+      where generation_id=v_generation and rota_date=v_today-1;
+    v_result:=public.candidate_daily_tiles_get_v1(v_candidate_context,v_today,14);
+    if v_result#>>'{tiles,0,action_target,target_kind}' is distinct from 'BOOKED_DAILY_SHIFT'
+       or v_result#>>'{tiles,0,timesheet_eligible}' is distinct from 'true' then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: legacy four-hour flag hid a current started shift';
+    end if;
+    v_bad:=jsonb_build_object('generation_id',v_generation,'work_date',v_today-1,
+      'source_row_hash',lpad(to_hex(1),64,'0'),'booking_id','daily-booked-proof-0');
+    perform private._candidate_daily_booked_source_v1('TEST',v_candidate,v_bad,v_now);
+    v_result:=public.candidate_daily_tiles_get_v1(
+      v_context||jsonb_build_object('policy','LEGACY_COMPAT','candidate_source_hmac',repeat('e',64)),
+      v_today-1,14);
+    if v_result#>>'{tiles,0,timesheet_eligible}' is distinct from 'false' then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: MyTMS entry changed legacy eligibility';
+    end if;
+    update public.candidate_daily_rota_days set
+      shift_starts_at=v_now+interval '1 hour',shift_ends_at=v_now+interval '9 hours'
+      where generation_id=v_generation and rota_date=v_today;
+    v_result:=public.candidate_daily_tiles_get_v1(v_candidate_context,v_today,14);
+    if v_result#>'{tiles,1,action_target}' is not null
+       or v_result#>>'{tiles,1,timesheet_eligible}' is distinct from 'false' then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: future shift exposed first submission';
+    end if;
+    v_bad:=jsonb_build_object('generation_id',v_generation,'work_date',v_today,
+      'source_row_hash',lpad(to_hex(2),64,'0'),'booking_id','daily-booked-proof-1');
+    begin
+      perform private._candidate_daily_booked_source_v1('TEST',v_candidate,v_bad,v_now);
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: future shift admitted';
+    exception when sqlstate '55000' then null;
+    end;
+    raise notice 'DAILY_BOOKED_SOURCE_PROOF: PASS started shift beyond four hours; legacy unchanged; future denied';
+    raise exception using errcode='Z9624',message='rollback entry-window fixture';
+  exception when sqlstate 'Z9624' then null;
+  end;
 
   for v_case in 0..1 loop
     v_source:=jsonb_build_object('generation_id',v_generation,'work_date',v_today-1+v_case,
@@ -703,6 +745,19 @@ begin
     raise exception 'DAILY_BOOKED_SOURCE_PROOF: Office-authorised withdrawal accepted';
   exception when sqlstate '55000' then null;
   end;
+  -- The published Rota can move on after submission. Existing business history
+  -- remains usable, but a cached source-only target is no longer admission.
+  update private.candidate_daily_authority_scopes set active_generation_id=null
+    where environment='TEST' and candidate_id=v_candidate;
+  begin
+    perform private._candidate_daily_booked_source_v1('TEST',v_candidate,v_source,v_now);
+    raise exception 'DAILY_BOOKED_SOURCE_PROOF: cached source admitted after window rollout';
+  exception when sqlstate '40001' then null;
+  end;
+  v_result:=public.candidate_app_timesheet_detail_v2(v_session,'TEST',v_replayed,null,null,v_now);
+  if v_result#>>'{timesheet,id}'<>v_replayed::text then
+    raise exception 'DAILY_BOOKED_SOURCE_PROOF: window rollout hid an existing receipt';
+  end if;
   v_result:=public.candidate_workflow_transition_atomic_v1(v_session,'TEST',v_created_workflow,
     'CANCEL',2,jsonb_build_object('reason_note','Correct my hours'),'daily-proof-cancel',v_now);
   select timesheet_id into v_current_id from public.timesheets
@@ -763,7 +818,9 @@ begin
        and kind='TIMESHEET' and processing_state<>'SUPERSEDED') then
     raise exception 'DAILY_BOOKED_SOURCE_PROOF: resubmitted current record, evidence or finance boundary failed';
   end if;
-  raise notice 'DAILY_BOOKED_SOURCE_PROOF: PASS connected submit, PHONE approval, receipt with signed evidence, exact retry, protected withdrawal, resubmission on one current family, and revoked evidence history';
+  raise notice 'DAILY_BOOKED_SOURCE_PROOF: PASS connected submit, PHONE approval, receipt with signed evidence, exact retry, protected withdrawal, resubmission on one current family after window rollout, and revoked evidence history';
+  update private.candidate_daily_authority_scopes set active_generation_id=v_generation
+    where environment='TEST' and candidate_id=v_candidate;
 
   -- Office rejection uses the existing authenticated preview/confirm adapter.
   -- Rota-only removal cannot erase access to already submitted business history
