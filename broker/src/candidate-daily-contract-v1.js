@@ -593,8 +593,14 @@ function normalizeDailyTilesResult(source) {
       if (!item.booked || !calendarDateValue(item.week_ending_date)
           || day.toISOString().slice(0, 10) !== item.week_ending_date) return null;
     }
+    let breakEntry;
     if (item.break_entry !== undefined) {
-      const entry = item.break_entry;
+      // PostgreSQL strips nested nulls from future, non-editable booked tiles.
+      // Restore only the explicit NOT_APPLICABLE null, never missing editable authority.
+      const rawEntry = item.break_entry;
+      const entry = rawEntry?.applicable === false && rawEntry.source === 'NOT_APPLICABLE'
+        && !Object.prototype.hasOwnProperty.call(rawEntry, 'mode')
+        ? { ...rawEntry, mode: null } : rawEntry;
       if (!item.booked || !exactObjectKeys(entry, ['applicable', 'mode', 'source', 'reason', 'context_version', 'context_token'])
           || typeof entry.applicable !== 'boolean'
           || !['START_END_TIMES', 'DURATION_MINUTES', null].includes(entry.mode)
@@ -604,6 +610,7 @@ function normalizeDailyTilesResult(source) {
           || !stringValue(entry.context_token, 64, 64, /^[a-f0-9]{64}$/)
           || (entry.applicable && (entry.mode === null || entry.source === 'NOT_APPLICABLE'))
           || (!entry.applicable && (entry.mode !== null || entry.source !== 'NOT_APPLICABLE'))) return null;
+      breakEntry = entry;
     }
     const target = item.action_target === undefined ? undefined : normalizeActionTarget(item.action_target);
     if (item.action_target !== undefined && item.action_target !== null && !target) return null;
@@ -614,7 +621,8 @@ function normalizeDailyTilesResult(source) {
           || Date.parse(item.shift_ends_at) <= Date.parse(item.shift_starts_at)
           || target.source.generation_id !== source.generation_id
           || target.source.work_date !== item.date || target.source.booking_id !== item.booking_id)) return null;
-    tiles.push({ ...item, ...(item.action_target !== undefined ? { action_target: target } : {}) });
+    tiles.push({ ...item, ...(breakEntry !== undefined ? { break_entry: breakEntry } : {}),
+      ...(item.action_target !== undefined ? { action_target: target } : {}) });
   }
   return { ...source, freshness, cohorts, tiles };
 }

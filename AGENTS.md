@@ -101,6 +101,8 @@ The Candidate receipt adapters may record factual hours and verified PHONE signa
 
 Keep `28082026_1858_candidate_daily_booked_source_verification.sql` mandatory in both NEW and UPGRADE. Its rollback-contained first use covers first admission, PHONE approval/receipt, separate dates, mixed Weekly/Daily pagination, withdrawal/resubmission, Office rejection after Rota removal, later Office resolution with document preservation and protected/stale/foreign negatives. Generated catalogue proof must show only the intended Candidate routine delta; no financial, trigger, table or policy changes. Source tests and mock render receipts do not replace deployed API, real-document and physical-phone acceptance.
 
+Daily response tests must include the actual PostgreSQL null-stripped shape of future booked days. Only `break_entry.applicable=false` with `source=NOT_APPLICABLE` may normalize an absent `mode` to explicit null; editable break authority, context proofs and undeclared-field rejection remain strict. Test both private and public response boundaries: a valid future day must not turn an otherwise complete Rota into a false readiness failure.
+
 Do not print, log, echo, expose, commit, or include in reports:
 
 * Cloudflare tokens

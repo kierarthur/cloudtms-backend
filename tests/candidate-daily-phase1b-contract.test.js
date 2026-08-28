@@ -151,6 +151,49 @@ test('Rota time-field validation rejects malformed values and still rejects unde
   }
 });
 
+test('Future booked days retain the whole Rota when PostgreSQL strips an inapplicable null break mode', async () => {
+  for (const includeNull of [false, true]) {
+    const source = dailyTiles();
+    Object.assign(source.tiles[1], {
+      booked: true, editable: false, status: 'BOOKED', timesheet_eligible: false,
+      week_ending_date: '2026-08-23',
+      break_entry: { applicable: false, source: 'NOT_APPLICABLE',
+        reason: 'CANDIDATE_NOT_EDITABLE', context_version: 'CANDIDATE_BREAK_ENTRY_V1',
+        context_token: 'b'.repeat(64), ...(includeNull ? { mode: null } : {}) }
+    });
+    const before = structuredClone(source);
+    const privateResponse = await handleCandidateDailyPhase1bRequest(
+      request('/candidate-app/v1/daily/tiles?days=14'), access, {},
+      { async rpc() { return source; } }
+    );
+    assert.equal(privateResponse.status, 200);
+    const route = findCandidateDailyRoute('GET', '/candidate-app/v1/daily/tiles');
+    const response = await candidateBrokerInternals.publicSafeDailyResponse(privateResponse, correlationId, route);
+    assert.equal(response.status, 200);
+    const result = (await response.json()).result;
+    assert.equal(result.tiles.length, 14);
+    assert.deepEqual(result.tiles[1].break_entry, { ...before.tiles[1].break_entry, mode: null });
+    assert.deepEqual(source, before, 'response normalization must not mutate database source');
+  }
+});
+
+test('Null break-mode compatibility never admits editable, malformed or undeclared break authority', () => {
+  const route = findCandidateDailyRoute('GET', '/candidate-app/v1/daily/tiles');
+  for (const patch of [
+    { applicable: true }, { source: 'DEFAULT' }, { mode: 'START_END_TIMES' },
+    { mode: '' }, { mode: false }, { mode: undefined }, { context_token: 'invalid' },
+    { context_version: null }, { contract_week_id: candidateId }
+  ]) {
+    const source = dailyTiles();
+    Object.assign(source.tiles[1], { booked: true, editable: false, status: 'BOOKED',
+      break_entry: { applicable: false, source: 'NOT_APPLICABLE',
+        reason: 'CANDIDATE_NOT_EDITABLE', context_version: 'CANDIDATE_BREAK_ENTRY_V1',
+        context_token: 'b'.repeat(64), ...patch } });
+    assert.equal(rebuildCandidateDailySuccessBody(route, 200,
+      { ok: true, correlation_id: correlationId, result: source }, correlationId), null);
+  }
+});
+
 test('R8 availability command freezes one caller key and emits replay only from the durable owner', async () => {
   const body = JSON.stringify({
     expected_availability_version: 0,
