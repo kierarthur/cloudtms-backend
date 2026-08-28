@@ -26,6 +26,11 @@ const finalAuthority = fs.readFileSync(path.join(root,
 const currentDetail = fs.readFileSync(path.join(root,
   'supabase/repeatable/27082026_0858_candidate_finalised_artifact_readiness_v1.sql'), 'utf8');
 
+test('withdrawal authority restores the final Timesheet-card expense projection', () => {
+  assert.match(finalAuthority,
+    /\\ir 27082026_0858_candidate_finalised_artifact_readiness_v1\.sql[\s\S]*\\ir 27082026_2350_candidate_timesheet_card_base_expense_fallback_v1\.sql/i);
+});
+
 test('candidate cancellation retires approval authority and resets weekly hours atomically', () => {
   assert.match(workflow,
     /v_action in \('CANCEL','SUPERSEDE'\)[\s\S]*_candidate_manager_mail_retire_v1[\s\S]*_candidate_weekly_withdrawal_reset_v1[\s\S]*submission_withdrawal_reset/i);
