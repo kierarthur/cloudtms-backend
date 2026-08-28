@@ -212,20 +212,6 @@ async function attachCandidateCode(verified, env, commitContext, rowFacts) {
       || text(target.agency_id).toLowerCase() !== text(commitContext.agency_id).toLowerCase()) {
     throw new MyTmsGoogleControlError(409, 'MYTMS_GOOGLE_IDENTITY_CHANGED');
   }
-  const now = Date.now();
-  const routeContext = await signMyTmsGoogleRouteContext({
-    environment: target.environment,
-    integration_id: target.integration_id,
-    agency_id: target.agency_id,
-    data_plane_id: target.data_plane_id,
-    route_version_id: target.route_version_id,
-    route_version: target.route_version,
-    target_generation: target.target_generation,
-    operation_id: operationId,
-    issued_at_utc: new Date(now).toISOString(),
-    expires_at_utc: new Date(now + 4 * 60_000).toISOString(),
-    key_version: registry.keyVersion
-  }, registry.routeContextSecret, now);
   const attachBody = {
     operation_id: operationId,
     local_candidate_id: text(commitContext.local_candidate_id),
@@ -235,7 +221,22 @@ async function attachCandidateCode(verified, env, commitContext, rowFacts) {
     source_hmac_key_version: integer(rowFacts.source_hmac_key_version, 1),
     correlation_id: verified.correlation_id
   };
-  const raw = JSON.stringify(attachBody);
+  return sendBoundGoogleMutation(env, target, registry, attachBody, {
+    purpose: 'PROVISIONING_ATTACH', project_role: commitContext.project_role,
+    operation_created_at_utc: commitContext.operation_created_at_utc
+  }, 'attach');
+}
+
+async function sendBoundGoogleMutation(env, target, registry, body, authority, route) {
+  const now = Date.now();
+  const routeContext = await signMyTmsGoogleRouteContext({
+    ...target, ...authority, v: 2, operation_id: uuid(body.operation_id),
+    request_sha256: await sha256Hex(canonicalJson(body)),
+    issued_at_utc: new Date(now).toISOString(),
+    expires_at_utc: new Date(now + 4 * 60_000).toISOString(),
+    key_version: registry.keyVersion
+  }, registry.routeContextSecret, now);
+  const raw = JSON.stringify(body);
   const headers = new Headers({
     'content-type': 'application/json; charset=utf-8',
     'content-length': String(new TextEncoder().encode(raw).byteLength),
@@ -244,15 +245,45 @@ async function attachCandidateCode(verified, env, commitContext, rowFacts) {
     'x-cloudtms-google-route-context-sha256': routeContext.sha256
   });
   const unsigned = new Request(
-    'https://cloudtms-candidate-private.internal/private/mytms-google-data/v1/candidates/attach',
+    `https://cloudtms-candidate-private.internal/private/mytms-google-data/v1/candidates/${route}`,
     { method: 'POST', headers, body: raw, redirect: 'manual', signal: AbortSignal.timeout(8_000) }
   );
   const response = await registry.binding.fetch(await signCandidatePrivateRequest(unsigned, env));
   const result = await boundedJson(response);
-  if (!response.ok || result.ok !== true || !['ATTACHED', 'UNCHANGED'].includes(text(result.state))) {
+  const allowed = route === 'attach' ? ['ATTACHED', 'UNCHANGED'] : ['REMOVED', 'UNLINKED', 'BUSY'];
+  if (!response.ok || !allowed.includes(text(result.state))
+      || (result.ok !== true && result.state !== 'BUSY')) {
     throw new MyTmsGoogleControlError(response.status, text(result.error_code) || 'MYTMS_GOOGLE_LINK_UNAVAILABLE');
   }
   return result;
+}
+
+async function removeCandidateRota(verified, env) {
+  const request = object(verified.body.removal_request);
+  const keys = ['operation_id','candidate_code','candidate_source_hmac','source_hmac_key_version',
+    'surname','email','mobile','row_fingerprint'];
+  if (Object.keys(request).length !== keys.length || keys.some(key => !(key in request))) {
+    throw new MyTmsGoogleControlError(400, 'GOOGLE_ROTA_REMOVAL_INVALID');
+  }
+  const operationId = uuid(request.operation_id);
+  // This RPC authenticates the REGISTERED MASTER (never a caller's role), pins
+  // the request/target permanently, and checks the same ACTIVE target on retry.
+  const target = await controlPlaneRpc(env, 'google_control', 'rota_removal_context_get_v1', {
+    p_google_context: verified.google_context, p_operation_id: operationId,
+    p_request_hash: await sha256Hex(canonicalJson(request)),
+    p_correlation_id: verified.correlation_id, p_now_utc: new Date().toISOString()
+  });
+  if (target.ok !== true) return target;
+  if (target.project_role !== 'MASTER' || target.state !== 'ACTIVE') {
+    throw new MyTmsGoogleControlError(401, 'SYSTEM_AUTH_FAILED');
+  }
+  const registry = candidateDataPlaneRegistryEntry(target.registry_binding_key, env);
+  if (!registry || registry.environment !== upper(target.environment)) {
+    throw new MyTmsGoogleControlError(503, 'MYTMS_GOOGLE_TARGET_UNAVAILABLE');
+  }
+  return sendBoundGoogleMutation(env, target, registry, {
+    operation_id: operationId, removal_request: request, correlation_id: verified.correlation_id
+  }, { purpose: 'ROTA_REMOVE', project_role: target.project_role }, 'rota-remove');
 }
 
 function requestHash(body) {
@@ -415,6 +446,7 @@ async function dispatch(verified, env) {
     case 'INTEGRATION_HEARTBEAT': return integrationHeartbeat(verified, env);
     case 'PROVISIONING_PREFLIGHT': return provisioningPreflight(verified, env);
     case 'PROVISIONING_COMMIT': return provisioningCommit(verified, env);
+    case 'ROTA_REMOVE': return removeCandidateRota(verified, env);
     case 'PROVISIONING_STATUS':
       return controlPlaneRpc(env, 'google_control', 'provisioning_status_get_v1', {
         p_google_context: verified.google_context,
@@ -464,5 +496,6 @@ export async function handleMyTmsGoogleControlRequest(request, env) {
 
 export const myTmsGoogleControlInternals = Object.freeze({
   attachCandidateCode, boundedBytes, boundedJson, canonicalJson, dispatch, exactCandidateMatch, forwardedHeaders,
-  integrationHeartbeat, operatorContext, pathUuid, requestHash, safeResult, targetForGoogleContext
+  integrationHeartbeat, operatorContext, pathUuid, requestHash, safeResult, targetForGoogleContext,
+  removeCandidateRota, sendBoundGoogleMutation
 });

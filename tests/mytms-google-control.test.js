@@ -308,7 +308,8 @@ test('Google CID attach re-proves the exact Candidate and route before one priva
       correlation_id: '01K35Y7N7ER4QY5F7M8D9P0Q1R'
     }, environment, {
       agency_id: IDS.agency, local_candidate_id: IDS.integration,
-      candidate_code: 'CID1-ABCDE'
+      candidate_code: 'CID1-ABCDE', project_role: 'MASTER',
+      operation_created_at_utc: '2026-08-28T12:00:00.000Z'
     }, {
       surname: 'Example', email: 'person@example.test', mobile: '447700900111',
       google_source_identity_hmac: '5'.repeat(64), source_hmac_key_version: 1

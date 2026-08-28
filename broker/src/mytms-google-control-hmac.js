@@ -25,6 +25,7 @@ function routeFor(method, path) {
     [`POST ${PREFIX}/integrations/heartbeat`]: 'INTEGRATION_HEARTBEAT',
     [`POST ${PREFIX}/candidates/provisioning/preflight`]: 'PROVISIONING_PREFLIGHT',
     [`POST ${PREFIX}/candidates/provisioning/commit`]: 'PROVISIONING_COMMIT',
+    [`POST ${PREFIX}/candidates/rota-remove`]: 'ROTA_REMOVE',
     [`POST ${PREFIX}/target-switches`]: 'TARGET_SWITCH_PREPARE'
   }[`${method} ${path}`];
   if (exact) return exact;

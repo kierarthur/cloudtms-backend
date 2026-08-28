@@ -12818,7 +12818,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "39ea649c30165fa483983e8551a6e4067aa1f5b36ef0dc572167a2d5109271b7"
+      "definition_sha256": "27ec47f6c1bf9d336414277a188806dba68996fb4bf61a763c78e6638ec06f50"
     },
     {
       "acl": [
@@ -12986,7 +12986,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "a95af16317b4fc98c12a2a377846a142e3ae37d21c5029c16d9b6d33844e16c2"
+      "definition_sha256": "7172d2a613355b5a425e178aef5820c8250a7e67ff75b2f040d507fd851bca48"
     },
     {
       "acl": [
@@ -13011,6 +13011,30 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "e2e5de3d19d2fdaa8b8871fa004c8acdbf736808d4954f75bfd09b6842112119"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_google_rota_remove_v1(p_internal_context jsonb, p_request jsonb, p_correlation_id text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "630a6f2bcc88b3329401dc3f1d2438285de3f71238369c83d6d3e85afe69cc11"
     },
     {
       "acl": [
@@ -34647,6 +34671,256 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (target = 'MASTER_AVAILABILITY_SHEET'::text)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_google_rota_removal_receipts",
+      "owner": "postgres",
+      "schema": "private",
+      "columns": [
+        {
+          "name": "candidate_code_sha256",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "candidate_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "candidate_source_hmac",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "correlation_id",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "environment",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "integration_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "operation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "outcome",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reenrolled_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "reenrolment_operation_id",
+          "type": "uuid",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "removed_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "request_sha256",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "source_hmac_key_version",
+          "type": "integer",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_google_rota_removal_receipts_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_google_rota_removal_receipts_pkey ON private.candidate_google_rota_removal_receipts USING btree (environment, integration_id, operation_id)"
+        },
+        {
+          "name": "candidate_google_rota_removal_source_idx",
+          "definition": "CREATE INDEX candidate_google_rota_removal_source_idx ON private.candidate_google_rota_removal_receipts USING btree (environment, source_hmac_key_version, candidate_source_hmac, removed_at_utc DESC)"
+        }
+      ],
+      "options": [],
+      "force_rls": false,
+      "constraints": [
+        {
+          "name": "candidate_google_rota_removal_rec_source_hmac_key_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (source_hmac_key_version > 0)"
+        },
+        {
+          "name": "candidate_google_rota_removal_recei_candidate_code_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_code_sha256 ~ '^[a-f0-9]{64}$'::text)"
+        },
+        {
+          "name": "candidate_google_rota_removal_recei_candidate_source_hmac_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_source_hmac ~ '^[a-f0-9]{64}$'::text)"
+        },
+        {
+          "name": "candidate_google_rota_removal_receipts_candidate_id_fkey",
+          "type": "f",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE RESTRICT"
+        },
+        {
+          "name": "candidate_google_rota_removal_receipts_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reenrolled_at_utc IS NULL AND reenrolment_operation_id IS NULL OR reenrolled_at_utc >= removed_at_utc AND reenrolment_operation_id IS NOT NULL)"
+        },
+        {
+          "name": "candidate_google_rota_removal_receipts_correlation_id_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (length(btrim(correlation_id)) >= 1 AND length(btrim(correlation_id)) <= 200)"
+        },
+        {
+          "name": "candidate_google_rota_removal_receipts_environment_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (environment = ANY (ARRAY['TEST'::text, 'LIVE'::text]))"
+        },
+        {
+          "name": "candidate_google_rota_removal_receipts_outcome_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (outcome = ANY (ARRAY['REMOVED'::text, 'UNLINKED'::text]))"
+        },
+        {
+          "name": "candidate_google_rota_removal_receipts_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (environment, integration_id, operation_id)"
+        },
+        {
+          "name": "candidate_google_rota_removal_receipts_request_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (request_sha256 ~ '^[a-f0-9]{64}$'::text)"
         }
       ],
       "view_definition_sha256": null

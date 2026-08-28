@@ -60,8 +60,10 @@ function normalize(input) {
   if (!['TEST', 'LIVE'].includes(environment)) {
     throw new Error('MYTMS_GOOGLE_ROUTE_CONTEXT_INVALID');
   }
-  return {
-    v: 1,
+  const version = Number(value.v || 1);
+  if (![1, 2].includes(version)) throw new Error('MYTMS_GOOGLE_ROUTE_CONTEXT_INVALID');
+  const context = {
+    v: version,
     aud: 'mytms-google-data-plane',
     environment,
     integration_id: uuid(value.integration_id),
@@ -77,6 +79,21 @@ function normalize(input) {
     expires_at_utc: text(value.expires_at_utc),
     key_version: positiveInteger(value.key_version || 1)
   };
+  if (version === 2) {
+    if (!['ROTA_REMOVE', 'PROVISIONING_ATTACH'].includes(value.purpose)
+        || value.project_role !== 'MASTER' || !SHA256_RE.test(value.request_sha256 || '')) {
+      throw new Error('MYTMS_GOOGLE_ROUTE_CONTEXT_INVALID');
+    }
+    context.purpose = value.purpose;
+    context.project_role = value.project_role;
+    context.request_sha256 = value.request_sha256;
+    if (value.purpose === 'PROVISIONING_ATTACH') {
+      const created = Date.parse(value.operation_created_at_utc);
+      if (!Number.isFinite(created)) throw new Error('MYTMS_GOOGLE_ROUTE_CONTEXT_INVALID');
+      context.operation_created_at_utc = new Date(created).toISOString();
+    }
+  }
+  return context;
 }
 
 function validateTimes(context, nowMs) {
@@ -103,8 +120,8 @@ async function sha256Hex(value) {
   return bytesToHex(await crypto.subtle.digest('SHA-256', encoder.encode(String(value))));
 }
 
-function canonical(payload) {
-  return `cloudtms-mytms-google-route-context-v1\n${payload}`;
+function canonical(payload, version) {
+  return `cloudtms-mytms-google-route-context-v${version}\n${payload}`;
 }
 
 export async function signMyTmsGoogleRouteContext(input, secret, nowMs = Date.now()) {
@@ -112,9 +129,9 @@ export async function signMyTmsGoogleRouteContext(input, secret, nowMs = Date.no
   validateTimes(context, nowMs);
   const payload = base64UrlEncode(encoder.encode(canonicalJson(context)));
   const signature = new Uint8Array(await crypto.subtle.sign(
-    'HMAC', await key(secret, ['sign']), encoder.encode(canonical(payload))
+    'HMAC', await key(secret, ['sign']), encoder.encode(canonical(payload, context.v))
   ));
-  const envelope = `v1.${payload}.${base64UrlEncode(signature)}`;
+  const envelope = `v${context.v}.${payload}.${base64UrlEncode(signature)}`;
   return { envelope, sha256: await sha256Hex(envelope), context };
 }
 
@@ -124,19 +141,19 @@ export async function verifyMyTmsGoogleRouteContext(request, env, nowMs = Date.n
     const digest = text(request.headers.get('x-cloudtms-google-route-context-sha256')).toLowerCase();
     if (!envelope || !SHA256_RE.test(digest) || await sha256Hex(envelope) !== digest) return null;
     const parts = envelope.split('.');
-    if (parts.length !== 3 || parts[0] !== 'v1') return null;
+    if (parts.length !== 3 || !['v1', 'v2'].includes(parts[0])) return null;
     const payload = base64UrlDecode(parts[1]);
     const signature = base64UrlDecode(parts[2]);
     if (!payload || !signature || signature.byteLength !== 32) return null;
     const raw = decoder.decode(payload);
     const context = normalize(JSON.parse(raw));
-    if (canonicalJson(context) !== raw) return null;
+    if (canonicalJson(context) !== raw || parts[0] !== `v${context.v}`) return null;
     validateTimes(context, nowMs);
     const keyVersion = Number(env.CANDIDATE_GOOGLE_ROUTE_CONTEXT_KEY_VERSION || 1);
     if (context.key_version !== keyVersion) return null;
     if (!await crypto.subtle.verify(
       'HMAC', await key(env.CANDIDATE_ROUTE_CONTEXT_SECRET, ['verify']),
-      signature, encoder.encode(canonical(parts[1]))
+      signature, encoder.encode(canonical(parts[1], context.v))
     )) return null;
     if (context.environment !== text(env.CANDIDATE_APP_ENVIRONMENT).toUpperCase()
         || context.agency_id !== uuid(env.CANDIDATE_AGENCY_ID)
@@ -149,3 +166,10 @@ export async function verifyMyTmsGoogleRouteContext(request, env, nowMs = Date.n
 }
 
 export const myTmsGoogleRouteContextInternals = Object.freeze({ canonicalJson, normalize, validateTimes });
+
+// Purpose and canonical payload are checked at the private endpoint, in addition
+// to the outer candidate-private-v3 method/path/body/context signature.
+export async function googleRouteRequestMatches(context, purpose, body) {
+  return context?.v === 2 && context.purpose === purpose && context.project_role === 'MASTER'
+    && context.request_sha256 === await sha256Hex(canonicalJson(body));
+}

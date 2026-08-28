@@ -17,7 +17,7 @@ import {
   purgeMyTmsGoogleControlNonces,
   verifyMyTmsGoogleControlRequest
 } from './mytms-google-control-hmac.js';
-import { verifyMyTmsGoogleRouteContext } from './mytms-google-route-context.js';
+import { verifyMyTmsGoogleRouteContext, googleRouteRequestMatches } from './mytms-google-route-context.js';
 import { candidateOperationForRequest } from '../../candidate-broker/src/candidate-operation-policy.js';
 import {
   handleCandidateAppReadyPrivateProbe,
@@ -287,7 +287,8 @@ async function handleGoogleDataMatch(request, env, routeContext) {
   if (request.method !== 'POST'
       || ![
         `${PRIVATE_GOOGLE_DATA_PREFIX}/candidates/match`,
-        `${PRIVATE_GOOGLE_DATA_PREFIX}/candidates/attach`
+        `${PRIVATE_GOOGLE_DATA_PREFIX}/candidates/attach`,
+        `${PRIVATE_GOOGLE_DATA_PREFIX}/candidates/rota-remove`
       ].includes(path)) {
     return json(404, { ok: false, error_code: 'MYTMS_GOOGLE_DATA_ROUTE_NOT_FOUND' });
   }
@@ -300,19 +301,32 @@ async function handleGoogleDataMatch(request, env, routeContext) {
   if (String(body.operation_id || '').toLowerCase() !== routeContext.context.operation_id) {
     return json(401, { ok: false, error_code: 'MYTMS_GOOGLE_ROUTE_CONTEXT_INVALID' });
   }
+  const removing = path.endsWith('/rota-remove');
+  const attaching = path.endsWith('/attach');
+  if ((removing || attaching) && !await googleRouteRequestMatches(
+    routeContext.context, removing ? 'ROTA_REMOVE' : 'PROVISIONING_ATTACH', body
+  )) return json(401, { ok: false, error_code: 'MYTMS_GOOGLE_ROUTE_CONTEXT_INVALID' });
   try {
     const dependencies = createCandidatePrivateDependencies(env, 'PRIVATE');
     const internalContext = {
       route_context_verified: true,
-      audience: path.endsWith('/attach') ? 'GOOGLE_PROVISIONING_ATTACH' : 'GOOGLE_PROVISIONING_MATCH',
+      audience: removing ? 'GOOGLE_ROTA_REMOVE' : attaching ? 'GOOGLE_PROVISIONING_ATTACH' : 'GOOGLE_PROVISIONING_MATCH',
       environment: routeContext.context.environment,
       agency_id: routeContext.context.agency_id,
       data_plane_id: routeContext.context.data_plane_id,
       route_version_id: routeContext.context.route_version_id,
       target_generation: routeContext.context.target_generation,
-      integration_id: routeContext.context.integration_id
+      integration_id: routeContext.context.integration_id,
+      operation_id: routeContext.context.operation_id,
+      project_role: routeContext.context.project_role,
+      operation_created_at_utc: routeContext.context.operation_created_at_utc
     };
-    const result = path.endsWith('/attach')
+    const result = removing
+      ? await dependencies.rpc('candidate_google_rota_remove_v1', {
+        p_internal_context: internalContext, p_request: body.removal_request,
+        p_correlation_id: body.correlation_id, p_now_utc: new Date().toISOString()
+      })
+      : attaching
       ? await dependencies.rpc('candidate_google_provisioning_attach_v1', {
         p_internal_context: internalContext,
         p_local_candidate_id: body.local_candidate_id,
@@ -338,7 +352,13 @@ async function handleGoogleDataMatch(request, env, routeContext) {
         p_correlation_id: body.correlation_id
       });
     return json(200, result);
-  } catch {
+  } catch (error) {
+    const allowed = new Set(['GOOGLE_ROTA_REMOVAL_INVALID', 'GOOGLE_ROTA_BOOKINGS_EXIST',
+      'GOOGLE_ROTA_IDENTITY_CHANGED', 'GOOGLE_ROTA_IDENTITY_AMBIGUOUS',
+      'IDEMPOTENCY_KEY_REUSED', 'GOOGLE_PROVISIONING_REENROLMENT_REQUIRED',
+      'GOOGLE_PROVISIONING_IDENTITY_CHANGED', 'GOOGLE_PROVISIONING_CID_CONFLICT']);
+    const code = [error?.code, error?.message, error?.details?.message].find(value => allowed.has(value));
+    if (code) return json(409, { ok: false, error_code: code });
     return json(503, { ok: false, error_code: 'MYTMS_GOOGLE_DATA_DEPENDENCY_UNAVAILABLE' });
   }
 }
