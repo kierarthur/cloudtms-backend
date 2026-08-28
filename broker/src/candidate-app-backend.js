@@ -10,7 +10,7 @@ import {
   composeCandidateBootstrapPhase1b,
   handleCandidateDailyPhase1bRequest
 } from './candidate-daily-phase1b.js';
-import { isCandidateDailyPath } from './candidate-daily-contract-v1.js';
+import { isCandidateDailyPath, normalizeCandidateDailyBookedSource } from './candidate-daily-contract-v1.js';
 import { controlPlaneRpc } from '../../candidate-broker/src/control-plane-client.js';
 import { verifyCandidatePaperQrViaAdapter } from './mytms-manager-control-adapter.js';
 
@@ -3384,6 +3384,16 @@ function normaliseCandidateWorkflowCreatePayload(value) {
   const workflowKind = upper(supplied.workflow_kind);
   const timesheetId = UUID_RE.test(text(supplied.timesheet_id))
     ? text(supplied.timesheet_id) : null;
+  if (Object.hasOwn(supplied, 'daily_source')) {
+    const source = normalizeCandidateDailyBookedSource(supplied.daily_source);
+    if (!source || workflowKind !== 'DAILY' || supplied.scope !== 'DAILY'
+        || supplied.route !== 'PHONE' || supplied.submission_requested !== true
+        || ['timesheet_id', 'target_timesheet_id', 'contract_id', 'contract_week_id',
+          'anchor_timesheet_id', 'week_ending_date'].some((key) => Object.hasOwn(supplied, key))) {
+      throw new CandidateHttpError(400, 'CANDIDATE_DAILY_IDENTITY_INVALID');
+    }
+    return { ...supplied, daily_source: source };
+  }
   return {
     ...supplied,
     ...(timesheetId && workflowKind === 'DAILY' && !supplied.target_timesheet_id
@@ -3487,6 +3497,14 @@ function safeFinalisationResult(value) {
   if (Array.isArray(source.issue_codes)) safe.issue_codes = source.issue_codes;
   if (Array.isArray(source.auto_authorisation_blockers)) {
     safe.auto_authorisation_blockers = source.auto_authorisation_blockers;
+  }
+  if (source.ok === true && source.state === 'RECEIVED' && source.office_resolution_pending === true) {
+    // Office matching is internal work, not a Candidate or manager failure.
+    // Preserve the normal successful receipt; never leak setup/rate diagnostics.
+    delete safe.reason;
+    delete safe.error_code;
+    delete safe.issue_codes;
+    delete safe.auto_authorisation_blockers;
   }
   return safe;
 }

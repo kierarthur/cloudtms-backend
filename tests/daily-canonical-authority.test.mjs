@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { buildCanonicalDailyFinancialSnapshot } from '../broker/src/daily-canonical-authority.js';
+import {
+  buildCanonicalDailyFinancialSnapshot,
+  deriveCanonicalDailyFinancialContext
+} from '../broker/src/daily-canonical-authority.js';
 import {
   buildCandidateDailyPatchFromFrozenInput,
   mapCanonicalDailyScheduleToIso
@@ -128,6 +131,68 @@ test('canonical DAILY owner preserves explicit no-break and derives all economic
   assert.equal(snapshot.margin_ex_vat, 86.2);
   assert.equal(snapshot.processing_status, 'UNPROCESSED');
   assert.equal(snapshot.invoice_breakdown_json.totals.margin_ex_vat, 86.2);
+});
+
+test('Daily receipt retains worked hours before Office Client, Candidate or rate resolution', () => {
+  const cases = [
+    { name: 'unresolved Client', overrides: { clientId: null }, expected: 'CLIENT_UNRESOLVED' },
+    { name: 'unassigned Candidate', overrides: { candidateId: null, candidateAssignment: 'UNASSIGNED' }, expected: 'UNASSIGNED' },
+    { name: 'missing rates awaiting processing', overrides: {}, expected: 'UNPROCESSED' },
+    { name: 'missing rates during canonical processing', overrides: { preserveUnprocessed: false }, expected: 'RATE_MISSING' }
+  ];
+  for (const entry of cases) {
+    for (const managerApproved of [false, true]) {
+      const input = baseSnapshotInput({ ratesRow: null, ...entry.overrides });
+      input.timesheet.authorised_at_server = managerApproved ? '2026-08-08T18:30:00.000Z' : null;
+      const snapshot = buildCanonicalDailyFinancialSnapshot(input);
+      assert.equal(snapshot.processing_status, entry.expected, entry.name);
+      assert.equal(snapshot.total_hours, 10, `${entry.name}: factual hours are retained`);
+      assert.equal(snapshot.pay_day, null, `${entry.name}: absent pay is not an approved zero rate`);
+      assert.equal(snapshot.charge_day, null, `${entry.name}: absent charge is not an approved zero rate`);
+      assert.equal(snapshot.client_id, input.clientId);
+      assert.equal(snapshot.candidate_id, input.candidateId);
+      if (entry.expected === 'RATE_MISSING' || entry.expected === 'UNPROCESSED') {
+        assert.equal(snapshot.has_rate_issue, true);
+      }
+    }
+  }
+});
+
+test('Daily rate context does not invent Client or role matches and does not use ward as a rate key', () => {
+  const input = {
+    effectiveTimesheetId: '00000000-0000-4000-8000-000000000001',
+    context: {
+      out_timesheet: { job_title_norm: 'rmn', band: '6', worked_start_iso: '2026-08-28T06:30:00Z', ward_norm: 'Unmapped ward' },
+      out_candidate: { id: '00000000-0000-4000-8000-000000000002', roles: ['RMN'], pay_method: 'PAYE' },
+      out_client_id: null
+    },
+    toLocalParts: () => ({ ymd: '2026-08-28' }),
+    parseCandidateRoleCodes: (roles) => roles,
+    normaliseRole: (role) => role.trim().toUpperCase(),
+    normaliseBand: (band) => `Band ${band}`
+  };
+  const unresolved = deriveCanonicalDailyFinancialContext(input);
+  assert.equal(unresolved.clientId, null);
+  assert.equal(unresolved.roleForRates, 'RMN');
+  assert.deepEqual(unresolved.rateRequest, {
+    k: input.effectiveTimesheetId,
+    candidate_id: input.context.out_candidate.id,
+    client_id: null,
+    role: 'RMN',
+    band: 'Band 6',
+    date: '2026-08-28',
+    rate_type: 'PAYE'
+  });
+  const roleMismatch = deriveCanonicalDailyFinancialContext({
+    ...input,
+    context: { ...input.context, out_client_id: '00000000-0000-4000-8000-000000000003' },
+    timesheetOverride: { job_title_norm: 'HCA', ward_norm: 'Different ward' }
+  });
+  assert.equal(roleMismatch.roleForRates, null, 'do not substitute a different Candidate role');
+  assert.equal(roleMismatch.rateRequest.role, null);
+  assert.equal(roleMismatch.clientId, '00000000-0000-4000-8000-000000000003');
+  assert.equal(Object.hasOwn(roleMismatch.rateRequest, 'ward'), false);
+  assert.equal(Object.hasOwn(roleMismatch.rateRequest, 'ward_norm'), false);
 });
 
 test('extracted DAILY core is economically identical to the pre-extraction TSFIN worker arithmetic', () => {

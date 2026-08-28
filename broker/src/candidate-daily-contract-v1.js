@@ -484,6 +484,12 @@ function dateTimeValue(value) {
   return stringValue(value, 1, 64) && Number.isFinite(Date.parse(value));
 }
 
+function calendarDateValue(value) {
+  if (!stringValue(value, 10, 10, DATE_RE)) return false;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 function normalizeFreshness(source) {
   const required = ['generation_version', 'generation_published_at', 'generation_age_seconds',
     'canonical_version', 'accepted_canonical_cursor', 'required_visible_cursor',
@@ -499,11 +505,27 @@ function normalizeFreshness(source) {
   return { ...source, reasons: [...source.reasons] };
 }
 
+export function normalizeCandidateDailyBookedSource(source) {
+  if (!exactObjectKeys(source, ['generation_id', 'work_date', 'source_row_hash', 'booking_id'])
+      || !stringValue(source.generation_id, 36, 36) || !UUID_RE.test(source.generation_id)
+      || !stringValue(source.work_date, 10, 10) || !DATE_RE.test(source.work_date)
+      || !stringValue(source.source_row_hash, 64, 64) || !/^[a-f0-9]{64}$/.test(source.source_row_hash)
+      || !stringValue(source.booking_id, 1, 128) || source.booking_id.trim() !== source.booking_id) return null;
+  const date = new Date(`${source.work_date}T00:00:00Z`);
+  if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== source.work_date) return null;
+  return { generation_id: source.generation_id, work_date: source.work_date,
+    source_row_hash: source.source_row_hash, booking_id: source.booking_id };
+}
+
 function normalizeActionTarget(source) {
   if (source == null) return null;
   if (!source || typeof source !== 'object' || Array.isArray(source)) return null;
   const kind = source.target_kind;
-  if (kind === 'TIMESHEET_DETAIL') {
+  if (kind === 'BOOKED_DAILY_SHIFT') {
+    if (!exactObjectKeys(source, ['target_kind', 'source'])) return null;
+    const bookedSource = normalizeCandidateDailyBookedSource(source.source);
+    return bookedSource ? { target_kind: kind, source: bookedSource } : null;
+  } else if (kind === 'TIMESHEET_DETAIL') {
     if (!exactObjectKeys(source, ['target_kind', 'timesheet_id', 'workflow_id', 'row_signature'],
       ['target_kind', 'timesheet_id', 'row_signature']) || !UUID_RE.test(source.timesheet_id)
       || (source.workflow_id !== undefined && source.workflow_id !== null && !UUID_RE.test(source.workflow_id))
@@ -527,7 +549,7 @@ function normalizeDailyTilesResult(source) {
     'availability_version', 'freshness', 'cohorts', 'tiles'];
   const required = allowed;
   if (!exactObjectKeys(source, allowed, required) || !UUID_RE.test(source.candidate_id)
-      || !DATE_RE.test(source.window_start) || !DATE_RE.test(source.window_end)
+      || !calendarDateValue(source.window_start) || !calendarDateValue(source.window_end)
       || !UUID_RE.test(source.generation_id) || !integerValue(source.generation_version, 1)
       || !integerValue(source.availability_version, 0) || !Array.isArray(source.cohorts)
       || !Array.isArray(source.tiles) || source.tiles.length !== 14) return null;
@@ -543,16 +565,17 @@ function normalizeDailyTilesResult(source) {
     const tileAllowed = ['date', 'display_day', 'display_date', 'booked', 'system_blocked', 'editable',
       'status', 'availability', 'shift_info', 'hospital', 'ward', 'job_title', 'booking_ref', 'shift_type',
       'booking_id', 'timesheet_authorised', 'timesheet_eligible', 'action_target',
-      'shift_starts_at', 'shift_ends_at'];
+      'shift_starts_at', 'shift_ends_at', 'week_ending_date', 'break_entry'];
     const tileRequired = ['date', 'display_day', 'display_date', 'booked', 'system_blocked', 'editable',
       'status', 'availability'];
-    if (!exactObjectKeys(item, tileAllowed, tileRequired) || !DATE_RE.test(item.date)
+    if (!exactObjectKeys(item, tileAllowed, tileRequired) || !calendarDateValue(item.date)
         || !stringValue(item.display_day, 1, 16) || !stringValue(item.display_date, 1, 16)
         || typeof item.booked !== 'boolean' || typeof item.system_blocked !== 'boolean'
         || typeof item.editable !== 'boolean' || !AVAILABILITY_VALUES.has(item.availability)
         || !new Set(['BOOKED', 'BLOCKED', ...AVAILABILITY_VALUES]).has(item.status)) return null;
     for (const key of ['shift_info', 'hospital', 'ward', 'job_title', 'booking_ref', 'shift_type', 'booking_id']) {
-      if (item[key] !== undefined && item[key] !== null && !stringValue(item[key], 1, key === 'shift_info' ? 256 : 160)) return null;
+      if (item[key] !== undefined && item[key] !== null
+          && !stringValue(item[key], key === 'ward' ? 0 : 1, key === 'shift_info' ? 256 : 160)) return null;
     }
     for (const key of ['timesheet_authorised', 'timesheet_eligible']) {
       if (item[key] !== undefined && item[key] !== null && typeof item[key] !== 'boolean') return null;
@@ -564,8 +587,33 @@ function normalizeDailyTilesResult(source) {
           && (!dateTimeValue(item[key])
             || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(item[key]))) return null;
     }
+    if (item.week_ending_date !== undefined) {
+      const day = new Date(`${item.date}T00:00:00Z`);
+      day.setUTCDate(day.getUTCDate() + (7 - day.getUTCDay()) % 7);
+      if (!item.booked || !calendarDateValue(item.week_ending_date)
+          || day.toISOString().slice(0, 10) !== item.week_ending_date) return null;
+    }
+    if (item.break_entry !== undefined) {
+      const entry = item.break_entry;
+      if (!item.booked || !exactObjectKeys(entry, ['applicable', 'mode', 'source', 'reason', 'context_version', 'context_token'])
+          || typeof entry.applicable !== 'boolean'
+          || !['START_END_TIMES', 'DURATION_MINUTES', null].includes(entry.mode)
+          || !['CONTRACT_OVERRIDE', 'CLIENT_SETTINGS', 'DEFAULT', 'NOT_APPLICABLE'].includes(entry.source)
+          || !stringValue(entry.reason, 1, 160)
+          || entry.context_version !== 'CANDIDATE_BREAK_ENTRY_V1'
+          || !stringValue(entry.context_token, 64, 64, /^[a-f0-9]{64}$/)
+          || (entry.applicable && (entry.mode === null || entry.source === 'NOT_APPLICABLE'))
+          || (!entry.applicable && (entry.mode !== null || entry.source !== 'NOT_APPLICABLE'))) return null;
+    }
     const target = item.action_target === undefined ? undefined : normalizeActionTarget(item.action_target);
     if (item.action_target !== undefined && item.action_target !== null && !target) return null;
+    if (target?.target_kind === 'BOOKED_DAILY_SHIFT'
+        && (!item.booked || item.timesheet_authorised === true || item.timesheet_eligible === false
+          || !item.week_ending_date || !item.break_entry?.applicable
+          || !item.shift_starts_at || !item.shift_ends_at
+          || Date.parse(item.shift_ends_at) <= Date.parse(item.shift_starts_at)
+          || target.source.generation_id !== source.generation_id
+          || target.source.work_date !== item.date || target.source.booking_id !== item.booking_id)) return null;
     tiles.push({ ...item, ...(item.action_target !== undefined ? { action_target: target } : {}) });
   }
   return { ...source, freshness, cohorts, tiles };

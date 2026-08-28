@@ -60,6 +60,19 @@ const {
   verifyPassword
 } = candidateAppBackendInternals;
 
+test('successful factual Daily receipt never exposes internal Office resolution to the Candidate', () => {
+  assert.deepEqual(safeFinalisationResult({
+    ok: true, workflow_id: 'daily-workflow', generation: 2, state: 'RECEIVED', auto_authorised: false,
+    office_resolution_pending: true, financial_processing_performed: false,
+    reason: 'OFFICE_RESOLUTION_REQUIRED', error_code: 'CLIENT_UNRESOLVED',
+    issue_codes: ['RATE_MISSING'], auto_authorisation_blockers: ['CLIENT_UNRESOLVED'],
+    canonical_result: { client_id: null, internal: true }
+  }), { ok: true, workflow_id: 'daily-workflow', generation: 2, state: 'RECEIVED', auto_authorised: false });
+  assert.deepEqual(safeFinalisationResult({ ok: false, state: 'READY_TO_FINALISE',
+    error_code: 'FINAL_SIGNED_DOCUMENT_NOT_READY', office_resolution_pending: true }),
+  { ok: false, state: 'READY_TO_FINALISE', error_code: 'FINAL_SIGNED_DOCUMENT_NOT_READY' });
+});
+
 test('Candidate RPC failures prefer the database closed code over the transport function name', () => {
   const error = new Error(
     'RPC candidate_app_bootstrap_v1 failed 400: {"message":"CANDIDATE_FEATURE_DISABLED"}'
@@ -126,6 +139,20 @@ test('Candidate workflow creation maps the public timesheet identity to server-o
   assert.equal(normaliseCandidateWorkflowCreatePayload({
     workflow_kind: 'CONTRACT_COMBINED', timesheet_id: timesheetId
   }).anchor_timesheet_id, undefined);
+});
+
+test('Daily booked creation requires explicit PHONE submission and cannot borrow weekly or financial identity', () => {
+  const payload = { workflow_kind: 'DAILY', scope: 'DAILY', route: 'PHONE', submission_requested: true,
+    daily_source: { generation_id: '00000000-0000-4000-8000-000000000073',
+      work_date: '2026-08-28', source_row_hash: 'a'.repeat(64), booking_id: 'test-daily-booking' } };
+  assert.deepEqual(normaliseCandidateWorkflowCreatePayload(payload), payload);
+  for (const extra of [{ submission_requested: false }, { route: 'EMAIL' }, { route: 'PAPER' },
+    { workflow_kind: 'CONTRACT_HOURS' }, { scope: 'WEEKLY' }, { contract_id: null },
+    { timesheet_id: '00000000-0000-4000-8000-000000000073' },
+    { daily_source: { ...payload.daily_source, rate: 20 } }]) {
+    assert.throws(() => normaliseCandidateWorkflowCreatePayload({ ...payload, ...extra }),
+      error => error.code === 'CANDIDATE_DAILY_IDENTITY_INVALID');
+  }
 });
 
 test('Candidate official period adds shift lines without mutating frozen week-day authority', () => {

@@ -28859,7 +28859,10 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
     p_action: 'BEGIN_CANONICAL_DAILY_SAVE',
     p_expected_generation: expectedGeneration,
     p_payload: {},
-    p_idempotency_key: `${correlation}:canonical-daily-begin`,
+    // This prepares a fresh locked context, not another submission. A previous
+    // attempt may have observed unresolved Office data which has since changed.
+    // The finalisation below retains its stable business idempotency key.
+    p_idempotency_key: `${correlation}:canonical-daily-begin:${crypto.randomUUID()}`,
     p_now_utc: nowUtc
   };
   const begin = officeActorId
@@ -28877,6 +28880,23 @@ async function buildCandidateDailyAtomicMaterialisation(env, {
       p_now_utc: nowUtc
     })
     : await sbRpc(env, 'candidate_workflow_transition_atomic_v1', beginPayload);
+  if (begin?.receipt_mode === 'DAILY_FACTUAL') {
+    const receiptTimesheetId = String(begin.timesheet_id || '').trim();
+    const inputHash = String(begin.canonical_save_input_sha256_hex || '');
+    if (begin.workflow_id !== workflowId || Number(begin.generation) !== expectedGeneration
+        || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(receiptTimesheetId)
+        || !/^[a-f0-9]{64}$/.test(inputHash)) {
+      throw new Error('CANDIDATE_DAILY_CANONICAL_SAVE_INPUT_INVALID');
+    }
+    return {
+      contract_version: 'CANDIDATE_DAILY_FACTUAL_RECEIPT_V1',
+      workflow_id: workflowId,
+      workflow_generation: expectedGeneration,
+      timesheet_id: receiptTimesheetId,
+      canonical_save_input_sha256_hex: inputHash,
+      service_finalisation: serviceFinalisation
+    };
+  }
   const canonicalInput = begin?.canonical_save_input;
   const lockedContext = begin?.canonical_context;
   const timesheetPatch = buildCandidateDailyPatchFromFrozenInput(canonicalInput);

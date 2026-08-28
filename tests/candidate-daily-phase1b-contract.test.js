@@ -112,7 +112,10 @@ test('Rota booked shift timestamps survive both private and public response boun
   Object.assign(source.tiles[0], {
     booked: true, editable: false, status: 'BOOKED',
     shift_starts_at: '2026-08-17T18:30:00+00:00',
-    shift_ends_at: '2026-08-18T07:00:00+00:00'
+    shift_ends_at: '2026-08-18T07:00:00+00:00',
+    week_ending_date: '2026-08-23',
+    break_entry: { applicable: true, mode: 'START_END_TIMES', source: 'DEFAULT',
+      reason: 'CANDIDATE_EDITABLE_ELECTRONIC', context_version: 'CANDIDATE_BREAK_ENTRY_V1', context_token: 'a'.repeat(64) }
   });
   Object.assign(source.tiles[1], { shift_starts_at: null, shift_ends_at: null });
   const privateResponse = await handleCandidateDailyPhase1bRequest(
@@ -169,6 +172,67 @@ test('R8 availability command freezes one caller key and emits replay only from 
   assert.equal(response.headers.get('x-idempotent-replay'), 'true');
   assert.deepEqual((await response.json()).result,
     { command_id: commandId, availability_version: 1, changed_dates: ['2026-08-17'] });
+});
+
+test('Daily first-submission source survives the closed broker boundary only for its exact booked tile', () => {
+  const route = findCandidateDailyRoute('GET', '/candidate-app/v1/daily/tiles');
+  const envelope = result => rebuildCandidateDailySuccessBody(route, 200,
+    { ok: true, correlation_id: correlationId, result }, correlationId);
+  const payload = dailyTiles();
+  payload.tiles[0] = { ...payload.tiles[0], booked: true, editable: false, status: 'BOOKED',
+    booking_id: 'daily-booking-1', timesheet_authorised: false, timesheet_eligible: true,
+    shift_starts_at: '2026-08-17T08:00:00Z', shift_ends_at: '2026-08-17T20:00:00Z',
+    week_ending_date: '2026-08-23', ward: '',
+    break_entry: { applicable: true, mode: 'START_END_TIMES', source: 'DEFAULT',
+      reason: 'CANDIDATE_EDITABLE_ELECTRONIC', context_version: 'CANDIDATE_BREAK_ENTRY_V1', context_token: 'b'.repeat(64) },
+    action_target: { target_kind: 'BOOKED_DAILY_SHIFT', source: {
+      generation_id: generationId, work_date: payload.tiles[0].date,
+      source_row_hash: 'a'.repeat(64), booking_id: 'daily-booking-1' } } };
+  assert.deepEqual(envelope(payload).result.tiles[0].action_target, payload.tiles[0].action_target);
+  for (const mutate of [
+    x => { x.tiles[0].action_target.source.work_date = '2026-02-30'; },
+    x => { x.tiles[0].action_target.source.work_date = '2026-08-18'; },
+    x => { x.tiles[0].action_target.source.generation_id = candidateId; },
+    x => { x.tiles[0].action_target.source.booking_id = 'another-booking'; },
+    x => { x.tiles[0].action_target.source.source_row_hash = 'A'.repeat(64); },
+    x => { x.tiles[0].action_target.source.client_id = candidateId; },
+    x => { x.tiles[0].action_target.source.rate = 12; },
+    x => { x.tiles[0].action_target.contract_week_id = candidateId; },
+    x => { x.tiles[0].timesheet_authorised = true; },
+    x => { x.tiles[0].timesheet_eligible = false; },
+    x => { delete x.tiles[0].week_ending_date; },
+    x => { x.tiles[0].week_ending_date = '2026-08-30'; },
+    x => { delete x.tiles[0].break_entry; },
+    x => { x.tiles[0].break_entry.context_token = 'invalid'; },
+    x => { x.tiles[0].break_entry.contract_week_id = candidateId; },
+    x => { x.tiles[0].shift_starts_at = null; },
+    x => { x.tiles[0].shift_ends_at = '2026-08-17T08:00:00Z'; },
+    x => { x.tiles[0].booked = false; }
+  ]) {
+    const invalid = structuredClone(payload); mutate(invalid);
+    assert.equal(envelope(invalid), null);
+  }
+});
+
+test('Daily dates fail closed without throwing, and a missing ward does not block a valid booked shift', async () => {
+  const route = findCandidateDailyRoute('GET', '/candidate-app/v1/daily/tiles');
+  const envelope = result => rebuildCandidateDailySuccessBody(route, 200,
+    { ok: true, correlation_id: correlationId, result }, correlationId);
+  const payload = dailyTiles();
+  payload.tiles[0] = { ...payload.tiles[0], booked: true, ward: '', week_ending_date: '2026-08-23' };
+  assert.ok(envelope(payload));
+  for (const date of ['2026-99-99', '2026-02-30', '2026-08-00', '', null, 42]) {
+    for (const field of ['date', 'week_ending_date']) {
+      const malformed = structuredClone(payload); malformed.tiles[0][field] = date;
+      assert.equal(envelope(malformed), null, `${field}: ${date}`);
+    }
+  }
+  const privateResponse = await handleCandidateDailyPhase1bRequest(
+    request('/candidate-app/v1/daily/tiles'), access, {}, { async rpc() { return payload; } });
+  assert.equal(privateResponse.status, 200);
+  const publicResponse = await candidateBrokerInternals.publicSafeDailyResponse(privateResponse, correlationId, route);
+  assert.equal(publicResponse.status, 200);
+  assert.equal((await publicResponse.json()).result.tiles[0].ward, '');
 });
 
 test('R8 Candidate commands preserve stable conflict details and the operation-specific refresh contract', async () => {

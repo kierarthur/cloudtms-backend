@@ -93,6 +93,14 @@ Current LIVE's first deliberate schema promotion uses `LEGACY_UPGRADE`; moving i
 
 ## Secrets and sensitive data
 
+### Daily Candidate first-submission regression boundary — AV-962
+
+Daily entry starts from the exact booked Rota source/date, not a Contract Week or an existing Timesheet. Preserve the 63 Candidate operations and the closed BOOKED_DAILY_SHIFT target. Reading a shift or saving a local draft must not create a database Timesheet; first-row admission requires explicit submission, source/current-generation checks and a locked, replay-safe booking family. Different worked dates in one week remain different Daily Timesheets; withdrawal/resubmission retains one current version per booking and revoked history.
+
+The Candidate receipt adapters may record factual hours and verified PHONE signatures/evidence before Office Client/role/rate resolution. They must not invent a Client, rate, TSFIN row or financial hash, stamp Office authorisation, invoke the signed legacy submit route, or change canonical calculation/processing/authorisation owners. With a real financial row, reset delegates to the existing owner; the narrowly proved no-finance receipt branch rotates only the Timesheet family. Keep normal triggers and derived rechecks, protected-history locks and browser-denied private helpers. Later Office resolution must preserve both signatures and the official signed document on the same current Timesheet. Candidate/manager copy is normal “Awaiting Office authorisation”, never internal resolution warnings.
+
+Keep `28082026_1858_candidate_daily_booked_source_verification.sql` mandatory in both NEW and UPGRADE. Its rollback-contained first use covers first admission, PHONE approval/receipt, separate dates, mixed Weekly/Daily pagination, withdrawal/resubmission, Office rejection after Rota removal, later Office resolution with document preservation and protected/stale/foreign negatives. Generated catalogue proof must show only the intended Candidate routine delta; no financial, trigger, table or policy changes. Source tests and mock render receipts do not replace deployed API, real-document and physical-phone acceptance.
+
 Do not print, log, echo, expose, commit, or include in reports:
 
 * Cloudflare tokens
