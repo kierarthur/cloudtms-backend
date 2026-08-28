@@ -28,7 +28,7 @@ const currentDetail = fs.readFileSync(path.join(root,
 
 test('withdrawal authority restores the final Timesheet-card expense projection', () => {
   assert.match(finalAuthority,
-    /\\ir 27082026_0858_candidate_finalised_artifact_readiness_v1\.sql[\s\S]*\\ir 27082026_2350_candidate_timesheet_card_base_expense_fallback_v1\.sql/i);
+    /\\ir 27082026_0858_candidate_finalised_artifact_readiness_v1\.sql[\s\S]*\\ir 27082026_2350_candidate_timesheet_card_base_expense_fallback_v1\.sql[\s\S]*\\ir 28082026_0214_candidate_manager_refusal_resubmission_v1\.sql/i);
 });
 
 test('candidate cancellation retires approval authority and resets weekly hours atomically', () => {

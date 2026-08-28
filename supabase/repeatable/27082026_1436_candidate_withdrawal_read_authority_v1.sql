@@ -17,3 +17,4 @@
 \ir 26082026_1537_candidate_home_draft_identity_v1.sql
 \ir 27082026_0858_candidate_finalised_artifact_readiness_v1.sql
 \ir 27082026_2350_candidate_timesheet_card_base_expense_fallback_v1.sql
+\ir 28082026_0214_candidate_manager_refusal_resubmission_v1.sql
