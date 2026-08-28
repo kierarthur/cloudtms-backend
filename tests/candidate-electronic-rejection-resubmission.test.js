@@ -27,6 +27,9 @@ const managerRefusalVerification = read(
 const managerRefusalCorrection = read(
   'supabase/repeatable/28082026_0214_candidate_manager_refusal_resubmission_v1.sql'
 );
+const timesheetCardRecovery = read(
+  'supabase/repeatable/28082026_0222_candidate_timesheet_card_fallback_reinstall_v1.sql'
+);
 const runtime = read('tests/10082026_1817_candidate_finalised_rejection_verification.sql');
 const resubmissionRuntime = read(
   'tests/11082026_1715_candidate_resubmission_idempotency_verification.sql'
@@ -132,4 +135,8 @@ test('manager-refused phone workflows share the guarded resubmission authority',
   );
   assert.match(resubmissionRuntime, /COMPLETE_ELECTRONIC_TRANSACTION/i);
   assert.match(resubmissionRuntime, /PHONE manager-refused workflow did not restart through ELECTRONIC/i);
+  assert.match(
+    timesheetCardRecovery,
+    /\\ir 27082026_2350_candidate_timesheet_card_base_expense_fallback_v1\.sql/i
+  );
 });
