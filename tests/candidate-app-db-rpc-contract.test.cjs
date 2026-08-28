@@ -419,7 +419,9 @@ test('rejected resubmission is source-bound, transaction-owned and request-aware
   assert.match(workflow, /from public\.contract_weeks current_week[\s\S]*current_week\.id=v_source_workflow\.contract_week_id/i);
   assert.match(workflow, /current_week\.contract_id is not distinct from v_source_workflow\.contract_id/i);
   assert.match(workflow, /current_week\.week_ending_date is not distinct from v_source_workflow\.week_ending_date/i);
-  assert.match(workflow, /current_timesheet\.timesheet_id=current_week\.timesheet_id/i);
+  assert.match(workflow, /if v_week\.timesheet_id is not null then[\s\S]*current_timesheet\.timesheet_id=v_week\.timesheet_id/i);
+  assert.match(workflow, /_candidate_route_family_v1\(\s*v_week\.timesheet_id,v_week\.id\s*\)/i);
+  assert.match(workflow, /'anchor_timesheet_id',v_week\.timesheet_id/i);
   assert.doesNotMatch(workflow, /where source_timesheet\.timesheet_id=coalesce\([\s\S]{0,240}v_source_workflow\.anchor_timesheet_id[\s\S]{0,240}CANDIDATE_WORKFLOW_ANCHOR_MISMATCH/i);
   assert.match(workflow, /v_source_workflow\.creation_identity_json#>>'\{derived,daily_booking_id\}'/i);
   assert.match(workflow, /CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='55000'/i);

@@ -115,10 +115,18 @@ begin
 end;
 $fixtures$;
 
--- The refused fixture's contract/date also has another current weekly
--- Timesheet row which is not the Contract Week authority.  Resubmission must
--- follow contract_weeks.timesheet_id instead of treating this valid carrier as
--- an ambiguous replacement target.
+-- Mirror the real manager-refusal lifecycle: retain the refused Timesheet as
+-- revoked history and return the exact Contract Week to an empty editable
+-- state.  A different current same-week carrier must never be adopted as the
+-- replacement anchor.
+update public.timesheets
+set is_current=false,status='REVOKED',document_state='STALE',
+    revoked_at=now(),revoked_reason='Manager refused the submitted claim.'
+where timesheet_id='b7080000-0000-4000-8000-000000000102';
+update public.contract_weeks
+set timesheet_id=null
+where id='b7080000-0000-4000-8000-000000000202';
+
 insert into public.timesheets(
   timesheet_id,contract_id,booking_id,week_ending_date,line_type,sheet_scope,
   submission_mode,r2_nurse_key,r2_auth_key

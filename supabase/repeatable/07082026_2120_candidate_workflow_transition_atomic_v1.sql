@@ -1728,8 +1728,6 @@ declare
   v_initial_route text;
   v_source_anchor public.timesheets%rowtype;
   v_daily_booking_id text;
-  v_current_anchor_count integer:=0;
-  v_current_anchor_timesheet_id uuid;
   v_paper_failure_code text;
   v_paper_failure_class text;
   v_paper_failure_retryable boolean:=false;
@@ -2076,39 +2074,31 @@ begin
       end;
       v_scope:='WEEKLY';
 
-      -- The refused or rejected submission can legitimately point to a
-      -- historical Timesheet revision which has since been retired. Resolve
-      -- the one current weekly authority through the source workflow's exact
-      -- Contract Week.  A contract/week can legitimately own other current
-      -- Timesheet rows (for example an additional or expense carrier), so a
-      -- broad contract/date count would reject an otherwise unambiguous
-      -- resubmission.
-      select count(distinct current_timesheet.timesheet_id)::integer,
-        min(current_timesheet.timesheet_id::text)::uuid
-      into v_current_anchor_count,v_current_anchor_timesheet_id
+      -- Refusal can return the exact Contract Week to an empty editable state:
+      -- the refused Timesheet remains revoked history and timesheet_id becomes
+      -- null.  The Contract Week is therefore the stable weekly authority.
+      -- When it does own a current Timesheet, use only that exact row; never
+      -- adopt another same-contract/date carrier.
+      select current_week.* into v_week
       from public.contract_weeks current_week
-      join public.timesheets current_timesheet
-        on current_timesheet.timesheet_id=current_week.timesheet_id
       where current_week.id=v_source_workflow.contract_week_id
         and current_week.contract_id is not distinct from v_source_workflow.contract_id
         and current_week.week_ending_date is not distinct from v_source_workflow.week_ending_date
-        and current_timesheet.is_current=true
-        and current_timesheet.archived_at_utc is null
-        and current_timesheet.sheet_scope='WEEKLY'::public.timesheet_scope_enum;
-      if v_current_anchor_count<>1 or v_current_anchor_timesheet_id is null then
-        raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='55000';
-      end if;
-      select current_timesheet.* into v_anchor_timesheet
-      from public.timesheets current_timesheet
-      where current_timesheet.timesheet_id=v_current_anchor_timesheet_id
       for update;
-      select current_week.* into v_week
-      from public.contract_weeks current_week
-      where current_week.timesheet_id=v_anchor_timesheet.timesheet_id
-        and current_week.contract_id=v_source_workflow.contract_id
-        and current_week.week_ending_date=v_source_workflow.week_ending_date;
       if not found then
         raise exception 'CANDIDATE_WORKFLOW_WEEK_NOT_FOUND' using errcode='P0002';
+      end if;
+      if v_week.timesheet_id is not null then
+        select current_timesheet.* into v_anchor_timesheet
+        from public.timesheets current_timesheet
+        where current_timesheet.timesheet_id=v_week.timesheet_id
+          and current_timesheet.is_current=true
+          and current_timesheet.archived_at_utc is null
+          and current_timesheet.sheet_scope='WEEKLY'::public.timesheet_scope_enum
+        for update;
+        if not found then
+          raise exception 'CANDIDATE_WORKFLOW_ANCHOR_MISMATCH' using errcode='55000';
+        end if;
       end if;
 
       v_initial_route:=upper(coalesce(
@@ -2116,7 +2106,7 @@ begin
         case when v_source_workflow.route='PAPER' then 'PAPER' else 'ELECTRONIC' end
       ));
       v_route_authority:=private._candidate_route_family_v1(
-        v_anchor_timesheet.timesheet_id,v_week.id
+        v_week.timesheet_id,v_week.id
       );
       if v_initial_route='PAPER'
          and (
@@ -2140,7 +2130,7 @@ begin
         'contract_id',v_source_workflow.contract_id,
         'contract_week_id',v_week.id,
         'week_ending_date',v_week.week_ending_date,
-        'anchor_timesheet_id',v_anchor_timesheet.timesheet_id
+        'anchor_timesheet_id',v_week.timesheet_id
       );
     end if;
     v_action:='CREATE';

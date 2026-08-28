@@ -38,10 +38,18 @@ begin
        in v_transition_definition
      )=0
      or position(
-       'on current_timesheet.timesheet_id=current_week.timesheet_id'
+       'if v_week.timesheet_id is not null then'
+       in v_transition_definition
+     )=0
+     or position(
+       'current_timesheet.timesheet_id=v_week.timesheet_id'
+       in v_transition_definition
+     )=0
+     or position(
+       '''anchor_timesheet_id'',v_week.timesheet_id'
        in v_transition_definition
      )=0 then
-    raise exception 'Candidate manager-refused weekly resubmission is not bound to the exact Contract Week Timesheet';
+    raise exception 'Candidate manager-refused weekly resubmission is not bound to the exact editable Contract Week';
   end if;
 
   if position(
