@@ -92,14 +92,20 @@ begin
         v_source,'TEST','b7080000-0000-4000-8000-000000000005',
         'b7080000-0000-4000-8000-000000000002',v_kind,'WEEKLY',
         case when v_no=1 then 'EMAIL' when v_no in (2,5) then 'PHONE' else 'ELECTRONIC' end,
-        'REJECTED',2,'b7080000-0000-4000-8000-000000000004',v_week,v_timesheet,
+        case when v_no=2 then 'REFUSED' else 'REJECTED' end,
+        2,'b7080000-0000-4000-8000-000000000004',v_week,v_timesheet,
         case when v_kind='CONTRACT_EXPENSE' then null else v_timesheet end,
         v_week_date,
         case when v_no=1 then 'b7080000-0000-4000-8000-000000009001'
              else format('resubmit-source-%s',v_no) end,
         now()-interval '1 day',now()-interval '1 day'
       );
-      if v_no=5 then
+      if v_no=2 then
+        update public.candidate_submission_workflows
+        set rejection_scope='COMPLETE_ELECTRONIC_TRANSACTION',
+            rejection_reason='Manager refused the submitted claim during the phone review.'
+        where id=v_source;
+      elsif v_no=5 then
         update public.candidate_submission_workflows
         set rejection_scope='COMPLETE_EXPENSE_CLAIM'
         where id=v_source;
@@ -344,7 +350,7 @@ begin
   end if;
   if (select route from public.candidate_submission_workflows
       where replacement_of_workflow_id='b7080000-0000-4000-8000-000000000302')<>'ELECTRONIC' then
-    raise exception 'PHONE rejected workflow did not restart through ELECTRONIC';
+    raise exception 'PHONE manager-refused workflow did not restart through ELECTRONIC';
   end if;
 end;
 $same_key_race$;

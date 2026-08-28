@@ -402,6 +402,7 @@ test('rejected resubmission is source-bound, transaction-owned and request-aware
   assert.match(sql.creationIdentity, /creation_identity_json jsonb/i);
   assert.match(sql.creationIdentity, /candidate_submission_workflows_creation_identity_group_ck/i);
   assert.match(workflow, /v_action='RESUBMIT_REJECTED'/i);
+  assert.match(workflow, /v_source_workflow\.state not in \('REJECTED','REFUSED'\)/i);
   assert.match(workflow, /candidate-workflow-idempotency\|/i);
   assert.match(workflow, /candidate-rejected-source\|/i);
   assert.match(workflow, /replacement_of_workflow_id=v_source_workflow\.id/i);
@@ -480,7 +481,10 @@ test('whole-record rejection clears every active economic/document field and is 
   assert.match(reject, /CANDIDATE_REJECT_REQUIRES_UNAUTHORISE/);
   assert.match(reject, /CANDIDATE_REJECT_PROTECTED_HISTORY/);
   assert.match(reject, /timesheet_qr_refuse_and_reset/);
-  assert.match(reject, /processing_status='UNPROCESSED'/);
+  assert.match(
+    reject,
+    /processing_status=case when v_timesheet\.sheet_scope='DAILY'::public\.timesheet_scope_enum[\s\S]*then 'UNASSIGNED'::public\.ts_fin_processing_status_enum[\s\S]*else 'UNPROCESSED'::public\.ts_fin_processing_status_enum end/i
+  );
   assert.match(reject, /status='OPEN'/);
   assert.match(reject, /audit_events[\s\S]*correlation_id=p_idempotency_key[\s\S]*idempotent_replay/i);
   assert.match(reject, /w\.state='FINALISED'\s+and w\.target_timesheet_id=v_timesheet\.timesheet_id/i);
@@ -632,6 +636,7 @@ test('rejected workflows project through the replacement current version with se
   const page = definition(sql.reads, 'candidate_app_timesheet_page_v1');
   const detail = definition(sql.reads, 'candidate_app_timesheet_detail_v1');
   const replaced = privateDefinition(sql.reads, '_candidate_rejection_replaced_v1');
+  assert.match(replaced, /v_rejected\.state not in \('REJECTED','REFUSED'\)/i);
   assert.match(page, /classified\.state='REJECTED'[\s\S]*resolution\.carrier_contract_week_id=classified\.contract_week_id/i);
   assert.match(page, /classified\.state='REJECTED'[\s\S]*current_week\.id=classified\.contract_week_id/i);
   assert.match(page, /RESUBMIT_EXPENSE_CLAIM/);

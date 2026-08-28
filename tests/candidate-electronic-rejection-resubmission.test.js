@@ -21,7 +21,13 @@ const historicalShapeRepair = read(
 const verification = read(
   'supabase/verification/27082026_0427_candidate_electronic_rejection_resubmission_verification.sql'
 );
+const managerRefusalVerification = read(
+  'supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql'
+);
 const runtime = read('tests/10082026_1817_candidate_finalised_rejection_verification.sql');
+const resubmissionRuntime = read(
+  'tests/11082026_1715_candidate_resubmission_idempotency_verification.sql'
+);
 const matrix = read('tests/run-candidate-daily-r16-local-matrix.ps1');
 
 test('electronic rejection creates an editable electronic replacement without weakening history', () => {
@@ -101,4 +107,21 @@ test('installed-state verification and real resubmission regression are release-
   assert.match(matrix, /27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql/);
   assert.match(verification, /financials\.processing_status='PENDING_AUTH'/);
   assert.match(verification, /Repaired electronic rejection replacement remains lifecycle-locked/);
+});
+
+test('manager-refused phone workflows share the guarded resubmission authority', () => {
+  assert.match(
+    managerRefusalVerification,
+    /v_source_workflow\.state not in \(''REJECTED'',''REFUSED''\)/i
+  );
+  assert.match(
+    managerRefusalVerification,
+    /v_rejected\.state not in \(''REJECTED'',''REFUSED''\)/i
+  );
+  assert.match(
+    resubmissionRuntime,
+    /case when v_no=2 then 'REFUSED' else 'REJECTED' end/i
+  );
+  assert.match(resubmissionRuntime, /COMPLETE_ELECTRONIC_TRANSACTION/i);
+  assert.match(resubmissionRuntime, /PHONE manager-refused workflow did not restart through ELECTRONIC/i);
 });

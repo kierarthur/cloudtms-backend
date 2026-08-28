@@ -1988,7 +1988,7 @@ begin
     if v_source_workflow.generation<>p_expected_generation then
       raise exception 'WORKFLOW_GENERATION_CONFLICT' using errcode='40001';
     end if;
-    if v_source_workflow.state<>'REJECTED' then
+    if v_source_workflow.state not in ('REJECTED','REFUSED') then
       raise exception 'CANDIDATE_REJECTED_WORKFLOW_NOT_RESUBMITTABLE' using errcode='40001';
     end if;
 

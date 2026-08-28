@@ -48,7 +48,8 @@
     "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
     "supabase/verification/26082026_2058_candidate_system_actor_verification.sql",
     "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
-    "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql"
+    "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
+    "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
@@ -61,6 +62,7 @@
     "supabase/verification/26082026_1643_candidate_daily_membership_ready_activation_verification.sql",
     "supabase/verification/26082026_2058_candidate_system_actor_verification.sql",
     "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
-    "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql"
+    "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
+    "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql"
   ]
 }

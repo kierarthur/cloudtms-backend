@@ -4182,7 +4182,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "32c4f30b2d0489c6d2a28bab3db3a8797f631e21a45a3e7c7777fd166b670e70"
+      "definition_sha256": "efc89f8b3c4347dd26c13224ccda526a6a6350171b3636688432e07da91adb6d"
     },
     {
       "acl": [
@@ -12235,14 +12235,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=\"\""
+        "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
       "identity": "candidate_app_bootstrap_v1(p_session_id uuid, p_environment text, p_expected_rotation integer, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "5c5d8b7046aac8a342411ea16df28f347de90f49187fdec25b815301d2ca2fe5"
+      "definition_sha256": "388b5c8bf32a9864ae9f8e872e3f2a4b3847b73e9ea8dd4ba7af77cf8274c9b3"
     },
     {
       "acl": [
@@ -12314,7 +12314,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "f0c3ee1e6249472c7229c344a90b963c0f2a4bab24a4385d2a22e7c3635a54a6"
+      "definition_sha256": "8570eb98db0a73647b9aa8928d0035d167074b1ecddd795c0cf411714b3707c6"
     },
     {
       "acl": [
@@ -12362,7 +12362,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "cfdd869366e81ec09fc6ee360306467be29dcd2c286302c4328e74e5777a2337"
+      "definition_sha256": "ccff74f1b030a19c2f4141639ff5cffde0de35f1e5a4881ddc07accd88b4b7d3"
     },
     {
       "acl": [
@@ -13514,7 +13514,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ebd9c5427d901e1ce6f028cab3d248e73ceab7e9d85997ba132eee2d4e250d03"
+      "definition_sha256": "3c54fc74c24f2e2eee959e87fa05f3dcfa49a713442dbf06ba31d5c476b28c31"
     },
     {
       "acl": [
