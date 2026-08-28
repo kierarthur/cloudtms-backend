@@ -2633,7 +2633,8 @@ function candidateNameParts(candidate) {
 
 function officialPresentationFromRows({ timesheet, contractRow, candidate, client, branding, renderer_contract_version } = {}) {
   const worker = candidateNameParts(candidate);
-  const clientName = text(client?.name) || 'CloudTMS Client';
+  const dailyHospital = upper(timesheet?.sheet_scope) === 'DAILY' ? text(timesheet?.hospital_norm) : '';
+  const clientName = text(client?.name) || dailyHospital || 'CloudTMS Client';
   return {
     schema_version: 'OFFICIAL_CANDIDATE_PRESENTATION_V1',
     worker: {
@@ -2642,7 +2643,7 @@ function officialPresentationFromRows({ timesheet, contractRow, candidate, clien
     },
     client: {
       name: clientName,
-      hospital: text(contractRow?.display_site) || clientName,
+      hospital: dailyHospital || text(contractRow?.display_site) || clientName,
       site_ward: text(contractRow?.ward_hint || timesheet?.ward_norm) || '-'
     },
     band: text(contractRow?.band || timesheet?.band) || null,
@@ -2667,7 +2668,7 @@ async function buildOfficialPresentationSnapshot(env, workflow) {
   const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
   const [timesheet, contractRow, candidate] = await Promise.all([
     timesheetId
-      ? restOne(env, 'timesheets', `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true&select=timesheet_id,ward_norm,job_title_norm,band`)
+      ? restOne(env, 'timesheets', `timesheet_id=eq.${encodeURIComponent(timesheetId)}&is_current=eq.true&select=timesheet_id,sheet_scope,hospital_norm,ward_norm,job_title_norm,band`)
       : Promise.resolve(null),
     workflow.contract_id
       ? restOne(env, 'contracts', `id=eq.${encodeURIComponent(workflow.contract_id)}&select=id,client_id,role,display_site,ward_hint,band`)
@@ -2761,7 +2762,7 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
   if (!UUID_RE.test(text(officialTimesheetId))) {
     throw new CandidateHttpError(409, 'CANDIDATE_RENDER_TIMESHEET_ID_INVALID');
   }
-  const endDate = text(workflow.week_ending_date || workflow.work_date || timesheet?.week_ending_date).slice(0, 10);
+  const endDate = text(workflow.week_ending_date || timesheet?.week_ending_date || workflow.work_date).slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) throw new CandidateHttpError(409, 'CANDIDATE_RENDER_DATE_INVALID');
   const rawSchedule = scheduleFromImmutable(workflow, timesheet);
   const lines = rawSchedule.map(scheduleLine).filter((line) => line.date && line.display_start_local && line.display_end_local);
@@ -6760,6 +6761,7 @@ export const candidateAppBackendInternals = Object.freeze({
   deferBackground,
   finaliseReceivedPaperReturn,
   buildOfficialPresentationSnapshot,
+  buildOfficialCandidateModel,
   officialPresentationFromRows,
   uploadTicket,
   verifyUploadTicket,

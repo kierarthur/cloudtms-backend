@@ -105,6 +105,8 @@ Daily response tests must include the actual PostgreSQL null-stripped shape of f
 
 Daily submission adapter tests must use the actual app's local `actual_schedule_json` (`start_time`/`end_time`) after adaptive-break normalization, not only hand-built `worked_*_iso` fixtures. The Candidate adapter must reuse the unchanged `mapCanonicalDailyScheduleToIso` and `ukLocalToUtcISO` authorities for that factual conversion, retain exact workflow work-date/one-interval checks and prove overnight/DST/break cases. Do not alter financial calculation/Office owners or require the app to duplicate UK timezone authority to repair a payload mismatch. Source or SQL fixture success is not physical PHONE submission proof.
 
+Daily official document proof must include a worked date different from the week ending and an unresolved Client. Use the saved Timesheet week-ending date before any worked-date fallback, and freeze the booked `hospital_norm` from the Daily receipt even when no Client/TSFIN mapping exists. The review and final signed copies must show the same factual hospital, ward, role, hours and period without inventing a financial Client. Keep the actual-read-projection and full render-model cases in `tests/candidate-daily-official-document.test.js`; preserve immutable prepared documents and obtain a new submission generation rather than overwriting an earlier review pack.
+
 Do not print, log, echo, expose, commit, or include in reports:
 
 * Cloudflare tokens
