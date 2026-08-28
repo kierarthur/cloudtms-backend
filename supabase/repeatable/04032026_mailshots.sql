@@ -2104,7 +2104,13 @@ begin
       u.recipient_id,
       coalesce(
         case
-          when lower(coalesce(u.recipient_kind, '')) = 'candidate' then nullif(btrim(coalesce(c_rec.display_name, concat_ws(' ', c_rec.first_name, c_rec.last_name), c_rec.email, c_rec.phone, u.to_address)), '')
+          when lower(coalesce(u.recipient_kind, '')) = 'candidate' then coalesce(
+            nullif(btrim(c_rec.display_name), ''),
+            nullif(btrim(concat_ws(' ', c_rec.first_name, c_rec.last_name)), ''),
+            nullif(btrim(c_rec.email), ''),
+            nullif(btrim(c_rec.phone), ''),
+            nullif(btrim(u.to_address), '')
+          )
           when lower(coalesce(u.recipient_kind, '')) = 'client' then nullif(btrim(coalesce(cl_rec.name, cl_rec.primary_invoice_email, cl_rec.contact_email, u.to_address)), '')
           when lower(coalesce(u.recipient_kind, '')) = 'umbrella' then nullif(btrim(coalesce(um_rec.name, um_rec.remittance_email, u.to_address)), '')
           else null
@@ -2376,7 +2382,13 @@ begin
     u.recipient_id,
     coalesce(
       case
-        when lower(coalesce(u.recipient_kind, '')) = 'candidate' then nullif(btrim(coalesce(c_rec.display_name, concat_ws(' ', c_rec.first_name, c_rec.last_name), c_rec.email, c_rec.phone, u.to_address)), '')
+        when lower(coalesce(u.recipient_kind, '')) = 'candidate' then coalesce(
+          nullif(btrim(c_rec.display_name), ''),
+          nullif(btrim(concat_ws(' ', c_rec.first_name, c_rec.last_name)), ''),
+          nullif(btrim(c_rec.email), ''),
+          nullif(btrim(c_rec.phone), ''),
+          nullif(btrim(u.to_address), '')
+        )
         when lower(coalesce(u.recipient_kind, '')) = 'client' then nullif(btrim(coalesce(cl_rec.name, cl_rec.primary_invoice_email, cl_rec.contact_email, u.to_address)), '')
         when lower(coalesce(u.recipient_kind, '')) = 'umbrella' then nullif(btrim(coalesce(um_rec.name, um_rec.remittance_email, u.to_address)), '')
         else null
