@@ -2,6 +2,7 @@ do $verification$
 declare
   v_transition_definition text;
   v_replacement_definition text;
+  v_read_definition text;
 begin
   select pg_get_functiondef(
     'public.candidate_workflow_transition_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamptz)'::regprocedure
@@ -70,8 +71,24 @@ begin
     raise exception 'Candidate manager-refused replacement guard is not installed';
   end if;
 
+  select pg_get_functiondef(
+    'private._candidate_timesheet_primary_action_v1(text,jsonb,jsonb,uuid,uuid)'::regprocedure
+  ) into v_read_definition;
+
+  if position(
+       'item->>''state''<>''REFUSED'''
+       in v_read_definition
+     )=0
+     or position(
+       'not private._candidate_rejection_replaced_v1('
+       in v_read_definition
+     )=0 then
+    raise exception 'Candidate refused-card recovery still offers a second impossible direct replacement';
+  end if;
+
   if v_transition_definition~*'pg_catalog\.(coalesce|nullif|least|greatest)\s*\('
-     or v_replacement_definition~*'pg_catalog\.(coalesce|nullif|least|greatest)\s*\(' then
+     or v_replacement_definition~*'pg_catalog\.(coalesce|nullif|least|greatest)\s*\('
+     or v_read_definition~*'pg_catalog\.(coalesce|nullif|least|greatest)\s*\(' then
     raise exception 'Candidate manager-refused resubmission authority contains an illegal conditional-expression prefix';
   end if;
 end;

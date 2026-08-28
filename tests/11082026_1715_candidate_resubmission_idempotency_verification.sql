@@ -198,9 +198,25 @@ do $sequential_contract$
 declare
   v_result jsonb;
   v_replay jsonb;
+  v_primary_action jsonb;
   v_replacement uuid;
   v_failed boolean;
 begin
+  v_primary_action:=private._candidate_timesheet_primary_action_v1(
+    'UNPROCESSED',
+    jsonb_build_array(jsonb_build_object(
+      'workflow_id','b7080000-0000-4000-8000-000000000302',
+      'workflow_kind','CONTRACT_HOURS','state','REFUSED','generation',2,
+      'updated_at_utc',now()-interval '1 day'
+    )),
+    '{"can_edit_hours":true}'::jsonb,
+    'b7080000-0000-4000-8000-000000000102',
+    'b7080000-0000-4000-8000-000000000202'
+  );
+  if v_primary_action->>'code'<>'REVIEW_AND_RESUBMIT' then
+    raise exception 'unreplaced manager refusal did not offer its one guarded resubmission: %',v_primary_action;
+  end if;
+
   begin
     perform public.candidate_workflow_transition_atomic_v1(
       'b7080000-0000-4000-8000-000000000006','TEST',
@@ -267,6 +283,21 @@ begin
        'b7080000-0000-4000-8000-000000000301'
      ) then
     raise exception 'progressed/cancelled replacement did not preserve exact replay and durable lineage: %',v_replay;
+  end if;
+
+  v_primary_action:=private._candidate_timesheet_primary_action_v1(
+    'UNPROCESSED',
+    jsonb_build_array(jsonb_build_object(
+      'workflow_id','b7080000-0000-4000-8000-000000000301',
+      'workflow_kind','CONTRACT_HOURS','state','REFUSED','generation',2,
+      'updated_at_utc',now()-interval '1 day'
+    )),
+    '{"can_edit_hours":true}'::jsonb,
+    'b7080000-0000-4000-8000-000000000101',
+    'b7080000-0000-4000-8000-000000000201'
+  );
+  if v_primary_action->>'code'<>'ENTER_TIMESHEET' then
+    raise exception 'refusal with a durable direct replacement still offered an impossible second resubmission: %',v_primary_action;
   end if;
 
   v_failed:=false;

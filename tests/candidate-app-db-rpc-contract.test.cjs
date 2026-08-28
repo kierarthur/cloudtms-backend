@@ -647,6 +647,7 @@ test('read and placement policy uses all authoritative worked and dated boundari
 test('rejected workflows project through the replacement current version with server-owned recovery scope', () => {
   const page = definition(sql.reads, 'candidate_app_timesheet_page_v1');
   const detail = definition(sql.reads, 'candidate_app_timesheet_detail_v1');
+  const primaryAction = privateDefinition(sql.reads, '_candidate_timesheet_primary_action_v1');
   const replaced = privateDefinition(managerRefusalResubmission, '_candidate_rejection_replaced_v1');
   assert.match(replaced, /v_rejected\.state not in \('REJECTED','REFUSED'\)/i);
   assert.match(page, /classified\.state='REJECTED'[\s\S]*resolution\.carrier_contract_week_id=classified\.contract_week_id/i);
@@ -674,6 +675,8 @@ test('rejected workflows project through the replacement current version with se
   assert.match(detail, /'required_resubmission_action'[\s\S]*RESUBMIT_EXPENSE_CLAIM/i);
   assert.match(detail, /'rejections',[\s\S]*rejection_actionable/i);
   assert.match(detail, /_candidate_rejection_replaced_v1\(w\.id\)/i);
+  assert.match(primaryAction, /item->>'state'<>'REFUSED'[\s\S]*not private\._candidate_rejection_replaced_v1\([\s\S]*nullif\(item->>'workflow_id',''\)::uuid/i);
+  assert.match(primaryAction, /if coalesce\(\(p_capabilities->>'can_edit_hours'\)::boolean,false\)[\s\S]*'code','ENTER_TIMESHEET'/i);
   assert.match(sql.reads, /_candidate_paper_pack_readiness_v1[\s\S]*candidate_paper_pack_ready[\s\S]*candidate_complete_pack_storage_key/i);
   assert.match(sql.reads, /\/resubmit[\s\S]*_candidate_action_invocation_v1/i);
 });
