@@ -11,7 +11,7 @@
 \set ON_ERROR_STOP on
 DO $local_only$
 BEGIN
-  IF current_database() <> 'rota_clear_proof'
+  IF current_database() NOT IN ('rota_clear_proof','rota_calendar_proof','rota_continuous_proof')
      OR current_setting('server_version_num')::integer NOT BETWEEN 170000 AND 179999
      OR inet_server_addr() IS NULL THEN
     RAISE EXCEPTION 'ROTA_CLEAR_LOCAL_FIXTURE_TARGET_INVALID';

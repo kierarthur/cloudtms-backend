@@ -50,7 +50,8 @@
     "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
     "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
     "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql",
-    "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql"
+    "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql",
+    "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
@@ -65,6 +66,7 @@
     "supabase/verification/27082026_1936_candidate_timesheet_summary_refresh_verification.sql",
     "supabase/verification/27082026_2351_candidate_timesheet_card_base_expense_fallback_verification.sql",
     "supabase/verification/28082026_0151_candidate_manager_refusal_resubmission_verification.sql",
-    "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql"
+    "supabase/verification/28082026_1236_candidate_daily_rota_clear_key_verification.sql",
+    "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql"
   ]
 }
