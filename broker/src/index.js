@@ -138500,6 +138500,7 @@ async function handleGetClient(env, req, clientId) {
           'default_submission_mode',
           'week_ending_weekday',
           'is_nhsp','self_bill_no_invoices_sent','daily_calc_of_invoices',
+          'candidate_paper_submission_enabled',
           'no_timesheet_required','group_nightsat_sunbh',
           'auto_invoice_default',
           'requires_hr','autoprocess_hr','hr_attach_to_invoice','ts_attach_to_invoice',
