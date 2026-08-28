@@ -85,7 +85,7 @@ BEGIN
      AND v_route_actor_user_id_text IS NULL
      AND v_candidate_current_method IS DISTINCT FROM v_source_method THEN
     RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_SOURCE_METHOD_STALE'
-      USING ERRCODE = '40001',
+      USING ERRCODE = 'PT409',
             DETAIL = jsonb_build_object(
               'candidate_id', p_candidate_id::text,
               'expected_source_method', v_source_method,
@@ -573,15 +573,6 @@ BEGIN
     v_target_details_json,
     v_source_target_mismatch_count;
 
-  v_scope_invalidation_result:=private.pay_workbench_scope_invalidate_v1(
-    CASE WHEN cardinality(v_targeted_timesheet_ids)=0 THEN ARRAY[p_candidate_id]
-      ELSE array_fill(p_candidate_id,ARRAY[cardinality(v_targeted_timesheet_ids)]) END,
-    CASE WHEN cardinality(v_targeted_timesheet_ids)=0 THEN ARRAY[NULL::uuid]
-      ELSE v_targeted_timesheet_ids END,
-    'CANDIDATE_PAY_METHOD_CHANGED',NULL,
-    jsonb_build_object('source_pay_method',v_source_method,'target_pay_method',v_target_method)
-  );
-
   WITH authoritative_session_ids AS (
     SELECT (session_value->>'session_id')::uuid AS session_id
     FROM jsonb_array_elements(v_authoritative_sessions_json) AS session_values(session_value)
@@ -639,7 +630,7 @@ BEGIN
 
     IF v_candidate_current_method IS DISTINCT FROM v_target_method THEN
       RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_TARGET_NOT_COMMITTED'
-        USING ERRCODE = '40001',
+        USING ERRCODE = 'PT409',
               DETAIL = jsonb_build_object(
                 'candidate_id', p_candidate_id::text,
                 'candidate_current_method', v_candidate_current_method,
@@ -743,6 +734,17 @@ BEGIN
         0
       );
     ELSE
+      -- Preview and existing-operation checks are reads. Invalidate once, only
+      -- after the committed target, actor and operation have been validated.
+      v_scope_invalidation_result:=private.pay_workbench_scope_invalidate_v1(
+        CASE WHEN cardinality(v_targeted_timesheet_ids)=0 THEN ARRAY[p_candidate_id]
+          ELSE array_fill(p_candidate_id,ARRAY[cardinality(v_targeted_timesheet_ids)]) END,
+        CASE WHEN cardinality(v_targeted_timesheet_ids)=0 THEN ARRAY[NULL::uuid]
+          ELSE v_targeted_timesheet_ids END,
+        'CANDIDATE_PAY_METHOD_CHANGED',NULL,
+        jsonb_build_object('source_pay_method',v_source_method,'target_pay_method',v_target_method)
+      );
+
       PERFORM public._change_bump('pay_candidate:' || p_candidate_id::text);
 
       SELECT COALESCE(change_counter.seq, 0)

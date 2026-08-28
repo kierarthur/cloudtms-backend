@@ -258,7 +258,7 @@ BEGIN
     IF v_existing_operation_source_method <> v_expected_old_method
        OR v_existing_operation_target_method <> v_new_method THEN
       RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
-        USING ERRCODE = '40001',
+        USING ERRCODE = 'PT409',
               DETAIL = format(
                 'operation=%s committed=%s_to_%s requested=%s_to_%s',
                 v_operation_id,
@@ -272,7 +272,7 @@ BEGIN
     IF jsonb_typeof(v_existing_operation_after_json->'operation_request') = 'object' THEN
       IF (v_existing_operation_after_json->'operation_request') IS DISTINCT FROM v_operation_request_json THEN
         RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
-          USING ERRCODE = '40001',
+          USING ERRCODE = 'PT409',
                 DETAIL = format('operation=%s request_payload_mismatch', v_operation_id);
       END IF;
     ELSIF v_new_method = 'UMBRELLA' THEN
@@ -286,7 +286,7 @@ BEGIN
              IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_existing_operation_after_json->>'umbrella_id', '')), '')
          ) THEN
         RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
-          USING ERRCODE = '40001',
+          USING ERRCODE = 'PT409',
                 DETAIL = format('operation=%s legacy_destination_payload_mismatch', v_operation_id);
       END IF;
     ELSE
@@ -312,7 +312,7 @@ BEGIN
              IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_existing_operation_after_json->>'account_number', '')), '')
          ) THEN
         RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
-          USING ERRCODE = '40001',
+          USING ERRCODE = 'PT409',
                 DETAIL = format('operation=%s legacy_destination_payload_mismatch', v_operation_id);
       END IF;
     END IF;
@@ -642,13 +642,13 @@ BEGIN
 
   IF v_old_method = v_new_method THEN
     RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_ALREADY_APPLIED_OR_STALE'
-      USING ERRCODE = '40001',
+      USING ERRCODE = 'PT409',
             DETAIL = format('candidate=%s current=%s operation=%s', p_candidate_id, v_old_method, v_operation_id);
   END IF;
 
   IF v_old_method <> v_expected_old_method THEN
     RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_STALE_EXPECTED_METHOD'
-      USING ERRCODE = '40001', DETAIL = format('expected=%s actual=%s', v_expected_old_method, v_old_method);
+      USING ERRCODE = 'PT409', DETAIL = format('expected=%s actual=%s', v_expected_old_method, v_old_method);
   END IF;
 
   IF v_old_method = v_new_method THEN
@@ -694,7 +694,7 @@ BEGIN
 
   IF v_preview_source_change_seq <> v_current_source_change_seq THEN
     RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_PREVIEW_STALE'
-      USING ERRCODE = '40001', DETAIL = format('preview_seq=%s current_seq=%s', v_preview_source_change_seq, v_current_source_change_seq);
+      USING ERRCODE = 'PT409', DETAIL = format('preview_seq=%s current_seq=%s', v_preview_source_change_seq, v_current_source_change_seq);
   END IF;
 
   SELECT COALESCE(array_agg(DISTINCT target_value::uuid ORDER BY target_value::uuid), ARRAY[]::uuid[])
@@ -917,7 +917,7 @@ BEGIN
 
   IF v_post_targeted_timesheet_ids IS DISTINCT FROM v_expected_targeted_timesheet_ids THEN
     RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_CANONICAL_SCOPE_CHANGED'
-      USING ERRCODE = '40001',
+      USING ERRCODE = 'PT409',
             DETAIL = jsonb_build_object(
               'expected_targeted_timesheet_ids', to_jsonb(v_expected_targeted_timesheet_ids),
               'post_update_targeted_timesheet_ids', to_jsonb(v_post_targeted_timesheet_ids)
