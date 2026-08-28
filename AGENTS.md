@@ -107,6 +107,8 @@ Daily submission adapter tests must use the actual app's local `actual_schedule_
 
 Daily official document proof must include a worked date different from the week ending and an unresolved Client. Use the saved Timesheet week-ending date before any worked-date fallback, and freeze the booked `hospital_norm` from the Daily receipt even when no Client/TSFIN mapping exists. The review and final signed copies must show the same factual hospital, ward, role, hours and period without inventing a financial Client. Keep the actual-read-projection and full render-model cases in `tests/candidate-daily-official-document.test.js`; preserve immutable prepared documents and obtain a new submission generation rather than overwriting an earlier review pack.
 
+Daily recovery/list regressions (28 August 2026): a non-editable historical Daily record must not resolve break-entry settings that it cannot use; retain exact Client-setting validation for editable records. Keep the rollback-contained `28082026_2203_candidate_daily_inapplicable_break_verification.sql` mandatory in NEW and UPGRADE. Cancelling an interrupted Daily PHONE review must preserve the permitted Daily PHONE route, not reset to the Weekly ELECTRONIC route. The booked-source first-use verifier must cancel/replay/reselect the manager request, preserve the review pack and then complete manager approval and receipt. Do not weaken the existing workflow route constraint or alter finance to repair either defect.
+
 Do not print, log, echo, expose, commit, or include in reports:
 
 * Cloudflare tokens

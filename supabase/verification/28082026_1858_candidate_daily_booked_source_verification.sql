@@ -99,6 +99,40 @@ begin
   if v_response->>'state'<>'AWAITING_MANAGER_APPROVAL' or v_manifest_hash is null then
     raise exception 'phone approval request failed: %',v_response;
   end if;
+  -- An interrupted Daily PHONE review must return to approval choices without
+  -- changing to a Weekly-only route, losing documents or creating a Timesheet.
+  v_response:=public.candidate_workflow_transition_atomic_v1(
+    p_session_id,'TEST',p_workflow_id,'CANCEL_MANAGER_HANDOFF',p_generation,
+    '{}'::jsonb,p_key_prefix||':cancel-interrupted-phone',p_now_utc);
+  if v_response->>'state'<>'READY_FOR_MANAGER_APPROVAL'
+    or v_response->>'handoff_cancelled'<>'true'
+    or (select route from public.candidate_submission_workflows where id=p_workflow_id)<>'PHONE'
+    or (select state from public.candidate_approval_requests where id=v_approval_request_id)<>'CANCELLED'
+    or (select encode(review_manifest_sha256,'hex') from public.candidate_submission_workflows where id=p_workflow_id)<>v_manifest_hash then
+    raise exception 'Daily interrupted review failed to preserve its route/documents';
+  end if;
+  if (public.candidate_workflow_transition_atomic_v1(
+    p_session_id,'TEST',p_workflow_id,'CANCEL_MANAGER_HANDOFF',p_generation,
+    '{}'::jsonb,p_key_prefix||':cancel-interrupted-phone',p_now_utc)-'idempotent_replay') is distinct from v_response then
+    raise exception 'Daily interrupted review cancellation replay changed';
+  end if;
+  v_response:=public.candidate_workflow_transition_atomic_v1(
+    p_session_id,'TEST',p_workflow_id,'SELECT_PHONE_APPROVAL',p_generation,
+    jsonb_build_object(
+      'approval_token_hash_hex',encode(extensions.digest(p_workflow_id::text||':'||p_key_prefix||':phone-retry','sha256'),'hex'),
+      'expires_at_utc',p_now_utc+interval '30 minutes','handoff_token_key_version',1,
+      'public_broker_binding',jsonb_build_object(
+        'contract_version','CANDIDATE_PUBLIC_PHONE_BINDING_V1',
+        'public_session_binding_sha256',repeat('ab',32),
+        'device_binding_sha256',repeat('cd',32)
+      ),'broker_handoff_key_version',1
+    ),p_key_prefix||':phone-select-retry',p_now_utc);
+  if v_response->>'state'<>'AWAITING_MANAGER_APPROVAL'
+    or v_response->>'review_manifest_sha256'<>v_manifest_hash
+    or (v_response->>'approval_request_id')::uuid=v_approval_request_id then
+    raise exception 'Daily interrupted review did not receive a fresh manager request';
+  end if;
+  v_approval_request_id:=(v_response->>'approval_request_id')::uuid;
   v_response:=public.candidate_workflow_transition_atomic_v1(
     p_session_id,'TEST',p_workflow_id,'BEGIN_MANAGER_REVIEW',p_generation,
     '{}'::jsonb,p_key_prefix||':begin-review',p_now_utc);
