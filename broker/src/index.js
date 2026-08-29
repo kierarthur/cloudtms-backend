@@ -184307,6 +184307,17 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       bankingPay: true
     }), 'pay_workbench_source_build_attempt_claim_start_v1');
   } catch (_error) {
+    const claimErrorStatus = Number.isFinite(Number(_error?.status))
+      ? Math.max(0, Math.min(999, Math.trunc(Number(_error.status))))
+      : null;
+    const rawDatabaseErrorCode = upper(_error?.json?.code || _error?.code || '');
+    const databaseErrorCode = (
+      /^[0-9A-Z]{5}$/.test(rawDatabaseErrorCode) || /^PGRST[0-9]{3}$/.test(rawDatabaseErrorCode)
+    ) ? rawDatabaseErrorCode : null;
+    const rawDatabaseErrorName = upper(_error?.json?.message || '');
+    const databaseErrorName = (
+      /^(?:PAY_WORKBENCH|SOURCE_BUILD|WORKBENCH)_[A-Z0-9_]{1,140}$/.test(rawDatabaseErrorName)
+    ) ? rawDatabaseErrorName : null;
     return {
       ...base,
       ok: false,
@@ -184318,6 +184329,9 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       result_code: 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN',
       error_code: 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN',
       error_message: 'The source-build claim outcome is uncertain; durable database recovery owns resolution.',
+      claim_error_status: claimErrorStatus,
+      database_error_code: databaseErrorCode,
+      database_error_name: databaseErrorName,
       elapsed_ms: Math.max(0, Date.now() - startedAtMs)
     };
   }

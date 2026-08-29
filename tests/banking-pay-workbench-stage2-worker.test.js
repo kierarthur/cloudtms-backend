@@ -417,6 +417,9 @@ test('actual RPC 1 non-success bodies never enter claim-uncertain results, aggre
     assert.equal(result.transport_ok, false);
     assert.equal(result.result_code, 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN');
     assert.equal(result.error_code, 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN');
+    assert.equal(result.claim_error_status, 502);
+    assert.equal(result.database_error_code, null);
+    assert.equal(result.database_error_name, null);
     assert.equal(
       result.error_message,
       'The source-build claim outcome is uncertain; durable database recovery owns resolution.'
@@ -435,6 +438,26 @@ test('actual RPC 1 non-success bodies never enter claim-uncertain results, aggre
     assert.doesNotMatch(completeOutput, new RegExp(nonce, 'i'));
     assert.equal(completeOutput.includes(body), false);
   }
+});
+
+test('claim uncertainty exposes only bounded database error identity needed for live diagnosis', async () => {
+  const runAttempt = loadActualSbRpcLaneAttempt(async () => ({
+    ok: false,
+    status: 500,
+    text: async () => JSON.stringify({
+      code: '40001',
+      message: 'PAY_WORKBENCH_ATTEMPT_CLAIM_ADOPTION_FAILED',
+      detail: JSON.stringify({ candidate_id: ids.candidate, attempt_nonce: ids.nonce })
+    })
+  }));
+  const result = await runAttempt({ SUPABASE_URL: 'https://test.invalid' }, baseOptions(undefined));
+
+  assert.equal(result.result_code, 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN');
+  assert.equal(result.claim_error_status, 500);
+  assert.equal(result.database_error_code, '40001');
+  assert.equal(result.database_error_name, 'PAY_WORKBENCH_ATTEMPT_CLAIM_ADOPTION_FAILED');
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.candidate, 'i'));
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.nonce, 'i'));
 });
 
 test('no-claim result codes are restricted to the database-owned allowlist', async () => {
