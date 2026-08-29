@@ -6320,11 +6320,12 @@ GRANT EXECUTE ON FUNCTION public.timesheet_daily_manual_unprocess_atomic(uuid,uu
 
 -- Upgrade-history convergence: interrupted installs can leave an
 -- earlier functional repeatable newer than the unchanged final browser ACL
--- closure. Reassert the exact final service-only ACL for the three proved
+-- closure. Reassert the exact final service-only ACL for the four proved
 -- pre-existing authorities and every additive Banking v2 RPC.
 REVOKE ALL ON FUNCTION
   public.pay_timesheet_summary_pay_state_refresh_trigger(),
   public.pay_workbench_contract_client_dirty_fanout_chunk(uuid,jsonb,integer),
+  public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb),
   public.pay_workbench_enqueue_stage_continuation(uuid,uuid,text,jsonb,uuid,jsonb,uuid,text,integer,integer),
   public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1(uuid,uuid,jsonb),
   public.pay_workbench_session_get_action_required_detail_v1(uuid,jsonb,uuid,text,text,integer),
@@ -6343,6 +6344,7 @@ FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION
   public.pay_timesheet_summary_pay_state_refresh_trigger(),
   public.pay_workbench_contract_client_dirty_fanout_chunk(uuid,jsonb,integer),
+  public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb),
   public.pay_workbench_enqueue_stage_continuation(uuid,uuid,text,jsonb,uuid,jsonb,uuid,text,integer,integer),
   public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1(uuid,uuid,jsonb),
   public.pay_workbench_session_get_action_required_detail_v1(uuid,jsonb,uuid,text,text,integer),
