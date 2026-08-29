@@ -287,7 +287,7 @@ declare
   v_resolution_outbox uuid;
   v_documents_before jsonb;
   v_documents_after jsonb;
-  v_office_actor uuid;
+  v_office_actor uuid:=gen_random_uuid();
   v_office_preview jsonb;
   v_office_payload jsonb;
   v_office_replacement uuid;
@@ -301,6 +301,9 @@ declare
     'authority_mode_compatible',true,'transition_ready',true);
 begin
   select count(*) into v_before from public.timesheets;
+  insert into public.tms_users(id,email,password_hash,role,is_active)
+    values(v_office_actor,'daily-booked-office-proof-'||v_office_actor::text||'@example.invalid',
+      'UNUSABLE_VERIFICATION_ONLY','admin',true);
   insert into public.candidates(id,email,display_name,active,key_norm)
     values(v_candidate,'daily-booked-proof@example.invalid','Daily booked proof',true,
       'cid1-962abcdefghjkmnpqrs');
@@ -595,8 +598,6 @@ begin
   -- inside a subtransaction, then roll that proof back so the same fixture can
   -- continue through manager approval and canonical completion below.
   begin
-    select candidate_app_system_actor_user_id into strict v_office_actor
-    from public.settings_defaults where id=1;
     select nullif(btrim(coalesce(s.value->>'backend_row_signature',
       s.value->>'row_signature',s.value->>'signature','')),'')
     into v_delete_signature
@@ -767,8 +768,6 @@ begin
          where timesheet_id=v_replayed and is_current and processing_status='PENDING_AUTH') then
       raise exception 'DAILY_BOOKED_SOURCE_PROOF: Office recalculation did not advance receipt: %',v_result;
     end if;
-    select candidate_app_system_actor_user_id into v_office_actor
-      from public.settings_defaults where id=1;
     v_result:=public.timesheet_authorise_generic_atomic(v_replayed,v_replayed,v_office_actor,v_now,null);
     if v_result->>'ok'<>'true'
        or not exists(select 1 from public.timesheets where timesheet_id=v_replayed
@@ -893,8 +892,6 @@ begin
         where item->>'booking_id'='daily-booked-proof-0')<>1 then
       raise exception 'DAILY_BOOKED_SOURCE_PROOF: Rota removal lost the current Timesheet';
     end if;
-    select candidate_app_system_actor_user_id into v_office_actor
-      from public.settings_defaults where id=1;
     v_office_preview:=public.cloudtms_office_candidate_adapter_v1(
       'REJECT_PREVIEW',v_office_actor,'TEST',jsonb_build_object('timesheet_id',v_current_id),v_now);
     if v_office_preview->>'permitted'<>'true' then

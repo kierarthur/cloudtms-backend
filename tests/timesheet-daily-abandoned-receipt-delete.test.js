@@ -7,6 +7,10 @@ const sql = readFileSync(new URL(
   import.meta.url
 ), 'utf8');
 const broker = readFileSync(new URL('../broker/src/index.js', import.meta.url), 'utf8');
+const dailyVerification = readFileSync(new URL(
+  '../supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql',
+  import.meta.url
+), 'utf8');
 
 test('Daily abandoned receipt authority is an exact service-only two-RPC boundary', () => {
   assert.equal((sql.match(/create or replace function public\.timesheet_daily_abandoned_receipt_delete_/gi) || []).length, 2);
@@ -62,3 +66,11 @@ test('Office broker previews the Daily adapter first and falls back for every ot
   assert.match(broker, /\['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'\]\.includes\(previewKind\)/);
 });
 
+test('installed Daily first-use proof uses its own rollback-only active Office actor', () => {
+  assert.match(dailyVerification, /v_office_actor uuid:=gen_random_uuid\(\)/i);
+  assert.match(dailyVerification, /insert into public\.tms_users\(id,email,password_hash,role,is_active\)[\s\S]*?'admin',true\)/i);
+  assert.doesNotMatch(
+    dailyVerification,
+    /select candidate_app_system_actor_user_id into(?: strict)? v_office_actor/i
+  );
+});
