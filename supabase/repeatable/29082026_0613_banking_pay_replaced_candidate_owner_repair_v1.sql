@@ -595,3 +595,9 @@ $function$;
 ALTER FUNCTION public.pay_workbench_repair_replayed_candidate_jobs_v1(uuid,uuid,integer,text) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.pay_workbench_repair_replayed_candidate_jobs_v1(uuid,uuid,integer,text) FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.pay_workbench_repair_replayed_candidate_jobs_v1(uuid,uuid,integer,text) TO postgres,service_role;
+
+-- The service-only repair is called through PostgREST by the Banking Pay drain.
+-- Make the newly installed signature visible immediately after this repeatable
+-- commits; otherwise a current Worker can fail closed with PGRST202 while the
+-- database already contains the function.
+NOTIFY pgrst, 'reload schema';

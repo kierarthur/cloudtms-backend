@@ -32,6 +32,7 @@ test('persisted raw replay jobs are terminalised under candidate lock and reboun
   assert.match(sql, /PAY_WORKBENCH_REPLAYED_CANDIDATE_OWNER_REPAIR_POSTCONDITION_FAILED/i);
   assert.match(sql, /EXCEPTION WHEN OTHERS[\s\S]*REPAIR_FAILED_NO_PARTIAL_ADOPTION/i);
   assert.match(sql, /REVOKE ALL ON FUNCTION public\.pay_workbench_repair_replayed_candidate_jobs_v1\(uuid,uuid,integer,text\) FROM PUBLIC,anon,authenticated,service_role;/i);
+  assert.match(sql, /NOTIFY pgrst, 'reload schema';/i);
 });
 
 test('drain repairs replayed candidate owners before any source-build claim and fails closed', () => {
