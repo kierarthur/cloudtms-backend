@@ -75,7 +75,19 @@ BEGIN
     'public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamptz,text)',
     'public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text)',
     'public.timesheet_lifecycle_guard_signature_v1(uuid,uuid,boolean)',
-    'public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamptz)'
+    'public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamptz)',
+    'public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1(uuid,uuid,jsonb)',
+    'public.pay_workbench_session_get_action_required_detail_v1(uuid,jsonb,uuid,text,text,integer)',
+    'public.pay_workbench_session_get_action_required_page_v1(uuid,jsonb,uuid,text,text,text,integer,text,text)',
+    'public.pay_workbench_session_get_blocked_detail_v1(uuid,jsonb,uuid,text,text,integer)',
+    'public.pay_workbench_session_get_blocked_page_v1(uuid,jsonb,uuid,text,text,text,integer,text)',
+    'public.pay_workbench_session_get_candidate_ready_page_v1(uuid,uuid,jsonb,uuid,text,integer)',
+    'public.pay_workbench_session_get_candidate_summary_page_v1(uuid,jsonb,uuid,text,text,text,integer)',
+    'public.pay_workbench_session_get_selected_ready_timesheets_v1(uuid,uuid,jsonb,uuid,text)',
+    'public.pay_workbench_session_set_candidate_ready_selection_v1(uuid,uuid,jsonb,uuid,text,uuid,text,jsonb)',
+    'public.pay_workbench_session_set_filtered_ready_selection_v1(uuid,jsonb,uuid,text,uuid,text)',
+    'public.pay_workbench_session_set_ready_group_v1(uuid,uuid,jsonb,uuid,text,text,boolean,uuid,text,jsonb)',
+    'public.pay_workbench_session_set_ready_rows_v1(uuid,uuid,jsonb,uuid,jsonb,boolean,uuid,text,jsonb)'
   ]
   LOOP
     IF pg_catalog.has_function_privilege('anon', v_identity, 'EXECUTE')

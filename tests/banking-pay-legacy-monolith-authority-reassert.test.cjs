@@ -34,6 +34,20 @@ const repairTargets = [
   ['pay_workbench_mark_finance_case_dirty', '04082026_1219_pay_workbench_mark_finance_case_dirty.sql'],
   ['timesheet_daily_manual_process_atomic', '07082026_2224_candidate_app_weekly_office_replacements_v1.sql'],
 ];
+const bankingV2PublicServiceIdentities = [
+  'public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1(uuid,uuid,jsonb)',
+  'public.pay_workbench_session_get_action_required_detail_v1(uuid,jsonb,uuid,text,text,integer)',
+  'public.pay_workbench_session_get_action_required_page_v1(uuid,jsonb,uuid,text,text,text,integer,text,text)',
+  'public.pay_workbench_session_get_blocked_detail_v1(uuid,jsonb,uuid,text,text,integer)',
+  'public.pay_workbench_session_get_blocked_page_v1(uuid,jsonb,uuid,text,text,text,integer,text)',
+  'public.pay_workbench_session_get_candidate_ready_page_v1(uuid,uuid,jsonb,uuid,text,integer)',
+  'public.pay_workbench_session_get_candidate_summary_page_v1(uuid,jsonb,uuid,text,text,text,integer)',
+  'public.pay_workbench_session_get_selected_ready_timesheets_v1(uuid,uuid,jsonb,uuid,text)',
+  'public.pay_workbench_session_set_candidate_ready_selection_v1(uuid,uuid,jsonb,uuid,text,uuid,text,jsonb)',
+  'public.pay_workbench_session_set_filtered_ready_selection_v1(uuid,jsonb,uuid,text,uuid,text)',
+  'public.pay_workbench_session_set_ready_group_v1(uuid,uuid,jsonb,uuid,text,text,boolean,uuid,text,jsonb)',
+  'public.pay_workbench_session_set_ready_rows_v1(uuid,uuid,jsonb,uuid,jsonb,boolean,uuid,text,jsonb)',
+];
 const definition = (source, name) => {
   const token = `CREATE OR REPLACE FUNCTION public.${name}(`;
   const start = source.indexOf(token);
@@ -73,8 +87,11 @@ test('immutable legacy replay is followed by the exact provider-neutral seven-ro
     currentClosure,
     /RETURN public\.timesheet_daily_manual_unprocess_atomic\([\s\S]*p_expected_row_signature => NULL::text[\s\S]*\);/,
   );
-  assert.equal((currentClosure.match(/REVOKE ALL ON FUNCTION/g) || []).length, 7);
-  assert.equal((currentClosure.match(/GRANT EXECUTE ON FUNCTION/g) || []).length, 7);
+  assert.equal((currentClosure.match(/REVOKE ALL ON FUNCTION/g) || []).length, 8);
+  assert.equal((currentClosure.match(/GRANT EXECUTE ON FUNCTION/g) || []).length, 8);
+  for (const identity of bankingV2PublicServiceIdentities) {
+    assert.ok(currentClosure.includes(identity), `missing explicit v2 ACL: ${identity}`);
+  }
 });
 
 test('changed earlier overlapping authorities force the final reassertion to replay', () => {

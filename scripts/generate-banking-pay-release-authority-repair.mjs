@@ -42,6 +42,21 @@ const targets = [
   },
 ];
 
+const bankingV2PublicServiceIdentities = [
+  'public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1(uuid,uuid,jsonb)',
+  'public.pay_workbench_session_get_action_required_detail_v1(uuid,jsonb,uuid,text,text,integer)',
+  'public.pay_workbench_session_get_action_required_page_v1(uuid,jsonb,uuid,text,text,text,integer,text,text)',
+  'public.pay_workbench_session_get_blocked_detail_v1(uuid,jsonb,uuid,text,text,integer)',
+  'public.pay_workbench_session_get_blocked_page_v1(uuid,jsonb,uuid,text,text,text,integer,text)',
+  'public.pay_workbench_session_get_candidate_ready_page_v1(uuid,uuid,jsonb,uuid,text,integer)',
+  'public.pay_workbench_session_get_candidate_summary_page_v1(uuid,jsonb,uuid,text,text,text,integer)',
+  'public.pay_workbench_session_get_selected_ready_timesheets_v1(uuid,uuid,jsonb,uuid,text)',
+  'public.pay_workbench_session_set_candidate_ready_selection_v1(uuid,uuid,jsonb,uuid,text,uuid,text,jsonb)',
+  'public.pay_workbench_session_set_filtered_ready_selection_v1(uuid,jsonb,uuid,text,uuid,text)',
+  'public.pay_workbench_session_set_ready_group_v1(uuid,uuid,jsonb,uuid,text,text,boolean,uuid,text,jsonb)',
+  'public.pay_workbench_session_set_ready_rows_v1(uuid,uuid,jsonb,uuid,jsonb,boolean,uuid,text,jsonb)',
+];
+
 const normalizeLf = (value) => String(value || '').replaceAll('\r\n', '\n');
 
 function extractDefinition(target) {
@@ -98,6 +113,17 @@ REVOKE ALL ON FUNCTION public.timesheet_daily_manual_unprocess_atomic(uuid,uuid,
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.timesheet_daily_manual_unprocess_atomic(uuid,uuid,uuid,timestamptz)
   TO service_role;`);
+
+blocks.push(`-- Upgrade-history convergence: interrupted installs can create a
+-- public RPC before the later browser-isolation verifier runs. Reassert the
+-- exact final service-only ACL for every additive Banking v2 RPC.
+REVOKE ALL ON FUNCTION
+  ${bankingV2PublicServiceIdentities.join(',\n  ')}
+FROM PUBLIC, anon, authenticated, service_role;
+
+GRANT EXECUTE ON FUNCTION
+  ${bankingV2PublicServiceIdentities.join(',\n  ')}
+TO service_role;`);
 
 const output = `-- Exact provider-neutral authority repair for Banking Pay modal v2.
 --
