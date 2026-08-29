@@ -26,87 +26,55 @@ const finalAuthorityFiles = [
 const incrementalReplayDependencies = [
   '21072026_1235_00b_import_correction_runtime_guards.sql',
 ];
-
-const dateKey = (name) => {
-  const match = name.match(/^(\d{2})(\d{2})(\d{4})[_-]?(\d{2})?(\d{2})?/);
-  if (!match) return '999999999999';
-  return `${match[3]}${match[2]}${match[1]}${match[4] || '00'}${match[5] || '00'}`;
+const repairTargets = [
+  ['bulk_authorise_dataset_v1', '14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql'],
+  ['bulk_process_dataset_v1', '07082026_2224_candidate_app_weekly_office_replacements_v1.sql'],
+  ['bulk_timesheet_row_patch_v1', '07082026_2224_candidate_app_weekly_office_replacements_v1.sql'],
+  ['contract_week_manual_upsert_atomic', '27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql'],
+  ['pay_workbench_mark_finance_case_dirty', '04082026_1219_pay_workbench_mark_finance_case_dirty.sql'],
+  ['timesheet_daily_manual_process_atomic', '07082026_2224_candidate_app_weekly_office_replacements_v1.sql'],
+];
+const definition = (source, name) => {
+  const token = `CREATE OR REPLACE FUNCTION public.${name}(`;
+  const start = source.indexOf(token);
+  assert.ok(start >= 0, `missing ${name}`);
+  assert.equal(source.indexOf(token, start + token.length), -1, `ambiguous ${name}`);
+  const terminator = '\n$function$;';
+  const end = source.indexOf(terminator, start);
+  assert.ok(end > start, `incomplete ${name}`);
+  return source.slice(start, end + terminator.length).trim();
 };
 
-const createdFunctions = (source) => [...source.matchAll(
-  /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+(?:(public|private)\.)?([a-zA-Z0-9_]+)\s*\(/gi,
-)].map((match) => `${(match[1] || 'public').toLowerCase()}.${match[2].toLowerCase()}`);
-
-const touchedFunctions = (source) => [...source.matchAll(
-  /(?:CREATE\s+OR\s+REPLACE|ALTER|DROP)\s+FUNCTION(?:\s+IF\s+EXISTS)?\s+(?:(public|private)\.)?([a-zA-Z0-9_]+)\s*\(/gi,
-)].map((match) => `${(match[1] || 'public').toLowerCase()}.${match[2].toLowerCase()}`);
-
-test('legacy monolith changes force a complete later-authority replay', () => {
+test('immutable legacy replay is followed by the exact provider-neutral seven-routine repair', () => {
   const monolithHash = crypto.createHash('sha256').update(monolith).digest('hex');
   assert.match(reassert, new RegExp(`legacy_monolith_sha256:\\s*\\n-- ${monolithHash}`));
-
-  const replayedFunctions = new Set(createdFunctions(monolith));
-  const laterFiles = fs.readdirSync(repeatableDir)
-    .filter((name) => name.endsWith('.sql'))
-    .filter((name) => name !== monolithName && name !== reassertName && name !== currentClosureName)
-    .filter((name) => dateKey(name) > dateKey(monolithName))
-    .sort((left, right) => dateKey(left).localeCompare(dateKey(right)) || left.localeCompare(right));
-
-  // Follow the complete authority chain, not only direct overlaps with the
-  // legacy omnibus. A replayed intermediate file can define another function
-  // whose newer focused authority must then also be replayed.
-  const expectedFiles = [];
-  for (const name of laterFiles) {
-    const source = normalizeLf(fs.readFileSync(path.join(repeatableDir, name), 'utf8'));
-    const identities = touchedFunctions(source);
-    if (!identities.some((identity) => replayedFunctions.has(identity))) continue;
-
-    expectedFiles.push(name);
-    for (const identity of identities) replayedFunctions.add(identity);
-  }
-  for (const name of criticalAuthorityFiles) {
-    assert.ok(laterFiles.includes(name), 'missing critical authority file: ' + name);
-    if (!expectedFiles.includes(name)) expectedFiles.push(name);
-  }
-  expectedFiles.sort((left, right) => dateKey(left).localeCompare(dateKey(right)) || left.localeCompare(right));
-  for (const name of finalAuthorityFiles) {
-    assert.ok(laterFiles.includes(name), 'missing final authority file: ' + name);
-    const existingIndex = expectedFiles.indexOf(name);
-    if (existingIndex >= 0) expectedFiles.splice(existingIndex, 1);
-    expectedFiles.push(name);
-  }
-
   const historicalIncludedFiles = [...reassert.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
     .map((match) => match[1]);
   const currentIncludedFiles = [...currentClosure.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
     .map((match) => match[1]);
-  const completeIncludedFiles = new Set([...historicalIncludedFiles, ...currentIncludedFiles]);
-
-  assert.deepEqual(
-    expectedFiles.filter((name) => !completeIncludedFiles.has(name)),
-    [],
-    'the immutable historical replay plus current closure must cover every later authority',
-  );
   assert.equal(new Set(historicalIncludedFiles).size, historicalIncludedFiles.length);
-  assert.equal(new Set(currentIncludedFiles).size, currentIncludedFiles.length);
+  assert.deepEqual(currentIncludedFiles, [], 'the current repair must not replay a broad authority file');
   assert.doesNotMatch(reassert, /\\ir\s+26052026_2100HRS_NEW_FUNCTIONS\.sql/i);
   assert.equal(
     crypto.createHash('sha256').update(reassert).digest('hex'),
     '3483e69bbc1ca13ba151b75b59e7b8e192f96f9df2627b829340b4d4e50d62c5',
     'the historical compatibility replay must remain byte-for-byte immutable',
   );
-  for (const required of [
-    '04082026_1219_pay_workbench_mark_finance_case_dirty.sql',
-    '07082026_2224_candidate_app_weekly_office_replacements_v1.sql',
-    '14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql',
-    '27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql',
-    '28082026_1424_banking_pay_modal_selection_owner_bridge.sql',
-  ]) assert.ok(currentIncludedFiles.includes(required), `missing current authority closure: ${required}`);
-  for (const forbidden of [
-    '20072026_0302_disable_plpgsql_check_for_reservation_finalizer.sql',
-    '23072026_1402_disable_plpgsql_check_for_banking_cancel.sql',
-    '26052026_2100HRS_NEW_FUNCTIONS.sql',
-  ]) assert.ok(!currentIncludedFiles.includes(forbidden), `unsafe historical replay in current closure: ${forbidden}`);
+  assert.doesNotMatch(currentClosure, /plpgsql_check\./i);
+
+  for (const [name, sourceName] of repairTargets) {
+    const source = normalizeLf(fs.readFileSync(path.join(repeatableDir, sourceName), 'utf8'));
+    assert.equal(definition(currentClosure, name), definition(source, name), `${name} must be byte-identical`);
+  }
+  const created = [...currentClosure.matchAll(/CREATE OR REPLACE FUNCTION\s+public\.([a-zA-Z0-9_]+)\s*\(/g)]
+    .map((match) => match[1]);
+  assert.deepEqual(created, [...repairTargets.map(([name]) => name), 'timesheet_daily_manual_unprocess_atomic']);
+  assert.match(
+    currentClosure,
+    /RETURN public\.timesheet_daily_manual_unprocess_atomic\([\s\S]*p_expected_row_signature => NULL::text[\s\S]*\);/,
+  );
+  assert.equal((currentClosure.match(/REVOKE ALL ON FUNCTION/g) || []).length, 7);
+  assert.equal((currentClosure.match(/GRANT EXECUTE ON FUNCTION/g) || []).length, 7);
 });
 
 test('changed earlier overlapping authorities force the final reassertion to replay', () => {
