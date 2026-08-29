@@ -435,6 +435,22 @@ function committedGenerationSourceHmacs(items, outcomes) {
     .filter(validateSourceHmac))];
 }
 
+function reconciledCandidateSourceHmacs(observations, outcomes) {
+  if (!Array.isArray(observations) || !Array.isArray(outcomes)) return [];
+  const linkedClassifications = new Set([
+    'AMBIGUOUS',
+    'CANONICAL_COMMAND_REQUIRED',
+    'MATCH',
+    'REPAIR_PROJECTION'
+  ]);
+  return [...new Set(outcomes
+    .filter((outcome) => isObject(outcome)
+      && safeInteger(outcome.index, 0, observations.length - 1)
+      && linkedClassifications.has(outcome.classification))
+    .map((outcome) => observations[outcome.index]?.candidate_source_hmac)
+    .filter(validateSourceHmac))];
+}
+
 async function invokeSystemRpc(verification, env, deps) {
   const { route, body, correlationId, idempotencyKey } = verification;
   if (!validateSystemBody(route.operationId, body)) throw new Error('VALIDATION_FAILED');
@@ -535,11 +551,6 @@ async function invokeSystemRpc(verification, env, deps) {
         p_internal_context: systemContext(env, 'RECONCILIATION'), p_batch_request_id: body.batch_request_id,
         p_idempotency_key: idempotencyKey, p_observations: body.observations, p_correlation_id: correlationId
       });
-      firstReadyActivation = {
-        p_candidate_source_hmacs: [...new Set(body.observations
-          .map((item) => item.candidate_source_hmac))],
-        p_projection_outbox_ids: []
-      };
       break;
     case 'googleAvailabilityEffectClaim':
       result = await rpc(deps, RPC_BY_OPERATION[route.operationId], {
@@ -572,6 +583,15 @@ async function invokeSystemRpc(verification, env, deps) {
   if (generationItems) {
     firstReadyActivation = {
       p_candidate_source_hmacs: committedGenerationSourceHmacs(generationItems, cleaned.result.outcomes),
+      p_projection_outbox_ids: []
+    };
+  }
+  if (route.operationId === 'googleAvailabilityApplyReconciliation') {
+    firstReadyActivation = {
+      p_candidate_source_hmacs: reconciledCandidateSourceHmacs(
+        body.observations,
+        cleaned.result.outcomes
+      ),
       p_projection_outbox_ids: []
     };
   }

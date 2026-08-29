@@ -226,3 +226,56 @@ test('a reconciliation retries activation for each unique Candidate identity wit
   assert.deepEqual(recorder.calls[1].args.p_candidate_source_hmacs, [hmac]);
   assert.match(await response.text(), /MATCH/);
 });
+
+test('a mixed reconciliation activates only uniquely linked Candidate identities', async () => {
+  const route = findCandidateDailyRoute('POST', '/candidate-system/v1/google-availability/reconciliation');
+  const notEnrolled = 'a'.repeat(64);
+  const linked = 'b'.repeat(64);
+  const ambiguous = 'c'.repeat(64);
+  const recorder = rpcRecorder();
+  recorder.deps.rpc = async (name, args) => {
+    recorder.calls.push({ name, args });
+    if (name === 'candidate_daily_reconciliation_apply_atomic_v1') {
+      return {
+        batch_receipt_id: '00000000-0000-4000-8000-000000000213',
+        outcomes: [
+          { index: 0, classification: 'NOT_ENROLLED' },
+          { index: 1, classification: 'MATCH' },
+          { index: 2, classification: 'TERMINAL_CONFLICT', error_code: 'IDENTITY_LINK_AMBIGUOUS' },
+          { index: 3, classification: 'REPAIR_PROJECTION' }
+        ]
+      };
+    }
+    if (name === 'candidate_daily_system_policy_activate_ready_v1') {
+      return { ok: true, policy_version: 'CANDIDATE_FIRST_READY_ACTIVATION_V1', outcomes: [] };
+    }
+    throw new Error(`Unexpected RPC ${name}`);
+  };
+  const observations = [notEnrolled, linked, ambiguous, linked].map((candidateSourceHmac, index) => ({
+    candidate_source_hmac: candidateSourceHmac,
+    date: '2026-08-29',
+    observed_value: index === 3 ? 'N' : '',
+    observed_sheet_revision: 'r3',
+    source_event_id: `reconcile.mixed.event.${index}`,
+    source_revision: '3',
+    source_event_time: '2026-08-29T12:55:00.000Z',
+    source_hash: String(index + 1).repeat(64).slice(0, 64),
+    item_key: `reconcile.mixed.item.${index}`
+  }));
+  const response = await candidateDailyPhase1bInternals.invokeSystemRpc({
+    route,
+    body: {
+      batch_request_id: '00000000-0000-4000-8000-000000000214',
+      observations
+    },
+    correlationId,
+    idempotencyKey: 'reconciliation-mixed-fixed-key'
+  }, { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, recorder.deps);
+  assert.equal(response.status, 200);
+  assert.equal(recorder.calls.length, 2);
+  assert.equal(recorder.calls[1].name, 'candidate_daily_system_policy_activate_ready_v1');
+  assert.deepEqual(recorder.calls[1].args.p_candidate_source_hmacs, [linked]);
+  const envelope = await response.text();
+  assert.match(envelope, /NOT_ENROLLED/);
+  assert.match(envelope, /TERMINAL_CONFLICT/);
+});
