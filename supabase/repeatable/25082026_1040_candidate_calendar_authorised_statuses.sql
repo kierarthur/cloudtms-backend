@@ -41,7 +41,7 @@ as $function$
 with candidate_contracts as (
   select contract_row.id as contract_id
   from public.contracts as contract_row
-  where contract_row.candidate_id = $1
+  where contract_row.candidate_id is not distinct from $1
     and contract_row.start_date <= $3
     and coalesce(contract_row.end_date, $3) >= $2
 ),

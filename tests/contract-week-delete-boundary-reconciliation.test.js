@@ -15,14 +15,19 @@ const weeklyDelete = fs.readFileSync(
   'utf8'
 );
 const plannedDelete = weeklyDelete;
-const calendarFeed = fs.readFileSync(
+const baseCalendarFeed = fs.readFileSync(
   new URL('../supabase/repeatable/14122025_calendar_rpc_feeds.sql', import.meta.url),
+  'utf8'
+);
+const authoritativeCalendarFeed = fs.readFileSync(
+  new URL('../supabase/repeatable/25082026_1040_candidate_calendar_authorised_statuses.sql', import.meta.url),
   'utf8'
 );
 
 test('contract calendar feed includes an exact unassigned contract', () => {
-  assert.match(calendarFeed, /where c\.candidate_id is not distinct from \$1/i);
-  assert.match(calendarFeed, /where f\.contract_id = \$1/i);
+  assert.match(baseCalendarFeed, /where c\.candidate_id is not distinct from \$1/i);
+  assert.match(authoritativeCalendarFeed, /where contract_row\.candidate_id is not distinct from \$1/i);
+  assert.match(baseCalendarFeed, /where f\.contract_id = \$1/i);
 });
 
 for (const [label, sql] of [
