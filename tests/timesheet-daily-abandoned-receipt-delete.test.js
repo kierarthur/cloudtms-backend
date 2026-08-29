@@ -36,7 +36,7 @@ function definitionHash(kind) {
     `CREATE OR REPLACE FUNCTION public.timesheet_daily_abandoned_receipt_delete_${kind}_v1(${signature})`,
     ' RETURNS jsonb',
     ' LANGUAGE plpgsql',
-    kind === 'preview' ? ' STABLE SECURITY DEFINER' : ' VOLATILE SECURITY DEFINER',
+    kind === 'preview' ? ' STABLE SECURITY DEFINER' : ' SECURITY DEFINER',
     " SET search_path TO 'public', 'pg_temp'",
     'AS $function$'
   ].join('\n') + body + '$function$\n';
