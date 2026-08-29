@@ -184315,9 +184315,12 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
       /^[0-9A-Z]{5}$/.test(rawDatabaseErrorCode) || /^PGRST[0-9]{3}$/.test(rawDatabaseErrorCode)
     ) ? rawDatabaseErrorCode : null;
     const rawDatabaseErrorName = upper(_error?.json?.message || '');
-    const databaseErrorName = (
-      /^(?:PAY_WORKBENCH|SOURCE_BUILD|WORKBENCH)_[A-Z0-9_]{1,140}$/.test(rawDatabaseErrorName)
-    ) ? rawDatabaseErrorName : null;
+    const allowedDatabaseErrorNames = [
+      'PAY_WORKBENCH_ATTEMPT_CALLER_INVALID',
+      'PAY_WORKBENCH_ATTEMPT_CUTOFF_INVALID',
+      'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_RUN_ID_REQUIRED'
+    ];
+    const databaseErrorName = allowedDatabaseErrorNames.find((name) => rawDatabaseErrorName.includes(name)) || null;
     return {
       ...base,
       ok: false,

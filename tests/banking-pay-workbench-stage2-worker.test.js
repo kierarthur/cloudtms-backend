@@ -446,7 +446,7 @@ test('claim uncertainty exposes only bounded database error identity needed for 
     status: 500,
     text: async () => JSON.stringify({
       code: '40001',
-      message: 'PAY_WORKBENCH_ATTEMPT_CLAIM_ADOPTION_FAILED',
+      message: 'Database rejected PAY_WORKBENCH_ATTEMPT_CUTOFF_INVALID during the bounded claim.',
       detail: JSON.stringify({ candidate_id: ids.candidate, attempt_nonce: ids.nonce })
     })
   }));
@@ -455,7 +455,7 @@ test('claim uncertainty exposes only bounded database error identity needed for 
   assert.equal(result.result_code, 'SOURCE_BUILD_ATTEMPT_CLAIM_UNCERTAIN');
   assert.equal(result.claim_error_status, 500);
   assert.equal(result.database_error_code, '40001');
-  assert.equal(result.database_error_name, 'PAY_WORKBENCH_ATTEMPT_CLAIM_ADOPTION_FAILED');
+  assert.equal(result.database_error_name, 'PAY_WORKBENCH_ATTEMPT_CUTOFF_INVALID');
   assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.candidate, 'i'));
   assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.nonce, 'i'));
 
