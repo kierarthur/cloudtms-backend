@@ -54,6 +54,17 @@ begin
   if nullif(btrim(v_candidate_reference),'') is null then
     raise exception 'BANKING_PAY_ACTION_PRESENTATION_VERIFY: canonical candidate reference is missing';
   end if;
+  -- The Workbench row carries the canonical Timesheet foreign key.  Keep the
+  -- rollback fixture structurally real so the verifier exercises the same
+  -- presentation path as an ordinary Timesheet-backed payment.
+  insert into public.timesheets(
+    timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,
+    job_title_norm,week_ending_date,status,is_current,version
+  ) values(
+    v_timesheet,'ACTION-PRESENTATION-'||v_timesheet::text,
+    lower(replace(v_candidate::text,'-','')),'VERIFY','VERIFY','VERIFY',
+    '2026-08-30','RECEIVED',true,1
+  );
   insert into public.banking_pay_snapshot_runs(id,pay_date,week_ending_cutoff,pay_week_start,eligibility_from_date,eligibility_to_date)
   values(v_snapshot,'2026-08-28','2026-08-30','2026-08-24','2026-08-01','2026-08-31');
   insert into public.banking_pay_workbench_sessions(

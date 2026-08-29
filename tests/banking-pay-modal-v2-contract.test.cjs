@@ -112,6 +112,8 @@ test('action-list verifier uses canonical candidate and Timesheet identities', (
     '29082026_1857_banking_pay_action_list_presentation_verification.sql'));
   assert.match(verification, /select c\.tms_ref into strict v_candidate_reference/);
   assert.match(verification,
+    /insert into public\.timesheets\([\s\S]*timesheet_id,booking_id,occupant_key_norm[\s\S]*values\([\s\S]*v_timesheet/);
+  assert.match(verification,
     /id,session_id,candidate_id,timesheet_id,section,row_key,row_ordinal,row_json,key_type,key_value/);
   assert.match(verification,
     /values\(v_row,v_session,v_candidate,v_timesheet,'cases_resolutions'/);
