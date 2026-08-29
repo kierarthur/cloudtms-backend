@@ -509,7 +509,7 @@ async function invokeSystemRpc(verification, env, deps) {
       result = await rpc(deps, RPC_BY_OPERATION[route.operationId], {
         p_internal_context: common, p_claim_request_id: body.claim_request_id,
         p_idempotency_key: idempotencyKey, p_target: body.target, p_claimant: body.claimant,
-        p_max_items: body.max_items, p_lease_seconds: 120, p_correlation_id: correlationId
+        p_max_items: body.max_items, p_lease_seconds: 600, p_correlation_id: correlationId
       });
       break;
     case 'googleAvailabilityCompleteProjection':

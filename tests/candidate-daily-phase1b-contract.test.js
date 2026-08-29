@@ -217,6 +217,39 @@ test('R8 availability command freezes one caller key and emits replay only from 
     { command_id: commandId, availability_version: 1, changed_dates: ['2026-08-17'] });
 });
 
+test('Google projection claims receive the full server-owned lease without accepting a caller lease', async () => {
+  const route = findCandidateDailyRoute(
+    'POST', '/candidate-system/v1/google-availability/projection/claim'
+  );
+  const calls = [];
+  const response = await candidateDailyPhase1bInternals.invokeSystemRpc({
+    route,
+    body: {
+      claim_request_id: commandId,
+      target: 'MASTER_AVAILABILITY_SHEET',
+      claimant: 'availability-projector-test',
+      max_items: 20
+    },
+    correlationId,
+    idempotencyKey: 'projection-claim-fixed-key'
+  }, { CANDIDATE_APP_ENVIRONMENT: 'TEST' }, {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return {
+        claim_request_id: commandId,
+        batch_receipt_id: sessionId,
+        lease_set_expires_at: '2026-08-17T10:10:00.000Z',
+        items: []
+      };
+    }
+  });
+  assert.equal(response.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, 'candidate_daily_projection_claim_v1');
+  assert.equal(calls[0].args.p_lease_seconds, 600);
+  assert.equal(calls[0].args.p_max_items, 20);
+});
+
 test('Daily first-submission source survives the closed broker boundary only for its exact booked tile', () => {
   const route = findCandidateDailyRoute('GET', '/candidate-app/v1/daily/tiles');
   const envelope = result => rebuildCandidateDailySuccessBody(route, 200,

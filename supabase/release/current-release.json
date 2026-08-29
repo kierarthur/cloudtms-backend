@@ -54,7 +54,8 @@
     "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql",
     "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
     "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
-    "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql"
+    "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
+    "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
@@ -73,6 +74,7 @@
     "supabase/verification/28082026_1321_candidate_daily_calendar_freshness_verification.sql",
     "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
     "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
-    "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql"
+    "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
+    "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql"
   ]
 }
