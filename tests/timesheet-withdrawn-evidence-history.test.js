@@ -13,7 +13,8 @@ assert.ok(start >= 0 && end > start, 'timesheet evidence list handler must exist
 const handler = source.slice(start, end);
 
 test('withdrawn evidence history is lineage-bound and absent from the legacy array response', () => {
-  assert.match(handler, /const bookingId = trimStr\(ts\?\.booking_id\)/);
+  assert.match(handler, /const bookingId = String\(ts\?\.booking_id \|\| ''\)\.trim\(\)/);
+  assert.doesNotMatch(handler, /const bookingId = trimStr\(/);
   assert.doesNotMatch(handler, /asUuidStringOrNull\(ts\?\.booking_id\)/);
   assert.match(handler, /booking_id=eq\.\$\{enc\(bookingId\)\}[\s\S]*is_current=eq\.false[\s\S]*status=eq\.REVOKED/);
   assert.match(handler, /candidate_submission_workflows[\s\S]*state=eq\.CANCELLED[\s\S]*target_timesheet_id\.in\.[\s\S]*anchor_timesheet_id\.in\./);
