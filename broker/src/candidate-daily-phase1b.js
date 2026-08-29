@@ -363,13 +363,24 @@ function validateReconciliation(body) {
   if (!exactKeys(body, ['batch_request_id', 'observations']) || !UUID_RE.test(body.batch_request_id)
       || !Array.isArray(body.observations) || body.observations.length < 1 || body.observations.length > 100) return false;
   const keys = new Set();
-  return body.observations.every((item) => exactKeys(item, ['candidate_source_hmac', 'date', 'observed_value',
-    'observed_sheet_revision', 'source_event_id', 'source_revision', 'source_event_time', 'source_hash', 'item_key'])
-    && validateSourceHmac(item.candidate_source_hmac) && DATE_RE.test(item.date)
-    && LEGACY_VALUES.has(item.observed_value) && boundedString(item.observed_sheet_revision, 1, 160)
-    && boundedString(item.source_event_id, 8, 160) && boundedString(item.source_revision, 1, 160)
-    && isoDateTime(item.source_event_time) && SHA256_RE.test(item.source_hash) && ITEM_KEY_RE.test(item.item_key)
-    && !keys.has(item.item_key) && Boolean(keys.add(item.item_key)));
+  return body.observations.every((item) => {
+    const common = validateSourceHmac(item?.candidate_source_hmac)
+      && boundedString(item?.source_revision, 1, 160)
+      && isoDateTime(item?.source_event_time)
+      && SHA256_RE.test(item?.source_hash)
+      && ITEM_KEY_RE.test(item?.item_key)
+      && !keys.has(item.item_key) && Boolean(keys.add(item.item_key));
+    if (!common) return false;
+    if (item.probe_only === true) {
+      return exactKeys(item, ['candidate_source_hmac', 'probe_only', 'source_revision',
+        'source_event_time', 'source_hash', 'item_key']);
+    }
+    return exactKeys(item, ['candidate_source_hmac', 'date', 'observed_value',
+      'observed_sheet_revision', 'source_event_id', 'source_revision', 'source_event_time', 'source_hash', 'item_key'])
+      && DATE_RE.test(item.date) && LEGACY_VALUES.has(item.observed_value)
+      && boundedString(item.observed_sheet_revision, 1, 160)
+      && boundedString(item.source_event_id, 8, 160);
+  });
 }
 
 function validateEffectClaim(body) {
@@ -440,6 +451,7 @@ function reconciledCandidateSourceHmacs(observations, outcomes) {
   const linkedClassifications = new Set([
     'AMBIGUOUS',
     'CANONICAL_COMMAND_REQUIRED',
+    'LINKED',
     'MATCH',
     'REPAIR_PROJECTION'
   ]);

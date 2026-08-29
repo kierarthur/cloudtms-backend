@@ -240,7 +240,7 @@ test('a mixed reconciliation activates only uniquely linked Candidate identities
         batch_receipt_id: '00000000-0000-4000-8000-000000000213',
         outcomes: [
           { index: 0, classification: 'NOT_ENROLLED' },
-          { index: 1, classification: 'MATCH' },
+          { index: 1, classification: 'LINKED' },
           { index: 2, classification: 'TERMINAL_CONFLICT', error_code: 'IDENTITY_LINK_AMBIGUOUS' },
           { index: 3, classification: 'REPAIR_PROJECTION' }
         ]

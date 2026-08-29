@@ -483,3 +483,29 @@ test('R8 signed-system operation mappings and strict body validators cover every
     }]
   }), false);
 });
+
+test('reconciliation identity probes accept only the exact read-only six-field item', () => {
+  const probe = {
+    candidate_source_hmac: 'a'.repeat(64),
+    probe_only: true,
+    source_revision: 'availability-window.runtime-v1',
+    source_event_time: '2026-08-29T14:08:00.000Z',
+    source_hash: 'b'.repeat(64),
+    item_key: 'identity-probe-runtime-0001'
+  };
+  const valid = { batch_request_id: commandId, observations: [probe] };
+  assert.equal(candidateDailyPhase1bInternals.validateSystemBody(
+    'googleAvailabilityApplyReconciliation', valid), true);
+  assert.equal(candidateDailyPhase1bInternals.validateSystemBody(
+    'googleAvailabilityApplyReconciliation', {
+      ...valid, observations: [{ ...probe, probe_only: false }]
+    }), false);
+  assert.equal(candidateDailyPhase1bInternals.validateSystemBody(
+    'googleAvailabilityApplyReconciliation', {
+      ...valid, observations: [{ ...probe, date: '2026-08-29' }]
+    }), false);
+  assert.equal(candidateDailyPhase1bInternals.validateSystemBody(
+    'googleAvailabilityApplyReconciliation', {
+      ...valid, observations: [{ ...probe, source_event_time: 'not-a-date' }]
+    }), false);
+});
