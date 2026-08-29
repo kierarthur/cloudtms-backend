@@ -206,13 +206,24 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
 test('legacy transition bootstrap is bounded and must be replaced before adoption', () => {
   const release = readJson('supabase/release/current-release.json');
   assert.deepEqual(release.legacyUpgradeBootstrapFiles, [
+    'supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql',
     'supabase/repeatable/08042026_1151_newtablesbanking.sql',
     'supabase/release/24082026_1128_legacy_upgrade_trigger_shims.sql',
   ]);
-  const schemaBootstrap = read(release.legacyUpgradeBootstrapFiles[0]);
+  assert.equal(release.baselineFiles[0], release.legacyUpgradeBootstrapFiles[0]);
+  const authBootstrap = read(release.legacyUpgradeBootstrapFiles[0]);
+  assert.match(authBootstrap, /create schema if not exists auth/);
+  assert.match(authBootstrap, /create table if not exists auth\.users/);
+  assert.match(authBootstrap, /create or replace function auth\.uid\(\)/);
+  assert.match(authBootstrap, /create or replace function auth\.role\(\)/);
+  assert.match(authBootstrap, /create or replace function auth\.jwt\(\)/);
+  assert.match(authBootstrap, /current_setting\('request\.jwt\.claim\.sub', true\)/);
+  assert.match(authBootstrap, /grant usage on schema auth to anon, authenticated, service_role/);
+  assert.doesNotMatch(authBootstrap, /insert\s+into\s+auth\.users|update\s+auth\.users|delete\s+from\s+auth\.users/i);
+  const schemaBootstrap = read(release.legacyUpgradeBootstrapFiles[1]);
   assert.match(schemaBootstrap, /CREATE TABLE IF NOT EXISTS public\.banking_pay_workbench_sessions/);
   assert.match(schemaBootstrap, /Safe to rerun/);
-  const bootstrap = read(release.legacyUpgradeBootstrapFiles[1]);
+  const bootstrap = read(release.legacyUpgradeBootstrapFiles[2]);
   assert.match(bootstrap, /to_regprocedure/);
   assert.match(bootstrap, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.match(bootstrap, /return OLD/);
