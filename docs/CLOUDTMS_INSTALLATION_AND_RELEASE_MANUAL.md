@@ -112,6 +112,7 @@ Every agency keeps separate PostgreSQL credentials, PostgREST JWT, gateway confi
 Mandatory safeguards:
 
 - run `supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql` first for LEGACY_UPGRADE and NEW so historical foreign keys and JWT claim helpers have their provider-neutral `auth` compatibility objects; it must not copy application users or replace `public.tms_users`;
+- for LEGACY_UPGRADE only, run `supabase/release/30082026_0055_legacy_workbench_shared_context_bootstrap.sql` after the legacy Banking table bootstrap and before repository migrations; it must prove the required columns and zero duplicate open shared contexts, reject an unexpected same-named index, and create only the exact replacement unique index required before the old actor-scoped index is removed;
 - append `options=-c%20pg_show_plans.is_enabled%3Doff` to each CloudTMS PostgREST `PGRST_DB_URI`, preserving every other URI component;
 - verify the live PostgreSQL memory profile and volume after any Miget resize;
 - map only the audited restored logical owner to `CURRENT_USER`; never assume `SET ROLE postgres` works;

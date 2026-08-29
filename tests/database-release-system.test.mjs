@@ -208,6 +208,7 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.deepEqual(release.legacyUpgradeBootstrapFiles, [
     'supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql',
     'supabase/repeatable/08042026_1151_newtablesbanking.sql',
+    'supabase/release/30082026_0055_legacy_workbench_shared_context_bootstrap.sql',
     'supabase/release/24082026_1128_legacy_upgrade_trigger_shims.sql',
   ]);
   assert.equal(release.baselineFiles[0], release.legacyUpgradeBootstrapFiles[0]);
@@ -223,7 +224,13 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   const schemaBootstrap = read(release.legacyUpgradeBootstrapFiles[1]);
   assert.match(schemaBootstrap, /CREATE TABLE IF NOT EXISTS public\.banking_pay_workbench_sessions/);
   assert.match(schemaBootstrap, /Safe to rerun/);
-  const bootstrap = read(release.legacyUpgradeBootstrapFiles[2]);
+  const sharedContextBootstrap = read(release.legacyUpgradeBootstrapFiles[2]);
+  assert.match(sharedContextBootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS ux_bpay_workbench_sessions_shared_context_open/);
+  assert.match(sharedContextBootstrap, /GROUP BY session_signature, pay_date, week_ending_cutoff/);
+  assert.match(sharedContextBootstrap, /HAVING count\(\*\) > 1/);
+  assert.match(sharedContextBootstrap, /unexpected definition; refusing bootstrap/);
+  assert.doesNotMatch(sharedContextBootstrap, /DROP\s+INDEX|INSERT\s+INTO|UPDATE\s+public\.|DELETE\s+FROM|TRUNCATE/i);
+  const bootstrap = read(release.legacyUpgradeBootstrapFiles[3]);
   assert.match(bootstrap, /to_regprocedure/);
   assert.match(bootstrap, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.match(bootstrap, /return OLD/);
