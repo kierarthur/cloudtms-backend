@@ -129,6 +129,8 @@ The plan must name every affected Worker and prove its repository, branch, worki
 
 Secondary Workers use dedicated `deploy/cloudflare/<worker>` branches. A prepared branch is not proof of a Workers Builds connection. Verify the actual connection and the resulting deployment identity. Preserve the Candidate deployment order: normal backend, private Worker, synthetic Worker, public broker last.
 
+For an existing LIVE Worker, preserve the target's current provider, session, download, stationery and other target-owned variable/secret values. Never copy TEST values into LIVE. Compare variable and secret names before and after deployment, use Wrangler's `--keep-vars` safeguard when the repository does not declare every retained LIVE variable, and stop if a required LIVE binding or secret name is missing. New capabilities must deploy disabled-first until their separate Worker topology, bindings, credentials and activation authority have been proved; installing current source is not permission to enable sends, providers, payments, Candidate routing, Google switching or background drains.
+
 After deployment, require bounded evidence for:
 
 - Worker version/deployment identity and effective route;
