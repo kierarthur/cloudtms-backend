@@ -934,13 +934,6 @@ LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
 SET search_path TO 'public'
-SET plpgsql_check.mode TO 'disabled'
-SET plpgsql_check.profiler TO 'off'
-SET plpgsql_check.tracer TO 'off'
-SET plpgsql_check.constants_tracing TO 'off'
-SET plpgsql_check.cursors_leaks TO 'off'
-SET plpgsql_check.strict_cursors_leaks TO 'off'
-SET plpgsql_check.fatal_errors TO 'off'
 AS $function$
 DECLARE
   v_now timestamptz := clock_timestamp();

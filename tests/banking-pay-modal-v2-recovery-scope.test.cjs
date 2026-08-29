@@ -23,7 +23,8 @@ test('ALL recovery logic and all financial expressions remain byte-identical', (
 });
 test('three-argument revalidator overload preserves the original owner body and ALL branch', () => {
   const name='public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1';
-  const original=declaration(read('19072026_1405_revalidate_recovery_headroom_after_materialisation.sql'),name);
+  const original=declaration(read('19072026_1405_revalidate_recovery_headroom_after_materialisation.sql'),name)
+    .replace(/^SET plpgsql_check\.[^\n]+\n/gm, '');
   let actual=declaration(read('28082026_1427_banking_pay_modal_recovery_channel_scope.sql'),name);
   actual=strip(strip(actual,'BANKING_PAY_MODAL_RECOVERY_SCOPE_VALIDATION_V2'),'BANKING_PAY_MODAL_NON_V3_SCOPE_FENCE_V2');
   actual=actual.replace('  p_candidate_id uuid,\n  p_options_json jsonb\n)','  p_candidate_id uuid\n)');
@@ -36,4 +37,9 @@ test('write-channel filter is closed, not SQL interpolation or a new allocation 
   assert.match(sql,/NOT IN \('ALL','PAYE','UMBRELLA'\)/);
   assert.doesNotMatch(sql,/pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
   assert.doesNotMatch(sql,/GRANT[^;]*\bTO\s+[^;]*\b(?:anon|authenticated|PUBLIC)\b/i);
+  assert.doesNotMatch(
+    sql,
+    /(?:SET|ALTER\s+FUNCTION[^;]*\s+SET)\s+plpgsql_check\./i,
+    'the provider-neutral Banking definition must not require permission to set plpgsql_check GUCs',
+  );
 });
