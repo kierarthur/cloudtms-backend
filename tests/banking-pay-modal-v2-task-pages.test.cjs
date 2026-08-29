@@ -2,11 +2,18 @@ const assert=require('node:assert/strict');const fs=require('node:fs');const pat
 const {spawnSync}=require('node:child_process');const root=path.resolve(__dirname,'..');
 const {pathToFileURL}=require('node:url');
 test('Action and Updating paging is one bounded read over complete tasks, not payment selection',()=>{
- const sql=fs.readFileSync(path.join(root,'supabase/repeatable/28082026_2130_banking_pay_modal_task_pages.sql'),'utf8');
+ const sql=fs.readFileSync(path.join(root,'supabase/repeatable/29082026_1831_banking_pay_action_list_presentation_v1.sql'),'utf8');
  for(const owner of ['task_summaries','context','draft_gate','cursor_decode','cursor_encode'])
   assert.ok(sql.includes(`private.pay_workbench_modal_${owner}_v2`),owner);
  assert.match(sql,/public\.pay_workbench_session_get_action_required_page_v1/);
  assert.match(sql,/p_view NOT IN \('ACTION_REQUIRED','UPDATING'\)/);
+ assert.match(sql,/p_sort_key NOT IN \('TITLE','CANDIDATES','PAYMENTS','AMOUNT'\)/);
+ for(const field of ['candidate_name','candidate_reference','payment_label','payment_date','affected_display_amount','linked_timesheet_id'])
+  assert.match(sql,new RegExp(field),field);
+ assert.match(sql,/FROM tasks t\)\s*,\s*'valid_presentation'/,
+  'the original complete-task validation remains authoritative');
+ assert.match(sql,/BANKING_PAY_V2_INVALID_TASK_PRESENTATION/,
+  'new display facts have their own fail-closed validation');
  assert.match(sql,/p_limit NOT BETWEEN 1 AND 100/);assert.match(sql,/256\*1024/);
  assert.match(sql,/SECURITY DEFINER SET search_path TO ''/);assert.match(sql,/TO service_role/);
  assert.match(sql,/NOTIFY pgrst/);assert.doesNotMatch(sql,/\b(?:OFFSET|INSERT INTO|UPDATE public\.|DELETE FROM|EXECUTE|LOOP)\b(?! ON)/i);
@@ -21,7 +28,7 @@ test('actual Action pages retain complete tasks and reject changed cursor scope'
  const worker=await import(pathToFileURL(path.join(root,'broker/src/banking-pay-modal-v2.js')).href);
  const issues=require(path.join(process.env.BANKING_MODAL_FRONTEND_ROOT,'js/banking-pay-modal-v2-issues.js'));
  const results=r.stdout.trim().split(/\r?\n/).filter(line=>line.startsWith('{')).map(line=>JSON.parse(line));
- assert.equal(results.length,17);
+ assert.equal(results.length,19);
  for(const {label,payload,summary} of results){
   const limit=label.startsWith('forty_')?40:100,cursor=payload.page_number>1?'current_boundary':null;
   const args={p_session_id:payload.session_id,p_options_json:{expected_session_version:payload.session_version,

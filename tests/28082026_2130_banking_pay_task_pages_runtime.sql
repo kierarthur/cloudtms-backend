@@ -48,6 +48,8 @@ INSERT INTO task_page_results VALUES('CANDIDATES_ASC',pg_temp.read_tasks('CANDID
 INSERT INTO task_page_results VALUES('CANDIDATES_DESC',pg_temp.read_tasks('CANDIDATES','DESC'));
 INSERT INTO task_page_results VALUES('PAYMENTS_ASC',pg_temp.read_tasks('PAYMENTS','ASC'));
 INSERT INTO task_page_results VALUES('PAYMENTS_DESC',pg_temp.read_tasks('PAYMENTS','DESC'));
+INSERT INTO task_page_results VALUES('AMOUNT_ASC',pg_temp.read_tasks('AMOUNT','ASC'));
+INSERT INTO task_page_results VALUES('AMOUNT_DESC',pg_temp.read_tasks('AMOUNT','DESC'));
 INSERT INTO task_page_results VALUES('literal_search',pg_temp.read_tasks(p_search=>'%_'));
 INSERT INTO task_page_results VALUES('empty_search',pg_temp.read_tasks(p_search=>'no matching task fixture'));
 DO $pages$
@@ -70,8 +72,10 @@ BEGIN
  IF jsonb_array_length(c->'rows')<>25 OR c->>'page_number'<>'3' OR c->'has_previous'<>'true'::jsonb THEN RAISE EXCEPTION 'ACTION_THIRD_PAGE';END IF;
  IF (SELECT payload FROM task_page_results WHERE label='forty_previous') IS DISTINCT FROM
   (SELECT payload FROM task_page_results WHERE label='forty_second') THEN RAISE EXCEPTION 'ACTION_PREVIOUS_CHANGED_PAGE';END IF;
- FOR t IN SELECT * FROM task_page_results WHERE label IN ('TITLE_ASC','TITLE_DESC','CANDIDATES_ASC','CANDIDATES_DESC','PAYMENTS_ASC','PAYMENTS_DESC') LOOP
-  IF t.payload->'rows' IS DISTINCT FROM a->'rows' THEN RAISE EXCEPTION 'ACTION_TIE_SORT_UNSTABLE: %',t.label;END IF;
+ FOR t IN SELECT * FROM task_page_results WHERE label IN ('TITLE_ASC','TITLE_DESC','CANDIDATES_ASC','CANDIDATES_DESC','PAYMENTS_ASC','PAYMENTS_DESC','AMOUNT_ASC','AMOUNT_DESC') LOOP
+  IF t.payload->>'total_count'<>'105' OR jsonb_array_length(t.payload->'rows')<>100
+   OR (SELECT count(DISTINCT r->>'identity') FROM jsonb_array_elements(t.payload->'rows') r)<>100 THEN
+   RAISE EXCEPTION 'ACTION_SORT_CHANGED_SCOPE: %',t.label;END IF;
  END LOOP;
  SELECT payload INTO STRICT c FROM task_page_results WHERE label='literal_search';
  IF c->'rows' IS DISTINCT FROM a->'rows' THEN RAISE EXCEPTION 'ACTION_LITERAL_SEARCH_NOT_LITERAL';END IF;
@@ -82,7 +86,7 @@ BEGIN
   BEGIN PERFORM pg_temp.read_tasks(p_search=>v_bad);RAISE EXCEPTION 'ACTION_BAD_SEARCH_ACCEPTED';
    EXCEPTION WHEN invalid_parameter_value THEN IF SQLERRM<>'BANKING_PAY_V2_INVALID_INPUT' THEN RAISE;END IF;END;
  END LOOP;
- BEGIN PERFORM pg_temp.read_tasks(p_sort=>'AMOUNT');RAISE EXCEPTION 'ACTION_BAD_SORT_ACCEPTED';
+ BEGIN PERFORM pg_temp.read_tasks(p_sort=>'GROSS');RAISE EXCEPTION 'ACTION_BAD_SORT_ACCEPTED';
   EXCEPTION WHEN invalid_parameter_value THEN IF SQLERRM<>'BANKING_PAY_V2_INVALID_INPUT' THEN RAISE;END IF;END;
  BEGIN PERFORM pg_temp.read_tasks(p_view=>'BLOCKED');RAISE EXCEPTION 'ACTION_BAD_VIEW_ACCEPTED';
   EXCEPTION WHEN invalid_parameter_value THEN IF SQLERRM<>'BANKING_PAY_V2_INVALID_INPUT' THEN RAISE;END IF;END;
@@ -116,7 +120,8 @@ END;
 $pages$;
 SAVEPOINT varying_task_sorts;
 UPDATE public.banking_pay_workbench_preview_rows SET row_json=row_json||jsonb_build_object('resolution_family',
- CASE WHEN row_ordinal%3=0 THEN 'BUCKETED' WHEN row_ordinal%3=1 THEN 'TAXABLE_CHANNEL_RESTRUCTURE' ELSE 'NON_BUCKET' END)
+ CASE WHEN row_ordinal%3=0 THEN 'BUCKETED' WHEN row_ordinal%3=1 THEN 'TAXABLE_CHANNEL_RESTRUCTURE' ELSE 'NON_BUCKET' END,
+ 'amount_display',(10+row_ordinal)::numeric(16,2)::text)
 WHERE session_id='10000000-0000-4000-8000-000000000005' AND row_ordinal<=105;
 INSERT INTO public.banking_pay_workbench_preview_rows(id,session_id,candidate_id,section,row_key,row_ordinal,row_json,key_type,key_value,selected,selection_state,status,session_version)
 SELECT ('10000000-0000-4000-8000-'||lpad((5000+n)::text,12,'0'))::uuid,r.session_id,r.candidate_id,r.section,
@@ -136,18 +141,22 @@ BEGIN
  b:=pg_temp.read_tasks(p_sort,p_direction,a->>'next_cursor');all_rows:=(a->'rows')||(b->'rows');
  IF a->>'total_count'<>'106' OR jsonb_array_length(all_rows)<>106
   OR (SELECT count(DISTINCT x->>'identity') FROM jsonb_array_elements(all_rows) x)<>106 THEN RAISE EXCEPTION 'VARIED_TASK_SORT_LOST_MEMBERS';END IF;
- WITH values AS (SELECT n,r->>'identity' AS id,lower(r->>'title') COLLATE "C" AS title,
-  (r->>CASE p_sort WHEN 'CANDIDATES' THEN 'affected_candidate_count' ELSE 'affected_payment_count' END)::bigint AS amount
+ WITH values AS (SELECT n,r->>'identity' AS id,
+  CASE p_sort WHEN 'CANDIDATES' THEN lower(COALESCE(r->>'candidate_name',(r->>'affected_candidate_count')||' candidates')) COLLATE "C"
+    ELSE lower(r->>'title') COLLATE "C" END AS title,
+  CASE p_sort WHEN 'PAYMENTS' THEN (r->>'affected_payment_count')::numeric
+    WHEN 'AMOUNT' THEN (r->>'affected_display_amount')::numeric END AS amount
   FROM jsonb_array_elements(all_rows) WITH ORDINALITY e(r,n)), compared AS (
   SELECT v.*,lag(id) OVER(ORDER BY n) AS old_id,lag(title) OVER(ORDER BY n) AS old_title,
    lag(amount) OVER(ORDER BY n) AS old_amount FROM values v)
- SELECT count(*) FILTER(WHERE n>1 AND CASE WHEN p_sort='TITLE' THEN
-    CASE WHEN p_direction='ASC' THEN title<old_title ELSE title>old_title END
-     OR (title=old_title AND id COLLATE "C"<old_id COLLATE "C")
+ SELECT count(*) FILTER(WHERE n>1 AND CASE WHEN p_sort IN ('TITLE','CANDIDATES') THEN
+    (title IS NOT NULL AND old_title IS NULL)
+     OR CASE WHEN p_direction='ASC' THEN title<old_title ELSE title>old_title END
+     OR (title IS NOT DISTINCT FROM old_title AND CASE WHEN p_direction='ASC' THEN id COLLATE "C"<old_id COLLATE "C" ELSE id COLLATE "C">old_id COLLATE "C" END)
    ELSE (amount IS NOT NULL AND old_amount IS NULL)
      OR CASE WHEN p_direction='ASC' THEN amount<old_amount ELSE amount>old_amount END
-     OR (amount IS NOT DISTINCT FROM old_amount AND id COLLATE "C"<old_id COLLATE "C") END),
-  CASE WHEN p_sort='TITLE' THEN count(DISTINCT title) ELSE count(DISTINCT amount) END
+     OR (amount IS NOT DISTINCT FROM old_amount AND CASE WHEN p_direction='ASC' THEN id COLLATE "C"<old_id COLLATE "C" ELSE id COLLATE "C">old_id COLLATE "C" END) END),
+  CASE WHEN p_sort IN ('TITLE','CANDIDATES') THEN count(DISTINCT title) ELSE count(DISTINCT amount) END
  INTO bad_count,variation FROM compared;
  IF bad_count<>0 OR variation<2 THEN RAISE EXCEPTION 'VARIED_TASK_SORT_WRONG_ORDER: % % % %',p_sort,p_direction,bad_count,variation;END IF;
  IF p_sort='PAYMENTS' AND (all_rows#>'{105,affected_payment_count}' IS DISTINCT FROM 'null'::jsonb
@@ -161,6 +170,8 @@ SELECT pg_temp.verify_varied_task_sort('CANDIDATES','ASC');
 SELECT pg_temp.verify_varied_task_sort('CANDIDATES','DESC');
 SELECT pg_temp.verify_varied_task_sort('PAYMENTS','ASC');
 SELECT pg_temp.verify_varied_task_sort('PAYMENTS','DESC');
+SELECT pg_temp.verify_varied_task_sort('AMOUNT','ASC');
+SELECT pg_temp.verify_varied_task_sort('AMOUNT','DESC');
 ROLLBACK TO SAVEPOINT varying_task_sorts;
 -- Actual queued work is created only inside this disposable rollback fixture.
 -- No work executor is invoked.105 separate source owners require continuation.

@@ -257,7 +257,7 @@ test('large JSON body is bounded and never submitted', async () => {
 
 // BP-102/BP-121: list-local navigation is not a main-table/Draft scope filter.
 for (const [kind, segment, keys] of [
-  ['actions', 'action-required', ['TITLE', 'CANDIDATES', 'PAYMENTS']],
+  ['actions', 'action-required', ['CANDIDATES', 'PAYMENTS', 'TITLE', 'AMOUNT']],
   ['blocked', 'blocked', ['CANDIDATE', 'REASON', 'AMOUNT']]
 ]) {
   const list = (search = '', sort_key = keys[0], sort_direction = 'ASC') => envelope({

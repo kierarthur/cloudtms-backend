@@ -12,7 +12,7 @@ const isObject = value => value !== null && typeof value === 'object' && !Array.
 const count = value => Number.isSafeInteger(value) && value >= 0;
 const text = value => typeof value === 'string';
 const LIST_SORTS = Object.freeze({
-  actions: Object.freeze(['TITLE', 'CANDIDATES', 'PAYMENTS']),
+  actions: Object.freeze(['CANDIDATES', 'PAYMENTS', 'TITLE', 'AMOUNT']),
   blocked: Object.freeze(['CANDIDATE', 'REASON', 'AMOUNT'])
 });
 
@@ -115,7 +115,8 @@ export function parseBankingPayModalInput(route, input, actorId) {
     const search = input.search ?? '';
     requireValue(text(search) && search.length <= 200 && !/[\u0000-\u001f\u007f]/u.test(search), 'BANKING_PAY_V2_INVALID_INPUT');
     args.p_search = search.trim();
-    args.p_sort_key = input.sort_key ?? LIST_SORTS[route.kind][0];
+    args.p_sort_key = input.sort_key ?? (route.kind === 'actions' && input.view === 'UPDATING'
+      ? 'TITLE' : LIST_SORTS[route.kind][0]);
     args.p_sort_direction = input.sort_direction ?? 'ASC';
     requireValue(LIST_SORTS[route.kind].includes(args.p_sort_key), 'BANKING_PAY_V2_INVALID_SORT');
     requireValue(['ASC', 'DESC'].includes(args.p_sort_direction), 'BANKING_PAY_V2_INVALID_SORT');
@@ -278,6 +279,17 @@ function validIssueCounts(value) {
 function validTask(row, state) {
   return isObject(row) && text(row.identity) && TOKEN.test(row.identity) && row.issue_state === state
     && text(row.title) && row.title.trim().length > 0 && validIssueCounts(row)
+    && (row.candidate_name == null || (row.affected_candidate_count === 1 && text(row.candidate_name)))
+    && (row.candidate_reference == null || (row.affected_candidate_count === 1 && typeof row.candidate_reference === 'string'))
+    && (row.payment_label == null || (row.affected_payment_count_complete === true
+      && row.affected_payment_count === 1 && text(row.payment_label)))
+    && (row.payment_date == null || (row.affected_payment_count_complete === true
+      && row.affected_payment_count === 1 && /^\d{4}-\d{2}-\d{2}$/.test(row.payment_date)))
+    && (row.affected_display_amount == null || (row.affected_payment_count_complete === true
+      && row.affected_payment_count === 1 && text(row.affected_display_amount)
+      && DECIMAL.test(row.affected_display_amount) && row.affected_display_amount !== '-0.00'))
+    && (row.linked_timesheet_id == null || (row.affected_payment_count_complete === true
+      && row.affected_payment_count === 1 && UUID.test(row.linked_timesheet_id)))
     && row.indefinite_snooze !== true && row.updating !== true;
 }
 function validateTasks(payload, args, fail) {

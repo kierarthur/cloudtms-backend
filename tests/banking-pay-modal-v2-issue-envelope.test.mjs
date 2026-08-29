@@ -75,6 +75,27 @@ for(const n of [0,105,null])test(`Action list accepts truthful payment count ${n
  const value=list({...actionRow(),affected_payment_count:n,affected_payment_count_complete:n!==null});
  assert.equal(validateBankingPayModalEnvelope(value,'actions',listArgs),value);
 });
+test('Action list accepts exact single-payment presentation facts without changing task ownership',()=>{
+ const value=list({...actionRow(),affected_payment_count:1,affected_payment_count_complete:true,
+  candidate_name:'James Terwane',candidate_reference:'CCR-03726',payment_label:'Timesheet payment',
+  payment_date:'2026-06-14',affected_display_amount:'200.00',linked_timesheet_id:id(77)});
+ assert.equal(validateBankingPayModalEnvelope(value,'actions',listArgs),value);
+});
+for(const [label,change] of Object.entries({
+ candidateOnMulti:r=>Object.assign(r,{candidate_name:'Invented',affected_candidate_count:2}),
+ referenceOnMulti:r=>Object.assign(r,{candidate_reference:'INVENTED',affected_candidate_count:2}),
+ paymentOnMulti:r=>Object.assign(r,{payment_label:'Payment',affected_payment_count:2}),
+ dateOnMulti:r=>Object.assign(r,{payment_date:'2026-06-14',affected_payment_count:2}),
+ amountOnMulti:r=>Object.assign(r,{affected_display_amount:'10.00',affected_payment_count:2}),
+ timesheetOnMulti:r=>Object.assign(r,{linked_timesheet_id:id(77),affected_payment_count:2}),
+ badDate:r=>Object.assign(r,{payment_date:'14/06/2026',affected_payment_count:1}),
+ badAmount:r=>Object.assign(r,{affected_display_amount:'10',affected_payment_count:1}),
+ negativeZero:r=>Object.assign(r,{affected_display_amount:'-0.00',affected_payment_count:1}),
+ badTimesheet:r=>Object.assign(r,{linked_timesheet_id:'not-a-uuid',affected_payment_count:1})
+}))test(`Action list rejects contradictory presentation ${label}`,()=>{
+ const row=actionRow();Object.assign(row,{affected_payment_count_complete:true});change(row);
+ assert.throws(()=>validateBankingPayModalEnvelope(list(row),'actions',listArgs),/INVALID_RESPONSE/);
+});
 for(const [label,change] of Object.entries({missingCompleteness:r=>delete r.affected_payment_count_complete,
  unknownZero:r=>{r.affected_payment_count=0;r.affected_payment_count_complete=false;},
  knownNull:r=>r.affected_payment_count=null,negative:r=>r.affected_payment_count=-1,
