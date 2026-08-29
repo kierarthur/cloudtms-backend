@@ -185517,6 +185517,53 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_lane_allowed_job_types: sourceBuildParallelEnabled ? ['WORKBENCH_CANDIDATE_SOURCE_BUILD'] : []
   });
 
+  let discardedSessionBlockerRepair = {
+    ok: true,
+    examined_count: 0,
+    repaired_candidate_count: 0,
+    terminalised_job_count: 0,
+    skipped_count: 0,
+    failed_count: 0
+  };
+  if (sourceBuildAllowedByFilter) {
+    try {
+      discardedSessionBlockerRepair = unwrapRpc(await sbRpc(env, 'pay_workbench_repair_discarded_session_blockers_v1', {
+        p_session_id: sessionId,
+        p_candidate_id: candidateId,
+        p_limit: Math.min(10, Math.max(1, claimLimit)),
+        p_reason: 'WORKBENCH_DRAIN_DISCARDED_SESSION_SOURCE_BUILD_BLOCKER_REPAIR'
+      }, {
+        routeClass: 'WORKBENCH_MUTATION',
+        purpose: 'WORKBENCH_DISCARDED_SESSION_SOURCE_BUILD_BLOCKER_REPAIR',
+        timeoutMs: Math.min(8000, dbRpcHardCapMs),
+        bankingPay: true
+      }), 'pay_workbench_repair_discarded_session_blockers_v1');
+      rpcCallCount += 1;
+      if (!isPlainObject(discardedSessionBlockerRepair) || !booleanFrom(discardedSessionBlockerRepair.ok)) {
+        const repairError = new Error('Banking Pay could not safely retire obsolete candidate work from a discarded session.');
+        repairError.code = 'WORKBENCH_DISCARDED_SESSION_BLOCKER_REPAIR_FAILED';
+        throw repairError;
+      }
+      const repairedDiscardedBlockerCount = countFrom(discardedSessionBlockerRepair, ['repaired_candidate_count']);
+      if (repairedDiscardedBlockerCount > 0) {
+        madeProgress = true;
+        logDrainDiag('WORKBENCH_DISCARDED_SESSION_BLOCKER_REPAIRED', {
+          repaired_candidate_count: repairedDiscardedBlockerCount,
+          terminalised_job_count: countFrom(discardedSessionBlockerRepair, ['terminalised_job_count']),
+          terminalised_attempt_count: countFrom(discardedSessionBlockerRepair, ['terminalised_attempt_count']),
+          obsoleted_build_count: countFrom(discardedSessionBlockerRepair, ['obsoleted_build_count']),
+          skipped_count: countFrom(discardedSessionBlockerRepair, ['skipped_count'])
+        });
+      }
+    } catch (repairError) {
+      logDrainDiag('WORKBENCH_DISCARDED_SESSION_BLOCKER_REPAIR_FAILED', {
+        error_code: upperTrim(repairError?.code || repairError?.name || 'WORKBENCH_DISCARDED_SESSION_BLOCKER_REPAIR_FAILED'),
+        error_message: String(repairError?.message || repairError || 'Discarded-session source-build blocker repair failed')
+      }, 'warn');
+      throw repairError;
+    }
+  }
+
   let replayedCandidateOwnerRepair = {
     ok: true,
     examined_count: 0,

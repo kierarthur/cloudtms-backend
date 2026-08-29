@@ -135,10 +135,11 @@ begin
        v_browser_executable_identities,v_hash
   from targets;
 
-  -- Banking Pay Modal Structure v2 adds nine service-only public RPCs to this
+  -- Banking Pay Modal Structure v2 and its discarded-session convergence
+  -- repair add ten service-only public RPCs to this
   -- non-Candidate catalogue. Browser execution remains exactly zero.
-  if v_count<>652 or v_service_missing<>72 or v_browser_executable<>0
-     or v_hash<>'951cb626cae1497249be73898f9906cd' then
+  if v_count<>653 or v_service_missing<>72 or v_browser_executable<>0
+     or v_hash<>'a8a9fb6f5d028dd46b6e5f16f0a0927c' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

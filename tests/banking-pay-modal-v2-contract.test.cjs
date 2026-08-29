@@ -61,11 +61,11 @@ test('v2 installs the complete additive Banking Pay modal contract', () => {
   assert.ok(release.newVerificationFiles.includes('supabase/verification/29082026_0246_banking_pay_modal_structure_v2_verification.sql'));
 });
 
-test('general browser isolation inventory admits only the nine new service RPCs', () => {
+test('general browser isolation inventory admits only the ten new service RPCs', () => {
   const verification = read(path.join(root, 'supabase', 'verification',
     '22082026_1302_general_browser_isolation_verification.sql'));
-  assert.match(verification, /v_count<>652 or v_service_missing<>72 or v_browser_executable<>0/);
-  assert.match(verification, /v_hash<>'951cb626cae1497249be73898f9906cd'/);
+  assert.match(verification, /v_count<>653 or v_service_missing<>72 or v_browser_executable<>0/);
+  assert.match(verification, /v_hash<>'a8a9fb6f5d028dd46b6e5f16f0a0927c'/);
 });
 
 test('Candidate-named isolation inventory admits only the four new service RPCs', () => {

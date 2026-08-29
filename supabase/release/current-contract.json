@@ -24254,6 +24254,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "pay_workbench_repair_discarded_session_blockers_v1(p_session_id uuid, p_candidate_id uuid, p_limit integer, p_reason text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b39c211f70af03596dd3c854c7757060c12f74e45b0ff26de2268aed7db0aab9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public"
       ],
       "schema": "public",
