@@ -21,6 +21,7 @@ DECLARE
   v_source_candidate_job uuid:=gen_random_uuid();
   v_source_root_job uuid:=gen_random_uuid();
   v_raw_target_job uuid:=gen_random_uuid();
+  v_invalid_target_owner uuid:=gen_random_uuid();
   v_deferred_source_job uuid:=gen_random_uuid();
   v_result jsonb;
   v_repair_result jsonb;
@@ -164,8 +165,26 @@ BEGIN
       'replayed_from_job_id',gen_random_uuid()::text
     ),NULL,'BUILD_INITIALISE','BUILD_INITIALISE','{}'::jsonb,1
   );
+
+  -- Reproduce the real persisted recovery shape: the raw replay row still
+  -- exists, but a later automatic-recovery pass has already pointed the scope
+  -- at a different queued owner whose session context is stale.
+  INSERT INTO public.banking_pay_workbench_jobs(
+    id,job_type,status,priority,run_at_utc,attempt_count,max_attempts,dedupe_key,
+    snapshot_run_id,session_id,candidate_id,payload_json,economic_build_id,
+    private_stage,private_cursor_kind,private_cursor_json,private_stage_version
+  ) VALUES (
+    v_invalid_target_owner,'WORKBENCH_CANDIDATE_SOURCE_BUILD','QUEUED',40,
+    clock_timestamp(),0,8,v_prefix || ':INVALID_RECOVERY_SUCCESSOR',v_snapshot_id,
+    v_target_session_id,v_candidate_repair,jsonb_build_object(
+      'session_id',v_target_session_id::text,'session_version',1,
+      'source_change_seq',7,
+      'source_build_run_id',gen_random_uuid()::text,
+      'owner_repair',true,'owner_repair_reason','HISTORICAL_REPLAY_RECOVERY'
+    ),NULL,'BUILD_INITIALISE','BUILD_INITIALISE','{}'::jsonb,1
+  );
   UPDATE public.banking_pay_workbench_session_scope
-  SET status='SOURCE_BUILD_PENDING',dirty=true,pending_job_id=v_raw_target_job,error_json=NULL
+  SET status='SOURCE_BUILD_PENDING',dirty=true,pending_job_id=v_invalid_target_owner,error_json=NULL
   WHERE session_id=v_target_session_id AND candidate_id=v_candidate_repair;
 
   v_repair_result:=public.pay_workbench_repair_replayed_candidate_jobs_v1(
@@ -209,6 +228,7 @@ BEGIN
         '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
      OR v_owner.source_build_run_id='10000000-0000-4000-8000-000000009902'
      OR LOWER(COALESCE(v_owner.raw_replay,'false'))='true'
+     OR v_owner.pending_job_id IN (v_raw_target_job,v_invalid_target_owner)
      OR v_owner.dedupe_key LIKE 'REPLAY_REPLACED_SESSION:%' THEN
     RAISE EXCEPTION USING MESSAGE='BANKING_PAY_REPLAYED_CANDIDATE_REPAIR_OWNER_INVALID',DETAIL=to_jsonb(v_owner)::text;
   END IF;

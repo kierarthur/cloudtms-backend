@@ -28,7 +28,8 @@ test('persisted raw replay jobs are terminalised under candidate lock and reboun
   assert.match(sql, /pg_try_advisory_xact_lock[\s\S]*_pay_workbench_candidate_serial_key/i);
   assert.match(sql, /REPLAY_REPLACED_SESSION:[\s\S]*source_job:%/i);
   assert.match(sql, /status='DEAD'[\s\S]*REPLACED_SESSION_CANDIDATE_JOB_REQUIRES_CANONICAL_OWNER/i);
-  assert.match(sql, /public\.pay_workbench_repair_orphaned_pending_source_build\(/i);
+  assert.match(sql, /replayed_candidate_owner_terminalised_at_utc[\s\S]*public\.pay_workbench_repair_orphaned_pending_source_build\(/i);
+  assert.doesNotMatch(sql, /IF v_scope\.pending_job_id IS NOT NULL AND EXISTS\([\s\S]*pay_workbench_repair_orphaned_pending_source_build/i);
   assert.match(sql, /PAY_WORKBENCH_REPLAYED_CANDIDATE_OWNER_REPAIR_POSTCONDITION_FAILED/i);
   assert.match(sql, /EXCEPTION WHEN OTHERS[\s\S]*REPAIR_FAILED_NO_PARTIAL_ADOPTION/i);
   assert.match(sql, /REVOKE ALL ON FUNCTION public\.pay_workbench_repair_replayed_candidate_jobs_v1\(uuid,uuid,integer,text\) FROM PUBLIC,anon,authenticated,service_role;/i);
@@ -54,6 +55,7 @@ test('rollback verifier proves canonical replay, persisted repair, deferral and 
   assert.match(verification, /ROLLBACK;/m);
   assert.match(verification, /BANKING_PAY_REPLACED_CANDIDATE_RAW_JOB_COPIED/i);
   assert.match(verification, /BANKING_PAY_REPLAYED_CANDIDATE_REPAIR_OWNER_INVALID/i);
+  assert.match(verification, /INVALID_RECOVERY_SUCCESSOR/i);
   assert.match(verification, /BANKING_PAY_REPLACED_CANDIDATE_DEFER_CONTRACT_INVALID/i);
   assert.match(verification, /BANKING_PAY_REPLAYED_CANDIDATE_REPAIR_NOT_IDEMPOTENT/i);
   assert.doesNotMatch(verification, /CREATE\s+DRAFT|provider submission|settlement execution/i);

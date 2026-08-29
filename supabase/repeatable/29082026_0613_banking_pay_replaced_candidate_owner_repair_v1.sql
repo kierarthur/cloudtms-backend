@@ -495,20 +495,18 @@ BEGIN
         CONTINUE;
       END IF;
 
-      IF v_scope.pending_job_id IS NOT NULL AND EXISTS(
-        SELECT 1 FROM public.banking_pay_workbench_jobs AS old_owner
-        WHERE old_owner.id=v_scope.pending_job_id
-          AND old_owner.status='DEAD'
-          AND LOWER(BTRIM(COALESCE(old_owner.payload_json->>'replayed_candidate_owner_terminalised','false')))
-              IN ('true','t','1','yes','y','on')
-      ) THEN
-        v_repair_result:=public.pay_workbench_repair_orphaned_pending_source_build(
-          v_candidate.session_id,v_candidate.candidate_id,1,v_now,
-          'REPLACED_SESSION_CANDIDATE_OWNER_REPAIR'
-        );
-      ELSE
-        v_repair_result:=jsonb_build_object('ok',true,'repair_not_required',true);
-      END IF;
+      -- A historical automatic-recovery pass can already have moved the scope
+      -- pointer away from the raw replay job and onto a later successor whose
+      -- session/version/change-sequence context is still invalid.  Therefore
+      -- repair the candidate owner after terminalising the proved raw replay
+      -- work even when that raw row is no longer the current pending_job_id.
+      -- The existing bounded owner repair is idempotent: it skips a valid
+      -- current owner, rebinds a valid successor, or enqueues exactly one
+      -- canonical successor under the same candidate-serial authority.
+      v_repair_result:=public.pay_workbench_repair_orphaned_pending_source_build(
+        v_candidate.session_id,v_candidate.candidate_id,1,v_now,
+        'REPLACED_SESSION_CANDIDATE_OWNER_REPAIR'
+      );
 
       SELECT scope_row.* INTO STRICT v_scope
       FROM public.banking_pay_workbench_session_scope AS scope_row
