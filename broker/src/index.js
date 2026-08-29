@@ -81086,7 +81086,10 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     // files auditable without ever mixing them into the current evidence/action set.
     const withdrawnSubmissions = [];
     let managerRefusals = [];
-    const bookingId = asUuidStringOrNull(ts?.booking_id);
+    // booking_id is an authoritative text lineage key. Daily Candidate
+    // submissions use canonical non-UUID values, so UUID coercion would hide
+    // their retained versions even though the lineage is otherwise valid.
+    const bookingId = trimStr(ts?.booking_id);
     if (wantMeta && bookingId) {
       try {
         const { rows: withdrawnRows } = await sbFetch(
