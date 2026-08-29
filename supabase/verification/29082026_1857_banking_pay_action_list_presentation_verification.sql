@@ -16,6 +16,7 @@ declare
   v_session uuid := gen_random_uuid();
   v_row uuid := gen_random_uuid();
   v_timesheet uuid := gen_random_uuid();
+  v_candidate_reference text;
   v_options jsonb;
   v_result jsonb;
   v_item jsonb;
@@ -48,6 +49,11 @@ begin
   values(v_actor,'banking-action-presentation-'||v_actor::text||'@example.invalid','UNUSABLE_VERIFICATION_ONLY','admin',true);
   insert into public.candidates(id,display_name,tms_ref,pay_method)
   values(v_candidate,'Action presentation fixture','ACTION-VERIFY','PAYE');
+  select c.tms_ref into strict v_candidate_reference
+  from public.candidates c where c.id=v_candidate;
+  if nullif(btrim(v_candidate_reference),'') is null then
+    raise exception 'BANKING_PAY_ACTION_PRESENTATION_VERIFY: canonical candidate reference is missing';
+  end if;
   insert into public.banking_pay_snapshot_runs(id,pay_date,week_ending_cutoff,pay_week_start,eligibility_from_date,eligibility_to_date)
   values(v_snapshot,'2026-08-28','2026-08-30','2026-08-24','2026-08-01','2026-08-31');
   insert into public.banking_pay_workbench_sessions(
@@ -60,9 +66,9 @@ begin
   ) values(v_session,v_candidate,1,'READY',true,false,
     '{"attestation_version":"CERTIFIED_SOURCE_PREVIEW_PUBLICATION_V3","contract_version":"3","semantic_contract_version":"READY_TO_PAY_SEMANTIC_V2"}');
   insert into public.banking_pay_workbench_preview_rows(
-    id,session_id,candidate_id,section,row_key,row_ordinal,row_json,key_type,key_value,
+    id,session_id,candidate_id,timesheet_id,section,row_key,row_ordinal,row_json,key_type,key_value,
     selected,selection_state,status,session_version
-  ) values(v_row,v_session,v_candidate,'cases_resolutions','action-presentation-fixture',1,
+  ) values(v_row,v_session,v_candidate,v_timesheet,'cases_resolutions','action-presentation-fixture',1,
     jsonb_build_object(
       'candidate_name','Action presentation fixture','pay_channel','PAYE','line_type','TIMESHEET_PAYMENT',
       'timesheet_id',v_timesheet,'week_ending_date','2026-08-30','amount_display','123.45',
@@ -94,7 +100,7 @@ begin
       end if;
       v_item := v_result#>'{rows,0}';
       if v_item->>'candidate_name' is distinct from 'Action presentation fixture'
-         or v_item->>'candidate_reference' is distinct from 'ACTION-VERIFY'
+         or v_item->>'candidate_reference' is distinct from v_candidate_reference
          or v_item->>'payment_label' is distinct from 'Timesheet payment'
          or v_item->>'payment_date' is distinct from '2026-08-30'
          or v_item->>'affected_display_amount' is distinct from '123.45'

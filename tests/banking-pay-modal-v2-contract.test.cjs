@@ -107,6 +107,20 @@ test('candidate-wide selection is one revision-fenced server mutation', () => {
   assert.doesNotMatch(response + core, /LOOP\s+[\s\S]*pay_workbench_session_set_selected_rows/i);
 });
 
+test('action-list verifier uses canonical candidate and Timesheet identities', () => {
+  const verification = read(path.join(root, 'supabase', 'verification',
+    '29082026_1857_banking_pay_action_list_presentation_verification.sql'));
+  assert.match(verification, /select c\.tms_ref into strict v_candidate_reference/);
+  assert.match(verification,
+    /id,session_id,candidate_id,timesheet_id,section,row_key,row_ordinal,row_json,key_type,key_value/);
+  assert.match(verification,
+    /values\(v_row,v_session,v_candidate,v_timesheet,'cases_resolutions'/);
+  assert.match(verification,
+    /v_item->>'candidate_reference' is distinct from v_candidate_reference/);
+  assert.doesNotMatch(verification,
+    /v_item->>'candidate_reference' is distinct from 'ACTION-VERIFY'/);
+});
+
 test('Worker exposes only the bounded typed v2 adapter routes', () => {
   const worker = read(workerPath);
   const router = read(routerPath);
