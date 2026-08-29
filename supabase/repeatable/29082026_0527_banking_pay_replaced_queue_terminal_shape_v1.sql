@@ -1,5 +1,6 @@
--- Banking Pay bounded-scope Version 1.2.4
--- Exact installed TEST baseline, extended only to initialise typed source-build jobs.
+-- Banking Pay replacement-session queue terminal-shape correction.
+-- Replaces only the current queue replay routine. Payment economics, selection,
+-- Draft, provider and settlement authorities remain unchanged.
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_session_replay_replaced_queue_v1(
   p_source_session_id uuid,
@@ -283,6 +284,34 @@ BEGIN
     SET status = 'DEAD',
         failed_at_utc = COALESCE(old_job.failed_at_utc, v_now),
         updated_at_utc = v_now,
+        private_stage = CASE
+          WHEN UPPER(BTRIM(COALESCE(old_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            AND old_job.economic_build_id IS NULL
+            AND old_job.private_stage = 'BUILD_INITIALISE'
+          THEN NULL::text
+          ELSE old_job.private_stage
+        END,
+        private_cursor_kind = CASE
+          WHEN UPPER(BTRIM(COALESCE(old_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            AND old_job.economic_build_id IS NULL
+            AND old_job.private_stage = 'BUILD_INITIALISE'
+          THEN NULL::text
+          ELSE old_job.private_cursor_kind
+        END,
+        private_cursor_json = CASE
+          WHEN UPPER(BTRIM(COALESCE(old_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            AND old_job.economic_build_id IS NULL
+            AND old_job.private_stage = 'BUILD_INITIALISE'
+          THEN '{}'::jsonb
+          ELSE old_job.private_cursor_json
+        END,
+        private_stage_version = CASE
+          WHEN UPPER(BTRIM(COALESCE(old_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            AND old_job.economic_build_id IS NULL
+            AND old_job.private_stage = 'BUILD_INITIALISE'
+          THEN NULL::integer
+          ELSE old_job.private_stage_version
+        END,
         last_error_json = jsonb_strip_nulls(
           jsonb_build_object(
             'code', 'REPLACED_SESSION_QUEUE_REPLAYED',

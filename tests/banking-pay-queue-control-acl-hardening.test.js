@@ -5,7 +5,7 @@ import test from 'node:test';
 const repoRoot = new URL('..', import.meta.url);
 const read = relativePath => readFileSync(new URL(relativePath, repoRoot), 'utf8');
 
-const replay = read('supabase/repeatable/04082026_1302_pay_workbench_session_replay_replaced_queue_v1.sql');
+const replay = read('supabase/repeatable/29082026_0527_banking_pay_replaced_queue_terminal_shape_v1.sql');
 const failJob = read('supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql');
 const migration = read('supabase/migrations/05082026_2304_banking_pay_queue_control_acl_hardening.sql');
 const canonicalBundle = read('supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
