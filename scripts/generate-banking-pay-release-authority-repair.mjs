@@ -36,6 +36,11 @@ const targets = [
     source: '04082026_1219_pay_workbench_mark_finance_case_dirty.sql',
   },
   {
+    name: 'pay_workbench_enqueue_candidate_refresh',
+    identity: 'public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb)',
+    source: '07082026_1017_pay_workbench_enqueue_candidate_refresh.sql',
+  },
+  {
     name: 'timesheet_daily_manual_process_atomic',
     identity: 'public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text)',
     source: '07082026_2224_candidate_app_weekly_office_replacements_v1.sql',
@@ -133,9 +138,9 @@ TO service_role;`);
 const output = `-- Exact provider-neutral authority repair for Banking Pay modal v2.
 --
 -- The immutable historical compatibility replay was accidentally changed by
--- the first capability-off release. Its partial hosted replay replaced seven
+-- the first capability-off release. Its partial hosted replay replaced eight
 -- current routine bodies before failing. This closure restores only those
--- seven certified definitions and their service-only ACLs. It deliberately
+-- eight certified definitions and their service-only ACLs. It deliberately
 -- contains no broad include, provider setting, economic rewrite or alternate
 -- Draft/selection owner.
 --

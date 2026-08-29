@@ -32,6 +32,7 @@ const repairTargets = [
   ['bulk_timesheet_row_patch_v1', '07082026_2224_candidate_app_weekly_office_replacements_v1.sql'],
   ['contract_week_manual_upsert_atomic', '27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql'],
   ['pay_workbench_mark_finance_case_dirty', '04082026_1219_pay_workbench_mark_finance_case_dirty.sql'],
+  ['pay_workbench_enqueue_candidate_refresh', '07082026_1017_pay_workbench_enqueue_candidate_refresh.sql'],
   ['timesheet_daily_manual_process_atomic', '07082026_2224_candidate_app_weekly_office_replacements_v1.sql'],
 ];
 const bankingV2PublicServiceIdentities = [
@@ -63,7 +64,7 @@ const definition = (source, name) => {
   return source.slice(start, end + terminator.length).trim();
 };
 
-test('immutable legacy replay is followed by the exact provider-neutral seven-routine repair', () => {
+test('immutable legacy replay is followed by the exact provider-neutral eight-routine repair', () => {
   const monolithHash = crypto.createHash('sha256').update(monolith).digest('hex');
   assert.match(reassert, new RegExp(`legacy_monolith_sha256:\\s*\\n-- ${monolithHash}`));
   const historicalIncludedFiles = [...reassert.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
@@ -91,8 +92,8 @@ test('immutable legacy replay is followed by the exact provider-neutral seven-ro
     currentClosure,
     /RETURN public\.timesheet_daily_manual_unprocess_atomic\([\s\S]*p_expected_row_signature => NULL::text[\s\S]*\);/,
   );
-  assert.equal((currentClosure.match(/REVOKE ALL ON FUNCTION/g) || []).length, 8);
-  assert.equal((currentClosure.match(/GRANT EXECUTE ON FUNCTION/g) || []).length, 8);
+  assert.equal((currentClosure.match(/REVOKE ALL ON FUNCTION/g) || []).length, 9);
+  assert.equal((currentClosure.match(/GRANT EXECUTE ON FUNCTION/g) || []).length, 9);
   for (const identity of bankingV2PublicServiceIdentities) {
     assert.ok(currentClosure.includes(identity), `missing explicit v2 ACL: ${identity}`);
   }
