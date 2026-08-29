@@ -25,12 +25,12 @@ const ready = () => envelope({ candidate_id: candidate, candidate: row(),
     selection_group_kind:null,selection_group_key:null,selection_group_member_count:0,selection_group_selected_count:0,selection_group_state:null,
     selection_group_display_amount:null,selection_group_selected_display_amount:null})),
   next_cursor: null, has_more: false, total_count: 2, page_number:1, has_previous:false, previous_cursor:null, page_anchor:'current_anchor' });
-async function invoke({ path = `${base}/candidates`, params = query, body, rpc = async () => summary(), user = { id: actor }, method = body ? 'POST' : 'GET' } = {}) {
+async function invoke({ path = `${base}/candidates`, params = query, body, rpc = async () => summary(), user = { id: actor }, method = body ? 'POST' : 'GET', contract = { banking_pay_workbench_v2: { available: true, contract_version: 1 } } } = {}) {
   let calls = 0;
   let called;
   const url = `https://test.invalid${path}${body ? '' : `?${new URLSearchParams(params)}`}`;
   const req = new Request(url, { method, ...(body ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
-  const res = await dispatchBankingPayModalV2Request({ req, user, rpc: async (...args) => { calls++; called = args; return rpc(...args); } });
+  const res = await dispatchBankingPayModalV2Request({ req, user, contract, rpc: async (...args) => { calls++; called = args; return rpc(...args); } });
   return { status: res?.status, json: res ? await res.json() : null, calls, called };
 }
 for(const [name,change] of Object.entries({
@@ -49,10 +49,15 @@ test('unrelated requests do not dispatch or touch a database', async () => {
   assert.equal(result.json, null);
   assert.equal(result.calls, 0);
 });
-test('capability remains false until acceptance; no second contract RPC', async () => {
+test('capability is true only after the independently loaded database contract agrees; no second contract RPC', async () => {
   const result = await invoke({ path: '/api/banking/pay/workbench/v2/capability', params: {} });
-  assert.deepEqual(result.json, { banking_pay_workbench_v2: { available: false, contract_version: 1 } });
+  assert.deepEqual(result.json, { banking_pay_workbench_v2: { available: true, contract_version: 1 } });
   assert.equal(result.calls, 0);
+  for (const contract of [null, {}, { banking_pay_workbench_v2: { available: false, contract_version: 1 } }, { banking_pay_workbench_v2: { available: true, contract_version: 2 } }]) {
+    const unavailable = await invoke({ path: '/api/banking/pay/workbench/v2/capability', params: {}, contract });
+    assert.deepEqual(unavailable.json, { banking_pay_workbench_v2: { available: false, contract_version: 1 } });
+    assert.equal(unavailable.calls, 0);
+  }
 });
 test('summary uses one exact RPC and preserves decimal strings unchanged', async () => {
   const result = await invoke();

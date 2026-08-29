@@ -1,9 +1,9 @@
 /** Banking Pay Modal Structure Bible v2. Transport only: no payment arithmetic.
  * This module is called inside the existing admin-authenticated Banking router.
- * Capability stays off until SQL, action parity and browser acceptance are proved.
+ * Capability is exposed only when the independently verified database contract agrees.
  */
 export const BANKING_PAY_MODAL_CONTRACT = 'BANKING_PAY_MODAL_STRUCTURE_V2';
-export const BANKING_PAY_MODAL_AVAILABLE = false;
+export const BANKING_PAY_MODAL_AVAILABLE = true;
 const PREFIX = '/api/banking/pay/workbench/v2';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN = /^[A-Za-z0-9_-]{1,4096}$/;
