@@ -765,6 +765,11 @@ begin
   insert into public.clients(id) values(v_client);
   insert into public.candidates(id,email,active,key_norm)
   values(v_candidate,'daily-workflow@example.test',true,'GCK-DAILY-TEST');
+  insert into private.candidate_daily_entitlements(
+    environment,candidate_id,enabled,reason,evidence_sha256
+  ) values(
+    'TEST',v_candidate,true,'Candidate DAILY manager-review fixture',repeat('5d',32)
+  );
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,
     week_ending_weekday_snapshot,default_submission_mode
