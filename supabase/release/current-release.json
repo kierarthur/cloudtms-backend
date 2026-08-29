@@ -7,6 +7,7 @@
   "legacyUpgradeBootstrapFiles": [
     "supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql",
     "supabase/repeatable/08042026_1151_newtablesbanking.sql",
+    "supabase/release/30082026_0055_legacy_workbench_shared_context_bootstrap.sql",
     "supabase/release/24082026_1128_legacy_upgrade_trigger_shims.sql"
   ],
   "bootstrapFile": "supabase/baseline/22082026_1506_cloudtms_new_database_bootstrap.sql",
