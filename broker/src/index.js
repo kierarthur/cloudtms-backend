@@ -35,6 +35,7 @@ import {
   normaliseBulkAuthoriseEvidenceKind
 } from './bulk-authorise-evidence-policy.js';
 import { buildBulkAuthoriseWatchVector } from './bulk-authorise-watch.js';
+import { dispatchBankingPayModalV2Request } from './banking-pay-modal-v2.js';
 import { handleBulkRowFreshnessRequest } from './bulk-row-freshness.js';
 import {
   buildCanonicalDailyFinancialSnapshot,
@@ -195538,9 +195539,10 @@ if (p.startsWith('/api/banking/')) {
     p.startsWith('/api/banking/pay/workbench/')
     || p === '/api/banking/pay/preview'
     || p === '/api/banking/pay/batch/create-draft';
+  let bankingPayWorkbenchContract = null;
   if (requiresBankingPayWorkbenchContract) {
     try {
-      await assertBankingPayWorkbenchContract(
+      bankingPayWorkbenchContract = await assertBankingPayWorkbenchContract(
         env,
         `${req.method} ${p}`
       );
@@ -195551,6 +195553,14 @@ if (p.startsWith('/api/banking/')) {
         bankingPayWorkbenchContractFailure(error)
       );
     }
+  }
+
+  if (p.startsWith('/api/banking/pay/workbench/v2/')) {
+    const bankingPayModalV2Response = await dispatchBankingPayModalV2Request({
+      req, user, contract: bankingPayWorkbenchContract,
+      rpc: (name, args, options) => sbRpc(env, name, args, options)
+    });
+    if (bankingPayModalV2Response) return withCORS(env, req, bankingPayModalV2Response);
   }
 
   if (req.method === 'GET' && p === '/api/banking/capabilities') {

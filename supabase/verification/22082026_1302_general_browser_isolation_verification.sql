@@ -131,8 +131,10 @@ begin
   into v_count,v_service_missing,v_browser_executable,v_hash
   from targets;
 
-  if v_count<>643 or v_service_missing<>72 or v_browser_executable<>0
-     or v_hash<>'f0363d2b9ead25d540d5162ca2e4f062' then
+  -- Banking Pay Modal Structure v2 adds nine service-only public RPCs to this
+  -- non-Candidate catalogue. Browser execution remains exactly zero.
+  if v_count<>652 or v_service_missing<>72 or v_browser_executable<>0
+     or v_hash<>'951cb626cae1497249be73898f9906cd' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

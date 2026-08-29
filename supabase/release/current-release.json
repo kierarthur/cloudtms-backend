@@ -55,7 +55,8 @@
     "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
     "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
     "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
-    "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql"
+    "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql",
+    "supabase/verification/29082026_0246_banking_pay_modal_structure_v2_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
@@ -75,6 +76,7 @@
     "supabase/verification/28082026_1657_candidate_google_rota_removal_verification.sql",
     "supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql",
     "supabase/verification/28082026_2203_candidate_daily_inapplicable_break_verification.sql",
-    "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql"
+    "supabase/verification/29082026_0116_candidate_daily_projection_expired_lease_recovery_verification.sql",
+    "supabase/verification/29082026_0246_banking_pay_modal_structure_v2_verification.sql"
   ]
 }

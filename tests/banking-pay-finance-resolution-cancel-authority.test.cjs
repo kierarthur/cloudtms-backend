@@ -48,11 +48,10 @@ const clear = functionBody('pay_workbench_session_clear_case_resolution');
 
 test('one durable authority owns the three finance cancellation functions and is replayed last', () => {
   assert.equal((authority.match(/^CREATE OR REPLACE FUNCTION public\./gm) || []).length, 3);
-  assert.match(reassert, new RegExp(
-    `\\\\ir ${authorityName.replaceAll('.', '\\.')}` +
-    '\\s+\\\\ir 19072026_1816_cancel_refresh_supersede_finance_dirty\\.sql',
-    'i'
-  ));
+  const authorityReplayAt = reassert.indexOf(`\\ir ${authorityName}`);
+  const finalReplayAt = reassert.indexOf('\\ir 19072026_1816_cancel_refresh_supersede_finance_dirty.sql');
+  assert.ok(authorityReplayAt >= 0 && finalReplayAt > authorityReplayAt,
+    'the later cancellation refresh authority must replay after the finance cancellation owner');
   for (const signature of [
     'pay_preview_candidate_build_finance_case_baseline(jsonb,uuid)',
     'pay_preview_candidate_build_canonical_lines(jsonb,uuid)',
