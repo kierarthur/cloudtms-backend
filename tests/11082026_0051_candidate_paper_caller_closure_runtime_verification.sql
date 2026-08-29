@@ -56,6 +56,9 @@ begin
   v_manifest_hash:=encode(private._candidate_sha256_jsonb_v1(v_manifest),'hex');
 
   insert into public.tms_users(id) values(v_actor);
+  update public.settings_defaults
+  set candidate_app_system_actor_user_id=v_actor
+  where id=1;
   insert into public.candidates(id,email,active)
   values(v_candidate,'received-'||replace(v_candidate::text,'-','')||'@example.test',true);
   insert into public.clients(id,name)

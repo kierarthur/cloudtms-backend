@@ -128,7 +128,7 @@ test('installed-state verification and real resubmission regression are release-
   assert.match(matrix, /27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql/);
   assert.match(
     candidateRuntimeWorkflow,
-    /07082026_2128_candidate_finalize_reject_no_work_rpcs_v1\.sql[\s\S]*27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql[\s\S]*28082026_1857_candidate_daily_booked_source_v1\.sql[\s\S]*28082026_1912_candidate_daily_receipt_context_v1\.sql[\s\S]*29082026_0951_candidate_expense_resubmission_anchor_v1\.sql/i
+    /07082026_2128_candidate_finalize_reject_no_work_rpcs_v1\.sql[\s\S]*27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql[\s\S]*28082026_1857_candidate_daily_booked_source_v1\.sql[\s\S]*28082026_1912_candidate_daily_receipt_context_v1\.sql[\s\S]*27082026_1255_candidate_weekly_withdrawal_reset_v1\.sql[\s\S]*28082026_0505_candidate_refused_card_recovery_v1\.sql[\s\S]*29082026_0951_candidate_expense_resubmission_anchor_v1\.sql/i
   );
   assert.match(
     candidateRuntimeWorkflow,

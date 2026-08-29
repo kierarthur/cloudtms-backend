@@ -16,6 +16,12 @@ insert into public.clients(id,name)
 values('b7080000-0000-4000-8000-000000000001','Candidate resubmission client');
 insert into public.candidates(id,email,active,key_norm)
 values('b7080000-0000-4000-8000-000000000002','candidate-resubmit@example.test',true,'RESUBMIT-GCK');
+insert into private.candidate_daily_entitlements(
+  environment,candidate_id,enabled,reason,evidence_sha256
+) values(
+  'TEST','b7080000-0000-4000-8000-000000000002',true,
+  'Candidate resubmission DAILY fixture',repeat('5f',32)
+);
 insert into public.client_settings(
   id,client_id,effective_from,default_submission_mode,week_ending_weekday,
   candidate_expenses_require_separate_timesheet,allow_daily_manager_authorise_on_phone
@@ -500,6 +506,9 @@ delete from public.timesheets_financials where candidate_id='b7080000-0000-4000-
 delete from public.timesheets where contract_id='b7080000-0000-4000-8000-000000000004';
 delete from public.contracts where id='b7080000-0000-4000-8000-000000000004';
 delete from public.client_settings where client_id='b7080000-0000-4000-8000-000000000001';
+delete from private.candidate_daily_entitlements
+where environment='TEST'
+  and candidate_id='b7080000-0000-4000-8000-000000000002';
 delete from public.candidates where id='b7080000-0000-4000-8000-000000000002';
 delete from public.clients where id='b7080000-0000-4000-8000-000000000001';
 delete from public.audit_events where object_id_text like 'b7080000-0000-4000-8000-%';

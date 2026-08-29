@@ -297,6 +297,11 @@ begin
     id,account_id,environment,selected_candidate_id,status,refresh_token_hash,expires_at_utc,absolute_expires_at_utc
   ) values(v_session,v_account,'TEST',v_candidate,'ACTIVE',decode(repeat('d1',32),'hex'),
     v_now+interval '30 days',v_now+interval '90 days');
+  insert into private.candidate_daily_entitlements(
+    environment,candidate_id,enabled,reason,evidence_sha256
+  ) values(
+    'TEST',v_candidate,true,'Candidate route DAILY fixture',repeat('5e',32)
+  );
 
   if private._candidate_route_family_v1(v_electronic_ts,v_electronic_week)->>'route_family'<>'ELECTRONIC'
      or private._candidate_route_family_v1(v_manual_ts,v_manual_week)->>'route_family'<>'MANUAL_NON_QR'

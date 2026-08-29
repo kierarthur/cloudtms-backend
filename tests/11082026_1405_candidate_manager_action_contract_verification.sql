@@ -16,6 +16,7 @@ declare
   v_now timestamptz:='2026-08-11 12:00:00+00';
   v_client uuid:='ac160000-0000-0000-0000-000000000001';
   v_candidate uuid:='ac160000-0000-0000-0000-000000000002';
+  v_actor uuid:='ac160000-0000-0000-0000-000000000011';
   v_contract uuid:='ac160000-0000-0000-0000-000000000003';
   v_timesheet uuid:='ac160000-0000-0000-0000-000000000004';
   v_week uuid:='ac160000-0000-0000-0000-000000000005';
@@ -44,6 +45,10 @@ declare
     )
   );
 begin
+  insert into public.tms_users(id) values(v_actor);
+  update public.settings_defaults
+  set candidate_app_system_actor_user_id=v_actor
+  where id=1;
   insert into public.clients(id,name) values(v_client,'Manager action contract client');
   insert into public.client_settings(
     id,client_id,effective_from,default_submission_mode,week_ending_weekday
@@ -215,21 +220,25 @@ begin
      or (v_result->>'manager_withdrawal_count')::integer<>1
      or not coalesce((v_result#>>'{submission_withdrawal_reset,reset}')::boolean,false)
      or v_result#>>'{submission_withdrawal_reset,effective_submission_mode}'<>'ELECTRONIC'
-     or v_result#>>'{submission_withdrawal_reset,draft_submission_mode}'<>'MANUAL' then
+     or v_result#>>'{submission_withdrawal_reset,draft_submission_mode}' is not null then
     raise exception 'reasoned cancellation result incomplete: %',v_result;
   end if;
-  v_reset_timesheet:=(v_result#>>'{submission_withdrawal_reset,current_timesheet_id}')::uuid;
-  if v_reset_timesheet is null or v_reset_timesheet=v_timesheet
+  v_reset_timesheet:=nullif(
+    v_result#>>'{submission_withdrawal_reset,current_timesheet_id}',''
+  )::uuid;
+  if v_reset_timesheet is not null
      or (select is_current from public.timesheets where timesheet_id=v_timesheet)
      or (select status from public.timesheets where timesheet_id=v_timesheet)<>'REVOKED'
-     or not coalesce((select is_current from public.timesheets where timesheet_id=v_reset_timesheet),false)
-     or (select status from public.timesheets where timesheet_id=v_reset_timesheet)<>'RECEIVED'
-     or (select submission_mode from public.timesheets where timesheet_id=v_reset_timesheet)<>'MANUAL'
-     or (select timesheet_id from public.contract_weeks where id=v_week)<>v_reset_timesheet
+     or (select timesheet_id from public.contract_weeks where id=v_week) is not null
      or (select status from public.contract_weeks where id=v_week)<>'OPEN'
      or (select submission_mode_snapshot from public.contract_weeks where id=v_week)<>'ELECTRONIC'
-     or (select total_hours from public.timesheets_financials where timesheet_id=v_reset_timesheet)<>0 then
-    raise exception 'reasoned cancellation did not rotate a clean editable electronic draft: %',v_result;
+     or exists(
+       select 1 from public.timesheets replacement
+       where replacement.contract_id=v_contract
+         and replacement.week_ending_date=current_date
+         and replacement.is_current=true
+     ) then
+    raise exception 'reasoned cancellation did not reopen the clean electronic Contract Week: %',v_result;
   end if;
   select count(*) into v_count from public.mail_outbox
   where deterministic_outbox_key='CANDIDATE_MANAGER_CANCELLATION_V1:'||v_request::text||':1'
