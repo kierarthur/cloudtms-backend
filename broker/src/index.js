@@ -185628,6 +185628,63 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     }
   }
 
+  let invalidSourceAuthorityRepair = {
+    ok: true,
+    examined_candidate_count: 0,
+    repaired_candidate_count: 0,
+    terminalised_job_count: 0,
+    skipped_count: 0,
+    failed_count: 0,
+    remaining_invalid_active_count: 0,
+    all_state_transitions_proven: true
+  };
+  if (sourceBuildAllowedByFilter) {
+    try {
+      invalidSourceAuthorityRepair = unwrapRpc(await sbRpc(env, 'pay_workbench_repair_invalid_source_authority_jobs_v1', {
+        p_session_id: sessionId,
+        p_candidate_id: candidateId,
+        p_limit: Math.min(10, Math.max(1, claimLimit)),
+        p_reason: 'WORKBENCH_DRAIN_INVALID_SOURCE_AUTHORITY_OWNER_REPAIR'
+      }, {
+        routeClass: 'WORKBENCH_MUTATION',
+        purpose: 'WORKBENCH_INVALID_SOURCE_AUTHORITY_OWNER_REPAIR',
+        timeoutMs: Math.min(8000, dbRpcHardCapMs),
+        bankingPay: true
+      }), 'pay_workbench_repair_invalid_source_authority_jobs_v1');
+      rpcCallCount += 1;
+
+      const failedRepairCount = countFrom(invalidSourceAuthorityRepair, ['failed_count']);
+      const remainingInvalidCount = countFrom(invalidSourceAuthorityRepair, ['remaining_invalid_active_count']);
+      const transitionsProven = booleanFrom(invalidSourceAuthorityRepair.all_state_transitions_proven);
+      if (!isPlainObject(invalidSourceAuthorityRepair)
+        || !booleanFrom(invalidSourceAuthorityRepair.ok)
+        || failedRepairCount > 0
+        || remainingInvalidCount > 0
+        || !transitionsProven) {
+        const repairError = new Error('Banking Pay could not safely replace historical candidate refresh work with current authority.');
+        repairError.code = 'WORKBENCH_INVALID_SOURCE_AUTHORITY_REPAIR_FAILED';
+        throw repairError;
+      }
+
+      const repairedCandidateCount = countFrom(invalidSourceAuthorityRepair, ['repaired_candidate_count']);
+      if (repairedCandidateCount > 0) {
+        madeProgress = true;
+        logDrainDiag('WORKBENCH_INVALID_SOURCE_AUTHORITY_REPAIRED', {
+          repaired_candidate_count: repairedCandidateCount,
+          terminalised_job_count: countFrom(invalidSourceAuthorityRepair, ['terminalised_job_count']),
+          skipped_count: countFrom(invalidSourceAuthorityRepair, ['skipped_count']),
+          remaining_invalid_active_count: remainingInvalidCount
+        });
+      }
+    } catch (repairError) {
+      logDrainDiag('WORKBENCH_INVALID_SOURCE_AUTHORITY_REPAIR_FAILED', {
+        error_code: upperTrim(repairError?.code || repairError?.name || 'WORKBENCH_INVALID_SOURCE_AUTHORITY_REPAIR_FAILED'),
+        error_message: String(repairError?.message || repairError || 'Historical source-authority repair failed')
+      }, 'warn');
+      throw repairError;
+    }
+  }
+
   const recordAggregate = async (aggregateLike, context = {}) => {
     const aggregate = isPlainObject(aggregateLike) ? aggregateLike : {};
     lastAggregate = aggregate;
@@ -186798,6 +186855,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_only_assertion_passed: !sourceBuildOnlyAssertionFailed,
     source_build_parallel_burst_summaries: sourceBuildParallelBurstSummaries,
     replayed_candidate_owner_repair: replayedCandidateOwnerRepair,
+    invalid_source_authority_owner_repair: invalidSourceAuthorityRepair,
     claimed: claimedCount,
     claimed_count: claimedCount,
     processed: processedCount,

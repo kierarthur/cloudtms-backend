@@ -24297,6 +24297,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "pay_workbench_repair_invalid_source_authority_jobs_v1(p_session_id uuid, p_candidate_id uuid, p_limit integer, p_reason text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4ba9092091f6c084a26b3b1b08ae862a060a5837f222ef0276bf26bbeaa83664"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public"
       ],
       "schema": "public",
