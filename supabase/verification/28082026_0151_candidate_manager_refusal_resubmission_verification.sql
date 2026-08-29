@@ -47,7 +47,11 @@ begin
        in v_transition_definition
      )=0
      or position(
-       '''anchor_timesheet_id'',v_week.timesheet_id'
+       '''anchor_timesheet_id'',case when v_workflow_kind=''CONTRACT_EXPENSE'''
+       in v_transition_definition
+     )=0
+     or position(
+       'then v_source_workflow.anchor_timesheet_id else v_week.timesheet_id end'
        in v_transition_definition
      )=0 then
     raise exception 'Candidate manager-refused weekly resubmission is not bound to the exact editable Contract Week';

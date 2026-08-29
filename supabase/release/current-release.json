@@ -62,7 +62,8 @@
     "supabase/verification/29082026_0614_banking_pay_replaced_candidate_owner_verification.sql",
     "supabase/verification/29082026_0720_banking_pay_discarded_session_blocker_verification.sql",
     "supabase/verification/29082026_0804_banking_pay_version_one_refresh_verification.sql",
-    "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql"
+    "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql",
+    "supabase/verification/29082026_0952_candidate_expense_resubmission_anchor_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
@@ -89,6 +90,7 @@
     "supabase/verification/29082026_0614_banking_pay_replaced_candidate_owner_verification.sql",
     "supabase/verification/29082026_0720_banking_pay_discarded_session_blocker_verification.sql",
     "supabase/verification/29082026_0804_banking_pay_version_one_refresh_verification.sql",
-    "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql"
+    "supabase/verification/29082026_0923_candidate_daily_reconciliation_linked_window_verification.sql",
+    "supabase/verification/29082026_0952_candidate_expense_resubmission_anchor_verification.sql"
   ]
 }

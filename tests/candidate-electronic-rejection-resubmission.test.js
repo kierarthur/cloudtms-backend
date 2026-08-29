@@ -6,6 +6,9 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf
 const correction = read(
   'supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql'
 );
+const expenseAnchorCorrection = read(
+  'supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql'
+);
 const repair = read(
   'supabase/migrations/27082026_0426_repair_electronic_rejection_replacements.sql'
 );
@@ -34,6 +37,7 @@ const runtime = read('tests/10082026_1817_candidate_finalised_rejection_verifica
 const resubmissionRuntime = read(
   'tests/11082026_1715_candidate_resubmission_idempotency_verification.sql'
 );
+const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
 const matrix = read('tests/run-candidate-daily-r16-local-matrix.ps1');
 
 test('electronic rejection creates an editable electronic replacement without weakening history', () => {
@@ -43,6 +47,17 @@ test('electronic rejection creates an editable electronic replacement without we
   assert.doesNotMatch(correction, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
   assert.match(correction, /revoke all on function private\._candidate_timesheet_reject_rotate_v1/);
   assert.doesNotMatch(correction, /grant execute on function private\._candidate_timesheet_reject_rotate_v1/);
+});
+
+test('expenses-only rejection keeps the original worked Timesheet as its resubmission anchor', () => {
+  assert.match(
+    expenseAnchorCorrection,
+    /'anchor_timesheet_id',case when v_workflow_kind='CONTRACT_EXPENSE'[\s\S]*then v_source_workflow\.anchor_timesheet_id else v_week\.timesheet_id end/i
+  );
+  assert.doesNotMatch(
+    expenseAnchorCorrection,
+    /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i
+  );
 });
 
 test('one-time repair is limited to empty audited electronic rejection replacements', () => {
@@ -111,6 +126,14 @@ test('installed-state verification and real resubmission regression are release-
   assert.match(runtime, /'RESUBMIT_REJECTED',3,'\{\}'::jsonb/);
   assert.match(runtime, /Electronic rejection replacement did not preserve unsigned draft storage and electronic route authority/);
   assert.match(matrix, /27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql/);
+  assert.match(
+    candidateRuntimeWorkflow,
+    /07082026_2128_candidate_finalize_reject_no_work_rpcs_v1\.sql[\s\S]*27082026_0423_candidate_electronic_rejection_resubmission_v1\.sql[\s\S]*29082026_0951_candidate_expense_resubmission_anchor_v1\.sql/i
+  );
+  assert.match(
+    candidateRuntimeWorkflow,
+    /07082026_2108_candidate_app_read_and_missing_week_rpcs_v1\.sql[\s\S]*26082026_0725_candidate_authorised_hours_expense_anchor_v1\.sql/i
+  );
   assert.match(verification, /financials\.processing_status='PENDING_AUTH'/);
   assert.match(verification, /Repaired electronic rejection replacement remains lifecycle-locked/);
 });
@@ -128,6 +151,10 @@ test('manager-refused phone workflows share the guarded resubmission authority',
   assert.match(
     managerRefusalVerification,
     /v_rejected\.state not in \(''REJECTED'',''REFUSED''\)/i
+  );
+  assert.match(
+    managerRefusalVerification,
+    /anchor_timesheet_id'',case when v_workflow_kind=''CONTRACT_EXPENSE''[\s\S]*then v_source_workflow\.anchor_timesheet_id else v_week\.timesheet_id end/i
   );
   assert.match(
     resubmissionRuntime,
