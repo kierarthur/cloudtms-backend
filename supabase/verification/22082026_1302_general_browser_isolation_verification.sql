@@ -7,6 +7,7 @@ declare
   v_hash text;
   v_service_missing integer;
   v_browser_executable integer;
+  v_browser_executable_identities text;
 begin
   with protected_tables(name) as (
     values
@@ -124,19 +125,23 @@ begin
     pg_catalog.count(*),
     pg_catalog.count(*) filter (where not svc_execute),
     pg_catalog.count(*) filter (where anon_execute or auth_execute),
+    pg_catalog.string_agg(signature,',' order by signature)
+      filter (where anon_execute or auth_execute),
     pg_catalog.md5(coalesce(pg_catalog.string_agg(
       signature||'|'||svc_execute::text||'|'||anon_execute::text||'|'||auth_execute::text,
       E'\n' order by signature
     ),''))
-  into v_count,v_service_missing,v_browser_executable,v_hash
+  into v_count,v_service_missing,v_browser_executable,
+       v_browser_executable_identities,v_hash
   from targets;
 
   -- Banking Pay Modal Structure v2 adds nine service-only public RPCs to this
   -- non-Candidate catalogue. Browser execution remains exactly zero.
   if v_count<>652 or v_service_missing<>72 or v_browser_executable<>0
      or v_hash<>'951cb626cae1497249be73898f9906cd' then
-    raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
-      v_count,v_service_missing,v_browser_executable,v_hash;
+    raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
+      v_count,v_service_missing,v_browser_executable,
+      v_browser_executable_identities,v_hash;
   end if;
 
   with targets as (
