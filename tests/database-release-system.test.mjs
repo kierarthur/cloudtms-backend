@@ -153,6 +153,14 @@ test('provider database owner mapping is explicit, bounded and fail closed', () 
       mapGeneratedAclBaselineSql('revoke all on function private.example() from PUBLIC, authenticator, supabase_admin;'),
       'revoke all on function private.example() from PUBLIC, supabase_admin;',
     );
+    assert.equal(
+      mapLogicalPostgresOwnerSql("SET plpgsql_check.mode TO 'disabled'\nSET search_path = ''\nselect 1;"),
+      "SET search_path = ''\nselect 1;",
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql("SET \"plpgsql_check.mode\" = 'disabled'\r\nSET lock_timeout = '5s';\r\n"),
+      "SET lock_timeout = '5s';\r\n",
+    );
     process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER = 'UNSAFE_ROLE';
     assert.throws(() => mapLogicalPostgresOwnerSql('select 1;'), /must be CURRENT_USER/);
   } finally {

@@ -20,6 +20,15 @@ export function mapLogicalPostgresOwnerSql(source) {
     .replace(
       /\balter\s+default\s+privileges\s+for\s+role\s+(?:"postgres"|postgres)/gi,
       'ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER',
+    )
+    // Miget's generated database owner cannot set provider instrumentation
+    // parameters. Keep the repository's standalone Supabase/plpgsql_check
+    // guard in canonical source, but omit that exact function SET clause from
+    // the provider-mapped executable tree. Application search_path and timeout
+    // settings remain unchanged.
+    .replace(
+      /^[ \t]*SET[ \t]+(?:"plpgsql_check\.mode"|plpgsql_check\.mode)[ \t]+(?:TO|=)[ \t]+'disabled'[ \t]*\r?\n/gim,
+      '',
     );
 }
 

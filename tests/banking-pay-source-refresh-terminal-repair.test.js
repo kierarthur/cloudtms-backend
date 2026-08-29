@@ -50,6 +50,7 @@ test('empty authoritative scope uses one bounded no-finance reconciliation adapt
   assert.match(syncAuthority, /v_empty_finalize:=private\.pay_workbench_reconcile_empty_scope_v1/);
   assert.match(syncAuthority, /jsonb_typeof\(v_result\) IS DISTINCT FROM 'object'/);
   assert.match(syncAuthority, /jsonb_typeof\(v_result->'public_result_json'\) IS DISTINCT FROM 'object'/);
+  assert.match(syncAuthority, /SET plpgsql_check\.mode TO 'disabled'/i);
 });
 
 test('the empty-scope adapter cannot write Draft, provider, payment or settlement authority', () => {
