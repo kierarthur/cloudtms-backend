@@ -8,9 +8,11 @@ const root = path.resolve(__dirname, '..');
 const repeatableDir = path.join(root, 'supabase', 'repeatable');
 const monolithName = '26052026_2100HRS_NEW_FUNCTIONS.sql';
 const reassertName = '08082026_0902_reassert_authorities_after_legacy_monolith.sql';
+const currentClosureName = '29082026_0326_banking_pay_release_authority_repair_v1.sql';
 const normalizeLf = (value) => String(value || '').replace(/\r\n/g, '\n');
 const monolith = normalizeLf(fs.readFileSync(path.join(repeatableDir, monolithName), 'utf8'));
 const reassert = normalizeLf(fs.readFileSync(path.join(repeatableDir, reassertName), 'utf8'));
+const currentClosure = normalizeLf(fs.readFileSync(path.join(repeatableDir, currentClosureName), 'utf8'));
 const targetedManifest = JSON.parse(fs.readFileSync(
   path.join(root, 'supabase', 'verification', 'banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json'),
   'utf8',
@@ -46,7 +48,7 @@ test('legacy monolith changes force a complete later-authority replay', () => {
   const replayedFunctions = new Set(createdFunctions(monolith));
   const laterFiles = fs.readdirSync(repeatableDir)
     .filter((name) => name.endsWith('.sql'))
-    .filter((name) => name !== monolithName && name !== reassertName)
+    .filter((name) => name !== monolithName && name !== reassertName && name !== currentClosureName)
     .filter((name) => dateKey(name) > dateKey(monolithName))
     .sort((left, right) => dateKey(left).localeCompare(dateKey(right)) || left.localeCompare(right));
 
@@ -74,11 +76,37 @@ test('legacy monolith changes force a complete later-authority replay', () => {
     expectedFiles.push(name);
   }
 
-  const includedFiles = [...reassert.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
+  const historicalIncludedFiles = [...reassert.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
     .map((match) => match[1]);
-  assert.deepEqual(includedFiles, expectedFiles);
-  assert.equal(new Set(includedFiles).size, includedFiles.length);
+  const currentIncludedFiles = [...currentClosure.matchAll(/^\\ir\s+([^\s]+\.sql)\s*$/gmi)]
+    .map((match) => match[1]);
+  const completeIncludedFiles = new Set([...historicalIncludedFiles, ...currentIncludedFiles]);
+
+  assert.deepEqual(
+    expectedFiles.filter((name) => !completeIncludedFiles.has(name)),
+    [],
+    'the immutable historical replay plus current closure must cover every later authority',
+  );
+  assert.equal(new Set(historicalIncludedFiles).size, historicalIncludedFiles.length);
+  assert.equal(new Set(currentIncludedFiles).size, currentIncludedFiles.length);
   assert.doesNotMatch(reassert, /\\ir\s+26052026_2100HRS_NEW_FUNCTIONS\.sql/i);
+  assert.equal(
+    crypto.createHash('sha256').update(reassert).digest('hex'),
+    '3483e69bbc1ca13ba151b75b59e7b8e192f96f9df2627b829340b4d4e50d62c5',
+    'the historical compatibility replay must remain byte-for-byte immutable',
+  );
+  for (const required of [
+    '04082026_1219_pay_workbench_mark_finance_case_dirty.sql',
+    '07082026_2224_candidate_app_weekly_office_replacements_v1.sql',
+    '14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql',
+    '27082026_2205_candidate_weekly_manager_finalisation_authority_v1.sql',
+    '28082026_1424_banking_pay_modal_selection_owner_bridge.sql',
+  ]) assert.ok(currentIncludedFiles.includes(required), `missing current authority closure: ${required}`);
+  for (const forbidden of [
+    '20072026_0302_disable_plpgsql_check_for_reservation_finalizer.sql',
+    '23072026_1402_disable_plpgsql_check_for_banking_cancel.sql',
+    '26052026_2100HRS_NEW_FUNCTIONS.sql',
+  ]) assert.ok(!currentIncludedFiles.includes(forbidden), `unsafe historical replay in current closure: ${forbidden}`);
 });
 
 test('changed earlier overlapping authorities force the final reassertion to replay', () => {
