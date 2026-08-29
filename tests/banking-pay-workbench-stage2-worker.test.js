@@ -458,6 +458,11 @@ test('claim uncertainty exposes only bounded database error identity needed for 
   assert.equal(result.database_error_name, 'PAY_WORKBENCH_ATTEMPT_CLAIM_ADOPTION_FAILED');
   assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.candidate, 'i'));
   assert.doesNotMatch(JSON.stringify(result), new RegExp(ids.nonce, 'i'));
+
+  const drain = functionBody('drainBankingPayWorkbenchJobs');
+  assert.match(drain, /claim_error_status:\s*lane\.claim_error_status \?\? null/);
+  assert.match(drain, /database_error_code:\s*lane\.database_error_code \|\| null/);
+  assert.match(drain, /database_error_name:\s*lane\.database_error_name \|\| null/);
 });
 
 test('no-claim result codes are restricted to the database-owned allowlist', async () => {

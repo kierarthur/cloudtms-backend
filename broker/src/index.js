@@ -186093,7 +186093,10 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       attempt_number: lane.attempt_number || null,
       lease_expires_at_utc: lane.lease_expires_at_utc || null,
       error_code: lane.error_code || null,
-      error_message: lane.error_message || null
+      error_message: lane.error_message || null,
+      claim_error_status: lane.claim_error_status ?? null,
+      database_error_code: lane.database_error_code || null,
+      database_error_name: lane.database_error_name || null
     }, passFailed > 0 || lane.transport_ok === false ? 'warn' : 'info');
 
     return {
@@ -186395,6 +186398,9 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
             lane_index: lane.lane_index ?? null,
             error_code: laneError.code,
             error_message: laneError.message,
+            claim_error_status: lane.claim_error_status ?? null,
+            database_error_code: lane.database_error_code || null,
+            database_error_name: lane.database_error_name || null,
             rpc_elapsed_ms: lane.elapsed_ms,
             rpc_budget_ms: dbRpcHardCapMs,
             source_build_allowed_job_types: ['WORKBENCH_CANDIDATE_SOURCE_BUILD'],
