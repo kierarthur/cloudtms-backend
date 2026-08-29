@@ -11,6 +11,7 @@ const migration = read('supabase/migrations/05082026_2304_banking_pay_queue_cont
 const canonicalBundle = read('supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql');
 const sourceBuildExecute = read('supabase/repeatable/04082026_1143_pay_workbench_source_build_attempt_execute_v1.sql');
 const workerDrain = read('supabase/repeatable/04082026_1219_pay_workbench_worker_drain_chunk.sql');
+const interruptedReplayAclRepair = read('supabase/repeatable/29082026_0535_banking_pay_failed_replay_acl_repair.sql');
 
 function extractFunction(sql, name) {
   const marker = `CREATE OR REPLACE FUNCTION public.${name}(`;
@@ -105,4 +106,19 @@ test('empty-search-path functions schema-qualify every application relation and 
       assert.doesNotMatch(sql, unqualified, `${objectName} must be schema-qualified`);
     }
   }
+});
+
+test('an interrupted historical replay can only restore the two approved service-only ACLs', () => {
+  assert.equal((interruptedReplayAclRepair.match(/ALTER FUNCTION/g) || []).length, 2);
+  assert.equal((interruptedReplayAclRepair.match(/REVOKE ALL ON FUNCTION/g) || []).length, 2);
+  assert.equal((interruptedReplayAclRepair.match(/GRANT EXECUTE ON FUNCTION/g) || []).length, 2);
+  for (const identity of [
+    /public\.bulk_timesheet_row_patch_v1\(jsonb\)/i,
+    /public\.timesheet_daily_manual_process_atomic\([\s\S]*uuid,[\s\S]*uuid,[\s\S]*uuid,[\s\S]*jsonb,[\s\S]*jsonb,[\s\S]*timestamptz,[\s\S]*text[\s\S]*\)/i,
+  ]) {
+    assert.match(interruptedReplayAclRepair, identity);
+  }
+  assert.equal((interruptedReplayAclRepair.match(/FROM PUBLIC, anon, authenticated, service_role/g) || []).length, 2);
+  assert.equal((interruptedReplayAclRepair.match(/TO service_role/g) || []).length, 2);
+  assert.doesNotMatch(interruptedReplayAclRepair, /CREATE OR REPLACE FUNCTION|\b(?:INSERT|UPDATE|DELETE)\b/i);
 });
