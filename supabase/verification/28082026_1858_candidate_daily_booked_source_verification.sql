@@ -291,6 +291,9 @@ declare
   v_office_preview jsonb;
   v_office_payload jsonb;
   v_office_replacement uuid;
+  v_delete_signature text;
+  v_delete_preview jsonb;
+  v_delete_result jsonb;
   v_candidate_context jsonb;
   v_context jsonb:=jsonb_build_object('policy','SIGNED_SYSTEM_SYNC','environment','TEST',
     'system_auth_verified',true,'nonce_consumed',true,'environment_trusted',true,
@@ -585,6 +588,56 @@ begin
     raise exception 'DAILY_BOOKED_SOURCE_PROOF: connected submit failed: %',v_result;
   end if;
   perform pg_temp.candidate_register_all_review_components(v_created_workflow,2,'daily-proof',v_now);
+
+  -- A submitted Daily receipt which never reached manager approval is a real
+  -- current Timesheet, but Office must still be able to remove it permanently
+  -- while it is financially clean. Exercise the exact Preview/APPLY boundary
+  -- inside a subtransaction, then roll that proof back so the same fixture can
+  -- continue through manager approval and canonical completion below.
+  begin
+    select candidate_app_system_actor_user_id into strict v_office_actor
+    from public.settings_defaults where id=1;
+    select nullif(btrim(coalesce(s.value->>'backend_row_signature',
+      s.value->>'row_signature',s.value->>'signature','')),'')
+    into v_delete_signature
+    from public.timesheet_lifecycle_guard_signature_v1(v_replayed,null,false) s(value);
+    if v_delete_signature is null then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: unfinished Daily delete signature missing';
+    end if;
+    v_delete_preview:=public.timesheet_daily_abandoned_receipt_delete_preview_v1(
+      v_replayed,v_office_actor,v_replayed,v_delete_signature);
+    if v_delete_preview->>'applicable'<>'true'
+       or v_delete_preview->>'decision'<>'PERMANENT_DELETE'
+       or v_delete_preview->>'eligible'<>'true'
+       or v_delete_preview->>'workflow_id' is distinct from v_created_workflow::text
+       or v_delete_preview->>'current_timesheet_id' is distinct from v_replayed::text
+       or jsonb_array_length(coalesce(v_delete_preview->'contract_week_ids','[]'::jsonb))<>0 then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: unfinished Daily delete preview failed: %',v_delete_preview;
+    end if;
+    v_delete_result:=public.timesheet_daily_abandoned_receipt_delete_apply_v1(
+      v_replayed,v_office_actor,v_replayed,v_delete_signature);
+    if v_delete_result->>'apply_performed'<>'true'
+       or v_delete_result->>'deleted'<>'true'
+       or v_delete_result->>'database_commit_confirmed'<>'true'
+       or v_delete_result->>'deleted_workflow_id' is distinct from v_created_workflow::text
+       or exists(select 1 from public.timesheets where timesheet_id=v_replayed)
+       or exists(select 1 from public.candidate_submission_workflows where id=v_created_workflow)
+       or exists(select 1 from public.candidate_submission_components where workflow_id=v_created_workflow)
+       or exists(select 1 from public.candidate_approval_requests where workflow_id=v_created_workflow)
+       or exists(select 1 from public.timesheets_financials where timesheet_id=v_replayed)
+       or not exists(select 1 from public.audit_events where object_id_text=v_created_workflow::text
+         and action='CANDIDATE_DAILY_ABANDONED_RECEIPT_DELETE_APPLIED') then
+      raise exception 'DAILY_BOOKED_SOURCE_PROOF: unfinished Daily delete apply failed: %',v_delete_result;
+    end if;
+    raise exception using errcode='Z9624',message='DAILY_BOOKED_SOURCE_DELETE_PROOF_ROLLBACK';
+  exception when sqlstate 'Z9624' then null;
+  end;
+
+  if not exists(select 1 from public.timesheets where timesheet_id=v_replayed)
+     or not exists(select 1 from public.candidate_submission_workflows where id=v_created_workflow)
+     or not exists(select 1 from public.candidate_submission_components where workflow_id=v_created_workflow) then
+    raise exception 'DAILY_BOOKED_SOURCE_PROOF: delete proof did not roll back cleanly';
+  end if;
   perform pg_temp.candidate_phone_approve_all(v_session,v_created_workflow,2,'daily-proof','manager-signature',v_now);
   perform pg_temp.candidate_register_all_final_components(v_created_workflow,2,'daily-proof',v_now);
   v_begin_receipt:=public.candidate_workflow_transition_atomic_v1(v_session,'TEST',v_created_workflow,

@@ -74361,7 +74361,7 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       compare_block_required: compareBlockRequired
     });
 
-    const detailsPayload = markCandidateOfficePayloadApplicability({
+    const rawDetailsPayload = {
       booking_id: bookingId,
       requested_timesheet_id: resolved.requested_timesheet_id,
       current_timesheet_id: resolved.current_timesheet_id,
@@ -74440,7 +74440,9 @@ async function handleTimesheetDetails(env, req, timesheetId) {
       bulk_authorise,
       artifact_hints,
       healthroster_compare
-    });
+    };
+    const presentedDetailsPayload = await attachCandidateDailyOfficeDetailPresentation(env, rawDetailsPayload);
+    const detailsPayload = markCandidateOfficePayloadApplicability(presentedDetailsPayload);
     return withCORS(env, req, ok(detailsPayload));
   } catch (e) {
     console.error('[TIMESHEET_DETAILS] error', {
@@ -84309,6 +84311,366 @@ async function handleTimesheetQrResendEmail(env, req, timesheetId, ctx = null) {
 
 
 const TIMESHEET_SUMMARY_CANDIDATE_BATCH_SIZE = 100;
+const DAILY_OFFICE_PRESENTATION_BATCH_SIZE = 50;
+
+function isOpaqueCandidateIdentity(value) {
+  return /^cid[0-9]+-[a-z0-9]+$/i.test(String(value == null ? '' : value).trim());
+}
+
+function candidateDailyOfficeWorkflowPresentation(stateInput) {
+  const state = String(stateInput == null ? '' : stateInput).trim().toUpperCase();
+  if (state === 'AWAITING_MANAGER_APPROVAL') {
+    return {
+      candidate_manager_approval_status: 'AWAITING_MANAGER_APPROVAL',
+      candidate_manager_approval_status_display: 'Awaiting manager approval'
+    };
+  }
+  if (state === 'READY_FOR_MANAGER_APPROVAL') {
+    return {
+      candidate_manager_approval_status: 'REQUIRED',
+      candidate_manager_approval_status_display: 'Manager approval required'
+    };
+  }
+  if (['MANAGER_APPROVED', 'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT', 'READY_TO_FINALISE', 'RECEIVED', 'FINALISED'].includes(state)) {
+    return {
+      candidate_manager_approval_status: 'APPROVED',
+      candidate_manager_approval_status_display: 'Manager approved'
+    };
+  }
+  if (state === 'REFUSED') {
+    return {
+      candidate_manager_approval_status: 'REFUSED',
+      candidate_manager_approval_status_display: 'Manager approval refused'
+    };
+  }
+  if (['CANCELLED', 'EXPIRED', 'SUPERSEDED'].includes(state)) {
+    return {
+      candidate_manager_approval_status: 'CANCELLED',
+      candidate_manager_approval_status_display: 'Candidate submission cancelled'
+    };
+  }
+  return null;
+}
+
+async function attachCandidateDailyOfficePresentation(env, rows, fetchRows = sbFetch) {
+  const output = (Array.isArray(rows) ? rows : []).map((row) => ({ ...(row || {}) }));
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+  const lower = (value) => String(value == null ? '' : value).trim().toLowerCase();
+  const chunks = (values, size = DAILY_OFFICE_PRESENTATION_BATCH_SIZE) => {
+    const result = [];
+    for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
+    return result;
+  };
+  const dailyRows = output.filter((row) => {
+    const route = upper(row?.route_type || row?.route_display || row?.route_family);
+    return upper(row?.sheet_scope) === 'DAILY' || route.includes('DAILY');
+  });
+
+  // A raw Global CID is never suitable Office display text. Hide it before
+  // attempting enrichment so even a dependency failure cannot expose it.
+  for (const row of output) {
+    if (isOpaqueCandidateIdentity(row?.candidate_name)) row.candidate_name = 'Candidate not yet resolved';
+    if (isOpaqueCandidateIdentity(row?.candidate_display_name)) row.candidate_display_name = 'Candidate not yet resolved';
+  }
+  if (!dailyRows.length) return output;
+
+  const timesheetIds = Array.from(new Set(
+    dailyRows.map((row) => String(row?.timesheet_id || '').trim()).filter((value) => uuidPattern.test(value))
+  ));
+  if (!timesheetIds.length) return output;
+
+  const timesheetsById = new Map();
+  for (const batch of chunks(timesheetIds)) {
+    try {
+      const { rows: sourceRows } = await fetchRows(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/timesheets` +
+          `?timesheet_id=in.(${batch.map(encodeURIComponent).join(',')})` +
+          '&is_current=eq.true' +
+          '&select=timesheet_id,occupant_key_norm,sheet_scope,submission_mode,candidate_submission_route_intent,is_current,archived_at_utc'
+      );
+      for (const sourceRow of (sourceRows || [])) {
+        const timesheetId = String(sourceRow?.timesheet_id || '').trim();
+        if (timesheetId) timesheetsById.set(timesheetId, sourceRow);
+      }
+    } catch (error) {
+      console.warn('[DAILY_OFFICE_PRESENTATION] timesheet source lookup failed', {
+        batch_size: batch.length,
+        message: error?.message || String(error)
+      });
+    }
+  }
+
+  const candidateKeys = Array.from(new Set(
+    dailyRows.map((row) => {
+      const timesheetId = String(row?.timesheet_id || '').trim();
+      const sourceKey = lower(timesheetsById.get(timesheetId)?.occupant_key_norm);
+      if (sourceKey) return sourceKey;
+      const original = lower(row?.candidate_name);
+      return isOpaqueCandidateIdentity(original) ? original : '';
+    }).filter(Boolean)
+  ));
+  const candidatesByKey = new Map();
+  for (const batch of chunks(candidateKeys)) {
+    try {
+      const { rows: candidateRows } = await fetchRows(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidates` +
+          `?key_norm=in.(${batch.map(encodeURIComponent).join(',')})` +
+          '&select=id,key_norm,display_name,first_name,last_name'
+      );
+      for (const candidate of (candidateRows || [])) {
+        const key = lower(candidate?.key_norm);
+        if (key && !candidatesByKey.has(key)) candidatesByKey.set(key, candidate);
+      }
+    } catch (error) {
+      console.warn('[DAILY_OFFICE_PRESENTATION] Candidate identity lookup failed', {
+        batch_size: batch.length,
+        message: error?.message || String(error)
+      });
+    }
+  }
+
+  const receiptIds = timesheetIds.filter((timesheetId) => {
+    const source = timesheetsById.get(timesheetId);
+    return upper(source?.sheet_scope) === 'DAILY'
+      && upper(source?.submission_mode) === 'MANUAL'
+      && upper(source?.candidate_submission_route_intent) === 'ELECTRONIC';
+  });
+  const workflowsByTimesheetId = new Map();
+  for (const batch of chunks(receiptIds)) {
+    try {
+      const encodedIds = batch.map(encodeURIComponent).join(',');
+      const { rows: workflowRows } = await fetchRows(
+        env,
+        `${env.SUPABASE_URL}/rest/v1/candidate_submission_workflows` +
+          `?or=(target_timesheet_id.in.(${encodedIds}),anchor_timesheet_id.in.(${encodedIds}))` +
+          '&select=id,target_timesheet_id,anchor_timesheet_id,state,route,generation,updated_at_utc' +
+          '&order=updated_at_utc.desc,id.desc'
+      );
+      for (const workflow of (workflowRows || [])) {
+        for (const rawId of [workflow?.target_timesheet_id, workflow?.anchor_timesheet_id]) {
+          const timesheetId = String(rawId || '').trim();
+          if (!batch.includes(timesheetId)) continue;
+          // The query is newest-first. The newest workflow is authoritative,
+          // including a later cancellation, refusal or supersession.
+          if (!workflowsByTimesheetId.has(timesheetId)) workflowsByTimesheetId.set(timesheetId, workflow);
+        }
+      }
+    } catch (error) {
+      console.warn('[DAILY_OFFICE_PRESENTATION] workflow lookup failed', {
+        batch_size: batch.length,
+        message: error?.message || String(error)
+      });
+    }
+  }
+
+  return output.map((row) => {
+    const timesheetId = String(row?.timesheet_id || '').trim();
+    const source = timesheetsById.get(timesheetId);
+    if (!source || upper(source?.sheet_scope) !== 'DAILY') return row;
+
+    const candidate = candidatesByKey.get(lower(source?.occupant_key_norm));
+    if (candidate) {
+      const candidateName = String(candidate?.display_name || '').trim()
+        || [candidate?.first_name, candidate?.last_name].map((value) => String(value || '').trim()).filter(Boolean).join(' ');
+      if (candidateName) {
+        row.candidate_id = candidate.id || row.candidate_id || null;
+        row.candidate_name = candidateName;
+        row.candidate_display_name = candidateName;
+      }
+    }
+
+    const isElectronicReceipt = upper(source?.submission_mode) === 'MANUAL'
+      && upper(source?.candidate_submission_route_intent) === 'ELECTRONIC';
+    if (!isElectronicReceipt) return row;
+
+    row.route_type = 'DAILY_ELECTRONIC';
+    row.route_display = 'Daily Electronic';
+    row.route_family = 'ELECTRONIC';
+    row.route_subfamily = 'ELECTRONIC';
+    row.underlying_channel_family = 'ELECTRONIC';
+    row.submission_mode = 'ELECTRONIC';
+    row.submission_mode_snapshot = 'ELECTRONIC';
+
+    const statusPatch = candidateDailyOfficeWorkflowPresentation(workflowsByTimesheetId.get(timesheetId)?.state);
+    if (statusPatch) Object.assign(row, statusPatch);
+    return row;
+  });
+}
+
+function candidateDailyOfficeImmutableFacts(workflowInput) {
+  const workflow = workflowInput && typeof workflowInput === 'object' ? workflowInput : {};
+  const immutable = workflow.immutable_submission_json && typeof workflow.immutable_submission_json === 'object'
+    ? workflow.immutable_submission_json
+    : {};
+  const hours = immutable.hours_submission && typeof immutable.hours_submission === 'object'
+    ? immutable.hours_submission
+    : immutable;
+  const patch = hours.timesheet_patch_json && typeof hours.timesheet_patch_json === 'object'
+    ? hours.timesheet_patch_json
+    : immutable.timesheet_patch_json && typeof immutable.timesheet_patch_json === 'object'
+      ? immutable.timesheet_patch_json
+      : hours;
+  const workDate = String(workflow.work_date || '').trim();
+  const workedStartIso = String(patch.worked_start_iso || '').trim();
+  const workedEndIso = String(patch.worked_end_iso || '').trim();
+  const startMs = Date.parse(workedStartIso);
+  const endMs = Date.parse(workedEndIso);
+  const londonParts = (value) => {
+    try {
+      const parts = toLocalParts(value, 'Europe/London');
+      return {
+        ymd: String(parts?.ymd || ''),
+        hhmm: String(parts?.hhmm || '')
+      };
+    } catch {
+      return { ymd: '', hhmm: '' };
+    }
+  };
+  const startLocal = londonParts(workedStartIso);
+  const endLocal = londonParts(workedEndIso);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(workDate)
+      || !Number.isFinite(startMs)
+      || !Number.isFinite(endMs)
+      || endMs <= startMs
+      || endMs - startMs > 36 * 60 * 60 * 1000
+      || startLocal.ymd !== workDate
+      || !/^\d{2}:\d{2}$/.test(startLocal.hhmm)
+      || !/^\d{2}:\d{2}$/.test(endLocal.hhmm)) return null;
+
+  const breakStartIso = patch.break_start_iso == null ? null : String(patch.break_start_iso).trim() || null;
+  const breakEndIso = patch.break_end_iso == null ? null : String(patch.break_end_iso).trim() || null;
+  const breakStartMs = breakStartIso ? Date.parse(breakStartIso) : NaN;
+  const breakEndMs = breakEndIso ? Date.parse(breakEndIso) : NaN;
+  const hasBreak = Number.isFinite(breakStartMs) && Number.isFinite(breakEndMs)
+    && breakEndMs > breakStartMs && breakStartMs >= startMs && breakEndMs <= endMs;
+  const breakStartLocal = hasBreak ? londonParts(breakStartIso) : null;
+  const breakEndLocal = hasBreak ? londonParts(breakEndIso) : null;
+  const suppliedBreakMinutes = Number(patch.break_minutes);
+  const breakMinutes = hasBreak
+    ? Math.max(0, Math.round((breakEndMs - breakStartMs) / 60000))
+    : Number.isFinite(suppliedBreakMinutes) && suppliedBreakMinutes >= 0
+      ? Math.round(suppliedBreakMinutes)
+      : 0;
+  const workedMinutes = Math.max(0, Math.round((endMs - startMs) / 60000) - breakMinutes);
+  return {
+    work_date: workDate,
+    worked_start_iso: workedStartIso,
+    worked_end_iso: workedEndIso,
+    break_start_iso: hasBreak ? breakStartIso : null,
+    break_end_iso: hasBreak ? breakEndIso : null,
+    break_minutes: breakMinutes,
+    worked_minutes: workedMinutes,
+    total_hours: workedMinutes / 60,
+    actual_schedule_json: [{
+      date: workDate,
+      work_date: workDate,
+      start_time: startLocal.hhmm,
+      end_time: endLocal.hhmm,
+      break_start: hasBreak ? breakStartLocal.hhmm : null,
+      break_end: hasBreak ? breakEndLocal.hhmm : null,
+      break_minutes: breakMinutes
+    }]
+  };
+}
+
+async function attachCandidateDailyOfficeDetailPresentation(env, payloadInput, fetchRows = sbFetch) {
+  const payload = payloadInput && typeof payloadInput === 'object' ? { ...payloadInput } : payloadInput;
+  if (!payload || !payload.timesheet || typeof payload.timesheet !== 'object') return payload;
+  const timesheet = { ...payload.timesheet };
+  const upper = (value) => String(value == null ? '' : value).trim().toUpperCase();
+  const timesheetId = String(timesheet.timesheet_id || payload.current_timesheet_id || '').trim();
+  const isReceipt = upper(timesheet.sheet_scope) === 'DAILY'
+    && upper(timesheet.submission_mode) === 'MANUAL'
+    && upper(timesheet.candidate_submission_route_intent) === 'ELECTRONIC'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(timesheetId);
+  if (!isReceipt) return payload;
+
+  let workflow = null;
+  try {
+    const encodedId = encodeURIComponent(timesheetId);
+    const { rows } = await fetchRows(
+      env,
+      `${env.SUPABASE_URL}/rest/v1/candidate_submission_workflows`+
+        `?or=(target_timesheet_id.eq.${encodedId},anchor_timesheet_id.eq.${encodedId})`+
+        '&select=id,target_timesheet_id,anchor_timesheet_id,state,route,generation,work_date,immutable_submission_json,updated_at_utc'+
+        '&order=updated_at_utc.desc,id.desc&limit=1'
+    );
+    workflow = rows?.[0] || null;
+  } catch (error) {
+    console.warn('[DAILY_OFFICE_PRESENTATION] detail workflow lookup failed', {
+      timesheet_id: timesheetId,
+      message: error?.message || String(error)
+    });
+  }
+
+  const facts = candidateDailyOfficeImmutableFacts(workflow);
+  const statusPatch = candidateDailyOfficeWorkflowPresentation(workflow?.state) || {};
+  delete timesheet.occupant_key_norm;
+  Object.assign(timesheet, {
+    submission_mode: 'ELECTRONIC',
+    submission_mode_snapshot: 'ELECTRONIC',
+    route_type: 'DAILY_ELECTRONIC',
+    route_display: 'Daily Electronic',
+    route_family: 'ELECTRONIC',
+    route_subfamily: 'ELECTRONIC',
+    underlying_channel_family: 'ELECTRONIC',
+    ...(facts || {}),
+    ...statusPatch
+  });
+
+  const effective = {
+    ...(payload.effective && typeof payload.effective === 'object' ? payload.effective : {}),
+    route_type: 'DAILY_ELECTRONIC',
+    route_display: 'Daily Electronic',
+    route_family: 'ELECTRONIC',
+    route_subfamily: 'ELECTRONIC',
+    underlying_channel_family: 'ELECTRONIC',
+    ...(facts ? { actual_schedule_json: facts.actual_schedule_json, total_hours: facts.total_hours } : {}),
+    ...statusPatch
+  };
+  const actionFlags = {
+    ...(payload.action_flags && typeof payload.action_flags === 'object' ? payload.action_flags : {}),
+    can_edit: false,
+    can_edit_hours: false,
+    can_authorise: false,
+    hours_schedule_editable: false,
+    route_evidence_editable: false,
+    candidate_manager_approval_pending: statusPatch.candidate_manager_approval_status === 'AWAITING_MANAGER_APPROVAL'
+  };
+  const bulkAuthorise = {
+    ...(payload.bulk_authorise && typeof payload.bulk_authorise === 'object' ? payload.bulk_authorise : {}),
+    route_family: 'ELECTRONIC',
+    underlying_channel_family: 'ELECTRONIC',
+    can_authorise: false
+  };
+
+  return {
+    ...payload,
+    timesheet,
+    effective,
+    action_flags: actionFlags,
+    bulk_authorise: bulkAuthorise,
+    route_type: 'DAILY_ELECTRONIC',
+    route_display: 'Daily Electronic',
+    route_family: 'ELECTRONIC',
+    route_subfamily: 'ELECTRONIC',
+    underlying_channel_family: 'ELECTRONIC',
+    ...(facts ? {
+      actual_schedule_json: facts.actual_schedule_json,
+      total_hours: facts.total_hours,
+      worked_start_iso: facts.worked_start_iso,
+      worked_end_iso: facts.worked_end_iso,
+      break_start_iso: facts.break_start_iso,
+      break_end_iso: facts.break_end_iso,
+      break_minutes: facts.break_minutes
+    } : {}),
+    ...statusPatch,
+    office_candidate_receipt_view_only: true
+  };
+}
 
 function candidateSummaryProjectionError(value, fallback = 'CANDIDATE_OFFICE_PROJECTION_FAILED') {
   const source = value && typeof value === 'object' ? value : {};
@@ -84580,7 +84942,8 @@ async function handleCandidateTimesheetSummaryPatches(env, req) {
     const rows = Array.isArray(raw)
       ? raw
       : (Array.isArray(raw?.data) ? raw.data : (Array.isArray(raw?.rows) ? raw.rows : []));
-    const projectedRows = await attachCandidateOfficeSummaryProjections(env,user.id,rows);
+    const presentedRows = await attachCandidateDailyOfficePresentation(env,rows);
+    const projectedRows = await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows);
     const byTimesheetId = new Map();
     const byContractWeekId = new Map();
     for (const row of projectedRows) {
@@ -85001,9 +85364,10 @@ async function handleTimesheetsSummary(env, req) {
       const payloadObj = (payload && typeof payload === 'object' && !Array.isArray(payload)) ? payload : {};
       const rawRows = Array.isArray(payloadObj.rows) ? payloadObj.rows : rpcRows(payload, 'pay_batch_timesheet_summary_lightweight_v1');
       const normalizedRows = normalizeSummaryRows(rawRows);
+      const presentedRows = await attachCandidateDailyOfficePresentation(env,normalizedRows);
       const outRows = includeCandidateProjection
-        ? await attachCandidateOfficeSummaryProjections(env,user.id,normalizedRows)
-        : normalizedRows;
+        ? await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
+        : presentedRows;
 
       const payloadTotals = (payloadObj.totals && typeof payloadObj.totals === 'object' && !Array.isArray(payloadObj.totals))
         ? payloadObj.totals
@@ -85035,9 +85399,10 @@ async function handleTimesheetsSummary(env, req) {
     const normalizedRows = normalizeSummaryRows(
       rpcRows(rowRes, 'timesheet_summary_lightweight_rows_v1')
     );
+    const presentedRows = await attachCandidateDailyOfficePresentation(env,normalizedRows);
     const outRows = includeCandidateProjection
-      ? await attachCandidateOfficeSummaryProjections(env,user.id,normalizedRows)
-      : normalizedRows;
+      ? await attachCandidateOfficeSummaryProjections(env,user.id,presentedRows)
+      : presentedRows;
 
     let totals = null;
     let totalCount = outRows.length;
@@ -104946,7 +105311,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   if (!uuidRe.test(operationId)) {
     return withCORS(env, req, badRequest('delete_operation_id must be a valid UUID'));
   }
-  if (!['STANDARD_DELETE', 'WEEKLY_CHAIN_DELETE_PARENT', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(expectedKind)) {
+  if (!['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE', 'WEEKLY_CHAIN_DELETE_PARENT', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(expectedKind)) {
     return withCORS(env, req, badRequest('expected_delete_kind is invalid'));
   }
   if (!uuidRe.test(expectedTimesheetId)) {
@@ -105007,16 +105372,29 @@ async function handleTimesheetDelete(env, req, timesheetId) {
       'TIMESHEET_DELETE_APPLY_SIGNATURE_STANDARD'
     );
 
-    let preview = normaliseRpc(await sbRpc(env, 'timesheet_standard_delete_preview_v1', {
+    let preview = normaliseRpc(await sbRpc(env, 'timesheet_daily_abandoned_receipt_delete_preview_v1', {
       p_timesheet_id: requestedTimesheetId,
       p_actor_user_id: user.id,
       p_expected_timesheet_id: currentTimesheetId,
       p_expected_row_signature: initialSignature.signature
     }, {
       routeClass: 'OPERATION_NUDGE',
-      purpose: 'TIMESHEET_DELETE_APPLY_REPREVIEW_STANDARD',
+      purpose: 'TIMESHEET_DELETE_APPLY_REPREVIEW_DAILY_RECEIPT',
       timeoutMs: 10000
     }));
+
+    if (!preview || preview.applicable !== true) {
+      preview = normaliseRpc(await sbRpc(env, 'timesheet_standard_delete_preview_v1', {
+        p_timesheet_id: requestedTimesheetId,
+        p_actor_user_id: user.id,
+        p_expected_timesheet_id: currentTimesheetId,
+        p_expected_row_signature: initialSignature.signature
+      }, {
+        routeClass: 'OPERATION_NUDGE',
+        purpose: 'TIMESHEET_DELETE_APPLY_REPREVIEW_STANDARD',
+        timeoutMs: 10000
+      }));
+    }
 
     if (!preview || typeof preview !== 'object' || Array.isArray(preview)) {
       throw new Error('DELETE_PREVIEW_INVALID_RESULT');
@@ -105060,7 +105438,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     }
 
     const kind = String(preview.kind || 'STANDARD_DELETE').trim().toUpperCase();
-    if (!['STANDARD_DELETE', 'WEEKLY_CHAIN_DELETE_PARENT', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(kind)) {
+    if (!['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE', 'WEEKLY_CHAIN_DELETE_PARENT', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(kind)) {
       throw new Error('DELETE_PREVIEW_KIND_UNSUPPORTED');
     }
 
@@ -105085,7 +105463,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     });
 
     let signature = initialSignature.signature;
-    if (kind !== 'STANDARD_DELETE') {
+    if (kind === 'WEEKLY_CHAIN_DELETE_PARENT' || kind === 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') {
       const specialisedSignature = await loadCanonicalSignature(
         currentTimesheetId,
         contractWeekIds,
@@ -105269,6 +105647,17 @@ async function handleTimesheetDelete(env, req, timesheetId) {
         purpose: 'TIMESHEET_STANDARD_DELETE_APPLY',
         timeoutMs: 15000
       }));
+    } else if (previewKind === 'DAILY_ABANDONED_RECEIPT_DELETE') {
+      applyResult = normaliseRpc(await sbRpc(env, 'timesheet_daily_abandoned_receipt_delete_apply_v1', {
+        p_timesheet_id: freshPreview.current_timesheet_id,
+        p_actor_user_id: user.id,
+        p_expected_timesheet_id: expectedTimesheetId,
+        p_expected_row_signature: expectedRowSignature
+      }, {
+        routeClass: 'OPERATION_NUDGE',
+        purpose: 'TIMESHEET_DAILY_ABANDONED_RECEIPT_DELETE_APPLY',
+        timeoutMs: 20000
+      }));
     } else if (previewKind === 'WEEKLY_CHAIN_DELETE_PARENT') {
       applyResult = normaliseRpc(await sbRpc(env, 'timesheet_weekly_chain_delete_apply', {
         p_timesheet_id: freshPreview.current_timesheet_id,
@@ -105372,12 +105761,12 @@ async function handleTimesheetDelete(env, req, timesheetId) {
   }
 
   const resultKind = firstText(applyResult.kind, previewKind).toUpperCase();
-  const standardCommitConfirmed = previewKind === 'STANDARD_DELETE' &&
+  const standardCommitConfirmed = ['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(previewKind) &&
     applyResult.ok !== false &&
     applyResult.deleted === true &&
     applyResult.committed === true &&
     applyResult.database_commit_confirmed === true;
-  const weeklyCommitConfirmed = previewKind !== 'STANDARD_DELETE' &&
+  const weeklyCommitConfirmed = !['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(previewKind) &&
     applyResult.ok !== false &&
     applyResult.apply_performed === true &&
     firstText(applyResult.decision).toUpperCase() === 'PERMANENT_DELETE';
@@ -105416,7 +105805,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     deletedTimesheetIds = parseCanonicalIdArray(applyResult.deleted_timesheet_ids, 'deleted_timesheet_ids', { maxCount: 64 });
     deletedContractWeekIds = parseCanonicalIdArray(applyResult.deleted_contract_week_ids, 'deleted_contract_week_ids', { maxCount: 64 });
 
-    if (previewKind === 'STANDARD_DELETE') {
+    if (['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(previewKind)) {
       returnedTimesheetIds = parseCanonicalIdArray(applyResult.timesheet_ids, 'timesheet_ids', { maxCount: 64 });
       returnedContractWeekIds = parseCanonicalIdArray(applyResult.contract_week_ids, 'contract_week_ids', { maxCount: 64 });
       returnedNhspShiftIds = parseCanonicalIdArray(applyResult.nhsp_shift_ids, 'nhsp_shift_ids', { maxCount: 512 });
@@ -105456,7 +105845,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     resultMismatchFields.push('deleted_timesheet_ids');
   }
 
-  if (previewKind === 'STANDARD_DELETE') {
+  if (['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(previewKind)) {
     if (deletedContractWeekIds.length !== 0) {
       resultEvidenceValid = false;
       resultMismatchFields.push('deleted_contract_week_ids');
@@ -105607,7 +105996,7 @@ async function handleTimesheetDelete(env, req, timesheetId) {
     preserved_source_contract_week_ids: previewKind === 'WEEKLY_CHAIN_DELETE_PARENT'
       ? expectedPreservedSourceContractWeekIds
       : returnedPreservedSourceContractWeekIds,
-    deleted_nhsp_shift_count: previewKind === 'STANDARD_DELETE'
+    deleted_nhsp_shift_count: ['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(previewKind)
       ? detachedNhspShiftIds.length
       : Number(applyResult.deleted_nhsp_shifts || 0),
     r2_cleanup: r2Cleanup,
@@ -192904,7 +193293,7 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
 
     let preview = normaliseRpc(await sbRpc(
       env,
-      'timesheet_standard_delete_preview_v1',
+      'timesheet_daily_abandoned_receipt_delete_preview_v1',
       {
         p_timesheet_id: requestedTimesheetId,
         p_actor_user_id: user.id,
@@ -192913,10 +193302,28 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
       },
       {
         routeClass: 'PREVIEW_PROGRESS',
-        purpose: 'TIMESHEET_DELETE_PREVIEW_STANDARD',
+        purpose: 'TIMESHEET_DELETE_PREVIEW_DAILY_RECEIPT',
         timeoutMs: 10000
       }
     ));
+
+    if (!preview || preview.applicable !== true) {
+      preview = normaliseRpc(await sbRpc(
+        env,
+        'timesheet_standard_delete_preview_v1',
+        {
+          p_timesheet_id: requestedTimesheetId,
+          p_actor_user_id: user.id,
+          p_expected_timesheet_id: currentTimesheetId,
+          p_expected_row_signature: initialSignature.signature
+        },
+        {
+          routeClass: 'PREVIEW_PROGRESS',
+          purpose: 'TIMESHEET_DELETE_PREVIEW_STANDARD',
+          timeoutMs: 10000
+        }
+      ));
+    }
 
     if (!preview || typeof preview !== 'object' || Array.isArray(preview)) {
       return jsonResponse(500, {
@@ -192986,7 +193393,7 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
     }
 
     const kind = String(preview.kind || 'STANDARD_DELETE').trim().toUpperCase();
-    if (!['STANDARD_DELETE', 'WEEKLY_CHAIN_DELETE_PARENT', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(kind)) {
+    if (!['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE', 'WEEKLY_CHAIN_DELETE_PARENT', 'WEEKLY_MANUAL_ADJUSTMENT_DELETE'].includes(kind)) {
       return jsonResponse(409, {
         error: 'Delete preview returned an unsupported removal kind.',
         error_code: 'DELETE_PREVIEW_KIND_UNSUPPORTED',
@@ -193023,7 +193430,7 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
     });
 
     let currentRowSignature = initialSignature.signature;
-    if (kind !== 'STANDARD_DELETE') {
+    if (kind === 'WEEKLY_CHAIN_DELETE_PARENT' || kind === 'WEEKLY_MANUAL_ADJUSTMENT_DELETE') {
       const specialisedSignature = await loadCanonicalSignature(
         currentTimesheetId,
         contractWeekIds,
@@ -193044,7 +193451,7 @@ async function handleTimesheetDeletePreview(env, req, timesheetId) {
     }
 
     let deleteItems = Array.isArray(preview.delete_items) ? preview.delete_items : [];
-    if (kind === 'STANDARD_DELETE' && deleteItems.length === 0 && timesheetIds.length) {
+    if (['STANDARD_DELETE', 'DAILY_ABANDONED_RECEIPT_DELETE'].includes(kind) && deleteItems.length === 0 && timesheetIds.length) {
       const currentRow = await sbGetOne(
         env,
         `${env.SUPABASE_URL}/rest/v1/timesheets` +
@@ -195583,6 +195990,11 @@ export function createCandidatePrivateDependencies(env, routeAudience = 'PRIVATE
   };
 }
 export const candidateOfficeSummaryInternals = Object.freeze({
+  isOpaqueCandidateIdentity,
+  candidateDailyOfficeWorkflowPresentation,
+  attachCandidateDailyOfficePresentation,
+  candidateDailyOfficeImmutableFacts,
+  attachCandidateDailyOfficeDetailPresentation,
   candidateSummaryProjectionError,
   candidateOfficeApplicability,
   markCandidateOfficeApplicability,
