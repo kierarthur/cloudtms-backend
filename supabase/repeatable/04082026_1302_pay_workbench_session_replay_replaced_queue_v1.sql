@@ -283,6 +283,34 @@ BEGIN
     SET status = 'DEAD',
         failed_at_utc = COALESCE(old_job.failed_at_utc, v_now),
         updated_at_utc = v_now,
+        private_stage = CASE
+          WHEN UPPER(BTRIM(COALESCE(old_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            AND old_job.economic_build_id IS NULL
+            AND old_job.private_stage = 'BUILD_INITIALISE'
+          THEN NULL::text
+          ELSE old_job.private_stage
+        END,
+        private_cursor_kind = CASE
+          WHEN UPPER(BTRIM(COALESCE(old_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            AND old_job.economic_build_id IS NULL
+            AND old_job.private_stage = 'BUILD_INITIALISE'
+          THEN NULL::text
+          ELSE old_job.private_cursor_kind
+        END,
+        private_cursor_json = CASE
+          WHEN UPPER(BTRIM(COALESCE(old_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            AND old_job.economic_build_id IS NULL
+            AND old_job.private_stage = 'BUILD_INITIALISE'
+          THEN '{}'::jsonb
+          ELSE old_job.private_cursor_json
+        END,
+        private_stage_version = CASE
+          WHEN UPPER(BTRIM(COALESCE(old_job.job_type, ''))) = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+            AND old_job.economic_build_id IS NULL
+            AND old_job.private_stage = 'BUILD_INITIALISE'
+          THEN NULL::integer
+          ELSE old_job.private_stage_version
+        END,
         last_error_json = jsonb_strip_nulls(
           jsonb_build_object(
             'code', 'REPLACED_SESSION_QUEUE_REPLAYED',

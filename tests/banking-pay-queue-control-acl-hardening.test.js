@@ -33,6 +33,14 @@ test('replacement-session queue replay is service-role-only with an empty search
   assert.doesNotMatch(replay, /GRANT EXECUTE[^;]+\bTO\s+(?:PUBLIC|anon|authenticated)\b/i);
 });
 
+test('replacement-session replay terminalises an initial source-build job in the valid terminal identity shape', () => {
+  assert.match(
+    replay,
+    /SET status = 'DEAD',[\s\S]*private_stage = CASE[\s\S]*job_type[\s\S]*WORKBENCH_CANDIDATE_SOURCE_BUILD[\s\S]*economic_build_id IS NULL[\s\S]*private_stage = 'BUILD_INITIALISE'[\s\S]*THEN NULL::text[\s\S]*private_cursor_kind = CASE[\s\S]*THEN NULL::text[\s\S]*private_cursor_json = CASE[\s\S]*THEN '\{\}'::jsonb[\s\S]*private_stage_version = CASE[\s\S]*THEN NULL::integer/i,
+  );
+  assert.match(replay, /WHERE old_job\.id = replay_job\.source_job_id[\s\S]*AND old_job\.status = 'QUEUED'/i);
+});
+
 test('legacy job failure is service-role-only with an empty search path', () => {
   assert.match(failJob, /SECURITY DEFINER\s+SET search_path = ''/i);
   assert.match(
