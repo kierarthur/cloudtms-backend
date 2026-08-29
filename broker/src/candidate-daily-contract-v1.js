@@ -734,7 +734,7 @@ function normalizeIndexedOutcomes(source, options = {}) {
           || (item.delivered_visible_cursor !== undefined && !integerValue(item.delivered_visible_cursor, 0))) return null;
     } else if (options.kind === 'reconciliation') {
       if (!exactObjectKeys(item, ['index', 'classification', 'error_code'], ['index', 'classification'])
-          || !['MATCH', 'REPAIR_PROJECTION', 'CANONICAL_COMMAND_REQUIRED', 'AMBIGUOUS', 'TERMINAL_CONFLICT'].includes(item.classification)) return null;
+          || !['MATCH', 'REPAIR_PROJECTION', 'CANONICAL_COMMAND_REQUIRED', 'NOT_ENROLLED', 'AMBIGUOUS', 'TERMINAL_CONFLICT'].includes(item.classification)) return null;
     }
     if (item.error_code !== undefined && !stringValue(item.error_code, 1, 80)) return null;
     output.push({ ...item });
