@@ -185525,7 +185525,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     skipped_count: 0,
     failed_count: 0
   };
-  if (sourceBuildAllowedByFilter) {
+  if (sourceBuildAllowedByFilter && sessionId) {
     try {
       discardedSessionBlockerRepair = unwrapRpc(await sbRpc(env, 'pay_workbench_repair_discarded_session_blockers_v1', {
         p_session_id: sessionId,

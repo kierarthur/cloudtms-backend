@@ -171,6 +171,7 @@ BEGIN
       FROM public.timesheets AS frontier
       JOIN public.timesheets AS related ON related.booking_id=frontier.booking_id
       WHERE frontier.timesheet_id=v_frontier AND frontier.booking_id IS NOT NULL
+        AND UPPER(COALESCE(related.status::text,''))<>'REVOKED'
         AND related.timesheet_id<>v_frontier
         AND (v_last_key IS NULL OR 'BOOKING:'||related.timesheet_id::text>v_last_key)
       ORDER BY 1 LIMIT v_limit+1;
@@ -181,7 +182,10 @@ BEGIN
              CASE WHEN v_family=6 THEN 'ROTATION_FAMILY' ELSE 'CANONICAL_ROTATION_PROJECTION' END,
              rotation.family_timesheet_id
       FROM public._pay_timesheet_rotation_scope(ARRAY[v_frontier]) AS rotation
+      JOIN public.timesheets AS rotation_member
+        ON rotation_member.timesheet_id=rotation.family_timesheet_id
       WHERE rotation.family_timesheet_id<>v_frontier
+        AND UPPER(COALESCE(rotation_member.status::text,''))<>'REVOKED'
         AND (v_last_key IS NULL OR (CASE WHEN v_family=6 THEN 'ROTATION:' ELSE 'CANONICAL_ROTATION:' END)||rotation.family_timesheet_id::text>v_last_key)
       ORDER BY 1 LIMIT v_limit+1;
     ELSIF v_family IN (8,9) THEN

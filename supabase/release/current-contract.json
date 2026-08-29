@@ -8315,6 +8315,25 @@
         "search_path=\"\""
       ],
       "schema": "private",
+      "identity": "pay_workbench_reconcile_empty_scope_v1(p_job_id uuid, p_build_id uuid, p_attempt_id uuid, p_attempt_nonce uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": false,
+      "definition_sha256": "88d8ba5813d3c5f6cdfcb016446bbf3464be6100602d9649c5d6b1de77e57231"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
       "identity": "pay_workbench_recovery_selection_overlay_apply_v1(p_session_id uuid, p_candidate_id uuid, p_options_json jsonb)",
       "parallel": "u",
       "volatility": "v",
@@ -8509,7 +8528,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": false,
-      "definition_sha256": "caf69d04d2f8b715dc146e3068be7a79f04f0ce6d363bcb98eb1ba4de3a56075"
+      "definition_sha256": "91f28e1b185955e811f4f7b261d3a4f21edccd6b49fdecd4109d22a9e896bf90"
     },
     {
       "acl": [
@@ -22965,7 +22984,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "17996bfdc19c52ae9b5ae253e04449a174295fc8fae6fd56c2829b679bffd56b"
+      "definition_sha256": "36b197f65c47b2e4ecf2ba2528dcbe18dfc02316492ff15f66eae37a380ebcf4"
     },
     {
       "acl": [

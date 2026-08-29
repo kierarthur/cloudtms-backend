@@ -29,6 +29,10 @@ DECLARE
   v_attempt_id uuid;
   v_attempt_nonce uuid;
   v_result jsonb;
+  v_empty_finalize jsonb;
+  v_capture_mode boolean:=lower(COALESCE(
+    pg_catalog.current_setting('cloudtms.pay_workbench_effect_capture_mode',true),''
+  ))='capture';
 BEGIN
   IF v_context IS NULL THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_BUILD_REQUIRED' USING ERRCODE='42501';
@@ -56,7 +60,33 @@ BEGIN
     p_candidate_ids,p_mismatch_choices,p_client_filter_single,
     p_force_include_timesheet_ids,p_exclude_timesheet_ids
   );
-  IF jsonb_typeof(v_result)<>'object' OR jsonb_typeof(v_result->'public_result_json')<>'object' THEN
+
+  IF jsonb_typeof(v_result)='object'
+     AND COALESCE((v_result->>'authoritative_timesheet_scope')::boolean,false)
+     AND COALESCE((v_result->>'explicit_empty_timesheet_scope')::boolean,false)
+     AND v_result->>'preview_scope_strategy'='AUTHORITATIVE_EMPTY'
+     AND jsonb_typeof(v_result->'scope_timesheet_ids')='array'
+     AND jsonb_array_length(v_result->'scope_timesheet_ids')=0 THEN
+    IF v_capture_mode THEN
+      RETURN v_result||jsonb_build_object(
+        'effect_plan_capture',true,
+        'captured_effects','[]'::jsonb,
+        '_internal_reconcile_timing','{}'::jsonb
+      );
+    END IF;
+    v_empty_finalize:=private.pay_workbench_reconcile_empty_scope_v1(
+      v_job_id,v_build_id,v_attempt_id,v_attempt_nonce
+    );
+    IF jsonb_typeof(v_empty_finalize) IS DISTINCT FROM 'object'
+       OR COALESCE((v_empty_finalize->>'ok')::boolean,false) IS NOT TRUE THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_EMPTY_SCOPE_RECONCILIATION_INVALID'
+        USING ERRCODE='23514';
+    END IF;
+    RETURN v_result;
+  END IF;
+
+  IF jsonb_typeof(v_result) IS DISTINCT FROM 'object'
+     OR jsonb_typeof(v_result->'public_result_json') IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'PAY_WORKBENCH_RECONCILIATION_RESULT_INVALID' USING ERRCODE='22023';
   END IF;
   RETURN v_result->'public_result_json';
