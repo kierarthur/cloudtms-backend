@@ -184318,7 +184318,9 @@ async function runBankingPayWorkbenchSourceBuildLaneAttempt(env, options = {}) {
     const allowedDatabaseErrorNames = [
       'PAY_WORKBENCH_ATTEMPT_CALLER_INVALID',
       'PAY_WORKBENCH_ATTEMPT_CUTOFF_INVALID',
-      'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_RUN_ID_REQUIRED'
+      'PAY_WORKBENCH_CANDIDATE_SOURCE_BUILD_RUN_ID_REQUIRED',
+      'PAY_WORKBENCH_SOURCE_BUILD_AUTHORITY_FINGERPRINT_REQUIRED',
+      'PAY_WORKBENCH_SOURCE_BUILD_PHYSICAL_PUBLICATION_CONTRACT_REQUIRED'
     ];
     const databaseErrorName = allowedDatabaseErrorNames.find((name) => rawDatabaseErrorName.includes(name)) || null;
     return {
@@ -186099,7 +186101,8 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
       error_message: lane.error_message || null,
       claim_error_status: lane.claim_error_status ?? null,
       database_error_code: lane.database_error_code || null,
-      database_error_name: lane.database_error_name || null
+      database_error_name: lane.database_error_name || null,
+      database_error_reason_code: lane.database_error_name || null
     }, passFailed > 0 || lane.transport_ok === false ? 'warn' : 'info');
 
     return {
@@ -186404,6 +186407,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
             claim_error_status: lane.claim_error_status ?? null,
             database_error_code: lane.database_error_code || null,
             database_error_name: lane.database_error_name || null,
+            database_error_reason_code: lane.database_error_name || null,
             rpc_elapsed_ms: lane.elapsed_ms,
             rpc_budget_ms: dbRpcHardCapMs,
             source_build_allowed_job_types: ['WORKBENCH_CANDIDATE_SOURCE_BUILD'],

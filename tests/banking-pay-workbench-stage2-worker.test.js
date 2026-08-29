@@ -463,6 +463,23 @@ test('claim uncertainty exposes only bounded database error identity needed for 
   assert.match(drain, /claim_error_status:\s*lane\.claim_error_status \?\? null/);
   assert.match(drain, /database_error_code:\s*lane\.database_error_code \|\| null/);
   assert.match(drain, /database_error_name:\s*lane\.database_error_name \|\| null/);
+  assert.match(drain, /database_error_reason_code:\s*lane\.database_error_name \|\| null/);
+
+  for (const expectedName of [
+    'PAY_WORKBENCH_SOURCE_BUILD_AUTHORITY_FINGERPRINT_REQUIRED',
+    'PAY_WORKBENCH_SOURCE_BUILD_PHYSICAL_PUBLICATION_CONTRACT_REQUIRED'
+  ]) {
+    const currentAuthorityResult = await loadActualSbRpcLaneAttempt(async () => ({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({
+        code: '22023',
+        message: `Database rejected ${expectedName} during the bounded claim.`
+      })
+    }))({ SUPABASE_URL: 'https://test.invalid' }, baseOptions(undefined));
+    assert.equal(currentAuthorityResult.database_error_code, '22023');
+    assert.equal(currentAuthorityResult.database_error_name, expectedName);
+  }
 });
 
 test('no-claim result codes are restricted to the database-owned allowlist', async () => {
