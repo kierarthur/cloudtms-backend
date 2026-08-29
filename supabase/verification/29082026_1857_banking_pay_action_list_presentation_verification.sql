@@ -101,7 +101,19 @@ begin
          or v_item->>'linked_timesheet_id' is distinct from v_timesheet::text
          or v_item->>'affected_candidate_count' is distinct from '1'
          or v_item->>'affected_payment_count' is distinct from '1' then
-        raise exception 'BANKING_PAY_ACTION_PRESENTATION_VERIFY: server presentation facts changed';
+        raise exception 'BANKING_PAY_ACTION_PRESENTATION_VERIFY: server presentation facts changed for % %: %',
+          v_sort,
+          v_direction,
+          jsonb_build_object(
+            'candidate_name', v_item->>'candidate_name',
+            'candidate_reference', v_item->>'candidate_reference',
+            'payment_label', v_item->>'payment_label',
+            'payment_date', v_item->>'payment_date',
+            'affected_display_amount', v_item->>'affected_display_amount',
+            'linked_timesheet_id_matches', (v_item->>'linked_timesheet_id' is not distinct from v_timesheet::text),
+            'affected_candidate_count', v_item->>'affected_candidate_count',
+            'affected_payment_count', v_item->>'affected_payment_count'
+          );
       end if;
     end loop;
   end loop;
