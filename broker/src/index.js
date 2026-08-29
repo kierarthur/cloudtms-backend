@@ -185517,6 +185517,51 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     source_build_lane_allowed_job_types: sourceBuildParallelEnabled ? ['WORKBENCH_CANDIDATE_SOURCE_BUILD'] : []
   });
 
+  let replayedCandidateOwnerRepair = {
+    ok: true,
+    examined_count: 0,
+    repaired_candidate_count: 0,
+    terminalised_replay_job_count: 0,
+    skipped_count: 0,
+    failed_count: 0
+  };
+  if (sourceBuildAllowedByFilter) {
+    try {
+      replayedCandidateOwnerRepair = unwrapRpc(await sbRpc(env, 'pay_workbench_repair_replayed_candidate_jobs_v1', {
+        p_session_id: sessionId,
+        p_candidate_id: candidateId,
+        p_limit: Math.min(10, Math.max(1, claimLimit)),
+        p_reason: 'WORKBENCH_DRAIN_REPLACED_SESSION_CANDIDATE_OWNER_REPAIR'
+      }, {
+        routeClass: 'WORKBENCH_MUTATION',
+        purpose: 'WORKBENCH_REPLACED_SESSION_CANDIDATE_OWNER_REPAIR',
+        timeoutMs: Math.min(8000, dbRpcHardCapMs),
+        bankingPay: true
+      }), 'pay_workbench_repair_replayed_candidate_jobs_v1');
+      rpcCallCount += 1;
+      if (!isPlainObject(replayedCandidateOwnerRepair) || !booleanFrom(replayedCandidateOwnerRepair.ok)) {
+        const repairError = new Error('Banking Pay could not safely replace copied candidate refresh work with the current canonical owner.');
+        repairError.code = 'WORKBENCH_REPLAYED_CANDIDATE_OWNER_REPAIR_FAILED';
+        throw repairError;
+      }
+      const repairedCandidateCount = countFrom(replayedCandidateOwnerRepair, ['repaired_candidate_count']);
+      if (repairedCandidateCount > 0) {
+        madeProgress = true;
+        logDrainDiag('WORKBENCH_REPLAYED_CANDIDATE_OWNER_REPAIRED', {
+          repaired_candidate_count: repairedCandidateCount,
+          terminalised_replay_job_count: countFrom(replayedCandidateOwnerRepair, ['terminalised_replay_job_count']),
+          skipped_count: countFrom(replayedCandidateOwnerRepair, ['skipped_count'])
+        });
+      }
+    } catch (repairError) {
+      logDrainDiag('WORKBENCH_REPLAYED_CANDIDATE_OWNER_REPAIR_FAILED', {
+        error_code: upperTrim(repairError?.code || repairError?.name || 'WORKBENCH_REPLAYED_CANDIDATE_OWNER_REPAIR_FAILED'),
+        error_message: String(repairError?.message || repairError || 'Replayed candidate owner repair failed')
+      }, 'warn');
+      throw repairError;
+    }
+  }
+
   const recordAggregate = async (aggregateLike, context = {}) => {
     const aggregate = isPlainObject(aggregateLike) ? aggregateLike : {};
     lastAggregate = aggregate;
@@ -186678,6 +186723,7 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     normal_due_no_claim_terminal_count: normalDueNoClaimTerminalCount,
     source_build_only_assertion_passed: !sourceBuildOnlyAssertionFailed,
     source_build_parallel_burst_summaries: sourceBuildParallelBurstSummaries,
+    replayed_candidate_owner_repair: replayedCandidateOwnerRepair,
     claimed: claimedCount,
     claimed_count: claimedCount,
     processed: processedCount,

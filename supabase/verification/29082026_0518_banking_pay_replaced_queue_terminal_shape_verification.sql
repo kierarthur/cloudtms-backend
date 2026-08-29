@@ -1,11 +1,11 @@
 \set ON_ERROR_STOP on
 
 -- Rollback-contained first-use proof for replacement-session queue replay.
--- A queued source-build job starts in BUILD_INITIALISE shape.  When the source
--- session is replaced the replay must create one valid initial job for the new
--- session and terminalise the old job without leaving active build cursor
--- fields on a DEAD row.  No Draft, provider, payment or settlement owner is
--- invoked by this verifier.
+-- A queued session-scope root is safe to replay after its session authority is
+-- replaced. Candidate work has a session-bound build identity and is covered
+-- separately by the canonical-candidate-owner verifier. This proof retains the
+-- established session replay, terminalisation and idempotency boundaries. No
+-- Draft, provider, payment or settlement owner is invoked.
 BEGIN;
 
 DO $verification$
@@ -91,7 +91,7 @@ BEGIN
     private_stage_version
   ) VALUES (
     v_source_job_id,
-    'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+    'WORKBENCH_SESSION_SCOPE_SEED',
     'QUEUED',
     40,
     clock_timestamp(),
@@ -102,10 +102,10 @@ BEGIN
     v_source_session_id,
     jsonb_build_object('verification_marker', v_prefix),
     NULL,
-    'BUILD_INITIALISE',
-    'BUILD_INITIALISE',
+    NULL,
+    NULL,
     '{}'::jsonb,
-    1
+    NULL
   );
 
   v_result := public.pay_workbench_session_replay_replaced_queue_v1(
@@ -178,16 +178,16 @@ BEGIN
   FROM public.banking_pay_workbench_jobs AS job
   WHERE job.id = v_replay_job_id;
 
-  IF v_row.job_type IS DISTINCT FROM 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+  IF v_row.job_type IS DISTINCT FROM 'WORKBENCH_SESSION_SCOPE_SEED'
      OR v_row.status IS DISTINCT FROM 'QUEUED'
      OR v_row.attempt_count IS DISTINCT FROM 0
      OR v_row.snapshot_run_id IS DISTINCT FROM v_snapshot_id
      OR v_row.session_id IS DISTINCT FROM v_target_session_id
      OR v_row.economic_build_id IS NOT NULL
-     OR v_row.private_stage IS DISTINCT FROM 'BUILD_INITIALISE'
-     OR v_row.private_cursor_kind IS DISTINCT FROM 'BUILD_INITIALISE'
+     OR v_row.private_stage IS NOT NULL
+     OR v_row.private_cursor_kind IS NOT NULL
      OR v_row.private_cursor_json IS DISTINCT FROM '{}'::jsonb
-     OR v_row.private_stage_version IS DISTINCT FROM 1
+     OR v_row.private_stage_version IS NOT NULL
      OR v_row.replayed_from_session_id IS DISTINCT FROM v_source_session_id::text
      OR v_row.replayed_from_job_id IS DISTINCT FROM v_source_job_id::text THEN
     RAISE EXCEPTION USING
@@ -237,7 +237,7 @@ BEGIN
     private_stage_version
   ) VALUES (
     v_second_source_job_id,
-    'WORKBENCH_CANDIDATE_SOURCE_BUILD',
+    'WORKBENCH_SESSION_SCOPE_SEED',
     'QUEUED',
     41,
     clock_timestamp(),
@@ -248,10 +248,10 @@ BEGIN
     v_source_session_id,
     '{}'::jsonb,
     NULL,
-    'BUILD_INITIALISE',
-    'BUILD_INITIALISE',
+    NULL,
+    NULL,
     '{}'::jsonb,
-    1
+    NULL
   );
 
   v_result := public.pay_workbench_session_replay_replaced_queue_v1(
@@ -267,9 +267,9 @@ BEGIN
   WHERE job.id = v_second_source_job_id;
 
   IF v_row.status IS DISTINCT FROM 'QUEUED'
-     OR v_row.private_stage IS DISTINCT FROM 'BUILD_INITIALISE'
-     OR v_row.private_cursor_kind IS DISTINCT FROM 'BUILD_INITIALISE'
-     OR v_row.private_stage_version IS DISTINCT FROM 1
+     OR v_row.private_stage IS NOT NULL
+     OR v_row.private_cursor_kind IS NOT NULL
+     OR v_row.private_stage_version IS NOT NULL
      OR COALESCE((v_result->>'source_queued_terminalised_count')::integer, -1) <> 0 THEN
     RAISE EXCEPTION USING
       MESSAGE = 'BANKING_PAY_REPLACED_QUEUE_NO_TERMINALISE_OPTION_CHANGED_SOURCE',

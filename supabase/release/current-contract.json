@@ -24302,6 +24302,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "pay_workbench_repair_replayed_candidate_jobs_v1(p_session_id uuid, p_candidate_id uuid, p_limit integer, p_reason text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "4e125a39deed80b5a76ad570af7afd22f00c913c8cc7a15b034952bad8a671c5"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=public"
       ],
       "schema": "public",
@@ -25364,7 +25388,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "31783363b21bc2bdc3a3ac1831b725fb26bf8860efbce551d0265d34ec74615f"
+      "definition_sha256": "363aeab20aed70b8396793808f9a2263766e984d66914317bdf0a767e6e0f360"
     },
     {
       "acl": [

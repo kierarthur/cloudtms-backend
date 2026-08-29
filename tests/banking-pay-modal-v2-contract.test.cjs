@@ -68,11 +68,11 @@ test('general browser isolation inventory admits only the nine new service RPCs'
   assert.match(verification, /v_hash<>'951cb626cae1497249be73898f9906cd'/);
 });
 
-test('Candidate-named isolation inventory admits only the three new service RPCs', () => {
+test('Candidate-named isolation inventory admits only the four new service RPCs', () => {
   const verification = read(path.join(root, 'supabase', 'verification',
     '27082026_1947_candidate_named_security_verification_v3.sql'));
-  assert.match(verification, /v_count<>111 or v_service_missing<>8 or v_browser_executable<>0/);
-  assert.match(verification, /v_hash<>'25ff5272e1f5dfc36a0fcf7c0c381a03'/);
+  assert.match(verification, /v_count<>112 or v_service_missing<>8 or v_browser_executable<>0/);
+  assert.match(verification, /v_hash<>'6d3c3fe23de37f1e7dc74edd08bfceed'/);
 });
 
 test('v2 summary is server-owned, selected-only and keyset paged before the browser', () => {
