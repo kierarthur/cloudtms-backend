@@ -26444,7 +26444,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "364a626d2ad0e8e226e8780332ca99b71133e974fe59db662848de11388ca2db"
+      "definition_sha256": "796ee87956df8a34c9ca16f7d2883a81fc7058b930f9052701b0484d1316120d"
     },
     {
       "acl": [
@@ -26468,7 +26468,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "6e44a6b7aa6e81d38c49b0d0aa86e0a2d3dbe5f5fb507deedfc53d25de381a28"
+      "definition_sha256": "9a571872b8e30aca7af1d854916af78d7e1c4416b3a8723a68315334a4f8090f"
     },
     {
       "acl": [
@@ -57141,7 +57141,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK ((workflow_kind = ANY (ARRAY['CONTRACT_HOURS'::text, 'CONTRACT_EXPENSE'::text, 'CONTRACT_COMBINED'::text])) AND contract_id IS NOT NULL AND contract_week_id IS NOT NULL AND week_ending_date IS NOT NULL OR workflow_kind = 'DAILY'::text AND target_timesheet_id IS NOT NULL AND anchor_timesheet_id = target_timesheet_id AND work_date IS NOT NULL AND contract_week_id IS NULL AND week_ending_date IS NULL)"
+          "definition": "CHECK ((workflow_kind = ANY (ARRAY['CONTRACT_HOURS'::text, 'CONTRACT_EXPENSE'::text, 'CONTRACT_COMBINED'::text])) AND contract_id IS NOT NULL AND contract_week_id IS NOT NULL AND week_ending_date IS NOT NULL OR workflow_kind = 'DAILY'::text AND work_date IS NOT NULL AND contract_week_id IS NULL AND week_ending_date IS NULL AND (target_timesheet_id IS NOT NULL AND anchor_timesheet_id = target_timesheet_id OR state = 'CANCELLED'::text AND target_timesheet_id IS NULL AND anchor_timesheet_id IS NULL AND issue_codes @> '[\"OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT\"]'::jsonb))"
         },
         {
           "name": "candidate_submission_workflows_immutable_submission_ck",

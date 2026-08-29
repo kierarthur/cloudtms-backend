@@ -12,24 +12,31 @@ const dailyVerification = readFileSync(new URL(
   '../supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql',
   import.meta.url
 ), 'utf8');
+const auditShapeMigration = readFileSync(new URL(
+  '../supabase/migrations/29082026_2125_candidate_daily_deleted_receipt_audit_shape.sql',
+  import.meta.url
+), 'utf8');
 const contract = JSON.parse(readFileSync(new URL(
   '../supabase/release/current-contract.json',
   import.meta.url
 ), 'utf8'));
 
-function previewDefinitionHash() {
-  const functionName = 'create or replace function public.timesheet_daily_abandoned_receipt_delete_preview_v1(';
+function definitionHash(kind) {
+  const functionName = `create or replace function public.timesheet_daily_abandoned_receipt_delete_${kind}_v1(`;
   const functionStart = sql.toLowerCase().indexOf(functionName);
   const bodyMarker = 'as $function$';
   const bodyStart = sql.toLowerCase().indexOf(bodyMarker, functionStart) + bodyMarker.length;
   const bodyEnd = sql.indexOf('$function$;', bodyStart);
   assert.ok(functionStart >= 0 && bodyStart >= bodyMarker.length && bodyEnd > bodyStart);
   const body = sql.slice(bodyStart, bodyEnd).replaceAll('\r\n', '\n');
+  const signature = kind === 'preview'
+    ? 'p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_expected_row_signature text DEFAULT NULL::text'
+    : 'p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid, p_expected_row_signature text';
   const definition = [
-    'CREATE OR REPLACE FUNCTION public.timesheet_daily_abandoned_receipt_delete_preview_v1(p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_expected_row_signature text DEFAULT NULL::text)',
+    `CREATE OR REPLACE FUNCTION public.timesheet_daily_abandoned_receipt_delete_${kind}_v1(${signature})`,
     ' RETURNS jsonb',
     ' LANGUAGE plpgsql',
-    ' STABLE SECURITY DEFINER',
+    kind === 'preview' ? ' STABLE SECURITY DEFINER' : ' VOLATILE SECURITY DEFINER',
     " SET search_path TO 'public', 'pg_temp'",
     'AS $function$'
   ].join('\n') + body + '$function$\n';
@@ -51,12 +58,29 @@ test('Daily abandoned receipt authority is an exact service-only two-RPC boundar
   assert.match(sql, /notify pgrst\s*,\s*'reload schema'/i);
 });
 
-test('generated contract contains the exact Daily preview definition hash', () => {
-  const routine = contract.routines.find(({ identity }) =>
-    identity.startsWith('timesheet_daily_abandoned_receipt_delete_preview_v1(')
+test('generated contract contains both exact Daily deletion definition hashes', () => {
+  for (const kind of ['preview', 'apply']) {
+    const routine = contract.routines.find(({ identity }) =>
+      identity.startsWith(`timesheet_daily_abandoned_receipt_delete_${kind}_v1(`)
+    );
+    assert.ok(routine);
+    assert.equal(routine.definition_sha256, definitionHash(kind));
+  }
+});
+
+test('generated contract retains only the exact terminal Daily audit shape', () => {
+  const relation = contract.relations.find(({ name }) => name === 'candidate_submission_workflows');
+  assert.ok(relation);
+  const constraint = relation.constraints.find(({ name }) =>
+    name === 'candidate_submission_workflows_identity_shape_ck'
   );
-  assert.ok(routine);
-  assert.equal(routine.definition_sha256, previewDefinitionHash());
+  assert.ok(constraint);
+  assert.match(constraint.definition, /workflow_kind = 'DAILY'::text/);
+  assert.match(constraint.definition, /state = 'CANCELLED'::text/);
+  assert.match(constraint.definition, /target_timesheet_id IS NULL/);
+  assert.match(constraint.definition, /anchor_timesheet_id IS NULL/);
+  assert.match(constraint.definition, /OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT/);
+  assert.doesNotMatch(constraint.definition, /state = ANY/);
 });
 
 test('preview delegates existing financial deletion classification and fails closed on approval or retained authority', () => {
@@ -84,14 +108,22 @@ test('apply preserves normal finance owners and proves the delegated standard de
   assert.doesNotMatch(sql, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
-test('delete cancels only unsent manager mail and retains durable operation audit', () => {
+test('delete cancels only unsent manager mail and retains immutable components as terminal audit', () => {
   assert.match(sql, /update public\.mail_outbox set status='FAILED'::public\.mail_status_enum/i);
   assert.match(sql, /status='QUEUED'::public\.mail_status_enum and sent_at is null/i);
   assert.match(sql, /CANCELLED_DAILY_ABANDONED_RECEIPT_DELETE/);
   assert.match(sql, /CANDIDATE_DAILY_ABANDONED_RECEIPT_DELETE_APPLIED/);
   assert.match(sql, /UNAPPROVED_FINANCIALLY_CLEAN_DAILY_RECEIPT/);
   assert.match(sql, /delete from public\.candidate_approval_requests where workflow_id=v_workflow_id/i);
-  assert.match(sql, /delete from public\.candidate_submission_workflows where id=v_workflow_id/i);
+  assert.match(sql, /state='CANCELLED'/i);
+  assert.match(sql, /target_timesheet_id=null/i);
+  assert.match(sql, /anchor_timesheet_id=null/i);
+  assert.match(sql, /OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT/);
+  assert.match(sql, /update public\.candidate_submission_components set[\s\S]*?timesheet_id=null[\s\S]*?state='ABANDONED'/i);
+  assert.doesNotMatch(sql, /source_component_id=null/i);
+  assert.doesNotMatch(sql, /delete from public\.candidate_submission_components/i);
+  assert.doesNotMatch(sql, /delete from public\.candidate_submission_workflows/i);
+  assert.match(auditShapeMigration, /state='CANCELLED'[\s\S]*?target_timesheet_id is null[\s\S]*?anchor_timesheet_id is null[\s\S]*?OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT/i);
 });
 
 test('Office broker previews the Daily adapter first and falls back for every other Timesheet', () => {

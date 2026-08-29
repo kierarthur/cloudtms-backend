@@ -803,6 +803,10 @@
       "sha256": "6753016fc4ed03eb149292972a1956df64f1c9650f6a52579f1474c8e6b78cd7"
     },
     {
+      "path": "supabase/migrations/29082026_2125_candidate_daily_deleted_receipt_audit_shape.sql",
+      "sha256": "dde9c9ff639a7ffded814a7976d01d7b280ac60f12046fb865b470785f1aed0f"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

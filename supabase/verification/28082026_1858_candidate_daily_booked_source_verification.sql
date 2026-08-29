@@ -621,9 +621,17 @@ begin
        or v_delete_result->>'deleted'<>'true'
        or v_delete_result->>'database_commit_confirmed'<>'true'
        or v_delete_result->>'deleted_workflow_id' is distinct from v_created_workflow::text
+       or coalesce((v_delete_result->>'retained_audit_component_count')::integer,0)<=0
        or exists(select 1 from public.timesheets where timesheet_id=v_replayed)
-       or exists(select 1 from public.candidate_submission_workflows where id=v_created_workflow)
-       or exists(select 1 from public.candidate_submission_components where workflow_id=v_created_workflow)
+       or not exists(select 1 from public.candidate_submission_workflows
+         where id=v_created_workflow and state='CANCELLED'
+           and target_timesheet_id is null and anchor_timesheet_id is null
+           and issue_codes @> '["OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT"]'::jsonb)
+       or exists(select 1 from public.candidate_submission_components
+         where workflow_id=v_created_workflow and
+           (timesheet_id is not null or approval_request_id is not null or state<>'ABANDONED'))
+       or not exists(select 1 from public.candidate_submission_components
+         where workflow_id=v_created_workflow and immutable_at_utc is not null)
        or exists(select 1 from public.candidate_approval_requests where workflow_id=v_created_workflow)
        or exists(select 1 from public.timesheets_financials where timesheet_id=v_replayed)
        or not exists(select 1 from public.audit_events where object_id_text=v_created_workflow::text

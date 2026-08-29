@@ -18,7 +18,7 @@ declare
   v_blockers jsonb:='[]'::jsonb;
   v_workflow_count integer:=0;
   v_decision text:='BLOCKED';
-  v_r2_keys text[]:=array[]::text[];
+  v_retained_component_count integer:=0;
 begin
   if p_timesheet_id is null then raise exception using message='TIMESHEET_ID_REQUIRED'; end if;
   if p_actor_user_id is null then raise exception using message='ACTOR_USER_ID_REQUIRED'; end if;
@@ -104,10 +104,8 @@ begin
       where c.id=e.candidate_component_id and c.workflow_id=v_workflow.id))) then
     v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','DAILY_RECEIPT_OFFICE_EVIDENCE_EXISTS'));
   end if;
-  select coalesce(array_agg(key_value order by convert_to(key_value,'UTF8')),array[]::text[]) into v_r2_keys
-  from (select distinct key_value from public.candidate_submission_components c cross join lateral unnest(array[
-    c.storage_key,c.review_storage_key,c.final_signed_storage_key,c.paper_return_page_key]) key_value
-    where c.workflow_id=v_workflow.id and nullif(btrim(key_value),'') is not null) keys;
+  select count(*)::integer into v_retained_component_count
+  from public.candidate_submission_components c where c.workflow_id=v_workflow.id;
   if jsonb_array_length(v_blockers)=0 and upper(coalesce(v_standard->>'decision','BLOCKED'))='PERMANENT_DELETE'
     then v_decision:='PERMANENT_DELETE';
   elsif upper(coalesce(v_standard->>'decision','BLOCKED'))='ARCHIVE_REQUIRED' then v_decision:='ARCHIVE_REQUIRED'; end if;
@@ -115,7 +113,7 @@ begin
     'ok',true,'applicable',true,'kind','DAILY_ABANDONED_RECEIPT_DELETE','decision',v_decision,
     'eligible',v_decision='PERMANENT_DELETE','workflow_id',v_workflow.id,'workflow_generation',v_workflow.generation,
     'workflow_state',v_workflow.state,'blockers',v_blockers,'blocked_reasons',v_blockers,
-    'candidate_component_r2_keys',to_jsonb(v_r2_keys),
+    'retained_audit_component_count',v_retained_component_count,
     'delete_items',jsonb_build_array(jsonb_build_object('timesheet_id',v_current.timesheet_id,
       'booking_id',v_current.booking_id,'week_ending_date',v_current.week_ending_date,'work_date',v_workflow.work_date,
       'status',v_current.status,'display_role','DAILY_ABANDONED_RECEIPT')));
@@ -137,11 +135,8 @@ declare
   v_preview jsonb;
   v_recheck jsonb;
   v_workflow_id uuid;
-  v_component_r2 text[]:=array[]::text[];
   v_standard_signature text;
   v_standard jsonb;
-  v_standard_r2 text[]:=array[]::text[];
-  v_all_r2 text[]:=array[]::text[];
 begin
   v_preview:=public.timesheet_daily_abandoned_receipt_delete_preview_v1(
     p_timesheet_id,p_actor_user_id,p_expected_timesheet_id,p_expected_row_signature);
@@ -169,9 +164,6 @@ begin
     or v_recheck->>'current_row_signature' is distinct from p_expected_row_signature then
     raise exception using message='DAILY_RECEIPT_DELETE_TARGET_CHANGED';
   end if;
-  select coalesce(array_agg(value order by convert_to(value,'UTF8')),array[]::text[]) into v_component_r2
-  from jsonb_array_elements_text(coalesce(v_recheck->'candidate_component_r2_keys','[]'::jsonb)) item(value);
-
   insert into public.audit_events(
     actor_user_id,object_type,object_id_text,action,before_json,after_json,reason
   ) values (
@@ -183,12 +175,18 @@ begin
       'workflow_generation',(v_recheck->>'workflow_generation')::integer,
       'workflow_state',v_recheck->>'workflow_state'
     ),
-    jsonb_build_object('deleted',true),
+    jsonb_build_object(
+      'timesheet_deleted',true,
+      'workflow_retained_as_terminal_audit',true,
+      'retained_audit_component_count',coalesce((v_recheck->>'retained_audit_component_count')::integer,0)
+    ),
     'UNAPPROVED_FINANCIALLY_CLEAN_DAILY_RECEIPT'
   );
 
-  -- Break only this exact workflow's retaining cycles. All ordinary Timesheet,
-  -- invoice, financial and Banking triggers remain enabled.
+  -- Break only this exact workflow's Timesheet/request retaining cycles. The
+  -- workflow and its immutable components remain terminal audit history; the
+  -- immutable component guard is neither weakened nor bypassed. All ordinary
+  -- Timesheet, invoice, financial and Banking triggers remain enabled.
   -- A mail already sent remains immutable audit history, but deleting its
   -- approval request below invalidates the manager link. Only unsent queued
   -- work is terminally failed so that a deleted submission cannot be emailed.
@@ -202,20 +200,30 @@ begin
     signature_component_id=null,manager_review_timesheet_component_id=null,updated_at_utc=now()
   where workflow_id=v_workflow_id;
   delete from public.candidate_manager_email_route_receipts where workflow_id=v_workflow_id;
-  update public.candidate_submission_components set approval_request_id=null,source_component_id=null
+  update public.candidate_submission_components set
+    approval_request_id=null,
+    timesheet_id=null,
+    state='ABANDONED',
+    superseded_at_utc=coalesce(superseded_at_utc,now())
   where workflow_id=v_workflow_id;
-  update public.candidate_submission_workflows set candidate_signature_component_id=null,
-    manager_signature_component_id=null,updated_at_utc=now() where id=v_workflow_id;
-  update public.timesheet_evidence set candidate_component_id=null
-  where timesheet_id=p_expected_timesheet_id and candidate_component_id in
-    (select c.id from public.candidate_submission_components c where c.workflow_id=v_workflow_id);
+  update public.candidate_submission_workflows set
+    state='CANCELLED',
+    anchor_timesheet_id=null,
+    target_timesheet_id=null,
+    candidate_signature_component_id=null,
+    manager_signature_component_id=null,
+    cancelled_at_utc=coalesce(cancelled_at_utc,now()),
+    issue_codes=case
+      when issue_codes @> '["OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT"]'::jsonb then issue_codes
+      else issue_codes||'["OFFICE_PERMANENTLY_DELETED_DAILY_RECEIPT"]'::jsonb
+    end,
+    updated_at_utc=now()
+  where id=v_workflow_id;
   update public.timesheets set candidate_workflow_id=null,candidate_workflow_generation=null,updated_at=now()
   where timesheet_id=p_expected_timesheet_id and candidate_workflow_id=v_workflow_id;
   delete from public.candidate_notifications
   where workflow_id=v_workflow_id or timesheet_id=p_expected_timesheet_id;
   delete from public.candidate_approval_requests where workflow_id=v_workflow_id;
-  delete from public.candidate_submission_components where workflow_id=v_workflow_id;
-  delete from public.candidate_submission_workflows where id=v_workflow_id;
 
   select nullif(btrim(coalesce(s.value->>'backend_row_signature',s.value->>'row_signature',s.value->>'signature','')),'')
   into v_standard_signature
@@ -228,13 +236,10 @@ begin
     or coalesce((v_standard->>'database_commit_confirmed')::boolean,false) is not true then
     raise exception using message='DAILY_RECEIPT_STANDARD_DELETE_NOT_PROVEN';
   end if;
-  select coalesce(array_agg(value order by convert_to(value,'UTF8')),array[]::text[]) into v_standard_r2
-  from jsonb_array_elements_text(coalesce(v_standard->'r2_cleanup_keys','[]'::jsonb)) item(value);
-  select coalesce(array_agg(distinct value order by value),array[]::text[]) into v_all_r2
-  from unnest(v_component_r2||v_standard_r2) item(value) where nullif(btrim(value),'') is not null;
   return v_standard||jsonb_build_object('kind','DAILY_ABANDONED_RECEIPT_DELETE',
     'current_row_signature',p_expected_row_signature,'deleted_workflow_id',v_workflow_id,
-    'r2_cleanup_keys',to_jsonb(v_all_r2),'r2_cleanup_required',cardinality(v_all_r2)>0);
+    'retained_terminal_workflow_id',v_workflow_id,
+    'retained_audit_component_count',coalesce((v_recheck->>'retained_audit_component_count')::integer,0));
 exception when lock_not_available or deadlock_detected then
   return jsonb_build_object('ok',false,'kind','DAILY_ABANDONED_RECEIPT_DELETE',
     'decision','BLOCKED','apply_performed',false,'error_code','LOCK_TIMEOUT',
