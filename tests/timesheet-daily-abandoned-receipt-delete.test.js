@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -11,6 +12,29 @@ const dailyVerification = readFileSync(new URL(
   '../supabase/verification/28082026_1858_candidate_daily_booked_source_verification.sql',
   import.meta.url
 ), 'utf8');
+const contract = JSON.parse(readFileSync(new URL(
+  '../supabase/release/current-contract.json',
+  import.meta.url
+), 'utf8'));
+
+function previewDefinitionHash() {
+  const functionName = 'create or replace function public.timesheet_daily_abandoned_receipt_delete_preview_v1(';
+  const functionStart = sql.toLowerCase().indexOf(functionName);
+  const bodyMarker = 'as $function$';
+  const bodyStart = sql.toLowerCase().indexOf(bodyMarker, functionStart) + bodyMarker.length;
+  const bodyEnd = sql.indexOf('$function$;', bodyStart);
+  assert.ok(functionStart >= 0 && bodyStart >= bodyMarker.length && bodyEnd > bodyStart);
+  const body = sql.slice(bodyStart, bodyEnd).replaceAll('\r\n', '\n');
+  const definition = [
+    'CREATE OR REPLACE FUNCTION public.timesheet_daily_abandoned_receipt_delete_preview_v1(p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_id uuid DEFAULT NULL::uuid, p_expected_row_signature text DEFAULT NULL::text)',
+    ' RETURNS jsonb',
+    ' LANGUAGE plpgsql',
+    ' STABLE SECURITY DEFINER',
+    " SET search_path TO 'public', 'pg_temp'",
+    'AS $function$'
+  ].join('\n') + body + '$function$\n';
+  return createHash('sha256').update(definition).digest('hex');
+}
 
 test('Daily abandoned receipt authority is an exact service-only two-RPC boundary', () => {
   assert.equal((sql.match(/create or replace function public\.timesheet_daily_abandoned_receipt_delete_/gi) || []).length, 2);
@@ -27,8 +51,20 @@ test('Daily abandoned receipt authority is an exact service-only two-RPC boundar
   assert.match(sql, /notify pgrst\s*,\s*'reload schema'/i);
 });
 
+test('generated contract contains the exact Daily preview definition hash', () => {
+  const routine = contract.routines.find(({ identity }) =>
+    identity.startsWith('timesheet_daily_abandoned_receipt_delete_preview_v1(')
+  );
+  assert.ok(routine);
+  assert.equal(routine.definition_sha256, previewDefinitionHash());
+});
+
 test('preview delegates existing financial deletion classification and fails closed on approval or retained authority', () => {
   assert.match(sql, /v_standard\s*:=\s*public\.timesheet_standard_delete_preview_v1/i);
+  assert.match(sql, /v_current\.timesheet_id is distinct from v_workflow\.target_timesheet_id/i);
+  assert.match(sql, /v_current\.timesheet_id is distinct from v_workflow\.anchor_timesheet_id/i);
+  assert.match(sql, /\(v_current\.candidate_workflow_id is null\)[\s\S]*?is distinct from \(v_current\.candidate_workflow_generation is null\)/i);
+  assert.match(sql, /v_current\.candidate_workflow_id is not null[\s\S]*?v_current\.candidate_workflow_id is distinct from v_workflow\.id[\s\S]*?v_current\.candidate_workflow_generation is distinct from v_workflow\.generation/i);
   assert.match(sql, /DAILY_RECEIPT_ALREADY_AUTHORISED/);
   assert.match(sql, /DAILY_RECEIPT_MANAGER_OR_FINAL_AUTHORITY_EXISTS/);
   assert.match(sql, /DAILY_RECEIPT_MANAGER_APPROVAL_EXISTS/);

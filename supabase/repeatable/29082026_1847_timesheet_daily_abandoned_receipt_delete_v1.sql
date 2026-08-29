@@ -65,8 +65,12 @@ begin
     'code','DAILY_RECEIPT_WORKFLOW_SET_AMBIGUOUS','workflow_count',v_workflow_count)); end if;
   if v_current.timesheet_id is distinct from v_workflow.target_timesheet_id
     or v_current.timesheet_id is distinct from v_workflow.anchor_timesheet_id
-    or v_current.candidate_workflow_id is distinct from v_workflow.id
-    or v_current.candidate_workflow_generation is distinct from v_workflow.generation then
+    or (v_current.candidate_workflow_id is null)
+      is distinct from (v_current.candidate_workflow_generation is null)
+    or (v_current.candidate_workflow_id is not null and (
+      v_current.candidate_workflow_id is distinct from v_workflow.id
+      or v_current.candidate_workflow_generation is distinct from v_workflow.generation
+    )) then
     v_blockers:=v_blockers||jsonb_build_array(jsonb_build_object('code','DAILY_RECEIPT_WORKFLOW_LINK_INVALID'));
   end if;
   if v_current.authorised_at_server is not null or v_current.candidate_manager_approved_at_utc is not null then
