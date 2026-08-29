@@ -1,0 +1,811 @@
+
+
+openapi: 3.1.0
+info:
+  title: CloudTMS Candidate Broker API
+  version: 1.0.0-test
+  license: {name: ISC, identifier: ISC}
+  description: >-
+    Versioned TEST contract for the public Candidate/manager broker and its deterministic
+    private CloudTMS service mapping. A public /candidate-app/v1 path maps to
+    /private/candidate-app/v1; a public /candidate-manager/v1 path maps to
+    /private/candidate-manager/v1. The broker alone is browser/native facing.
+servers:
+  - url: https://candidate-broker.test.invalid
+    description: Placeholder only; the approved TEST broker hostname is assigned at deployment.
+tags:
+  - name: Authentication
+    description: Candidate activation, password and rotating session operations.
+  - name: Candidate
+    description: Candidate-safe account, timesheet and notification reads.
+  - name: Workflow
+    description: Candidate factual submission, evidence and lifecycle orchestration.
+  - name: Manager
+    description: Token-bound manager page review, signature, approval and refusal.
+security:
+  - CandidateAccess: []
+x-cloudtms-private-security:
+  scheme: HMAC-SHA256 private service signature
+  transport: Cloudflare Worker service binding only
+  headers:
+    - x-cloudtms-service-version
+    - x-cloudtms-service-environment
+    - x-cloudtms-service-timestamp
+    - x-cloudtms-service-nonce
+    - x-cloudtms-service-body-sha256
+    - x-cloudtms-service-authorization-sha256
+    - x-cloudtms-service-headers-sha256
+    - x-cloudtms-service-signature
+x-standard-responses: &standardResponses
+  '200': {$ref: '#/components/responses/Success'}
+  '201': {$ref: '#/components/responses/Created'}
+  '202': {$ref: '#/components/responses/Accepted'}
+  '400': {$ref: '#/components/responses/Error'}
+  '401': {$ref: '#/components/responses/Error'}
+  '403': {$ref: '#/components/responses/Error'}
+  '404': {$ref: '#/components/responses/Error'}
+  '405': {$ref: '#/components/responses/Error'}
+  '409': {$ref: '#/components/responses/Error'}
+  '413': {$ref: '#/components/responses/Error'}
+  '429': {$ref: '#/components/responses/Error'}
+x-accepted-responses: &acceptedResponses
+  '202': {$ref: '#/components/responses/Accepted'}
+  '400': {$ref: '#/components/responses/Error'}
+  '409': {$ref: '#/components/responses/Error'}
+  '429': {$ref: '#/components/responses/Error'}
+x-session-responses: &sessionResponses
+  '200': {$ref: '#/components/responses/Session'}
+  '400': {$ref: '#/components/responses/Error'}
+  '401': {$ref: '#/components/responses/Error'}
+  '429': {$ref: '#/components/responses/Error'}
+x-binary-responses: &binaryResponses
+  '200': {$ref: '#/components/responses/Binary'}
+  '401': {$ref: '#/components/responses/Error'}
+  '404': {$ref: '#/components/responses/Error'}
+  '409': {$ref: '#/components/responses/Error'}
+paths:
+  /healthz:
+    get:
+      tags: [Candidate]
+      security: []
+      operationId: getCandidateBrokerHealth
+      summary: Get candidate broker health
+      responses: *standardResponses
+  /readyz:
+    get:
+      tags: [Candidate]
+      security: []
+      operationId: getCandidateBrokerReadiness
+      summary: Get candidate broker readiness
+      description: Uses a signed service-bound private health request; it does not query Candidate data.
+      responses: *standardResponses
+  /candidate-app/v1/auth/challenge/start:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: startCandidateChallenge
+      summary: Start candidate challenge
+      x-cloudtms-private-path: /private/candidate-app/v1/auth/challenge/start
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *acceptedResponses
+  /candidate-app/v1/auth/challenge/resend:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: resendCandidateChallenge
+      summary: Resend candidate challenge
+      description: >-
+        A successful 202 means the resend operation was durably accepted. A resend attempted
+        before the 60-second boundary returns CANDIDATE_CHALLENGE_RESEND_TOO_SOON as 429 with
+        Retry-After. Exhausted resend allowance returns CANDIDATE_CHALLENGE_RESEND_LIMIT as a
+        terminal 429. Either throttle consumes its idempotency key; an exact replay returns the
+        same throttle and a later attempt requires a new key.
+      x-cloudtms-private-path: /private/candidate-app/v1/auth/challenge/resend
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *acceptedResponses
+  /candidate-app/v1/auth/challenge/verify:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: verifyCandidateChallenge
+      summary: Verify candidate challenge
+      x-cloudtms-private-path: /private/candidate-app/v1/auth/challenge/verify
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/auth/password/complete:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: completeCandidatePassword
+      summary: Complete candidate password
+      x-cloudtms-private-path: /private/candidate-app/v1/auth/password/complete
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *sessionResponses
+  /candidate-app/v1/auth/login:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: loginCandidate
+      summary: Login candidate
+      x-cloudtms-private-path: /private/candidate-app/v1/auth/login
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *sessionResponses
+  /candidate-app/v1/auth/refresh:
+    post:
+      tags: [Authentication]
+      security: []
+      operationId: refreshCandidateSession
+      summary: Refresh candidate session
+      x-cloudtms-private-path: /private/candidate-app/v1/auth/refresh
+      requestBody: {$ref: '#/components/requestBodies/RefreshBody'}
+      responses: *sessionResponses
+  /candidate-app/v1/auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logoutCandidate
+      summary: Logout candidate
+      x-cloudtms-private-path: /private/candidate-app/v1/auth/logout
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/account/select-candidate:
+    post:
+      tags: [Candidate]
+      operationId: selectTestCandidate
+      summary: Select test candidate
+      x-cloudtms-private-path: /private/candidate-app/v1/account/select-candidate
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses:
+        '200': {description: Candidate selected; returns a replacement broker access token and the same public session_id, content: {application/json: {schema: {$ref: '#/components/schemas/SelectedCandidateSession'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /candidate-app/v1/account/preferences:
+    patch:
+      tags: [Candidate]
+      operationId: updateCandidateNotificationPreferences
+      summary: Update candidate notification preferences
+      x-cloudtms-private-path: /private/candidate-app/v1/account/preferences
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/account/push-token:
+    post:
+      tags: [Candidate]
+      operationId: registerCandidateDevice
+      summary: Register candidate device
+      description: The broker encrypts the raw provider token before calling the private API.
+      x-cloudtms-private-path: /private/candidate-app/v1/account/push-token
+      requestBody: {$ref: '#/components/requestBodies/PushTokenBody'}
+      responses: *standardResponses
+  /candidate-app/v1/account/password:
+    post:
+      tags: [Authentication]
+      operationId: changeCandidatePassword
+      summary: Change candidate password
+      x-cloudtms-private-path: /private/candidate-app/v1/account/password
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/bootstrap:
+    get:
+      tags: [Candidate]
+      operationId: getCandidateBootstrap
+      summary: Get candidate bootstrap
+      x-cloudtms-private-path: /private/candidate-app/v1/bootstrap
+      responses: *standardResponses
+  /candidate-app/v1/timesheets:
+    get:
+      tags: [Candidate]
+      operationId: listCandidateTimesheets
+      summary: List candidate timesheets
+      description: >-
+        Current is the default and contains every non-future unpaid record plus records
+        paid at or after the frozen snapshot's seven-day cutoff. History contains only
+        records paid before that cutoff whose week ending falls within the contract's
+        effective current week plus the preceding 15 weeks. The two views never overlap.
+        Both use newest week ending first and a v2 cursor bound to view, candidate and
+        frozen snapshot.
+      x-cloudtms-private-path: /private/candidate-app/v1/timesheets
+      parameters:
+        - {$ref: '#/components/parameters/TimesheetView'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses:
+        '200': {description: Candidate timesheet page, content: {application/json: {schema: {$ref: '#/components/schemas/TimesheetPage'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '403': {$ref: '#/components/responses/Error'}
+  /candidate-app/v1/timesheets/{timesheetId}:
+    get:
+      tags: [Candidate]
+      operationId: getCandidateTimesheet
+      summary: Get candidate timesheet
+      x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}
+      parameters: [{$ref: '#/components/parameters/TimesheetId'}]
+      responses:
+        '200': {description: Authoritative timesheet detail and action hub, content: {application/json: {schema: {$ref: '#/components/schemas/TimesheetDetail'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /candidate-app/v1/contract-weeks/{contractWeekId}/detail:
+    get:
+      tags: [Candidate]
+      operationId: getCandidateContractWeekDetail
+      summary: Get an unmaterialised or materialised contract-week detail
+      x-cloudtms-private-path: /private/candidate-app/v1/contract-weeks/{contractWeekId}/detail
+      parameters: [{$ref: '#/components/parameters/ContractWeekId'}]
+      responses:
+        '200': {description: Authoritative timesheet detail and action hub, content: {application/json: {schema: {$ref: '#/components/schemas/TimesheetDetail'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /candidate-app/v1/workflows/{workflowId}/timesheet-detail:
+    get:
+      tags: [Candidate]
+      operationId: getCandidateWorkflowTimesheetDetail
+      summary: Get timesheet detail through immutable workflow identity
+      x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/timesheet-detail
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      responses:
+        '200': {description: Authoritative timesheet detail and action hub, content: {application/json: {schema: {$ref: '#/components/schemas/TimesheetDetail'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '401': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+  /candidate-app/v1/timesheets/{timesheetId}/paper-pack/status:
+    get:
+      tags: [Candidate]
+      operationId: getPaperPackStatus
+      summary: Get paper pack status
+      description: Read-only readiness lookup. Pack assembly, mail release and notification creation occur only in the private scheduled worker.
+      x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}/paper-pack/status
+      parameters: [{$ref: '#/components/parameters/TimesheetId'}]
+      responses: *standardResponses
+  /candidate-app/v1/timesheets/{timesheetId}/paper-pack:
+    get:
+      tags: [Candidate]
+      operationId: downloadPaperPack
+      summary: Download paper pack
+      description: Streams an already-ready immutable pack. This operation never assembles documents or changes mail/notification state.
+      x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}/paper-pack
+      parameters: [{$ref: '#/components/parameters/TimesheetId'}]
+      responses:
+        '200': {description: Official PDF bytes, content: {application/pdf: {schema: {type: string, contentEncoding: binary}}}}
+        '401': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+  /candidate-app/v1/timesheets/{timesheetId}/expense-placement:
+    post:
+      tags: [Workflow]
+      operationId: resolveCandidateExpensePlacement
+      summary: Resolve candidate expense placement
+      x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}/expense-placement
+      parameters: [{$ref: '#/components/parameters/TimesheetId'}]
+      requestBody: {$ref: '#/components/requestBodies/JsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/timesheets/{timesheetId}/expense-carrier:
+    post:
+      tags: [Workflow]
+      operationId: resolveOrCreateCandidateExpenseCarrier
+      summary: Resolve or create candidate expense carrier
+      x-cloudtms-private-path: /private/candidate-app/v1/timesheets/{timesheetId}/expense-carrier
+      parameters: [{$ref: '#/components/parameters/TimesheetId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/contracts/{contractId}/missing-weeks:
+    get:
+      tags: [Candidate]
+      operationId: listCandidateMissingWeeks
+      summary: List candidate missing weeks
+      x-cloudtms-private-path: /private/candidate-app/v1/contracts/{contractId}/missing-weeks
+      parameters:
+        - {$ref: '#/components/parameters/ContractId'}
+        - {$ref: '#/components/parameters/FromDate'}
+        - {$ref: '#/components/parameters/ToDate'}
+      responses: *standardResponses
+    post:
+      tags: [Workflow]
+      operationId: addCandidateMissingWeek
+      summary: Add candidate missing week
+      x-cloudtms-private-path: /private/candidate-app/v1/contracts/{contractId}/missing-weeks
+      parameters: [{$ref: '#/components/parameters/ContractId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/notifications:
+    get:
+      tags: [Candidate]
+      operationId: listCandidateNotifications
+      summary: List candidate notifications
+      x-cloudtms-private-path: /private/candidate-app/v1/notifications
+      parameters:
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/Limit'}
+      responses: *standardResponses
+  /candidate-app/v1/notifications/{notificationId}/read:
+    post:
+      tags: [Candidate]
+      operationId: markCandidateNotificationRead
+      summary: Mark candidate notification read
+      x-cloudtms-private-path: /private/candidate-app/v1/notifications/{notificationId}/read
+      parameters: [{$ref: '#/components/parameters/NotificationId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/workflows:
+    post:
+      tags: [Workflow]
+      operationId: createCandidateWorkflow
+      summary: Create candidate workflow
+      x-cloudtms-private-path: /private/candidate-app/v1/workflows
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/workflows/{workflowId}/actions/{action}:
+    post:
+      tags: [Workflow]
+      operationId: transitionCandidateWorkflow
+      summary: Transition candidate workflow
+      x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/actions/{action}
+      parameters:
+        - {$ref: '#/components/parameters/WorkflowId'}
+        - {name: action, in: path, required: true, schema: {type: string, enum: [amend, worker-submit, select-approval-method, select-phone-approval, create-email-approval-request, paper-prepare, paper-return, remind, renew, cancel-manager-handoff, cancel, supersede, component-supersede, retry-finalisation]}}
+      requestBody: {$ref: '#/components/requestBodies/WorkflowActionBody'}
+      responses: *standardResponses
+  /candidate-app/v1/workflows/{workflowId}/resubmit:
+    post:
+      tags: [Workflow]
+      operationId: resubmitRejectedCandidateWorkflow
+      summary: Create a new replacement workflow from immutable rejected history
+      description: >-
+        The rejected workflow is never amended or revived. One atomic database action validates
+        its exact generation, binds the supplied idempotency key to that rejected source, derives
+        the replacement kind, scope, route and current record identity, and creates at most one
+        durable WORKER_DRAFT replacement. Exact retries return the same replacement receipt;
+        cross-source or conflicting key reuse fails closed.
+      x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/resubmit
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      requestBody: {$ref: '#/components/requestBodies/RejectedWorkflowResubmitBody'}
+      responses: *standardResponses
+  /candidate-app/v1/workflows/{workflowId}/components/prepare:
+    post:
+      tags: [Workflow]
+      operationId: prepareCandidateComponent
+      summary: Prepare candidate component
+      description: Idempotent preparation. A same-generation replay returns a ticket for the original database-owned component/object identity only while that component is PENDING or IMMUTABLE. Cross-generation reuse, terminal-state reuse, or conflicting media, size, role or category fails before a ticket is issued.
+      x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/components/prepare
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-app/v1/uploads/{ticket}:
+    put:
+      tags: [Workflow]
+      operationId: uploadCandidateComponent
+      summary: Upload candidate component
+      x-cloudtms-private-path: /private/candidate-app/v1/uploads/{ticket}
+      parameters:
+        - {name: ticket, in: path, required: true, schema: {type: string, maxLength: 32768}}
+      requestBody:
+        required: true
+        content:
+          image/png: {schema: {type: string, contentEncoding: binary, maxLength: 15728640}}
+          image/jpeg: {schema: {type: string, contentEncoding: binary, maxLength: 15728640}}
+          application/pdf: {schema: {type: string, contentEncoding: binary, maxLength: 15728640}}
+      responses: *standardResponses
+  /candidate-app/v1/workflows/{workflowId}/components/{componentId}/document:
+    get:
+      tags: [Workflow]
+      operationId: streamCandidateWorkflowDocument
+      summary: Stream candidate workflow document
+      x-cloudtms-private-path: /private/candidate-app/v1/workflows/{workflowId}/components/{componentId}/document
+      parameters:
+        - {$ref: '#/components/parameters/WorkflowId'}
+        - {$ref: '#/components/parameters/ComponentId'}
+      responses: *binaryResponses
+  /candidate-app/v1/contract-weeks/{contractWeekId}/no-work:
+    post:
+      tags: [Workflow]
+      operationId: markCandidateContractWeekNoWork
+      summary: Mark candidate contract week no work
+      x-cloudtms-private-path: /private/candidate-app/v1/contract-weeks/{contractWeekId}/no-work
+      parameters:
+        - {name: contractWeekId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-manager/v1/workflows/{workflowId}/start:
+    get:
+      tags: [Manager]
+      security: [{ManagerToken: []}]
+      operationId: startManagerReview
+      summary: Start manager review
+      description: Email uses the approval bearer token. Same-phone approval uses the broker-sealed PHONE handoff bearer plus x-candidate-session-token and, where bound, x-candidate-device-id.
+      x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/start
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      responses: *standardResponses
+  /candidate-manager/v1/workflows/{workflowId}/progress:
+    post:
+      tags: [Manager]
+      security: [{ManagerToken: []}]
+      operationId: recordManagerReviewProgress
+      summary: Record manager review progress
+      x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/progress
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-manager/v1/workflows/{workflowId}/signature/prepare:
+    post:
+      tags: [Manager]
+      security: [{ManagerToken: []}]
+      operationId: prepareManagerSignature
+      summary: Prepare manager signature
+      x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/signature/prepare
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-manager/v1/workflows/{workflowId}/approve:
+    post:
+      tags: [Manager]
+      security: [{ManagerToken: []}]
+      operationId: approveManagerReview
+      summary: Approve manager review
+      x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/approve
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-manager/v1/workflows/{workflowId}/refuse:
+    post:
+      tags: [Manager]
+      security: [{ManagerToken: []}]
+      operationId: refuseManagerReview
+      summary: Refuse manager review
+      x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/refuse
+      parameters: [{$ref: '#/components/parameters/WorkflowId'}]
+      requestBody: {$ref: '#/components/requestBodies/IdempotentJsonBody'}
+      responses: *standardResponses
+  /candidate-manager/v1/workflows/{workflowId}/components/{componentId}/document:
+    get:
+      tags: [Manager]
+      security: [{ManagerToken: []}]
+      operationId: streamManagerReviewDocument
+      summary: Stream manager review document
+      x-cloudtms-private-path: /private/candidate-manager/v1/workflows/{workflowId}/components/{componentId}/document
+      parameters:
+        - {$ref: '#/components/parameters/WorkflowId'}
+        - {$ref: '#/components/parameters/ComponentId'}
+      responses: *binaryResponses
+components:
+  securitySchemes:
+    CandidateAccess: {type: http, scheme: bearer, bearerFormat: OpaqueBrokerEnvelope}
+    ManagerToken: {type: http, scheme: bearer, bearerFormat: OpaqueApprovalToken}
+  schemas:
+    Uuid: {type: string, format: uuid}
+    JsonObject: {type: object, additionalProperties: true}
+    Error:
+      type: object
+      required: [ok, error_code]
+      properties:
+        ok: {const: false}
+        error_code: {type: string}
+        request_id: {type: string}
+        details:
+          type: object
+          description: Public-safe structured details; challenge throttles may include retry_after_seconds and terminal.
+          additionalProperties: true
+    Session:
+      type: object
+      required: [ok, access_token, refresh_token, session_id, access_expires_in_seconds, issued_at_utc, expires_at_utc, absolute_expires_at_utc]
+      properties:
+        ok: {const: true}
+        access_token: {type: string, description: Broker-sealed access envelope; never a CloudTMS private token.}
+        refresh_token: {type: string, description: Broker-sealed refresh envelope; never a CloudTMS private token.}
+        session_id: {type: string, description: Public broker session identity.}
+        access_expires_in_seconds: {type: integer}
+        issued_at_utc: {type: string, format: date-time, description: Frozen private session issue time used for exact public replay.}
+        expires_at_utc: {type: string, format: date-time}
+        absolute_expires_at_utc: {type: string, format: date-time}
+    TimesheetActionCode:
+      type: string
+      enum:
+        - ENTER_TIMESHEET
+        - ADD_EXPENSES
+        - CONTINUE_TIMESHEET
+        - CONTINUE_EXPENSE_CLAIM
+        - CANCEL_ENTIRE_CLAIM_AND_START_AGAIN
+        - DISCARD_EXPENSE_CLAIM
+        - SEND_MANAGER_REMINDER
+        - REQUEST_APPROVAL_AGAIN
+        - DOWNLOAD_PAPER_DOCUMENTS
+        - UPLOAD_SIGNED_RETURN
+        - REVIEW_AND_RESUBMIT
+        - RESUBMIT_TIMESHEET
+        - RESUBMIT_TIMESHEET_AND_EXPENSES
+        - RESUBMIT_EXPENSE_CLAIM
+        - NO_WORK_THIS_WEEK
+        - RETRY_FINALISATION
+    TimesheetAvailableAction:
+      type: object
+      required: [code, label, requires_confirmation, enabled, invocation]
+      properties:
+        code: {$ref: '#/components/schemas/TimesheetActionCode'}
+        label: {type: string}
+        method: {type: [string, 'null'], enum: [GET, POST, null]}
+        path: {type: [string, 'null']}
+        requires_confirmation: {type: boolean}
+        requires_reason: {type: boolean, default: false}
+        enabled: {type: boolean}
+        disabled_reason: {type: [string, 'null']}
+        workflow_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        workflow_generation: {type: [integer, 'null'], minimum: 1}
+        approval_request_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        timesheet_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        contract_week_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        invocation: {$ref: '#/components/schemas/TimesheetActionInvocation'}
+    TimesheetActionInvocation:
+      type: object
+      required: [version, kind]
+      properties:
+        version: {const: 1}
+        kind: {type: string, enum: [HTTP, CLIENT_DESTINATION]}
+        method: {type: [string, 'null'], enum: [GET, POST, null]}
+        path: {type: [string, 'null']}
+        destination: {type: [string, 'null'], enum: [TIMESHEET_EDITOR, EXPENSE_CLAIM_EDITOR, null]}
+        fixed_body: {$ref: '#/components/schemas/JsonObject'}
+        required_user_inputs:
+          type: array
+          items:
+            type: object
+            required: [name, type, required]
+            properties:
+              name: {type: string}
+              type: {type: string}
+              required: {type: boolean}
+        idempotency: {type: [string, 'null'], enum: [REQUIRED, NOT_REQUIRED, null]}
+        context: {$ref: '#/components/schemas/JsonObject'}
+    TimesheetPrimaryAction:
+      allOf:
+        - {$ref: '#/components/schemas/TimesheetAvailableAction'}
+    ManagerApprovalStatus:
+      type: object
+      required: [method, request_id, request_generation, state, resend_count, resends_remaining, reminder_eligible, renewal_eligible, cancel_eligible, delivery_pending]
+      properties:
+        method: {const: EMAIL}
+        request_id: {$ref: '#/components/schemas/Uuid'}
+        request_generation: {type: integer, minimum: 1}
+        state: {type: string, enum: [PENDING, EXPIRED, APPROVED, REFUSED, CANCELLED, SUPERSEDED]}
+        stored_state: {type: string}
+        provider_first_accepted_at_utc: {type: [string, 'null'], format: date-time}
+        provider_accepted_at_utc: {type: [string, 'null'], format: date-time}
+        delivery_state: {type: [string, 'null']}
+        provider_status: {type: [string, 'null']}
+        delivery_pending: {type: boolean}
+        expires_at_utc: {type: string, format: date-time}
+        resend_count: {type: integer, minimum: 0, maximum: 5}
+        resends_remaining: {type: integer, minimum: 0, maximum: 5}
+        next_reminder_at_utc: {type: [string, 'null'], format: date-time}
+        reminder_eligible: {type: boolean}
+        renewal_eligible: {type: boolean}
+        cancel_eligible: {type: boolean}
+    TimesheetDetailTarget:
+      type: object
+      required: [identity_kind, id, path]
+      additionalProperties: false
+      properties:
+        identity_kind: {type: string, enum: [TIMESHEET, CONTRACT_WEEK, WORKFLOW]}
+        id: {$ref: '#/components/schemas/Uuid'}
+        path: {type: string}
+    TimesheetCard:
+      type: object
+      required: [contract_week_id, contract_id, week_ending_date, week_ending_label, tab_bucket, candidate_status_code, detail_target]
+      properties:
+        contract_week_id: {$ref: '#/components/schemas/Uuid'}
+        contract_id: {$ref: '#/components/schemas/Uuid'}
+        timesheet_id: {oneOf: [{$ref: '#/components/schemas/Uuid'}, {type: 'null'}]}
+        client_name: {type: string}
+        job_title: {type: [string, 'null']}
+        band: {type: [string, 'null']}
+        week_ending_date: {type: string, format: date}
+        week_ending_label: {type: string, example: Week Ending 1 January 2025}
+        additional_seq: {type: integer}
+        tab_bucket: {type: string, enum: [CURRENT, HISTORY]}
+        effective_current_week_ending_date: {type: string, format: date}
+        paid_at_utc: {type: [string, 'null'], format: date-time}
+        candidate_status_code: {type: string}
+        payment_state: {type: string}
+        invoice_state: {type: string}
+        route_family: {type: [string, 'null']}
+        record_role: {type: [string, 'null']}
+        primary_action: {oneOf: [{$ref: '#/components/schemas/TimesheetPrimaryAction'}, {type: 'null'}]}
+        detail_target: {$ref: '#/components/schemas/TimesheetDetailTarget'}
+    TimesheetPage:
+      type: object
+      required: [ok, view, default_view, snapshot_utc, paid_current_cutoff_utc, cursor_version, items, readiness_conflicts, limit]
+      properties:
+        ok: {const: true}
+        view: {type: string, enum: [CURRENT, HISTORY]}
+        default_view: {const: CURRENT}
+        snapshot_utc: {type: string, format: date-time}
+        paid_current_cutoff_utc: {type: string, format: date-time}
+        cursor_version: {const: v2}
+        items: {type: array, items: {$ref: '#/components/schemas/TimesheetCard'}}
+        next_cursor: {type: [string, 'null']}
+        readiness_conflicts: {type: array, items: {type: object}}
+        limit: {type: integer, minimum: 1, maximum: 100}
+        absolute_expires_at_utc: {type: string, format: date-time}
+    TimesheetDetail:
+      type: object
+      required: [ok, week_ending_label, candidate_status_code, list_membership, available_actions, contract_week, hours, expenses, lifecycle, capabilities, manager_review, evidence, components, workflows, rejections]
+      properties:
+        ok: {const: true}
+        week_ending_label: {type: string, example: Week Ending 1 January 2025}
+        candidate_status_code: {type: string}
+        list_membership:
+          type: object
+          required: [tab_bucket, effective_current_week_ending_date, paid_current_cutoff_utc]
+          properties:
+            tab_bucket: {type: string, enum: [CURRENT, HISTORY, EXCLUDED]}
+            effective_current_week_ending_date: {type: string, format: date}
+            paid_current_cutoff_utc: {type: string, format: date-time}
+        primary_action: {oneOf: [{$ref: '#/components/schemas/TimesheetPrimaryAction'}, {type: 'null'}]}
+        available_actions: {type: array, items: {$ref: '#/components/schemas/TimesheetAvailableAction'}}
+        manager_approval: {oneOf: [{$ref: '#/components/schemas/ManagerApprovalStatus'}, {type: 'null'}]}
+        paper_pack: {oneOf: [{$ref: '#/components/schemas/PaperPackReadiness'}, {type: 'null'}]}
+        contract_week: {$ref: '#/components/schemas/JsonObject'}
+        timesheet: {oneOf: [{$ref: '#/components/schemas/JsonObject'}, {type: 'null'}]}
+        hours: {$ref: '#/components/schemas/JsonObject'}
+        expenses: {$ref: '#/components/schemas/JsonObject'}
+        lifecycle: {$ref: '#/components/schemas/JsonObject'}
+        capabilities: {$ref: '#/components/schemas/JsonObject'}
+        manager_review: {$ref: '#/components/schemas/JsonObject'}
+        evidence: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+        components: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+        workflows: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+        rejections: {type: array, items: {$ref: '#/components/schemas/JsonObject'}}
+    PaperPackReadiness:
+      type: object
+      required: [state, download_available, upload_available]
+      properties:
+        state: {type: string, enum: [NOT_APPLICABLE, PREPARING, BACKOFF, READY, FAILED_RETRYABLE, FAILED_TERMINAL, RETIRED, STALE, RETURN_RECEIVED]}
+        download_available: {type: boolean}
+        upload_available: {type: boolean}
+        page_count: {type: [integer, 'null'], minimum: 1}
+        reason_code: {type: [string, 'null']}
+        failure_scope: {type: [string, 'null'], enum: [WORKFLOW, OUTBOX, null]}
+        retryable: {type: boolean}
+        retry_in_progress: {type: boolean}
+        attempt_count: {type: integer, minimum: 0}
+        next_retry_at_utc: {type: [string, 'null'], format: date-time}
+        operation_id: {type: [string, 'null']}
+    WorkflowActionRequest:
+      type: object
+      required: [generation, idempotency_key]
+      properties:
+        generation: {type: integer, minimum: 1}
+        idempotency_key: {type: string, minLength: 1, maxLength: 200}
+        candidate_signed_at_utc:
+          type: string
+          format: date-time
+          description: Required factual signature timestamp for WORKER_SUBMIT. The server never substitutes a fresh timestamp during replay.
+        payload: {$ref: '#/components/schemas/JsonObject'}
+    ReminderRequest:
+      allOf:
+        - {$ref: '#/components/schemas/WorkflowActionRequest'}
+        - type: object
+          required: [approval_request_id, approval_request_generation]
+          properties:
+            approval_request_id: {$ref: '#/components/schemas/Uuid'}
+            approval_request_generation: {type: integer, minimum: 1}
+    RenewalRequest:
+      allOf:
+        - {$ref: '#/components/schemas/WorkflowActionRequest'}
+        - type: object
+          required: [approval_request_id, approval_request_generation]
+          properties:
+            approval_request_id: {$ref: '#/components/schemas/Uuid'}
+            approval_request_generation: {type: integer, minimum: 1}
+    CancellationRequest:
+      allOf:
+        - {$ref: '#/components/schemas/WorkflowActionRequest'}
+        - type: object
+          required: [reason_note]
+          properties:
+            reason_code: {type: [string, 'null'], maxLength: 100}
+            reason_note: {type: string, minLength: 1, maxLength: 1000}
+    RejectedWorkflowResubmitRequest:
+      type: object
+      required: [generation, idempotency_key]
+      additionalProperties: false
+      properties:
+        generation: {type: integer, minimum: 1}
+        idempotency_key: {type: string, format: uuid}
+    SelectedCandidateSession:
+      type: object
+      required: [ok, access_token, session_id, access_expires_in_seconds, issued_at_utc]
+      properties:
+        ok: {const: true}
+        access_token: {type: string, description: Replacement broker-sealed access envelope.}
+        session_id: {type: string, description: Unchanged public broker session identity; the private database session ID is never returned.}
+        selected_candidate_id: {$ref: '#/components/schemas/Uuid'}
+        access_expires_in_seconds: {type: integer}
+        issued_at_utc: {type: string, format: date-time, description: Frozen access-token issue time preserved on exact selection replay.}
+  parameters:
+    TimesheetView: {name: view, in: query, required: false, schema: {type: string, enum: [current, history], default: current}}
+    Cursor: {name: cursor, in: query, required: false, schema: {type: string}}
+    Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+    FromDate: {name: from, in: query, required: true, schema: {type: string, format: date}}
+    ToDate: {name: to, in: query, required: true, schema: {type: string, format: date}}
+    TimesheetId: {name: timesheetId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    ContractWeekId: {name: contractWeekId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    ContractId: {name: contractId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    WorkflowId: {name: workflowId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    ComponentId: {name: componentId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+    NotificationId: {name: notificationId, in: path, required: true, schema: {$ref: '#/components/schemas/Uuid'}}
+  requestBodies:
+    WorkflowActionBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - {$ref: '#/components/schemas/ReminderRequest'}
+              - {$ref: '#/components/schemas/RenewalRequest'}
+              - {$ref: '#/components/schemas/CancellationRequest'}
+              - {$ref: '#/components/schemas/WorkflowActionRequest'}
+    RejectedWorkflowResubmitBody:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RejectedWorkflowResubmitRequest'}
+    JsonBody:
+      required: true
+      content: {application/json: {schema: {$ref: '#/components/schemas/JsonObject'}}}
+    IdempotentJsonBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [idempotency_key]
+            properties:
+              idempotency_key: {type: string, minLength: 1, maxLength: 200}
+            additionalProperties: true
+    RefreshBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [refresh_token, session_id, idempotency_key]
+            properties:
+              refresh_token: {type: string}
+              session_id: {type: string}
+              idempotency_key: {type: string, minLength: 1, maxLength: 200}
+    PushTokenBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [push_provider, push_token, idempotency_key]
+            properties:
+              push_provider: {type: string, enum: [APNS, FCM, WEB_PUSH]}
+              push_token: {type: string, maxLength: 8192}
+              idempotency_key: {type: string, minLength: 1, maxLength: 200}
+  responses:
+    Error:
+      description: Stable public-safe failure.
+      headers:
+        Retry-After:
+          description: Whole seconds before a new challenge resend may be attempted, when applicable.
+          schema: {type: integer, minimum: 1}
+      content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}
+    Success:
+      description: Successful canonical response.
+      content: {application/json: {schema: {$ref: '#/components/schemas/JsonObject'}}}
+    Created:
+      description: Resource prepared or created.
+      content: {application/json: {schema: {$ref: '#/components/schemas/JsonObject'}}}
+    Accepted:
+      description: Durable asynchronous work or enumeration-safe challenge accepted.
+      content: {application/json: {schema: {$ref: '#/components/schemas/JsonObject'}}}
+    Session:
+      description: Public broker session.
+      content: {application/json: {schema: {$ref: '#/components/schemas/Session'}}}
+    Binary:
+      description: Authorised server-streamed document bytes.
+      content:
+        application/pdf: {schema: {type: string, contentEncoding: binary}}
+        image/png: {schema: {type: string, contentEncoding: binary}}
+        image/jpeg: {schema: {type: string, contentEncoding: binary}}

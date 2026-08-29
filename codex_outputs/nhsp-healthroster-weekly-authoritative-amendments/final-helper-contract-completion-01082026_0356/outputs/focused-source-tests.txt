@@ -1,0 +1,39 @@
+✔ the production delta preserves the locked helper signature and bounds (1.5522ms)
+✔ completed operation authority is validated before invoice scope is built (0.1412ms)
+✔ operation evidence requires one request, applied result, and policy unit (0.1046ms)
+✔ fresh and mutable generation repair modes are validated by route (0.1355ms)
+✔ the real request and both phase-3 producers match the route-aware repair contract (0.1601ms)
+✔ completed operation authority re-attests source scope and the immutable request unit (0.0862ms)
+✔ operation and applied-result fingerprints are independently re-attested (0.1736ms)
+✔ all valid completed generations are accumulated rather than newest-only selected (0.196ms)
+✔ validated applied member IDs enter historical invoice scope (0.1471ms)
+✔ canonical member ownership accepts only a proven archived-role re-key lineage (0.2423ms)
+✔ archived-member supersession is canonicalised transitively and fails closed on graph conflicts (0.1638ms)
+✔ deleted operation-proven members can scope exact HOURS_WEEKLY lines (0.1209ms)
+✔ one canonical economic ledger drives B and correction role state (0.1346ms)
+✔ role economics are deduplicated by physical invoice-line scope (0.188ms)
+✔ separable non-hours components remain excluded from B and role state (0.0793ms)
+✔ credits require a full mirror and allocate multi-source money by exact frozen segment (0.0853ms)
+✔ credits require exact header, line, client, and source provenance (0.1133ms)
+✔ archived-only generations cannot become mutable (0.1287ms)
+✔ missing mutable roles require durable completed-operation proof (0.0747ms)
+✔ multiple effective physical members for one role fail closed (0.0687ms)
+✔ latest fully invoiced operation may reconstruct a deleted schedule only on exact bucket equality (0.1743ms)
+✔ effective-zero source safety distinguishes full credit from paid-uninvoiced (0.1072ms)
+✔ safe current source requires one ordinary current row and a safe lifecycle (0.1334ms)
+✔ source safety participates in review/apply staleness fingerprinting (0.131ms)
+✔ historical operations survive latest-import replacement through decision outcomes (0.0458ms)
+✔ zero hours with a non-zero frozen monetary balance blocks as non-standard (0.0811ms)
+✔ existing catalog blocker precedence and route order remain unchanged (0.0772ms)
+✔ helper remains read-only and contains no Banking Pay or invoice mutation path (0.3134ms)
+✔ PAID_DATE prefers the exact current correction component lineage (0.7929ms)
+✔ PAID_DATE retains a fail-closed component-scoped legacy fallback (0.27ms)
+✔ frozen component payment date overrides the root TSFIN paid date (0.1009ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 116.1564

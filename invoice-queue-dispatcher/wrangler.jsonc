@@ -1,0 +1,25 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "cloudtms-invoice-queue-dispatcher-local",
+  "main": "src/index.js",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "durable_objects": {
+    "bindings": [{ "name": "INVOICE_DISPATCH_NONCE_GATE", "class_name": "InvoiceDispatchNonceGate" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["InvoiceDispatchNonceGate"] }],
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "env": {
+    "test": {
+      "name": "test-cloudtms-invoice-queue-dispatcher",
+      "workers_dev": false,
+      "vars": { "ENVIRONMENT": "test" },
+      "services": [{ "binding": "INVOICE_QUEUE_MAIN", "service": "test-cloudtms-backend" }],
+      "durable_objects": {
+        "bindings": [{ "name": "INVOICE_DISPATCH_NONCE_GATE", "class_name": "InvoiceDispatchNonceGate" }]
+      },
+      "observability": { "enabled": true, "head_sampling_rate": 1 }
+    }
+  }
+}

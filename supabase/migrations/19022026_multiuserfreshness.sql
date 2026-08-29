@@ -79,46 +79,9 @@ $$;
 -- 3) HEARTBEAT RPC: tiny, fast, and safe to poll
 --    Frontend can send last-seen map; RPC returns seqs + changed list.
 -- -----------------------------------------------------------------------------
-create or replace function public.rpc_changes_ping(p_last_seen jsonb default '{}'::jsonb)
-returns jsonb
-language plpgsql
-stable
-as $$
-declare
-  v_seqs jsonb := '{}'::jsonb;
-  v_changed text[] := array[]::text[];
-  v_prev bigint;
-  v_cur  bigint;
-  r record;
-begin
-  for r in
-    select c.entity_key, c.seq
-    from public.app_change_counters c
-    order by c.entity_key
-  loop
-    v_cur := coalesce(r.seq, 0);
-    v_prev := 0;
 
-    begin
-      v_prev := coalesce((p_last_seen ->> r.entity_key)::bigint, 0);
-    exception when others then
-      v_prev := 0;
-    end;
+-- public.rpc_changes_ping moved to supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_rpc_changes_ping.sql.
 
-    v_seqs := v_seqs || jsonb_build_object(r.entity_key, v_cur);
-
-    if v_cur > v_prev then
-      v_changed := array_append(v_changed, r.entity_key);
-    end if;
-  end loop;
-
-  return jsonb_build_object(
-    'server_utc', now(),
-    'seqs', v_seqs,
-    'changed', to_jsonb(v_changed)
-  );
-end;
-$$;
 
 -- -----------------------------------------------------------------------------
 -- 4) TRIGGERS: bump counters when key entities change

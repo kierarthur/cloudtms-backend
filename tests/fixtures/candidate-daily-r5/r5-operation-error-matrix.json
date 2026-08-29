@@ -1,0 +1,1491 @@
+{
+  "authority": "CANDIDATE_API_OPENAPI_V1_MERGED_R5.yaml",
+  "operations": [
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "AVAILABILITY_VERSION_CONFLICT",
+          "retry_class": "REFRESH",
+          "status": 409
+        },
+        {
+          "error_code": "AVAILABILITY_DATE_NOT_EDITABLE",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 422
+        },
+        {
+          "error_code": "GENERATION_INCOMPLETE",
+          "retry_class": "REFRESH",
+          "status": 422
+        }
+      ],
+      "method": "PATCH",
+      "operation_id": "applyCandidateDailyAvailability",
+      "path": "/candidate-app/v1/daily/availability"
+    },
+    {
+      "access_policy": "BASELINE_BOOTSTRAP",
+      "errors": [
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        }
+      ],
+      "method": "GET",
+      "operation_id": "getCandidateBootstrap",
+      "path": "/candidate-app/v1/bootstrap"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        }
+      ],
+      "method": "GET",
+      "operation_id": "getCandidateDailyContent",
+      "path": "/candidate-app/v1/daily/content/{kind}"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "EFFECT_NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        },
+        {
+          "error_code": "EFFECT_STATUS_UNKNOWN",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        }
+      ],
+      "method": "GET",
+      "operation_id": "getCandidateDailyEffectStatus",
+      "path": "/candidate-app/v1/daily/effects/{effect_key}"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        }
+      ],
+      "method": "GET",
+      "operation_id": "getCandidateDailyEmergencyWindow",
+      "path": "/candidate-app/v1/daily/emergency-window"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        }
+      ],
+      "method": "GET",
+      "operation_id": "getCandidateDailyPastShifts",
+      "path": "/candidate-app/v1/daily/past-shifts"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        },
+        {
+          "error_code": "SEMANTIC_REJECTION",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 422
+        }
+      ],
+      "method": "POST",
+      "operation_id": "getCandidateDailyRunningLateOptions",
+      "path": "/candidate-app/v1/daily/running-late/options"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "DAILY_GENERATION_UNAVAILABLE",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        }
+      ],
+      "method": "GET",
+      "operation_id": "getCandidateDailyTiles",
+      "path": "/candidate-app/v1/daily/tiles"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "SOURCE_EVENT_CONFLICT",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_MISSING",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_AMBIGUOUS",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityApplyReconciliation",
+      "path": "/candidate-system/v1/google-availability/reconciliation"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "SOURCE_EVENT_CONFLICT",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "BATCH_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityApplySheetEdits",
+      "path": "/candidate-system/v1/google-availability/sheet-edits"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "BATCH_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "LEASE_CONFLICT",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_MISSING",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_AMBIGUOUS",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityClaimProjection",
+      "path": "/candidate-system/v1/google-availability/projection/claim"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "LEASE_CONFLICT",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "PROJECTION_STALE_COMPLETION",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "LEASE_EXPIRED_STATUS_REQUIRED",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityCompleteProjection",
+      "path": "/candidate-system/v1/google-availability/projection/complete"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "EFFECT_STATUS_UNKNOWN",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "LEASE_CONFLICT",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "SOURCE_EVENT_CONFLICT",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityEffectClaim",
+      "path": "/candidate-system/v1/google-availability/effects/claim"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "EFFECT_NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        },
+        {
+          "error_code": "EFFECT_STATUS_UNKNOWN",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "LEASE_CONFLICT",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "LEASE_EXPIRED_STATUS_REQUIRED",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityEffectComplete",
+      "path": "/candidate-system/v1/google-availability/effects/complete"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "EFFECT_NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        },
+        {
+          "error_code": "EFFECT_STATUS_UNKNOWN",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityEffectStatus",
+      "path": "/candidate-system/v1/google-availability/effects/status"
+    },
+    {
+      "access_policy": "LEGACY_COMPAT",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_MISSING",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_AMBIGUOUS",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "AVAILABILITY_VERSION_CONFLICT",
+          "retry_class": "REFRESH",
+          "status": 409
+        },
+        {
+          "error_code": "AVAILABILITY_DATE_NOT_EDITABLE",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 422
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityLegacyApply",
+      "path": "/candidate-system/v1/google-availability/legacy/availability"
+    },
+    {
+      "access_policy": "LEGACY_COMPAT",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_MISSING",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_AMBIGUOUS",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityLegacyStatus",
+      "path": "/candidate-system/v1/google-availability/legacy/availability-status"
+    },
+    {
+      "access_policy": "LEGACY_COMPAT",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_MISSING",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_AMBIGUOUS",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "DAILY_GENERATION_UNAVAILABLE",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityLegacyTiles",
+      "path": "/candidate-system/v1/google-availability/legacy/tiles"
+    },
+    {
+      "access_policy": "LEGACY_COMPAT",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_MISSING",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_AMBIGUOUS",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityLegacyTimesheetAuthorisationStatus",
+      "path": "/candidate-system/v1/google-availability/legacy/timesheet-authorisation-status"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "SOURCE_EVENT_CONFLICT",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "BATCH_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "GENERATION_INCOMPLETE",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 422
+        },
+        {
+          "error_code": "IDENTITY_LINK_CONFLICT",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityPublishRotaGenerations",
+      "path": "/candidate-system/v1/google-availability/rota-generations"
+    },
+    {
+      "access_policy": "SIGNED_SYSTEM_SYNC",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "SYSTEM_AUTH_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 401
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "DEPENDENCY_UNAVAILABLE",
+          "retry_class": "RETRY_AFTER",
+          "status": 503
+        },
+        {
+          "error_code": "NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        },
+        {
+          "error_code": "IDENTITY_LINK_MISSING",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDENTITY_LINK_AMBIGUOUS",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "googleAvailabilityReadSyncStatus",
+      "path": "/candidate-system/v1/google-availability/sync-status"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        },
+        {
+          "error_code": "EFFECT_STATUS_UNKNOWN",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        }
+      ],
+      "method": "POST",
+      "operation_id": "markCandidateDailyMessageSeen",
+      "path": "/candidate-app/v1/daily/message-seen"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "RETRY_AFTER",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        },
+        {
+          "error_code": "SEMANTIC_REJECTION",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 422
+        }
+      ],
+      "method": "POST",
+      "operation_id": "previewCandidateDailyRunningLate",
+      "path": "/candidate-app/v1/daily/running-late/preview"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "EFFECT_STATUS_UNKNOWN",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "SEMANTIC_REJECTION",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 422
+        }
+      ],
+      "method": "POST",
+      "operation_id": "raiseCandidateDailyEmergency",
+      "path": "/candidate-app/v1/daily/emergencies"
+    },
+    {
+      "access_policy": "CANDIDATE_SURFACE",
+      "errors": [
+        {
+          "error_code": "VALIDATION_FAILED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 400
+        },
+        {
+          "error_code": "UNAUTHENTICATED",
+          "retry_class": "REAUTHENTICATE",
+          "status": 401
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_DISABLED",
+          "retry_class": "REFRESH",
+          "status": 403
+        },
+        {
+          "error_code": "FORBIDDEN",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 403
+        },
+        {
+          "error_code": "SOURCE_IDENTITY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "IDEMPOTENCY_KEY_REUSED",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 409
+        },
+        {
+          "error_code": "COMMAND_IN_PROGRESS",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "RATE_LIMITED",
+          "retry_class": "RETRY_AFTER",
+          "status": 429
+        },
+        {
+          "error_code": "INTERNAL_ERROR",
+          "retry_class": "STATUS_CHECK",
+          "status": 500
+        },
+        {
+          "error_code": "CANDIDATE_DAILY_NOT_READY",
+          "retry_class": "STATUS_CHECK",
+          "status": 503
+        },
+        {
+          "error_code": "NOT_FOUND",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 404
+        },
+        {
+          "error_code": "EFFECT_STATUS_UNKNOWN",
+          "retry_class": "STATUS_CHECK",
+          "status": 409
+        },
+        {
+          "error_code": "SEMANTIC_REJECTION",
+          "retry_class": "DO_NOT_RETRY",
+          "status": 422
+        }
+      ],
+      "method": "POST",
+      "operation_id": "sendCandidateDailyRunningLate",
+      "path": "/candidate-app/v1/daily/running-late/send"
+    }
+  ],
+  "version": "r5"
+}

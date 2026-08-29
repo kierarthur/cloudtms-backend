@@ -1,0 +1,100 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "test-cloudtms-candidate-broker",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-09",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {
+    "CANDIDATE_APP_ENVIRONMENT": "TEST",
+    "CANDIDATE_APP_READY_PROOF_ENABLED": "TRUE",
+    "MYTMS_CONTROL_PLANE_ENABLED": "TRUE",
+    "MYTMS_GLOBAL_AUTH_CUTOVER_ENABLED": "TRUE",
+    "MYTMS_CONTROL_PLANE_URL": "https://cloudtms-mytms-miget-gateway.kier-88a.workers.dev",
+    "CANDIDATE_ALLOWED_ORIGINS": "https://testmode.arthur-rai.co.uk,https://mycloudtms.arthur-rai.co.uk,https://mytms-manager-review-test.kier-88a.workers.dev",
+    "CANDIDATE_ALLOW_NATIVE_CLIENTS": "true",
+    "CANDIDATE_BROKER_ACCESS_TOKEN_KEY_VERSION": "1",
+    "CANDIDATE_BROKER_ACCESS_TOKEN_READ_KEY_VERSIONS": "1",
+    "CANDIDATE_BROKER_REFRESH_TOKEN_KEY_VERSION": "1",
+    "CANDIDATE_BROKER_REFRESH_TOKEN_READ_KEY_VERSIONS": "1",
+    "CANDIDATE_BROKER_MANAGER_HANDOFF_KEY_VERSION": "1",
+    "CANDIDATE_BROKER_MANAGER_HANDOFF_READ_KEY_VERSIONS": "1",
+    "CANDIDATE_BROKER_PUBLIC_SESSION_ID_KEY_VERSION": "1",
+    "CANDIDATE_BROKER_PUBLIC_SESSION_ID_READ_KEY_VERSIONS": "1",
+    "CANDIDATE_BROKER_DEVICE_TOKEN_ENCRYPTION_KEY_VERSION": "1",
+    "CANDIDATE_BROKER_DEVICE_TOKEN_ENCRYPTION_READ_KEY_VERSIONS": "1",
+    "CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_KEY_VERSION": "1",
+    "CANDIDATE_BROKER_DEVICE_TOKEN_IDENTITY_READ_KEY_VERSIONS": "1",
+    "MYTMS_AGENCY_CHOICE_TOKEN_KEY_VERSION": "1",
+    "MYTMS_AGENCY_CHOICE_TOKEN_READ_KEY_VERSIONS": "1",
+    "MYTMS_GLOBAL_CHALLENGE_TOKEN_KEY_VERSION": "1",
+    "MYTMS_GLOBAL_CHALLENGE_TOKEN_READ_KEY_VERSIONS": "1"
+  },
+  "services": [
+    {
+      "binding": "CLOUDTMS_PRIVATE",
+      "service": "test-cloudtms-candidate-private-api"
+    },
+    {
+      "binding": "CANDIDATE_SYNTHETIC_SECOND_PRIVATE",
+      "service": "test-cloudtms-candidate-synthetic-private-api"
+    },
+    {
+      "binding": "MYTMS_IDENTITY_DELIVERY",
+      "service": "test-cloudtms-backend"
+    }
+  ],
+  "ratelimits": [
+    {
+      "name": "CANDIDATE_GENERAL_RATE_LIMIT",
+      "namespace_id": "71001",
+      "simple": { "limit": 120, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_AUTH_RATE_LIMIT",
+      "namespace_id": "71002",
+      "simple": { "limit": 10, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_MANAGER_RATE_LIMIT",
+      "namespace_id": "71003",
+      "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_UPLOAD_RATE_LIMIT",
+      "namespace_id": "71004",
+      "simple": { "limit": 20, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_DAILY_READ_RATE_LIMIT",
+      "namespace_id": "71005",
+      "simple": { "limit": 60, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_DAILY_COMMAND_RATE_LIMIT",
+      "namespace_id": "71006",
+      "simple": { "limit": 12, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_DAILY_EFFECT_RATE_LIMIT",
+      "namespace_id": "71007",
+      "simple": { "limit": 6, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_DAILY_SYSTEM_RATE_LIMIT",
+      "namespace_id": "71008",
+      "simple": { "limit": 120, "period": 60 }
+    },
+    {
+      "name": "CANDIDATE_APP_READY_PROOF_RATE_LIMIT",
+      "namespace_id": "71009",
+      "simple": { "limit": 120, "period": 60 }
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  }
+}

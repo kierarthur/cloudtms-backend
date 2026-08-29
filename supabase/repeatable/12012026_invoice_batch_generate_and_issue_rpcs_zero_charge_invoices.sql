@@ -22,765 +22,9 @@
 -- SAFE TO RE-RUN: CREATE OR REPLACE FUNCTION
 -- ============================================================
 
+-- public.invoice_autoinvoice_candidate_groups moved to supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_autoinvoice_candidate_groups.sql.
 
-
-create or replace function public.invoice_autoinvoice_candidate_groups(
-  p_limit int default 5000
-)
-returns table (
-  client_id uuid,
-  invoice_week_start date
-)
-language sql
-stable
-security definer
-set search_path = public
-as $$
-with anchor as (
-  select (now() at time zone 'Europe/London')::date as anchor_ymd
-),
-
-base as (
-  select
-    tf.timesheet_id,
-    tf.client_id,
-    ts.week_ending_date::date as week_ending_date,
-    (ts.week_ending_date::date - interval '6 days')::date as natural_week_start,
-    tf.invoice_breakdown_json,
-    coalesce(ts.contract_id, cw.contract_id) as contract_id
-  from public.timesheets_financials tf
-  join public.timesheets ts
-    on ts.timesheet_id = tf.timesheet_id
-   and ts.is_current = true
-  left join public.contract_weeks cw
-    on cw.timesheet_id = tf.timesheet_id
-  where tf.is_current = true
-    and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-    and tf.locked_by_invoice_id is null
-    and tf.paid_at_utc is null
-    and ts.revoked_at is null
-    and tf.client_id is not null
-    and ts.week_ending_date is not null
-),
-
-auto_ok as (
-  select
-    b.timesheet_id,
-    b.client_id,
-    b.week_ending_date,
-    b.natural_week_start,
-    b.invoice_breakdown_json,
-    b.contract_id,
-    c.auto_invoice as contract_auto_invoice,
-    cs.auto_invoice_default as client_auto_invoice_default,
-    (
-      case
-        when b.contract_id is not null then coalesce(c.auto_invoice, cs.auto_invoice_default, false)
-        else coalesce(cs.auto_invoice_default, false)
-      end
-    ) as auto_invoice_effective
-  from base b
-  left join public.contracts c
-    on c.id = b.contract_id
-  left join lateral (
-    select cs0.auto_invoice_default
-    from public.client_settings cs0
-    cross join anchor a
-    where cs0.client_id = b.client_id
-      and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
-    order by cs0.effective_from desc nulls last
-    limit 1
-  ) cs on true
-  where (
-    case
-      when b.contract_id is not null then coalesce(c.auto_invoice, cs.auto_invoice_default, false)
-      else coalesce(cs.auto_invoice_default, false)
-    end
-  ) = true
-),
-
-groups_from_nonseg as (
-  select
-    aok.client_id,
-    aok.natural_week_start as invoice_week_start
-  from auto_ok aok
-  cross join anchor a
-  where coalesce(aok.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
-    and aok.week_ending_date < a.anchor_ymd
-),
-
-groups_from_seg_empty as (
-  select
-    aok.client_id,
-    aok.natural_week_start as invoice_week_start
-  from auto_ok aok
-  cross join anchor a
-  where coalesce(aok.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-    and jsonb_typeof(aok.invoice_breakdown_json->'segments') = 'array'
-    and jsonb_array_length(aok.invoice_breakdown_json->'segments') = 0
-    and aok.week_ending_date < a.anchor_ymd
-),
-
-groups_from_segments as (
-  select distinct
-    aok.client_id,
-    coalesce(seg_t.tgt_start, aok.natural_week_start) as invoice_week_start
-  from auto_ok aok
-  cross join anchor a
-  cross join lateral jsonb_array_elements(
-    case
-      when jsonb_typeof(aok.invoice_breakdown_json->'segments') = 'array' then aok.invoice_breakdown_json->'segments'
-      else '[]'::jsonb
-    end
-  ) seg
-  cross join lateral (
-    select
-      case
-        when nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
-          then nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date
-        else null::date
-      end as tgt_start
-  ) seg_t
-  where coalesce(aok.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-    and jsonb_typeof(seg) = 'object'
-    and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
-    and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
-    and (
-      -- DELAYED segment: target differs from natural; only include once target week start reached (<= today)
-      (
-        seg_t.tgt_start is not null
-        and seg_t.tgt_start <> aok.natural_week_start
-        and seg_t.tgt_start <= a.anchor_ymd
-      )
-      or
-      -- NON-DELAYED segment: week must have ended (cron never allow-early)
-      (
-        (seg_t.tgt_start is null or seg_t.tgt_start = aok.natural_week_start)
-        and aok.week_ending_date < a.anchor_ymd
-      )
-    )
-),
-
-all_groups as (
-  select * from groups_from_nonseg
-  union
-  select * from groups_from_seg_empty
-  union
-  select * from groups_from_segments
-),
-
-dedup as (
-  select distinct
-    g.client_id,
-    g.invoice_week_start
-  from all_groups g
-  where g.client_id is not null
-    and g.invoice_week_start is not null
-),
-
-filtered as (
-  select
-    d.client_id,
-    d.invoice_week_start
-  from dedup d
-  where not exists (
-    select 1
-    from public.invoice_jobs_outbox o
-    where o.kind = 'BY_WEEK'
-      and (o.payload->>'client_id') = d.client_id::text
-      and (o.payload->>'invoice_week_start') = d.invoice_week_start::text
-  )
-)
-
-select
-  f.client_id,
-  f.invoice_week_start
-from filtered f
-order by
-  f.invoice_week_start asc,
-  f.client_id::text asc
-limit greatest(0, least(coalesce(p_limit, 5000), 20000));
-$$;
-
-
-
-create or replace function public.invoice_batch_generate_candidates(
-  p_allow_early boolean default false,
-  p_limit int default 5000
-)
-returns jsonb
-language sql
-stable
-security definer
-set search_path = public
-as $$
-with anchor as (
-  select (now() at time zone 'Europe/London')::date as anchor_ymd
-),
-
--- ------------------------------------------------------------
--- Base TSFIN rows that are "ready for invoice" at the timesheet level.
--- Segment gating is applied later.
--- ------------------------------------------------------------
-base as (
-  select
-    tf.timesheet_id,
-    tf.client_id,
-    ts.week_ending_date::date as ts_week_ending_date,
-    (ts.week_ending_date::date - interval '6 days')::date as ts_invoice_week_start,
-
-    s.client_name,
-    s.candidate_name,
-
-    tf.total_charge_ex_vat,
-    tf.total_hours,
-
-    -- charge components (defensive: used when total_charge_ex_vat is 0 but expense components exist)
-    coalesce(tf.expenses_charge_ex_vat, 0)::numeric as expenses_charge_ex_vat,
-    coalesce(tf.travel_charge_ex_vat, 0)::numeric as travel_charge_ex_vat,
-    coalesce(tf.accommodation_charge_ex_vat, 0)::numeric as accommodation_charge_ex_vat,
-    coalesce(tf.other_charge_ex_vat, 0)::numeric as other_charge_ex_vat,
-    coalesce(tf.mileage_charge_ex_vat, 0)::numeric as mileage_charge_ex_vat,
-    (
-      case
-        when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') is null then 0::numeric
-        when nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-          then (nullif(btrim(coalesce(tf.invoice_breakdown_json#>>'{additional,charge_ex_vat}','')), '')::numeric)
-        else 0::numeric
-      end
-    ) as additional_charge_ex_vat,
-
-    tf.basis,
-    ts.submission_mode,
-    s.validation_status,
-
-    coalesce(s.hr_validation_required_for_invoice, false) as hr_validation_required_for_invoice,
-    (
-      coalesce(s.hr_validation_required_for_invoice, false) = true
-      and (
-        s.validation_status is null
-        or s.validation_status <> all (array[
-          'VALIDATION_OK'::public.validation_status_enum,
-          'OVERRIDDEN'::public.validation_status_enum
-        ])
-      )
-    ) as blocked_by_hr_validation,
-
-    -- Precheck diagnostics for UI
-    pc.precheck_status as precheck_status,
-    coalesce(pc.has_timesheet_evidence_pdf, false) as has_timesheet_evidence_pdf,
-
-    tf.invoice_breakdown_json
-
-  from public.timesheets_financials tf
-  join public.timesheets ts
-    on ts.timesheet_id = tf.timesheet_id
-   and ts.is_current = true
-  join public.v_ts_invoice_precheck pc
-    on pc.timesheet_id = tf.timesheet_id
-  left join public.v_timesheets_summary_base s
-    on s.timesheet_id = tf.timesheet_id
-
-  where tf.is_current = true
-    and tf.processing_status = 'READY_FOR_INVOICE'::public.ts_fin_processing_status_enum
-    and tf.locked_by_invoice_id is null
-    and ts.revoked_at is null
-    and upper(coalesce(pc.precheck_status,'')) = 'OK'
-),
-
--- ------------------------------------------------------------
--- SEGMENTS mode:
--- Include ONLY unlocked segments.
--- ------------------------------------------------------------
-seg_rows as (
-  select
-    b.timesheet_id,
-    b.client_id,
-
-    coalesce(t.tgt_start, b.ts_invoice_week_start) as invoice_week_start,
-    (coalesce(t.tgt_start, b.ts_invoice_week_start) + interval '6 days')::date as week_ending_date,
-
-    b.client_name,
-    b.candidate_name,
-
-    -- defensive: support either key name (charge_ex_vat or charge_amount), and avoid bad casts
-    (
-      case
-        when nullif(btrim(coalesce(seg->>'charge_ex_vat','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-          then (nullif(btrim(coalesce(seg->>'charge_ex_vat','')), '')::numeric)
-        when nullif(btrim(coalesce(seg->>'charge_amount','')), '') ~ '^-?[0-9]+(\.[0-9]+)?$'
-          then (nullif(btrim(coalesce(seg->>'charge_amount','')), '')::numeric)
-        else 0::numeric
-      end
-    ) as seg_charge_ex_vat,
-
-    (
-      coalesce(nullif(seg->>'hours_day','')::numeric, 0) +
-      coalesce(nullif(seg->>'hours_night','')::numeric, 0) +
-      coalesce(nullif(seg->>'hours_sat','')::numeric, 0) +
-      coalesce(nullif(seg->>'hours_sun','')::numeric, 0) +
-      coalesce(nullif(seg->>'hours_bh','')::numeric, 0)
-    ) as seg_hours_total,
-
-    b.basis,
-    b.submission_mode,
-    b.validation_status,
-    b.hr_validation_required_for_invoice,
-    b.blocked_by_hr_validation,
-
-    b.precheck_status,
-    b.has_timesheet_evidence_pdf
-
-  from base b
-  cross join lateral jsonb_array_elements(
-    case
-      when jsonb_typeof(b.invoice_breakdown_json->'segments') = 'array' then b.invoice_breakdown_json->'segments'
-      else '[]'::jsonb
-    end
-  ) seg
-  cross join lateral (
-    select
-      case
-        when nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '') ~ '^\d{4}-\d{2}-\d{2}$'
-          then (nullif(btrim(coalesce(seg->>'invoice_target_week_start','')), '')::date)
-        else null::date
-      end as tgt_start
-  ) t
-  cross join anchor a
-
-  where coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-    and jsonb_typeof(seg) = 'object'
-    and nullif(btrim(coalesce(seg->>'segment_id','')), '') is not null
-    -- only segments not already locked to an invoice
-    and nullif(btrim(coalesce(seg->>'invoice_locked_invoice_id','')), '') is null
-    and (
-      -- NOT DELAYED
-      (
-        (t.tgt_start is null or t.tgt_start = b.ts_invoice_week_start)
-        and (
-          p_allow_early = true
-          or b.ts_week_ending_date < a.anchor_ymd
-        )
-      )
-      or
-      -- DELAYED (allow_early never overrides delayed)
-      (
-        t.tgt_start is not null
-        and t.tgt_start <> b.ts_invoice_week_start
-        and t.tgt_start <= a.anchor_ymd
-      )
-    )
-),
-
-seg_agg as (
-  select
-    r.timesheet_id,
-    r.client_id,
-    r.invoice_week_start,
-    r.week_ending_date,
-
-    r.client_name,
-    r.candidate_name,
-
-    round(coalesce(sum(r.seg_charge_ex_vat),0), 2) as total_charge_ex_vat,
-    round(coalesce(sum(r.seg_hours_total),0), 2) as total_hours,
-
-    r.basis,
-    r.submission_mode,
-    r.validation_status,
-    r.hr_validation_required_for_invoice,
-    r.blocked_by_hr_validation,
-
-    r.precheck_status,
-    r.has_timesheet_evidence_pdf
-  from seg_rows r
-  group by
-    r.timesheet_id, r.client_id, r.invoice_week_start, r.week_ending_date,
-    r.client_name, r.candidate_name,
-    r.basis, r.submission_mode, r.validation_status,
-    r.hr_validation_required_for_invoice, r.blocked_by_hr_validation,
-    r.precheck_status, r.has_timesheet_evidence_pdf
-),
-
--- ------------------------------------------------------------
--- ✅ SEGMENTS mode but segments=[] (common for expenses-only, or legacy states)
--- Treat as a synthetic single row at the natural week.
--- Respect the same allow_early / week-ended gate as nonseg.
--- Use defensive "effective charge" when total_charge_ex_vat is 0 but expense components exist.
--- ------------------------------------------------------------
-seg_empty_fallback as (
-  select
-    b.timesheet_id,
-    b.client_id,
-    b.ts_invoice_week_start as invoice_week_start,
-    b.ts_week_ending_date   as week_ending_date,
-
-    b.client_name,
-    b.candidate_name,
-
-    round(
-      (
-        case
-          when coalesce(b.total_charge_ex_vat,0)::numeric <> 0 then coalesce(b.total_charge_ex_vat,0)::numeric
-          else (
-            coalesce(b.expenses_charge_ex_vat,0)::numeric +
-            coalesce(b.travel_charge_ex_vat,0)::numeric +
-            coalesce(b.accommodation_charge_ex_vat,0)::numeric +
-            coalesce(b.other_charge_ex_vat,0)::numeric +
-            coalesce(b.mileage_charge_ex_vat,0)::numeric +
-            coalesce(b.additional_charge_ex_vat,0)::numeric
-          )
-        end
-      ),
-      2
-    ) as total_charge_ex_vat,
-
-    round(coalesce(b.total_hours,0), 2) as total_hours,
-
-    b.basis,
-    b.submission_mode,
-    b.validation_status,
-    b.hr_validation_required_for_invoice,
-    b.blocked_by_hr_validation,
-
-    b.precheck_status,
-    b.has_timesheet_evidence_pdf
-  from base b
-  cross join anchor a
-  where coalesce(b.invoice_breakdown_json->>'mode','') = 'SEGMENTS'
-    and (
-      case
-        when jsonb_typeof(b.invoice_breakdown_json->'segments') = 'array' then jsonb_array_length(b.invoice_breakdown_json->'segments')
-        else 0
-      end
-    ) = 0
-    and (
-      p_allow_early = true
-      or b.ts_week_ending_date < a.anchor_ymd
-    )
-),
-
--- ------------------------------------------------------------
--- NON-SEGMENTS mode:
--- Use defensive "effective charge" when total_charge_ex_vat is 0 but expense components exist.
--- ------------------------------------------------------------
-nonseg as (
-  select
-    b.timesheet_id,
-    b.client_id,
-    b.ts_invoice_week_start as invoice_week_start,
-    b.ts_week_ending_date as week_ending_date,
-
-    b.client_name,
-    b.candidate_name,
-
-    round(
-      (
-        case
-          when coalesce(b.total_charge_ex_vat,0)::numeric <> 0 then coalesce(b.total_charge_ex_vat,0)::numeric
-          else (
-            coalesce(b.expenses_charge_ex_vat,0)::numeric +
-            coalesce(b.travel_charge_ex_vat,0)::numeric +
-            coalesce(b.accommodation_charge_ex_vat,0)::numeric +
-            coalesce(b.other_charge_ex_vat,0)::numeric +
-            coalesce(b.mileage_charge_ex_vat,0)::numeric +
-            coalesce(b.additional_charge_ex_vat,0)::numeric
-          )
-        end
-      ),
-      2
-    ) as total_charge_ex_vat,
-
-    round(coalesce(b.total_hours,0), 2) as total_hours,
-
-    b.basis,
-    b.submission_mode,
-    b.validation_status,
-    b.hr_validation_required_for_invoice,
-    b.blocked_by_hr_validation,
-
-    b.precheck_status,
-    b.has_timesheet_evidence_pdf
-  from base b
-  cross join anchor a
-  where coalesce(b.invoice_breakdown_json->>'mode','') <> 'SEGMENTS'
-    and (
-      p_allow_early = true
-      or b.ts_week_ending_date < a.anchor_ymd
-    )
-),
-
-eligible as (
-  -- NOTE: eligibility for preview must match enqueue:
-  -- keep rows where there is any invoiceable value signal (charge or hours).
-  select * from seg_agg
-  where (round(coalesce(total_charge_ex_vat,0), 2) <> 0 or round(coalesce(total_hours,0), 2) <> 0)
-
-  union all
-  select * from seg_empty_fallback
-  where (round(coalesce(total_charge_ex_vat,0), 2) <> 0 or round(coalesce(total_hours,0), 2) <> 0)
-
-  union all
-  select * from nonseg
-  where (round(coalesce(total_charge_ex_vat,0), 2) <> 0 or round(coalesce(total_hours,0), 2) <> 0)
-),
-
-eligible_limited as (
-  select *
-  from eligible
-  order by week_ending_date desc nulls last, client_name nulls last, candidate_name nulls last
-  limit greatest(1, least(coalesce(p_limit, 5000), 20000))
-),
-
-weeks as (
-  select
-    e.client_id,
-    max(e.client_name) as client_name,
-    e.invoice_week_start,
-    e.week_ending_date,
-
-    round(coalesce(sum(e.total_charge_ex_vat),0), 2) as subtotal_ex_vat,
-    round(coalesce(sum(e.total_hours),0), 2) as total_hours,
-
-    jsonb_agg(
-      jsonb_build_object(
-        'timesheet_id', e.timesheet_id::text,
-        'candidate_name', e.candidate_name,
-        'week_ending_date', e.week_ending_date::text,
-        'total_charge_ex_vat', round(coalesce(e.total_charge_ex_vat,0),2),
-        'total_hours', round(coalesce(e.total_hours,0),2),
-        'basis', e.basis::text,
-        'submission_mode', coalesce(e.submission_mode::text, ''),
-        'validation_status', coalesce(e.validation_status::text, ''),
-        'hr_validation_required_for_invoice', e.hr_validation_required_for_invoice,
-        'blocked_by_hr_validation', e.blocked_by_hr_validation,
-        'precheck_status', coalesce(e.precheck_status::text, ''),
-        'has_timesheet_evidence_pdf', coalesce(e.has_timesheet_evidence_pdf, false)
-      )
-      order by e.candidate_name nulls last, e.timesheet_id::text
-    ) as timesheets
-
-  from eligible_limited e
-  group by e.client_id, e.invoice_week_start, e.week_ending_date
-),
-
-clients as (
-  select
-    w.client_id,
-    max(w.client_name) as client_name,
-
-    coalesce(cs.invoice_consolidation_mode, 'NONE') as invoice_consolidation_mode,
-    case coalesce(cs.invoice_consolidation_mode, 'NONE')
-      when 'NONE' then 'One per timesheet'
-      when 'BY_WEEK' then 'Consolidated by week'
-      when 'ANY_WEEK' then 'Consolidated across weeks'
-      else 'One per timesheet'
-    end as consolidation_label,
-
-    case coalesce(cs.invoice_consolidation_mode, 'NONE')
-      when 'NONE' then coalesce(sum(jsonb_array_length(w.timesheets)), 0)
-      when 'BY_WEEK' then count(*)
-      when 'ANY_WEEK' then case when coalesce(sum(jsonb_array_length(w.timesheets)), 0) > 0 then 1 else 0 end
-      else coalesce(sum(jsonb_array_length(w.timesheets)), 0)
-    end as expected_invoice_count,
-
-    jsonb_agg(
-      jsonb_build_object(
-        'invoice_week_start', w.invoice_week_start::text,
-        'week_ending_date', w.week_ending_date::text,
-        'subtotal_ex_vat', w.subtotal_ex_vat,
-        'total_hours', w.total_hours,
-        'timesheets', w.timesheets
-      )
-      order by w.week_ending_date desc
-    ) as weeks
-  from weeks w
-  left join lateral (
-    select coalesce(cs0.invoice_consolidation_mode::text, 'NONE') as invoice_consolidation_mode
-    from public.client_settings cs0
-    cross join anchor a
-    where cs0.client_id = w.client_id
-      and (cs0.effective_from <= a.anchor_ymd or cs0.effective_from is null)
-    order by cs0.effective_from desc nulls last
-    limit 1
-  ) cs on true
-  group by w.client_id, cs.invoice_consolidation_mode
-)
-
-select coalesce(
-  jsonb_agg(
-    jsonb_build_object(
-      'client_id', c.client_id::text,
-      'client_name', c.client_name,
-      'invoice_consolidation_mode', c.invoice_consolidation_mode,
-      'expected_invoice_count', c.expected_invoice_count,
-      'consolidation_label', c.consolidation_label,
-      'weeks', c.weeks
-    )
-    order by c.client_name nulls last, c.client_id::text
-  ),
-  '[]'::jsonb
-)
-from clients c;
-$$;
-
-
-create or replace function public.invoice_outbox_enqueue_by_week_selected(
-  p_rows jsonb,
-  p_actor_user_id uuid,
-  p_allow_early boolean default false,
-  p_meta jsonb default null
-)
-returns table (
-  client_id uuid,
-  invoice_week_start date,
-  outbox_id uuid,
-  action text
-)
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_anchor_ymd date := (now() at time zone 'Europe/London')::date;
-
-  v_row jsonb;
-
-  v_client_id uuid;
-  v_week_start date;
-
-  v_in_ids uuid[];
-
-  v_existing_id uuid;
-  v_outbox_id uuid;
-
-  v_invoice_consolidation_mode text;
-
-  v_meta_outer jsonb;
-  v_meta_inner jsonb;
-begin
-  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
-    raise exception 'p_rows must be a JSON array';
-  end if;
-
-  if coalesce(jsonb_array_length(p_rows), 0) = 0 then
-    raise exception 'p_rows must not be empty';
-  end if;
-
-  for v_row in
-    select t.value
-    from jsonb_array_elements(p_rows) as t(value)
-  loop
-    if jsonb_typeof(v_row) <> 'object' then
-      raise exception 'each element of p_rows must be a JSON object';
-    end if;
-
-    v_client_id := nullif(btrim(coalesce(v_row->>'client_id','')), '')::uuid;
-    v_week_start := (v_row->>'invoice_week_start')::date;
-
-    if v_client_id is null then
-      raise exception 'row missing client_id';
-    end if;
-
-    if v_week_start is null then
-      raise exception 'row missing invoice_week_start';
-    end if;
-
-    -- parse timesheet_ids
-    if not (v_row ? 'timesheet_ids') then
-      raise exception 'row missing timesheet_ids';
-    end if;
-
-    if jsonb_typeof(v_row->'timesheet_ids') <> 'array' then
-      raise exception 'row timesheet_ids must be a JSON array';
-    end if;
-
-    -- NOTE: dedupe in a subquery, then apply deterministic ordering in array_agg.
-    select array_agg(q.x order by q.x::text)
-    into v_in_ids
-    from (
-      select distinct (t.val)::uuid as x
-      from jsonb_array_elements_text(v_row->'timesheet_ids') as t(val)
-      where t.val ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-    ) q;
-
-    if v_in_ids is null or coalesce(array_length(v_in_ids, 1), 0) = 0 then
-      raise exception 'row timesheet_ids empty/invalid';
-    end if;
-
-    -- ------------------------------------------------------------
-    -- Store consolidation mode for traceability (payload.meta.invoice_consolidation_mode)
-    -- ------------------------------------------------------------
-    select coalesce(cs0.invoice_consolidation_mode::text, 'NONE')
-      into v_invoice_consolidation_mode
-    from public.client_settings cs0
-    where cs0.client_id = v_client_id
-      and (cs0.effective_from <= v_anchor_ymd or cs0.effective_from is null)
-    order by cs0.effective_from desc nulls last
-    limit 1;
-
-    if v_invoice_consolidation_mode is null then
-      v_invoice_consolidation_mode := 'NONE';
-    end if;
-
-    -- Build meta to pass into canonical gate (preserve caller meta, add invoice_consolidation_mode under nested meta)
-    v_meta_outer := coalesce(p_meta, '{}'::jsonb);
-
-    if jsonb_typeof(v_meta_outer) <> 'object' then
-      v_meta_outer := jsonb_build_object('meta', v_meta_outer);
-    end if;
-
-    v_meta_inner :=
-      case
-        when jsonb_typeof(v_meta_outer->'meta') = 'object' then coalesce(v_meta_outer->'meta','{}'::jsonb)
-        else '{}'::jsonb
-      end;
-
-    v_meta_inner := v_meta_inner || jsonb_build_object('invoice_consolidation_mode', v_invoice_consolidation_mode);
-
-    v_meta_outer := v_meta_outer || jsonb_build_object('meta', v_meta_inner);
-
-    -- ✅ Concurrency guard: serialize enqueue per (client_id, invoice_week_start)
-    -- (lets us return a correct INSERTED/UPDATED action deterministically)
-    perform pg_advisory_xact_lock(
-      hashtext(v_client_id::text),
-      (v_week_start - date '2000-01-01')::int
-    );
-
-    -- Determine whether an outbox row already exists (for action only; eligibility is decided by canonical gate)
-    select o.id
-      into v_existing_id
-    from public.invoice_jobs_outbox o
-    where o.kind = 'BY_WEEK'
-      and (o.payload->>'client_id') = v_client_id::text
-      and (o.payload->>'invoice_week_start') = v_week_start::text
-    order by o.created_at desc
-    limit 1;
-
-    -- ------------------------------------------------------------
-    -- Canonical gate: all eligibility logic lives in invoice_outbox_enqueue_by_week
-    -- ------------------------------------------------------------
-    v_outbox_id := public.invoice_outbox_enqueue_by_week(
-      p_client_id         => v_client_id,
-      p_invoice_week_start=> v_week_start,
-      p_actor_user_id     => p_actor_user_id,
-      p_allow_early       => p_allow_early,
-      p_meta              => v_meta_outer,
-      p_timesheet_ids     => v_in_ids,
-      p_auto_invoice_only => false
-    );
-
-    client_id := v_client_id;
-    invoice_week_start := v_week_start;
-    outbox_id := v_outbox_id;
-    action := case when v_existing_id is null then 'INSERTED' else 'UPDATED' end;
-    return next;
-  end loop;
-
-end;
-$$;
-
-
+-- public.invoice_batch_generate_candidates moved to supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_invoice_batch_generate_candidates.sql.
 
 
 
@@ -811,6 +55,7 @@ declare
   v_issue_json jsonb := '[]'::jsonb;
   v_not_due_json jsonb := '[]'::jsonb;
   v_email_json jsonb := '[]'::jsonb;
+  v_email_warn_json jsonb := '[]'::jsonb;
 
   v_debug boolean := false;
   v_steps jsonb := '[]'::jsonb;
@@ -1001,21 +246,20 @@ begin
     ));
   end if;
 
-  -- queue emails for successfully ISSUED invoices, excluding self-bill
-  create temporary table tmp_to_email on commit drop as
+  -- queue emails for successfully ISSUED invoices, excluding self-bill/do_not_send.
+  -- Recipient routing is derived before tmp_to_email so batch queueing matches handleInvoiceEmail(...).
+  create temporary table tmp_email_route_base on commit drop as
   select
     i.id as invoice_id,
     i.client_id,
     i.invoice_no,
     g.week_ending_date,
-
-    -- recipient: prefer snapshot primary invoice email if present, else clients.primary_invoice_email
     coalesce(
       nullif(btrim(coalesce(i.header_snapshot_json->>'client_primary_invoice_email','')), ''),
       nullif(btrim(coalesce(c.primary_invoice_email,'')), '')
-    ) as to_email,
-
-    g.is_self_bill
+    ) as primary_to_email,
+    g.is_self_bill,
+    coalesce(i.do_not_send,false) as do_not_send
   from tmp_issue r
   join public.invoices i
     on i.id = r.invoice_id
@@ -1024,9 +268,313 @@ begin
   join public.clients c
     on c.id = i.client_id
   where r.ok = true
-    and upper(coalesce(r.status,'')) = 'ISSUED'
-    and coalesce(g.is_self_bill,false) = false
-    and coalesce(i.do_not_send,false) = false;
+    and upper(coalesce(r.status,'')) = 'ISSUED';
+
+  create temporary table tmp_latest_client_settings on commit drop as
+  select distinct on (cs.client_id)
+    cs.client_id,
+    cs.send_manual_invoices_to_different_email,
+    cs.manual_invoices_alt_email_address,
+    cs.effective_from,
+    cs.created_at
+  from public.client_settings cs
+  join (
+    select distinct rb.client_id
+    from tmp_email_route_base rb
+    where rb.client_id is not null
+  ) bc
+    on bc.client_id = cs.client_id
+  order by cs.client_id, cs.effective_from desc nulls last, cs.created_at desc nulls last;
+
+  create temporary table tmp_email_route_lines on commit drop as
+  select
+    rb.invoice_id,
+    il.timesheet_id,
+    (il.timesheet_id is not null and ts.timesheet_id is null) as missing_current_timesheet,
+    ts.contract_id as timesheet_contract_id,
+    cw.contract_id as contract_week_contract_id,
+    coalesce(ts.contract_id, cw.contract_id) as contract_id,
+    coalesce(ts.is_adjustment,false) as timesheet_is_adjustment,
+    coalesce(cw.is_adjustment,false) as contract_week_is_adjustment,
+    (
+      coalesce(ts.is_adjustment,false) = true
+      and (
+        left(upper(coalesce(ts.adjustment_origin::text,'')), 7) = 'IMPORT_'
+        or ts.correction_id is not null
+        or nullif(btrim(coalesce(ts.correction_kind::text,'')), '') is not null
+      )
+    ) as is_import_derived_adjustment,
+    (
+      upper(coalesce(ts.submission_mode::text,'')) in ('MANUAL','QR')
+      or nullif(btrim(coalesce(ts.qr_status::text,'')), '') is not null
+      or nullif(btrim(coalesce(ts.qr_token::text,'')), '') is not null
+    ) as is_manual_or_qr,
+    (
+      (coalesce(ts.is_adjustment,false) = true or coalesce(cw.is_adjustment,false) = true)
+      and (
+        upper(coalesce(ts.submission_mode::text,'')) in ('MANUAL','QR')
+        or nullif(btrim(coalesce(ts.qr_status::text,'')), '') is not null
+        or nullif(btrim(coalesce(ts.qr_token::text,'')), '') is not null
+      )
+      and not (
+        coalesce(ts.is_adjustment,false) = true
+        and (
+          left(upper(coalesce(ts.adjustment_origin::text,'')), 7) = 'IMPORT_'
+          or ts.correction_id is not null
+          or nullif(btrim(coalesce(ts.correction_kind::text,'')), '') is not null
+        )
+      )
+    ) as is_user_created_manual_qr_adjustment
+  from tmp_email_route_base rb
+  left join public.invoice_lines il
+    on il.invoice_id = rb.invoice_id
+   and il.timesheet_id is not null
+  left join public.timesheets ts
+    on ts.timesheet_id = il.timesheet_id
+   and ts.is_current = true
+  left join lateral (
+    select
+      coalesce(bool_or(coalesce(cw0.is_adjustment,false)), false) as is_adjustment,
+      (array_agg(cw0.contract_id order by cw0.contract_id::text) filter (where cw0.contract_id is not null))[1] as contract_id
+    from public.contract_weeks cw0
+    where cw0.timesheet_id = il.timesheet_id
+  ) cw
+    on true;
+
+  create temporary table tmp_email_route_flags on commit drop as
+  select
+    rb.invoice_id,
+    rb.client_id,
+    rb.invoice_no,
+    rb.week_ending_date,
+    rb.primary_to_email,
+    rb.is_self_bill,
+    rb.do_not_send,
+    coalesce(bool_or(coalesce(erl.missing_current_timesheet,false)), false) as has_missing_current_timesheet,
+    coalesce(bool_or(coalesce(erl.is_import_derived_adjustment,false)), false) as has_import_derived_adjustment,
+    coalesce(bool_or(coalesce(erl.is_user_created_manual_qr_adjustment,false)), false) as has_user_created_manual_qr_adjustment,
+    coalesce(bool_or(coalesce(erl.is_user_created_manual_qr_adjustment,false) = true and erl.contract_id is null), false) as has_missing_user_created_manual_qr_contract
+  from tmp_email_route_base rb
+  left join tmp_email_route_lines erl
+    on erl.invoice_id = rb.invoice_id
+  group by
+    rb.invoice_id,
+    rb.client_id,
+    rb.invoice_no,
+    rb.week_ending_date,
+    rb.primary_to_email,
+    rb.is_self_bill,
+    rb.do_not_send;
+
+  create temporary table tmp_email_route_contracts on commit drop as
+  select distinct
+    erl.invoice_id,
+    erl.contract_id,
+    (ct.id is null) as missing_contract,
+    coalesce(ct.overrideclientsettings,false) as overrideclientsettings,
+    coalesce(ct.send_manual_invoices_to_different_email,false) as send_manual_invoices_to_different_email,
+    nullif(btrim(coalesce(ct.manual_invoices_alt_email_address,'')), '') as manual_invoices_alt_email_address,
+    (
+      coalesce(ct.overrideclientsettings,false) = true
+      and coalesce(ct.send_manual_invoices_to_different_email,false) = true
+    ) as override_enabled
+  from tmp_email_route_lines erl
+  left join public.contracts ct
+    on ct.id = erl.contract_id
+  where erl.is_user_created_manual_qr_adjustment = true
+    and erl.contract_id is not null;
+
+  create temporary table tmp_email_route_contract_agg on commit drop as
+  select
+    erc.invoice_id,
+    coalesce(bool_or(coalesce(erc.missing_contract,false)), false) as missing_contract,
+    coalesce(bool_or(coalesce(erc.override_enabled,false)), false) as has_enabled_contract_override,
+    coalesce(bool_or(coalesce(erc.override_enabled,false) and erc.manual_invoices_alt_email_address is null), false) as has_missing_contract_alt_email,
+    count(distinct erc.manual_invoices_alt_email_address) filter (
+      where erc.override_enabled = true
+        and erc.manual_invoices_alt_email_address is not null
+    ) as contract_alt_email_count,
+    (array_agg(distinct erc.manual_invoices_alt_email_address) filter (
+      where erc.override_enabled = true
+        and erc.manual_invoices_alt_email_address is not null
+    ))[1] as contract_alt_email,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'contract_id', erc.contract_id::text,
+          'email', erc.manual_invoices_alt_email_address
+        )
+      ) filter (
+        where erc.override_enabled = true
+          and erc.manual_invoices_alt_email_address is not null
+      ),
+      '[]'::jsonb
+    ) as contract_alt_details,
+    coalesce(
+      jsonb_agg(
+        jsonb_build_object(
+          'contract_id', erc.contract_id::text
+        )
+      ) filter (
+        where erc.override_enabled = true
+          and erc.manual_invoices_alt_email_address is null
+      ),
+      '[]'::jsonb
+    ) as missing_contract_alt_details
+  from tmp_email_route_contracts erc
+  group by erc.invoice_id;
+
+  create temporary table tmp_email_queue_warnings on commit drop as
+  select
+    erf.invoice_id,
+    'EMAIL_ROUTING_CHECK_FAILED'::text as warning_code,
+    'Current timesheet data could not be loaded for one or more invoice lines, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'EMAIL_ROUTING_CHECK_FAILED',
+      'message', 'Current timesheet data could not be loaded for one or more invoice lines, so invoice email routing was not queued.'
+    ) as warning_json
+  from tmp_email_route_flags erf
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_missing_current_timesheet = true
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CONTRACT_ROUTING_CHECK_FAILED'::text as warning_code,
+    'Contract data could not be resolved for one or more user-created manual/QR adjustment invoice lines, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CONTRACT_ROUTING_CHECK_FAILED',
+      'message', 'Contract data could not be resolved for one or more user-created manual/QR adjustment invoice lines, so invoice email routing was not queued.'
+    ) as warning_json
+  from tmp_email_route_flags erf
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and erf.has_missing_user_created_manual_qr_contract = true
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CONTRACT_ROUTING_CHECK_FAILED'::text as warning_code,
+    'Contract data could not be loaded for one or more user-created manual/QR adjustment invoice lines, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CONTRACT_ROUTING_CHECK_FAILED',
+      'message', 'Contract data could not be loaded for one or more user-created manual/QR adjustment invoice lines, so invoice email routing was not queued.'
+    ) as warning_json
+  from tmp_email_route_flags erf
+  join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and erca.missing_contract = true
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CONTRACT_MANUAL_EMAIL_MISSING'::text as warning_code,
+    'Contract manual invoice email is enabled but no alternate email address is configured, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CONTRACT_MANUAL_EMAIL_MISSING',
+      'message', 'Contract manual invoice email is enabled but no alternate email address is configured, so invoice email routing was not queued.',
+      'contracts', coalesce(erca.missing_contract_alt_details, '[]'::jsonb)
+    ) as warning_json
+  from tmp_email_route_flags erf
+  join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and erca.has_missing_contract_alt_email = true
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CONTRACT_MANUAL_EMAIL_CONFLICT'::text as warning_code,
+    'Multiple contract manual invoice email overrides apply to this invoice and they disagree, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CONTRACT_MANUAL_EMAIL_CONFLICT',
+      'message', 'Multiple contract manual invoice email overrides apply to this invoice and they disagree, so invoice email routing was not queued.',
+      'contracts', coalesce(erca.contract_alt_details, '[]'::jsonb)
+    ) as warning_json
+  from tmp_email_route_flags erf
+  join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and coalesce(erca.contract_alt_email_count,0) > 1
+
+  union all
+
+  select
+    erf.invoice_id,
+    'CLIENT_MANUAL_EMAIL_MISSING'::text as warning_code,
+    'Client manual adjustment email is enabled but no alternate email address is configured, so invoice email routing was not queued.'::text as warning_message,
+    jsonb_build_object(
+      'invoice_id', erf.invoice_id::text,
+      'warning_code', 'CLIENT_MANUAL_EMAIL_MISSING',
+      'message', 'Client manual adjustment email is enabled but no alternate email address is configured, so invoice email routing was not queued.'
+    ) as warning_json
+  from tmp_email_route_flags erf
+  left join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  left join tmp_latest_client_settings lcs
+    on lcs.client_id = erf.client_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and erf.has_user_created_manual_qr_adjustment = true
+    and coalesce(erca.has_enabled_contract_override,false) = false
+    and coalesce(lcs.send_manual_invoices_to_different_email,false) = true
+    and nullif(btrim(coalesce(lcs.manual_invoices_alt_email_address,'')), '') is null;
+
+  select coalesce(
+    jsonb_agg(t.warning_json order by t.invoice_id::text, t.warning_code),
+    '[]'::jsonb
+  )
+  into v_email_warn_json
+  from tmp_email_queue_warnings t;
+
+  create temporary table tmp_to_email on commit drop as
+  select
+    erf.invoice_id,
+    erf.client_id,
+    erf.invoice_no,
+    erf.week_ending_date,
+    case
+      when erf.has_user_created_manual_qr_adjustment = true
+        and coalesce(erca.contract_alt_email_count,0) = 1
+        then erca.contract_alt_email
+      when erf.has_user_created_manual_qr_adjustment = true
+        and coalesce(erca.has_enabled_contract_override,false) = false
+        and coalesce(lcs.send_manual_invoices_to_different_email,false) = true
+        and nullif(btrim(coalesce(lcs.manual_invoices_alt_email_address,'')), '') is not null
+        then nullif(btrim(coalesce(lcs.manual_invoices_alt_email_address,'')), '')
+      else erf.primary_to_email
+    end as to_email,
+    erf.is_self_bill
+  from tmp_email_route_flags erf
+  left join tmp_email_route_contract_agg erca
+    on erca.invoice_id = erf.invoice_id
+  left join tmp_latest_client_settings lcs
+    on lcs.client_id = erf.client_id
+  where coalesce(erf.is_self_bill,false) = false
+    and coalesce(erf.do_not_send,false) = false
+    and not exists (
+      select 1
+      from tmp_email_queue_warnings w
+      where w.invoice_id = erf.invoice_id
+    );
 
   -- build queued mail_outbox rows in chunks
   create temporary table tmp_mail_rows on commit drop as
@@ -1214,6 +762,7 @@ begin
         'issue_results', v_issue_json,
         'not_due_results', v_not_due_json,
         'email_outbox', v_email_json,
+        'email_queue_warnings', v_email_warn_json,
         'max_attachments_per_email', v_max_attach,
         'pdf_invoice_ids', to_jsonb(coalesce(v_pdf_invoice_ids, array[]::uuid[])),
         'pdf_invoice_count', v_pdf_invoice_count,
@@ -1231,6 +780,7 @@ begin
   return jsonb_build_object(
     'invoice_results', (v_issue_json || v_not_due_json),
     'email_outbox', v_email_json,
+    'email_queue_warnings', v_email_warn_json,
     'max_attachments_per_email', v_max_attach,
     'allow_early', coalesce(p_allow_early,false),
 
@@ -1268,6 +818,9 @@ exception
     raise;
 end;
 $$;
+
+
+
 
 
 -- ============================================================

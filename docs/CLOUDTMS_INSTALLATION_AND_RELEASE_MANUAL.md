@@ -1,0 +1,171 @@
+# CloudTMS Installation, UPGRADE and NEW-Database Manual
+
+## Purpose
+
+This manual is the durable operating entry point for moving an existing CloudTMS database to the current approved repository release or creating a new isolated agency database on Miget.
+
+It is deliberately simple:
+
+- Git is the authority for database definitions and application source.
+- Miget supplies isolated PostgreSQL and PostgREST services on the shared purchased Resource.
+- Cloudflare Workers and gateways supply the application routes.
+- Codex prepares a read-only plan first.
+- A database or infrastructure change happens only after a separate, target-specific APPLY instruction.
+
+The directory name `supabase/` and logical variables such as `SUPABASE_URL` are retained for source compatibility. They do not make Supabase the runtime provider. Their deployed values must resolve only to the intended Miget/PostgREST route.
+
+## The two commands to give Codex
+
+Use one of these exact requests:
+
+```text
+CLOUDTMS PLAN UPGRADE <exact target>
+CLOUDTMS PLAN NEW DATABASE <agency>
+```
+
+Examples:
+
+```text
+CLOUDTMS PLAN UPGRADE CloudTMS LIVE
+CLOUDTMS PLAN NEW DATABASE Agency D TEST
+```
+
+Both commands are read-only. They tell Codex to inspect the named target, compare it with the exact current repository authority, list every pending database and runtime change, and stop before mutation.
+
+Words such as “upgrade”, “prepare”, “new database” or “what is missing” without the complete canonical command are discussion only. They do not authorise resource creation, database changes, deployment, secret changes, feature activation, paid spend or resource reallocation.
+
+## What Codex must read before planning
+
+Codex must read the applicable workspace and repository `AGENTS.md` files and then inspect the current versions of:
+
+- `docs/DATABASE_RELEASE_BIBLE.md`;
+- `docs/DATABASE_CONFIGURATION_BIBLE.md`;
+- `.github/workflows/database-release.yml`;
+- `scripts/cloudtms-db-release.mjs` and its library;
+- `supabase/release/current-release.json`;
+- `supabase/release/current-contract.json`;
+- `supabase/release/migration-lock.json`;
+- all current one-time migrations, repeatables and verification SQL;
+- the exact Worker, gateway and PostgREST source/configuration for the target; and
+- the exact frontend/backend Git heads intended for deployment.
+
+Never rely on an old copy of this ZIP as proof of what is currently pending. The plan must always calculate from the current approved Git commit and current target evidence.
+
+## How TEST changes remain known
+
+Every database-definition change must be represented in Git:
+
+- one-time structure/data transitions are immutable files under `supabase/migrations`;
+- functions, views and other replacement definitions are complete authorities under `supabase/repeatable`;
+- one-time migration hashes are locked in `supabase/release/migration-lock.json`;
+- the approved data-free schema/security contract is `supabase/release/current-contract.json`; and
+- the protected release records installed migration and repeatable hashes in the target database ledgers.
+
+Normal pushes verify source but do not alter a database. Direct, undocumented changes to TEST are forbidden because they would bypass this record. A plan compares the target ledgers/catalogue with the current Git authority and therefore reports the exact missing migrations and new or changed repeatables.
+
+## Planning an UPGRADE
+
+An UPGRADE deliberately brings the selected existing database to the current approved repository release. It is not merely a hosting move.
+
+Codex must:
+
+1. Identify the exact Miget project, Resource, PostgreSQL service, database, PostgREST app, gateway, Workers, repository branches and deployed source identities.
+2. Confirm backup/recovery evidence appropriate to the operation.
+3. Fetch the approved repository head without altering a dirty user worktree.
+4. Run `npm run db:check` from a clean copy of that exact commit.
+5. Inspect the target's release identity, ledgers, catalogue, RLS, grants, functions, triggers, extensions and security posture through authorised read-only routes.
+6. Select the correct mode:
+   - `UPGRADE` for a database already managed by the private CloudTMS release ledgers;
+   - `ADOPT` only where an existing database exactly matches the approved contract and needs control metadata; or
+   - `LEGACY_UPGRADE` for the first deliberate schema promotion of the current historical LIVE database.
+7. Run the protected workflow in `PLAN` and report the exact commit, mode, installed/pending counts, changed repeatables, contract outcome and runtime work.
+8. Include any PostgREST redeployment, gateway/Worker configuration, branch deployment, cron, health, security and application acceptance checks.
+9. Stop and wait for a separate APPLY instruction.
+
+Moving LIVE hosting from Supabase to Miget did not upgrade LIVE to the TEST schema. Its first deliberate promotion remains `LEGACY_UPGRADE`. After that succeeds and installs managed identity, later releases use `UPGRADE`.
+
+## Planning a NEW database
+
+NEW means a genuinely blank, isolated agency database. It does not mean cloning TEST business data.
+
+The plan must include:
+
+1. the exact agency and environment identity;
+2. a separately credentialed PostgreSQL service on the approved shared Miget Resource;
+3. explicit RAM and storage allocations that fit the Resource, while retaining pooled CPU behaviour;
+4. an independently credentialed PostgREST app and JWT secret;
+5. the repository-controlled compatibility gateway and Worker configuration;
+6. protected GitHub Environment secret/target-locator names;
+7. `NEW/PLAN`, proving that the application database is blank;
+8. `NEW/APPLY`, installing the repository schema, repeatables, release metadata and verifiers only after separate approval;
+9. target-specific baseline, tenant and initial-user configuration;
+10. disabled send/provider/payment/autonomous feature states until separately reviewed;
+11. backup/recovery, health, login, representative RPC and security acceptance checks; and
+12. exact source/deployment identity evidence.
+
+Resource creation that incurs cost requires the user's explicit cost approval. NEW copies no TEST candidates, clients, users, sessions, timesheets, invoices, payments, provider state, audit history or other operational rows.
+
+## Miget and PostgREST requirements
+
+Every agency keeps separate PostgreSQL credentials, PostgREST JWT, gateway configuration and Worker secrets even when services share the purchased Miget Resource.
+
+Mandatory safeguards:
+
+- append `options=-c%20pg_show_plans.is_enabled%3Doff` to each CloudTMS PostgREST `PGRST_DB_URI`, preserving every other URI component;
+- verify the live PostgreSQL memory profile and volume after any Miget resize;
+- map only the audited restored logical owner to `CURRENT_USER`; never assume `SET ROLE postgres` works;
+- reapply and verify audited owner default privileges after a restore;
+- install and verify `cloudtms_miget_service_owner_all` for `CURRENT_USER, service_role` on every RLS-enabled public table exposed to the Worker;
+- run role-specific private-helper ACL verifiers after final repeatables, without granting browser roles access to `private`;
+- expose `/rest/v1` and `/rest/v1/rpc` only through the correct independently credentialed PostgREST/gateway route;
+- prove a real PostgREST service-role lookup and representative RPC, not only an owner SQL query; and
+- keep gateways as repository-controlled source under `infra/miget`.
+
+The permanent read-only ChatGPT connector is **CloudTMS Miget Operations**. It is an audit route, not an APPLY route. The credential-protected browser SQL/table viewer is the repository-documented pgAdmin service. Neither replaces the protected database-release workflow.
+
+## Worker and application deployment
+
+The plan must name every affected Worker and prove its repository, branch, working directory/root, deploy command, managed build-token selection, bindings and secrets by name only.
+
+Secondary Workers use dedicated `deploy/cloudflare/<worker>` branches. A prepared branch is not proof of a Workers Builds connection. Verify the actual connection and the resulting deployment identity. Preserve the Candidate deployment order: normal backend, private Worker, synthetic Worker, public broker last.
+
+For an existing LIVE Worker, preserve the target's current provider, session, download, stationery and other target-owned variable/secret values. Never copy TEST values into LIVE. Compare variable and secret names before and after deployment, use Wrangler's `--keep-vars` safeguard when the repository does not declare every retained LIVE variable, and stop if a required LIVE binding or secret name is missing. New capabilities must deploy disabled-first until their separate Worker topology, bindings, credentials and activation authority have been proved; installing current source is not permission to enable sends, providers, payments, Candidate routing, Google switching or background drains.
+
+After deployment, require bounded evidence for:
+
+- Worker version/deployment identity and effective route;
+- PostgREST and gateway health;
+- database identity and installed ledgers;
+- login and a representative read-only application route;
+- scheduled-trigger presence where required;
+- absence of legacy Supabase runtime hostnames; and
+- no secret values in logs or reports.
+
+## APPLY is a separate instruction
+
+After reviewing a locked PLAN, the user must explicitly name the exact target and plan and authorise APPLY in the current task. The protected workflow additionally requires the exact commit-bound phrase:
+
+```text
+APPLY <TEST|LIVE> <NEW|ADOPT|UPGRADE|LEGACY_UPGRADE> <40-character commit SHA>
+```
+
+An APPLY for one database, environment or stage never authorises another. If the commit, target, database identity, plan evidence or required configuration changes, the plan expires and must be rebuilt.
+
+## Required post-APPLY proof
+
+Codex must not call the operation complete until it proves, without exposing sensitive data:
+
+- the workflow succeeded at the exact approved commit;
+- migration and repeatable ledgers match Git;
+- the installed contract and security verifiers pass;
+- RLS, grants, owner/default privileges and private-helper ACLs are correct;
+- PostgREST has the plan collector disabled and is healthy;
+- gateways and all affected Workers run the intended source;
+- login, representative table/RPC routes and required crons work;
+- configuration and activation states match the reviewed target plan;
+- backup/recovery evidence is still valid; and
+- no traffic for the migrated target is routed to Supabase.
+
+## Stop conditions
+
+Stop before APPLY if the target is ambiguous, the plan is stale, a cost is unapproved, a backup cannot be verified, the database is not blank for NEW, an installed migration hash differs, an unexpected owner/grantee appears, the final contract differs, a required verifier fails, a Worker connection is unproved, a secret would need to be exposed, or the requested work would broaden into another database/environment.

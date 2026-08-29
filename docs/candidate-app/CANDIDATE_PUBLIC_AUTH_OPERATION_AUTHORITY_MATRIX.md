@@ -1,0 +1,106 @@
+# Candidate public authentication operation authority matrix
+
+Decision closure date: 13 August 2026.
+
+This matrix is controlling for the bounded public-authentication correction family. It covers the public Candidate broker, signed private Candidate backend, Candidate RPC/database receipt, public response construction and supported credential rotation/rollback. It does not change Candidate product workflow, Office modal behaviour, financial calculations, Banking Pay, Policy X or production authority.
+
+## Family-wide invariants
+
+- One caller-owned bounded `idempotency_key` identifies one factual operation.
+- Same key plus the same factual request returns the same durable result.
+- Same key plus a changed action, email/purpose, session, device, provider, token or payload returns `CANDIDATE_IDEMPOTENCY_CONFLICT`.
+- Server-generated session IDs, refresh tokens, challenge tokens, mail rows, token hashes, expiry timestamps, storage IVs and credential wrapping are execution detail, not factual request identity.
+- The database receipt is written in the same transaction as the factual mutation. A crash before that transaction commits leaves no success; a crash after it commits is recovered by receipt-first replay.
+- New public credentials use v4 envelopes. The issuing key version is authenticated in the HMAC identity, per-message key derivation and AES-GCM additional authenticated data. Every authority has one current writer version and an explicit reader catalogue; bounded v1/v2/v3 read compatibility is retained.
+- A broker authority refuses to write or read versioned credentials if two configured version slots resolve to identical secret material. This protects retained legacy v3 readers as well as enforcing operational key-version provenance.
+- The broker proves the selected access, refresh, public-session and PHONE wrapping secrets before forwarding a mutation that will freeze those versions. A version misconfiguration therefore cannot commit a private winner and only then fail public reconstruction.
+- Login, password completion and refresh freeze their public access, refresh and public-session mapping versions in the durable private result.
+- The approved rollback is the same v4-capable build with the former writer versions restored and all credentials issued by the newer build retained in reader catalogues. A pre-v4 writer build is not an approved rollback build after v4 issuance starts.
+- No raw password, private refresh token, challenge token, PHONE token or push token enters an ordinary audit receipt or public response.
+
+## Operation map
+
+| Operation | Factual identity | Generated execution | Durable owner/result | Exact replay and changed input | Rotation/rollback |
+|---|---|---|---|---|---|
+| Challenge start | environment, normalised email, purpose, caller key | challenge UUID/token, issuing token-key version, expiry, deterministic mail key | challenge transition plus auth mutation receipt; public response is enumeration-safe 202 | missing/oversized key is 400; same request is 202; same key with changed email/purpose is 409; only eligibility/account-state outcomes are masked to 202 | receipt freezes the issuing challenge-token key version; retained private readers reconstruct that exact version |
+| Challenge resend | environment, normalised email, purpose, exact challenge ID, caller key | replacement token/expiry and deterministic mail | challenge transition plus receipt, including durable throttle results | same factual resend replays; changed challenge/email/purpose conflicts; too-soon returns 429 plus Retry-After; exhausted allowance returns terminal 429; either throttle consumes the key and a later attempt uses a new key | retained challenge-token reader authority reconstructs the exact receipt-recorded version |
+| Challenge verify | environment, email, purpose, challenge ID/token proof, caller key | none beyond response | challenge receipt and single-use state transition | exact verification replays; changed proof or identity conflicts | private challenge-token authority only |
+| Password completion | verified challenge, selected Candidate, password proof, device/platform facts, caller key | proposed session, verifier material, deterministic private refresh token, public credential wrapping | account/session mutation and auth receipt; result freezes winning session, issue/expiry facts, private replay key version and public credential versions | exact lost-response/concurrent retry reconstructs the database winner's private refresh token and byte-identical public v4 credentials; changed password/device/selection conflicts | frozen v4 writer versions are used after rotation; retained reader catalogues and secrets support rollback |
+| Login success/failure | normalised email, selected Candidate, non-plaintext presented-password digest, exact password-authority fingerprint, device/platform facts, caller key | proposed session and deterministic refresh token; failed-login counter mutation only for an existing account with a current verifier proof | the Worker may preverify for bounded CPU work, but the locked database account row recomputes the exact password-authority fingerprint and digest match before session creation or counter mutation; auth receipt contains success or generic failure, including unknown-account failure | stale success/failure verdicts return durable generic invalid without creating a session or changing the failed-login counter; a genuine current mismatch advances it once; exact success/failure replays; changed password/email/selection conflicts | exact replay uses recorded private and public versions, not current writer versions |
+| Refresh | old private session, presented refresh proof, caller key | proposed successor session and deterministic successor refresh token | refresh-family transition and receipt freeze the database winner and public versions; the receipt/key lock is followed by the account-session transaction lock before account/session rows; refresh-token-reuse family revocation and its negative result commit in the same receipt transaction | concurrent/lost-response retry returns the same successor; a different key using the rotated token retains theft detection; exact replay of that security-event key returns `CANDIDATE_REFRESH_TOKEN_REUSE` rather than re-evaluating the revoked predecessor; `family_revoked=true` is returned only after zero `ACTIVE`/`ROTATED` family rows are proved; changed old token/session conflicts | access/refresh writers may rotate; the initiating public-session mapping version remains frozen from the incoming public refresh credential |
+| Logout | authenticated private session plus caller key | none | private session revoke and auth receipt | public broker must unwrap the public access token and forward the exact private bearer; exact concurrent retry recovers the receipt after the session becomes revoked; missing/invalid public access is 401 | public access v1/v2/v3/v4 readers apply; logout cannot use the unauthenticated route catalogue |
+| Select TEST Candidate | authenticated session, selected Candidate, caller key | replacement private/public access token | session selection and receipt | exact retry uses original issue time and access key version; changed Candidate conflicts | selected access remains on the initiating public access envelope's issuing version |
+| Notification preferences/read | authenticated session, exact preference object or notification ID, caller key | read timestamp for first acknowledgement | account/notification mutation and receipt | exact replay returns the first state/timestamp; changed object/notification conflicts | no public credential generation beyond authenticating the request |
+| Password change | authenticated session, non-plaintext current-password digest, exact expected password-authority fingerprint, new password proof, caller key | new verifier salt/digest | after the shared account-session and account-row locks, the database recomputes the current authority fingerprint and accepts the change only if the presented digest matches that exact locked verifier; account mutation, session revocation and receipt commit together | a stale preverified change cannot overwrite a newer reset/change; it receives durable generic invalid with no password/session mutation; exact successful retry recovers after the verifier moved; changed password facts conflict | private auth replay key version is frozen in receipt metadata |
+| Push registration | authenticated private/public session, provider, raw-token semantic HMAC and caller key | randomized versioned storage ciphertext | session token storage plus receipt; metadata freezes semantic identity key version | new storage IV or storage-key version does not change identity; during identity-key overlap the backend selects the originally frozen proof; changed token/provider/session conflicts | ciphertext embeds a positive database-safe storage version; proof catalogue covers configured identity readers; rollback retains all issued/receipt versions until bounded expiry |
+| PHONE selection/handoff | workflow, expected generation, caller key, public-session digest and optional supplied-device digest | private manager token/hash/expiry and public v4 handoff wrapping | global environment/key workflow receipt plus exact approval request; internal canonical response freezes the database-winning private token hash/version and public handoff version | every first execution or replay reconstructs and verifies only the database winner token; another workflow, session, changed supplied device, generation or factual payload conflicts | v4 handoff authenticates broker version; mixed private manager-token writers use the canonical winner; rollback reader accepts credentials issued by the new build |
+
+## Durable boundaries and crash recovery
+
+| Boundary | Required recovery result |
+|---|---|
+| Before signed private request reaches the backend | No factual mutation. Repeating the public request proceeds normally. |
+| After private request validation but before RPC commit | No durable success. Repeating the same request may execute once. |
+| After RPC mutation/receipt commit but before private response | Receipt-first retry returns the committed result without a second mutation. |
+| After private response but before broker wrapping completes | Private receipt returns the same frozen generated facts and key versions; broker reconstructs the same public credential. |
+| After broker returns but client loses the response | Exact public retry returns the same status and public result. |
+| Concurrent same-key callers | The environment/key or workflow/key lock serialises them; all exact callers receive usable copies of the database-winning result. |
+| Same key with a changed factual request | The receipt hash/action/workflow binding fails with `CANDIDATE_IDEMPOTENCY_CONFLICT` before a second mutation. |
+
+## Reader and writer deployment order
+
+1. Install database/private response support and verify old public traffic remains accepted.
+2. Deploy the private Candidate Worker and normal TEST backend readers.
+3. Provision new versioned broker secrets without changing the current writer version.
+4. Prove the new broker build reads v1, v2, v3 and v4; prove v4 version-header relabelling fails even where two configured version slots deliberately share secret material; prove the approved rollback configuration reads every issued version.
+5. Deploy the public broker last, with one current writer version and explicit overlapping readers.
+6. On rollback, restore former writer versions in the same version-aware build; do not remove newly issued reader versions until all bounded credentials/receipts have expired.
+
+## Mandatory verification matrix
+
+For every applicable operation, verification must include:
+
+- public broker to signed private backend to RPC/database to public response;
+- exact lost-response replay;
+- two concurrent same-key requests;
+- same key with changed factual input;
+- generated execution drift after the first commit;
+- crash recovery after each durable boundary that can be simulated without external communications;
+- writer-key rotation with retained readers;
+- approved rollback-reader compatibility;
+- invalid or retired reader-version rejection;
+- proof that no extra mutation, mail, notification or external provider call occurred.
+
+The independent audit must inspect one layer beyond each reported seam. It should issue GO and stop when the bounded family, controlling decisions and mandatory matrix pass with no concrete release blocker. If it finds a genuine blocker, the next correction must cover the whole affected operation family rather than only the first reported function.
+
+## No-change boundary
+
+This authority does not alter DAILY/WEEKLY calculations, rates, pay, charge, VAT, ERNI, margin, TSFIN, Process, Authorise, invoice grouping/generation/issue, payments, Banking Pay, Policy X, settlement, remittances, Office modal behaviour, Candidate timesheet Current/History rules or production.
+
+## Mixed-version concurrency addendum
+
+- Database-winning challenge metadata owns mail content. START and RESEND return the frozen internal token hash/version, and every private handler reconstructs and verifies that winner before a create-only mail attempt.
+- One pre-hash database reservation freezes the first proposed authentication request-HMAC version. The complete account/authentication family uses it for secret proofs and request identity; local writer configuration is only a proposal.
+- Required adversarial proof combines concurrency and rotation: either challenge database winner, either mail arrival order, request-HMAC writer 1/2 overlap, changed factual input/action, retained-reader rollback and deliberate reader retirement.
+
+## Credential-winner and security-receipt addendum
+
+- A locally generated PHONE handoff is only a proposal. Every successful or replayed `SELECT_PHONE_APPROVAL` result returns the frozen approval-token hash and private handoff-token version internally. The private backend reconstructs the token from those winner facts, verifies its SHA-256 hash and removes the internal hash before responding. A concurrently losing Worker can never return its proposal token.
+- Refresh-token-reuse is a factual security mutation. Complete token-family revocation and the negative `CANDIDATE_REFRESH_TOKEN_REUSE` response are recorded in the same database transaction. An exact lost-response or concurrent retry returns that durable negative result before inspecting the now-revoked predecessor and never attempts successor-credential reconstruction.
+- Required proof combines PHONE first execution under manager-token writers 1/2 with either database winner, plus sequential and concurrent exact replay of refresh-token-reuse after family revocation. Candidate flags remain false, the seven-table/fourteen-RPC boundary is unchanged and no public/internal token hash is exposed to a client.
+
+## Account-session concurrency addendum
+
+- `private._candidate_auth_account_session_lock_v1(environment, account_id)` is the single transaction-scoped session-lifecycle concurrency owner. It uses a transaction advisory lock, is unavailable to browser and service roles, and adds neither a Candidate business table nor a public Candidate RPC.
+- The mandatory order is receipt/idempotency-key ownership, account-session advisory lock, account row lock, session row locks, mutation and durable response receipt. Where only a session is initially known, its immutable account identity is read non-authoritatively before the account lock; the account and session are then re-read and revalidated under lock.
+- Normal refresh, rotated-token reuse, existing-account password activation/reset, password change, account-wide session revocation, account lock/disable and login session creation all participate in the same per-account boundary. No timeout, retry loop or broad table lock is part of normal control flow.
+- Authoritative postconditions are closed: reuse leaves zero `ACTIVE`/`ROTATED` family rows; reset leaves only the new reset session active; password change leaves only the initiating retained session active; revoke/lock/disable leave zero active sessions; login retains one to five active sessions.
+- Required proof uses real independent PostgreSQL transactions in both operation orders for reuse versus current refresh, password change/reset versus refresh, revoke/lock/disable versus refresh and login versus disable. PostgreSQL 17.6 and 18.1 must both pass without deadlock, escaped successor or partial mutation.
+
+## Locked password-authority addendum
+
+- REST account lookup and Worker PBKDF2 verification are a bounded preflight only. They never authorise a login session, failed-login counter change or password replacement after another transaction may have changed the verifier.
+- For a known account, the private Worker submits only the derived presented-password digest and a SHA-256 fingerprint of the exact verifier authority it inspected: account ID, scheme/version, salt, digest and canonical parameters. No plaintext current or new password enters PostgreSQL.
+- After receipt ownership, the shared account-session lock and `candidate_app_accounts ... FOR UPDATE`, the database recomputes that fingerprint from the locked row and compares the presented digest with the locked current digest. Login success, genuine current failure and password change are permitted only from that revalidated authority.
+- A stale positive login cannot create a session after a reset/change. A stale negative login cannot increment the counter after the verifier changes. Of two concurrently preverified password changes, only the transaction whose proof still matches the locked current authority may commit; the other returns durable generic invalid and cannot overwrite the winner.
+- Mandatory real-handler/PostgreSQL proof runs both operation orders for reset/login and change/login, stale failed login versus reset, and two concurrently preverified password changes. Exact replay and the seven-table/fourteen-public-RPC/no-financial-change boundaries remain controlling.

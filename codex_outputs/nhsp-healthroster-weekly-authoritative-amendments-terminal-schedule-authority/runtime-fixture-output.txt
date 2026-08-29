@@ -1,0 +1,35 @@
+BEGIN
+SET
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:217: NOTICE:  PASS cross-import deleted-member reconstruction: NHSP
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:217: NOTICE:  PASS cross-import deleted-member reconstruction: HEALTHROSTER
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:306: NOTICE:  PASS archived-member repair supersession: NHSP
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:306: NOTICE:  PASS archived-member repair supersession: HEALTHROSTER
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:396: NOTICE:  PASS multi-source credit allocation: NHSP
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:396: NOTICE:  PASS multi-source credit allocation: HEALTHROSTER
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:453: NOTICE:  PASS zero-hours non-zero-money blocker: NHSP
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:453: NOTICE:  PASS zero-hours non-zero-money blocker: HEALTHROSTER
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:547: NOTICE:  PASS transitive archived-member supersession: NHSP
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:547: NOTICE:  PASS transitive archived-member supersession: HEALTHROSTER
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:627: NOTICE:  PASS invalid operation authority controls: NHSP
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:627: NOTICE:  PASS invalid operation authority controls: HEALTHROSTER
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:671: NOTICE:  PASS malformed credit provenance controls: NHSP
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:671: NOTICE:  PASS malformed credit provenance controls: HEALTHROSTER
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:850: NOTICE:  PASS repeated correction chain and terminal schedule authority: NHSP
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:850: NOTICE:  PASS repeated correction chain and terminal schedule authority: HEALTHROSTER
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:924: NOTICE:  PASS real apply-envelope producer contract: NHSP
+DO
+psql:tests/01082026_0150_import_authoritative_effective_balance_runtime_fixtures.sql:924: NOTICE:  PASS real apply-envelope producer contract: HEALTHROSTER
+ROLLBACK
+

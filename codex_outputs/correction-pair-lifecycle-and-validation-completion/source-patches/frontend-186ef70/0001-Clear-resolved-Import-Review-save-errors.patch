@@ -1,0 +1,37 @@
+From 186ef7092eb3ef4e4de915abf11f1459ec67d9ed Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 17:29:44 +0100
+Subject: [PATCH] Clear resolved Import Review save errors
+
+---
+ js/import-review-v1.js                 | 1 +
+ tests/import-review-v1.static.test.mjs | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/js/import-review-v1.js b/js/import-review-v1.js
+index 696d607..a428982 100644
+--- a/js/import-review-v1.js
++++ b/js/import-review-v1.js
+@@ -762,6 +762,7 @@
+       review.header.state.status = result.status;
+       if (result.preview_generation != null) review.header.state.preview_generation = result.preview_generation;
+       if (result.preview_fingerprint) review.header.state.preview_fingerprint = result.preview_fingerprint;
++      review.error = '';
+       review.saveState = 'Selections saved';
+       if (!quiet) showScreen('Import review', renderReview, 'import-review-v1');
+       return true;
+diff --git a/tests/import-review-v1.static.test.mjs b/tests/import-review-v1.static.test.mjs
+index e7f591c..65e8b31 100644
+--- a/tests/import-review-v1.static.test.mjs
++++ b/tests/import-review-v1.static.test.mjs
+@@ -32,6 +32,7 @@ test('review pagination uses only the approved page sizes and saves before navig
+   assert.match(source, /sort_by/);
+   assert.match(source, /data-ir-action="sort"/);
+   assert.match(source, /currentItem\.selected = change\.selected === true/);
++  assert.match(source, /review\.error = '';\s*review\.saveState = 'Selections saved'/);
+   assert.match(source, /review\.saveState = 'Selections saved';\s*if \(!quiet\) showScreen\('Import review', renderReview, 'import-review-v1'\)/);
+ });
+ 
+-- 
+2.54.0.windows.1
+

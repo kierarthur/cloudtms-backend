@@ -1,0 +1,215 @@
+# CloudTMS Candidate App authority and caller map
+
+Status: TEST broker/private-backend authority map, updated 17 August 2026 for Candidate Daily Phase 2 and Phase 1B R8. The accepted Candidate authority below is preserved. R8 installs the additive twelve-table/thirteen-RPC Daily authority and wires the previously dark 11 authenticated Candidate routes plus 13 signed Google-system routes through the private Worker. All Candidate feature flags and Daily entitlements remain false/empty, so Candidate business use is still unavailable pending independent approval and later rollout gates.
+
+Candidate Daily current authority is documented in `CANDIDATE_DAILY_PHASE2_PHASE1B_IMPLEMENTATION_AUTHORITY.md`. Phase 2 owns canonical generations, availability, source links, receipts, projection/outbox state, authority transitions and external-effect receipts. Phase 1B maps the frozen broker contract to those owners and reconstructs strict public envelopes. The later temporary legacy seam remains existing browser -> existing Apps Script -> narrow signed server adapter -> the same CloudTMS Daily authority. It is not a new browser authority, and no Google source was edited by R8.
+
+## Canonical owner graph
+
+```text
+Candidate app/web or manager browser
+        ↓
+public Candidate broker
+  origin/rate-limit/public-token boundary
+        ↓ signed service binding (plus credential-free forwarding of signed Google-system bytes)
+private CloudTMS Candidate API
+        ↓
+installed Candidate DB/RPC validation + immutable workflow
+        ↓
+WEEKLY → existing WEEKLY calculation/upsert authority
+DAILY  → one canonical DAILY Save/Recalculate owner
+        ↓
+existing Process authority
+        ↓
+existing Authorise authority when office/policy permits
+        ↓
+existing invoice and payment-eligibility pipelines
+```
+
+Neither Worker alters the existing financial algorithms. The broker cannot access Supabase or R2. The private API adapts factual input to the existing WEEKLY/DAILY owners. Banking Pay is not called or changed.
+
+The private Candidate API alone verifies Google-system HMAC v1 and owns the R2 nonce namespace. The public broker has neither Google-system secret nor replay storage. Signed-system pre-auth traffic always consumes a source-IP bucket and either an accepted-key-ID bucket or one shared invalid-key bucket before private HMAC work. R8 signed-system routes may reach the installed Daily RPC authority without consulting the Candidate product switch, preserving coexistence continuity. Candidate-facing Daily routes additionally require the global Daily flag, exact entitlement, current mode, complete active generation and freshness proof; those prerequisites are absent in TEST.
+
+## Fourteen Candidate business RPCs and HTTP callers
+
+| Installed RPC | CloudTMS backend caller |
+|---|---|
+| `candidate_auth_account_transition_v1` | login, activation/password completion, refresh, logout, selection, preferences, push registration and password change |
+| `candidate_auth_challenge_transition_v1` | activation/reset/recovery challenge start, resend and verify |
+| `candidate_app_bootstrap_v1` | `GET /candidate-app/v1/bootstrap` |
+| `candidate_app_timesheet_page_v1` | `GET /candidate-app/v1/timesheets?view=current|history`; owns the frozen-snapshot, non-overlapping Current/History partition, v2 cursor, newest-first order, exact week-ending label, one primary action and stable detail target while preserving exact anchor/rejection projection |
+| `private._candidate_timesheet_action_contract_v1` | Private detail action/status authority; returns the closed typed invocation catalogue, exact PAPER readiness and provider-owned manager-approval timing/eligibility without adding a public RPC |
+| `candidate_app_timesheet_detail_v1` | `GET /candidate-app/v1/timesheets/:id`, `/candidate-app/v1/contract-weeks/:id/detail` or `/candidate-app/v1/workflows/:id/timesheet-detail`; resolves one exact card/version-family identity and returns current/history membership, plural scoped rejection truth, typed actions and PAPER readiness |
+| `candidate_missing_week_options_v1` | `GET /candidate-app/v1/contracts/:id/missing-weeks` |
+| `candidate_contract_week_add_missing_atomic_v1` | `POST /candidate-app/v1/contracts/:id/missing-weeks` |
+| `expense_placement_resolve_v1` | `POST /candidate-app/v1/timesheets/:id/expense-placement` |
+| `expense_carrier_resolve_or_create_atomic_v1` | `POST /candidate-app/v1/timesheets/:id/expense-carrier`; finalisation composition |
+| `timesheet_expense_apply_atomic_v1` | called only inside the installed finalisation authority |
+| `candidate_workflow_transition_atomic_v1` | workflow/components/manager/phone/notification orchestration |
+| `candidate_submission_finalize_atomic_v1` | final signed ELECTRONIC and complete PAPER finalisation |
+| `candidate_submission_reject_atomic_v1` | office whole-record Candidate rejection; one candidate/contract/week family lock is obtained before row locks, then pre-finalisation target-or-anchor retirement, finalised exact-target rejection, separate-expense anchor isolation and `AWAITING_PAPER_RETURN`/`RECEIVED`/`FINALISED` delivery retirement with mail-receipt-owned QR invalidation occur before economic-target rotation |
+| `candidate_no_work_atomic_v1` | Candidate no-work decision |
+
+## Existing CloudTMS owners retained
+
+| Authority | Entry points after backend implementation | Single owner |
+|---|---|---|
+| DAILY economics | office create, office save/edit, additional DAILY, TSFIN worker, Candidate finalisation | `buildCanonicalDailyFinancialSnapshot` and its canonical context/schedule helpers |
+| WEEKLY economics | office WEEKLY, Candidate WEEKLY | existing WEEKLY schedule/TSFIN calculation and `contract_week_manual_upsert_atomic` |
+| DAILY Process | office and Candidate | `timesheet_daily_manual_process_atomic` |
+| Authorise | office and policy-safe Candidate auto-authorise | `timesheet_authorise_generic_atomic` / established row authority |
+| Route/version | office and Candidate route orchestration | confirmed SQL route/version authority; feature-off legacy wrapper retained |
+| QR pack | office and Candidate PAPER | `timesheet_qr_send_enqueue_v1` plus existing document-operation worker |
+| Invoice | all record types | existing Generator/Issuer grouping, validation, render, issue and email pipeline |
+| Official timesheet | QR unsigned, manager review, final signed | existing official renderer with controlled variants |
+| Manager approval | email and phone | one workflow/request/manifest/signature/finalisation authority |
+
+## Source responsibilities
+
+### `candidate-broker/src/candidate-broker.js`
+
+- public Candidate and manager route boundary;
+- exact browser origins and declared iOS/Android native clients;
+- independent general/auth/manager/upload rate limits;
+- public access/refresh envelope issuance and unwrapping;
+- bounded body forwarding and public-safe error mapping;
+- device-provider validation and broker-key encryption of raw push tokens;
+- signed Cloudflare service-binding calls only—no Supabase, R2, mail or financial access.
+
+### `broker/src/candidate-private-worker.js`
+
+- accepts only `/private/candidate-app/v1` and `/private/candidate-manager/v1`;
+- verifies environment/body/authorisation-bound service HMAC;
+- has no public workers.dev route;
+- removes public browser headers and injects the `PRIVATE` Candidate route audience;
+- delegates all business work to the existing Candidate backend module and canonical owners.
+
+### `broker/src/candidate-app-backend.js`
+
+QR/paper delivery remains one composed authority: `PAPER_PREPARE` queues the existing QR document operation and binds its exact held mail operation to the workflow generation and manifest; the private scheduler alone assembles the complete pack and releases that exact email and the idempotent Candidate notification. Candidate paper-pack status/download endpoints are read-only and only inspect/stream an already-ready immutable pack without exposing an R2 key. They cannot requeue failed mail.
+
+Candidate rejection/read authority remains server-owned: historical workflow and carrier anchor IDs are immutable audit facts, while the current card identity is resolved through one exact current booking/version family. A newer workflow suppresses an older rejection only when it is a true replacement of that exact logical claim: the same contract-week record for hours/combined, the same week-level expense family for expenses, or the same DAILY booking/work date. Independently actionable hours and expense rejections are returned together, so the client never guesses which recovery action survives.
+
+Office projection identity follows the same ownership rule. WEEKLY rows require one exact current timesheet plus contract-week identity. DAILY rows are timesheet/booking-family owned and must project without manufacturing or requiring a `contract_weeks` row. Manual non-QR and import-authoritative rows never acquire Candidate lifecycle truth merely from financial status. Likewise, Authorised, Invoiced or Paid is not evidence that the Candidate submission completed: Office may show `Candidate Submission Complete` only from a durable finalised Candidate workflow. A current eligible unprocessed ELECTRONIC/QR row with no workflow may show `Awaiting Candidate Submission`; a historic financially protected row with no Candidate workflow remains blank.
+
+Timesheet Summary transports its compact Candidate projection inside the authenticated normal Summary response when `include_candidate_projection=true`. The normal backend resolves Manual non-QR and import-authoritative rows as server-owned blank/not-applicable results directly from the established Summary route authority, then composes the existing exact Office projection for the remaining rows in maximum-100-row batches before returning the page. The browser validates and renders that embedded result during the first grid paint. It must not create an after-render Candidate request for rows that carry either the embedded projection or resolved-not-applicable marker. The same server-owned not-applicable marker is transported in Simple Timesheet, Bulk Process and Bulk Authorise payloads, so those surfaces also stay blank without requesting a Candidate projection. Full applicable Simple Timesheet/modal detail and explicit refresh continue to use the established Office detail/projection routes. The existing `issue_codes` field remains part of the main summary-row authority and likewise does not hydrate after render.
+
+Office route, lifecycle and processing presentation are separate authorities. Route displays only canonical `QR`, `Electronic` or `Manual` truth: a Manual non-QR row never displays QR, while an Electronic-capable route remains Electronic even when the Candidate later selects QR Pack. Candidate Submission owns Candidate/QR lifecycle presentation. Processing Status is limited to `Unprocessed`, `Processed`, `Authorised for Invoicing`, `Partially Invoiced`, `Invoiced`, `Archived` and fail-safe `Processing Delayed`; it never projects legacy QR waiting text. Office Authorise/Unauthorise uses the canonical TSFIN/server action authority only. A QR submission reaches that authority only after the canonical Candidate finaliser has verified the complete signed return manifest and advanced the row to `PENDING_AUTH` or `READY_FOR_HR`; an unsigned issued pack, partial return, QR code or legacy QR field never enables Authorise. A row deliberately converted to Manual follows the unchanged Manual rules.
+
+PAPER retirement keeps QR source, delivery owner, affected workflow set and economic target separate. The source and current-token owner come from exact immutable workflow-generation/mail receipts; the affected economic target comes from the locked workflow/route target and may be a different expense carrier. A second mail-independent source-family catalogue finds every nonterminal PAPER workflow that would lose its current anchor, including draft, submitted, review/approval, waiting-return and received states. The database locks the complete set and fails closed before delivery or route mutation when the selected delivery owner does not own the sole affected nonterminal lifecycle. A final locked postcondition covers `CONVERT_QR_TO_MANUAL`, `DISABLE_QR`, `INVALIDATE_QR` and `REISSUE_QR`, so no nonterminal workflow can remain tied exclusively to a source made historical. Cancellation, supersession, rejection and confirmed route conversion continue to compose the immutable delivery owner under the same family lock and mail permit barrier. No Candidate, frontend or broker code may infer, interchange or bypass these identities.
+
+Manager EMAIL delivery has the same exact-authority discipline. `MANAGER_APPROVAL_V1` scope binds mail kind, workflow ID/generation and approval-request ID/generation. Approval-request state transitions centrally retire queued or failed mail, fence an active provider lease and preserve accepted sent history. The normal backend obtains `MANAGER_PROVIDER_SUBMIT_PERMIT` for that exact outbox lease immediately before external submission. Withdrawal is allowed only when provider acceptance of earlier mail for that exact request is proved.
+
+Manager action meaning is closed. `REMIND` remains on the same pending request and rotates its token after the exact 24-hour provider-acceptance boundary, subject to five resends and no pending exact delivery. `RENEW` is permitted only for an expired unchanged request and creates a new request generation. `CANCEL` requires a recorded plain-English reason and queues one deterministic withdrawal only for provider-accepted request history. Enqueue timestamps never become send truth.
+
+The timesheet detail authority, not the client, decides `primary_action`, `available_actions`, `manager_approval` and `paper_pack`. The action object carries typed invocation version 1: exact method/path or client editor destination, immutable fixed body, required user inputs, idempotency requirement, workflow/request identity, confirmation, enabled state and disabled reason. `ENTER_TIMESHEET` and `ADD_EXPENSES` carry complete server-owned create context. `CONTINUE_*` opens the declared editor. `REFUSED` invokes supported `AMEND`; `REJECTED` remains immutable and `POST /candidate-app/v1/workflows/:id/resubmit` creates a new server-derived workflow through the existing `CREATE` owner. Public retry-finalisation is restricted to a retryable `RECEIVED` workflow and composes the existing service finalisation owner; general public `FINALISE` remains absent.
+
+Exact mutation replay is governed by the durable semantic receipt described in `CANDIDATE_EXECUTION_REPLAY_AND_PAPER_FAILURE_AUTHORITY.md`. Caller-owned keys are mandatory. `WORKER_SUBMIT` and manager semantic replay are probed before mutable enrichment and exclude generated presentation/mail/token facts. Finalisation completion is keyed by immutable workflow-generation and approval/PAPER identity rather than the incidental trigger key. PAPER scheduler/Office retries share the exact outbox operation/attempt lease, failure catalogue, source-document readiness and advancing backoff authority. Replayed `CLAIMED` receipts never create a second executor; Office cannot bypass backoff, can recover only after an expired lease, and retains the complete final result rather than a transient in-progress response.
+
+Detail workflow/component/document membership is bounded by the exact card/version family, including historical-to-current expense-anchor resolution. Another `additional_seq` record or unrelated same-date claim cannot leak into the opened action hub. PAPER readiness is derived from the exact workflow generation, manifest, outbox and attachment receipt; download and signed-return upload remain disabled until `READY`, and the private backend separately proves the immutable R2 receipt.
+
+The Timesheets list is server-partitioned. Current is the default: no future weeks, all unpaid rows regardless of age, and paid rows whose `paid_at_utc` is exactly seven days old or newer. History contains only older-paid rows inside the contract-specific 16-week window. A frozen snapshot and view/candidate-bound v2 cursor make the sets disjoint across pagination. Clients display the returned `week_ending_label`, follow `detail_target`, and render at most the returned `primary_action`; they do not recalculate membership or status.
+
+- versioned private Candidate/manager and authenticated office routing, explicitly separated by route audience;
+- private Candidate session/password boundary behind the broker;
+- database-result-owned refresh-token reconstruction for activation, login and refresh, including concurrent same-key winner/loser responses;
+- stable opaque public session identity plus deterministic authenticated v4 broker access/refresh/PHONE envelopes whose key version is bound into HMAC, key derivation and AES-GCM authenticated data, with frozen issue/expiry facts, explicit reader catalogues and retained v1/v2/v3 read compatibility;
+- randomized versioned push-token storage encryption separated from the versioned provider/session/token HMAC used by semantic idempotency; overlapping identity proofs preserve exact replay during an approved identity-key rotation;
+- a closed unauthenticated authentication-route catalogue: logout always unwraps the public access credential and forwards the exact private bearer;
+- challenge start/resend preserve caller-key validation and idempotency conflicts while masking only Candidate eligibility/account state; resend timing/allowance throttles are durable public 429 results, and each receipt freezes the exact challenge-token issuing key version for retained-reader replay;
+- generic unknown-account login failures are durable, mutate no account counter and conflict if their key is reused with changed factual input;
+- PHONE mutation receipts bind the initiating public session and optional supplied device before any token is generated;
+- post-precondition exact-receipt recovery for concurrent logout and password change;
+- dedicated session, challenge and upload secrets with no general-secret fallback;
+- encrypted upload envelopes plus actual PNG/JPEG/PDF validation, one-page evidence PDF enforcement and R2 byte verification;
+- DB-owned `COMPONENT_PREPARE` replay identity: the upload ticket is always built from the authoritative stored key/type/size/role/category returned by SQL;
+- safe RPC adapters and response filtering;
+- official manager-review/final page rendering and registration;
+- configured-brand professional Expense and Mileage Approval Summary and A4 repeatable-journey Mileage Claim Form rendering;
+- manager email/phone orchestration and isolated follow-on recovery;
+- no-work, notifications, route preview/confirm and rejection adapters.
+
+General public Candidate workflow actions do not expose service finalisation. Manager approval, complete paper return and authenticated office retry are the only HTTP owners that can invoke the service-finalisation context.
+
+It must not own rates, pay, charge, VAT, ERNI, margin, invoice breakdown, TSFIN, Process, Authorise, invoice grouping or QR versions.
+
+### `broker/src/index.js`
+
+- injects the established CloudTMS RPC and canonical financial/document dependencies;
+- keeps existing office endpoints and business authorities intact;
+- exposes authenticated Candidate office adapters only; direct public Candidate/manager paths are not dispatched by the normal CloudTMS Worker;
+- exports dependency composition for the private Candidate Worker without duplicating financial or lifecycle logic;
+- routes Candidate DAILY finalisation through the already shared canonical DAILY materialisation seam;
+- routes Candidate WEEKLY through the existing WEEKLY calculation/upsert authority;
+- routes PAPER pack creation through the existing QR enqueue/document worker.
+
+### Official renderer modules
+
+- `invoice-presentation-contract.js` accepts `ELECTRONIC_MANAGER_REVIEW` only with candidate signature and without manager signature/authorisation;
+- `timesheet-official-pdf.js` displays the candidate signature in the review variant and both signatures only in the final variant;
+- immutable official presentation facts are frozen at worker submission and reused for review and final derivatives.
+
+## Consumer boundaries
+
+- CloudTMS frontend consumes server warning/status/capability fields and performs preview → warning → confirm.
+- Candidate broker consumes only the versioned private CloudTMS service API.
+- Candidate app/web sends factual inputs and renders server truth.
+- Google Availability/rota remains unchanged and is mediated rather than moved.
+
+## Candidate Daily authority-transition owner (R10 later-controlling)
+
+`public.candidate_daily_authority_transition_atomic_v1` is the only owner permitted to change `private.candidate_daily_authority_scopes.authority_mode` or the Candidate Daily entitlement as one transition outcome. A caller supplies expected prior facts, reason/evidence, an independent approver and a disposition assertion; none of those assertions becomes authority without locked database equality.
+
+Before an authority-changing commit, this owner locks or proves:
+
+- the global Candidate Daily feature row;
+- every existing cohort scope in deterministic Candidate order;
+- exact scope and entitlement;
+- the current source-link catalogue;
+- in-progress commands and other batches;
+- in-progress/unknown effects;
+- all projection outbox rows;
+- the active generation and exact fourteen day rows;
+- the one sync/freshness row and exact current overlay evidence.
+
+It derives in-flight disposition, refuses missing/ambiguous source, missing/incomplete/stale generation, cursor lag, old reconciliation, invalid overlay and unresolved work, and freezes the resulting database-winner generation/sync/disposition in the immutable transition ledger. `NONE` always means unresolved work and can never authorise a mode change, including the first `SUPABASE_PRIMARY -> ROLLBACK_PENDING` edge. Missing scopes remain a separate provisioning responsibility and are never created by transition. A failed cohort item rolls back its local changes; a successful item cannot inherit another item's records or scalar state.
+
+Phase 1B remains an adapter only. The Worker may forward the expected generation/cursors and requested disposition from a controlled transition request, but it cannot infer success or substitute absent database proof. The public browser has no direct transition authority.
+
+## 13 August 2026 mixed-version authentication authority
+
+- Challenge START/RESEND delivery always reconstructs from the token hash and issuing version returned by the database-winning result after the canonical RPC. A losing Worker proposal is never allowed to supply the create-only mail row.
+- Every authentication/account operation reserves one request-HMAC key version under the existing environment/idempotency-key lock before it creates a password/refresh proof or factual request hash. Overlapping Workers use that frozen version; a changed action conflicts and a retired reader fails closed.
+- The reservation and completed outcome are one durable `audit_events` receipt lifecycle. No Candidate business table or public Candidate RPC is added.
+- `SELECT_PHONE_APPROVAL` returns the database winner's internal token hash/version to the private backend. The backend reconstructs and verifies that winner after the RPC, discards every losing local proposal and strips the internal hash before any Candidate or public-broker response.
+- Refresh-token-reuse family revocation and `CANDIDATE_REFRESH_TOKEN_REUSE` are one atomic durable receipt. Exact and concurrent same-key security-event retries replay that negative result before the revoked predecessor session is re-evaluated.
+
+## 13 August 2026 account-session mutation authority
+
+- One private transaction-scoped advisory lock keyed by environment and Candidate account serialises session creation/rotation against family-wide and account-wide invalidation. It is taken after the receipt/key lock and before account/session row locks.
+- Refresh/reuse, existing-account reset, password change, revoke/lock/disable and login session creation all use the same boundary and revalidate mutable facts after acquiring it.
+- Locked postconditions prevent a refresh successor from escaping: reuse proves zero active/rotated family members; reset/password change prove the exact permitted active set; revoke/lock/disable prove zero active sessions; login proves the five-session cap.
+- Password verification is revalidated inside that same locked database authority. The Worker sends a derived presented-password digest plus a fingerprint of the exact account verifier it inspected; after the account row is locked, PostgreSQL recomputes the fingerprint and compares the digest before allowing login success, failed-login accounting or password replacement. A stale Worker verdict can neither create a session nor increment the failure counter nor overwrite a newer verifier. No plaintext password enters SQL.
+- Real two-transaction tests execute both orders on PostgreSQL 17.6 and 18.1. The authority adds no Candidate business table, public Candidate RPC, frontend contract or financial/Banking Pay/Policy X behaviour.
+
+## 17 August 2026 Candidate Daily Phase 3 Google coexistence authority
+
+The temporary legacy browser remains contained behind its existing Availability Apps Script. It retains its existing login, msisdn lookup, UI, response envelope, Sheet/cache reads and writes, Emergency functions and retained specialist services. It receives no CloudTMS session, HMAC secret, canonical candidate UUID or Supabase access.
+
+`CLOUDTMS_CANDIDATE_BRIDGE_ENABLED` is the exact local bridge switch in both Google projects. Missing/false is a hard functional no-op: no signed request, bridge retry/status call, bridge log, bridge property mutation, bridge Sheet write or changed legacy result. The existing `Code.gs` seams are also helper-presence guarded. No manifest or trigger change is part of Phase 3, and the orphan `ai_startDailyPings` state remains untouched.
+
+When enabled, Availability builds its existing legacy tile envelope first, resolves the candidate through the existing trusted msisdn path, derives an environment-bound HMAC of `Public ID - Credentially`, and calls the CloudTMS Worker through the frozen HMAC v1 system boundary. The Worker independently resolves the approved source link and reads canonical Supabase tile truth. Apps Script merges canonical by-date fields into the existing envelope while retaining legacy-only cohorts, welcome and emergency presentation. Failure returns the unchanged legacy envelope.
+
+Availability writes continue using the existing Sheet/queue action first. The enabled mirror freezes one factual operation identity in Script Properties under Script Lock. Lost-response recovery is exact-status first; one authoritative not-found may consume one same-body/same-key retry, after which refresh is status-only. It never invents a replacement key because the first response was uncertain.
+
+NEW MASTER ROTA continues publishing to the Availability API first. Only an accepted 2xx `AVAILABILITY_UPDATE_END` result may trigger CloudTMS generation mirroring; a rejected/uncertain legacy publication cannot advance CloudTMS independently. Each frozen item contains the Google-generated CID1 global key, separate source HMAC and source-key version. PostgreSQL resolves exactly one active existing Candidate by CID1 and atomically creates a missing PRIMARY source link plus initial `GOOGLE_PRIMARY` scope with that complete fourteen-day generation. It never creates a Candidate or enables an entitlement. The existing legacy result is returned unchanged.
+
+The Availability project owns an explicit projection claim/complete adapter. It writes only through the existing availability mapping and returns `DEFERRED_OVERLAY` instead of overwriting booked or system-blocked cells. No trigger is added. It also exposes effect claim/complete/status primitives only; concrete provider execution remains Phase 6.
+
+The bridge-enabled legacy app resolves canonical tiles through the source HMAC. The new Candidate app resolves the same canonical generation through its authenticated Candidate UUID after the separate existing authority-transition, entitlement and global-feature gates. A candidate who never used the old app participates identically once the administrator enters the Google-generated CID1 key on that existing Candidate.
+
+Availability, Emergency, Master Rota publication and retained specialists remain required after the temporary legacy browser retires, until each is separately migrated and accepted. R15 source preparation does not enable a Candidate feature or entitlement, invoke an external effect or authorise production; live source-link creation occurs only with a later enabled signed Master generation.
+
+R16 makes the surrounding identity authority enforceable at database level. Active valid CID1 keys are unique after trim/case normalization; a versioned source HMAC has one immutable Candidate owner across all history states and validity periods; and automatic first generation cannot reactivate historical identity. The private binder/guard have no caller-role execute authority at any committed installation point. Candidate migration is subordinate to the exact-commit PostgreSQL 17.6/18.1 matrix, and the qualifying new-app read must follow the real reconciliation and controlled authority-transition RPC rather than fixture-owned scope or entitlement writes.
+
+R17 is later-controlling for source identity inside `candidate_daily_authority_transition_atomic_v1`. Every syntactically valid distinct `environment:SOURCE:key-version:HMAC` transaction lock is acquired in sorted order before any Candidate authority-scope row lock. Candidate scopes remain sorted by Candidate UUID. The R16 history trigger uses the same lock namespace and may only reacquire an already-owned transaction lock. A protected-history `IDENTITY_LINK_CONFLICT` is an expected item rejection: it rolls back that item, not valid siblings or the durable batch receipt. Malformed source-link values are not cast by the pre-lock scan and remain indexed `VALIDATION_FAILED` outcomes. The eight-argument function signature, transition/readiness/entitlement authority, replay semantics and role grants remain unchanged.

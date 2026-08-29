@@ -1,0 +1,239 @@
+name: Candidate DB runtime verification
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  push:
+    branches: [test]
+    paths:
+      - 'supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql'
+      - 'supabase/migrations/07082026_2055_candidate_app_timesheet_evidence_integrity.sql'
+      - 'supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql'
+      - 'supabase/migrations/11082026_1708_candidate_workflow_replacement_lineage.sql'
+      - 'supabase/migrations/11082026_2112_candidate_workflow_creation_identity.sql'
+      - 'supabase/migrations/11082026_2254_candidate_workflow_mutation_receipt_index.sql'
+      - 'supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql'
+      - 'supabase/migrations/18082026_0802_candidate_daily_identity_integrity.sql'
+      - 'supabase/migrations/21082026_1757_candidate_federated_session_projection.sql'
+      - 'supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql'
+      - 'supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql'
+      - 'supabase/repeatable/07082026_20*_candidate_*.sql'
+      - 'supabase/repeatable/07082026_21*_candidate_*.sql'
+      - 'supabase/repeatable/07082026_22*_candidate_*.sql'
+      - 'supabase/repeatable/07082026_23*_candidate_*.sql'
+      - 'supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql'
+      - 'supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql'
+      - 'supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql'
+      - 'supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql'
+      - 'supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql'
+      - 'supabase/repeatable/18082026_1051_candidate_daily_authority_transition_source_identity_v1.sql'
+      - 'supabase/repeatable/21082026_1758_candidate_app_federated_session_project_v1.sql'
+      - 'supabase/repeatable/21082026_2231_candidate_google_provisioning_match_v1.sql'
+      - 'supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql'
+      - 'supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql'
+      - 'supabase/repeatable/26072026_1947_invoice_batch_issue_candidate_rows_v1.sql'
+      - 'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql'
+      - 'supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql'
+      - 'supabase/repeatable/23082026_0822_candidate_manager_email_claim_route_guard_v1.sql'
+      - 'supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql'
+      - 'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql'
+      - 'tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql'
+      - 'tests/*candidate*runtime_verification.sql'
+      - 'tests/09082026_*candidate*_verification.sql'
+      - 'tests/10082026_*candidate*_verification.sql'
+      - 'tests/11082026_*candidate*_verification.sql'
+      - 'tests/12082026_*candidate*_verification.sql'
+      - 'tests/13082026_*candidate*_verification.sql'
+      - '.github/workflows/candidate-db-runtime.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  candidate-runtime:
+    name: PostgreSQL ${{ matrix.postgres }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ['17.6', '18.1']
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGDATABASE: postgres
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+
+      - name: Ensure PostgreSQL client is available
+        timeout-minutes: 5
+        run: |
+          set -euo pipefail
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get update -qq \
+              -o Acquire::Retries=3 \
+              -o Acquire::http::Timeout=30 \
+              -o Acquire::https::Timeout=30
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get install -y -qq \
+              -o Acquire::Retries=3 \
+              postgresql-client
+          psql --version
+
+      - name: Install backend dependencies for real-chain verification
+        run: npm ci --ignore-scripts --no-audit --no-fund --engine-strict
+
+      - name: Verify the locked dependency authority
+        run: npm run security:dependencies
+
+      - name: Install Candidate authority and run all runtime suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          apply_sql() {
+            psql -X -v ON_ERROR_STOP=1 -q -f "$1"
+          }
+
+          apply_sql tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql
+
+          install_files=(
+            supabase/migrations/07082026_2055_candidate_app_foundation_schema.sql
+            supabase/migrations/07082026_2055_candidate_app_timesheet_evidence_integrity.sql
+            supabase/migrations/07082026_2306_candidate_app_manager_review_documents.sql
+            supabase/migrations/11082026_1708_candidate_workflow_replacement_lineage.sql
+            supabase/migrations/11082026_2112_candidate_workflow_creation_identity.sql
+            supabase/migrations/11082026_2254_candidate_workflow_mutation_receipt_index.sql
+            supabase/migrations/12082026_1355_candidate_auth_mutation_receipt_index.sql
+            supabase/migrations/17082026_0010_candidate_daily_phase2_authority_schema.sql
+            supabase/migrations/18082026_0802_candidate_daily_identity_integrity.sql
+            supabase/migrations/21082026_1757_candidate_federated_session_projection.sql
+            supabase/migrations/21082026_2348_candidate_federated_membership_account_index.sql
+            supabase/migrations/23082026_0116_candidate_manager_email_route_receipts.sql
+            supabase/repeatable/07082026_2059_candidate_app_private_helpers_v1.sql
+            supabase/repeatable/25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1.sql
+            supabase/repeatable/07082026_2103_candidate_auth_rpcs_v1.sql
+            supabase/repeatable/17082026_0015_candidate_daily_phase2_rpcs_v1.sql
+            supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql
+            supabase/repeatable/18082026_1051_candidate_daily_authority_transition_source_identity_v1.sql
+            supabase/repeatable/21082026_1758_candidate_app_federated_session_project_v1.sql
+            supabase/repeatable/21082026_2231_candidate_google_provisioning_match_v1.sql
+            supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql
+            supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql
+            supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql
+            supabase/repeatable/07082026_2113_candidate_expense_placement_rpcs_v1.sql
+            supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql
+            supabase/repeatable/23082026_0822_candidate_manager_email_claim_route_guard_v1.sql
+            supabase/repeatable/07082026_2120_candidate_workflow_transition_atomic_v1.sql
+            supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql
+            supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql
+            supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql
+            supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql
+            supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql
+            supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql
+            supabase/repeatable/28082026_0505_candidate_refused_card_recovery_v1.sql
+            supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql
+            supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql
+            supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
+            supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql
+            supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql
+            supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql
+            supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql
+            supabase/repeatable/11082026_1832_cloudtms_office_candidate_adapter_v1.sql
+            supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql
+          )
+          for file in "${install_files[@]}"; do apply_sql "$file"; done
+
+          suites=(
+            tests/07082026_2155_candidate_app_local_runtime_verification.sql
+            tests/07082026_2333_candidate_app_manager_review_handover_verification.sql
+            tests/08082026_1040_candidate_app_policy_corrections_runtime_verification.sql
+            tests/08082026_1055_candidate_app_claim_concurrency_verification.sql
+            tests/08082026_1200_candidate_app_expense_workflow_runtime_verification.sql
+            tests/08082026_1210_candidate_app_flag_acl_runtime_verification.sql
+            tests/08082026_1220_candidate_app_read_contract_runtime_verification.sql
+            tests/08082026_1235_candidate_app_authority_corrections_runtime_verification.sql
+            tests/08082026_1522_candidate_route_daily_runtime_verification.sql
+            tests/09082026_0100_candidate_qr_version_runtime_verification.sql
+            tests/09082026_0944_candidate_route_confirmation_runtime_verification.sql
+            tests/09082026_1211_candidate_route_final_closure_verification.sql
+            tests/09082026_1329_candidate_route_legacy_signature_policy_verification.sql
+            tests/10082026_1113_candidate_paper_mail_authority_verification.sql
+            tests/10082026_1535_candidate_paper_generation_retirement_verification.sql
+            tests/10082026_1545_candidate_paper_retirement_concurrency_verification.sql
+            tests/10082026_1651_candidate_digest_and_anchor_rejection_verification.sql
+            tests/10082026_1817_candidate_finalised_rejection_verification.sql
+            tests/10082026_2005_candidate_finalised_paper_rejection_verification.sql
+            tests/10082026_2350_candidate_paper_rejection_lock_order_verification.sql
+            tests/11082026_0051_candidate_paper_caller_closure_runtime_verification.sql
+            tests/11082026_0506_candidate_paper_source_owner_selection_verification.sql
+            tests/11082026_0824_candidate_paper_predelivery_route_guard_verification.sql
+            tests/11082026_1023_candidate_electronic_route_workflow_guard_verification.sql
+            tests/11082026_1214_candidate_manager_mail_lifecycle_verification.sql
+            tests/11082026_1215_candidate_timesheet_current_history_verification.sql
+            tests/11082026_1405_candidate_manager_action_contract_verification.sql
+            tests/11082026_1428_candidate_action_hub_closure_verification.sql
+            tests/11082026_1715_candidate_resubmission_idempotency_verification.sql
+            tests/11082026_1851_cloudtms_office_candidate_adapter_verification.sql
+            tests/11082026_2145_candidate_office_rejection_replay_verification.sql
+            tests/12082026_0059_candidate_execution_replay_paper_authority_verification.sql
+            tests/12082026_0922_candidate_execution_boundary_closure_verification.sql
+            tests/12082026_1408_candidate_auth_receipt_runtime_verification.sql
+            tests/12082026_1859_candidate_public_auth_operation_family_verification.sql
+            tests/12082026_2146_candidate_public_auth_final_correction_verification.sql
+            tests/12082026_2223_candidate_public_auth_concurrency_verification.sql
+            tests/13082026_0002_candidate_auth_mixed_version_concurrency_verification.sql
+            tests/13082026_0617_candidate_phone_refresh_security_verification.sql
+            tests/13082026_0927_candidate_session_invalidation_concurrency_verification.sql
+            tests/14082026_1410_candidate_office_legacy_route_retirement_verification.sql
+            tests/17082026_0053_candidate_daily_phase2_runtime_verification.sql
+            tests/17082026_0955_candidate_daily_authority_transition_runtime_verification.sql
+            tests/18082026_0138_candidate_daily_first_generation_source_link_runtime_verification.sql
+            tests/18082026_0807_candidate_daily_r16_identity_integrity_runtime_verification.sql
+            tests/18082026_1105_candidate_daily_r17_authority_transition_source_identity_runtime_verification.sql
+            tests/21082026_2345_candidate_federated_membership_runtime_verification.sql
+            supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql
+          )
+          for file in "${suites[@]}"; do apply_sql "$file"; done
+
+          CANDIDATE_AUTH_POSTGRES_CHAIN=1 \
+            node --test tests/candidate-public-auth-postgres-chain.integration.js
+          node --test --test-concurrency=1 tests/candidate-auth-mixed-version-concurrency.test.js
+          CANDIDATE_DAILY_POSTGRES_CHAIN=1 \
+            node --test tests/candidate-daily-authority-transition-concurrency.integration.js
+          CANDIDATE_DAILY_POSTGRES_CHAIN=1 \
+            node --test tests/candidate-daily-first-generation-source-link-concurrency.integration.js
+          CANDIDATE_DAILY_POSTGRES_CHAIN=1 \
+            node --test tests/candidate-daily-r16-identity-integrity-concurrency.integration.js
+          CANDIDATE_DAILY_POSTGRES_CHAIN=1 \
+            node --test tests/candidate-daily-r17-authority-transition-source-identity-concurrency.integration.js
+
+          version="$(psql -X -tA -c 'show server_version')"
+          printf 'PostgreSQL=%s CandidateSuites=%s Result=PASS\n' "$version" "${#suites[@]}"

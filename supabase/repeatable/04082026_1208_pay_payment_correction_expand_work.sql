@@ -1,0 +1,614 @@
+-- CloudTMS Banking Pay cancellation — Stage 1 replacement.
+-- Exact installed identity retained. Expansion reads immutable child membership only.
+
+CREATE OR REPLACE FUNCTION public.pay_payment_correction_expand_work(
+  p_correction_request_id uuid,
+  p_actor_user_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path TO pg_catalog, private, extensions, pg_temp
+SET statement_timeout TO '6000ms'
+SET lock_timeout TO '1000ms'
+AS $function$
+DECLARE
+  v_now timestamptz := pg_catalog.clock_timestamp();
+  v_request public.pay_payment_correction_requests%rowtype;
+  v_batch public.pay_batches%rowtype;
+  v_operation public.banking_pay_operations%rowtype;
+  v_batch_id uuid;
+  v_guard jsonb;
+  v_last_ordinal bigint := 0;
+  v_next_ordinal bigint := 0;
+  v_page_count integer := 0;
+  v_child_count integer := 0;
+  v_work_count integer := 0;
+  v_mismatch_count integer := 0;
+  v_complete boolean := false;
+  v_work_kind text;
+  v_requested_action text;
+  v_fast_draft_enabled boolean := false;
+  v_fast_draft_result jsonb := '{}'::jsonb;
+  v_fast_draft_after_candidate_id uuid := NULL::uuid;
+  v_candidate_id uuid;
+  v_candidate_scope_contract_version integer := 1;
+  v_candidate_scope_contract_raw text;
+  v_source_row_count_semantics text := 'FINANCIAL_AND_QUEUED_COMMUNICATIONS';
+BEGIN
+  IF p_correction_request_id IS NULL THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_ID_REQUIRED'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_NOT_FOUND')::text;
+  END IF;
+
+  -- Resolve identifiers without taking row locks, then use the canonical
+  -- mutation order: guard -> request -> batch -> operation.
+  SELECT request_row.pay_batch_id
+  INTO v_batch_id
+  FROM public.pay_payment_correction_requests AS request_row
+  WHERE request_row.id = p_correction_request_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_NOT_FOUND'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_NOT_FOUND')::text;
+  END IF;
+
+  v_guard := private.pay_payment_mutation_guard_v1(
+    v_batch_id,
+    p_correction_request_id,
+    'CORRECTION_APPLY'
+  );
+
+  SELECT request_row.*
+  INTO v_request
+  FROM public.pay_payment_correction_requests AS request_row
+  WHERE request_row.id = p_correction_request_id
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_request.status NOT IN ('AUTHORISED', 'EXPANDED') THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_REQUEST_NOT_AUTHORISED'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'REQUEST_STATE_INVALID')::text;
+  END IF;
+
+  SELECT batch_row.*
+  INTO v_batch
+  FROM public.pay_batches AS batch_row
+  WHERE batch_row.id = v_request.pay_batch_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_EXPAND_BATCH_NOT_FOUND'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'PAY_BATCH_NOT_FOUND')::text;
+  END IF;
+
+  SELECT operation_row.*
+  INTO v_operation
+  FROM public.banking_pay_operations AS operation_row
+  WHERE operation_row.operation_type = 'PAYMENT_CORRECTION'
+    AND operation_row.input_json->>'correction_request_id' = p_correction_request_id::text
+  ORDER BY operation_row.created_at_utc
+  LIMIT 1
+  FOR UPDATE;
+
+  IF NOT FOUND OR v_operation.phase IS DISTINCT FROM 'EXPAND_WORK' THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_EXPAND_OPERATION_MISMATCH'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'OPERATION_MISMATCH')::text;
+  END IF;
+
+  IF v_operation.pay_batch_id IS DISTINCT FROM v_request.pay_batch_id THEN
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_EXPAND_OPERATION_BATCH_MISMATCH'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object('code', 'OPERATION_MISMATCH')::text;
+  END IF;
+
+  IF p_actor_user_id IS NOT NULL
+     AND p_actor_user_id IS DISTINCT FROM v_request.requested_by_user_id
+     AND coalesce(v_request.auto_requested, false) IS NOT TRUE THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM public.tms_users AS actor_row
+      WHERE actor_row.id = p_actor_user_id AND coalesce(actor_row.is_active, false)
+    ) THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_EXPAND_ACTOR_NOT_ALLOWED'
+        USING ERRCODE = '42501', DETAIL = pg_catalog.jsonb_build_object('code', 'PERMISSION_DENIED')::text;
+    END IF;
+  END IF;
+
+  v_last_ordinal := coalesce(
+    NULLIF(v_operation.progress_json->>'last_expanded_selection_ordinal', '')::bigint,
+    0
+  );
+  v_work_kind := CASE WHEN v_request.correction_kind = 'NO_MONEY_UNWIND'
+                      THEN 'NO_MONEY_UNWIND' ELSE 'PRE_BANK_CANCEL' END;
+  v_requested_action := coalesce(
+    v_request.plan_json->>'requested_action', v_request.selection_json->>'requested_action'
+  );
+
+  v_candidate_scope_contract_raw := NULLIF(
+    BTRIM(COALESCE(v_request.plan_json->>'candidate_scope_contract_version', '')),
+    ''
+  );
+  IF v_candidate_scope_contract_raw IS NULL OR v_candidate_scope_contract_raw = '1' THEN
+    v_candidate_scope_contract_version := 1;
+    v_source_row_count_semantics := 'FINANCIAL_AND_QUEUED_COMMUNICATIONS';
+  ELSIF v_candidate_scope_contract_raw = '2' THEN
+    v_candidate_scope_contract_version := 2;
+    v_source_row_count_semantics := 'FINANCIAL_ONLY';
+    IF v_request.plan_json->>'candidate_scope_hash_version' IS DISTINCT FROM '2'
+       OR v_request.plan_json->>'source_row_count_semantics' IS DISTINCT FROM 'FINANCIAL_ONLY'
+       OR v_request.plan_json->>'communication_cleanup_contract_version' IS DISTINCT FROM '1' THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH',
+          'correction_request_id', p_correction_request_id,
+          'candidate_scope_contract_version', v_candidate_scope_contract_raw
+        )::text;
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED'
+      USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+        'code', 'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED',
+        'correction_request_id', p_correction_request_id,
+        'candidate_scope_contract_version', v_candidate_scope_contract_raw
+      )::text;
+  END IF;
+
+  SELECT COALESCE(settings_row.banking_pay_draft_overlay_fast_cancel_v1_enabled,false)
+  INTO v_fast_draft_enabled
+  FROM public.settings_defaults AS settings_row
+  WHERE settings_row.id=1;
+
+  IF COALESCE(v_fast_draft_enabled,false)
+     AND UPPER(BTRIM(COALESCE(v_batch.status,''))) IN ('DRAFT','DRAFT_CREATED','CANCELLED')
+     AND v_batch.source_workbench_session_id IS NOT NULL THEN
+    v_fast_draft_after_candidate_id := CASE
+      WHEN COALESCE(v_operation.progress_json->>'last_fast_draft_candidate_id','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN (v_operation.progress_json->>'last_fast_draft_candidate_id')::uuid
+      ELSE NULL::uuid END;
+
+    v_fast_draft_result := private.pay_workbench_draft_overlay_remove_page_v1(
+      p_correction_request_id,v_request.pay_batch_id,v_batch.source_workbench_session_id,
+      v_fast_draft_after_candidate_id,100,500,p_actor_user_id,
+      jsonb_build_object('requested_action',v_requested_action)
+    );
+
+    IF COALESCE((v_fast_draft_result->>'fast_route_eligible')::boolean,true) IS NOT TRUE THEN
+      -- Admission occurs before any Draft mutation.  A rejected candidate page
+      -- therefore falls through to the existing frozen financial correction
+      -- route without partial voiding, reservation release or publication.
+      UPDATE public.banking_pay_operations AS fallback_operation
+      SET progress_json=COALESCE(fallback_operation.progress_json,'{}'::jsonb)
+            || jsonb_build_object(
+              'draft_overlay_fast_rejected',true,
+              'draft_overlay_fast_rejection',v_fast_draft_result
+            ),
+          updated_at_utc=v_now
+      WHERE fallback_operation.id=v_operation.id;
+    ELSE
+    UPDATE public.banking_pay_operations AS fast_operation
+    SET progress_json=COALESCE(fast_operation.progress_json,'{}'::jsonb)
+          || jsonb_build_object(
+            'draft_overlay_fast',true,
+            'last_fast_draft_candidate_id',v_fast_draft_result->>'last_candidate_id',
+            'last_fast_draft_page',v_fast_draft_result
+          ),
+        phase=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN 'EXPAND_WORK' ELSE 'COMPLETE' END,
+        status=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN 'RUNNING' ELSE 'COMPLETE' END,
+        runner_state=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN 'RUNNABLE' ELSE 'COMPLETE' END,
+        run_after_utc=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN v_now ELSE NULL END,
+        completed_at_utc=CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+          THEN fast_operation.completed_at_utc ELSE v_now END,
+        updated_at_utc=v_now
+    WHERE fast_operation.id=v_operation.id;
+
+    IF COALESCE((v_fast_draft_result->>'has_more')::boolean,false) IS NOT TRUE THEN
+      UPDATE public.pay_payment_correction_requests AS fast_request
+      SET status='APPLIED',applied_at_utc=COALESCE(fast_request.applied_at_utc,v_now),updated_at_utc=v_now
+      WHERE fast_request.id=p_correction_request_id;
+
+      INSERT INTO public.pay_payment_correction_actions(
+        correction_request_id,pay_batch_id,actor_kind,actor_user_id,action,
+        action_at_utc,note,before_json,after_json,metadata_json
+      ) VALUES (
+        p_correction_request_id,v_request.pay_batch_id,
+        CASE WHEN p_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END,
+        p_actor_user_id,'APPLY',v_now,'DRAFT_OVERLAY_FAST_COMPLETE',NULL,
+        jsonb_build_object('status','APPLIED'),v_fast_draft_result
+      );
+
+      -- The fast Draft route intentionally creates no financial work items, so
+      -- it never enters process_chunk's ordinary terminal alert branch.  Emit
+      -- the same request-scoped success event here from frozen correction
+      -- membership.  The unique request event key makes lost-response replay
+      -- idempotent and prevents per-candidate alert fanout.
+      INSERT INTO public.banking_alert_success_events (
+        pay_batch_id,
+        alert_kind,
+        event_key,
+        payload_json,
+        occurred_at_utc,
+        expires_at_utc,
+        created_at_utc,
+        updated_at_utc
+      )
+      SELECT
+        v_request.pay_batch_id,
+        'BATCH_CANCELLATION_SUCCESS',
+        'CANCELLATION:' || p_correction_request_id::text,
+        pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+          'contract_version', 'BANKING_ALERT_CANCELLATION_SUCCESS_V1',
+          'correction_request_id', p_correction_request_id::text,
+          'operation_id', v_operation.id::text,
+          'pay_batch_id', v_request.pay_batch_id::text,
+          'cancelled_payment_count', frozen_scope.payment_count,
+          'cancelled_amount_pence', frozen_scope.amount_pence,
+          'user_label', frozen_scope.payment_count::text || ' payment'
+            || CASE WHEN frozen_scope.payment_count = 1 THEN '' ELSE 's' END
+            || ' cancelled',
+          'user_description', 'Cancellation completed for '
+            || frozen_scope.payment_count::text || ' payment'
+            || CASE WHEN frozen_scope.payment_count = 1 THEN '' ELSE 's' END
+            || '. Banking Pay has been updated.',
+          'required_user_action', 'Review or clear this Banking alert.',
+          'stable_issue_key', v_request.pay_batch_id::text
+            || ':BATCH_CANCELLATION_SUCCESS:' || p_correction_request_id::text,
+          'dedupe_key', v_request.pay_batch_id::text
+            || ':BATCH_CANCELLATION_SUCCESS:' || p_correction_request_id::text,
+          'policy_x_source', 'FROZEN_CORRECTION_REQUEST_MEMBERSHIP'
+        )),
+        v_now,
+        v_now + interval '365 days',
+        v_now,
+        v_now
+      FROM (
+        SELECT
+          pg_catalog.count(*)::integer AS payment_count,
+          pg_catalog.round(COALESCE(pg_catalog.sum(request_candidate.active_amount),0) * 100)::bigint AS amount_pence
+        FROM public.pay_payment_correction_request_candidates AS request_candidate
+        WHERE request_candidate.correction_request_id = p_correction_request_id
+      ) AS frozen_scope
+      WHERE frozen_scope.payment_count > 0
+      ON CONFLICT (pay_batch_id, alert_kind, event_key) DO NOTHING;
+    END IF;
+
+    RETURN v_fast_draft_result || jsonb_build_object(
+      'correction_request_id',p_correction_request_id,
+      'operation_id',v_operation.id,
+      'phase',CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+        THEN 'EXPAND_WORK' ELSE 'COMPLETE' END,
+      'complete',COALESCE((v_fast_draft_result->>'has_more')::boolean,false) IS NOT TRUE,
+      'processing_continues',COALESCE((v_fast_draft_result->>'has_more')::boolean,false),
+      'code',CASE WHEN COALESCE((v_fast_draft_result->>'has_more')::boolean,false)
+        THEN 'DRAFT_OVERLAY_FAST_PAGE' ELSE 'DRAFT_OVERLAY_FAST_COMPLETE' END
+    );
+    END IF;
+  END IF;
+
+  FOR v_candidate_id IN
+    SELECT candidate_row.candidate_id
+    FROM public.pay_payment_correction_request_candidates AS member_row
+    JOIN public.pay_batch_candidates AS candidate_row ON candidate_row.id=member_row.pay_batch_candidate_id
+    WHERE member_row.correction_request_id=p_correction_request_id
+      AND member_row.selection_ordinal>v_last_ordinal
+    ORDER BY member_row.selection_ordinal
+    LIMIT 100
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(
+      public._pay_workbench_candidate_serial_key(v_candidate_id),24062027));
+  END LOOP;
+
+  WITH page AS (
+    SELECT member_row.*
+    FROM public.pay_payment_correction_request_candidates AS member_row
+    WHERE member_row.correction_request_id = p_correction_request_id
+      AND member_row.selection_ordinal > v_last_ordinal
+    ORDER BY member_row.selection_ordinal
+    LIMIT 100
+  ), resolved AS (
+    SELECT page.*,candidate_row.candidate_id,
+      COALESCE(
+        v_request.selection_json->'cancellation_reversion_pre_request_authorities_v3'
+          ->candidate_row.candidate_id::text,
+        v_request.selection_json->'cancellation_reversion_pre_request_authorities_v2'
+          ->candidate_row.candidate_id::text,
+        page_authority.pre_request_authority
+      ) AS pre_request_authority,
+      COALESCE(
+        page_authority.pre_request_authority->>'authority_digest',
+        v_request.selection_json->'cancellation_reversion_pre_request_authorities_v3'
+          ->candidate_row.candidate_id::text->>'authority_digest',
+        v_request.selection_json->'cancellation_reversion_pre_request_authorities_v2'
+          ->candidate_row.candidate_id::text->>'authority_digest'
+      ) AS candidate_scope_hash_pre_request_authority_digest,
+      COALESCE(
+        v_operation.input_json->'cancellation_reversion_start_authorities_v2'
+          ->candidate_row.candidate_id::text,
+        pg_catalog.jsonb_strip_nulls(pg_catalog.jsonb_build_object(
+          'contract_version','CANCELLATION_REVERSION_START_AUTHORITY_V2',
+          'correction_request_id',p_correction_request_id,
+          'operation_id',v_operation.id,
+          'candidate_id',candidate_row.candidate_id,
+          'source_change_seq',COALESCE(candidate_counter.seq,0),
+          'dirty_generation',COALESCE(candidate_counter.scope_change_generation,0),
+          'start_exact',COALESCE((page_authority.pre_request_authority->>'pre_request_exact')::boolean,false)
+            AND (
+              (page_authority.pre_request_authority->>'source_change_seq')::bigint=COALESCE(candidate_counter.seq,0)
+              AND (page_authority.pre_request_authority->>'dirty_generation')::bigint=COALESCE(candidate_counter.scope_change_generation,0)
+              OR request_dirty.job_id IS NOT NULL
+            ),
+          'rejection_reason',CASE WHEN COALESCE((page_authority.pre_request_authority->>'pre_request_exact')::boolean,false)
+            AND (((page_authority.pre_request_authority->>'source_change_seq')::bigint=COALESCE(candidate_counter.seq,0)
+              AND (page_authority.pre_request_authority->>'dirty_generation')::bigint=COALESCE(candidate_counter.scope_change_generation,0))
+              OR request_dirty.job_id IS NOT NULL) THEN NULL
+            ELSE 'ECONOMIC_AUTHORITY_CHANGED_BEFORE_CANCELLATION_START' END,
+          'pre_request_fence_digest',page_authority.pre_request_authority->>'authority_digest',
+          'request_owned_dirty_job_id',request_dirty.job_id,
+          'request_owned_dirty_proven',request_dirty.job_id IS NOT NULL,
+          'fence_digest',pg_catalog.md5(
+            p_correction_request_id::text||'|'||v_operation.id::text||'|'||candidate_row.candidate_id::text||'|'||
+            COALESCE(candidate_counter.seq,0)::text||'|'||COALESCE(candidate_counter.scope_change_generation,0)::text||'|'||
+            COALESCE(page_authority.pre_request_authority->>'authority_digest','')||'|'||
+            COALESCE(request_dirty.job_id::text,'')||'|'||(request_dirty.job_id IS NOT NULL)::text||'|'||
+            (COALESCE((page_authority.pre_request_authority->>'pre_request_exact')::boolean,false)
+              AND (((page_authority.pre_request_authority->>'source_change_seq')::bigint=COALESCE(candidate_counter.seq,0)
+                AND (page_authority.pre_request_authority->>'dirty_generation')::bigint=COALESCE(candidate_counter.scope_change_generation,0))
+                OR request_dirty.job_id IS NOT NULL))::text||'|CANCELLATION_REVERSION_START_AUTHORITY_V2'
+          )
+        ))
+      ) AS start_authority
+    FROM page
+    JOIN public.pay_batch_candidates AS candidate_row
+      ON candidate_row.id=page.pay_batch_candidate_id
+     AND candidate_row.pay_batch_id=v_request.pay_batch_id
+    LEFT JOIN public.app_change_counters AS candidate_counter
+      ON candidate_counter.entity_key='pay_candidate:'||candidate_row.candidate_id::text
+    LEFT JOIN LATERAL (
+      SELECT page_chunk.result_json->'cancellation_reversion_pre_request_authorities_v3'
+               ->candidate_row.candidate_id::text AS pre_request_authority
+      FROM public.banking_pay_operation_chunks AS page_chunk
+      WHERE page_chunk.operation_id=v_operation.id
+        AND page_chunk.phase='PREPARE_SELECTION'
+        AND page_chunk.chunk_type='CANDIDATE_SCOPE'
+        AND page_chunk.status='COMPLETE'
+        AND page_chunk.result_json->'cancellation_reversion_pre_request_authorities_v3'
+              ? candidate_row.candidate_id::text
+      ORDER BY page_chunk.sequence_no
+      LIMIT 1
+    ) AS page_authority ON true
+    LEFT JOIN LATERAL (
+      SELECT dirty_job.id AS job_id
+      FROM public.banking_pay_workbench_jobs AS dirty_job
+      WHERE dirty_job.candidate_id=candidate_row.candidate_id
+        AND dirty_job.job_type='WORKBENCH_CANDIDATE_DIRTY_APPLY'
+        AND dirty_job.status IN ('QUEUED','RUNNING','SUCCEEDED')
+        AND dirty_job.scope_change_generation=COALESCE(candidate_counter.scope_change_generation,0)
+        AND COALESCE(dirty_job.payload_json->>'source_change_seq','')=COALESCE(candidate_counter.seq,0)::text
+        AND COALESCE(dirty_job.payload_json->>'correction_dirty_causal_contract_version','')
+              ='CORRECTION_OWNED_DIRTY_CAUSAL_V1'
+        AND COALESCE(dirty_job.payload_json->'correction_dirty_contexts'
+              ->candidate_row.candidate_id::text->>'correction_request_id','')=p_correction_request_id::text
+        AND COALESCE(dirty_job.payload_json->'correction_dirty_contexts'
+              ->candidate_row.candidate_id::text->>'correction_operation_id','')=v_operation.id::text
+        AND COALESCE(dirty_job.payload_json->>'request_owned_scope_change_tx_token','')
+              =COALESCE(dirty_job.payload_json->>'scope_change_tx_token','')
+      ORDER BY dirty_job.updated_at_utc DESC NULLS LAST,dirty_job.created_at_utc DESC,dirty_job.id DESC
+      LIMIT 1
+    ) AS request_dirty ON true
+  ), inserted AS (
+    INSERT INTO public.pay_payment_correction_work_items (
+      correction_request_id, pay_batch_id, pay_batch_candidate_id,
+      pay_bank_transfer_id, candidate_id, umbrella_id, work_kind,
+      selection_json, selection_hash, status, attempt_count, last_error,
+      locked_at_utc, locked_by, created_at_utc, processed_at_utc, result_json
+    )
+    SELECT
+      p_correction_request_id,
+      v_request.pay_batch_id,
+       resolved.pay_batch_candidate_id,
+      (
+        SELECT item_row.pay_bank_transfer_id
+        FROM public.pay_batch_items AS item_row
+         WHERE item_row.id = ANY(resolved.pay_batch_item_ids)
+          AND item_row.pay_bank_transfer_id IS NOT NULL
+        ORDER BY item_row.pay_bank_transfer_id
+        LIMIT 1
+      ),
+      resolved.candidate_id,
+      (
+        SELECT item_row.umbrella_id
+        FROM public.pay_batch_items AS item_row
+         WHERE item_row.id = ANY(resolved.pay_batch_item_ids)
+          AND item_row.umbrella_id IS NOT NULL
+        ORDER BY item_row.umbrella_id
+        LIMIT 1
+      ),
+      v_work_kind,
+      pg_catalog.jsonb_build_object(
+        'contract_version', 1,
+        'scope_type', 'CANDIDATES',
+        'work_unit', 'CANDIDATE',
+        'requested_action', v_requested_action,
+        'selection_ordinal', resolved.selection_ordinal,
+        'pay_batch_candidate_ids', pg_catalog.jsonb_build_array(resolved.pay_batch_candidate_id),
+        'pay_batch_item_ids', pg_catalog.to_jsonb(resolved.pay_batch_item_ids),
+        'expected_pay_batch_item_ids', pg_catalog.to_jsonb(resolved.pay_batch_item_ids),
+        'expected_item_count', resolved.active_item_count,
+        'source_row_count', resolved.source_row_count,
+        'amount_inc_vat', resolved.active_amount,
+        'shared_instruction_scope_hash', resolved.shared_instruction_scope_hash,
+        'eligibility_code_at_plan', resolved.eligibility_code_at_plan,
+        'source_correction_request_id', p_correction_request_id,
+        'cancellation_reversion_pre_request_authority',resolved.pre_request_authority,
+        'candidate_scope_hash_pre_request_authority_digest',
+          resolved.candidate_scope_hash_pre_request_authority_digest,
+        'cancellation_reversion_start_authority_v2',resolved.start_authority
+      ) || CASE WHEN v_candidate_scope_contract_version = 2 THEN
+        pg_catalog.jsonb_build_object(
+          'candidate_scope_contract_version', 2,
+          'candidate_scope_hash_version', 2,
+          'source_row_count_semantics', v_source_row_count_semantics,
+          'communication_cleanup_contract_version', 1
+        )
+      ELSE '{}'::jsonb END,
+      resolved.candidate_scope_hash,
+      'PENDING', 0, NULL, NULL, NULL, v_now, NULL,
+      pg_catalog.jsonb_build_object(
+        'created_by', 'pay_payment_correction_expand_work',
+         'selection_ordinal', resolved.selection_ordinal,
+         'candidate_scope_hash', resolved.candidate_scope_hash,
+         'candidate_scope_contract_version', v_candidate_scope_contract_version,
+         'source_row_count_semantics', v_source_row_count_semantics
+      )
+    FROM resolved
+    ON CONFLICT (correction_request_id, work_kind, selection_hash) DO NOTHING
+    RETURNING id
+  )
+  SELECT pg_catalog.count(*)::integer INTO v_page_count FROM inserted;
+
+  SELECT coalesce(pg_catalog.max(member_row.selection_ordinal), v_last_ordinal)
+  INTO v_next_ordinal
+  FROM public.pay_payment_correction_request_candidates AS member_row
+  WHERE member_row.correction_request_id = p_correction_request_id
+    AND member_row.selection_ordinal > v_last_ordinal
+    AND member_row.selection_ordinal <= v_last_ordinal + 100;
+
+  v_next_ordinal := greatest(v_next_ordinal, v_last_ordinal);
+  v_complete := NOT EXISTS (
+    SELECT 1
+    FROM public.pay_payment_correction_request_candidates AS remaining_member
+    WHERE remaining_member.correction_request_id = p_correction_request_id
+      AND remaining_member.selection_ordinal > v_next_ordinal
+  );
+
+  UPDATE public.banking_pay_operations AS progress_operation
+  SET progress_json = coalesce(progress_operation.progress_json, '{}'::jsonb)
+        || pg_catalog.jsonb_build_object(
+          'last_expanded_selection_ordinal', v_next_ordinal,
+          'expanded_page_count', v_page_count
+        ),
+      updated_at_utc = v_now
+  WHERE progress_operation.id = v_operation.id;
+
+  IF v_complete THEN
+    SELECT pg_catalog.count(*)::integer INTO v_child_count
+    FROM public.pay_payment_correction_request_candidates AS member_row
+    WHERE member_row.correction_request_id = p_correction_request_id;
+
+    SELECT pg_catalog.count(*)::integer INTO v_work_count
+    FROM public.pay_payment_correction_work_items AS work_row
+    WHERE work_row.correction_request_id = p_correction_request_id;
+
+    SELECT pg_catalog.count(*)::integer INTO v_mismatch_count
+    FROM (
+      (
+        SELECT member_row.pay_batch_candidate_id, member_row.candidate_scope_hash
+        FROM public.pay_payment_correction_request_candidates AS member_row
+        WHERE member_row.correction_request_id = p_correction_request_id
+        EXCEPT
+        SELECT work_row.pay_batch_candidate_id, work_row.selection_hash
+        FROM public.pay_payment_correction_work_items AS work_row
+        WHERE work_row.correction_request_id = p_correction_request_id
+      )
+      UNION ALL
+      (
+        SELECT work_row.pay_batch_candidate_id, work_row.selection_hash
+        FROM public.pay_payment_correction_work_items AS work_row
+        WHERE work_row.correction_request_id = p_correction_request_id
+        EXCEPT
+        SELECT member_row.pay_batch_candidate_id, member_row.candidate_scope_hash
+        FROM public.pay_payment_correction_request_candidates AS member_row
+        WHERE member_row.correction_request_id = p_correction_request_id
+      )
+    ) AS membership_difference;
+
+    v_mismatch_count := v_mismatch_count + (
+      SELECT pg_catalog.count(*)::integer
+      FROM public.pay_payment_correction_work_items AS work_row
+      JOIN public.pay_payment_correction_request_candidates AS member_row
+        ON member_row.correction_request_id = work_row.correction_request_id
+       AND member_row.pay_batch_candidate_id = work_row.pay_batch_candidate_id
+      JOIN public.pay_batch_candidates AS candidate_row
+        ON candidate_row.id = member_row.pay_batch_candidate_id
+       AND candidate_row.pay_batch_id = v_request.pay_batch_id
+      WHERE work_row.correction_request_id = p_correction_request_id
+        AND (
+          work_row.candidate_id IS DISTINCT FROM candidate_row.candidate_id
+          OR work_row.selection_hash IS DISTINCT FROM member_row.candidate_scope_hash
+          OR work_row.selection_json->>'expected_item_count'
+               IS DISTINCT FROM member_row.active_item_count::text
+          OR work_row.selection_json->'expected_pay_batch_item_ids'
+               IS DISTINCT FROM pg_catalog.to_jsonb(member_row.pay_batch_item_ids)
+          OR (
+            v_candidate_scope_contract_version = 2
+            AND (
+              work_row.selection_json->>'candidate_scope_contract_version' IS DISTINCT FROM '2'
+              OR work_row.selection_json->>'candidate_scope_hash_version' IS DISTINCT FROM '2'
+              OR work_row.selection_json->>'source_row_count_semantics' IS DISTINCT FROM 'FINANCIAL_ONLY'
+              OR work_row.selection_json->>'communication_cleanup_contract_version' IS DISTINCT FROM '1'
+            )
+          )
+        )
+    );
+
+    IF v_child_count < 1 OR v_child_count <> v_work_count OR v_mismatch_count <> 0 THEN
+      RAISE EXCEPTION 'PAYMENT_CORRECTION_WORK_MEMBERSHIP_MISMATCH'
+        USING ERRCODE = 'P0001', DETAIL = pg_catalog.jsonb_build_object(
+          'code', 'WORK_MEMBERSHIP_MISMATCH',
+          'child_count', v_child_count, 'work_count', v_work_count,
+          'mismatch_count', v_mismatch_count
+        )::text;
+    END IF;
+
+    UPDATE public.pay_payment_correction_requests AS expanded_request
+    SET status = 'EXPANDED', updated_at_utc = v_now
+    WHERE expanded_request.id = p_correction_request_id;
+
+    UPDATE public.banking_pay_operations AS expanded_operation
+    SET phase = 'PROCESS_CHUNKS', status = 'RUNNING', runner_state = 'RUNNABLE',
+        run_after_utc = v_now, requires_user_action = false,
+        progress_json = coalesce(expanded_operation.progress_json, '{}'::jsonb)
+          || pg_catalog.jsonb_build_object('materialised_work_count', v_work_count),
+        updated_at_utc = v_now
+    WHERE expanded_operation.id = v_operation.id;
+
+    INSERT INTO public.pay_payment_correction_actions (
+      correction_request_id, pay_batch_id, actor_kind, actor_user_id, action,
+      action_at_utc, note, before_json, after_json, metadata_json
+    ) VALUES (
+      p_correction_request_id, v_request.pay_batch_id,
+      CASE WHEN p_actor_user_id IS NULL THEN 'SYSTEM' ELSE 'USER' END,
+      p_actor_user_id, 'EXPAND_WORK', v_now, NULL, NULL,
+      pg_catalog.jsonb_build_object('status', 'EXPANDED'),
+      pg_catalog.jsonb_build_object('work_count', v_work_count, 'membership_reconciled', true)
+    );
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'ok', true, 'correction_request_id', p_correction_request_id,
+    'operation_id', v_operation.id, 'page_work_count', v_page_count,
+    'inserted_count', v_page_count,
+    'existing_count', greatest(
+      (v_next_ordinal - v_last_ordinal)::integer - v_page_count,
+      0
+    ),
+    'blocked_count', 0,
+    'next_selection_ordinal', v_next_ordinal,
+    'has_more', NOT v_complete,
+    'deprecation_code', NULL,
+    'last_selection_ordinal', v_next_ordinal, 'complete', v_complete,
+    'phase', CASE WHEN v_complete THEN 'PROCESS_CHUNKS' ELSE 'EXPAND_WORK' END,
+    'code', CASE WHEN v_complete THEN 'PAYMENT_CORRECTION_WORK_EXPANDED' ELSE 'PAYMENT_CORRECTION_WORK_PAGE_EXPANDED' END
+  );
+END;
+$function$;
+
+ALTER FUNCTION public.pay_payment_correction_expand_work(uuid,uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.pay_payment_correction_expand_work(uuid,uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.pay_payment_correction_expand_work(uuid,uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.pay_payment_correction_expand_work(uuid,uuid) FROM authenticated;
+REVOKE ALL ON FUNCTION public.pay_payment_correction_expand_work(uuid,uuid) FROM service_role;
+GRANT EXECUTE ON FUNCTION public.pay_payment_correction_expand_work(uuid,uuid) TO service_role;

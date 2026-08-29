@@ -1,0 +1,149 @@
+{
+  "contract_version": "INVOICE_BATCH_CANONICAL_HASH_V2",
+  "authority": "private._invoice_batch_canonical_text_v2(jsonb) and private._invoice_batch_hash_v2(jsonb)",
+  "vectors": [
+    {
+      "name": "json_null",
+      "value": null,
+      "canonical_text": "null",
+      "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+    },
+    {
+      "name": "empty_object",
+      "value": {},
+      "canonical_text": "{}",
+      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+    },
+    {
+      "name": "object_key_order",
+      "value": {
+        "b": 2,
+        "a": 1
+      },
+      "canonical_text": "{\"a\": 1, \"b\": 2}",
+      "sha256": "d8497d9d82770a70729261095aa98f7ef5154d7af499f8037b6ca250296785a6"
+    },
+    {
+      "name": "array_and_null",
+      "value": [
+        3,
+        "two",
+        null
+      ],
+      "canonical_text": "[3, \"two\", null]",
+      "sha256": "0ac497eaf7cf91f96b33a27b4bea9a9bd9c6801932e723eab8244e46d679b6c2"
+    },
+    {
+      "name": "nested_and_numeric",
+      "value": {
+        "nested": {
+          "z": false,
+          "a": true
+        },
+        "amount": 12.30,
+        "label": "CloudTMS"
+      },
+      "canonical_text": "{\"label\": \"CloudTMS\", \"amount\": 12.30, \"nested\": {\"a\": true, \"z\": false}}",
+      "sha256": "987bfd670fc79dce2f635c1e50d2fc152bde13540e0fd20b668c9eed7d1d76b5"
+    },
+    {
+      "name": "unicode",
+      "value": {
+        "emoji": "🙂",
+        "latin": "Café",
+        "greek": "Ω"
+      },
+      "canonical_text": "{\"emoji\": \"🙂\", \"greek\": \"Ω\", \"latin\": \"Café\"}",
+      "sha256": "3b8ef77994bfeaea73c2d67faac6cb5e89620825ea68a62f7149840ba2b4c523"
+    },
+    {
+      "name": "escaping",
+      "value": {
+        "quote": "He said \"yes\"",
+        "backslash": "C:\\\\CloudTMS",
+        "control": "line\nfeed"
+      },
+      "canonical_text": "{\"quote\": \"He said \\\"yes\\\"\", \"control\": \"line\\nfeed\", \"backslash\": \"C:\\\\\\\\CloudTMS\"}",
+      "sha256": "83511b6336c446d8826633646526d679f7dd947bbf51c520f2089fd2ec30f6e4"
+    },
+    {
+      "name": "identities",
+      "value": {
+        "uuid": "123e4567-e89b-12d3-a456-426614174000",
+        "date": "2026-07-27",
+        "timestamp": "2026-07-27T12:34:56.789Z",
+        "money": "1234.50"
+      },
+      "canonical_text": "{\"date\": \"2026-07-27\", \"uuid\": \"123e4567-e89b-12d3-a456-426614174000\", \"money\": \"1234.50\", \"timestamp\": \"2026-07-27T12:34:56.789Z\"}",
+      "sha256": "dbeaae79bb2f16989d3bfba431c53e2fe2eb58706f29206956113ef43561162b"
+    },
+    {
+      "name": "empty_containers",
+      "value": {
+        "array": [],
+        "object": {},
+        "null": null,
+        "false": false,
+        "true": true
+      },
+      "canonical_text": "{\"null\": null, \"true\": true, \"array\": [], \"false\": false, \"object\": {}}",
+      "sha256": "687a2cf327a70f7a1c844ee704b192e7549fd8179df65ad4dcd5dba21736943d"
+    },
+    {
+      "name": "ordered_selection_rules",
+      "value": {
+        "contract_version": "INVOICE_BATCH_SELECTION_V2",
+        "mode": "IMPLICIT_ALL",
+        "default_selected": true,
+        "rules": [
+          {
+            "sequence": 1,
+            "action": "EXCLUDE",
+            "selector": {
+              "type": "WEEK",
+              "week_ending_date": "2026-07-26"
+            }
+          },
+          {
+            "sequence": 2,
+            "action": "INCLUDE",
+            "selector": {
+              "type": "ROW",
+              "selection_key": "invoice:123e4567-e89b-12d3-a456-426614174000"
+            }
+          }
+        ]
+      },
+      "canonical_text": "{\"mode\": \"IMPLICIT_ALL\", \"rules\": [{\"action\": \"EXCLUDE\", \"selector\": {\"type\": \"WEEK\", \"week_ending_date\": \"2026-07-26\"}, \"sequence\": 1}, {\"action\": \"INCLUDE\", \"selector\": {\"type\": \"ROW\", \"selection_key\": \"invoice:123e4567-e89b-12d3-a456-426614174000\"}, \"sequence\": 2}], \"contract_version\": \"INVOICE_BATCH_SELECTION_V2\", \"default_selected\": true}",
+      "sha256": "5e8e7450de35a98c61ff574a379e8a09d134df4a81b2305412e575673b7808cf"
+    },
+    {
+      "name": "deep_mixed",
+      "value": {
+        "z": [
+          {
+            "b": "2.00",
+            "a": [
+              true,
+              false,
+              null
+            ]
+          },
+          {
+            "unicode": "東京",
+            "empty": {}
+          }
+        ],
+        "a": {
+          "timestamp": "2026-07-27T00:00:00.000Z",
+          "ids": [
+            "00000000-0000-0000-0000-000000000001",
+            "00000000-0000-0000-0000-000000000002"
+          ]
+        }
+      },
+      "canonical_text": "{\"a\": {\"ids\": [\"00000000-0000-0000-0000-000000000001\", \"00000000-0000-0000-0000-000000000002\"], \"timestamp\": \"2026-07-27T00:00:00.000Z\"}, \"z\": [{\"a\": [true, false, null], \"b\": \"2.00\"}, {\"empty\": {}, \"unicode\": \"東京\"}]}",
+      "sha256": "3c3545f9141c86776076dcf373c55985ab5ea55dcd6b339dfa006b37d5b94707"
+    }
+  ]
+}

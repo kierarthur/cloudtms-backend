@@ -1,0 +1,33 @@
+COMMAND: node --test tests/import-authoritative-effective-balance-helper.test.cjs
+EXIT: 0
+✔ the production delta preserves the locked helper signature and bounds (2.1151ms)
+✔ completed operation authority is validated before invoice scope is built (0.2196ms)
+✔ operation evidence requires one request, applied result, and policy unit (0.1321ms)
+✔ operation and applied-result fingerprints are independently re-attested (0.2877ms)
+✔ all valid completed generations are accumulated rather than newest-only selected (0.2897ms)
+✔ validated applied member IDs enter historical invoice scope (0.1253ms)
+✔ canonical member ownership accepts only a proven archived-role re-key lineage (0.1576ms)
+✔ deleted operation-proven members can scope exact HOURS_WEEKLY lines (0.0963ms)
+✔ one canonical economic ledger drives B and correction role state (0.1881ms)
+✔ role economics are deduplicated by physical invoice-line scope (0.269ms)
+✔ separable non-hours components remain excluded from B and role state (0.3324ms)
+✔ credits require a full mirror and allocate multi-source money by exact frozen segment (0.1655ms)
+✔ archived-only generations cannot become mutable (0.1821ms)
+✔ missing mutable roles require durable completed-operation proof (0.1311ms)
+✔ multiple effective physical members for one role fail closed (0.1199ms)
+✔ latest fully invoiced operation may reconstruct a deleted schedule only on exact bucket equality (0.2579ms)
+✔ effective-zero source safety distinguishes full credit from paid-uninvoiced (0.1354ms)
+✔ safe current source requires one ordinary current row and a safe lifecycle (0.185ms)
+✔ source safety participates in review/apply staleness fingerprinting (0.2019ms)
+✔ historical operations survive latest-import replacement through decision outcomes (0.0802ms)
+✔ zero hours with a non-zero frozen monetary balance blocks as non-standard (0.1094ms)
+✔ existing catalog blocker precedence and route order remain unchanged (0.0991ms)
+✔ helper remains read-only and contains no Banking Pay or invoice mutation path (0.7876ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 151.0206

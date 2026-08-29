@@ -1,545 +1,1103 @@
-CREATE OR REPLACE FUNCTION public.candidate_pay_method_change_apply(
-  p_candidate_id uuid,
-  p_new_method text,
-  p_plan jsonb,
-  p_actor_user_id uuid,
-  p_reason text DEFAULT null
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
+
+CREATE OR REPLACE FUNCTION public.candidate_pay_method_change_apply(p_candidate_id uuid, p_new_method text, p_plan jsonb, p_actor_user_id uuid, p_reason text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
 AS $function$
 DECLARE
+  v_now timestamptz := clock_timestamp();
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+  v_new_method text := UPPER(BTRIM(COALESCE(p_new_method, '')));
+  v_expected_old_method text;
   v_old_method text;
-  v_umbrella_id uuid;
-
-  v_item jsonb;
-  v_contract_id uuid;
-  v_successor_start date;
-
-  v_expected_earliest_we date;
-  v_expected_successor_start date;
-
-  v_old_contract_end date;
-  v_old_contract_start date;
-
-  v_new_contract_id uuid;
-
-  v_moved_timesheet_ids uuid[] := ARRAY[]::uuid[];
-
-  v_keep_min_we date;
-  v_keep_max_we date;
-  v_new_old_end date;
-
-  v_old_timesheets_remaining integer := 0;
-
-  v_contract_before jsonb;
-  v_contract_after jsonb;
-
-  v_result jsonb := jsonb_build_object(
-    'candidate_id', coalesce(p_candidate_id::text,''),
-    'old_method', null,
-    'new_method', coalesce(p_new_method,''),
-    'migrations', jsonb_build_array()
-  );
+  v_operation_id uuid;
+  v_preview_source_change_seq bigint;
+  v_current_source_change_seq bigint := 0;
+  v_destination_patch jsonb := '{}'::jsonb;
+  v_operation_request_json jsonb := '{}'::jsonb;
+  v_unknown_plan_keys text[] := ARRAY[]::text[];
+  v_unknown_destination_keys text[] := ARRAY[]::text[];
+  v_effective_umbrella_id uuid;
+  v_account_holder text;
+  v_bank_name text;
+  v_sort_code text;
+  v_account_number text;
+  v_actor_role text;
+  v_scope_result jsonb := '{}'::jsonb;
+  v_post_scope_result jsonb := '{}'::jsonb;
+  v_expected_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_post_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_enqueued_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_missing_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_extra_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_enqueued_raw_count integer := 0;
+  v_enqueued_invalid_count integer := 0;
+  v_effective_duplicate_count integer := 0;
+  v_scope_exact boolean := false;
+  v_scope_complete boolean := false;
+  v_job_id uuid;
+  v_job_status text;
+  v_job_payload jsonb := '{}'::jsonb;
+  v_job_source_change_seq bigint := 0;
+  v_before_json jsonb := '{}'::jsonb;
+  v_after_json jsonb := '{}'::jsonb;
+  v_result jsonb := '{}'::jsonb;
+  v_audit_after_json jsonb := '{}'::jsonb;
+  v_existing_operation_audit_id uuid := NULL::uuid;
+  v_existing_operation_before_json jsonb := '{}'::jsonb;
+  v_existing_operation_after_json jsonb := '{}'::jsonb;
+  v_existing_operation_result jsonb := '{}'::jsonb;
+  v_existing_operation_source_method text := NULL::text;
+  v_existing_operation_target_method text := NULL::text;
+  v_existing_operation_job_id uuid := NULL::uuid;
+  v_existing_operation_job_status text := NULL::text;
+  v_existing_operation_source_change_seq bigint := 0;
+  v_existing_operation_superseded boolean := false;
 BEGIN
-  -- Validate inputs
   IF p_candidate_id IS NULL THEN
-    RAISE EXCEPTION 'candidate_id is required';
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_CANDIDATE_REQUIRED'
+      USING ERRCODE = '22023';
   END IF;
 
-  IF p_new_method IS NULL OR (p_new_method <> 'PAYE' AND p_new_method <> 'UMBRELLA') THEN
-    RAISE EXCEPTION 'new_method must be PAYE or UMBRELLA';
+  IF v_new_method NOT IN ('PAYE', 'UMBRELLA') THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_TARGET_METHOD_INVALID'
+      USING ERRCODE = '22023', DETAIL = COALESCE(p_new_method, '');
   END IF;
 
-  IF p_plan IS NULL OR jsonb_typeof(p_plan) <> 'array' THEN
-    RAISE EXCEPTION 'plan must be a JSON array';
+  IF p_actor_user_id IS NULL THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_ACTOR_REQUIRED'
+      USING ERRCODE = '22023';
   END IF;
 
-  -- Lock candidate row to prevent concurrent migrations
-  SELECT c.pay_method, c.umbrella_id
-    INTO v_old_method, v_umbrella_id
-  FROM public.candidates c
-  WHERE c.id = p_candidate_id
+  SELECT LOWER(BTRIM(COALESCE(user_row.role, '')))
+  INTO v_actor_role
+  FROM public.tms_users AS user_row
+  WHERE user_row.id = p_actor_user_id
+    AND user_row.is_active IS TRUE;
+
+  IF NOT FOUND OR v_actor_role <> 'admin' THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_ADMIN_REQUIRED'
+      USING ERRCODE = '42501', DETAIL = p_actor_user_id::text;
+  END IF;
+
+  IF p_plan IS NULL OR jsonb_typeof(p_plan) <> 'object' THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_PLAN_OBJECT_REQUIRED'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF p_plan ?| ARRAY[
+    'contract_ids',
+    'contracts',
+    'migrations',
+    'successor_start',
+    'successor_contract_id',
+    'new_contract_id',
+    'new_rates_json',
+    'new_additional_rates_json',
+    'rates_json',
+    'timesheet_ids',
+    'affected_timesheet_ids',
+    'move_contract_weeks',
+    'delete_old_contracts'
+  ] THEN
+    RAISE EXCEPTION 'LEGACY_CONTRACT_MIGRATION_PLAN_REJECTED'
+      USING ERRCODE = '22023';
+  END IF;
+
+  SELECT COALESCE(array_agg(plan_key ORDER BY plan_key), ARRAY[]::text[])
+  INTO v_unknown_plan_keys
+  FROM jsonb_object_keys(p_plan) AS plan_keys(plan_key)
+  WHERE plan_key NOT IN (
+    'operation_id',
+    'expected_old_method',
+    'preview_source_change_seq',
+    'destination_patch'
+  );
+
+  IF COALESCE(array_length(v_unknown_plan_keys, 1), 0) > 0 THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_PLAN_FIELDS_UNSUPPORTED'
+      USING ERRCODE = '22023', DETAIL = array_to_string(v_unknown_plan_keys, ',');
+  END IF;
+
+  IF COALESCE(p_plan->>'operation_id', '') !~* v_uuid_re THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_REQUIRED'
+      USING ERRCODE = '22023';
+  END IF;
+  v_operation_id := (p_plan->>'operation_id')::uuid;
+
+  v_expected_old_method := UPPER(BTRIM(COALESCE(p_plan->>'expected_old_method', '')));
+  IF v_expected_old_method NOT IN ('PAYE', 'UMBRELLA') THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_EXPECTED_OLD_METHOD_INVALID'
+      USING ERRCODE = '22023';
+  END IF;
+
+  IF COALESCE(p_plan->>'preview_source_change_seq', '') !~ '^[0-9]{1,18}$' THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_PREVIEW_SEQUENCE_REQUIRED'
+      USING ERRCODE = '22023';
+  END IF;
+  v_preview_source_change_seq := (p_plan->>'preview_source_change_seq')::bigint;
+
+  IF p_plan ? 'destination_patch' THEN
+    IF jsonb_typeof(p_plan->'destination_patch') <> 'object' THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_DESTINATION_PATCH_INVALID'
+        USING ERRCODE = '22023';
+    END IF;
+    v_destination_patch := p_plan->'destination_patch';
+  END IF;
+
+  SELECT COALESCE(array_agg(destination_key ORDER BY destination_key), ARRAY[]::text[])
+  INTO v_unknown_destination_keys
+  FROM jsonb_object_keys(v_destination_patch) AS destination_keys(destination_key)
+  WHERE destination_key NOT IN (
+    'umbrella_id',
+    'account_holder',
+    'bank_name',
+    'sort_code',
+    'account_number'
+  );
+
+  IF COALESCE(array_length(v_unknown_destination_keys, 1), 0) > 0 THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_DESTINATION_FIELDS_UNSUPPORTED'
+      USING ERRCODE = '22023', DETAIL = array_to_string(v_unknown_destination_keys, ',');
+  END IF;
+
+  v_operation_request_json := jsonb_build_object(
+    'candidate_id', p_candidate_id::text,
+    'expected_old_method', v_expected_old_method,
+    'new_method', v_new_method,
+    'preview_source_change_seq', v_preview_source_change_seq,
+    'destination_patch', v_destination_patch
+  );
+
+  SELECT
+    UPPER(BTRIM(COALESCE(candidate_row.pay_method, ''))),
+    candidate_row.umbrella_id,
+    candidate_row.account_holder,
+    candidate_row.bank_name,
+    candidate_row.sort_code,
+    candidate_row.account_number,
+    jsonb_build_object(
+      'id', candidate_row.id::text,
+      'pay_method', candidate_row.pay_method,
+      'umbrella_id', CASE WHEN candidate_row.umbrella_id IS NULL THEN NULL ELSE candidate_row.umbrella_id::text END,
+      'account_holder', candidate_row.account_holder,
+      'bank_name', candidate_row.bank_name,
+      'sort_code', candidate_row.sort_code,
+      'account_number', candidate_row.account_number,
+      'updated_at', candidate_row.updated_at,
+      'rev', candidate_row.rev
+    )
+  INTO
+    v_old_method,
+    v_effective_umbrella_id,
+    v_account_holder,
+    v_bank_name,
+    v_sort_code,
+    v_account_number,
+    v_before_json
+  FROM public.candidates AS candidate_row
+  WHERE candidate_row.id = p_candidate_id
   FOR UPDATE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Candidate not found';
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_CANDIDATE_NOT_FOUND'
+      USING ERRCODE = 'P0002', DETAIL = p_candidate_id::text;
   END IF;
 
-  v_result := jsonb_set(v_result, '{old_method}', to_jsonb(v_old_method), true);
+  SELECT
+    audit_row.id,
+    COALESCE(audit_row.before_json, '{}'::jsonb),
+    COALESCE(audit_row.after_json, '{}'::jsonb)
+  INTO
+    v_existing_operation_audit_id,
+    v_existing_operation_before_json,
+    v_existing_operation_after_json
+  FROM public.audit_events AS audit_row
+  WHERE audit_row.object_type = 'candidate'
+    AND audit_row.object_id_text = p_candidate_id::text
+    AND audit_row.action = 'PAY_METHOD_CHANGE_PROSPECTIVE_ONLY'
+    AND audit_row.after_json->>'operation_id' = v_operation_id::text
+  ORDER BY audit_row.ts_utc DESC, audit_row.id DESC
+  LIMIT 1;
 
-  IF v_old_method = p_new_method THEN
-    RAISE EXCEPTION 'Candidate already has pay_method %', p_new_method;
-  END IF;
+  IF v_existing_operation_audit_id IS NOT NULL THEN
+    v_existing_operation_result := CASE
+      WHEN jsonb_typeof(v_existing_operation_after_json->'operation_result') = 'object'
+        THEN v_existing_operation_after_json->'operation_result'
+      ELSE '{}'::jsonb
+    END;
 
-  IF p_new_method = 'UMBRELLA' AND v_umbrella_id IS NULL THEN
-    RAISE EXCEPTION 'Cannot change candidate to UMBRELLA without umbrella_id';
-  END IF;
+    v_existing_operation_source_method := UPPER(BTRIM(COALESCE(
+      v_existing_operation_result->>'original_method',
+      v_existing_operation_after_json->>'original_method',
+      v_existing_operation_before_json->>'pay_method',
+      ''
+    )));
+    v_existing_operation_target_method := UPPER(BTRIM(COALESCE(
+      v_existing_operation_result->>'new_method',
+      v_existing_operation_after_json->>'new_method',
+      v_existing_operation_after_json->>'pay_method',
+      ''
+    )));
 
-  -- Perform migrations per plan item
-  FOR v_item IN SELECT value FROM jsonb_array_elements(p_plan)
-  LOOP
-    v_contract_id := (v_item->>'contract_id')::uuid;
-    v_successor_start := (v_item->>'successor_start')::date;
-
-    IF v_contract_id IS NULL THEN
-      RAISE EXCEPTION 'plan item missing contract_id';
+    IF v_existing_operation_source_method NOT IN ('PAYE', 'UMBRELLA')
+       OR v_existing_operation_target_method NOT IN ('PAYE', 'UMBRELLA')
+       OR v_existing_operation_source_method = v_existing_operation_target_method THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_AUDIT_INVALID'
+        USING ERRCODE = 'P0001',
+              DETAIL = format(
+                'operation=%s audit=%s source=%s target=%s',
+                v_operation_id,
+                v_existing_operation_audit_id,
+                COALESCE(v_existing_operation_source_method, ''),
+                COALESCE(v_existing_operation_target_method, '')
+              );
     END IF;
 
-    IF v_successor_start IS NULL THEN
-      RAISE EXCEPTION 'plan item missing successor_start for contract %', v_contract_id;
+    IF v_existing_operation_source_method <> v_expected_old_method
+       OR v_existing_operation_target_method <> v_new_method THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
+        USING ERRCODE = 'PT409',
+              DETAIL = format(
+                'operation=%s committed=%s_to_%s requested=%s_to_%s',
+                v_operation_id,
+                v_existing_operation_source_method,
+                v_existing_operation_target_method,
+                v_expected_old_method,
+                v_new_method
+              );
     END IF;
 
-    IF (v_item ? 'new_rates_json') IS NOT TRUE THEN
-      RAISE EXCEPTION 'plan item missing new_rates_json for contract %', v_contract_id;
-    END IF;
-
-    -- Lock and validate contract belongs to candidate and matches old method
-    SELECT ct.start_date, ct.end_date
-      INTO v_old_contract_start, v_old_contract_end
-    FROM public.contracts ct
-    WHERE ct.id = v_contract_id
-      AND ct.candidate_id = p_candidate_id
-      AND ct.pay_method_snapshot = v_old_method
-    FOR UPDATE;
-
-    IF NOT FOUND THEN
-      RAISE EXCEPTION 'Contract % not found for candidate or pay_method mismatch', v_contract_id;
-    END IF;
-
-    -- Compute earliest outstanding week-ending date (authoritative)
-    SELECT MIN(cw.week_ending_date)
-      INTO v_expected_earliest_we
-    FROM public.contract_weeks cw
-    LEFT JOIN public.timesheets_financials tsf
-      ON tsf.timesheet_id = cw.timesheet_id
-     AND tsf.is_current = true
-    WHERE cw.contract_id = v_contract_id
-      AND (
-        cw.timesheet_id IS NULL
-        OR (
-          tsf.locked_by_invoice_id IS NULL
-          AND tsf.paid_at_utc IS NULL
-        )
-      );
-
-    IF v_expected_earliest_we IS NULL THEN
-      RAISE EXCEPTION 'Contract % has no outstanding weeks to migrate', v_contract_id;
-    END IF;
-
-    -- ✅ FIX: expected successor_start is the later of:
-    --   (earliest_outstanding_we - 6) AND old_contract.start_date
-    v_expected_successor_start := (v_expected_earliest_we - 6);
-    IF v_expected_successor_start < v_old_contract_start THEN
-      v_expected_successor_start := v_old_contract_start;
-    END IF;
-
-    IF v_expected_successor_start <> v_successor_start THEN
-      RAISE EXCEPTION
-        'Plan successor_start % does not match expected % for contract %',
-        v_successor_start, v_expected_successor_start, v_contract_id;
-    END IF;
-
-    -- Capture before snapshot (minimal) for audit
-    v_contract_before := jsonb_build_object(
-      'contract_id', v_contract_id::text,
-      'start_date', v_old_contract_start::text,
-      'end_date', v_old_contract_end::text,
-      'pay_method_snapshot', v_old_method,
-      'successor_start', v_successor_start::text
-    );
-
-    -- Create successor contract: copy ALL columns except overrides
-    INSERT INTO public.contracts (
-      candidate_id,
-      client_id,
-      role,
-      band,
-      display_site,
-      ward_hint,
-      start_date,
-      end_date,
-      pay_method_snapshot,
-      rates_json,
-      std_hours_json,
-      default_submission_mode,
-      week_ending_weekday_snapshot,
-      auto_invoice,
-      require_reference_to_pay,
-      require_reference_to_invoice,
-      created_at,
-      updated_at,
-      bucket_labels_json,
-      std_schedule_json,
-      mileage_pay_rate,
-      mileage_charge_rate,
-      additional_rates_json,
-      self_bill,
-      weekly_timesheet_source,
-      no_timesheet_required,
-      daily_calc_of_invoices,
-      group_nightsat_sunbh,
-      is_nhsp,
-      autoprocess_hr,
-      requires_hr,
-      hr_attach_to_invoice,
-      ts_attach_to_invoice,
-      overrideclientsettings,
-      reference_number_required_to_issue_invoice,
-      send_manual_invoices_to_different_email,
-      manual_invoices_alt_email_address
-    )
-    SELECT
-      ct.candidate_id,
-      ct.client_id,
-      ct.role,
-      ct.band,
-      ct.display_site,
-      ct.ward_hint,
-      v_successor_start,
-      ct.end_date,
-      p_new_method,
-      (v_item->'new_rates_json'),
-      ct.std_hours_json,
-      ct.default_submission_mode,
-      ct.week_ending_weekday_snapshot,
-      ct.auto_invoice,
-      ct.require_reference_to_pay,
-      ct.require_reference_to_invoice,
-      now(),
-      now(),
-      ct.bucket_labels_json,
-      ct.std_schedule_json,
-      ct.mileage_pay_rate,
-      ct.mileage_charge_rate,
-      COALESCE(v_item->'new_additional_rates_json', ct.additional_rates_json),
-      ct.self_bill,
-      ct.weekly_timesheet_source,
-      ct.no_timesheet_required,
-      ct.daily_calc_of_invoices,
-      ct.group_nightsat_sunbh,
-      ct.is_nhsp,
-      ct.autoprocess_hr,
-      ct.requires_hr,
-      ct.hr_attach_to_invoice,
-      ct.ts_attach_to_invoice,
-      ct.overrideclientsettings,
-      ct.reference_number_required_to_issue_invoice,
-      ct.send_manual_invoices_to_different_email,
-      ct.manual_invoices_alt_email_address
-    FROM public.contracts ct
-    WHERE ct.id = v_contract_id
-    RETURNING id INTO v_new_contract_id;
-
-    -- Move outstanding contract_weeks to successor (and update updated_at)
-    UPDATE public.contract_weeks cw
-    SET contract_id = v_new_contract_id,
-        updated_at = now()
-    WHERE cw.contract_id = v_contract_id
-      AND (
-        cw.timesheet_id IS NULL
-        OR EXISTS (
-          SELECT 1
-          FROM public.timesheets_financials tsf2
-          WHERE tsf2.timesheet_id = cw.timesheet_id
-            AND tsf2.is_current = true
-            AND tsf2.locked_by_invoice_id IS NULL
-            AND tsf2.paid_at_utc IS NULL
-        )
-      );
-
-    -- Move current timesheets for those moved weeks
-    WITH moved_ts AS (
-      SELECT DISTINCT cw2.timesheet_id
-      FROM public.contract_weeks cw2
-      JOIN public.timesheets_financials tsf3
-        ON tsf3.timesheet_id = cw2.timesheet_id
-       AND tsf3.is_current = true
-      WHERE cw2.contract_id = v_new_contract_id
-        AND cw2.timesheet_id IS NOT NULL
-        AND tsf3.locked_by_invoice_id IS NULL
-        AND tsf3.paid_at_utc IS NULL
-    )
-    UPDATE public.timesheets t
-    SET contract_id = v_new_contract_id
-    WHERE t.timesheet_id IN (SELECT timesheet_id FROM moved_ts)
-      AND t.is_current = true;
-
-    -- Collect moved timesheet ids (for return + outbox enqueue)
-    SELECT COALESCE(array_agg(mt.timesheet_id), ARRAY[]::uuid[])
-      INTO STRICT v_moved_timesheet_ids
-    FROM (
-      SELECT DISTINCT cw2.timesheet_id
-      FROM public.contract_weeks cw2
-      JOIN public.timesheets_financials tsf3
-        ON tsf3.timesheet_id = cw2.timesheet_id
-       AND tsf3.is_current = true
-      WHERE cw2.contract_id = v_new_contract_id
-        AND cw2.timesheet_id IS NOT NULL
-        AND tsf3.locked_by_invoice_id IS NULL
-        AND tsf3.paid_at_utc IS NULL
-    ) mt;
-
-    -- Enqueue TSFIN recompute for moved timesheets
-    IF array_length(v_moved_timesheet_ids, 1) IS NOT NULL THEN
-      INSERT INTO public.ts_financials_outbox (timesheet_id, reason, attempt_count, created_at)
-      SELECT tid, 'RATE_CHANGED'::public.ts_fin_reason_enum, 0, now()
-      FROM unnest(v_moved_timesheet_ids) AS tid
-      ON CONFLICT ON CONSTRAINT uq_tsfin_outbox DO NOTHING;
-    END IF;
-
-    -- Adjust old contract end_date:
-    -- Keep range that covers any invoice-locked or paid weeks still attached to old contract.
-    SELECT MIN(cw3.week_ending_date), MAX(cw3.week_ending_date)
-      INTO v_keep_min_we, v_keep_max_we
-    FROM public.contract_weeks cw3
-    JOIN public.timesheets_financials tsf4
-      ON tsf4.timesheet_id = cw3.timesheet_id
-     AND tsf4.is_current = true
-    WHERE cw3.contract_id = v_contract_id
-      AND cw3.timesheet_id IS NOT NULL
-      AND (
-        tsf4.locked_by_invoice_id IS NOT NULL
-        OR tsf4.paid_at_utc IS NOT NULL
-      );
-
-    IF v_keep_max_we IS NULL THEN
-      v_new_old_end := (v_successor_start - 1);
+    IF jsonb_typeof(v_existing_operation_after_json->'operation_request') = 'object' THEN
+      IF (v_existing_operation_after_json->'operation_request') IS DISTINCT FROM v_operation_request_json THEN
+        RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
+          USING ERRCODE = 'PT409',
+                DETAIL = format('operation=%s request_payload_mismatch', v_operation_id);
+      END IF;
+    ELSIF v_new_method = 'UMBRELLA' THEN
+      IF v_destination_patch ? 'account_holder'
+         OR v_destination_patch ? 'bank_name'
+         OR v_destination_patch ? 'sort_code'
+         OR v_destination_patch ? 'account_number'
+         OR (
+           v_destination_patch ? 'umbrella_id'
+           AND NULLIF(BTRIM(COALESCE(v_destination_patch->>'umbrella_id', '')), '')
+             IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_existing_operation_after_json->>'umbrella_id', '')), '')
+         ) THEN
+        RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
+          USING ERRCODE = 'PT409',
+                DETAIL = format('operation=%s legacy_destination_payload_mismatch', v_operation_id);
+      END IF;
     ELSE
-      v_new_old_end := v_keep_max_we;
+      IF NULLIF(BTRIM(COALESCE(v_destination_patch->>'umbrella_id', '')), '') IS NOT NULL
+         OR (
+           v_destination_patch ? 'account_holder'
+           AND NULLIF(BTRIM(COALESCE(v_destination_patch->>'account_holder', '')), '')
+             IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_existing_operation_after_json->>'account_holder', '')), '')
+         )
+         OR (
+           v_destination_patch ? 'bank_name'
+           AND NULLIF(BTRIM(COALESCE(v_destination_patch->>'bank_name', '')), '')
+             IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_existing_operation_after_json->>'bank_name', '')), '')
+         )
+         OR (
+           v_destination_patch ? 'sort_code'
+           AND NULLIF(BTRIM(COALESCE(v_destination_patch->>'sort_code', '')), '')
+             IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_existing_operation_after_json->>'sort_code', '')), '')
+         )
+         OR (
+           v_destination_patch ? 'account_number'
+           AND NULLIF(BTRIM(COALESCE(v_destination_patch->>'account_number', '')), '')
+             IS DISTINCT FROM NULLIF(BTRIM(COALESCE(v_existing_operation_after_json->>'account_number', '')), '')
+         ) THEN
+        RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_ID_CONFLICT'
+          USING ERRCODE = 'PT409',
+                DETAIL = format('operation=%s legacy_destination_payload_mismatch', v_operation_id);
+      END IF;
     END IF;
 
-    -- ✅ FIX: never allow old end_date to precede old start_date
-    IF v_new_old_end < v_old_contract_start THEN
-      v_new_old_end := v_old_contract_start;
+    IF COALESCE(
+         v_existing_operation_result->>'job_id',
+         v_existing_operation_after_json->>'job_id',
+         ''
+       ) ~* v_uuid_re THEN
+      v_existing_operation_job_id := COALESCE(
+        v_existing_operation_result->>'job_id',
+        v_existing_operation_after_json->>'job_id'
+      )::uuid;
     END IF;
 
-    UPDATE public.contracts ct_old
-    SET end_date = v_new_old_end,
-        updated_at = now()
-    WHERE ct_old.id = v_contract_id;
+    IF v_existing_operation_job_id IS NOT NULL THEN
+      SELECT
+        job_row.status,
+        COALESCE(job_row.payload_json, '{}'::jsonb)
+      INTO
+        v_existing_operation_job_status,
+        v_job_payload
+      FROM public.banking_pay_workbench_jobs AS job_row
+      WHERE job_row.id = v_existing_operation_job_id
+        AND job_row.candidate_id = p_candidate_id
+      LIMIT 1;
+    END IF;
 
-    -- Delete future empty weeks on old contract (timesheet_id IS NULL) beyond old end
-    DELETE FROM public.contract_weeks cw_del
-    WHERE cw_del.contract_id = v_contract_id
-      AND cw_del.timesheet_id IS NULL
-      AND cw_del.week_ending_date > v_new_old_end;
-
-    -- Remaining timesheets on OLD contract after migration (for UI delete-old prompt)
-    SELECT COUNT(1)
-      INTO v_old_timesheets_remaining
-    FROM public.timesheets t_rem
-    WHERE t_rem.contract_id = v_contract_id
-      AND t_rem.is_current = true;
-
-    -- Audit contract migration
-    v_contract_after := jsonb_build_object(
-      'old_contract_id', v_contract_id::text,
-      'new_contract_id', v_new_contract_id::text,
-      'successor_start', v_successor_start::text,
-      'moved_timesheet_ids', to_jsonb(COALESCE(v_moved_timesheet_ids, ARRAY[]::uuid[])),
-      'old_contract_new_end_date', v_new_old_end::text,
-      'old_contract_timesheets_remaining', v_old_timesheets_remaining
+    v_existing_operation_job_status := COALESCE(
+      v_existing_operation_job_status,
+      NULLIF(BTRIM(COALESCE(v_existing_operation_result->>'job_status', '')), ''),
+      NULLIF(BTRIM(COALESCE(v_existing_operation_after_json->>'job_status', '')), '')
+    );
+    v_existing_operation_source_change_seq := COALESCE(
+      CASE
+        WHEN COALESCE(v_existing_operation_result->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+          THEN (v_existing_operation_result->>'source_change_seq')::bigint
+        WHEN COALESCE(v_existing_operation_after_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+          THEN (v_existing_operation_after_json->>'source_change_seq')::bigint
+      END,
+      0
     );
 
-    PERFORM public._audit_insert(
-      'contracts',
-      v_contract_id::text,
-      'PAY_METHOD_CONTRACT_MIGRATED',
-      v_contract_before,
-      v_contract_after,
-      COALESCE(p_reason, 'PAY_METHOD_CHANGE'),
-      p_actor_user_id
+    IF v_existing_operation_job_id IS NULL
+       OR v_existing_operation_job_status IS NULL
+       OR jsonb_typeof(v_existing_operation_result->'expected_targeted_timesheet_ids') IS DISTINCT FROM 'array'
+       OR LOWER(BTRIM(COALESCE(v_existing_operation_result->>'exact_set_equality', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on') THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_EXACT_SCOPE_PROOF_MISSING'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'operation_id', v_operation_id::text,
+                'audit_id', v_existing_operation_audit_id,
+                'job_id', CASE WHEN v_existing_operation_job_id IS NULL THEN NULL ELSE v_existing_operation_job_id::text END
+              )::text;
+    END IF;
+
+    IF COALESCE(v_job_payload->>'candidate_id', '') <> p_candidate_id::text
+       OR COALESCE(v_job_payload->>'route_change_operation_id', '') <> v_operation_id::text
+       OR UPPER(BTRIM(COALESCE(v_job_payload->>'route_change_source_method', ''))) <> v_existing_operation_source_method
+       OR UPPER(BTRIM(COALESCE(v_job_payload->>'route_change_target_method', ''))) <> v_existing_operation_target_method
+       OR LOWER(BTRIM(COALESCE(v_job_payload->>'exact_target_scope', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+       OR UPPER(BTRIM(COALESCE(v_job_payload->>'refresh_scope_kind', ''))) <> 'TARGETED_TIMESHEETS' THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_QUEUE_AUTHORITY_MISMATCH'
+        USING ERRCODE = 'P0001', DETAIL = v_existing_operation_job_id::text;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements_text(v_existing_operation_result->'expected_targeted_timesheet_ids') AS expected_raw(value)
+      WHERE expected_raw.value !~* v_uuid_re
+    ) THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_EXPECTED_SCOPE_INVALID'
+        USING ERRCODE = 'P0001', DETAIL = v_operation_id::text;
+    END IF;
+
+    SELECT COALESCE(array_agg(DISTINCT expected_raw.value::uuid ORDER BY expected_raw.value::uuid), ARRAY[]::uuid[])
+    INTO v_expected_targeted_timesheet_ids
+    FROM jsonb_array_elements_text(v_existing_operation_result->'expected_targeted_timesheet_ids') AS expected_raw(value);
+
+    SELECT
+      COUNT(*)::integer,
+      COUNT(*) FILTER (WHERE persisted_raw.value !~* v_uuid_re)::integer,
+      COALESCE(
+        array_agg(DISTINCT persisted_raw.value::uuid ORDER BY persisted_raw.value::uuid)
+          FILTER (WHERE persisted_raw.value ~* v_uuid_re),
+        ARRAY[]::uuid[]
+      )
+    INTO
+      v_enqueued_raw_count,
+      v_enqueued_invalid_count,
+      v_enqueued_targeted_timesheet_ids
+    FROM jsonb_array_elements_text(
+      CASE
+        WHEN jsonb_typeof(v_job_payload->'targeted_timesheet_ids') = 'array'
+          THEN v_job_payload->'targeted_timesheet_ids'
+        ELSE '[]'::jsonb
+      END
+    ) AS persisted_raw(value);
+
+    v_effective_duplicate_count := GREATEST(
+      COALESCE(v_enqueued_raw_count, 0)
+        - COALESCE(v_enqueued_invalid_count, 0)
+        - COALESCE(array_length(v_enqueued_targeted_timesheet_ids, 1), 0),
+      0
     );
 
-    -- Add to result
-    v_result := jsonb_set(
-      v_result,
-      '{migrations}',
-      (v_result->'migrations') || jsonb_build_object(
-        'old_contract_id', v_contract_id::text,
-        'new_contract_id', v_new_contract_id::text,
-        'successor_start', v_successor_start::text,
-        'moved_timesheet_ids', to_jsonb(COALESCE(v_moved_timesheet_ids, ARRAY[]::uuid[])),
-        'old_contract_new_end_date', v_new_old_end::text,
-        'old_contract_timesheets_remaining', v_old_timesheets_remaining,
-        'old_contract_can_delete', (v_old_timesheets_remaining = 0)
-      ),
-      true
+    SELECT COALESCE(array_agg(missing_id ORDER BY missing_id), ARRAY[]::uuid[])
+    INTO v_missing_targeted_timesheet_ids
+    FROM (
+      SELECT unnest(v_expected_targeted_timesheet_ids) AS missing_id
+      EXCEPT
+      SELECT unnest(v_enqueued_targeted_timesheet_ids) AS missing_id
+    ) AS missing_scope;
+
+    SELECT COALESCE(array_agg(extra_id ORDER BY extra_id), ARRAY[]::uuid[])
+    INTO v_extra_targeted_timesheet_ids
+    FROM (
+      SELECT unnest(v_enqueued_targeted_timesheet_ids) AS extra_id
+      EXCEPT
+      SELECT unnest(v_expected_targeted_timesheet_ids) AS extra_id
+    ) AS extra_scope;
+
+    IF COALESCE(v_enqueued_invalid_count, 0) <> 0
+       OR COALESCE(v_effective_duplicate_count, 0) <> 0
+       OR COALESCE(array_length(v_missing_targeted_timesheet_ids, 1), 0) <> 0
+       OR COALESCE(array_length(v_extra_targeted_timesheet_ids, 1), 0) <> 0 THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_OPERATION_QUEUE_SET_MISMATCH'
+        USING ERRCODE = 'P0001',
+              DETAIL = jsonb_build_object(
+                'operation_id', v_operation_id::text,
+                'job_id', v_existing_operation_job_id::text,
+                'expected_targeted_timesheet_ids', to_jsonb(v_expected_targeted_timesheet_ids),
+                'persisted_targeted_timesheet_ids', to_jsonb(v_enqueued_targeted_timesheet_ids),
+                'missing_targeted_timesheet_ids', to_jsonb(v_missing_targeted_timesheet_ids),
+                'extra_targeted_timesheet_ids', to_jsonb(v_extra_targeted_timesheet_ids),
+                'effective_duplicate_count', v_effective_duplicate_count,
+                'invalid_target_count', v_enqueued_invalid_count
+              )::text;
+    END IF;
+
+    IF v_existing_operation_source_change_seq > 0 THEN
+      SELECT EXISTS (
+        SELECT 1
+        FROM public.audit_events AS later_audit
+        WHERE later_audit.object_type = 'candidate'
+          AND later_audit.object_id_text = p_candidate_id::text
+          AND later_audit.action = 'PAY_METHOD_CHANGE_PROSPECTIVE_ONLY'
+          AND later_audit.id <> v_existing_operation_audit_id
+          AND CASE
+            WHEN COALESCE(later_audit.after_json#>>'{operation_result,source_change_seq}', '') ~ '^[0-9]{1,18}$'
+              THEN (later_audit.after_json#>>'{operation_result,source_change_seq}')::bigint
+            WHEN COALESCE(later_audit.after_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+              THEN (later_audit.after_json->>'source_change_seq')::bigint
+            ELSE 0
+          END > v_existing_operation_source_change_seq
+      )
+      INTO v_existing_operation_superseded;
+    END IF;
+
+    v_existing_operation_superseded := COALESCE(v_existing_operation_superseded, false)
+      OR v_old_method <> v_existing_operation_target_method;
+
+    v_result := jsonb_strip_nulls(
+      COALESCE(v_existing_operation_result, '{}'::jsonb)
+      || jsonb_build_object(
+        'ok', true,
+        'idempotent_replay', true,
+        'operation_committed', true,
+        'operation_superseded_by_later_change', v_existing_operation_superseded,
+        'operation_id', v_operation_id::text,
+        'candidate_id', p_candidate_id::text,
+        'original_method', v_existing_operation_source_method,
+        'new_method', v_existing_operation_target_method,
+        'current_method', v_old_method,
+        'candidate', v_before_json,
+        'job_id', CASE WHEN v_existing_operation_job_id IS NULL THEN NULL ELSE v_existing_operation_job_id::text END,
+        'job_status', v_existing_operation_job_status
+      )
+      || jsonb_build_object(
+        'targeted_timesheet_ids', to_jsonb(v_enqueued_targeted_timesheet_ids),
+        'expected_targeted_timesheet_ids', to_jsonb(v_expected_targeted_timesheet_ids),
+        'persisted_targeted_timesheet_ids', to_jsonb(v_enqueued_targeted_timesheet_ids),
+        'missing_targeted_timesheet_ids', to_jsonb(v_missing_targeted_timesheet_ids),
+        'extra_targeted_timesheet_ids', to_jsonb(v_extra_targeted_timesheet_ids),
+        'effective_duplicate_count', v_effective_duplicate_count,
+        'invalid_target_count', v_enqueued_invalid_count,
+        'exact_set_equality', true,
+        'coverage_basis', COALESCE(
+          NULLIF(v_job_payload->>'coverage_basis', ''),
+          NULLIF(v_existing_operation_result->>'coverage_basis', ''),
+          'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'
+        ),
+        'coverage_complete', true,
+        'exact_target_scope', true,
+        'authorised_timesheet_ids', CASE
+          WHEN jsonb_typeof(v_existing_operation_result->'authorised_timesheet_ids') = 'array'
+            THEN v_existing_operation_result->'authorised_timesheet_ids'
+          WHEN jsonb_typeof(v_existing_operation_after_json->'authorised_timesheet_ids') = 'array'
+            THEN v_existing_operation_after_json->'authorised_timesheet_ids'
+          ELSE '[]'::jsonb
+        END,
+        'active_advance_timesheet_ids', CASE
+          WHEN jsonb_typeof(v_existing_operation_result->'active_advance_timesheet_ids') = 'array'
+            THEN v_existing_operation_result->'active_advance_timesheet_ids'
+          WHEN jsonb_typeof(v_existing_operation_after_json->'active_advance_timesheet_ids') = 'array'
+            THEN v_existing_operation_after_json->'active_advance_timesheet_ids'
+          ELSE '[]'::jsonb
+        END,
+        'retained_finance_timesheet_ids', CASE
+          WHEN jsonb_typeof(v_existing_operation_result->'retained_finance_timesheet_ids') = 'array'
+            THEN v_existing_operation_result->'retained_finance_timesheet_ids'
+          WHEN jsonb_typeof(v_existing_operation_after_json->'retained_finance_timesheet_ids') = 'array'
+            THEN v_existing_operation_after_json->'retained_finance_timesheet_ids'
+          WHEN jsonb_typeof(v_job_payload->'retained_finance_timesheet_ids') = 'array'
+            THEN v_job_payload->'retained_finance_timesheet_ids'
+          ELSE '[]'::jsonb
+        END,
+        'authoritative_sessions', CASE
+          WHEN jsonb_typeof(v_existing_operation_result->'authoritative_sessions') = 'array'
+            THEN v_existing_operation_result->'authoritative_sessions'
+          WHEN jsonb_typeof(v_existing_operation_after_json->'authoritative_sessions') = 'array'
+            THEN v_existing_operation_after_json->'authoritative_sessions'
+          ELSE '[]'::jsonb
+        END,
+        'replaced_source_session_ids', CASE
+          WHEN jsonb_typeof(v_existing_operation_result->'replaced_source_session_ids') = 'array'
+            THEN v_existing_operation_result->'replaced_source_session_ids'
+          WHEN jsonb_typeof(v_existing_operation_after_json->'replaced_source_session_ids') = 'array'
+            THEN v_existing_operation_after_json->'replaced_source_session_ids'
+          ELSE '[]'::jsonb
+        END,
+        'target_details', CASE
+          WHEN jsonb_typeof(v_existing_operation_result->'target_details') = 'array'
+            THEN v_existing_operation_result->'target_details'
+          WHEN jsonb_typeof(v_existing_operation_after_json->'target_details') = 'array'
+            THEN v_existing_operation_after_json->'target_details'
+          ELSE '[]'::jsonb
+        END
+      )
+      || jsonb_build_object(
+        'targeted_timesheet_count', COALESCE(
+          CASE
+            WHEN COALESCE(v_existing_operation_result->>'targeted_timesheet_count', '') ~ '^[0-9]{1,10}$'
+              THEN (v_existing_operation_result->>'targeted_timesheet_count')::integer
+            WHEN jsonb_typeof(v_existing_operation_after_json->'targeted_timesheet_ids') = 'array'
+              THEN jsonb_array_length(v_existing_operation_after_json->'targeted_timesheet_ids')
+          END,
+          0
+        ),
+        'authorised_timesheet_count', COALESCE(
+          CASE
+            WHEN COALESCE(v_existing_operation_result->>'authorised_timesheet_count', '') ~ '^[0-9]{1,10}$'
+              THEN (v_existing_operation_result->>'authorised_timesheet_count')::integer
+            WHEN jsonb_typeof(v_existing_operation_after_json->'authorised_timesheet_ids') = 'array'
+              THEN jsonb_array_length(v_existing_operation_after_json->'authorised_timesheet_ids')
+          END,
+          0
+        ),
+        'active_advance_timesheet_count', COALESCE(
+          CASE
+            WHEN COALESCE(v_existing_operation_result->>'active_advance_timesheet_count', '') ~ '^[0-9]{1,10}$'
+              THEN (v_existing_operation_result->>'active_advance_timesheet_count')::integer
+            WHEN jsonb_typeof(v_existing_operation_after_json->'active_advance_timesheet_ids') = 'array'
+              THEN jsonb_array_length(v_existing_operation_after_json->'active_advance_timesheet_ids')
+          END,
+          0
+        ),
+        'retained_finance_timesheet_count', COALESCE(
+          CASE
+            WHEN COALESCE(v_existing_operation_result->>'retained_finance_timesheet_count', '') ~ '^[0-9]{1,10}$'
+              THEN (v_existing_operation_result->>'retained_finance_timesheet_count')::integer
+            WHEN jsonb_typeof(v_existing_operation_after_json->'retained_finance_timesheet_ids') = 'array'
+              THEN jsonb_array_length(v_existing_operation_after_json->'retained_finance_timesheet_ids')
+            WHEN jsonb_typeof(v_job_payload->'retained_finance_timesheet_ids') = 'array'
+              THEN jsonb_array_length(v_job_payload->'retained_finance_timesheet_ids')
+          END,
+          0
+        ),
+        'source_target_mismatch_count', COALESCE(
+          CASE
+            WHEN COALESCE(v_existing_operation_result->>'source_target_mismatch_count', '') ~ '^[0-9]{1,10}$'
+              THEN (v_existing_operation_result->>'source_target_mismatch_count')::integer
+            WHEN COALESCE(v_existing_operation_after_json->>'source_target_mismatch_count', '') ~ '^[0-9]{1,10}$'
+              THEN (v_existing_operation_after_json->>'source_target_mismatch_count')::integer
+          END,
+          0
+        ),
+        'source_change_seq', COALESCE(
+          CASE
+            WHEN COALESCE(v_existing_operation_result->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+              THEN (v_existing_operation_result->>'source_change_seq')::bigint
+            WHEN COALESCE(v_existing_operation_after_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+              THEN (v_existing_operation_after_json->>'source_change_seq')::bigint
+          END,
+          0
+        ),
+        'preview_source_change_seq', COALESCE(
+          CASE
+            WHEN COALESCE(v_existing_operation_result->>'preview_source_change_seq', '') ~ '^[0-9]{1,18}$'
+              THEN (v_existing_operation_result->>'preview_source_change_seq')::bigint
+            WHEN COALESCE(v_existing_operation_after_json->>'preview_source_change_seq', '') ~ '^[0-9]{1,18}$'
+              THEN (v_existing_operation_after_json->>'preview_source_change_seq')::bigint
+          END,
+          v_preview_source_change_seq
+        )
+      )
+      || jsonb_build_object(
+        'contracts_changed', 0,
+        'contract_weeks_changed', 0,
+        'timesheets_changed', 0,
+        'rates_changed', 0,
+        'tsfin_repricing_rows', 0,
+        'refresh_accepted', true,
+        'refresh_completed', CASE
+          WHEN v_existing_operation_superseded IS TRUE THEN false
+          WHEN UPPER(BTRIM(COALESCE(v_existing_operation_job_status, ''))) = 'SUCCEEDED' THEN true
+          ELSE COALESCE((v_existing_operation_result->>'refresh_completed')::boolean, false)
+        END,
+        'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+        'policy_x_dirtying_only', true,
+        'economic_truth_mutation_allowed', false
+      )
     );
 
-  END LOOP;
+    RETURN v_result;
+  END IF;
 
-  -- Update candidate pay_method last (still in txn)
-  PERFORM public._audit_insert(
-    'candidates',
-    p_candidate_id::text,
-    'PAY_METHOD_CHANGE_APPLY',
-    jsonb_build_object('pay_method', v_old_method, 'umbrella_id', CASE WHEN v_umbrella_id IS NULL THEN null ELSE v_umbrella_id::text END),
-    jsonb_build_object('pay_method', p_new_method, 'umbrella_id', CASE WHEN p_new_method = 'PAYE' THEN null ELSE (CASE WHEN v_umbrella_id IS NULL THEN null ELSE v_umbrella_id::text END) END),
-    COALESCE(p_reason, 'PAY_METHOD_CHANGE'),
-    p_actor_user_id
+  IF v_old_method = v_new_method THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_ALREADY_APPLIED_OR_STALE'
+      USING ERRCODE = 'PT409',
+            DETAIL = format('candidate=%s current=%s operation=%s', p_candidate_id, v_old_method, v_operation_id);
+  END IF;
+
+  IF v_old_method <> v_expected_old_method THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_STALE_EXPECTED_METHOD'
+      USING ERRCODE = 'PT409', DETAIL = format('expected=%s actual=%s', v_expected_old_method, v_old_method);
+  END IF;
+
+  IF v_old_method = v_new_method THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_METHODS_MUST_DIFFER'
+      USING ERRCODE = '22023';
+  END IF;
+
+  v_scope_result := public.candidate_pay_method_change_refresh_scope_v1(
+    p_candidate_id,
+    v_old_method,
+    v_new_method
   );
 
-  UPDATE public.candidates c
-  SET pay_method = p_new_method,
-      umbrella_id = CASE WHEN p_new_method = 'PAYE' THEN NULL ELSE c.umbrella_id END,
-      updated_at = now()
-  WHERE c.id = p_candidate_id;
+  v_scope_exact := LOWER(BTRIM(COALESCE(v_scope_result->>'exact_scope', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
+  v_scope_complete := LOWER(BTRIM(COALESCE(v_scope_result->>'coverage_complete', 'false'))) IN ('true', 't', '1', 'yes', 'y', 'on');
 
-  -- Bump change counters for UI delta sync
-  PERFORM public._change_bump('candidates');
-  PERFORM public._change_bump('contracts');
-  PERFORM public._change_bump('timesheets');
+  IF COALESCE(v_scope_result->>'ok', 'false') <> 'true'
+     OR v_scope_exact IS NOT TRUE
+     OR v_scope_complete IS NOT TRUE
+     OR UPPER(BTRIM(COALESCE(v_scope_result->>'coverage_basis', ''))) <> 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'
+     OR jsonb_typeof(v_scope_result->'targeted_timesheet_ids') IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_EXACT_SCOPE_UNAVAILABLE'
+      USING ERRCODE = 'P0001', DETAIL = COALESCE(v_scope_result, '{}'::jsonb)::text;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_array_elements_text(v_scope_result->'targeted_timesheet_ids') AS raw_target(value)
+    WHERE raw_target.value !~* v_uuid_re
+  ) THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_TARGET_SCOPE_INVALID'
+      USING ERRCODE = 'P0001';
+  END IF;
+
+  v_current_source_change_seq := COALESCE(
+    CASE
+      WHEN COALESCE(v_scope_result->>'latest_source_change_seq', '') ~ '^[0-9]{1,18}$'
+        THEN (v_scope_result->>'latest_source_change_seq')::bigint
+      ELSE 0
+    END,
+    0
+  );
+
+  IF v_preview_source_change_seq <> v_current_source_change_seq THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_PREVIEW_STALE'
+      USING ERRCODE = 'PT409', DETAIL = format('preview_seq=%s current_seq=%s', v_preview_source_change_seq, v_current_source_change_seq);
+  END IF;
+
+  SELECT COALESCE(array_agg(DISTINCT target_value::uuid ORDER BY target_value::uuid), ARRAY[]::uuid[])
+  INTO v_expected_targeted_timesheet_ids
+  FROM jsonb_array_elements_text(
+    CASE
+      WHEN jsonb_typeof(v_scope_result->'targeted_timesheet_ids') = 'array'
+        THEN v_scope_result->'targeted_timesheet_ids'
+      ELSE '[]'::jsonb
+    END
+  ) AS target_values(target_value)
+  WHERE target_value ~* v_uuid_re;
+
+  IF v_new_method = 'UMBRELLA' THEN
+    IF v_destination_patch ? 'account_holder'
+       OR v_destination_patch ? 'bank_name'
+       OR v_destination_patch ? 'sort_code'
+       OR v_destination_patch ? 'account_number' THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_PAYE_BANK_FIELDS_NOT_ALLOWED_FOR_UMBRELLA'
+        USING ERRCODE = '22023';
+    END IF;
+
+    IF v_destination_patch ? 'umbrella_id' THEN
+      IF NULLIF(BTRIM(COALESCE(v_destination_patch->>'umbrella_id', '')), '') IS NULL THEN
+        v_effective_umbrella_id := NULL::uuid;
+      ELSIF v_destination_patch->>'umbrella_id' ~* v_uuid_re THEN
+        v_effective_umbrella_id := (v_destination_patch->>'umbrella_id')::uuid;
+      ELSE
+        RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_UMBRELLA_ID_INVALID'
+          USING ERRCODE = '22023';
+      END IF;
+    END IF;
+
+    v_account_holder := NULL::text;
+    v_bank_name := NULL::text;
+    v_sort_code := NULL::text;
+    v_account_number := NULL::text;
+
+    IF v_effective_umbrella_id IS NULL THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_UMBRELLA_REQUIRED'
+        USING ERRCODE = '23502';
+    END IF;
+
+    PERFORM 1
+    FROM public.umbrellas AS umbrella_row
+    WHERE umbrella_row.id = v_effective_umbrella_id
+      AND umbrella_row.enabled IS TRUE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_UMBRELLA_NOT_FOUND_OR_DISABLED'
+        USING ERRCODE = '23503', DETAIL = v_effective_umbrella_id::text;
+    END IF;
+  ELSE
+    IF NULLIF(BTRIM(COALESCE(v_destination_patch->>'umbrella_id', '')), '') IS NOT NULL THEN
+      RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_UMBRELLA_ID_NOT_ALLOWED_FOR_PAYE'
+        USING ERRCODE = '22023';
+    END IF;
+
+    v_effective_umbrella_id := NULL::uuid;
+
+    IF v_destination_patch ? 'account_holder' THEN
+      v_account_holder := NULLIF(BTRIM(COALESCE(v_destination_patch->>'account_holder', '')), '');
+    END IF;
+    IF v_destination_patch ? 'bank_name' THEN
+      v_bank_name := NULLIF(BTRIM(COALESCE(v_destination_patch->>'bank_name', '')), '');
+    END IF;
+    IF v_destination_patch ? 'sort_code' THEN
+      v_sort_code := NULLIF(BTRIM(COALESCE(v_destination_patch->>'sort_code', '')), '');
+    END IF;
+    IF v_destination_patch ? 'account_number' THEN
+      v_account_number := NULLIF(BTRIM(COALESCE(v_destination_patch->>'account_number', '')), '');
+    END IF;
+  END IF;
+
+  PERFORM set_config('cloudtms.candidate_pay_method_change_operation_id', v_operation_id::text, true);
+  PERFORM set_config('cloudtms.candidate_pay_method_change_actor_user_id', p_actor_user_id::text, true);
+  PERFORM set_config('cloudtms.candidate_pay_method_change_reason', COALESCE(NULLIF(BTRIM(p_reason), ''), 'PAY_METHOD_CHANGE'), true);
+
+  UPDATE public.candidates AS candidate_row
+  SET pay_method = v_new_method,
+      umbrella_id = v_effective_umbrella_id,
+      account_holder = v_account_holder,
+      bank_name = v_bank_name,
+      sort_code = v_sort_code,
+      account_number = v_account_number,
+      updated_at = v_now
+  WHERE candidate_row.id = p_candidate_id
+  RETURNING jsonb_build_object(
+    'id', candidate_row.id::text,
+    'pay_method', candidate_row.pay_method,
+    'umbrella_id', CASE WHEN candidate_row.umbrella_id IS NULL THEN NULL ELSE candidate_row.umbrella_id::text END,
+    'account_holder', candidate_row.account_holder,
+    'bank_name', candidate_row.bank_name,
+    'sort_code', candidate_row.sort_code,
+    'account_number', candidate_row.account_number,
+    'updated_at', candidate_row.updated_at,
+    'rev', candidate_row.rev
+  )
+  INTO v_after_json;
+
+  SELECT
+    job_row.id,
+    job_row.status,
+    COALESCE(job_row.payload_json, '{}'::jsonb)
+  INTO v_job_id, v_job_status, v_job_payload
+  FROM public.banking_pay_workbench_jobs AS job_row
+  WHERE job_row.candidate_id = p_candidate_id
+    AND UPPER(BTRIM(COALESCE(job_row.job_type, ''))) = 'WORKBENCH_CANDIDATE_DIRTY_APPLY'
+    AND job_row.payload_json->>'route_change_operation_id' = v_operation_id::text
+    AND UPPER(BTRIM(COALESCE(job_row.payload_json->>'route_change_source_method', ''))) = v_old_method
+    AND UPPER(BTRIM(COALESCE(job_row.payload_json->>'route_change_target_method', ''))) = v_new_method
+  ORDER BY job_row.updated_at_utc DESC, job_row.id DESC
+  LIMIT 1;
+
+  IF v_job_id IS NULL THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_DURABLE_QUEUE_MISSING'
+      USING ERRCODE = 'P0001', DETAIL = v_operation_id::text;
+  END IF;
+
+  IF COALESCE(v_job_payload->>'route_change_operation_id', '') <> v_operation_id::text
+     OR UPPER(BTRIM(COALESCE(v_job_payload->>'route_change_source_method', ''))) <> v_old_method
+     OR UPPER(BTRIM(COALESCE(v_job_payload->>'route_change_target_method', ''))) <> v_new_method
+     OR COALESCE(v_job_payload->>'candidate_id', '') <> p_candidate_id::text THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_DURABLE_QUEUE_AUTHORITY_MISMATCH'
+      USING ERRCODE = 'P0001', DETAIL = v_job_id::text;
+  END IF;
+
+  SELECT
+    COUNT(*)::integer,
+    COUNT(*) FILTER (WHERE target_value !~* v_uuid_re)::integer,
+    COALESCE(
+      array_agg(DISTINCT target_value::uuid ORDER BY target_value::uuid)
+        FILTER (WHERE target_value ~* v_uuid_re),
+      ARRAY[]::uuid[]
+    )
+  INTO
+    v_enqueued_raw_count,
+    v_enqueued_invalid_count,
+    v_enqueued_targeted_timesheet_ids
+  FROM jsonb_array_elements_text(
+    CASE
+      WHEN jsonb_typeof(v_job_payload->'targeted_timesheet_ids') = 'array'
+        THEN v_job_payload->'targeted_timesheet_ids'
+      ELSE '[]'::jsonb
+    END
+  ) AS target_values(target_value);
+
+  v_effective_duplicate_count := GREATEST(
+    COALESCE(v_enqueued_raw_count, 0)
+      - COALESCE(v_enqueued_invalid_count, 0)
+      - COALESCE(array_length(v_enqueued_targeted_timesheet_ids, 1), 0),
+    0
+  );
+
+  SELECT COALESCE(array_agg(missing_id ORDER BY missing_id), ARRAY[]::uuid[])
+  INTO v_missing_targeted_timesheet_ids
+  FROM (
+    SELECT unnest(v_expected_targeted_timesheet_ids) AS missing_id
+    EXCEPT
+    SELECT unnest(v_enqueued_targeted_timesheet_ids) AS missing_id
+  ) AS missing_scope;
+
+  SELECT COALESCE(array_agg(extra_id ORDER BY extra_id), ARRAY[]::uuid[])
+  INTO v_extra_targeted_timesheet_ids
+  FROM (
+    SELECT unnest(v_enqueued_targeted_timesheet_ids) AS extra_id
+    EXCEPT
+    SELECT unnest(v_expected_targeted_timesheet_ids) AS extra_id
+  ) AS extra_scope;
+
+  IF COALESCE(v_enqueued_invalid_count, 0) <> 0
+     OR COALESCE(v_effective_duplicate_count, 0) <> 0
+     OR COALESCE(array_length(v_missing_targeted_timesheet_ids, 1), 0) <> 0
+     OR COALESCE(array_length(v_extra_targeted_timesheet_ids, 1), 0) <> 0
+     OR LOWER(BTRIM(COALESCE(v_job_payload->>'exact_target_scope', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+     OR UPPER(BTRIM(COALESCE(v_job_payload->>'coverage_basis', ''))) <> 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'
+     OR UPPER(BTRIM(COALESCE(v_job_payload->>'refresh_scope_kind', ''))) <> 'TARGETED_TIMESHEETS' THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_QUEUE_SET_MISMATCH'
+      USING ERRCODE = 'P0001',
+            DETAIL = jsonb_build_object(
+              'expected_targeted_timesheet_ids', to_jsonb(v_expected_targeted_timesheet_ids),
+              'persisted_targeted_timesheet_ids', to_jsonb(v_enqueued_targeted_timesheet_ids),
+              'missing_targeted_timesheet_ids', to_jsonb(v_missing_targeted_timesheet_ids),
+              'extra_targeted_timesheet_ids', to_jsonb(v_extra_targeted_timesheet_ids),
+              'effective_duplicate_count', v_effective_duplicate_count,
+              'invalid_target_count', v_enqueued_invalid_count,
+              'job_id', v_job_id::text
+            )::text;
+  END IF;
+
+  v_post_scope_result := public.candidate_pay_method_change_refresh_scope_v1(
+    p_candidate_id,
+    v_old_method,
+    v_new_method
+  );
+
+  IF COALESCE(v_post_scope_result->>'ok', 'false') <> 'true'
+     OR LOWER(BTRIM(COALESCE(v_post_scope_result->>'exact_scope', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+     OR LOWER(BTRIM(COALESCE(v_post_scope_result->>'coverage_complete', 'false'))) NOT IN ('true', 't', '1', 'yes', 'y', 'on')
+     OR UPPER(BTRIM(COALESCE(v_post_scope_result->>'coverage_basis', ''))) <> 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'
+     OR jsonb_typeof(v_post_scope_result->'targeted_timesheet_ids') IS DISTINCT FROM 'array'
+     OR EXISTS (
+       SELECT 1
+       FROM jsonb_array_elements_text(
+         CASE
+           WHEN jsonb_typeof(v_post_scope_result->'targeted_timesheet_ids') = 'array'
+             THEN v_post_scope_result->'targeted_timesheet_ids'
+           ELSE '[]'::jsonb
+         END
+       ) AS post_target(value)
+       WHERE post_target.value !~* v_uuid_re
+     ) THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_POST_COMMIT_SCOPE_UNAVAILABLE'
+      USING ERRCODE = 'P0001', DETAIL = COALESCE(v_post_scope_result, '{}'::jsonb)::text;
+  END IF;
+
+  SELECT COALESCE(array_agg(DISTINCT post_target.value::uuid ORDER BY post_target.value::uuid), ARRAY[]::uuid[])
+  INTO v_post_targeted_timesheet_ids
+  FROM jsonb_array_elements_text(v_post_scope_result->'targeted_timesheet_ids') AS post_target(value);
+
+  IF v_post_targeted_timesheet_ids IS DISTINCT FROM v_expected_targeted_timesheet_ids THEN
+    RAISE EXCEPTION 'CANDIDATE_PAY_METHOD_CHANGE_CANONICAL_SCOPE_CHANGED'
+      USING ERRCODE = 'PT409',
+            DETAIL = jsonb_build_object(
+              'expected_targeted_timesheet_ids', to_jsonb(v_expected_targeted_timesheet_ids),
+              'post_update_targeted_timesheet_ids', to_jsonb(v_post_targeted_timesheet_ids)
+            )::text;
+  END IF;
+
+  v_job_source_change_seq := COALESCE(
+    CASE
+      WHEN COALESCE(v_job_payload->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+        THEN (v_job_payload->>'source_change_seq')::bigint
+      ELSE 0
+    END,
+    0
+  );
+
+  v_result := jsonb_strip_nulls(
+    jsonb_build_object(
+      'ok', true,
+      'idempotent_replay', false,
+      'operation_committed', true,
+      'operation_superseded_by_later_change', false,
+      'operation_id', v_operation_id::text,
+      'candidate_id', p_candidate_id::text,
+      'original_method', v_old_method,
+      'new_method', v_new_method,
+      'current_method', v_new_method,
+      'candidate', v_after_json,
+      'job_id', v_job_id::text,
+      'job_status', v_job_status,
+      'source_change_seq', v_job_source_change_seq,
+      'preview_source_change_seq', v_preview_source_change_seq
+    )
+    || jsonb_build_object(
+      'targeted_timesheet_ids', to_jsonb(v_enqueued_targeted_timesheet_ids),
+      'targeted_timesheet_count', COALESCE(array_length(v_enqueued_targeted_timesheet_ids, 1), 0),
+      'expected_targeted_timesheet_ids', to_jsonb(v_expected_targeted_timesheet_ids),
+      'persisted_targeted_timesheet_ids', to_jsonb(v_enqueued_targeted_timesheet_ids),
+      'missing_targeted_timesheet_ids', to_jsonb(v_missing_targeted_timesheet_ids),
+      'extra_targeted_timesheet_ids', to_jsonb(v_extra_targeted_timesheet_ids),
+      'effective_duplicate_count', v_effective_duplicate_count,
+      'invalid_target_count', v_enqueued_invalid_count,
+      'exact_set_equality', true,
+      'coverage_basis', COALESCE(v_scope_result->>'coverage_basis', 'CANONICAL_TIMESHEETS_WITH_RETAINED_FINANCE_AUTHORITY'),
+      'coverage_complete', true,
+      'exact_target_scope', true,
+      'authorised_timesheet_ids', CASE
+        WHEN jsonb_typeof(v_job_payload->'authorised_timesheet_ids') = 'array'
+          THEN v_job_payload->'authorised_timesheet_ids'
+        ELSE '[]'::jsonb
+      END,
+      'authorised_timesheet_count', COALESCE(
+        CASE
+          WHEN COALESCE(v_job_payload->>'authorised_timesheet_count', '') ~ '^[0-9]{1,10}$'
+            THEN (v_job_payload->>'authorised_timesheet_count')::integer
+        END,
+        0
+      ),
+      'active_advance_timesheet_ids', CASE
+        WHEN jsonb_typeof(v_job_payload->'active_advance_timesheet_ids') = 'array'
+          THEN v_job_payload->'active_advance_timesheet_ids'
+        ELSE '[]'::jsonb
+      END,
+      'active_advance_timesheet_count', COALESCE(
+        CASE
+          WHEN COALESCE(v_job_payload->>'active_advance_timesheet_count', '') ~ '^[0-9]{1,10}$'
+            THEN (v_job_payload->>'active_advance_timesheet_count')::integer
+        END,
+        0
+      ),
+      'retained_finance_timesheet_ids', CASE
+        WHEN jsonb_typeof(v_job_payload->'retained_finance_timesheet_ids') = 'array'
+          THEN v_job_payload->'retained_finance_timesheet_ids'
+        ELSE '[]'::jsonb
+      END,
+      'retained_finance_timesheet_count', COALESCE(
+        CASE
+          WHEN COALESCE(v_job_payload->>'retained_finance_timesheet_count', '') ~ '^[0-9]{1,10}$'
+            THEN (v_job_payload->>'retained_finance_timesheet_count')::integer
+        END,
+        0
+      ),
+      'authoritative_sessions', CASE
+        WHEN jsonb_typeof(v_job_payload->'authoritative_sessions') = 'array'
+          THEN v_job_payload->'authoritative_sessions'
+        ELSE '[]'::jsonb
+      END,
+      'replaced_source_session_ids', CASE
+        WHEN jsonb_typeof(v_job_payload->'replaced_source_session_ids') = 'array'
+          THEN v_job_payload->'replaced_source_session_ids'
+        ELSE '[]'::jsonb
+      END,
+      'target_details', CASE
+        WHEN jsonb_typeof(v_job_payload->'target_details') = 'array'
+          THEN v_job_payload->'target_details'
+        ELSE '[]'::jsonb
+      END,
+      'source_target_mismatch_count', COALESCE(
+        CASE
+          WHEN COALESCE(v_job_payload->>'source_target_mismatch_count', '') ~ '^[0-9]{1,10}$'
+            THEN (v_job_payload->>'source_target_mismatch_count')::integer
+        END,
+        0
+      )
+    )
+    || jsonb_build_object(
+      'contracts_changed', 0,
+      'contract_weeks_changed', 0,
+      'timesheets_changed', 0,
+      'rates_changed', 0,
+      'tsfin_repricing_rows', 0,
+      'refresh_accepted', true,
+      'refresh_completed', UPPER(BTRIM(COALESCE(v_job_status, ''))) = 'SUCCEEDED',
+      'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH',
+      'policy_x_dirtying_only', true,
+      'economic_truth_mutation_allowed', false
+    )
+  );
+
+  v_audit_after_json := v_after_json
+    || jsonb_build_object(
+      'operation_id', v_operation_id::text,
+      'original_method', v_old_method,
+      'new_method', v_new_method,
+      'job_id', v_job_id::text,
+      'job_status', v_job_status,
+      'source_change_seq', v_job_source_change_seq,
+      'preview_source_change_seq', v_preview_source_change_seq,
+      'operation_request', v_operation_request_json
+    )
+    || jsonb_build_object(
+      'targeted_timesheet_ids', v_result->'targeted_timesheet_ids',
+      'expected_targeted_timesheet_ids', v_result->'expected_targeted_timesheet_ids',
+      'persisted_targeted_timesheet_ids', v_result->'persisted_targeted_timesheet_ids',
+      'missing_targeted_timesheet_ids', v_result->'missing_targeted_timesheet_ids',
+      'extra_targeted_timesheet_ids', v_result->'extra_targeted_timesheet_ids',
+      'effective_duplicate_count', v_result->'effective_duplicate_count',
+      'invalid_target_count', v_result->'invalid_target_count',
+      'exact_set_equality', v_result->'exact_set_equality',
+      'authorised_timesheet_ids', v_result->'authorised_timesheet_ids',
+      'active_advance_timesheet_ids', v_result->'active_advance_timesheet_ids',
+      'authoritative_sessions', v_result->'authoritative_sessions',
+      'replaced_source_session_ids', v_result->'replaced_source_session_ids',
+      'target_details', v_result->'target_details',
+      'source_target_mismatch_count', v_result->'source_target_mismatch_count'
+    )
+    || jsonb_build_object(
+      'contracts_changed', 0,
+      'contract_weeks_changed', 0,
+      'timesheets_changed', 0,
+      'rates_changed', 0,
+      'tsfin_repricing_rows', 0,
+      'operation_result', v_result
+    );
+
+  PERFORM public._audit_insert(
+    'candidate',
+    p_candidate_id::text,
+    'PAY_METHOD_CHANGE_PROSPECTIVE_ONLY',
+    v_before_json,
+    v_audit_after_json,
+    COALESCE(NULLIF(BTRIM(p_reason), ''), 'PAY_METHOD_CHANGE'),
+    p_actor_user_id
+  );
 
   RETURN v_result;
 END;
 $function$;
 
--- =========================================================
--- 3) NEW RPCs: Candidate delete eligibility + apply (tombstones + audit + change bump)
---    Verified:
---      candidates_tombstones(id, deleted_rev, deleted_at)
---      app_change_counters(entity_key, seq, updated_at)
--- =========================================================
+REVOKE ALL ON FUNCTION public.candidate_pay_method_change_apply(uuid, text, jsonb, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.candidate_pay_method_change_apply(uuid, text, jsonb, uuid, text) TO service_role;
 
-CREATE OR REPLACE FUNCTION public.candidate_delete_eligibility(p_candidate_id uuid)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_contracts int;
-  v_contract_weeks int;
-  v_timesheets int;
-  v_invoice_lines int;
-  v_pay_batches int;
-  v_reason text := null;
-  v_can boolean := true;
-BEGIN
-  IF p_candidate_id IS NULL THEN
-    RAISE EXCEPTION 'candidate_id is required';
-  END IF;
+-- Reuse the current Candidate-delete authorities. Replaying this legacy
+-- pay-method file must not restore superseded deletion guards.
+\ir 04082026_1219_candidate_delete_eligibility.sql
+\ir 04082026_1219_candidate_delete_apply.sql
 
-  SELECT COUNT(*) INTO v_contracts
-  FROM public.contracts ct
-  WHERE ct.candidate_id = p_candidate_id;
-
-  SELECT COUNT(*) INTO v_contract_weeks
-  FROM public.contract_weeks cw
-  JOIN public.contracts ct ON ct.id = cw.contract_id
-  WHERE ct.candidate_id = p_candidate_id;
-
-  SELECT COUNT(*) INTO v_timesheets
-  FROM public.timesheets t
-  JOIN public.contracts ct ON ct.id = t.contract_id
-  WHERE ct.candidate_id = p_candidate_id;
-
-  SELECT COUNT(*) INTO v_invoice_lines
-  FROM public.invoice_lines il
-  JOIN public.timesheets t ON t.timesheet_id = il.timesheet_id
-  JOIN public.contracts ct ON ct.id = t.contract_id
-  WHERE ct.candidate_id = p_candidate_id;
-
-  SELECT COUNT(*) INTO v_pay_batches
-  FROM public.pay_batch_candidates pbc
-  WHERE pbc.candidate_id = p_candidate_id;
-
-  IF v_contracts > 0 OR v_contract_weeks > 0 OR v_timesheets > 0 OR v_invoice_lines > 0 OR v_pay_batches > 0 THEN
-    v_can := false;
-    v_reason := 'Candidate cannot be deleted because related records exist.';
-  END IF;
-
-  RETURN jsonb_build_object(
-    'candidate_id', p_candidate_id::text,
-    'can_delete', v_can,
-    'reason', v_reason,
-    'blockers', jsonb_build_object(
-      'contracts', v_contracts,
-      'contract_weeks', v_contract_weeks,
-      'timesheets', v_timesheets,
-      'invoice_lines', v_invoice_lines,
-      'pay_batch_candidates', v_pay_batches
-    )
-  );
-END;
-$function$;
-
-CREATE OR REPLACE FUNCTION public.candidate_delete_apply(p_candidate_id uuid, p_actor_user_id uuid, p_reason text DEFAULT null)
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path TO 'public'
-AS $function$
-DECLARE
-  v_elig jsonb;
-  v_can boolean;
-  v_deleted_rev bigint;
-  v_seq bigint;
-  v_before jsonb;
-BEGIN
-  v_elig := public.candidate_delete_eligibility(p_candidate_id);
-  v_can := COALESCE((v_elig->>'can_delete')::boolean, false);
-
-  IF v_can IS NOT TRUE THEN
-    RAISE EXCEPTION '%', COALESCE(v_elig->>'reason', 'Candidate cannot be deleted');
-  END IF;
-
-  -- Lock candidate to ensure consistent delete
-  SELECT jsonb_build_object(
-           'id', c.id::text,
-           'tms_ref', c.tms_ref,
-           'display_name', c.display_name,
-           'active', c.active
-         )
-    INTO v_before
-  FROM public.candidates c
-  WHERE c.id = p_candidate_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'Candidate not found';
-  END IF;
-
-  -- Non-blocking dependents (verified tables)
-  DELETE FROM public.candidate_job_titles cjt WHERE cjt.candidate_id = p_candidate_id;
-  DELETE FROM public.rates_candidate_overrides rco WHERE rco.candidate_id = p_candidate_id;
-  DELETE FROM public.legacy_eclipse_candidate_map lem WHERE lem.candidate_id = p_candidate_id;
-
-  -- Delete candidate
-  DELETE FROM public.candidates c WHERE c.id = p_candidate_id;
-
-  -- Bump change counter and record deleted_rev
-  PERFORM public._change_bump('candidates');
-  SELECT acc.seq INTO v_seq
-  FROM public.app_change_counters acc
-  WHERE acc.entity_key = 'candidates'
-  LIMIT 1;
-
-  v_deleted_rev := COALESCE(v_seq, 0);
-
-  INSERT INTO public.candidates_tombstones (id, deleted_rev, deleted_at)
-  VALUES (p_candidate_id, v_deleted_rev, now())
-  ON CONFLICT (id) DO UPDATE
-    SET deleted_rev = EXCLUDED.deleted_rev,
-        deleted_at  = EXCLUDED.deleted_at;
-
-  PERFORM public._audit_insert(
-    'candidates',
-    p_candidate_id::text,
-    'DELETE',
-    v_before,
-    jsonb_build_object('deleted_rev', v_deleted_rev),
-    COALESCE(p_reason, 'DELETE'),
-    p_actor_user_id
-  );
-
-  RETURN jsonb_build_object('deleted', true, 'candidate_id', p_candidate_id::text, 'deleted_rev', v_deleted_rev);
-END;
-$function$;
+-- Retain the current service-only browser-isolation boundary after the legacy
+-- authority files' historical grants. No deletion rule or service grant changes.
+REVOKE ALL ON FUNCTION public.candidate_delete_eligibility(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.candidate_delete_apply(uuid, uuid, text) FROM PUBLIC, anon, authenticated;
 
 
 -- =========================================================

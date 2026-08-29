@@ -1,0 +1,56 @@
+{
+  "artifact": "CloudTMS Candidate App Candidate Daily Phase 3 R17",
+  "date": "2026-08-18",
+  "environment": "TEST",
+  "publication_status": "UNPUBLISHED_REVIEW_CANDIDATE",
+  "repository": {
+    "name": "kierarthur/cloudtms-backend",
+    "branch": "test",
+    "base_head": "37b7e5d140cfb97d8b32b8b4b727b470ff545134",
+    "r17_commit": null,
+    "pushed": false
+  },
+  "google": {
+    "availability_active_version": 216,
+    "availability_rollback_version": 215,
+    "master_active_version": 102,
+    "master_rollback_version": 101,
+    "r17_google_source_changed": false,
+    "r17_installed": false,
+    "r17_deployed": false,
+    "bridge_enabled": false,
+    "triggers_changed": false
+  },
+  "runtime": {
+    "supabase_installed": false,
+    "worker_source_changed_by_r17": false,
+    "worker_deployed": false,
+    "frontend_changed": false,
+    "production_accessed": false
+  },
+  "verification": {
+    "focused_candidate_daily_javascript": {"passed": 72, "failed": 0},
+    "complete_backend_javascript": {"passed": 686, "failed": 0},
+    "postgres_17_6_candidate_suites": 46,
+    "postgres_18_1_candidate_suites": 46,
+    "postgres_17_6_r17_concurrency": {"passed": 2, "failed": 0},
+    "postgres_18_1_r17_concurrency": {"passed": 2, "failed": 0},
+    "postgres_17_6_all_concurrency": {"passed": 18, "failed": 0},
+    "postgres_18_1_all_concurrency": {"passed": 18, "failed": 0},
+    "git_diff_check": "PASS"
+  },
+  "source_sha256": {
+    "identity_integrity_migration": "dfa2c87bd1e656f6b701b27882f1aec178363502b943e18ba2f12622945242c0",
+    "first_generation_repeatable": "0993d940a4ab5a04672876b13ade40a3c873a516e7419116b3c8c69d429edf02",
+    "r17_authority_transition_repeatable": "a99772103d0c72bbe03f8677c5a70c522e2fddd559757a410b077058818f3746",
+    "master_helper_unchanged_by_r17": "5363cfafdfb83db0d958fcb3cd178875cd3ba66adb2410d27e29294850725a1f",
+    "candidate_db_runtime_workflow": "d6197d3254dfd2c46c2b1d4848c08abe5aa743a149b7b11b1e3aae55f6c486d5",
+    "supabase_migrate_workflow": "1f92ec05469de3545a895bd85c6ca47633f11af25d563aa0c81e015e5922704c",
+    "candidate_daily_contract_unchanged_by_r17": "333a6f5c9ea77f58a62d4245dd024013eff153510a4e90a7d8b0de65ce081c50",
+    "candidate_daily_worker_adapter_unchanged_by_r17": "88cc69e645528bc501f8ae9ed234c229f9226b2de3d21f3004b8fb86ba8df943"
+  },
+  "generated_artifacts": {
+    "decisions_pdf_sha256": "bc2ec0eda7c6aa64e51e9b2f6abeb42bb8eeee306dffcbfc441b22ed295287dd",
+    "handover_zip_sha256": "REPORTED_OUTSIDE_ARCHIVE_TO_AVOID_SELF_REFERENTIAL_HASH"
+  }
+}

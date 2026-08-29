@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "codex-cloudtms-miget-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "MIGET_POSTGREST_ORIGIN": "https://cloudtms-codex-poc-postgrest-kwtyn.eu-east-1.migetapp.com",
+    "LIVE_MIGET_POSTGRES_SERVICE_ID": "01a03205-8273-7159-952e-47029c786995"
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "11c78f14afea494c9d5e8d8ad57d41a2"
+    },
+    {
+      "binding": "MYTMS_HYPERDRIVE",
+      "id": "7e979a8127c84c319dfc2ecf488aa903"
+    },
+    {
+      "binding": "LIVE_HYPERDRIVE",
+      "id": "19fc41d1b2e34b9b8a97b4961f6e6fb5"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "head_sampling_rate": 1
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 1
+    }
+  }
+}

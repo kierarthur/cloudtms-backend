@@ -1,0 +1,71 @@
+{
+  "package": "CloudTMS Candidate App Candidate Daily Phase 3 R13",
+  "date": "2026-08-17",
+  "environment": "TEST",
+  "implementation_commit": "ccf193eb49d4e022a971d845ce77120f53cd6bb8",
+  "implementation_parent": "6117000635a2f287220e5d20b90ba9e74d5cd8b1",
+  "evidence_commit": "6a62cf9864cdb41a63b8516f81540b0fa434a41c",
+  "published": true,
+  "feature_activated": false,
+  "signed_bridge_request": false,
+  "database_changed": false,
+  "worker_runtime_changed": false,
+  "frontend_changed": false,
+  "google": {
+    "bridge_enabled": false,
+    "availability_active_version": 216,
+    "availability_rollback_version": 215,
+    "availability_r13_changed": false,
+    "master_active_version": 102,
+    "master_rollback_version": 101,
+    "master_r13_saved_to_head": true,
+    "master_r13_deployed": false,
+    "deployment_gate": "Independent R13 GO required"
+  },
+  "source_hashes": {
+    "availability_code": "01a737620116b387776d1bcb24992abecb9cdde523f09a936c587b17a7b55309",
+    "availability_helper": "2a44bce4dd72613178370c342e8dcfc45f13bdaedf16ef29b828b6a64c079bdf",
+    "availability_rollback": "eacd187564ea9b0f00c1830f9240c6afcfe1a0d0611162c1bdf9b9fd6bbb3b3f",
+    "master_code": "e0d4ac48bffd4e9e79b1c0439cb952a298a2d11f90e3caf2a53df4b9d779d700",
+    "master_helper": "141538b2c7d3b9719963484d057fafbfe733fd150712a50a5b9fb673fdc3783f",
+    "master_rollback": "c3ae9c480a97ad2771312f5f453adbe7049c07219f89624f75df543d319fa0a8"
+  },
+  "tests": {
+    "focused": {"passed": 73, "failed": 0, "skipped": 0},
+    "r13_master": {"passed": 19, "failed": 0, "skipped": 0},
+    "complete_backend": {"passed": 651, "failed": 0, "skipped": 0},
+    "candidate_broker_dry_build": "PASS",
+    "candidate_private_dry_build": "PASS",
+    "real_test_broker_invalid_authority_probe": {
+      "result": "PASS",
+      "http_status": 401,
+      "error_code": "SYSTEM_AUTH_FAILED",
+      "retry_class": "DO_NOT_RETRY",
+      "database_mutation": false
+    }
+  },
+  "identity_readiness": {
+    "named_observational_candidate": "Kier Arthur",
+    "candidate_hard_coded": false,
+    "active_candidate_records_matching_name": 1,
+    "existing_global_candidate_key_present": true,
+    "operator_supplied_global_candidate_key_matches": true,
+    "global_key_generated_from_google_credentially_public_id": true,
+    "cloudtms_admin_enters_generated_cid1_not_raw_public_id": true,
+    "global_candidate_key_is_daily_source_link": false,
+    "new_app_only_candidate_uses_admin_global_key": true,
+    "new_app_only_candidate_requires_legacy_browser": false,
+    "source_link_bootstrap_creates_candidate": false,
+    "active_google_source_links_matching_candidate": 0,
+    "active_google_source_links_total": 0
+  },
+  "safety": {
+    "secrets_printed_or_packaged": false,
+    "raw_candidate_identity_packaged": false,
+    "destructive_action": false,
+    "production_action": false,
+    "financial_authority_changed": false,
+    "screenshots_packaged": false,
+    "machine_local_paths_packaged": false
+  }
+}

@@ -1,0 +1,144 @@
+name: Database Release (manual and protected)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Exact target environment
+        required: true
+        type: choice
+        options: [TEST, LIVE]
+      mode:
+        description: NEW blank, UPGRADE managed, ADOPT exact, or one-time LEGACY_UPGRADE
+        required: true
+        type: choice
+        options: [UPGRADE, NEW, ADOPT, LEGACY_UPGRADE]
+      phase:
+        description: PLAN is read-only; APPLY performs the reviewed plan
+        required: true
+        type: choice
+        options: [PLAN, APPLY]
+      customer_key:
+        description: Optional non-secret tenant key for a dedicated customer database
+        required: false
+        type: string
+      approval:
+        description: Required for APPLY except managed TEST UPGRADE, which uses standing TEST authority
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudtms-database-release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  source-gate:
+    name: Prove repository release authority
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.commit.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+      - run: npm ci --engine-strict
+      - run: npm run security:verify
+      - run: npm run db:check
+      - run: node --test tests/database-release-system.test.mjs
+      - id: commit
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  release:
+    name: ${{ inputs.phase }} ${{ inputs.mode }} ${{ inputs.environment }}
+    needs: source-gate
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}
+    env:
+      CLOUDTMS_DATABASE_URL: ${{ (inputs.environment == 'TEST' && secrets.MIGET_DATABASE_URL_TEST) || (inputs.environment == 'LIVE' && secrets.MIGET_DATABASE_URL_LIVE) }}
+      CLOUDTMS_EXPECTED_TARGET: ${{ (inputs.environment == 'TEST' && vars.MIGET_DATABASE_TARGET_TEST) || (inputs.environment == 'LIVE' && vars.MIGET_DATABASE_TARGET_LIVE) }}
+      CLOUDTMS_ENVIRONMENT: ${{ inputs.environment }}
+      CLOUDTMS_RELEASE_MODE: ${{ inputs.mode }}
+      CLOUDTMS_CUSTOMER_KEY: ${{ inputs.customer_key }}
+      CLOUDTMS_RELEASE_REQUESTED_APPROVAL: ${{ inputs.approval }}
+      # The repository's logical `postgres` owner maps to the authenticated
+      # provider database owner. On Supabase this is a no-op; on Miget it avoids
+      # requiring membership in the platform-reserved postgres superuser role.
+      CLOUDTMS_LOGICAL_POSTGRES_OWNER: CURRENT_USER
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.source-gate.outputs.commit }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+      - run: npm ci --engine-strict
+      - run: npm run security:dependencies
+      - name: Install PostgreSQL client
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v psql >/dev/null 2>&1; then
+            psql --version
+            exit 0
+          fi
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get update -qq \
+              -o Acquire::Retries=3 \
+              -o Acquire::http::Timeout=30 \
+              -o Acquire::https::Timeout=30
+          sudo env DEBIAN_FRONTEND=noninteractive timeout 180s \
+            apt-get install -y -qq \
+              -o Acquire::Retries=3 \
+              postgresql-client
+          psql --version
+      - name: Validate protected target configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${CLOUDTMS_DATABASE_URL:-}" || { echo "Missing protected database URL secret"; exit 1; }
+          test -n "${CLOUDTMS_EXPECTED_TARGET:-}" || { echo "Missing protected database target locator"; exit 1; }
+          if [[ "${{ inputs.phase }}" == "APPLY" ]]; then
+            expected="APPLY ${{ inputs.environment }} ${{ inputs.mode }} ${{ needs.source-gate.outputs.commit }}"
+            if [[ "${{ inputs.environment }}" == "TEST" && "${{ inputs.mode }}" == "UPGRADE" ]]; then
+              [[ "${GITHUB_REPOSITORY}" == "kierarthur/cloudtms-backend" ]] || { echo "Standing TEST UPGRADE authority is restricted to the canonical repository"; exit 1; }
+              [[ "${GITHUB_REF}" == "refs/heads/test" ]] || { echo "Standing TEST UPGRADE authority is restricted to the test branch head"; exit 1; }
+              echo "Using standing managed TEST UPGRADE authority for the exact source-gated commit."
+            else
+              [[ "${CLOUDTMS_RELEASE_REQUESTED_APPROVAL:-}" == "$expected" ]] || { echo "Exact APPLY approval phrase does not match this commit"; exit 1; }
+            fi
+            echo "CLOUDTMS_RELEASE_APPROVAL=$expected" >> "$GITHUB_ENV"
+          fi
+      - name: Read-only release plan
+        run: npm run db:plan -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
+      - name: Apply verified release
+        if: inputs.phase == 'APPLY'
+        run: npm run db:apply -- --environment=${{ inputs.environment }} --mode=${{ inputs.mode }}
+      - name: Release evidence
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### CloudTMS database release"
+            echo "- Phase: ${{ inputs.phase }}"
+            echo "- Mode: ${{ inputs.mode }}"
+            echo "- Environment: ${{ inputs.environment }}"
+            echo "- Commit: ${{ needs.source-gate.outputs.commit }}"
+            echo "- Protected GitHub Environment: ${{ inputs.environment == 'LIVE' && 'database-live' || 'database-test' }}"
+            echo "- Authority: ${{ inputs.environment == 'TEST' && inputs.mode == 'UPGRADE' && 'standing managed TEST UPGRADE' || 'exact commit-bound approval' }}"
+          } >> "$GITHUB_STEP_SUMMARY"

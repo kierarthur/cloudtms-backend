@@ -1,0 +1,38 @@
+{
+  "target": "TEST Supabase",
+  "implementation_commit": "cffab09d284a690c5130b6821bef53a50f1dbcdc",
+  "deployment_workflow_run": 30680863468,
+  "deployment_conclusion": "success",
+  "applied_repeatable": "21072026_1820_00_import_review_internal_core.sql",
+  "predeploy_helper_md5": "d2fa598794684bbde7176919eb209942",
+  "postdeploy_helper_md5": "feaf3ed9910f2dc0f8132b406f8f5cd0",
+  "normalized_committed_live_body_sha256": "fac36d9aa4af0078d8760bbb00573d495019c5f2fc4119a87a442dae354d9e35",
+  "normalized_committed_live_body_exact": true,
+  "repeatable_git_blob_and_deployment_ledger_sha256": "93e6850be5b9c87ae5f1905279fde98df33ba5dcfd3c57d4270c023c70e9de80",
+  "repeatable_ledger_exact": true,
+  "exact_signature_count": 1,
+  "owner": "postgres",
+  "security_definer": false,
+  "search_path": "public, extensions, pg_temp",
+  "execute_acl": "postgres only",
+  "operations_total": 29,
+  "operations_non_complete": 0,
+  "operations_incomplete_timestamps": 0,
+  "active_followups": 0,
+  "protected_function_hashes": {
+    "_import_review_action_catalog_core_v1(uuid,integer,integer)": "1623934a80bd09d263588271addd9ffd",
+    "_import_review_apply_envelope_core_v1(uuid)": "3fad3522f7d3d0aaa464d8a32b20ebd9",
+    "import_review_correction_generation_transition_v1(uuid,uuid,text,text,uuid,text[],timestamp with time zone)": "1d3481867a4326c471812ef7c6326f76",
+    "timesheet_paid_uninvoiced_rollover_v1(uuid,uuid,uuid,uuid,text,timestamp with time zone)": "2632b3b506dcd2bd06a77dddad01e76d",
+    "hr_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)": "788e9d8926c91cf654a9d36634944d94",
+    "nhsp_weekly_phase3_apply_adjustment_truth(uuid,text[],uuid)": "5a35c7cd476e580841eb8c8a060d3992",
+    "hr_weekly_apply_transactional(uuid,jsonb,uuid)": "d57dea07edca42d3ae41b56b37ded723",
+    "nhsp_weekly_apply_transactional(uuid,jsonb,uuid)": "505bfc530f49e8e79233d1e468271e49"
+  },
+  "safe_catalog_smoke": {
+    "HEALTHROSTER": { "action_rows": 11, "apply_amendment_rows": 0, "blocking_rows": 10 },
+    "NHSP": { "action_rows": 26, "apply_amendment_rows": 0, "blocking_rows": 21 }
+  },
+  "application_rows_mutated_by_verification": false,
+  "production_accessed": false
+}

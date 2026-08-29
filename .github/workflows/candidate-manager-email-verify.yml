@@ -1,0 +1,60 @@
+name: Candidate manager email verification
+
+on:
+  push:
+    branches: [test]
+    paths:
+      - "candidate-broker/**"
+      - "candidate-private-api/**"
+      - "candidate-synthetic-private-api/**"
+      - "broker/src/candidate-**"
+      - "broker/src/mytms-**"
+      - "tests/candidate-**"
+      - "package.json"
+      - "package-lock.json"
+      - ".node-version"
+      - ".npmrc"
+      - "scripts/verify-approved-toolchain.mjs"
+      - "scripts/verify-backend-dependency-security.mjs"
+      - "scripts/verify-source-secret-safety.mjs"
+      - ".github/workflows/candidate-manager-email-verify.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: candidate-manager-email-verify-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify Candidate and manager email source
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Pin npm and verify the approved toolchain
+        run: |
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+
+      - name: Install dependencies
+        run: npm ci --engine-strict
+
+      - name: Enforce dependency and source security
+        run: npm run security:verify
+
+      - name: Verify complete backend source
+        run: npm test
+
+      - name: Reject generated Candidate binding drift
+        run: npm run candidate:bindings:check

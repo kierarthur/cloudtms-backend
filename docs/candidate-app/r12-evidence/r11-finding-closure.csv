@@ -1,0 +1,5 @@
+finding,independent_observation,r12_owner,r12_result,test_result
+R11-AW-001,"busy/deferred request mirrored before durable Google write","Availability Code.gs queue/flush ordering","busy path makes no bridge call; flush mirrors only successful rows after writes and lock release","PASS"
+R11-AW-002,"mixed legacy result forwarded rejected dates","Availability bridge factual-body builder","body derives only from unique applied non-deferred legacy results; all-rejected is a no-op","PASS"
+R11-AW-003,"STATUS_CHECK 409 cleared the recovery identity","Availability bridge response disposition","closed route-specific classifier retains STATUS_CHECK, retryable and malformed responses","PASS"
+R11-PACK-001,"Phase 3 test was not runnable from extracted archive","test resolver and R12 pack","repository/packaged path resolver plus packaged canonical HMAC fixture and extracted-root execution","PASS"

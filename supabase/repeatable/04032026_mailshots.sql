@@ -2104,7 +2104,13 @@ begin
       u.recipient_id,
       coalesce(
         case
-          when lower(coalesce(u.recipient_kind, '')) = 'candidate' then nullif(btrim(coalesce(c_rec.display_name, concat_ws(' ', c_rec.first_name, c_rec.last_name), c_rec.email, c_rec.phone, u.to_address)), '')
+          when lower(coalesce(u.recipient_kind, '')) = 'candidate' then coalesce(
+            nullif(btrim(c_rec.display_name), ''),
+            nullif(btrim(concat_ws(' ', c_rec.first_name, c_rec.last_name)), ''),
+            nullif(btrim(c_rec.email), ''),
+            nullif(btrim(c_rec.phone), ''),
+            nullif(btrim(u.to_address), '')
+          )
           when lower(coalesce(u.recipient_kind, '')) = 'client' then nullif(btrim(coalesce(cl_rec.name, cl_rec.primary_invoice_email, cl_rec.contact_email, u.to_address)), '')
           when lower(coalesce(u.recipient_kind, '')) = 'umbrella' then nullif(btrim(coalesce(um_rec.name, um_rec.remittance_email, u.to_address)), '')
           else null
@@ -2376,7 +2382,13 @@ begin
     u.recipient_id,
     coalesce(
       case
-        when lower(coalesce(u.recipient_kind, '')) = 'candidate' then nullif(btrim(coalesce(c_rec.display_name, concat_ws(' ', c_rec.first_name, c_rec.last_name), c_rec.email, c_rec.phone, u.to_address)), '')
+        when lower(coalesce(u.recipient_kind, '')) = 'candidate' then coalesce(
+          nullif(btrim(c_rec.display_name), ''),
+          nullif(btrim(concat_ws(' ', c_rec.first_name, c_rec.last_name)), ''),
+          nullif(btrim(c_rec.email), ''),
+          nullif(btrim(c_rec.phone), ''),
+          nullif(btrim(u.to_address), '')
+        )
         when lower(coalesce(u.recipient_kind, '')) = 'client' then nullif(btrim(coalesce(cl_rec.name, cl_rec.primary_invoice_email, cl_rec.contact_email, u.to_address)), '')
         when lower(coalesce(u.recipient_kind, '')) = 'umbrella' then nullif(btrim(coalesce(um_rec.name, um_rec.remittance_email, u.to_address)), '')
         else null
@@ -3955,10 +3967,12 @@ declare
 
   v_sms_max int := 1000;
   v_voice_max int := 1200;
-  v_whatsapp_max int := 600;
+  -- The approved WATI wrapper currently consumes at most 172 characters.
+  -- Keep 100 characters of additional wrapper headroom within WATI's
+  -- 1024-character rendered-template limit and round down to 750.
+  v_whatsapp_max int := 750;
 
   v_cfg jsonb;
-  v_cfg_wati jsonb;
   v_cfg_clicksend jsonb;
   v_cfg_scheduling jsonb;
 
@@ -4108,13 +4122,8 @@ begin
   limit 1;
 
   if v_cfg is not null and jsonb_typeof(v_cfg) = 'object' then
-    v_cfg_wati := v_cfg->'wati';
     v_cfg_clicksend := v_cfg->'clicksend';
     v_cfg_scheduling := v_cfg->'scheduling';
-
-    if v_cfg_wati is not null and jsonb_typeof(v_cfg_wati) = 'object' then
-      v_whatsapp_max := coalesce(nullif((v_cfg_wati->>'whatsapp_max_chars')::int, 0), v_whatsapp_max);
-    end if;
 
     if v_cfg_clicksend is not null and jsonb_typeof(v_cfg_clicksend) = 'object' then
       v_sms_max := coalesce(nullif((v_cfg_clicksend->>'sms_max_chars')::int, 0), v_sms_max);
@@ -4508,9 +4517,12 @@ begin
           continue;
         end if;
 
-        v_rendered_message := regexp_replace(v_rendered_message, E'[\\r\\n\\t]+', ' ', 'g');
-        v_rendered_message := regexp_replace(v_rendered_message, '[^A-Za-z ,]+', '', 'g');
-        v_rendered_message := regexp_replace(v_rendered_message, E'\\s+', ' ', 'g');
+        -- WATI permits printable Unicode in template parameter values but
+        -- rejects line breaks and tabs. Preserve letters, numbers,
+        -- punctuation, symbols, URLs, formatting markers and emoji while
+        -- normalising all control/whitespace runs to one ordinary space.
+        v_rendered_message := regexp_replace(v_rendered_message, '[[:cntrl:]]+', ' ', 'g');
+        v_rendered_message := regexp_replace(v_rendered_message, '[[:space:]]+', ' ', 'g');
         v_rendered_message := btrim(v_rendered_message);
 
         if char_length(v_rendered_message) <> v_original_len then
@@ -4518,7 +4530,7 @@ begin
         end if;
 
         if char_length(v_rendered_message) > v_whatsapp_max then
-          v_rendered_message := left(v_rendered_message, v_whatsapp_max);
+          v_rendered_message := rtrim(left(v_rendered_message, v_whatsapp_max));
           v_truncated := true;
         end if;
       elsif v_output_type = 'SMS' then
@@ -5303,79 +5315,8 @@ begin
 end;
 $function$;
 
-create or replace function public.email_outbox_claim_ready_batch(
-  p_limit integer,
-  p_attempt_lease_token text,
-  p_lease_minutes integer default 5
-)
-returns setof public.mail_outbox
-language plpgsql
-as $function$
-declare
-  v_now timestamptz := now();
-  v_effective_limit integer := greatest(coalesce(p_limit, 0), 0);
-  v_effective_lease_minutes integer := greatest(coalesce(p_lease_minutes, 5), 1);
-begin
-  if coalesce(btrim(p_attempt_lease_token), '') = '' then
-    raise exception 'attempt_lease_token is required';
-  end if;
+-- public.email_outbox_claim_ready_batch moved to supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_email_outbox_claim_ready_batch.sql.
 
-  if v_effective_limit = 0 then
-    return;
-  end if;
-
-  return query
-  with picked as (
-    select mo.id
-    from public.mail_outbox as mo
-    where mo.status = 'QUEUED'::public.mail_status_enum
-      and mo.sent_at is null
-      and mo.delivered_at is null
-      and mo.read_at is null
-      and coalesce(
-            mo.next_attempt_at_utc,
-            mo.scheduled_for_utc,
-            mo.created_at_utc
-          ) <= v_now
-      and (
-            mo.attempt_lease_token is null
-         or mo.attempt_lease_expires_at_utc is null
-         or mo.attempt_lease_expires_at_utc <= v_now
-      )
-    order by
-      coalesce(
-        mo.next_attempt_at_utc,
-        mo.scheduled_for_utc,
-        mo.created_at_utc
-      ) asc,
-      mo.created_at_utc asc,
-      mo.id asc
-    for update skip locked
-    limit v_effective_limit
-  ),
-  updated as (
-    update public.mail_outbox as mo
-    set attempt_lease_token = p_attempt_lease_token,
-        attempt_leased_at_utc = v_now,
-        attempt_lease_expires_at_utc = v_now + make_interval(mins => v_effective_lease_minutes)
-    from picked
-    where mo.id = picked.id
-    returning mo.*
-  )
-  select u.*
-  from updated as u
-  order by
-    coalesce(
-      u.next_attempt_at_utc,
-      u.scheduled_for_utc,
-      u.created_at_utc
-    ) asc,
-    u.created_at_utc asc,
-    u.id asc;
-
-  return;
-end;
-$function$;
 
 create or replace function public.comms_outbox_claim_ready_batch(
   p_channel text,

@@ -1,0 +1,816 @@
+From ace010237f70932b8f121b73a3ffa6ab5fcdcf66 Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 19:08:00 +0100
+Subject: [PATCH] Complete HealthRoster validation evidence workflow
+
+
+diff --git a/broker/src/import-review.js b/broker/src/import-review.js
+index 79c1d45..f93643d 100644
+--- a/broker/src/import-review.js
++++ b/broker/src/import-review.js
+@@ -28,6 +28,7 @@ const ROUTE_RPCS = Object.freeze(new Set([
+   'import_review_create_v1',
+   'import_review_replace_v1',
+   'import_review_get_v1',
++  'import_review_attachment_preparation_targets_v1',
+   'import_review_actions_page_v1',
+   'import_review_save_v1',
+   'import_review_refresh_v1',
+@@ -38,6 +39,7 @@ const ROUTE_RPCS = Object.freeze(new Set([
+   'import_review_apply_failed_before_commit_recover_v1',
+   'nhsp_weekly_review_preview_v1',
+   'hr_daily_validation_preview_v1',
++  'invoice_operation_start_batch',
+   'nhsp_weekly_apply_transactional',
+   'hr_weekly_apply_transactional',
+   'hr_daily_apply_transactional'
+@@ -371,6 +373,42 @@ function sourceRouteToApplyRpc(route) {
+   throw new ImportReviewInputError('The review source route is unsupported');
+ }
+ 
++function scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId, actorId }) {
++  const task = (async () => {
++    const targets = await runAllowedRpc(sbRpc, env, 'import_review_attachment_preparation_targets_v1', {
++      p_import_id: importId,
++      p_actor_user_id: actorId,
++      p_max_targets: 100
++    }, { timeoutMs: 10000 });
++    const commands = Array.isArray(targets?.commands) ? targets.commands : [];
++    if (!commands.length) return;
++    const raw = await runAllowedRpc(sbRpc, env, 'invoice_operation_start_batch', {
++      p_commands: commands,
++      p_actor_user_id: actorId,
++      p_now_utc: new Date().toISOString()
++    }, { timeoutMs: 15000 });
++    const operations = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : [raw].filter(Boolean));
++    const active = operations.filter((operation) => operation?.accepted !== false && operation?.operation_id
++      && ['QUEUED', 'RUNNING', 'WAITING', 'RETRY_WAIT'].includes(String(operation?.status || '').toUpperCase()));
++    if (active.length && typeof nudgeInvoiceOperations === 'function') {
++      await nudgeInvoiceOperations(env, active, {
++        ctx,
++        rpc: (name, args, options) => sbRpc(env, name, args, options),
++        lanes: ['DATABASE', 'DOCUMENT'],
++        priorityClass: 'INTERACTIVE'
++      });
++    }
++  })().catch((error) => {
++    console.warn(JSON.stringify({
++      event: 'IMPORT_REVIEW_ATTACHMENT_PREPARATION_DEFERRED',
++      code: postgresErrorToken(error) || 'IMPORT_REVIEW_ATTACHMENT_PREPARATION_FAILED',
++      retryable: true
++    }));
++  });
++  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(task);
++  return task;
++}
++
+ async function getReview(sbRpc, env, importId, actorId, options = {}) {
+   return runAllowedRpc(sbRpc, env, 'import_review_get_v1', {
+     p_import_id: importId,
+@@ -576,7 +614,7 @@ function routeMatch(pathname, pattern) {
+ }
+ 
+ export function createImportReviewDispatcher(dependencies) {
+-  const { requireUser, sbRpc, runFollowUp } = dependencies || {};
++  const { requireUser, sbRpc, runFollowUp, nudgeInvoiceOperations } = dependencies || {};
+   if (typeof requireUser !== 'function' || typeof sbRpc !== 'function') {
+     throw new Error('createImportReviewDispatcher requires requireUser and sbRpc');
+   }
+@@ -699,6 +737,7 @@ export function createImportReviewDispatcher(dependencies) {
+           );
+         }
+         const data = await runAllowedRpc(sbRpc, env, rpcName, rpcArgs, { timeoutMs: 30000 });
++        scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId, actorId: user.id });
+         return success(data, 201);
+       }
+ 
+@@ -711,16 +750,19 @@ export function createImportReviewDispatcher(dependencies) {
+           eventCursor: url.searchParams.get('event_cursor') == null ? null : integer(url.searchParams.get('event_cursor'), 'event_cursor', 0, Number.MAX_SAFE_INTEGER),
+           eventLimit: integer(url.searchParams.get('event_limit'), 'event_limit', 1, 100, 50)
+         });
++        scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId, actorId: user.id });
+         return success(data);
+       }
+ 
+       const actionPage = routeMatch(pathname, '/api/import-reviews/:import_id/actions');
+       if (req.method === 'GET' && actionPage) {
++        const importId = uuid(actionPage.import_id, 'import_id');
+         const data = await runAllowedRpc(sbRpc, env, 'import_review_actions_page_v1', {
+-          p_import_id: uuid(actionPage.import_id, 'import_id'),
++          p_import_id: importId,
+           p_actor_user_id: user.id,
+           ...parseActionPageQuery(url)
+         });
++        scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId, actorId: user.id });
+         return success(data);
+       }
+ 
+@@ -772,6 +814,7 @@ export function createImportReviewDispatcher(dependencies) {
+           }));
+           data = await runAllowedRpc(sbRpc, env, 'import_review_refresh_v1', refreshArgs, { timeoutMs: 30000 });
+         }
++        scheduleAttachmentPreparation({ sbRpc, nudgeInvoiceOperations, env, ctx, importId: refreshArgs.p_import_id, actorId: user.id });
+         return success(data);
+       }
+ 
+diff --git a/broker/src/index.js b/broker/src/index.js
+index 92bced2..2ad0201 100644
+--- a/broker/src/index.js
++++ b/broker/src/index.js
+@@ -113,7 +113,8 @@ const runImportReviewPostCommit = createImportReviewPostCommitRunner({
+ const dispatchImportReviewRequest = createImportReviewDispatcher({
+   requireUser,
+   sbRpc,
+-  runFollowUp: runImportReviewPostCommit
++  runFollowUp: runImportReviewPostCommit,
++  nudgeInvoiceOperations
+ });
+ 
+ const BANKING_PAY_WORKBENCH_DB_CONTRACT = 'BANKING_PAY_WORKBENCH_DB_V1';
+diff --git a/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql b/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
+index 8eca1a5..4e4e997 100644
+--- a/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
++++ b/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
+@@ -600,6 +600,152 @@ begin
+ end
+ $function$;
+ 
++create or replace function public._import_review_query_evidence_core_v1(p_timesheet_id uuid)
++returns jsonb
++language plpgsql
++security definer
++set search_path to 'public', 'extensions', 'pg_temp'
++as $function$
++declare
++  v_ts public.timesheets%rowtype;
++  v_doc public.invoice_document_versions%rowtype;
++  v_asset public.invoice_document_assets%rowtype;
++  v_protection jsonb;
++  v_has_hours boolean:=false;
++  v_source_complete boolean:=false;
++  v_document_ready boolean:=false;
++  v_is_signed_qr boolean:=false;
++  v_reason_code text;
++  v_fingerprint text;
++begin
++  if p_timesheet_id is null then
++    return jsonb_build_object(
++      'timesheet_id',null,'source_complete',false,'document_ready',false,
++      'preparation_required',false,'reason_code','TIMESHEET_EVIDENCE_INCOMPLETE',
++      'evidence_fingerprint',public._import_review_hash_v1('query-evidence-v1|null')
++    );
++  end if;
++
++  select * into v_ts
++  from public.timesheets t
++  where t.timesheet_id=p_timesheet_id
++  limit 1;
++
++  if not found or not coalesce(v_ts.is_current,false) or v_ts.archived_at_utc is not null then
++    return jsonb_build_object(
++      'timesheet_id',p_timesheet_id,'source_complete',false,'document_ready',false,
++      'preparation_required',false,'reason_code','TIMESHEET_EVIDENCE_INCOMPLETE',
++      'evidence_fingerprint',public._import_review_hash_v1(concat_ws('|','query-evidence-v1',p_timesheet_id,'MISSING_CURRENT_SOURCE'))
++    );
++  end if;
++
++  v_protection:=public._import_review_timesheet_protection_core_v1(p_timesheet_id);
++  v_has_hours:=case
++    when upper(coalesce(v_ts.sheet_scope::text,''))='WEEKLY' then
++      jsonb_typeof(coalesce(v_ts.actual_schedule_json,'[]'::jsonb))='array'
++      and jsonb_array_length(coalesce(v_ts.actual_schedule_json,'[]'::jsonb))>0
++      and not exists (
++        select 1 from jsonb_array_elements(coalesce(v_ts.actual_schedule_json,'[]'::jsonb)) day(value)
++        where nullif(btrim(coalesce(day.value->>'start',day.value->>'start_time',day.value->>'worked_start','')),'') is null
++           or nullif(btrim(coalesce(day.value->>'end',day.value->>'end_time',day.value->>'worked_end','')),'') is null
++      )
++    else v_ts.worked_start_iso is not null and v_ts.worked_end_iso is not null
++  end;
++
++  -- Any QR lifecycle marker makes this a QR timesheet.  It is complete only
++  -- when the complete signed-QR contract below is satisfied; a pending or
++  -- unsigned QR PDF must never fall through as an ordinary manual upload.
++  v_is_signed_qr:=v_ts.qr_status is not null
++    or v_ts.qr_scanned_at is not null
++    or nullif(btrim(coalesce(v_ts.qr_signed_hash,'')),'') is not null
++    or v_ts.qr_signed_at_utc is not null;
++
++  if upper(coalesce(v_ts.submission_mode::text,''))='ELECTRONIC' then
++    v_source_complete:=v_has_hours
++      and nullif(btrim(coalesce(v_ts.r2_nurse_key,'')),'') is not null
++      and nullif(btrim(coalesce(v_ts.img_sha256_nurse,'')),'') is not null
++      and nullif(btrim(coalesce(v_ts.r2_auth_key,'')),'') is not null
++      and nullif(btrim(coalesce(v_ts.img_sha256_auth,'')),'') is not null
++      and nullif(btrim(coalesce(v_ts.auth_name,'')),'') is not null
++      and v_ts.authorised_at_server is not null;
++  elsif upper(coalesce(v_ts.submission_mode::text,''))='MANUAL' and v_is_signed_qr then
++    v_source_complete:=v_has_hours
++      and upper(coalesce(v_ts.qr_status::text,''))='USED'
++      and v_ts.qr_scanned_at is not null
++      and nullif(btrim(coalesce(v_ts.qr_signed_hash,'')),'') is not null
++      and v_ts.qr_signed_at_utc is not null
++      and nullif(btrim(coalesce(v_ts.manual_pdf_r2_key,'')),'') is not null;
++  elsif upper(coalesce(v_ts.submission_mode::text,''))='MANUAL' then
++    if v_ts.manual_document_asset_id is not null then
++      select * into v_asset from public.invoice_document_assets a
++      where a.id=v_ts.manual_document_asset_id limit 1;
++    end if;
++    v_source_complete:=v_has_hours and (
++      nullif(btrim(coalesce(v_ts.manual_pdf_r2_key,'')),'') is not null
++      or (
++        v_asset.id is not null
++        and upper(coalesce(v_asset.status,''))='READY'
++        and nullif(btrim(coalesce(v_asset.normalised_r2_key,v_asset.original_r2_key,'')),'') is not null
++      )
++    );
++  end if;
++
++  if v_ts.current_document_version_id is not null then
++    select * into v_doc from public.invoice_document_versions d
++    where d.id=v_ts.current_document_version_id limit 1;
++  end if;
++  v_document_ready:=v_source_complete
++    and v_doc.id is not null
++    and v_doc.entity_type='TIMESHEET'
++    and v_doc.entity_id=v_ts.timesheet_id
++    and v_doc.purpose='TIMESHEET'
++    and v_doc.source_revision=v_ts.document_revision::text
++    and v_doc.status='READY'
++    and v_doc.superseded_at_utc is null
++    and nullif(btrim(coalesce(v_doc.r2_key,'')),'') is not null
++    and coalesce(v_doc.sha256,'')~'^[0-9a-f]{64}$'
++    and coalesce(v_doc.size_bytes,0)>0
++    and coalesce(v_doc.page_count,0)>0
++    and v_doc.ready_at_utc is not null
++    and v_doc.verified_at_utc is not null;
++
++  v_reason_code:=case
++    when coalesce((v_protection->>'invoice_locked')::boolean,false) then 'TIMESHEET_PRESENT_BUT_INVOICED'
++    when not v_source_complete then 'TIMESHEET_EVIDENCE_INCOMPLETE'
++    when not v_document_ready then 'TIMESHEET_EVIDENCE_PREPARING'
++  end;
++  v_fingerprint:=public._import_review_hash_v1(concat_ws('|','query-evidence-v1',v_ts.timesheet_id,
++    v_ts.document_revision,v_ts.document_state,v_ts.current_document_version_id,
++    v_ts.submission_mode::text,v_ts.sheet_scope::text,v_ts.updated_at,
++    v_source_complete,v_document_ready,v_reason_code,
++    coalesce(v_doc.id::text,''),coalesce(v_doc.source_revision,''),coalesce(v_doc.sha256,''),
++    coalesce(v_doc.size_bytes::text,''),coalesce(v_doc.page_count::text,''),
++    coalesce((v_protection->>'invoice_locked')::boolean,false)));
++
++  return jsonb_strip_nulls(jsonb_build_object(
++    'timesheet_id',v_ts.timesheet_id,
++    'source_complete',v_source_complete,
++    'document_ready',v_document_ready,
++    'preparation_required',v_source_complete and not v_document_ready
++      and not coalesce((v_protection->>'invoice_locked')::boolean,false),
++    'reason_code',v_reason_code,
++    'evidence_fingerprint',v_fingerprint,
++    'document_revision',v_ts.document_revision,
++    'document_state',v_ts.document_state,
++    'document_version_id',case when v_document_ready then v_doc.id end,
++    'attachment_r2_key',case when v_document_ready then v_doc.r2_key end,
++    'attachment_sha256',case when v_document_ready then v_doc.sha256 end,
++    'attachment_size_bytes',case when v_document_ready then v_doc.size_bytes end,
++    'attachment_page_count',case when v_document_ready then v_doc.page_count end,
++    'attachment_filename',case when v_document_ready then 'timesheet-'||v_ts.timesheet_id::text||'.pdf' end,
++    'submission_mode',v_ts.submission_mode::text,
++    'sheet_scope',v_ts.sheet_scope::text,
++    'signed_qr',v_is_signed_qr,
++    'protection',v_protection
++  ));
++end
++$function$;
++
+ create or replace function public._import_review_timesheet_has_calculated_expenses_core_v1(
+   p_timesheet_id uuid
+ )
+@@ -3634,6 +3780,128 @@ begin
+       'start_time',m.start_utc,'end_time',m.end_utc,'break_minutes',m.break_mins,'role',m.assignment_code,'protection',m.protection)
+   from missing m;
+ 
++  -- Query emails can be committed only with one exact, complete, current
++  -- timesheet PDF.  Invoice-linked validation records are never eligible for
++  -- validation.  The same evidence fingerprint is frozen into the decision so
++  -- document or invoice lifecycle movement makes a reviewed action stale.
++  with evidence as materialized (
++    select c.action_id,public._import_review_query_evidence_core_v1(c.timesheet_id) evidence_json
++    from pg_temp.import_review_catalog_v1 c
++    where c.timesheet_id is not null
++      and (
++        c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++        or c.summary_json->>'authority_mode'='VALIDATION_ONLY'
++        or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
++      )
++  )
++  update pg_temp.import_review_catalog_v1 c
++  set evidence_fingerprint=public._import_review_hash_v1(concat_ws('|','query-evidence-decision-v1',
++        c.evidence_fingerprint,e.evidence_json->>'evidence_fingerprint')),
++      action_category=case
++        when c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++          and nullif(e.evidence_json->>'reason_code','') is not null then 'PENDING'
++        when (
++          c.summary_json->>'authority_mode'='VALIDATION_ONLY'
++          or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
++        ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED' then 'PENDING'
++        else c.action_category end,
++      selectable=case
++        when c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++          and nullif(e.evidence_json->>'reason_code','') is not null then false
++        when (
++          c.summary_json->>'authority_mode'='VALIDATION_ONLY'
++          or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
++        ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED' then false
++        else c.selectable end,
++      default_selected=case
++        when c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++          and nullif(e.evidence_json->>'reason_code','') is not null then false
++        when (
++          c.summary_json->>'authority_mode'='VALIDATION_ONLY'
++          or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
++        ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED' then false
++        else c.default_selected end,
++      blocking=case
++        when c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++          and nullif(e.evidence_json->>'reason_code','') is not null then true
++        when (
++          c.summary_json->>'authority_mode'='VALIDATION_ONLY'
++          or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
++        ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED' then true
++        else c.blocking end,
++      summary_json=c.summary_json||jsonb_build_object(
++        'attachment_evidence',e.evidence_json,
++        'attachment_fingerprint',e.evidence_json->>'evidence_fingerprint'
++      )||case
++        when (
++          c.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++          and nullif(e.evidence_json->>'reason_code','') is not null
++        ) or (
++          (
++            c.summary_json->>'authority_mode'='VALIDATION_ONLY'
++            or coalesce(nullif(c.summary_json->>'is_daily','')::boolean,false)
++          ) and e.evidence_json->>'reason_code'='TIMESHEET_PRESENT_BUT_INVOICED'
++        ) then jsonb_build_object(
++          'reason_code',e.evidence_json->>'reason_code',
++          'default_excluded_reason',e.evidence_json->>'reason_code',
++          'outcome_label',case e.evidence_json->>'reason_code'
++            when 'TIMESHEET_PRESENT_BUT_INVOICED' then 'Timesheet present but invoiced'
++            when 'TIMESHEET_EVIDENCE_PREPARING' then 'Preparing timesheet evidence'
++            else 'Timesheet evidence incomplete' end
++        ) else '{}'::jsonb end
++  from evidence e
++  where e.action_id=c.action_id;
++
++  -- Daily validation is atomic per Daily timesheet.  An email, document hold
++  -- or invoice blocker for that record prevents only that record from entering
++  -- validation and TSFIN work.
++  update pg_temp.import_review_catalog_v1 current_row
++  set selectable=false,
++      default_selected=false,
++      evidence_fingerprint=public._import_review_hash_v1(concat_ws('|','daily-validation-held-v1',
++        current_row.evidence_fingerprint,current_row.timesheet_id)),
++      summary_json=current_row.summary_json||jsonb_build_object(
++        'daily_validation_held',true,
++        'validation_hold_label','Validation held: resolve this Daily timesheet first'
++      )
++  where current_row.action_kind='NO_ACTION'
++    and coalesce(nullif(current_row.summary_json->>'is_daily','')::boolean,false)
++    and current_row.timesheet_id is not null
++    and exists (
++      select 1 from pg_temp.import_review_catalog_v1 hold
++      where hold.timesheet_id=current_row.timesheet_id
++        and hold.action_id<>current_row.action_id
++        and (hold.blocking or hold.action_category in ('EMAIL','PENDING','BLOCKED'))
++    );
++
++  -- Weekly validation is all-or-nothing per candidate/client/contract/week.
++  -- One mismatch, unresolved exception, missing attachment or invoice blocker
++  -- holds the whole Weekly timesheet while leaving the actual issue visible.
++  update pg_temp.import_review_catalog_v1 current_row
++  set selectable=false,
++      default_selected=false,
++      evidence_fingerprint=public._import_review_hash_v1(concat_ws('|','weekly-validation-held-v2',
++        current_row.evidence_fingerprint,current_row.candidate_id,current_row.client_id,
++        current_row.contract_id,current_row.summary_json->>'week_ending_date')),
++      summary_json=current_row.summary_json||jsonb_build_object(
++        'weekly_validation_held',true,
++        'weekly_validation_badge_code','WEEKLY_VALIDATION_HELD',
++        'weekly_validation_badge_label','Validation held: resolve outstanding shift',
++        'validation_hold_label','Validation held: one or more shifts still require action'
++      )
++  where current_row.action_kind='NO_ACTION'
++    and current_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
++    and current_row.summary_json->>'source_route' not like '%DAILY%'
++    and exists (
++      select 1 from pg_temp.import_review_catalog_v1 hold
++      where hold.candidate_id=current_row.candidate_id
++        and hold.client_id=current_row.client_id
++        and hold.contract_id is not distinct from current_row.contract_id
++        and hold.summary_json->>'week_ending_date'=current_row.summary_json->>'week_ending_date'
++        and hold.action_id<>current_row.action_id
++        and (hold.blocking or hold.action_category in ('EMAIL','PENDING','BLOCKED'))
++    );
++
+   select count(*) into v_count from pg_temp.import_review_catalog_v1;
+   if v_count>p_max_actions then
+     raise exception 'IMPORT_REVIEW_ACTION_LIMIT_EXCEEDED' using errcode='54000',
+@@ -3792,6 +4060,7 @@ revoke all on function public._import_review_assert_actor_v1(uuid) from public,a
+ revoke all on function public._import_review_ready_action_ids_core_v1(uuid) from public,anon,authenticated,service_role;
+ revoke all on function public._import_review_validate_ui_state_v1(jsonb) from public,anon,authenticated,service_role;
+ revoke all on function public._import_review_timesheet_protection_core_v1(uuid) from public,anon,authenticated,service_role;
++revoke all on function public._import_review_query_evidence_core_v1(uuid) from public,anon,authenticated,service_role;
+ revoke all on function public._import_review_auto_authorise_targets_core_v1(uuid[],public.hr_source_enum,boolean) from public,anon,authenticated,service_role;
+ revoke all on function public._import_review_effective_invoice_balance_core_v1(uuid,jsonb,integer,integer,integer,integer) from public,anon,authenticated,service_role;
+ revoke all on function public._import_review_action_catalog_core_v1(uuid,integer,integer) from public,anon,authenticated,service_role;
+diff --git a/supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql b/supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql
+index e89c078..fb43108 100644
+--- a/supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql
++++ b/supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql
+@@ -277,7 +277,23 @@ begin
+       hi.coverage_fingerprint,hi.source_file_sha256,
+       (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current and d.blocking) blocker_count,
+       (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current and d.selected) selected_count,
+-      (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current and d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')) selected_email_count
++      (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current and d.selected and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')) selected_email_count,
++      (select count(*) from public.import_review_decisions d where d.import_id=s.import_id and d.is_current
++        and (d.blocking or d.action_category in ('EMAIL','PENDING','BLOCKED'))) unresolved_current_count,
++      (select count(*) from public.import_review_action_outcomes o where o.import_id=s.import_id
++        and o.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')) applied_email_count,
++      (select count(*) from public.import_review_action_outcomes o where o.import_id=s.import_id
++        and o.action_kind in ('INCLUDE_SHIFT','APPLY_AMENDMENT','APPLY_CANCELLATION')) applied_change_count,
++      (select count(distinct o.timesheet_id) from public.import_review_action_outcomes o
++        where o.import_id=s.import_id and o.timesheet_id is not null
++          and (o.summary_json->>'authority_mode'='VALIDATION_ONLY'
++            or coalesce(nullif(o.summary_json->>'is_daily','')::boolean,false))) validation_target_count,
++      (select count(distinct o.timesheet_id) from public.import_review_action_outcomes o
++        left join public.timesheet_validations tv on tv.timesheet_id=o.timesheet_id
++        where o.import_id=s.import_id and o.timesheet_id is not null
++          and (o.summary_json->>'authority_mode'='VALIDATION_ONLY'
++            or coalesce(nullif(o.summary_json->>'is_daily','')::boolean,false))
++          and (tv.timesheet_id is null or tv.status::text<>'VALIDATION_OK' or tv.last_source is distinct from s.import_id)) validation_incomplete_count
+     from public.import_review_states s join public.hr_imports hi on hi.id=s.import_id
+     where (case upper(coalesce(p_status_class,'ACTIVE')) when 'ACTIVE' then s.status in ('STAGED','IN_REVIEW','BLOCKED','READY','APPLYING')
+       when 'COMPLETED' then s.status='APPLIED' when 'ABANDONED' then s.status='ABANDONED' when 'SUPERSEDED' then s.status='SUPERSEDED' else true end)
+@@ -290,8 +306,21 @@ begin
+   select coalesce(jsonb_agg(jsonb_build_object('schema_contract_version',schema_contract_version,
+     'import_id',import_id,'filename',filename,'source_system',source_system,'source_route',import_scope,
+     'source_hash_prefix',left(source_file_sha256,12),'coverage_mode',coverage_mode,'coverage_start_date',coverage_start_date,'coverage_end_date',coverage_end_date,
+-    'status',status,'follow_up_status',follow_up_status,'state_version',state_version,'preview_generation',preview_generation,
++    'status',status,'display_status',case
++      when status='APPLIED'
++        and follow_up_status in ('COMPLETE','NOT_REQUIRED')
++        and blocker_count=0 and unresolved_current_count=0 and applied_email_count=0
++        and validation_incomplete_count=0
++        and (
++          validation_target_count>0
++          or applied_change_count>0
++        )
++      then 'SUCCESS' else status end,
++    'follow_up_status',follow_up_status,'state_version',state_version,'preview_generation',preview_generation,
+     'blocker_count',blocker_count,'selected_count',selected_count,'selected_email_count',selected_email_count,
++    'unresolved_current_count',unresolved_current_count,'applied_email_count',applied_email_count,
++    'applied_change_count',applied_change_count,'validation_target_count',validation_target_count,
++    'validation_incomplete_count',validation_incomplete_count,
+     'read_only',status in ('APPLYING','APPLIED','ABANDONED','SUPERSEDED'),'updated_at_utc',updated_at_utc) order by updated_at_utc desc,import_id desc),'[]'),
+     (select count(*)>v_limit from page) into v_items,v_has_more from limited;
+   if v_has_more and jsonb_array_length(v_items)>0 then
+@@ -301,6 +330,50 @@ begin
+   return jsonb_build_object('ok',true,'items',v_items,'page_size',v_limit,'next_cursor',case when v_has_more then jsonb_build_object('updated_at_utc',v_last_updated_at,'import_id',v_last_import_id) end);
+ end $function$;
+ 
++create or replace function public.import_review_attachment_preparation_targets_v1(
++  p_import_id uuid,p_actor_user_id uuid default null,p_max_targets integer default 100
++)
++returns jsonb language plpgsql security definer set search_path to 'public','pg_temp' as $function$
++declare v_commands jsonb; v_count integer;
++begin
++  perform public._import_review_assert_actor_v1(p_actor_user_id);
++  if p_import_id is null or p_max_targets<1 or p_max_targets>100 then
++    raise exception 'IMPORT_REVIEW_ATTACHMENT_TARGET_INPUT_INVALID' using errcode='22023';
++  end if;
++  if not exists(select 1 from public.import_review_states s where s.import_id=p_import_id) then
++    raise exception 'IMPORT_REVIEW_NOT_FOUND' using errcode='P0002';
++  end if;
++  with targets as (
++    select distinct d.timesheet_id,e.evidence_json
++    from public.import_review_decisions d
++    cross join lateral (select public._import_review_query_evidence_core_v1(d.timesheet_id) evidence_json) e
++    where d.import_id=p_import_id and d.is_current
++      and d.action_kind in ('EMAIL_ISSUE','EMAIL_REMINDER')
++      and d.timesheet_id is not null
++      and coalesce((e.evidence_json->>'preparation_required')::boolean,false)
++    order by d.timesheet_id
++    limit p_max_targets+1
++  ), bounded as (
++    select * from targets order by timesheet_id limit p_max_targets
++  )
++  select coalesce(jsonb_agg(jsonb_build_object(
++      'command_type','VIEW_TIMESHEET_DOCUMENT',
++      'timesheet_id',timesheet_id,
++      'purpose','TIMESHEET',
++      'priority_reason','IMPORT_REVIEW_EMAIL_EVIDENCE',
++      'template_version','timesheet-professional-v2',
++      'command_token','import-review-evidence:'||public._import_review_hash_v1(concat_ws('|',p_import_id,timesheet_id,
++        evidence_json->>'evidence_fingerprint'))
++    ) order by timesheet_id),'[]'::jsonb),
++    (select count(*) from targets)
++  into v_commands,v_count
++  from bounded;
++  if v_count>p_max_targets then
++    raise exception 'IMPORT_REVIEW_ATTACHMENT_TARGET_LIMIT_EXCEEDED' using errcode='54000';
++  end if;
++  return jsonb_build_object('ok',true,'import_id',p_import_id,'target_count',coalesce(v_count,0),'commands',v_commands);
++end $function$;
++
+ create or replace function public.import_review_get_v1(
+   p_import_id uuid,p_actor_user_id uuid default null,p_action_cursor text default null,p_action_limit integer default 100,
+   p_event_cursor bigint default null,p_event_limit integer default 50
+@@ -1638,6 +1711,8 @@ revoke all on function public.import_review_replace_v1(uuid,text,date,date,jsonb
+ grant execute on function public.import_review_replace_v1(uuid,text,date,date,jsonb,jsonb,text,text,uuid,text,uuid,bigint) to service_role;
+ revoke all on function public.import_review_list_v1(text,text,uuid,date,date,timestamptz,uuid,integer) from public,anon,authenticated;
+ grant execute on function public.import_review_list_v1(text,text,uuid,date,date,timestamptz,uuid,integer) to service_role;
++revoke all on function public.import_review_attachment_preparation_targets_v1(uuid,uuid,integer) from public,anon,authenticated;
++grant execute on function public.import_review_attachment_preparation_targets_v1(uuid,uuid,integer) to service_role;
+ revoke all on function public.import_review_get_v1(uuid,uuid,text,integer,bigint,integer) from public,anon,authenticated;
+ grant execute on function public.import_review_get_v1(uuid,uuid,text,integer,bigint,integer) to service_role;
+ revoke all on function public.import_review_save_v1(uuid,bigint,integer,text,jsonb,jsonb,uuid,uuid) from public,anon,authenticated;
+diff --git a/supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql b/supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql
+index 9b0db8f..d53e8a7 100644
+--- a/supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql
++++ b/supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql
+@@ -43,6 +43,7 @@ declare
+   v_issue_ids uuid[]; v_issue_set_hash text; v_outbox_key text; v_delivery_id uuid; v_outbox_id uuid;
+   v_html text; v_text text; v_subject text; v_results jsonb:='[]'; v_group_count integer:=0; v_reminder integer;
+   v_new_delivery_count integer:=0; v_group_replay boolean; v_recipient_group_key text;
++  v_attachments jsonb:='[]'::jsonb; v_greeting text; v_agency_name text;
+ begin
+   perform public._import_review_assert_actor_v1(p_actor_user_id);
+   if p_import_id is null or p_operation_id is null or jsonb_typeof(coalesce(p_selected_action_ids,'[]'))<>'array'
+@@ -81,11 +82,24 @@ begin
+ 
+   create temporary table pg_temp.query_email_issues on commit drop as
+   select d.*,coalesce(nullif(d.summary_json->>'issue_fingerprint',''),d.source_identity) issue_fingerprint,
+-    public._timesheet_query_recipient_resolve_core_v1(d.client_id,d.contract_id) route
+-  from public.import_review_decisions d where d.import_id=p_import_id and d.action_id=any(v_ids) order by d.action_id;
++    public._timesheet_query_recipient_resolve_core_v1(d.client_id,d.contract_id) route,
++    evidence.evidence_json attachment_evidence
++  from public.import_review_decisions d
++  cross join lateral (select public._import_review_query_evidence_core_v1(d.timesheet_id) evidence_json) evidence
++  where d.import_id=p_import_id and d.action_id=any(v_ids) order by d.action_id;
+   if exists(select 1 from pg_temp.query_email_issues where route->>'recipient_scope_key' is distinct from summary_json->>'recipient_scope_key'
+     or route->>'route_fingerprint' is distinct from summary_json->>'recipient_route_fingerprint') then
+     raise exception 'TIMESHEET_QUERY_RECIPIENT_ROUTE_CHANGED' using errcode='40001'; end if;
++  if exists(select 1 from pg_temp.query_email_issues
++    where not coalesce((attachment_evidence->>'document_ready')::boolean,false)
++      or attachment_evidence->>'evidence_fingerprint' is distinct from summary_json->>'attachment_fingerprint') then
++    raise exception 'TIMESHEET_QUERY_ATTACHMENT_EVIDENCE_STALE' using errcode='40001'; end if;
++
++  select coalesce(nullif(btrim(agency_name),''),'CloudTMS') into v_agency_name
++  from public.settings_defaults order by agency_name nulls last limit 1;
++  v_agency_name:=coalesce(v_agency_name,'CloudTMS');
++  v_greeting:=case when (statement_timestamp() at time zone 'Europe/London')::time<time '12:00'
++    then 'Good morning' else 'Good afternoon' end;
+ 
+   -- Create/reuse issue identities without changing successful-send history.
+   insert into public.hr_issue_emails(source_system,import_id,client_id,contract_id,timesheet_id,hr_row_id,staff_norm,work_date,
+@@ -110,8 +124,21 @@ begin
+   loop
+     v_group_count:=v_group_count+1; if v_group_count>p_max_groups then raise exception 'TIMESHEET_QUERY_GROUP_LIMIT_EXCEEDED' using errcode='54000'; end if;
+     v_recipient_group_key:='RECIPIENT_EMAIL:'||public._import_review_hash_v1(v_group.recipient_email);
+-    select array_agg(q.issue_id order by q.issue_id),public._import_review_hash_v1(string_agg(q.issue_fingerprint,'|' order by q.issue_fingerprint))
+-      into v_issue_ids,v_issue_set_hash from pg_temp.query_email_issues q where lower(q.route->>'recipient_email')=v_group.recipient_email;
++    select array_agg(q.issue_id order by q.issue_id),
++      public._import_review_hash_v1(string_agg(q.issue_fingerprint||':'||(q.attachment_evidence->>'evidence_fingerprint'),'|' order by q.issue_fingerprint)),
++      coalesce((select jsonb_agg(jsonb_build_object(
++        'r2_key',attachment_row.attachment_evidence->>'attachment_r2_key',
++        'filename',attachment_row.attachment_evidence->>'attachment_filename'
++      ) order by attachment_row.timesheet_id)
++      from (
++        select distinct on (q2.timesheet_id) q2.timesheet_id,q2.attachment_evidence
++        from pg_temp.query_email_issues q2
++        where lower(q2.route->>'recipient_email')=v_group.recipient_email
++        order by q2.timesheet_id,q2.action_id
++      ) attachment_row),'[]'::jsonb)
++      into v_issue_ids,v_issue_set_hash,v_attachments
++    from pg_temp.query_email_issues q
++    where lower(q.route->>'recipient_email')=v_group.recipient_email;
+     v_reminder:=v_group.reminder_sequence;
+     v_outbox_key:='TIMESHEET_QUERY:'||public._import_review_hash_v1(concat_ws('|',p_operation_id,v_recipient_group_key,v_issue_set_hash,v_reminder));
+     v_delivery_id:=null;v_outbox_id:=null;v_group_replay:=false;
+@@ -137,7 +164,13 @@ begin
+             case when nullif(q.summary_json->>'hours_worked','') is not null then (q.summary_json->>'hours_worked')||' hours' end) timesheet_detail,
+           concat_ws(' ',nullif(cx.value->>'healthroster_start','')||case when nullif(cx.value->>'healthroster_end','') is null then '' else '–'||(cx.value->>'healthroster_end') end,
+             case when nullif(cx.value->>'healthroster_break_mins','') is not null then 'break '||(cx.value->>'healthroster_break_mins')||' min' end) import_detail,
+-          concat_ws(' → ',nullif(cx.value->>'ref_before',''),nullif(cx.value->>'ref_after','')) reference_detail
++          case
++            when nullif(cx.value->>'ref_before','') is not null
++              and cx.value->>'ref_before'=cx.value->>'ref_after' then cx.value->>'ref_before'
++            when nullif(cx.value->>'ref_before','') is not null and nullif(cx.value->>'ref_after','') is not null
++              then (cx.value->>'ref_before')||' → '||(cx.value->>'ref_after')
++            else coalesce(nullif(cx.value->>'ref_after',''),nullif(cx.value->>'ref_before',''))
++          end reference_detail
+         from pg_temp.query_email_issues q
+         left join public.clients cl on cl.id=q.client_id
+         left join public.contracts ct on ct.id=q.contract_id
+@@ -170,8 +203,10 @@ begin
+           public._import_review_html_escape_v1(client_name)||'</h3>'||string_agg(contract_html,'' order by contract_label,contract_sort)||'</section>' client_html
+         from contract_tables group by client_name
+       )
+-      select '<div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.45"><p>Please review the following timesheet discrepancies. Items are grouped by client and contract.</p>'||
+-        string_agg(client_html,'' order by client_name)||'</div>' into v_html from client_sections;
++      select '<div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.45"><p>'||
++        public._import_review_html_escape_v1(v_greeting)||',</p><p>Please can you kindly make amendments on HealthRoster for the below shifts. The relevant timesheets have been attached to this email.</p>'||
++        string_agg(client_html,'' order by client_name)||'<p>Many thanks,<br>'||
++        public._import_review_html_escape_v1(v_agency_name)||'</p></div>' into v_html from client_sections;
+       with lines as (
+         select q.action_id||':'||row_number() over(partition by q.action_id order by cx.value->>'comparison_key') sort_key,
+           coalesce(nullif(cl.name,''),nullif(q.summary_json->>'client_name',''),'Client') client_name,
+@@ -197,12 +232,13 @@ begin
+         ) cx
+         where lower(q.route->>'recipient_email')=v_group.recipient_email
+       )
+-      select string_agg(concat_ws(' | ',l.client_name,l.contract_label,l.candidate_name,l.work_date,l.issue_code,l.detail),'\n' order by l.client_name,l.contract_label,l.sort_key)
+-        into v_text from lines l;
++      select v_greeting||E',\n\nPlease can you kindly make amendments on HealthRoster for the below shifts. The relevant timesheets have been attached to this email.\n\n'||
++        string_agg(concat_ws(' | ',l.client_name,l.contract_label,l.candidate_name,l.work_date,l.issue_code,l.detail),'\n' order by l.client_name,l.contract_label,l.sort_key)
++        ||E'\n\nMany thanks,\n'||v_agency_name into v_text from lines l;
+       if length(v_html)>262144 or length(v_text)>131072 then raise exception 'TIMESHEET_QUERY_BODY_LIMIT_EXCEEDED' using errcode='54000'; end if;
+-      insert into public.mail_outbox(type,"to",subject,body_html,body_text,status,created_by,reference,recipient_kind,recipient_id,
++      insert into public.mail_outbox(type,"to",subject,body_html,body_text,attachments,status,created_by,reference,recipient_kind,recipient_id,
+         context_kind,context_id,email_type,deterministic_outbox_key,payment_scope_json)
+-      values('TIMESHEET_QUERY',v_group.recipient_email,v_subject,v_html,v_text,'QUEUED'::public.mail_status_enum,p_actor_user_id,
++      values('TIMESHEET_QUERY',v_group.recipient_email,v_subject,v_html,v_text,v_attachments,'QUEUED'::public.mail_status_enum,p_actor_user_id,
+         v_outbox_key,'TIMESHEET_QUERY_EMAIL',null,
+         'TIMESHEET_QUERY_DELIVERY',v_delivery_id,'TIMESHEET_QUERY',v_outbox_key,'{}'::jsonb)
+       on conflict do nothing;
+diff --git a/supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql b/supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql
+index b4f1c5b..000ef9f 100644
+--- a/supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql
++++ b/supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql
+@@ -483,11 +483,65 @@ begin
+    and gm.candidate_id = p2ok.candidate_id
+    and gm.week_ending_date = p2ok.week_ending_date;
+ 
++  -- Validation-only Weekly work is atomic at the real timesheet boundary.
++  -- A selected email by itself must never cause matching sibling shifts to be
++  -- validated or sent to TSFIN.  The complete group is eligible only when at
++  -- least one server-selected validation row exists, no unresolved action is
++  -- present, and every selectable validation row in the group was selected.
++  create temporary table tmp_mode_a_eligible_groups on commit drop as
++  select gm.contract_id,gm.candidate_id,gm.client_id,gm.week_ending_date,gm.group_id
++  from tmp_group_mode gm
++  join tmp_review_batch_units bu
++    on bu.candidate_id=gm.candidate_id and bu.client_id=gm.client_id
++  where gm.mode='MODE_A'
++    and exists (
++      select 1
++      from public.import_review_decisions selected_row
++      where selected_row.import_id=p_import_id
++        and selected_row.is_current
++        and selected_row.action_id in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
++        and selected_row.action_kind='NO_ACTION'
++        and selected_row.candidate_id=gm.candidate_id
++        and selected_row.client_id=gm.client_id
++        and selected_row.contract_id is not distinct from gm.contract_id
++        and nullif(selected_row.summary_json->>'week_ending_date','')::date=gm.week_ending_date
++        and selected_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
++    )
++    and not exists (
++      select 1
++      from public.import_review_decisions hold
++      where hold.import_id=p_import_id
++        and hold.is_current
++        and hold.candidate_id=gm.candidate_id
++        and hold.client_id=gm.client_id
++        and hold.contract_id is not distinct from gm.contract_id
++        and nullif(hold.summary_json->>'week_ending_date','')::date=gm.week_ending_date
++        and hold.summary_json->>'source_route' not like '%DAILY%'
++        and (hold.blocking or hold.action_category in ('EMAIL','PENDING','BLOCKED'))
++    )
++    and not exists (
++      select 1
++      from public.import_review_decisions deferred_row
++      where deferred_row.import_id=p_import_id
++        and deferred_row.is_current
++        and deferred_row.action_kind='NO_ACTION'
++        and deferred_row.selectable
++        and deferred_row.candidate_id=gm.candidate_id
++        and deferred_row.client_id=gm.client_id
++        and deferred_row.contract_id is not distinct from gm.contract_id
++        and nullif(deferred_row.summary_json->>'week_ending_date','')::date=gm.week_ending_date
++        and deferred_row.summary_json->>'authority_mode'='VALIDATION_ONLY'
++        and deferred_row.action_id not in (select jsonb_array_elements_text(v_review_guard->'selected_action_ids'))
++    );
++
+   select coalesce(array_agg(distinct m.external_row_key order by m.external_row_key), array[]::text[])
+   into v_mode_a_external_keys
+   from tmp_p2_ok_mode m
+-  join tmp_review_batch_units bu
+-    on bu.candidate_id=m.candidate_id and bu.client_id=m.client_id
++  join tmp_mode_a_eligible_groups eligible
++    on eligible.contract_id=m.contract_id
++   and eligible.candidate_id=m.candidate_id
++   and eligible.client_id=m.client_id
++   and eligible.week_ending_date=m.week_ending_date
+   where m.mode = 'MODE_A';
+ 
+   select coalesce(array_agg(distinct m.external_row_key order by m.external_row_key), array[]::text[])
+@@ -2031,9 +2085,11 @@ begin
+     and nullif(btrim(r.value->>'week_ending_date'), '') is not null
+     and nullif(btrim(r.value->>'client_id'), '') is not null
+     and exists (
+-      select 1 from tmp_review_batch_units bu
+-      where bu.candidate_id=nullif(btrim(r.value->>'candidate_id'), '')::uuid
+-        and bu.client_id=nullif(btrim(r.value->>'client_id'), '')::uuid
++      select 1 from tmp_mode_a_eligible_groups eligible
++      where eligible.candidate_id=nullif(btrim(r.value->>'candidate_id'), '')::uuid
++        and eligible.client_id=nullif(btrim(r.value->>'client_id'), '')::uuid
++        and eligible.contract_id=nullif(btrim(r.value->>'contract_id'), '')::uuid
++        and eligible.week_ending_date=nullif(btrim(r.value->>'week_ending_date'), '')::date
+     );
+ 
+   select count(*)::int
+diff --git a/tests/import-review-validation-evidence-integrity.test.cjs b/tests/import-review-validation-evidence-integrity.test.cjs
+new file mode 100644
+index 0000000..0c27e18
+--- /dev/null
++++ b/tests/import-review-validation-evidence-integrity.test.cjs
+@@ -0,0 +1,76 @@
++const test = require('node:test');
++const assert = require('node:assert/strict');
++const fs = require('node:fs');
++const path = require('node:path');
++
++const read = (relative) => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
++const core = read('supabase/repeatable/21072026_1820_00_import_review_internal_core.sql');
++const lifecycle = read('supabase/repeatable/21072026_1820_01_import_review_lifecycle_rpcs.sql');
++const email = read('supabase/repeatable/21072026_1820_04_timesheet_query_email_rpcs.sql');
++const weekly = read('supabase/repeatable/21072026_1820_06_hr_weekly_apply_transactional.sql');
++const worker = read('broker/src/import-review.js');
++const entry = read('broker/src/index.js');
++
++test('query evidence requires a complete exact current timesheet document', () => {
++  assert.match(core, /_import_review_query_evidence_core_v1/);
++  assert.match(core, /current_document_version_id/);
++  assert.match(core, /v_doc\.source_revision=v_ts\.document_revision::text/);
++  assert.match(core, /v_doc\.status='READY'/);
++  assert.match(core, /TIMESHEET_PRESENT_BUT_INVOICED/);
++  assert.match(core, /TIMESHEET_EVIDENCE_INCOMPLETE/);
++  assert.match(core, /TIMESHEET_EVIDENCE_PREPARING/);
++  assert.match(core, /r2_nurse_key[\s\S]*r2_auth_key/);
++  assert.match(core, /qr_signed_hash[\s\S]*qr_signed_at_utc/);
++  assert.match(core, /v_is_signed_qr:=v_ts\.qr_status is not null/);
++  assert.match(core, /jsonb_array_length[\s\S]*and not exists/);
++});
++
++test('catalog holds Daily records independently and Weekly validation atomically', () => {
++  assert.match(core, /daily-validation-held-v1/);
++  assert.match(core, /weekly-validation-held-v2/);
++  assert.match(core, /weekly_validation_badge_code','WEEKLY_VALIDATION_HELD'/);
++  assert.match(core, /hold\.action_category in \('EMAIL','PENDING','BLOCKED'\)/);
++  assert.match(weekly, /tmp_mode_a_eligible_groups/);
++  assert.match(weekly, /selected_row\.action_kind='NO_ACTION'/);
++  assert.match(weekly, /hold\.action_category in \('EMAIL','PENDING','BLOCKED'\)/);
++  assert.match(weekly, /join tmp_mode_a_eligible_groups eligible/);
++});
++
++test('query emails re-attest and attach the exact current document', () => {
++  assert.match(email, /TIMESHEET_QUERY_ATTACHMENT_EVIDENCE_STALE/);
++  assert.match(email, /attachment_evidence->>'evidence_fingerprint' is distinct from summary_json->>'attachment_fingerprint'/);
++  assert.match(email, /Please can you kindly make amendments on HealthRoster for the below shifts/);
++  assert.match(email, /The relevant timesheets have been attached to this email/);
++  assert.match(email, /Many thanks/);
++  assert.match(email, /v_agency_name/);
++  assert.match(email, /body_text,attachments,status/);
++  assert.match(email, /'r2_key'[\s\S]*'filename'/);
++  assert.match(email, /when nullif\(cx\.value->>'ref_before',''\) is not null[\s\S]*cx\.value->>'ref_before'=cx\.value->>'ref_after'/);
++});
++
++test('document generation is asynchronous and idempotently nudged', () => {
++  assert.match(lifecycle, /import_review_attachment_preparation_targets_v1/);
++  assert.match(lifecycle, /VIEW_TIMESHEET_DOCUMENT/);
++  assert.match(lifecycle, /IMPORT_REVIEW_EMAIL_EVIDENCE/);
++  assert.match(worker, /scheduleAttachmentPreparation/);
++  assert.match(worker, /invoice_operation_start_batch/);
++  assert.match(worker, /ctx\.waitUntil\(task\)/);
++  assert.match(entry, /nudgeInvoiceOperations/);
++});
++
++test('history exposes SUCCESS only from settled server evidence', () => {
++  assert.match(lifecycle, /'display_status',case/);
++  assert.match(lifecycle, /status='APPLIED'/);
++  assert.match(lifecycle, /follow_up_status in \('COMPLETE','NOT_REQUIRED'\)/);
++  assert.match(lifecycle, /applied_email_count=0/);
++  assert.match(lifecycle, /validation_incomplete_count=0/);
++  assert.match(lifecycle, /then 'SUCCESS'/);
++});
++
++test('scope stays outside Banking Pay and invoice/TSFIN writers', () => {
++  for (const sql of [lifecycle, email, weekly]) {
++    assert.doesNotMatch(sql, /create or replace function public\.pay_/i);
++  }
++  assert.doesNotMatch(core, /create or replace function public\.invoice_create/i);
++  assert.doesNotMatch(core, /create or replace function public\.tsfin_/i);
++});
+-- 
+2.54.0.windows.1
+

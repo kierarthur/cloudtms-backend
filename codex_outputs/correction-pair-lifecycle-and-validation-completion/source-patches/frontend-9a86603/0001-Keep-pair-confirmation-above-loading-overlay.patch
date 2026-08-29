@@ -1,0 +1,64 @@
+From 9a86603daec148c9284e853ab031974158d7ddd7 Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 21:26:11 +0100
+Subject: [PATCH] Keep pair confirmation above loading overlay
+
+---
+ js/main.js                                         | 4 ++++
+ tests/correction-pair-lifecycle-ui.static.test.mjs | 7 +++++++
+ 2 files changed, 11 insertions(+)
+
+diff --git a/js/main.js b/js/main.js
+index d9d6ab1..99614f9 100644
+--- a/js/main.js
++++ b/js/main.js
+@@ -265983,6 +265983,7 @@ async function unauthoriseTimesheet(ctxOrId, expectedTimesheetId) {
+     } catch (err) {
+       if (String(err?.json?.error_code || err?.json?.error || '').toUpperCase() === 'CORRECTION_PAIR_CONFIRMATION_REQUIRED') {
+         const preview = err?.json?.pair_lifecycle || {};
++        GE();
+         const confirmation = await openUiConfirmModal({
+           title: 'Unauthorise linked correction pair',
+           message: `This timesheet is one half of a linked correction pair. Both timesheets will be unauthorised together (${Number(preview.affected_timesheet_count || 2)} timesheets affected). Continue?`,
+@@ -265992,6 +265993,7 @@ async function unauthoriseTimesheet(ctxOrId, expectedTimesheetId) {
+           GE();
+           return { ok: false, cancelled: true };
+         }
++        GC('unauthoriseTimesheet.confirmedPair');
+         json = await apiPostJson(urlPath, { ...payload, confirm_pair_lifecycle: true });
+       }
+       if (!json) {
+@@ -303806,6 +303808,7 @@ async function authoriseTimesheet(ctxOrId, expectedTimesheetId) {
+     } catch (err) {
+       if (String(err?.json?.error_code || err?.json?.error || '').toUpperCase() === 'CORRECTION_PAIR_CONFIRMATION_REQUIRED') {
+         const preview = err?.json?.pair_lifecycle || {};
++        GE();
+         const confirmation = await openUiConfirmModal({
+           title: 'Authorise linked correction pair',
+           message: `This timesheet is one half of a linked correction pair. Both timesheets will be authorised together (${Number(preview.affected_timesheet_count || 2)} timesheets affected). Continue?`,
+@@ -303815,6 +303818,7 @@ async function authoriseTimesheet(ctxOrId, expectedTimesheetId) {
+           GE();
+           return { ok: false, cancelled: true };
+         }
++        GC('authoriseTimesheet.confirmedPair');
+         json = await apiPostJson(urlPath, { ...payload, confirm_pair_lifecycle: true });
+       }
+       if (!json) {
+diff --git a/tests/correction-pair-lifecycle-ui.static.test.mjs b/tests/correction-pair-lifecycle-ui.static.test.mjs
+index 103bcb2..bd14e72 100644
+--- a/tests/correction-pair-lifecycle-ui.static.test.mjs
++++ b/tests/correction-pair-lifecycle-ui.static.test.mjs
+@@ -42,3 +42,10 @@ test('the incomplete placement blocker has a friendly Import Review explanation'
+   assert.match(importReview, /IMPORT_REVIEW_CORRECTION_PAIR_PLACEMENT_INCOMPLETE/i);
+   assert.match(importReview, /temporarily split while one member is being moved between invoices/i);
+ });
++
++test('simple correction-pair confirmation is not covered by the global loading overlay', () => {
++  assert.match(main, /GE\(\);\s*const confirmation = await openUiConfirmModal\(\{\s*title: 'Unauthorise linked correction pair'/s);
++  assert.match(main, /GC\('unauthoriseTimesheet\.confirmedPair'\);\s*json = await apiPostJson\(urlPath, \{ \.\.\.payload, confirm_pair_lifecycle: true \}\)/s);
++  assert.match(main, /GE\(\);\s*const confirmation = await openUiConfirmModal\(\{\s*title: 'Authorise linked correction pair'/s);
++  assert.match(main, /GC\('authoriseTimesheet\.confirmedPair'\);\s*json = await apiPostJson\(urlPath, \{ \.\.\.payload, confirm_pair_lifecycle: true \}\)/s);
++});
+-- 
+2.54.0.windows.1
+

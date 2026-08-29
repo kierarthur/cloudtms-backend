@@ -1,0 +1,39 @@
+From 16c9143d89467b07b482ce5ae2ebfb6b8e5095dd Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 17:32:41 +0100
+Subject: [PATCH] Accept the Email review section in UI state
+
+---
+ .../repeatable/21072026_1820_00_import_review_internal_core.sql | 2 +-
+ tests/import-review-validation-only-policy.test.cjs             | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql b/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
+index e57c67b..8eca1a5 100644
+--- a/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
++++ b/supabase/repeatable/21072026_1820_00_import_review_internal_core.sql
+@@ -432,7 +432,7 @@ begin
+   end if;
+   if v?'active_section' and (
+     jsonb_typeof(v->'active_section')<>'string'
+-    or upper(v->>'active_section') not in ('PENDING','READY','EMAILS','NO_ACTION')
++    or upper(v->>'active_section') not in ('PENDING','READY','EMAIL','NO_ACTION')
+   ) then raise exception 'IMPORT_REVIEW_UI_STATE_SECTION_INVALID' using errcode='22023'; end if;
+   if v?'scroll_anchor' and jsonb_typeof(v->'scroll_anchor')<>'null' then
+     raise exception 'IMPORT_REVIEW_UI_STATE_SCROLL_ANCHOR_INVALID' using errcode='22023'; end if;
+diff --git a/tests/import-review-validation-only-policy.test.cjs b/tests/import-review-validation-only-policy.test.cjs
+index f573dce..99462e3 100644
+--- a/tests/import-review-validation-only-policy.test.cjs
++++ b/tests/import-review-validation-only-policy.test.cjs
+@@ -58,7 +58,7 @@ test('UI contract hides mismatch support rows from Passed checks', () => {
+ });
+ 
+ test('UI state accepts the Emails section but persists only opaque expansion tokens', () => {
+-  assert.match(core, /upper\(v->>'active_section'\) not in \('PENDING','READY','EMAILS','NO_ACTION'\)/);
++  assert.match(core, /upper\(v->>'active_section'\) not in \('PENDING','READY','EMAIL','NO_ACTION'\)/);
+   assert.match(core, /\^\(candidate\|client\|week\|shift\):u-/);
+   assert.match(core, /IMPORT_REVIEW_UI_STATE_CONTAINS_AUTHORITY/);
+   assert.doesNotMatch(core, /v::text ~\* '\(recipient\|email\|amount/);
+-- 
+2.54.0.windows.1
+

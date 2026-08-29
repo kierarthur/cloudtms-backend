@@ -32,7 +32,7 @@ as $$
     least(coalesce(c.end_date, $3), $3) as "to"
   from contracts c
   left join clients cl on cl.id = c.client_id
-  where c.candidate_id = $1
+  where c.candidate_id is not distinct from $1
     and c.start_date <= $3
     and coalesce(c.end_date, $3) >= $2
   order by greatest(c.start_date, $2), cl.name nulls last, c.role nulls last, c.band nulls last;
@@ -350,7 +350,6 @@ where date between $2 and $3
 order by date, contract_id;
 $$;
 
-
 -- =========================================================
 -- Contract: day feed for a single contract
 -- (fixed: prevents contract_id shadowing)
@@ -389,4 +388,3 @@ as $$
   ) as f
   where f.contract_id = $1;
 $$;
-

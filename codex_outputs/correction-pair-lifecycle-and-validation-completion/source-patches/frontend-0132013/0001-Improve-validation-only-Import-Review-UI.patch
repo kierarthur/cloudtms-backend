@@ -1,0 +1,262 @@
+From 0132013405d06105dfd6325c00e22070e5b5024a Mon Sep 17 00:00:00 2001
+From: kierarthur <kier@arthur-rai.co.uk>
+Date: Sun, 2 Aug 2026 17:06:34 +0100
+Subject: [PATCH] Improve validation-only Import Review UI
+
+---
+ index.html                             |   2 +-
+ js/import-review-v1.js                 | 114 ++++++++++++++++++++++---
+ tests/import-review-v1.static.test.mjs |  23 ++++-
+ 3 files changed, 123 insertions(+), 16 deletions(-)
+
+diff --git a/index.html b/index.html
+index 89feab3..88fa133 100644
+--- a/index.html
++++ b/index.html
+@@ -2816,7 +2816,7 @@ body{
+  <script src="./js/invoice-diagnostic-catalog.js?v=20260728-invoice-async-v8-source-evidence-r1"></script>
+  <script src="./js/invoice-batch-modal.js?v=20260730-invoice-v8-auto-recovery-r8"></script>
+ <script src="./js/invoice-async-ui.js?v=20260730-invoice-refs-ward-r13"></script>
+- <script src="./js/import-review-v1.js?v=20260723-confirm-outcomes-v1"></script>
++ <script src="./js/import-review-v1.js?v=20260802-validation-policy-r1"></script>
+  <script src="./js/bulk-row-freshness-v1.js"></script>
+  <script src="./js/bulk-authorise-lifecycle-v2.js"></script>
+  <script src="./js/bulk-authorise-evidence-controller.js"></script>
+diff --git a/js/import-review-v1.js b/js/import-review-v1.js
+index d391acd..a2dcf19 100644
+--- a/js/import-review-v1.js
++++ b/js/import-review-v1.js
+@@ -43,6 +43,16 @@
+         const r = Math.random() * 16 | 0;
+         return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+       });
++  function opaqueUiToken(value) {
++    let left = 0x811c9dc5;
++    let right = 0x9e3779b9;
++    for (const ch of String(value || '')) {
++      const code = ch.codePointAt(0);
++      left = Math.imul(left ^ code, 0x01000193) >>> 0;
++      right = Math.imul(right ^ (code + 0x7f4a7c15), 0x85ebca6b) >>> 0;
++    }
++    return `${left.toString(16).padStart(8, '0')}${right.toString(16).padStart(8, '0')}`;
++  }
+   const recoveryKey = (importId) => `cloudtms:import-review:v3:apply:${importId}`;
+   function recoveryFor(importId) {
+     try { return JSON.parse(global.sessionStorage.getItem(recoveryKey(importId)) || 'null'); } catch { return null; }
+@@ -798,7 +808,8 @@
+       TIMESHEET_NOT_FOUND: 'No eligible existing daily timesheet was found. Correct the timesheet records outside this review, then return and recheck.',
+       WEEKLY_TIMESHEET_NOT_SUBMITTED: 'Request timesheet from candidate. The candidate has not submitted an eligible weekly timesheet for this client and week. Ask them to submit one containing this shift, then choose Recheck.',
+       DAILY_TIMESHEET_NOT_SUBMITTED: 'Request timesheet from candidate. The candidate has not submitted an eligible Daily timesheet for this client and date. Ask them to submit one containing this shift, then choose Recheck.',
+-      WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET: 'Candidate timesheet states they did not work this shift. HealthRoster contains the shift, but the submitted candidate timesheet does not. The HealthRoster record likely needs correcting or removing. This item is not included in the client query email.',
++      WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET: 'HealthRoster contains this shift, but the submitted Weekly candidate timesheet does not. Confirm “candidate did not work” only if that omission is correct. This validation exception does not alter hours, financials or HealthRoster evidence.',
++      CANDIDATE_DID_NOT_WORK_CONFIRMED: 'Confirmed: the candidate did not work this HealthRoster shift. The remaining submitted Weekly shifts can pass validation; no hours or financial records were changed.',
+       DAILY_SHIFT_ABSENT_FROM_TIMESHEET: 'Candidate timesheet states they did not work this shift. HealthRoster contains the shift, but the submitted candidate Daily timesheet does not. The HealthRoster record likely needs correcting or removing. This item is not included in the client query email.',
+       TIMESHEET_AMBIGUOUS: 'Choose the existing timesheet that this HealthRoster row validates.',
+       ACTUAL_HOURS_MISMATCH: 'Imported worked hours differ from the current CloudTMS timesheet. Review both sides before continuing.',
+@@ -924,7 +935,8 @@
+       ACTUAL_HOURS_MISMATCH: 'Hours differ', MISSING_FROM_IMPORT: 'Missing from complete import',
+       MISSING_FROM_COMPLETE_IMPORT: 'Missing from complete import', UNMATCHED: 'Timesheet shift is missing from the import',
+       HR_ONLY: 'Imported shift is missing from the timesheet', AMBIGUOUS: 'Shift pairing is ambiguous',
+-      MISMATCH: 'Start, end or break differs', REFERENCE: 'Reference differs'
++      MISMATCH: 'Start, end or break differs', REFERENCE: 'Reference differs',
++      CONFIRMED_EXCEPTION: 'Candidate did not work this HealthRoster shift'
+     };
+     return codes.length ? `<ul class="irv1-differences">${codes.map((code) => `<li>${esc(labels[String(code).toUpperCase()] || 'Evidence differs')}</li>`).join('')}</ul>` : '<span class="mini">No difference</span>';
+   }
+@@ -959,7 +971,8 @@
+     const reasonCode = String(summary.reason_code || '').toUpperCase();
+     const reason = summary.reason_code ? `<span class="irv1-reason">${esc(reasonText(summary.reason_code))}</span>` : '';
+     const excluded = excludedReasonText(item.default_excluded_reason || summary.default_excluded_reason);
+-    const inlineResolution = ['CANDIDATE_UNRESOLVED','CLIENT_UNRESOLVED','GRADE_MAPPING_REQUIRED'].includes(reasonCode);
++    const inlineResolution = ['CANDIDATE_UNRESOLVED','CLIENT_UNRESOLVED','GRADE_MAPPING_REQUIRED',
++      'WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET','CANDIDATE_DID_NOT_WORK_CONFIRMED'].includes(reasonCode);
+     const advice = item.action_kind === 'ADVISORY' && !inlineResolution ? '<span class="irv1-advisory">This is an advisory. Use Save & close, fix it in the relevant record, then reopen and choose Recheck.</span>' : '';
+     const editable = reviewCan(review, 'SAVE_SELECTIONS');
+     const checkbox = item.selectable
+@@ -969,8 +982,18 @@
+       ? `<button type="button" class="irv1-btn" data-ir-action="resolve-mapping" data-resolution="CANDIDATE" data-action-id="${esc(item.action_id)}">Link candidate</button>`
+       : reasonCode === 'CLIENT_UNRESOLVED' && editable
+         ? `<button type="button" class="irv1-btn" data-ir-action="resolve-mapping" data-resolution="CLIENT" data-action-id="${esc(item.action_id)}">Link client</button>`
+-        : reasonCode === 'GRADE_MAPPING_REQUIRED' ? gradeResolutionControl(item, editable) : '';
+-    return `<tr data-action-id="${esc(item.action_id)}"><td>${checkbox}</td><td>${evidenceCell(item, 'imported_evidence')}</td><td>${evidenceCell(item, 'current_evidence')}</td><td>${differenceCell(item)}</td><td><strong>${esc(item.outcome_label || 'Review item')}</strong>${reason}${excluded ? `<span class="irv1-advisory">${esc(excluded)}</span>` : ''}${advice}${resolution}</td></tr>`;
++        : reasonCode === 'GRADE_MAPPING_REQUIRED' ? gradeResolutionControl(item, editable)
++          : reasonCode === 'WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET' && editable
++            ? `<button type="button" class="irv1-btn primary" data-ir-action="weekly-candidate-not-worked" data-action-id="${esc(item.action_id)}" data-confirmed="true">Confirm candidate did not work this shift</button>`
++            : reasonCode === 'CANDIDATE_DID_NOT_WORK_CONFIRMED' && editable
++              ? `<button type="button" class="irv1-btn" data-ir-action="weekly-candidate-not-worked" data-action-id="${esc(item.action_id)}" data-confirmed="false">Undo confirmation</button>`
++              : '';
++    const deliveryStatus = ['EMAIL_ISSUE','EMAIL_REMINDER'].includes(item.action_kind)
++      ? `<span class="irv1-advisory">${Number(summary.sent_count || 0)>0
++          ? `Previously sent ${Number(summary.sent_count)} time${Number(summary.sent_count)===1?'':'s'} · ${esc(String(summary.delivery_history_status || 'SENT_VERIFIED').replaceAll('_',' ').toLowerCase())}`
++          : 'Not previously sent. A reminder is never selected automatically.'}</span>`
++      : '';
++    return `<tr data-action-id="${esc(item.action_id)}"><td>${checkbox}</td><td>${evidenceCell(item, 'imported_evidence')}</td><td>${evidenceCell(item, 'current_evidence')}</td><td>${differenceCell(item)}</td><td><strong>${esc(item.outcome_label || 'Review item')}</strong>${reason}${deliveryStatus}${excluded ? `<span class="irv1-advisory">${esc(excluded)}</span>` : ''}${advice}${resolution}</td></tr>`;
+   }
+ 
+   function reviewRoute(review) {
+@@ -1042,7 +1065,9 @@
+       const isPrimary = depth === 0;
+       const open = review.expanded.has(node.key);
+       const children = Array.from(node.children.values()).map((child) => renderNode(child, depth + 1)).join('');
+-      const badges = node.type === 'candidate' ? branchBadgesHtml(node.badges) : '';
++      // Issue badges belong to the affected shift row.  Candidate-level badge
++      // rolls made unrelated rows look as if they shared the same problem.
++      const badges = '';
+       const bigToggle = isPrimary ? `<button type="button" class="irv1-branch-toggle" data-ir-action="toggle-branch" data-expand="${open ? 'false' : 'true'}" aria-label="${open ? 'Collapse' : 'Expand'} ${esc(node.label)} and all sections">${open ? '−' : '+'}</button>` : '';
+       return `<details class="irv1-group" data-ir-expand-key="${esc(node.key)}" ${open ? 'open' : ''}><summary>${bigToggle}<span class="irv1-group-label">${esc(node.label)} · ${node.count} item${node.count === 1 ? '' : 's'}</span>${badges}</summary>${children}${node.items.length ? table(node.items) : ''}</details>`;
+     };
+@@ -1058,14 +1083,41 @@
+       const clientKey = String(item.client_id || item.summary?.recipient_scope_key || 'client-unavailable');
+       const clientLabel = item.client_name || item.summary?.client_name || 'Client';
+       const group = groups.get(recipientKey);
+-      if (!group.clients.has(clientKey)) group.clients.set(clientKey, { label: clientLabel, contracts: new Map() });
++      if (!group.clients.has(clientKey)) group.clients.set(clientKey, { label: clientLabel, candidates: new Map() });
+       const client = group.clients.get(clientKey);
++      const candidateKey = String(item.candidate_id || item.candidate_branch_key || item.candidate_name || 'candidate-unavailable');
++      const candidateLabel = item.candidate_name || item.summary?.candidate_name || 'Unknown candidate';
++      if (!client.candidates.has(candidateKey)) client.candidates.set(candidateKey, { label: candidateLabel, contracts: new Map() });
++      const candidate = client.candidates.get(candidateKey);
+       const contractKey = String(item.contract_id || item.summary?.recipient_scope_key || 'client-default');
+       const contractLabel = item.contract_label || 'Client default';
+-      if (!client.contracts.has(contractKey)) client.contracts.set(contractKey, { label: contractLabel, rows: [] });
+-      client.contracts.get(contractKey).rows.push(item);
++      if (!candidate.contracts.has(contractKey)) candidate.contracts.set(contractKey, { label: contractLabel, rows: [] });
++      candidate.contracts.get(contractKey).rows.push(item);
+     }
+-    return Array.from(groups, ([recipientKey, group]) => `<section class="irv1-email-group"><h4>One email to ${esc(group.recipient)}</h4><div class="mini">All selected rows are combined into one tidy message. They are shown below as Client → Contract → Shift.</div>${Array.from(group.clients, ([clientKey, client]) => { const expandClient = `client:email:${recipientKey}:${clientKey}`; return `<details class="irv1-group" data-ir-expand-key="${esc(expandClient)}" ${review.expanded.has(expandClient) ? 'open' : ''}><summary>${esc(client.label)}</summary>${Array.from(client.contracts, ([contractKey, contract]) => { const expandContract = `week:email:${recipientKey}:${clientKey}:${contractKey}`; return `<details class="irv1-group" data-ir-expand-key="${esc(expandContract)}" ${review.expanded.has(expandContract) ? 'open' : ''}><summary>${esc(contract.label)} · ${contract.rows.length} shift${contract.rows.length === 1 ? '' : 's'}</summary><table class="irv1-shifts"><thead><tr><th>Use</th><th>Imported evidence</th><th>Current CloudTMS evidence</th><th>Difference</th><th>Proposed outcome</th></tr></thead><tbody>${contract.rows.map((item) => shiftRow(item, review)).join('')}</tbody></table></details>`; }).join('')}</details>`; }).join('')}</section>`).join('');
++    const table = (rows) => `<table class="irv1-shifts"><thead><tr><th>Use</th><th>Imported evidence</th><th>Current CloudTMS evidence</th><th>Difference</th><th>Proposed outcome</th></tr></thead><tbody>${rows.map((item) => shiftRow(item, review)).join('')}</tbody></table>`;
++    return Array.from(groups, ([recipientKey, group]) => {
++      const routeToken = opaqueUiToken(recipientKey);
++      return `<section class="irv1-email-group"><h4>One email to ${esc(group.recipient)}</h4><div class="mini">Selected rows are combined into one message and shown as Client → Candidate → Contract → Shift.</div>${Array.from(group.clients, ([clientKey, client]) => {
++        const expandClient = `client:u-${routeToken}-${opaqueUiToken(clientKey)}`;
++        const openClient = review.expanded.has(expandClient);
++        const clientCount = Array.from(client.candidates.values()).reduce((total, candidate) => total + Array.from(candidate.contracts.values()).reduce((n, contract) => n + contract.rows.length, 0), 0);
++        return `<details class="irv1-group" data-ir-expand-key="${esc(expandClient)}" ${openClient ? 'open' : ''}><summary><button type="button" class="irv1-branch-toggle" data-ir-action="toggle-branch" data-expand="${openClient ? 'false' : 'true'}" aria-label="${openClient ? 'Collapse' : 'Expand'} ${esc(client.label)} and all sections">${openClient ? '−' : '+'}</button><span class="irv1-group-label">${esc(client.label)} · ${clientCount} shift${clientCount===1?'':'s'}</span></summary>${Array.from(client.candidates, ([candidateKey, candidate]) => {
++          const expandCandidate = `candidate:u-${routeToken}-${opaqueUiToken(`${clientKey}|${candidateKey}`)}`;
++          const candidateRows = Array.from(candidate.contracts.values()).flatMap((contract) => contract.rows);
++          const summaryRow = candidateRows[0]?.summary || {};
++          const totalShifts = Number(summaryRow.validation_total_shift_count || candidateRows.reduce((n, row) => n + Math.max(1, Array.isArray(row.evidence_rows) ? row.evidence_rows.length : 1), 0));
++          const differenceCount = Number(summaryRow.validation_difference_count || candidateRows.reduce((n, row) => n + Math.max(1, Array.isArray(row.evidence_rows) ? row.evidence_rows.length : 1), 0));
++          const weekEnding = candidateRows[0]?.week_ending_date || summaryRow.week_ending_date;
++          const validationLabel = totalShifts > 0
++            ? `${candidate.label} · Week ending ${formatDate(weekEnding)} — validation failed: ${differenceCount} of ${totalShifts} shift${totalShifts===1?'':'s'} differ${differenceCount===1?'s':''}`
++            : candidate.label;
++          return `<details class="irv1-group" data-ir-expand-key="${esc(expandCandidate)}" ${review.expanded.has(expandCandidate) ? 'open' : ''}><summary>${esc(validationLabel)}</summary>${Array.from(candidate.contracts, ([contractKey, contract]) => {
++            const expandContract = `week:u-${routeToken}-${opaqueUiToken(`${clientKey}|${candidateKey}|${contractKey}`)}`;
++            return `<details class="irv1-group" data-ir-expand-key="${esc(expandContract)}" ${review.expanded.has(expandContract) ? 'open' : ''}><summary>${esc(contract.label)} · ${contract.rows.length} shift${contract.rows.length===1?'':'s'}</summary>${table(contract.rows)}</details>`;
++          }).join('')}</details>`;
++        }).join('')}</details>`;
++      }).join('')}</section>`;
++    }).join('');
+   }
+ 
+   function sortButtons(review) {
+@@ -1079,7 +1131,7 @@
+       ['PENDING', 'Pending action', 'Resolve blockers or choose required evidence'],
+       ['READY', 'Ready', 'Changes and selections ready to apply'],
+       ...(reviewRoute(review) === 'NHSP' ? [] : [['EMAIL', 'Emails', 'Client query rows selected for grouped emails']]),
+-      ['NO_ACTION', 'No action required', 'Automatic and unchanged rows']
++      ['NO_ACTION', 'Passed checks', 'Validated rows and confirmed non-financial exceptions']
+     ];
+     return cards.map(([view, label, help]) => `<button type="button" class="irv1-card-filter ${review.view === view ? 'is-active' : ''}" data-ir-action="review-view" data-view="${view}"><strong>${Number(counts[view] || 0)}</strong><span>${esc(label)}</span><small>${esc(help)}</small></button>`).join('');
+   }
+@@ -1395,6 +1447,40 @@
+     }
+   }
+ 
++  async function saveWeeklyCandidateNotWorked(actionId, confirmed) {
++    const review = state.review;
++    if (!review || !reviewCan(review, 'SAVE_SELECTIONS')) return;
++    if (!(await flushSelections({ quiet: true }))) return;
++    const item = (review.pageData?.items || []).find((entry) => String(entry.action_id) === String(actionId));
++    if (!item || item.summary?.resolution_kind !== 'WEEKLY_CANDIDATE_DID_NOT_WORK') return;
++    const accepted = await importUiConfirm({
++      title: confirmed ? 'Confirm candidate did not work this shift?' : 'Undo confirmed exception?',
++      messageHtml: confirmed
++        ? `<div style="font-size:14px;font-weight:700;margin-bottom:6px;">${esc(item.candidate_name || item.summary?.candidate_name || 'Candidate')} · ${esc(formatDate(item.work_date || item.summary?.work_date))}</div><div class="mini">Use this only when the candidate submitted a Weekly timesheet and deliberately omitted this HealthRoster shift because they did not work it. CloudTMS will validate the remaining submitted shifts. No timesheet hours, TSFIN, invoice, payment or financial record will be changed.</div>`
++        : '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">Return this shift to Resolve blockers?</div><div class="mini">The Weekly validation will fail again until the shift is corrected or explicitly confirmed.</div>',
++      confirmLabel: confirmed ? 'Confirm candidate did not work' : 'Undo confirmation',
++      cancelLabel: 'Cancel',
++      danger: false
++    });
++    if (!accepted) return;
++    try {
++      await request(`/api/import-reviews/${encodeURIComponent(review.importId)}/weekly-candidate-not-worked`, {
++        method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({
++          action_id: item.action_id,
++          confirmed,
++          expected_state_version: review.header.state.state_version,
++          expected_preview_generation: review.header.state.preview_generation,
++          expected_evidence_fingerprint: item.evidence_fingerprint,
++          request_id: makeUuid()
++        })
++      });
++      await openReview(review.importId, { page: 1, skipAutoRecheck: true });
++    } catch (error) {
++      review.error = error.message || 'The Weekly validation exception was not saved. Choose Recheck and try again.';
++      showScreen('Import review', renderReview, 'import-review-v1');
++    }
++  }
++
+   async function refreshReview() {
+     const review = state.review;
+     if (!review) return;
+@@ -1715,6 +1801,12 @@
+         const select = document.querySelector(`[data-ir-daily-resolution="${CSS.escape(item?.action_id || '')}"]`);
+         if (select) return saveDailyResolution(select, null);
+       }
++      if (action === 'weekly-candidate-not-worked') {
++        return saveWeeklyCandidateNotWorked(
++          button.getAttribute('data-action-id'),
++          button.getAttribute('data-confirmed') === 'true'
++        );
++      }
+       if (action === 'conflict-save') { state.review.conflictBuffer = null; return flushSelections(); }
+       if (action === 'conflict-discard') { state.review.dirty.clear(); state.review.pendingSave = null; state.review.conflictBuffer = null; state.review.error = ''; return openReview(state.review.importId); }
+       if (action === 'apply-preview') {
+diff --git a/tests/import-review-v1.static.test.mjs b/tests/import-review-v1.static.test.mjs
+index 14b10da..3a33a02 100644
+--- a/tests/import-review-v1.static.test.mjs
++++ b/tests/import-review-v1.static.test.mjs
+@@ -110,10 +110,14 @@ test('transient import-review reads retry once without retrying mutations', () =
+ 
+ test('email confirmation states and renders one message per shared recipient with contract sections', () => {
+   assert.match(source, /One email to/);
+-  assert.match(source, /combined into one tidy message/);
++  assert.match(source, /combined into one message/);
+   assert.match(source, /contract_label/);
+   assert.match(source, /recipient_email/);
+-  assert.match(source, /Client → Contract → Shift/);
++  assert.match(source, /Client → Candidate → Contract → Shift/);
++  assert.match(source, /opaqueUiToken/);
++  assert.match(source, /validation failed:/);
++  assert.match(source, /Previously sent/);
++  assert.match(source, /reminder is never selected automatically/);
+ });
+ 
+ test('V4 grade resolution is server-option-only and route specific', () => {
+@@ -221,8 +225,19 @@ test('Weekly and Daily distinguish no submitted timesheet from an omitted shift'
+     'WEEKLY_SHIFT_ABSENT_FROM_TIMESHEET', 'DAILY_SHIFT_ABSENT_FROM_TIMESHEET'
+   ]) assert.match(source, new RegExp(code));
+   assert.match(source, /Request timesheet from candidate/);
+-  assert.match(source, /Candidate timesheet states they did not work this shift/);
+-  assert.match(source, /not included in the client query email/);
++  assert.match(source, /Confirm candidate did not work this shift/);
++  assert.match(source, /submitted Weekly candidate timesheet/);
++  assert.match(source, /No timesheet hours, TSFIN, invoice, payment or financial record will be changed/);
++  assert.match(source, /weekly-candidate-not-worked/);
++});
++
++test('validation-only review presents passed rows without duplicating mismatches', () => {
++  assert.match(source, /Passed checks/);
++  assert.match(source, /CANDIDATE_DID_NOT_WORK_CONFIRMED/);
++  assert.match(source, /Undo confirmation/);
++  assert.match(source, /openUiConfirmModal/);
++  assert.doesNotMatch(source, /client:email:/);
++  assert.doesNotMatch(source, /week:email:/);
+ });
+ 
+ test('coverage sends only the Worker-approved scope fields and shows mapping status in every mode', () => {
+-- 
+2.54.0.windows.1
+

@@ -1,176 +1,81 @@
-name: Supabase Migrate (safe)
+name: Database source verification (no deploy)
 
 on:
   push:
-    branches: [ "main", "test" ]
+    branches: [main, test]
     paths:
-      - "supabase/migrations/**"
-      - "supabase/repeatable/**"
+      - "supabase/**"
+      - "scripts/cloudtms-db-release*.mjs"
+      - "tests/database-release-system.test.mjs"
+      - "docs/DATABASE_RELEASE_BIBLE.md"
+      - "AGENTS.md"
+      - "package.json"
+      - "package-lock.json"
+      - ".node-version"
+      - ".npmrc"
+      - "scripts/verify-approved-toolchain.mjs"
+      - "scripts/verify-backend-dependency-security.mjs"
+      - "scripts/verify-source-secret-safety.mjs"
       - ".github/workflows/supabase-migrate.yml"
+      - ".github/workflows/database-release.yml"
+  pull_request:
+    paths:
+      - "supabase/**"
+      - "scripts/cloudtms-db-release*.mjs"
+      - "tests/database-release-system.test.mjs"
+      - "docs/DATABASE_RELEASE_BIBLE.md"
+      - "AGENTS.md"
+      - ".github/workflows/**"
   workflow_dispatch: {}
 
+permissions:
+  contents: read
+
+concurrency:
+  group: database-source-verification-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  candidate-db-runtime:
+    name: Candidate PostgreSQL runtime gate
+    uses: ./.github/workflows/candidate-db-runtime.yml
+
   migrate:
+    name: Verify immutable database release source
+    needs: candidate-db-runtime
     runs-on: ubuntu-latest
-
-    env:
-      # main -> live DB, test -> test DB
-      DB_URL: ${{ github.ref_name == 'main' && secrets.SUPABASE_DB_URL || secrets.SUPABASE_DB_URL_TEST }}
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install psql
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Pin npm and verify the approved toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
-
-      - name: Apply repeatables first, then migrations even if repeatables fail
+          npm install --global npm@11.12.1
+          npm run security:toolchain
+      - run: npm ci --engine-strict
+      - run: npm run security:verify
+      - run: npm run db:check
+      - run: node --test tests/database-release-system.test.mjs
+      - name: Verify retained catalogue and runtime authority artifacts
         shell: bash
         run: |
-          set -euo pipefail
+          test -f supabase/verification/verify_banking_pay_targeted_fast_route_certified_reuse_catalog.mjs
+          test -f supabase/verification/verify_banking_pay_revision5_catalog.mjs
+          test -f supabase/verification/verify_banking_pay_workbench_certified_source_preview_catalog.mjs
+          test -f supabase/verification/verify_banking_pay_semantic_ready_cancellation_reversion_catalog.mjs
+          test -f tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql
+          test -f supabase/verification/22082026_1302_general_browser_isolation_verification.sql
+          test -f supabase/verification/22082026_1402_candidate_named_legacy_security_verification.sql
+          test -f supabase/verification/23082026_0400_candidate_named_security_verification_v2.sql
+          test -f supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql
+          test -f supabase/verification/22082026_0952_candidate_mytms_browser_isolation_verification.sql
+      - name: Verify existing database and RPC source authorities
+        run: npm test
 
-          if [[ -z "${DB_URL:-}" ]]; then
-            echo "DB_URL is not set. Check GitHub secrets."
-            exit 1
-          fi
-
-          MIG_DIR="supabase/migrations"
-          REP_DIR="supabase/repeatable"
-
-          test -d "$MIG_DIR" || { echo "Missing $MIG_DIR"; exit 1; }
-          test -d "$REP_DIR" || { echo "Missing $REP_DIR"; exit 1; }
-
-          echo "Running on branch: $GITHUB_REF_NAME"
-
-          # 1) Ensure ledger exists
-          psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q <<'SQL'
-          create table if not exists public.schema_migrations (
-            filename text primary key,
-            applied_at timestamptz not null default now()
-          );
-          SQL
-
-          # 2) Detect whether DB already has schema (bootstrap guard)
-          EXISTING_PUBLIC_TABLES=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc "
-            select count(*)
-            from pg_catalog.pg_tables
-            where schemaname = 'public'
-              and tablename <> 'schema_migrations'
-          " | tr -d '[:space:]')
-
-          LEDGER_COUNT=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc "
-            select count(*) from public.schema_migrations
-          " | tr -d '[:space:]')
-
-          echo "Existing public tables (excluding ledger): ${EXISTING_PUBLIC_TABLES}"
-          echo "Ledger rows: ${LEDGER_COUNT}"
-
-          apply_file () {
-            local f="$1"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -f "$f"
-          }
-
-          record_name () {
-            local name="$1"
-            psql "$DB_URL" -v ON_ERROR_STOP=1 -X -q -c \
-              "insert into public.schema_migrations(filename) values ('$name') on conflict (filename) do nothing;"
-          }
-
-          record_migration () {
-            local f="$1"
-            local base
-            base="$(basename "$f")"
-            record_name "$base"
-          }
-
-          # Build a sortable key from the filename:
-          # - DDMMYYYY -> YYYYMMDD
-          # - YYYYMMDD -> YYYYMMDD
-          # - otherwise fallback after dated files using ZZZZZZZZ_
-          sort_key_for_file () {
-            local f="$1"
-            local base
-            base="$(basename "$f")"
-
-            if [[ "$base" =~ ^([0-9]{2})([0-9]{2})([0-9]{4})(.*)$ ]]; then
-              # UK format DDMMYYYY...
-              printf '%s|%s\n' "${BASH_REMATCH[3]}${BASH_REMATCH[2]}${BASH_REMATCH[1]}${BASH_REMATCH[4]}" "$f"
-            elif [[ "$base" =~ ^([0-9]{4})([0-9]{2})([0-9]{2})(.*)$ ]]; then
-              # ISO-like format YYYYMMDD...
-              printf '%s|%s\n' "${BASH_REMATCH[1]}${BASH_REMATCH[2]}${BASH_REMATCH[3]}${BASH_REMATCH[4]}" "$f"
-            else
-              # Undated files sort after dated files, alphabetically
-              printf 'ZZZZZZZZ_%s|%s\n' "$base" "$f"
-            fi
-          }
-
-          sorted_sql_files () {
-            local dir="$1"
-            local files=()
-            local f
-
-            shopt -s nullglob
-            files=( "$dir"/*.sql )
-
-            if [[ "${#files[@]}" -eq 0 ]]; then
-              return 0
-            fi
-
-            for f in "${files[@]}"; do
-              sort_key_for_file "$f"
-            done | sort | cut -d'|' -f2-
-          }
-
-          # Gather migration files in UK date order
-          mapfile -t MIG_FILES_SORTED < <(sorted_sql_files "$MIG_DIR")
-
-          # 3) Bootstrap mode for migrations ledger only
-          if [[ "${LEDGER_COUNT}" == "0" && "${EXISTING_PUBLIC_TABLES}" != "0" ]]; then
-            echo "BOOTSTRAP: DB already populated; marking existing migrations as applied (no replay)."
-            for f in "${MIG_FILES_SORTED[@]}"; do
-              record_migration "$f"
-            done
-            record_name "__BOOTSTRAPPED__"
-          fi
-
-          # 4) Apply repeatables first, always, in UK date order
-          echo "Applying repeatables first (always), in UK date order."
-          mapfile -t REP_FILES_SORTED < <(sorted_sql_files "$REP_DIR")
-
-          REPEATABLE_FAILED=0
-
-          set +e
-          for f in "${REP_FILES_SORTED[@]}"; do
-            echo "APPLY repeatable: $(basename "$f")"
-            apply_file "$f"
-            status=$?
-            if [[ $status -ne 0 ]]; then
-              echo "FAILED repeatable: $(basename "$f")"
-              REPEATABLE_FAILED=1
-            fi
-          done
-          set -e
-
-          # 5) Then apply one-time migrations anyway, in UK date order
-          echo "Applying one-time migrations after repeatables, in UK date order."
-          for f in "${MIG_FILES_SORTED[@]}"; do
-            base="$(basename "$f")"
-            already=$(psql "$DB_URL" -v ON_ERROR_STOP=1 -X -tAc \
-              "select 1 from public.schema_migrations where filename = '$base' limit 1;" | tr -d '[:space:]')
-            if [[ "$already" == "1" ]]; then
-              echo "SKIP migration: $base"
-            else
-              echo "APPLY migration: $base"
-              apply_file "$f"
-              record_migration "$f"
-            fi
-          done
-
-          if [[ "${REPEATABLE_FAILED}" -ne 0 ]]; then
-            echo "One or more repeatables failed, but migrations were still attempted."
-            exit 1
-          fi
-
-          echo "Done."
+  prove-no-deploy:
+    name: Confirm this workflow has no database authority
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "This workflow performs source checks only. Database releases require the manual protected Database Release workflow."

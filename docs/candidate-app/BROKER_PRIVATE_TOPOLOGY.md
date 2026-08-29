@@ -1,0 +1,205 @@
+# Candidate broker and private CloudTMS API topology
+
+Status: TEST implementation and deployed topology contract; updated through incomplete-expense switch-to-MANUAL confirmation/removal, amendable `REFUSED` source protection, mail-independent PAPER source guarding, source-owner/claim isolation, complete caller retirement, atomic provider-submit permission and shared route/rejection lock order on 11 August 2026.
+
+## Required trust boundary
+
+```text
+Candidate iOS / Android / responsive web
+Public manager review page
+                  |
+                  v
+       Candidate broker Worker
+  public origin, abuse and token boundary
+                  |
+        Cloudflare service binding
+       signed private service request
+                  |
+                  v
+      CloudTMS private API Worker
+       no public workers.dev route
+                  |
+                  v
+ Candidate DB/RPC + R2 + mail outbox
+ existing financial/lifecycle authorities
+```
+
+The two Workers are separate deployment artefacts in the same repository. They have different entry points, bindings, secrets and audiences:
+
+| Artefact | Entry point | Network audience | Main responsibility |
+|---|---|---|---|
+| Candidate broker | `candidate-broker/src/index.js` | Candidate apps, Candidate web and manager browser | Strict origins, native-client declaration, public access/refresh envelopes, rate limits, safe errors, body limits, device-token encryption and public upload forwarding |
+| CloudTMS private Candidate API | `broker/src/candidate-private-worker.js` | Candidate broker service binding only | Service authentication, Candidate DB/RPC composition, official documents, R2, mail outbox and canonical workflow/lifecycle composition |
+| Existing CloudTMS Worker | `broker/src/index.js` | Existing CloudTMS frontend/API | Existing office routes, including authenticated `/api/candidate-app/*` adapters only |
+
+The existing CloudTMS Worker no longer dispatches public `/candidate-app/v1` or `/candidate-manager/v1` routes. Its Candidate dependency injection has the `OFFICE` audience. The private Worker uses the `PRIVATE` audience. A missing or incorrect audience returns no Candidate route.
+
+## Service authentication
+
+The broker reaches the private API through the `CLOUDTMS_PRIVATE` service binding. Every request is HMAC-SHA256 signed with a dedicated service secret. The signature binds:
+
+- protocol version;
+- HTTP method and complete private path/query;
+- TEST/LIVE environment;
+- timestamp and nonce;
+- SHA-256 of the complete bounded request body;
+- SHA-256 of the internal authorisation header;
+- SHA-256 of content type, idempotency key, request ID and declared public-client context.
+
+The private Worker rejects an incorrect environment, signature, body, authorisation digest or a timestamp outside the five-minute service window. Mutating business calls retain their existing idempotency keys and database locks. The private Worker has `workers_dev = false` and no public route in its deployment manifest.
+
+## Token and secret separation
+
+The browser/native client receives only broker-sealed access and refresh envelopes. Those envelopes are audience- and environment-bound and contain the corresponding internal Candidate session material encrypted with different broker secrets. New responses use deterministic authenticated v4 envelopes. The issuing key version participates in the domain-separated HMAC identity, distinct per-message AES-GCM key derivation and AES-GCM authenticated data, so changing only the version label always invalidates the credential—even if two configured version slots share secret material. Explicit reader catalogues retain supported random-IV v1 and deterministic v2/v3 envelopes during bounded rollout and may retire a version even while its secret remains bound. Public session UUIDs are stable opaque HMAC-derived identities for the immutable internal session. Before a session or PHONE mutation reaches the private authority, the broker proves that every selected public wrapping secret exists. The broker unwraps a supported version only while constructing a signed service-bound request.
+
+No secret has a fallback to the normal CloudTMS session secret. Required secret names are:
+
+### Candidate broker
+
+- `CANDIDATE_BROKER_ACCESS_TOKEN_SECRET`
+- `CANDIDATE_BROKER_REFRESH_TOKEN_SECRET`
+- `CANDIDATE_BROKER_DEVICE_TOKEN_SECRET`
+- `CANDIDATE_PRIVATE_SERVICE_SECRET`
+
+### CloudTMS private Candidate API
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `CANDIDATE_PRIVATE_SERVICE_SECRET`
+- `CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET`
+- `CANDIDATE_PRIVATE_CHALLENGE_TOKEN_SECRET`
+- `CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET`
+- `CANDIDATE_FEDERATED_IDENTITY_SECRET` whenever `CANDIDATE_FEDERATED_ROUTING_ENABLED=TRUE`
+
+The normal backend and the real private Candidate Worker must hold the same agency-specific
+`CANDIDATE_FEDERATED_IDENTITY_SECRET`. It is the one-way identity-projection authority used
+after a global MyTMS account selects that agency. Private readiness must fail while federated
+routing is enabled and this binding is missing; a healthy service-binding probe must never
+mask a login route that cannot create its agency projection.
+
+TEST and LIVE must use unrelated values. Missing environment or secrets fail closed. Secret values must be set through Worker secret bindings and must never be committed.
+
+## Public browser and native policy
+
+- Browser routes accept only exact origins from `CANDIDATE_ALLOWED_ORIGINS`; wildcard origins are rejected.
+- Preflight accepts only the documented methods and headers.
+- Manager routes always require an approved browser origin.
+- Candidate native requests without an `Origin` header require `CANDIDATE_ALLOW_NATIVE_CLIENTS=true` and `x-cloudtms-client: ios` or `android`.
+- Public responses use `no-store`, `nosniff`, `DENY` framing and `no-referrer`.
+- Public errors expose a stable safe code and request ID, not private response details.
+- Activation/reset challenge start remains enumeration-safe: the public success contract is always `202 accepted`; login failures remain generic.
+
+## Abuse controls
+
+The Candidate broker uses independent Cloudflare rate-limit bindings for:
+
+- all public requests;
+- authentication/challenge/refresh requests;
+- manager-token requests;
+- upload preparation and upload bytes.
+
+Keys are SHA-256 digests of environment plus bounded IP/account/session/token context. If a required rate-limit binding is missing, traffic fails closed. Request bodies are bounded before signing or forwarding: ordinary JSON is 1 MiB; component uploads are 15 MiB.
+
+The initial TEST limits are recorded in `candidate-broker/wrangler.jsonc`. They are configuration values, not economic or lifecycle policy, and must be tuned from TEST telemetry before LIVE.
+
+## Upload and evidence boundary
+
+The public broker accepts bytes only within the bounded route and forwards them through the signed service binding. The private API then:
+
+- verifies the upload ticket, owner, workflow, generation, component and declared media type;
+- validates the actual PNG/JPEG/PDF byte signature;
+- rejects malformed images and malformed or encrypted PDFs;
+- requires exactly one page for an evidence PDF;
+- enforces byte, dimension and pixel limits;
+- calculates SHA-256 itself;
+- refuses duplicate source bytes through the existing database authority;
+- stores bytes under a server-generated R2 identity;
+- returns no R2 key.
+
+The existing one-component-per-category/page policy remains unchanged.
+
+## Notifications and push ownership
+
+CloudTMS remains the canonical event ledger: event type, preference category, dedupe identity, deep link and push state are database truth. The public broker owns provider-facing device material: it validates provider type and encrypts the raw APNs/FCM/Web Push token with a broker-only versioned key before the private API persists the ciphertext. Storage encryption keeps its random IV and embeds the encryption-key version; that version is bounded to the positive `smallint` range used by the established session column. Separately, a versioned broker HMAC binds environment, provider, public session and raw token. During an approved identity-key rotation the broker supplies proofs for every configured reader version; the private durable receipt selects its originally frozen semantic version before hashing. Randomized ciphertext is excluded from semantic identity, so storage-key drift and supported identity-key drift replay the same result, while a changed token/provider/session conflicts.
+
+Public credential rollout uses v4 envelopes with an authenticated issuing version for access, refresh and PHONE handoff. Each authority has a current writer version and an explicit reader catalogue. An approved rollback uses the same v4-capable reader build with the previous writer version restored while retaining the newer version in the reader catalogue; rollback to a pre-v4 writer build is forbidden after issuance begins. Login, activation and refresh store the chosen public access/refresh/session versions in the durable private result so a lost-response retry reissues the byte-identical public result. Refresh retains the original public-session mapping version even when access or refresh writer keys rotate.
+
+Unauthenticated routing is a closed catalogue limited to challenge start/resend/verify, password completion, login and refresh. Public logout is never included: it unwraps the Candidate access credential and forwards the exact private bearer. Challenge start/resend validate the bounded caller key at the broker, pass through idempotency errors/conflicts and enumeration-mask only eligibility/account-state outcomes. Too-soon and exhausted-allowance resends are durable public 429 results; the same key replays the same throttle. Each accepted or throttled start/resend receipt freezes the challenge-token issuing key version, which the private reader catalogue can reconstruct across forward rotation and approved writer rollback. Unknown-account login also records a durable generic failure without mutating an account. PHONE selection binds public session and optional supplied device digests into the private semantic mutation receipt before creating or wrapping any handoff token.
+
+For known-account login and authenticated password change, the private Worker treats its REST-loaded verifier as preflight only. It forwards a derived password digest and exact verifier-authority fingerprint—not a plaintext password—to the canonical account transition. The database revalidates both after receipt ownership, the shared account-session lock and account-row lock. This prevents a stale Worker from creating a post-reset session, charging a failed attempt to a newly reset password, or overwriting the winner of a concurrent password change.
+
+The provider delivery adapter and retry/dead-letter worker belong to the Candidate broker deployment, not the CloudTMS private API. Their final provider credentials, application identifiers and TEST devices cannot be configured until the iOS/Android/web application identities exist. Until then:
+
+- the in-app notification feed is complete and authoritative;
+- push registration is encrypted and provider-labelled;
+- QR readiness is released only after durable pack readiness;
+- no code is permitted to claim that an external push was sent;
+- lack of push never changes workflow truth and the app refresh/resume path reads the feed.
+
+The delivery contract to implement with the app identities is: deterministic notification ID as provider collapse/dedupe key; per-device delivery; bounded exponential retry; invalid-token retirement; dead-letter after the approved attempt limit; and acknowledgement back to the canonical notification `push_state`. This provider activation is a coordinated broker/app stage, not a DB/RPC or financial-authority change.
+
+## Candidate paper-email provider boundary
+
+Candidate PAPER email uses the existing CloudTMS mail delivery authority. The database claim fence and the provider adapter are both required:
+
+- the claimant proves the current `PAPER / AWAITING_PAPER_RETURN` workflow, exact workflow generation, immutable manifest, complete-pack attachment and non-retired outbox binding;
+- after claim, immediately before provider submission, `candidate-paper-provider-authority.js` calls service-only `PAPER_PROVIDER_SUBMIT_PERMIT` through the existing workflow RPC;
+- that action atomically locks and verifies the live lease token, `QUEUED`/not-sent state, workflow ID, generation, manifest, context timesheet, complete-pack readiness, attachment and non-retired binding;
+- the workflow must still be `PAPER / AWAITING_PAPER_RETURN` for that exact generation and manifest, and the exact lease is renewed as the provider-submit permit;
+- `PAPER_RETURN`, cancellation, supersession, office rejection and route intervention lock/respect the same outbox barrier, so authority cannot change after permit while the live permit/lease remains active;
+- ordinary non-Candidate mail retains its existing provider path.
+
+This permit and the transactional retirement rules are one database coordination boundary. An active permit/lease blocks every supported authority-changing PAPER transition before mutation.
+
+## Candidate manager-email provider boundary
+
+Manager EMAIL outbox rows use exact `MANAGER_APPROVAL_V1` scope rather than an unbound recipient/deterministic key. The claimant and `candidate-manager-provider-authority.js` require the exact request/workflow IDs and generations, mail kind, recipient, current state, non-retired marker and live outbox lease. Immediately before provider submission the adapter calls service-only `MANAGER_PROVIDER_SUBMIT_PERMIT`; cancellation, supersession, expiry, refusal and approval retire the same exact mail set under that lease barrier. Queued mail becomes inert, failed mail remains failed-but-retired, accepted sent history is immutable, and a withdrawal is created only from proved accepted provider history.
+
+Route intervention derives the live PAPER owner from the immutable current-token delivery receipt, not from a historical timesheet workflow pointer. It separately finds every nonterminal PAPER workflow affected by rotating the source, including a draft/submitted workflow that has no mail receipt yet. A distinct or ambiguous affected workflow returns a controlled conflict before any delivery, notification, token, workflow or route change. Source-wide retirement preserves only terminal history, and claim-level cancellation cannot invalidate another claim's live pack.
+
+## Current TEST deployment
+
+- Public broker: `test-cloudtms-candidate-broker`, active version `da17fbf9-b2a4-48ea-af87-770d91d56003`.
+- Private API: `test-cloudtms-candidate-private-api`, active version `893b3b73-d65d-415e-8706-ed67bfaf5580`, with `workers_dev = false` and service-binding access only.
+- Normal backend: `test-cloudtms-backend`, active version `64707ac1-8dad-45a9-af47-2d7a2ffa75b8`.
+- Broker health/readiness: 200/200; readiness proves the private service binding and signed private-health request.
+- Normal backend health: 200.
+- Direct public Candidate route on normal backend: 404.
+- Candidate feature flags remain false; all seven Candidate business tables and Candidate-bound mail contain zero rows after deployment verification.
+
+The preceding public-authentication runtime correction was published through backend commit `1df31d2f041bb2e6b9381f39dd97a0f63ae7bcd4`. GitHub workflow `31628119602` proved all 35 Candidate PostgreSQL suites on 17.6 and 18.1, and safe migration workflow `31628119591` installed exact repeatable hashes `ac1f99582254f661fec65d3d69624af0648b0618265cd1b2854c046c550623e7` (authentication) and `0ca52de3d26c069846caa7717a88cc75c6c861bf35e3279a9fd8f4752510bb35` (workflow). Its private Candidate version was `ab5ea859-f68a-41fd-98a0-4c20ed6dac2e`, normal TEST backend version `463e8856-4e78-493e-8d96-742a69963bc1` and public broker version `0f358ca2-4631-42b8-b18b-820fe82f0e69`. That record is retained only as prior rollout history; the later v4 final-correction rollout and its independently reproducible evidence supersede it as current authority. TEST and production remain strictly separate; no production resource is part of this authority.
+
+The current mixed-version concurrency authority is runtime commit `c47a6823c64b5457130a36e56d78575bb5d220cf`. GitHub workflow `31650844022` passed 38 Candidate PostgreSQL suites plus the real public/private/database mixed-version chain on PostgreSQL 17.6 and 18.1. Safe migration workflow `31650844068` installed authentication repeatable hash `34d9f7fd12fd0f6a69b85de985ff617db487f991527c1c6108b9a62f68acee82`. The complete backend JavaScript suite passed 519 tests; focused Candidate/Office/provider tests passed 151 tests; both OpenAPI files and all three Worker dry builds passed. The deployed normal backend and public broker returned health/readiness 200/200. The TEST rollout kept all Candidate feature flags false and all Candidate business tables and Candidate-bound mail empty. Production was not accessed or changed.
+
+The current Candidate credential-winner and security-receipt authority is runtime commit `122f18ef903707b730fe093d5b87e4df68fe8674`. GitHub workflow `31670570727` passed all 39 Candidate PostgreSQL suites, the real public/private/database chain and the dedicated PHONE/refresh-security concurrency harness on PostgreSQL 17.6 and 18.1. Safe migration workflow `31670570753` installed authentication repeatable hash `5c7c8dc14728a942173b4c9668db1899b888613146498d4cfb0068adb8c9e248` and workflow repeatable hash `f6d472bbb26afdc62bd39f60d306193ea038e715e1d295c422a309efd2d6fcdf`. The complete backend JavaScript suite passed 521 tests and the complete focused Candidate suite passed 188 tests. Both OpenAPI files and all three Worker dry builds passed. Postdeployment TEST inspection proved the exact installed markers and hashes, 0 of 12 Candidate flags enabled, all seven Candidate business tables empty, Candidate-bound mail empty, exactly 14 one-overload Candidate business RPCs, service-role-only execution, and the Office adapter's service-role-only boundary. Normal backend and broker health/readiness returned 200/200; production was not accessed or changed.
+
+The current account-session concurrency authority is runtime commit `ba93ba08e325233bd9e915f7a2de3416b81a721d`. GitHub workflow `31684118773` passed all 40 Candidate PostgreSQL suites, the real public/private/database chain and the mixed-version harness on PostgreSQL 17.6 and 18.1. Safe migration workflow `31684118800` installed authentication repeatable hash `35315a8e50aee20ac226fcfbb26c758d2e1edf27fe9f8228535500f2abf3a20e`. The complete backend JavaScript suite passed 521 tests, the focused Candidate/Office/provider suite passed 189 tests and the Candidate SQL contract passed 43 tests. Both OpenAPI files and all three Worker dry builds passed. TEST deployed private Candidate version `893b3b73-d65d-415e-8706-ed67bfaf5580`, normal backend version `64707ac1-8dad-45a9-af47-2d7a2ffa75b8` and public broker version `da17fbf9-b2a4-48ea-af87-770d91d56003`. Normal-backend and public-broker health/readiness returned 200/200 and direct Candidate routing on the normal backend remained 404. Postdeployment inspection proved PostgreSQL 17.6, one security-definer private helper overload with no role execution grant, 0 of 12 Candidate flags enabled, all seven Candidate business tables empty, Candidate-bound mail empty, exactly 14 one-overload Candidate business RPCs and no production access or change.
+
+The current locked password-authority runtime is commit `7a98383fe08f559c5eb10a455e7253c2c0b3dd87`. GitHub workflow `31693446422` passed all 40 Candidate PostgreSQL suites, the three-test real public/private/database chain and the mixed-version harness on PostgreSQL 17.6 and 18.1. Safe migration workflow `31693446413` installed authentication repeatable hash `4c32cf9f8b65303d849b01f80e6a3084e5c5aa16b1bae11f473a31f802db0227`. The complete JavaScript regression passed 1,123 tests with 17 environment-specific skips and zero failures; the focused Candidate backend/SQL contract passed 124 tests; both OpenAPI descriptions and all three Worker dry builds passed. TEST deployed private Candidate version `e9f8ae06-3e67-48d8-836f-d7cd56504c42`, normal backend version `03a37a90-432b-48db-a933-132d23c99fa5` and public broker version `3bc03b5c-1d61-4f2b-83c9-d432c6ba97a3`. Normal-backend and public-broker health/readiness returned 200/200 and direct Candidate routing on the normal backend remained 404. Postdeployment inspection proved PostgreSQL 17.6, exact JS/SQL password-authority fingerprint parity, one private invoker helper with no role execution grant, 0 of 12 Candidate flags enabled, all seven Candidate business tables empty, no Candidate App authentication/workflow mail, exactly 14 one-overload Candidate business RPCs and no production access or change.
+
+## Deployment and verification gate
+
+The following gate was applied to the current authorised TEST deployment and remains mandatory for every later deployment:
+
+1. merge only the current saved files and preserve unrelated work;
+2. provision the private Worker first with no public route;
+3. set private secrets without displaying them;
+4. provision the broker service binding and dedicated broker secrets;
+5. deploy with every Candidate feature flag still false unless separately approved;
+6. verify the normal CloudTMS Worker returns no public Candidate/manager route;
+7. verify an unsigned private request is rejected;
+8. verify exact TEST origins, rate limits, public token wrapping and no raw storage key;
+9. run disabled-state and existing-system regression before any Candidate data mutation;
+10. enable one synthetic TEST capability at a time only with explicit approval.
+
+No production deployment is authorised by this document.
+
+## Mixed private-Worker writer overlap
+
+Rolling private deployments may temporarily run two approved writer versions. For challenge START/RESEND, locally generated material is only a proposal to the database. The canonical result always returns its frozen token hash/version; every handler reconstructs and verifies that winner before writing mail. The deterministic create-only outbox key therefore preserves winner content regardless of RPC-winner or mail-arrival order.
+
+For authentication/account operations, a preliminary service RPC reserves the first proposed request-HMAC version while holding the same global environment/key lock used by the final receipt. Only after that reservation returns may a Worker calculate secret proofs, the factual request HMAC, deterministic refresh output or push semantic selection. The reservation row is completed by the canonical mutation; it is not a second receipt or public RPC. Overlapping writer 1/2 requests with identical facts therefore hash identically and return one usable result rather than a false idempotency conflict.
+
+PHONE approval follows the same database-winner rule. A private Worker may propose a manager handoff token, but after `SELECT_PHONE_APPROVAL` the canonical result's internal token hash and winning key version are authoritative. Every successful or replayed handler reconstructs the deterministic token from those winning facts, verifies its SHA-256 and removes the internal hash before returning the private/public result. A losing Worker can no longer return its pre-RPC proposal.
+
+Refresh-token reuse is one atomic security operation. When a rotated predecessor is reused, family revocation and the negative `CANDIDATE_REFRESH_TOKEN_REUSE` result are committed through the same durable authentication receipt. An exact or concurrent same-key replay returns that stored security result without deriving a successor credential or re-evaluating the now-revoked predecessor.

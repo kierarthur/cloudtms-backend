@@ -1,3 +1,76 @@
+DO $$
+DECLARE
+  v_modern_oid oid;
+  v_legacy_oid oid;
+BEGIN
+  /*
+    Retire only the legacy seven-argument overload:
+
+      public.contract_week_manual_upsert_atomic(
+        uuid,
+        uuid,
+        jsonb,
+        jsonb,
+        jsonb,
+        jsonb,
+        timestamp with time zone
+      )
+
+    This block is safe to rerun:
+      - If the legacy overload is already gone, it only raises a NOTICE.
+      - If the legacy overload exists but the modern overload is missing, it aborts.
+      - It does not use CASCADE, so dependent objects cannot be silently dropped.
+  */
+
+  SELECT pg_proc_entry.oid
+    INTO v_modern_oid
+  FROM pg_proc AS pg_proc_entry
+  JOIN pg_namespace AS pg_namespace_entry
+    ON pg_namespace_entry.oid = pg_proc_entry.pronamespace
+  WHERE pg_namespace_entry.nspname = 'public'
+    AND pg_proc_entry.proname = 'contract_week_manual_upsert_atomic'
+    AND pg_get_function_identity_arguments(pg_proc_entry.oid) =
+      'p_week_id uuid, p_expected_timesheet_id uuid, p_timesheet_create_json jsonb, p_timesheet_patch_json jsonb, p_contract_week_patch_json jsonb, p_tsfin_snapshot_json jsonb, p_rotation_json jsonb, p_actor_user_id uuid, p_materialise_staged_evidence boolean, p_now_utc timestamp with time zone, p_expected_row_signature text'
+  LIMIT 1;
+
+  SELECT pg_proc_entry.oid
+    INTO v_legacy_oid
+  FROM pg_proc AS pg_proc_entry
+  JOIN pg_namespace AS pg_namespace_entry
+    ON pg_namespace_entry.oid = pg_proc_entry.pronamespace
+  WHERE pg_namespace_entry.nspname = 'public'
+    AND pg_proc_entry.proname = 'contract_week_manual_upsert_atomic'
+    AND pg_get_function_identity_arguments(pg_proc_entry.oid) =
+      'p_week_id uuid, p_expected_timesheet_id uuid, p_timesheet_create_json jsonb, p_timesheet_patch_json jsonb, p_contract_week_patch_json jsonb, p_tsfin_snapshot_json jsonb, p_now_utc timestamp with time zone'
+  LIMIT 1;
+
+  IF v_legacy_oid IS NULL THEN
+    RAISE NOTICE 'Legacy seven-argument contract_week_manual_upsert_atomic overload is not present; nothing to drop.';
+    RETURN;
+  END IF;
+
+  IF v_modern_oid IS NULL THEN
+    RAISE EXCEPTION
+      'Refusing to drop legacy seven-argument contract_week_manual_upsert_atomic overload because the modern eleven-argument overload was not found.';
+  END IF;
+
+  DROP FUNCTION IF EXISTS public.contract_week_manual_upsert_atomic(
+    uuid,
+    uuid,
+    jsonb,
+    jsonb,
+    jsonb,
+    jsonb,
+    timestamp with time zone
+  );
+
+  RAISE NOTICE 'Dropped legacy seven-argument contract_week_manual_upsert_atomic overload.';
+END;
+$$;
+
+
+
+
 CREATE OR REPLACE FUNCTION public.enqueue_ts_financials(_timesheet_id uuid, _reason ts_fin_reason_enum)
 RETURNS void
 LANGUAGE plpgsql
@@ -4950,7 +5023,17 @@ security definer
 set search_path = public
 as $$
 declare
-  cs record;
+  v_no_timesheet_required boolean;
+  v_daily_calc_of_invoices boolean;
+  v_group_nightsat_sunbh boolean;
+  v_is_nhsp boolean;
+  v_autoprocess_hr boolean;
+  v_requires_hr boolean;
+  v_hr_attach_to_invoice boolean;
+  v_ts_attach_to_invoice boolean;
+  v_reference_number_required_to_issue_invoice boolean;
+  v_send_manual_invoices_to_different_email boolean;
+  v_manual_invoices_alt_email_address text;
 begin
   -- Normalise NULL -> false (shouldn't happen because column is NOT NULL, but safe)
   new.overrideclientsettings := coalesce(new.overrideclientsettings, false);
@@ -4996,7 +5079,18 @@ begin
     cs.reference_number_required_to_issue_invoice,
     cs.send_manual_invoices_to_different_email,
     cs.manual_invoices_alt_email_address
-  into cs
+  into
+    v_no_timesheet_required,
+    v_daily_calc_of_invoices,
+    v_group_nightsat_sunbh,
+    v_is_nhsp,
+    v_autoprocess_hr,
+    v_requires_hr,
+    v_hr_attach_to_invoice,
+    v_ts_attach_to_invoice,
+    v_reference_number_required_to_issue_invoice,
+    v_send_manual_invoices_to_different_email,
+    v_manual_invoices_alt_email_address
   from public.client_settings cs
   where cs.client_id = new.client_id
   order by cs.effective_from desc nulls last, cs.updated_at desc
@@ -5004,28 +5098,28 @@ begin
 
   -- For booleans: never leave NULL when override is ON.
   -- If no client_settings row exists, fall back to defaults that match client_settings defaults.
-  new.no_timesheet_required  := coalesce(new.no_timesheet_required,  cs.no_timesheet_required,  false);
-  new.daily_calc_of_invoices := coalesce(new.daily_calc_of_invoices, cs.daily_calc_of_invoices, false);
-  new.group_nightsat_sunbh   := coalesce(new.group_nightsat_sunbh,   cs.group_nightsat_sunbh,   false);
-  new.is_nhsp                := coalesce(new.is_nhsp,                cs.is_nhsp,                false);
-  new.autoprocess_hr         := coalesce(new.autoprocess_hr,         cs.autoprocess_hr,         false);
-  new.requires_hr            := coalesce(new.requires_hr,            cs.requires_hr,            false);
+  new.no_timesheet_required  := coalesce(new.no_timesheet_required,  v_no_timesheet_required,  false);
+  new.daily_calc_of_invoices := coalesce(new.daily_calc_of_invoices, v_daily_calc_of_invoices, false);
+  new.group_nightsat_sunbh   := coalesce(new.group_nightsat_sunbh,   v_group_nightsat_sunbh,   false);
+  new.is_nhsp                := coalesce(new.is_nhsp,                v_is_nhsp,                false);
+  new.autoprocess_hr         := coalesce(new.autoprocess_hr,         v_autoprocess_hr,         false);
+  new.requires_hr            := coalesce(new.requires_hr,            v_requires_hr,            false);
 
   -- These default TRUE in client_settings
-  new.hr_attach_to_invoice   := coalesce(new.hr_attach_to_invoice,   cs.hr_attach_to_invoice,   true);
-  new.ts_attach_to_invoice   := coalesce(new.ts_attach_to_invoice,   cs.ts_attach_to_invoice,   true);
+  new.hr_attach_to_invoice   := coalesce(new.hr_attach_to_invoice,   v_hr_attach_to_invoice,   true);
+  new.ts_attach_to_invoice   := coalesce(new.ts_attach_to_invoice,   v_ts_attach_to_invoice,   true);
 
   -- New governed issue/email flags (default FALSE in client_settings)
   new.reference_number_required_to_issue_invoice :=
-    coalesce(new.reference_number_required_to_issue_invoice, cs.reference_number_required_to_issue_invoice, false);
+    coalesce(new.reference_number_required_to_issue_invoice, v_reference_number_required_to_issue_invoice, false);
 
   new.send_manual_invoices_to_different_email :=
-    coalesce(new.send_manual_invoices_to_different_email, cs.send_manual_invoices_to_different_email, false);
+    coalesce(new.send_manual_invoices_to_different_email, v_send_manual_invoices_to_different_email, false);
 
   -- If send_manual is TRUE, alt email must be present (try fill from client_settings first)
   if new.send_manual_invoices_to_different_email = true then
     if new.manual_invoices_alt_email_address is null or btrim(new.manual_invoices_alt_email_address) = '' then
-      new.manual_invoices_alt_email_address := cs.manual_invoices_alt_email_address;
+      new.manual_invoices_alt_email_address := v_manual_invoices_alt_email_address;
     end if;
 
     if new.manual_invoices_alt_email_address is null or btrim(new.manual_invoices_alt_email_address) = '' then
@@ -5204,6 +5298,7 @@ BEGIN
   );
 END;
 $$;
+
 
 
 
@@ -6114,14 +6209,44 @@ begin
         vts.week_ending_date,
         vts.route_display,
         vts.route_type,
+        vts.route_family,
         vts.tools_stage,
+        vts.processing_status,
         vts.processing_status_display,
         vts.total_hours,
         vts.total_pay_ex_vat,
         vts.total_charge_ex_vat,
         vts.margin_ex_vat,
-        vts.pay_paid_at_utc
-      from public.v_timesheets_summary as vts
+        vts.pay_paid_at_utc,
+        vts.issue_codes,
+        vts.is_qr,
+        vts.qr_status,
+        vts.candidate_id,
+        vts.client_id,
+        vts.timesheet_id,
+        vts.contract_week_id,
+        vts.occupant_key_norm
+      from public.timesheet_summary_lightweight_rows_v1(
+        (
+          coalesce(p_filters, '{}'::jsonb)
+          - 'q'
+          - 'query'
+          - 'name'
+          - 'route_type'
+          - 'routeType'
+          - 'issues_filter'
+          - 'issuesFilter'
+        )
+        || jsonb_build_object(
+             'disable_paging', true,
+             'purpose', 'typeahead',
+             'order_by', coalesce(nullif(v_sort_key, ''), 'candidate_name'),
+             'order_dir', v_sort_dir
+           )
+      ) as vts
+      left join public.timesheets as timesheet_row
+        on timesheet_row.timesheet_id = vts.timesheet_id
+       and timesheet_row.is_current = true
       where (
           v_ids is null
           or vts.timesheet_id::text = any(v_ids)
@@ -6145,21 +6270,31 @@ begin
           )
           or (
             v_route_type = 'MANUAL'
-            and upper(coalesce(vts.route_type, '')) in ('DAILY_MANUAL', 'WEEKLY_MANUAL')
+            and (
+              upper(coalesce(vts.route_type, '')) in ('DAILY_MANUAL', 'WEEKLY_MANUAL')
+              or upper(coalesce(vts.route_family, '')) = 'MANUAL'
+            )
           )
           or (
             v_route_type = 'NHSP'
-            and upper(coalesce(vts.route_type, '')) in ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT')
+            and (
+              upper(coalesce(vts.route_type, '')) in ('WEEKLY_NHSP', 'WEEKLY_NHSP_ADJUSTMENT', 'NHSP')
+              or upper(coalesce(vts.route_family, '')) = 'NHSP'
+            )
           )
           or (
             v_route_type = 'HEALTHROSTER'
-            and upper(coalesce(vts.route_type, '')) = 'WEEKLY_HEALTHROSTER'
+            and (
+              upper(coalesce(vts.route_type, '')) in ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+              or upper(coalesce(vts.route_family, '')) = 'HEALTHROSTER'
+            )
           )
           or (
             v_route_type = 'QR'
             and coalesce(vts.is_qr, false) = true
           )
           or upper(coalesce(vts.route_type, '')) = v_route_type
+          or upper(coalesce(vts.route_family, '')) = v_route_type
         )
         and (
           v_sheet_scope is null
@@ -6169,45 +6304,41 @@ begin
           v_issues_filter is null
           or (
             v_issues_filter = 'NO_MATCH_ID'
-            and exists (
-              select 1
-              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-              where upper(coalesce(ic.code, '')) = 'NO MATCH TO CANDIDATE/CLIENT'
-            )
+            and (vts.candidate_id is null or vts.client_id is null)
           )
           or (
             v_issues_filter = 'RATE_MISSING'
             and exists (
               select 1
               from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-              where upper(coalesce(ic.code, '')) = 'RATE MISSING'
+              where upper(coalesce(ic.code, '')) in ('RATE', 'RATE MISSING')
             )
           )
           or (
-            v_issues_filter = 'PAY_CHAN_MISS'
+            v_issues_filter in ('PAY_CHAN_MISS', 'PAY_CHANNEL_MISSING')
             and exists (
               select 1
               from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-              where upper(coalesce(ic.code, '')) = 'PAY CHANNEL MISSING'
+              where upper(coalesce(ic.code, '')) in ('PAY CHANNEL', 'PAY CHANNEL MISSING')
             )
           )
           or (
-            v_issues_filter = 'AWAITING_HR_VALIDATION'
+            v_issues_filter in ('AWAITING_HR_VALIDATION', 'AWAITING_HR_VALIDATION_REQUIRED')
             and (
               upper(coalesce(vts.tools_stage, '')) = 'AWAITING_HR_VALIDATION'
               or exists (
                 select 1
                 from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-                where upper(coalesce(ic.code, '')) = 'AWAITING HR VALIDATION'
+                where upper(coalesce(ic.code, '')) in ('HR VALIDATION', 'AWAITING HR VALIDATION')
               )
             )
           )
           or (
-            v_issues_filter = 'HR_HOURS_MISMATCH'
+            v_issues_filter in ('HR_HOURS_MISMATCH', 'HOURS_MISMATCH_HR')
             and exists (
               select 1
               from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-              where upper(coalesce(ic.code, '')) = 'HOURS MISMATCH (HEALTHROSTER)'
+              where upper(coalesce(ic.code, '')) in ('HOURS MISMATCH HR', 'HOURS MISMATCH (HEALTHROSTER)')
             )
           )
           or (
@@ -6255,7 +6386,7 @@ begin
             and exists (
               select 1
               from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-              where upper(coalesce(ic.code, '')) = 'REFERENCE MISSING'
+              where upper(coalesce(ic.code, '')) in ('REFERENCE', 'REFERENCE MISSING')
             )
           )
           or (
@@ -6287,24 +6418,23 @@ begin
             and exists (
               select 1
               from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-              where upper(coalesce(ic.code, '')) = 'AWAITING AUTHORISATION'
+              where upper(coalesce(ic.code, '')) in ('AUTHORISATION', 'AWAITING AUTHORISATION')
             )
           )
           or (
             v_issues_filter = 'QR_NOT_ISSUED'
-            and exists (
-              select 1
-              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-              where upper(coalesce(ic.code, '')) = 'QR NOT ISSUED'
-            )
+            and vts.timesheet_id is not null
+            and upper(coalesce(vts.qr_status::text, '')) = 'PENDING'
+            and coalesce(timesheet_row.qr_token, '') = ''
+            and timesheet_row.qr_generated_at is null
           )
           or (
-            v_issues_filter = 'QR_AWAITING_SIGNATURE'
-            and exists (
-              select 1
-              from unnest(coalesce(vts.issue_codes, '{}'::text[])) as ic(code)
-              where upper(coalesce(ic.code, '')) = 'QR AWAITING SIGNATURE'
-            )
+            v_issues_filter in ('QR_AWAITING_SIGNATURE', 'QR_ISSUED_AWAITING_SIGNATURE')
+            and vts.timesheet_id is not null
+            and upper(coalesce(vts.qr_status::text, '')) = 'PENDING'
+            and coalesce(timesheet_row.qr_token, '') <> ''
+            and timesheet_row.qr_generated_at is not null
+            and timesheet_row.qr_scanned_at is null
           )
         )
     ),
@@ -6493,4 +6623,1272 @@ begin
 
   return;
 end
+$function$;
+
+BEGIN;
+
+
+CREATE OR REPLACE FUNCTION public.timesheet_summary_lightweight_rows_v1(p_filters jsonb DEFAULT '{}'::jsonb)
+ RETURNS TABLE(timesheet_id uuid, contract_week_id uuid, contract_id uuid, candidate_id uuid, candidate_name text, candidate_display_name text, client_id uuid, client_name text, booking_id text, occupant_key_norm text, hospital_norm text, candidate_hint_text jsonb, week_ending_date date, work_date date, sheet_scope text, submission_mode text, submission_mode_snapshot text, basis text, route_type text, route_display text, route_family text, route_subfamily text, underlying_channel_family text, summary_stage text, tools_stage text, processing_status text, processing_status_display text, authorised_at_utc timestamp with time zone, authorised_at_server timestamp with time zone, processed_at_utc timestamp with time zone, is_authorised boolean, total_hours numeric, total_pay_ex_vat numeric, total_charge_ex_vat numeric, margin_ex_vat numeric, net_delta_ex_vat numeric, paid_at_utc timestamp with time zone, pay_icon_code text, pay_status_code text, pay_paid_at_utc timestamp with time zone, invoice_is_paid boolean, invoice_issue_stage text, invoice_segment_stage text, invoice_segments_total integer, invoice_segments_locked integer, invoice_segments_unlocked integer, issue_codes text[], validation_status text, validation_summary text, hr_crosscheck_status text, hr_crosscheck_issues text[], qr_status text, is_qr boolean, is_adjusted boolean, needs_attention boolean, has_rate_issue boolean, has_pay_channel_issue boolean, client_no_timesheet_required boolean, client_autoprocess_hr boolean, client_is_nhsp boolean, has_any_evidence boolean, attached_evidence_count integer, primary_artifact_storage_key text, primary_artifact_display_name text, primary_artifact_preview_mode text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
+  v_source_filters jsonb := COALESCE(p_filters, '{}'::jsonb);
+
+  v_uuid_re text := '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$';
+
+  v_id_text text := NULL;
+  v_lookup_ids uuid[] := NULL;
+  v_has_lookup_filter boolean := FALSE;
+
+  v_timesheet_ids_filter uuid[] := NULL;
+  v_contract_week_ids_filter uuid[] := NULL;
+  v_has_timesheet_filter boolean := FALSE;
+  v_has_contract_week_filter boolean := FALSE;
+
+  v_candidate_id_text text := NULL;
+  v_client_id_text text := NULL;
+  v_candidate_id_filter uuid := NULL;
+  v_client_id_filter uuid := NULL;
+  v_has_candidate_filter boolean := FALSE;
+  v_has_client_filter boolean := FALSE;
+
+  v_q text := NULL;
+  v_tools_stage text := NULL;
+  v_route_type text := NULL;
+  v_sheet_scope text := NULL;
+  v_qr_status text := NULL;
+  v_status_code text := NULL;
+  v_issues_filter text := NULL;
+
+  v_candidate_paid boolean := NULL;
+  v_is_adjusted boolean := NULL;
+  v_is_qr boolean := NULL;
+  v_hr_issue boolean := NULL;
+  v_hr_issue_token text := NULL;
+
+  v_week_ending_from_text text := NULL;
+  v_week_ending_to_text text := NULL;
+  v_week_ending_from date := NULL;
+  v_week_ending_to date := NULL;
+
+  v_order_by text := 'candidate_name';
+  v_order_dir text := 'asc';
+  v_limit integer := 100;
+  v_offset integer := 0;
+  v_disable_paging boolean := FALSE;
+BEGIN
+  v_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'id', '')), '');
+  v_has_lookup_filter := (v_id_text IS NOT NULL) OR (v_filters ? 'ids');
+
+  IF v_id_text IS NOT NULL AND v_id_text ~* v_uuid_re THEN
+    v_lookup_ids := ARRAY[v_id_text::uuid];
+  ELSIF v_filters ? 'ids' AND jsonb_typeof(v_filters->'ids') = 'array' THEN
+    SELECT ARRAY_AGG(id_values.id_value)
+      INTO v_lookup_ids
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS id_value
+      FROM jsonb_array_elements_text(v_filters->'ids') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS id_values;
+  ELSIF v_filters ? 'ids'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'ids', '')), '') IS NOT NULL THEN
+    SELECT ARRAY_AGG(id_values.id_value)
+      INTO v_lookup_ids
+    FROM (
+      SELECT DISTINCT split_values.value::uuid AS id_value
+      FROM UNNEST(regexp_split_to_array(v_filters->>'ids', '\s*,\s*')) AS split_values(value)
+      WHERE split_values.value ~* v_uuid_re
+    ) AS id_values;
+  END IF;
+
+  IF v_has_lookup_filter AND COALESCE(ARRAY_LENGTH(v_lookup_ids, 1), 0) = 0 THEN
+    RETURN;
+  END IF;
+
+  IF COALESCE(ARRAY_LENGTH(v_lookup_ids, 1), 0) > 0 THEN
+    v_source_filters :=
+      v_source_filters
+      || jsonb_build_object(
+           'timesheet_ids', to_jsonb(v_lookup_ids),
+           'contract_week_ids', to_jsonb(v_lookup_ids)
+         );
+  END IF;
+
+  v_has_timesheet_filter :=
+    (v_filters ? 'timesheet_id')
+    OR (v_filters ? 'timesheetId')
+    OR (v_filters ? 'timesheet_ids')
+    OR (v_filters ? 'timesheetIds');
+
+  IF v_filters ? 'timesheet_ids' AND jsonb_typeof(v_filters->'timesheet_ids') = 'array' THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_timesheet_ids_filter
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS uuid_value
+      FROM jsonb_array_elements_text(v_filters->'timesheet_ids') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'timesheet_ids'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_ids', '')), '') IS NOT NULL THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_timesheet_ids_filter
+    FROM (
+      SELECT DISTINCT split_values.value::uuid AS uuid_value
+      FROM UNNEST(regexp_split_to_array(v_filters->>'timesheet_ids', '\s*,\s*')) AS split_values(value)
+      WHERE split_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'timesheetIds' AND jsonb_typeof(v_filters->'timesheetIds') = 'array' THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_timesheet_ids_filter
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS uuid_value
+      FROM jsonb_array_elements_text(v_filters->'timesheetIds') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'timesheetIds'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'timesheetIds', '')), '') IS NOT NULL THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_timesheet_ids_filter
+    FROM (
+      SELECT DISTINCT split_values.value::uuid AS uuid_value
+      FROM UNNEST(regexp_split_to_array(v_filters->>'timesheetIds', '\s*,\s*')) AS split_values(value)
+      WHERE split_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'timesheet_id'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'timesheet_id', '')), '') IS NOT NULL
+        AND (v_filters->>'timesheet_id') ~* v_uuid_re THEN
+    v_timesheet_ids_filter := ARRAY[(v_filters->>'timesheet_id')::uuid];
+  ELSIF v_filters ? 'timesheetId'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'timesheetId', '')), '') IS NOT NULL
+        AND (v_filters->>'timesheetId') ~* v_uuid_re THEN
+    v_timesheet_ids_filter := ARRAY[(v_filters->>'timesheetId')::uuid];
+  END IF;
+
+  IF v_has_timesheet_filter AND COALESCE(ARRAY_LENGTH(v_timesheet_ids_filter, 1), 0) = 0 THEN
+    RETURN;
+  END IF;
+
+  IF COALESCE(ARRAY_LENGTH(v_timesheet_ids_filter, 1), 0) > 0 THEN
+    v_source_filters :=
+      v_source_filters
+      || jsonb_build_object('timesheet_ids', to_jsonb(v_timesheet_ids_filter));
+  END IF;
+
+  v_has_contract_week_filter :=
+    (v_filters ? 'contract_week_id')
+    OR (v_filters ? 'contractWeekId')
+    OR (v_filters ? 'contract_week_ids')
+    OR (v_filters ? 'contractWeekIds');
+
+  IF v_filters ? 'contract_week_ids' AND jsonb_typeof(v_filters->'contract_week_ids') = 'array' THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_contract_week_ids_filter
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS uuid_value
+      FROM jsonb_array_elements_text(v_filters->'contract_week_ids') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'contract_week_ids'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_ids', '')), '') IS NOT NULL THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_contract_week_ids_filter
+    FROM (
+      SELECT DISTINCT split_values.value::uuid AS uuid_value
+      FROM UNNEST(regexp_split_to_array(v_filters->>'contract_week_ids', '\s*,\s*')) AS split_values(value)
+      WHERE split_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'contractWeekIds' AND jsonb_typeof(v_filters->'contractWeekIds') = 'array' THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_contract_week_ids_filter
+    FROM (
+      SELECT DISTINCT input_values.value::uuid AS uuid_value
+      FROM jsonb_array_elements_text(v_filters->'contractWeekIds') AS input_values(value)
+      WHERE input_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'contractWeekIds'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'contractWeekIds', '')), '') IS NOT NULL THEN
+    SELECT ARRAY_AGG(uuid_values.uuid_value)
+      INTO v_contract_week_ids_filter
+    FROM (
+      SELECT DISTINCT split_values.value::uuid AS uuid_value
+      FROM UNNEST(regexp_split_to_array(v_filters->>'contractWeekIds', '\s*,\s*')) AS split_values(value)
+      WHERE split_values.value ~* v_uuid_re
+    ) AS uuid_values;
+  ELSIF v_filters ? 'contract_week_id'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'contract_week_id', '')), '') IS NOT NULL
+        AND (v_filters->>'contract_week_id') ~* v_uuid_re THEN
+    v_contract_week_ids_filter := ARRAY[(v_filters->>'contract_week_id')::uuid];
+  ELSIF v_filters ? 'contractWeekId'
+        AND NULLIF(BTRIM(COALESCE(v_filters->>'contractWeekId', '')), '') IS NOT NULL
+        AND (v_filters->>'contractWeekId') ~* v_uuid_re THEN
+    v_contract_week_ids_filter := ARRAY[(v_filters->>'contractWeekId')::uuid];
+  END IF;
+
+  IF v_has_contract_week_filter AND COALESCE(ARRAY_LENGTH(v_contract_week_ids_filter, 1), 0) = 0 THEN
+    RETURN;
+  END IF;
+
+  IF COALESCE(ARRAY_LENGTH(v_contract_week_ids_filter, 1), 0) > 0 THEN
+    v_source_filters :=
+      v_source_filters
+      || jsonb_build_object('contract_week_ids', to_jsonb(v_contract_week_ids_filter));
+  END IF;
+
+  v_candidate_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'candidate_id', v_filters->>'candidateId', '')), '');
+  v_has_candidate_filter := v_candidate_id_text IS NOT NULL;
+  BEGIN
+    IF v_candidate_id_text IS NOT NULL AND v_candidate_id_text ~* v_uuid_re THEN
+      v_candidate_id_filter := v_candidate_id_text::uuid;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_candidate_id_filter := NULL;
+  END;
+
+  IF v_has_candidate_filter AND v_candidate_id_filter IS NULL THEN
+    RETURN;
+  END IF;
+
+  v_client_id_text := NULLIF(BTRIM(COALESCE(v_filters->>'client_id', v_filters->>'clientId', '')), '');
+  v_has_client_filter := v_client_id_text IS NOT NULL;
+  BEGIN
+    IF v_client_id_text IS NOT NULL AND v_client_id_text ~* v_uuid_re THEN
+      v_client_id_filter := v_client_id_text::uuid;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_client_id_filter := NULL;
+  END;
+
+  IF v_has_client_filter AND v_client_id_filter IS NULL THEN
+    RETURN;
+  END IF;
+
+  v_q := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'q', v_filters->>'query', v_filters->>'name', '')), ''));
+  v_tools_stage := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'tools_stage', v_filters->>'toolsStage', '')), ''));
+  IF v_tools_stage = 'all' THEN v_tools_stage := NULL; END IF;
+  v_route_type := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'route_type', v_filters->>'routeType', '')), ''));
+  v_sheet_scope := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'sheet_scope', v_filters->>'sheetScope', '')), ''));
+  v_qr_status := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'qr_status', v_filters->>'qrStatus', '')), ''));
+  v_status_code := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'status_code', v_filters->>'statusCode', '')), ''));
+  v_issues_filter := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'issues_filter', v_filters->>'issuesFilter', '')), ''));
+  IF v_issues_filter = 'all' THEN v_issues_filter := NULL; END IF;
+
+  IF LOWER(COALESCE(v_filters->>'candidate_paid', v_filters->>'candidatePaid', '')) IN ('true','t','yes','y','1') THEN
+    v_candidate_paid := TRUE;
+  ELSIF LOWER(COALESCE(v_filters->>'candidate_paid', v_filters->>'candidatePaid', '')) IN ('false','f','no','n','0') THEN
+    v_candidate_paid := FALSE;
+  END IF;
+
+  IF LOWER(COALESCE(v_filters->>'is_adjusted', v_filters->>'isAdjusted', '')) IN ('true','t','yes','y','1') THEN
+    v_is_adjusted := TRUE;
+  ELSIF LOWER(COALESCE(v_filters->>'is_adjusted', v_filters->>'isAdjusted', '')) IN ('false','f','no','n','0') THEN
+    v_is_adjusted := FALSE;
+  END IF;
+
+  IF LOWER(COALESCE(v_filters->>'is_qr', v_filters->>'isQr', '')) IN ('true','t','yes','y','1') THEN
+    v_is_qr := TRUE;
+  ELSIF LOWER(COALESCE(v_filters->>'is_qr', v_filters->>'isQr', '')) IN ('false','f','no','n','0') THEN
+    v_is_qr := FALSE;
+  END IF;
+
+  IF LOWER(COALESCE(v_filters->>'hr_issue', v_filters->>'hrIssue', '')) IN ('true','t','yes','y','1') THEN
+    v_hr_issue := TRUE;
+  ELSIF LOWER(COALESCE(v_filters->>'hr_issue', v_filters->>'hrIssue', '')) IN ('false','f','no','n','0') THEN
+    v_hr_issue := FALSE;
+  ELSE
+    v_hr_issue_token := UPPER(NULLIF(BTRIM(COALESCE(v_filters->>'hr_issue', v_filters->>'hrIssue', '')), ''));
+    IF v_hr_issue_token = 'ALL' THEN
+      v_hr_issue_token := NULL;
+    END IF;
+  END IF;
+
+  v_week_ending_from_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_from', v_filters->>'weekEndingFrom', '')), '');
+  v_week_ending_to_text := NULLIF(BTRIM(COALESCE(v_filters->>'week_ending_to', v_filters->>'weekEndingTo', '')), '');
+
+  BEGIN
+    IF v_week_ending_from_text IS NOT NULL THEN
+      v_week_ending_from := v_week_ending_from_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_week_ending_from := NULL;
+  END;
+
+  BEGIN
+    IF v_week_ending_to_text IS NOT NULL THEN
+      v_week_ending_to := v_week_ending_to_text::date;
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    v_week_ending_to := NULL;
+  END;
+
+  v_order_by := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'order_by', v_filters->>'orderBy', 'candidate_name')), ''));
+  v_order_dir := LOWER(NULLIF(BTRIM(COALESCE(v_filters->>'order_dir', v_filters->>'orderDir', 'asc')), ''));
+
+  IF v_order_dir NOT IN ('asc', 'desc') THEN
+    v_order_dir := 'asc';
+  END IF;
+
+  v_disable_paging :=
+    LOWER(COALESCE(v_filters->>'disable_paging', v_filters->>'disablePaging', v_filters->>'no_paging', v_filters->>'noPaging', '')) IN ('true','t','yes','y','1')
+    OR LOWER(COALESCE(v_filters->>'apply_paging', v_filters->>'applyPaging', '')) IN ('false','f','no','n','0')
+    OR LOWER(COALESCE(v_filters->>'purpose', '')) IN ('membership','memberships','ids','totals','total','count','counts');
+
+  IF v_disable_paging THEN
+    v_limit := NULL;
+    v_offset := 0;
+  ELSE
+    IF COALESCE(v_filters->>'limit', '') ~ '^[0-9]+$' THEN
+      v_limit := LEAST(GREATEST((v_filters->>'limit')::integer, 1), 5000);
+    ELSIF COALESCE(v_filters->>'page_size', v_filters->>'pageSize', '') ~ '^[0-9]+$' THEN
+      v_limit := LEAST(GREATEST(COALESCE(v_filters->>'page_size', v_filters->>'pageSize')::integer, 1), 5000);
+    END IF;
+
+    IF COALESCE(v_filters->>'offset', '') ~ '^[0-9]+$' THEN
+      v_offset := GREATEST((v_filters->>'offset')::integer, 0);
+    ELSIF COALESCE(v_filters->>'page', '') ~ '^[0-9]+$'
+          AND COALESCE(v_filters->>'page_size', v_filters->>'pageSize', '') ~ '^[0-9]+$' THEN
+      v_offset :=
+        GREATEST(((v_filters->>'page')::integer - 1), 0)
+        * LEAST(GREATEST(COALESCE(v_filters->>'page_size', v_filters->>'pageSize')::integer, 1), 5000);
+    END IF;
+  END IF;
+
+  RETURN QUERY
+  WITH source_rows AS MATERIALIZED (
+    SELECT
+      source_row.*
+    FROM public.bulk_timesheet_workbench_row_source_v1(v_source_filters) AS source_row
+  ),
+  source_correction_ids AS MATERIALIZED (
+    SELECT DISTINCT timesheet_row.correction_id
+    FROM source_rows
+    JOIN public.timesheets AS timesheet_row
+      ON timesheet_row.timesheet_id = source_rows.timesheet_id
+     AND timesheet_row.is_current = TRUE
+     AND timesheet_row.archived_at_utc IS NULL
+     AND UPPER(COALESCE(timesheet_row.adjustment_origin, '')) = 'IMPORT_CORRECTION'
+     AND timesheet_row.correction_id IS NOT NULL
+  ),
+  correction_pair_members AS MATERIALIZED (
+    SELECT
+      timesheet_row.timesheet_id,
+      timesheet_row.correction_id,
+      UPPER(COALESCE(timesheet_row.correction_kind, '')) AS correction_kind
+    FROM public.timesheets AS timesheet_row
+    JOIN source_correction_ids
+      ON source_correction_ids.correction_id = timesheet_row.correction_id
+    WHERE timesheet_row.is_current = TRUE
+      AND timesheet_row.archived_at_utc IS NULL
+      AND UPPER(COALESCE(timesheet_row.adjustment_origin, '')) = 'IMPORT_CORRECTION'
+      AND UPPER(COALESCE(timesheet_row.correction_kind, '')) IN (
+        'CHANGED_HOURS_REVERSAL',
+        'CHANGED_HOURS_REPLACEMENT'
+      )
+  ),
+  correction_pair_placed_members AS MATERIALIZED (
+    SELECT DISTINCT invoice_line.timesheet_id
+    FROM public.invoice_lines AS invoice_line
+    JOIN public.invoices AS invoice_row
+      ON invoice_row.id = invoice_line.invoice_id
+     AND UPPER(COALESCE(invoice_row.type::text, '')) <> 'CREDIT_NOTE'
+    WHERE EXISTS (
+      SELECT 1
+      FROM correction_pair_members AS pair_member
+      WHERE pair_member.timesheet_id = invoice_line.timesheet_id
+    )
+  ),
+  correction_pair_shapes AS MATERIALIZED (
+    SELECT
+      pair_member.correction_id,
+      COUNT(*)::integer AS member_count,
+      COUNT(*) FILTER (
+        WHERE pair_member.correction_kind = 'CHANGED_HOURS_REVERSAL'
+      )::integer AS reversal_count,
+      COUNT(*) FILTER (
+        WHERE pair_member.correction_kind = 'CHANGED_HOURS_REPLACEMENT'
+      )::integer AS replacement_count,
+      COUNT(*) FILTER (
+        WHERE placed_member.timesheet_id IS NOT NULL
+      )::integer AS placed_member_count
+    FROM correction_pair_members AS pair_member
+    LEFT JOIN correction_pair_placed_members AS placed_member
+      ON placed_member.timesheet_id = pair_member.timesheet_id
+    GROUP BY pair_member.correction_id
+  ),
+  correction_pair_issue_timesheets AS MATERIALIZED (
+    SELECT pair_member.timesheet_id
+    FROM correction_pair_members AS pair_member
+    JOIN correction_pair_shapes AS pair_shape
+      ON pair_shape.correction_id = pair_member.correction_id
+     AND pair_shape.member_count = 2
+     AND pair_shape.reversal_count = 1
+     AND pair_shape.replacement_count = 1
+     AND pair_shape.placed_member_count = 1
+    LEFT JOIN correction_pair_placed_members AS placed_member
+      ON placed_member.timesheet_id = pair_member.timesheet_id
+    WHERE placed_member.timesheet_id IS NULL
+  ),
+  client_reference_settings AS MATERIALIZED (
+    SELECT
+      client_setting.client_id,
+      COALESCE(BOOL_OR(client_setting.reference_number_required_to_issue_invoice), FALSE)
+        AS issue_reference_required
+    FROM public.client_settings AS client_setting
+    WHERE EXISTS (
+      SELECT 1
+      FROM source_rows
+      WHERE source_rows.client_id = client_setting.client_id
+    )
+    GROUP BY client_setting.client_id
+  ),
+  enriched_base AS MATERIALIZED (
+    SELECT
+      source_rows.timesheet_id,
+      source_rows.contract_week_id,
+      COALESCE(timesheet_row.contract_id, contract_week_row.contract_id) AS contract_id,
+
+      source_rows.candidate_id,
+      source_rows.candidate_name,
+      source_rows.candidate_name AS candidate_display_name,
+      source_rows.client_id,
+      source_rows.client_name,
+
+      source_rows.booking_id,
+      source_rows.occupant_key_norm,
+      source_rows.hospital_norm,
+      source_rows.candidate_hint_text,
+
+      COALESCE(source_rows.contract_week_ending_date, source_rows.week_ending_date) AS week_ending_date,
+
+      CASE
+        WHEN source_rows.sheet_scope = 'DAILY'::public.timesheet_scope_enum THEN
+          COALESCE(timesheet_row.worked_start_iso::date, timesheet_row.scheduled_start_iso::date, source_rows.week_ending_date)
+        ELSE NULL::date
+      END AS work_date,
+
+      source_rows.sheet_scope::text AS sheet_scope,
+      source_rows.submission_mode::text AS submission_mode,
+      COALESCE(contract_week_row.submission_mode_snapshot::text, source_rows.submission_mode::text) AS submission_mode_snapshot,
+      source_rows.basis::text AS basis,
+
+      source_rows.route_type,
+      CASE
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        )
+         AND COALESCE(source_rows.client_is_nhsp, FALSE) = TRUE THEN 'NHSP Manual Adjustment'
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        )
+         AND COALESCE(source_rows.client_autoprocess_hr, FALSE) = TRUE THEN 'HealthRoster Manual Adjustment'
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        ) THEN 'Manual Adjustment'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'NHSP' THEN 'NHSP'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'HEALTHROSTER' THEN 'HealthRoster'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'HEALTHROSTER_DAILY' THEN 'HealthRoster Daily'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'QR' THEN 'QR'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'NO_TIMESHEET_REQUIRED' THEN 'No timesheet required'
+        WHEN COALESCE(source_rows.route_type, '') <> '' THEN INITCAP(REPLACE(source_rows.route_type, '_', ' '))
+        ELSE 'Manual'
+      END AS route_display,
+
+      CASE
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        ) THEN 'MANUAL'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) LIKE '%NHSP%' THEN 'NHSP'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) LIKE '%HEALTHROSTER%' THEN 'HEALTHROSTER'
+        WHEN COALESCE(source_rows.is_qr, FALSE) THEN 'QR'
+        WHEN COALESCE(source_rows.client_no_timesheet_required, FALSE) THEN 'NO_TIMESHEET_REQUIRED'
+        ELSE 'MANUAL'
+      END AS route_family,
+
+      CASE
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        ) THEN 'MANUAL_ADJUSTMENT'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) = 'HEALTHROSTER_DAILY' THEN 'DAILY'
+        WHEN source_rows.sheet_scope = 'DAILY'::public.timesheet_scope_enum THEN 'DAILY'
+        ELSE 'WEEKLY'
+      END AS route_subfamily,
+
+      CASE
+        WHEN (
+          source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum
+          AND (
+            COALESCE(source_rows.is_adjusted, FALSE) = TRUE
+            OR COALESCE(source_rows.is_adjustment, FALSE) = TRUE
+            OR COALESCE(source_rows.additional_seq, 0) > 0
+            OR UPPER(COALESCE(source_rows.basis::text, '')) IN ('NHSP_ADJUSTMENT', 'MANUAL_ADJUSTMENT')
+          )
+        ) THEN 'MANUAL'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) LIKE '%NHSP%' THEN 'IMPORT'
+        WHEN UPPER(COALESCE(source_rows.route_type, '')) LIKE '%HEALTHROSTER%' THEN 'IMPORT'
+        WHEN COALESCE(source_rows.is_qr, FALSE) THEN 'QR'
+        ELSE 'MANUAL'
+      END AS underlying_channel_family,
+
+      source_rows.summary_stage,
+      source_rows.tools_stage,
+      source_rows.processing_status::text AS processing_status,
+      source_rows.processing_status_display,
+
+      COALESCE(financial_row.authorised_at_utc, source_rows.authorised_at_server) AS authorised_at_utc,
+      source_rows.authorised_at_server,
+      financial_row.processed_at_utc,
+
+      (COALESCE(financial_row.authorised_at_utc, source_rows.authorised_at_server) IS NOT NULL) AS is_authorised,
+
+      COALESCE(source_rows.total_hours, 0::numeric) AS total_hours,
+      COALESCE(source_rows.total_pay_ex_vat, 0::numeric) AS total_pay_ex_vat,
+      COALESCE(source_rows.total_charge_ex_vat, 0::numeric) AS total_charge_ex_vat,
+      COALESCE(source_rows.margin_ex_vat, 0::numeric) AS margin_ex_vat,
+      COALESCE(source_rows.net_delta_ex_vat, COALESCE(source_rows.total_charge_ex_vat, 0::numeric) - COALESCE(source_rows.total_pay_ex_vat, 0::numeric)) AS net_delta_ex_vat,
+
+      source_rows.paid_at_utc,
+      source_rows.pay_icon_code,
+      source_rows.pay_status_code,
+      source_rows.pay_paid_at_utc,
+
+      COALESCE(source_rows.invoice_is_paid, FALSE) AS invoice_is_paid,
+
+      CASE
+        WHEN COALESCE(source_rows.invoice_is_paid, FALSE) THEN 'PAID'
+        WHEN COALESCE(source_rows.invoice_segments_locked, 0) > 0 THEN 'LOCKED'
+        WHEN COALESCE(source_rows.invoice_segments_total, 0) > 0 THEN 'DRAFT'
+        ELSE NULL::text
+      END AS invoice_issue_stage,
+
+      source_rows.invoice_segment_stage,
+      COALESCE(source_rows.invoice_segments_total, 0)::integer AS invoice_segments_total,
+      COALESCE(source_rows.invoice_segments_locked, 0)::integer AS invoice_segments_locked,
+      COALESCE(source_rows.invoice_segments_unlocked, 0)::integer AS invoice_segments_unlocked,
+
+      COALESCE(
+        ARRAY(
+          SELECT issue_values.issue_code
+          FROM UNNEST(COALESCE(source_rows.issue_codes, ARRAY[]::text[]))
+            WITH ORDINALITY AS issue_values(issue_code, issue_ordinality)
+          WHERE issue_values.issue_code NOT IN (
+            '__PAY_BADGE_ADV__',
+            '__PAY_BADGE_OVERPAID__',
+            '__PAY_BADGE_PROCESSING__',
+            'Authorisation'
+          )
+          ORDER BY issue_values.issue_ordinality
+        ),
+        ARRAY[]::text[]
+      ) AS base_business_issue_codes,
+      COALESCE(
+        ARRAY(
+          SELECT payment_badges.badge_code
+          FROM UNNEST(COALESCE(summary_pay_cache.summary_badge_codes, ARRAY[]::text[]))
+            WITH ORDINALITY AS payment_badges(badge_code, badge_ordinality)
+          WHERE payment_badges.badge_code IN (
+            '__PAY_BADGE_ADV__',
+            '__PAY_BADGE_PROCESSING__'
+          )
+          ORDER BY payment_badges.badge_ordinality
+        ),
+        ARRAY[]::text[]
+      ) AS base_payment_badge_codes,
+      (
+        COALESCE(summary_pay_cache.paid_to_date_ex_vat, 0::numeric) > 0.01
+        AND (
+          COALESCE(summary_pay_cache.paid_to_date_ex_vat, 0::numeric)
+          + COALESCE(summary_pay_cache.net_delta_ex_vat, 0::numeric)
+        ) > 0.01
+        AND COALESCE(summary_pay_cache.net_delta_ex_vat, 0::numeric) < -0.01
+      ) AS genuine_overpaid,
+      (correction_pair_issue_timesheets.timesheet_id IS NOT NULL) AS correction_pair_placement_incomplete,
+      CASE
+        WHEN source_rows.timesheet_id IS NULL
+          OR COALESCE(source_rows.total_hours, 0::numeric) <= 0::numeric
+          OR NOT (
+            COALESCE(source_rows.require_reference_to_pay, FALSE)
+            OR COALESCE(source_rows.require_reference_to_invoice, FALSE)
+            OR COALESCE(source_rows.client_ts_reference_required, FALSE)
+            OR COALESCE(source_rows.client_pay_reference_required, FALSE)
+            OR COALESCE(source_rows.client_invoice_reference_required, FALSE)
+            OR COALESCE(client_reference_settings.issue_reference_required, FALSE)
+          ) THEN FALSE
+        WHEN source_rows.sheet_scope = 'DAILY'::public.timesheet_scope_enum THEN
+          NULLIF(BTRIM(COALESCE(timesheet_row.reference_number, '')), '') IS NULL
+        WHEN financial_row.invoice_breakdown_json IS NOT NULL
+          AND jsonb_typeof(financial_row.invoice_breakdown_json) = 'object'
+          AND UPPER(COALESCE(financial_row.invoice_breakdown_json->>'mode', '')) = 'SEGMENTS'
+          AND jsonb_typeof(financial_row.invoice_breakdown_json->'segments') = 'array' THEN
+          EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(financial_row.invoice_breakdown_json->'segments') AS segment_rows(segment_json)
+            WHERE NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'invoice_locked_invoice_id', '')), '') IS NULL
+              AND (
+                COALESCE(NULLIF(segment_rows.segment_json->>'hours_day', '')::numeric, 0::numeric)
+                + COALESCE(NULLIF(segment_rows.segment_json->>'hours_night', '')::numeric, 0::numeric)
+                + COALESCE(NULLIF(segment_rows.segment_json->>'hours_sat', '')::numeric, 0::numeric)
+                + COALESCE(NULLIF(segment_rows.segment_json->>'hours_sun', '')::numeric, 0::numeric)
+                + COALESCE(NULLIF(segment_rows.segment_json->>'hours_bh', '')::numeric, 0::numeric)
+              ) > 0::numeric
+              AND NULLIF(BTRIM(COALESCE(segment_rows.segment_json->>'ref_num', '')), '') IS NULL
+          )
+        WHEN source_rows.submission_mode = 'MANUAL'::public.submission_mode_enum THEN
+          timesheet_row.actual_schedule_json IS NULL
+          OR jsonb_typeof(timesheet_row.actual_schedule_json) <> 'array'
+          OR jsonb_array_length(timesheet_row.actual_schedule_json) = 0
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(timesheet_row.actual_schedule_json) AS schedule_rows(schedule_json)
+            WHERE NULLIF(BTRIM(COALESCE(schedule_rows.schedule_json->>'start', '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(schedule_rows.schedule_json->>'end', '')), '') IS NOT NULL
+              AND NULLIF(BTRIM(COALESCE(schedule_rows.schedule_json->>'ref_num', '')), '') IS NULL
+          )
+        ELSE NOT (
+          NULLIF(BTRIM(COALESCE(timesheet_row.reference_number, '')), '') IS NOT NULL
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_each_text(
+              CASE
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'object'
+                  THEN timesheet_row.day_references_json
+                ELSE '{}'::jsonb
+              END
+            ) AS day_reference(reference_key, reference_value)
+            WHERE LEFT(COALESCE(day_reference.reference_key, ''), 2) <> '__'
+              AND NULLIF(BTRIM(COALESCE(day_reference.reference_value, '')), '') IS NOT NULL
+          )
+          OR EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'array'
+                  THEN timesheet_row.day_references_json
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'object'
+                  AND jsonb_typeof(timesheet_row.day_references_json->'__freeform_refs') = 'array'
+                  THEN timesheet_row.day_references_json->'__freeform_refs'
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'object'
+                  AND jsonb_typeof(timesheet_row.day_references_json->'__freeform') = 'array'
+                  THEN timesheet_row.day_references_json->'__freeform'
+                WHEN jsonb_typeof(timesheet_row.day_references_json) = 'object'
+                  AND jsonb_typeof(timesheet_row.day_references_json->'__freeform_lines') = 'array'
+                  THEN timesheet_row.day_references_json->'__freeform_lines'
+                ELSE '[]'::jsonb
+              END
+            ) AS freeform_reference(reference_json)
+            WHERE NULLIF(BTRIM(COALESCE(
+              CASE
+                WHEN jsonb_typeof(freeform_reference.reference_json) = 'string'
+                  THEN freeform_reference.reference_json #>> '{}'
+                WHEN jsonb_typeof(freeform_reference.reference_json) = 'object'
+                  THEN COALESCE(
+                    freeform_reference.reference_json->>'reference',
+                    freeform_reference.reference_json->>'ref_num',
+                    freeform_reference.reference_json->>'value'
+                  )
+                ELSE NULL::text
+              END,
+              ''
+            )), '') IS NOT NULL
+          )
+        )
+      END AS reference_missing,
+      source_rows.validation_status::text AS validation_status,
+
+      CASE
+        WHEN source_rows.validation_status IS NULL THEN NULL::text
+        ELSE source_rows.validation_status::text
+      END AS validation_summary,
+
+      source_rows.hr_crosscheck_status,
+      COALESCE(source_rows.hr_crosscheck_issues, ARRAY[]::text[]) AS hr_crosscheck_issues,
+
+      source_rows.qr_status::text AS qr_status,
+      timesheet_row.qr_token AS qr_token,
+      timesheet_row.qr_generated_at AS qr_generated_at,
+      timesheet_row.qr_scanned_at AS qr_scanned_at,
+      COALESCE(source_rows.is_qr, FALSE) AS is_qr,
+      COALESCE(source_rows.is_adjusted, FALSE) AS is_adjusted,
+      COALESCE(source_rows.needs_attention, FALSE) AS needs_attention,
+      COALESCE(source_rows.has_rate_issue, FALSE) AS has_rate_issue,
+      COALESCE(source_rows.has_pay_channel_issue, FALSE) AS has_pay_channel_issue,
+
+      COALESCE(source_rows.client_no_timesheet_required, FALSE) AS client_no_timesheet_required,
+      COALESCE(source_rows.client_autoprocess_hr, FALSE) AS client_autoprocess_hr,
+      COALESCE(source_rows.client_is_nhsp, FALSE) AS client_is_nhsp,
+
+      (
+        COALESCE(evidence_summary.attached_evidence_count, 0) > 0
+        OR NULLIF(timesheet_row.manual_pdf_r2_key, '') IS NOT NULL
+        OR NULLIF(timesheet_row.qr_r2_key, '') IS NOT NULL
+        OR (source_rows.timesheet_id IS NULL AND NULLIF(contract_week_row.uploaded_pdf_r2_key, '') IS NOT NULL)
+      ) AS has_any_evidence,
+
+      COALESCE(evidence_summary.attached_evidence_count, 0)::integer AS attached_evidence_count,
+
+      COALESCE(
+        evidence_summary.primary_storage_key,
+        NULLIF(timesheet_row.manual_pdf_r2_key, ''),
+        NULLIF(timesheet_row.qr_r2_key, ''),
+        CASE WHEN source_rows.timesheet_id IS NULL THEN NULLIF(contract_week_row.uploaded_pdf_r2_key, '') END
+      ) AS primary_artifact_storage_key,
+
+      COALESCE(
+        evidence_summary.primary_display_name,
+        CASE WHEN NULLIF(timesheet_row.manual_pdf_r2_key, '') IS NOT NULL THEN 'Manual timesheet PDF' END,
+        CASE WHEN NULLIF(timesheet_row.qr_r2_key, '') IS NOT NULL THEN 'QR timesheet' END,
+        CASE WHEN source_rows.timesheet_id IS NULL AND NULLIF(contract_week_row.uploaded_pdf_r2_key, '') IS NOT NULL THEN 'Uploaded weekly PDF' END
+      ) AS primary_artifact_display_name,
+
+      CASE
+        WHEN COALESCE(evidence_summary.primary_storage_key, NULLIF(timesheet_row.manual_pdf_r2_key, ''), NULLIF(timesheet_row.qr_r2_key, ''), CASE WHEN source_rows.timesheet_id IS NULL THEN NULLIF(contract_week_row.uploaded_pdf_r2_key, '') END) IS NOT NULL THEN 'document'
+        ELSE NULL::text
+      END AS primary_artifact_preview_mode
+
+    FROM source_rows
+    LEFT JOIN public.timesheet_summary_pay_state_cache AS summary_pay_cache
+      ON summary_pay_cache.timesheet_id = source_rows.timesheet_id
+    LEFT JOIN public.timesheets AS timesheet_row
+      ON timesheet_row.timesheet_id = source_rows.timesheet_id
+     AND timesheet_row.is_current = TRUE
+    LEFT JOIN public.contract_weeks AS contract_week_row
+      ON contract_week_row.id = source_rows.contract_week_id
+    LEFT JOIN public.timesheets_financials AS financial_row
+      ON financial_row.timesheet_id = source_rows.timesheet_id
+     AND financial_row.is_current = TRUE
+    LEFT JOIN correction_pair_issue_timesheets
+      ON correction_pair_issue_timesheets.timesheet_id = source_rows.timesheet_id
+    LEFT JOIN client_reference_settings
+      ON client_reference_settings.client_id = source_rows.client_id
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(timesheet_evidence_row.id) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(timesheet_evidence_row.storage_key, '')), '') IS NOT NULL
+        )::integer AS attached_evidence_count,
+        (ARRAY_AGG(
+          timesheet_evidence_row.storage_key
+          ORDER BY
+            (UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'TIMESHEET') DESC,
+            timesheet_evidence_row.created_at DESC,
+            timesheet_evidence_row.id DESC
+        ) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(timesheet_evidence_row.storage_key, '')), '') IS NOT NULL
+        ))[1] AS primary_storage_key,
+        (ARRAY_AGG(
+          COALESCE(NULLIF(timesheet_evidence_row.display_name, ''), timesheet_evidence_row.kind, 'Evidence')
+          ORDER BY
+            (UPPER(COALESCE(timesheet_evidence_row.kind, '')) = 'TIMESHEET') DESC,
+            timesheet_evidence_row.created_at DESC,
+            timesheet_evidence_row.id DESC
+        ) FILTER (
+          WHERE NULLIF(BTRIM(COALESCE(timesheet_evidence_row.storage_key, '')), '') IS NOT NULL
+        ))[1] AS primary_display_name
+      FROM public.timesheet_evidence AS timesheet_evidence_row
+      WHERE timesheet_evidence_row.timesheet_id = source_rows.timesheet_id
+    ) AS evidence_summary ON TRUE
+  ),
+  enriched AS MATERIALIZED (
+    SELECT
+      enriched_base.*,
+      (
+        enriched_base.base_business_issue_codes
+        || CASE
+             WHEN enriched_base.reference_missing THEN ARRAY['Refs missing'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN enriched_base.correction_pair_placement_incomplete THEN ARRAY['Paired needs invoicing'::text]
+             ELSE ARRAY[]::text[]
+           END
+      ) AS business_issue_codes,
+      (
+        enriched_base.base_business_issue_codes
+        || CASE
+             WHEN enriched_base.reference_missing THEN ARRAY['Refs missing'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || CASE
+             WHEN enriched_base.correction_pair_placement_incomplete THEN ARRAY['Paired needs invoicing'::text]
+             ELSE ARRAY[]::text[]
+           END
+        || enriched_base.base_payment_badge_codes
+        || CASE
+             WHEN enriched_base.genuine_overpaid THEN ARRAY['__PAY_BADGE_OVERPAID__'::text]
+             ELSE ARRAY[]::text[]
+           END
+      ) AS issue_codes
+    FROM enriched_base
+  ),
+  filtered AS MATERIALIZED (
+    SELECT enriched_row.*
+    FROM enriched AS enriched_row
+    WHERE
+      (
+        NOT v_has_lookup_filter
+        OR (
+          v_lookup_ids IS NOT NULL
+          AND (
+            enriched_row.timesheet_id = ANY(v_lookup_ids)
+            OR enriched_row.contract_week_id = ANY(v_lookup_ids)
+          )
+        )
+      )
+      AND (
+        NOT v_has_timesheet_filter
+        OR (
+          v_timesheet_ids_filter IS NOT NULL
+          AND enriched_row.timesheet_id = ANY(v_timesheet_ids_filter)
+        )
+      )
+      AND (
+        NOT v_has_contract_week_filter
+        OR (
+          v_contract_week_ids_filter IS NOT NULL
+          AND enriched_row.contract_week_id = ANY(v_contract_week_ids_filter)
+        )
+      )
+      AND (
+        NOT v_has_candidate_filter
+        OR enriched_row.candidate_id = v_candidate_id_filter
+      )
+      AND (
+        NOT v_has_client_filter
+        OR enriched_row.client_id = v_client_id_filter
+      )
+      AND (
+        v_week_ending_from IS NULL
+        OR enriched_row.week_ending_date >= v_week_ending_from
+      )
+      AND (
+        v_week_ending_to IS NULL
+        OR enriched_row.week_ending_date <= v_week_ending_to
+      )
+      AND (
+        v_q IS NULL
+        OR LOWER(COALESCE(enriched_row.candidate_name, '')) LIKE '%' || v_q || '%'
+        OR LOWER(COALESCE(enriched_row.candidate_display_name, '')) LIKE '%' || v_q || '%'
+        OR LOWER(COALESCE(enriched_row.client_name, '')) LIKE '%' || v_q || '%'
+        OR LOWER(COALESCE(enriched_row.booking_id, '')) LIKE '%' || v_q || '%'
+        OR LOWER(COALESCE(enriched_row.occupant_key_norm, '')) LIKE '%' || v_q || '%'
+        OR LOWER(COALESCE(enriched_row.hospital_norm, '')) LIKE '%' || v_q || '%'
+        OR LOWER(COALESCE(enriched_row.route_display, '')) LIKE '%' || v_q || '%'
+        OR LOWER(COALESCE(enriched_row.processing_status_display, '')) LIKE '%' || v_q || '%'
+      )
+      AND (
+        (v_tools_stage IS NULL AND LOWER(COALESCE(enriched_row.tools_stage, '')) <> 'archived')
+        OR (v_tools_stage = 'archived' AND LOWER(COALESCE(enriched_row.tools_stage, '')) = 'archived')
+        OR (
+          v_tools_stage IS NOT NULL
+          AND v_tools_stage <> 'archived'
+          AND LOWER(COALESCE(enriched_row.tools_stage, '')) = v_tools_stage
+          AND LOWER(COALESCE(enriched_row.tools_stage, '')) <> 'archived'
+        )
+      )
+      AND (
+        v_route_type IS NULL
+        OR (
+          v_route_type = 'electronic'
+          AND UPPER(COALESCE(enriched_row.route_type, '')) IN ('DAILY_ELECTRONIC', 'WEEKLY_ELECTRONIC')
+        )
+        OR (
+          v_route_type = 'manual'
+          AND (
+            UPPER(COALESCE(enriched_row.route_type, '')) IN ('DAILY_MANUAL', 'WEEKLY_MANUAL')
+            OR UPPER(COALESCE(enriched_row.route_family, '')) = 'MANUAL'
+          )
+        )
+        OR (
+          v_route_type = 'nhsp'
+          AND (
+            UPPER(COALESCE(enriched_row.route_type, '')) IN ('WEEKLY_NHSP', 'NHSP')
+            OR UPPER(COALESCE(enriched_row.route_family, '')) = 'NHSP'
+          )
+        )
+        OR (
+          v_route_type = 'healthroster'
+          AND (
+            UPPER(COALESCE(enriched_row.route_type, '')) IN ('WEEKLY_HEALTHROSTER', 'HEALTHROSTER', 'HEALTHROSTER_DAILY')
+            OR UPPER(COALESCE(enriched_row.route_family, '')) = 'HEALTHROSTER'
+          )
+        )
+        OR (
+          v_route_type = 'qr'
+          AND COALESCE(enriched_row.is_qr, FALSE) = TRUE
+        )
+        OR (
+          v_route_type IN ('no_timesheet_required', 'no-timesheet-required')
+          AND (
+            UPPER(COALESCE(enriched_row.route_type, '')) = 'NO_TIMESHEET_REQUIRED'
+            OR UPPER(COALESCE(enriched_row.route_family, '')) = 'NO_TIMESHEET_REQUIRED'
+            OR COALESCE(enriched_row.client_no_timesheet_required, FALSE) = TRUE
+          )
+        )
+        OR LOWER(COALESCE(enriched_row.route_type, '')) = v_route_type
+        OR LOWER(COALESCE(enriched_row.route_family, '')) = v_route_type
+      )
+      AND (
+        v_sheet_scope IS NULL
+        OR LOWER(COALESCE(enriched_row.sheet_scope, '')) = v_sheet_scope
+      )
+      AND (
+        v_qr_status IS NULL
+        OR LOWER(COALESCE(enriched_row.qr_status, '')) = v_qr_status
+      )
+      AND (
+        v_status_code IS NULL
+        OR (
+          v_status_code = 'no_match_id'
+          AND (enriched_row.candidate_id IS NULL OR enriched_row.client_id IS NULL)
+        )
+        OR (
+          v_status_code = 'rate_missing'
+          AND enriched_row.has_rate_issue
+        )
+        OR (
+          v_status_code IN ('pay_chan_miss', 'pay_channel_missing')
+          AND enriched_row.has_pay_channel_issue
+        )
+        OR (
+          v_status_code = 'ready_for_hr'
+          AND UPPER(COALESCE(enriched_row.processing_status, '')) = 'READY_FOR_HR'
+        )
+        OR (
+          v_status_code = 'ready_for_inv'
+          AND UPPER(COALESCE(enriched_row.processing_status, '')) = 'READY_FOR_INVOICE'
+        )
+        OR LOWER(COALESCE(enriched_row.processing_status, '')) = v_status_code
+        OR LOWER(COALESCE(enriched_row.summary_stage, '')) = v_status_code
+        OR LOWER(COALESCE(enriched_row.tools_stage, '')) = v_status_code
+      )
+      AND (
+        v_candidate_paid IS NULL
+        OR (
+          (
+            UPPER(COALESCE(enriched_row.pay_status_code, '')) IN ('PAID','PARTIALLY_PAID','OVERPAID')
+            OR enriched_row.pay_paid_at_utc IS NOT NULL
+            OR enriched_row.paid_at_utc IS NOT NULL
+          ) = v_candidate_paid
+        )
+      )
+      AND (
+        v_is_adjusted IS NULL
+        OR enriched_row.is_adjusted = v_is_adjusted
+      )
+      AND (
+        v_is_qr IS NULL
+        OR enriched_row.is_qr = v_is_qr
+      )
+      AND (
+        v_hr_issue IS NULL
+        OR (
+          (
+            COALESCE(ARRAY_LENGTH(enriched_row.hr_crosscheck_issues, 1), 0) > 0
+            OR (
+              enriched_row.hr_crosscheck_status IS NOT NULL
+              AND UPPER(enriched_row.hr_crosscheck_status) NOT IN ('OK', 'MATCHED', 'MATCH', 'VALID', 'PASSED', 'CLEAR')
+            )
+          ) = v_hr_issue
+        )
+      )
+      AND (
+        v_hr_issue_token IS NULL
+        OR EXISTS (
+          SELECT 1
+          FROM UNNEST(COALESCE(enriched_row.hr_crosscheck_issues, ARRAY[]::text[])) AS hr_issue_value(issue_code)
+          WHERE UPPER(COALESCE(hr_issue_value.issue_code, '')) = v_hr_issue_token
+        )
+      )
+      AND (
+        v_issues_filter IS NULL
+        OR (
+          v_issues_filter = 'any'
+          AND (
+            COALESCE(ARRAY_LENGTH(enriched_row.business_issue_codes, 1), 0) > 0
+            OR enriched_row.genuine_overpaid
+          )
+        )
+        OR (
+          v_issues_filter IN ('none', 'clear')
+          AND COALESCE(ARRAY_LENGTH(enriched_row.business_issue_codes, 1), 0) = 0
+          AND NOT enriched_row.genuine_overpaid
+        )
+        OR (
+          v_issues_filter IN ('no_match_id', 'identity_missing')
+          AND (enriched_row.candidate_id IS NULL OR enriched_row.client_id IS NULL)
+        )
+        OR (
+          v_issues_filter IN ('rate', 'rates', 'rate_missing')
+          AND 'Rate' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('pay', 'pay_channel', 'pay-channel', 'pay_chan_miss', 'pay_channel_missing')
+          AND 'Pay channel' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter = 'on_hold'
+          AND 'On hold' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('hr_hours_mismatch', 'hours_mismatch_hr')
+          AND 'Hours mismatch HR' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter = 'hr_hours_missing'
+          AND 'HR hours missing' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter = 'duplicate_contracts'
+          AND 'Duplicate contracts' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter = 'expenses_evidence'
+          AND 'Expenses evidence' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter = 'mileage_evidence'
+          AND 'Mileage evidence' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('refs_missing', 'reference_missing')
+          AND 'Refs missing' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('awaiting_validation', 'awaiting_hr_validation')
+          AND 'Awaiting validation' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('validation_failed', 'validation')
+          AND 'Validation failed' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter IN ('qr_awaiting_signature', 'qr_issued_awaiting_signature')
+          AND 'Awaiting signed QR timesheet' = ANY(COALESCE(enriched_row.business_issue_codes, ARRAY[]::text[]))
+        )
+        OR (
+          v_issues_filter = 'paired_needs_invoicing'
+          AND enriched_row.correction_pair_placement_incomplete
+        )
+        OR (
+          v_issues_filter = 'overpaid'
+          AND enriched_row.genuine_overpaid
+        )
+      )
+  )
+  SELECT
+    filtered_row.timesheet_id,
+    filtered_row.contract_week_id,
+    filtered_row.contract_id,
+    filtered_row.candidate_id,
+    filtered_row.candidate_name,
+    filtered_row.candidate_display_name,
+    filtered_row.client_id,
+    filtered_row.client_name,
+    filtered_row.booking_id,
+    filtered_row.occupant_key_norm,
+    filtered_row.hospital_norm,
+    filtered_row.candidate_hint_text,
+    filtered_row.week_ending_date,
+    filtered_row.work_date,
+    filtered_row.sheet_scope,
+    filtered_row.submission_mode,
+    filtered_row.submission_mode_snapshot,
+    filtered_row.basis,
+    filtered_row.route_type,
+    filtered_row.route_display,
+    filtered_row.route_family,
+    filtered_row.route_subfamily,
+    filtered_row.underlying_channel_family,
+    filtered_row.summary_stage,
+    filtered_row.tools_stage,
+    filtered_row.processing_status,
+    filtered_row.processing_status_display,
+    filtered_row.authorised_at_utc,
+    filtered_row.authorised_at_server,
+    filtered_row.processed_at_utc,
+    filtered_row.is_authorised,
+    filtered_row.total_hours,
+    filtered_row.total_pay_ex_vat,
+    filtered_row.total_charge_ex_vat,
+    filtered_row.margin_ex_vat,
+    filtered_row.net_delta_ex_vat,
+    filtered_row.paid_at_utc,
+    filtered_row.pay_icon_code,
+    filtered_row.pay_status_code,
+    filtered_row.pay_paid_at_utc,
+    filtered_row.invoice_is_paid,
+    filtered_row.invoice_issue_stage,
+    filtered_row.invoice_segment_stage,
+    filtered_row.invoice_segments_total,
+    filtered_row.invoice_segments_locked,
+    filtered_row.invoice_segments_unlocked,
+    filtered_row.issue_codes,
+    filtered_row.validation_status,
+    filtered_row.validation_summary,
+    filtered_row.hr_crosscheck_status,
+    filtered_row.hr_crosscheck_issues,
+    filtered_row.qr_status,
+    filtered_row.is_qr,
+    filtered_row.is_adjusted,
+    filtered_row.needs_attention,
+    filtered_row.has_rate_issue,
+    filtered_row.has_pay_channel_issue,
+    filtered_row.client_no_timesheet_required,
+    filtered_row.client_autoprocess_hr,
+    filtered_row.client_is_nhsp,
+    filtered_row.has_any_evidence,
+    filtered_row.attached_evidence_count,
+    filtered_row.primary_artifact_storage_key,
+    filtered_row.primary_artifact_display_name,
+    filtered_row.primary_artifact_preview_mode
+  FROM filtered AS filtered_row
+  ORDER BY
+    CASE WHEN v_order_by IN ('candidate_name', 'candidate') AND v_order_dir = 'asc' THEN filtered_row.candidate_name END ASC NULLS LAST,
+    CASE WHEN v_order_by IN ('candidate_name', 'candidate') AND v_order_dir = 'desc' THEN filtered_row.candidate_name END DESC NULLS LAST,
+
+    CASE WHEN v_order_by IN ('client_name', 'client') AND v_order_dir = 'asc' THEN filtered_row.client_name END ASC NULLS LAST,
+    CASE WHEN v_order_by IN ('client_name', 'client') AND v_order_dir = 'desc' THEN filtered_row.client_name END DESC NULLS LAST,
+
+    CASE WHEN v_order_by IN ('week_ending_date', 'week_ending', 'date') AND v_order_dir = 'asc' THEN filtered_row.week_ending_date END ASC NULLS LAST,
+    CASE WHEN v_order_by IN ('week_ending_date', 'week_ending', 'date') AND v_order_dir = 'desc' THEN filtered_row.week_ending_date END DESC NULLS LAST,
+
+    CASE WHEN v_order_by = 'work_date' AND v_order_dir = 'asc' THEN filtered_row.work_date END ASC NULLS LAST,
+    CASE WHEN v_order_by = 'work_date' AND v_order_dir = 'desc' THEN filtered_row.work_date END DESC NULLS LAST,
+
+    CASE WHEN v_order_by IN ('processing_status', 'status') AND v_order_dir = 'asc' THEN filtered_row.processing_status END ASC NULLS LAST,
+    CASE WHEN v_order_by IN ('processing_status', 'status') AND v_order_dir = 'desc' THEN filtered_row.processing_status END DESC NULLS LAST,
+
+    CASE WHEN v_order_by = 'tools_stage' AND v_order_dir = 'asc' THEN filtered_row.tools_stage END ASC NULLS LAST,
+    CASE WHEN v_order_by = 'tools_stage' AND v_order_dir = 'desc' THEN filtered_row.tools_stage END DESC NULLS LAST,
+
+    CASE WHEN v_order_by = 'route_type' AND v_order_dir = 'asc' THEN filtered_row.route_type END ASC NULLS LAST,
+    CASE WHEN v_order_by = 'route_type' AND v_order_dir = 'desc' THEN filtered_row.route_type END DESC NULLS LAST,
+
+    CASE WHEN v_order_by = 'sheet_scope' AND v_order_dir = 'asc' THEN filtered_row.sheet_scope END ASC NULLS LAST,
+    CASE WHEN v_order_by = 'sheet_scope' AND v_order_dir = 'desc' THEN filtered_row.sheet_scope END DESC NULLS LAST,
+
+    CASE WHEN v_order_by IN ('total_pay_ex_vat', 'pay') AND v_order_dir = 'asc' THEN filtered_row.total_pay_ex_vat END ASC NULLS LAST,
+    CASE WHEN v_order_by IN ('total_pay_ex_vat', 'pay') AND v_order_dir = 'desc' THEN filtered_row.total_pay_ex_vat END DESC NULLS LAST,
+
+    CASE WHEN v_order_by IN ('total_charge_ex_vat', 'charge') AND v_order_dir = 'asc' THEN filtered_row.total_charge_ex_vat END ASC NULLS LAST,
+    CASE WHEN v_order_by IN ('total_charge_ex_vat', 'charge') AND v_order_dir = 'desc' THEN filtered_row.total_charge_ex_vat END DESC NULLS LAST,
+
+    CASE WHEN v_order_by IN ('margin_ex_vat', 'margin') AND v_order_dir = 'asc' THEN filtered_row.margin_ex_vat END ASC NULLS LAST,
+    CASE WHEN v_order_by IN ('margin_ex_vat', 'margin') AND v_order_dir = 'desc' THEN filtered_row.margin_ex_vat END DESC NULLS LAST,
+
+    filtered_row.candidate_name ASC NULLS LAST,
+    filtered_row.week_ending_date DESC NULLS LAST,
+    filtered_row.work_date DESC NULLS LAST,
+    filtered_row.timesheet_id NULLS LAST,
+    filtered_row.contract_week_id NULLS LAST
+  LIMIT v_limit
+  OFFSET v_offset;
+END;
+$function$;
+
+
+
+
+REVOKE ALL ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.timesheet_summary_lightweight_rows_v1(jsonb) TO service_role;
+
+COMMIT;
+
+
+
+
+CREATE OR REPLACE FUNCTION public.cloudtms_format_london_date(p_date date)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF p_date IS NULL THEN
+    RETURN 'Not recorded';
+  END IF;
+
+  RETURN TO_CHAR(p_date, 'FMDD FMMonth YYYY');
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.cloudtms_format_gbp(p_amount numeric)
+ RETURNS text
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_amount numeric;
+  v_abs_amount numeric;
+  v_formatted text;
+BEGIN
+  IF p_amount IS NULL THEN
+    RETURN '—';
+  END IF;
+
+  v_amount := round(p_amount, 2);
+  v_abs_amount := abs(v_amount);
+  v_formatted := to_char(v_abs_amount, 'FM999,999,999,999,999,999,999,990.00');
+
+  IF v_amount < 0 THEN
+    RETURN '-£' || v_formatted;
+  END IF;
+
+  RETURN '£' || v_formatted;
+END;
+$function$;
+
+
+CREATE OR REPLACE FUNCTION public.cloudtms_format_london_datetime(p_ts timestamptz)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_local_ts timestamp without time zone;
+BEGIN
+  IF p_ts IS NULL THEN
+    RETURN 'Not recorded';
+  END IF;
+
+  v_local_ts := p_ts AT TIME ZONE 'Europe/London';
+
+  RETURN TO_CHAR(v_local_ts, 'FMDD FMMonth YYYY "at" HH24:MI "hrs"') || ' (UK time)';
+END;
 $function$;

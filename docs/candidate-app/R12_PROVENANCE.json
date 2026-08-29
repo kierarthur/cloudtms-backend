@@ -1,0 +1,63 @@
+{
+  "artifact": "CloudTMS Candidate App Candidate Daily Phase 3 R12",
+  "date": "2026-08-17",
+  "environment": "TEST only",
+  "repository_implementation_commits": [
+    "65d2d196b1e7a7622e7a66db9580a665dd3ebbb3",
+    "2ffabc7cf8a945ea1a5d064af9a57c691940d629",
+    "4e5e2a9f7667d2866f5061ae75eadc008ea0cc26"
+  ],
+  "published": true,
+  "live_google_changed": true,
+  "feature_activated": false,
+  "google": {
+    "availability_active_version": 216,
+    "availability_rollback_version": 215,
+    "master_active_version": 102,
+    "master_rollback_version": 101,
+    "bridge_enabled": false,
+    "manifest_changed": false,
+    "oauth_scopes_changed": false,
+    "triggers_changed": false,
+    "sheet_business_data_changed": false,
+    "secret_values_read_or_packaged": false
+  },
+  "workers": {
+    "worker_source_changed": false,
+    "worker_source_deployed": false,
+    "public_candidate_secret_change_version": "19199ecd-aa2a-40b5-b415-296d4cd25f21",
+    "private_candidate_secret_change_version": "f697b9e3-2f9c-4e67-bea9-951651c670a9",
+    "public_health_http": 200,
+    "public_readiness_http": 200
+  },
+  "source": {
+    "availability_revised_sha256": "01a737620116b387776d1bcb24992abecb9cdde523f09a936c587b17a7b55309",
+    "availability_helper_sha256": "2a44bce4dd72613178370c342e8dcfc45f13bdaedf16ef29b828b6a64c079bdf",
+    "availability_rollback_sha256": "eacd187564ea9b0f00c1830f9240c6afcfe1a0d0611162c1bdf9b9fd6bbb3b3f",
+    "master_revised_sha256": "e0d4ac48bffd4e9e79b1c0439cb952a298a2d11f90e3caf2a53df4b9d779d700",
+    "master_helper_sha256": "58e8da3948f2890b42abd802485776169ff500dedcf060d27b449a60597bcb2c",
+    "master_rollback_sha256": "c3ae9c480a97ad2771312f5f453adbe7049c07219f89624f75df543d319fa0a8"
+  },
+  "verification": {
+    "focused_tests": 54,
+    "focused_failures": 0,
+    "complete_backend_tests": 632,
+    "complete_backend_failures": 0,
+    "packaged_phase3_tests": 18,
+    "packaged_phase3_failures": 0,
+    "decisions_pdf_pages": 109,
+    "decisions_pdf_sha256": "9dbebe2ccb5192c286cef7f7684d63eb5074080f7cb9675b1b1852836dc88052",
+    "all_pdf_pages_visually_inspected": true
+  },
+  "safety": {
+    "secrets_packaged": false,
+    "raw_candidate_identity_packaged": false,
+    "database_mutation": false,
+    "database_definition_change": false,
+    "signed_bridge_request": false,
+    "candidate_business_data_mutation": false,
+    "provider_or_emergency_effect": false,
+    "production_action": false,
+    "financial_authority_changed": false
+  }
+}

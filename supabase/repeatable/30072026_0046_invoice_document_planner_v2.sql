@@ -1,0 +1,8 @@
+\set ON_ERROR_STOP on
+
+begin;
+
+\ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql
+\ir 24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql
+
+commit;

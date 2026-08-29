@@ -1,0 +1,149 @@
+name: LIVE Supabase to Miget drift audit (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      approval:
+        description: Enter AUDIT LIVE MIGET DRIFT followed by the exact Miget service UUID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudtms-live-provider-drift-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Prove current LIVE source and Miget clone still match
+    runs-on: ubuntu-latest
+    environment: database-live
+    timeout-minutes: 90
+    env:
+      SOURCE_DATABASE_URL: ${{ secrets.CLOUDTMS_DATABASE_URL || secrets.SUPABASE_DB_URL }}
+      DESTINATION_DATABASE_URL: ${{ secrets.MIGET_DATABASE_URL_LIVE }}
+      SOURCE_EXPECTED_TARGET: ${{ vars.CLOUDTMS_PROJECT_REF }}
+      DESTINATION_EXPECTED_TARGET: ${{ vars.MIGET_DATABASE_TARGET_LIVE }}
+      DESTINATION_SERVICE_UUID: 01a03205-8273-7159-952e-47029c786995
+    steps:
+      - name: Validate protected read-only targets and approval
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          test -n "${SOURCE_DATABASE_URL:-}" || { echo "Missing protected LIVE source URL"; exit 1; }
+          test -n "${DESTINATION_DATABASE_URL:-}" || { echo "Missing protected Miget LIVE destination URL"; exit 1; }
+          test -n "${SOURCE_EXPECTED_TARGET:-}" || { echo "Missing protected LIVE source locator"; exit 1; }
+          test -n "${DESTINATION_EXPECTED_TARGET:-}" || { echo "Missing protected Miget LIVE destination locator"; exit 1; }
+          expected="AUDIT LIVE MIGET DRIFT ${DESTINATION_SERVICE_UUID}"
+          test "${{ inputs.approval }}" = "$expected" || { echo "Exact drift-audit approval phrase does not match"; exit 1; }
+          node --input-type=module <<'NODE'
+          const source = new URL(process.env.SOURCE_DATABASE_URL);
+          const destination = new URL(process.env.DESTINATION_DATABASE_URL);
+          const sourceLocator = `${source.hostname}|${decodeURIComponent(source.username)}|${decodeURIComponent(source.pathname)}`;
+          const destinationLocator = `${destination.hostname}|${decodeURIComponent(destination.username)}|${decodeURIComponent(destination.pathname)}`;
+          if (!sourceLocator.includes(process.env.SOURCE_EXPECTED_TARGET)) throw new Error('LIVE source locator mismatch');
+          if (!destinationLocator.includes(process.env.DESTINATION_EXPECTED_TARGET)) throw new Error('Miget LIVE destination locator mismatch');
+          if (source.hostname === destination.hostname && source.pathname === destination.pathname) throw new Error('Source and destination resolve to the same database');
+          NODE
+
+      - name: Compare all application rows and sequence state without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          work="${RUNNER_TEMP}/cloudtms-live-miget-drift-audit"
+          install -d -m 700 "$work"
+          trap 'find "$work" -type f -exec shred -u {} + 2>/dev/null || rm -rf "$work"' EXIT
+
+          docker pull postgres:18
+
+          cat > "$work/row_fingerprints.sql" <<'SQL'
+          \set ON_ERROR_STOP on
+          \pset format unaligned
+          \pset tuples_only on
+          \pset fieldsep '|'
+          select format(
+            $query$
+            select %L,
+                   count(*),
+                   coalesce(sum((('x'||substr(row_hash,1,16))::bit(64)::bigint)::numeric),0),
+                   coalesce(sum((('x'||substr(row_hash,17,16))::bit(64)::bigint)::numeric),0),
+                   coalesce(min(row_hash),''),
+                   coalesce(max(row_hash),'')
+            from (select md5(to_jsonb(t)::text) as row_hash from %I.%I t) fingerprint_rows;
+            $query$,
+            schemaname||'.'||tablename,
+            schemaname,
+            tablename
+          )
+          from pg_tables
+          where schemaname in ('public','maintenance')
+          order by schemaname, tablename
+          \gexec
+          SQL
+
+          cat > "$work/sequence_state.sql" <<'SQL'
+          \set ON_ERROR_STOP on
+          \pset format unaligned
+          \pset tuples_only on
+          \pset fieldsep '|'
+          select format('select %L, last_value, is_called from %I.%I;', schemaname||'.'||sequencename, schemaname, sequencename)
+          from pg_sequences
+          where schemaname in ('public','maintenance')
+          order by schemaname, sequencename
+          \gexec
+          SQL
+
+          for side in source destination; do
+            if test "$side" = source; then
+              database_url="$SOURCE_DATABASE_URL"
+            else
+              database_url="$DESTINATION_DATABASE_URL"
+            fi
+            docker run --rm \
+              -e DATABASE_URL="$database_url" \
+              -e PGOPTIONS="-c default_transaction_read_only=on -c statement_timeout=0" \
+              --mount type=bind,src="$work",dst=/work \
+              postgres:18 \
+              sh -ec 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f /work/row_fingerprints.sql' \
+              > "$work/${side}-rows.txt"
+            docker run --rm \
+              -e DATABASE_URL="$database_url" \
+              -e PGOPTIONS="-c default_transaction_read_only=on" \
+              --mount type=bind,src="$work",dst=/work \
+              postgres:18 \
+              sh -ec 'psql "$DATABASE_URL" -X -v ON_ERROR_STOP=1 -f /work/sequence_state.sql' \
+              > "$work/${side}-sequences.txt"
+          done
+
+          if ! cmp -s "$work/source-rows.txt" "$work/destination-rows.txt"; then
+            echo "LIVE source and Miget row fingerprints differ; a controlled final synchronisation is required before declaring cutover complete."
+            diff --unchanged-line-format='' --old-line-format='source-only-or-changed: %L' --new-line-format='miget-only-or-changed: %L' "$work/source-rows.txt" "$work/destination-rows.txt" \
+              | sed -E 's/\|.*$/|<fingerprint-redacted>/' \
+              | head -200
+            exit 1
+          fi
+          if ! cmp -s "$work/source-sequences.txt" "$work/destination-sequences.txt"; then
+            echo "LIVE source and Miget sequence state differ; a controlled final synchronisation is required before declaring cutover complete."
+            diff --unchanged-line-format='' --old-line-format='source-only-or-changed: %L' --new-line-format='miget-only-or-changed: %L' "$work/source-sequences.txt" "$work/destination-sequences.txt" \
+              | sed -E 's/\|.*$/|<state-redacted>/' \
+              | head -200
+            exit 1
+          fi
+
+          row_manifest_sha="$(sha256sum "$work/destination-rows.txt" | cut -d' ' -f1)"
+          sequence_manifest_sha="$(sha256sum "$work/destination-sequences.txt" | cut -d' ' -f1)"
+          {
+            echo "### LIVE Supabase to Miget drift audit"
+            echo "- Source access: read-only SQL only"
+            echo "- Destination access: read-only SQL only"
+            echo "- Compared schemas: public, maintenance"
+            echo "- All table row-content fingerprints: MATCH"
+            echo "- All sequence states: MATCH"
+            echo "- Row manifest SHA-256: ${row_manifest_sha}"
+            echo "- Sequence manifest SHA-256: ${sequence_manifest_sha}"
+            echo "- Sensitive rows retained or printed: no"
+          } >> "$GITHUB_STEP_SUMMARY"

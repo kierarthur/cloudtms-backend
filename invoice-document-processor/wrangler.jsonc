@@ -1,0 +1,67 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "cloudtms-invoice-document-processor-local",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-07-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "containers": [
+    {
+      "class_name": "InvoiceDocumentContainer",
+      "image": "./container/Dockerfile",
+      "max_instances": 4,
+      "instance_type": "basic"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "INVOICE_DOCUMENT_CONTAINER",
+        "class_name": "InvoiceDocumentContainer"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["InvoiceDocumentContainer"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "env": {
+    "test": {
+      "name": "test-cloudtms-invoice-document-processor",
+      "workers_dev": false,
+      "containers": [
+        {
+          "class_name": "InvoiceDocumentContainer",
+          "image": "./container/Dockerfile",
+          "max_instances": 4,
+          "instance_type": "basic"
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "INVOICE_DOCUMENT_CONTAINER",
+            "class_name": "InvoiceDocumentContainer"
+          }
+        ]
+      },
+      "r2_buckets": [
+        {
+          "binding": "R2",
+          "bucket_name": "test-cloudtms",
+          "preview_bucket_name": "test-cloudtms-preview"
+        }
+      ],
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1
+      }
+    }
+  }
+}

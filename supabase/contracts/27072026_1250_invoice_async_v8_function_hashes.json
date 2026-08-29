@@ -1,0 +1,180 @@
+{
+  "contract_version": "INVOICE_ASYNC_DB_V2_FUNCTION_HASH_MANIFEST",
+  "project": "test-cloudtms",
+  "generated_at_utc": "2026-07-29T15:16:03.451Z",
+  "hash_input": "pg_get_functiondef(oid)",
+  "hash_algorithm": "sha256",
+  "aggregate_sha256": "45741d3e5f0f4b6da6c5dd1e64f6ca034e2198f3043da5fa68d05da1ba639295",
+  "security_gate": {
+    "owner": "postgres",
+    "private_public_execute": false,
+    "private_anon_execute": false,
+    "private_authenticated_execute": false,
+    "public_public_execute": false,
+    "public_anon_execute": false,
+    "security_definer_and_search_path_verified": true,
+    "defaults_verified": true
+  },
+  "functions": [
+    {
+      "identity": "private._invoice_batch_canonical_text_v2(jsonb)",
+      "definition_sha256": "4c2432eb3d550d64bbdeab6838926cb6dde6ac3782dbc2f3ec3b9cb39bfda639"
+    },
+    {
+      "identity": "private._invoice_batch_generate_candidate_keys_v2(jsonb,timestamptz)",
+      "definition_sha256": "f24e219ebc022493ab953743ab37e96ee07fb326fd0ace475c1dfc76b1392e4e"
+    },
+    {
+      "identity": "private._invoice_batch_generate_candidate_rows_v2(jsonb,timestamptz)",
+      "definition_sha256": "d00c11c62efb1b371598eabd093bb96c30a87c76b8b4a0fd669e4c3a38f16bbc"
+    },
+    {
+      "identity": "private._invoice_batch_generate_classification_v2(boolean,text[],timestamptz)",
+      "definition_sha256": "38b575649e08c2b79275d3992978279f5a3ef5431bb9d712c7ce1efc2ffe1586"
+    },
+    {
+      "identity": "private._invoice_batch_generate_group_rows_v2(boolean,integer,text[],timestamptz)",
+      "definition_sha256": "5569a1d053fdb90422cce8acd877e43fe9a424e90a1e86cfa4d44bdac827b78d"
+    },
+    {
+      "identity": "private._invoice_batch_hash_v2(jsonb)",
+      "definition_sha256": "57d44098e7a449f3a5dc1c38bbafb09e1f9248e250c0d932a3998a146baca3cb"
+    },
+    {
+      "identity": "private._invoice_batch_issue_candidate_keys_v2(jsonb,timestamptz)",
+      "definition_sha256": "d175793be1c3877fae07effa493157dbebe0a088f1f173794aa92d7ed7bd39fa"
+    },
+    {
+      "identity": "private._invoice_batch_issue_candidate_rows_v2(jsonb,timestamptz)",
+      "definition_sha256": "a0f00a52774563c653366b93830ed9e485ac79ccaa2f1bca90226f165f373abc"
+    },
+    {
+      "identity": "private._invoice_batch_issue_classification_v2(boolean,uuid[],timestamptz)",
+      "definition_sha256": "76593dd589fd264e9f8d8ed02efd7b526dd1a32daf2dcc6e416d557f3d0956d0"
+    },
+    {
+      "identity": "private._invoice_batch_issue_source_rows_core_v2(boolean,integer,timestamptz,uuid[])",
+      "definition_sha256": "233dbdecf722b950658c6ee01ec3e4039b65c084bd16cdcceb308ba9b16a48ef"
+    },
+    {
+      "identity": "private._invoice_batch_issue_source_rows_for_ids_v2(uuid[],boolean,timestamptz)",
+      "definition_sha256": "a046a1b8cc2954883becbe9fc3d85db569ef5cda48b75f87e5abbf6e728484b1"
+    },
+    {
+      "identity": "private._invoice_batch_issue_source_rows_v2(boolean,integer,timestamptz)",
+      "definition_sha256": "215c8ad8f3634adf3f5f8173919355c8a1e5291d52df6af46a3c8424f1f6db06"
+    },
+    {
+      "identity": "private._invoice_batch_manifest_advance_v2(jsonb,text,timestamptz)",
+      "definition_sha256": "cff248cca2c0789031e7a081b164ccc516323cace2c0d0e94669b7302c95481c"
+    },
+    {
+      "identity": "private._invoice_batch_query_validate_v2(jsonb,text)",
+      "definition_sha256": "ed4b2c8b1887c78d9aa0de65d3dec1b95a2e9621d4e8d47ce8f05f965220b18e"
+    },
+    {
+      "identity": "private._invoice_batch_selection_rules_v2(jsonb)",
+      "definition_sha256": "331c9313f88d8d767cfc4279dd800ea9e3eaf080555042e71ec206ee944fd410"
+    },
+    {
+      "identity": "private._invoice_candidate_revision_trigger_v2()",
+      "definition_sha256": "bfd729a5eb25bc5fef8c6ed100d0b54f99af4e3e27ece84c1c1680acd55ec8b9"
+    },
+    {
+      "identity": "private._invoice_candidate_snapshot_bump_v2(boolean,boolean,text,text,timestamptz)",
+      "definition_sha256": "5d51a9ef2b527ab40232b475f446d9f82c89fabc55a6b11a8bb31705e2a1bae1"
+    },
+    {
+      "identity": "private._invoice_candidate_snapshot_get_v2(text,timestamptz)",
+      "definition_sha256": "1348c5c176285f9bc00da9ca3fabf26c72f5cb20b856606946409076bbadc6a8"
+    },
+    {
+      "identity": "private._invoice_candidate_snapshot_verify_v2(text,jsonb,timestamptz)",
+      "definition_sha256": "634819a4e482e49b2d158f6ae2eb65f490da6fd60b3d380f05c81e772823b722"
+    },
+    {
+      "identity": "private._invoice_candidate_triggers_install_v2()",
+      "definition_sha256": "9752bb8a70b2c8876fa091d0ad51c243ed3acf2e6b8651929a21a3dc53fca9da"
+    },
+    {
+      "identity": "private._invoice_current_chunk_ids_v2(uuid[],integer)",
+      "definition_sha256": "a36eb6621a90b31d80cbc7ad8730fc7a36994f92f14e9c8c0abe3815d4883370"
+    },
+    {
+      "identity": "private._invoice_dispatch_advance_batch(jsonb,timestamptz)",
+      "definition_sha256": "3fa5d50e498adc1a3c25bf77ae5bb5595deda0783018763d32f35e2da72657e4"
+    },
+    {
+      "identity": "private._invoice_generation_advance_batch(jsonb,timestamptz)",
+      "definition_sha256": "713a1a488fae11139008c0ce440cf0552317d89104fa611df31c9ae329e80a79"
+    },
+    {
+      "identity": "private._invoice_generation_advance_core_v8(jsonb,timestamptz)",
+      "definition_sha256": "bd45f022f27d4f5a2a8f0436566576b2eee5e5d1cc8db27ffed7ef80556c183a"
+    },
+    {
+      "identity": "private._invoice_generation_resolve_command_groups(jsonb,uuid,timestamptz)",
+      "definition_sha256": "fc8e80854e4520399d8d49ccf6c03a488b2585d1e36d5c6b1d22494e9c59c34b"
+    },
+    {
+      "identity": "private._invoice_issue_advance_batch(jsonb,timestamptz)",
+      "definition_sha256": "2e135a06b4916bc54ed8f72d4487c7d3069958fbd7a503a240ae49ee25a9d886"
+    },
+    {
+      "identity": "private._invoice_issue_advance_core_v8(jsonb,timestamptz)",
+      "definition_sha256": "ed4acc4d854b9fdb613c76f62fb0877efa089b191e9fe4461ffe95e2c266e959"
+    },
+    {
+      "identity": "private._invoice_jsonb_pick_v2(jsonb,text[])",
+      "definition_sha256": "c51b4d70db794053ddccc94ad9cc827d88ccef1d74e273f1eeed243ec81062c4"
+    },
+    {
+      "identity": "private._invoice_operation_get_core_v8(uuid[],uuid,text)",
+      "definition_sha256": "4888e9d91af43c657bdcc003a646bd7a73d65698d75383ccda0fe281bffd235a"
+    },
+    {
+      "identity": "private._invoice_operation_rollup_batch(uuid[],timestamptz,boolean)",
+      "definition_sha256": "d8a383d745d482ab1d5fcacef3fbab5d573dea0fb19f9a312fe380885118a981"
+    },
+    {
+      "identity": "private._invoice_operation_rollup_core_v8(uuid[],timestamptz,boolean)",
+      "definition_sha256": "52e6b4c995d0e48f8e2224c5abda3ae34da6196191a24d6cbcabe3285b7d7699"
+    },
+    {
+      "identity": "private._invoice_operation_start_core_v8(jsonb,uuid,timestamptz)",
+      "definition_sha256": "b0f55c908df462836759b6ce2b591b0aa8b999fc4c30be3c52fb2c1cf4649a1e"
+    },
+    {
+      "identity": "private._invoice_result_page_revision_trigger_v2()",
+      "definition_sha256": "1269c841e771c2f290552e8413c9c7afe208b4ddd35eee6d139f337deb917117"
+    },
+    {
+      "identity": "public.invoice_batch_generate_candidates(jsonb)",
+      "definition_sha256": "de2bb2e914d009049ff56eb097eb5b0d1127a87635f3bebeaad46ea30ac847ac"
+    },
+    {
+      "identity": "public.invoice_batch_issue_candidates(jsonb)",
+      "definition_sha256": "7b5719fe22a0c902863e8cbe4fd4dd5c63302a616b5f2e6bc9f9541520662c48"
+    },
+    {
+      "identity": "public.invoice_operation_advance_batch(jsonb,timestamptz)",
+      "definition_sha256": "f2ddd8a28fd19b950836d9f2c9b0b052fa45006dd870ce943b3b035e4ef2b8ed"
+    },
+    {
+      "identity": "public.invoice_operation_control_batch(jsonb,uuid,timestamptz)",
+      "definition_sha256": "ff559f6a1a32925d00c5db8474bbfe83f1cc2623bfbd50aab88539df6a093970"
+    },
+    {
+      "identity": "public.invoice_operation_get(uuid[],uuid,text,jsonb)",
+      "definition_sha256": "80985ea08bca808073c75123641af64644e9b218b768c25859f41aac8ddfece9"
+    },
+    {
+      "identity": "public.invoice_operation_start_batch(jsonb,uuid,timestamptz)",
+      "definition_sha256": "cf9618f913b6b8cb8fc6de090cab56955670b5f9db3777b55ea3b2064587e466"
+    },
+    {
+      "identity": "public.invoice_work_claim_batch(text[],text,integer,integer,timestamptz)",
+      "definition_sha256": "f1d6fd7042222f5d9d6d6f926bff8058d9cc9de0828888354b79dee12aa3df32"
+    }
+  ]
+}

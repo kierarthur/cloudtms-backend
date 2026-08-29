@@ -1,0 +1,635 @@
+-- CloudTMS Banking Pay cancellation — Stage 1.
+-- Bounded correction request and operation status read.
+
+CREATE OR REPLACE FUNCTION public.pay_payment_correction_status_get_v1(
+    p_correction_request_id uuid,
+    p_actor_user_id uuid DEFAULT NULL::uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+PARALLEL RESTRICTED
+SECURITY DEFINER
+SET search_path TO pg_catalog, private, extensions, pg_temp
+SET statement_timeout TO '3000ms'
+AS $function$
+DECLARE
+    v_request public.pay_payment_correction_requests%ROWTYPE;
+    v_operation public.banking_pay_operations%ROWTYPE;
+    v_actor public.tms_users%ROWTYPE;
+    v_batch_status text;
+    v_operation_envelope jsonb := '{}'::jsonb;
+    v_candidate_counts jsonb := '{}'::jsonb;
+    v_workbench_refresh jsonb := '{}'::jsonb;
+    v_progress jsonb := '{}'::jsonb;
+    v_available_actions text[] := ARRAY[]::text[];
+    v_user_title text;
+    v_user_message text;
+    v_request_expired boolean := false;
+    v_workbench_session_id uuid;
+    v_refresh_group_total integer := 0;
+    v_refresh_group_complete integer := 0;
+    v_refresh_candidate_count integer := 0;
+    v_refresh_failed_count integer := 0;
+    v_refresh_pending_count integer := 0;
+    v_refresh_ready_count integer := 0;
+    v_workbench_status text := 'NOT_STAGED';
+    v_progress_stage text := 'PLANNING';
+    v_poll_after_ms integer := 1000;
+    v_financial_complete boolean := false;
+    v_terminal boolean := false;
+    v_blockers jsonb := '[]'::jsonb;
+    v_is_requester boolean := false;
+    v_is_admin boolean := false;
+    v_can_authorise boolean := false;
+    v_can_use_golden_key boolean := false;
+    v_selected_count integer := 0;
+    v_completed_count integer := 0;
+    v_applied_count integer := 0;
+    v_blocked_count integer := 0;
+    v_remaining_count integer := 0;
+    v_selected_amount_pence bigint := 0;
+    v_removed_amount_pence bigint := 0;
+    v_remaining_amount_pence bigint := 0;
+    v_request_kind text := 'CANCEL_PAYMENT';
+    v_refresh_candidate_ids uuid[] := ARRAY[]::uuid[];
+    v_physical_currentness jsonb := '{}'::jsonb;
+BEGIN
+    SELECT request_row.*
+    INTO v_request
+    FROM public.pay_payment_correction_requests AS request_row
+    WHERE request_row.id = p_correction_request_id;
+
+    IF NOT FOUND THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'ok', false,
+            'correction_request_id', p_correction_request_id,
+            'code', 'REQUEST_NOT_FOUND'
+        );
+    END IF;
+
+    IF p_actor_user_id IS NOT NULL THEN
+        SELECT actor_row.*
+        INTO v_actor
+        FROM public.tms_users AS actor_row
+        WHERE actor_row.id = p_actor_user_id
+          AND COALESCE(actor_row.is_active, false);
+
+        IF NOT FOUND THEN
+            RETURN pg_catalog.jsonb_build_object(
+                'ok', false,
+                'correction_request_id', p_correction_request_id,
+                'code', 'PERMISSION_DENIED'
+            );
+        END IF;
+
+        v_is_requester := p_actor_user_id = v_request.requested_by_user_id;
+        v_is_admin := pg_catalog.lower(COALESCE(v_actor.role, '')) = 'admin';
+        v_can_authorise := COALESCE(v_actor.payment_authoriser, false)
+          AND p_actor_user_id IS DISTINCT FROM v_request.requested_by_user_id;
+        v_can_use_golden_key := COALESCE(v_actor.payment_golden_key, false)
+          AND p_actor_user_id IS DISTINCT FROM v_request.requested_by_user_id;
+
+        IF NOT (v_is_requester OR v_is_admin OR v_can_authorise OR v_can_use_golden_key) THEN
+            RETURN pg_catalog.jsonb_build_object(
+                'ok', false,
+                'correction_request_id', p_correction_request_id,
+                'code', 'PERMISSION_DENIED'
+            );
+        END IF;
+    END IF;
+
+    v_request_kind := CASE
+        WHEN pg_catalog.upper(COALESCE(
+            v_request.selection_json->>'requested_action',
+            v_request.plan_json->>'requested_action',
+            v_request.correction_kind,
+            ''
+        )) = 'DRAFT_CANCEL' THEN 'DRAFT_CANCEL'
+        WHEN pg_catalog.upper(COALESCE(
+            v_request.selection_json->>'requested_action',
+            v_request.plan_json->>'requested_action',
+            v_request.correction_kind,
+            ''
+        )) IN ('NO_MONEY_RELEASE', 'NO_MONEY_UNWIND') THEN 'RELEASE_FAILED_PAYMENT'
+        ELSE 'CANCEL_PAYMENT'
+    END;
+
+    SELECT operation_row.*
+    INTO v_operation
+    FROM public.banking_pay_operations AS operation_row
+    WHERE operation_row.operation_type = 'PAYMENT_CORRECTION'
+      AND operation_row.input_json ->> 'correction_request_id' = p_correction_request_id::text
+    ORDER BY operation_row.created_at_utc DESC, operation_row.id DESC
+    LIMIT 1;
+
+    IF v_operation.id IS NOT NULL THEN
+        v_operation_envelope := public.banking_pay_operation_get(
+            v_operation.id,
+            p_actor_user_id,
+            'PROGRESS_LIGHT'
+        );
+    END IF;
+
+    SELECT batch_row.status
+    INTO v_batch_status
+    FROM public.pay_batches AS batch_row
+    WHERE batch_row.id = v_request.pay_batch_id;
+
+    SELECT EXISTS (
+        SELECT 1
+        FROM public.pay_payment_correction_actions AS expiry_action
+        WHERE expiry_action.correction_request_id = p_correction_request_id
+          AND expiry_action.action = 'CANCEL'
+          AND expiry_action.metadata_json ->> 'audit_code' = 'UNAPPROVED_REQUEST_EXPIRED'
+    ) INTO v_request_expired;
+
+    WITH selected_membership AS MATERIALIZED (
+        SELECT membership.pay_batch_candidate_id,
+               COALESCE(membership.active_amount, 0)::numeric AS active_amount
+        FROM public.pay_payment_correction_request_candidates AS membership
+        WHERE membership.correction_request_id = p_correction_request_id
+    ), latest_work AS MATERIALIZED (
+        SELECT DISTINCT ON (work_item.pay_batch_candidate_id)
+               work_item.pay_batch_candidate_id,
+               work_item.status
+        FROM public.pay_payment_correction_work_items AS work_item
+        WHERE work_item.correction_request_id = p_correction_request_id
+        ORDER BY work_item.pay_batch_candidate_id,
+                 work_item.created_at_utc DESC,
+                 work_item.id DESC
+    )
+    SELECT pg_catalog.jsonb_build_object(
+               'total', pg_catalog.count(*)::integer,
+               'pending', pg_catalog.count(*) FILTER (
+                   WHERE latest_work.status IS NULL OR latest_work.status = 'PENDING'
+               )::integer,
+               'processing', pg_catalog.count(*) FILTER (
+                   WHERE latest_work.status = 'PROCESSING'
+               )::integer,
+               'applied', pg_catalog.count(*) FILTER (
+                   WHERE latest_work.status = 'APPLIED'
+               )::integer,
+               'blocked', pg_catalog.count(*) FILTER (
+                   WHERE latest_work.status = 'BLOCKED'
+               )::integer,
+               'failed_retryable', pg_catalog.count(*) FILTER (
+                   WHERE latest_work.status = 'FAILED_RETRYABLE'
+               )::integer,
+               'failed_final', pg_catalog.count(*) FILTER (
+                   WHERE latest_work.status = 'FAILED_FINAL'
+               )::integer,
+               'cancelled', pg_catalog.count(*) FILTER (
+                   WHERE latest_work.status = 'CANCELLED'
+               )::integer
+           ),
+           pg_catalog.count(*)::integer,
+           pg_catalog.count(*) FILTER (
+               WHERE latest_work.status IN ('APPLIED', 'BLOCKED', 'FAILED_FINAL', 'CANCELLED')
+           )::integer,
+           pg_catalog.count(*) FILTER (WHERE latest_work.status = 'APPLIED')::integer,
+           pg_catalog.count(*) FILTER (WHERE latest_work.status = 'BLOCKED')::integer,
+           greatest(
+               pg_catalog.count(*) - pg_catalog.count(*) FILTER (
+                   WHERE latest_work.status IN ('APPLIED', 'BLOCKED', 'FAILED_FINAL', 'CANCELLED')
+               ),
+               0
+           )::integer,
+           COALESCE(pg_catalog.round(pg_catalog.sum(selected_membership.active_amount) * 100), 0)::bigint,
+           COALESCE(pg_catalog.round(pg_catalog.sum(selected_membership.active_amount) FILTER (
+               WHERE latest_work.status = 'APPLIED'
+           ) * 100), 0)::bigint,
+           COALESCE(pg_catalog.round(pg_catalog.sum(selected_membership.active_amount) FILTER (
+               WHERE latest_work.status IS DISTINCT FROM 'APPLIED'
+           ) * 100), 0)::bigint
+    INTO v_candidate_counts,
+         v_selected_count,
+         v_completed_count,
+         v_applied_count,
+         v_blocked_count,
+         v_remaining_count,
+         v_selected_amount_pence,
+         v_removed_amount_pence,
+         v_remaining_amount_pence
+    FROM selected_membership
+    LEFT JOIN latest_work
+      ON latest_work.pay_batch_candidate_id = selected_membership.pay_batch_candidate_id;
+
+    SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+            pg_catalog.jsonb_build_object(
+                'label', blocker_summary.label,
+                'count', blocker_summary.blocker_count
+            )
+            ORDER BY blocker_summary.blocker_count DESC, blocker_summary.label
+        ),
+        '[]'::jsonb
+    )
+    INTO v_blockers
+    FROM (
+        SELECT blocker_source.label, pg_catalog.count(*)::integer AS blocker_count
+        FROM (
+            SELECT CASE
+                WHEN work_item.status = 'BLOCKED'
+                    THEN 'Some selected payments are no longer safe to change.'
+                WHEN work_item.status = 'FAILED_FINAL'
+                    THEN 'CloudTMS could not safely complete some selected payments.'
+                ELSE 'Some selected payments require review.'
+            END AS label
+            FROM public.pay_payment_correction_work_items AS work_item
+            WHERE work_item.correction_request_id = p_correction_request_id
+              AND work_item.status IN ('BLOCKED', 'FAILED_FINAL')
+        ) AS blocker_source
+        GROUP BY blocker_source.label
+        ORDER BY pg_catalog.count(*) DESC, blocker_source.label
+        LIMIT 20
+    ) AS blocker_summary;
+
+    IF v_operation.id IS NOT NULL THEN
+        SELECT pg_catalog.count(*)::integer,
+               pg_catalog.count(*) FILTER (WHERE chunk_row.status = 'COMPLETE')::integer
+        INTO v_refresh_group_total, v_refresh_group_complete
+        FROM public.banking_pay_operation_chunks AS chunk_row
+        WHERE chunk_row.operation_id = v_operation.id
+          AND chunk_row.phase = 'REFRESH_WORKBENCH'
+          AND chunk_row.chunk_type = 'CANDIDATE_SCOPE';
+
+        v_workbench_session_id := COALESCE(
+            v_operation.workbench_session_id,
+            (SELECT batch_row.source_workbench_session_id FROM public.pay_batches AS batch_row WHERE batch_row.id = v_request.pay_batch_id)
+        );
+
+        WITH refresh_candidates AS (
+            SELECT DISTINCT (candidate_token.value #>> '{}')::uuid AS candidate_id
+            FROM public.banking_pay_operation_chunks AS refresh_chunk
+            CROSS JOIN LATERAL pg_catalog.jsonb_array_elements(
+                COALESCE(refresh_chunk.payload_json->'candidate_ids', '[]'::jsonb)
+            ) AS candidate_token(value)
+            WHERE refresh_chunk.operation_id = v_operation.id
+              AND refresh_chunk.phase = 'REFRESH_WORKBENCH'
+              AND refresh_chunk.chunk_type = 'CANDIDATE_SCOPE'
+              AND (candidate_token.value #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        ), candidate_freshness AS (
+            SELECT refresh_candidate.candidate_id,
+                   pg_catalog.upper(COALESCE(candidate_state.status, 'MISSING')) AS candidate_state,
+                   candidate_state.pending_job_id,
+                   COALESCE(candidate_state.source_change_seq, 0) AS source_change_seq,
+                   pg_catalog.upper(COALESCE(latest_job.status, 'NONE')) AS job_status,
+                   COALESCE(latest_job.scope_change_generation, 0) AS job_generation
+            FROM refresh_candidates AS refresh_candidate
+            LEFT JOIN public.banking_pay_workbench_session_candidate_state AS candidate_state
+              ON candidate_state.session_id = v_workbench_session_id
+             AND candidate_state.candidate_id = refresh_candidate.candidate_id
+            LEFT JOIN LATERAL (
+                SELECT job_row.status, job_row.scope_change_generation
+                FROM public.banking_pay_workbench_jobs AS job_row
+                WHERE job_row.session_id = v_workbench_session_id
+                  AND job_row.candidate_id = refresh_candidate.candidate_id
+                ORDER BY job_row.updated_at_utc DESC, job_row.id DESC
+                LIMIT 1
+            ) AS latest_job ON true
+        )
+        SELECT pg_catalog.count(*)::integer,
+               0::integer,
+               0::integer,
+               pg_catalog.count(*)::integer
+        INTO v_refresh_candidate_count, v_refresh_failed_count, v_refresh_ready_count, v_refresh_pending_count
+        FROM candidate_freshness;
+
+        -- Source sequence and scope generation are independent domains; never
+        -- compare one to the other.  Re-derive the exact frozen request
+        -- membership and ask the shared physical-currentness authority once.
+        SELECT COALESCE(pg_catalog.array_agg(DISTINCT work_row.candidate_id ORDER BY work_row.candidate_id),ARRAY[]::uuid[]),
+               pg_catalog.count(DISTINCT work_row.candidate_id)::integer
+        INTO v_refresh_candidate_ids,v_refresh_candidate_count
+        FROM public.pay_payment_correction_request_candidates AS member_row
+        JOIN public.pay_payment_correction_work_items AS work_row
+          ON work_row.correction_request_id=member_row.correction_request_id
+         AND work_row.pay_batch_candidate_id=member_row.pay_batch_candidate_id
+        WHERE member_row.correction_request_id=p_correction_request_id
+          AND work_row.status='APPLIED' AND work_row.candidate_id IS NOT NULL;
+
+        IF v_workbench_session_id IS NOT NULL AND v_refresh_candidate_count BETWEEN 1 AND 100 THEN
+            v_physical_currentness:=private.pay_workbench_candidate_physical_currentness_page_v1(
+              v_workbench_session_id,v_refresh_candidate_ids,'TERMINAL_CURRENT',
+              pg_catalog.jsonb_build_object('contract_version',1,'allow_active_owner',true)
+            );
+            v_refresh_ready_count:=COALESCE((v_physical_currentness->>'terminal_current_count')::integer,0);
+            v_refresh_pending_count:=COALESCE((v_physical_currentness->>'current_or_active_owner_count')::integer,0)
+              -v_refresh_ready_count;
+            v_refresh_failed_count:=CASE
+              WHEN v_refresh_ready_count+v_refresh_pending_count<v_refresh_candidate_count
+                AND v_operation.status IN ('FAILED','REVIEW_REQUIRED','CANCELLED')
+              THEN v_refresh_candidate_count-v_refresh_ready_count-v_refresh_pending_count ELSE 0 END;
+        END IF;
+
+        v_workbench_status := CASE
+            -- The untouched-Draft fast route deliberately creates no
+            -- REFRESH_WORKBENCH chunks.  Its final bounded page nevertheless
+            -- owns a certified V3 reversion publication and a whole-session
+            -- READY proof.  Treat that persisted terminal contract as CURRENT
+            -- so the read-only status owner does not leave the UI waiting on
+            -- a stage which this route never creates.
+            WHEN v_refresh_group_total = 0
+              AND v_operation.status = 'COMPLETE'
+              AND COALESCE((v_operation.progress_json->>'draft_overlay_fast')::boolean, false)
+              AND COALESCE(v_operation.progress_json#>>'{last_fast_draft_page,status}', '') = 'DRAFT_OVERLAY_FAST_COMPLETE'
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reversion_publication,ok}')::boolean, false)
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reversion_publication,progress,ready}')::boolean, false)
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reversion_publication,progress,still_running}')::boolean, false) IS NOT TRUE
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reversion_publication,progress,pending_refresh}')::boolean, false) IS NOT TRUE
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,full_build_count}')::integer, 0) = 0
+              AND COALESCE((v_operation.progress_json#>>'{last_fast_draft_page,reconciliation_count}')::integer, 0) = 0
+              THEN 'CURRENT'
+            WHEN v_refresh_candidate_count<=100
+              AND COALESCE((v_physical_currentness->>'all_terminal_current')::boolean,false)
+              THEN 'CURRENT'
+            WHEN v_refresh_candidate_count<=100
+              AND COALESCE((v_physical_currentness->>'all_current_or_active_owner')::boolean,false)
+              THEN 'PENDING'
+            WHEN v_refresh_candidate_count>100 AND v_refresh_group_total>0
+              AND v_refresh_group_complete=v_refresh_group_total
+              AND NOT EXISTS (
+                SELECT 1 FROM public.banking_pay_operation_chunks AS current_chunk
+                WHERE current_chunk.operation_id=v_operation.id
+                  AND current_chunk.phase='REFRESH_WORKBENCH'
+                  AND current_chunk.chunk_type='CANDIDATE_SCOPE'
+                  AND current_chunk.status='COMPLETE'
+                  AND COALESCE((current_chunk.result_json->>'physical_currentness_proven')::boolean,false) IS NOT TRUE
+                  AND COALESCE(current_chunk.result_json->>'status','') NOT LIKE 'NOT_REQUIRED%'
+              ) THEN 'CURRENT'
+            WHEN v_refresh_group_total = 0 THEN 'NOT_STAGED'
+            WHEN EXISTS (
+                SELECT 1 FROM public.banking_pay_operation_chunks AS failed_chunk
+                WHERE failed_chunk.operation_id = v_operation.id
+                  AND failed_chunk.phase = 'REFRESH_WORKBENCH'
+                  AND failed_chunk.status IN ('FAILED', 'FAILED_FINAL', 'CANCELLED')
+            ) OR v_refresh_failed_count > 0 THEN 'FAILED'
+            WHEN v_refresh_group_complete < v_refresh_group_total THEN 'STAGED'
+            WHEN v_refresh_candidate_count = 0
+              OR NOT EXISTS (
+                  SELECT 1 FROM public.banking_pay_operation_chunks AS required_chunk
+                  WHERE required_chunk.operation_id = v_operation.id
+                    AND required_chunk.phase = 'REFRESH_WORKBENCH'
+                    AND COALESCE(required_chunk.result_json->>'status', '') NOT LIKE 'NOT_REQUIRED%'
+              ) THEN 'CURRENT'
+            ELSE 'STAGED'
+        END;
+    END IF;
+
+    v_workbench_refresh := pg_catalog.jsonb_build_object(
+        'status', v_workbench_status,
+        'group_total', v_refresh_group_total,
+        'group_complete', v_refresh_group_complete,
+        'candidate_total', v_refresh_candidate_count,
+        'candidate_ready', v_refresh_ready_count,
+        'candidate_pending', v_refresh_pending_count,
+        'candidate_failed', v_refresh_failed_count
+    );
+
+    v_progress := pg_catalog.jsonb_strip_nulls(
+        pg_catalog.jsonb_build_object(
+            'total_units', v_operation.total_units,
+            'completed_units', v_operation.completed_units,
+            'failed_units', v_operation.failed_units,
+            'selected_count', v_selected_count,
+            'completed_count', v_completed_count,
+            'applied_count', v_applied_count,
+            'blocked_count', v_blocked_count,
+            'remaining_count', v_remaining_count,
+            'denominator', v_selected_count,
+            'percent', CASE
+                WHEN v_request.status IN (
+                    'APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED',
+                    'FAILED', 'REJECTED', 'CANCELLED'
+                ) THEN 100
+                WHEN v_selected_count > 0 THEN least(
+                    99,
+                    pg_catalog.floor(
+                        (v_completed_count::numeric * 100) / v_selected_count::numeric
+                    )::integer
+                )
+                ELSE 0
+            END,
+            'phase_message', v_operation_envelope ->> 'status_text',
+            'requires_user_action', COALESCE(v_operation.requires_user_action, false)
+        )
+    );
+
+    CASE v_request.status
+        WHEN 'PLANNING' THEN
+            v_user_title := 'Preparing cancellation';
+            v_user_message := 'CloudTMS is preparing the exact payments for review.';
+            v_available_actions := ARRAY['CANCEL_REQUEST']::text[];
+        WHEN 'PLANNED' THEN
+            v_user_title := 'Ready to review';
+            v_user_message := 'Review the exact payments, then confirm your identity.';
+            v_available_actions := ARRAY['REAUTHENTICATE', 'CANCEL_REQUEST']::text[];
+        WHEN 'REQUESTED' THEN
+            v_user_title := 'Cancellation requested';
+            v_user_message := 'The cancellation is awaiting authorisation.';
+            v_available_actions := ARRAY['CANCEL_REQUEST']::text[];
+        WHEN 'AWAITING_AUTHORISATION' THEN
+            v_user_title := 'Awaiting authorisation';
+            v_user_message := 'The cancellation is awaiting the configured financial approval.';
+            v_available_actions := ARRAY['AUTHORISE', 'REJECT']::text[];
+        WHEN 'AUTHORISED' THEN
+            v_user_title := 'Cancellation approved and queued';
+            v_user_message := 'CloudTMS will process the cancellation safely.';
+        WHEN 'EXPANDED' THEN
+            v_user_title := 'Cancellation ready to process';
+            v_user_message := 'CloudTMS has prepared the cancellation work.';
+        WHEN 'PROCESSING' THEN
+            v_user_title := CASE
+                WHEN v_request_kind = 'RELEASE_FAILED_PAYMENT' THEN 'Releasing failed payments'
+                ELSE 'Cancelling payments'
+            END;
+            v_user_message := CASE
+                WHEN v_request_kind = 'RELEASE_FAILED_PAYMENT'
+                    THEN 'CloudTMS is releasing the selected failed payments.'
+                ELSE 'CloudTMS is processing the selected payments.'
+            END;
+        WHEN 'APPLIED' THEN
+            v_user_title := 'Cancellation complete';
+            v_user_message := CASE
+                WHEN v_workbench_refresh ->> 'status' = 'CURRENT'
+                    THEN 'Payment availability is up to date.'
+                ELSE 'Payment availability is refreshing.'
+            END;
+            IF v_batch_status = 'AWAITING_AUTHORISATION' THEN
+                v_available_actions := ARRAY['REAUTHORISE_REMAINING']::text[];
+            END IF;
+        WHEN 'APPLIED_WITH_BLOCKERS' THEN
+            v_user_title := 'Cancellation complete with blockers';
+            v_user_message := 'Some selected payments were cancelled. Review the payments that remain active.';
+            v_available_actions := ARRAY['REAUTHORISE_REMAINING']::text[];
+        WHEN 'BLOCKED' THEN
+            v_user_title := 'No payment was cancelled';
+            v_user_message := 'Review the payment status and reauthorise the intact batch where permitted.';
+            v_available_actions := ARRAY['REAUTHORISE_REMAINING']::text[];
+        WHEN 'FAILED' THEN
+            v_user_title := 'CloudTMS safely stopped this request';
+            v_user_message := 'No further automatic action will be taken. Review the remaining payment scope.';
+        WHEN 'REJECTED' THEN
+            v_user_title := 'Cancellation rejected';
+            v_user_message := 'No payment was changed by this request.';
+        WHEN 'CANCELLED' THEN
+            v_user_title := 'Cancellation request ended';
+            v_user_message := CASE
+                WHEN v_request_expired
+                    THEN 'This request expired. Refresh Current Payment Status and start again.'
+                ELSE 'No further cancellation work will be performed.'
+            END;
+        ELSE
+            v_user_title := 'Payment correction';
+            v_user_message := 'Review the current payment status.';
+    END CASE;
+
+    -- The status reader is the sole UI action authority.  Build actions for
+    -- this actor only; never expose requester proof controls to an authoriser
+    -- or approval controls to the maker.
+    v_available_actions := ARRAY[]::text[];
+    IF p_actor_user_id IS NOT NULL THEN
+        CASE v_request.status
+            WHEN 'PLANNING' THEN
+                IF v_is_requester OR v_is_admin THEN
+                    v_available_actions := ARRAY['CANCEL_REQUEST']::text[];
+                END IF;
+            WHEN 'PLANNED' THEN
+                IF v_is_requester THEN
+                    v_available_actions := ARRAY['REAUTHENTICATE', 'CANCEL_REQUEST']::text[];
+                ELSIF v_is_admin THEN
+                    v_available_actions := ARRAY['CANCEL_REQUEST']::text[];
+                END IF;
+            WHEN 'REQUESTED' THEN
+                IF v_can_authorise THEN
+                    v_available_actions := v_available_actions || ARRAY['AUTHORISE']::text[];
+                END IF;
+                IF v_can_use_golden_key THEN
+                    v_available_actions := v_available_actions || ARRAY['USE_GOLDEN_KEY']::text[];
+                END IF;
+                IF v_is_requester OR v_is_admin THEN
+                    v_available_actions := v_available_actions || ARRAY['CANCEL_REQUEST']::text[];
+                END IF;
+                IF v_is_admin AND NOT v_is_requester THEN
+                    v_available_actions := v_available_actions || ARRAY['REJECT']::text[];
+                END IF;
+            WHEN 'AWAITING_AUTHORISATION' THEN
+                IF v_can_authorise THEN
+                    v_available_actions := v_available_actions || ARRAY['AUTHORISE']::text[];
+                END IF;
+                IF v_can_use_golden_key THEN
+                    v_available_actions := v_available_actions || ARRAY['USE_GOLDEN_KEY']::text[];
+                END IF;
+                IF v_is_requester OR v_is_admin THEN
+                    v_available_actions := v_available_actions || ARRAY['CANCEL_REQUEST']::text[];
+                END IF;
+                IF v_is_admin AND NOT v_is_requester THEN
+                    v_available_actions := v_available_actions || ARRAY['REJECT']::text[];
+                END IF;
+            WHEN 'APPLIED' THEN
+                IF v_batch_status = 'AWAITING_AUTHORISATION'
+                   AND (v_is_requester OR v_is_admin OR v_can_authorise) THEN
+                    v_available_actions := ARRAY['REAUTHORISE_REMAINING']::text[];
+                END IF;
+            WHEN 'APPLIED_WITH_BLOCKERS' THEN
+                IF v_is_requester OR v_is_admin OR v_can_authorise THEN
+                    v_available_actions := ARRAY['REAUTHORISE_REMAINING']::text[];
+                END IF;
+            WHEN 'BLOCKED' THEN
+                IF v_is_requester OR v_is_admin OR v_can_authorise THEN
+                    v_available_actions := ARRAY['REAUTHORISE_REMAINING']::text[];
+                END IF;
+            ELSE
+                NULL;
+        END CASE;
+    END IF;
+
+    v_financial_complete := v_request.status IN (
+        'APPLIED', 'APPLIED_WITH_BLOCKERS', 'BLOCKED', 'FAILED', 'REJECTED', 'CANCELLED'
+    );
+
+    IF v_financial_complete
+       AND v_workbench_status='FAILED'
+       AND v_operation.status='REVIEW_REQUIRED'
+       AND v_operation.runner_state='WAITING_USER_REVIEW'
+       AND COALESCE(v_operation.requires_user_action,false)
+       AND (v_is_requester OR v_is_admin) THEN
+        v_available_actions:=ARRAY['RETRY_PROCESSING']::text[];
+        v_user_title:='Payment cancelled — Banking Pay update needs attention';
+        v_user_message:='The financial cancellation is complete. Retry only the Banking Pay update.';
+    END IF;
+
+    v_progress_stage := CASE
+        WHEN v_request.status = 'PLANNING' THEN 'PLANNING'
+        WHEN v_request.status = 'PLANNED' THEN 'REVIEW'
+        WHEN v_request.status = 'REQUESTED' THEN 'AUTHORISATION'
+        WHEN v_request.status = 'AWAITING_AUTHORISATION' THEN 'AUTHORISATION'
+        WHEN v_request.status = 'AUTHORISED' THEN 'EXPANDING'
+        WHEN v_request.status = 'EXPANDED' THEN 'PROCESSING'
+        WHEN v_request.status = 'PROCESSING' AND v_operation.phase = 'FINALISE' THEN 'FINALISING'
+        WHEN v_request.status = 'PROCESSING' AND v_operation.phase = 'REFRESH_WORKBENCH' THEN 'REFRESHING_AVAILABILITY'
+        WHEN v_request.status = 'PROCESSING' THEN 'PROCESSING'
+        WHEN v_request.status = 'APPLIED' AND v_workbench_status <> 'CURRENT' THEN 'REFRESHING_AVAILABILITY'
+        WHEN v_request.status = 'APPLIED' THEN 'COMPLETE'
+        WHEN v_request.status = 'APPLIED_WITH_BLOCKERS' THEN 'COMPLETE_WITH_BLOCKERS'
+        WHEN v_request.status = 'BLOCKED' THEN 'BLOCKED'
+        WHEN v_request.status = 'FAILED' THEN 'FAILED'
+        WHEN v_request.status = 'REJECTED' THEN 'REJECTED'
+        WHEN v_request.status = 'CANCELLED' THEN 'CANCELLED'
+        ELSE 'PROCESSING'
+    END;
+
+    v_terminal := v_financial_complete
+      AND (v_operation.id IS NULL OR v_operation.status IN ('COMPLETE', 'FAILED', 'CANCELLED', 'REVIEW_REQUIRED'))
+      AND v_workbench_status IN ('CURRENT', 'FAILED', 'NOT_STAGED');
+
+    v_poll_after_ms := CASE
+        WHEN v_terminal THEN NULL
+        WHEN v_progress_stage IN ('REVIEW', 'AUTHORISATION', 'REFRESHING_AVAILABILITY') THEN 5000
+        ELSE 1000
+    END;
+
+    RETURN pg_catalog.jsonb_build_object(
+        'ok', true,
+        'correction_request_id', v_request.id,
+        'pay_batch_id', v_request.pay_batch_id,
+        'request_kind', v_request_kind,
+        'request_status', v_request.status,
+        'progress_stage', v_progress_stage,
+        'poll_after_ms', v_poll_after_ms,
+        'financial_complete', v_financial_complete,
+        'terminal', v_terminal,
+        'progress', COALESCE(v_progress, '{}'::jsonb),
+        'candidate_counts', COALESCE(v_candidate_counts, '{}'::jsonb),
+        'selected_count', v_selected_count,
+        'completed_count', v_completed_count,
+        'applied_count', v_applied_count,
+        'blocked_count', v_blocked_count,
+        'remaining_count', v_remaining_count,
+        'selected_amount_pence', v_selected_amount_pence,
+        'removed_amount_pence', v_removed_amount_pence,
+        'remaining_amount_pence', v_remaining_amount_pence,
+        'blockers', COALESCE(v_blockers, '[]'::jsonb),
+        'workbench_refresh', COALESCE(v_workbench_refresh, '{}'::jsonb),
+        'available_actions', v_available_actions,
+        'user_title', v_user_title,
+        'user_message', v_user_message,
+        'continuation', pg_catalog.jsonb_build_object(
+            'required', false,
+            'reason', 'STATUS_READ_ONLY',
+            'successor_relation', 'NONE',
+            'requires_user_action', false,
+            'terminal', v_terminal
+        ),
+        'code', 'PAYMENT_CORRECTION_STATUS_OK'
+    );
+END
+$function$;
+
+ALTER FUNCTION public.pay_payment_correction_status_get_v1(uuid,uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.pay_payment_correction_status_get_v1(uuid,uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.pay_payment_correction_status_get_v1(uuid,uuid) FROM anon;
+REVOKE ALL ON FUNCTION public.pay_payment_correction_status_get_v1(uuid,uuid) FROM authenticated;
+REVOKE ALL ON FUNCTION public.pay_payment_correction_status_get_v1(uuid,uuid) FROM service_role;
+GRANT EXECUTE ON FUNCTION public.pay_payment_correction_status_get_v1(uuid,uuid) TO service_role;

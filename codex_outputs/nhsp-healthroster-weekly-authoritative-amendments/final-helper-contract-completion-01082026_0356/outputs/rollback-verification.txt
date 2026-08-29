@@ -1,0 +1,18 @@
+Rollback verification
+=====================
+
+Rollback file:
+
+01082026_0356_authoritative_effective_balance_helper_rollback.sql
+
+Authority:
+
+- Extracted from parent commit e3df88f435bb9bf71e6ad49125021bbb66e1c923.
+- The pre-deployment live TEST helper MD5 was read as d2fa598794684bbde7176919eb209942.
+- The parent commit was the current TEST/GitHub parity baseline immediately before deployment.
+- The rollback restores only the helper, its postgres owner and its postgres-only EXECUTE ACL.
+- The complete rollback transaction compiled successfully in disposable PostgreSQL 18 after installing dummy local role names required by the ACL statement.
+- The rollback was not executed on TEST.
+
+Windows PostgreSQL stores the fixture function source with Windows line endings, so its raw pg_get_functiondef MD5 is not compared to the Linux TEST MD5. The rollback body is mechanically extracted from the exact pre-deploy Git blob; pre-deploy live parity was established before installation.
+

@@ -1,0 +1,16 @@
+GitHub Actions deployment evidence
+==================================
+
+Repository: kierarthur/cloudtms-backend
+Branch: test
+Commit: cffab09d284a690c5130b6821bef53a50f1dbcdc
+Workflow: Supabase Migrate (safe)
+Run ID: 30680863468
+Conclusion: success
+
+Changed repeatable applied:
+
+APPLY new/changed repeatable: 21072026_1820_00_import_review_internal_core.sql
+
+No other repeatable was applied by this push. Existing migrations were skipped.
+

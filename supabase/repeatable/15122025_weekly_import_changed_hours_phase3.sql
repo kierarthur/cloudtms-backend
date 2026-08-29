@@ -1,26 +1,4 @@
--- 15122025_weekly_import_changed_hours_phase3.sql
---
--- FULL REPLACEMENT (compiles) + FILTERED OUTPUT:
--- ✅ Now returns ONLY rows that REQUIRE OPERATOR ATTENTION
---    (i.e. requires_any_decision = true).
---
--- FIX (requested):
--- ✅ Adds contract_self_bill boolean (from contracts.self_bill)
--- ✅ Adds invoice_id_detected uuid (coalesce seg lock, TSFIN lock, shift.invoice_id)
---    so UI/back-end can clearly distinguish “self-bill correction allowed” vs “credit note required”.
---
--- Notes:
--- - Keeps the same RPC signature:
---     public.weekly_import_changed_hours_phase3(p_import_id uuid, p_system_type text)
--- - NHSP-only invoice_lines fallback:
---     meta_json->>'nhsp_shift_id' is only consulted when source_system='NHSP'.
---     HealthRoster relies on TSFIN segment charge/pay amounts (segment_id = 'nhsp:'||shift_id).
---
--- IMPORTANT:
--- Postgres cannot change the OUT row type of an existing function with CREATE OR REPLACE.
--- So we DROP and recreate.
 
-drop function if exists public.weekly_import_changed_hours_phase3(uuid, text);
 
 -- ---------------------------------------------------------
 -- Helper: HH:MM(:SS) -> minutes since midnight
@@ -225,6 +203,8 @@ $$;
 -- - precedence BH > Sun > Sat > Night > Day
 -- - "0/0" windows treated as FULL DAY
 -- ---------------------------------------------------------
+
+
 create or replace function public._wkimp_bucket_hours_from_policy(
   p_policy jsonb,
   p_start_utc timestamptz,
@@ -300,6 +280,10 @@ declare
   sun_eff int;
   sat_eff int;
   night_eff int;
+
+  minute_cursor timestamptz;
+  local_ts timestamp;
+  local_minute int;
 begin
   hours_day := 0; hours_night := 0; hours_sat := 0; hours_sun := 0; hours_bh := 0; total_hours := 0;
 
@@ -341,77 +325,56 @@ begin
       if next_midnight_utc is null then
         next_midnight_utc := date_trunc('day', slice_start) + interval '1 day';
       end if;
-
       slice_end := least(cur_end, next_midnight_utc);
       if slice_end <= slice_start then
         slice_start := next_midnight_utc;
         continue;
       end if;
 
-      a0 := floor(extract(epoch from ((slice_start at time zone tz) - (local_date::timestamp))) / 60)::int;
-      b0 := floor(extract(epoch from ((slice_end   at time zone tz) - (local_date::timestamp))) / 60)::int;
-
-      a0 := greatest(0, least(1440, a0));
-      b0 := greatest(0, least(1440, b0));
-
-      slice_len := greatest(0, floor(extract(epoch from (slice_end - slice_start)) / 60)::int);
-      if slice_len <= 0 or a0 >= b0 then
-        slice_start := slice_end;
-        continue;
-      end if;
-
       dow := extract(dow from local_date)::int; -- 0=Sun..6=Sat
       is_bh := (local_date::text = any(bh_list));
 
-      -- BH (highest priority)
-      bh_raw := case when is_bh then public._wkimp_overlap_window(a0,b0,bh_start,bh_end) else 0 end;
+      minute_cursor := slice_start;
 
-      -- Sun / Sat (excluding BH overlap)
-      if dow = 0 then
-        sun_raw := public._wkimp_overlap_window(a0,b0,sun_start,sun_end);
-        sun_eff := greatest(0, sun_raw - case when is_bh then public._wkimp_overlap_intersection2(a0,b0,sun_start,sun_end,bh_start,bh_end) else 0 end);
-      else
-        sun_eff := 0;
-      end if;
+      while (minute_cursor + interval '1 minute') <= slice_end loop
+        local_ts := (minute_cursor at time zone tz);
+        local_minute := floor(extract(epoch from (local_ts - (local_date::timestamp))) / 60)::int;
+        local_minute := greatest(0, least(1439, local_minute));
 
-      if dow = 6 then
-        sat_raw := public._wkimp_overlap_window(a0,b0,sat_start,sat_end);
-        sat_eff := greatest(0, sat_raw - case when is_bh then public._wkimp_overlap_intersection2(a0,b0,sat_start,sat_end,bh_start,bh_end) else 0 end);
-      else
-        sat_eff := 0;
-      end if;
+        if is_bh and (
+          (bh_start = bh_end) or
+          (bh_start < bh_end and local_minute >= bh_start and local_minute < bh_end) or
+          (bh_start > bh_end and (local_minute >= bh_start or local_minute < bh_end))
+        ) then
+          m_bh := m_bh + 1;
 
-      -- Day (exclude BH + weekend windows with inclusion-exclusion)
-      day_raw := public._wkimp_overlap_window(a0,b0,day_start,day_end);
-      day_eff := day_raw;
+        elsif dow = 0 and (
+          (sun_start = sun_end) or
+          (sun_start < sun_end and local_minute >= sun_start and local_minute < sun_end) or
+          (sun_start > sun_end and (local_minute >= sun_start or local_minute < sun_end))
+        ) then
+          m_sun := m_sun + 1;
 
-      if is_bh then
-        day_eff := day_eff - public._wkimp_overlap_intersection2(a0,b0,day_start,day_end,bh_start,bh_end);
-      end if;
+        elsif dow = 6 and (
+          (sat_start = sat_end) or
+          (sat_start < sat_end and local_minute >= sat_start and local_minute < sat_end) or
+          (sat_start > sat_end and (local_minute >= sat_start or local_minute < sat_end))
+        ) then
+          m_sat := m_sat + 1;
 
-      if dow = 0 then
-        day_eff := day_eff - public._wkimp_overlap_intersection2(a0,b0,day_start,day_end,sun_start,sun_end);
-        if is_bh then
-          day_eff := day_eff + public._wkimp_overlap_intersection3(a0,b0,day_start,day_end,bh_start,bh_end,sun_start,sun_end);
+        elsif
+          (day_start = day_end) or
+          (day_start < day_end and local_minute >= day_start and local_minute < day_end) or
+          (day_start > day_end and (local_minute >= day_start or local_minute < day_end))
+        then
+          m_day := m_day + 1;
+
+        else
+          m_night := m_night + 1;
         end if;
-      elsif dow = 6 then
-        day_eff := day_eff - public._wkimp_overlap_intersection2(a0,b0,day_start,day_end,sat_start,sat_end);
-        if is_bh then
-          day_eff := day_eff + public._wkimp_overlap_intersection3(a0,b0,day_start,day_end,bh_start,bh_end,sat_start,sat_end);
-        end if;
-      end if;
 
-      if day_eff < 0 then day_eff := 0; end if;
-
-      -- Night remainder
-      night_eff := slice_len - bh_raw - sun_eff - sat_eff - day_eff;
-      if night_eff < 0 then night_eff := 0; end if;
-
-      m_bh    := m_bh    + bh_raw;
-      m_sun   := m_sun   + sun_eff;
-      m_sat   := m_sat   + sat_eff;
-      m_day   := m_day   + day_eff;
-      m_night := m_night + night_eff;
+        minute_cursor := minute_cursor + interval '1 minute';
+      end loop;
 
       slice_start := slice_end;
     end loop;
@@ -424,386 +387,220 @@ begin
   hours_bh    := round((m_bh::numeric    / 60.0), 2);
   total_hours := round((hours_day + hours_night + hours_sat + hours_sun + hours_bh), 2);
 
+  return next;
   return;
 end;
 $$;
 
--- ---------------------------------------------------------
--- PHASE 3 RPC: preview "changed hours" rows (read-only)
--- NOW FILTERED: returns ONLY requires_any_decision=true
--- FIX: adds contract_self_bill + invoice_id_detected
--- ---------------------------------------------------------
-
-create or replace function public.weekly_import_changed_hours_phase3(
-  p_import_id uuid,
-  p_system_type text
+CREATE OR REPLACE FUNCTION public._pay_finance_protected_recovery_allocate(
+  p_recovery_rows jsonb,
+  p_run_earnings_headroom numeric,
+  p_run_take_home_headroom numeric DEFAULT NULL::numeric,
+  p_default_take_home_floor numeric DEFAULT NULL::numeric
 )
-returns table (
-  hr_row_id uuid,
-  external_row_key text,
-
-  shift_id uuid,
-  source_system text,
-
-  candidate_id uuid,
-  client_id uuid,
-  contract_id uuid,
-  timesheet_id uuid,
-
-  contract_self_bill boolean,
-
-  work_date date,
-  week_ending_date date,
-
-  old_start_utc timestamptz,
-  old_end_utc timestamptz,
-  old_break_mins int,
-
-  new_start_utc timestamptz,
-  new_end_utc timestamptz,
-  new_break_mins int,
-
-  old_paid_minutes int,
-  new_paid_minutes int,
-
-  is_changed_hours boolean,
-
-  is_paid boolean,
-  is_invoiced boolean,
-
-  invoice_id_detected uuid,
-
-  old_pay_ex numeric,
-  old_charge_ex numeric,
-
-  new_pay_ex numeric,
-  new_charge_ex numeric,
-
-  delta_pay_ex numeric,
-  delta_charge_ex numeric,
-
-  requires_pay_decision boolean,
-  requires_invoice_decision boolean,
-  requires_any_decision boolean
+RETURNS TABLE(
+  sort_order integer,
+  finance_case_id uuid,
+  case_type public.pay_finance_case_type_enum,
+  payout_status public.pay_advance_payout_status_enum,
+  nominal_due_amount numeric,
+  minimum_earnings_threshold numeric,
+  effective_take_home_floor numeric,
+  headroom_before numeric,
+  take_home_before numeric,
+  threshold_cap_amount numeric,
+  take_home_cap_amount numeric,
+  protected_recoverable_amount numeric,
+  headroom_after numeric,
+  take_home_after numeric
 )
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-declare
-  v_sys public.hr_source_enum;
-begin
-  v_sys :=
-    case
-      when upper(coalesce(p_system_type,'')) = 'NHSP' then 'NHSP'::public.hr_source_enum
-      when upper(coalesce(p_system_type,'')) = 'HEALTHROSTER' then 'HEALTHROSTER'::public.hr_source_enum
-      else null::public.hr_source_enum
-    end;
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_row record;
+  v_remaining_headroom numeric(12,2) := round(greatest(coalesce(p_run_earnings_headroom, 0), 0), 2)::numeric(12,2);
+  v_remaining_take_home numeric(12,2) := CASE
+    WHEN p_run_take_home_headroom IS NULL THEN NULL
+    ELSE round(greatest(p_run_take_home_headroom, 0), 2)::numeric(12,2)
+  END;
+  v_default_take_home_floor numeric(12,2) := CASE
+    WHEN p_default_take_home_floor IS NULL THEN NULL
+    ELSE round(greatest(p_default_take_home_floor, 0), 2)::numeric(12,2)
+  END;
+  v_case_type_text text := NULL;
+  v_payout_status_text text := NULL;
+  v_nominal_due_amount numeric(12,2) := 0;
+  v_minimum_earnings_threshold numeric(12,2) := NULL;
+  v_effective_take_home_floor_local numeric(12,2) := NULL;
+  v_headroom_before_local numeric(12,2) := 0;
+  v_take_home_before_local numeric(12,2) := NULL;
+  v_threshold_cap_amount_local numeric(12,2) := 0;
+  v_take_home_cap_amount_local numeric(12,2) := NULL;
+  v_effective_cap_amount_local numeric(12,2) := 0;
+  v_protected_recoverable_amount_local numeric(12,2) := 0;
+BEGIN
+  IF p_recovery_rows IS NULL OR jsonb_typeof(p_recovery_rows) <> 'array' THEN
+    RAISE EXCEPTION '%', jsonb_build_object(
+      'error', 'PAY_FINANCE_PROTECTED_RECOVERY_ALLOCATE',
+      'code', 'RECOVERY_ROWS_ARRAY_REQUIRED',
+      'message', '_pay_finance_protected_recovery_allocate: p_recovery_rows must be a JSON array'
+    )::text;
+  END IF;
 
-  if v_sys is null then
-    raise exception 'weekly_import_changed_hours_phase3: invalid p_system_type "%". Expected NHSP or HEALTHROSTER.', p_system_type;
-  end if;
+  FOR v_row IN
+    WITH parsed_rows AS (
+      SELECT
+        CASE
+          WHEN nullif(btrim(elem.value->>'sort_order'), '') IS NULL THEN elem.ordinality::integer
+          ELSE (elem.value->>'sort_order')::integer
+        END AS sort_order,
+        elem.ordinality::integer AS input_ordinality,
+        CASE
+          WHEN nullif(btrim(elem.value->>'finance_case_id'), '') IS NULL THEN NULL::uuid
+          ELSE (elem.value->>'finance_case_id')::uuid
+        END AS finance_case_id,
+        nullif(btrim(elem.value->>'case_type'), '') AS case_type_text,
+        nullif(btrim(elem.value->>'payout_status'), '') AS payout_status_text,
+        round(
+          greatest(
+            coalesce(
+              CASE
+                WHEN nullif(btrim(elem.value->>'nominal_due_amount'), '') IS NULL THEN 0::numeric
+                ELSE (elem.value->>'nominal_due_amount')::numeric
+              END,
+              0::numeric
+            ),
+            0::numeric
+          ),
+          2
+        )::numeric(12,2) AS nominal_due_amount,
+        CASE
+          WHEN nullif(btrim(elem.value->>'minimum_earnings_threshold'), '') IS NULL THEN NULL::numeric(12,2)
+          ELSE round(greatest((elem.value->>'minimum_earnings_threshold')::numeric, 0::numeric), 2)::numeric(12,2)
+        END AS minimum_earnings_threshold,
+        CASE
+          WHEN nullif(btrim(elem.value->>'take_home_floor_override'), '') IS NULL THEN NULL::numeric(12,2)
+          ELSE round(greatest((elem.value->>'take_home_floor_override')::numeric, 0::numeric), 2)::numeric(12,2)
+        END AS take_home_floor_override
+      FROM jsonb_array_elements(p_recovery_rows) WITH ORDINALITY AS elem(value, ordinality)
+    )
+    SELECT
+      pr.sort_order,
+      pr.input_ordinality,
+      pr.finance_case_id,
+      pr.case_type_text,
+      pr.payout_status_text,
+      pr.nominal_due_amount,
+      pr.minimum_earnings_threshold,
+      pr.take_home_floor_override
+    FROM parsed_rows AS pr
+    ORDER BY pr.sort_order, pr.input_ordinality, pr.finance_case_id
+  LOOP
+    IF v_row.finance_case_id IS NULL THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_PROTECTED_RECOVERY_ALLOCATE',
+        'code', 'FINANCE_CASE_ID_REQUIRED',
+        'message', '_pay_finance_protected_recovery_allocate: each recovery row must include finance_case_id',
+        'sort_order', v_row.sort_order,
+        'input_ordinality', v_row.input_ordinality
+      )::text;
+    END IF;
 
-  return query
-  with rows_in as (
-    select
-      r.id as hr_row_id,
-      r.external_row_key,
+    v_case_type_text := upper(coalesce(v_row.case_type_text, ''));
 
-      -- POLICY: shift "date" is derived from start time local date (Europe/London), not date_local.
-      ((date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) at time zone 'Europe/London')::date) as work_date,
+    IF v_case_type_text NOT IN ('PAYMENT_ADVANCE', 'MANUAL_DEBT_ADJUSTMENT') THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_PROTECTED_RECOVERY_ALLOCATE',
+        'code', 'UNSUPPORTED_CASE_TYPE',
+        'message', '_pay_finance_protected_recovery_allocate: only PAYMENT_ADVANCE repayments and MANUAL_DEBT_ADJUSTMENT recoveries are supported',
+        'finance_case_id', v_row.finance_case_id::text,
+        'case_type', v_row.case_type_text
+      )::text;
+    END IF;
 
-      date_trunc('minute', (r.payload_json->>'start_utc')::timestamptz) as new_start_utc,
-      date_trunc('minute', (r.payload_json->>'end_utc')::timestamptz)   as new_end_utc,
+    v_payout_status_text := upper(coalesce(v_row.payout_status_text, ''));
+    IF v_case_type_text = 'PAYMENT_ADVANCE' AND v_payout_status_text <> 'PAID' THEN
+      RAISE EXCEPTION '%', jsonb_build_object(
+        'error', 'PAY_FINANCE_PROTECTED_RECOVERY_ALLOCATE',
+        'code', 'PAYMENT_ADVANCE_NOT_REPAYABLE',
+        'message', '_pay_finance_protected_recovery_allocate: PAYMENT_ADVANCE rows must represent paid advances when allocating recoveries',
+        'finance_case_id', v_row.finance_case_id::text,
+        'payout_status', v_row.payout_status_text
+      )::text;
+    END IF;
 
-      -- ✅ FIX: HealthRoster weekly uses Actual Break as authoritative.
-      -- Priority: actual_break_mins / actual_break_minutes -> break_mins / break_minutes -> 0
-      case
-        when (r.payload_json ? 'actual_break_mins') and ((r.payload_json->>'actual_break_mins') ~ '^[0-9]+$')
-          then (r.payload_json->>'actual_break_mins')::int
-        when (r.payload_json ? 'actual_break_minutes') and ((r.payload_json->>'actual_break_minutes') ~ '^[0-9]+$')
-          then (r.payload_json->>'actual_break_minutes')::int
-        when (r.payload_json ? 'break_mins') and ((r.payload_json->>'break_mins') ~ '^[0-9]+$')
-          then (r.payload_json->>'break_mins')::int
-        when (r.payload_json ? 'break_minutes') and ((r.payload_json->>'break_minutes') ~ '^[0-9]+$')
-          then (r.payload_json->>'break_minutes')::int
-        else 0
-      end as new_break_mins
-    from public.hr_rows r
-    where r.import_id = p_import_id
-      and r.external_row_key is not null
-      and (r.payload_json->>'start_utc') is not null
-      and (r.payload_json->>'end_utc')   is not null
-  ),
-  matched as (
-    select
-      ri.*,
-      s.id as shift_id,
-      s.source_system::text as source_system,
-      s.candidate_id,
-      s.client_id,
-      s.contract_id,
-      s.timesheet_id,
+    v_nominal_due_amount := round(greatest(coalesce(v_row.nominal_due_amount, 0), 0), 2)::numeric(12,2);
+    v_minimum_earnings_threshold := v_row.minimum_earnings_threshold;
+    v_effective_take_home_floor_local := coalesce(v_row.take_home_floor_override, v_default_take_home_floor);
 
-      -- week_ending_date resolution (DO NOT assume Sunday):
-      -- 1) base timesheet week_ending_date (authoritative) if present
-      -- 2) nhsp_shifts.week_ending_date if present
-      -- 3) derived from contracts.week_ending_weekday_snapshot (0=Sun) and basis_date (old shift start local date, else import work_date)
-      coalesce(
-        ts.week_ending_date,
-        s.week_ending_date,
-        (
-          coalesce(
-            (date_trunc('minute', s.start_utc) at time zone 'Europe/London')::date,
-            ri.work_date
-          )
-          +
-          (
-            (
-              (
-                case
-                  when c.week_ending_weekday_snapshot is null then 0
-                  when c.week_ending_weekday_snapshot between 0 and 6 then c.week_ending_weekday_snapshot
-                  else 0
-                end
-                -
-                extract(dow from coalesce(
-                  (date_trunc('minute', s.start_utc) at time zone 'Europe/London')::date,
-                  ri.work_date
-                ))::int
-                + 7
-              ) % 7
-            )::int
-          )
-        )::date
-      ) as week_ending_date,
+    v_headroom_before_local := v_remaining_headroom;
+    v_take_home_before_local := v_remaining_take_home;
 
-      -- old values truncated to minute precision for comparison + output consistency
-      date_trunc('minute', s.start_utc) as old_start_utc,
-      date_trunc('minute', s.end_utc)   as old_end_utc,
-      coalesce(s.break_mins,0) as old_break_mins,
-      coalesce(s.pay_minutes,0) as old_paid_minutes,
+    v_threshold_cap_amount_local := round(
+      CASE
+        WHEN v_minimum_earnings_threshold IS NULL THEN v_headroom_before_local
+        ELSE greatest(v_headroom_before_local - v_minimum_earnings_threshold, 0)
+      END,
+      2
+    )::numeric(12,2);
 
-      s.invoice_id as shift_invoice_id,
+    v_take_home_cap_amount_local := CASE
+      WHEN v_take_home_before_local IS NULL OR v_effective_take_home_floor_local IS NULL THEN NULL
+      ELSE round(greatest(v_take_home_before_local - v_effective_take_home_floor_local, 0), 2)::numeric(12,2)
+    END;
 
-      c.self_bill as contract_self_bill
-    from rows_in ri
-    left join public.nhsp_shifts s
-      on s.external_row_key = ri.external_row_key
-     and s.source_system = v_sys
-     and s.cancelled_at_utc is null
-    left join public.contracts c
-      on c.id = s.contract_id
-    left join public.timesheets ts
-      on ts.timesheet_id = s.timesheet_id
-     and ts.is_current = true
-  ),
-  fin as (
-    select
-      m.*,
-      tf.id as tsfin_id,
-      tf.paid_at_utc,
-      tf.locked_by_invoice_id,
-      tf.invoice_breakdown_json,
-      tf.policy_snapshot_json,
-      tf.pay_day, tf.pay_night, tf.pay_sat, tf.pay_sun, tf.pay_bh,
-      tf.charge_day, tf.charge_night, tf.charge_sat, tf.charge_sun, tf.charge_bh
-    from matched m
-    left join public.timesheets_financials tf
-      on tf.timesheet_id = m.timesheet_id
-     and tf.is_current = true
-  ),
-  seg_old as (
-    select
-      f.*,
-      (seg->>'pay_amount')::numeric     as seg_old_pay_ex,
-      (seg->>'charge_amount')::numeric  as seg_old_charge_ex,
-      nullif(seg->>'invoice_locked_invoice_id','')::uuid as seg_invoice_id
-    from fin f
-    left join lateral (
-      select t.seg
-      from jsonb_array_elements(coalesce(f.invoice_breakdown_json->'segments','[]'::jsonb)) as t(seg)
-      where (
-        (t.seg->>'nhsp_shift_id') = f.shift_id::text
-        or (t.seg->>'external_row_key') = f.external_row_key
-      )
-      order by
-        case when (t.seg->>'nhsp_shift_id') = f.shift_id::text then 0 else 1 end
-      limit 1
-    ) x(seg) on true
-  ),
-  invline_old as (
-    select
-      s.*,
-      case
-        when upper(coalesce(s.source_system,'')) = 'NHSP' then (
-          select max(il.total_charge_ex_vat)
-          from public.invoice_lines il
-          where il.meta_json->>'nhsp_shift_id' = s.shift_id::text
-        )
-        else null
-      end as invline_old_charge_ex
-    from seg_old s
-  ),
-  new_hours as (
-    select
-      a.*,
-      h.hours_day, h.hours_night, h.hours_sat, h.hours_sun, h.hours_bh, h.total_hours,
-      greatest(
-        0,
-        (extract(epoch from (a.new_end_utc - a.new_start_utc))/60)::int - coalesce(a.new_break_mins,0)
-      ) as new_paid_minutes
-    from invline_old a
-    left join lateral public._wkimp_bucket_hours_from_policy(
-      coalesce(a.policy_snapshot_json, '{}'::jsonb),
-      a.new_start_utc,
-      a.new_end_utc,
-      a.new_break_mins
-    ) h on true
-  ),
-  amounts as (
-    select
-      n.*,
+    v_effective_cap_amount_local := round(
+      least(
+        v_headroom_before_local,
+        v_threshold_cap_amount_local,
+        coalesce(v_take_home_cap_amount_local, v_headroom_before_local)
+      ),
+      2
+    )::numeric(12,2);
 
-      coalesce(n.seg_old_pay_ex, null) as old_pay_ex,
-      coalesce(n.seg_old_charge_ex, n.invline_old_charge_ex, null) as old_charge_ex,
+    v_protected_recoverable_amount_local := round(
+      least(v_nominal_due_amount, greatest(v_effective_cap_amount_local, 0)),
+      2
+    )::numeric(12,2);
 
-      case
-        when n.policy_snapshot_json is null then null
-        else round(
-          coalesce(n.hours_day,0)   * coalesce(n.pay_day,0) +
-          coalesce(n.hours_night,0) * coalesce(n.pay_night,0) +
-          coalesce(n.hours_sat,0)   * coalesce(n.pay_sat,0) +
-          coalesce(n.hours_sun,0)   * coalesce(n.pay_sun,0) +
-          coalesce(n.hours_bh,0)    * coalesce(n.pay_bh,0)
-        , 2)
-      end as new_pay_ex,
+    v_remaining_headroom := round(
+      greatest(v_remaining_headroom - v_protected_recoverable_amount_local, 0),
+      2
+    )::numeric(12,2);
 
-      case
-        when n.policy_snapshot_json is null then null
-        else round(
-          coalesce(n.hours_day,0)   * coalesce(n.charge_day,0) +
-          coalesce(n.hours_night,0) * coalesce(n.charge_night,0) +
-          coalesce(n.hours_sat,0)   * coalesce(n.charge_sat,0) +
-          coalesce(n.hours_sun,0)   * coalesce(n.charge_sun,0) +
-          coalesce(n.hours_bh,0)    * coalesce(n.charge_bh,0)
-        , 2)
-      end as new_charge_ex
-    from new_hours n
-  ),
-  final_rows as (
-    select
-      a.hr_row_id,
-      a.external_row_key,
+    IF v_remaining_take_home IS NOT NULL THEN
+      v_remaining_take_home := round(
+        greatest(v_remaining_take_home - v_protected_recoverable_amount_local, 0),
+        2
+      )::numeric(12,2);
+    END IF;
 
-      a.shift_id,
-      a.source_system,
+    sort_order := v_row.sort_order;
+    finance_case_id := v_row.finance_case_id;
+    case_type := v_case_type_text::public.pay_finance_case_type_enum;
+    payout_status := CASE
+      WHEN v_case_type_text = 'PAYMENT_ADVANCE' THEN 'PAID'::public.pay_advance_payout_status_enum
+      ELSE NULL::public.pay_advance_payout_status_enum
+    END;
+    nominal_due_amount := v_nominal_due_amount;
+    minimum_earnings_threshold := v_minimum_earnings_threshold;
+    effective_take_home_floor := v_effective_take_home_floor_local;
+    headroom_before := v_headroom_before_local;
+    take_home_before := v_take_home_before_local;
+    threshold_cap_amount := v_threshold_cap_amount_local;
+    take_home_cap_amount := v_take_home_cap_amount_local;
+    protected_recoverable_amount := v_protected_recoverable_amount_local;
+    headroom_after := v_remaining_headroom;
+    take_home_after := v_remaining_take_home;
 
-      a.candidate_id,
-      a.client_id,
-      a.contract_id,
-      a.timesheet_id,
+    RETURN NEXT;
+  END LOOP;
 
-      a.contract_self_bill,
-
-      -- POLICY: shift date is start-date (computed from new_start_utc).
-      a.work_date as work_date,
-      a.week_ending_date as week_ending_date,
-
-      a.old_start_utc,
-      a.old_end_utc,
-      a.old_break_mins,
-
-      a.new_start_utc,
-      a.new_end_utc,
-      a.new_break_mins,
-
-      a.old_paid_minutes,
-      a.new_paid_minutes,
-
-      (
-        a.shift_id is not null
-        and (
-          a.old_start_utc is distinct from a.new_start_utc
-          or a.old_end_utc is distinct from a.new_end_utc
-          or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
-        )
-      ) as is_changed_hours,
-
-      (a.paid_at_utc is not null) as is_paid,
-
-      (
-        a.seg_invoice_id is not null
-        or a.locked_by_invoice_id is not null
-        or a.shift_invoice_id is not null
-      ) as is_invoiced,
-
-      coalesce(a.seg_invoice_id, a.locked_by_invoice_id, a.shift_invoice_id) as invoice_id_detected,
-
-      a.old_pay_ex,
-      a.old_charge_ex,
-
-      a.new_pay_ex,
-      a.new_charge_ex,
-
-      case when a.new_pay_ex is null or a.old_pay_ex is null then null else round(a.new_pay_ex - a.old_pay_ex, 2) end as delta_pay_ex,
-      case when a.new_charge_ex is null or a.old_charge_ex is null then null else round(a.new_charge_ex - a.old_charge_ex, 2) end as delta_charge_ex,
-
-      (
-        (a.paid_at_utc is not null)
-        and (
-          a.shift_id is not null
-          and (
-            a.old_start_utc is distinct from a.new_start_utc
-            or a.old_end_utc is distinct from a.new_end_utc
-            or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
-          )
-        )
-      ) as requires_pay_decision,
-
-      (
-        (
-          a.seg_invoice_id is not null
-          or a.locked_by_invoice_id is not null
-          or a.shift_invoice_id is not null
-        )
-        and (
-          a.shift_id is not null
-          and (
-            a.old_start_utc is distinct from a.new_start_utc
-            or a.old_end_utc is distinct from a.new_end_utc
-            or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
-          )
-        )
-      ) as requires_invoice_decision,
-
-      (
-        (
-          (a.paid_at_utc is not null)
-          or
-          (a.seg_invoice_id is not null or a.locked_by_invoice_id is not null or a.shift_invoice_id is not null)
-        )
-        and (
-          a.shift_id is not null
-          and (
-            a.old_start_utc is distinct from a.new_start_utc
-            or a.old_end_utc is distinct from a.new_end_utc
-            or coalesce(a.old_break_mins,0) <> coalesce(a.new_break_mins,0)
-          )
-        )
-      ) as requires_any_decision
-    from amounts a
-  )
-  select fr.*
-  from final_rows fr
-  where fr.is_changed_hours = true
-  order by fr.work_date asc, fr.external_row_key asc;
-
-end;
-$$;
-
-
+  RETURN;
+END;
+$function$;
 
 
 
