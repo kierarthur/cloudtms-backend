@@ -221,7 +221,6 @@ END;
 $function$;
 
 ALTER FUNCTION public.pay_workbench_session_refresh_current_authority_v1(uuid,uuid,jsonb,integer) OWNER TO postgres;
-ALTER FUNCTION public.pay_workbench_session_refresh_current_authority_v1(uuid,uuid,jsonb,integer) SET plpgsql_check.mode TO 'disabled';
 REVOKE ALL ON FUNCTION public.pay_workbench_session_refresh_current_authority_v1(uuid,uuid,jsonb,integer) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.pay_workbench_session_refresh_current_authority_v1(uuid,uuid,jsonb,integer) TO service_role;
 
