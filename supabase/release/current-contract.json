@@ -6423,6 +6423,30 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "private",
+      "identity": "contract_week_delete_planned_base_v1(p_contract_week_id uuid, p_actor_user_id uuid)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "46ef04bb32f3f2a4d86bd61c99ee322e7226190673ee5f8d62ca9396c1271498"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
         }
       ],
       "owner": "postgres",
@@ -8624,6 +8648,30 @@
       "volatility": "s",
       "security_definer": false,
       "definition_sha256": "3e6d55c605be9bd2fc5b6cd34a908d2911645b529f3713668e93f39102503efa"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "timesheet_weekly_chain_delete_apply_base_v1(p_timesheet_id uuid, p_actor_user_id uuid, p_expected_timesheet_ids uuid[], p_expected_contract_week_ids uuid[], p_expected_nhsp_shift_ids uuid[], p_expected_row_signature text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ca15ec580bd1d0f588d180b8787ad21a26d6763f6cf7dff154c8eed854e7d73f"
     },
     {
       "acl": [
@@ -13438,7 +13486,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": false,
-      "definition_sha256": "4e5c6386e58eddae82dc357597b3f03931baae40796c8f9541aa2437c9825d2a"
+      "definition_sha256": "888700d729a1e33da3f2a6fe9943ac9b76e2771162a167e388d8d40de8f65e04"
     },
     {
       "acl": [
@@ -15551,14 +15599,14 @@
       ],
       "owner": "postgres",
       "config": [
-        "search_path=public"
+        "search_path=public, pg_temp"
       ],
       "schema": "public",
       "identity": "contract_week_delete_planned(p_contract_week_id uuid, p_actor_user_id uuid)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "ee2509094d9e271649ae88083536d0a6e43e97bfb6971c0fb398fb1bfcad0f99"
+      "definition_sha256": "12c08be5bcc02fd23bdbb2dfec717ea2af4f4ffb912ec471e35eac55eebdd508"
     },
     {
       "acl": [
@@ -27392,7 +27440,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "401e1f38afb5a4a97673216dc4f4c4a98c9d5448b5ae8e68cabebea3faa7ed8c"
+      "definition_sha256": "d17e4bbbb3aaf75c011630cf8c472cfb2ac365ca42ba78763b3c5047d7b5f966"
     },
     {
       "acl": [
