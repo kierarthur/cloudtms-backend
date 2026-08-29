@@ -35,6 +35,9 @@ const repairTargets = [
   ['timesheet_daily_manual_process_atomic', '07082026_2224_candidate_app_weekly_office_replacements_v1.sql'],
 ];
 const bankingV2PublicServiceIdentities = [
+  'public.pay_timesheet_summary_pay_state_refresh_trigger()',
+  'public.pay_workbench_contract_client_dirty_fanout_chunk(uuid,jsonb,integer)',
+  'public.pay_workbench_enqueue_stage_continuation(uuid,uuid,text,jsonb,uuid,jsonb,uuid,text,integer,integer)',
   'public.pay_workbench_revalidate_zero_retained_recovery_headroom_v1(uuid,uuid,jsonb)',
   'public.pay_workbench_session_get_action_required_detail_v1(uuid,jsonb,uuid,text,text,integer)',
   'public.pay_workbench_session_get_action_required_page_v1(uuid,jsonb,uuid,text,text,text,integer,text,text)',
