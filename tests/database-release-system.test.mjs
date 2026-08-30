@@ -385,6 +385,8 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.match(scopeGapNonApplicability, /TEST_FIXTURE_PRESENT_IN_LIVE/);
   assert.doesNotMatch(scopeGapNonApplicability, /update\s+|delete\s+|insert\s+|truncate\s+|drop\s+/i);
   assert.deepEqual(release.legacyUpgradeReplacementMigrations, {
+    'supabase/migrations/26072026_1219_disable_runtime_plpgsql_check.sql':
+      'supabase/release/30082026_0958_legacy_plpgsql_check_database_defaults_replacement.sql',
     'supabase/migrations/22082026_1302_general_browser_relation_sequence_isolation.sql':
       'supabase/release/30082026_0222_legacy_general_browser_isolation_replacement.sql',
     'supabase/migrations/22082026_1302_general_browser_rpc_isolation.sql':
@@ -396,6 +398,17 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
     'supabase/migrations/24082026_0232_miget_provider_owner_defaults.sql':
       'supabase/release/30082026_0255_legacy_miget_provider_owner_defaults_replacement.sql',
   });
+  const plpgsqlCheckDefaultsReplacement = read(
+    release.legacyUpgradeReplacementMigrations[
+      'supabase/migrations/26072026_1219_disable_runtime_plpgsql_check.sql'
+    ],
+  );
+  assert.match(plpgsqlCheckDefaultsReplacement, /v_database name := current_database\(\)/);
+  assert.equal((plpgsqlCheckDefaultsReplacement.match(/alter database %I set/g) ?? []).length, 7);
+  assert.match(plpgsqlCheckDefaultsReplacement, /pg_catalog\.pg_db_role_setting/);
+  assert.match(plpgsqlCheckDefaultsReplacement, /LEGACY_PLPGSQL_CHECK_DATABASE_DEFAULTS_NOT_APPLIED/);
+  assert.doesNotMatch(plpgsqlCheckDefaultsReplacement, /alter database postgres/i);
+  assert.doesNotMatch(plpgsqlCheckDefaultsReplacement, /\b(?:insert into|update|delete from|truncate|drop|create extension)\b/i);
   const generalIsolationReplacement = read(
     release.legacyUpgradeReplacementMigrations[
       'supabase/migrations/22082026_1302_general_browser_relation_sequence_isolation.sql'

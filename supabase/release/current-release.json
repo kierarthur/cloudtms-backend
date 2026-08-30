@@ -64,6 +64,7 @@
     "supabase/migrations/08082026_1137_repair_banking_pay_scope_generation_gap.sql": "supabase/release/30082026_0218_legacy_scope_generation_gap_nonapplicability.sql"
   },
   "legacyUpgradeReplacementMigrations": {
+    "supabase/migrations/26072026_1219_disable_runtime_plpgsql_check.sql": "supabase/release/30082026_0958_legacy_plpgsql_check_database_defaults_replacement.sql",
     "supabase/migrations/22082026_1302_general_browser_relation_sequence_isolation.sql": "supabase/release/30082026_0222_legacy_general_browser_isolation_replacement.sql",
     "supabase/migrations/22082026_1302_general_browser_rpc_isolation.sql": "supabase/release/30082026_0233_legacy_general_browser_rpc_isolation_replacement.sql",
     "supabase/migrations/22082026_1302_general_browser_view_isolation.sql": "supabase/release/30082026_0236_legacy_general_browser_view_isolation_replacement.sql",
