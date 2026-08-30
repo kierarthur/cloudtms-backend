@@ -4429,6 +4429,17 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       } : {})
     };
   }
+  if (dbAction === 'PAPER_PREPARE') {
+    const prepared = await rpcCall(deps, 'candidate_weekly_paper_target_prepare_v1',
+      candidateRpcArgs(access, env, {
+        p_workflow_id: workflowId,
+        p_expected_generation: generation,
+        p_now_utc: new Date().toISOString()
+      }));
+    if (prepared?.ok !== true || !UUID_RE.test(text(prepared?.timesheet_id))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
+    }
+  }
   const managerRoutesToRetire = dbAction === 'CANCEL'
     ? await currentManagerEmailRouteTickets(env, workflowId) : [];
   const result = replayResult || await rpcCall(

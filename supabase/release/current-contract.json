@@ -14992,6 +14992,30 @@
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
+      "identity": "candidate_weekly_paper_target_prepare_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "67561615ca9f71166d44cd66a46dbd4d3e16112d68b9d224f1e037e24808d774"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
       "identity": "candidate_workflow_transition_atomic_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_action text, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "v",

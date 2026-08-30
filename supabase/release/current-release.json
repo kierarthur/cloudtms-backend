@@ -37,6 +37,7 @@
     "supabase/baseline/22082026_1505_cloudtms_test_acl_baseline.sql"
   ],
   "verificationFiles": [
+    "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
     "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql",
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
     "supabase/verification/22082026_1712_daily_validation_compatibility_security_verification.sql",
@@ -74,6 +75,7 @@
     "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql"
   ],
   "newVerificationFiles": [
+    "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
     "supabase/verification/22082026_1712_daily_validation_compatibility_security_verification.sql",
     "supabase/verification/27082026_1947_candidate_named_security_verification_v3.sql",
