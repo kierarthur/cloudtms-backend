@@ -189,6 +189,7 @@ const scenarios = [
     test: "multi_read",
     arms: [
       { id: "postgrest_current", path: "postgrest", variant: "current" },
+      { id: "postgrest_optimized", path: "postgrest", variant: "optimized" },
       { id: "hyperdrive_sequential", path: "hyperdrive", variant: "sequential" },
       { id: "hyperdrive_optimized", path: "hyperdrive", variant: "optimized" },
     ],
@@ -205,7 +206,7 @@ async function metadataSnapshot() {
 async function measure(phase, iteration, scenario, arm) {
   const url = new URL(`/__debug/db-benchmark/${arm.path}`, baseUrl);
   url.searchParams.set("test", scenario.test);
-  if (arm.path === "hyperdrive") url.searchParams.set("variant", arm.variant);
+  if (arm.variant !== "current") url.searchParams.set("variant", arm.variant);
   if (scenario.test === "multi_read") url.searchParams.set("timesheet_id", timesheetId);
   const result = await fetchJson(url, { method: "GET", headers: commonHeaders }, timeoutMs);
   const payload = result.payload && typeof result.payload === "object" ? result.payload : {};

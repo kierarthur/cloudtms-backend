@@ -32,7 +32,7 @@ All benchmark routes require `Authorization: Bearer <MIGET_MCP_ROUTE_TOKEN>`. Po
 - `/__debug/db-benchmark/compare`
 - `/__debug/db-benchmark/metadata`
 
-Tests are `select_1`, `small_read`, and `multi_read`. The `multi_read` test requires a TEST timesheet UUID. Hyperdrive supports `variant=sequential` for like-for-like round trips and `variant=optimized` for a single-query version. The runner is deliberately serial and writes only timings, counts, structural hashes, and aggregate metadata:
+Tests are `select_1`, `small_read`, and `multi_read`. The `multi_read` test requires a TEST timesheet UUID. Hyperdrive supports `variant=sequential` for like-for-like round trips and `variant=optimized` for a single-query version. PostgREST supports `variant=optimized` for the same consolidated SQL through one diagnostic RPC, which isolates the benefit of fewer round trips from the transport choice. The runner is deliberately serial and writes only timings, counts, structural hashes, and aggregate metadata:
 
 ```powershell
 $env:MIGET_MCP_ROUTE_TOKEN = '<load from approved ignored storage without printing>'

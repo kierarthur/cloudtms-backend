@@ -230,10 +230,84 @@ async function postgrestJson(
   };
 }
 
+function optimizedMultiSql(timesheetReference: string): string {
+  return `with selected_timesheet as (
+    select t.*
+    from public.timesheets t
+    where t.timesheet_id = ${timesheetReference}::uuid
+      and t.is_current is true
+    limit 1
+  )
+  select jsonb_build_object(
+    'timesheet', to_jsonb(t),
+    'summary', case when s.timesheet_id is null then null else jsonb_build_object(
+      'timesheet_id', s.timesheet_id,
+      'candidate_id', s.candidate_id,
+      'client_id', s.client_id,
+      'candidate_name', s.candidate_name,
+      'client_name', s.client_name,
+      'contract_id', s.contract_id
+    ) end,
+    'financial', case when f.id is null then null else to_jsonb(f) end,
+    'contract', case when c.id is null then null else to_jsonb(c) end,
+    'client', case when cl.id is null then null else to_jsonb(cl) end,
+    'candidate', case when ca.id is null then null else to_jsonb(ca) end,
+    'settings', case when d.id is null then null else jsonb_build_object(
+      'agency_name', d.agency_name,
+      'agency_logo', d.agency_logo,
+      'timesheet_header_json', d.timesheet_header_json,
+      'timesheet_footer_json', d.timesheet_footer_json,
+      'temporary_worker_declaration_json', d.temporary_worker_declaration_json,
+      'client_declaration_json', d.client_declaration_json
+    ) end
+  ) as payload
+  from selected_timesheet t
+  left join lateral (
+    select summary.timesheet_id, summary.candidate_id, summary.client_id,
+           summary.candidate_name, summary.client_name, summary.contract_id
+    from public.v_timesheets_summary summary
+    where t.contract_id is null
+      and summary.timesheet_id = t.timesheet_id
+    limit 1
+  ) s on true
+  left join lateral (
+    select financial.*
+    from public.timesheets_financials financial
+    where financial.timesheet_id = t.timesheet_id
+      and financial.is_current is true
+    limit 1
+  ) f on true
+  left join lateral (
+    select contract_row.*
+    from public.contracts contract_row
+    where contract_row.id = coalesce(t.contract_id, s.contract_id)
+    limit 1
+  ) c on true
+  left join lateral (
+    select client_row.*
+    from public.clients client_row
+    where client_row.id = coalesce(c.client_id, s.client_id)
+    limit 1
+  ) cl on true
+  left join lateral (
+    select candidate_row.*
+    from public.candidates candidate_row
+    where candidate_row.id = coalesce(c.candidate_id, s.candidate_id)
+    limit 1
+  ) ca on true
+  left join lateral (
+    select defaults.*
+    from public.settings_defaults defaults
+    where defaults.id = 1
+    limit 1
+  ) d on true`;
+}
+
 async function runPostgrest(
   env: DbBenchmarkEnv,
   token: string,
   test: BenchmarkTest,
+  variant: "current" | "optimized",
   timesheetId: string | null,
 ): Promise<PathMeasurement> {
   const dbStartedAt = performance.now();
@@ -266,6 +340,26 @@ async function runPostgrest(
       `/settings_defaults?id=eq.1&select=${SETTINGS_COLUMNS.join(",")}&limit=1`,
     );
     rowCount = rowsFrom(payload).length;
+  } else if (variant === "optimized") {
+    if (!timesheetId) throw new BenchmarkHttpError(400, "timesheet_id is required");
+    const diagnostic = await step("/rpc/codex_debug_select_sql", {
+      method: "POST",
+      body: JSON.stringify({
+        p_sql: optimizedMultiSql(`'${timesheetId}'`),
+        p_limit: 1,
+      }),
+    });
+    const wrapper = diagnostic && typeof diagnostic === "object" && !Array.isArray(diagnostic)
+      ? diagnostic as Record<string, unknown>
+      : null;
+    if (wrapper?.ok !== true) {
+      throw new BenchmarkHttpError(502, "PostgREST optimized diagnostic query failed");
+    }
+    payload = firstRow(wrapper.rows)?.payload ?? null;
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      throw new BenchmarkHttpError(404, "The TEST benchmark timesheet was not found");
+    }
+    rowCount = Object.values(payload as Record<string, unknown>).filter((value) => value !== null).length;
   } else {
     if (!timesheetId) throw new BenchmarkHttpError(400, "timesheet_id is required");
     const encodedId = encodeURIComponent(timesheetId);
@@ -316,7 +410,7 @@ async function runPostgrest(
     environment: "TEST",
     path: "postgrest",
     test,
-    variant: "current",
+    variant,
     cache_mode: "disabled",
     placement_mode: "targeted",
     db_elapsed_ms: dbElapsedMs,
@@ -373,76 +467,7 @@ async function runHyperdrive(
   } else if (variant === "optimized") {
     if (!timesheetId) throw new BenchmarkHttpError(400, "timesheet_id is required");
     const rows = await query<{ payload: Record<string, unknown> }>(
-      `with selected_timesheet as (
-         select t.*
-         from public.timesheets t
-         where t.timesheet_id = $1::uuid
-           and t.is_current is true
-         limit 1
-       )
-       select jsonb_build_object(
-         'timesheet', to_jsonb(t),
-         'summary', case when s.timesheet_id is null then null else jsonb_build_object(
-           'timesheet_id', s.timesheet_id,
-           'candidate_id', s.candidate_id,
-           'client_id', s.client_id,
-           'candidate_name', s.candidate_name,
-           'client_name', s.client_name,
-           'contract_id', s.contract_id
-         ) end,
-         'financial', case when f.id is null then null else to_jsonb(f) end,
-         'contract', case when c.id is null then null else to_jsonb(c) end,
-         'client', case when cl.id is null then null else to_jsonb(cl) end,
-         'candidate', case when ca.id is null then null else to_jsonb(ca) end,
-         'settings', case when d.id is null then null else jsonb_build_object(
-           'agency_name', d.agency_name,
-           'agency_logo', d.agency_logo,
-           'timesheet_header_json', d.timesheet_header_json,
-           'timesheet_footer_json', d.timesheet_footer_json,
-           'temporary_worker_declaration_json', d.temporary_worker_declaration_json,
-           'client_declaration_json', d.client_declaration_json
-         ) end
-       ) as payload
-       from selected_timesheet t
-       left join lateral (
-         select summary.timesheet_id, summary.candidate_id, summary.client_id,
-                summary.candidate_name, summary.client_name, summary.contract_id
-         from public.v_timesheets_summary summary
-         where t.contract_id is null
-           and summary.timesheet_id = t.timesheet_id
-         limit 1
-       ) s on true
-       left join lateral (
-         select financial.*
-         from public.timesheets_financials financial
-         where financial.timesheet_id = t.timesheet_id
-           and financial.is_current is true
-         limit 1
-       ) f on true
-       left join lateral (
-         select contract_row.*
-         from public.contracts contract_row
-         where contract_row.id = coalesce(t.contract_id, s.contract_id)
-         limit 1
-       ) c on true
-       left join lateral (
-         select client_row.*
-         from public.clients client_row
-         where client_row.id = coalesce(c.client_id, s.client_id)
-         limit 1
-       ) cl on true
-       left join lateral (
-         select candidate_row.*
-         from public.candidates candidate_row
-         where candidate_row.id = coalesce(c.candidate_id, s.candidate_id)
-         limit 1
-       ) ca on true
-       left join lateral (
-         select defaults.*
-         from public.settings_defaults defaults
-         where defaults.id = 1
-         limit 1
-       ) d on true`,
+      optimizedMultiSql("$1"),
       [timesheetId],
     );
     payload = rows[0]?.payload ?? null;
@@ -616,7 +641,14 @@ export async function handleDbBenchmark(request: Request, env: DbBenchmarkEnv): 
     const timesheetId = requestedTimesheetId(url, test);
 
     if (action === "postgrest") {
-      const result = await runPostgrest(env, postgrestToken(request), test, timesheetId);
+      const requested = url.searchParams.get("variant") ?? "current";
+      if (requested !== "current" && requested !== "optimized") {
+        throw new BenchmarkHttpError(400, "Unsupported PostgREST benchmark variant");
+      }
+      if (requested === "optimized" && test !== "multi_read") {
+        throw new BenchmarkHttpError(400, "PostgREST optimized is supported only for multi_read");
+      }
+      const result = await runPostgrest(env, postgrestToken(request), test, requested, timesheetId);
       result.handler_elapsed_ms = milliseconds(handlerStartedAt);
       return benchmarkResponse(result);
     }
@@ -635,9 +667,9 @@ export async function handleDbBenchmark(request: Request, env: DbBenchmarkEnv): 
       let hyperdrive: PathMeasurement;
       if (order === "hyperdrive_first") {
         hyperdrive = await runHyperdrive(env, test, variant, timesheetId);
-        postgrest = await runPostgrest(env, token, test, timesheetId);
+        postgrest = await runPostgrest(env, token, test, "current", timesheetId);
       } else {
-        postgrest = await runPostgrest(env, token, test, timesheetId);
+        postgrest = await runPostgrest(env, token, test, "current", timesheetId);
         hyperdrive = await runHyperdrive(env, test, variant, timesheetId);
       }
       return benchmarkResponse({
