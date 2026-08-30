@@ -149,8 +149,8 @@ begin
     week_ending_date,idempotency_key,review_manifest_sha256,
     immutable_submission_json,immutable_submission_sha256
   ) values(
-    v_workflow,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','PAPER',
-    'WORKER_SUBMITTED',1,v_contract,v_week,null,null,current_date,
+    v_workflow,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','ELECTRONIC',
+    'READY_FOR_MANAGER_APPROVAL',1,v_contract,v_week,null,null,current_date,
     'paper-target-verification-'||v_workflow::text,
     extensions.digest('paper-target-verification-'||v_workflow::text,'sha256'),
     v_submission,private._candidate_sha256_jsonb_v1(v_submission)
@@ -206,11 +206,15 @@ begin
   end if;
 
   -- The real app offers Printed Documents after the electronic review pack is
-  -- ready.  Prove that exact state can enter the existing PAPER authority and
-  -- that a replay does not create another Timesheet, workflow or outbox item.
-  update public.candidate_submission_workflows
-  set state='READY_FOR_MANAGER_APPROVAL',route='ELECTRONIC',updated_at_utc=v_now
-  where id=v_workflow and generation=1;
+  -- ready.  Target preparation above must preserve that state, then the atomic
+  -- adapter enters the existing PAPER authority without creating another
+  -- Timesheet, workflow or outbox item.
+  if (select state from public.candidate_submission_workflows where id=v_workflow)
+       is distinct from 'READY_FOR_MANAGER_APPROVAL'
+     or (select route from public.candidate_submission_workflows where id=v_workflow)
+       is distinct from 'ELECTRONIC' then
+    raise exception 'CANDIDATE_WEEKLY_PAPER_TARGET_READY_STATE_NOT_PRESERVED';
+  end if;
   v_paper:=public.candidate_weekly_paper_prepare_atomic_v1(
     v_session,'TEST',v_workflow,'PAPER_PREPARE',1,'{}'::jsonb,
     'paper-ready-verification-'||v_workflow::text,v_now+interval '3 seconds'

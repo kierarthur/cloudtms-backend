@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const read = path => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
-const sql = read('supabase/repeatable/30082026_0550_candidate_weekly_paper_target_prepare_v1.sql');
+const sql = read('supabase/repeatable/30082026_0714_candidate_weekly_paper_target_ready_state_v1.sql');
 const backend = read('broker/src/candidate-app-backend.js');
 const release = JSON.parse(read('supabase/release/current-release.json'));
 const proofPath = 'supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql';
@@ -13,7 +13,7 @@ test('printed preparation materialises a missing weekly target through the exist
   assert.match(sql, /private\._candidate_session_context_v1\(/i);
   assert.match(sql, /v_workflow\.scope<>'WEEKLY'/i);
   assert.match(sql, /v_workflow\.workflow_kind not in \('CONTRACT_HOURS','CONTRACT_COMBINED'\)/i);
-  assert.match(sql, /v_workflow\.state not in \('WORKER_SUBMITTED','AWAITING_PAPER_RETURN'\)/i);
+  assert.match(sql, /v_workflow\.state not in \('READY_FOR_MANAGER_APPROVAL','WORKER_SUBMITTED','AWAITING_PAPER_RETURN'\)/i);
   assert.match(sql, /candidate_paper_submission_allowed/i);
   assert.match(sql, /CANDIDATE_WEEKLY_CANONICAL_AUTHORITY_V1/i);
   assert.match(sql, /contract_week_manual_upsert_atomic\(/i);

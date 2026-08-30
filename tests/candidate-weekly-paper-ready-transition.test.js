@@ -38,7 +38,7 @@ test('weekly PAPER adapter remains service-only', () => {
 });
 
 test('mandatory rollback proof executes ready-state transition and exact replay', () => {
-  assert.match(verification, /state='READY_FOR_MANAGER_APPROVAL'/i);
+  assert.match(verification, /'READY_FOR_MANAGER_APPROVAL'/i);
   assert.match(verification, /candidate_weekly_paper_prepare_atomic_v1\(/i);
   assert.match(verification, /AWAITING_PAPER_RETURN/i);
   assert.match(verification, /count\(\*\) from public\.mail_outbox/i);
