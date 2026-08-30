@@ -5344,17 +5344,29 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
   if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_FAILED') execution.state = 'FAILED_TERMINAL';
   const ready = execution.state === 'READY' && complete?.ready === true;
   return {
-    id, timesheet, version, key: complete?.key || null, ready,
+    id, workflow: workflows[0], timesheet, version, key: complete?.key || null, ready,
     state: execution.state, execution, complete, outbox
   };
 }
 
 async function handlePaperPackStatus(request, env, deps, timesheetId) {
   const context = await candidatePaperPackContext(request, env, deps, timesheetId);
+  const paperReturnPages = safePaperReturnPages(
+    parseJson(context.workflow.paper_return_manifest_json, {})
+  );
+  const manifestSha256 = text(context.workflow.paper_return_manifest_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  if (!paperReturnPages.length || !SHA256_RE.test(manifestSha256)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
   return jsonResponse(200, {
     ok: true,
+    workflow_id: context.workflow.id,
+    generation: Number(context.workflow.generation),
     timesheet_id: context.id,
     timesheet_version: Number(context.timesheet.version || 1),
+    paper_return_manifest_sha256: manifestSha256,
+    paper_return_pages: paperReturnPages,
     paper_pack_state: context.state,
     failure_scope: context.execution.failure_scope,
     failure_code: context.execution.failure_code,
@@ -5363,7 +5375,7 @@ async function handlePaperPackStatus(request, env, deps, timesheetId) {
     next_retry_at_utc: context.execution.next_retry_at_utc,
     retry_in_progress: context.execution.retry_in_progress,
     download_available: context.ready,
-    page_count: context.complete?.page_count || null
+    page_count: paperReturnPages.length
   });
 }
 

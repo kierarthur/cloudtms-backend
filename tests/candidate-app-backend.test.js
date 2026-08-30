@@ -3034,6 +3034,13 @@ test('paper pack readiness is a read-only durable-object receipt check', async (
   assert.doesNotMatch(readPath, /assembleCandidatePaperPack|restWrite|immutablePut/);
   assert.match(readPath, /readyPaperPackReceipt/);
   assert.match(readPath, /workflows\.length > 1[\s\S]*CANDIDATE_PAPER_WORKFLOW_CONFLICT/);
+  const statusEnd = source.indexOf('async function handlePaperPackDownload', readEnd);
+  const statusPath = source.slice(readEnd, statusEnd);
+  assert.match(statusPath, /workflow_id: context\.workflow\.id/);
+  assert.match(statusPath, /generation: Number\(context\.workflow\.generation\)/);
+  assert.match(statusPath, /paper_return_manifest_sha256: manifestSha256/);
+  assert.match(statusPath, /paper_return_pages: paperReturnPages/);
+  assert.match(statusPath, /page_count: paperReturnPages\.length/);
 });
 
 test('paper pack receipt rejects malformed hashes, generation and page-count metadata', async () => {
