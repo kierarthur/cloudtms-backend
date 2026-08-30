@@ -14,7 +14,7 @@ function functionBody(source, qualifiedName) {
   return source.slice(start, bodyEnd + '$function$;'.length);
 }
 
-const qrSource = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
+const qrSource = read('supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql');
 const invoiceCompleteSource = read(
   'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
     + '24072026_1217_invoice_work_complete_batch.sql'
@@ -65,6 +65,17 @@ test('QR enqueue atomically owns Candidate PAPER mail identity and hold state', 
   assert.match(sql, /payment_scope_json\s*=\s*v_mail_scope_json/i);
   assert.match(sql, /CANDIDATE_PAPER_OUTBOX_PRESERVED/i);
   assert.match(sql, /CANDIDATE_PAPER_MAIL_FAILED/i);
+});
+
+test('QR enqueue captures the official document revision after the final invalidating state change', () => {
+  const sql = functionBody(qrSource, 'public.timesheet_qr_send_enqueue_v1');
+  const statusUpdate = sql.indexOf("SET processing_status = 'AWAITING_MANUAL_SIGNATURE'");
+  const revisionCapture = sql.indexOf('SELECT t.document_revision', statusUpdate);
+  const snapshot = sql.indexOf('private._invoice_presentation_snapshot_batch', revisionCapture);
+  assert.ok(statusUpdate >= 0, 'final processing-state update is missing');
+  assert.ok(revisionCapture > statusUpdate, 'document revision must be captured after state invalidation');
+  assert.ok(snapshot > revisionCapture, 'document work must use the final captured revision');
+  assert.doesNotMatch(sql, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
 test('ordinary QR document completion cannot release a Candidate-bound mail row', () => {

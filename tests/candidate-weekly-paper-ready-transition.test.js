@@ -10,6 +10,7 @@ const adapter = read('broker/src/mytms-manager-control-adapter.js');
 const verification = read('supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql');
 const release = read('supabase/release/current-release.json');
 const contract = JSON.parse(read('supabase/release/current-contract.json'));
+const ownerReassert = read('supabase/repeatable/30082026_1540_candidate_weekly_paper_prepare_owner_reassert_v1.sql');
 
 test('weekly PAPER adapter accepts only the exact submitted and ready states', () => {
   assert.match(sql, /v_workflow\.state='READY_FOR_MANAGER_APPROVAL'/i);
@@ -87,9 +88,24 @@ test('pending PAPER status resumes the existing document then atomically complet
   assert.doesNotMatch(requeue, /timesheet_qr_send_enqueue_v1|immutablePut/i);
 });
 
+test('an older mail attachment never projects the current Candidate pack as ready', () => {
+  const executionState = backend.slice(
+    backend.indexOf('function candidatePaperExecutionState'),
+    backend.indexOf('async function candidatePaperPackContext')
+  );
+  assert.match(executionState, /if \(complete\?\.ready === true\)/i);
+  assert.doesNotMatch(
+    executionState,
+    /complete\?\.ready === true\s*\|\|\s*candidateCompletePackAttachmentMatchesScope/i
+  );
+});
+
 test('weekly PAPER adapter remains service-only', () => {
   assert.match(sql, /revoke all on function public\.candidate_weekly_paper_prepare_atomic_v1[\s\S]*from public,anon,authenticated/i);
   assert.match(sql, /grant execute on function public\.candidate_weekly_paper_prepare_atomic_v1[\s\S]*to service_role/i);
+  assert.match(ownerReassert, /alter function public\.candidate_weekly_paper_prepare_atomic_v1\([\s\S]*owner to postgres/i);
+  assert.match(ownerReassert, /revoke all on function public\.candidate_weekly_paper_prepare_atomic_v1[\s\S]*from public,anon,authenticated/i);
+  assert.match(ownerReassert, /grant execute on function public\.candidate_weekly_paper_prepare_atomic_v1[\s\S]*to service_role/i);
 });
 
 test('mandatory rollback proof executes ready-state transition and exact replay', () => {
@@ -99,6 +115,9 @@ test('mandatory rollback proof executes ready-state transition and exact replay'
   assert.match(verification, /count\(\*\) from public\.mail_outbox/i);
   assert.match(verification, /private\._invoice_document_advance_batch\(/i);
   assert.match(verification, /CANDIDATE_WEEKLY_QR_UNSIGNED_DOCUMENT_PLAN_FAILED/i);
+  assert.match(verification, /AWAITING_MANUAL_SIGNATURE/i);
+  assert.match(verification, /current_document\.source_revision=current_timesheet\.document_revision::text/i);
+  assert.match(verification, /current_timesheet\.document_state='QUEUED'/i);
   assert.match(verification, /ELECTRONIC_TIMESHEET/i);
   assert.match(verification, /ORDINARY_MANUAL_MISSING_ASSET_NOT_BLOCKED/i);
   assert.match(verification, /MANUAL_TIMESHEET_ASSET_REQUIRED/i);

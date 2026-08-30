@@ -43,7 +43,7 @@ test('new invoice plans omit attachment indexes and use official timesheet V2', 
 });
 
 test('QR enqueue creates V8 document work and never creates legacy PDF-outbox work', () => {
-  const source = read('supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql');
+  const source = read('supabase/repeatable/30082026_1232_candidate_qr_document_revision_order_v1.sql');
   const sql = functionBody(source, 'public.timesheet_qr_send_enqueue_v1');
   assert.match(sql, /insert into public\.invoice_operations/i);
   assert.match(sql, /insert into public\.invoice_document_versions/i);

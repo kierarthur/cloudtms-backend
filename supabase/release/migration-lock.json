@@ -811,6 +811,10 @@
       "sha256": "56553d790f3241b611a34d41ba8d0f17799b96a3eb72f8a077284c3534f0d865"
     },
     {
+      "path": "supabase/migrations/30082026_1352_candidate_paper_return_verified_page_receipts.sql",
+      "sha256": "cbb1c92b4d698fde455ee66e39fa05e16073c9a2d2e6587f5790cea8b19dec4f"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

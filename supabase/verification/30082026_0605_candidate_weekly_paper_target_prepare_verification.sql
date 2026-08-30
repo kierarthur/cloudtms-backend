@@ -29,6 +29,22 @@ declare
   v_replay jsonb;
   v_paper jsonb;
   v_paper_replay jsonb;
+  v_promote jsonb;
+  v_manifest jsonb;
+  v_manifest_hex text;
+  v_page jsonb;
+  v_qr jsonb;
+  v_proof jsonb;
+  v_prepare jsonb;
+  v_pack jsonb;
+  v_pack_replay jsonb;
+  v_verified_pages jsonb;
+  v_component uuid;
+  v_component_key uuid := gen_random_uuid();
+  v_pack_key uuid := gen_random_uuid();
+  v_bad_pack_key uuid := gen_random_uuid();
+  v_content_hash text;
+  v_bad_proof_failed boolean := false;
   v_plan_chunk uuid;
   v_plan_document_version uuid;
   v_plan_result jsonb;
@@ -240,7 +256,22 @@ begin
      or (select count(*) from public.timesheets where contract_id=v_contract and week_ending_date=current_date and is_current)<>1
      or (select count(*) from public.mail_outbox
          where type='TIMESHEET_QR'
-           and payment_scope_json->>'candidate_workflow_id'=v_workflow::text)<>1 then
+           and payment_scope_json->>'candidate_workflow_id'=v_workflow::text)<>1
+     or (select processing_status::text
+         from public.timesheets_financials
+         where timesheet_id=v_timesheet and is_current)
+          is distinct from 'AWAITING_MANUAL_SIGNATURE'
+     or not exists(
+       select 1
+       from public.timesheets current_timesheet
+       join public.invoice_document_versions current_document
+         on current_document.id=current_timesheet.current_document_version_id
+       where current_timesheet.timesheet_id=v_timesheet
+         and current_timesheet.is_current
+         and current_timesheet.document_state='QUEUED'
+         and current_document.source_revision=current_timesheet.document_revision::text
+         and current_document.entity_id=current_timesheet.timesheet_id
+     ) then
     raise exception 'CANDIDATE_WEEKLY_PAPER_READY_FIRST_USE_FAILED: %, %',v_paper,v_paper_replay;
   end if;
 
@@ -294,6 +325,125 @@ begin
          and error_json->>'code'='MANUAL_TIMESHEET_ASSET_REQUIRED'
      ) then
     raise exception 'CANDIDATE_WEEKLY_QR_UNSIGNED_DOCUMENT_PLAN_FAILED: %',v_plan_result;
+  end if;
+
+  -- New packs are promoted while the email is still held.  The returned
+  -- physical JPEG is first staged outside PostgreSQL, but no returned page is
+  -- accepted here until the exact full manifest is supplied in one call.
+  v_promote:=public.candidate_paper_manifest_v2_promote_v1(
+    v_session,'TEST',v_workflow,1,
+    v_paper->>'paper_return_manifest_sha256',v_now+interval '6 seconds'
+  );
+  select paper_return_manifest_json,
+         encode(paper_return_manifest_sha256,'hex')
+    into v_manifest,v_manifest_hex
+  from public.candidate_submission_workflows
+  where id=v_workflow;
+  if v_promote->>'manifest_version' is distinct from '2'
+     or v_manifest->>'qr_contract_version' is distinct from
+       'CANDIDATE_PAPER_PAGE_QR_V2'
+     or jsonb_array_length(v_manifest->'pages')<>1 then
+    raise exception 'CANDIDATE_PAPER_MANIFEST_V2_PROMOTION_FAILED: %',v_promote;
+  end if;
+
+  v_page:=v_manifest->'pages'->0;
+  v_qr:=jsonb_build_object(
+    'v',2,
+    'w',v_workflow::text,
+    't',v_timesheet::text,
+    'g',1,
+    'm',v_manifest_hex,
+    'o',(v_page->>'ordinal')::integer,
+    'p',v_page->>'page_key_sha256_16',
+    'k',v_page->>'page_kind_code',
+    'c',coalesce(v_page->>'category_code',''),
+    'n',(v_page->>'category_occurrence')::integer
+  );
+  v_proof:=public.candidate_paper_return_proof_validate_v2(
+    v_session,'TEST',v_workflow,1,v_manifest_hex,v_page->>'page_key',v_qr,
+    v_now+interval '7 seconds'
+  );
+  v_content_hash:=encode(extensions.digest(
+    'candidate-paper-pack-v2-first-use','sha256'
+  ),'hex');
+  v_prepare:=public.candidate_component_prepare_atomic_v1(
+    v_session,'TEST',v_workflow,1,jsonb_build_object(
+      'component_kind','SIGNED_RETURN',
+      'document_role','SIGNED_RETURN',
+      'paper_return_page_key',v_page->>'page_key',
+      'storage_key','candidate-paper-pack-v2/verification.jpg',
+      'media_type','image/jpeg',
+      'byte_size',4096
+    ),v_component_key::text,v_now+interval '8 seconds'
+  );
+  v_component:=(v_prepare->>'component_id')::uuid;
+  v_verified_pages:=jsonb_build_array(jsonb_build_object(
+    'ordinal',(v_page->>'ordinal')::integer,
+    'page_key',v_page->>'page_key',
+    'component_id',v_component,
+    'source_content_sha256',v_content_hash,
+    'byte_size',4096,
+    'media_type','image/jpeg',
+    'image_width',1600,
+    'image_height',1200,
+    'manifest_sha256',v_manifest_hex,
+    'qr_payload',v_qr,
+    'proof_receipt_sha256',v_proof->>'proof_receipt_sha256',
+    'qr_payload_sha256',v_proof->>'qr_payload_sha256'
+  ));
+
+  -- A syntactically valid but false proof must roll back the component
+  -- completion performed earlier in the same function invocation.
+  begin
+    perform public.candidate_paper_return_pack_complete_v2(
+      v_session,'TEST',v_workflow,1,
+      jsonb_set(v_verified_pages,'{0,proof_receipt_sha256}',
+        to_jsonb(repeat('0',64)),false),
+      v_bad_pack_key::text,v_now+interval '9 seconds'
+    );
+  exception when sqlstate '40001' then
+    v_bad_proof_failed:=true;
+  end;
+  if not v_bad_proof_failed
+     or (select state from public.candidate_submission_components
+         where id=v_component) is distinct from 'PENDING'
+     or (select state from public.candidate_submission_workflows
+         where id=v_workflow) is distinct from 'AWAITING_PAPER_RETURN' then
+    raise exception 'CANDIDATE_PAPER_PACK_PARTIAL_ACCEPTANCE_NOT_ROLLED_BACK';
+  end if;
+
+  v_pack:=public.candidate_paper_return_pack_complete_v2(
+    v_session,'TEST',v_workflow,1,v_verified_pages,
+    v_pack_key::text,v_now+interval '10 seconds'
+  );
+  if v_pack->>'state' is distinct from 'RECEIVED'
+     or v_pack->>'paper_return_pack_verified' is distinct from 'true'
+     or v_pack->>'paper_return_page_count' is distinct from '1'
+     or (select state from public.candidate_submission_components
+         where id=v_component) is distinct from 'IMMUTABLE'
+     or (select paper_return_proof_receipt_sha256 is not null
+         from public.candidate_submission_components
+         where id=v_component) is distinct from true
+     or (select state from public.candidate_submission_workflows
+         where id=v_workflow) is distinct from 'RECEIVED' then
+    raise exception 'CANDIDATE_PAPER_PACK_ATOMIC_FIRST_USE_FAILED: %',v_pack;
+  end if;
+
+  v_pack_replay:=public.candidate_paper_return_pack_complete_v2(
+    v_session,'TEST',v_workflow,1,v_verified_pages,
+    v_pack_key::text,v_now+interval '11 seconds'
+  );
+  if v_pack_replay->>'state' is distinct from 'RECEIVED'
+     or v_pack_replay->>'idempotent_replay' is distinct from 'true'
+     or v_pack_replay->>'paper_return_pack_verified' is distinct from 'true'
+     or v_pack_replay->>'paper_return_page_count' is distinct from '1'
+     or (select count(*) from public.candidate_submission_components
+         where workflow_id=v_workflow and component_kind='SIGNED_RETURN')<>1
+     or (select count(*) from public.audit_events
+         where object_type='candidate_workflow_mutation_receipt'
+           and object_id_text=v_workflow::text
+           and correlation_id=v_pack_key::text)<>1 then
+    raise exception 'CANDIDATE_PAPER_PACK_IDEMPOTENT_REPLAY_FAILED: %',v_pack_replay;
   end if;
 
   -- Preserve the opposite fail-closed rule: an ordinary MANUAL Timesheet with
@@ -377,6 +527,17 @@ begin
        'public.candidate_weekly_paper_prepare_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)',
        'EXECUTE') then
     raise exception 'CANDIDATE_WEEKLY_PAPER_READY_ACL_INVALID';
+  end if;
+  if pg_catalog.has_function_privilege('anon',
+       'public.candidate_paper_return_pack_complete_v2(uuid,text,uuid,integer,jsonb,text,timestamp with time zone)',
+       'EXECUTE')
+     or pg_catalog.has_function_privilege('authenticated',
+       'public.candidate_paper_return_pack_complete_v2(uuid,text,uuid,integer,jsonb,text,timestamp with time zone)',
+       'EXECUTE')
+     or not pg_catalog.has_function_privilege('service_role',
+       'public.candidate_paper_return_pack_complete_v2(uuid,text,uuid,integer,jsonb,text,timestamp with time zone)',
+       'EXECUTE') then
+    raise exception 'CANDIDATE_PAPER_PACK_ACL_INVALID';
   end if;
 end;
 $candidate_weekly_paper_target_prepare_verification$;

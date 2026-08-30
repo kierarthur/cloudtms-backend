@@ -1,4 +1,5 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import QRCode from 'qrcode';
 import {
   buildOfficialWeekPeriod,
   officialTimesheetNumber,
@@ -12,7 +13,12 @@ import {
 } from './candidate-daily-phase1b.js';
 import { isCandidateDailyPath, normalizeCandidateDailyBookedSource } from './candidate-daily-contract-v1.js';
 import { controlPlaneRpc } from '../../candidate-broker/src/control-plane-client.js';
-import { verifyCandidatePaperQrViaAdapter } from './mytms-manager-control-adapter.js';
+import {
+  buildCandidatePaperPageQrViaAdapter,
+  verifyCandidatePaperQrViaAdapter
+} from './mytms-manager-control-adapter.js';
+import { buildTsq2PagePayload } from './timesheet-qr-payload.js';
+import { decodeCandidatePaperQrTextsFromJpeg } from './candidate-paper-page-image.js';
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -88,6 +94,7 @@ const CONFLICT_ERROR_CODES = new Set([
   'CANDIDATE_BREAK_ENTRY_CONTEXT_STALE',
   'CANDIDATE_PAPER_QR_PROOF_STALE',
   'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
+  'CANDIDATE_PAPER_RETURN_PACK_STALE',
   'MANAGER_REVIEW_MANIFEST_MISMATCH'
 ]);
 
@@ -109,7 +116,9 @@ const COMPONENT_MEDIA_TYPES = Object.freeze({
   MILEAGE_FORM: ['image/png', 'image/jpeg', 'application/pdf'],
   SIGNED_RETURN: ['image/png', 'image/jpeg', 'application/pdf']
 });
-const PAPER_RETURN_PROOF_VERSION = 'CANDIDATE_PAPER_RETURN_PROOF_V1';
+const PAPER_RETURN_PROOF_V1 = 'CANDIDATE_PAPER_RETURN_PROOF_V1';
+const PAPER_RETURN_PROOF_V2 = 'CANDIDATE_PAPER_RETURN_PROOF_V2';
+const PAPER_PAGE_QR_V2 = 'CANDIDATE_PAPER_PAGE_QR_V2';
 const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
 
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
@@ -187,6 +196,24 @@ function requestId(request) {
 
 function text(value) {
   return String(value == null ? '' : value).trim();
+}
+
+function candidatePaperPagesError(status, code, pageKeys) {
+  const replacementPageKeys = [...new Set((Array.isArray(pageKeys) ? pageKeys : [])
+    .map((value) => text(value))
+    .filter((value) => value && value.length <= 256))].slice(0, 100);
+  return new CandidateHttpError(
+    status,
+    code,
+    code,
+    replacementPageKeys.length
+      ? { replacement_page_keys: replacementPageKeys }
+      : null
+  );
+}
+
+function candidatePaperPageError(status, code, pageKey) {
+  return candidatePaperPagesError(status, code, [pageKey]);
 }
 
 function upper(value) {
@@ -772,9 +799,13 @@ function errorResponse(error, correlationId, office = false) {
     CANDIDATE_BREAK_ENTRY_NOT_APPLICABLE: 'Break entry is not available for this timesheet route.',
     CANDIDATE_BREAK_ENTRY_REQUIRED: 'Enter the break for each worked period, or confirm that no break was taken.',
     CANDIDATE_PAPER_QR_UNREADABLE: 'The timesheet QR code could not be read. Take a clearer photograph of the full page.',
+    CANDIDATE_PAPER_QR_AMBIGUOUS: 'This image contains more than one page QR. Photograph one complete page at a time.',
     CANDIDATE_PAPER_QR_PROOF_MISMATCH: 'The photographed timesheet does not match this submission.',
     CANDIDATE_PAPER_QR_PROOF_FORBIDDEN: 'A QR code is not expected on this supporting page.',
     CANDIDATE_PAPER_QR_PROOF_STALE: 'The returned-paper upload changed. Start the upload again.',
+    CANDIDATE_PAPER_RETURN_PACK_STALE: 'One signed page no longer matches this document pack. Refresh it before trying again.',
+    CANDIDATE_PAPER_RETURN_PACK_INCOMPLETE: 'Photograph every signed page in this document pack before returning it.',
+    CANDIDATE_PAPER_RETURN_IMAGE_REQUIRED: 'Use one clear photograph or saved image for each signed page. PDF files are not accepted.',
     METHOD_NOT_ALLOWED: 'This operation does not support that HTTP method.'
   };
   const body = {
@@ -1865,6 +1896,35 @@ async function verifyUploadTicket(env, value) {
   return payload;
 }
 
+async function paperReturnStagedReceipt(env, payload) {
+  const now = Math.floor(Date.now() / 1000);
+  return sealEnvelope(
+    env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET,
+    'candidate-paper-return-stage-v2',
+    {
+      typ: 'candidate_paper_return_stage',
+      aud: 'cloudtms-paper-return-pack-v2',
+      iat: now,
+      exp: now + 24 * 60 * 60,
+      ...payload
+    }
+  );
+}
+
+async function verifyPaperReturnStagedReceipt(env, value) {
+  const payload = await openEnvelope(
+    env.CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET,
+    'candidate-paper-return-stage-v2',
+    value
+  );
+  if (!payload || payload.typ !== 'candidate_paper_return_stage'
+      || payload.aud !== 'cloudtms-paper-return-pack-v2'
+      || Number(payload.exp) <= Math.floor(Date.now() / 1000)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_PACK_STALE');
+  }
+  return payload;
+}
+
 function managerRouteAuthority(request) {
   const authorityKind = upper(request.headers.get('x-cloudtms-manager-route-authority'));
   if (!['MANAGER_EMAIL', 'MANAGER_PHONE'].includes(authorityKind)) {
@@ -1982,20 +2042,24 @@ async function validateCandidatePaperReturnProof(env, deps, access, workflowId, 
   ], ['qr_text'])) {
     throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_REQUIRED');
   }
-  if (proof.proof_contract_version !== PAPER_RETURN_PROOF_VERSION
+  const proofVersion = text(proof.proof_contract_version);
+  if (![PAPER_RETURN_PROOF_V1, PAPER_RETURN_PROOF_V2].includes(proofVersion)
       || !SHA256_RE.test(text(proof.paper_return_manifest_sha256))
       || text(proof.paper_return_page_key) !== text(body.paper_return_page_key)
       || !Number.isSafeInteger(proof.detected_qr_count)
       || proof.detected_qr_count < 0 || proof.detected_qr_count > 1) {
     throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_INVALID');
   }
-  let decodedToken = null;
+  if (proofVersion === PAPER_RETURN_PROOF_V2 && proof.detected_qr_count !== 1) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+  }
+  let decodedQr = null;
   if (proof.detected_qr_count === 1) {
     if (!text(proof.qr_text)) {
       throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
     }
     try {
-      decodedToken = (await verifyCandidatePaperQrViaAdapter(env, proof.qr_text)).tok;
+      decodedQr = await verifyCandidatePaperQrViaAdapter(env, proof.qr_text);
     } catch (error) {
       const code = text(error?.code || error?.message);
       if (code === 'TSQ1_SIGNING_SECRET_MISSING') {
@@ -2006,23 +2070,41 @@ async function validateCandidatePaperReturnProof(env, deps, access, workflowId, 
   } else if (Object.prototype.hasOwnProperty.call(proof, 'qr_text')) {
     throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_INVALID');
   }
-  const result = await rpcCall(deps, 'candidate_paper_return_proof_validate_v1', {
+  if (proofVersion === PAPER_RETURN_PROOF_V2 && Number(decodedQr?.v) !== 2) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+  }
+  if (proofVersion === PAPER_RETURN_PROOF_V1
+      && proof.detected_qr_count === 1 && Number(decodedQr?.v) !== 1) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_UNREADABLE');
+  }
+  const commonArgs = {
     p_session_id: access.session_id,
     p_environment: access.environment || environmentName(env),
     p_workflow_id: workflowId,
     p_expected_generation: generation,
     p_manifest_sha256_hex: text(proof.paper_return_manifest_sha256).toLowerCase(),
     p_page_key: text(proof.paper_return_page_key),
-    p_qr_token: decodedToken,
-    p_qr_token_sha256_hex: null,
     p_now_utc: new Date().toISOString()
-  });
-  if (result?.proof_contract_version !== PAPER_RETURN_PROOF_VERSION
+  };
+  const result = proofVersion === PAPER_RETURN_PROOF_V2
+    ? await rpcCall(deps, 'candidate_paper_return_proof_validate_v2', {
+      ...commonArgs,
+      p_qr_payload: decodedQr
+    })
+    : await rpcCall(deps, 'candidate_paper_return_proof_validate_v1', {
+      ...commonArgs,
+      p_qr_token: decodedQr?.tok || null,
+      p_qr_token_sha256_hex: null
+    });
+  if (result?.proof_contract_version !== proofVersion
       || result?.workflow_id !== workflowId
       || Number(result?.workflow_generation) !== generation
       || result?.paper_return_page_key !== text(proof.paper_return_page_key)
       || !SHA256_RE.test(text(result?.proof_receipt_sha256))
-      || (result?.qr_required === true && !SHA256_RE.test(text(result?.qr_token_sha256)))) {
+      || (proofVersion === PAPER_RETURN_PROOF_V1
+        && result?.qr_required === true && !SHA256_RE.test(text(result?.qr_token_sha256)))
+      || (proofVersion === PAPER_RETURN_PROOF_V2
+        && !SHA256_RE.test(text(result?.qr_payload_sha256)))) {
     throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_PROOF_UNAVAILABLE');
   }
   if (result.qr_required === true && proof.detected_qr_count !== 1) {
@@ -2031,28 +2113,131 @@ async function validateCandidatePaperReturnProof(env, deps, access, workflowId, 
   if (result.qr_required !== true && proof.detected_qr_count !== 0) {
     throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_FORBIDDEN');
   }
-  return result;
+  return {
+    ...result,
+    ...(proofVersion === PAPER_RETURN_PROOF_V2 ? { qr_payload: decodedQr } : {})
+  };
 }
 
 async function revalidateCandidatePaperReturnProof(env, deps, ticket, sessionId) {
   if (!ticket.paper_return_proof) return;
   const proof = ticket.paper_return_proof;
-  const result = await rpcCall(deps, 'candidate_paper_return_proof_validate_v1', {
+  const commonArgs = {
     p_session_id: sessionId,
     p_environment: ticket.env,
     p_workflow_id: ticket.workflow_id,
     p_expected_generation: Number(ticket.generation),
     p_manifest_sha256_hex: proof.paper_return_manifest_sha256,
     p_page_key: proof.paper_return_page_key,
-    p_qr_token: null,
-    p_qr_token_sha256_hex: proof.qr_token_sha256 || null,
     p_now_utc: new Date().toISOString()
-  });
+  };
+  const result = proof.proof_contract_version === PAPER_RETURN_PROOF_V2
+    ? await rpcCall(deps, 'candidate_paper_return_proof_validate_v2', {
+      ...commonArgs,
+      p_qr_payload: proof.qr_payload
+    })
+    : await rpcCall(deps, 'candidate_paper_return_proof_validate_v1', {
+      ...commonArgs,
+      p_qr_token: null,
+      p_qr_token_sha256_hex: proof.qr_token_sha256 || null
+    });
   if (result?.proof_receipt_sha256 !== proof.proof_receipt_sha256
       || result?.paper_return_page_key !== proof.paper_return_page_key
-      || Boolean(result?.qr_required) !== Boolean(proof.qr_required)) {
+      || Boolean(result?.qr_required) !== Boolean(proof.qr_required)
+      || (proof.proof_contract_version === PAPER_RETURN_PROOF_V2
+        && result?.qr_payload_sha256 !== proof.qr_payload_sha256)) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_QR_PROOF_STALE');
   }
+}
+
+async function candidatePaperReturnPackReceipts(env, access, workflowId, generation, receipts) {
+  if (!Array.isArray(receipts) || receipts.length < 1 || receipts.length > 100
+      || receipts.some((value) => typeof value !== 'string' || value.length < 40 || value.length > 32768)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_RETURN_PACK_INCOMPLETE');
+  }
+  const workflow = await workflowRow(env, workflowId);
+  if (workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id
+      || workflow.environment !== environmentName(env)
+      || Number(workflow.generation) !== generation
+      || upper(workflow.route) !== 'PAPER'
+      || !['AWAITING_PAPER_RETURN', 'RECEIVED', 'FINALISED'].includes(upper(workflow.state))) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_PACK_STALE');
+  }
+  const expectedPages = safePaperReturnPages(parseJson(workflow.paper_return_manifest_json, {}));
+  const manifestSha256 = text(workflow.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase();
+  if (!expectedPages.length || !SHA256_RE.test(manifestSha256)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_PAPER_RETURN_PACK_INCOMPLETE');
+  }
+  const expectedByKey = new Map(expectedPages.map((page) => [page.page_key, page]));
+  const seenPageKeys = new Set();
+  const verifiedPages = [];
+  for (const sealed of receipts) {
+    const receipt = await verifyPaperReturnStagedReceipt(env, sealed);
+    const pageKey = text(receipt.page_key);
+    const expected = expectedByKey.get(pageKey);
+    if (!expected || seenPageKeys.has(pageKey)
+        || receipt.environment !== environmentName(env)
+        || receipt.workflow_id !== workflowId
+        || Number(receipt.workflow_generation) !== generation
+        || receipt.candidate_session_id !== access.session_id
+        || text(receipt.manifest_sha256).toLowerCase() !== manifestSha256
+        || !UUID_RE.test(text(receipt.component_id))
+        || !SHA256_RE.test(text(receipt.source_content_sha256))
+        || !SHA256_RE.test(text(receipt.proof_receipt_sha256))
+        || !SHA256_RE.test(text(receipt.qr_payload_sha256))
+        || text(receipt.media_type).toLowerCase() !== 'image/jpeg'
+        || !Number.isSafeInteger(Number(receipt.byte_size)) || Number(receipt.byte_size) < 1
+        || !Number.isSafeInteger(Number(receipt.image_width)) || Number(receipt.image_width) < 1
+        || !Number.isSafeInteger(Number(receipt.image_height)) || Number(receipt.image_height) < 1) {
+      throw candidatePaperPagesError(
+        409,
+        'CANDIDATE_PAPER_RETURN_PACK_STALE',
+        expected && !seenPageKeys.has(pageKey) ? [pageKey] : []
+      );
+    }
+    const stored = await env.R2?.head(text(receipt.storage_key));
+    const metadata = stored?.customMetadata || {};
+    if (!stored
+        || text(metadata.purpose) !== 'candidate-component'
+        || text(metadata.workflow_id) !== workflowId
+        || text(metadata.component_id) !== receipt.component_id
+        || text(metadata.sha256).toLowerCase() !== text(receipt.source_content_sha256).toLowerCase()
+        || text(metadata.media_type).toLowerCase() !== 'image/jpeg'
+        || Number(metadata.byte_size) !== Number(receipt.byte_size)
+        || text(metadata.paper_return_proof_receipt_sha256).toLowerCase()
+          !== text(receipt.proof_receipt_sha256).toLowerCase()
+        || text(metadata.paper_return_qr_payload_sha256).toLowerCase()
+          !== text(receipt.qr_payload_sha256).toLowerCase()) {
+      throw candidatePaperPageError(409, 'CANDIDATE_PAPER_RETURN_PACK_STALE', pageKey);
+    }
+    seenPageKeys.add(pageKey);
+    verifiedPages.push({
+      ordinal: expected.ordinal,
+      component_id: receipt.component_id,
+      page_key: pageKey,
+      source_content_sha256: text(receipt.source_content_sha256).toLowerCase(),
+      byte_size: Number(receipt.byte_size),
+      media_type: 'image/jpeg',
+      image_width: Number(receipt.image_width),
+      image_height: Number(receipt.image_height),
+      manifest_sha256: manifestSha256,
+      qr_payload: receipt.qr_payload,
+      proof_receipt_sha256: text(receipt.proof_receipt_sha256).toLowerCase(),
+      qr_payload_sha256: text(receipt.qr_payload_sha256).toLowerCase()
+    });
+  }
+  const missingPageKeys = expectedPages
+    .filter((page) => !seenPageKeys.has(page.page_key))
+    .map((page) => page.page_key);
+  if (missingPageKeys.length || seenPageKeys.size !== expectedPages.length) {
+    throw candidatePaperPagesError(
+      400,
+      'CANDIDATE_PAPER_RETURN_PACK_INCOMPLETE',
+      missingPageKeys
+    );
+  }
+  return verifiedPages.sort((left, right) => left.ordinal - right.ordinal);
 }
 
 async function handleComponentPrepare(request, env, deps, workflowId, owner = 'candidate') {
@@ -2105,6 +2290,14 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     paperReturnProof = await validateCandidatePaperReturnProof(
       env, deps, candidateAccess, workflowId, generation, body
     );
+    if (paperReturnProof.proof_contract_version === PAPER_RETURN_PROOF_V2
+        && mediaType !== 'image/jpeg') {
+      throw candidatePaperPageError(
+        415,
+        'CANDIDATE_PAPER_RETURN_IMAGE_REQUIRED',
+        body.paper_return_page_key
+      );
+    }
   } else if (Object.prototype.hasOwnProperty.call(body, 'signed_return_proof')) {
     throw new CandidateHttpError(400, 'CANDIDATE_PAPER_QR_PROOF_FORBIDDEN');
   }
@@ -2190,11 +2383,13 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     ...(expectedContentSha256 ? { expected_content_sha256: expectedContentSha256 } : {}),
     ...(captureMethod ? { capture_method: captureMethod } : {}),
     ...(paperReturnProof ? { paper_return_proof: {
-      proof_contract_version: PAPER_RETURN_PROOF_VERSION,
+      proof_contract_version: paperReturnProof.proof_contract_version,
       paper_return_manifest_sha256: paperReturnProof.paper_return_manifest_sha256,
       paper_return_page_key: paperReturnProof.paper_return_page_key,
       qr_required: paperReturnProof.qr_required === true,
       qr_token_sha256: paperReturnProof.qr_token_sha256 || null,
+      qr_payload: paperReturnProof.qr_payload || null,
+      qr_payload_sha256: paperReturnProof.qr_payload_sha256 || null,
       proof_receipt_sha256: paperReturnProof.proof_receipt_sha256
     } } : {}),
     ...(authority?.authority_kind === 'MANAGER_EMAIL' ? {
@@ -2286,6 +2481,51 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
   if (ticket.expected_content_sha256 && digest !== ticket.expected_content_sha256) {
     throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_MISMATCH');
   }
+  let storedPaperQr = null;
+  if (ticket.paper_return_proof?.proof_contract_version === PAPER_RETURN_PROOF_V2) {
+    const replacementPageKey = ticket.paper_return_proof.paper_return_page_key;
+    if (contentType !== 'image/jpeg') {
+      throw candidatePaperPageError(415, 'CANDIDATE_PAPER_RETURN_IMAGE_REQUIRED', replacementPageKey);
+    }
+    let decoded;
+    try {
+      decoded = decodeCandidatePaperQrTextsFromJpeg(bytes);
+    } catch {
+      throw candidatePaperPageError(400, 'CANDIDATE_PAPER_QR_UNREADABLE', replacementPageKey);
+    }
+    const pageQrs = decoded.qr_texts.filter((value) => text(value).startsWith('TSQ2.'));
+    if (pageQrs.length !== 1) {
+      throw candidatePaperPageError(
+        400,
+        pageQrs.length ? 'CANDIDATE_PAPER_QR_AMBIGUOUS' : 'CANDIDATE_PAPER_QR_UNREADABLE',
+        replacementPageKey
+      );
+    }
+    let qrPayload;
+    try {
+      qrPayload = await verifyCandidatePaperQrViaAdapter(env, pageQrs[0]);
+    } catch (error) {
+      const code = text(error?.code || error?.message);
+      if (code === 'TSQ2_SIGNING_SECRET_MISSING') {
+        throw new CandidateHttpError(503, 'CANDIDATE_PAPER_QR_CONFIGURATION_UNAVAILABLE');
+      }
+      throw candidatePaperPageError(400, 'CANDIDATE_PAPER_QR_UNREADABLE', replacementPageKey);
+    }
+    if (Number(qrPayload?.v) !== 2
+        || JSON.stringify(qrPayload) !== JSON.stringify(ticket.paper_return_proof.qr_payload)) {
+      throw candidatePaperPageError(400, 'CANDIDATE_PAPER_QR_PROOF_MISMATCH', replacementPageKey);
+    }
+    const payloadHash = text(ticket.paper_return_proof.qr_payload_sha256).toLowerCase();
+    if (!SHA256_RE.test(payloadHash)) {
+      throw candidatePaperPageError(400, 'CANDIDATE_PAPER_QR_PROOF_MISMATCH', replacementPageKey);
+    }
+    storedPaperQr = {
+      payload_hash: payloadHash,
+      detected_qr_count: 1,
+      width: decoded.width,
+      height: decoded.height
+    };
+  }
   await revalidateCandidatePaperReturnProof(env, deps, ticket, owner.session_id);
   const stored = await bucket.put(ticket.key, bytes, {
     onlyIf: { etagDoesNotMatch: '*' },
@@ -2295,7 +2535,8 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
       byte_size: String(bytes.byteLength), sha256: digest,
       authority_kind: ticket.authority_kind,
       capture_method: ticket.capture_method || '',
-      paper_return_proof_receipt_sha256: ticket.paper_return_proof?.proof_receipt_sha256 || ''
+      paper_return_proof_receipt_sha256: ticket.paper_return_proof?.proof_receipt_sha256 || '',
+      paper_return_qr_payload_sha256: storedPaperQr?.payload_hash || ''
     }
   });
   if (!stored) {
@@ -2309,21 +2550,58 @@ async function handleComponentUpload(request, env, deps, encodedTicket) {
       throw new CandidateHttpError(409, 'CANDIDATE_UPLOAD_TICKET_ALREADY_USED');
     }
   }
+  const completionPayload = {
+    component_id: ticket.component_id, source_content_sha256_hex: digest,
+    verified_byte_size: bytes.byteLength, verified_media_type: contentType,
+    ...(ticket.capture_method ? { manager_signature_capture_method: ticket.capture_method } : {}),
+    ...(validated.width ? { verified_image_width: validated.width } : {}),
+    ...(validated.height ? { verified_image_height: validated.height } : {}),
+    ...(ticket.owner === 'office' ? { service_phone_approval: true, actor_user_id: ticket.owner_id } : {}),
+    ...(owner.approval_token_hash_hex ? { approval_token_hash_hex: owner.approval_token_hash_hex } : {})
+  };
+  if (storedPaperQr) {
+    const stagedReceipt = await paperReturnStagedReceipt(env, {
+      environment: ticket.env,
+      workflow_id: ticket.workflow_id,
+      workflow_generation: Number(ticket.generation),
+      candidate_session_id: owner.session_id,
+      component_id: ticket.component_id,
+      page_key: ticket.paper_return_proof.paper_return_page_key,
+      manifest_sha256: ticket.paper_return_proof.paper_return_manifest_sha256,
+      qr_payload: ticket.paper_return_proof.qr_payload,
+      proof_receipt_sha256: ticket.paper_return_proof.proof_receipt_sha256,
+      qr_payload_sha256: storedPaperQr.payload_hash,
+      storage_key: ticket.key,
+      source_content_sha256: digest,
+      byte_size: bytes.byteLength,
+      media_type: contentType,
+      image_width: storedPaperQr.width,
+      image_height: storedPaperQr.height
+    });
+    return jsonResponse(202, {
+      ok: true,
+      workflow_id: ticket.workflow_id,
+      generation: Number(ticket.generation),
+      component_id: ticket.component_id,
+      state: 'STAGED_FOR_PACK_CONFIRMATION',
+      media_type: contentType,
+      byte_size: bytes.byteLength,
+      content_sha256: digest,
+      idempotent_replay: !stored,
+      page_count: validated.page_count,
+      image_width: validated.width,
+      image_height: validated.height,
+      paper_return_staged: true,
+      staged_receipt: stagedReceipt
+    });
+  }
   const result = await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', {
-    p_session_id: owner.session_id, p_environment: ticket.env,
-    p_workflow_id: ticket.workflow_id, p_action: 'COMPONENT_COMPLETE',
-    p_expected_generation: Number(ticket.generation),
-    p_payload: {
-      component_id: ticket.component_id, source_content_sha256_hex: digest,
-        verified_byte_size: bytes.byteLength, verified_media_type: contentType,
-        ...(ticket.capture_method ? { manager_signature_capture_method: ticket.capture_method } : {}),
-        ...(validated.width ? { verified_image_width: validated.width } : {}),
-        ...(validated.height ? { verified_image_height: validated.height } : {}),
-        ...(ticket.owner === 'office' ? { service_phone_approval: true, actor_user_id: ticket.owner_id } : {}),
-      ...(owner.approval_token_hash_hex ? { approval_token_hash_hex: owner.approval_token_hash_hex } : {})
-    }, p_idempotency_key: ticket.completion_idempotency_key,
-    p_now_utc: new Date().toISOString()
-  });
+      p_session_id: owner.session_id, p_environment: ticket.env,
+      p_workflow_id: ticket.workflow_id, p_action: 'COMPONENT_COMPLETE',
+      p_expected_generation: Number(ticket.generation),
+      p_payload: completionPayload, p_idempotency_key: ticket.completion_idempotency_key,
+      p_now_utc: new Date().toISOString()
+    });
   return jsonResponse(200, {
     ok: true, workflow_id: ticket.workflow_id, generation: Number(ticket.generation),
     component_id: ticket.component_id, state: result.state, media_type: contentType,
@@ -3134,6 +3412,8 @@ async function renderExpensePage(env, contract, state, phase) {
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const branding = await candidateDocumentBranding(env, workflow);
+  const paperReturnQrText = text(contract.paper_return_qr_text);
+  const isPaperReturn = paperReturnQrText.startsWith('TSQ2.');
   page.drawRectangle({ x: 0, y: 790, width: page.getWidth(), height: 52, color: rgb(0.04, 0.12, 0.24) });
   await drawCandidateBranding(pdf, page, branding, { x: 420, y: 800, maxWidth: 135, maxHeight: 30 });
   page.drawText(component.component_kind === 'EXPENSE_SUMMARY' ? 'Expense claim approval summary' : 'Expense evidence', {
@@ -3142,7 +3422,11 @@ async function renderExpensePage(env, contract, state, phase) {
   page.drawText(`${branding.agency_name} | Page ${component.review_ordinal || contract.review_ordinal} | ${component.expense_category || 'General'}`, {
     x: 36, y: 797, size: 9, font: regular, color: rgb(0.86, 0.9, 0.96)
   });
-  const hasSource = await embedExpenseSource(pdf, page, env, component, contract.render_input, 760, 570);
+  const hasSource = await embedExpenseSource(
+    pdf, page, env, component, contract.render_input,
+    isPaperReturn ? 690 : 760,
+    isPaperReturn ? 500 : 570
+  );
   if (!hasSource) {
     const lines = expenseLines(workflow, component).slice(0, 24);
     if (upper(component.component_kind) === 'EXPENSE_SUMMARY') {
@@ -3178,6 +3462,14 @@ async function renderExpensePage(env, contract, state, phase) {
       }
     }
   }
+  if (isPaperReturn) {
+    await drawCandidatePaperPageQr(page, paperReturnQrText, {
+      x: page.getWidth() - 124,
+      y: 688,
+      size: 88,
+      label: text(contract.paper_return_display_name) || 'Page QR'
+    });
+  }
   page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
   if (phase === 'FINAL') {
     page.drawText(`Approved by ${workflow.manager_name || contract.manager?.name || ''}`, { x: 48, y: 116, size: 10, font: bold });
@@ -3191,6 +3483,18 @@ async function renderExpensePage(env, contract, state, phase) {
     const image = signature.data.data_url.startsWith('data:image/png') ? await pdf.embedPng(decoded) : await pdf.embedJpg(decoded);
     const scale = Math.min(180 / image.width, 55 / image.height);
     page.drawImage(image, { x: 330, y: 70, width: image.width * scale, height: image.height * scale });
+  } else if (isPaperReturn && upper(component.component_kind) === 'EXPENSE_SUMMARY') {
+    page.drawText('Manager name', { x: 48, y: 116, size: 10, font: bold });
+    page.drawLine({ start: { x: 132, y: 114 }, end: { x: 535, y: 114 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Manager signature', { x: 48, y: 77, size: 10, font: bold });
+    page.drawLine({ start: { x: 150, y: 75 }, end: { x: 340, y: 75 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 77, size: 10, font: bold });
+    page.drawLine({ start: { x: 404, y: 75 }, end: { x: 535, y: 75 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  } else if (isPaperReturn) {
+    page.drawText('Manager signature', { x: 48, y: 102, size: 10, font: bold });
+    page.drawLine({ start: { x: 48, y: 68 }, end: { x: 340, y: 68 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 102, size: 10, font: bold });
+    page.drawLine({ start: { x: 370, y: 68 }, end: { x: 535, y: 68 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
   } else {
     page.drawText('Hiring manager review', { x: 48, y: 112, size: 11, font: bold });
     page.drawText('Review this page together with every page in the manifest before approval.', { x: 48, y: 91, size: 9, font: regular });
@@ -3493,6 +3797,11 @@ function normaliseCandidateWorkflowCreatePayload(value) {
 function safePaperReturnPages(value) {
   const source = isObject(value) ? value : {};
   const pages = Array.isArray(source.pages) ? source.pages : [];
+  const manifestVersion = Number(source.manifest_version || 1);
+  if (![1, 2].includes(manifestVersion)
+      || (manifestVersion === 2 && source.qr_contract_version !== PAPER_PAGE_QR_V2)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+  }
   return pages.map((page, index) => {
     if (!isObject(page) || !text(page.page_key).trim() || !text(page.component_kind).trim()) {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
@@ -3501,14 +3810,39 @@ function safePaperReturnPages(value) {
     const pageKey = text(page.page_key).trim();
     const sourceComponentId = page.source_component_id == null
       ? null : requireUuid(page.source_component_id, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    const storageCategory = componentKind === 'EXPENSE_SUMMARY'
+      ? 'OTHER'
+      : (page.expense_category == null ? null : upper(page.expense_category));
+    if (manifestVersion === 2) {
+      if (Number(page.ordinal) !== index + 1
+          || !text(page.display_name).trim()
+          || !/^[TSME]$/.test(text(page.page_kind_code))
+          || !/^(?:A|M|O|T)?$/.test(text(page.category_code))
+          || !/^[0-9a-f]{16}$/i.test(text(page.page_key_sha256_16))
+          || !Number.isSafeInteger(Number(page.category_occurrence))
+          || Number(page.category_occurrence) < 1
+          || page.qr_required !== true) {
+        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+      }
+    }
     return {
       ordinal: index + 1,
       page_key: pageKey,
       component_kind: componentKind,
-      expense_category: page.expense_category == null
-        ? null : upper(page.expense_category),
+      expense_category: storageCategory,
       source_component_id: sourceComponentId,
-      qr_required: componentKind === 'HOURS_TIMESHEET' && pageKey === 'HOURS_TIMESHEET'
+      qr_required: manifestVersion === 2
+        ? true
+        : componentKind === 'HOURS_TIMESHEET' && pageKey === 'HOURS_TIMESHEET',
+      ...(manifestVersion === 2 ? {
+        display_name: text(page.display_name).trim(),
+        manifest_version: manifestVersion,
+        qr_contract_version: PAPER_PAGE_QR_V2,
+        category_occurrence: Number(page.category_occurrence),
+        page_kind_code: text(page.page_kind_code),
+        category_code: text(page.category_code),
+        page_key_sha256_16: text(page.page_key_sha256_16).toLowerCase()
+      } : {})
     };
   });
 }
@@ -4442,7 +4776,26 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
   }
   const managerRoutesToRetire = dbAction === 'CANCEL'
     ? await currentManagerEmailRouteTickets(env, workflowId) : [];
-  const result = replayResult || await rpcCall(
+  let result = replayResult;
+  if (!result && dbAction === 'PAPER_RETURN') {
+    const paperWorkflow = await workflowRow(env, workflowId);
+    const paperManifest = parseJson(paperWorkflow.paper_return_manifest_json, {}) || {};
+    if (Number(paperManifest.manifest_version) === 2) {
+      const verifiedPages = await candidatePaperReturnPackReceipts(
+        env, access, workflowId, generation, payload.paper_return_receipts
+      );
+      result = await rpcCall(deps, 'candidate_paper_return_pack_complete_v2', {
+        p_session_id: access.session_id,
+        p_environment: access.environment || environmentName(env),
+        p_workflow_id: workflowId,
+        p_expected_generation: generation,
+        p_verified_pages: verifiedPages,
+        p_idempotency_key: mutationKey,
+        p_now_utc: new Date().toISOString()
+      });
+    }
+  }
+  result = result || await rpcCall(
     deps, dbAction === 'PAPER_PREPARE'
       ? 'candidate_weekly_paper_prepare_atomic_v1'
       : 'candidate_workflow_transition_atomic_v1',
@@ -4476,6 +4829,20 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     return jsonResponse(202, { ...withoutInternalRenderContracts(result), review_rendering_accepted: true });
   }
   if (dbAction === 'PAPER_PREPARE' && result?.state === 'AWAITING_PAPER_RETURN') {
+    const promoted = await rpcCall(deps, 'candidate_paper_manifest_v2_promote_v1',
+      candidateRpcArgs(access, env, {
+        p_workflow_id: workflowId,
+        p_expected_generation: generation,
+        p_expected_v1_manifest_sha256_hex:
+          text(result?.paper_return_manifest_sha256).replace(/^\\x/i, '').toLowerCase(),
+        p_now_utc: new Date().toISOString()
+      }));
+    if (promoted?.ok !== true
+        || Number(promoted?.manifest_version) !== 2
+        || promoted?.qr_contract_version !== PAPER_PAGE_QR_V2
+        || !SHA256_RE.test(text(promoted?.paper_return_manifest_sha256))) {
+      throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
+    }
     const workflow = await workflowRow(env, workflowId);
     const timesheetId = workflow.target_timesheet_id || workflow.anchor_timesheet_id;
     if (!timesheetId) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_NOT_READY');
@@ -4483,7 +4850,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       parseJson(workflow.paper_return_manifest_json, {})
     );
     if (!paperReturnPages.length
-        || paperReturnPages.length !== Number(result?.paper_return_page_count)) {
+        || paperReturnPages.length !== Number(promoted?.paper_return_page_count)) {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
     }
     const pack = result?.paper_pack;
@@ -4492,6 +4859,11 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     const { paper_pack: _privatePaperPack, ...publicResult } = result;
     return jsonResponse(202, {
       ...publicResult,
+      paper_return_manifest_sha256:
+        text(promoted.paper_return_manifest_sha256).toLowerCase(),
+      paper_return_page_count: Number(promoted.paper_return_page_count),
+      paper_return_manifest_version: 2,
+      paper_return_qr_contract_version: PAPER_PAGE_QR_V2,
       paper_pack_queued: pack?.queued === true,
       paper_pack: safeQrPackResponse(pack),
       paper_pack_email_bound: outboxBinding.bound,
@@ -4766,6 +5138,87 @@ async function appendPdfBytes(target, sourceBytes) {
   for (const page of pages) target.addPage(page);
 }
 
+async function drawCandidatePaperPageQr(page, qrText, {
+  x, y, size, label = 'Page QR'
+}) {
+  const value = text(qrText).trim();
+  if (!value.startsWith('TSQ2.')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
+  }
+  const qr = QRCode.create(value, { errorCorrectionLevel: 'L' });
+  const quiet = 4;
+  const modules = qr.modules.size + quiet * 2;
+  const moduleSize = size / modules;
+  const originX = x + quiet * moduleSize;
+  const originY = y + quiet * moduleSize;
+  page.drawRectangle({
+    x, y, width: size, height: size,
+    color: rgb(1, 1, 1),
+    borderColor: rgb(0.04, 0.12, 0.24),
+    borderWidth: 0.8
+  });
+  for (let row = 0; row < qr.modules.size; row += 1) {
+    for (let column = 0; column < qr.modules.size; column += 1) {
+      if (!qr.modules.get(row, column)) continue;
+      page.drawRectangle({
+        x: originX + column * moduleSize,
+        y: originY + (qr.modules.size - row - 1) * moduleSize,
+        width: moduleSize,
+        height: moduleSize,
+        color: rgb(0, 0, 0)
+      });
+    }
+  }
+  if (label) {
+    const font = await page.doc.embedFont(StandardFonts.HelveticaBold);
+    const fontSize = 7;
+    const labelWidth = font.widthOfTextAtSize(label, fontSize);
+    page.drawRectangle({
+      x, y: y - 13, width: size, height: 13,
+      color: rgb(1, 1, 1)
+    });
+    page.drawText(label, {
+      x: x + Math.max(2, (size - labelWidth) / 2),
+      y: y - 10,
+      size: fontSize,
+      font,
+      color: rgb(0.04, 0.12, 0.24)
+    });
+  }
+}
+
+async function candidatePaperPageQrText(env, workflow, timesheet, page) {
+  const payload = await buildTsq2PagePayload({
+    workflow_id: workflow.id,
+    timesheet_id: timesheet.timesheet_id,
+    workflow_generation: Number(workflow.generation),
+    paper_return_manifest_sha256: text(workflow.paper_return_manifest_sha256)
+      .replace(/^\\x/i, '').toLowerCase(),
+    ordinal: Number(page.ordinal),
+    page_key: page.page_key,
+    page_kind: page.page_kind_code,
+    category_code: page.category_code,
+    category_occurrence: Number(page.category_occurrence)
+  });
+  return buildCandidatePaperPageQrViaAdapter(env, payload);
+}
+
+async function timesheetPaperPageBytes(sourceBytes, qrText) {
+  const pdf = await PDFDocument.load(sourceBytes, { updateMetadata: false });
+  if (pdf.getPageCount() !== 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_PAGE_COUNT_INVALID');
+  }
+  const page = pdf.getPage(0);
+  const size = Math.min(page.getWidth(), page.getHeight()) * (28 / 210);
+  await drawCandidatePaperPageQr(page, qrText, {
+    x: (page.getWidth() - size) / 2,
+    y: page.getHeight() - ((17 / 210) * page.getHeight()) - size,
+    size,
+    label: ''
+  });
+  return new Uint8Array(await pdf.save());
+}
+
 function mileageJourneyRows(workflow) {
   const { expenseSubmission } = expenseClaim(workflow);
   const source = [expenseSubmission.mileage_journeys, expenseSubmission.journeys, expenseSubmission.mileage_entries]
@@ -4779,7 +5232,10 @@ function mileageJourneyRows(workflow) {
   return rows;
 }
 
-async function mileageClaimFormBytes(env, workflow, brandingOverride = null, presentationOverride = null) {
+async function mileageClaimFormBytes(
+  env, workflow, brandingOverride = null, presentationOverride = null,
+  paperReturnQrText = null, paperReturnDisplayName = 'Mileage form'
+) {
   const pdf = await PDFDocument.create({ updateMetadata: false });
   const page = pdf.addPage([595.28, 841.89]);
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -4798,47 +5254,68 @@ async function mileageClaimFormBytes(env, workflow, brandingOverride = null, pre
     x: 42, y: 755, size: 10, font: regular, color: rgb(0.07, 0.14, 0.24)
   });
   page.drawText(`Client: ${text(presentation.client?.name) || '-'}`, {
-    x: 315, y: 755, size: 10, font: regular, color: rgb(0.07, 0.14, 0.24)
+    x: 42, y: 728, size: 10, font: regular, color: rgb(0.07, 0.14, 0.24)
   });
+  if (paperReturnQrText) {
+    await drawCandidatePaperPageQr(page, paperReturnQrText, {
+      x: 465, y: 682, size: 88, label: paperReturnDisplayName
+    });
+  }
   const columns = [
     { label: 'Post Code from', x: 42, width: 180 },
     { label: 'Post Code To', x: 222, width: 180 },
     { label: 'Number of miles', x: 402, width: 151 }
   ];
-  const headerY = 712;
+  const headerY = paperReturnQrText ? 638 : 712;
   for (const column of columns) {
     page.drawRectangle({ x: column.x, y: headerY, width: column.width, height: 30, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
     page.drawText(column.label, { x: column.x + 8, y: headerY + 10, size: 10, font: bold, color: rgb(0.07, 0.14, 0.24) });
   }
   const journeys = mileageJourneyRows(workflow);
   journeys.forEach((journey, index) => {
-    const y = headerY - ((index + 1) * 38);
+    const rowHeight = paperReturnQrText ? 31 : 38;
+    const y = headerY - ((index + 1) * rowHeight);
     const values = [journey.post_code_from, journey.post_code_to, journey.miles];
     columns.forEach((column, columnIndex) => {
-      page.drawRectangle({ x: column.x, y, width: column.width, height: 38, borderColor: rgb(0.35, 0.42, 0.5), borderWidth: 0.8 });
-      if (values[columnIndex]) page.drawText(values[columnIndex].slice(0, 26), { x: column.x + 8, y: y + 13, size: 9, font: regular });
+      page.drawRectangle({ x: column.x, y, width: column.width, height: rowHeight, borderColor: rgb(0.35, 0.42, 0.5), borderWidth: 0.8 });
+      if (values[columnIndex]) page.drawText(values[columnIndex].slice(0, 26), { x: column.x + 8, y: y + Math.max(9, rowHeight / 2 - 3), size: 9, font: regular });
     });
   });
   const totalMileage = text(expenseSubmission.total_mileage ?? claim.mileage_units ?? expenseSubmission.mileage_units) || '0';
-  page.drawText(`Total mileage: ${totalMileage}`, { x: 402, y: 278, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
-  page.drawRectangle({ x: 42, y: 120, width: 511, height: 110, borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
-  page.drawText('Manager signature', { x: 56, y: 205, size: 10, font: bold });
-  page.drawText('Date', { x: 370, y: 205, size: 10, font: bold });
-  page.drawLine({ start: { x: 56, y: 150 }, end: { x: 330, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-  page.drawLine({ start: { x: 370, y: 150 }, end: { x: 530, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  page.drawText(`Total mileage: ${totalMileage}`, { x: 402, y: paperReturnQrText ? 275 : 278, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
+  if (paperReturnQrText) {
+    // QR packs add their one consistent signing footer when the held pack is
+    // rendered.  The standalone mileage form below retains its established
+    // signing area, so neither route can show two signature/date sections.
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawText('Manager signature', { x: 48, y: 102, size: 10, font: bold });
+    page.drawLine({ start: { x: 48, y: 68 }, end: { x: 340, y: 68 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 102, size: 10, font: bold });
+    page.drawLine({ start: { x: 370, y: 68 }, end: { x: 535, y: 68 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  } else {
+    page.drawRectangle({ x: 42, y: 120, width: 511, height: 110, borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+    page.drawText('Manager signature', { x: 56, y: 205, size: 10, font: bold });
+    page.drawText('Date', { x: 370, y: 205, size: 10, font: bold });
+    page.drawLine({ start: { x: 56, y: 150 }, end: { x: 330, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawLine({ start: { x: 370, y: 150 }, end: { x: 530, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+  }
   page.drawText('This page forms part of the immutable CloudTMS paper-return manifest.', {
-    x: 42, y: 58, size: 8, font: regular, color: rgb(0.35, 0.4, 0.48)
+    x: 42, y: paperReturnQrText ? 164 : 58, size: 8, font: regular, color: rgb(0.35, 0.4, 0.48)
   });
   page.drawText(`Workflow ${workflow.id} | Generation ${workflow.generation}`, {
-    x: 42, y: 43, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5)
+    x: 42, y: paperReturnQrText ? 150 : 43, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5)
   });
   return new Uint8Array(await pdf.save());
 }
 
-async function paperExpensePageBytes(env, workflow, component, ordinal) {
-  if (upper(component.component_kind) === 'MILEAGE_FORM') return mileageClaimFormBytes(env, workflow);
+async function paperExpensePageBytes(env, workflow, component, ordinal, pageQrText, displayName) {
+  if (upper(component.component_kind) === 'MILEAGE_FORM') {
+    return mileageClaimFormBytes(env, workflow, null, null, pageQrText, displayName);
+  }
   const rendered = await renderExpensePage(env, {
     review_ordinal: ordinal,
+    paper_return_qr_text: pageQrText,
+    paper_return_display_name: displayName,
     render_input: upper(component.component_kind) === 'EXPENSE_SUMMARY'
       ? {} : { source_component_id: component.id }
   }, { workflow, component }, 'REVIEW');
@@ -4961,7 +5438,12 @@ function candidatePaperExecutionState(workflow, outbox = null, timesheet = null,
   if (scope.candidate_paper_generation_retired === true) {
     return { ...common, state: 'RETIRED', retryable: false };
   }
-  if (complete?.ready === true || candidateCompletePackAttachmentMatchesScope(outbox)) {
+  // The outbox attachment proves what was sent, but an active Candidate
+  // download must also prove that the exact pack still matches the current
+  // Timesheet document revision in R2.  A source revision can legitimately
+  // become stale after the mail row was released; never project that older
+  // attachment as the current downloadable pack.
+  if (complete?.ready === true) {
     return { ...common, state: 'READY', retryable: false, failure_code: null };
   }
   if (scope.candidate_paper_pack_retryable === true
@@ -5223,7 +5705,7 @@ async function releaseCandidatePaperPack(
 
 async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   const manifest = parseJson(workflow.paper_return_manifest_json, {}) || {};
-  const pages = Array.isArray(manifest.pages) ? manifest.pages : [];
+  const pages = safePaperReturnPages(manifest);
   if (!pages.length || !workflow.paper_return_manifest_sha256) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_RETURN_MANIFEST_STALE');
   }
@@ -5249,15 +5731,20 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
   for (let index = 0; index < pages.length; index += 1) {
     const expected = pages[index];
     const kind = upper(expected.component_kind);
+    const pageQrText = expected.manifest_version === 2
+      ? await candidatePaperPageQrText(env, workflow, timesheet, expected)
+      : null;
     if (kind === 'HOURS_TIMESHEET') {
-      await appendPdfBytes(combined, base.bytes);
+      await appendPdfBytes(combined, pageQrText
+        ? await timesheetPaperPageBytes(base.bytes, pageQrText)
+        : base.bytes);
       continue;
     }
     let component = null;
     if (kind === 'EXPENSE_SUMMARY') {
       component = components.find((entry) => upper(entry.component_kind) === 'EXPENSE_SUMMARY') || {
         id: workflow.id, component_kind: 'EXPENSE_SUMMARY', document_role: 'EXPENSE_APPROVAL_SUMMARY',
-        expense_category: null, review_ordinal: index + 1
+        expense_category: 'OTHER', review_ordinal: index + 1
       };
     } else {
       component = byId.get(text(expected.source_component_id));
@@ -5265,7 +5752,9 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
     if (!component || upper(component.component_kind) !== kind) {
       throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_MISSING');
     }
-    await appendPdfBytes(combined, await paperExpensePageBytes(env, workflow, component, index + 1));
+    await appendPdfBytes(combined, await paperExpensePageBytes(
+      env, workflow, component, index + 1, pageQrText, expected.display_name
+    ));
   }
   if (combined.getPageCount() !== pages.length) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_INCOMPLETE');
   const bytes = new Uint8Array(await combined.save());

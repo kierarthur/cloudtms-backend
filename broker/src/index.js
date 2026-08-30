@@ -57,12 +57,14 @@ import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import {
   handleMyTmsManagerControlAdapter,
   handleMyTmsPaperDocumentNudgeAdapter,
+  handleMyTmsPaperQrSignAdapter,
   handleMyTmsPaperQrVerifyAdapter,
   managerControlPlaneRpc,
   nudgeCandidatePaperDocumentViaAdapter,
   purgeMyTmsManagerControlAdapterNonces,
   MYTMS_MANAGER_CONTROL_ADAPTER_PATH,
   MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH,
+  MYTMS_PAPER_QR_SIGN_ADAPTER_PATH,
   MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH
 } from './mytms-manager-control-adapter.js';
 import {
@@ -196088,6 +196090,10 @@ export default {
 
     if (req.method === 'POST' && p === MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH) {
       return handleMyTmsPaperQrVerifyAdapter(req, env);
+    }
+
+    if (req.method === 'POST' && p === MYTMS_PAPER_QR_SIGN_ADAPTER_PATH) {
+      return handleMyTmsPaperQrSignAdapter(req, env);
     }
 
     if (req.method === 'POST' && p === MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH) {

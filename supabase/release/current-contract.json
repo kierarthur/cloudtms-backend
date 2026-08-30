@@ -14824,11 +14824,107 @@
         "search_path=pg_catalog, public, private, extensions, pg_temp"
       ],
       "schema": "public",
+      "identity": "candidate_paper_manifest_v2_promote_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_expected_v1_manifest_sha256_hex text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6326cdf184832e9c2d8c3bc2a2d45a7475f86bffd5214e4aff6472725f9ce9e4"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_paper_return_component_complete_v2(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_component_id uuid, p_source_content_sha256_hex text, p_verified_byte_size bigint, p_verified_media_type text, p_verified_image_width integer, p_verified_image_height integer, p_manifest_sha256_hex text, p_page_key text, p_qr_payload jsonb, p_proof_receipt_sha256_hex text, p_qr_payload_sha256_hex text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "6a64e6b2fee1d4f8341a7010591d7d069140c11d2e21d6a12499b05ae309389c"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_paper_return_pack_complete_v2(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_verified_pages jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "84b58d321f0939640407f626a86e509af95a363d398fae76c2468c8b3b852cc6"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
       "identity": "candidate_paper_return_proof_validate_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_manifest_sha256_hex text, p_page_key text, p_qr_token text, p_qr_token_sha256_hex text, p_now_utc timestamp with time zone)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "56d8f9158c0c4021f71dfec4e4b5bcf036ffaa8c546e586187a855f56948db18"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_paper_return_proof_validate_v2(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_manifest_sha256_hex text, p_page_key text, p_qr_payload jsonb, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "d52c166cf7fa290dcf0fd97e28053cf24cc0d5fb2372801e402379496c46e21b"
     },
     {
       "acl": [
@@ -27269,7 +27365,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "dc4a3e13a24279c19ec93961be6a900fbb685f7557b29057178178ee495c0fdf"
+      "definition_sha256": "090fcbd7a66ade81f107635c360a038a514a5c26358c0b4aa716bdea91245347"
     },
     {
       "acl": [
@@ -56472,6 +56568,30 @@
           "generated": ""
         },
         {
+          "name": "paper_return_proof_receipt_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "paper_return_qr_payload_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "paper_return_verified_at_utc",
+          "type": "timestamp with time zone",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "required",
           "type": "boolean",
           "default": "false",
@@ -56836,6 +56956,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (component_kind = 'SIGNED_RETURN'::text AND NULLIF(btrim(paper_return_page_key), ''::text) IS NOT NULL OR component_kind <> 'SIGNED_RETURN'::text AND paper_return_page_key IS NULL)"
+        },
+        {
+          "name": "candidate_submission_components_paper_qr_receipt_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (paper_return_proof_receipt_sha256 IS NULL AND paper_return_qr_payload_sha256 IS NULL AND paper_return_verified_at_utc IS NULL OR component_kind = 'SIGNED_RETURN'::text AND state = 'IMMUTABLE'::text AND paper_return_proof_receipt_sha256 IS NOT NULL AND octet_length(paper_return_proof_receipt_sha256) = 32 AND paper_return_qr_payload_sha256 IS NOT NULL AND octet_length(paper_return_qr_payload_sha256) = 32 AND paper_return_verified_at_utc IS NOT NULL)"
         },
         {
           "name": "candidate_submission_components_pkey",

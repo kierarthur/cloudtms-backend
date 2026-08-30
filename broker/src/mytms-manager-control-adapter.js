@@ -3,12 +3,18 @@ import {
   signCandidatePrivateRequest,
   verifyCandidatePrivateRequest
 } from './candidate-service-auth.js';
-import { verifyTsq1String } from './timesheet-qr-payload.js';
+import {
+  buildTsq2String,
+  verifyTsq1String,
+  verifyTsq2String
+} from './timesheet-qr-payload.js';
 
 export const MYTMS_MANAGER_CONTROL_ADAPTER_PATH =
   '/private/mytms-control/v1/manager-route-rpc';
 export const MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH =
   '/private/mytms-control/v1/paper-qr-verify';
+export const MYTMS_PAPER_QR_SIGN_ADAPTER_PATH =
+  '/private/mytms-control/v1/paper-qr-sign';
 export const MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH =
   '/private/mytms-control/v1/paper-document-nudge';
 
@@ -147,13 +153,45 @@ export async function handleMyTmsPaperQrVerifyAdapter(request, env) {
         || text(body.qr_text).length < 20 || text(body.qr_text).length > 4096) {
       return json(400, { ok: false, error_code: 'MYTMS_PAPER_QR_REQUEST_INVALID' });
     }
-    const verified = await verifyTsq1String(body.qr_text, env);
+    const verified = text(body.qr_text).startsWith('TSQ2.')
+      ? await verifyTsq2String(body.qr_text, env)
+      : await verifyTsq1String(body.qr_text, env);
     return json(200, { ok: true, result: verified });
   } catch (error) {
     const candidate = text(error?.code || error?.message || error).toUpperCase();
     const errorCode = /^[A-Z][A-Z0-9_]{2,100}$/.test(candidate)
       ? candidate : 'MYTMS_PAPER_QR_UNAVAILABLE';
-    const status = ['TSQ1_FORMAT_INVALID', 'TSQ1_SIGNATURE_INVALID', 'TSQ1_PAYLOAD_INVALID']
+    const status = [
+      'TSQ1_FORMAT_INVALID', 'TSQ1_SIGNATURE_INVALID', 'TSQ1_PAYLOAD_INVALID',
+      'TSQ2_FORMAT_INVALID', 'TSQ2_SIGNATURE_INVALID', 'TSQ2_PAYLOAD_INVALID'
+    ]
+      .includes(errorCode) ? 400 : 503;
+    return json(status, { ok: false, error_code: errorCode });
+  }
+}
+
+export async function handleMyTmsPaperQrSignAdapter(request, env) {
+  if (request.method !== 'POST'
+      || new URL(request.url).pathname !== MYTMS_PAPER_QR_SIGN_ADAPTER_PATH) {
+    return json(404, { ok: false, error_code: 'MYTMS_PAPER_QR_ROUTE_NOT_FOUND' });
+  }
+  try {
+    if (!await verifyCandidatePrivateRequest(request, adapterAuthEnv(env))
+        || !await consumeAdapterNonce(request, env)) {
+      return json(401, { ok: false, error_code: 'MYTMS_PAPER_QR_AUTHORITY_INVALID' });
+    }
+    const body = await boundedJson(request);
+    if (!body || typeof body !== 'object' || Array.isArray(body)
+        || Object.keys(body).join(',') !== 'payload') {
+      return json(400, { ok: false, error_code: 'MYTMS_PAPER_QR_REQUEST_INVALID' });
+    }
+    const qrText = await buildTsq2String(body.payload, env);
+    return json(200, { ok: true, result: { v: 2, qr_text: qrText } });
+  } catch (error) {
+    const candidate = text(error?.code || error?.message || error).toUpperCase();
+    const errorCode = /^[A-Z][A-Z0-9_]{2,100}$/.test(candidate)
+      ? candidate : 'MYTMS_PAPER_QR_UNAVAILABLE';
+    const status = ['TSQ2_FORMAT_INVALID', 'TSQ2_PAYLOAD_INVALID']
       .includes(errorCode) ? 400 : 503;
     return json(status, { ok: false, error_code: errorCode });
   }
@@ -206,7 +244,11 @@ export async function handleMyTmsPaperDocumentNudgeAdapter(
 }
 
 export async function verifyCandidatePaperQrViaAdapter(env, qrText) {
-  if (text(env.QR_SIGNING_SECRET)) return verifyTsq1String(qrText, env);
+  if (text(env.QR_SIGNING_SECRET)) {
+    return text(qrText).startsWith('TSQ2.')
+      ? verifyTsq2String(qrText, env)
+      : verifyTsq1String(qrText, env);
+  }
   const binding = env.MYTMS_MANAGER_CONTROL_ADAPTER;
   if (!binding || typeof binding.fetch !== 'function') {
     throw Object.assign(new Error('TSQ1_SIGNING_SECRET_MISSING'), {
@@ -226,7 +268,7 @@ export async function verifyCandidatePaperQrViaAdapter(env, qrText) {
   ));
   const payload = await boundedJson(response);
   if (!response.ok || payload?.ok !== true
-      || payload?.result?.v !== 1 || !text(payload?.result?.tok)) {
+      || ![1, 2].includes(Number(payload?.result?.v))) {
     const code = text(payload?.error_code).toUpperCase();
     throw Object.assign(new Error(/^[A-Z][A-Z0-9_]{2,100}$/.test(code)
       ? code : 'MYTMS_PAPER_QR_UNAVAILABLE'), {
@@ -234,7 +276,43 @@ export async function verifyCandidatePaperQrViaAdapter(env, qrText) {
         ? code : 'MYTMS_PAPER_QR_UNAVAILABLE'
     });
   }
-  return Object.freeze({ v: 1, tok: text(payload.result.tok) });
+  if (Number(payload.result.v) === 1) {
+    if (!text(payload.result.tok)) throw new Error('MYTMS_PAPER_QR_UNAVAILABLE');
+    return Object.freeze({ v: 1, tok: text(payload.result.tok) });
+  }
+  return Object.freeze({ ...payload.result, v: 2 });
+}
+
+export async function buildCandidatePaperPageQrViaAdapter(env, payload) {
+  if (text(env.QR_SIGNING_SECRET)) return buildTsq2String(payload, env);
+  const binding = env.MYTMS_MANAGER_CONTROL_ADAPTER;
+  if (!binding || typeof binding.fetch !== 'function') {
+    throw Object.assign(new Error('TSQ2_SIGNING_SECRET_MISSING'), {
+      code: 'TSQ2_SIGNING_SECRET_MISSING'
+    });
+  }
+  const unsigned = new Request(
+    `https://cloudtms-manager-control.internal${MYTMS_PAPER_QR_SIGN_ADAPTER_PATH}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ payload })
+    }
+  );
+  const response = await binding.fetch(await signCandidatePrivateRequest(
+    unsigned, adapterAuthEnv(env)
+  ));
+  const body = await boundedJson(response);
+  if (!response.ok || body?.ok !== true || body?.result?.v !== 2
+      || !text(body?.result?.qr_text).startsWith('TSQ2.')) {
+    const code = text(body?.error_code).toUpperCase();
+    throw Object.assign(new Error(/^[A-Z][A-Z0-9_]{2,100}$/.test(code)
+      ? code : 'MYTMS_PAPER_QR_UNAVAILABLE'), {
+      code: /^[A-Z][A-Z0-9_]{2,100}$/.test(code)
+        ? code : 'MYTMS_PAPER_QR_UNAVAILABLE'
+    });
+  }
+  return text(body.result.qr_text);
 }
 
 export async function nudgeCandidatePaperDocumentViaAdapter(env, {
