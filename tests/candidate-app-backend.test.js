@@ -3194,6 +3194,8 @@ test('paper pack readiness uses the durable receipt and advances only the exact 
   const readPath = source.slice(readStart, readEnd);
   assert.doesNotMatch(readPath, /assembleCandidatePaperPack|restWrite|immutablePut/);
   assert.match(readPath, /readyPaperPackReceipt/);
+  assert.match(readPath, /if \(version\?\.r2_key\)[\s\S]*const verifiedPack = await readyPaperPackReceipt[\s\S]*verifiedPack\?\.ready === true/);
+  assert.doesNotMatch(readPath, /if \(outbox && candidateCompletePackAttachmentMatchesScope\(outbox\) && version\?\.r2_key\)/);
   assert.match(readPath, /workflows\.length > 1[\s\S]*CANDIDATE_PAPER_WORKFLOW_CONFLICT/);
   const statusStart = source.indexOf('async function handlePaperPackStatus', readEnd);
   const statusEnd = source.indexOf('async function handlePaperPackDownload', statusStart);

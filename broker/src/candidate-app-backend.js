@@ -5352,8 +5352,9 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
     outboxError = code;
   }
   let complete = null;
-  if (outbox && candidateCompletePackAttachmentMatchesScope(outbox) && version?.r2_key) {
-    complete = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
+  if (version?.r2_key) {
+    const verifiedPack = await readyPaperPackReceipt(env, workflows[0], timesheet, version);
+    if (verifiedPack?.ready === true) complete = verifiedPack;
   }
   const execution = candidatePaperExecutionState(workflows[0], outbox, timesheet, complete);
   if (!outbox && outboxError === 'CANDIDATE_PAPER_OUTBOX_CONFLICT') execution.state = 'STALE';
