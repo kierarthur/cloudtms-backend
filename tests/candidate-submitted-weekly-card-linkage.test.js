@@ -25,6 +25,18 @@ test('submitted Weekly workflows remain linked to their exact Contract Week befo
   assert.match(sql,/workflows\.display_timesheet_id=coalesce\(base\.timesheet_id,base\.id\)/i);
 });
 
+test('submitted Weekly cards show immutable hours and expenses before Timesheet materialisation',()=>{
+  assert.match(sql,/\{hours_submission,canonical_tsfin_snapshot,total_hours\}/i);
+  for(const field of [
+    'expenses_pay_ex_vat','mileage_pay_ex_vat','travel_pay_ex_vat',
+    'accommodation_pay_ex_vat','other_pay_ex_vat'
+  ]) assert.match(sql,new RegExp(`\\{expense_submission,canonical_tsfin_snapshot,${field}\\}`,'i'));
+  assert.match(sql,/case when base\.timesheet_id is null then coalesce\(workflows\.submitted_total_hours,base\.total_hours,0\)/i);
+  assert.match(sql,/'total_hours',coalesce\(d\.overlay_total_hours,0\)/i);
+  assert.match(sql,/case when base\.timesheet_id is null then coalesce\(workflows\.submitted_expenses_pay_ex_vat,/i);
+  assert.match(sql,/else coalesce\(totals\.expenses_pay_ex_vat,base\.expenses_pay_ex_vat,0\) end as overlay_expenses_pay_ex_vat/i);
+});
+
 test('replacement preserves service-only paging authority and reloads PostgREST',()=>{
   assert.match(sql,/create or replace function public\.candidate_app_timesheet_page_v1\(/i);
   assert.doesNotMatch(sql,/create or replace function private\._candidate_daily_read_projection_v1\(/i);

@@ -277,7 +277,61 @@ begin
           else 'RESUBMIT_TIMESHEET' end,
         'rejection_actionable',resolved.rejection_actionable,
         'updated_at_utc',resolved.updated_at_utc
-      ) order by resolved.updated_at_utc desc,resolved.id) as workflows
+      ) order by resolved.updated_at_utc desc,resolved.id) as workflows,
+      (array_agg(
+        nullif(resolved.immutable_submission_json#>>'{hours_submission,canonical_tsfin_snapshot,total_hours}','')::numeric
+        order by resolved.updated_at_utc desc,resolved.id
+      ) filter (where resolved.state in (
+        'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+        'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
+      ) and nullif(resolved.immutable_submission_json#>>'{hours_submission,canonical_tsfin_snapshot,total_hours}','') is not null))[1]
+        as submitted_total_hours,
+      (array_agg(
+        nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,expenses_pay_ex_vat}','')::numeric
+        order by resolved.updated_at_utc desc,resolved.id
+      ) filter (where resolved.state in (
+        'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+        'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
+      ) and nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,expenses_pay_ex_vat}','') is not null))[1]
+        as submitted_expenses_pay_ex_vat,
+      (array_agg(
+        nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,mileage_pay_ex_vat}','')::numeric
+        order by resolved.updated_at_utc desc,resolved.id
+      ) filter (where resolved.state in (
+        'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+        'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
+      ) and nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,mileage_pay_ex_vat}','') is not null))[1]
+        as submitted_mileage_pay_ex_vat,
+      (array_agg(
+        nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,travel_pay_ex_vat}','')::numeric
+        order by resolved.updated_at_utc desc,resolved.id
+      ) filter (where resolved.state in (
+        'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+        'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
+      ) and nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,travel_pay_ex_vat}','') is not null))[1]
+        as submitted_travel_pay_ex_vat,
+      (array_agg(
+        nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,accommodation_pay_ex_vat}','')::numeric
+        order by resolved.updated_at_utc desc,resolved.id
+      ) filter (where resolved.state in (
+        'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+        'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
+      ) and nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,accommodation_pay_ex_vat}','') is not null))[1]
+        as submitted_accommodation_pay_ex_vat,
+      (array_agg(
+        nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,other_pay_ex_vat}','')::numeric
+        order by resolved.updated_at_utc desc,resolved.id
+      ) filter (where resolved.state in (
+        'WORKER_SUBMITTED','WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT','READY_FOR_MANAGER_APPROVAL',
+        'AWAITING_MANAGER_APPROVAL','MANAGER_APPROVED','MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+        'READY_TO_FINALISE','AWAITING_PAPER_RETURN','RECEIVED'
+      ) and nullif(resolved.immutable_submission_json#>>'{expense_submission,canonical_tsfin_snapshot,other_pay_ex_vat}','') is not null))[1]
+        as submitted_other_pay_ex_vat
     from (
       select classified.*,
         case
@@ -348,11 +402,18 @@ begin
     group by resolved.display_timesheet_id
   ), visible as materialized (
     select base.*,
-      coalesce(totals.expenses_pay_ex_vat,base.expenses_pay_ex_vat,0) as overlay_expenses_pay_ex_vat,
-      coalesce(totals.mileage_pay_ex_vat,base.mileage_pay_ex_vat,0) as overlay_mileage_pay_ex_vat,
-      coalesce(totals.travel_pay_ex_vat,base.travel_pay_ex_vat,0) as overlay_travel_pay_ex_vat,
-      coalesce(totals.accommodation_pay_ex_vat,base.accommodation_pay_ex_vat,0) as overlay_accommodation_pay_ex_vat,
-      coalesce(totals.other_pay_ex_vat,base.other_pay_ex_vat,0) as overlay_other_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_total_hours,base.total_hours,0)
+        else coalesce(base.total_hours,0) end as overlay_total_hours,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_expenses_pay_ex_vat,totals.expenses_pay_ex_vat,base.expenses_pay_ex_vat,0)
+        else coalesce(totals.expenses_pay_ex_vat,base.expenses_pay_ex_vat,0) end as overlay_expenses_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_mileage_pay_ex_vat,totals.mileage_pay_ex_vat,base.mileage_pay_ex_vat,0)
+        else coalesce(totals.mileage_pay_ex_vat,base.mileage_pay_ex_vat,0) end as overlay_mileage_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_travel_pay_ex_vat,totals.travel_pay_ex_vat,0)
+        else coalesce(totals.travel_pay_ex_vat,0) end as overlay_travel_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_accommodation_pay_ex_vat,totals.accommodation_pay_ex_vat,0)
+        else coalesce(totals.accommodation_pay_ex_vat,0) end as overlay_accommodation_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_other_pay_ex_vat,totals.other_pay_ex_vat,0)
+        else coalesce(totals.other_pay_ex_vat,0) end as overlay_other_pay_ex_vat,
       coalesce(workflows.workflows,'[]'::jsonb) as workflows,
       null::text as expense_overlay_conflict_code,
       membership.tab_bucket
@@ -440,7 +501,7 @@ begin
       'processing_status',d.processing_status,
       'paid',d.paid_at_utc is not null and d.paid_at_utc<=v_snapshot_utc,
       'authorised',d.authorised_at_utc is not null,
-      'total_hours',coalesce(d.total_hours,0),
+      'total_hours',coalesce(d.overlay_total_hours,0),
       'expenses',jsonb_build_object(
         'expenses_pay_ex_vat',coalesce(d.overlay_expenses_pay_ex_vat,0),
         'mileage_pay_ex_vat',coalesce(d.overlay_mileage_pay_ex_vat,0),

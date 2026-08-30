@@ -34,6 +34,13 @@ begin
     raise exception 'CANDIDATE_SUBMITTED_WEEKLY_CARD_EXACT_WEEK_LINK_MISSING';
   end if;
 
+  if position('{hours_submission,canonical_tsfin_snapshot,total_hours}' in lower(v_definition))=0
+     or position('{expense_submission,canonical_tsfin_snapshot,expenses_pay_ex_vat}' in lower(v_definition))=0
+     or position('base.timesheet_id is null' in lower(v_definition))=0
+     or position('overlay_total_hours' in lower(v_definition))=0 then
+    raise exception 'CANDIDATE_SUBMITTED_WEEKLY_CARD_FACTUAL_OVERLAY_MISSING';
+  end if;
+
   if has_function_privilege('anon',
        'public.candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamp with time zone)',
        'EXECUTE')
