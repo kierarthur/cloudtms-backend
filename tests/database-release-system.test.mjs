@@ -194,6 +194,9 @@ test('release engine has fail-closed NEW, ADOPT, UPGRADE, and one-time legacy up
   assert.match(source, /release\.legacyUpgradeBootstrapFiles/);
   assert.match(source, /assertLegacyTransitionShimsReplaced\(\)/);
   assert.match(source, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
+  assert.match(source, /function reloadPostgrestSchemaCache\(\)[\s\S]*notify pgrst, 'reload schema';/i);
+  assert.match(source, /assertLegacyTransitionShimsReplaced\(\);[\s\S]*reloadPostgrestSchemaCache\(\);[\s\S]*runVerifiers\(mode\)/);
+  assert.match(source, /reloadPostgrestSchemaCache\(\);[\s\S]*runVerifiers\(mode\);[\s\S]*compareExpected\(release\.contractPath\)/);
   assert.doesNotMatch(source, /marking existing migrations/);
   assert.match(source, /mode === 'NEW'[\s\S]*controlPlaneIndex[\s\S]*postBaselineMigrations[\s\S]*for \(const item of postBaselineMigrations\) psql\(\{ file: item\.path \}\)[\s\S]*baselineRepeatableLock[\s\S]*pendingRepeatables[\s\S]*runBankingPayCatalogPreapply[\s\S]*for \(const item of pendingRepeatables\) psql\(\{ file: item\.path \}\)[\s\S]*recordInventory/);
   assert.match(source, /mode === 'NEW'[\s\S]*release\.newVerificationFiles/);

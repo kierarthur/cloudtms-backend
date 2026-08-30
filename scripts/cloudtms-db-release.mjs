@@ -244,6 +244,14 @@ function adoptLegacyInventoryAtomically({ releaseId, environment, customerKey, e
   ` });
 }
 
+function reloadPostgrestSchemaCache() {
+  // Newly installed RPCs are not callable until the long-running PostgREST
+  // process refreshes its schema cache.  Keep this inside the protected
+  // release engine so every database mode performs the refresh after its
+  // durable SQL changes and before installed-state verification completes.
+  psql({ sql: `notify pgrst, 'reload schema';` });
+}
+
 function applyRelease() {
   verifyIntegrity();
   const release = readJson('supabase/release/current-release.json');
@@ -280,6 +288,7 @@ function applyRelease() {
     runBankingPayCatalogPreapply(legacy.pendingRepeatables.map(item => item.path));
     for (const item of legacy.pendingRepeatables) psql({ file: item.path });
     assertLegacyTransitionShimsReplaced();
+    reloadPostgrestSchemaCache();
     runVerifiers(mode);
     const verified = compareExpected(release.contractPath);
     adoptLegacyInventoryAtomically({
@@ -356,6 +365,7 @@ function applyRelease() {
       psql({ sql: `insert into private.cloudtms_repeatable_ledger(path,closure_sha256,last_release_id) values (${sqlLiteral(item.path)},${sqlLiteral(item.sha256)},${sqlLiteral(releaseId)}) on conflict(path) do update set closure_sha256=excluded.closure_sha256,last_release_id=excluded.last_release_id,applied_at_utc=clock_timestamp();` });
     }
   }
+  reloadPostgrestSchemaCache();
   runVerifiers(mode);
   const verified = compareExpected(release.contractPath);
   recordRelease({ releaseId, mode, status: 'VERIFIED', expectedHash, installedHash: verified.sha256, evidence: { verificationFiles: verificationFilesForMode(release, mode) } });
