@@ -1161,7 +1161,10 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     drawLine(page, box.x + 2, signatureLineTop, box.x + declarationWidth - 28, signatureLineTop);
     drawText(page, regular, 'Signature', box.x + 2, top + declarationHeight - 2.5, layout.smallFont);
     drawLine(page, box.x + declarationWidth - 24, signatureLineTop, box.x + declarationWidth - 2, signatureLineTop);
-    drawText(page, regular, `Date ${formatDmy(box.date)}`, box.x + declarationWidth - 24, top + declarationHeight - 6.2, layout.smallFont, 22);
+    if (box.date) {
+      drawText(page, regular, formatDmy(box.date), box.x + declarationWidth - 24, top + declarationHeight - 6.2, layout.smallFont, 22);
+    }
+    drawText(page, regular, 'Date', box.x + declarationWidth - 24, top + declarationHeight - 2.5, layout.smallFont, 22);
     const signatureAllowed = model.form_variant === 'ELECTRONIC_SIGNED'
       || (model.form_variant === 'ELECTRONIC_MANAGER_REVIEW' && box.signatureRole === 'CANDIDATE');
     if (signatureAllowed && box.signature) {

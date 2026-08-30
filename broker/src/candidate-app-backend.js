@@ -3486,19 +3486,19 @@ async function renderExpensePage(env, contract, state, phase) {
     const scale = Math.min(180 / image.width, 55 / image.height);
     page.drawImage(image, { x: 330, y: 70, width: image.width * scale, height: image.height * scale });
   } else if (isPaperReturn && upper(component.component_kind) === 'EXPENSE_SUMMARY') {
-    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 90, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
-    page.drawText('Manager name', { x: 48, y: 108, size: 9, font: bold });
-    page.drawLine({ start: { x: 128, y: 106 }, end: { x: 535, y: 106 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Manager signature', { x: 48, y: 86, size: 9, font: bold });
-    page.drawLine({ start: { x: 48, y: 54 }, end: { x: 340, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Date', { x: 370, y: 86, size: 9, font: bold });
-    page.drawLine({ start: { x: 370, y: 54 }, end: { x: 535, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 96, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawLine({ start: { x: 48, y: 105 }, end: { x: 535, y: 105 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Manager name', { x: 48, y: 91, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
+    page.drawLine({ start: { x: 48, y: 64 }, end: { x: 340, y: 64 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Manager signature', { x: 48, y: 50, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
+    page.drawLine({ start: { x: 370, y: 64 }, end: { x: 535, y: 64 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 50, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
   } else if (isPaperReturn) {
-    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 76, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
-    page.drawText('Manager signature', { x: 48, y: 94, size: 9, font: bold });
-    page.drawLine({ start: { x: 48, y: 54 }, end: { x: 340, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Date', { x: 370, y: 94, size: 9, font: bold });
-    page.drawLine({ start: { x: 370, y: 54 }, end: { x: 535, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 68, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawLine({ start: { x: 48, y: 72 }, end: { x: 340, y: 72 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Manager signature', { x: 48, y: 51, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
+    page.drawLine({ start: { x: 370, y: 72 }, end: { x: 535, y: 72 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 51, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
   } else {
     page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
     page.drawText('Hiring manager review', { x: 48, y: 112, size: 11, font: bold });
@@ -5304,11 +5304,11 @@ async function mileageClaimFormBytes(
     // QR packs add their one consistent signing footer when the held pack is
     // rendered.  The standalone mileage form below retains its established
     // signing area, so neither route can show two signature/date sections.
-    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 76, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
-    page.drawText('Manager signature', { x: 48, y: 94, size: 9, font: bold });
-    page.drawLine({ start: { x: 48, y: 54 }, end: { x: 340, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Date', { x: 370, y: 94, size: 9, font: bold });
-    page.drawLine({ start: { x: 370, y: 54 }, end: { x: 535, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 68, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawLine({ start: { x: 48, y: 72 }, end: { x: 340, y: 72 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Manager signature', { x: 48, y: 51, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
+    page.drawLine({ start: { x: 370, y: 72 }, end: { x: 535, y: 72 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 51, size: 8, font: regular, color: rgb(0.2, 0.27, 0.35) });
   } else {
     page.drawRectangle({ x: 42, y: 120, width: 511, height: 110, borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
     page.drawText('Manager signature', { x: 56, y: 205, size: 10, font: bold });

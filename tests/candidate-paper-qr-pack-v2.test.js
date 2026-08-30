@@ -161,7 +161,7 @@ test('QR mileage has one pack signing footer while standalone mileage retains it
     backend.indexOf('async function paperExpensePageBytes(')
   );
   assert.match(mileage, /if \(paperReturnQrText\) \{[\s\S]*Manager signature[\s\S]*Date[\s\S]*\} else \{[\s\S]*Manager signature[\s\S]*Date/);
-  assert.match(mileage, /paperReturnQrText\) \{[\s\S]*height: 76[\s\S]*y: 94[\s\S]*y: 54/);
+  assert.match(mileage, /paperReturnQrText\) \{[\s\S]*height: 68[\s\S]*y: 72[\s\S]*y: 51/);
   assert.match(mileage, /x: 465, y: 682, size: 88/);
   assert.equal((mileage.match(/page\.drawText\('Manager signature'/g) || []).length, 2);
   assert.doesNotMatch(mileage, /immutable CloudTMS paper-return manifest|Workflow \$\{workflow\.id\}/);
@@ -194,7 +194,7 @@ test('expense QR pages reserve a clear area without shrinking the physical code'
   assert.match(expensePage, /isPaperReturn \? 510 : 570/);
   assert.match(expensePage, /x: page\.getWidth\(\) - 124,[\s\S]*y: 688,[\s\S]*size: 88/);
   assert.match(expensePage, /isPaperReturn \? 625 : 670/);
-  assert.match(expensePage, /component_kind\) === 'EXPENSE_SUMMARY'[\s\S]*height: 90[\s\S]*Manager name[\s\S]*Manager signature/);
-  assert.match(expensePage, /else if \(isPaperReturn\) \{[\s\S]*height: 76[\s\S]*Manager signature[\s\S]*Date/);
+  assert.match(expensePage, /component_kind\) === 'EXPENSE_SUMMARY'[\s\S]*height: 96[\s\S]*Manager name[\s\S]*Manager signature/);
+  assert.match(expensePage, /else if \(isPaperReturn\) \{[\s\S]*height: 68[\s\S]*Manager signature[\s\S]*Date/);
   assert.doesNotMatch(expensePage, /CloudTMS workflow:|Page identity:/);
 });

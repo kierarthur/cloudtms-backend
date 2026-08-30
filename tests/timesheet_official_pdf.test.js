@@ -281,12 +281,13 @@ test('declaration capacity accepts an exact nine-line readable fit', async () =>
   assert.equal(rendered.render_receipt.signature_line_zone_height_mm, 5.5);
   assert.equal(rendered.render_receipt.signature_overlay_height_mm, 14);
 });
-test('signature dates are drawn above their date lines', () => {
+test('date values use the writing area while the Date label sits below its line', () => {
   const source = readFileSync(
     new URL('../broker/src/timesheet-official-pdf.js', import.meta.url), 'utf8'
   );
   assert.match(source, /drawLine\(page, box\.x \+ declarationWidth - 24, signatureLineTop,/);
-  assert.match(source, /`Date \$\{formatDmy\(box\.date\)\}`[^\n]+top \+ declarationHeight - 6\.2/);
+  assert.match(source, /if \(box\.date\) \{[\s\S]*formatDmy\(box\.date\)[^\n]+top \+ declarationHeight - 6\.2/);
+  assert.match(source, /'Date', box\.x \+ declarationWidth - 24, top \+ declarationHeight - 2\.5/);
 });
 
 test('signature images are the final visual layer inside each declaration box', () => {
@@ -295,7 +296,7 @@ test('signature images are the final visual layer inside each declaration box', 
   );
   assert.match(
     source,
-    /drawText\(page, regular, `Date \$\{formatDmy\(box\.date\)\}`[\s\S]*const signatureAllowed =[\s\S]*ELECTRONIC_MANAGER_REVIEW[\s\S]*signatureFits\.push\(drawEmbeddedImage/
+    /drawText\(page, regular, 'Date'[\s\S]*const signatureAllowed =[\s\S]*ELECTRONIC_MANAGER_REVIEW[\s\S]*signatureFits\.push\(drawEmbeddedImage/
   );
   assert.doesNotMatch(
     source,
