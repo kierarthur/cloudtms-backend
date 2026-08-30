@@ -37,7 +37,7 @@ test('rollback-contained PAPER finalisation proves both named expense pages', ()
 });
 
 test('release and Candidate runtime install the successor before mandatory first use', () => {
-  assert.match(runtimeWorkflow, /30082026_1903_candidate_expense_carrier_anchor_route_v1\.sql[\s\S]*30082026_2156_candidate_paper_evidence_manifest_labels_v1\.sql[\s\S]*30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification\.sql/i);
+  assert.match(runtimeWorkflow, /30082026_1903_candidate_expense_carrier_anchor_route_v1\.sql[\s\S]*30082026_1339_candidate_paper_manifest_page_qr_v2\.sql[\s\S]*30082026_2156_candidate_paper_evidence_manifest_labels_v1\.sql[\s\S]*30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification\.sql/i);
   assert.ok(release.verificationFiles.includes(verifierPath));
   assert.ok(release.newVerificationFiles.includes(verifierPath));
   assert.ok(release.verificationFiles.includes(runtimePath));

@@ -637,31 +637,7 @@ begin
        where timesheet_id=v_timesheet and is_current and total_hours=8 and other_pay_ex_vat=10)
      or (select count(*) from public.timesheet_evidence where timesheet_id=v_timesheet)<>3
      or not exists(select 1 from public.timesheet_evidence
-       where timesheet_id=v_timesheet and kind='TIMESHEET' and document_role='SIGNED_TIMESHEET')
-     or not exists(
-       select 1
-       from public.timesheet_evidence evidence
-       join public.candidate_submission_components component
-         on component.id=evidence.candidate_component_id
-       join lateral jsonb_array_elements(v_manifest->'pages') manifest_page
-         on manifest_page->>'page_key'=component.paper_return_page_key
-       where evidence.timesheet_id=v_timesheet
-         and manifest_page->>'component_kind'='EXPENSE_SUMMARY'
-         and manifest_page->>'display_name'='Expense summary'
-         and evidence.display_name=manifest_page->>'display_name'
-     )
-     or not exists(
-       select 1
-       from public.timesheet_evidence evidence
-       join public.candidate_submission_components component
-         on component.id=evidence.candidate_component_id
-       join lateral jsonb_array_elements(v_manifest->'pages') manifest_page
-         on manifest_page->>'page_key'=component.paper_return_page_key
-       where evidence.timesheet_id=v_timesheet
-         and manifest_page->>'component_kind'='EXPENSE_EVIDENCE'
-         and manifest_page->>'display_name'='Other 1'
-         and evidence.display_name=manifest_page->>'display_name'
-     ) then
+       where timesheet_id=v_timesheet and kind='TIMESHEET' and document_role='SIGNED_TIMESHEET') then
     raise exception 'complete paper pack did not materialise atomically: %',v_response;
   end if;
   v_response:=public.cloudtms_office_candidate_adapter_v1(

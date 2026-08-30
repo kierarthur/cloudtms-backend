@@ -31,7 +31,6 @@ declare
   v_account uuid:='a2000000-0000-0000-0000-000000000007';
   v_session uuid:='a2000000-0000-0000-0000-000000000008';
   v_workflow uuid:='a2000000-0000-0000-0000-000000000009';
-  v_document_operation uuid:='a2000000-0000-0000-0000-00000000000a';
   v_source_component uuid;
   v_unsafe_component uuid;
   v_return_component uuid;
@@ -45,14 +44,7 @@ declare
   v_failed boolean:=false;
   v_counter integer:=0;
 begin
-  insert into public.tms_users(id,email,password_hash,role,is_active)
-  values(
-    v_actor,
-    'paper-label-office-proof-'||v_actor::text||'@example.invalid',
-    'UNUSABLE_VERIFICATION_ONLY',
-    'admin',
-    true
-  );
+  insert into public.tms_users(id) values(v_actor);
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
   insert into public.clients(id,name) values(v_client,'Paper complete-pack runtime client');
   insert into public.candidates(id,email,active,key_norm)
@@ -62,18 +54,15 @@ begin
     candidate_expenses_require_separate_timesheet,candidate_paper_submission_enabled
   ) values(gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',false,true);
   insert into public.contracts(
-    id,candidate_id,client_id,start_date,end_date,pay_method_snapshot,week_ending_weekday_snapshot,
+    id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
     default_submission_mode
-  ) values(v_contract,v_candidate,v_client,current_date-60,current_date+60,'PAYE',
+  ) values(v_contract,v_candidate,v_client,current_date-60,current_date+60,
     extract(dow from current_date)::integer,'ELECTRONIC');
   insert into public.timesheets(
-    timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
-    contract_id,week_ending_date,line_type,sheet_scope,submission_mode,
+    timesheet_id,contract_id,week_ending_date,line_type,submission_mode,
     qr_status,qr_token,actual_schedule_json
   ) values(
-    v_timesheet,'PAPER_LABEL_RUNTIME_'||replace(v_timesheet::text,'-',''),
-    'GCK-PAPER-RUNTIME','PAPER RUNTIME HOSPITAL','PAPER RUNTIME WARD','NURSE',
-    v_contract,current_date,'HOURS','WEEKLY','MANUAL',
+    v_timesheet,v_contract,current_date,'HOURS','MANUAL',
     'PENDING','paper-complete-pack-runtime-token',
     jsonb_build_array(jsonb_build_object(
       'date',current_date,'start','09:00','end','17:30','break_minutes',30
@@ -83,27 +72,14 @@ begin
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
   ) values(v_week,v_contract,current_date,'OPEN','ELECTRONIC',v_timesheet);
   insert into public.timesheets_financials(
-    timesheet_id,timesheet_version,candidate_id,client_id,total_hours,processing_status
-  ) values(v_timesheet,1,v_candidate,v_client,8,'UNPROCESSED');
-  insert into public.invoice_operations(
-    id,operation_type,entity_type,entity_id,idempotency_key,status,phase,
-    priority,source_revision,template_version,input_json,config_json,
-    progress_json,total_units,chunk_count,control_version,change_seq
-  ) values(
-    v_document_operation,'BUILD_DOCUMENT','TIMESHEET',v_timesheet,
-    'paper-label-runtime-document','QUEUED','BUILD_MANIFEST',550,'1',
-    'timesheet-professional-v2','{}'::jsonb,
-    jsonb_build_object('processor_policy',private._invoice_processor_limits()),
-    '{}'::jsonb,1,1,1,nextval('public.invoice_operation_change_seq')
-  );
+    timesheet_id,candidate_id,client_id,total_hours,processing_status
+  ) values(v_timesheet,v_candidate,v_client,8,'UNPROCESSED');
   insert into public.invoice_document_versions(
-    entity_type,entity_id,purpose,operation_id,source_revision,template_version,status,
-    snapshot_json,snapshot_hash,manifest_json,manifest_hash,
-    r2_key,sha256,size_bytes,page_count,ready_at_utc,verified_at_utc
+    entity_type,entity_id,purpose,source_revision,template_version,status,
+    r2_key,sha256,size_bytes,page_count
   ) values(
-    'TIMESHEET',v_timesheet,'TIMESHEET',v_document_operation,'1','timesheet-professional-v2','READY',
-    '{}'::jsonb,repeat('e',64),'[]'::jsonb,repeat('d',64),
-    'candidate-app/test/paper-base.pdf',repeat('f',64),1024,1,now(),now()
+    'TIMESHEET',v_timesheet,'TIMESHEET','1','timesheet-professional-v2','READY',
+    'candidate-app/test/paper-base.pdf',repeat('f',64),1024,1
   );
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','paper-runtime@example.test','ACTIVE');
