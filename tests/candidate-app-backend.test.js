@@ -34,6 +34,7 @@ const {
   releaseCandidatePaperPack,
   bindCandidatePaperOutbox,
   assembleCandidatePaperPack,
+  candidatePaperPackComponentIndex,
   renderAndRegister,
   candidateDocumentBranding,
   createAccessToken,
@@ -3040,6 +3041,110 @@ test('complete paper pack retry reuses the same deterministic object and digest'
     assert.equal(first.sha256, replay.sha256);
     assert.equal(first.key, replay.key);
     assert.equal(putCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('paper pack component lookup accepts the exact current-generation clone under its durable source identity', () => {
+  const originalId = '00000000-0000-4000-8000-000000000501';
+  const clone = {
+    id: '00000000-0000-4000-8000-000000000502',
+    source_component_id: originalId,
+    workflow_id: '00000000-0000-4000-8000-000000000503',
+    workflow_generation: 4,
+    state: 'IMMUTABLE',
+    component_kind: 'EXPENSE_EVIDENCE'
+  };
+  const index = candidatePaperPackComponentIndex([clone]);
+  assert.equal(index.get(clone.id), clone);
+  assert.equal(index.get(originalId), clone);
+});
+
+test('paper pack component lookup fails closed when two current-generation rows claim one durable source identity', () => {
+  const sourceId = '00000000-0000-4000-8000-000000000511';
+  assert.throws(
+    () => candidatePaperPackComponentIndex([
+      { id: '00000000-0000-4000-8000-000000000512', source_component_id: sourceId },
+      { id: '00000000-0000-4000-8000-000000000513', source_component_id: sourceId }
+    ]),
+    error => error?.code === 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT'
+  );
+});
+
+test('complete paper pack assembles cloned expense evidence referenced by its durable source identity', async () => {
+  const branding = noLogoBranding();
+  const basePdf = await PDFDocument.create({ updateMetadata: false });
+  basePdf.addPage([200, 200]);
+  const baseBytes = new Uint8Array(await basePdf.save());
+  const evidencePdf = await PDFDocument.create({ updateMetadata: false });
+  evidencePdf.addPage([180, 120]).drawText('Expense evidence', { x: 12, y: 60, size: 10 });
+  const evidenceBytes = new Uint8Array(await evidencePdf.save());
+  const baseHash = createHash('sha256').update(baseBytes).digest('hex');
+  const evidenceHash = createHash('sha256').update(evidenceBytes).digest('hex');
+  const originalId = '00000000-0000-4000-8000-000000000521';
+  const clone = {
+    id: '00000000-0000-4000-8000-000000000522',
+    source_component_id: originalId,
+    workflow_id: '00000000-0000-4000-8000-000000000523',
+    workflow_generation: 2,
+    state: 'IMMUTABLE',
+    component_kind: 'EXPENSE_EVIDENCE',
+    document_role: 'SOURCE_EVIDENCE',
+    expense_category: 'ACCOMMODATION',
+    review_ordinal: 2,
+    storage_key: 'evidence.pdf',
+    media_type: 'application/pdf',
+    source_content_sha256: evidenceHash
+  };
+  const workflow = {
+    id: clone.workflow_id,
+    generation: 2,
+    renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
+    paper_return_manifest_sha256: 'd'.repeat(64),
+    paper_return_manifest_json: { pages: [
+      { page_key: 'HOURS_TIMESHEET', component_kind: 'HOURS_TIMESHEET' },
+      { page_key: 'EXPENSE_EVIDENCE:1', component_kind: 'EXPENSE_EVIDENCE', source_component_id: originalId }
+    ] },
+    immutable_submission_json: { official_presentation: { branding } }
+  };
+  const timesheet = { timesheet_id: '00000000-0000-4000-8000-000000000524' };
+  const version = { r2_key: 'base.pdf', sha256: baseHash };
+  const objects = new Map();
+  const r2Object = (bytes, mediaType) => ({
+    httpMetadata: { contentType: mediaType },
+    async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); }
+  });
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    SUPABASE_URL: 'https://test.supabase.invalid', SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async get(key) {
+        if (key === 'base.pdf') return r2Object(baseBytes, 'application/pdf');
+        if (key === 'evidence.pdf') return r2Object(evidenceBytes, 'application/pdf');
+        return null;
+      },
+      async put(key, bytes, options) {
+        const data = new Uint8Array(bytes);
+        const row = { key, size: data.byteLength, customMetadata: options.customMetadata, bytes: data };
+        objects.set(key, row);
+        return row;
+      },
+      async head(key) { return objects.get(key) || null; }
+    }
+  };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_submission_components')) return Response.json([clone]);
+    return Response.json([]);
+  };
+  try {
+    const receipt = await assembleCandidatePaperPack(env, workflow, timesheet, version);
+    assert.equal(receipt.page_count, 2);
+    const stored = objects.get(receipt.key);
+    const combined = await PDFDocument.load(stored.bytes);
+    assert.equal(combined.getPageCount(), 2);
   } finally {
     globalThis.fetch = originalFetch;
   }

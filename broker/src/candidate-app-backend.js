@@ -5244,7 +5244,7 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
     if (error instanceof CandidateHttpError) throw error;
     throw new CandidateHttpError(503, 'CANDIDATE_PAPER_SOURCE_READ_TRANSIENT');
   }
-  const byId = new Map(components.map((component) => [text(component.id), component]));
+  const byId = candidatePaperPackComponentIndex(components);
   const combined = await PDFDocument.create({ updateMetadata: false });
   for (let index = 0; index < pages.length; index += 1) {
     const expected = pages[index];
@@ -5290,6 +5290,21 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
     page_count: combined.getPageCount(), ready: true
   };
   return complete;
+}
+
+function candidatePaperPackComponentIndex(components) {
+  const byId = new Map();
+  for (const component of components) {
+    const aliases = new Set([text(component.id), text(component.source_component_id)].filter(Boolean));
+    for (const alias of aliases) {
+      const existing = byId.get(alias);
+      if (existing && existing !== component) {
+        throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
+      }
+      byId.set(alias, component);
+    }
+  }
+  return byId;
 }
 
 async function candidatePaperPackContext(request, env, deps, timesheetId) {
@@ -5565,6 +5580,7 @@ const TERMINAL_PAPER_PACK_FAILURES = new Set([
   'CANDIDATE_PAPER_RETURN_MANIFEST_STALE',
   'CANDIDATE_PAPER_PACK_MEDIA_TYPE_INVALID',
   'CANDIDATE_PAPER_PACK_COMPONENT_MISSING',
+  'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT',
   'CANDIDATE_PAPER_PACK_INCOMPLETE',
   'CANDIDATE_PAPER_PACK_IDENTITY_INVALID',
   'CANDIDATE_PAPER_PACK_IDENTITY_CONFLICT',
@@ -7068,6 +7084,7 @@ export const candidateAppBackendInternals = Object.freeze({
   requireCandidatePaperOutbox,
   bindCandidatePaperOutbox,
   assembleCandidatePaperPack,
+  candidatePaperPackComponentIndex,
   renderAndRegister,
   candidateDocumentBranding,
   mileageClaimFormBytes,
