@@ -178,7 +178,9 @@ Codex must not call the operation complete until it proves, without exposing sen
 - RLS, grants, owner/default privileges and private-helper ACLs are correct;
 - PostgREST has the plan collector disabled and is healthy;
 - gateways and all affected Workers run the intended source;
+- every Worker that fetches a public `*.workers.dev` Miget gateway retains `global_fetch_strictly_public`; prove a harmless gateway-backed database read because health/ready alone can pass while Cloudflare rejects the real hop with error `1042`;
 - login, representative table/RPC routes and required crons work;
+- observe each required cron on the final active Worker version with `outcome=ok` and no exceptions; for LIVE this includes the legacy `arthur-rai-broker` five-minute Sheets outbox retry as well as the main one-minute/five-minute schedules;
 - configuration and activation states match the reviewed target plan;
 - backup/recovery evidence is still valid; and
 - no traffic for the migrated target is routed to Supabase.
