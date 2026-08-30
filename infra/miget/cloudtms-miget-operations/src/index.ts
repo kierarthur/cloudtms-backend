@@ -3,13 +3,8 @@ import { createMcpHandler } from "agents/mcp/server";
 import { Client } from "pg";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import {
-  handleDbBenchmark,
-  isDbBenchmarkPath,
-  type DbBenchmarkEnv,
-} from "./db-benchmark";
 
-interface Env extends DbBenchmarkEnv {
+interface Env {
   HYPERDRIVE: Hyperdrive;
   MYTMS_HYPERDRIVE: Hyperdrive;
   LIVE_HYPERDRIVE: Hyperdrive;
@@ -690,9 +685,6 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
     const route = "/mcp";
-    if (isDbBenchmarkPath(url.pathname)) {
-      return await handleDbBenchmark(request, env);
-    }
     if (url.pathname === "/miget-gateway/health") {
       return Response.json({
         ok: true,
