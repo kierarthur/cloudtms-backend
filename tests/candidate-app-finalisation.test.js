@@ -86,6 +86,35 @@ test('public broker enforces the closed returned-paper QR proof envelope', () =>
   ), /CANDIDATE_PAPER_QR_PROOF_INVALID/);
 });
 
+test('public broker accepts the QR-required v2 proof and rejects a missing QR', () => {
+  const path = '/candidate-app/v1/workflows/f1000000-0000-4000-8000-000000000008/components/prepare';
+  const body = {
+    generation: 2,
+    component_kind: 'SIGNED_RETURN',
+    media_type: 'image/jpeg',
+    byte_size: 1024,
+    document_role: 'SIGNED_RETURN',
+    paper_return_page_key: 'HOURS_TIMESHEET',
+    idempotency_key: '3f74fd8c-2261-45a2-9e49-5f412917c31e',
+    signed_return_proof: {
+      proof_contract_version: 'CANDIDATE_PAPER_RETURN_PROOF_V2',
+      paper_return_manifest_sha256: 'c'.repeat(64),
+      paper_return_page_key: 'HOURS_TIMESHEET',
+      detected_qr_count: 1,
+      qr_text: `TSQ2.${'d'.repeat(20)}.${'e'.repeat(43)}`
+    }
+  };
+  assert.equal(candidateBrokerInternals.validateCandidateFinalisationBody(path, body), body);
+  assert.throws(() => candidateBrokerInternals.validateCandidateFinalisationBody(path, {
+    ...body,
+    signed_return_proof: {
+      ...body.signed_return_proof,
+      detected_qr_count: 0,
+      qr_text: undefined
+    }
+  }), /CANDIDATE_PAPER_QR_PROOF_INVALID/);
+});
+
 test('public broker rejects an inapplicable or mixed-shape adaptive break before routing', () => {
   const path = '/candidate-app/v1/workflows/f1000000-0000-4000-8000-000000000008/actions/worker-submit';
   assert.throws(() => candidateBrokerInternals.validateCandidateFinalisationBody(path, {

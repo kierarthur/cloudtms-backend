@@ -844,17 +844,24 @@ function validateCandidateFinalisationBody(path, body) {
       return body;
     }
     const proof = body.signed_return_proof;
+    const proofVersion = text(proof?.proof_contract_version);
+    const detectedQrCount = proof?.detected_qr_count;
+    const qrTextLength = text(proof?.qr_text).length;
+    const qrProofShapeValid = proofVersion === 'CANDIDATE_PAPER_RETURN_PROOF_V2'
+      ? detectedQrCount === 1 && qrTextLength >= 20 && qrTextLength <= 4096
+      : proofVersion === 'CANDIDATE_PAPER_RETURN_PROOF_V1'
+        && Number.isSafeInteger(detectedQrCount)
+        && detectedQrCount >= 0 && detectedQrCount <= 1
+        && (detectedQrCount === 1
+          ? qrTextLength >= 20 && qrTextLength <= 4096
+          : !Object.prototype.hasOwnProperty.call(proof, 'qr_text'));
     if (!hasExactKeys(proof, [
       'proof_contract_version', 'paper_return_manifest_sha256',
       'paper_return_page_key', 'detected_qr_count'
-    ], ['qr_text']) || proof.proof_contract_version !== 'CANDIDATE_PAPER_RETURN_PROOF_V1'
+    ], ['qr_text'])
         || !/^[0-9a-f]{64}$/i.test(text(proof.paper_return_manifest_sha256))
         || text(proof.paper_return_page_key) !== text(body.paper_return_page_key)
-        || !Number.isSafeInteger(proof.detected_qr_count)
-        || proof.detected_qr_count < 0 || proof.detected_qr_count > 1
-        || (proof.detected_qr_count === 1
-          ? text(proof.qr_text).length < 20 || text(proof.qr_text).length > 4096
-          : Object.prototype.hasOwnProperty.call(proof, 'qr_text'))) {
+        || !qrProofShapeValid) {
       throw new CandidateBrokerError(400, 'CANDIDATE_PAPER_QR_PROOF_INVALID');
     }
     return body;
