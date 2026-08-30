@@ -5110,8 +5110,8 @@ async function requireCandidatePaperOutbox(env, workflow, timesheet) {
   if (exact.length !== 1) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
   const row = exact[0];
   if (row.status === 'FAILED') throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_FAILED');
-  if (text(row.attempt_lease_token)) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
   if (['QUEUED', 'SENT'].includes(row.status) && candidateCompletePackAttachmentMatchesScope(row)) return row;
+  if (text(row.attempt_lease_token)) throw new CandidateHttpError(409, 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
   const scope = parseJson(row.payment_scope_json, {}) || {};
   const held = row.status === 'QUEUED'
     && scope.candidate_paper_pack_ready === false

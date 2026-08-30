@@ -31,6 +31,7 @@ const {
   readyPaperPackReceipt,
   readyGeneratedDocumentReceipt,
   restartCandidatePaperSourceDocumentFromStatus,
+  requireCandidatePaperOutbox,
   releaseCandidatePaperPack,
   bindCandidatePaperOutbox,
   assembleCandidatePaperPack,
@@ -3572,6 +3573,39 @@ test('paper pack release rejects an already claimed held email before PATCH or n
       page_count: 2, manifest_hash: 'd'.repeat(64)
     }), error => error?.code === 'CANDIDATE_PAPER_OUTBOX_NOT_READY');
     assert.deepEqual(methods, ['GET']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('completed paper pack stays downloadable while its email delivery is leased', async () => {
+  const originalFetch = globalThis.fetch;
+  const workflowId = '00000000-0000-4000-8000-000000000044';
+  const timesheetId = '00000000-0000-4000-8000-000000000047';
+  const manifestHash = 'd'.repeat(64);
+  const completed = {
+    id: '00000000-0000-4000-8000-000000000043',
+    status: 'QUEUED',
+    payment_scope_json: readyPaperScope(workflowId, 2, manifestHash),
+    attachments: [readyPaperAttachment(workflowId, 2, manifestHash)],
+    attempt_lease_token: 'email-delivery-in-progress',
+    attempt_lease_expires_at_utc: '2026-08-30T12:30:00.000Z'
+  };
+  globalThis.fetch = async (url, options = {}) => {
+    assert.equal(options.method || 'GET', 'GET');
+    assert.ok(new URL(url).pathname.endsWith('/mail_outbox'));
+    return Response.json([completed]);
+  };
+  try {
+    const result = await requireCandidatePaperOutbox({
+      SUPABASE_URL: 'https://test.supabase.invalid',
+      SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+    }, {
+      id: workflowId,
+      generation: 2,
+      paper_return_manifest_sha256: manifestHash
+    }, { timesheet_id: timesheetId });
+    assert.deepEqual(result, completed);
   } finally {
     globalThis.fetch = originalFetch;
   }
