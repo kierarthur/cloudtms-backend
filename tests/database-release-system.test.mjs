@@ -389,12 +389,13 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
       'supabase/repeatable/22082026_1402_candidate_named_security_definer_browser_isolation.sql'
     ],
   );
-  assert.match(candidateRpcReplacement, /9a750d0555772cb2902c02ec73d56711/);
-  assert.match(candidateRpcReplacement, /1358ce0e91782fffa75f9199067f6bdd/);
-  assert.match(candidateRpcReplacement, /d74699ad8c6938055b2d83e883feeee9/);
-  assert.match(candidateRpcReplacement, /v_service_missing=8 and v_service_hash='4ebcaad05387329b2e3bfe0801b821d4'/);
-  assert.match(candidateRpcReplacement, /722266b727a74535c1f66befd9206837/);
-  assert.match(candidateRpcReplacement, /37b50acd1118c2c6f9cbb2099cbc4776/);
+  assert.match(candidateRpcReplacement, /cc2fdf2c039a8fe660d7f916211d5b48/);
+  assert.match(candidateRpcReplacement, /v_service_missing=8 and v_service_hash='a2385961fc412bc27af963ffa1d8b1d5'/);
+  assert.match(candidateRpcReplacement, /49848ad832ddbfcdf8c42851e04a83b7/);
+  assert.match(candidateRpcReplacement, /e7dd4bf723616c232bf09f07df1253f3/);
+  assert.match(candidateRpcReplacement, /p\.proargtypes::oid\[\]/);
+  assert.match(candidateRpcReplacement, /type_namespace\.nspname\|\|'\.'\|\|argument_type\.typname/);
+  assert.doesNotMatch(candidateRpcReplacement, /p\.oid::regprocedure::text\s+as\s+signature/i);
   assert.match(candidateRpcReplacement, /v_service_hash<>v_expected_service_hash/);
   assert.match(candidateRpcReplacement, /v_acl_hash<>v_expected_acl_after/);
   assert.match(candidateRpcReplacement, /revoke all privileges on function %s from PUBLIC, anon, authenticated/);

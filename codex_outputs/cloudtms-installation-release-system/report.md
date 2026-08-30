@@ -1,6 +1,6 @@
 # CloudTMS Miget Installation, UPGRADE and NEW-Database Package
 
-## Delivery status — 25 August 2026
+## Delivery status — 30 August 2026
 
 This package replaces the Supabase-oriented archive dated 23 August 2026. It documents the current repository-controlled Miget/PostgREST release model and contains no secret values.
 
@@ -21,6 +21,9 @@ The package does not itself authorise APPLY, deployment, paid resource creation,
 - Existing managed databases use `UPGRADE`; the first deliberate promotion of historical LIVE uses `LEGACY_UPGRADE`; a proved-blank database uses `NEW`; exact pre-control databases may use `ADOPT`.
 - Each agency keeps isolated PostgreSQL credentials, PostgREST JWT and Worker/gateway configuration while services may share the purchased Miget Resource.
 - Repository directories/variables retaining “Supabase” in their names are compatibility names only and are not runtime authority.
+- Miget is the sole current database provider. No release or runtime path may contact Supabase; historical names remain only where renaming would break repository compatibility.
+- LEGACY_UPGRADE is resumable rather than globally atomic. After any fail-closed stop, Codex must inspect the fresh Miget state, rerun PLAN, and complete both the original-data non-superuser rehearsal and the exact interrupted-state schema/ACL rehearsal before one corrected retry.
+- Routine-security fingerprints use explicit PostgreSQL catalogue schemas and names, never `regprocedure` display text that varies with `search_path`.
 - The package does not claim that nonexistent generic `install:*` commands automate the full estate. Codex follows the manual and the implemented protected database workflow, then separately verifies PostgREST, gateways, Workers and application behaviour.
 
 ## Contents
