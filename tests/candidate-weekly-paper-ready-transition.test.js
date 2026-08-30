@@ -48,6 +48,19 @@ test('private PAPER preparation immediately delegates document work to the norma
   assert.match(adapter, /keys\.join\(','\) !== 'operation_id,timesheet_id'/i);
 });
 
+test('pending PAPER status only resumes its existing exact document operation', () => {
+  const status = backend.slice(
+    backend.indexOf('async function handlePaperPackStatus'),
+    backend.indexOf('async function handlePaperPackDownload')
+  );
+  assert.match(backend, /active_document_operation_id,manual_pdf_r2_key/i);
+  assert.match(status, /context\.state === 'PREPARING'/i);
+  assert.match(status, /UUID_RE\.test\(documentOperationId\)/i);
+  assert.match(status, /document_operation_id: documentOperationId/i);
+  assert.match(status, /current_timesheet_id: context\.id/i);
+  assert.doesNotMatch(status, /timesheet_qr_send_enqueue_v1|assembleCandidatePaperPack|immutablePut/i);
+});
+
 test('weekly PAPER adapter remains service-only', () => {
   assert.match(sql, /revoke all on function public\.candidate_weekly_paper_prepare_atomic_v1[\s\S]*from public,anon,authenticated/i);
   assert.match(sql, /grant execute on function public\.candidate_weekly_paper_prepare_atomic_v1[\s\S]*to service_role/i);

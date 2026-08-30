@@ -2990,7 +2990,7 @@ test('complete paper pack retry reuses the same deterministic object and digest'
   }
 });
 
-test('paper pack readiness is a read-only durable-object receipt check', async () => {
+test('paper pack readiness uses the durable receipt and only nudges the exact active document operation', async () => {
   const workflow = {
     id: '00000000-0000-4000-8000-000000000030', generation: 1, environment: 'TEST',
     renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
@@ -3041,6 +3041,12 @@ test('paper pack readiness is a read-only durable-object receipt check', async (
   assert.match(statusPath, /paper_return_manifest_sha256: manifestSha256/);
   assert.match(statusPath, /paper_return_pages: paperReturnPages/);
   assert.match(statusPath, /page_count: paperReturnPages\.length/);
+  assert.match(statusPath, /context\.state === 'PREPARING'/);
+  assert.match(statusPath, /UUID_RE\.test\(documentOperationId\)/);
+  assert.match(statusPath, /document_operation_id: documentOperationId/);
+  assert.match(statusPath, /current_timesheet_id: context\.id/);
+  assert.match(statusPath, /deferBackground\(ctx, work, 'paper-pack-status-nudge'/);
+  assert.doesNotMatch(statusPath, /timesheet_qr_send_enqueue_v1|assembleCandidatePaperPack|immutablePut/);
 });
 
 test('paper pack receipt rejects malformed hashes, generation and page-count metadata', async () => {

@@ -5308,7 +5308,7 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
   const timesheet = await restOne(env, 'timesheets',
     `timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`
     + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
-    + 'document_state,current_document_version_id,manual_pdf_r2_key');
+    + 'document_state,current_document_version_id,active_document_operation_id,manual_pdf_r2_key');
   const qrRoute = text(timesheet?.qr_token)
     && ['PENDING', 'SENT', 'READY'].includes(upper(timesheet?.qr_status));
   if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY' || !qrRoute) {
@@ -5349,8 +5349,25 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
   };
 }
 
-async function handlePaperPackStatus(request, env, deps, timesheetId) {
+async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null) {
   const context = await candidatePaperPackContext(request, env, deps, timesheetId);
+  const documentOperationId = text(context.timesheet.active_document_operation_id);
+  if (context.state === 'PREPARING' && UUID_RE.test(documentOperationId) && deps.nudgeQrPack) {
+    const work = deps.nudgeQrPack({
+      pack: {
+        document_operation_id: documentOperationId,
+        current_timesheet_id: context.id
+      },
+      timesheetId: context.id,
+      ctx
+    });
+    const deferred = deferBackground(ctx, work, 'paper-pack-status-nudge', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
   const paperReturnPages = safePaperReturnPages(
     parseJson(context.workflow.paper_return_manifest_json, {})
   );
@@ -6716,7 +6733,9 @@ export async function handleCandidateAppRequest(request, env, ctx, deps) {
     match = routeMatch(path, `${CANDIDATE_PREFIX}/workflows/:workflowId/timesheet-detail`);
     if (match && request.method === 'GET') return await handleCandidateRead(request, env, deps, 'detail', match);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/paper-pack/status`);
-    if (match && request.method === 'GET') return await handlePaperPackStatus(request, env, deps, match.timesheetId);
+    if (match && request.method === 'GET') {
+      return await handlePaperPackStatus(request, env, deps, match.timesheetId, ctx);
+    }
     match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/paper-pack`);
     if (match && request.method === 'GET') return await handlePaperPackDownload(request, env, deps, match.timesheetId);
     match = routeMatch(path, `${CANDIDATE_PREFIX}/timesheets/:timesheetId/expense-placement`);
