@@ -4,6 +4,11 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
 const PAGE_KEY_DIGEST_PATTERN = /^[0-9a-f]{16}$/i;
 const TSQ2_KINDS = new Set(['T', 'S', 'M', 'E']);
 const TSQ2_CATEGORIES = new Set(['', 'A', 'M', 'O', 'T']);
+const TSQ2_COMPACT_BYTES = 81;
+const TSQ2_KIND_TO_BYTE = Object.freeze({ T: 1, S: 2, M: 3, E: 4 });
+const TSQ2_BYTE_TO_KIND = Object.freeze({ 1: 'T', 2: 'S', 3: 'M', 4: 'E' });
+const TSQ2_CATEGORY_TO_BYTE = Object.freeze({ '': 0, A: 1, M: 2, O: 3, T: 4 });
+const TSQ2_BYTE_TO_CATEGORY = Object.freeze({ 0: '', 1: 'A', 2: 'M', 3: 'O', 4: 'T' });
 
 function base64Url(bytes) {
   let binary = '';
@@ -120,6 +125,59 @@ function tsq2Error(code) {
   return Object.assign(new Error(code), { code });
 }
 
+function hexBytes(value, expectedBytes) {
+  const source = String(value || '').replace(/-/g, '').toLowerCase();
+  if (!/^[0-9a-f]+$/.test(source) || source.length !== expectedBytes * 2) {
+    throw tsq2Error('TSQ2_PAYLOAD_INVALID');
+  }
+  return Uint8Array.from({ length: expectedBytes }, (_, index) => (
+    Number.parseInt(source.slice(index * 2, index * 2 + 2), 16)
+  ));
+}
+
+function bytesHex(bytes) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function uuidFromBytes(bytes) {
+  const hex = bytesHex(bytes);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+function encodeCompactTsq2Payload(payload) {
+  if (payload.g > 0xffffffff) return null;
+  const bytes = new Uint8Array(TSQ2_COMPACT_BYTES);
+  bytes[0] = 2;
+  bytes.set(hexBytes(payload.w, 16), 1);
+  bytes.set(hexBytes(payload.t, 16), 17);
+  new DataView(bytes.buffer).setUint32(33, payload.g, false);
+  bytes.set(hexBytes(payload.m, 32), 37);
+  bytes[69] = payload.o;
+  bytes.set(hexBytes(payload.p, 8), 70);
+  bytes[78] = TSQ2_KIND_TO_BYTE[payload.k];
+  bytes[79] = TSQ2_CATEGORY_TO_BYTE[payload.c];
+  bytes[80] = payload.n;
+  return bytes;
+}
+
+function decodeCompactTsq2Payload(bytes) {
+  if (bytes.length !== TSQ2_COMPACT_BYTES || bytes[0] !== 2) {
+    throw tsq2Error('TSQ2_PAYLOAD_INVALID');
+  }
+  return normaliseTsq2Payload({
+    v: 2,
+    w: uuidFromBytes(bytes.subarray(1, 17)),
+    t: uuidFromBytes(bytes.subarray(17, 33)),
+    g: new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(33, false),
+    m: bytesHex(bytes.subarray(37, 69)),
+    o: bytes[69],
+    p: bytesHex(bytes.subarray(70, 78)),
+    k: TSQ2_BYTE_TO_KIND[bytes[78]] || '',
+    c: TSQ2_BYTE_TO_CATEGORY[bytes[79]],
+    n: bytes[80]
+  });
+}
+
 function normaliseTsq2Payload(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)
       || Object.keys(payload).sort().join(',') !== 'c,g,k,m,n,o,p,t,v,w'
@@ -180,7 +238,10 @@ export async function buildTsq2String(payload, env = {}) {
   const normalised = normaliseTsq2Payload(payload);
   const secret = String(env.QR_SIGNING_SECRET || '').trim();
   if (!secret) throw tsq2Error('TSQ2_SIGNING_SECRET_MISSING');
-  const payloadBase64Url = base64Url(textEncoder.encode(JSON.stringify(normalised)));
+  const compact = encodeCompactTsq2Payload(normalised);
+  const payloadBase64Url = base64Url(
+    compact || textEncoder.encode(JSON.stringify(normalised))
+  );
   const key = await crypto.subtle.importKey(
     'raw', textEncoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
   );
@@ -204,8 +265,12 @@ export async function verifyTsq2String(value, env = {}) {
     'HMAC', key, fromBase64Url(parts[2]), textEncoder.encode(`TSQ2.${parts[1]}`)
   );
   if (!valid) throw tsq2Error('TSQ2_SIGNATURE_INVALID');
+  const payloadBytes = fromBase64Url(parts[1]);
+  if (payloadBytes.length === TSQ2_COMPACT_BYTES && payloadBytes[0] === 2) {
+    return decodeCompactTsq2Payload(payloadBytes);
+  }
   let payload;
-  try { payload = JSON.parse(new TextDecoder().decode(fromBase64Url(parts[1]))); }
+  try { payload = JSON.parse(new TextDecoder().decode(payloadBytes)); }
   catch { throw tsq2Error('TSQ2_PAYLOAD_INVALID'); }
   return normaliseTsq2Payload(payload);
 }

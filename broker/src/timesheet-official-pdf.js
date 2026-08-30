@@ -768,7 +768,7 @@ async function drawQrModules(page, value, box) {
   if (!text) throw timesheetError('TIMESHEET_QR_PAYLOAD_MISSING');
   const qr = QRCode.create(text, { errorCorrectionLevel: 'L' });
   const count = qr.modules.size;
-  const quiet = 2;
+  const quiet = 4;
   const modules = count + quiet * 2;
   const moduleSize = Math.min(box.width, box.height) / modules;
   const originX = box.x + (box.width - moduleSize * modules) / 2 + quiet * moduleSize;
@@ -991,7 +991,6 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       width: detailsGeometry.centreBox.width,
       height: detailsHeight
     };
-    drawBox(page, qrBox.x, qrBox.top, qrBox.width, qrBox.height);
     await drawQrModules(page, assets.qr_text, qrBox);
   }
   top += detailsHeight + layout.gap;

@@ -33,7 +33,7 @@ test('the complete successor changes only the QR manifest label expression', () 
 
 test('rollback-contained PAPER finalisation proves both named expense pages', () => {
   assert.match(compileFixture, /create table public\.tms_users[\s\S]*email text not null default 'candidate-runtime@example\.invalid'/i);
-  assert.match(runtimeSql, /insert into public\.tms_users\(id,email,password_hash,role,is_active\)[\s\S]*@example\.invalid[\s\S]*UNUSABLE_VERIFICATION_ONLY[\s\S]*'admin'[\s\S]*true/i);
+  assert.match(runtimeSql, /information_schema\.columns[\s\S]*column_name='password_hash'[\s\S]*insert into public\.tms_users\(id,email,password_hash,role,is_active\)[\s\S]*@example\.invalid[\s\S]*UNUSABLE_VERIFICATION_ONLY[\s\S]*'admin'[\s\S]*true[\s\S]*else[\s\S]*insert into public\.tms_users\(id,email,is_active\)/i);
   assert.match(runtimeSql, /manifest_page->>'component_kind'='EXPENSE_SUMMARY'[\s\S]*manifest_page->>'display_name'='Expense summary'[\s\S]*evidence\.display_name=manifest_page->>'display_name'/i);
   assert.match(runtimeSql, /manifest_page->>'component_kind'='EXPENSE_EVIDENCE'[\s\S]*manifest_page->>'display_name'='Other 1'[\s\S]*evidence\.display_name=manifest_page->>'display_name'/i);
   assert.match(runtimeSql, /begin;[\s\S]*rollback;/i);

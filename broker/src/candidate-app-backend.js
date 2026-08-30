@@ -3277,9 +3277,7 @@ function expenseLines(workflow, component) {
     `Client: ${text(presentation.client?.name) || '-'}`,
     `Week ending: ${ukDate(workflow.week_ending_date)}`,
     ...summary.lines,
-    `Total claim: ${summary.total}`,
-    `CloudTMS workflow: ${workflow.id}`,
-    `Page identity: ${component.id || workflow.id}`
+    `Total claim: ${summary.total}`
   ];
 }
 
@@ -3430,8 +3428,8 @@ async function renderExpensePage(env, contract, state, phase) {
   });
   const hasSource = await embedExpenseSource(
     pdf, page, env, component, contract.render_input,
-    isPaperReturn ? 690 : 760,
-    isPaperReturn ? 500 : 570
+    isPaperReturn ? 650 : 760,
+    isPaperReturn ? 510 : 570
   );
   if (!hasSource) {
     const lines = expenseLines(workflow, component).slice(0, 24);
@@ -3442,11 +3440,11 @@ async function renderExpensePage(env, contract, state, phase) {
         page.drawText(line.slice(0, 100), { x: 42, y, size: 10, font: regular, color: rgb(0.08, 0.12, 0.2) });
         y -= 20;
       }
-      const claimLines = lines.slice(3, -3);
-      const totalLine = lines.at(-3) || 'Total claim: £0.00';
-      page.drawRectangle({ x: 42, y: 670, width: 511, height: 32, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
-      page.drawText('Claim details', { x: 54, y: 681, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
-      y = 632;
+      const claimLines = lines.slice(3, -1);
+      const totalLine = lines.at(-1) || 'Total claim: £0.00';
+      page.drawRectangle({ x: 42, y: isPaperReturn ? 625 : 670, width: 511, height: 32, color: rgb(0.9, 0.93, 0.97), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
+      page.drawText('Claim details', { x: 54, y: isPaperReturn ? 636 : 681, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
+      y = isPaperReturn ? 587 : 632;
       for (const line of claimLines) {
         const colon = line.indexOf(':');
         const label = colon >= 0 ? line.slice(0, colon) : line;
@@ -3458,8 +3456,6 @@ async function renderExpensePage(env, contract, state, phase) {
       }
       page.drawRectangle({ x: 42, y: y - 17, width: 511, height: 45, color: rgb(0.95, 0.97, 0.99), borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
       page.drawText(totalLine.slice(0, 90), { x: 365, y: y - 1, size: 11, font: bold, color: rgb(0.07, 0.14, 0.24) });
-      page.drawText(lines.at(-2)?.slice(0, 100) || '', { x: 42, y: 178, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5) });
-      page.drawText(lines.at(-1)?.slice(0, 100) || '', { x: 42, y: 164, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5) });
     } else {
       let y = 750;
       for (const line of lines) {
@@ -3476,8 +3472,8 @@ async function renderExpensePage(env, contract, state, phase) {
       label: text(contract.paper_return_display_name) || 'Page QR'
     });
   }
-  page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
   if (phase === 'FINAL') {
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
     page.drawText(`Approved by ${workflow.manager_name || contract.manager?.name || ''}`, { x: 48, y: 116, size: 10, font: bold });
     page.drawText(`Position: ${workflow.manager_position || contract.manager?.position || ''}`, { x: 48, y: 98, size: 9, font: regular });
     page.drawText(`Approval date: ${londonCalendarDate(
@@ -3490,18 +3486,21 @@ async function renderExpensePage(env, contract, state, phase) {
     const scale = Math.min(180 / image.width, 55 / image.height);
     page.drawImage(image, { x: 330, y: 70, width: image.width * scale, height: image.height * scale });
   } else if (isPaperReturn && upper(component.component_kind) === 'EXPENSE_SUMMARY') {
-    page.drawText('Manager name', { x: 48, y: 116, size: 10, font: bold });
-    page.drawLine({ start: { x: 132, y: 114 }, end: { x: 535, y: 114 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Manager signature', { x: 48, y: 77, size: 10, font: bold });
-    page.drawLine({ start: { x: 150, y: 75 }, end: { x: 340, y: 75 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Date', { x: 370, y: 77, size: 10, font: bold });
-    page.drawLine({ start: { x: 404, y: 75 }, end: { x: 535, y: 75 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 90, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawText('Manager name', { x: 48, y: 108, size: 9, font: bold });
+    page.drawLine({ start: { x: 128, y: 106 }, end: { x: 535, y: 106 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Manager signature', { x: 48, y: 86, size: 9, font: bold });
+    page.drawLine({ start: { x: 48, y: 54 }, end: { x: 340, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 86, size: 9, font: bold });
+    page.drawLine({ start: { x: 370, y: 54 }, end: { x: 535, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
   } else if (isPaperReturn) {
-    page.drawText('Manager signature', { x: 48, y: 102, size: 10, font: bold });
-    page.drawLine({ start: { x: 48, y: 68 }, end: { x: 340, y: 68 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Date', { x: 370, y: 102, size: 10, font: bold });
-    page.drawLine({ start: { x: 370, y: 68 }, end: { x: 535, y: 68 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 76, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawText('Manager signature', { x: 48, y: 94, size: 9, font: bold });
+    page.drawLine({ start: { x: 48, y: 54 }, end: { x: 340, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 94, size: 9, font: bold });
+    page.drawLine({ start: { x: 370, y: 54 }, end: { x: 535, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
   } else {
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
     page.drawText('Hiring manager review', { x: 48, y: 112, size: 11, font: bold });
     page.drawText('Review this page together with every page in the manifest before approval.', { x: 48, y: 91, size: 9, font: regular });
     page.drawText('Manager signature and approval date intentionally blank.', { x: 48, y: 72, size: 9, font: regular });
@@ -5305,11 +5304,11 @@ async function mileageClaimFormBytes(
     // QR packs add their one consistent signing footer when the held pack is
     // rendered.  The standalone mileage form below retains its established
     // signing area, so neither route can show two signature/date sections.
-    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 105, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
-    page.drawText('Manager signature', { x: 48, y: 102, size: 10, font: bold });
-    page.drawLine({ start: { x: 48, y: 68 }, end: { x: 340, y: 68 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
-    page.drawText('Date', { x: 370, y: 102, size: 10, font: bold });
-    page.drawLine({ start: { x: 370, y: 68 }, end: { x: 535, y: 68 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawRectangle({ x: 36, y: 38, width: page.getWidth() - 72, height: 76, borderColor: rgb(0.15, 0.25, 0.4), borderWidth: 1 });
+    page.drawText('Manager signature', { x: 48, y: 94, size: 9, font: bold });
+    page.drawLine({ start: { x: 48, y: 54 }, end: { x: 340, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
+    page.drawText('Date', { x: 370, y: 94, size: 9, font: bold });
+    page.drawLine({ start: { x: 370, y: 54 }, end: { x: 535, y: 54 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
   } else {
     page.drawRectangle({ x: 42, y: 120, width: 511, height: 110, borderColor: rgb(0.18, 0.28, 0.4), borderWidth: 1 });
     page.drawText('Manager signature', { x: 56, y: 205, size: 10, font: bold });
@@ -5317,12 +5316,6 @@ async function mileageClaimFormBytes(
     page.drawLine({ start: { x: 56, y: 150 }, end: { x: 330, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
     page.drawLine({ start: { x: 370, y: 150 }, end: { x: 530, y: 150 }, thickness: 0.8, color: rgb(0.35, 0.42, 0.5) });
   }
-  page.drawText('This page forms part of the immutable CloudTMS paper-return manifest.', {
-    x: 42, y: paperReturnQrText ? 164 : 58, size: 8, font: regular, color: rgb(0.35, 0.4, 0.48)
-  });
-  page.drawText(`Workflow ${workflow.id} | Generation ${workflow.generation}`, {
-    x: 42, y: paperReturnQrText ? 150 : 43, size: 7, font: regular, color: rgb(0.4, 0.45, 0.5)
-  });
   return new Uint8Array(await pdf.save());
 }
 

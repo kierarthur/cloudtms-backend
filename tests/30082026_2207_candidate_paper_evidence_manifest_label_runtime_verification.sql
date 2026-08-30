@@ -44,14 +44,19 @@ declare
   v_failed boolean:=false;
   v_counter integer:=0;
 begin
-  insert into public.tms_users(id,email,password_hash,role,is_active)
-  values(
-    v_actor,
-    'qr-evidence-label-runtime@example.invalid',
-    'UNUSABLE_VERIFICATION_ONLY',
-    'admin',
-    true
-  );
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public' and table_name='tms_users' and column_name='password_hash'
+  ) then
+    execute $sql$
+      insert into public.tms_users(id,email,password_hash,role,is_active)
+      values($1,'qr-evidence-label-runtime@example.invalid','UNUSABLE_VERIFICATION_ONLY','admin',true)
+    $sql$ using v_actor;
+  else
+    insert into public.tms_users(id,email,is_active)
+    values(v_actor,'qr-evidence-label-runtime@example.invalid',true);
+  end if;
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
   insert into public.clients(id,name) values(v_client,'Paper complete-pack runtime client');
   insert into public.candidates(id,email,active,key_norm)

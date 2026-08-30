@@ -50,6 +50,22 @@ function jpegWithCodes(codes) {
   return jpeg.encode({ data, width, height }, 92).data;
 }
 
+function base64Url(bytes) {
+  return Buffer.from(bytes).toString('base64url');
+}
+
+async function legacyTsq2String(payload, env) {
+  const encoded = base64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(env.QR_SIGNING_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  );
+  const signature = await crypto.subtle.sign(
+    'HMAC', key, new TextEncoder().encode(`TSQ2.${encoded}`)
+  );
+  return `TSQ2.${encoded}.${base64Url(new Uint8Array(signature))}`;
+}
+
 test('server decodes the exact signed TSQ2 identity from actual JPEG bytes', async () => {
   const env = { QR_SIGNING_SECRET: 'test-only-qr-signing-secret' };
   const payload = await buildTsq2PagePayload({
@@ -68,6 +84,31 @@ test('server decodes the exact signed TSQ2 identity from actual JPEG bytes', asy
   assert.deepEqual(result.qr_texts, [text]);
   assert.deepEqual(await verifyTsq2String(result.qr_texts[0], env), payload);
   assert.ok(result.width > 0 && result.height > 0);
+});
+
+test('new TSQ2 pages retain the full signed identity with materially simpler camera codes', async () => {
+  const env = { QR_SIGNING_SECRET: 'test-only-qr-signing-secret' };
+  const payload = await buildTsq2PagePayload({
+    workflow_id: '00000000-0000-4000-8000-000000000001',
+    timesheet_id: '00000000-0000-5000-8000-000000000002',
+    workflow_generation: 9,
+    paper_return_manifest_sha256: 'f'.repeat(64),
+    ordinal: 3,
+    page_key: 'EXPENSE_EVIDENCE:ACCOMMODATION:1',
+    page_kind: 'E',
+    category_code: 'A',
+    category_occurrence: 1
+  });
+  const compact = await buildTsq2String(payload, env);
+  const legacy = await legacyTsq2String(payload, env);
+
+  assert.deepEqual(await verifyTsq2String(compact, env), payload);
+  assert.deepEqual(await verifyTsq2String(legacy, env), payload);
+  assert.ok(compact.length < legacy.length * 0.7, `${compact.length} should be much shorter than ${legacy.length}`);
+  assert.ok(
+    QRCode.create(compact, { errorCorrectionLevel: 'L' }).modules.size
+      < QRCode.create(legacy, { errorCorrectionLevel: 'L' }).modules.size
+  );
 });
 
 test('server never treats a photographed page containing two QRs as one valid page', async () => {
@@ -120,9 +161,10 @@ test('QR mileage has one pack signing footer while standalone mileage retains it
     backend.indexOf('async function paperExpensePageBytes(')
   );
   assert.match(mileage, /if \(paperReturnQrText\) \{[\s\S]*Manager signature[\s\S]*Date[\s\S]*\} else \{[\s\S]*Manager signature[\s\S]*Date/);
-  assert.match(mileage, /paperReturnQrText \? 164 : 58/);
+  assert.match(mileage, /paperReturnQrText\) \{[\s\S]*height: 76[\s\S]*y: 94[\s\S]*y: 54/);
   assert.match(mileage, /x: 465, y: 682, size: 88/);
   assert.equal((mileage.match(/page\.drawText\('Manager signature'/g) || []).length, 2);
+  assert.doesNotMatch(mileage, /immutable CloudTMS paper-return manifest|Workflow \$\{workflow\.id\}/);
 });
 
 test('landscape Timesheet pages are re-rendered with a dedicated large QR panel', () => {
@@ -138,4 +180,21 @@ test('landscape Timesheet pages are re-rendered with a dedicated large QR panel'
   assert.match(renderer, /paper_return_qr_panel === true/);
   assert.match(renderer, /paperReturnQrPanel \? 48 : 28/);
   assert.match(renderer, /Math\.max\(layout\.detailsHeight, 48\)/);
+  assert.match(renderer, /const quiet = 4/);
+  assert.doesNotMatch(renderer, /drawBox\(page, qrBox\.x, qrBox\.top, qrBox\.width, qrBox\.height\)/);
+});
+
+test('expense QR pages reserve a clear area without shrinking the physical code', () => {
+  const backend = read('broker/src/candidate-app-backend.js');
+  const expensePage = backend.slice(
+    backend.indexOf('async function renderExpensePage('),
+    backend.indexOf('function candidateRpcArgs(')
+  );
+  assert.match(expensePage, /isPaperReturn \? 650 : 760/);
+  assert.match(expensePage, /isPaperReturn \? 510 : 570/);
+  assert.match(expensePage, /x: page\.getWidth\(\) - 124,[\s\S]*y: 688,[\s\S]*size: 88/);
+  assert.match(expensePage, /isPaperReturn \? 625 : 670/);
+  assert.match(expensePage, /component_kind\) === 'EXPENSE_SUMMARY'[\s\S]*height: 90[\s\S]*Manager name[\s\S]*Manager signature/);
+  assert.match(expensePage, /else if \(isPaperReturn\) \{[\s\S]*height: 76[\s\S]*Manager signature[\s\S]*Date/);
+  assert.doesNotMatch(expensePage, /CloudTMS workflow:|Page identity:/);
 });
