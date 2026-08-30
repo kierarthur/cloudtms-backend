@@ -5349,6 +5349,74 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
   };
 }
 
+async function resumeCandidatePaperPackFromStatus(env, deps, context) {
+  if (context.state !== 'PREPARING' || !context.version?.r2_key || !context.outbox) {
+    return { ok: true, skipped: true, reason: 'SOURCE_NOT_READY' };
+  }
+  const scope = parseJson(context.outbox.payment_scope_json, {}) || {};
+  if (upper(scope.candidate_paper_pack_failure_class) === 'TERMINAL') {
+    return { ok: false, skipped: true, reason: 'FAILED_TERMINAL' };
+  }
+  const nextRetryAt = Date.parse(text(scope.candidate_paper_pack_next_retry_at_utc));
+  if (scope.candidate_paper_pack_retryable === true
+      && Number.isFinite(nextRetryAt) && nextRetryAt > Date.now()) {
+    return { ok: false, skipped: true, reason: 'RETRY_BACKOFF_ACTIVE' };
+  }
+
+  const operationId = `paper-pack-status:${context.workflow.id}:${context.workflow.generation}:${crypto.randomUUID()}`;
+  let attemptToken = null;
+  try {
+    const claim = await claimCandidatePaperPackAttempt(
+      env, deps, context.workflow, context.outbox, operationId
+    );
+    if (claim.paper_pack_attempt_state === 'READY') {
+      return { ok: true, already_ready: true };
+    }
+    if (claim.claim_acquired_new !== true) {
+      return { ok: true, skipped: true, reason: 'ATTEMPT_IN_PROGRESS' };
+    }
+    attemptToken = claim.attempt_token;
+    let complete = await readyPaperPackReceipt(
+      env, context.workflow, context.timesheet, context.version
+    );
+    if (!complete.ready) {
+      complete = await assembleCandidatePaperPack(
+        env, context.workflow, context.timesheet, context.version
+      );
+    }
+    await releaseCandidatePaperPack(
+      env, deps, context.workflow, context.timesheet, complete,
+      context.outbox, null, attemptToken, operationId
+    );
+    return { ok: true, page_count: complete.page_count };
+  } catch (error) {
+    const observedErrorCode = knownErrorCode(error);
+    const failureCode = canonicalPaperPackFailureCode(error);
+    let failureRecorded = false;
+    if (!['CANDIDATE_PAPER_PACK_ATTEMPT_IN_PROGRESS',
+      'CANDIDATE_PAPER_PACK_RETRY_BACKOFF_ACTIVE',
+      'CANDIDATE_PAPER_PACK_FAILED_TERMINAL'].includes(observedErrorCode)
+        && SHA256_RE.test(text(context.workflow.paper_return_manifest_sha256)
+          .replace(/^\\x/i, '').toLowerCase())) {
+      try {
+        const receipt = await recordCandidatePaperPackFailure(
+          env, deps, context.workflow, context.outbox, failureCode,
+          attemptToken, null, null, operationId
+        );
+        failureRecorded = receipt?.ok === true;
+      } catch {
+        // The scheduler can safely reconcile an expired claim. Preserve the
+        // original execution error and never start a second unowned attempt.
+      }
+    }
+    return {
+      ok: false,
+      error_code: observedErrorCode,
+      failure_recorded: failureRecorded
+    };
+  }
+}
+
 async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null) {
   const context = await candidatePaperPackContext(request, env, deps, timesheetId);
   const documentOperationId = text(context.timesheet.active_document_operation_id);
@@ -5362,6 +5430,26 @@ async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null
       ctx
     });
     const deferred = deferBackground(ctx, work, 'paper-pack-status-nudge', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
+  if (context.state === 'PREPARING' && context.version?.r2_key && context.outbox) {
+    const work = resumeCandidatePaperPackFromStatus(env, deps, context).then((result) => {
+      console.log('[candidate-app] exact Paper pack continuation', {
+        workflow_id: context.workflow.id,
+        generation: Number(context.workflow.generation),
+        timesheet_id: context.id,
+        ok: result?.ok === true,
+        skipped: result?.skipped === true,
+        reason: result?.reason || null,
+        error_code: result?.error_code || null
+      });
+      return result;
+    });
+    const deferred = deferBackground(ctx, work, 'paper-pack-status-assembly', {
       workflow_id: context.workflow.id,
       generation: Number(context.workflow.generation),
       timesheet_id: context.id

@@ -48,7 +48,11 @@ test('private PAPER preparation immediately delegates document work to the norma
   assert.match(adapter, /keys\.join\(','\) !== 'operation_id,timesheet_id'/i);
 });
 
-test('pending PAPER status only resumes its existing exact document operation', () => {
+test('pending PAPER status resumes the existing document then atomically completes its exact ready pack', () => {
+  const assembly = backend.slice(
+    backend.indexOf('async function resumeCandidatePaperPackFromStatus'),
+    backend.indexOf('async function handlePaperPackStatus')
+  );
   const status = backend.slice(
     backend.indexOf('async function handlePaperPackStatus'),
     backend.indexOf('async function handlePaperPackDownload')
@@ -58,7 +62,15 @@ test('pending PAPER status only resumes its existing exact document operation', 
   assert.match(status, /UUID_RE\.test\(documentOperationId\)/i);
   assert.match(status, /document_operation_id: documentOperationId/i);
   assert.match(status, /current_timesheet_id: context\.id/i);
-  assert.doesNotMatch(status, /timesheet_qr_send_enqueue_v1|assembleCandidatePaperPack|immutablePut/i);
+  assert.match(status, /context\.version\?\.r2_key && context\.outbox/i);
+  assert.match(status, /resumeCandidatePaperPackFromStatus\(env, deps, context\)/i);
+  assert.match(assembly, /claimCandidatePaperPackAttempt\(/i);
+  assert.match(assembly, /claim\.claim_acquired_new !== true/i);
+  assert.match(assembly, /assembleCandidatePaperPack\(/i);
+  assert.match(assembly, /releaseCandidatePaperPack\(/i);
+  assert.match(assembly, /recordCandidatePaperPackFailure\(/i);
+  assert.doesNotMatch(status, /timesheet_qr_send_enqueue_v1|immutablePut/i);
+  assert.doesNotMatch(assembly, /timesheet_qr_send_enqueue_v1/i);
 });
 
 test('weekly PAPER adapter remains service-only', () => {

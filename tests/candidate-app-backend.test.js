@@ -2990,7 +2990,7 @@ test('complete paper pack retry reuses the same deterministic object and digest'
   }
 });
 
-test('paper pack readiness uses the durable receipt and only nudges the exact active document operation', async () => {
+test('paper pack readiness uses the durable receipt and advances only the exact authenticated workflow', async () => {
   const workflow = {
     id: '00000000-0000-4000-8000-000000000030', generation: 1, environment: 'TEST',
     renderer_contract_version: 'CANDIDATE_REVIEW_DOCUMENTS_V1',
@@ -3029,13 +3029,14 @@ test('paper pack readiness uses the durable receipt and only nudges the exact ac
   assert.equal(receipt.page_count, 4);
   const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
   const readStart = source.indexOf('async function candidatePaperPackContext');
-  const readEnd = source.indexOf('async function handlePaperPackStatus', readStart);
+  const readEnd = source.indexOf('async function resumeCandidatePaperPackFromStatus', readStart);
   const readPath = source.slice(readStart, readEnd);
   assert.doesNotMatch(readPath, /assembleCandidatePaperPack|restWrite|immutablePut/);
   assert.match(readPath, /readyPaperPackReceipt/);
   assert.match(readPath, /workflows\.length > 1[\s\S]*CANDIDATE_PAPER_WORKFLOW_CONFLICT/);
-  const statusEnd = source.indexOf('async function handlePaperPackDownload', readEnd);
-  const statusPath = source.slice(readEnd, statusEnd);
+  const statusStart = source.indexOf('async function handlePaperPackStatus', readEnd);
+  const statusEnd = source.indexOf('async function handlePaperPackDownload', statusStart);
+  const statusPath = source.slice(statusStart, statusEnd);
   assert.match(statusPath, /workflow_id: context\.workflow\.id/);
   assert.match(statusPath, /generation: Number\(context\.workflow\.generation\)/);
   assert.match(statusPath, /paper_return_manifest_sha256: manifestSha256/);
@@ -3046,7 +3047,8 @@ test('paper pack readiness uses the durable receipt and only nudges the exact ac
   assert.match(statusPath, /document_operation_id: documentOperationId/);
   assert.match(statusPath, /current_timesheet_id: context\.id/);
   assert.match(statusPath, /deferBackground\(ctx, work, 'paper-pack-status-nudge'/);
-  assert.doesNotMatch(statusPath, /timesheet_qr_send_enqueue_v1|assembleCandidatePaperPack|immutablePut/);
+  assert.match(statusPath, /resumeCandidatePaperPackFromStatus\(env, deps, context\)/);
+  assert.doesNotMatch(statusPath, /timesheet_qr_send_enqueue_v1|immutablePut/);
 });
 
 test('paper pack receipt rejects malformed hashes, generation and page-count metadata', async () => {
