@@ -10,6 +10,17 @@
 
 \set ON_ERROR_STOP on
 
+-- This file is the final Banking Pay closure after the immutable historical
+-- compatibility replay. Keep the changed targeted runtime in this closure so
+-- a future edit makes this final repair pending whenever the historical replay
+-- becomes pending. Then restore only the existing certified current owners
+-- that the historical replay can supersede before installing the new repair.
+\ir 07082026_1016_banking_pay_targeted_delta_runtime.sql
+\ir 28082026_1424_banking_pay_modal_selection_owner_bridge.sql
+\ir 29082026_0613_banking_pay_replaced_candidate_owner_repair_v1.sql
+\ir 30082026_1232_candidate_qr_document_revision_order_v1.sql
+\ir 29082026_0326_banking_pay_release_authority_repair_v1.sql
+
 begin;
 
 CREATE OR REPLACE FUNCTION public.pay_workbench_repair_invalid_dirty_apply_jobs_v1(
@@ -358,6 +369,60 @@ BEGIN
   );
 END;
 $function$;
+
+-- The immutable historical compatibility replay predates the current
+-- browser-isolation closure. Reassert only the exact service-owned routines
+-- proved by the data-free installed-contract export to have drifted when that
+-- replay ran. This is permission repair only; no row or financial state is
+-- changed.
+REVOKE ALL ON FUNCTION public._pay_active_settled_components(uuid[]) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public._pay_active_settled_components(uuid[]) TO service_role;
+REVOKE ALL ON FUNCTION public.bulk_authorise_dataset_v1(jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.bulk_authorise_dataset_v1(jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.bulk_authorise_row_context_v1(jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.bulk_authorise_row_context_v1(jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.bulk_process_dataset_v1(jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.bulk_process_dataset_v1(jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.bulk_process_row_context_v1(jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.bulk_process_row_context_v1(jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.bulk_timesheet_row_patch_v1(jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.bulk_timesheet_row_patch_v1(jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_preview_candidate_build_canonical_lines(jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_preview_candidate_build_canonical_lines(jsonb,uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_preview_candidate_build_finance_case_baseline(jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_preview_candidate_build_finance_case_baseline(jsonb,uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger() FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_timesheet_summary_pay_state_refresh_trigger() TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_contract_client_dirty_fanout_chunk(uuid,jsonb,integer) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_contract_client_dirty_fanout_chunk(uuid,jsonb,integer) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_dirty_apply_jobs_chunk(integer,timestamptz,uuid,uuid,text,integer) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_dirty_apply_jobs_chunk(integer,timestamptz,uuid,uuid,text,integer) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_enqueue_stage_continuation(uuid,uuid,text,jsonb,uuid,jsonb,uuid,text,integer,integer) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_enqueue_stage_continuation(uuid,uuid,text,jsonb,uuid,jsonb,uuid,text,integer,integer) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_repair_invalid_source_build_poison(uuid,uuid,integer,timestamptz,text) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_repair_invalid_source_build_poison(uuid,uuid,integer,timestamptz,text) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_session_clear_case_resolution(uuid,uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_clear_case_resolution(uuid,uuid,jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_session_clone_eligibility_v1(uuid,uuid,uuid,jsonb) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_clone_eligibility_v1(uuid,uuid,uuid,jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_session_set_selected_rows(uuid,jsonb,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_session_set_selected_rows(uuid,jsonb,uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.pay_workbench_worker_drain_chunk(integer,timestamptz,uuid,uuid,text[],text,integer) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.pay_workbench_worker_drain_chunk(integer,timestamptz,uuid,uuid,text[],text,integer) TO service_role;
+REVOKE ALL ON FUNCTION public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamptz) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamptz) TO service_role;
+REVOKE ALL ON FUNCTION public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamptz,text) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamptz,text) TO service_role;
+REVOKE ALL ON FUNCTION public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text) TO service_role;
+REVOKE ALL ON FUNCTION public.timesheet_lifecycle_guard_signature_v1(uuid,uuid,boolean) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.timesheet_lifecycle_guard_signature_v1(uuid,uuid,boolean) TO service_role;
+REVOKE ALL ON FUNCTION public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamptz) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamptz) TO service_role;
 
 ALTER FUNCTION public.pay_workbench_repair_invalid_dirty_apply_jobs_v1(
   uuid,uuid,integer,text
