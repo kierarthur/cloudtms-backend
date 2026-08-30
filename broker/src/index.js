@@ -47,6 +47,7 @@ import {
   mapCanonicalDailyScheduleToIso
 } from './daily-schedule-authority.js';
 import { handleCandidateAppRequest } from './candidate-app-backend.js';
+import { resolveOfficeCandidatePaperPackEvidenceKey } from './office-candidate-paper-pack-evidence.js';
 import { createCandidateDailySpecialist } from './candidate-daily-specialist.js';
 import {
   CANDIDATE_MANAGER_EMAIL_E2E_PROOF_PATH,
@@ -80500,6 +80501,31 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
     const signedStillMatches =
       !!current_hash && !!signedHash && (String(current_hash) === String(signedHash));
 
+    let candidatePaperPackStorageKey = null;
+    if (awaitingSignatureUpload) {
+      try {
+        const { rows: candidatePaperRows } = await sbFetch(
+          env,
+          `${env.SUPABASE_URL}/rest/v1/mail_outbox` +
+            `?type=eq.TIMESHEET_QR` +
+            `&context_kind=eq.timesheets` +
+            `&context_id=eq.${enc(currentTsId)}` +
+            `&select=context_id,payment_scope_json,attachments,created_at_utc` +
+            `&order=created_at_utc.desc&limit=25`
+        );
+        candidatePaperPackStorageKey = resolveOfficeCandidatePaperPackEvidenceKey(
+          env,
+          candidatePaperRows,
+          currentTsId
+        );
+      } catch (e) {
+        console.warn('[handleTimesheetEvidenceList] Candidate paper pack enrichment failed (non-fatal)', {
+          timesheet_id: currentTsId,
+          err: e?.message || String(e)
+        });
+      }
+    }
+
     // ─────────────────────────────────────────────────────────────
     // 0b) Shared evidence mutation policy
     // ─────────────────────────────────────────────────────────────
@@ -80754,9 +80780,9 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         });
       }
     } else if (awaitingSignatureUpload) {
-      const storageKey = (ts?.manual_pdf_r2_key && String(ts.manual_pdf_r2_key).trim())
+      const storageKey = candidatePaperPackStorageKey || ((ts?.manual_pdf_r2_key && String(ts.manual_pdf_r2_key).trim())
         ? String(ts.manual_pdf_r2_key).trim()
-        : docsPdfKey;
+        : docsPdfKey);
 
       const issuedAt = ts?.qr_last_sent_at_utc || ts?.qr_generated_at || null;
 
@@ -80779,7 +80805,8 @@ async function handleTimesheetEvidenceList(env, req, tsId) {
         source_badge: 'QR',
         meta_json: {
           qr_status: qrStatus || null,
-          matches_current: (issuedStillMatches || null)
+          matches_current: (issuedStillMatches || null),
+          complete_candidate_pack: !!candidatePaperPackStorageKey
         }
       });
     }
