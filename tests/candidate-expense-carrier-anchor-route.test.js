@@ -29,6 +29,10 @@ test('expense workflow creation derives approval route from the worked anchor be
     repeatable,
     /v_workflow_kind='CONTRACT_EXPENSE'[\s\S]*CANDIDATE_WORKFLOW_ANCHOR_NOT_WORKED[\s\S]*v_route_authority:=private\._candidate_route_family_v1/i
   );
+  assert.match(
+    repeatable,
+    /v_workflow_kind='CONTRACT_EXPENSE'[\s\S]*route_family'='QR'[\s\S]*v_route:='PAPER'/i
+  );
   assert.doesNotMatch(repeatable, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });
 
@@ -38,6 +42,13 @@ test('rollback-contained proof reproduces the app carrier-first sequence and pro
   assert.match(verifier, /idempotent_replay[\s\S]*count\(\*\)[\s\S]*candidate_submission_workflows/i);
   assert.match(verifier, /v_after_timesheet is distinct from v_before_timesheet/i);
   assert.match(verifier, /v_after_financial is distinct from v_before_financial/i);
+  assert.match(verifier, /qr_status,qr_token[\s\S]*'PENDING','carrier-qr-route-token'/i);
+  assert.match(
+    verifier,
+    /creation_identity_json#>>'\{request,initial_route\}'='ELECTRONIC'[\s\S]*creation_identity_json#>>'\{derived,initial_route\}'='PAPER'/i
+  );
+  assert.match(verifier, /QR-backed expense replay created duplicate state/i);
+  assert.match(verifier, /v_qr_after_financial is distinct from v_qr_before_financial/i);
   assert.match(verifier, /begin;[\s\S]*rollback;/i);
 });
 

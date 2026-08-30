@@ -29,15 +29,26 @@ declare
   v_account uuid:=gen_random_uuid();
   v_session uuid:=gen_random_uuid();
   v_workflow uuid:=gen_random_uuid();
+  v_qr_anchor_week uuid:=gen_random_uuid();
+  v_qr_anchor_timesheet uuid:=gen_random_uuid();
+  v_qr_workflow uuid:=gen_random_uuid();
   v_carrier_week uuid;
+  v_qr_carrier_week uuid;
   v_email text:='carrier-route-'||gen_random_uuid()::text||'@example.test';
   v_carrier jsonb;
+  v_qr_carrier jsonb;
   v_created jsonb;
   v_replayed jsonb;
+  v_qr_created jsonb;
+  v_qr_replayed jsonb;
   v_before_timesheet jsonb;
   v_after_timesheet jsonb;
   v_before_financial jsonb;
   v_after_financial jsonb;
+  v_qr_before_timesheet jsonb;
+  v_qr_after_timesheet jsonb;
+  v_qr_before_financial jsonb;
+  v_qr_after_financial jsonb;
   v_definition text;
 begin
   select lower(pg_get_functiondef(to_regprocedure(
@@ -50,6 +61,10 @@ begin
      or position(
        'case when v_workflow_kind=''contract_expense'' then v_anchor_week.id else v_week.id end'
        in v_definition
+     )=0
+     or position(
+       'if v_workflow_kind=''contract_expense'' and v_route_authority->>''route_family''=''qr'' then v_route:=''paper'''
+       in regexp_replace(v_definition,'\s+',' ','g')
      )=0 then
     raise exception 'Candidate expense creation does not derive route authority from its worked anchor';
   end if;
@@ -195,6 +210,115 @@ begin
      or (select count(*) from public.timesheets_financials
          where candidate_id=v_candidate)<>1 then
     raise exception 'Expense workflow creation changed Timesheet financial authority';
+  end if;
+
+  -- The real phone sequence can begin from a worked Timesheet whose QR pack is
+  -- already pending.  The Candidate still sends the immutable ELECTRONIC create
+  -- request, while the server derives and stores PAPER from that exact anchor.
+  insert into public.timesheets(
+    timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
+    contract_id,week_ending_date,sheet_scope,line_type,submission_mode,
+    r2_nurse_key,r2_auth_key,qr_status,qr_token
+  ) values(
+    v_qr_anchor_timesheet,'CARRIER_QR_ROUTE_'||replace(v_qr_anchor_timesheet::text,'-',''),
+    'GCK-CARRIER-'||replace(v_candidate::text,'-',''),
+    'CARRIER QR HOSPITAL','CARRIER QR WARD','NURSE',
+    v_contract,current_date-7,'WEEKLY','HOURS','ELECTRONIC',
+    'carrier-qr-route/candidate-signature','carrier-qr-route/manager-signature',
+    'PENDING','carrier-qr-route-token'
+  );
+  insert into public.contract_weeks(
+    id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
+  ) values(
+    v_qr_anchor_week,v_contract,current_date-7,'OPEN','ELECTRONIC',v_qr_anchor_timesheet
+  );
+  insert into public.timesheets_financials(
+    timesheet_id,timesheet_version,candidate_id,client_id,total_hours,processing_status
+  ) values(
+    v_qr_anchor_timesheet,1,v_candidate,v_client,8,'UNPROCESSED'
+  );
+
+  select to_jsonb(t) into v_qr_before_timesheet
+  from public.timesheets t where t.timesheet_id=v_qr_anchor_timesheet;
+  select to_jsonb(tf) into v_qr_before_financial
+  from public.timesheets_financials tf
+  where tf.timesheet_id=v_qr_anchor_timesheet and tf.is_current=true;
+
+  v_qr_carrier:=public.expense_carrier_resolve_or_create_atomic_v1(
+    v_candidate,'TEST',v_qr_anchor_timesheet,null,
+    'carrier-qr-route:create-carrier',now()
+  );
+  if v_qr_carrier->>'placement'<>'CREATE_CARRIER'
+     or nullif(v_qr_carrier->>'target_contract_week_id','') is null
+     or nullif(v_qr_carrier->>'target_timesheet_id','') is not null then
+    raise exception 'QR-backed separate expense carrier was not created safely: %',v_qr_carrier;
+  end if;
+  v_qr_carrier_week:=(v_qr_carrier->>'target_contract_week_id')::uuid;
+
+  v_qr_created:=public.candidate_workflow_transition_atomic_v1(
+    v_session,'TEST',v_qr_workflow,'CREATE',1,
+    jsonb_build_object(
+      'workflow_kind','CONTRACT_EXPENSE',
+      'scope','WEEKLY',
+      'route','ELECTRONIC',
+      'contract_id',v_contract,
+      'contract_week_id',v_qr_carrier_week,
+      'anchor_timesheet_id',v_qr_anchor_timesheet,
+      'week_ending_date',current_date-7
+    ),
+    'carrier-qr-route:create-workflow',now()
+  );
+  if coalesce((v_qr_created->>'ok')::boolean,false)=false
+     or v_qr_created->>'state'<>'WORKER_DRAFT'
+     or (v_qr_created->>'workflow_id')::uuid is distinct from v_qr_workflow then
+    raise exception 'QR-backed expense-workflow creation was not accepted: %',v_qr_created;
+  end if;
+  if not exists(
+    select 1 from public.candidate_submission_workflows
+    where id=v_qr_workflow
+      and workflow_kind='CONTRACT_EXPENSE'
+      and route='PAPER'
+      and contract_week_id=v_qr_carrier_week
+      and anchor_timesheet_id=v_qr_anchor_timesheet
+      and target_timesheet_id is null
+      and creation_identity_json#>>'{request,initial_route}'='ELECTRONIC'
+      and creation_identity_json#>>'{derived,initial_route}'='PAPER'
+  ) then
+    raise exception 'QR-backed expense workflow lost request/derived route authority';
+  end if;
+
+  v_qr_replayed:=public.candidate_workflow_transition_atomic_v1(
+    v_session,'TEST',v_qr_workflow,'CREATE',1,
+    jsonb_build_object(
+      'workflow_kind','CONTRACT_EXPENSE',
+      'scope','WEEKLY',
+      'route','ELECTRONIC',
+      'contract_id',v_contract,
+      'contract_week_id',v_qr_carrier_week,
+      'anchor_timesheet_id',v_qr_anchor_timesheet,
+      'week_ending_date',current_date-7
+    ),
+    'carrier-qr-route:create-workflow',now()+interval '1 second'
+  );
+  if coalesce((v_qr_replayed->>'idempotent_replay')::boolean,false)=false
+     or (v_qr_replayed->>'workflow_id')::uuid is distinct from v_qr_workflow
+     or (select count(*) from public.candidate_submission_workflows
+         where candidate_id=v_candidate)<>2
+     or (select count(*) from public.contract_weeks
+         where contract_id=v_contract and week_ending_date=current_date-7)<>2 then
+    raise exception 'QR-backed expense replay created duplicate state: %',v_qr_replayed;
+  end if;
+
+  select to_jsonb(t) into v_qr_after_timesheet
+  from public.timesheets t where t.timesheet_id=v_qr_anchor_timesheet;
+  select to_jsonb(tf) into v_qr_after_financial
+  from public.timesheets_financials tf
+  where tf.timesheet_id=v_qr_anchor_timesheet and tf.is_current=true;
+  if v_qr_after_timesheet is distinct from v_qr_before_timesheet
+     or v_qr_after_financial is distinct from v_qr_before_financial
+     or (select count(*) from public.timesheets_financials
+         where candidate_id=v_candidate)<>2 then
+    raise exception 'QR-backed expense creation changed Timesheet financial authority';
   end if;
 end;
 $verification$;

@@ -778,6 +778,14 @@ begin
         case when v_workflow_kind='CONTRACT_EXPENSE' then v_anchor_week.timesheet_id else v_week.timesheet_id end,
         case when v_workflow_kind='CONTRACT_EXPENSE' then v_anchor_week.id else v_week.id end
       );
+      -- A separate expense workflow is requested before the Candidate chooses
+      -- the approval route.  Preserve that immutable ELECTRONIC request receipt,
+      -- but follow an already QR-backed worked anchor into its server-owned PAPER
+      -- family so the empty MANUAL carrier cannot cause a false route conflict.
+      if v_workflow_kind='CONTRACT_EXPENSE'
+         and v_route_authority->>'route_family'='QR' then
+        v_route:='PAPER';
+      end if;
       if v_route_authority->>'route_family'='MANUAL_NON_QR'
          or (v_route_authority->>'route_family'='IMPORT_AUTHORITATIVE'
            and v_workflow_kind<>'CONTRACT_EXPENSE') then
