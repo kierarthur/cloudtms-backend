@@ -1,9 +1,9 @@
--- Targeted executable verification for the 8 August Candidate App policy corrections.
--- Run only after the complete bundle has been installed in a disposable PostgreSQL database.
--- All fixture writes and canonical mutations are rolled back.
+-- Rollback-contained first-use proof for QR/printed evidence manifest labels.
+-- Installs no authority and leaves no fixture rows after completion.
+
+\set ON_ERROR_STOP on
 
 begin;
-
 update public.settings_defaults
 set candidate_app_feature_flags_json=jsonb_build_object(
   'candidate_account_registration',true,
@@ -20,236 +20,6 @@ set candidate_app_feature_flags_json=jsonb_build_object(
 )
 where id=1;
 
--- The compact compile fixture intentionally omits this existing TEST authority.
--- The real installed function remains authoritative outside this rolled-back test.
-create or replace function public._import_review_assert_actor_v1(p_actor_user_id uuid)
-returns void language plpgsql as $function$
-begin
-  if p_actor_user_id is null then
-    raise exception 'ACTOR_REQUIRED' using errcode='42501';
-  end if;
-end;
-$function$;
-
-create or replace function public._ctms_assert_import_correction_settings_write_v1(
-  p_is_nhsp boolean,
-  p_requires_hr boolean,
-  p_no_timesheet_required boolean,
-  p_reversal_complete public.correction_financials_date_basis_enum,
-  p_reversal_replacement public.correction_financials_date_basis_enum
-)
-returns void language plpgsql as $function$
-begin
-  return;
-end;
-$function$;
-
-do $policy_and_claim_gate$
-declare
-  v_client uuid:='a1000000-0000-0000-0000-000000000001';
-  v_candidate uuid:='a1000000-0000-0000-0000-000000000002';
-  v_contract uuid:='a1000000-0000-0000-0000-000000000003';
-  v_week uuid:='a1000000-0000-0000-0000-000000000004';
-  v_timesheet uuid:='a1000000-0000-0000-0000-000000000005';
-  v_actor uuid:='a1000000-0000-0000-0000-000000000006';
-  v_account uuid:='a1000000-0000-0000-0000-000000000007';
-  v_session uuid:='a1000000-0000-0000-0000-000000000008';
-  v_prior_workflow uuid:='a1000000-0000-0000-0000-000000000009';
-  v_new_workflow uuid:='a1000000-0000-0000-0000-00000000000a';
-  v_policy jsonb;
-  v_placement jsonb;
-  v_response jsonb;
-  v_settings_updated_at timestamptz;
-begin
-  insert into public.tms_users(id) values(v_actor);
-  begin
-    perform public.client_create_with_settings_v1(
-      'a1000000-0000-0000-0000-0000000000b0'::uuid,
-      jsonb_build_object('name','Invalid free manager email client'),v_actor,
-      jsonb_build_object(
-        'candidate_manager_approval_policy_json',jsonb_build_object(
-          'approved_emails',jsonb_build_array(),
-          'approved_domains',jsonb_build_array(),
-          'allow_free_business_email',true
-        )
-      ),now());
-    raise exception 'client create enabled free manager email without a barred-domain policy';
-  exception when sqlstate '22023' then
-    if sqlerrm<>'CANDIDATE_BARRED_MANAGER_DOMAIN_POLICY_REQUIRED' then raise; end if;
-  end;
-  begin
-    perform public.client_create_with_settings_v1(
-      'a1000000-0000-0000-0000-0000000000b1'::uuid,
-      jsonb_build_object('name','Invalid import separation client'),v_actor,
-      jsonb_build_object(
-        'is_nhsp',true,
-        'candidate_expenses_require_separate_timesheet',false,
-        'candidate_expense_invoice_email','expenses@example.test'
-      ),now());
-    raise exception 'import client create accepted disabled candidate expense separation';
-  exception when sqlstate '22023' then
-    if sqlerrm<>'CANDIDATE_IMPORT_EXPENSE_SEPARATION_REQUIRED' then raise; end if;
-  end;
-  begin
-    perform public.client_create_with_settings_v1(
-      'a1000000-0000-0000-0000-0000000000b2'::uuid,
-      jsonb_build_object('name','Invalid import email client'),v_actor,
-      jsonb_build_object(
-        'is_nhsp',true,
-        'candidate_expenses_require_separate_timesheet',true
-      ),now());
-    raise exception 'import client create accepted a missing Expense Invoice Email';
-  exception when sqlstate '22023' then
-    if sqlerrm<>'CANDIDATE_IMPORT_EXPENSE_EMAIL_REQUIRED' then raise; end if;
-  end;
-  insert into public.clients(id,name) values(v_client,'Import policy runtime client');
-  insert into public.candidates(id,email,active,key_norm)
-  values(v_candidate,'policy-runtime@example.test',true,'GCK-POLICY-RUNTIME');
-  insert into public.client_settings(
-    id,client_id,effective_from,default_submission_mode,is_nhsp,
-    candidate_expenses_require_separate_timesheet,candidate_expense_invoice_email
-  ) values(
-    gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',true,true,
-    'expenses@example.test'
-  ) returning updated_at into v_settings_updated_at;
-  insert into public.contracts(
-    id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
-    default_submission_mode,weekly_timesheet_source,
-    candidate_expenses_require_separate_timesheet_override
-  ) values(
-    v_contract,v_candidate,v_client,current_date-60,current_date+60,
-    extract(dow from current_date)::integer,'ELECTRONIC','NHSP',false
-  );
-  insert into public.timesheets(
-    timesheet_id,contract_id,week_ending_date,line_type,submission_mode,additional_units_week
-  ) values(v_timesheet,v_contract,current_date,'HOURS','MANUAL','{"ON_CALL":1}'::jsonb);
-  insert into public.contract_weeks(
-    id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
-  ) values(v_week,v_contract,current_date,'OPEN','ELECTRONIC',v_timesheet);
-  insert into public.timesheets_financials(
-    timesheet_id,candidate_id,client_id,total_hours,processing_status
-  ) values(v_timesheet,v_candidate,v_client,0,'UNPROCESSED');
-  insert into public.candidate_app_accounts(id,environment,email_normalized,status)
-  values(v_account,'TEST','policy-runtime@example.test','ACTIVE');
-  insert into public.candidate_app_sessions(
-    id,account_id,environment,selected_candidate_id,status,refresh_token_hash,
-    expires_at_utc,absolute_expires_at_utc
-  ) values(v_session,v_account,'TEST',v_candidate,'ACTIVE',decode(repeat('a1',32),'hex'),
-    now()+interval '30 days',now()+interval '90 days');
-
-  v_policy:=private._candidate_policy_resolve_v1(v_client,v_contract,current_date);
-  if coalesce((v_policy->>'import_expense_separation_mandatory')::boolean,false)=false
-     or coalesce((v_policy->>'expenses_require_separate_timesheet')::boolean,false)=false
-     or v_policy->>'expenses_require_separate_timesheet_source'<>'IMPORT_MANDATORY'
-     or coalesce((v_policy->>'expense_invoice_email_ready')::boolean,false)=false then
-    raise exception 'mandatory import expense policy did not override the contract false value: %',v_policy;
-  end if;
-
-  v_placement:=public.expense_placement_resolve_v1(
-    v_candidate,'TEST',v_timesheet,v_week,'{}'::jsonb,now());
-  if v_placement#>>'{capabilities,record_role}'<>'IMPORT_HOURS'
-     or coalesce((v_placement#>>'{capabilities,requires_carrier}')::boolean,false)=false
-     or v_placement->>'placement'='BLOCKED' then
-    raise exception 'import/additional-units-only carrier resolution was incorrect: %',v_placement;
-  end if;
-
-  begin
-    perform public.client_update_with_settings_v1(
-      v_client,1,v_settings_updated_at,'{}'::jsonb,
-      jsonb_build_object('candidate_expenses_require_separate_timesheet',false),
-      v_actor,repeat('S',16));
-    raise exception 'import client accepted disabled candidate expense separation';
-  exception when sqlstate '22023' then
-    if sqlerrm<>'CANDIDATE_IMPORT_EXPENSE_SEPARATION_REQUIRED' then raise; end if;
-  end;
-  begin
-    perform public.client_update_with_settings_v1(
-      v_client,1,v_settings_updated_at,'{}'::jsonb,
-      jsonb_build_object('candidate_expense_invoice_email',null),
-      v_actor,repeat('E',16));
-    raise exception 'import client accepted a missing Expense Invoice Email';
-  exception when sqlstate '22023' then
-    if sqlerrm<>'CANDIDATE_IMPORT_EXPENSE_EMAIL_REQUIRED' then raise; end if;
-  end;
-  begin
-    perform public.client_update_with_settings_v1(
-      v_client,1,v_settings_updated_at,'{}'::jsonb,
-      jsonb_build_object(
-        'candidate_manager_approval_policy_json',jsonb_build_object(
-          'approved_emails',jsonb_build_array(),
-          'approved_domains',jsonb_build_array(),
-          'allow_free_business_email',true
-        )
-      ),v_actor,repeat('B',16));
-    raise exception 'client update enabled free manager email without a barred-domain policy';
-  exception when sqlstate '22023' then
-    if sqlerrm<>'CANDIDATE_BARRED_MANAGER_DOMAIN_POLICY_REQUIRED' then raise; end if;
-  end;
-
-  insert into public.candidate_submission_workflows(
-    id,environment,account_id,candidate_id,workflow_kind,scope,route,state,generation,
-    contract_id,contract_week_id,anchor_timesheet_id,target_timesheet_id,week_ending_date,
-    policy_snapshot_json,input_snapshot_json,idempotency_key,created_at_utc,updated_at_utc
-  ) values(
-    v_prior_workflow,'TEST',v_account,v_candidate,'CONTRACT_EXPENSE','WEEKLY','ELECTRONIC',
-    'FINALISED',2,v_contract,v_week,v_timesheet,v_timesheet,current_date,
-    v_policy,'{}'::jsonb,'prior-finalised',now(),now()
-  );
-  begin
-    perform public.candidate_workflow_transition_atomic_v1(
-      v_session,'TEST',v_new_workflow,'CREATE',1,jsonb_build_object(
-        'workflow_kind','CONTRACT_EXPENSE','scope','WEEKLY','route','ELECTRONIC',
-        'contract_id',v_contract,'contract_week_id',v_week,
-        'anchor_timesheet_id',v_timesheet,
-        'week_ending_date',current_date
-      ),'claim-before-authorised',now());
-    raise exception 'second expense claim was accepted before the first was authorised';
-  exception when sqlstate '55000' then
-    if sqlerrm<>'CANDIDATE_EXPENSE_CLAIM_ALREADY_ACTIVE' then raise; end if;
-  end;
-  update public.timesheets_financials set authorised_at_utc=now()
-  where timesheet_id=v_timesheet and is_current=true;
-  v_response:=public.candidate_workflow_transition_atomic_v1(
-    v_session,'TEST',v_new_workflow,'CREATE',1,jsonb_build_object(
-      'workflow_kind','CONTRACT_EXPENSE','scope','WEEKLY','route','ELECTRONIC',
-      'contract_id',v_contract,'contract_week_id',v_week,
-      'anchor_timesheet_id',v_timesheet,
-      'week_ending_date',current_date
-    ),'claim-after-authorised',now());
-  if v_response->>'state'<>'WORKER_DRAFT' then
-    raise exception 'second expense claim did not open after authorisation: %',v_response;
-  end if;
-
-  begin
-    insert into public.candidate_submission_components(
-      workflow_id,workflow_generation,component_no,component_kind,expense_category,
-      document_role,state,created_at_utc
-    ) values(v_new_workflow,1,900,'EXPENSE_EVIDENCE',null,'SOURCE_EVIDENCE','PENDING',now());
-    raise exception 'schema accepted a null category for expense evidence';
-  exception when check_violation then null;
-  end;
-  begin
-    insert into public.candidate_submission_components(
-      workflow_id,workflow_generation,component_no,component_kind,expense_category,
-      document_role,state,created_at_utc
-    ) values(v_new_workflow,1,901,'MILEAGE_FORM','TRAVEL','MILEAGE_CLAIM_FORM','PENDING',now());
-    raise exception 'schema accepted a non-mileage category for a mileage form';
-  exception when check_violation then null;
-  end;
-
-  begin
-    perform public.candidate_workflow_transition_atomic_v1(
-      v_session,'TEST',v_new_workflow,'COMPONENT_PREPARE',1,jsonb_build_object(
-        'component_kind','EXPENSE_EVIDENCE','document_role','SOURCE_EVIDENCE',
-        'storage_key','policy/null-category.png','media_type','image/png','byte_size',128
-      ),'null-category',now());
-    raise exception 'uncategorised expense evidence was accepted';
-  exception when sqlstate '22023' then
-    if sqlerrm<>'CANDIDATE_COMPONENT_TYPE_INVALID' then raise; end if;
-  end;
-end;
-$policy_and_claim_gate$;
-
 do $paper_complete_pack$
 declare
   v_client uuid:='a2000000-0000-0000-0000-000000000001';
@@ -261,6 +31,7 @@ declare
   v_account uuid:='a2000000-0000-0000-0000-000000000007';
   v_session uuid:='a2000000-0000-0000-0000-000000000008';
   v_workflow uuid:='a2000000-0000-0000-0000-000000000009';
+  v_document_operation uuid:='a2000000-0000-0000-0000-00000000000a';
   v_source_component uuid;
   v_unsafe_component uuid;
   v_return_component uuid;
@@ -274,7 +45,14 @@ declare
   v_failed boolean:=false;
   v_counter integer:=0;
 begin
-  insert into public.tms_users(id) values(v_actor);
+  insert into public.tms_users(id,email,password_hash,role,is_active)
+  values(
+    v_actor,
+    'paper-label-office-proof-'||v_actor::text||'@example.invalid',
+    'UNUSABLE_VERIFICATION_ONLY',
+    'admin',
+    true
+  );
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
   insert into public.clients(id,name) values(v_client,'Paper complete-pack runtime client');
   insert into public.candidates(id,email,active,key_norm)
@@ -284,15 +62,18 @@ begin
     candidate_expenses_require_separate_timesheet,candidate_paper_submission_enabled
   ) values(gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',false,true);
   insert into public.contracts(
-    id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
+    id,candidate_id,client_id,start_date,end_date,pay_method_snapshot,week_ending_weekday_snapshot,
     default_submission_mode
-  ) values(v_contract,v_candidate,v_client,current_date-60,current_date+60,
+  ) values(v_contract,v_candidate,v_client,current_date-60,current_date+60,'PAYE',
     extract(dow from current_date)::integer,'ELECTRONIC');
   insert into public.timesheets(
-    timesheet_id,contract_id,week_ending_date,line_type,submission_mode,
+    timesheet_id,booking_id,occupant_key_norm,hospital_norm,ward_norm,job_title_norm,
+    contract_id,week_ending_date,line_type,sheet_scope,submission_mode,
     qr_status,qr_token,actual_schedule_json
   ) values(
-    v_timesheet,v_contract,current_date,'HOURS','MANUAL',
+    v_timesheet,'PAPER_LABEL_RUNTIME_'||replace(v_timesheet::text,'-',''),
+    'GCK-PAPER-RUNTIME','PAPER RUNTIME HOSPITAL','PAPER RUNTIME WARD','NURSE',
+    v_contract,current_date,'HOURS','WEEKLY','MANUAL',
     'PENDING','paper-complete-pack-runtime-token',
     jsonb_build_array(jsonb_build_object(
       'date',current_date,'start','09:00','end','17:30','break_minutes',30
@@ -302,14 +83,27 @@ begin
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
   ) values(v_week,v_contract,current_date,'OPEN','ELECTRONIC',v_timesheet);
   insert into public.timesheets_financials(
-    timesheet_id,candidate_id,client_id,total_hours,processing_status
-  ) values(v_timesheet,v_candidate,v_client,8,'UNPROCESSED');
-  insert into public.invoice_document_versions(
-    entity_type,entity_id,purpose,source_revision,template_version,status,
-    r2_key,sha256,size_bytes,page_count
+    timesheet_id,timesheet_version,candidate_id,client_id,total_hours,processing_status
+  ) values(v_timesheet,1,v_candidate,v_client,8,'UNPROCESSED');
+  insert into public.invoice_operations(
+    id,operation_type,entity_type,entity_id,idempotency_key,status,phase,
+    priority,source_revision,template_version,input_json,config_json,
+    progress_json,total_units,chunk_count,control_version,change_seq
   ) values(
-    'TIMESHEET',v_timesheet,'TIMESHEET','1','timesheet-professional-v2','READY',
-    'candidate-app/test/paper-base.pdf',repeat('f',64),1024,1
+    v_document_operation,'BUILD_DOCUMENT','TIMESHEET',v_timesheet,
+    'paper-label-runtime-document','QUEUED','BUILD_MANIFEST',550,'1',
+    'timesheet-professional-v2','{}'::jsonb,
+    jsonb_build_object('processor_policy',private._invoice_processor_limits()),
+    '{}'::jsonb,1,1,1,nextval('public.invoice_operation_change_seq')
+  );
+  insert into public.invoice_document_versions(
+    entity_type,entity_id,purpose,operation_id,source_revision,template_version,status,
+    snapshot_json,snapshot_hash,manifest_json,manifest_hash,
+    r2_key,sha256,size_bytes,page_count,ready_at_utc,verified_at_utc
+  ) values(
+    'TIMESHEET',v_timesheet,'TIMESHEET',v_document_operation,'1','timesheet-professional-v2','READY',
+    '{}'::jsonb,repeat('e',64),'[]'::jsonb,repeat('d',64),
+    'candidate-app/test/paper-base.pdf',repeat('f',64),1024,1,now(),now()
   );
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','paper-runtime@example.test','ACTIVE');
@@ -474,6 +268,10 @@ begin
 
   v_response:=public.candidate_workflow_transition_atomic_v1(
     v_session,'TEST',v_workflow,'PAPER_PREPARE',2,'{}'::jsonb,'paper:prepare',now());
+  perform public.candidate_paper_manifest_v2_promote_v1(
+    v_session,'TEST',v_workflow,2,
+    v_response->>'paper_return_manifest_sha256',now()
+  );
   select paper_return_manifest_json into v_manifest
   from public.candidate_submission_workflows where id=v_workflow;
   v_mail:=(v_response->'paper_pack'->>'mail_outbox_id')::uuid;
@@ -481,6 +279,10 @@ begin
   from public.candidate_submission_workflows where id=v_workflow;
   if v_response->>'state'<>'AWAITING_PAPER_RETURN'
      or jsonb_array_length(v_manifest->'pages')<>3
+     or v_manifest->>'manifest_version'<>'2'
+     or v_manifest->>'qr_contract_version'<>'CANDIDATE_PAPER_PAGE_QR_V2'
+     or v_manifest#>>'{pages,1,display_name}'<>'Expense summary'
+     or v_manifest#>>'{pages,2,display_name}'<>'Other 1'
      or not coalesce((v_response->'paper_pack'->>'queued')::boolean,false)
      or not coalesce((v_response->'paper_pack'->>'recipient_available')::boolean,false)
      or nullif(v_response->'paper_pack'->>'mail_outbox_id','') is null then
@@ -629,16 +431,26 @@ begin
       'daily_materialisation_json',jsonb_build_object('service_finalisation',v_service)
     ),now()
   );
-  if v_response->>'state'<>'FINALISED'
-     or not exists(select 1 from public.timesheets
-       where timesheet_id=v_timesheet and submission_mode='MANUAL'
-         and r2_nurse_key is null and r2_auth_key is null)
-     or not exists(select 1 from public.timesheets_financials
-       where timesheet_id=v_timesheet and is_current and total_hours=8 and other_pay_ex_vat=10)
-     or (select count(*) from public.timesheet_evidence where timesheet_id=v_timesheet)<>3
-     or not exists(select 1 from public.timesheet_evidence
-       where timesheet_id=v_timesheet and kind='TIMESHEET' and document_role='SIGNED_TIMESHEET')
-     or not exists(
+  if v_response->>'state'<>'FINALISED' then
+    raise exception 'complete paper pack did not finalise: %',v_response;
+  end if;
+  if not exists(select 1 from public.timesheets
+    where timesheet_id=v_timesheet and submission_mode='MANUAL'
+      and r2_nurse_key is null and r2_auth_key is null) then
+    raise exception 'PAPER finalisation did not preserve the expected unsigned MANUAL Timesheet';
+  end if;
+  if (select count(*) from public.timesheet_evidence where timesheet_id=v_timesheet)<>3 then
+    raise exception 'PAPER finalisation did not attach exactly three evidence rows: %',
+      (select jsonb_agg(jsonb_build_object(
+        'kind',kind,'document_role',document_role,'display_name',display_name,
+        'candidate_component_id',candidate_component_id
+      ) order by created_at_utc,id) from public.timesheet_evidence where timesheet_id=v_timesheet);
+  end if;
+  if not exists(select 1 from public.timesheet_evidence
+    where timesheet_id=v_timesheet and kind='TIMESHEET' and document_role='SIGNED_TIMESHEET') then
+    raise exception 'PAPER finalisation did not attach the signed Timesheet evidence';
+  end if;
+  if not exists(
        select 1
        from public.timesheet_evidence evidence
        join public.candidate_submission_components component
@@ -649,8 +461,26 @@ begin
          and manifest_page->>'component_kind'='EXPENSE_SUMMARY'
          and manifest_page->>'display_name'='Expense summary'
          and evidence.display_name=manifest_page->>'display_name'
-     )
-     or not exists(
+     ) then
+    raise exception 'PAPER finalisation did not attach the Expense summary manifest label: %',
+      (select jsonb_agg(jsonb_build_object(
+        'display_name',evidence.display_name,
+        'candidate_component_id',evidence.candidate_component_id,
+        'component_kind',component.component_kind,
+        'paper_return_page_key',component.paper_return_page_key,
+        'matched_manifest_page',manifest_page.page
+      ))
+       from public.timesheet_evidence evidence
+       left join public.candidate_submission_components component
+         on component.id=evidence.candidate_component_id
+       left join lateral (
+         select page
+         from jsonb_array_elements(v_manifest->'pages') page
+         where page->>'page_key'=component.paper_return_page_key
+       ) manifest_page on true
+       where evidence.timesheet_id=v_timesheet);
+  end if;
+  if not exists(
        select 1
        from public.timesheet_evidence evidence
        join public.candidate_submission_components component
@@ -662,7 +492,9 @@ begin
          and manifest_page->>'display_name'='Other 1'
          and evidence.display_name=manifest_page->>'display_name'
      ) then
-    raise exception 'complete paper pack did not materialise atomically: %',v_response;
+    raise exception 'PAPER finalisation did not attach the Other 1 manifest label: %',
+      (select jsonb_agg(jsonb_build_object('display_name',display_name,'candidate_component_id',candidate_component_id))
+       from public.timesheet_evidence where timesheet_id=v_timesheet);
   end if;
   v_response:=public.cloudtms_office_candidate_adapter_v1(
     'FINALISE_REPLAY_LOOKUP',v_actor,'TEST',jsonb_build_object(
@@ -680,99 +512,6 @@ begin
   end if;
 end;
 $paper_complete_pack$;
-
-do $dated_read_boundaries$
-declare
-  v_client uuid:='a3000000-0000-0000-0000-000000000001';
-  v_candidate uuid:='a3000000-0000-0000-0000-000000000002';
-  v_contract uuid:='a3000000-0000-0000-0000-000000000003';
-  v_account uuid:='a3000000-0000-0000-0000-000000000004';
-  v_session uuid:='a3000000-0000-0000-0000-000000000005';
-  v_weekday integer:=extract(dow from current_date)::integer;
-  v_current_week date:=current_date;
-  v_response jsonb;
-  v_options jsonb;
-  v_week_date date;
-  v_week_id uuid;
-  v_timesheet_id uuid;
-  v_index integer:=0;
-begin
-  insert into public.clients(id,name) values(v_client,'Dated reads runtime client');
-  insert into public.candidates(id,email,active,key_norm)
-  values(v_candidate,'dated-reads@example.test',true,'GCK-DATED-READS');
-  insert into public.client_settings(
-    id,client_id,effective_from,default_submission_mode,week_ending_weekday,
-    candidate_paper_submission_enabled
-  ) values
-    (gen_random_uuid(),v_client,current_date-200,'MANUAL',v_weekday,false),
-    (gen_random_uuid(),v_client,current_date+7,'ELECTRONIC',v_weekday,false);
-  insert into public.contracts(
-    id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
-    default_submission_mode,overrideclientsettings
-  ) values(v_contract,v_candidate,v_client,current_date-200,current_date+35,
-    v_weekday,'MANUAL',false);
-  insert into public.candidate_app_accounts(id,environment,email_normalized,status)
-  values(v_account,'TEST','dated-reads@example.test','ACTIVE');
-  insert into public.candidate_app_sessions(
-    id,account_id,environment,selected_candidate_id,status,refresh_token_hash,
-    expires_at_utc,absolute_expires_at_utc
-  ) values(v_session,v_account,'TEST',v_candidate,'ACTIVE',decode(repeat('a5',32),'hex'),
-    now()+interval '30 days',now()+interval '90 days');
-
-  foreach v_week_date in array array[
-    v_current_week-49,
-    v_current_week-56,
-    v_current_week-100
-  ] loop
-    v_index:=v_index+1;
-    v_week_id:=('a3000000-0000-0000-0000-'||lpad((100+v_index)::text,12,'0'))::uuid;
-    v_timesheet_id:=('a3000000-0000-0000-0000-'||lpad((200+v_index)::text,12,'0'))::uuid;
-    insert into public.timesheets(
-      timesheet_id,contract_id,week_ending_date,line_type,submission_mode
-    ) values(v_timesheet_id,v_contract,v_week_date,'HOURS','MANUAL');
-    insert into public.contract_weeks(
-      id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
-    ) values(v_week_id,v_contract,v_week_date,'OPEN','MANUAL',v_timesheet_id);
-    insert into public.timesheets_financials(
-      timesheet_id,candidate_id,client_id,total_hours,processing_status,paid_at_utc
-    ) values(
-      v_timesheet_id,v_candidate,v_client,8,'READY_FOR_INVOICE',
-      case when v_week_date=v_current_week-100 then null else now() end
-    );
-  end loop;
-
-  v_response:=public.candidate_app_timesheet_page_v1(v_session,'TEST','CURRENT',null,50,now());
-  if not exists(
-      select 1 from jsonb_array_elements(v_response->'items') item
-      where (item->>'week_ending_date')::date=v_current_week-49
-    )
-     or not exists(
-      select 1 from jsonb_array_elements(v_response->'items') item
-      where (item->>'week_ending_date')::date=v_current_week-56
-    )
-     or not exists(
-      select 1 from jsonb_array_elements(v_response->'items') item
-      where (item->>'week_ending_date')::date=v_current_week-100
-        and coalesce((item->>'paid')::boolean,false)=false
-    ) then
-    raise exception 'Current recent-paid or age-unbounded unpaid membership was incorrect: %',v_response;
-  end if;
-
-  v_response:=public.candidate_missing_week_options_v1(
-    v_session,'TEST',v_contract,current_date,current_date+21,now());
-  v_options:=v_response->'options';
-  if exists(
-      select 1 from jsonb_array_elements(v_options) option_row
-      where (option_row->>'week_ending_date')::date=current_date
-    )
-     or not exists(
-      select 1 from jsonb_array_elements(v_options) option_row
-      where (option_row->>'week_ending_date')::date=current_date+7
-        and option_row->>'submission_mode'='ELECTRONIC'
-    ) then
-    raise exception 'missing-week policy was not resolved for each generated week: %',v_response;
-  end if;
-end;
-$dated_read_boundaries$;
+select 'PASS'::text as candidate_paper_evidence_manifest_label_runtime_verification;
 
 rollback;

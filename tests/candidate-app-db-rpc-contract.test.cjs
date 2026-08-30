@@ -26,7 +26,7 @@ const all = Object.values(sql).join('\n');
 const codeOnly = all.replace(/^\s*--.*$/gm, '');
 const latestCapabilities = read('supabase/repeatable/26082026_0725_candidate_authorised_hours_expense_anchor_v1.sql');
 const latestNoWork = read('supabase/repeatable/26082026_0659_candidate_no_work_weekly_chain_v1.sql');
-const latestExpenseApply = read('supabase/repeatable/26082026_2225_candidate_expense_finalise_signature_recheck_v3.sql');
+const latestExpenseApply = read('supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql');
 const candidateRuntimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
 const managerRefusalResubmission = read(
   'supabase/repeatable/28082026_0214_candidate_manager_refusal_resubmission_v1.sql'

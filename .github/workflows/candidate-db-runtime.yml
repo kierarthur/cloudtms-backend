@@ -32,6 +32,9 @@ on:
       - 'supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql'
       - 'supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql'
       - 'supabase/repeatable/26072026_1947_invoice_batch_issue_candidate_rows_v1.sql'
+      - 'supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql'
+      - 'supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql'
+      - 'tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql'
       - 'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql'
       - 'supabase/repeatable/23082026_0117_candidate_manager_email_authority_v1.sql'
       - 'supabase/repeatable/23082026_0822_candidate_manager_email_claim_route_guard_v1.sql'
@@ -161,6 +164,7 @@ jobs:
             supabase/repeatable/28082026_0505_candidate_refused_card_recovery_v1.sql
             supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql
             supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql
+            supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql
             supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql
             supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
             supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql
@@ -176,6 +180,7 @@ jobs:
             tests/07082026_2155_candidate_app_local_runtime_verification.sql
             tests/07082026_2333_candidate_app_manager_review_handover_verification.sql
             tests/08082026_1040_candidate_app_policy_corrections_runtime_verification.sql
+            tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql
             tests/08082026_1055_candidate_app_claim_concurrency_verification.sql
             tests/08082026_1200_candidate_app_expense_workflow_runtime_verification.sql
             tests/08082026_1210_candidate_app_flag_acl_runtime_verification.sql
@@ -222,6 +227,7 @@ jobs:
             tests/21082026_2345_candidate_federated_membership_runtime_verification.sql
             supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql
             supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql
+            supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql
           )
           for file in "${suites[@]}"; do apply_sql "$file"; done
 
