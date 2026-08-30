@@ -29,6 +29,14 @@ declare
   v_replay jsonb;
   v_paper jsonb;
   v_paper_replay jsonb;
+  v_plan_chunk uuid;
+  v_plan_document_version uuid;
+  v_plan_result jsonb;
+  v_manual_operation uuid := gen_random_uuid();
+  v_manual_document_version uuid := gen_random_uuid();
+  v_manual_plan_chunk uuid := gen_random_uuid();
+  v_manual_revision bigint;
+  v_manual_result jsonb;
   v_stale_failed boolean := false;
 begin
   v_email := 'paper-target-'||replace(v_candidate::text,'-','')||'@example.test';
@@ -234,6 +242,118 @@ begin
          where type='TIMESHEET_QR'
            and payment_scope_json->>'candidate_workflow_id'=v_workflow::text)<>1 then
     raise exception 'CANDIDATE_WEEKLY_PAPER_READY_FIRST_USE_FAILED: %, %',v_paper,v_paper_replay;
+  end if;
+
+  -- The Candidate PAPER route stores the Timesheet as MANUAL so the eventual
+  -- returned page is handled by the established signed-asset authority.  Its
+  -- initial frozen QR_UNSIGNED pack is nevertheless a server-rendered official
+  -- form and must not be rejected as a missing uploaded manual asset.
+  if (select count(*)
+      from public.invoice_operation_chunks c
+      where c.entity_type='TIMESHEET'
+        and c.entity_id=v_timesheet
+        and c.chunk_type='DOCUMENT_PLAN'
+        and c.phase='BUILD_MANIFEST')<>1 then
+    raise exception 'CANDIDATE_WEEKLY_PAPER_DOCUMENT_PLAN_MULTIPLICITY_INVALID';
+  end if;
+  select c.id,c.document_version_id
+    into v_plan_chunk,v_plan_document_version
+  from public.invoice_operation_chunks c
+  where c.entity_type='TIMESHEET'
+    and c.entity_id=v_timesheet
+    and c.chunk_type='DOCUMENT_PLAN'
+    and c.phase='BUILD_MANIFEST';
+
+  v_plan_result:=private._invoice_document_advance_batch(
+    jsonb_build_array(jsonb_build_object(
+      'chunk_id',v_plan_chunk,'phase','BUILD_MANIFEST')),
+    v_now+interval '5 seconds'
+  );
+  if v_plan_result->0->>'status' is distinct from 'QUEUED'
+     or v_plan_result->0->>'phase' is distinct from 'WAIT_FOR_INPUTS'
+     or (select status::text from public.invoice_operation_chunks
+         where id=v_plan_chunk) is distinct from 'QUEUED'
+     or (select phase from public.invoice_operation_chunks
+         where id=v_plan_chunk) is distinct from 'WAIT_FOR_INPUTS'
+     or (select status::text from public.invoice_document_versions
+         where id=v_plan_document_version) is distinct from 'WAITING_FOR_INPUTS'
+     or (select jsonb_array_length(manifest_json)
+         from public.invoice_document_versions
+         where id=v_plan_document_version)<>1
+     or (select manifest_json->0->>'input_type'
+         from public.invoice_document_versions
+         where id=v_plan_document_version) is distinct from 'ELECTRONIC_TIMESHEET'
+     or (select count(*) from public.invoice_operation_chunks
+         where operation_id=(select operation_id from public.invoice_operation_chunks
+                             where id=v_plan_chunk)
+           and chunk_type='SOURCE_RENDER' and phase='RENDER' and status='QUEUED')<>1
+     or exists(
+       select 1 from public.invoice_operation_chunks
+       where operation_id=(select operation_id from public.invoice_operation_chunks
+                           where id=v_plan_chunk)
+         and error_json->>'code'='MANUAL_TIMESHEET_ASSET_REQUIRED'
+     ) then
+    raise exception 'CANDIDATE_WEEKLY_QR_UNSIGNED_DOCUMENT_PLAN_FAILED: %',v_plan_result;
+  end if;
+
+  -- Preserve the opposite fail-closed rule: an ordinary MANUAL Timesheet with
+  -- no registered source asset is still blocked.  This second planner is a
+  -- rollback-only synthetic operation over the same fixture after QR has been
+  -- cancelled, so it cannot be mistaken for the approved QR_UNSIGNED form.
+  update public.timesheets
+     set qr_status='CANCELLED',qr_token=null,qr_payload_json='{}'::jsonb,
+         current_document_version_id=null,active_document_operation_id=null,
+         document_state='STALE',document_revision=document_revision+1,
+         updated_at=v_now+interval '6 seconds'
+   where timesheet_id=v_timesheet and is_current
+   returning document_revision into v_manual_revision;
+
+  insert into public.invoice_operations(
+    id,operation_type,entity_type,entity_id,idempotency_key,status,phase,
+    priority,source_revision,template_version,input_json,config_json,
+    progress_json,total_units,chunk_count,control_version,change_seq,
+    created_at_utc,updated_at_utc
+  ) values(
+    v_manual_operation,'BUILD_DOCUMENT','TIMESHEET',v_timesheet,
+    'paper-manual-negative-'||v_manual_operation::text,'QUEUED','BUILD_MANIFEST',
+    550,v_manual_revision::text,'timesheet-professional-v2','{}'::jsonb,
+    jsonb_build_object('processor_policy',private._invoice_processor_limits()),
+    '{}'::jsonb,1,1,1,nextval('public.invoice_operation_change_seq'),
+    v_now+interval '6 seconds',v_now+interval '6 seconds'
+  );
+  insert into public.invoice_document_versions(
+    id,entity_type,entity_id,purpose,operation_id,source_revision,
+    template_version,status,snapshot_json,snapshot_hash,manifest_json,
+    manifest_hash,created_at_utc
+  ) values(
+    v_manual_document_version,'TIMESHEET',v_timesheet,'TIMESHEET',
+    v_manual_operation,v_manual_revision::text,'timesheet-professional-v2',
+    'PLANNING','{}'::jsonb,encode(extensions.digest('{}','sha256'),'hex'),
+    '[]'::jsonb,encode(extensions.digest('[]','sha256'),'hex'),
+    v_now+interval '6 seconds'
+  );
+  insert into public.invoice_operation_chunks(
+    id,operation_id,chunk_type,phase,work_key,sequence_no,entity_type,
+    entity_id,document_version_id,status,priority,run_after_utc,payload_json,
+    operation_control_version,created_at_utc,updated_at_utc
+  ) values(
+    v_manual_plan_chunk,v_manual_operation,'DOCUMENT_PLAN','BUILD_MANIFEST',
+    encode(extensions.digest('paper-manual-negative-'||v_manual_operation::text,
+      'sha256'),'hex'),0,'TIMESHEET',v_timesheet,v_manual_document_version,
+    'QUEUED',550,v_now+interval '6 seconds','{}'::jsonb,1,
+    v_now+interval '6 seconds',v_now+interval '6 seconds'
+  );
+  v_manual_result:=private._invoice_document_advance_batch(
+    jsonb_build_array(jsonb_build_object(
+      'chunk_id',v_manual_plan_chunk,'phase','BUILD_MANIFEST')),
+    v_now+interval '7 seconds'
+  );
+  if v_manual_result->0->>'status' is distinct from 'BLOCKED'
+     or v_manual_result->0#>>'{error,code}' is distinct from
+       'MANUAL_TIMESHEET_ASSET_REQUIRED'
+     or (select status::text from public.invoice_operation_chunks
+         where id=v_manual_plan_chunk) is distinct from 'BLOCKED' then
+    raise exception 'ORDINARY_MANUAL_MISSING_ASSET_NOT_BLOCKED: %',v_manual_result;
   end if;
 
   if pg_catalog.has_function_privilege('anon',

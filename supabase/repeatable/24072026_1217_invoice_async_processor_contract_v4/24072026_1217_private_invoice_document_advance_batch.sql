@@ -118,6 +118,10 @@ begin
   direct_timesheet as materialized (
     select l.id chunk_id,l.operation_id,l.document_version_id,
       upper(coalesce(t.submission_mode::text,'')) submission_mode,
+      (l.snapshot_json_v5#>>'{presentation_model,schema_version}'=
+        'TIMESHEET_RENDER_MODEL_V2'
+        and l.snapshot_json_v5#>>'{presentation_model,form_variant}'=
+          'QR_UNSIGNED') candidate_qr_unsigned,
       t.manual_document_asset_id,
       a.id asset_id,a.source_kind,a.source_id,a.source_revision,
       a.original_filename,a.normalised_page_count,a.status asset_status
@@ -142,6 +146,7 @@ begin
     where c.id=dt.chunk_id
       and dt.submission_mode in('MANUAL','QR')
       and dt.asset_id is null
+      and not dt.candidate_qr_unsigned
     returning c.id,c.operation_id,c.status,c.phase,c.error_json
   ),
   invoice_ts as materialized (
@@ -190,7 +195,9 @@ begin
       l.presentation_schema,l.presentation_hash
     from linked l
     left join direct_timesheet dt on dt.chunk_id=l.id
-    where l.entity_type='INVOICE' or dt.submission_mode='ELECTRONIC'
+    where l.entity_type='INVOICE'
+      or dt.submission_mode='ELECTRONIC'
+      or dt.candidate_qr_unsigned
     union all
     select dt.chunk_id,dt.document_version_id,0::integer,
       'ASSET',dt.source_kind,dt.source_id,dt.source_revision,
@@ -201,7 +208,9 @@ begin
       encode(digest(concat_ws('|',dt.asset_id::text,dt.source_revision,
         dt.source_kind,dt.source_id::text),'sha256'),'hex')
     from direct_timesheet dt
-    where dt.submission_mode in('MANUAL','QR') and dt.asset_id is not null
+    where dt.submission_mode in('MANUAL','QR')
+      and dt.asset_id is not null
+      and not dt.candidate_qr_unsigned
     union all
     select it.chunk_id,it.document_version_id,
       1000+row_number() over(partition by it.chunk_id order by it.timesheet_id)::integer,
@@ -298,7 +307,9 @@ begin
       l.control_version,v_now,v_now
     from linked l
     left join direct_timesheet dt on dt.chunk_id=l.id
-    where l.entity_type='INVOICE' or dt.submission_mode='ELECTRONIC'
+    where l.entity_type='INVOICE'
+      or dt.submission_mode='ELECTRONIC'
+      or dt.candidate_qr_unsigned
     on conflict(operation_id,chunk_type,level_no,sequence_no,work_key) do update set
       priority=greatest(public.invoice_operation_chunks.priority,excluded.priority),
       payload_json=excluded.payload_json,
@@ -388,15 +399,17 @@ begin
            status=case when exists(
              select 1 from direct_timesheet dt
              where dt.chunk_id=l.id
-               and dt.submission_mode in('MANUAL','QR')
-               and dt.asset_status='READY')
+               and ((dt.submission_mode in('MANUAL','QR')
+                 and dt.asset_status='READY')
+                 or dt.candidate_qr_unsigned))
              then 'QUEUED' else 'WAITING' end,
            progress_json=jsonb_build_object(
              'status_message',case when exists(
                select 1 from direct_timesheet dt
                where dt.chunk_id=l.id
-                 and dt.submission_mode in('MANUAL','QR')
-                 and dt.asset_status='READY')
+                 and ((dt.submission_mode in('MANUAL','QR')
+                   and dt.asset_status='READY')
+                   or dt.candidate_qr_unsigned))
                then 'Document inputs ready'
                else 'Waiting for document inputs' end,
              'manifest_items',(select jsonb_array_length(v.manifest_json)

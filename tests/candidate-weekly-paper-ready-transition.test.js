@@ -97,6 +97,11 @@ test('mandatory rollback proof executes ready-state transition and exact replay'
   assert.match(verification, /candidate_weekly_paper_prepare_atomic_v1\(/i);
   assert.match(verification, /AWAITING_PAPER_RETURN/i);
   assert.match(verification, /count\(\*\) from public\.mail_outbox/i);
+  assert.match(verification, /private\._invoice_document_advance_batch\(/i);
+  assert.match(verification, /CANDIDATE_WEEKLY_QR_UNSIGNED_DOCUMENT_PLAN_FAILED/i);
+  assert.match(verification, /ELECTRONIC_TIMESHEET/i);
+  assert.match(verification, /ORDINARY_MANUAL_MISSING_ASSET_NOT_BLOCKED/i);
+  assert.match(verification, /MANUAL_TIMESHEET_ASSET_REQUIRED/i);
   assert.match(release, /30082026_0605_candidate_weekly_paper_target_prepare_verification\.sql/i);
 });
 

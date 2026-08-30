@@ -1722,7 +1722,7 @@ test('manual and QR timesheet document planning fails closed without an immutabl
   );
 });
 
-test('direct manual and QR timesheet documents use the exact registered asset', () => {
+test('direct manual documents use an exact asset while Candidate QR packs use their frozen official form', () => {
   const documentAdvance = read(
     'supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/'
     + '24072026_1217_private_invoice_document_advance_batch.sql',
@@ -1733,19 +1733,31 @@ test('direct manual and QR timesheet documents use the exact registered asset', 
   );
   assert.match(
     documentAdvance,
-    /blocked_direct_timesheet_source as materialized \([\s\S]*'MANUAL_TIMESHEET_ASSET_REQUIRED'[\s\S]*dt\.submission_mode in\('MANUAL','QR'\)[\s\S]*dt\.asset_id is null/s,
+    /blocked_direct_timesheet_source as materialized \([\s\S]*'MANUAL_TIMESHEET_ASSET_REQUIRED'[\s\S]*dt\.submission_mode in\('MANUAL','QR'\)[\s\S]*dt\.asset_id is null[\s\S]*not dt\.candidate_qr_unsigned/s,
   );
   assert.match(
     documentAdvance,
-    /select dt\.chunk_id,dt\.document_version_id,0::integer,\s*'ASSET',dt\.source_kind,dt\.source_id,dt\.source_revision,\s*dt\.asset_id[\s\S]*dt\.submission_mode in\('MANUAL','QR'\) and dt\.asset_id is not null/s,
+    /direct_timesheet as materialized \([\s\S]*TIMESHEET_RENDER_MODEL_V2[\s\S]*QR_UNSIGNED[\s\S]*candidate_qr_unsigned/s,
   );
   assert.match(
     documentAdvance,
-    /from linked l\s+left join direct_timesheet dt on dt\.chunk_id=l\.id\s+where l\.entity_type='INVOICE' or dt\.submission_mode='ELECTRONIC'\s+on conflict/s,
+    /select dt\.chunk_id,dt\.document_version_id,0::integer,\s*'ASSET',dt\.source_kind,dt\.source_id,dt\.source_revision,\s*dt\.asset_id[\s\S]*dt\.submission_mode in\('MANUAL','QR'\)[\s\S]*dt\.asset_id is not null[\s\S]*not dt\.candidate_qr_unsigned/s,
   );
   assert.match(
     documentAdvance,
-    /status=case when exists\(\s*select 1 from direct_timesheet dt\s*where dt\.chunk_id=l\.id\s*and dt\.submission_mode in\('MANUAL','QR'\)\s*and dt\.asset_status='READY'\)\s*then 'QUEUED' else 'WAITING' end/s,
+    /from linked l\s+left join direct_timesheet dt on dt\.chunk_id=l\.id\s+where l\.entity_type='INVOICE'\s+or dt\.submission_mode='ELECTRONIC'\s+or dt\.candidate_qr_unsigned/s,
+  );
+  assert.match(
+    documentAdvance,
+    /core_chunks as materialized \([\s\S]*where l\.entity_type='INVOICE'\s+or dt\.submission_mode='ELECTRONIC'\s+or dt\.candidate_qr_unsigned/s,
+  );
+  assert.match(
+    documentAdvance,
+    /advanced as materialized \([\s\S]*dt\.asset_status='READY'\)\s+or dt\.candidate_qr_unsigned/s,
+  );
+  assert.match(
+    documentAdvance,
+    /status=case when exists\(\s*select 1 from direct_timesheet dt\s*where dt\.chunk_id=l\.id\s*and \(\(dt\.submission_mode in\('MANUAL','QR'\)\s*and dt\.asset_status='READY'\)\s*or dt\.candidate_qr_unsigned\)\)\s*then 'QUEUED' else 'WAITING' end/s,
   );
 });
 
