@@ -49,6 +49,10 @@ test('private PAPER preparation immediately delegates document work to the norma
 });
 
 test('pending PAPER status resumes the existing document then atomically completes its exact ready pack', () => {
+  const requeue = backend.slice(
+    backend.indexOf('async function restartCandidatePaperSourceDocumentFromStatus'),
+    backend.indexOf('async function handlePaperPackStatus')
+  );
   const assembly = backend.slice(
     backend.indexOf('async function resumeCandidatePaperPackFromStatus'),
     backend.indexOf('async function handlePaperPackStatus')
@@ -58,7 +62,16 @@ test('pending PAPER status resumes the existing document then atomically complet
     backend.indexOf('async function handlePaperPackDownload')
   );
   assert.match(backend, /active_document_operation_id,manual_pdf_r2_key/i);
+  assert.match(requeue, /documentState !== 'STALE'/i);
+  assert.match(requeue, /UUID_RE\.test\(activeOperationId\)/i);
+  assert.match(requeue, /typeof deps\?\.enqueueQrPack !== 'function'/i);
+  assert.match(requeue, /expectedTimesheetId: context\.id/i);
+  assert.match(requeue, /candidate-paper-status:\$\{context\.workflow\.id\}:g\$\{generation\}:r\$\{documentRevision\}/i);
+  assert.match(requeue, /CANDIDATE_PAPER_DOCUMENT_REQUEUE_INVALID/i);
   assert.match(status, /context\.state === 'PREPARING'/i);
+  assert.match(status, /upper\(context\.timesheet\.document_state\) === 'STALE'/i);
+  assert.match(status, /restartCandidatePaperSourceDocumentFromStatus\(/i);
+  assert.match(status, /paper-source-status-requeue/i);
   assert.match(status, /UUID_RE\.test\(documentOperationId\)/i);
   assert.match(status, /document_operation_id: documentOperationId/i);
   assert.match(status, /current_timesheet_id: context\.id/i);
@@ -71,6 +84,7 @@ test('pending PAPER status resumes the existing document then atomically complet
   assert.match(assembly, /recordCandidatePaperPackFailure\(/i);
   assert.doesNotMatch(status, /timesheet_qr_send_enqueue_v1|immutablePut/i);
   assert.doesNotMatch(assembly, /timesheet_qr_send_enqueue_v1/i);
+  assert.doesNotMatch(requeue, /timesheet_qr_send_enqueue_v1|immutablePut/i);
 });
 
 test('weekly PAPER adapter remains service-only', () => {

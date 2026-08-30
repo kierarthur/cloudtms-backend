@@ -30,6 +30,7 @@ const {
   candidatePaperCompleteReceipt,
   readyPaperPackReceipt,
   readyGeneratedDocumentReceipt,
+  restartCandidatePaperSourceDocumentFromStatus,
   releaseCandidatePaperPack,
   bindCandidatePaperOutbox,
   assembleCandidatePaperPack,
@@ -59,6 +60,60 @@ const {
   withoutInternalRenderContracts,
   verifyPassword
 } = candidateAppBackendInternals;
+
+test('stale Paper source recovery creates one exact replacement document job', async () => {
+  const timesheetId = '00000000-0000-4000-8000-000000000901';
+  const workflowId = '00000000-0000-4000-8000-000000000902';
+  const operationId = '00000000-0000-4000-8000-000000000903';
+  let observed = null;
+  const result = await restartCandidatePaperSourceDocumentFromStatus({}, {
+    async enqueueQrPack(options) {
+      observed = options;
+      return {
+        document_operation_id: operationId,
+        current_timesheet_id: timesheetId
+      };
+    }
+  }, {
+    id: timesheetId,
+    state: 'PREPARING',
+    outbox: { id: 'held-paper-outbox' },
+    workflow: { id: workflowId, generation: 4 },
+    timesheet: {
+      document_state: 'STALE',
+      active_document_operation_id: null,
+      document_revision: 7
+    }
+  }, null);
+
+  assert.deepEqual(result, { ok: true, document_operation_id: operationId });
+  assert.equal(observed.timesheetId, timesheetId);
+  assert.equal(observed.expectedTimesheetId, timesheetId);
+  assert.equal(observed.idempotencyKey,
+    `candidate-paper-status:${workflowId}:g4:r7`);
+});
+
+test('Paper source recovery never queues over an existing active document job', async () => {
+  let calls = 0;
+  const result = await restartCandidatePaperSourceDocumentFromStatus({}, {
+    async enqueueQrPack() { calls += 1; }
+  }, {
+    id: '00000000-0000-4000-8000-000000000911',
+    state: 'PREPARING',
+    outbox: { id: 'held-paper-outbox' },
+    workflow: { id: '00000000-0000-4000-8000-000000000912', generation: 1 },
+    timesheet: {
+      document_state: 'STALE',
+      active_document_operation_id: '00000000-0000-4000-8000-000000000913',
+      document_revision: 3
+    }
+  }, null);
+
+  assert.deepEqual(result, {
+    ok: true, skipped: true, reason: 'SOURCE_REQUEUE_NOT_REQUIRED'
+  });
+  assert.equal(calls, 0);
+});
 
 test('successful factual Daily receipt never exposes internal Office resolution to the Candidate', () => {
   assert.deepEqual(safeFinalisationResult({
@@ -3043,6 +3098,9 @@ test('paper pack readiness uses the durable receipt and advances only the exact 
   assert.match(statusPath, /paper_return_pages: paperReturnPages/);
   assert.match(statusPath, /page_count: paperReturnPages\.length/);
   assert.match(statusPath, /context\.state === 'PREPARING'/);
+  assert.match(statusPath, /upper\(context\.timesheet\.document_state\) === 'STALE'/);
+  assert.match(statusPath, /restartCandidatePaperSourceDocumentFromStatus\(/);
+  assert.match(statusPath, /deferBackground\(ctx, work, 'paper-source-status-requeue'/);
   assert.match(statusPath, /UUID_RE\.test\(documentOperationId\)/);
   assert.match(statusPath, /document_operation_id: documentOperationId/);
   assert.match(statusPath, /current_timesheet_id: context\.id/);

@@ -5417,9 +5417,62 @@ async function resumeCandidatePaperPackFromStatus(env, deps, context) {
   }
 }
 
+async function restartCandidatePaperSourceDocumentFromStatus(env, deps, context, ctx) {
+  const documentState = upper(context?.timesheet?.document_state);
+  const activeOperationId = text(context?.timesheet?.active_document_operation_id);
+  if (context?.state !== 'PREPARING' || documentState !== 'STALE'
+      || UUID_RE.test(activeOperationId) || !context?.outbox
+      || typeof deps?.enqueueQrPack !== 'function') {
+    return { ok: true, skipped: true, reason: 'SOURCE_REQUEUE_NOT_REQUIRED' };
+  }
+
+  const generation = requireInteger(
+    context.workflow?.generation, 'WORKFLOW_GENERATION_CONFLICT', 1
+  );
+  const documentRevision = requireInteger(
+    context.timesheet?.document_revision, 'CANDIDATE_PAPER_DOCUMENT_REVISION_INVALID', 1
+  );
+  const pack = await deps.enqueueQrPack({
+    timesheetId: context.id,
+    expectedTimesheetId: context.id,
+    idempotencyKey: `candidate-paper-status:${context.workflow.id}:g${generation}:r${documentRevision}`,
+    ctx
+  });
+  const operationId = text(pack?.document_operation_id);
+  if (!UUID_RE.test(operationId)
+      || text(pack?.current_timesheet_id || pack?.timesheet_id) !== context.id) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_DOCUMENT_REQUEUE_INVALID');
+  }
+  return { ok: true, document_operation_id: operationId };
+}
+
 async function handlePaperPackStatus(request, env, deps, timesheetId, ctx = null) {
   const context = await candidatePaperPackContext(request, env, deps, timesheetId);
   const documentOperationId = text(context.timesheet.active_document_operation_id);
+  if (context.state === 'PREPARING'
+      && upper(context.timesheet.document_state) === 'STALE'
+      && !UUID_RE.test(documentOperationId)) {
+    const work = restartCandidatePaperSourceDocumentFromStatus(
+      env, deps, context, ctx
+    ).then((result) => {
+      console.log('[candidate-app] exact Paper source document continuation', {
+        workflow_id: context.workflow.id,
+        generation: Number(context.workflow.generation),
+        timesheet_id: context.id,
+        ok: result?.ok === true,
+        skipped: result?.skipped === true,
+        reason: result?.reason || null,
+        document_operation_id: result?.document_operation_id || null
+      });
+      return result;
+    });
+    const deferred = deferBackground(ctx, work, 'paper-source-status-requeue', {
+      workflow_id: context.workflow.id,
+      generation: Number(context.workflow.generation),
+      timesheet_id: context.id
+    });
+    if (deferred !== true) await deferred;
+  }
   if (context.state === 'PREPARING' && UUID_RE.test(documentOperationId) && deps.nudgeQrPack) {
     const work = deps.nudgeQrPack({
       pack: {
@@ -7009,6 +7062,7 @@ export const candidateAppBackendInternals = Object.freeze({
   candidatePaperCompleteReceipt,
   readyPaperPackReceipt,
   readyGeneratedDocumentReceipt,
+  restartCandidatePaperSourceDocumentFromStatus,
   releaseCandidatePaperPack,
   requireCandidatePaperOutbox,
   bindCandidatePaperOutbox,
