@@ -4443,7 +4443,9 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
   const managerRoutesToRetire = dbAction === 'CANCEL'
     ? await currentManagerEmailRouteTickets(env, workflowId) : [];
   const result = replayResult || await rpcCall(
-    deps, 'candidate_workflow_transition_atomic_v1',
+    deps, dbAction === 'PAPER_PREPARE'
+      ? 'candidate_weekly_paper_prepare_atomic_v1'
+      : 'candidate_workflow_transition_atomic_v1',
     workflowActionArgs(access, env, workflowId, dbAction, generation, payload, mutationKey)
   );
   if (pendingManagerRoute) {

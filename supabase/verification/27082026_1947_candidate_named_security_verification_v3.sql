@@ -108,10 +108,10 @@ begin
 
   -- Banking Pay Modal Structure v2, its replaced-session candidate-owner
   -- repair, the three service-only MyTMS Places and contacts functions, and the
-  -- service-only weekly paper-target preparation function are present. Browser
-  -- execution remains exactly zero.
-  if v_count<>116 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'5c3c5e83e2ce24ff3a5460635319629d' then
+  -- service-only weekly paper-target preparation functions (durable target and
+  -- ready-state adapter) are present. Browser execution remains exactly zero.
+  if v_count<>117 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'4d6ec4409b49f26825ee8b3b74d6f113' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

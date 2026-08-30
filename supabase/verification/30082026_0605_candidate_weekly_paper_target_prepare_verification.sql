@@ -27,11 +27,14 @@ declare
   v_submission jsonb;
   v_first jsonb;
   v_replay jsonb;
+  v_paper jsonb;
+  v_paper_replay jsonb;
   v_stale_failed boolean := false;
 begin
   v_email := 'paper-target-'||replace(v_candidate::text,'-','')||'@example.test';
   v_schedule := jsonb_build_array(jsonb_build_object(
-    'day','MON','start','09:00','end','17:00','break_minutes',0,'hours',8
+    'date',current_date,'day','MON','start','09:00','end','17:00',
+    'break_minutes',0,'hours',8
   ));
   v_create := jsonb_build_object(
     'timesheet_id',v_timesheet,
@@ -108,9 +111,9 @@ begin
 
   insert into public.clients(id,name)
   values(v_client,'Paper target verification client');
-  insert into public.candidates(id,email,display_name,active,key_norm)
+  insert into public.candidates(id,email,display_name,active,key_norm,opt_in_email)
   values(v_candidate,v_email,'Paper Target Candidate',true,
-    'PAPER-TARGET-'||replace(v_candidate::text,'-',''));
+    'PAPER-TARGET-'||replace(v_candidate::text,'-',''),true);
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
     default_submission_mode,pay_method_snapshot,role,
@@ -202,6 +205,33 @@ begin
     raise exception 'CANDIDATE_WEEKLY_PAPER_TARGET_STALE_GENERATION_ACCEPTED';
   end if;
 
+  -- The real app offers Printed Documents after the electronic review pack is
+  -- ready.  Prove that exact state can enter the existing PAPER authority and
+  -- that a replay does not create another Timesheet, workflow or outbox item.
+  update public.candidate_submission_workflows
+  set state='READY_FOR_MANAGER_APPROVAL',route='ELECTRONIC',updated_at_utc=v_now
+  where id=v_workflow and generation=1;
+  v_paper:=public.candidate_weekly_paper_prepare_atomic_v1(
+    v_session,'TEST',v_workflow,'PAPER_PREPARE',1,'{}'::jsonb,
+    'paper-ready-verification-'||v_workflow::text,v_now+interval '3 seconds'
+  );
+  v_paper_replay:=public.candidate_weekly_paper_prepare_atomic_v1(
+    v_session,'TEST',v_workflow,'PAPER_PREPARE',1,'{}'::jsonb,
+    'paper-ready-verification-'||v_workflow::text,v_now+interval '4 seconds'
+  );
+  if v_paper->>'state' is distinct from 'AWAITING_PAPER_RETURN'
+     or v_paper_replay->>'state' is distinct from 'AWAITING_PAPER_RETURN'
+     or (select state from public.candidate_submission_workflows where id=v_workflow)
+          is distinct from 'AWAITING_PAPER_RETURN'
+     or (select route from public.candidate_submission_workflows where id=v_workflow)
+          is distinct from 'PAPER'
+     or (select count(*) from public.timesheets where contract_id=v_contract and week_ending_date=current_date and is_current)<>1
+     or (select count(*) from public.mail_outbox
+         where type='TIMESHEET_QR'
+           and payment_scope_json->>'candidate_workflow_id'=v_workflow::text)<>1 then
+    raise exception 'CANDIDATE_WEEKLY_PAPER_READY_FIRST_USE_FAILED: %, %',v_paper,v_paper_replay;
+  end if;
+
   if pg_catalog.has_function_privilege('anon',
        'public.candidate_weekly_paper_target_prepare_v1(uuid,text,uuid,integer,timestamp with time zone)',
        'EXECUTE')
@@ -212,6 +242,17 @@ begin
        'public.candidate_weekly_paper_target_prepare_v1(uuid,text,uuid,integer,timestamp with time zone)',
        'EXECUTE') then
     raise exception 'CANDIDATE_WEEKLY_PAPER_TARGET_ACL_INVALID';
+  end if;
+  if pg_catalog.has_function_privilege('anon',
+       'public.candidate_weekly_paper_prepare_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)',
+       'EXECUTE')
+     or pg_catalog.has_function_privilege('authenticated',
+       'public.candidate_weekly_paper_prepare_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)',
+       'EXECUTE')
+     or not pg_catalog.has_function_privilege('service_role',
+       'public.candidate_weekly_paper_prepare_atomic_v1(uuid,text,uuid,text,integer,jsonb,text,timestamp with time zone)',
+       'EXECUTE') then
+    raise exception 'CANDIDATE_WEEKLY_PAPER_READY_ACL_INVALID';
   end if;
 end;
 $candidate_weekly_paper_target_prepare_verification$;
