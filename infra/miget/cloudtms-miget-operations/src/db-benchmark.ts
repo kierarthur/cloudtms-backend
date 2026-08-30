@@ -256,21 +256,21 @@ async function runPostgrest(
   let rowCount = 0;
 
   if (test === "select_1") {
-    payload = await step("/rest/v1/rpc/codex_debug_select_sql", {
+    payload = await step("/rpc/codex_debug_select_sql", {
       method: "POST",
       body: JSON.stringify({ p_sql: "select 1::integer as value", p_limit: 1 }),
     });
     rowCount = 1;
   } else if (test === "small_read") {
     payload = await step(
-      `/rest/v1/settings_defaults?id=eq.1&select=${SETTINGS_COLUMNS.join(",")}&limit=1`,
+      `/settings_defaults?id=eq.1&select=${SETTINGS_COLUMNS.join(",")}&limit=1`,
     );
     rowCount = rowsFrom(payload).length;
   } else {
     if (!timesheetId) throw new BenchmarkHttpError(400, "timesheet_id is required");
     const encodedId = encodeURIComponent(timesheetId);
     const timesheetPayload = await step(
-      `/rest/v1/timesheets?timesheet_id=eq.${encodedId}&is_current=eq.true&select=*&limit=1`,
+      `/timesheets?timesheet_id=eq.${encodedId}&is_current=eq.true&select=*&limit=1`,
     );
     const timesheet = firstRow(timesheetPayload);
     if (!timesheet) throw new BenchmarkHttpError(404, "The TEST benchmark timesheet was not found");
@@ -279,7 +279,7 @@ async function runPostgrest(
     if (!timesheet.contract_id) {
       summary = firstRow(
         await step(
-          `/rest/v1/v_timesheets_summary?timesheet_id=eq.${encodedId}` +
+          `/v_timesheets_summary?timesheet_id=eq.${encodedId}` +
             "&select=timesheet_id,candidate_id,client_id,candidate_name,client_name,contract_id&limit=1",
         ),
       );
@@ -287,23 +287,23 @@ async function runPostgrest(
 
     const financial = firstRow(
       await step(
-        `/rest/v1/timesheets_financials?timesheet_id=eq.${encodedId}&is_current=eq.true&select=*&limit=1`,
+        `/timesheets_financials?timesheet_id=eq.${encodedId}&is_current=eq.true&select=*&limit=1`,
       ),
     );
     const contractId = String(timesheet.contract_id ?? summary?.contract_id ?? "");
     const contract = contractId
-      ? firstRow(await step(`/rest/v1/contracts?id=eq.${encodeURIComponent(contractId)}&select=*&limit=1`))
+      ? firstRow(await step(`/contracts?id=eq.${encodeURIComponent(contractId)}&select=*&limit=1`))
       : null;
     const clientId = String(contract?.client_id ?? summary?.client_id ?? "");
     const candidateId = String(contract?.candidate_id ?? summary?.candidate_id ?? "");
     const client = clientId
-      ? firstRow(await step(`/rest/v1/clients?id=eq.${encodeURIComponent(clientId)}&select=*&limit=1`))
+      ? firstRow(await step(`/clients?id=eq.${encodeURIComponent(clientId)}&select=*&limit=1`))
       : null;
     const candidate = candidateId
-      ? firstRow(await step(`/rest/v1/candidates?id=eq.${encodeURIComponent(candidateId)}&select=*&limit=1`))
+      ? firstRow(await step(`/candidates?id=eq.${encodeURIComponent(candidateId)}&select=*&limit=1`))
       : null;
     const settings = firstRow(
-      await step(`/rest/v1/settings_defaults?id=eq.1&select=${SETTINGS_COLUMNS.join(",")}&limit=1`),
+      await step(`/settings_defaults?id=eq.1&select=${SETTINGS_COLUMNS.join(",")}&limit=1`),
     );
 
     payload = { timesheet, summary, financial, contract, client, candidate, settings };
