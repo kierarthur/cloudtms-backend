@@ -174,6 +174,18 @@ export function createCandidateDailySpecialist(env, rpc) {
           p_now_utc: new Date().toISOString(), p_correlation_id: request.correlation_id
         }) };
       case 'getCandidateDailyContent': {
+        if (['hospital-addresses', 'accommodation-contacts'].includes(request.input.kind)) {
+          return { result: await invokeRpc(
+            rpc,
+            'candidate_daily_information_candidate_v1',
+            {
+              p_internal_context: request.candidate_context,
+              p_kind: request.input.kind,
+              p_now_utc: new Date().toISOString(),
+              p_correlation_id: request.correlation_id
+            }
+          ) };
+        }
         let input = request.input;
         if (request.input.kind === 'candidate-message') {
           const context = await invokeRpc(rpc, 'candidate_daily_specialist_read_v1', {

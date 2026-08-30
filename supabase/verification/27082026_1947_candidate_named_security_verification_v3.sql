@@ -106,11 +106,11 @@ begin
   into v_count,v_service_missing,v_browser_executable,v_hash
   from targets;
 
-  -- Banking Pay Modal Structure v2 plus its replaced-session candidate-owner
-  -- repair add four service-only RPCs whose names include Candidate. Browser
-  -- execution remains exactly zero.
-  if v_count<>112 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'6d3c3fe23de37f1e7dc74edd08bfceed' then
+  -- Banking Pay Modal Structure v2, its replaced-session candidate-owner
+  -- repair, and the three service-only MyTMS Places and contacts functions are
+  -- present. Browser execution remains exactly zero.
+  if v_count<>115 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'9eb64f67054303d3d292ecfa07f432e3' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

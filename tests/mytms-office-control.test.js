@@ -6,6 +6,7 @@ import { signCandidatePrivateRequest } from '../broker/src/candidate-service-aut
 import {
   adoptMyTmsCandidate,
   getMyTmsCandidateStatus,
+  getMyTmsDailyInformationSettings,
   getMyTmsHomeAnnouncementSettings,
   getMyTmsManagerEmailSettings,
   MyTmsOfficeError,
@@ -18,6 +19,7 @@ import {
   sanitizeMyTmsEmailHtml,
   sanitizeManagerEmailHtml,
   setMyTmsManagerEmailTemplates,
+  setMyTmsDailyInformationSettings,
   setMyTmsHomeAnnouncement,
   setMyTmsMembershipState,
   setMyTmsOfficeSettings
@@ -229,6 +231,95 @@ test('Candidate Home announcement rejects unsafe Office requests before database
       expected_version: 1, idempotency_key: 'short', announcement_text: 'Message'
     }),
     error => error instanceof MyTmsOfficeError && error.code === 'MYTMS_SETTINGS_REQUEST_INVALID'
+  );
+});
+
+test('MyTMS Places and contacts read and save use one narrow versioned agency boundary', async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push({ url: String(url), body });
+    const common = {
+      ok: true,
+      hospital_addresses: [{
+        hospital_name: 'North General Hospital',
+        address: '1 Health Street\nLondon',
+        telephone: '020 7123 4567',
+        map_query: 'North General Hospital, London'
+      }],
+      accommodation_contacts: [{
+        hospital_name: 'North General Hospital',
+        office_name: 'Staff accommodation office',
+        telephone: '020 7987 6543',
+        email: 'housing@example.invalid',
+        working_hours: 'Monday to Friday\n09:00–17:00'
+      }],
+      version: String(url).endsWith('candidate_daily_information_settings_get_v1') ? 2 : 3,
+      semantic_sha256_hex: 'd'.repeat(64),
+      updated_at_utc: '2026-08-30T03:20:00Z'
+    };
+    return Response.json(common);
+  };
+  const env = officeEnvironment({
+    SUPABASE_URL: 'https://agency.test.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-agency-service-role'
+  });
+  try {
+    const current = await getMyTmsDailyInformationSettings(env, { id: IDS.challenge });
+    assert.equal(current.version, 2);
+    assert.equal(current.hospital_addresses[0].hospital_name, 'North General Hospital');
+
+    const saved = await setMyTmsDailyInformationSettings(env, { id: IDS.challenge }, {
+      expected_version: 2,
+      idempotency_key: 'daily-information-save-0001',
+      hospital_addresses: current.hospital_addresses,
+      accommodation_contacts: current.accommodation_contacts
+    });
+    assert.equal(saved.version, 3);
+    assert.match(calls[0].url, /candidate_daily_information_settings_get_v1$/);
+    assert.match(calls[1].url, /candidate_daily_information_settings_set_v1$/);
+    assert.deepEqual(calls[1].body.p_hospital_addresses, current.hospital_addresses);
+    assert.deepEqual(calls[1].body.p_accommodation_contacts, current.accommodation_contacts);
+    assert.equal(calls[1].body.p_expected_version, 2);
+    assert.match(calls[1].body.p_actor_identity_hmac_hex, /^[a-f0-9]{64}$/);
+    assert.deepEqual(Object.keys(calls[1].body).sort(), [
+      'p_accommodation_contacts', 'p_actor_identity_hmac_hex', 'p_expected_version',
+      'p_hospital_addresses', 'p_idempotency_key', 'p_now_utc'
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('MyTMS Places and contacts fail closed on malformed reads and incomplete saves', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => Response.json({
+    ok: true,
+    hospital_addresses: [{ hospital_name: 'North General Hospital' }],
+    accommodation_contacts: [],
+    version: 1,
+    semantic_sha256_hex: 'a'.repeat(64)
+  });
+  try {
+    await assert.rejects(
+      getMyTmsDailyInformationSettings(officeEnvironment({
+        SUPABASE_URL: 'https://agency.test.invalid',
+        SUPABASE_SERVICE_ROLE_KEY: 'test-agency-service-role'
+      }), { id: IDS.challenge }),
+      error => error instanceof MyTmsOfficeError && error.code === 'MYTMS_OFFICE_RESPONSE_INVALID'
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+  await assert.rejects(
+    setMyTmsDailyInformationSettings(officeEnvironment(), { id: IDS.challenge }, {
+      expected_version: 1,
+      idempotency_key: 'daily-information-save-0002',
+      hospital_addresses: []
+    }),
+    error => error instanceof MyTmsOfficeError
+      && error.code === 'CANDIDATE_DAILY_INFORMATION_REQUEST_INVALID'
   );
 });
 

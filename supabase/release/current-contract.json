@@ -1151,6 +1151,32 @@
         "postgres",
         "service_role"
       ],
+      "table": "candidate_daily_information_settings",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
+      "table": "candidate_daily_information_versions",
+      "using": "true",
+      "schema": "public",
+      "command": "ALL",
+      "permissive": "PERMISSIVE"
+    },
+    {
+      "name": "cloudtms_miget_service_owner_all",
+      "check": "true",
+      "roles": [
+        "postgres",
+        "service_role"
+      ],
       "table": "candidate_daily_rota_days",
       "using": "true",
       "schema": "public",
@@ -3123,6 +3149,44 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "57430d2e5635e21da1ee84fae8d6c336e1f918125b17e44c11bab9364d852a7b"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "_candidate_daily_information_normalize_v1(p_hospital_addresses jsonb, p_accommodation_contacts jsonb)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "5f7b2d5d4e8c6b7a7aa28c0defb0112faca09b5284d7d5b2d3fbcdd1423b1ce0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "private",
+      "identity": "_candidate_daily_information_text_v1(p_value text, p_min_length integer, p_max_length integer, p_allow_newlines boolean)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "6028683295fb221abd5551114d2793d1250e6f25823b9a553aef9896c1d1065a"
     },
     {
       "acl": [
@@ -13997,6 +14061,78 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "f805426cb3d7845f65e7727bdd1dc63d47357ceb5755ce31e51441ca4b7099b2"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_daily_information_candidate_v1(p_internal_context jsonb, p_kind text, p_now_utc timestamp with time zone, p_correlation_id text)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "98ea6f2947d2339ebf29c463776442178883f35fadd1bba89209a07bde0c1afc"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_daily_information_settings_get_v1()",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "8d25985eee8164b1c07bbcda79c6f8e5d0161b3c47e739235953ca69fee46a1d"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_daily_information_settings_set_v1(p_expected_version bigint, p_hospital_addresses jsonb, p_accommodation_contacts jsonb, p_actor_identity_hmac_hex text, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "ebc729ec6eae3b4dfce4d737ab9f521890c67a119bea7500008ec7a07a467f68"
     },
     {
       "acl": [
@@ -53052,6 +53188,366 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (canonical_version_before >= 0 AND (canonical_version_after IS NULL OR canonical_version_after >= canonical_version_before))"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_daily_information_settings",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "accommodation_contacts",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "hospital_addresses",
+          "type": "jsonb",
+          "default": "'[]'::jsonb",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "id",
+          "type": "smallint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "semantic_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "updated_by_hmac",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "default": "1",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_daily_information_settings_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_daily_information_settings_pkey ON public.candidate_daily_information_settings USING btree (id)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_daily_information_settin_accommodation_contacts_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(accommodation_contacts) = 'array'::text)"
+        },
+        {
+          "name": "candidate_daily_information_settings_hospital_addresses_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(hospital_addresses) = 'array'::text)"
+        },
+        {
+          "name": "candidate_daily_information_settings_id_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (id = 1)"
+        },
+        {
+          "name": "candidate_daily_information_settings_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "candidate_daily_information_settings_semantic_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(semantic_sha256) = 32)"
+        },
+        {
+          "name": "candidate_daily_information_settings_updated_by_hmac_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (updated_by_hmac IS NULL OR octet_length(updated_by_hmac) = 32)"
+        },
+        {
+          "name": "candidate_daily_information_settings_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (version >= 1)"
+        }
+      ],
+      "view_definition_sha256": null
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "DELETE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "MAINTAIN"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "REFERENCES"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRIGGER"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "TRUNCATE"
+        },
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "UPDATE"
+        }
+      ],
+      "rls": true,
+      "kind": "r",
+      "name": "candidate_daily_information_versions",
+      "owner": "postgres",
+      "schema": "public",
+      "columns": [
+        {
+          "name": "actor_identity_hmac",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
+          "name": "idempotency_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "payload",
+          "type": "jsonb",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "reason_code",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "recorded_at_utc",
+          "type": "timestamp with time zone",
+          "default": "transaction_timestamp()",
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "semantic_sha256",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        },
+        {
+          "name": "version",
+          "type": "bigint",
+          "default": null,
+          "identity": "",
+          "not_null": true,
+          "generated": ""
+        }
+      ],
+      "indexes": [
+        {
+          "name": "candidate_daily_information_versions_idempotency_key_key",
+          "definition": "CREATE UNIQUE INDEX candidate_daily_information_versions_idempotency_key_key ON public.candidate_daily_information_versions USING btree (idempotency_key)"
+        },
+        {
+          "name": "candidate_daily_information_versions_pkey",
+          "definition": "CREATE UNIQUE INDEX candidate_daily_information_versions_pkey ON public.candidate_daily_information_versions USING btree (version)"
+        }
+      ],
+      "options": [],
+      "force_rls": true,
+      "constraints": [
+        {
+          "name": "candidate_daily_information_versions_actor_identity_hmac_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (actor_identity_hmac IS NULL OR octet_length(actor_identity_hmac) = 32)"
+        },
+        {
+          "name": "candidate_daily_information_versions_idempotency_key_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (char_length(btrim(idempotency_key)) >= 16 AND char_length(btrim(idempotency_key)) <= 200)"
+        },
+        {
+          "name": "candidate_daily_information_versions_idempotency_key_key",
+          "type": "u",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "UNIQUE (idempotency_key)"
+        },
+        {
+          "name": "candidate_daily_information_versions_payload_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (jsonb_typeof(payload) = 'object'::text)"
+        },
+        {
+          "name": "candidate_daily_information_versions_pkey",
+          "type": "p",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "PRIMARY KEY (version)"
+        },
+        {
+          "name": "candidate_daily_information_versions_reason_code_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (reason_code = ANY (ARRAY['INSTALL_DEFAULT'::text, 'OFFICE_SAVE'::text]))"
+        },
+        {
+          "name": "candidate_daily_information_versions_semantic_sha256_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (octet_length(semantic_sha256) = 32)"
+        },
+        {
+          "name": "candidate_daily_information_versions_version_check",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (version >= 1)"
         }
       ],
       "view_definition_sha256": null

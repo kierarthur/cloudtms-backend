@@ -751,9 +751,40 @@ function normalizeCandidateDailyResult(operationId, source) {
       && stringValue(source.appInfo.version, 0, 80) && stringValue(source.appInfo.buildTs, 0, 80);
     if (!appInfoValid) return null;
     if (['hospital-addresses', 'accommodation-contacts'].includes(source.kind)) {
-      return exactObjectKeys(source, ['kind', 'title', 'html', 'appInfo'])
-        && stringValue(source.title, 1, 160) && stringValue(source.html, 0, 200000)
-        ? { ...source, appInfo: { ...source.appInfo } } : null;
+      if (!exactObjectKeys(source, ['kind', 'title', 'schema_version', 'entries', 'appInfo'])
+          || !stringValue(source.title, 1, 160) || source.schema_version !== 1
+          || !Array.isArray(source.entries)
+          || source.entries.length > (source.kind === 'hospital-addresses' ? 100 : 200)) {
+        return null;
+      }
+      const entries = source.entries.map((entry) => {
+        if (source.kind === 'hospital-addresses') {
+          if (!exactObjectKeys(
+            entry,
+            ['hospital_name', 'address', 'telephone', 'map_query'],
+            ['hospital_name', 'address']
+          ) || !stringValue(entry.hospital_name, 1, 160)
+            || !stringValue(entry.address, 1, 600)
+            || (entry.telephone !== undefined && !stringValue(entry.telephone, 1, 40))
+            || (entry.map_query !== undefined && !stringValue(entry.map_query, 1, 600))) {
+            return null;
+          }
+        } else if (!exactObjectKeys(
+          entry,
+          ['hospital_name', 'office_name', 'address', 'telephone', 'email', 'working_hours'],
+          ['hospital_name', 'office_name']
+        ) || !stringValue(entry.hospital_name, 1, 160)
+          || !stringValue(entry.office_name, 1, 160)
+          || (entry.address !== undefined && !stringValue(entry.address, 1, 600))
+          || (entry.telephone !== undefined && !stringValue(entry.telephone, 1, 40))
+          || (entry.email !== undefined && !stringValue(entry.email, 3, 254))
+          || (entry.working_hours !== undefined && !stringValue(entry.working_hours, 1, 240))) {
+          return null;
+        }
+        return { ...entry };
+      });
+      return entries.some(entry => entry === null)
+        ? null : { ...source, entries, appInfo: { ...source.appInfo } };
     }
     return exactObjectKeys(source,
       ['kind', 'title', 'html', 'message_token', 'message_kind', 'acknowledgement_mode', 'appInfo'])

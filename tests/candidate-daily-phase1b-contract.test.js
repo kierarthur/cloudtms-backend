@@ -415,6 +415,42 @@ test('R8 retained candidate-message read requires one closed platform and return
   }
 });
 
+test('Office-owned Daily directories expose only closed structured cards', async () => {
+  const response = await handleCandidateDailyPhase1bRequest(request(
+    '/candidate-app/v1/daily/content/hospital-addresses'
+  ), access, {}, {
+    async candidateDailySpecialist(input) {
+      assert.deepEqual(input.input, { kind: 'hospital-addresses' });
+      return { result: {
+        kind: 'hospital-addresses', title: 'Hospital addresses', schema_version: 1,
+        entries: [{
+          hospital_name: 'North General Hospital', address: '1 Health Street\nLondon',
+          telephone: '020 7123 4567', map_query: 'North General Hospital, London'
+        }],
+        appInfo: { version: 'CLOUDTMS_DIRECTORY_V1', buildTs: '2026-08-30T03:20:00.000Z' }
+      } };
+    }
+  });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.result.entries[0].hospital_name, 'North General Hospital');
+  assert.equal(Object.hasOwn(body.result, 'html'), false);
+
+  const malformed = await handleCandidateDailyPhase1bRequest(request(
+    '/candidate-app/v1/daily/content/accommodation-contacts'
+  ), access, {}, {
+    async candidateDailySpecialist() {
+      return { result: {
+        kind: 'accommodation-contacts', title: 'Accommodation contacts', schema_version: 1,
+        entries: [{ hospital_name: 'North General Hospital', office_name: 'Housing', html: '<p>unsafe</p>' }],
+        appInfo: { version: 'CLOUDTMS_DIRECTORY_V1', buildTs: '2026-08-30T03:20:00.000Z' }
+      } };
+    }
+  });
+  assert.equal(malformed.status, 503);
+  assert.equal((await malformed.json()).error_code, 'CANDIDATE_DAILY_NOT_READY');
+});
+
 test('R8 specialist seam rejects unapproved request keys and malformed provider responses', async () => {
   const invalid = await handleCandidateDailyPhase1bRequest(request('/candidate-app/v1/daily/running-late/options', {
     method: 'POST', headers: { 'content-type': 'application/json' },

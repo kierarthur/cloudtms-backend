@@ -18,6 +18,18 @@ const MANAGER_MAIL_KINDS = Object.freeze([
 ]);
 const MANAGER_LINK_MAIL_KINDS = new Set(['INITIAL', 'REMINDER', 'RENEWAL']);
 const MAX_JSON_BYTES = 256 * 1024;
+const DIRECTORY_KINDS = Object.freeze({
+  hospital_addresses: Object.freeze({
+    required: Object.freeze(['hospital_name', 'address']),
+    allowed: Object.freeze(['hospital_name', 'address', 'telephone', 'map_query'])
+  }),
+  accommodation_contacts: Object.freeze({
+    required: Object.freeze(['hospital_name', 'office_name']),
+    allowed: Object.freeze([
+      'hospital_name', 'office_name', 'address', 'telephone', 'email', 'working_hours'
+    ])
+  })
+});
 
 export class MyTmsOfficeError extends Error {
   constructor(status, code) {
@@ -238,6 +250,14 @@ async function agencyRpc(env, rpcName, parameters = {}) {
     if (code === 'CANDIDATE_HOME_ANNOUNCEMENT_IDEMPOTENCY_CONFLICT') {
       throw new MyTmsOfficeError(409, 'IDEMPOTENCY_CONFLICT');
     }
+    if (code === 'CANDIDATE_DAILY_INFORMATION_INVALID'
+        || code === 'CANDIDATE_DAILY_INFORMATION_REQUEST_INVALID'
+        || code === 'CANDIDATE_DAILY_INFORMATION_DUPLICATE') {
+      throw new MyTmsOfficeError(400, code);
+    }
+    if (code === 'CANDIDATE_DAILY_INFORMATION_IDEMPOTENCY_CONFLICT') {
+      throw new MyTmsOfficeError(409, 'IDEMPOTENCY_CONFLICT');
+    }
     throw new MyTmsOfficeError(503, 'MYTMS_MANAGER_SETTINGS_UNAVAILABLE');
   }
   if (!isObject(result) || result.ok !== true) {
@@ -249,6 +269,92 @@ async function agencyRpc(env, rpcName, parameters = {}) {
 function exactObjectKeys(value, expected) {
   return isObject(value)
     && Object.keys(value).sort().join('|') === [...expected].sort().join('|');
+}
+
+function normalizeDirectoryEntries(value, kind) {
+  const shape = DIRECTORY_KINDS[kind];
+  if (!shape || !Array.isArray(value)
+      || value.length > (kind === 'hospital_addresses' ? 100 : 200)) {
+    throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+  }
+  return value.map((source) => {
+    if (!isObject(source)
+        || Object.keys(source).some(key => !shape.allowed.includes(key))
+        || shape.required.some(key => !Object.hasOwn(source, key))) {
+      throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+    }
+    const output = {};
+    for (const key of shape.allowed) {
+      if (!Object.hasOwn(source, key)) continue;
+      if (typeof source[key] !== 'string') {
+        throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+      }
+      const valueText = String(source[key]);
+      const maximum = ['address', 'map_query'].includes(key) ? 600
+        : key === 'email' ? 254 : key === 'working_hours' ? 240
+          : key === 'telephone' ? 40 : 160;
+      if (valueText.length > maximum
+          || (shape.required.includes(key) && !valueText.trim())) {
+        throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+      }
+      output[key] = valueText;
+    }
+    return output;
+  });
+}
+
+function publicDailyInformationSettings(result) {
+  if (!isObject(result) || result.ok !== true) {
+    throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+  }
+  const version = Number(result.version);
+  const semanticHash = text(result.semantic_sha256_hex).toLowerCase();
+  if (!Number.isSafeInteger(version) || version < 1 || !SHA256_RE.test(semanticHash)) {
+    throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+  }
+  return {
+    ok: true,
+    hospital_addresses: normalizeDirectoryEntries(result.hospital_addresses, 'hospital_addresses'),
+    accommodation_contacts: normalizeDirectoryEntries(
+      result.accommodation_contacts, 'accommodation_contacts'
+    ),
+    version,
+    semantic_sha256_hex: semanticHash,
+    updated_at_utc: result.updated_at_utc || null,
+    idempotent_replay: result.idempotent_replay === true
+  };
+}
+
+export async function getMyTmsDailyInformationSettings(env, user) {
+  assertOfficeControlEnabled(env);
+  await officeContext(env, user, ['MYTMS_SETTINGS_READ']);
+  return publicDailyInformationSettings(
+    await agencyRpc(env, 'candidate_daily_information_settings_get_v1')
+  );
+}
+
+export async function setMyTmsDailyInformationSettings(env, user, request) {
+  assertOfficeControlEnabled(env);
+  const source = isObject(request) ? request : {};
+  const expectedVersion = Number(source.expected_version);
+  const idempotencyKey = text(source.idempotency_key);
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1
+      || idempotencyKey.length < 16 || idempotencyKey.length > 200
+      || !Array.isArray(source.hospital_addresses)
+      || !Array.isArray(source.accommodation_contacts)) {
+    throw new MyTmsOfficeError(400, 'CANDIDATE_DAILY_INFORMATION_REQUEST_INVALID');
+  }
+  const context = await officeContext(env, user, ['MYTMS_SETTINGS_WRITE']);
+  return publicDailyInformationSettings(await agencyRpc(
+    env, 'candidate_daily_information_settings_set_v1', {
+      p_expected_version: expectedVersion,
+      p_hospital_addresses: source.hospital_addresses,
+      p_accommodation_contacts: source.accommodation_contacts,
+      p_actor_identity_hmac_hex: context.actor_identity_hmac,
+      p_idempotency_key: idempotencyKey,
+      p_now_utc: new Date().toISOString()
+    }
+  ));
 }
 
 function normalizeManagerTemplates(value) {

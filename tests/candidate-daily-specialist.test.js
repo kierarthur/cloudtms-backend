@@ -106,6 +106,45 @@ test('DAILY retained candidate messages resolve identity in the agency database 
   }
 });
 
+test('DAILY hospital and accommodation directories come directly from the agency database', async () => {
+  const calls = [];
+  const originalFetch = globalThis.fetch;
+  let networkCalls = 0;
+  globalThis.fetch = async () => {
+    networkCalls += 1;
+    throw new Error('Google must not be called for Office-owned directories');
+  };
+  try {
+    const specialist = createCandidateDailySpecialist(environment(), async (name, args) => {
+      calls.push({ name, args });
+      return {
+        kind: args.p_kind,
+        title: args.p_kind === 'hospital-addresses'
+          ? 'Hospital addresses' : 'Accommodation contacts',
+        schema_version: 1,
+        entries: [],
+        appInfo: { version: 'CLOUDTMS_DIRECTORY_V1', buildTs: '2026-08-30T03:20:00.000Z' }
+      };
+    });
+    for (const kind of ['hospital-addresses', 'accommodation-contacts']) {
+      const output = await specialist({
+        operation_id: 'getCandidateDailyContent', input: { kind, platform: 'ANDROID' },
+        correlation_id: correlationId, candidate_context: candidateContext
+      });
+      assert.equal(output.result.kind, kind);
+    }
+    assert.equal(networkCalls, 0);
+    assert.equal(calls.length, 2);
+    assert.ok(calls.every(call => call.name === 'candidate_daily_information_candidate_v1'));
+    assert.ok(calls.every(call => call.args.p_internal_context === candidateContext));
+    assert.deepEqual(calls.map(call => call.args.p_kind), [
+      'hospital-addresses', 'accommodation-contacts'
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('DAILY external effect claims one durable database receipt before the narrow Google call', async () => {
   const order = [];
   const rpcCalls = [];

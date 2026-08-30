@@ -64,6 +64,7 @@ import {
 import {
   adoptMyTmsCandidate,
   getMyTmsCandidateStatus,
+  getMyTmsDailyInformationSettings,
   getMyTmsHomeAnnouncementSettings,
   getMyTmsManagerEmailSettings,
   getMyTmsOfficeSettings,
@@ -77,6 +78,7 @@ import {
   resetMyTmsHomeAnnouncement,
   reserveAndQueueMyTmsInvitation,
   setMyTmsManagerEmailTemplates,
+  setMyTmsDailyInformationSettings,
   setMyTmsHomeAnnouncement,
   setMyTmsMembershipState,
   setMyTmsOfficeSettings
@@ -135204,6 +135206,9 @@ const MYTMS_OFFICE_SAFE_ERROR_CODES = new Set([
   'MYTMS_MEMBERSHIP_ADMIN_DISABLED', 'MYTMS_MEMBERSHIP_LINK_UNAVAILABLE',
   'MYTMS_MANAGER_TEMPLATE_INVALID', 'MYTMS_MANAGER_SETTINGS_UNAVAILABLE',
   'MYTMS_HOME_ANNOUNCEMENT_INVALID',
+  'CANDIDATE_DAILY_INFORMATION_INVALID',
+  'CANDIDATE_DAILY_INFORMATION_REQUEST_INVALID',
+  'CANDIDATE_DAILY_INFORMATION_DUPLICATE',
   'MYTMS_PLATFORM_SETTING_READ_ONLY',
   'CONTROL_PLANE_CONFIGURATION_UNAVAILABLE', 'CONTROL_PLANE_AUTH_FAILED',
   'CONTROL_PLANE_REQUEST_REJECTED', 'CONTROL_PLANE_RESPONSE_INVALID',
@@ -135271,6 +135276,21 @@ async function handleMyTmsHomeAnnouncement(env, req, action) {
     if (action === 'PREVIEW') return ok(await previewMyTmsHomeAnnouncement(env, user, body));
     if (action === 'SET') return ok(await setMyTmsHomeAnnouncement(env, user, body));
     if (action === 'RESET') return ok(await resetMyTmsHomeAnnouncement(env, user, body));
+    throw new MyTmsOfficeError(404, 'MYTMS_OFFICE_REQUEST_FAILED');
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
+
+async function handleMyTmsDailyInformation(env, req, action) {
+  try {
+    const user = await requireMyTmsOfficeAdmin(env, req);
+    if (action === 'GET') return ok(await getMyTmsDailyInformationSettings(env, user));
+    const body = await parseJSONBody(req);
+    if (!body) {
+      throw new MyTmsOfficeError(400, 'CANDIDATE_DAILY_INFORMATION_REQUEST_INVALID');
+    }
+    if (action === 'SET') return ok(await setMyTmsDailyInformationSettings(env, user, body));
     throw new MyTmsOfficeError(404, 'MYTMS_OFFICE_REQUEST_FAILED');
   } catch (error) {
     return myTmsOfficeFailure(error);
@@ -196987,6 +197007,8 @@ if (req.method === 'GET' && p === '/api/mytms/home-announcement') return withCOR
 if (req.method === 'POST' && p === '/api/mytms/home-announcement/preview') return withCORS(env, req, await handleMyTmsHomeAnnouncement(env, req, 'PREVIEW'));
 if (req.method === 'PUT' && p === '/api/mytms/home-announcement') return withCORS(env, req, await handleMyTmsHomeAnnouncement(env, req, 'SET'));
 if (req.method === 'POST' && p === '/api/mytms/home-announcement/reset') return withCORS(env, req, await handleMyTmsHomeAnnouncement(env, req, 'RESET'));
+if (req.method === 'GET' && p === '/api/mytms/daily-information') return withCORS(env, req, await handleMyTmsDailyInformation(env, req, 'GET'));
+if (req.method === 'PUT' && p === '/api/mytms/daily-information') return withCORS(env, req, await handleMyTmsDailyInformation(env, req, 'SET'));
 {
   const myTmsStatus = matchPath(p, '/api/mytms/candidates/:id/status');
   if (myTmsStatus && req.method === 'GET') {
