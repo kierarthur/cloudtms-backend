@@ -5,6 +5,8 @@ import test from 'node:test';
 const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const sql = read('supabase/repeatable/30082026_0640_candidate_weekly_paper_prepare_state_adapter_v1.sql');
 const backend = read('broker/src/candidate-app-backend.js');
+const runtime = read('broker/src/index.js');
+const adapter = read('broker/src/mytms-manager-control-adapter.js');
 const verification = read('supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql');
 const release = read('supabase/release/current-release.json');
 const contract = JSON.parse(read('supabase/release/current-contract.json'));
@@ -30,6 +32,20 @@ test('state adaptation and authoritative PAPER transition share one transaction'
 
 test('PAPER dispatch uses the bounded adapter without changing other actions', () => {
   assert.match(backend, /dbAction === 'PAPER_PREPARE'[\s\S]*'candidate_weekly_paper_prepare_atomic_v1'[\s\S]*'candidate_workflow_transition_atomic_v1'/i);
+});
+
+test('private PAPER preparation immediately delegates document work to the normal backend', () => {
+  const nudge = runtime.slice(
+    runtime.indexOf('async function nudgeCandidateQrPackDocumentOperation'),
+    runtime.indexOf('function hasExplicitCandidateZeroBreak')
+  );
+  assert.match(nudge, /nudgeInvoiceOperations\(/i);
+  assert.match(nudge, /result\?\.scheduled !== true && result\?\.coalesced !== true/i);
+  assert.match(nudge, /nudgeCandidatePaperDocumentViaAdapter\(/i);
+  assert.match(adapter, /MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH/i);
+  assert.match(adapter, /verifyCandidatePrivateRequest\(/i);
+  assert.match(adapter, /consumeAdapterNonce\(/i);
+  assert.match(adapter, /keys\.join\(','\) !== 'operation_id,timesheet_id'/i);
 });
 
 test('weekly PAPER adapter remains service-only', () => {

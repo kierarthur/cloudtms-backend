@@ -9,6 +9,8 @@ export const MYTMS_MANAGER_CONTROL_ADAPTER_PATH =
   '/private/mytms-control/v1/manager-route-rpc';
 export const MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH =
   '/private/mytms-control/v1/paper-qr-verify';
+export const MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH =
+  '/private/mytms-control/v1/paper-document-nudge';
 
 const ALLOWED_FUNCTIONS = new Set([
   'manager_email_route_register_v1',
@@ -16,6 +18,7 @@ const ALLOWED_FUNCTIONS = new Set([
   'manager_review_origin_resolve_v1'
 ]);
 const MAX_BODY_BYTES = 256 * 1024;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function text(value) {
   return String(value == null ? '' : value).trim();
@@ -156,6 +159,52 @@ export async function handleMyTmsPaperQrVerifyAdapter(request, env) {
   }
 }
 
+export async function handleMyTmsPaperDocumentNudgeAdapter(
+  request,
+  env,
+  { nudgeDocumentOperation } = {}
+) {
+  if (request.method !== 'POST'
+      || new URL(request.url).pathname !== MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH) {
+    return json(404, { ok: false, error_code: 'MYTMS_PAPER_DOCUMENT_ROUTE_NOT_FOUND' });
+  }
+  try {
+    if (!await verifyCandidatePrivateRequest(request, adapterAuthEnv(env))
+        || !await consumeAdapterNonce(request, env)) {
+      return json(401, { ok: false, error_code: 'MYTMS_PAPER_DOCUMENT_AUTHORITY_INVALID' });
+    }
+    const body = await boundedJson(request);
+    const keys = body && typeof body === 'object' && !Array.isArray(body)
+      ? Object.keys(body).sort() : [];
+    const operationId = text(body?.operation_id).toLowerCase();
+    const timesheetId = text(body?.timesheet_id).toLowerCase();
+    if (keys.join(',') !== 'operation_id,timesheet_id'
+        || !UUID_PATTERN.test(operationId) || !UUID_PATTERN.test(timesheetId)) {
+      return json(400, { ok: false, error_code: 'MYTMS_PAPER_DOCUMENT_REQUEST_INVALID' });
+    }
+    if (typeof nudgeDocumentOperation !== 'function') {
+      return json(503, { ok: false, error_code: 'MYTMS_PAPER_DOCUMENT_PROCESSOR_UNAVAILABLE' });
+    }
+    const result = await nudgeDocumentOperation({ operationId, timesheetId });
+    if (result?.scheduled !== true && result?.coalesced !== true) {
+      return json(503, { ok: false, error_code: 'MYTMS_PAPER_DOCUMENT_PROCESSOR_UNAVAILABLE' });
+    }
+    return json(202, {
+      ok: true,
+      accepted: true,
+      result: {
+        scheduled: result?.scheduled === true,
+        coalesced: result?.coalesced === true
+      }
+    });
+  } catch (error) {
+    const candidate = text(error?.code || error?.message || error).toUpperCase();
+    const errorCode = /^[A-Z][A-Z0-9_]{2,100}$/.test(candidate)
+      ? candidate : 'MYTMS_PAPER_DOCUMENT_UNAVAILABLE';
+    return json(503, { ok: false, error_code: errorCode });
+  }
+}
+
 export async function verifyCandidatePaperQrViaAdapter(env, qrText) {
   if (text(env.QR_SIGNING_SECRET)) return verifyTsq1String(qrText, env);
   const binding = env.MYTMS_MANAGER_CONTROL_ADAPTER;
@@ -186,6 +235,41 @@ export async function verifyCandidatePaperQrViaAdapter(env, qrText) {
     });
   }
   return Object.freeze({ v: 1, tok: text(payload.result.tok) });
+}
+
+export async function nudgeCandidatePaperDocumentViaAdapter(env, {
+  operationId,
+  timesheetId
+} = {}) {
+  const binding = env.MYTMS_MANAGER_CONTROL_ADAPTER;
+  const normalisedOperationId = text(operationId).toLowerCase();
+  const normalisedTimesheetId = text(timesheetId).toLowerCase();
+  if (!binding || typeof binding.fetch !== 'function'
+      || !UUID_PATTERN.test(normalisedOperationId)
+      || !UUID_PATTERN.test(normalisedTimesheetId)) {
+    throw new Error('MYTMS_PAPER_DOCUMENT_PROCESSOR_UNAVAILABLE');
+  }
+  const unsigned = new Request(
+    `https://cloudtms-manager-control.internal${MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({
+        operation_id: normalisedOperationId,
+        timesheet_id: normalisedTimesheetId
+      })
+    }
+  );
+  const response = await binding.fetch(await signCandidatePrivateRequest(
+    unsigned, adapterAuthEnv(env)
+  ));
+  const payload = await boundedJson(response);
+  if (response.status !== 202 || payload?.ok !== true || payload?.accepted !== true) {
+    const code = text(payload?.error_code).toUpperCase();
+    throw new Error(/^[A-Z][A-Z0-9_]{2,100}$/.test(code)
+      ? code : 'MYTMS_PAPER_DOCUMENT_PROCESSOR_UNAVAILABLE');
+  }
+  return payload.result;
 }
 
 export async function managerControlPlaneRpc(env, schema, functionName, args) {

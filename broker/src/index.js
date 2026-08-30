@@ -55,10 +55,13 @@ import {
 import { verifyCandidatePrivateRequest } from './candidate-service-auth.js';
 import {
   handleMyTmsManagerControlAdapter,
+  handleMyTmsPaperDocumentNudgeAdapter,
   handleMyTmsPaperQrVerifyAdapter,
   managerControlPlaneRpc,
+  nudgeCandidatePaperDocumentViaAdapter,
   purgeMyTmsManagerControlAdapterNonces,
   MYTMS_MANAGER_CONTROL_ADAPTER_PATH,
+  MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH,
   MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH
 } from './mytms-manager-control-adapter.js';
 import {
@@ -29053,7 +29056,7 @@ async function nudgeCandidateQrPackDocumentOperation(env, {
   const payload = pack || {};
   const operationId = String(payload?.document_operation_id || '').trim();
   if (operationId) {
-    await nudgeInvoiceOperations(env, [{
+    const result = await nudgeInvoiceOperations(env, [{
       accepted: true,
       operation_id: operationId,
       status: 'QUEUED',
@@ -29066,6 +29069,12 @@ async function nudgeCandidateQrPackDocumentOperation(env, {
       lanes: ['DATABASE', 'DOCUMENT'],
       priorityClass: 'INTERACTIVE'
     });
+    if (result?.scheduled !== true && result?.coalesced !== true) {
+      await nudgeCandidatePaperDocumentViaAdapter(env, {
+        operationId,
+        timesheetId: payload?.current_timesheet_id || timesheetId
+      });
+    }
   }
   return payload;
 }
@@ -196052,6 +196061,25 @@ export default {
 
     if (req.method === 'POST' && p === MYTMS_PAPER_QR_VERIFY_ADAPTER_PATH) {
       return handleMyTmsPaperQrVerifyAdapter(req, env);
+    }
+
+    if (req.method === 'POST' && p === MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH) {
+      return handleMyTmsPaperDocumentNudgeAdapter(req, env, {
+        nudgeDocumentOperation: ({ operationId, timesheetId }) =>
+          nudgeInvoiceOperations(env, [{
+            accepted: true,
+            operation_id: operationId,
+            status: 'QUEUED',
+            operation_type: 'BUILD_DOCUMENT',
+            entity_type: 'TIMESHEET',
+            entity_id: timesheetId
+          }], {
+            ctx,
+            rpc: (functionName, args, options) => sbRpc(env, functionName, args, options),
+            lanes: ['DATABASE', 'DOCUMENT'],
+            priorityClass: 'INTERACTIVE'
+          })
+      });
     }
 
     const candidateAppResponse = await handleCandidateAppRequest(

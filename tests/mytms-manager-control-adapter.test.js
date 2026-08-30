@@ -3,11 +3,14 @@ import test from 'node:test';
 
 import {
   handleMyTmsManagerControlAdapter,
+  handleMyTmsPaperDocumentNudgeAdapter,
   handleMyTmsPaperQrVerifyAdapter,
   managerControlPlaneRpc,
+  nudgeCandidatePaperDocumentViaAdapter,
   purgeMyTmsManagerControlAdapterNonces,
   verifyCandidatePaperQrViaAdapter,
   MYTMS_MANAGER_CONTROL_ADAPTER_PATH,
+  MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH,
   myTmsManagerControlAdapterInternals
 } from '../broker/src/mytms-manager-control-adapter.js';
 import { signCandidatePrivateRequest } from '../broker/src/candidate-service-auth.js';
@@ -157,4 +160,60 @@ test('private Candidate QR verification fails closed on a forged QR', async () =
     verifyCandidatePaperQrViaAdapter(clientEnv, `${qrText.slice(0, -1)}A`),
     /TSQ1_SIGNATURE_INVALID/
   );
+});
+
+test('private Candidate paper preparation signs one exact immediate document nudge', async () => {
+  const serviceEnv = testEnv();
+  const calls = [];
+  const clientEnv = {
+    CANDIDATE_APP_ENVIRONMENT: serviceEnv.CANDIDATE_APP_ENVIRONMENT,
+    MYTMS_MANAGER_CONTROL_ADAPTER_SECRET: serviceEnv.MYTMS_MANAGER_CONTROL_ADAPTER_SECRET,
+    MYTMS_MANAGER_CONTROL_ADAPTER: {
+      fetch: (request) => handleMyTmsPaperDocumentNudgeAdapter(
+        request,
+        serviceEnv,
+        {
+          nudgeDocumentOperation: async (call) => {
+            calls.push(call);
+            return { scheduled: true };
+          }
+        }
+      )
+    }
+  };
+  const operationId = '00000000-0000-4000-8000-000000000101';
+  const timesheetId = '00000000-0000-4000-8000-000000000102';
+  const result = await nudgeCandidatePaperDocumentViaAdapter(clientEnv, {
+    operationId,
+    timesheetId
+  });
+  assert.deepEqual(result, { scheduled: true, coalesced: false });
+  assert.deepEqual(calls, [{ operationId, timesheetId }]);
+});
+
+test('paper document nudge adapter rejects unbounded or malformed work before dispatch', async () => {
+  const env = testEnv();
+  let calls = 0;
+  const unsigned = new Request(
+    `https://control.internal${MYTMS_PAPER_DOCUMENT_NUDGE_ADAPTER_PATH}`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        operation_id: 'not-an-operation',
+        timesheet_id: '00000000-0000-4000-8000-000000000102',
+        lanes: ['ALL']
+      })
+    }
+  );
+  const response = await handleMyTmsPaperDocumentNudgeAdapter(
+    await signCandidatePrivateRequest(
+      unsigned, myTmsManagerControlAdapterInternals.adapterAuthEnv(env)
+    ),
+    env,
+    { nudgeDocumentOperation: async () => { calls += 1; } }
+  );
+  assert.equal(response.status, 400);
+  assert.equal((await response.json()).error_code, 'MYTMS_PAPER_DOCUMENT_REQUEST_INVALID');
+  assert.equal(calls, 0);
 });
