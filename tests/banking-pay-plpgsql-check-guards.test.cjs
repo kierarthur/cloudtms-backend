@@ -20,6 +20,12 @@ const correctionGuardPath = path.join(
 
 const cancellationGuard = fs.readFileSync(cancellationGuardPath, 'utf8');
 const correctionGuard = fs.readFileSync(correctionGuardPath, 'utf8');
+const cancellationCompletionOwner = fs.readFileSync(path.join(
+  repoRoot,
+  'supabase',
+  'repeatable',
+  '19072026_1659_cancel_batch_audit_and_full_candidate_refresh.sql'
+), 'utf8');
 
 const correctionEntryPointSources = [
   ['21072026_1235_00_import_correction_policy_helpers.sql', [
@@ -73,6 +79,13 @@ test('draft cancellation and post-cancel refresh entry points disable faulty pas
   ]) {
     assert.match(cancellationGuard, signature);
   }
+});
+
+test('the cancellation completion owner is catalogue-complete without an auxiliary ordering dependency', () => {
+  assert.match(
+    cancellationCompletionOwner,
+    /ALTER FUNCTION public\.pay_payment_cancel_not_sent_and_recalculate_complete_v1\(uuid, jsonb, uuid, text, text, jsonb\) SET plpgsql_check\.mode TO 'disabled';/
+  );
 });
 
 test('instrumentation guards do not redefine Banking Pay economic or mutation bodies', () => {

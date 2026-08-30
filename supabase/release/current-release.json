@@ -6,13 +6,70 @@
   "controlPlaneMigration": "supabase/migrations/22082026_1507_cloudtms_database_release_control_plane.sql",
   "legacyUpgradeBootstrapFiles": [
     "supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql",
+    "supabase/release/30082026_0205_miget_vault_compatibility_bootstrap.sql",
     "supabase/repeatable/08042026_1151_newtablesbanking.sql",
     "supabase/release/30082026_0055_legacy_workbench_shared_context_bootstrap.sql",
+    "supabase/release/30082026_0120_legacy_structural_baseline_gap_bootstrap.sql",
+    "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_invoice_document_invalidate.sql",
+    "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_trg_timesheet_document_invalidate.sql",
+    "supabase/release/30082026_0145_legacy_invoice_candidate_scope_authority.sql",
+    "supabase/repeatable/25072026_2153_banking_pay_selection_carry_runtime.sql",
+    "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch_v6_downstream.sql",
+    "supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_private_invoice_document_advance_batch.sql",
+    "supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql",
+    "supabase/repeatable/04082026_1302_pay_workbench_session_replay_replaced_queue_v1.sql",
     "supabase/release/24082026_1128_legacy_upgrade_trigger_shims.sql"
   ],
+  "legacyUpgradeFinalizeFiles": [
+    "supabase/release/30082026_0130_legacy_structural_baseline_gap_finalize.sql"
+  ],
+  "legacyUpgradeRepeatablePreloadFiles": [
+    "supabase/repeatable/04082026_1147_pay_current_timesheet_entitlement_components_from_build_v1.sql",
+    "supabase/repeatable/20072026_1220_allow_bounded_cleanup_of_local_review.sql",
+    "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_source_reference_validate_batch.sql",
+    "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_resolve_command_groups.sql",
+    "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_generation_vat_policy_batch.sql",
+    "supabase/repeatable/21072026_1235_10_invoice_correction_pair_scope_v1.sql",
+    "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_correction_validate_batch.sql",
+    "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_reference_rows_batch.sql",
+    "supabase/release/30082026_0350_legacy_candidate_feature_current_preload.sql",
+    "supabase/repeatable/30082026_0345_invoice_delivery_routes_batch_v1.sql",
+    "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_issue_validate_batch.sql",
+    "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_generate_classification_v2.sql",
+    "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql",
+    "supabase/release/30082026_0321_legacy_pay_batch_status_helper_preload.sql"
+  ],
+  "legacyUpgradeDeferredRepeatableFiles": [
+    "supabase/repeatable/23072026_1217_disable_plpgsql_check_for_correction_chain_banking.sql"
+  ],
+  "legacyUpgradePostRepeatableFiles": [
+    "supabase/release/30082026_0236_legacy_general_browser_view_isolation_replacement.sql"
+  ],
+  "legacyUpgradeReplacementRepeatables": {
+    "supabase/repeatable/22082026_1402_candidate_named_security_definer_browser_isolation.sql": "supabase/release/30082026_0341_legacy_candidate_named_security_replacement.sql"
+  },
+  "legacyUpgradeMigrationTransitions": {
+    "supabase/migrations/06082026_0440_banking_pay_workbench_terminal_reconciliation_window.sql": [
+      "supabase/release/30082026_0214_legacy_workbench_terminal_profile_prepare.sql"
+    ],
+    "supabase/migrations/06082026_0754_banking_pay_workbench_four_lane_32_burst.sql": [
+      "supabase/release/30082026_0215_legacy_workbench_four_lane_profile_prepare.sql"
+    ]
+  },
+  "legacyUpgradeNonApplicableMigrations": {
+    "supabase/migrations/08082026_1137_repair_banking_pay_scope_generation_gap.sql": "supabase/release/30082026_0218_legacy_scope_generation_gap_nonapplicability.sql"
+  },
+  "legacyUpgradeReplacementMigrations": {
+    "supabase/migrations/22082026_1302_general_browser_relation_sequence_isolation.sql": "supabase/release/30082026_0222_legacy_general_browser_isolation_replacement.sql",
+    "supabase/migrations/22082026_1302_general_browser_rpc_isolation.sql": "supabase/release/30082026_0233_legacy_general_browser_rpc_isolation_replacement.sql",
+    "supabase/migrations/22082026_1302_general_browser_view_isolation.sql": "supabase/release/30082026_0236_legacy_general_browser_view_isolation_replacement.sql",
+    "supabase/migrations/22082026_1402_candidate_named_legacy_relation_isolation.sql": "supabase/release/30082026_0239_legacy_candidate_named_relation_isolation_replacement.sql",
+    "supabase/migrations/24082026_0232_miget_provider_owner_defaults.sql": "supabase/release/30082026_0255_legacy_miget_provider_owner_defaults_replacement.sql"
+  },
   "bootstrapFile": "supabase/baseline/22082026_1506_cloudtms_new_database_bootstrap.sql",
   "baselineFiles": [
     "supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql",
+    "supabase/release/30082026_0205_miget_vault_compatibility_bootstrap.sql",
     "supabase/baseline/22082026_1500_cloudtms_test_structural_baseline.sql",
     "supabase/baseline/22082026_1503_cloudtms_test_routines_00.sql",
     "supabase/baseline/22082026_1503_cloudtms_test_routines_01.sql",
@@ -74,7 +131,11 @@
     "supabase/verification/29082026_1857_banking_pay_action_list_presentation_verification.sql",
     "supabase/verification/30082026_0134_candidate_submitted_weekly_card_linkage_verification.sql",
     "supabase/verification/30082026_0316_candidate_daily_information_directory_verification.sql",
-    "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql"
+    "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
+    "supabase/verification/30082026_0220_miget_vault_compatibility_verification.sql"
+  ],
+  "legacyUpgradeExcludedVerificationFiles": [
+    "tests/13082026_1942_banking_pay_james_rate_authority_runtime_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/22082026_1302_general_browser_isolation_verification.sql",
@@ -110,6 +171,7 @@
     "supabase/verification/29082026_1857_banking_pay_action_list_presentation_verification.sql",
     "supabase/verification/30082026_0134_candidate_submitted_weekly_card_linkage_verification.sql",
     "supabase/verification/30082026_0316_candidate_daily_information_directory_verification.sql",
-    "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql"
+    "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
+    "supabase/verification/30082026_0220_miget_vault_compatibility_verification.sql"
   ]
 }

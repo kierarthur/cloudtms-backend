@@ -741,8 +741,14 @@ begin
 end
 $function$;
 
-revoke all on function public.import_review_contract_version_get_v1() from public,anon,authenticated;
-grant execute on function public.import_review_contract_version_get_v1() to service_role;
+do $optional_contract_acl$
+begin
+  if to_regprocedure('public.import_review_contract_version_get_v1()') is not null then
+    execute 'revoke all on function public.import_review_contract_version_get_v1() from public,anon,authenticated';
+    execute 'grant execute on function public.import_review_contract_version_get_v1() to service_role';
+  end if;
+end
+$optional_contract_acl$;
 revoke all on function public.import_review_staged_scope_get_v1(uuid,uuid,integer,integer) from public,anon,authenticated;
 grant execute on function public.import_review_staged_scope_get_v1(uuid,uuid,integer,integer) to service_role;
 revoke all on function public.import_review_actions_page_v1(uuid,uuid,integer,integer,text,text,text) from public,anon,authenticated;

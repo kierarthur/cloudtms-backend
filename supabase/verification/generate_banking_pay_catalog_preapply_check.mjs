@@ -13,10 +13,25 @@ const manifestNames = [
   'banking_pay_semantic_ready_cancellation_reversion_catalog_manifest.json',
 ];
 
-const [outputArg, ...pendingArgs] = process.argv.slice(2);
+const [outputArg, ...inputArgs] = process.argv.slice(2);
 if (!outputArg) {
-  console.error('Usage: generate_banking_pay_catalog_preapply_check.mjs <output.sql> [pending-repeatable.sql ...]');
+  console.error('Usage: generate_banking_pay_catalog_preapply_check.mjs <output.sql> [--pending-manifest <paths.json> | pending-repeatable.sql ...]');
   process.exit(1);
+}
+
+let pendingArgs;
+if (inputArgs[0] === '--pending-manifest') {
+  if (inputArgs.length !== 2) {
+    throw new Error('The pending-repeatable manifest requires exactly one JSON path');
+  }
+  const manifestPath = path.resolve(inputArgs[1]);
+  const manifestValue = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  if (!Array.isArray(manifestValue) || manifestValue.some(value => typeof value !== 'string')) {
+    throw new Error('The pending-repeatable manifest must contain a JSON string array');
+  }
+  pendingArgs = manifestValue;
+} else {
+  pendingArgs = inputArgs;
 }
 
 const normalizeRepoPath = (value) => path.relative(repoRoot, path.resolve(repoRoot, value))

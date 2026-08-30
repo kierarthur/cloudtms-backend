@@ -4,9 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import {
-  canonicalContractHash, contractDifference, databaseUrl, exportContract, inventory,
+  canonicalContractHash, canonicalSqlBytes, contractDifference, databaseUrl, exportContract, inventory,
   formatPlanSection, legacyUpgradeInventory, psql, readJson, repoRoot, shellGitHead, validateTarget,
-  verifyIntegrity, writeJson,
+  sha256, verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
@@ -24,6 +24,229 @@ function required(name, fallback) {
 }
 
 function sqlLiteral(value) { return `'${String(value).replaceAll("'", "''")}'`; }
+
+function legacyUpgradeTransitionFiles(release, migrationPath) {
+  const mapping = release.legacyUpgradeMigrationTransitions ?? {};
+  const files = mapping[migrationPath] ?? [];
+  if (!Array.isArray(files)) {
+    throw new Error(`LEGACY_UPGRADE transition list must be an array: ${migrationPath}`);
+  }
+  for (const file of files) {
+    if (typeof file !== 'string'
+        || !file.startsWith('supabase/release/')
+        || !file.endsWith('.sql')
+        || file.includes('..')
+        || path.isAbsolute(file)) {
+      throw new Error(`LEGACY_UPGRADE transition path is outside supabase/release: ${file}`);
+    }
+    if (!fs.existsSync(path.join(repoRoot, file))) {
+      throw new Error(`LEGACY_UPGRADE transition file is missing: ${file}`);
+    }
+  }
+  return files;
+}
+
+function legacyUpgradeTransitionPlan(release, pendingMigrations) {
+  const seen = new Set();
+  return pendingMigrations.flatMap(item => (
+    legacyUpgradeTransitionFiles(release, item.path).flatMap(file => {
+      if (seen.has(file)) return [];
+      seen.add(file);
+      return [{ path: file, sha256: sha256(canonicalSqlBytes(file)) }];
+    })
+  ));
+}
+
+function legacyUpgradeNonApplicableVerifier(release, migrationPath) {
+  const mapping = release.legacyUpgradeNonApplicableMigrations ?? {};
+  const file = mapping[migrationPath];
+  if (file === undefined) return null;
+  if (typeof file !== 'string'
+      || !file.startsWith('supabase/release/')
+      || !file.endsWith('.sql')
+      || file.includes('..')
+      || path.isAbsolute(file)
+      || !fs.existsSync(path.join(repoRoot, file))) {
+    throw new Error(`LEGACY_UPGRADE non-applicability verifier is invalid: ${migrationPath}`);
+  }
+  return file;
+}
+
+function legacyUpgradeReplacementFile(release, migrationPath) {
+  const mapping = release.legacyUpgradeReplacementMigrations ?? {};
+  const file = mapping[migrationPath];
+  if (file === undefined) return null;
+  if (typeof file !== 'string'
+      || !file.startsWith('supabase/release/')
+      || !file.endsWith('.sql')
+      || file.includes('..')
+      || path.isAbsolute(file)
+      || !fs.existsSync(path.join(repoRoot, file))) {
+    throw new Error(`LEGACY_UPGRADE replacement file is invalid: ${migrationPath}`);
+  }
+  return file;
+}
+
+function legacyUpgradeReplacementPlan(release, pendingMigrations) {
+  return pendingMigrations.flatMap(item => {
+    const replacement = legacyUpgradeReplacementFile(release, item.path);
+    return replacement ? [{ path: replacement, sha256: sha256(canonicalSqlBytes(replacement)) }] : [];
+  });
+}
+
+function legacyUpgradeRepeatablePreloadPlan(release, pendingRepeatables) {
+  const files = release.legacyUpgradeRepeatablePreloadFiles ?? [];
+  if (!Array.isArray(files)) {
+    throw new Error('LEGACY_UPGRADE repeatable preload list must be an array');
+  }
+  const pending = new Set(pendingRepeatables.map(item => item.path));
+  const seen = new Set();
+  return files.map(file => {
+    const isRepeatable = typeof file === 'string' && file.startsWith('supabase/repeatable/');
+    const isReleaseAuthority = typeof file === 'string' && file.startsWith('supabase/release/');
+    if ((!isRepeatable && !isReleaseAuthority)
+        || !file.endsWith('.sql')
+        || file.includes('..')
+        || path.isAbsolute(file)
+        || !fs.existsSync(path.join(repoRoot, file))) {
+      throw new Error(`LEGACY_UPGRADE repeatable preload is invalid: ${file}`);
+    }
+    if (seen.has(file)) {
+      throw new Error(`LEGACY_UPGRADE repeatable preload is duplicated: ${file}`);
+    }
+    if (isRepeatable && !pending.has(file)) {
+      throw new Error(`LEGACY_UPGRADE repeatable preload is not pending: ${file}`);
+    }
+    seen.add(file);
+    return { path: file, sha256: sha256(canonicalSqlBytes(file)) };
+  });
+}
+
+function legacyUpgradeDeferredRepeatablePlan(release, pendingRepeatables) {
+  const files = release.legacyUpgradeDeferredRepeatableFiles ?? [];
+  if (!Array.isArray(files)) {
+    throw new Error('LEGACY_UPGRADE deferred repeatable list must be an array');
+  }
+  const pending = new Set(pendingRepeatables.map(item => item.path));
+  const seen = new Set();
+  return files.map(file => {
+    if (typeof file !== 'string'
+        || !file.startsWith('supabase/repeatable/')
+        || !file.endsWith('.sql')
+        || file.includes('..')
+        || path.isAbsolute(file)
+        || !fs.existsSync(path.join(repoRoot, file))) {
+      throw new Error(`LEGACY_UPGRADE deferred repeatable is invalid: ${file}`);
+    }
+    if (seen.has(file)) {
+      throw new Error(`LEGACY_UPGRADE deferred repeatable is duplicated: ${file}`);
+    }
+    if (!pending.has(file)) {
+      throw new Error(`LEGACY_UPGRADE deferred repeatable is not pending: ${file}`);
+    }
+    seen.add(file);
+    return { path: file, sha256: sha256(canonicalSqlBytes(file)) };
+  });
+}
+
+function legacyUpgradeReplacementRepeatableFile(release, repeatablePath) {
+  const mapping = release.legacyUpgradeReplacementRepeatables ?? {};
+  const file = mapping[repeatablePath];
+  if (file === undefined) return null;
+  if (typeof file !== 'string'
+      || !file.startsWith('supabase/release/')
+      || !file.endsWith('.sql')
+      || file.includes('..')
+      || path.isAbsolute(file)
+      || !fs.existsSync(path.join(repoRoot, file))) {
+    throw new Error(`LEGACY_UPGRADE repeatable replacement is invalid: ${repeatablePath}`);
+  }
+  return file;
+}
+
+function legacyUpgradeReplacementRepeatablePlan(release, pendingRepeatables) {
+  return pendingRepeatables.flatMap(item => {
+    const replacement = legacyUpgradeReplacementRepeatableFile(release, item.path);
+    return replacement ? [{ path: replacement, sha256: sha256(canonicalSqlBytes(replacement)) }] : [];
+  });
+}
+
+function legacyUpgradePostRepeatablePlan(release) {
+  const files = release.legacyUpgradePostRepeatableFiles ?? [];
+  const seen = new Set();
+  return files.map(file => {
+    if (typeof file !== 'string'
+        || !file.startsWith('supabase/release/')
+        || !file.endsWith('.sql')
+        || file.includes('..')
+        || path.isAbsolute(file)
+        || !fs.existsSync(path.join(repoRoot, file))) {
+      throw new Error(`LEGACY_UPGRADE post-repeatable file is invalid: ${file}`);
+    }
+    if (seen.has(file)) {
+      throw new Error(`LEGACY_UPGRADE post-repeatable file is duplicated: ${file}`);
+    }
+    seen.add(file);
+    return { path: file, sha256: sha256(canonicalSqlBytes(file)) };
+  });
+}
+
+function legacyUpgradeNonApplicablePlan(release, pendingMigrations) {
+  return pendingMigrations.flatMap(item => {
+    const verifier = legacyUpgradeNonApplicableVerifier(release, item.path);
+    return verifier ? [{ path: item.path, sha256: item.sha256, verifier }] : [];
+  });
+}
+
+function applyLegacyMigrationWithTransition(item, transitionFiles) {
+  const paths = [...transitionFiles, item.path];
+  const sources = paths.map(file => {
+    const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
+    if (/^\s*\\/m.test(source)) {
+      throw new Error(`Atomic LEGACY_UPGRADE transition cannot contain psql include/meta commands: ${file}`);
+    }
+    return `-- BEGIN ${file}\n${source}\n-- END ${file}`;
+  });
+  psql({ sql: `
+    begin;
+    ${sources.join('\n')}
+    insert into public.schema_migrations(filename)
+    values (${sqlLiteral(path.basename(item.path))});
+    commit;
+  ` });
+}
+
+function applyLegacyNonApplicableMigration(item, verifierFile) {
+  const source = fs.readFileSync(path.join(repoRoot, verifierFile), 'utf8');
+  if (/^\s*\\/m.test(source)) {
+    throw new Error(`Atomic LEGACY_UPGRADE non-applicability verifier cannot contain psql include/meta commands: ${verifierFile}`);
+  }
+  psql({ sql: `
+    begin;
+    -- BEGIN ${verifierFile}
+    ${source}
+    -- END ${verifierFile}
+    insert into public.schema_migrations(filename)
+    values (${sqlLiteral(path.basename(item.path))});
+    commit;
+  ` });
+}
+
+function applyLegacyReplacementMigration(item, replacementFile) {
+  const source = fs.readFileSync(path.join(repoRoot, replacementFile), 'utf8');
+  if (/^\s*\\/m.test(source)) {
+    throw new Error(`Atomic LEGACY_UPGRADE replacement cannot contain psql include/meta commands: ${replacementFile}`);
+  }
+  psql({ sql: `
+    begin;
+    -- BEGIN ${replacementFile}
+    ${source}
+    -- END ${replacementFile}
+    insert into public.schema_migrations(filename)
+    values (${sqlLiteral(path.basename(item.path))});
+    commit;
+  ` });
+}
 
 function writeMigrationLock() {
   const current = inventory();
@@ -83,6 +306,21 @@ function verificationFilesForMode(release, mode) {
     }
     return release.newVerificationFiles;
   }
+  if (mode === 'LEGACY_UPGRADE') {
+    const excluded = release.legacyUpgradeExcludedVerificationFiles;
+    if (!Array.isArray(excluded) || excluded.length === 0) {
+      throw new Error('LEGACY_UPGRADE verification exclusion set is missing or empty');
+    }
+    const known = new Set(release.verificationFiles);
+    for (const file of excluded) {
+      if (typeof file !== 'string' || !known.has(file)) {
+        throw new Error(`LEGACY_UPGRADE verification exclusion is invalid: ${String(file)}`);
+      }
+    }
+    const selected = release.verificationFiles.filter(file => !excluded.includes(file));
+    if (selected.length === 0) throw new Error('LEGACY_UPGRADE portable verifier set is empty');
+    return selected;
+  }
   return release.verificationFiles;
 }
 
@@ -101,7 +339,22 @@ function assertLegacyTransitionShimsReplaced() {
         and p.proname in (
           'pay_workbench_mark_candidate_dirty',
           'pay_workbench_mark_finance_case_dirty',
-          'pay_workbench_mark_contract_client_dirty'
+          'pay_workbench_mark_contract_client_dirty',
+          'timesheet_archive_row_guard_v1',
+          'timesheet_archived_evidence_guard_v1',
+          'invoice_line_archived_timesheet_guard_v1',
+          'timesheet_financial_retention_capture_trigger_v1',
+          'pay_workbench_case_resolution_origin_backfill_v1',
+          'pay_workbench_case_resolution_origin_guard_v1',
+          'pay_payment_cancel_not_sent_and_recalculate',
+          'invoice_batch_generate_candidates',
+          'timesheet_financial_retention_mark_v1',
+          'timesheet_archive_transition_v1',
+          'timesheet_r2_cleanup_claim_v1',
+          'timesheet_r2_cleanup_record_v1',
+          'timesheet_r2_cleanup_complete_v1',
+          '_pay_timesheet_rotation_scope',
+          '_pay_active_settled_components'
         )
         and p.prosrc like '%CLOUDTMS_LEGACY_TRANSITION_SHIM%';
     `,
@@ -116,9 +369,11 @@ function runBankingPayCatalogPreapply(pendingRepeatables) {
   const tempRoot = path.resolve(os.tmpdir());
   const tempDir = fs.mkdtempSync(path.join(tempRoot, 'cloudtms-banking-pay-preapply-'));
   const output = path.join(tempDir, 'catalog-preapply.sql');
+  const pendingManifest = path.join(tempDir, 'pending-repeatables.json');
   try {
     const generator = path.join(repoRoot, 'supabase', 'verification', 'generate_banking_pay_catalog_preapply_check.mjs');
-    const result = spawnSync(process.execPath, [generator, output, ...pendingRepeatables], {
+    fs.writeFileSync(pendingManifest, JSON.stringify(pendingRepeatables), 'utf8');
+    const result = spawnSync(process.execPath, [generator, output, '--pending-manifest', pendingManifest], {
       cwd: repoRoot,
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
@@ -272,13 +527,40 @@ function applyRelease() {
     const legacy = legacyUpgradeState(current, environment);
     for (const file of release.legacyUpgradeBootstrapFiles) psql({ file });
     for (const item of legacy.pendingMigrations) {
-      psql({ file: item.path });
-      psql({
-        sql: `insert into public.schema_migrations(filename) values (${sqlLiteral(path.basename(item.path))});`,
-      });
+      const replacementFile = legacyUpgradeReplacementFile(release, item.path);
+      if (replacementFile) {
+        applyLegacyReplacementMigration(item, replacementFile);
+        continue;
+      }
+      const nonApplicableVerifier = legacyUpgradeNonApplicableVerifier(release, item.path);
+      if (nonApplicableVerifier) {
+        applyLegacyNonApplicableMigration(item, nonApplicableVerifier);
+        continue;
+      }
+      const transitionFiles = legacyUpgradeTransitionFiles(release, item.path);
+      if (transitionFiles.length) {
+        applyLegacyMigrationWithTransition(item, transitionFiles);
+      } else {
+        psql({ file: item.path });
+        psql({
+          sql: `insert into public.schema_migrations(filename) values (${sqlLiteral(path.basename(item.path))});`,
+        });
+      }
     }
+    for (const file of release.legacyUpgradeFinalizeFiles ?? []) psql({ file });
+    const repeatablePreloads = legacyUpgradeRepeatablePreloadPlan(release, legacy.pendingRepeatables);
+    for (const item of repeatablePreloads) psql({ file: item.path });
     runBankingPayCatalogPreapply(legacy.pendingRepeatables.map(item => item.path));
-    for (const item of legacy.pendingRepeatables) psql({ file: item.path });
+    const deferredRepeatables = legacyUpgradeDeferredRepeatablePlan(release, legacy.pendingRepeatables);
+    const deferredPaths = new Set(deferredRepeatables.map(item => item.path));
+    for (const item of legacy.pendingRepeatables) {
+      if (deferredPaths.has(item.path)) continue;
+      const replacementFile = legacyUpgradeReplacementRepeatableFile(release, item.path);
+      psql({ file: replacementFile ?? item.path });
+    }
+    for (const item of deferredRepeatables) psql({ file: item.path });
+    const postRepeatableFiles = legacyUpgradePostRepeatablePlan(release);
+    for (const item of postRepeatableFiles) psql({ file: item.path });
     assertLegacyTransitionShimsReplaced();
     runVerifiers(mode);
     const verified = compareExpected(release.contractPath);
@@ -293,6 +575,14 @@ function applyRelease() {
         appliedMigrations: legacy.pendingMigrations.length,
         appliedRepeatables: legacy.pendingRepeatables.length,
         legacyUpgradeBootstrapFiles: release.legacyUpgradeBootstrapFiles,
+        legacyUpgradeMigrationTransitions: release.legacyUpgradeMigrationTransitions ?? {},
+        legacyUpgradeReplacementMigrations: release.legacyUpgradeReplacementMigrations ?? {},
+        legacyUpgradeNonApplicableMigrations: release.legacyUpgradeNonApplicableMigrations ?? {},
+        legacyUpgradeFinalizeFiles: release.legacyUpgradeFinalizeFiles ?? [],
+        legacyUpgradeRepeatablePreloadFiles: repeatablePreloads.map(item => item.path),
+        legacyUpgradeDeferredRepeatableFiles: deferredRepeatables.map(item => item.path),
+        legacyUpgradePostRepeatableFiles: postRepeatableFiles.map(item => item.path),
+        legacyUpgradeReplacementRepeatables: release.legacyUpgradeReplacementRepeatables ?? {},
         verificationFiles: verificationFilesForMode(release, mode),
       },
     });
@@ -402,6 +692,35 @@ try {
         + `${legacy.pendingRepeatables.length} repeatables.`,
       );
       console.log(formatPlanSection('PENDING MIGRATIONS', legacy.pendingMigrations));
+      console.log(formatPlanSection(
+        'LEGACY TRANSITION FILES',
+        legacyUpgradeTransitionPlan(release, legacy.pendingMigrations),
+      ));
+      console.log(formatPlanSection(
+        'LEGACY NON-APPLICABLE MIGRATIONS',
+        legacyUpgradeNonApplicablePlan(release, legacy.pendingMigrations),
+      ));
+      console.log(formatPlanSection(
+        'LEGACY REPLACEMENT FILES',
+        legacyUpgradeReplacementPlan(release, legacy.pendingMigrations),
+      ));
+      console.log(formatPlanSection(
+        'LEGACY REPEATABLE PRELOAD FILES',
+        legacyUpgradeRepeatablePreloadPlan(release, legacy.pendingRepeatables),
+      ));
+      console.log(formatPlanSection(
+        'LEGACY DEFERRED REPEATABLE FILES',
+        legacyUpgradeDeferredRepeatablePlan(release, legacy.pendingRepeatables),
+        'closure_sha256',
+      ));
+      console.log(formatPlanSection(
+        'LEGACY REPEATABLE REPLACEMENT FILES',
+        legacyUpgradeReplacementRepeatablePlan(release, legacy.pendingRepeatables),
+      ));
+      console.log(formatPlanSection(
+        'LEGACY POST-REPEATABLE FILES',
+        legacyUpgradePostRepeatablePlan(release),
+      ));
       console.log(formatPlanSection(
         'PENDING/CHANGED REPEATABLES',
         legacy.pendingRepeatables,

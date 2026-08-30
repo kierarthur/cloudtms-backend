@@ -37,6 +37,28 @@ test('catalog-owned pending repeatables are rehearsed in a rollback-only transac
   }
 });
 
+test('catalog pre-apply accepts a bounded JSON path manifest for large releases', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'banking-pay-catalog-preapply-'));
+  const output = path.join(tempDir, 'preapply.sql');
+  const manifest = path.join(tempDir, 'pending-repeatables.json');
+  try {
+    fs.writeFileSync(manifest, JSON.stringify([
+      'supabase/repeatable/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1.sql',
+      'supabase/repeatable/13082026_1912_pay_workbench_sealed_rate_component_projection_v1.sql',
+    ]));
+    const result = spawnSync(process.execPath, [
+      generator,output,'--pending-manifest',manifest,
+    ], { cwd: root, encoding: 'utf8' });
+    assert.equal(result.status,0,result.stderr);
+    const sql = fs.readFileSync(output,'utf8');
+    assert.match(sql,/07082026_1015_pay_sync_overpayments_from_workbench_workspace_v1\.sql/);
+    assert.match(sql,/13082026_1912_pay_workbench_sealed_rate_component_projection_v1\.sql/);
+    assert.match(sql,/ROLLBACK;\n$/);
+  } finally {
+    fs.rmSync(tempDir,{ recursive: true,force: true });
+  }
+});
+
 test('release engine runs the rollback-only catalog rehearsal before changed repeatables', () => {
   const engine = fs.readFileSync(releaseEnginePath, 'utf8');
   const collectIndex = engine.indexOf('const pendingRepeatables = current.repeatables.filter');
@@ -47,5 +69,7 @@ test('release engine runs the rollback-only catalog rehearsal before changed rep
   assert.ok(generatorIndex > collectIndex, 'release engine must run the catalog rehearsal after collection');
   assert.ok(applyIndex > generatorIndex, 'catalog rehearsal must pass before applying changed repeatables');
   assert.match(engine, /generate_banking_pay_catalog_preapply_check\.mjs/);
+  assert.match(engine, /pending-repeatables\.json/);
+  assert.match(engine, /--pending-manifest/);
   assert.match(engine, /psql\(\{ file: output \}\)/);
 });
