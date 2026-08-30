@@ -76,7 +76,8 @@
     "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
     "supabase/verification/30082026_1113_candidate_paper_return_proof_transaction_boundary_verification.sql",
     "supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql",
-    "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql"
+    "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql",
+    "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql"
   ],
   "newVerificationFiles": [
     "supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql",
@@ -117,6 +118,7 @@
     "supabase/verification/30082026_0455_candidate_daily_emergency_window_row_verification.sql",
     "supabase/verification/30082026_1113_candidate_paper_return_proof_transaction_boundary_verification.sql",
     "supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql",
-    "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql"
+    "tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql",
+    "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql"
   ]
 }

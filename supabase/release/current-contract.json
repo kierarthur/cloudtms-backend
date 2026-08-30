@@ -23528,7 +23528,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2a3900e3eb15b3616bbf87bb015f37be50f12e003162d96e8dca218a75727704"
+      "definition_sha256": "ffeae1a1a2a06e80dc5cd2cd1ac0ffe964b658c9000badc7410a1b3a8afd9fd0"
     },
     {
       "acl": [
@@ -24609,6 +24609,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "b39c211f70af03596dd3c854c7757060c12f74e45b0ff26de2268aed7db0aab9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "pay_workbench_repair_invalid_dirty_apply_jobs_v1(p_session_id uuid, p_candidate_id uuid, p_limit integer, p_reason text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "a97cfd4a915c8b3235a4b3b43a88788d83e5d265178e01582fa124419c801a0c"
     },
     {
       "acl": [

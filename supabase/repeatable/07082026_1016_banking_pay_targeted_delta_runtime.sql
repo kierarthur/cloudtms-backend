@@ -1697,6 +1697,19 @@ DECLARE
   v_canonical_targeted_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_canonical_linked_timesheet_ids uuid[] := ARRAY[]::uuid[];
   v_all_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_effective_bounded_timesheet_ids uuid[] := ARRAY[]::uuid[];
+  v_preceding_scope_authority_reusable boolean := false;
+  v_preinvalidated_scope_reissued boolean := false;
+  v_payload_scope_change_tx_token uuid := NULL::uuid;
+  v_payload_scope_change_generation bigint := NULL::bigint;
+  v_effective_scope_change_tx_token uuid := NULL::uuid;
+  v_effective_scope_change_generation bigint := NULL::bigint;
+  v_scope_transaction_state text := NULL::text;
+  v_scope_transaction_generation bigint := NULL::bigint;
+  v_registry_dirty_generation bigint := NULL::bigint;
+  v_live_scope_change_generation bigint := NULL::bigint;
+  v_scope_state_generation_match_count integer := 0;
+  v_scope_reissue_result jsonb := '{}'::jsonb;
   v_refresh_scope_kind text := 'CANDIDATE_FULL_LIVE';
   v_reason text := 'DIRTY_TRIGGER:CANDIDATE';
   v_payload_seq bigint := 0;
@@ -1771,6 +1784,9 @@ BEGIN
   END IF;
 
   v_payload := COALESCE(v_job.payload_json, '{}'::jsonb);
+  v_preinvalidated_scope_reissued := lower(BTRIM(COALESCE(
+    v_payload->>'preinvalidated_scope_reissued','false'
+  ))) IN ('true','t','1','yes','y','on');
   v_candidate_id := COALESCE(
     v_job.candidate_id,
     CASE WHEN COALESCE(v_payload->>'candidate_id', '') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN (v_payload->>'candidate_id')::uuid END
@@ -1982,6 +1998,15 @@ BEGIN
     v_all_timesheet_ids := ARRAY[]::uuid[];
     v_refresh_scope_kind := 'CANDIDATE_FULL_LIVE';
   END IF;
+
+  SELECT COALESCE(array_agg(DISTINCT bounded_id ORDER BY bounded_id), ARRAY[]::uuid[])
+  INTO v_effective_bounded_timesheet_ids
+  FROM (
+    SELECT unnest(v_canonical_targeted_timesheet_ids) AS bounded_id
+    UNION ALL
+    SELECT unnest(v_canonical_linked_timesheet_ids) AS bounded_id
+  ) AS bounded_scope
+  WHERE bounded_id IS NOT NULL;
 
   v_reason := COALESCE(NULLIF(BTRIM(COALESCE(v_payload->>'reason_latest', v_payload->>'reason', '')), ''), 'DIRTY_TRIGGER:CANDIDATE');
   v_payload_seq := GREATEST(
@@ -2324,6 +2349,177 @@ BEGIN
       OR LOWER(COALESCE(v_reason, '')) LIKE '%authorise%'
       OR LOWER(COALESCE(v_reason, '')) LIKE '%unauthorise%'
     );
+
+  -- The trigger invalidates the exact row known at write time.  Dependency and
+  -- rotation closure can legitimately discover a wider Timesheet family by
+  -- the time this worker runs, and a newer event can also supersede the
+  -- original generation.  Prove the *final* bounded scope here, once under the
+  -- Candidate serial lock and before scanning any open session.  If the old
+  -- proof is incomplete or stale, issue one fresh central invalidation for the
+  -- complete effective scope and reuse that one proof for every session.
+  v_payload_scope_change_tx_token := CASE
+    WHEN COALESCE(v_payload->>'scope_change_tx_token','')
+      ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN (v_payload->>'scope_change_tx_token')::uuid
+    ELSE NULL::uuid
+  END;
+  v_payload_scope_change_generation := CASE
+    WHEN COALESCE(v_payload->>'scope_change_generation','') ~ '^[0-9]{1,18}$'
+      THEN (v_payload->>'scope_change_generation')::bigint
+    ELSE NULL::bigint
+  END;
+
+  SELECT scope_tx.state,scope_tx.allocated_generation
+  INTO v_scope_transaction_state,v_scope_transaction_generation
+  FROM public.banking_pay_scope_change_transactions AS scope_tx
+  WHERE scope_tx.tx_token=v_payload_scope_change_tx_token;
+
+  SELECT registry.dirty_generation,
+         change_counter.scope_change_generation
+  INTO v_registry_dirty_generation,v_live_scope_change_generation
+  FROM private.banking_pay_workbench_candidate_scope_registry AS registry
+  LEFT JOIN public.app_change_counters AS change_counter
+    ON change_counter.entity_key='pay_candidate:'||v_candidate_id::text
+  WHERE registry.candidate_id=v_candidate_id;
+
+  SELECT count(*)::integer
+  INTO v_scope_state_generation_match_count
+  FROM unnest(v_effective_bounded_timesheet_ids) AS requested(timesheet_id)
+  JOIN private.banking_pay_workbench_timesheet_scope_state AS scope_state
+    ON scope_state.timesheet_id=requested.timesheet_id
+   AND scope_state.candidate_id=v_candidate_id
+   AND scope_state.dirty_generation=v_payload_scope_change_generation;
+
+  v_preceding_scope_authority_reusable :=
+    lower(BTRIM(COALESCE(v_payload->>'bounded_scope_state_precedes_job','false')))
+      IN ('true','t','1','yes','y','on')
+    AND v_payload_scope_change_tx_token IS NOT NULL
+    AND COALESCE(v_payload_scope_change_generation,0)>0
+    AND v_scope_transaction_state='FINALIZED'
+    AND v_scope_transaction_generation=v_payload_scope_change_generation
+    AND v_registry_dirty_generation=v_payload_scope_change_generation
+    AND v_live_scope_change_generation=v_payload_scope_change_generation
+    AND v_scope_state_generation_match_count=
+      cardinality(v_effective_bounded_timesheet_ids);
+
+  IF NOT v_preceding_scope_authority_reusable THEN
+    v_scope_reissue_result:=private.pay_workbench_scope_invalidate_v1(
+      CASE WHEN cardinality(v_effective_bounded_timesheet_ids)=0
+        THEN ARRAY[v_candidate_id]
+        ELSE array_fill(v_candidate_id,ARRAY[cardinality(v_effective_bounded_timesheet_ids)])
+      END,
+      CASE WHEN cardinality(v_effective_bounded_timesheet_ids)=0
+        THEN ARRAY[NULL::uuid]
+        ELSE v_effective_bounded_timesheet_ids
+      END,
+      'DIRTY_APPLY_EFFECTIVE_SCOPE_REISSUE:'||v_reason,
+      NULL::uuid,
+      (v_payload
+        - 'scope_change_tx_token'
+        - 'scope_change_generation'
+        - 'bounded_scope_state_precedes_job')
+        || jsonb_build_object(
+          'skip_candidate_job_enqueue',true,
+          'effective_scope_reissue_job_id',p_job_id::text,
+          'effective_scope_reissue_reason','FINAL_FAMILY_SCOPE_OR_GENERATION_CHANGED',
+          'effective_scope_timesheet_count',cardinality(v_effective_bounded_timesheet_ids),
+          'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH'
+        )
+    );
+
+    v_effective_scope_change_tx_token:=CASE
+      WHEN COALESCE(v_scope_reissue_result->>'scope_change_tx_token','')
+        ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        THEN (v_scope_reissue_result->>'scope_change_tx_token')::uuid
+      ELSE NULL::uuid
+    END;
+
+    -- The ordinary invalidator callback stages this counter through
+    -- pay_workbench_dirty_event_enqueue. This path deliberately reuses the
+    -- current durable job, so stage the same canonical Candidate counter
+    -- explicitly before the deferred finaliser runs.
+    PERFORM public._change_bump('pay_candidate:'||v_candidate_id::text);
+
+    -- The scope-change finaliser is an intentionally deferred constraint
+    -- trigger.  Do not pretend its generation is available inside this same
+    -- transaction and do not force the global constraint mode.  Stage this
+    -- existing durable owner under the fresh token, requeue it, and return
+    -- before session fan-out.  At commit the canonical finaliser assigns one
+    -- generation to the registry, every final-family Timesheet and this job;
+    -- the next claim must then prove that finalised authority before doing any
+    -- Workbench work.
+    IF lower(BTRIM(COALESCE(v_scope_reissue_result->>'ok','false')))
+         NOT IN ('true','t','1','yes','y','on')
+       OR v_effective_scope_change_tx_token IS NULL THEN
+      RAISE EXCEPTION 'PAY_WORKBENCH_EFFECTIVE_SCOPE_REISSUE_NOT_STAGED'
+        USING ERRCODE='40001',DETAIL=jsonb_build_object(
+          'code','PAY_WORKBENCH_EFFECTIVE_SCOPE_REISSUE_NOT_STAGED',
+          'candidate_id',v_candidate_id,
+          'job_id',p_job_id,
+          'effective_timesheet_count',cardinality(v_effective_bounded_timesheet_ids),
+          'scope_reissue_result',v_scope_reissue_result
+        )::text;
+    END IF;
+
+    v_preinvalidated_scope_reissued:=true;
+    v_payload:=(v_payload
+      - 'scope_change_tx_token'
+      - 'scope_change_generation'
+      - 'bounded_scope_state_precedes_job')
+      || jsonb_build_object(
+        'scope_change_tx_token',v_effective_scope_change_tx_token::text,
+        'bounded_scope_state_precedes_job',true,
+        'preinvalidated_scope_reissued',true,
+        'preinvalidated_scope_reissued_at_utc',v_now::text,
+        'preinvalidated_scope_reissue_pending_finalization',true,
+        'preinvalidated_scope_original_tx_token',v_payload_scope_change_tx_token,
+        'preinvalidated_scope_original_generation',v_payload_scope_change_generation,
+        'preinvalidated_scope_effective_timesheet_count',
+          cardinality(v_effective_bounded_timesheet_ids)
+      );
+
+    UPDATE public.banking_pay_workbench_jobs AS repaired_job
+    SET status='QUEUED',
+        attempt_count=GREATEST(COALESCE(repaired_job.attempt_count,0)-1,0),
+        run_at_utc=v_now,
+        started_at_utc=NULL,
+        completed_at_utc=NULL,
+        failed_at_utc=NULL,
+        last_error_json=NULL,
+        payload_json=v_payload,
+        scope_change_tx_token=v_effective_scope_change_tx_token,
+        scope_change_generation=NULL,
+        updated_at_utc=v_now
+    WHERE repaired_job.id=p_job_id;
+
+    RETURN jsonb_build_object(
+      'ok',true,
+      'job_id',p_job_id::text,
+      'job_type','WORKBENCH_CANDIDATE_DIRTY_APPLY',
+      'candidate_id',v_candidate_id::text,
+      'refresh_scope_kind',v_refresh_scope_kind,
+      'targeted_timesheet_count',COALESCE(array_length(v_targeted_timesheet_ids,1),0),
+      'family_timesheet_count',COALESCE(array_length(v_family_timesheet_ids,1),0),
+      'preinvalidated_scope_reissued',true,
+      'preinvalidated_scope_reissue_pending_finalization',true,
+      'effective_scope_change_tx_token',v_effective_scope_change_tx_token::text,
+      'effective_scope_change_generation',NULL,
+      'dirty_apply_row_marking_applied',false,
+      'dirty_marking_skipped',true,
+      'session_progress_dirtying_skipped',true,
+      'more_due',true,
+      'has_more',true,
+      'rerun_required',true,
+      'next_cursor_json',COALESCE(v_job.private_cursor_json,'{}'::jsonb),
+      'made_progress',true,
+      'dirty_apply_complete',false,
+      'policy_x_authority_scope','PRE_DRAFT_LIVE_TRUTH',
+      'elapsed_ms',ROUND((EXTRACT(EPOCH FROM (clock_timestamp()-v_started_at))*1000)::numeric,2)
+    );
+  ELSE
+    v_effective_scope_change_tx_token:=v_payload_scope_change_tx_token;
+    v_effective_scope_change_generation:=v_payload_scope_change_generation;
+  END IF;
 
   PERFORM public._temp_diag_log('TEMP_TRIGGER_DIRTY_STAGE', 'TEMP_BANKING_PAY_DIRTY', p_job_id::text, jsonb_build_object('function_name', 'pay_workbench_candidate_dirty_apply_job_process', 'stage', 'dirty_worker_apply_start', 'job_id', p_job_id::text, 'candidate_id', v_candidate_id::text, 'targeted_timesheet_count', COALESCE(array_length(v_targeted_timesheet_ids, 1), 0), 'family_timesheet_count', COALESCE(array_length(v_family_timesheet_ids, 1), 0), 'latest_source_change_seq', v_payload_seq, 'processed_source_change_seq', v_processed_source_change_seq));
 
@@ -2829,6 +3025,9 @@ BEGIN
             ELSE 'SOURCE_BUILD_OR_LEGACY_REFRESH'
           END,
           'refresh_enqueue_result', COALESCE(v_refresh_result, '{}'::jsonb)
+          ,'preinvalidated_scope_reissued',v_preinvalidated_scope_reissued
+          ,'effective_scope_change_tx_token',v_effective_scope_change_tx_token::text
+          ,'effective_scope_change_generation',v_effective_scope_change_generation
           ,'session_scan_cutoff_created_at_utc',v_session_scan_cutoff_created_at::text
           ,'session_scan_cutoff_id',v_session_scan_cutoff_id::text
           ,'session_scan_last_created_at_utc',CASE WHEN v_session_scan_has_more THEN v_session_scan_last_created_at::text ELSE NULL END
@@ -2891,6 +3090,9 @@ BEGIN
       ELSE 'SOURCE_BUILD_OR_LEGACY_REFRESH'
     END,
     'refresh_enqueue_result', COALESCE(v_refresh_result, '{}'::jsonb),
+    'preinvalidated_scope_reissued', v_preinvalidated_scope_reissued,
+    'effective_scope_change_tx_token', v_effective_scope_change_tx_token::text,
+    'effective_scope_change_generation', v_effective_scope_change_generation,
     'more_due', v_session_scan_has_more,
     'has_more', v_session_scan_has_more,
     'made_progress', true,

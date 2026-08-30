@@ -186075,6 +186075,63 @@ async function drainBankingPayWorkbenchJobs(env, opts = {}) {
     }
   }
 
+  let invalidDirtyApplyRepair = {
+    ok: true,
+    examined_candidate_count: 0,
+    repaired_candidate_count: 0,
+    successor_job_count: 0,
+    skipped_count: 0,
+    failed_count: 0,
+    remaining_invalid_unrepaired_count: 0,
+    all_state_transitions_proven: true
+  };
+  if (sourceBuildAllowedByFilter) {
+    try {
+      invalidDirtyApplyRepair = unwrapRpc(await sbRpc(env, 'pay_workbench_repair_invalid_dirty_apply_jobs_v1', {
+        p_session_id: sessionId,
+        p_candidate_id: candidateId,
+        p_limit: Math.min(10, Math.max(1, claimLimit)),
+        p_reason: 'WORKBENCH_DRAIN_INVALID_DIRTY_APPLY_CANONICAL_REPAIR'
+      }, {
+        routeClass: 'WORKBENCH_MUTATION',
+        purpose: 'WORKBENCH_INVALID_DIRTY_APPLY_CANONICAL_REPAIR',
+        timeoutMs: Math.min(8000, dbRpcHardCapMs),
+        bankingPay: true
+      }), 'pay_workbench_repair_invalid_dirty_apply_jobs_v1');
+      rpcCallCount += 1;
+
+      const failedRepairCount = countFrom(invalidDirtyApplyRepair, ['failed_count']);
+      const remainingInvalidCount = countFrom(invalidDirtyApplyRepair, ['remaining_invalid_unrepaired_count']);
+      const transitionsProven = booleanFrom(invalidDirtyApplyRepair.all_state_transitions_proven);
+      if (!isPlainObject(invalidDirtyApplyRepair)
+        || !booleanFrom(invalidDirtyApplyRepair.ok)
+        || failedRepairCount > 0
+        || remainingInvalidCount > 0
+        || !transitionsProven) {
+        const repairError = new Error('Banking Pay could not safely replace failed candidate-change work with current full-scope authority.');
+        repairError.code = 'WORKBENCH_INVALID_DIRTY_APPLY_REPAIR_FAILED';
+        throw repairError;
+      }
+
+      const repairedCandidateCount = countFrom(invalidDirtyApplyRepair, ['repaired_candidate_count']);
+      if (repairedCandidateCount > 0) {
+        madeProgress = true;
+        logDrainDiag('WORKBENCH_INVALID_DIRTY_APPLY_REPAIRED', {
+          repaired_candidate_count: repairedCandidateCount,
+          successor_job_count: countFrom(invalidDirtyApplyRepair, ['successor_job_count']),
+          skipped_count: countFrom(invalidDirtyApplyRepair, ['skipped_count']),
+          remaining_invalid_unrepaired_count: remainingInvalidCount
+        });
+      }
+    } catch (repairError) {
+      logDrainDiag('WORKBENCH_INVALID_DIRTY_APPLY_REPAIR_FAILED', {
+        error_code: upperTrim(repairError?.code || repairError?.name || 'WORKBENCH_INVALID_DIRTY_APPLY_REPAIR_FAILED'),
+        error_message: String(repairError?.message || repairError || 'Historical candidate-change repair failed')
+      }, 'warn');
+      throw repairError;
+    }
+  }
+
   let invalidSourceAuthorityRepair = {
     ok: true,
     examined_candidate_count: 0,
