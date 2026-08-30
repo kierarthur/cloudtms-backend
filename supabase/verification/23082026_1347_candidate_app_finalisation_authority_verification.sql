@@ -10,14 +10,14 @@ declare
   v_private_helper_executable integer;
   v_initial_template_mismatch integer;
 begin
-  with expected(signature,expected_config) as (
+  with expected(signature,expected_config,expected_volatility) as (
     values
       ('candidate_app_timesheet_detail_v2(uuid,text,uuid,uuid,uuid,timestamp with time zone)',
-        array['search_path=pg_catalog, public, private, extensions, pg_temp']::text[]),
+        array['search_path=pg_catalog, public, private, extensions, pg_temp']::text[],'s'::"char"),
       ('candidate_break_entry_context_get_v1(uuid,text,uuid,timestamp with time zone)',
-        array['search_path=pg_catalog, public, private, extensions, pg_temp']::text[]),
+        array['search_path=pg_catalog, public, private, extensions, pg_temp']::text[],'s'::"char"),
       ('candidate_paper_return_proof_validate_v1(uuid,text,uuid,integer,text,text,text,text,timestamp with time zone)',
-        array['search_path=pg_catalog, public, private, extensions, pg_temp']::text[])
+        array['search_path=pg_catalog, public, private, extensions, pg_temp']::text[],'v'::"char")
   ), target as (
     select
       e.signature,
@@ -29,7 +29,8 @@ begin
       pg_catalog.has_function_privilege('service_role',p.oid,'EXECUTE') as service_execute,
       pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE') as anon_execute,
       pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE') as authenticated_execute,
-      e.expected_config
+      e.expected_config,
+      e.expected_volatility
     from expected e
     left join pg_catalog.pg_proc p
       on p.oid=pg_catalog.to_regprocedure('public.'||e.signature)
@@ -39,7 +40,7 @@ begin
     count(*) filter(where oid is not null),
     count(*) filter(where oid is null or not service_execute),
     count(*) filter(where oid is not null and (anon_execute or authenticated_execute)),
-    count(*) filter(where oid is null or not prosecdef or provolatile<>'s'
+    count(*) filter(where oid is null or not prosecdef or provolatile<>expected_volatility
       or owner_name<>'postgres' or proconfig is distinct from expected_config)
   into v_public_count,v_service_missing,v_browser_executable,v_shape_mismatch
   from target;

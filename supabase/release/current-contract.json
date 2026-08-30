@@ -14826,9 +14826,9 @@
       "schema": "public",
       "identity": "candidate_paper_return_proof_validate_v1(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_manifest_sha256_hex text, p_page_key text, p_qr_token text, p_qr_token_sha256_hex text, p_now_utc timestamp with time zone)",
       "parallel": "u",
-      "volatility": "s",
+      "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2ada81bbcf0b734c2fcb90ec801b3a783297cf6f9a24d5dd5e6627477fc388f5"
+      "definition_sha256": "56d8f9158c0c4021f71dfec4e4b5bcf036ffaa8c546e586187a855f56948db18"
     },
     {
       "acl": [
