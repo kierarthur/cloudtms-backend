@@ -535,6 +535,8 @@ async function benchmarkMetadata(request: Request, env: DbBenchmarkEnv): Promise
     owns_timesheets: boolean;
     row_security: string;
     can_select_timesheets: boolean;
+    collector_disabled: boolean;
+    work_mem: string;
   }>(`
     select
       current_database() = 'cloudtms_test_clone' as expected_database,
@@ -542,7 +544,9 @@ async function benchmarkMetadata(request: Request, env: DbBenchmarkEnv): Promise
       r.rolbypassrls as bypass_rls,
       c.relowner = r.oid as owns_timesheets,
       current_setting('row_security') as row_security,
-      has_table_privilege(current_user, 'public.timesheets', 'select') as can_select_timesheets
+      has_table_privilege(current_user, 'public.timesheets', 'select') as can_select_timesheets,
+      current_setting('pg_show_plans.is_enabled', true) = 'off' as collector_disabled,
+      current_setting('work_mem') as work_mem
     from pg_roles r
     join pg_class c on c.oid = 'public.timesheets'::regclass
     where r.rolname = current_user
@@ -586,6 +590,8 @@ async function benchmarkMetadata(request: Request, env: DbBenchmarkEnv): Promise
       owns_timesheets: role?.owns_timesheets ?? null,
       row_security: role?.row_security ?? null,
       can_select_timesheets: role?.can_select_timesheets ?? null,
+      collector_disabled: role?.collector_disabled ?? null,
+      work_mem: role?.work_mem ?? null,
     },
     postgrest_jwt_role: decodeJwtRole(request.headers.get(POSTGREST_TOKEN_HEADER)?.trim() ?? ""),
     sessions,
