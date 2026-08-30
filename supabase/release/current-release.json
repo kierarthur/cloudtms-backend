@@ -43,7 +43,10 @@
     "supabase/repeatable/23072026_1217_disable_plpgsql_check_for_correction_chain_banking.sql"
   ],
   "legacyUpgradePostRepeatableFiles": [
-    "supabase/release/30082026_0236_legacy_general_browser_view_isolation_replacement.sql"
+    "supabase/release/30082026_0236_legacy_general_browser_view_isolation_replacement.sql",
+    "supabase/release/30082026_0442_legacy_structural_contract_convergence.sql",
+    "supabase/release/30082026_0421_legacy_general_rpc_contract_convergence.sql",
+    "supabase/release/30082026_0450_legacy_routine_contract_convergence.sql"
   ],
   "legacyUpgradeReplacementRepeatables": {
     "supabase/repeatable/22082026_1402_candidate_named_security_definer_browser_isolation.sql": "supabase/release/30082026_0341_legacy_candidate_named_security_replacement.sql"

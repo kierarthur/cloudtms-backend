@@ -46,23 +46,12 @@ facts as materialized (
     lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}',
       i.header_snapshot_json->>'self_bill','false'))
       in('true','t','1','yes') invoice_self_bill,
-    case when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
-      then upper(coalesce(nullif(btrim(i.header_snapshot_json->>'invoice_stream'),''),
-        case when lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}',
-          i.header_snapshot_json->>'self_bill','false')) in('true','t','1','yes')
-          then 'SELF_BILL' else 'NORMAL' end))
-      else case when lower(coalesce(i.header_snapshot_json#>>'{meta,self_bill}',
-          i.header_snapshot_json->>'self_bill','false')) in('true','t','1','yes')
-          then 'SELF_BILL' else 'NORMAL' end
-    end invoice_stream,
     nullif(btrim(coalesce(i.header_snapshot_json->>
       'client_primary_invoice_email',cl.primary_invoice_email,'')),'')
       primary_email,
     cs.id client_settings_id,cs.effective_from client_settings_effective_from,
     cs.send_manual_invoices_to_different_email client_alt_enabled,
     nullif(btrim(cs.manual_invoices_alt_email_address),'') client_alt_email,
-    lower(nullif(btrim(cs.candidate_expense_invoice_email),''))
-      client_expense_invoice_email,
     cs.self_bill_no_invoices_sent
   from raw r
   left join request_counts rc on rc.request_key=r.request_key
@@ -70,8 +59,7 @@ facts as materialized (
   left join public.clients cl on cl.id=i.client_id
   left join lateral (
     select s.id,s.effective_from,s.send_manual_invoices_to_different_email,
-      s.manual_invoices_alt_email_address,s.candidate_expense_invoice_email,
-      s.self_bill_no_invoices_sent
+      s.manual_invoices_alt_email_address,s.self_bill_no_invoices_sent
     from public.client_settings s
     where p_evaluation_date is not null
       and s.client_id=i.client_id
@@ -83,7 +71,6 @@ facts as materialized (
 ),
 line_routes as materialized (
   select f.request_no,f.request_key,f.invoice_id,l.timesheet_id,
-    f.client_expense_invoice_email,
     l.timesheet_id is not null and ts.timesheet_id is null
       missing_current_timesheet,
     (
@@ -123,10 +110,7 @@ contract_routes as materialized (
     nullif(btrim(coalesce(ct.manual_invoices_alt_email_address,'')),'')
       alt_email,
     lower(nullif(btrim(coalesce(ct.manual_invoices_alt_email_address,'')),'') )
-      contract_alt_policy_email,
-    lower(coalesce(
-      nullif(btrim(ct.candidate_expense_invoice_email_override),''),
-      lr.client_expense_invoice_email)) effective_expense_invoice_email
+      contract_alt_policy_email
   from line_routes lr
   left join public.contracts ct on ct.id=lr.contract_id
 ),
@@ -149,12 +133,6 @@ route_rollup as materialized (
     min(lower(cr.alt_email))
       filter(where cr.manual_adjustment and cr.override_enabled
         and cr.alt_email is not null) contract_alt_email,
-    count(distinct cr.effective_expense_invoice_email)
-      filter(where cr.effective_expense_invoice_email is not null)
-      expense_email_count,
-    min(cr.effective_expense_invoice_email)
-      filter(where cr.effective_expense_invoice_email is not null)
-      expense_invoice_email,
     coalesce(jsonb_agg(distinct jsonb_build_object(
       'contract_id',cr.contract_id,
       'override_client_settings',cr.override_enabled,
@@ -176,11 +154,8 @@ chosen as materialized (
   select f.*,rr.missing_current_timesheet,rr.has_manual_adjustment,
     rr.missing_contract,rr.contract_data_missing,rr.has_contract_override,
     rr.contract_alt_missing,rr.contract_alt_count,rr.contract_alt_email,
-    rr.expense_email_count,rr.expense_invoice_email,
     rr.contract_setting_identities,
     case
-      when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
-       and f.invoice_stream='EXPENSE' then 'EXPENSE_INVOICE_EMAIL'
       when jsonb_array_length(f.requested_to)>0 then 'REQUESTED'
       when rr.contract_alt_count=1 then 'CONTRACT_MANUAL_ALTERNATE'
       when rr.has_manual_adjustment and not rr.has_contract_override
@@ -189,9 +164,6 @@ chosen as materialized (
       else 'CLIENT_PRIMARY'
     end route_source,
     case
-      when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
-       and f.invoice_stream='EXPENSE'
-        then jsonb_build_array(rr.expense_invoice_email)
       when jsonb_array_length(f.requested_to)>0 then f.requested_to
       when rr.contract_alt_count=1 then jsonb_build_array(rr.contract_alt_email)
       when rr.has_manual_adjustment and not rr.has_contract_override
@@ -200,13 +172,11 @@ chosen as materialized (
       else jsonb_build_array(f.primary_email)
     end selected_to,
     f.invoice_do_not_send
-      or(f.invoice_stream<>'EXPENSE' and f.invoice_self_bill
-        and coalesce(f.self_bill_no_invoices_sent,true))
+      or(f.invoice_self_bill and coalesce(f.self_bill_no_invoices_sent,true))
       delivery_suppressed,
     case
       when f.invoice_do_not_send then 'DO_NOT_SEND'
-      when f.invoice_stream<>'EXPENSE' and f.invoice_self_bill
-        and coalesce(f.self_bill_no_invoices_sent,true)
+      when f.invoice_self_bill and coalesce(f.self_bill_no_invoices_sent,true)
         then 'SELF_BILL_SUPPRESSED'
     end suppression_reason
   from facts f
@@ -275,13 +245,7 @@ classified as materialized (
       case when p_evaluation_date is null then 'EVALUATION_DATE_REQUIRED' end,
       case when c.delivery_policy not in('ATTACH','SPLIT','SECURE_LINK')
         then 'DELIVERY_POLICY_INVALID' end,
-      case when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
-       and c.invoice_stream='EXPENSE'
-        and (coalesce(c.expense_email_count,0)<>1
-          or jsonb_array_length(c.to_json)=0)
-        then 'EXPENSE_INVOICE_EMAIL_REQUIRED' end,
-      case when c.invoice_stream<>'EXPENSE'
-        and not c.delivery_suppressed and jsonb_array_length(c.to_json)=0
+      case when not c.delivery_suppressed and jsonb_array_length(c.to_json)=0
         then 'MISSING_RECIPIENT' end,
       case when c.invalid_to>0 then 'INVALID_TO_RECIPIENT' end,
       case when c.invalid_cc>0 then 'INVALID_CC_RECIPIENT' end,
@@ -300,12 +264,8 @@ hashed as materialized (
 ),
 policy_hashed as materialized (
   select h.*,
-    encode(digest((jsonb_build_object(
-      'policy_version',case
-        when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
-          then 'INVOICE_DELIVERY_ROUTE_V6'
-        else 'INVOICE_DELIVERY_ROUTE_V5'
-      end,
+    encode(digest(jsonb_build_object(
+      'policy_version','INVOICE_DELIVERY_ROUTE_V5',
       'client_id',h.client_id,
       'invoice_week_identity',h.invoice_week_identity,
       'recipient_set_hash',h.calculated_recipient_set_hash,
@@ -323,11 +283,7 @@ policy_hashed as materialized (
       'warnings',to_jsonb(h.warnings),'blockers',to_jsonb(h.blockers),
       'template_version',h.template_version,
       'delivery_policy',h.delivery_policy
-    ) || case
-      when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
-        then jsonb_build_object('invoice_stream',h.invoice_stream)
-      else '{}'::jsonb
-    end)::text,'sha256'),'hex') calculated_route_policy_hash
+    )::text,'sha256'),'hex') calculated_route_policy_hash
   from hashed h
 )
 select p.request_key,p.invoice_id,
@@ -342,14 +298,7 @@ select p.request_key,p.invoice_id,
   jsonb_build_object(
     'missing_current_timesheet',p.missing_current_timesheet,
     'manual_adjustment',p.has_manual_adjustment,
-    'contract_override_count',p.contract_alt_count)
-    || case
-      when private._candidate_feature_enabled_current_v1('candidate_expense_invoice_routing_v1')
-        then jsonb_build_object(
-          'invoice_stream',p.invoice_stream,
-          'expense_email_count',p.expense_email_count)
-      else '{}'::jsonb
-    end,
+    'contract_override_count',p.contract_alt_count),
   to_jsonb(p.blockers),
   jsonb_build_object(
     'invalid_to_count',p.invalid_to,'invalid_cc_count',p.invalid_cc,
@@ -357,10 +306,10 @@ select p.request_key,p.invoice_id,
   p.calculated_route_policy_hash
 from policy_hashed p
 order by p.request_key nulls first,p.invoice_id nulls first,p.request_no;
-$function$;
+$function$
+;
 
 alter function private._invoice_delivery_routes_batch(jsonb, date) owner to "postgres";
 revoke all privileges on function private._invoice_delivery_routes_batch(jsonb, date) from PUBLIC, anon, authenticated, service_role, authenticator, supabase_admin;
 grant execute on function private._invoice_delivery_routes_batch(jsonb, date) to "postgres";
 grant execute on function private._invoice_delivery_routes_batch(jsonb, date) to service_role;
-

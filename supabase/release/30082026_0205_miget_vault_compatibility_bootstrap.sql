@@ -7,6 +7,32 @@
 
 begin;
 
+-- A truly blank PostgreSQL service does not provide Supabase's pre-created
+-- extensions schema. Keep the compatibility dependency provider-neutral and
+-- fail closed if pgcrypto already exists in an unexpected schema.
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+
+do $vault_pgcrypto_dependency$
+declare
+  v_extension_schema text;
+begin
+  select n.nspname
+  into v_extension_schema
+  from pg_catalog.pg_extension e
+  join pg_catalog.pg_namespace n on n.oid=e.extnamespace
+  where e.extname='pgcrypto';
+
+  if v_extension_schema is distinct from 'extensions'
+     or pg_catalog.to_regprocedure('extensions.gen_random_uuid()') is null
+     or pg_catalog.to_regprocedure('extensions.gen_random_bytes(integer)') is null
+     or pg_catalog.to_regprocedure('extensions.pgp_sym_encrypt(text,text,text)') is null
+     or pg_catalog.to_regprocedure('extensions.pgp_sym_decrypt(bytea,text)') is null then
+    raise exception 'VAULT_PGCRYPTO_DEPENDENCY_INVALID:%',v_extension_schema;
+  end if;
+end
+$vault_pgcrypto_dependency$;
+
 do $vault_compatibility$
 declare
   v_schema_present boolean := to_regnamespace('vault') is not null;

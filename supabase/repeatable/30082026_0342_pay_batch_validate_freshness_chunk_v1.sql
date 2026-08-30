@@ -834,3 +834,4 @@ $function$;
 alter function public.pay_batch_validate_freshness_chunk(uuid, uuid, uuid, uuid, integer) owner to "postgres";
 revoke all privileges on function public.pay_batch_validate_freshness_chunk(uuid, uuid, uuid, uuid, integer) from PUBLIC, anon, authenticated, service_role, authenticator, supabase_admin;
 grant execute on function public.pay_batch_validate_freshness_chunk(uuid, uuid, uuid, uuid, integer) to "postgres";
+grant execute on function public.pay_batch_validate_freshness_chunk(uuid, uuid, uuid, uuid, integer) to service_role;

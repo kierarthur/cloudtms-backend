@@ -299,11 +299,46 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.match(deferredPlpgsqlGuard, /plpgsql_check\.fatal_errors TO %L/);
   assert.deepEqual(release.legacyUpgradePostRepeatableFiles, [
     'supabase/release/30082026_0236_legacy_general_browser_view_isolation_replacement.sql',
+    'supabase/release/30082026_0442_legacy_structural_contract_convergence.sql',
+    'supabase/release/30082026_0421_legacy_general_rpc_contract_convergence.sql',
+    'supabase/release/30082026_0450_legacy_routine_contract_convergence.sql',
   ]);
   const postRepeatableViewIsolation = read(release.legacyUpgradePostRepeatableFiles[0]);
   assert.match(postRepeatableViewIsolation, /alter view %I\.%I set \(security_invoker=true\)/i);
   assert.match(postRepeatableViewIsolation, /revoke all privileges on table %I\.%I from PUBLIC, anon, authenticated/i);
   assert.match(postRepeatableViewIsolation, /f7b3b9ccf07dd052c65b98932af9a76c/);
+  const postRepeatableStructuralConvergence = read(release.legacyUpgradePostRepeatableFiles[1]);
+  assert.match(postRepeatableStructuralConvergence, /^begin;/im);
+  assert.match(postRepeatableStructuralConvergence, /^commit;/im);
+  assert.match(postRepeatableStructuralConvergence, /LEGACY_NUMERIC_12_2_CONVERSION_WOULD_CHANGE_DATA/);
+  assert.match(postRepeatableStructuralConvergence, /cloudtms_miget_service_owner_all/);
+  assert.doesNotMatch(
+    postRepeatableStructuralConvergence,
+    /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i,
+  );
+  const postRepeatableRpcConvergence = read(release.legacyUpgradePostRepeatableFiles[2]);
+  assert.match(postRepeatableRpcConvergence, /^begin;/im);
+  assert.match(postRepeatableRpcConvergence, /^commit;/im);
+  assert.match(postRepeatableRpcConvergence, /LEGACY_GENERAL_RPC_PRESTATE_DRIFT/);
+  assert.match(postRepeatableRpcConvergence, /79c1d4349118210f3166017e4c0ff43d/);
+  assert.match(postRepeatableRpcConvergence, /a992e2c09a147974a745e7a9073db1c2/);
+  assert.equal((postRepeatableRpcConvergence.match(/^-- SOURCE public\./gm) || []).length, 19);
+  assert.equal((postRepeatableRpcConvergence.match(/^drop function public\./gim) || []).length, 7);
+  assert.match(postRepeatableRpcConvergence, /426cb25afcca047d21c729af91ca6fe5/);
+  assert.match(postRepeatableRpcConvergence, /9eb64f67054303d3d292ecfa07f432e3/);
+  assert.doesNotMatch(
+    postRepeatableRpcConvergence,
+    /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i,
+  );
+  const postRepeatableRoutineConvergence = read(release.legacyUpgradePostRepeatableFiles[3]);
+  assert.match(postRepeatableRoutineConvergence, /^begin;/im);
+  assert.match(postRepeatableRoutineConvergence, /^commit;/im);
+  assert.equal((postRepeatableRoutineConvergence.match(/^-- SOURCE (?:public|private)\./gm) || []).length, 15);
+  assert.match(postRepeatableRoutineConvergence, /LEGACY_ROUTINE_CONVERGENCE_COUNT_FAILED/);
+  assert.doesNotMatch(
+    postRepeatableRoutineConvergence,
+    /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i,
+  );
   assert.deepEqual(release.legacyUpgradeReplacementRepeatables, {
     'supabase/repeatable/22082026_1402_candidate_named_security_definer_browser_isolation.sql':
       'supabase/release/30082026_0341_legacy_candidate_named_security_replacement.sql',
@@ -451,6 +486,10 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.match(authBootstrap, /grant usage on schema auth to anon, authenticated, service_role/);
   assert.doesNotMatch(authBootstrap, /insert\s+into\s+auth\.users|update\s+auth\.users|delete\s+from\s+auth\.users/i);
   const vaultBootstrap = read(release.legacyUpgradeBootstrapFiles[1]);
+  assert.match(vaultBootstrap, /create schema if not exists extensions/);
+  assert.match(vaultBootstrap, /create extension if not exists pgcrypto with schema extensions/);
+  assert.match(vaultBootstrap, /VAULT_PGCRYPTO_DEPENDENCY_INVALID/);
+  assert.match(vaultBootstrap, /to_regprocedure\('extensions\.gen_random_uuid\(\)'\)/);
   assert.match(vaultBootstrap, /VAULT_COMPATIBILITY_PARTIAL_AUTHORITY_REFUSED/);
   assert.match(vaultBootstrap, /extensions\.pgp_sym_encrypt/);
   assert.match(vaultBootstrap, /create view vault\.decrypted_secrets/i);
@@ -673,6 +712,45 @@ test('private Candidate Daily Miget policies are exact, reproducible and grant n
   assert.match(source, /for all to %I, service_role using \(true\) with check \(true\)/i);
   assert.doesNotMatch(source, /grant\s+(?:select|insert|update|delete|all)\s+on\s+table/i);
   assert.doesNotMatch(source, /\b(?:insert|update|delete|truncate)\s+(?:into|from|table)\s+private\.candidate_daily_/i);
+});
+
+test('blank NEW and legacy convergence retain the current release-control and routine authority', () => {
+  const freshnessOwner = read('supabase/repeatable/30082026_0342_pay_batch_validate_freshness_chunk_v1.sql');
+  assert.match(
+    freshnessOwner,
+    /grant execute on function public\.pay_batch_validate_freshness_chunk\(uuid, uuid, uuid, uuid, integer\) to service_role/i,
+  );
+
+  const retiredCancelOwner = read('supabase/repeatable/19072026_1659_cancel_batch_audit_and_full_candidate_refresh.sql');
+  assert.match(
+    retiredCancelOwner,
+    /revoke all on function public\.pay_payment_cancel_not_sent_and_recalculate_complete_v1\(uuid, jsonb, uuid, text, text, jsonb\) from service_role/i,
+  );
+  assert.doesNotMatch(
+    retiredCancelOwner,
+    /grant execute on function public\.pay_payment_cancel_not_sent_and_recalculate_complete_v1\(uuid, jsonb, uuid, text, text, jsonb\) to service_role/i,
+  );
+
+  const invoiceRouteOwner = read('supabase/repeatable/30082026_0345_invoice_delivery_routes_batch_v1.sql');
+  const legacyRoutineConvergence = read('supabase/release/30082026_0450_legacy_routine_contract_convergence.sql');
+  const marker = '-- SOURCE private._invoice_delivery_routes_batch(p_requests jsonb, p_evaluation_date date)';
+  const start = legacyRoutineConvergence.indexOf(marker);
+  const next = legacyRoutineConvergence.indexOf('\n-- SOURCE ', start + marker.length);
+  assert.ok(start >= 0 && next > start);
+  const exactDefinition = legacyRoutineConvergence
+    .slice(legacyRoutineConvergence.indexOf('CREATE OR REPLACE FUNCTION', start), next)
+    .trim();
+  assert.ok(invoiceRouteOwner.includes(exactDefinition));
+  assert.doesNotMatch(invoiceRouteOwner, /candidate_expense_invoice_routing_v1/);
+
+  const structuralConvergence = read('supabase/release/30082026_0442_legacy_structural_contract_convergence.sql');
+  assert.match(structuralConvergence, /LEGACY_RELEASE_MODE_CONSTRAINT_PRESTATE_DRIFT/);
+  assert.match(structuralConvergence, /'NEW','UPGRADE','ADOPT','LEGACY_UPGRADE'/);
+  assert.match(structuralConvergence, /8f5bc83b3f8158a1dde3adaed4ab0c0d/);
+
+  const generalConvergence = read('supabase/release/30082026_0421_legacy_general_rpc_contract_convergence.sql');
+  assert.match(generalConvergence, /create trigger trg_bpay_workbench_sessions_change_bump[\s\S]*pay_workbench_session_change_bump\(\)/i);
+  assert.doesNotMatch(structuralConvergence, /create trigger trg_bpay_workbench_sessions_change_bump/i);
 });
 
 test('Bible preserves Policy X and protected security boundary', () => {
