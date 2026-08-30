@@ -1317,6 +1317,70 @@ test('global password change revokes centrally and device registration never exp
   }
 });
 
+test('permanent account deletion requires password confirmation and remains control-plane only', async () => {
+  const originalFetch = globalThis.fetch;
+  const env = orchestratorEnvironment(async () => {
+    throw new Error('account deletion must never call an agency business plane');
+  });
+  const token = await centralAccessToken(env);
+  const seen = [];
+  globalThis.fetch = async request => {
+    const operation = new URL(request.url).pathname.split('/').pop();
+    seen.push(operation);
+    const args = await request.json();
+    if (operation === 'global_session_metadata_v1') {
+      return Response.json({
+        ok: true, account_id: IDS.account, verified_emails: ['candidate@example.test'],
+        credential_scheme: 'PBKDF2-HMAC-SHA256', scheme_version: 1,
+        password_salt_hex: '33'.repeat(16),
+        parameters: { hash: 'SHA-256', iterations: 100000, length_bytes: 32 },
+        key_version: 1, credential_authority_sha256_hex: '44'.repeat(32),
+        internal_only: true
+      });
+    }
+    if (operation === 'global_account_delete_v1') {
+      assert.match(args.p_current_password_proof.presented_digest_hex, /^[a-f0-9]{64}$/);
+      assert.equal(JSON.stringify(args).includes('not-a-real-password'), false);
+      assert.equal(args.p_idempotency_key, '80000000-0000-4000-8000-000000000099');
+      return Response.json({
+        ok: true, status: 'DELETED', account_deleted: true, access_revoked: true,
+        session_version: 9, memberships_revoked: 2, invitations_revoked: 1,
+        devices_revoked: 2, idempotent_replay: false, internal_only: true
+      });
+    }
+    throw new Error(`unexpected operation ${operation}`);
+  };
+  const invoke = body => handleCandidateBrokerRequest(new Request(
+    'https://candidate-api.test.example/candidate-app/v1/account/delete', {
+      method: 'POST', headers: {
+        origin: 'https://candidate.test.example', authorization: `Bearer ${token}`,
+        'cf-connecting-ip': '192.0.2.32', 'content-type': 'application/json'
+      }, body: JSON.stringify(body)
+    }
+  ), env);
+  try {
+    const missingConfirmation = await invoke({
+      current_password: 'not-a-real-password', confirmation: 'DELETE_ACCOUNT',
+      idempotency_key: '80000000-0000-4000-8000-000000000099'
+    });
+    assert.equal(missingConfirmation.status, 400);
+    assert.equal((await missingConfirmation.json()).error_code, 'ACCOUNT_DELETE_CONFIRMATION_INVALID');
+    assert.deepEqual(seen, []);
+
+    const deleted = await invoke({
+      current_password: 'not-a-real-password', confirmation: 'DELETE_MY_ACCOUNT',
+      idempotency_key: '80000000-0000-4000-8000-000000000099'
+    });
+    assert.equal(deleted.status, 200, JSON.stringify(await deleted.clone().json()));
+    assert.deepEqual(await deleted.json(), {
+      ok: true, account_deleted: true, access_revoked: true
+    });
+    assert.deepEqual(seen, ['global_session_metadata_v1', 'global_account_delete_v1']);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('public invitation inspection is enumeration-safe and never exposes control-plane identifiers', async () => {
   const originalFetch = globalThis.fetch;
   const env = orchestratorEnvironment(async () => {

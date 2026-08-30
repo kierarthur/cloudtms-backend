@@ -2498,6 +2498,49 @@ async function handleControlPlanePasswordChange(request, access, env, correlatio
   });
 }
 
+async function handleControlPlaneAccountDelete(request, access, env, correlationId) {
+  const body = await boundedJson(request.clone());
+  const idempotencyKey = text(body.idempotency_key).toLowerCase();
+  const currentPassword = text(body.current_password);
+  if (body.confirmation !== 'DELETE_MY_ACCOUNT') {
+    throw new CandidateBrokerError(400, 'ACCOUNT_DELETE_CONFIRMATION_INVALID');
+  }
+  if (!UUID_RE.test(idempotencyKey)) {
+    throw new CandidateBrokerError(400, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
+  }
+  if (!currentPassword || currentPassword.length > 512) {
+    throw new CandidateBrokerError(401, 'CURRENT_PASSWORD_INVALID');
+  }
+  const context = globalSessionContext(access, env);
+  const metadata = await candidateControlPlaneRpc(
+    env, 'identity', 'global_session_metadata_v1',
+    { p_global_session_context: context, p_correlation_id: correlationId }
+  );
+  const currentDigest = await deriveGlobalPasswordDigest(currentPassword, metadata);
+  const result = await candidateControlPlaneRpc(
+    env, 'identity', 'global_account_delete_v1',
+    {
+      p_global_session_context: {
+        ...context,
+        actor_identity_hmac: await controlPlaneActorIdentityHmac(env, access.global_account_id)
+      },
+      p_current_password_proof: {
+        presented_digest_hex: currentDigest,
+        credential_authority_sha256_hex: metadata.credential_authority_sha256_hex
+      },
+      p_idempotency_key: idempotencyKey,
+      p_correlation_id: correlationId,
+      p_now_utc: new Date().toISOString()
+    }
+  );
+  const resultError = controlPlaneResultError(result, 'CURRENT_PASSWORD_INVALID');
+  if (resultError) throw resultError;
+  if (result?.ok !== true || result?.account_deleted !== true || result?.access_revoked !== true) {
+    throw new CandidateBrokerError(502, 'CONTROL_PLANE_RESPONSE_INVALID');
+  }
+  return jsonResponse(200, { ok: true, account_deleted: true, access_revoked: true });
+}
+
 async function handleControlPlaneLogin(request, env, correlationId) {
   const body = await boundedJson(request.clone());
   const email = text(body.email).toLowerCase();
@@ -3029,6 +3072,14 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
           }
           return withCors(
             await handleControlPlanePasswordChange(request, access, env, id), origin
+          );
+        }
+        if (path === `${PUBLIC_CANDIDATE_PREFIX}/account/delete`) {
+          if (request.method !== 'POST') {
+            throw new CandidateBrokerError(405, 'CANDIDATE_METHOD_NOT_ALLOWED');
+          }
+          return withCors(
+            await handleControlPlaneAccountDelete(request, access, env, id), origin
           );
         }
         const route = await resolveControlPlaneRoute(access, env, id);
