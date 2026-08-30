@@ -92,10 +92,12 @@ BEGIN;
 
 DO $sealed_amount_fixture$
 DECLARE
-  v_template_build constant uuid := 'b6e2bc38-2bff-4a5f-8b32-675b9a5728af';
+  v_snapshot uuid := gen_random_uuid();
+  v_actor uuid := gen_random_uuid();
+  v_session uuid := gen_random_uuid();
   v_build constant uuid := '13082026-1942-4000-8000-000000000001';
   v_timesheet constant uuid := '13082026-1942-4000-8000-000000000002';
-  v_candidate constant uuid := '6e8493ae-c207-497e-8d83-0b518753f590';
+  v_candidate uuid := gen_random_uuid();
   v_reservation constant uuid := '13082026-1942-4000-8000-000000000003';
   v_ambiguous_reservation constant uuid := '13082026-1942-4000-8000-000000000004';
   v_recovery_reservation constant uuid := '13082026-1942-4000-8000-000000000005';
@@ -123,22 +125,60 @@ BEGIN
     RAISE EXCEPTION 'JAMES_RATE_FIXTURE_ID_ALREADY_EXISTS';
   END IF;
 
-  INSERT INTO private.banking_pay_workbench_economic_builds
-  SELECT (pg_catalog.jsonb_populate_record(
-    NULL::private.banking_pay_workbench_economic_builds,
-    to_jsonb(template)||jsonb_build_object(
-      'id',v_build,'build_token',gen_random_uuid(),
-      'source_build_run_id',gen_random_uuid(),'source_job_id',NULL,
-      'status','OBSOLETE','private_stage','WORKSPACE_FACT',
-      'obsolete_at_utc',v_fixture_now,'failed_at_utc',NULL,
-      'cleanup_not_before_utc',NULL,'authority_fingerprint_version',NULL,
-      'authority_fingerprint',NULL,'updated_at_utc',v_fixture_now))).*
-  FROM private.banking_pay_workbench_economic_builds template
-  WHERE template.id=v_template_build;
+  INSERT INTO public.banking_pay_snapshot_runs(
+    id,pay_date,week_ending_cutoff,pay_week_start,eligibility_from_date,
+    eligibility_to_date,status,is_active
+  ) VALUES (
+    v_snapshot,DATE '2099-08-14',DATE '2099-08-09',DATE '2099-08-03',
+    DATE '2099-01-01',DATE '2099-08-09','OPEN',false
+  );
 
-  IF NOT FOUND THEN
-    RAISE EXCEPTION 'JAMES_RATE_FIXTURE_TEMPLATE_BUILD_MISSING';
-  END IF;
+  INSERT INTO public.tms_users(id,email,password_hash,role,is_active)
+  VALUES (
+    v_actor,
+    'james-rate-rollback-'||replace(v_actor::text,'-','')||'@example.invalid',
+    'UNUSABLE_ROLLBACK_VERIFIER','admin',true
+  );
+
+  INSERT INTO public.candidates(id,display_name,tms_ref,pay_method)
+  VALUES (
+    v_candidate,
+    'James rate rollback verifier',
+    'JAMES-RATE-'||replace(v_candidate::text,'-',''),
+    'PAYE'
+  );
+
+  INSERT INTO public.banking_pay_workbench_sessions(
+    id,actor_user_id,pay_date,week_ending_cutoff,session_signature,
+    source_snapshot_run_id,status,version
+  ) VALUES (
+    v_session,v_actor,DATE '2099-08-14',DATE '2099-08-09',
+    'JAMES_RATE_ROLLBACK:'||v_session::text,v_snapshot,'OPEN',1
+  );
+
+  INSERT INTO private.banking_pay_workbench_economic_builds(
+    id,candidate_id,session_id,session_version,source_snapshot_run_id,
+    source_build_run_id,source_job_id,captured_candidate_generation,
+    source_change_seq,status,private_stage,
+    seed_scope_count,seed_scope_digest,seed_scope_sealed_at_utc,
+    scope_count,dependency_node_count,dependency_edge_count,tagged_edge_count,
+    row_seal_count,last_stable_ordinal,scope_cursor_json,closure_cursor_json,
+    dependency_edge_stream_complete,dependency_edge_stream_digest,
+    edge_tag_stream_complete,edge_tag_digest,unit_digest,scope_digest,
+    dependency_digest,sealed_fingerprint_digest,dependency_closure_sealed_at_utc,
+    obsolete_at_utc,
+    created_at_utc,updated_at_utc
+  ) VALUES (
+    v_build,v_candidate,v_session,1,v_snapshot,
+    gen_random_uuid(),NULL,0,0,'OBSOLETE','WORKSPACE_FACT',
+    1,md5('JAMES_RATE_SEED'),v_fixture_now,
+    1,1,0,0,1,1,'{"terminal":true}'::jsonb,
+    '{"terminal":true,"seal_phase":"COMPLETE"}'::jsonb,
+    true,md5(''),true,md5(''),md5('JAMES_RATE_UNIT'),
+    md5('JAMES_RATE_SCOPE'),md5('JAMES_RATE_DEPENDENCY'),
+    md5('JAMES_RATE_FINGERPRINT'),v_fixture_now,v_fixture_now,
+    v_fixture_now,v_fixture_now
+  );
 
   INSERT INTO private.banking_pay_workbench_economic_build_scope(
     build_id,timesheet_id,candidate_id,seed_reasons,dependency_reasons,
@@ -253,7 +293,12 @@ BEGIN
   IF v_count<>3 OR v_failure IS NOT NULL
      OR round(v_baseline,2) IS DISTINCT FROM 15::numeric
      OR round(v_reserved,2) IS DISTINCT FROM 10::numeric THEN
-    RAISE EXCEPTION 'JAMES_RATE_EXACT_SEALED_AMOUNT_ATTRIBUTION_FAILED';
+    RAISE EXCEPTION USING
+      MESSAGE='JAMES_RATE_EXACT_SEALED_AMOUNT_ATTRIBUTION_FAILED',
+      DETAIL=jsonb_build_object(
+        'row_count',v_count,'failure_code',v_failure,
+        'baseline_ex_vat',v_baseline,'reserved_ex_vat',v_reserved
+      )::text;
   END IF;
 
   -- A bucket-resolution document is a more specific view of the same sealed

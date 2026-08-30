@@ -33,6 +33,10 @@ test('migration gate runs deterministic James fixtures without mutable TEST buil
   assert.match(deterministicRuntime, /\nBEGIN;\n/);
   assert.match(deterministicRuntime, /\nROLLBACK;\s*$/);
   assert.match(deterministicRuntime, /mutable TEST[\s-]+build lifecycle state must not block an unrelated database deployment/);
+  assert.doesNotMatch(deterministicRuntime, /v_template_build|FIXTURE_TEMPLATE_BUILD_MISSING/);
+  assert.match(deterministicRuntime, /INSERT INTO public\.banking_pay_snapshot_runs/);
+  assert.match(deterministicRuntime, /INSERT INTO public\.banking_pay_workbench_sessions/);
+  assert.match(deterministicRuntime, /INSERT INTO private\.banking_pay_workbench_economic_builds/);
 });
 
 test('manual live James diagnostic selects only a completed sealed build', () => {
