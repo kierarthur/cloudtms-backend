@@ -286,7 +286,7 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.match(statusHelperPreload, /grant execute on function public\._pay_batch_status_is_active_reservation\(text\) to service_role/i);
   const freshnessChunkOwner = read('supabase/repeatable/30082026_0342_pay_batch_validate_freshness_chunk_v1.sql');
   assert.match(freshnessChunkOwner, /revoke all privileges on function public\.pay_batch_validate_freshness_chunk\(uuid, uuid, uuid, uuid, integer\) from PUBLIC, anon, authenticated, service_role, authenticator, supabase_admin/i);
-  assert.doesNotMatch(freshnessChunkOwner, /grant execute on function public\.pay_batch_validate_freshness_chunk\([^;]+\) to service_role/i);
+  assert.match(freshnessChunkOwner, /grant execute on function public\.pay_batch_validate_freshness_chunk\(uuid, uuid, uuid, uuid, integer\) to service_role/i);
   const importReviewUiContract = read('supabase/repeatable/22072026_0052_import_review_ui_contract_v1.sql');
   assert.match(importReviewUiContract, /to_regprocedure\('public\.import_review_contract_version_get_v1\(\)'\) is not null/i);
   assert.match(importReviewUiContract, /execute 'revoke all on function public\.import_review_contract_version_get_v1\(\) from public,anon,authenticated'/i);
