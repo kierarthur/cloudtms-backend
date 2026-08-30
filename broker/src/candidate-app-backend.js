@@ -2866,6 +2866,92 @@ function expenseClaim(workflow) {
   };
 }
 
+const SUBMITTED_FACT_DISPLAY_STATES = new Set([
+  'WORKER_SUBMITTED',
+  'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+  'READY_FOR_MANAGER_APPROVAL',
+  'AWAITING_MANAGER_APPROVAL',
+  'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT',
+  'READY_TO_FINALISE'
+]);
+
+function currentSubmittedDisplayWorkflow(detail) {
+  if (!isObject(detail)) return null;
+  const workflows = Array.isArray(detail.workflows) ? detail.workflows.filter(isObject) : [];
+  const eligible = workflows.filter((workflow) => (
+    text(workflow.workflow_id)
+    && SUBMITTED_FACT_DISPLAY_STATES.has(upper(workflow.state))
+  ));
+  if (!eligible.length) return null;
+  const managerWorkflowId = text(detail.manager_review?.workflow_id);
+  return eligible.find((workflow) => text(workflow.workflow_id) === managerWorkflowId)
+    || eligible.find((workflow) => workflow.detail_action_owner === true)
+    || eligible.slice().sort((left, right) => (
+      text(right.updated_at_utc).localeCompare(text(left.updated_at_utc))
+    ))[0]
+    || null;
+}
+
+function candidateSubmittedFactsProjection(detail, workflow) {
+  if (!isObject(detail) || !isObject(workflow)
+      || !SUBMITTED_FACT_DISPLAY_STATES.has(upper(workflow.state))) return detail;
+  const projected = structuredClone(detail);
+  const kind = upper(workflow.workflow_kind);
+  if (['CONTRACT_HOURS', 'CONTRACT_COMBINED', 'DAILY'].includes(kind)) {
+    const schedule = scheduleFromImmutable(workflow, null);
+    if (schedule.length) {
+      const paidMinutes = schedule.reduce((total, segment, index) => (
+        total + scheduleLine(segment, index).paid_minutes
+      ), 0);
+      projected.hours = {
+        ...(isObject(projected.hours) ? projected.hours : {}),
+        total_hours: paidMinutes / 60,
+        actual_schedule_json: schedule
+      };
+    }
+  }
+  if (['CONTRACT_EXPENSE', 'CONTRACT_COMBINED'].includes(kind)) {
+    const { expenseSubmission, claim } = expenseClaim(workflow);
+    const amount = (value) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    };
+    const travel = amount(claim.travel_pay_ex_vat ?? expenseSubmission.travel_amount);
+    const accommodation = amount(claim.accommodation_pay_ex_vat ?? expenseSubmission.accommodation_amount);
+    const other = amount(claim.other_pay_ex_vat ?? expenseSubmission.other_amount);
+    projected.expenses = {
+      ...(isObject(projected.expenses) ? projected.expenses : {}),
+      expenses_pay_ex_vat: travel + accommodation + other,
+      expenses_description: text(claim.expenses_description ?? expenseSubmission.description) || null,
+      mileage_units: amount(claim.mileage_units ?? expenseSubmission.mileage_units),
+      // Mileage pay remains financial authority and is never invented from Candidate input.
+      mileage_pay_ex_vat: amount(projected.expenses?.mileage_pay_ex_vat),
+      travel_pay_ex_vat: travel,
+      accommodation_pay_ex_vat: accommodation,
+      other_pay_ex_vat: other
+    };
+  }
+  return projected;
+}
+
+async function projectCurrentSubmittedFacts(env, access, detail) {
+  const owner = currentSubmittedDisplayWorkflow(detail);
+  if (!owner) return detail;
+  const workflowId = requireUuid(owner.workflow_id, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  const generation = requireInteger(owner.generation, 'WORKFLOW_GENERATION_CONFLICT', 1);
+  const expectedState = upper(owner.state);
+  const row = await restOne(env, 'candidate_submission_workflows', [
+    `id=eq.${encodeURIComponent(workflowId)}`,
+    `candidate_id=eq.${encodeURIComponent(requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED'))}`,
+    `environment=eq.${encodeURIComponent(environmentName(env))}`,
+    `generation=eq.${generation}`,
+    `state=eq.${encodeURIComponent(expectedState)}`,
+    'select=id,candidate_id,environment,generation,workflow_kind,scope,work_date,state,immutable_submission_json,immutable_submission_sha256,updated_at_utc'
+  ].join('&'));
+  if (!row || !text(row.immutable_submission_sha256)) return detail;
+  return candidateSubmittedFactsProjection(detail, row);
+}
+
 function pounds(value) {
   const amount = Number(value);
   return Number.isFinite(amount) ? `£${amount.toFixed(2)}` : null;
@@ -3885,13 +3971,14 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
     })));
   }
   if (kind === 'detail') {
-    return jsonResponse(200, await rpcCall(deps, 'candidate_app_timesheet_detail_v2', candidateRpcArgs(access, env, {
+    const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v2', candidateRpcArgs(access, env, {
       p_timesheet_id: params.timesheetId ? requireUuid(params.timesheetId) : null,
       p_contract_week_id: params.contractWeekId ? requireUuid(params.contractWeekId)
         : (url.searchParams.get('contract_week_id') ? requireUuid(url.searchParams.get('contract_week_id')) : null),
       p_workflow_id: params.workflowId ? requireUuid(params.workflowId)
         : (url.searchParams.get('workflow_id') ? requireUuid(url.searchParams.get('workflow_id')) : null)
-    })));
+    }));
+    return jsonResponse(200, await projectCurrentSubmittedFacts(env, access, detail));
   }
   if (kind === 'missing-options') {
     return jsonResponse(200, await rpcCall(deps, 'candidate_missing_week_options_v1', candidateRpcArgs(access, env, {
@@ -6780,6 +6867,8 @@ export const candidateAppBackendInternals = Object.freeze({
   preparedUploadContract,
   preparedCandidateComponentReplay,
   expenseSummaryDisplayLines,
+  currentSubmittedDisplayWorkflow,
+  candidateSubmittedFactsProjection,
   mileageJourneyRows,
   londonCalendarDate,
   officialPeriodWithShiftLines,
