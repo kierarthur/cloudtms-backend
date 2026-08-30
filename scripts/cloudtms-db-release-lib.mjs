@@ -15,6 +15,8 @@ export function mapLogicalPostgresOwnerSql(source) {
   if (mode !== 'CURRENT_USER') {
     throw new Error('CLOUDTMS_LOGICAL_POSTGRES_OWNER must be CURRENT_USER when set');
   }
+  const diagnosticParameter = String.raw`(?:"plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors)"|plpgsql_check\.(?:mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors))`;
+  const diagnosticValue = String.raw`(?:'disabled'|'off')`;
   return String(source)
     .replace(/\bowner\s+to\s+(?:"postgres"|postgres)(?=\s*;)/gi, 'OWNER TO CURRENT_USER')
     .replace(
@@ -22,12 +24,16 @@ export function mapLogicalPostgresOwnerSql(source) {
       'ALTER DEFAULT PRIVILEGES FOR ROLE CURRENT_USER',
     )
     // Miget's generated database owner cannot set provider instrumentation
-    // parameters. Keep the repository's standalone Supabase/plpgsql_check
-    // guard in canonical source, but omit that exact function SET clause from
-    // the provider-mapped executable tree. Application search_path and timeout
-    // settings remain unchanged.
+    // parameters. Keep the repository's Supabase/plpgsql_check diagnostics in
+    // canonical source, but omit only the seven exact diagnostic function
+    // settings from the provider-mapped executable tree. Application
+    // search_path, timeout and every other function setting remain unchanged.
     .replace(
-      /^[ \t]*SET[ \t]+(?:"plpgsql_check\.mode"|plpgsql_check\.mode)[ \t]+(?:TO|=)[ \t]+'disabled'[ \t]*\r?\n/gim,
+      new RegExp(`^[ \\t]*ALTER[ \\t]+FUNCTION\\b[^;]*?\\)[ \\t\\r\\n]+SET[ \\t]+${diagnosticParameter}[ \\t]+(?:TO|=)[ \\t]+${diagnosticValue}[ \\t]*;[ \\t]*(?:\\r?\\n|$)`, 'gim'),
+      '',
+    )
+    .replace(
+      new RegExp(`^[ \\t]*SET[ \\t]+${diagnosticParameter}[ \\t]+(?:TO|=)[ \\t]+${diagnosticValue}[ \\t]*;?[ \\t]*(?:\\r?\\n|$)`, 'gim'),
       '',
     );
 }

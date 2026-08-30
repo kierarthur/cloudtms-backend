@@ -161,6 +161,24 @@ test('provider database owner mapping is explicit, bounded and fail closed', () 
       mapLogicalPostgresOwnerSql("SET \"plpgsql_check.mode\" = 'disabled'\r\nSET lock_timeout = '5s';\r\n"),
       "SET lock_timeout = '5s';\r\n",
     );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        "SET plpgsql_check.profiler TO 'off'\nSET plpgsql_check.tracer TO 'off'\nSET statement_timeout TO '2min'\n",
+      ),
+      "SET statement_timeout TO '2min'\n",
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        "ALTER FUNCTION public.example(\n  uuid,\n  text\n) SET plpgsql_check.mode TO 'disabled';\nREVOKE ALL ON FUNCTION public.example(uuid,text) FROM PUBLIC;\n",
+      ),
+      'REVOKE ALL ON FUNCTION public.example(uuid,text) FROM PUBLIC;\n',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        "ALTER FUNCTION public.keep_me(uuid) OWNER TO postgres;\nCREATE OR REPLACE FUNCTION public.example(\n  uuid,\n  text\n) RETURNS text LANGUAGE sql AS 'select null::text';\nALTER FUNCTION public.example(\n  uuid,\n  text\n)\n  SET plpgsql_check.mode TO 'disabled';\nREVOKE ALL ON FUNCTION public.example(uuid,text) FROM PUBLIC;\n",
+      ),
+      "ALTER FUNCTION public.keep_me(uuid) OWNER TO CURRENT_USER;\nCREATE OR REPLACE FUNCTION public.example(\n  uuid,\n  text\n) RETURNS text LANGUAGE sql AS 'select null::text';\nREVOKE ALL ON FUNCTION public.example(uuid,text) FROM PUBLIC;\n",
+    );
     process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER = 'UNSAFE_ROLE';
     assert.throws(() => mapLogicalPostgresOwnerSql('select 1;'), /must be CURRENT_USER/);
   } finally {
