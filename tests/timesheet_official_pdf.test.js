@@ -318,6 +318,19 @@ test('QR forms retain the centre QR panel while electronic forms expand both det
   assert.equal(qr.render_receipt.centre_box_rendered, true);
 });
 
+test('Candidate paper-return Timesheets reserve a 48 mm QR panel without overlaying form text', async () => {
+  const model = fixture();
+  model.layout = { ...model.layout, paper_return_qr_panel: true };
+  const rendered = await renderOfficialTimesheetPdfBytes(model, {
+    qr_text: `TSQ2.${'a'.repeat(330)}`
+  });
+  assert.equal(rendered.page_count, 1);
+  assert.equal(rendered.render_receipt.detail_layout_variant, 'PAPER_RETURN_QR_THREE_PANEL');
+  assert.equal(rendered.render_receipt.centre_box_rendered, true);
+  assert.equal(rendered.render_receipt.centre_box_width_mm, 48);
+  assert.ok(rendered.render_receipt.details_height_mm >= 48);
+});
+
 test('dense supported form selects a readable compact mode without omitting rows', async () => {
   const model = fixture();
   for (const day of model.week_period.days) {

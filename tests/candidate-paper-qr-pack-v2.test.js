@@ -124,3 +124,18 @@ test('QR mileage has one pack signing footer while standalone mileage retains it
   assert.match(mileage, /x: 465, y: 682, size: 88/);
   assert.equal((mileage.match(/page\.drawText\('Manager signature'/g) || []).length, 2);
 });
+
+test('landscape Timesheet pages are re-rendered with a dedicated large QR panel', () => {
+  const backend = read('broker/src/candidate-app-backend.js');
+  const timesheetPage = backend.slice(
+    backend.indexOf('async function candidatePaperTimesheetPageBytes('),
+    backend.indexOf('function mileageJourneyRows(')
+  );
+  assert.match(timesheetPage, /buildOfficialCandidateModel\([\s\S]*paper_return_qr_text:\s*qrText/);
+  assert.match(timesheetPage, /renderOfficialTimesheetPdfBytes\(model, assets\)/);
+  assert.doesNotMatch(timesheetPage, /drawCandidatePaperPageQr/);
+  const renderer = read('broker/src/timesheet-official-pdf.js');
+  assert.match(renderer, /paper_return_qr_panel === true/);
+  assert.match(renderer, /paperReturnQrPanel \? 48 : 28/);
+  assert.match(renderer, /Math\.max\(layout\.detailsHeight, 48\)/);
+});

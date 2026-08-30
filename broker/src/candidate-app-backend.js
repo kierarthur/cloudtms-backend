@@ -3029,7 +3029,7 @@ function officialPeriodWithShiftLines(endDate, lines) {
   };
 }
 
-async function buildOfficialCandidateModel(env, contract, state, phase) {
+async function buildOfficialCandidateModel(env, contract, state, phase, options = {}) {
   const { workflow, timesheet, candidate, client, contract: contractRow } = state;
   const frozen = parseJson(workflow.immutable_submission_json, {}) || {};
   const frozenPresentation = parseJson(frozen.official_presentation, {}) || {};
@@ -3057,6 +3057,10 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
     ? frozenPresentation.worker
     : candidateNameParts(candidate);
   const formVariant = phase === 'FINAL' ? 'ELECTRONIC_SIGNED' : 'ELECTRONIC_MANAGER_REVIEW';
+  const paperReturnQrText = text(options.paper_return_qr_text);
+  if (paperReturnQrText && !paperReturnQrText.startsWith('TSQ2.')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
+  }
   const signedDate = londonCalendarDate(workflow.candidate_signed_at_utc);
   const managerDate = londonCalendarDate(
     workflow.manager_approved_at_utc || contract.manager?.approval_date_utc
@@ -3124,14 +3128,16 @@ async function buildOfficialCandidateModel(env, contract, state, phase) {
     layout: {
       one_page_required: true, allowed_modes: ['NORMAL', 'COMPACT', 'ULTRA'], second_page_allowed: false,
       minimum_font_size: 5.5, minimum_row_height_mm: 3.45, minimum_signature_height_mm: 7,
-      minimum_additional_blank_rows: 1
+      minimum_additional_blank_rows: 1,
+      ...(paperReturnQrText ? { paper_return_qr_panel: true } : {})
     }
   };
   validateFrozenTimesheetPresentationModel(model);
   return { model, assets: {
     logo: branding.logo ? { data_url: dataUrl(branding.logo.bytes, branding.logo.media_type) } : null,
     candidate_signature: candidateSignature.data,
-    authoriser_signature: managerSignature.data
+    authoriser_signature: managerSignature.data,
+    qr_text: paperReturnQrText || null
   } };
 }
 
@@ -5203,20 +5209,32 @@ async function candidatePaperPageQrText(env, workflow, timesheet, page) {
   return buildCandidatePaperPageQrViaAdapter(env, payload);
 }
 
-async function timesheetPaperPageBytes(sourceBytes, qrText) {
-  const pdf = await PDFDocument.load(sourceBytes, { updateMetadata: false });
-  if (pdf.getPageCount() !== 1) {
+async function candidatePaperTimesheetPageBytes(env, workflow, timesheet, components, qrText) {
+  if (!text(qrText).startsWith('TSQ2.')) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PAGE_QR_INVALID');
+  }
+  const hours = components.filter((component) => upper(component.component_kind) === 'HOURS_TIMESHEET');
+  if (hours.length !== 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_COMPONENT_CONFLICT');
+  }
+  const state = await loadRenderState(env, {
+    workflow_id: workflow.id,
+    workflow_generation: Number(workflow.generation),
+    component_id: hours[0].id
+  });
+  if (state.workflow?.id !== workflow.id
+      || Number(state.workflow?.generation) !== Number(workflow.generation)
+      || state.timesheet?.timesheet_id !== timesheet.timesheet_id) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const { model, assets } = await buildOfficialCandidateModel(
+    env, {}, state, 'REVIEW', { paper_return_qr_text: qrText }
+  );
+  const rendered = await renderOfficialTimesheetPdfBytes(model, assets);
+  if (rendered.page_count !== 1) {
     throw new CandidateHttpError(409, 'CANDIDATE_PAPER_TIMESHEET_PAGE_COUNT_INVALID');
   }
-  const page = pdf.getPage(0);
-  const size = Math.min(page.getWidth(), page.getHeight()) * (28 / 210);
-  await drawCandidatePaperPageQr(page, qrText, {
-    x: (page.getWidth() - size) / 2,
-    y: page.getHeight() - ((17 / 210) * page.getHeight()) - size,
-    size,
-    label: ''
-  });
-  return new Uint8Array(await pdf.save());
+  return rendered.pdf_bytes;
 }
 
 function mileageJourneyRows(workflow) {
@@ -5736,7 +5754,9 @@ async function assembleCandidatePaperPack(env, workflow, timesheet, version) {
       : null;
     if (kind === 'HOURS_TIMESHEET') {
       await appendPdfBytes(combined, pageQrText
-        ? await timesheetPaperPageBytes(base.bytes, pageQrText)
+        ? await candidatePaperTimesheetPageBytes(
+          env, workflow, timesheet, components, pageQrText
+        )
         : base.bytes);
       continue;
     }

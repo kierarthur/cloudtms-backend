@@ -255,7 +255,7 @@ function measureLayoutHeightWithFonts(model, layout, regular) {
     )
     : 0;
   const required = 12
-    + layout.detailsHeight + layout.gap
+    + officialDetailsHeight(model, layout) + layout.gap
     + (headerCount ? headerCount * headerStyle.lineHeight + layout.gap : 0)
     + layout.scheduleHeaderHeight
     + scheduleLineCount(model) * layout.rowHeight
@@ -275,7 +275,9 @@ function preflightLayoutHorizontalCapacity(model, layout, fonts) {
   const bold = fonts.bold || regular;
   const margin = layout.margin;
   const width = PAGE_WIDTH_MM - margin * 2;
-  const details = officialDetailsGeometry(model.form_variant, margin, width);
+  const details = officialDetailsGeometry(
+    model.form_variant, margin, width, paperReturnQrPanelRequested(model)
+  );
   const ending = model.week_period || {};
   const timesheetNumber = safeText(
     model.timesheet_number || officialTimesheetNumber(model.timesheet_id)
@@ -478,13 +480,23 @@ export function formatOfficialTimesheetHoursWords(totalMinutes) {
   return wording ? `${wording.charAt(0).toUpperCase()}${wording.slice(1)}` : '';
 }
 
-function officialDetailsGeometry(formVariant, margin, width) {
+function paperReturnQrPanelRequested(model) {
+  return model?.layout?.paper_return_qr_panel === true;
+}
+
+function officialDetailsHeight(model, layout) {
+  return paperReturnQrPanelRequested(model)
+    ? Math.max(layout.detailsHeight, 48)
+    : layout.detailsHeight;
+}
+
+function officialDetailsGeometry(formVariant, margin, width, paperReturnQrPanel = false) {
   const gap = 3;
-  if (safeText(formVariant).toUpperCase() === 'QR_UNSIGNED') {
-    const centreWidth = 28;
+  if (safeText(formVariant).toUpperCase() === 'QR_UNSIGNED' || paperReturnQrPanel) {
+    const centreWidth = paperReturnQrPanel ? 48 : 28;
     const sideWidth = (width - centreWidth - gap * 2) / 2;
     return Object.freeze({
-      variant: 'QR_THREE_PANEL',
+      variant: paperReturnQrPanel ? 'PAPER_RETURN_QR_THREE_PANEL' : 'QR_THREE_PANEL',
       gap,
       workerX: margin,
       workerWidth: sideWidth,
@@ -882,7 +894,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       + layout.gap
     : 0;
   const baseContentHeight = 12
-    + layout.detailsHeight + layout.gap
+    + officialDetailsHeight(model, layout) + layout.gap
     + headerWordingHeight
     + layout.scheduleHeaderHeight + lineCount * layout.rowHeight
     + layout.scheduleTotalHeight + layout.gap
@@ -908,7 +920,7 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
     ? (additionalRows.length + blankRows) * 1.35
     : 0;
   const flexibleUnitHeight = flexibleHeight / Math.max(1, lineCount + additionalFlexUnits);
-  const detailsHeight = layout.detailsHeight + detailsBonus;
+  const detailsHeight = officialDetailsHeight(model, layout) + detailsBonus;
   const scheduleHeaderHeight = layout.scheduleHeaderHeight + scheduleHeaderBonus;
   const scheduleTotalHeight = layout.scheduleTotalHeight + scheduleTotalBonus;
   const scheduleRowHeight = layout.rowHeight + flexibleUnitHeight;
@@ -935,7 +947,9 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   drawText(page, bold, heading, right - headingWidth, top + 2.5, headingSize, null, CORPORATE_NAVY);
   top += 12;
 
-  const detailsGeometry = officialDetailsGeometry(model.form_variant, margin, width);
+  const detailsGeometry = officialDetailsGeometry(
+    model.form_variant, margin, width, paperReturnQrPanelRequested(model)
+  );
   const detailsTop = top;
   fillBox(page, detailsGeometry.workerX, detailsTop, detailsGeometry.workerWidth, 6, CORPORATE_NAVY);
   fillBox(page, detailsGeometry.clientX, detailsTop, detailsGeometry.clientWidth, 6, CORPORATE_NAVY);
@@ -950,22 +964,25 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
   const worker = model.worker || model.candidate || {};
   const client = model.client || {};
   const workerValueX = detailsGeometry.workerX + 31;
-  drawText(page, bold, 'Surname:', detailsGeometry.workerX + 2, detailsTop + 8, layout.smallFont);
-  drawText(page, regular, safeText(worker.surname), workerValueX, detailsTop + 8,
+  const paperReturnPanel = paperReturnQrPanelRequested(model);
+  const workerRows = paperReturnPanel ? [11, 25, 39] : [8, 14, 20];
+  const clientRows = paperReturnPanel ? [15, 33] : [9, 17];
+  drawText(page, bold, 'Surname:', detailsGeometry.workerX + 2, detailsTop + workerRows[0], layout.smallFont);
+  drawText(page, regular, safeText(worker.surname), workerValueX, detailsTop + workerRows[0],
     layout.baseFont, detailsGeometry.workerWidth - 33);
-  drawText(page, bold, 'First name:', detailsGeometry.workerX + 2, detailsTop + 14, layout.smallFont);
-  drawText(page, regular, safeText(worker.first_name), workerValueX, detailsTop + 14,
+  drawText(page, bold, 'First name:', detailsGeometry.workerX + 2, detailsTop + workerRows[1], layout.smallFont);
+  drawText(page, regular, safeText(worker.first_name), workerValueX, detailsTop + workerRows[1],
     layout.baseFont, detailsGeometry.workerWidth - 33);
-  drawText(page, bold, 'Job Profile Title:', detailsGeometry.workerX + 2, detailsTop + 20, layout.smallFont);
-  drawText(page, regular, safeText(worker.job_profile_title), workerValueX, detailsTop + 20,
+  drawText(page, bold, 'Job Profile Title:', detailsGeometry.workerX + 2, detailsTop + workerRows[2], layout.smallFont);
+  drawText(page, regular, safeText(worker.job_profile_title), workerValueX, detailsTop + workerRows[2],
     layout.baseFont, detailsGeometry.workerWidth - 33);
   const clientValueX = detailsGeometry.clientX + 39;
-  drawText(page, bold, 'Client Name / Hospital:', detailsGeometry.clientX + 2, detailsTop + 9, layout.smallFont);
+  drawText(page, bold, 'Client Name / Hospital:', detailsGeometry.clientX + 2, detailsTop + clientRows[0], layout.smallFont);
   drawText(page, regular, safeText(client.name || client.hospital_display || client.hospital),
-    clientValueX, detailsTop + 9, layout.baseFont, detailsGeometry.clientWidth - 41);
-  drawText(page, bold, 'Site / Ward:', detailsGeometry.clientX + 2, detailsTop + 17, layout.smallFont);
+    clientValueX, detailsTop + clientRows[0], layout.baseFont, detailsGeometry.clientWidth - 41);
+  drawText(page, bold, 'Site / Ward:', detailsGeometry.clientX + 2, detailsTop + clientRows[1], layout.smallFont);
   drawText(page, regular, safeText(client.site_ward || client.hospital_ward_display || client.ward_display),
-    clientValueX, detailsTop + 17, layout.baseFont, detailsGeometry.clientWidth - 41);
+    clientValueX, detailsTop + clientRows[1], layout.baseFont, detailsGeometry.clientWidth - 41);
 
   if (detailsGeometry.centreBox) {
     const qrBox = {
@@ -1208,6 +1225,8 @@ export async function renderOfficialTimesheetPdfBytes(model, assets = {}) {
       additional_units_above_declarations: true,
       detail_layout_variant: detailsGeometry.variant,
       centre_box_rendered: Boolean(detailsGeometry.centreBox),
+      details_height_mm: detailsHeight,
+      centre_box_width_mm: Number(detailsGeometry.centreBox?.width || 0),
       worker_value_columns_aligned: true,
       client_value_columns_aligned: true,
       signature_overlay_independent_of_text_flow: true,
