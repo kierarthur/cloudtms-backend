@@ -53,8 +53,10 @@ begin
   into v_count,v_service_missing,v_browser_executable,v_hash
   from targets;
 
-  if v_count<>647 or v_service_missing<>85 or v_browser_executable<>0
-     or v_hash<>'79c1d4349118210f3166017e4c0ff43d' then
+  -- The exact current LEGACY_UPGRADE prestate includes the early service-only
+  -- _temp_diag_log preload and the current repeatable service grants.
+  if v_count<>648 or v_service_missing<>77 or v_browser_executable<>0
+     or v_hash<>'187b7ce5b4d52bdf871870c7ccef0939' then
     raise exception 'LEGACY_GENERAL_RPC_PRESTATE_DRIFT:count=% service_missing=% browser=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
@@ -1170,8 +1172,10 @@ begin
   into v_count,v_service_missing,v_browser_executable,v_hash
   from targets;
 
-  if v_count<>114 or v_service_missing<>13 or v_browser_executable<>0
-     or v_hash<>'426cb25afcca047d21c729af91ca6fe5' then
+  -- The interrupted LIVE ACL profile already contains the five exact
+  -- repository-authorised service grants sealed by the earlier replacement.
+  if v_count<>114 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'4a8cb59f85124a6c52dcb33eff37c1f0' then
     raise exception 'LEGACY_CANDIDATE_RPC_PRESTATE_DRIFT:count=% service_missing=% browser=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

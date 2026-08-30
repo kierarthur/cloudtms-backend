@@ -47,7 +47,9 @@ begin
   into v_count,v_identity_hash,v_service_hash_before
   from targets;
 
-  if v_count<>354 or v_identity_hash<>'29c373707fca29a303b91fb0144b7d78' then
+  -- The exact legacy preload set includes the service-only _temp_diag_log
+  -- dependency before this browser-isolation replacement runs.
+  if v_count<>355 or v_identity_hash<>'7a6aba97ad9ba88c2f561099a210495e' then
     raise exception 'LEGACY_GENERAL_RPC_IDENTITY_MANIFEST_DRIFT:count=% hash=%',
       v_count,v_identity_hash;
   end if;

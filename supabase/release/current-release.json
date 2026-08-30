@@ -7,6 +7,7 @@
   "legacyUpgradeBootstrapFiles": [
     "supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql",
     "supabase/release/30082026_0205_miget_vault_compatibility_bootstrap.sql",
+    "supabase/release/30082026_1038_legacy_temp_diag_log_preload.sql",
     "supabase/release/30082026_0321_legacy_pay_batch_status_helper_preload.sql",
     "supabase/repeatable/08042026_1151_newtablesbanking.sql",
     "supabase/release/30082026_0055_legacy_workbench_shared_context_bootstrap.sql",
@@ -38,6 +39,7 @@
     "supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_issue_validate_batch.sql",
     "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_generate_classification_v2.sql",
     "supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql",
+    "supabase/release/30082026_1038_legacy_temp_diag_log_preload.sql",
     "supabase/release/30082026_0321_legacy_pay_batch_status_helper_preload.sql"
   ],
   "legacyUpgradeDeferredRepeatableFiles": [

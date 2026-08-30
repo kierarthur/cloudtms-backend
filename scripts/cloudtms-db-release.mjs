@@ -453,7 +453,49 @@ function legacyUpgradeState(current, environment) {
     sql: `select (to_regclass('public.schema_repeatables') is not null)::text;`,
   }) === 'true';
   if (repeatableLedgerPresent) {
-    throw new Error('LEGACY_UPGRADE refuses a database with an ambiguous public repeatable ledger');
+    const repeatableLedgerColumns = JSON.parse(psql({
+      sql: `
+        select coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'name',column_name,
+              'type',data_type,
+              'nullable',is_nullable,
+              'has_default',column_default is not null
+            ) order by ordinal_position
+          ),
+          '[]'::jsonb
+        )::text
+        from information_schema.columns
+        where table_schema='public' and table_name='schema_repeatables';
+      `,
+    }) || '[]');
+    const expectedColumns = [
+      { name: 'filename', type: 'text', nullable: 'NO', has_default: false },
+      { name: 'content_sha256', type: 'text', nullable: 'NO', has_default: false },
+      { name: 'applied_at', type: 'timestamp with time zone', nullable: 'NO', has_default: true },
+    ];
+    if (JSON.stringify(repeatableLedgerColumns) !== JSON.stringify(expectedColumns)) {
+      throw new Error('LEGACY_UPGRADE refuses an interrupted public repeatable ledger with unexpected columns');
+    }
+    const repeatableLedgerPrimaryKey = Number(psql({
+      sql: `
+        select count(*)
+        from pg_catalog.pg_constraint
+        where conrelid='public.schema_repeatables'::regclass
+          and contype='p'
+          and pg_catalog.pg_get_constraintdef(oid)='PRIMARY KEY (filename)';
+      `,
+    }));
+    if (repeatableLedgerPrimaryKey !== 1) {
+      throw new Error('LEGACY_UPGRADE refuses an interrupted public repeatable ledger without the exact filename primary key');
+    }
+    const repeatableLedgerRows = Number(psql({
+      sql: `select count(*) from public.schema_repeatables;`,
+    }));
+    if (repeatableLedgerRows !== 0) {
+      throw new Error('LEGACY_UPGRADE refuses a populated public repeatable ledger before managed adoption');
+    }
   }
   const identityTablePresent = psql({
     sql: `select (to_regclass('private.cloudtms_database_identity') is not null)::text;`,

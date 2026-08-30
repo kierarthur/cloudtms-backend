@@ -220,6 +220,7 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.deepEqual(release.legacyUpgradeBootstrapFiles, [
     'supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql',
     'supabase/release/30082026_0205_miget_vault_compatibility_bootstrap.sql',
+    'supabase/release/30082026_1038_legacy_temp_diag_log_preload.sql',
     'supabase/release/30082026_0321_legacy_pay_batch_status_helper_preload.sql',
     'supabase/repeatable/08042026_1151_newtablesbanking.sql',
     'supabase/release/30082026_0055_legacy_workbench_shared_context_bootstrap.sql',
@@ -253,6 +254,7 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
     'supabase/repeatable/23072026_2207_invoice_queue_stage1_revision8/23072026_2207_private_invoice_issue_validate_batch.sql',
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_generate_classification_v2.sql',
     'supabase/repeatable/27072026_1042_invoice_async_v8/27072026_1806_private_invoice_batch_issue_classification_v2.sql',
+    'supabase/release/30082026_1038_legacy_temp_diag_log_preload.sql',
     'supabase/release/30082026_0321_legacy_pay_batch_status_helper_preload.sql',
   ]);
   const catalogPreload = read(release.legacyUpgradeRepeatablePreloadFiles[0]);
@@ -289,6 +291,20 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   ));
   assert.match(statusHelperPreload, /revoke all on function public\._pay_batch_status_is_active_reservation\(text\) from public, anon, authenticated, service_role/i);
   assert.match(statusHelperPreload, /grant execute on function public\._pay_batch_status_is_active_reservation\(text\) to service_role/i);
+  const tempDiagPath = 'supabase/release/30082026_1038_legacy_temp_diag_log_preload.sql';
+  const tempDiagPreload = read(tempDiagPath);
+  const generalRpcConvergence = read('supabase/release/30082026_0421_legacy_general_rpc_contract_convergence.sql');
+  const tempDiagStart = generalRpcConvergence.indexOf('-- SOURCE public._temp_diag_log(text,text,text,jsonb)');
+  const tempDiagEnd = generalRpcConvergence.indexOf('-- SOURCE public.banking_alert_display_summary_touch', tempDiagStart);
+  assert.ok(tempDiagStart >= 0 && tempDiagEnd > tempDiagStart);
+  assert.ok(tempDiagPreload.includes(
+    generalRpcConvergence.slice(tempDiagStart, tempDiagEnd).replace(/^-- SOURCE[^\n]*\n/, '').trim(),
+  ));
+  assert.ok(release.legacyUpgradeBootstrapFiles.indexOf(tempDiagPath)
+    < release.legacyUpgradeBootstrapFiles.indexOf('supabase/repeatable/08042026_1151_newtablesbanking.sql'));
+  assert.equal(release.legacyUpgradeRepeatablePreloadFiles.at(-2), tempDiagPath);
+  assert.match(tempDiagPreload, /grant execute on function public\._temp_diag_log\(text,text,text,jsonb\)[\s\S]*to current_user, service_role/i);
+  assert.match(tempDiagPreload, /LEGACY_TEMP_DIAG_LOG_PRELOAD_VERIFICATION_FAILED/);
   const freshnessChunkOwner = read('supabase/repeatable/30082026_0342_pay_batch_validate_freshness_chunk_v1.sql');
   assert.match(freshnessChunkOwner, /revoke all privileges on function public\.pay_batch_validate_freshness_chunk\(uuid, uuid, uuid, uuid, integer\) from PUBLIC, anon, authenticated, service_role, authenticator, supabase_admin/i);
   assert.match(freshnessChunkOwner, /grant execute on function public\.pay_batch_validate_freshness_chunk\(uuid, uuid, uuid, uuid, integer\) to service_role/i);
@@ -325,11 +341,13 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.match(postRepeatableRpcConvergence, /^begin;/im);
   assert.match(postRepeatableRpcConvergence, /^commit;/im);
   assert.match(postRepeatableRpcConvergence, /LEGACY_GENERAL_RPC_PRESTATE_DRIFT/);
-  assert.match(postRepeatableRpcConvergence, /79c1d4349118210f3166017e4c0ff43d/);
+  assert.match(postRepeatableRpcConvergence, /187b7ce5b4d52bdf871870c7ccef0939/);
+  assert.match(postRepeatableRpcConvergence, /v_count<>648/);
+  assert.match(postRepeatableRpcConvergence, /v_service_missing<>77/);
   assert.match(postRepeatableRpcConvergence, /a992e2c09a147974a745e7a9073db1c2/);
   assert.equal((postRepeatableRpcConvergence.match(/^-- SOURCE public\./gm) || []).length, 19);
   assert.equal((postRepeatableRpcConvergence.match(/^drop function public\./gim) || []).length, 7);
-  assert.match(postRepeatableRpcConvergence, /426cb25afcca047d21c729af91ca6fe5/);
+  assert.match(postRepeatableRpcConvergence, /4a8cb59f85124a6c52dcb33eff37c1f0/);
   assert.match(postRepeatableRpcConvergence, /9eb64f67054303d3d292ecfa07f432e3/);
   assert.doesNotMatch(
     postRepeatableRpcConvergence,
@@ -356,6 +374,11 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.match(candidateRpcReplacement, /9a750d0555772cb2902c02ec73d56711/);
   assert.match(candidateRpcReplacement, /1358ce0e91782fffa75f9199067f6bdd/);
   assert.match(candidateRpcReplacement, /d74699ad8c6938055b2d83e883feeee9/);
+  assert.match(candidateRpcReplacement, /v_service_missing=8 and v_service_hash='4ebcaad05387329b2e3bfe0801b821d4'/);
+  assert.match(candidateRpcReplacement, /722266b727a74535c1f66befd9206837/);
+  assert.match(candidateRpcReplacement, /37b50acd1118c2c6f9cbb2099cbc4776/);
+  assert.match(candidateRpcReplacement, /v_service_hash<>v_expected_service_hash/);
+  assert.match(candidateRpcReplacement, /v_acl_hash<>v_expected_acl_after/);
   assert.match(candidateRpcReplacement, /revoke all privileges on function %s from PUBLIC, anon, authenticated/);
   assert.doesNotMatch(candidateRpcReplacement, /\bgrant\s+/i);
   assert.doesNotMatch(
@@ -432,8 +455,9 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
       'supabase/migrations/22082026_1302_general_browser_rpc_isolation.sql'
     ],
   );
-  assert.match(generalRpcIsolationReplacement, /29c373707fca29a303b91fb0144b7d78/);
-  assert.match(generalRpcIsolationReplacement, /v_count<>354/);
+  assert.match(generalRpcIsolationReplacement, /7a6aba97ad9ba88c2f561099a210495e/);
+  assert.match(generalRpcIsolationReplacement, /v_count<>355/);
+  assert.match(generalRpcIsolationReplacement, /_temp_diag_log/);
   assert.match(generalRpcIsolationReplacement, /type_namespace\.nspname\|\|'\.'\|\|argument_type\.typname/);
   assert.match(generalRpcIsolationReplacement, /revoke all privileges on function/);
   assert.match(generalRpcIsolationReplacement, /grant execute on function %s to service_role/);
@@ -521,16 +545,16 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.ok(release.newVerificationFiles.includes(
     'supabase/verification/30082026_0220_miget_vault_compatibility_verification.sql',
   ));
-  const schemaBootstrap = read(release.legacyUpgradeBootstrapFiles[3]);
+  const schemaBootstrap = read(release.legacyUpgradeBootstrapFiles[4]);
   assert.match(schemaBootstrap, /CREATE TABLE IF NOT EXISTS public\.banking_pay_workbench_sessions/);
   assert.match(schemaBootstrap, /Safe to rerun/);
-  const sharedContextBootstrap = read(release.legacyUpgradeBootstrapFiles[4]);
+  const sharedContextBootstrap = read(release.legacyUpgradeBootstrapFiles[5]);
   assert.match(sharedContextBootstrap, /CREATE UNIQUE INDEX IF NOT EXISTS ux_bpay_workbench_sessions_shared_context_open/);
   assert.match(sharedContextBootstrap, /GROUP BY session_signature, pay_date, week_ending_cutoff/);
   assert.match(sharedContextBootstrap, /HAVING count\(\*\) > 1/);
   assert.match(sharedContextBootstrap, /unexpected definition; refusing bootstrap/);
   assert.doesNotMatch(sharedContextBootstrap, /DROP\s+INDEX|INSERT\s+INTO|UPDATE\s+public\.|DELETE\s+FROM|TRUNCATE/i);
-  const structuralGapBootstrap = read(release.legacyUpgradeBootstrapFiles[5]);
+  const structuralGapBootstrap = read(release.legacyUpgradeBootstrapFiles[6]);
   assert.match(structuralGapBootstrap, /create table if not exists public\.import_apply_operations/);
   assert.match(structuralGapBootstrap, /create table if not exists public\.pay_manual_adjustment_carry_forwards/);
   assert.match(structuralGapBootstrap, /create table if not exists public\.schema_repeatables/);
@@ -551,11 +575,11 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.match(structuralGapFinalize, /pay_manual_adjustment_carry_forwards_source_work_item_fkey/);
   assert.match(structuralGapFinalize, /if not exists/);
   assert.doesNotMatch(structuralGapFinalize, /insert\s+into|update\s+public\.|delete\s+from|truncate/i);
-  const invoiceInvalidationBootstrap = read(release.legacyUpgradeBootstrapFiles[6]);
-  const timesheetInvalidationBootstrap = read(release.legacyUpgradeBootstrapFiles[7]);
+  const invoiceInvalidationBootstrap = read(release.legacyUpgradeBootstrapFiles[7]);
+  const timesheetInvalidationBootstrap = read(release.legacyUpgradeBootstrapFiles[8]);
   assert.match(invoiceInvalidationBootstrap, /create or replace function public\.trg_invoice_document_invalidate\(\)/i);
   assert.match(timesheetInvalidationBootstrap, /create or replace function public\.trg_timesheet_document_invalidate\(\)/i);
-  const invoiceCandidateScopeBootstrap = read(release.legacyUpgradeBootstrapFiles[8]);
+  const invoiceCandidateScopeBootstrap = read(release.legacyUpgradeBootstrapFiles[9]);
   const structuralRoutineBaseline = read('supabase/baseline/22082026_1503_cloudtms_test_routines_15.sql');
   const exactPrivateStart = structuralRoutineBaseline.indexOf('CREATE OR REPLACE FUNCTION private._invoice_batch_generate_candidates_legacy_20260726(');
   const exactPrivateEnd = structuralRoutineBaseline.indexOf('-- private._invoice_batch_generate_classification_v2(boolean,text[],timestamp with time zone)');
@@ -568,21 +592,21 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.doesNotMatch(invoiceCandidateScopeBootstrap, /drop function[^;]+cascade/i);
   assert.match(invoiceCandidateScopeBootstrap, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.match(invoiceCandidateScopeBootstrap, /LEGACY_UPGRADE_IN_PROGRESS/);
-  const selectionCarryBootstrap = read(release.legacyUpgradeBootstrapFiles[9]);
+  const selectionCarryBootstrap = read(release.legacyUpgradeBootstrapFiles[10]);
   assert.match(selectionCarryBootstrap, /create or replace function public\.trg_banking_pay_preview_selection_carry_apply\(\)/i);
-  const documentAdvanceDownstreamBootstrap = read(release.legacyUpgradeBootstrapFiles[10]);
-  const documentAdvanceBootstrap = read(release.legacyUpgradeBootstrapFiles[11]);
+  const documentAdvanceDownstreamBootstrap = read(release.legacyUpgradeBootstrapFiles[11]);
+  const documentAdvanceBootstrap = read(release.legacyUpgradeBootstrapFiles[12]);
   assert.match(documentAdvanceDownstreamBootstrap, /create or replace function private\._invoice_document_advance_batch_v6_downstream\(/i);
   assert.match(documentAdvanceBootstrap, /create or replace function private\._invoice_document_advance_batch\(/i);
-  const failJobBootstrap = read(release.legacyUpgradeBootstrapFiles[12]);
+  const failJobBootstrap = read(release.legacyUpgradeBootstrapFiles[13]);
   assert.match(failJobBootstrap, /create or replace function public\.pay_workbench_fail_job\(/i);
   assert.match(failJobBootstrap, /revoke all on function public\.pay_workbench_fail_job/i);
   assert.match(failJobBootstrap, /grant execute on function public\.pay_workbench_fail_job/i);
-  const queueReplayBootstrap = read(release.legacyUpgradeBootstrapFiles[13]);
+  const queueReplayBootstrap = read(release.legacyUpgradeBootstrapFiles[14]);
   assert.match(queueReplayBootstrap, /create or replace function public\.pay_workbench_session_replay_replaced_queue_v1\(/i);
   assert.match(queueReplayBootstrap, /revoke all on function public\.pay_workbench_session_replay_replaced_queue_v1/i);
   assert.match(queueReplayBootstrap, /grant execute on function public\.pay_workbench_session_replay_replaced_queue_v1/i);
-  const bootstrap = read(release.legacyUpgradeBootstrapFiles[14]);
+  const bootstrap = read(release.legacyUpgradeBootstrapFiles[15]);
   assert.match(bootstrap, /to_regprocedure/);
   assert.match(bootstrap, /CLOUDTMS_LEGACY_TRANSITION_SHIM/);
   assert.match(bootstrap, /return OLD/);
@@ -613,6 +637,11 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.match(engine, /applyLegacyMigrationWithTransition/);
   assert.match(engine, /applyLegacyNonApplicableMigration/);
   assert.match(engine, /applyLegacyReplacementMigration/);
+  assert.match(engine, /LEGACY_UPGRADE refuses an interrupted public repeatable ledger with unexpected columns/);
+  assert.match(engine, /LEGACY_UPGRADE refuses an interrupted public repeatable ledger without the exact filename primary key/);
+  assert.match(engine, /LEGACY_UPGRADE refuses a populated public repeatable ledger before managed adoption/);
+  assert.match(engine, /select count\(\*\) from public\.schema_repeatables/);
+  assert.match(engine, /pg_catalog\.pg_get_constraintdef\(oid\)='PRIMARY KEY \(filename\)'/);
   assert.match(engine, /begin;[\s\S]*insert into public\.schema_migrations\(filename\)[\s\S]*commit;/);
   assert.match(engine, /LEGACY TRANSITION FILES/);
   assert.match(engine, /LEGACY NON-APPLICABLE MIGRATIONS/);
