@@ -44,8 +44,14 @@ declare
   v_failed boolean:=false;
   v_counter integer:=0;
 begin
-  insert into public.tms_users(id,email)
-  values(v_actor,'qr-evidence-label-runtime@example.invalid');
+  insert into public.tms_users(id,email,password_hash,role,is_active)
+  values(
+    v_actor,
+    'qr-evidence-label-runtime@example.invalid',
+    'UNUSABLE_VERIFICATION_ONLY',
+    'admin',
+    true
+  );
   update public.settings_defaults set candidate_app_system_actor_user_id=v_actor where id=1;
   insert into public.clients(id,name) values(v_client,'Paper complete-pack runtime client');
   insert into public.candidates(id,email,active,key_norm)
