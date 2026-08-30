@@ -7,6 +7,7 @@
   "legacyUpgradeBootstrapFiles": [
     "supabase/release/30082026_0030_miget_auth_compatibility_bootstrap.sql",
     "supabase/release/30082026_0205_miget_vault_compatibility_bootstrap.sql",
+    "supabase/release/30082026_0321_legacy_pay_batch_status_helper_preload.sql",
     "supabase/repeatable/08042026_1151_newtablesbanking.sql",
     "supabase/release/30082026_0055_legacy_workbench_shared_context_bootstrap.sql",
     "supabase/release/30082026_0120_legacy_structural_baseline_gap_bootstrap.sql",

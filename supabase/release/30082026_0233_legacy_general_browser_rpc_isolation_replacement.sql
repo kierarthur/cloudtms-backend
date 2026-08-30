@@ -47,7 +47,7 @@ begin
   into v_count,v_identity_hash,v_service_hash_before
   from targets;
 
-  if v_count<>353 or v_identity_hash<>'a0b546b38607f66e1afaec987f15ede7' then
+  if v_count<>354 or v_identity_hash<>'29c373707fca29a303b91fb0144b7d78' then
     raise exception 'LEGACY_GENERAL_RPC_IDENTITY_MANIFEST_DRIFT:count=% hash=%',
       v_count,v_identity_hash;
   end if;
