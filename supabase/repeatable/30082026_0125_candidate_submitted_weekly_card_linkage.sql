@@ -408,12 +408,12 @@ begin
         else coalesce(totals.expenses_pay_ex_vat,base.expenses_pay_ex_vat,0) end as overlay_expenses_pay_ex_vat,
       case when base.timesheet_id is null then coalesce(workflows.submitted_mileage_pay_ex_vat,totals.mileage_pay_ex_vat,base.mileage_pay_ex_vat,0)
         else coalesce(totals.mileage_pay_ex_vat,base.mileage_pay_ex_vat,0) end as overlay_mileage_pay_ex_vat,
-      case when base.timesheet_id is null then coalesce(workflows.submitted_travel_pay_ex_vat,totals.travel_pay_ex_vat,0)
-        else coalesce(totals.travel_pay_ex_vat,0) end as overlay_travel_pay_ex_vat,
-      case when base.timesheet_id is null then coalesce(workflows.submitted_accommodation_pay_ex_vat,totals.accommodation_pay_ex_vat,0)
-        else coalesce(totals.accommodation_pay_ex_vat,0) end as overlay_accommodation_pay_ex_vat,
-      case when base.timesheet_id is null then coalesce(workflows.submitted_other_pay_ex_vat,totals.other_pay_ex_vat,0)
-        else coalesce(totals.other_pay_ex_vat,0) end as overlay_other_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_travel_pay_ex_vat,totals.travel_pay_ex_vat,base.travel_pay_ex_vat,0)
+        else coalesce(totals.travel_pay_ex_vat,base.travel_pay_ex_vat,0) end as overlay_travel_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_accommodation_pay_ex_vat,totals.accommodation_pay_ex_vat,base.accommodation_pay_ex_vat,0)
+        else coalesce(totals.accommodation_pay_ex_vat,base.accommodation_pay_ex_vat,0) end as overlay_accommodation_pay_ex_vat,
+      case when base.timesheet_id is null then coalesce(workflows.submitted_other_pay_ex_vat,totals.other_pay_ex_vat,base.other_pay_ex_vat,0)
+        else coalesce(totals.other_pay_ex_vat,base.other_pay_ex_vat,0) end as overlay_other_pay_ex_vat,
       coalesce(workflows.workflows,'[]'::jsonb) as workflows,
       null::text as expense_overlay_conflict_code,
       membership.tab_bucket
