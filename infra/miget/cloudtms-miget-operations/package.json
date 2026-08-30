@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "benchmark:db": "node scripts/run-db-benchmark.mjs",
     "check": "wrangler types --config wrangler.jsonc && tsc --noEmit",
     "deploy": "wrangler deploy --config wrangler.jsonc",
     "deploy:dry": "wrangler deploy --config wrangler.jsonc --dry-run"

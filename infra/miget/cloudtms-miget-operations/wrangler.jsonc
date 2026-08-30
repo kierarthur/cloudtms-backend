@@ -4,6 +4,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-23",
   "compatibility_flags": ["nodejs_compat"],
+  "placement": {
+    "mode": "targeted",
+    "hostname": "cloudtms-codex-poc-postgrest-kwtyn.eu-east-1.migetapp.com"
+  },
   "vars": {
     "MIGET_POSTGREST_ORIGIN": "https://cloudtms-codex-poc-postgrest-kwtyn.eu-east-1.migetapp.com",
     "LIVE_MIGET_POSTGRES_SERVICE_ID": "01a03205-8273-7159-952e-47029c786995"
