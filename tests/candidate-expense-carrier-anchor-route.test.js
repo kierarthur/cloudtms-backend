@@ -10,6 +10,7 @@ const repeatablePath = 'supabase/repeatable/30082026_1903_candidate_expense_carr
 const verifierPath = 'supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql';
 const repeatable = read(repeatablePath);
 const verifier = read(verifierPath);
+const compileFixture = read('tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql');
 const release = JSON.parse(read('supabase/release/current-release.json'));
 const runtime = read('.github/workflows/candidate-db-runtime.yml');
 
@@ -53,6 +54,10 @@ test('rollback-contained proof reproduces the app carrier-first sequence and pro
 });
 
 test('release and Candidate runtime install the successor before executing its first-use verifier', () => {
+  assert.match(
+    compileFixture,
+    /create table public\.contracts[\s\S]*pay_method_snapshot text not null default 'PAYE'/i
+  );
   assert.ok(release.verificationFiles.includes(verifierPath));
   assert.ok(release.newVerificationFiles.includes(verifierPath));
   assert.match(

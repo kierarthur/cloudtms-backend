@@ -174,6 +174,7 @@ create table public.contracts (
   std_schedule_json jsonb not null default '[]'::jsonb,
   role text,
   band text,
+  pay_method_snapshot text not null default 'PAYE',
   default_submission_mode public.submission_mode_enum,
   overrideclientsettings boolean not null default false,
   weekly_timesheet_source public.weekly_timesheet_source_enum not null default 'NONE',
