@@ -5308,7 +5308,8 @@ async function candidatePaperPackContext(request, env, deps, timesheetId) {
   const timesheet = await restOne(env, 'timesheets',
     `timesheet_id=eq.${encodeURIComponent(id)}&is_current=eq.true`
     + '&select=timesheet_id,version,sheet_scope,submission_mode,qr_status,qr_token,'
-    + 'document_state,current_document_version_id,active_document_operation_id,manual_pdf_r2_key');
+    + 'document_revision,document_state,current_document_version_id,'
+    + 'active_document_operation_id,manual_pdf_r2_key');
   const qrRoute = text(timesheet?.qr_token)
     && ['PENDING', 'SENT', 'READY'].includes(upper(timesheet?.qr_status));
   if (!timesheet || upper(timesheet.sheet_scope) !== 'WEEKLY' || !qrRoute) {

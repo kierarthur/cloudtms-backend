@@ -61,7 +61,7 @@ test('pending PAPER status resumes the existing document then atomically complet
     backend.indexOf('async function handlePaperPackStatus'),
     backend.indexOf('async function handlePaperPackDownload')
   );
-  assert.match(backend, /active_document_operation_id,manual_pdf_r2_key/i);
+  assert.match(backend, /document_revision,document_state,current_document_version_id,[\s\S]*active_document_operation_id,manual_pdf_r2_key/i);
   assert.match(requeue, /documentState !== 'STALE'/i);
   assert.match(requeue, /UUID_RE\.test\(activeOperationId\)/i);
   assert.match(requeue, /typeof deps\?\.enqueueQrPack !== 'function'/i);
