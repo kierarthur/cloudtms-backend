@@ -428,8 +428,16 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   );
   assert.match(plpgsqlCheckDefaultsReplacement, /v_database name := current_database\(\)/);
   assert.equal((plpgsqlCheckDefaultsReplacement.match(/alter database %I set/g) ?? []).length, 7);
+  assert.match(plpgsqlCheckDefaultsReplacement, /pg_catalog\.pg_extension/);
+  assert.match(plpgsqlCheckDefaultsReplacement, /pg_catalog\.pg_settings/);
   assert.match(plpgsqlCheckDefaultsReplacement, /pg_catalog\.pg_db_role_setting/);
+  assert.match(plpgsqlCheckDefaultsReplacement, /LEGACY_PLPGSQL_CHECK_NOT_AVAILABLE_ON_PROVIDER/);
+  assert.match(plpgsqlCheckDefaultsReplacement, /LEGACY_PLPGSQL_CHECK_UNAVAILABLE_OVERRIDE_DRIFT/);
+  assert.match(plpgsqlCheckDefaultsReplacement, /v_any_setting_count=0/);
+  assert.match(plpgsqlCheckDefaultsReplacement, /v_persisted_override_count=0/);
+  assert.match(plpgsqlCheckDefaultsReplacement, /LEGACY_PLPGSQL_CHECK_EXPECTED_SETTINGS_MISSING/);
   assert.match(plpgsqlCheckDefaultsReplacement, /LEGACY_PLPGSQL_CHECK_DATABASE_DEFAULTS_NOT_APPLIED/);
+  assert.doesNotMatch(plpgsqlCheckDefaultsReplacement, /when\s+insufficient_privilege/i);
   assert.doesNotMatch(plpgsqlCheckDefaultsReplacement, /alter database postgres/i);
   assert.doesNotMatch(plpgsqlCheckDefaultsReplacement, /\b(?:insert into|update|delete from|truncate|drop|create extension)\b/i);
   const generalIsolationReplacement = read(
