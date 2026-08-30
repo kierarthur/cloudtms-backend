@@ -30,6 +30,10 @@ test('catalog-owned pending repeatables are rehearsed in a rollback-only transac
     assert.match(sql, /6545152d1cb26ddfb71453803d5c5d3f5682a02176c1b3eacc424917ca16478f/);
     assert.match(sql, /a3e3a35101070382fb2e9957bc007ef31f9801afca165b2391ae0179adf6da0e/);
     assert.match(sql, /pg_catalog\.min\(p\.oid::text\)::oid/);
+    assert.match(sql, /BANKING_PAY_CATALOG_PREAPPLY_DIAGNOSTIC_RECONSTRUCTION_MISMATCH/);
+    assert.match(sql, /v_hash_input := overlay\(/);
+    assert.doesNotMatch(sql, /pg_catalog\.overlay\(/);
+    assert.match(sql, /SET "plpgsql_check\.mode" TO ''disabled''/);
     assert.match(sql, /ROLLBACK;\n$/);
     assert.doesNotMatch(sql, /COMMIT;/);
   } finally {

@@ -14,7 +14,61 @@
 DO $block$
 DECLARE
   v_function regprocedure;
+  v_extension_present boolean;
+  v_setting_count integer;
+  v_set_privilege_count integer;
 BEGIN
+  SELECT EXISTS (
+           SELECT 1 FROM pg_catalog.pg_extension WHERE extname='plpgsql_check'
+         ),
+         (
+           SELECT pg_catalog.count(*)
+           FROM pg_catalog.pg_settings
+           WHERE name IN (
+             'plpgsql_check.mode',
+             'plpgsql_check.profiler',
+             'plpgsql_check.tracer',
+             'plpgsql_check.constants_tracing',
+             'plpgsql_check.cursors_leaks',
+             'plpgsql_check.strict_cursors_leaks',
+             'plpgsql_check.fatal_errors'
+           )
+         ),
+         (
+           SELECT pg_catalog.count(*)
+           FROM (VALUES
+             ('plpgsql_check.mode'),
+             ('plpgsql_check.profiler'),
+             ('plpgsql_check.tracer'),
+             ('plpgsql_check.constants_tracing'),
+             ('plpgsql_check.cursors_leaks'),
+             ('plpgsql_check.strict_cursors_leaks'),
+             ('plpgsql_check.fatal_errors')
+           ) AS parameter(name)
+           WHERE pg_catalog.has_parameter_privilege(current_user,parameter.name,'SET')
+         )
+  INTO v_extension_present,v_setting_count,v_set_privilege_count;
+
+  IF NOT v_extension_present
+     AND v_setting_count=0
+     AND v_set_privilege_count=0
+  THEN
+    RAISE NOTICE 'PLPGSQL_CHECK_RUNTIME_CONFIGURATION_NOT_AVAILABLE_ON_PROVIDER';
+    RETURN;
+  END IF;
+
+  IF NOT v_extension_present
+     OR v_setting_count<>7
+     OR v_set_privilege_count<>7
+  THEN
+    RAISE EXCEPTION USING
+      ERRCODE='check_violation',
+      MESSAGE=pg_catalog.format(
+        'PLPGSQL_CHECK_RUNTIME_CONFIGURATION_PARTIAL_STATE:extension=%s settings=%s privileges=%s',
+        v_extension_present,v_setting_count,v_set_privilege_count
+      );
+  END IF;
+
   FOREACH v_function IN ARRAY ARRAY[
     'public.pay_correction_chain_residual_v1(uuid,uuid,text,uuid,uuid,integer)'::regprocedure,
     'public._ctms_correction_policy_leg_read_v1(uuid)'::regprocedure,

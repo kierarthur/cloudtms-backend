@@ -161,6 +161,24 @@ test('provider database owner mapping is explicit, bounded and fail closed', () 
       mapLogicalPostgresOwnerSql("SET \"plpgsql_check.mode\" = 'disabled'\r\nSET lock_timeout = '5s';\r\n"),
       "SET lock_timeout = '5s';\r\n",
     );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        "SET plpgsql_check.profiler TO 'off'\nSET plpgsql_check.tracer TO 'off'\nSET statement_timeout TO '2min'\n",
+      ),
+      "SET statement_timeout TO '2min'\n",
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        "ALTER FUNCTION public.example(\n  uuid,\n  text\n) SET plpgsql_check.mode TO 'disabled';\nREVOKE ALL ON FUNCTION public.example(uuid,text) FROM PUBLIC;\n",
+      ),
+      'REVOKE ALL ON FUNCTION public.example(uuid,text) FROM PUBLIC;\n',
+    );
+    assert.equal(
+      mapLogicalPostgresOwnerSql(
+        "ALTER FUNCTION public.keep_me(uuid) OWNER TO postgres;\nCREATE OR REPLACE FUNCTION public.example(\n  uuid,\n  text\n) RETURNS text LANGUAGE sql AS 'select null::text';\nALTER FUNCTION public.example(\n  uuid,\n  text\n)\n  SET plpgsql_check.mode TO 'disabled';\nREVOKE ALL ON FUNCTION public.example(uuid,text) FROM PUBLIC;\n",
+      ),
+      "ALTER FUNCTION public.keep_me(uuid) OWNER TO CURRENT_USER;\nCREATE OR REPLACE FUNCTION public.example(\n  uuid,\n  text\n) RETURNS text LANGUAGE sql AS 'select null::text';\nREVOKE ALL ON FUNCTION public.example(uuid,text) FROM PUBLIC;\n",
+    );
     process.env.CLOUDTMS_LOGICAL_POSTGRES_OWNER = 'UNSAFE_ROLE';
     assert.throws(() => mapLogicalPostgresOwnerSql('select 1;'), /must be CURRENT_USER/);
   } finally {
@@ -418,6 +436,8 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
       'supabase/release/30082026_0236_legacy_general_browser_view_isolation_replacement.sql',
     'supabase/migrations/22082026_1402_candidate_named_legacy_relation_isolation.sql':
       'supabase/release/30082026_0239_legacy_candidate_named_relation_isolation_replacement.sql',
+    'supabase/migrations/23082026_1337_manager_email_candidate_identity_defaults.sql':
+      'supabase/release/30082026_1155_legacy_manager_email_template_defaults_rls_replacement.sql',
     'supabase/migrations/24082026_0232_miget_provider_owner_defaults.sql':
       'supabase/release/30082026_0255_legacy_miget_provider_owner_defaults_replacement.sql',
   });
@@ -440,6 +460,23 @@ test('legacy transition bootstrap is bounded and must be replaced before adoptio
   assert.doesNotMatch(plpgsqlCheckDefaultsReplacement, /when\s+insufficient_privilege/i);
   assert.doesNotMatch(plpgsqlCheckDefaultsReplacement, /alter database postgres/i);
   assert.doesNotMatch(plpgsqlCheckDefaultsReplacement, /\b(?:insert into|update|delete from|truncate|drop|create extension)\b/i);
+  const managerEmailRlsReplacement = read(
+    release.legacyUpgradeReplacementMigrations[
+      'supabase/migrations/23082026_1337_manager_email_candidate_identity_defaults.sql'
+    ],
+  );
+  assert.match(managerEmailRlsReplacement, /LEGACY_MANAGER_EMAIL_TEMPLATE_RLS_SHAPE_MISMATCH/);
+  assert.match(managerEmailRlsReplacement, /no force row level security/i);
+  assert.match(managerEmailRlsReplacement, /force row level security/i);
+  assert.match(managerEmailRlsReplacement, /manager-email-candidate-identity-defaults-20260823/);
+  const runtimePlpgsqlCheckRepeatable = read(
+    'supabase/repeatable/23072026_1217_disable_plpgsql_check_for_correction_chain_banking.sql',
+  );
+  assert.match(runtimePlpgsqlCheckRepeatable, /PLPGSQL_CHECK_RUNTIME_CONFIGURATION_NOT_AVAILABLE_ON_PROVIDER/);
+  assert.match(runtimePlpgsqlCheckRepeatable, /PLPGSQL_CHECK_RUNTIME_CONFIGURATION_PARTIAL_STATE/);
+  assert.match(runtimePlpgsqlCheckRepeatable, /v_setting_count<>7/);
+  assert.match(runtimePlpgsqlCheckRepeatable, /v_set_privilege_count<>7/);
+  assert.match(read('scripts/cloudtms-db-release.mjs'), /executableSqlFile\(absolute\)/);
   const generalIsolationReplacement = read(
     release.legacyUpgradeReplacementMigrations[
       'supabase/migrations/22082026_1302_general_browser_relation_sequence_isolation.sql'

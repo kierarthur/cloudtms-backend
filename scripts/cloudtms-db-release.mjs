@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import {
   canonicalContractHash, canonicalSqlBytes, contractDifference, databaseUrl, exportContract, inventory,
   formatPlanSection, legacyUpgradeInventory, psql, readJson, repoRoot, shellGitHead, validateTarget,
-  sha256, verifyIntegrity, writeJson,
+  executableSqlFile, sha256, verifyIntegrity, writeJson,
 } from './cloudtms-db-release-lib.mjs';
 
 const [command, ...rest] = process.argv.slice(2);
@@ -381,6 +381,19 @@ function runBankingPayCatalogPreapply(pendingRepeatables) {
     if (result.status !== 0) {
       throw new Error(`Banking Pay catalog pre-apply generation failed: ${String(result.stderr || result.stdout || result.error?.message || `exit ${result.status}`).trim()}`);
     }
+    const generated = fs.readFileSync(output, 'utf8').replace(
+      /^\\i '([^']+)'$/gm,
+      (line, includedPath) => {
+        const absolute = path.resolve(includedPath.replaceAll('/', path.sep));
+        const relative = path.relative(repoRoot, absolute);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
+          throw new Error(`Banking Pay catalog pre-apply include is outside the repository: ${includedPath}`);
+        }
+        const executable = executableSqlFile(absolute).replaceAll('\\', '/').replaceAll("'", "''");
+        return `\\i '${executable}'`;
+      },
+    );
+    fs.writeFileSync(output, generated, 'utf8');
     psql({ file: output });
   } finally {
     const resolved = path.resolve(tempDir);

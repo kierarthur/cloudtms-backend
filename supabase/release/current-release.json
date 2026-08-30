@@ -71,6 +71,7 @@
     "supabase/migrations/22082026_1302_general_browser_rpc_isolation.sql": "supabase/release/30082026_0233_legacy_general_browser_rpc_isolation_replacement.sql",
     "supabase/migrations/22082026_1302_general_browser_view_isolation.sql": "supabase/release/30082026_0236_legacy_general_browser_view_isolation_replacement.sql",
     "supabase/migrations/22082026_1402_candidate_named_legacy_relation_isolation.sql": "supabase/release/30082026_0239_legacy_candidate_named_relation_isolation_replacement.sql",
+    "supabase/migrations/23082026_1337_manager_email_candidate_identity_defaults.sql": "supabase/release/30082026_1155_legacy_manager_email_template_defaults_rls_replacement.sql",
     "supabase/migrations/24082026_0232_miget_provider_owner_defaults.sql": "supabase/release/30082026_0255_legacy_miget_provider_owner_defaults_replacement.sql"
   },
   "bootstrapFile": "supabase/baseline/22082026_1506_cloudtms_new_database_bootstrap.sql",

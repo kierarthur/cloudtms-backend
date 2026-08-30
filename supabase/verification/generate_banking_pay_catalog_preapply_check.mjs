@@ -39,6 +39,7 @@ const normalizeRepoPath = (value) => path.relative(repoRoot, path.resolve(repoRo
   .join('/');
 const sqlLiteral = (value) => `'${String(value).replaceAll("'", "''")}'`;
 const psqlPath = (value) => String(value).replaceAll('\\', '/').replaceAll("'", "''");
+const diagnosticConfigPattern = /^plpgsql_check\.(mode|profiler|tracer|constants_tracing|cursors_leaks|strict_cursors_leaks|fatal_errors)=(disabled|off)$/;
 const pending = pendingArgs.map(normalizeRepoPath);
 for (const pendingPath of pending) {
   if (!pendingPath.startsWith('supabase/repeatable/') || pendingPath.includes('../')) {
@@ -66,7 +67,26 @@ for (const { name: manifestName, value: manifest } of manifests) {
     if (existing && existing.definition_sha256 !== fn.definition_sha256) {
       throw new Error(`Conflicting catalog hashes for ${fn.schema}.${fn.name}`);
     }
-    functionsByIdentity.set(key, { ...fn, manifestName });
+    const proconfig = fn.proconfig || [];
+    if (!Array.isArray(proconfig) || proconfig.some(value => typeof value !== 'string')) {
+      throw new Error(`Invalid catalog proconfig for ${fn.schema}.${fn.name}`);
+    }
+    const firstDiagnostic = proconfig.findIndex(value => value.startsWith('plpgsql_check.'));
+    const diagnosticConfig = firstDiagnostic < 0 ? [] : proconfig.slice(firstDiagnostic);
+    if (firstDiagnostic >= 0 && proconfig.slice(0, firstDiagnostic).some(value => value.startsWith('plpgsql_check.'))) {
+      throw new Error(`Invalid diagnostic config order for ${fn.schema}.${fn.name}`);
+    }
+    if (diagnosticConfig.some(value => !diagnosticConfigPattern.test(value))) {
+      throw new Error(`Unsupported diagnostic config for ${fn.schema}.${fn.name}`);
+    }
+    if (firstDiagnostic >= 0 && proconfig.slice(firstDiagnostic).some(value => !value.startsWith('plpgsql_check.'))) {
+      throw new Error(`Diagnostic config must be the final catalog config for ${fn.schema}.${fn.name}`);
+    }
+    const diagnosticDefinitionLines = diagnosticConfig.map((value) => {
+      const match = value.match(diagnosticConfigPattern);
+      return ` SET "plpgsql_check.${match[1]}" TO '${match[2]}'`;
+    });
+    functionsByIdentity.set(key, { ...fn, manifestName, diagnosticDefinitionLines });
   }
 }
 
@@ -94,6 +114,9 @@ DO $catalog_preapply$
 DECLARE
   v_oid oid;
   v_count integer;
+  v_definition text;
+  v_hash_input text;
+  v_as_position integer;
   v_actual_sha256 text;
 BEGIN
   SELECT count(*), pg_catalog.min(p.oid::text)::oid
@@ -108,9 +131,24 @@ BEGIN
     RAISE EXCEPTION 'BANKING_PAY_CATALOG_PREAPPLY_IDENTITY_MISMATCH: ${label}';
   END IF;
 
+  SELECT pg_catalog.pg_get_functiondef(v_oid)
+  INTO v_definition;
+
+  v_hash_input := v_definition;
+${fn.diagnosticDefinitionLines.length ? `  v_as_position := pg_catalog.strpos(v_definition, E'\\nAS ');
+  IF v_as_position <= 0 THEN
+    RAISE EXCEPTION 'BANKING_PAY_CATALOG_PREAPPLY_DIAGNOSTIC_RECONSTRUCTION_MISMATCH: ${label}';
+  END IF;
+  v_hash_input := overlay(
+    v_definition
+    PLACING ${sqlLiteral(`\n${fn.diagnosticDefinitionLines.join('\n')}`)}
+    FROM v_as_position
+    FOR 0
+  );
+` : ''}
   SELECT pg_catalog.encode(
     extensions.digest(
-      pg_catalog.convert_to(pg_catalog.pg_get_functiondef(v_oid), 'UTF8'),
+      pg_catalog.convert_to(v_hash_input, 'UTF8'),
       'sha256'
     ),
     'hex'
