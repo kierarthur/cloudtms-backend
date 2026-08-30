@@ -40,6 +40,7 @@ create type public.ts_fin_processing_status_enum as enum (
 
 create table public.tms_users (
   id uuid primary key default gen_random_uuid(),
+  email text not null default 'candidate-runtime@example.invalid',
   is_active boolean not null default true
 );
 

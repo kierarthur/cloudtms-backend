@@ -11,6 +11,7 @@ const verifier = read(verifierPath);
 const runtimePath = 'tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql';
 const runtimeSql = read(runtimePath);
 const runtimeWorkflow = read('.github/workflows/candidate-db-runtime.yml');
+const compileFixture = read('tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql');
 const release = JSON.parse(read('supabase/release/current-release.json'));
 
 test('PAPER evidence uses the exact server manifest display name with non-paper fallback preserved', () => {
@@ -31,6 +32,8 @@ test('the complete successor changes only the QR manifest label expression', () 
 });
 
 test('rollback-contained PAPER finalisation proves both named expense pages', () => {
+  assert.match(compileFixture, /create table public\.tms_users[\s\S]*email text not null default 'candidate-runtime@example\.invalid'/i);
+  assert.match(runtimeSql, /insert into public\.tms_users\(id,email\)[\s\S]*@example\.invalid/i);
   assert.match(runtimeSql, /manifest_page->>'component_kind'='EXPENSE_SUMMARY'[\s\S]*manifest_page->>'display_name'='Expense summary'[\s\S]*evidence\.display_name=manifest_page->>'display_name'/i);
   assert.match(runtimeSql, /manifest_page->>'component_kind'='EXPENSE_EVIDENCE'[\s\S]*manifest_page->>'display_name'='Other 1'[\s\S]*evidence\.display_name=manifest_page->>'display_name'/i);
   assert.match(runtimeSql, /begin;[\s\S]*rollback;/i);
