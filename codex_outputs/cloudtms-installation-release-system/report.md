@@ -25,6 +25,7 @@ The package does not itself authorise APPLY, deployment, paid resource creation,
 - LEGACY_UPGRADE is resumable rather than globally atomic. After any fail-closed stop, Codex must inspect the fresh Miget state, rerun PLAN, and complete both the original-data non-superuser rehearsal and the exact interrupted-state schema/ACL rehearsal before one corrected retry.
 - Routine-security fingerprints use explicit PostgreSQL catalogue schemas and names, never `regprocedure` display text that varies with `search_path`.
 - Any Cloudflare Worker that calls a public `*.workers.dev` Miget gateway must retain `global_fetch_strictly_public`; without it, the real hop can fail with Cloudflare error `1042` while health checks still pass. Final acceptance requires a harmless gateway-backed database request and every configured cron to run on the final active version with no exception. LIVE acceptance includes the main one-minute/five-minute schedules and the legacy `arthur-rai-broker` five-minute Sheets-outbox retry.
+- The permanent ChatGPT audit connector uses a separate least-privilege Miget workspace token set to `Never`, `All projects` and read-only. Its API-backed parity/infrastructure/service checks are mandatory because an expired REST token can coexist with working Hyperdrive database tools.
 - The package does not claim that nonexistent generic `install:*` commands automate the full estate. Codex follows the manual and the implemented protected database workflow, then separately verifies PostgREST, gateways, Workers and application behaviour.
 
 ## Contents

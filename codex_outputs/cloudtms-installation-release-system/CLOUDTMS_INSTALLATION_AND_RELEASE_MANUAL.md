@@ -140,6 +140,8 @@ Mandatory safeguards:
 
 The permanent read-only ChatGPT connector is **CloudTMS Miget Operations**. It is an audit route, not an APPLY route. The credential-protected browser SQL/table viewer is the repository-documented pgAdmin service. Neither replaces the protected database-release workflow.
 
+The connector's Miget REST credential must be a separate workspace API token configured with `Expires = Never`, `All projects`, and the read-only permission preset. Store it only as the `MIGET_API_TOKEN` secret on `codex-cloudtms-miget-gateway`; never put it in Git, an ordinary Worker variable, a report or a local plaintext handover. A Miget token expiry can leave Hyperdrive-backed database tools working while `miget_verify_codex_parity_route`, `miget_list_infrastructure` and `miget_inspect_postgres` fail, so the fresh-chat acceptance preflight must exercise those API-backed tools as well as both database targets. Keep any deployment/management token separate and more tightly controlled; the read-only ChatGPT connector does not need manage, operate or deploy permissions.
+
 ## Worker and application deployment
 
 The plan must name every affected Worker and prove its repository, branch, working directory/root, deploy command, managed build-token selection, bindings and secrets by name only.
