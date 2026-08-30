@@ -41,7 +41,7 @@ begin
     count(*) filter(where oid is null or not service_execute),
     count(*) filter(where oid is not null and (anon_execute or authenticated_execute)),
     count(*) filter(where oid is null or not prosecdef or provolatile<>expected_volatility
-      or owner_name<>'postgres' or proconfig is distinct from expected_config)
+      or owner_name<>current_user or proconfig is distinct from expected_config)
   into v_public_count,v_service_missing,v_browser_executable,v_shape_mismatch
   from target;
 

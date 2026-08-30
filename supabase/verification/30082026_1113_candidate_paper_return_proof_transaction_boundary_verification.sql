@@ -20,7 +20,7 @@ begin
   if not found
      or not v_security_definer
      or v_volatility<>'v'
-     or v_owner<>'postgres'
+     or v_owner<>current_user
      or v_config is distinct from
         array['search_path=pg_catalog, public, private, extensions, pg_temp']::text[]
      or not pg_catalog.has_function_privilege('service_role',v_oid,'EXECUTE')

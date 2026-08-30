@@ -32,6 +32,8 @@ test('catalogue verifiers require VOLATILE only for the QR proof and retain the 
   assert.match(authorityVerifier, /candidate_break_entry_context_get_v1[\s\S]*'s'::"char"/);
   assert.match(authorityVerifier, /candidate_paper_return_proof_validate_v1[\s\S]*'v'::"char"/);
   assert.match(boundaryVerifier, /v_volatility<>'v'/);
+  assert.match(boundaryVerifier, /v_owner<>current_user/);
+  assert.match(authorityVerifier, /owner_name<>current_user/);
   assert.match(boundaryVerifier, /has_function_privilege\('service_role'/);
   assert.match(boundaryVerifier, /has_function_privilege\('anon'/);
   assert.match(boundaryVerifier, /has_function_privilege\('authenticated'/);
