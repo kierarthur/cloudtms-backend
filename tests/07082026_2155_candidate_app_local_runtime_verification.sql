@@ -1133,7 +1133,7 @@ begin
     processing_status,basis,total_hours,hours_day,additional_pay_ex_vat,
     additional_charge_ex_vat,other_pay_ex_vat,other_charge_ex_vat
   ) values(
-    v_timesheet,1,v_candidate,v_client,true,false,'READY_FOR_INVOICE','MANUAL',
+    v_timesheet,1,v_candidate,v_client,true,false,'READY_FOR_INVOICE','SELF_REPORTED',
     0,0,0,0,-10,-12
   );
 
