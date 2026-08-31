@@ -75,6 +75,26 @@ begin
 end;
 $lifecycle_signature_fixture$;
 
+-- The same reduced catalogue omits the optional HR-validation history read by
+-- the Office authorisation owners.  The duplicate-expense fixture has no HR
+-- validation, so an empty rollback-only relation preserves that truthful
+-- state while allowing the unchanged production query to run.
+do $validation_fixture$
+begin
+  if to_regclass('public.timesheet_validations') is null then
+    create table public.timesheet_validations (
+      id uuid not null,
+      timesheet_id uuid,
+      status public.validation_status_enum not null,
+      reason_code text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now(),
+      pre_validated boolean not null default false
+    );
+  end if;
+end;
+$validation_fixture$;
+
 do $verification$
 declare
   v_actor uuid:=gen_random_uuid();
