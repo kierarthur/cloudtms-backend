@@ -22,7 +22,8 @@ const global={candidate_count:1,selected_candidate_count:0,selected_ready_count:
     display_ready:true,draft_safe:true,draft_block_reason_code:null,session_selected_row_count:0,session_selected_eligible_ready_row_count:0}};
 const readyRow={identity:id(1100),candidate_id:id(1),effective_section:'canonical_preview_lines',selected:false,
   selection_group_kind:null,selection_group_key:null,selection_group_member_count:0,selection_group_selected_count:0,
-  selection_group_state:null,selection_group_display_amount:null,selection_group_selected_display_amount:null};
+  selection_group_state:null,selection_group_display_amount:null,selection_group_selected_display_amount:null,
+  presentation_group_kind:'ROW',presentation_group_key:id(1100),presentation_group_row_count:1};
 function bridge(reply){
   const {createTransport}=require(path.join(frontend,'js/banking-pay-modal-v2.js'));const calls=[];
   const transport=createTransport({API:route=>`https://test-boundary.example.invalid${route}`,
@@ -40,7 +41,9 @@ test('current frontend initial-summary builder reaches the exact Worker RPC with
 });
 for(const [kind,name,params,extra] of [
   ['ready','pay_workbench_session_get_candidate_ready_page_v1',{candidate_id:id(1),cursor:null,limit:100},
-    {candidate_id:id(1),candidate,page_number:1,has_previous:false,previous_cursor:null,page_anchor:'fixture_ready_anchor'}],
+    {candidate_id:id(1),candidate,ready_row_count:1,page_number:1,has_previous:false,previous_cursor:null,page_anchor:'fixture_ready_anchor'}],
+  ['readyGroup','pay_workbench_session_get_candidate_ready_group_page_v1',{candidate_id:id(1),group_kind:'ROW',group_key:id(1100),cursor:null,limit:10},
+    {candidate_id:id(1),group_kind:'ROW',group_key:id(1100),page_offset:0}],
   ['actions','pay_workbench_session_get_action_required_page_v1',{search:'bank details',sort_key:'PAYMENTS',sort_direction:'DESC',cursor:null,limit:100},
     {search:'bank details',sort_key:'PAYMENTS',sort_direction:'DESC',scope_count:0,view:'ACTION_REQUIRED',
       updating_count:0,updating:[],updating_has_more:false,updating_next_cursor:null}],
@@ -53,15 +56,15 @@ for(const [kind,name,params,extra] of [
 ]){
   test(`current frontend ${kind} request and response cross the exact Worker contract`,{skip:!enabled},async()=>{
     const isDetail=['actionDetail','blockedDetail'].includes(kind);
-    const reply=envelope({rows:kind==='ready'?[readyRow]
+    const reply=envelope({rows:['ready','readyGroup'].includes(kind)?[readyRow]
       :isDetail?[{identity:'source_issue',candidate_id:id(1),preview_row_id:null,source_kind:'SOURCE_PROGRESS',context_only:false,payload:{current_source_issue:true}}]:[],
-      total_count:kind==='ready'||isDetail?1:0,has_more:false,next_cursor:null,
+      total_count:['ready','readyGroup'].includes(kind)||isDetail?1:0,has_more:false,next_cursor:null,
       ...(['actions','blocked'].includes(kind)?{page_number:0,has_previous:false,previous_cursor:null}:{}),
       ...(isDetail?{page_number:1,has_previous:false,previous_cursor:null,affected_candidate_count:1,
         affected_payment_count:null,affected_payment_count_complete:false}:{}),...extra});
     const {transport,calls}=bridge(reply);assert.deepEqual(await transport.readPage(kind,{...ctx,...params}),reply);
     assert.equal(calls.length,1);assert.equal(calls[0].name,name);assert.equal(calls[0].args.p_actor_user_id,id(9000));
-    assert.equal(calls[0].policy.routeClass,'PREVIEW_PROGRESS');assert.equal(calls[0].args.p_limit,100);
+    assert.equal(calls[0].policy.routeClass,'PREVIEW_PROGRESS');assert.equal(calls[0].args.p_limit,kind==='readyGroup'?10:100);
     if(params.identity)assert.equal(calls[0].args[kind==='actionDetail'?'p_task_key':'p_blocker_key'],params.identity);
     if(params.search)assert.equal(calls[0].args.p_search,params.search);
     if(kind==='actions')assert.equal(calls[0].args.p_view,'ACTION_REQUIRED');
@@ -95,6 +98,7 @@ test('current frontend open-child selection crosses the Worker once with complet
     candidate_absent:false,movements:[],movements_complete:true,movement_count:0,movement_digest:'b'.repeat(64),
     invalidations:{scope:'ALL_PREVIOUS_DETAILS',ready:true,actions:true,updating:true,blocked:true},ready_page:envelope({progress_counter_version:4,
       candidate_id:id(1),candidate:currentCandidate,total_count:1,has_more:false,next_cursor:null,
+      ready_row_count:1,
       page_number:1,has_previous:false,previous_cursor:null,page_anchor:'fixture_ready_anchor',
       rows:[readyRow]})});
   const {transport,calls}=bridge(reply);

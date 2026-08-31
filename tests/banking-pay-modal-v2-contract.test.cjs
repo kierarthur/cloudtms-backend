@@ -22,6 +22,7 @@ const publicSources = [
   '29082026_0002_banking_pay_modal_global_selection_response.sql',
   '29082026_0019_banking_pay_modal_row_selection_response.sql',
   '29082026_0114_banking_pay_modal_group_selection_response.sql'
+  ,'31082026_1408_banking_pay_candidate_group_pagination_v2.sql'
 ];
 
 test('v2 installs the complete additive Banking Pay modal contract', () => {
@@ -33,6 +34,7 @@ test('v2 installs the complete additive Banking Pay modal contract', () => {
     'pay_workbench_session_set_ready_rows_v1',
     'pay_workbench_session_set_ready_group_v1',
     'pay_workbench_session_get_candidate_ready_page_v1',
+    'pay_workbench_session_get_candidate_ready_group_page_v1',
     'pay_workbench_session_get_action_required_page_v1',
     'pay_workbench_session_get_action_required_detail_v1',
     'pay_workbench_session_get_blocked_page_v1',
@@ -71,8 +73,8 @@ test('general browser isolation inventory admits only the fourteen current servi
 test('Candidate-named isolation inventory remains at the current proved boundary', () => {
   const verification = read(path.join(root, 'supabase', 'verification',
     '27082026_1947_candidate_named_security_verification_v3.sql'));
-  assert.match(verification, /v_count<>121 or v_service_missing<>8 or v_browser_executable<>0/);
-  assert.match(verification, /v_hash<>'fbee26a22fddd48851c09c60d1f84306'/);
+  assert.match(verification, /v_count<>122 or v_service_missing<>8 or v_browser_executable<>0/);
+  assert.match(verification, /v_hash<>'e82084b8b739995d086e72f1983acfb1'/);
 });
 
 test('v2 summary is server-owned, selected-only and keyset paged before the browser', () => {
@@ -133,6 +135,7 @@ test('Worker exposes only the bounded typed v2 adapter routes', () => {
     '/api/banking/pay/workbench/v2/session/:id/candidate/:candidateId/ready-selection',
     '/api/banking/pay/workbench/v2/session/:id/candidate/:candidateId/group-selection',
     '/api/banking/pay/workbench/v2/session/:id/candidate/:candidateId/ready',
+    '/api/banking/pay/workbench/v2/session/:id/candidate/:candidateId/ready-group',
     '/api/banking/pay/workbench/v2/session/:id/action-required',
     '/api/banking/pay/workbench/v2/session/:id/action-required/:taskKey',
     '/api/banking/pay/workbench/v2/session/:id/blocked',

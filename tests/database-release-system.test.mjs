@@ -312,6 +312,8 @@ test('contract export is provider and upgrade-history neutral without weakening 
   assert.match(source, /expanded_acl\.grantee = 'authenticator'/);
   assert.match(source, /'security_definer', p\.prosecdef/);
   assert.match(source, /'definition_sha256'/);
+  assert.match(source, /jsonb_agg\([\s\S]*case when role_name::text=current_user then 'postgres'[\s\S]*order by \(case when role_name::text=current_user then 'postgres'[\s\S]*collate "C"/);
+  assert.doesNotMatch(source, /jsonb_agg\([\s\S]*role_name::text[\s\S]*order by ordinality/);
 });
 
 test('private Candidate Daily Miget policies are exact, reproducible and grant no table privilege', () => {

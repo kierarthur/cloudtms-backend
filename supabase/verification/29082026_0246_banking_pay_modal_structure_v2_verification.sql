@@ -15,6 +15,7 @@ declare
   v_public_identities regprocedure[] := array[
     'public.pay_workbench_session_get_candidate_summary_page_v1(uuid,jsonb,uuid,text,text,text,integer)'::regprocedure,
     'public.pay_workbench_session_get_candidate_ready_page_v1(uuid,uuid,jsonb,uuid,text,integer)'::regprocedure,
+    'public.pay_workbench_session_get_candidate_ready_group_page_v1(uuid,uuid,jsonb,uuid,text,text,text,integer)'::regprocedure,
     'public.pay_workbench_session_get_action_required_page_v1(uuid,jsonb,uuid,text,text,text,integer,text,text)'::regprocedure,
     'public.pay_workbench_session_get_action_required_detail_v1(uuid,jsonb,uuid,text,text,integer)'::regprocedure,
     'public.pay_workbench_session_get_blocked_page_v1(uuid,jsonb,uuid,text,text,text,integer,text)'::regprocedure,
@@ -106,6 +107,13 @@ begin
     perform public.pay_workbench_session_get_candidate_ready_page_v1(
       v_session,v_candidate,v_options,v_actor,null,100);
     raise exception 'BANKING_PAY_V2_VERIFY: missing-session Ready detail was accepted';
+  exception when sqlstate 'P0001' then
+    if sqlerrm is distinct from 'WORKBENCH_SESSION_NOT_FOUND' then raise; end if;
+  end;
+  begin
+    perform public.pay_workbench_session_get_candidate_ready_group_page_v1(
+      v_session,v_candidate,v_options,v_actor,'ROW',v_row::text,null,10);
+    raise exception 'BANKING_PAY_V2_VERIFY: missing-session Ready group detail was accepted';
   exception when sqlstate 'P0001' then
     if sqlerrm is distinct from 'WORKBENCH_SESSION_NOT_FOUND' then raise; end if;
   end;

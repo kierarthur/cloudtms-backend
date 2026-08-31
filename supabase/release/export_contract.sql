@@ -236,7 +236,7 @@ policy_contract as (
       'roles', coalesce((
         select jsonb_agg(
           case when role_name::text=current_user then 'postgres' else role_name::text end
-          order by ordinality
+          order by (case when role_name::text=current_user then 'postgres' else role_name::text end) collate "C"
         )
         from pg_catalog.unnest(roles) with ordinality as policy_role(role_name,ordinality)
       ), '[]'::jsonb),

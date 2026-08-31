@@ -25541,11 +25541,37 @@
         "statement_timeout=3s"
       ],
       "schema": "public",
+      "identity": "pay_workbench_session_get_candidate_ready_group_page_v1(p_session_id uuid, p_candidate_id uuid, p_options_json jsonb, p_actor_user_id uuid, p_group_kind text, p_group_key text, p_cursor text, p_limit integer)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "92fe987c4f35ba2ab519b9bd1bf38ef5e20c1f42ae16a8273ba3bc9f601f93d9"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "lock_timeout=1s",
+        "search_path=\"\"",
+        "statement_timeout=3s"
+      ],
+      "schema": "public",
       "identity": "pay_workbench_session_get_candidate_ready_page_v1(p_session_id uuid, p_candidate_id uuid, p_options_json jsonb, p_actor_user_id uuid, p_cursor text, p_limit integer)",
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "f56808dc62266ac46367586009aae6f49686a75cba9f0ecd1de6bd5523ccab1d"
+      "definition_sha256": "45090633a33ebb80ea67fa5e99330fa7382c264732fd106e52c7ff2e9af325ad"
     },
     {
       "acl": [

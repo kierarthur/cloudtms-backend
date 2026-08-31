@@ -25,6 +25,7 @@ export const BANKING_PAY_MODAL_ROUTES = Object.freeze([
   ['POST', '/api/banking/pay/workbench/v2/session/:id/candidate/:candidateId/ready-selection', 'pay_workbench_session_set_ready_rows_v1', 'rowSelection'],
   ['POST', '/api/banking/pay/workbench/v2/session/:id/candidate/:candidateId/group-selection', 'pay_workbench_session_set_ready_group_v1', 'groupSelection'],
   ['GET', '/api/banking/pay/workbench/v2/session/:id/candidate/:candidateId/ready', 'pay_workbench_session_get_candidate_ready_page_v1', 'ready'],
+  ['GET', '/api/banking/pay/workbench/v2/session/:id/candidate/:candidateId/ready-group', 'pay_workbench_session_get_candidate_ready_group_page_v1', 'readyGroup'],
   ['GET', '/api/banking/pay/workbench/v2/session/:id/action-required', 'pay_workbench_session_get_action_required_page_v1', 'actions'],
   ['GET', '/api/banking/pay/workbench/v2/session/:id/action-required/:taskKey', 'pay_workbench_session_get_action_required_detail_v1', 'actionDetail'],
   ['GET', '/api/banking/pay/workbench/v2/session/:id/blocked', 'pay_workbench_session_get_blocked_page_v1', 'blocked'],
@@ -73,7 +74,7 @@ export function parseBankingPayModalInput(route, input, actorId) {
   const pageKeys = ['cursor', 'limit'];
   const kindKeys = {
     summary: [...pageKeys, 'sort_key', 'sort_direction'],
-    ready: pageKeys,
+    ready: pageKeys, readyGroup: [...pageKeys, 'group_kind', 'group_key'],
     actions: [...pageKeys, 'search', 'sort_key', 'sort_direction', 'view'],
     blocked: [...pageKeys, 'search', 'sort_key', 'sort_direction'],
     actionDetail: pageKeys, blockedDetail: pageKeys,
@@ -108,6 +109,14 @@ export function parseBankingPayModalInput(route, input, actorId) {
     args.p_sort_direction = input.sort_direction ?? 'ASC';
     requireValue(['CANDIDATE', 'DEDUCTIONS', 'READY_TO_PAY'].includes(args.p_sort_key), 'BANKING_PAY_V2_INVALID_SORT');
     requireValue(['ASC', 'DESC'].includes(args.p_sort_direction), 'BANKING_PAY_V2_INVALID_SORT');
+  }
+  if (route.kind === 'readyGroup') {
+    requireValue(['TIMESHEET', 'OVERPAYMENT', 'ROW'].includes(input.group_kind)
+      && text(input.group_key) && input.group_key.length >= 1 && input.group_key.length <= 512
+      && !/[\u0000-\u001f\u007f]/u.test(input.group_key), 'BANKING_PAY_V2_INVALID_INPUT');
+    args.p_group_kind = input.group_kind;
+    args.p_group_key = input.group_key;
+    requireValue(args.p_limit <= 25, 'BANKING_PAY_V2_INVALID_LIMIT');
   }
   if (Object.hasOwn(LIST_SORTS, route.kind)) {
     // BP-102/BP-121 list navigation only. Never put this in p_options_json,
@@ -189,6 +198,11 @@ function validReadyGroup(row) {
     &&['NONE','SOME','ALL'].includes(row.selection_group_state)
     &&row.selection_group_state===(row.selection_group_selected_count===0?'NONE'
       :row.selection_group_selected_count===row.selection_group_member_count?'ALL':'SOME');
+}
+function validPresentationGroup(row) {
+  return ['TIMESHEET', 'OVERPAYMENT', 'ROW'].includes(row.presentation_group_kind)
+    && text(row.presentation_group_key) && row.presentation_group_key.length >= 1 && row.presentation_group_key.length <= 512
+    && !/[\u0000-\u001f\u007f]/u.test(row.presentation_group_key);
 }
 function validIds(ids) {
   return Array.isArray(ids) && ids.every(id => text(id) && UUID.test(id)) && new Set(ids).size === ids.length;
@@ -438,8 +452,11 @@ export function validateBankingPayModalEnvelope(payload, kind, args) {
     if (kind === 'ready') {
       if (payload.candidate_id !== args.p_candidate_id || !Object.hasOwn(payload, 'candidate')
           || payload.rows.some(row => row.candidate_id !== args.p_candidate_id
-            || row.effective_section !== 'canonical_preview_lines' || typeof row.selected !== 'boolean' || !validReadyGroup(row))) fail();
-      if (!count(payload.total_count) || !count(payload.page_number) || typeof payload.has_previous !== 'boolean'
+            || row.effective_section !== 'canonical_preview_lines' || typeof row.selected !== 'boolean'
+            || !validReadyGroup(row) || !validPresentationGroup(row)
+            || !count(row.presentation_group_row_count) || row.presentation_group_row_count < 1)) fail();
+      if (!count(payload.total_count) || !count(payload.ready_row_count) || payload.ready_row_count < payload.total_count
+          || !count(payload.page_number) || typeof payload.has_previous !== 'boolean'
           || payload.has_previous !== (payload.page_number > 1)
           || (payload.page_number > 2 ? !(text(payload.previous_cursor) && TOKEN.test(payload.previous_cursor)) : payload.previous_cursor !== null)
           || (payload.total_count === 0
@@ -450,9 +467,22 @@ export function validateBankingPayModalEnvelope(payload, kind, args) {
               || payload.has_more !== (payload.page_number * args.p_limit < payload.total_count)
               || !(text(payload.page_anchor) && TOKEN.test(payload.page_anchor)))) fail();
       if (payload.candidate === null) {
-        if (payload.total_count !== 0 || payload.rows.length !== 0 || payload.has_more !== false || payload.next_cursor !== null) fail();
+        if (payload.total_count !== 0 || payload.ready_row_count !== 0 || payload.rows.length !== 0 || payload.has_more !== false || payload.next_cursor !== null) fail();
       } else if (!validCandidate(payload.candidate) || payload.candidate.candidate_id !== args.p_candidate_id
-          || payload.candidate.selectable_ready_count > payload.total_count) fail();
+          || payload.candidate.selectable_ready_count > payload.ready_row_count) fail();
+    }
+    if (kind === 'readyGroup') {
+      if (payload.candidate_id !== args.p_candidate_id || payload.group_kind !== args.p_group_kind
+        || payload.group_key !== args.p_group_key || !count(payload.total_count) || payload.total_count < 1
+        || !count(payload.page_offset) || payload.page_offset >= payload.total_count
+        || payload.rows.length < 1 || payload.rows.length > args.p_limit
+        || payload.rows.some(row => row.candidate_id !== args.p_candidate_id
+          || row.effective_section !== 'canonical_preview_lines' || typeof row.selected !== 'boolean'
+          || !validReadyGroup(row) || !validPresentationGroup(row)
+          || row.presentation_group_kind !== args.p_group_kind || row.presentation_group_key !== args.p_group_key)
+        || payload.rows.length !== Math.min(args.p_limit, payload.total_count - payload.page_offset)
+        || payload.has_more !== (payload.page_offset + payload.rows.length < payload.total_count)
+        || (payload.has_more ? !(text(payload.next_cursor) && TOKEN.test(payload.next_cursor)) : payload.next_cursor !== null)) fail();
     }
     if (kind === 'actions') validateTasks(payload, args, fail);
     if (kind === 'blocked') validateBlocked(payload, fail);

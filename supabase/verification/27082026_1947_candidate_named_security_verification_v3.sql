@@ -106,13 +106,14 @@ begin
   into v_count,v_service_missing,v_browser_executable,v_hash
   from targets;
 
-  -- Banking Pay Modal Structure v2, its replaced-session candidate-owner
+  -- Banking Pay Modal Structure v2, its bounded candidate Ready-group detail,
+  -- its replaced-session candidate-owner
   -- repair, the three service-only MyTMS Places and contacts functions, the
   -- weekly paper-target preparation functions, and the four QR signed-pack V2
   -- manifest/proof/component/whole-pack functions are present. Browser
   -- execution remains exactly zero.
-  if v_count<>121 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'fbee26a22fddd48851c09c60d1f84306' then
+  if v_count<>122 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'e82084b8b739995d086e72f1983acfb1' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;
