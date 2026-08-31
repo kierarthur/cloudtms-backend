@@ -3496,23 +3496,34 @@ async function candidateDocumentBranding(env, frozenSource = null) {
 
 async function candidateAppAgencyBranding(env) {
   try {
-    const branding = await candidateDocumentBranding(env);
-    if (!branding.logo) {
+    const settings = await restOne(
+      env,
+      'settings_defaults',
+      'id=eq.1&select=agency_name,candidate_app_logo_asset_key'
+    );
+    const agencyName = text(settings?.agency_name) || null;
+    const logoKey = text(settings?.candidate_app_logo_asset_key) || null;
+    if (!logoKey) {
       return {
-        agency_name: branding.agency_name,
+        agency_name: agencyName,
         logo_data_url: null,
         logo_media_type: null,
         logo_sha256: null
       };
     }
-    if (branding.logo.bytes.byteLength > 512 * 1024) {
+    const keyMatch = /^candidate-app\/branding\/([0-9a-f]{64})\.png$/.exec(logoKey);
+    if (!keyMatch) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    const logo = await r2Bytes(env, logoKey, keyMatch[1]);
+    if (logo.media_type !== 'image/png' || logo.bytes.byteLength > 512 * 1024) {
       throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
     }
     return {
-      agency_name: branding.agency_name,
-      logo_data_url: dataUrl(branding.logo.bytes, branding.logo_media_type),
-      logo_media_type: branding.logo_media_type,
-      logo_sha256: branding.logo_sha256
+      agency_name: agencyName,
+      logo_data_url: dataUrl(logo.bytes, logo.media_type),
+      logo_media_type: logo.media_type,
+      logo_sha256: keyMatch[1]
     };
   } catch (error) {
     console.error('[candidate-app] agency branding unavailable',
@@ -7885,6 +7896,7 @@ export const candidateAppBackendInternals = Object.freeze({
   candidatePaperPackComponentIndex,
   renderAndRegister,
   candidateDocumentBranding,
+  candidateAppAgencyBranding,
   mileageClaimFormBytes,
   queueCandidatePaperPackEmail,
   renderExpensePage,

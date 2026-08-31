@@ -823,6 +823,10 @@
       "sha256": "871cce3c7ac480005e98cf79094211283a08bdc64788fdc53923c17edc5e4383"
     },
     {
+      "path": "supabase/migrations/01092026_0024_candidate_app_logo_asset_key.sql",
+      "sha256": "e08baf30408d2bf18689787fcf62a93845c9bcffaf69bc4f1e9fba149d0a41c9"
+    },
+    {
       "path": "supabase/migrations/remittance_config_table.sql",
       "sha256": "6d6f671794f7408ccec8f65af6f61e77b07ca913f5c863abb32080aeb9ad6d75"
     },

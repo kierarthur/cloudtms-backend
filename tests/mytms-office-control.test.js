@@ -106,6 +106,7 @@ test('agency logo upload, read and delete use private content-addressed storage 
   const digest = Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
   const key = `candidate-app/branding/${digest}.png`;
   let pointer = null;
+  const documentBrandingPointer = 'Assets/LEGACY-DOCUMENT-LOGO.png';
   let settingsVersion = 3;
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
@@ -117,11 +118,17 @@ test('agency logo upload, read and delete use private content-addressed storage 
     calls.push({ url: requestUrl, method });
     if (requestUrl.includes('/rest/v1/settings_defaults')) {
       if (method === 'PATCH') {
-        pointer = requestBody.agency_logo;
-        return Response.json([{ agency_logo: pointer }]);
+        assert.equal(Object.hasOwn(requestBody, 'agency_logo'), false);
+        pointer = requestBody.candidate_app_logo_asset_key;
+        return Response.json([{
+          agency_logo: documentBrandingPointer,
+          candidate_app_logo_asset_key: pointer
+        }]);
       }
       return Response.json([{
-        agency_name: 'Arthur Rai Medical Services', agency_logo: pointer
+        agency_name: 'Arthur Rai Medical Services',
+        agency_logo: documentBrandingPointer,
+        candidate_app_logo_asset_key: pointer
       }]);
     }
     if (requestUrl.includes('/rpc/agency_app_settings_get_v1')) {
@@ -168,6 +175,8 @@ test('agency logo upload, read and delete use private content-addressed storage 
     assert.equal(pointer, null);
     assert.equal(bucket.objects.has(key), true, 'historical immutable logo object is retained');
     assert.equal(calls.some(call => call.method === 'DELETE'), false);
+    assert.equal(documentBrandingPointer, 'Assets/LEGACY-DOCUMENT-LOGO.png');
+    assert.equal(calls.every(call => !call.url.includes('agency_logo=eq.')), true);
   } finally {
     globalThis.fetch = originalFetch;
   }

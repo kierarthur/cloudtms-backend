@@ -679,7 +679,7 @@ function agencyLogoBucket(env) {
 async function readAgencyLogoPointer(env) {
   const base = text(env.SUPABASE_URL).replace(/\/$/, '');
   const response = await fetch(
-    `${base}/rest/v1/settings_defaults?id=eq.1&select=agency_name,agency_logo&limit=1`,
+    `${base}/rest/v1/settings_defaults?id=eq.1&select=agency_name,candidate_app_logo_asset_key&limit=1`,
     { headers: supabaseHeaders(env) }
   );
   if (!response.ok) {
@@ -691,20 +691,21 @@ async function readAgencyLogoPointer(env) {
   }
   return {
     agency_name: text(rows[0].agency_name),
-    logo_asset_key: text(rows[0].agency_logo) || null
+    logo_asset_key: text(rows[0].candidate_app_logo_asset_key) || null
   };
 }
 
 async function updateAgencyLogoPointer(env, expectedKey, nextKey) {
   const base = text(env.SUPABASE_URL).replace(/\/$/, '');
   const expectedFilter = expectedKey
-    ? `agency_logo=eq.${encodeURIComponent(expectedKey)}` : 'agency_logo=is.null';
+    ? `candidate_app_logo_asset_key=eq.${encodeURIComponent(expectedKey)}`
+    : 'candidate_app_logo_asset_key=is.null';
   const response = await fetch(
     `${base}/rest/v1/settings_defaults?id=eq.1&${expectedFilter}`,
     {
       method: 'PATCH',
       headers: supabaseHeaders(env, 'return=representation'),
-      body: JSON.stringify({ agency_logo: nextKey || null })
+      body: JSON.stringify({ candidate_app_logo_asset_key: nextKey || null })
     }
   );
   if (!response.ok) {

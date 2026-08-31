@@ -38,6 +38,7 @@ const {
   candidatePaperPackComponentIndex,
   renderAndRegister,
   candidateDocumentBranding,
+  candidateAppAgencyBranding,
   createAccessToken,
   mileageClaimFormBytes,
   queueCandidatePaperPackEmail,
@@ -3106,6 +3107,46 @@ test('live branding is copied once to a content-addressed immutable logo key', a
     assert.equal(first.logo_sha256, logoDigest);
     assert.equal(replay.branding_contract_sha256, first.branding_contract_sha256);
     assert.equal(putCount, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('Candidate app branding uses its dedicated logo pointer and leaves document branding independent', async () => {
+  const originalFetch = globalThis.fetch;
+  const logoBytes = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, 4]);
+  const logoDigest = createHash('sha256').update(logoBytes).digest('hex');
+  const logoKey = `candidate-app/branding/${logoDigest}.png`;
+  let settingsQuery = '';
+  const env = {
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder',
+    R2: {
+      async get(key) {
+        assert.equal(key, logoKey);
+        return {
+          httpMetadata: { contentType: 'image/png' },
+          async arrayBuffer() { return logoBytes.buffer.slice(0); }
+        };
+      }
+    }
+  };
+  globalThis.fetch = async url => {
+    settingsQuery = String(url);
+    return Response.json([{
+      agency_name: 'Configured Agency',
+      agency_logo: 'Assets/LEGACY-DOCUMENT-LOGO.png',
+      candidate_app_logo_asset_key: logoKey
+    }]);
+  };
+  try {
+    const branding = await candidateAppAgencyBranding(env);
+    assert.equal(branding.agency_name, 'Configured Agency');
+    assert.equal(branding.logo_media_type, 'image/png');
+    assert.equal(branding.logo_sha256, logoDigest);
+    assert.equal(branding.logo_data_url.startsWith('data:image/png;base64,'), true);
+    assert.match(settingsQuery, /select=agency_name,candidate_app_logo_asset_key/);
+    assert.equal(settingsQuery.includes('agency_logo'), false);
   } finally {
     globalThis.fetch = originalFetch;
   }

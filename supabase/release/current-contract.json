@@ -86072,6 +86072,14 @@
           "generated": ""
         },
         {
+          "name": "candidate_app_logo_asset_key",
+          "type": "text",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "candidate_app_system_actor_user_id",
           "type": "uuid",
           "default": null,
@@ -87304,6 +87312,14 @@
           "validated": true,
           "deferrable": false,
           "definition": "CHECK (jsonb_typeof(candidate_app_feature_flags_json) = 'object'::text)"
+        },
+        {
+          "name": "settings_defaults_candidate_app_logo_asset_key_ck",
+          "type": "c",
+          "deferred": false,
+          "validated": true,
+          "deferrable": false,
+          "definition": "CHECK (candidate_app_logo_asset_key IS NULL OR candidate_app_logo_asset_key ~ '^candidate-app/branding/[0-9a-f]{64}\\.png$'::text)"
         },
         {
           "name": "settings_defaults_candidate_app_system_actor_fk",
