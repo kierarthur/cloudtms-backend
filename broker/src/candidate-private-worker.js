@@ -245,7 +245,15 @@ async function projectFederatedRequest(request, env, routeContext, dependencies 
   if (!projection?.ok || !projection.session_id) {
     throw new Error('CANDIDATE_FEDERATED_SESSION_PROJECTION_FAILED');
   }
-  const accessToken = await candidateAppBackendInternals.createAccessToken(env, projection);
+  // The projected agency session may intentionally keep one stable database
+  // identity across many central-session requests. Mint this request's local
+  // bearer from the freshly verified route time, never from that stable row's
+  // original issued_at_utc; otherwise a renewed session can receive an access
+  // token that was already expired before this request reached the data plane.
+  const accessToken = await candidateAppBackendInternals.createAccessToken(env, {
+    ...projection,
+    issued_at_utc: now.toISOString()
+  });
   const headers = new Headers(request.headers);
   headers.set('authorization', `Bearer ${accessToken}`);
   return new Request(request, { headers });

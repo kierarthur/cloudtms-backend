@@ -54,6 +54,55 @@ test('private membership projection attempts Rota activation after membership li
   assert.ok(linked >= 0 && linked < activated && activated < projected);
 });
 
+test('a renewed federated projection always mints a genuinely fresh local access token', async () => {
+  const historicalIssuedAt = '2026-08-21T16:00:00.000Z';
+  const startedAtSeconds = Math.floor(Date.now() / 1000);
+  const routedRequest = await candidatePrivateWorkerInternals.projectFederatedRequest(
+    request(), {
+      CANDIDATE_APP_ENVIRONMENT: 'TEST',
+      CANDIDATE_FEDERATED_IDENTITY_SECRET: 'test-federated-identity-secret',
+      CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-private-session-secret'
+    }, {
+      context: {
+        ...context,
+        global_account_id: '00000000-0000-4000-8000-000000000103',
+        global_session_id: '00000000-0000-4000-8000-000000000104',
+        route_version: 7,
+        session_epoch: 12,
+        expires_at_utc: new Date(Date.now() + 5 * 60_000).toISOString()
+      }
+    }, {
+      async rpc(name) {
+        if (name === 'candidate_app_federated_membership_link_set_v1') {
+          return { ok: true, status: 'LINKED' };
+        }
+        if (name === 'candidate_daily_system_policy_activate_ready_v1') {
+          return { ok: true, outcomes: [{
+            candidate_id: context.agency_candidate_id,
+            status: 'NOT_READY'
+          }] };
+        }
+        if (name === 'candidate_app_federated_session_project_v1') {
+          return {
+            ok: true,
+            session_id: '00000000-0000-4000-8000-000000000105',
+            rotation: 0,
+            issued_at_utc: historicalIssuedAt
+          };
+        }
+        throw new Error(`unexpected RPC ${name}`);
+      }
+    }
+  );
+  const token = routedRequest.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
+  assert.ok(token);
+  const payload = JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString('utf8'));
+  assert.ok(payload.iat >= startedAtSeconds);
+  assert.ok(payload.iat <= Math.floor(Date.now() / 1000));
+  assert.equal(payload.exp - payload.iat, 15 * 60);
+  assert.notEqual(new Date(payload.iat * 1000).toISOString(), historicalIssuedAt);
+});
+
 test('active membership attempts immediate Rota activation with service-only proof', async () => {
   const calls = [];
   const status = await candidatePrivateWorkerInternals.attemptFederatedDailyActivation(
