@@ -84,6 +84,7 @@ test('duplicate review is category-specific and excludes the official expense su
   assert.match(duplicateReviewVerifier, /information_schema\.columns[\s\S]*column_name='password_hash'/i);
   assert.match(duplicateReviewVerifier, /column_name='requires_hr'[\s\S]*alter table public\.contracts add column requires_hr boolean not null default false/i);
   assert.match(duplicateReviewVerifier, /to_regprocedure\('public\._temp_diag_log\(text,text,text,jsonb\)'\)[\s\S]*create function public\._temp_diag_log[\s\S]*returns void[\s\S]*language plpgsql/i);
+  assert.match(duplicateReviewVerifier, /to_regprocedure\('public\.timesheet_lifecycle_signature_v1\(uuid,uuid,boolean\)'\)[\s\S]*create function public\.timesheet_lifecycle_signature_v1[\s\S]*returns jsonb[\s\S]*verification:/i);
   assert.doesNotMatch(duplicateReviewVerifier, /create function public\._ctms_import_correction_classify_v1/i);
   assert.match(duplicateReviewVerifier, /insert into public\.tms_users\(id,email,is_active\)/i);
   assert.match(repeatable, /_expense_duplicate_review_v1[\s\S]*'MILEAGE','TRAVEL','ACCOMMODATION','OTHER'/i);

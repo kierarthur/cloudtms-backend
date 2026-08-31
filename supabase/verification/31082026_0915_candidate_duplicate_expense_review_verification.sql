@@ -46,6 +46,35 @@ begin
 end;
 $diagnostic_fixture$;
 
+-- The reduced Candidate runtime catalogue also omits the established
+-- lifecycle-signature reader used by the Office bulk-authorisation owner.
+-- Supply a deterministic rollback-only signature so this verifier exercises
+-- the real authorisation routines without replacing their production owner.
+do $lifecycle_signature_fixture$
+begin
+  if to_regprocedure('public.timesheet_lifecycle_signature_v1(uuid,uuid,boolean)') is null then
+    execute $sql$
+      create function public.timesheet_lifecycle_signature_v1(
+        p_timesheet_id uuid,
+        p_contract_week_id uuid default null,
+        p_include_finance boolean default false
+      ) returns jsonb
+      language sql
+      stable
+      as $body$
+        select jsonb_build_object(
+          'ok', true,
+          'backend_row_signature',
+          'verification:' || coalesce(p_timesheet_id::text, '') || ':' ||
+            coalesce(p_contract_week_id::text, '') || ':' ||
+            coalesce(p_include_finance::text, 'false')
+        )
+      $body$
+    $sql$;
+  end if;
+end;
+$lifecycle_signature_fixture$;
+
 do $verification$
 declare
   v_actor uuid:=gen_random_uuid();
