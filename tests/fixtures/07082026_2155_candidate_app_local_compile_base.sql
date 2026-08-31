@@ -446,9 +446,42 @@ create table public.timesheet_evidence (
   processing_state text not null default 'DISCOVERED'
 );
 
+create sequence public.invoice_operation_change_seq as bigint start with 1;
+
 create table public.invoice_operations (
   id uuid primary key default gen_random_uuid(),
-  status text not null default 'QUEUED'
+  parent_operation_id uuid,
+  operation_type text not null default 'BUILD_DOCUMENT',
+  entity_type text,
+  entity_id uuid,
+  actor_user_id uuid,
+  idempotency_key text not null default gen_random_uuid()::text,
+  status text not null default 'QUEUED',
+  phase text not null default 'SUBMITTED',
+  priority integer not null default 200,
+  source_revision text,
+  template_version text,
+  input_json jsonb not null default '{}'::jsonb,
+  config_json jsonb not null default '{}'::jsonb,
+  progress_json jsonb not null default '{}'::jsonb,
+  result_json jsonb,
+  error_json jsonb,
+  total_units integer not null default 0,
+  completed_units integer not null default 0,
+  failed_units integer not null default 0,
+  chunk_count integer not null default 0,
+  control_version bigint not null default 1,
+  change_seq bigint not null default nextval('public.invoice_operation_change_seq'),
+  requires_user_action boolean not null default false,
+  created_at_utc timestamptz not null default now(),
+  started_at_utc timestamptz,
+  updated_at_utc timestamptz not null default now(),
+  completed_at_utc timestamptz,
+  failed_at_utc timestamptz,
+  manifest_generation integer not null default 0,
+  manifest_committed boolean not null default true,
+  release_complete boolean not null default true,
+  result_page_revision bigint not null default 0
 );
 
 create table public.invoice_document_assets (
@@ -462,16 +495,26 @@ create table public.invoice_document_versions (
   entity_type text not null,
   entity_id uuid not null,
   purpose text not null,
-  source_revision text,
-  template_version text,
+  source_revision text not null,
+  template_version text not null,
   status text not null,
+  snapshot_json jsonb not null default '{}'::jsonb,
+  snapshot_hash text not null default '',
+  manifest_json jsonb not null default '[]'::jsonb,
+  manifest_hash text not null default '',
   r2_key text,
   sha256 text,
   size_bytes bigint,
+  expected_page_count integer,
   page_count integer,
+  core_page_count integer,
+  supporting_page_count integer,
   superseded_at_utc timestamptz,
   operation_id uuid references public.invoice_operations(id),
-  created_at_utc timestamptz not null default now()
+  created_at_utc timestamptz not null default now(),
+  ready_at_utc timestamptz,
+  verified_at_utc timestamptz,
+  error_json jsonb
 );
 
 create table public.invoice_hr_source_rows (
