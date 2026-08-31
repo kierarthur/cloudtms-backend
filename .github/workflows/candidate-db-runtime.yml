@@ -28,6 +28,8 @@ on:
       - 'supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql'
       - 'supabase/repeatable/18082026_1051_candidate_daily_authority_transition_source_identity_v1.sql'
       - 'supabase/repeatable/21082026_1758_candidate_app_federated_session_project_v1.sql'
+      - 'supabase/repeatable/31082026_1732_candidate_federated_session_expiry_renewal_v1.sql'
+      - 'supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql'
       - 'supabase/repeatable/21082026_2231_candidate_google_provisioning_match_v1.sql'
       - 'supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql'
       - 'supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql'
@@ -149,6 +151,7 @@ jobs:
             supabase/repeatable/18082026_0131_candidate_daily_first_generation_source_link_v1.sql
             supabase/repeatable/18082026_1051_candidate_daily_authority_transition_source_identity_v1.sql
             supabase/repeatable/21082026_1758_candidate_app_federated_session_project_v1.sql
+            supabase/repeatable/31082026_1732_candidate_federated_session_expiry_renewal_v1.sql
             supabase/repeatable/21082026_2231_candidate_google_provisioning_match_v1.sql
             supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql
             supabase/repeatable/07082026_2108_candidate_app_read_and_missing_week_rpcs_v1.sql
@@ -229,6 +232,7 @@ jobs:
             tests/18082026_0807_candidate_daily_r16_identity_integrity_runtime_verification.sql
             tests/18082026_1105_candidate_daily_r17_authority_transition_source_identity_runtime_verification.sql
             tests/21082026_2345_candidate_federated_membership_runtime_verification.sql
+            supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql
             supabase/verification/23082026_0250_candidate_manager_email_security_verification.sql
             supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql
             supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql
