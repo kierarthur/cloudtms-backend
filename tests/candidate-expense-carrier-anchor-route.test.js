@@ -64,6 +64,10 @@ test('release and Candidate runtime install the successor before executing its f
     compileFixture,
     /create table public\.contracts[\s\S]*pay_method_snapshot text not null default 'PAYE'/i
   );
+  assert.match(
+    compileFixture,
+    /create view public\.v_timesheets_summary_base[\s\S]*client_requires_hr[\s\S]*hr_validation_required_for_invoice[\s\S]*validation_status/i
+  );
   assert.ok(release.verificationFiles.includes(verifierPath));
   assert.ok(release.newVerificationFiles.includes(verifierPath));
   assert.ok(release.verificationFiles.includes(duplicateReviewVerifierPath));

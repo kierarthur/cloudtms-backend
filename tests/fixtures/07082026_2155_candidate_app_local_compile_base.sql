@@ -404,6 +404,9 @@ from public.timesheets t;
 
 create view public.v_timesheets_summary_base as
 select t.timesheet_id,
+  false::boolean client_requires_hr,
+  false::boolean hr_validation_required_for_invoice,
+  null::validation_status_enum validation_status,
   false::boolean client_no_timesheet_required,
   false::boolean client_is_nhsp,
   ''::text route_type
