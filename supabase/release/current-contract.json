@@ -29434,14 +29434,14 @@
       "table": "candidate_daily_authority_transitions",
       "schema": "private",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_daily_authority_transitions_immutable BEFORE DELETE OR UPDATE ON candidate_daily_authority_transitions FOR EACH ROW EXECUTE FUNCTION _candidate_daily_transition_immutable_v1()"
+      "definition": "CREATE TRIGGER candidate_daily_authority_transitions_immutable BEFORE DELETE OR UPDATE ON private.candidate_daily_authority_transitions FOR EACH ROW EXECUTE FUNCTION private._candidate_daily_transition_immutable_v1()"
     },
     {
       "name": "candidate_daily_source_link_identity_history_guard_v1",
       "table": "candidate_daily_source_links",
       "schema": "private",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_daily_source_link_identity_history_guard_v1 BEFORE INSERT OR UPDATE OF environment, source_system, hmac_key_version, identifier_hmac, candidate_id ON candidate_daily_source_links FOR EACH ROW EXECUTE FUNCTION _candidate_daily_source_link_identity_history_guard_v1()"
+      "definition": "CREATE TRIGGER candidate_daily_source_link_identity_history_guard_v1 BEFORE INSERT OR UPDATE OF environment, source_system, hmac_key_version, identifier_hmac, candidate_id ON private.candidate_daily_source_links FOR EACH ROW EXECUTE FUNCTION private._candidate_daily_source_link_identity_history_guard_v1()"
     },
     {
       "name": "trg_pay_workbench_scope_counter_stage_v1",
@@ -29609,14 +29609,14 @@
       "table": "candidate_approval_requests",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_manager_request_mail_guard_v1 BEFORE UPDATE OF state ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION _candidate_manager_request_mail_guard_v1()"
+      "definition": "CREATE TRIGGER candidate_manager_request_mail_guard_v1 BEFORE UPDATE OF state ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION private._candidate_manager_request_mail_guard_v1()"
     },
     {
       "name": "candidate_timesheet_summary_approval_revision_trg",
       "table": "candidate_approval_requests",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_timesheet_summary_approval_revision_trg AFTER INSERT OR DELETE OR UPDATE ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION _candidate_timesheet_summary_approval_revision_trg_v1()"
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_approval_revision_trg AFTER INSERT OR DELETE OR UPDATE ON candidate_approval_requests FOR EACH ROW EXECUTE FUNCTION private._candidate_timesheet_summary_approval_revision_trg_v1()"
     },
     {
       "name": "trg_candidate_job_titles_set_updated_at",
@@ -29637,28 +29637,28 @@
       "table": "candidate_submission_components",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_submission_components_immutability_guard BEFORE DELETE OR UPDATE ON candidate_submission_components FOR EACH ROW EXECUTE FUNCTION _candidate_component_immutability_guard_v1()"
+      "definition": "CREATE TRIGGER candidate_submission_components_immutability_guard BEFORE DELETE OR UPDATE ON candidate_submission_components FOR EACH ROW EXECUTE FUNCTION private._candidate_component_immutability_guard_v1()"
     },
     {
       "name": "candidate_timesheet_summary_workflow_revision_trg",
       "table": "candidate_submission_workflows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_timesheet_summary_workflow_revision_trg AFTER INSERT OR DELETE OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION _candidate_timesheet_summary_workflow_revision_trg_v1()"
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_workflow_revision_trg AFTER INSERT OR DELETE OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_timesheet_summary_workflow_revision_trg_v1()"
     },
     {
       "name": "candidate_workflow_creation_identity_guard_v1",
       "table": "candidate_submission_workflows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_workflow_creation_identity_guard_v1 BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION _candidate_workflow_creation_identity_guard_v1()"
+      "definition": "CREATE TRIGGER candidate_workflow_creation_identity_guard_v1 BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_workflow_creation_identity_guard_v1()"
     },
     {
       "name": "trg_timesheet_submission_workflow_overlap_biu",
       "table": "candidate_submission_workflows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_timesheet_submission_workflow_overlap_biu BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION _timesheet_submission_workflow_overlap_trg_v1()"
+      "definition": "CREATE TRIGGER trg_timesheet_submission_workflow_overlap_biu BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._timesheet_submission_workflow_overlap_trg_v1()"
     },
     {
       "name": "set_tms_ref",
@@ -29707,21 +29707,21 @@
       "table": "candidates",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_d AFTER DELETE ON candidates REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_d AFTER DELETE ON candidates REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_candidates_i",
       "table": "candidates",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_i AFTER INSERT ON candidates REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_i AFTER INSERT ON candidates REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_candidates_u",
       "table": "candidates",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_u AFTER UPDATE ON candidates REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_candidates_u AFTER UPDATE ON candidates REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'first_name', 'last_name', 'display_name', 'active', 'key_norm')"
     },
     {
       "name": "trg_pay_workbench_mark_candidate_dirty__candidates",
@@ -29756,21 +29756,21 @@
       "table": "client_settings",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_d AFTER DELETE ON client_settings REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_d AFTER DELETE ON client_settings REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_client_settings_i",
       "table": "client_settings",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_i AFTER INSERT ON client_settings REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_i AFTER INSERT ON client_settings REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_client_settings_u",
       "table": "client_settings",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_u AFTER UPDATE ON client_settings REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_client_settings_u AFTER UPDATE ON client_settings REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'vat_rate_pct', 'effective_from', 'hr_validation_required', 'ts_reference_required', 'week_ending_weekday', 'autoprocess_hr', 'invoice_reference_required', 'default_submission_mode', 'is_nhsp', 'self_bill_no_invoices_sent', 'daily_calc_of_invoices', 'no_timesheet_required', 'group_nightsat_sunbh', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'auto_invoice_default', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'invoice_consolidation_mode', 'reference_number_required_to_issue_invoice', 'reversal_complete_financials_date', 'reversal_replacement_financials_date')"
     },
     {
       "name": "trg_pay_workbench_mark_contract_client_dirty__client_settings",
@@ -29826,21 +29826,21 @@
       "table": "clients",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_d AFTER DELETE ON clients REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_d AFTER DELETE ON clients REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_clients_i",
       "table": "clients",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_i AFTER INSERT ON clients REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_i AFTER INSERT ON clients REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_clients_u",
       "table": "clients",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_u AFTER UPDATE ON clients REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_clients_u AFTER UPDATE ON clients REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'name', 'invoice_address', 'primary_invoice_email', 'vat_chargeable', 'payment_terms_days', 'ts_queries_email', 'client_address', 'contact_email')"
     },
     {
       "name": "trg_cc_clients_tombstones",
@@ -29868,21 +29868,21 @@
       "table": "contract_weeks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_d AFTER DELETE ON contract_weeks REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_d AFTER DELETE ON contract_weeks REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_contract_weeks_i",
       "table": "contract_weeks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_i AFTER INSERT ON contract_weeks REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_i AFTER INSERT ON contract_weeks REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_contract_weeks_u",
       "table": "contract_weeks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_u AFTER UPDATE ON contract_weeks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contract_weeks_u AFTER UPDATE ON contract_weeks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'contract_id', 'week_ending_date', 'additional_seq', 'status', 'submission_mode_snapshot', 'timesheet_id', 'day_entries_json', 'totals_json', 'planned_schedule_json', 'is_adjustment', 'enforce_day_partition', 'allowed_days_mask', 'split_boundary_date', 'split_group_key')"
     },
     {
       "name": "trg_cc_contracts",
@@ -29910,21 +29910,21 @@
       "table": "contracts",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_d AFTER DELETE ON contracts REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_d AFTER DELETE ON contracts REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_contracts_i",
       "table": "contracts",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_i AFTER INSERT ON contracts REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_i AFTER INSERT ON contracts REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_contracts_u",
       "table": "contracts",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_u AFTER UPDATE ON contracts REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_contracts_u AFTER UPDATE ON contracts REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'candidate_id', 'client_id', 'start_date', 'end_date', 'pay_method_snapshot', 'rates_json', 'std_hours_json', 'default_submission_mode', 'week_ending_weekday_snapshot', 'auto_invoice', 'require_reference_to_invoice', 'mileage_charge_rate', 'additional_rates_json', 'self_bill', 'weekly_timesheet_source', 'no_timesheet_required', 'daily_calc_of_invoices', 'group_nightsat_sunbh', 'is_nhsp', 'autoprocess_hr', 'requires_hr', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'overrideclientsettings', 'reference_number_required_to_issue_invoice', 'send_manual_invoices_to_different_email', 'manual_invoices_alt_email_address', 'is_ad_hoc', 'healthroster_import_auto_authorise_override', 'nhsp_import_auto_authorise_override')"
     },
     {
       "name": "trg_pay_workbench_mark_contract_client_dirty__contracts",
@@ -30001,21 +30001,21 @@
       "table": "invoice_document_assets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_assets_d AFTER DELETE ON invoice_document_assets REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'source_kind', 'source_id', 'source_revision', 'declared_media_type', 'detected_media_type', 'original_sha256', 'original_size_bytes', 'status', 'normalised_manifest_hash', 'normalised_r2_key', 'normalised_sha256', 'normalised_size_bytes', 'normalised_page_count', 'operation_id', 'error_json', 'ready_at_utc')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_assets_d AFTER DELETE ON invoice_document_assets REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'source_kind', 'source_id', 'source_revision', 'declared_media_type', 'detected_media_type', 'original_sha256', 'original_size_bytes', 'status', 'normalised_manifest_hash', 'normalised_r2_key', 'normalised_sha256', 'normalised_size_bytes', 'normalised_page_count', 'operation_id', 'error_json', 'ready_at_utc')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_document_assets_i",
       "table": "invoice_document_assets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_assets_i AFTER INSERT ON invoice_document_assets REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'source_kind', 'source_id', 'source_revision', 'declared_media_type', 'detected_media_type', 'original_sha256', 'original_size_bytes', 'status', 'normalised_manifest_hash', 'normalised_r2_key', 'normalised_sha256', 'normalised_size_bytes', 'normalised_page_count', 'operation_id', 'error_json', 'ready_at_utc')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_assets_i AFTER INSERT ON invoice_document_assets REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'source_kind', 'source_id', 'source_revision', 'declared_media_type', 'detected_media_type', 'original_sha256', 'original_size_bytes', 'status', 'normalised_manifest_hash', 'normalised_r2_key', 'normalised_sha256', 'normalised_size_bytes', 'normalised_page_count', 'operation_id', 'error_json', 'ready_at_utc')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_document_assets_u",
       "table": "invoice_document_assets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_assets_u AFTER UPDATE ON invoice_document_assets REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'source_kind', 'source_id', 'source_revision', 'declared_media_type', 'detected_media_type', 'original_sha256', 'original_size_bytes', 'status', 'normalised_manifest_hash', 'normalised_r2_key', 'normalised_sha256', 'normalised_size_bytes', 'normalised_page_count', 'operation_id', 'error_json', 'ready_at_utc')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_assets_u AFTER UPDATE ON invoice_document_assets REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'source_kind', 'source_id', 'source_revision', 'declared_media_type', 'detected_media_type', 'original_sha256', 'original_size_bytes', 'status', 'normalised_manifest_hash', 'normalised_r2_key', 'normalised_sha256', 'normalised_size_bytes', 'normalised_page_count', 'operation_id', 'error_json', 'ready_at_utc')"
     },
     {
       "name": "trg_invoice_document_assets_immutability",
@@ -30029,21 +30029,21 @@
       "table": "invoice_document_versions",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_version_d AFTER DELETE ON invoice_document_versions REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'entity_type', 'entity_id', 'purpose', 'operation_id', 'source_revision', 'template_version', 'status', 'r2_key', 'sha256', 'size_bytes', 'page_count', 'ready_at_utc', 'verified_at_utc', 'superseded_at_utc', 'error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_version_d AFTER DELETE ON invoice_document_versions REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'entity_type', 'entity_id', 'purpose', 'operation_id', 'source_revision', 'template_version', 'status', 'r2_key', 'sha256', 'size_bytes', 'page_count', 'ready_at_utc', 'verified_at_utc', 'superseded_at_utc', 'error_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_document_version_i",
       "table": "invoice_document_versions",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_version_i AFTER INSERT ON invoice_document_versions REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'entity_type', 'entity_id', 'purpose', 'operation_id', 'source_revision', 'template_version', 'status', 'r2_key', 'sha256', 'size_bytes', 'page_count', 'ready_at_utc', 'verified_at_utc', 'superseded_at_utc', 'error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_version_i AFTER INSERT ON invoice_document_versions REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'entity_type', 'entity_id', 'purpose', 'operation_id', 'source_revision', 'template_version', 'status', 'r2_key', 'sha256', 'size_bytes', 'page_count', 'ready_at_utc', 'verified_at_utc', 'superseded_at_utc', 'error_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_document_version_u",
       "table": "invoice_document_versions",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_version_u AFTER UPDATE ON invoice_document_versions REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'entity_type', 'entity_id', 'purpose', 'operation_id', 'source_revision', 'template_version', 'status', 'r2_key', 'sha256', 'size_bytes', 'page_count', 'ready_at_utc', 'verified_at_utc', 'superseded_at_utc', 'error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_document_version_u AFTER UPDATE ON invoice_document_versions REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'entity_type', 'entity_id', 'purpose', 'operation_id', 'source_revision', 'template_version', 'status', 'r2_key', 'sha256', 'size_bytes', 'page_count', 'ready_at_utc', 'verified_at_utc', 'superseded_at_utc', 'error_json')"
     },
     {
       "name": "trg_invoice_document_versions_immutability",
@@ -30057,21 +30057,21 @@
       "table": "invoice_hr_source_rows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_hr_source_rows_d AFTER DELETE ON invoice_hr_source_rows REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('false', 'true', 'invoice_id', 'source_system', 'import_id', 'header_rows', 'header_columns', 'rows_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_hr_source_rows_d AFTER DELETE ON invoice_hr_source_rows REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('false', 'true', 'invoice_id', 'source_system', 'import_id', 'header_rows', 'header_columns', 'rows_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_hr_source_rows_i",
       "table": "invoice_hr_source_rows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_hr_source_rows_i AFTER INSERT ON invoice_hr_source_rows REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('false', 'true', 'invoice_id', 'source_system', 'import_id', 'header_rows', 'header_columns', 'rows_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_hr_source_rows_i AFTER INSERT ON invoice_hr_source_rows REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('false', 'true', 'invoice_id', 'source_system', 'import_id', 'header_rows', 'header_columns', 'rows_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_hr_source_rows_u",
       "table": "invoice_hr_source_rows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_hr_source_rows_u AFTER UPDATE ON invoice_hr_source_rows REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('false', 'true', 'invoice_id', 'source_system', 'import_id', 'header_rows', 'header_columns', 'rows_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_hr_source_rows_u AFTER UPDATE ON invoice_hr_source_rows REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('false', 'true', 'invoice_id', 'source_system', 'import_id', 'header_rows', 'header_columns', 'rows_json')"
     },
     {
       "name": "trg_invoice_hr_source_document_invalidate_d",
@@ -30127,21 +30127,21 @@
       "table": "invoice_lines",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_d AFTER DELETE ON invoice_lines REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_d AFTER DELETE ON invoice_lines REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_lines_i",
       "table": "invoice_lines",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_i AFTER INSERT ON invoice_lines REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_i AFTER INSERT ON invoice_lines REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_lines_u",
       "table": "invoice_lines",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_u AFTER UPDATE ON invoice_lines REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_lines_u AFTER UPDATE ON invoice_lines REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'invoice_id', 'timesheet_id', 'booking_id', 'source_key', 'description', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_pay_ex_vat', 'total_charge_ex_vat', 'vat_rate_pct', 'vat_amount', 'total_inc_vat', 'margin_ex_vat', 'meta_json')"
     },
     {
       "name": "trg_invoice_line_archived_timesheet_guard_v1",
@@ -30176,63 +30176,63 @@
       "table": "invoice_operation_chunks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operation_chunks_d AFTER DELETE ON invoice_operation_chunks REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'operation_id', 'chunk_type', 'entity_type', 'entity_id', 'document_version_id', 'document_asset_id', 'input_document_version_id', 'status', 'phase', 'replaced_by_chunk_id', 'manifest_generation', 'is_manifest_member', 'manifest_committed', 'result_visible', 'selection_key', 'result_category')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operation_chunks_d AFTER DELETE ON invoice_operation_chunks REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'operation_id', 'chunk_type', 'entity_type', 'entity_id', 'document_version_id', 'document_asset_id', 'input_document_version_id', 'status', 'phase', 'replaced_by_chunk_id', 'manifest_generation', 'is_manifest_member', 'manifest_committed', 'result_visible', 'selection_key', 'result_category')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_operation_chunks_i",
       "table": "invoice_operation_chunks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operation_chunks_i AFTER INSERT ON invoice_operation_chunks REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'operation_id', 'chunk_type', 'entity_type', 'entity_id', 'document_version_id', 'document_asset_id', 'input_document_version_id', 'status', 'phase', 'replaced_by_chunk_id', 'manifest_generation', 'is_manifest_member', 'manifest_committed', 'result_visible', 'selection_key', 'result_category')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operation_chunks_i AFTER INSERT ON invoice_operation_chunks REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'operation_id', 'chunk_type', 'entity_type', 'entity_id', 'document_version_id', 'document_asset_id', 'input_document_version_id', 'status', 'phase', 'replaced_by_chunk_id', 'manifest_generation', 'is_manifest_member', 'manifest_committed', 'result_visible', 'selection_key', 'result_category')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_operation_chunks_u",
       "table": "invoice_operation_chunks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operation_chunks_u AFTER UPDATE ON invoice_operation_chunks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'operation_id', 'chunk_type', 'entity_type', 'entity_id', 'document_version_id', 'document_asset_id', 'input_document_version_id', 'status', 'phase', 'replaced_by_chunk_id', 'manifest_generation', 'is_manifest_member', 'manifest_committed', 'result_visible', 'selection_key', 'result_category')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operation_chunks_u AFTER UPDATE ON invoice_operation_chunks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'operation_id', 'chunk_type', 'entity_type', 'entity_id', 'document_version_id', 'document_asset_id', 'input_document_version_id', 'status', 'phase', 'replaced_by_chunk_id', 'manifest_generation', 'is_manifest_member', 'manifest_committed', 'result_visible', 'selection_key', 'result_category')"
     },
     {
       "name": "trg_invoice_result_page_revision_v2_d",
       "table": "invoice_operation_chunks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_result_page_revision_v2_d AFTER DELETE ON invoice_operation_chunks REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_result_page_revision_trigger_v2()"
+      "definition": "CREATE TRIGGER trg_invoice_result_page_revision_v2_d AFTER DELETE ON invoice_operation_chunks REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_result_page_revision_trigger_v2()"
     },
     {
       "name": "trg_invoice_result_page_revision_v2_i",
       "table": "invoice_operation_chunks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_result_page_revision_v2_i AFTER INSERT ON invoice_operation_chunks REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_result_page_revision_trigger_v2()"
+      "definition": "CREATE TRIGGER trg_invoice_result_page_revision_v2_i AFTER INSERT ON invoice_operation_chunks REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_result_page_revision_trigger_v2()"
     },
     {
       "name": "trg_invoice_result_page_revision_v2_u",
       "table": "invoice_operation_chunks",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_result_page_revision_v2_u AFTER UPDATE ON invoice_operation_chunks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_result_page_revision_trigger_v2()"
+      "definition": "CREATE TRIGGER trg_invoice_result_page_revision_v2_u AFTER UPDATE ON invoice_operation_chunks REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_result_page_revision_trigger_v2()"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_operations_d",
       "table": "invoice_operations",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operations_d AFTER DELETE ON invoice_operations REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'parent_operation_id', 'operation_type', 'entity_type', 'entity_id', 'status', 'phase', 'source_revision', 'template_version', 'control_version', 'manifest_generation', 'manifest_committed', 'release_complete')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operations_d AFTER DELETE ON invoice_operations REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'parent_operation_id', 'operation_type', 'entity_type', 'entity_id', 'status', 'phase', 'source_revision', 'template_version', 'control_version', 'manifest_generation', 'manifest_committed', 'release_complete')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_operations_i",
       "table": "invoice_operations",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operations_i AFTER INSERT ON invoice_operations REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'parent_operation_id', 'operation_type', 'entity_type', 'entity_id', 'status', 'phase', 'source_revision', 'template_version', 'control_version', 'manifest_generation', 'manifest_committed', 'release_complete')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operations_i AFTER INSERT ON invoice_operations REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'parent_operation_id', 'operation_type', 'entity_type', 'entity_id', 'status', 'phase', 'source_revision', 'template_version', 'control_version', 'manifest_generation', 'manifest_committed', 'release_complete')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoice_operations_u",
       "table": "invoice_operations",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operations_u AFTER UPDATE ON invoice_operations REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'parent_operation_id', 'operation_type', 'entity_type', 'entity_id', 'status', 'phase', 'source_revision', 'template_version', 'control_version', 'manifest_generation', 'manifest_committed', 'release_complete')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoice_operations_u AFTER UPDATE ON invoice_operations REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'parent_operation_id', 'operation_type', 'entity_type', 'entity_id', 'status', 'phase', 'source_revision', 'template_version', 'control_version', 'manifest_generation', 'manifest_committed', 'release_complete')"
     },
     {
       "name": "trg_cc_invoices",
@@ -30260,21 +30260,21 @@
       "table": "invoices",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoices_d AFTER DELETE ON invoices REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'invoice_no', 'type', 'original_invoice_id', 'subtotal_ex_vat', 'vat_amount', 'total_inc_vat', 'due_at_utc', 'notes', 'do_not_send', 'header_snapshot_json', 'status', 'issued_at_utc', 'paid_at_utc', 'on_hold_reason', 'document_revision', 'document_state', 'preview_document_version_id', 'issued_document_version_id', 'active_document_operation_id', 'issue_state', 'active_issue_operation_id', 'last_document_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoices_d AFTER DELETE ON invoices REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'invoice_no', 'type', 'original_invoice_id', 'subtotal_ex_vat', 'vat_amount', 'total_inc_vat', 'due_at_utc', 'notes', 'do_not_send', 'header_snapshot_json', 'status', 'issued_at_utc', 'paid_at_utc', 'on_hold_reason', 'document_revision', 'document_state', 'preview_document_version_id', 'issued_document_version_id', 'active_document_operation_id', 'issue_state', 'active_issue_operation_id', 'last_document_error_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoices_i",
       "table": "invoices",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoices_i AFTER INSERT ON invoices REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'invoice_no', 'type', 'original_invoice_id', 'subtotal_ex_vat', 'vat_amount', 'total_inc_vat', 'due_at_utc', 'notes', 'do_not_send', 'header_snapshot_json', 'status', 'issued_at_utc', 'paid_at_utc', 'on_hold_reason', 'document_revision', 'document_state', 'preview_document_version_id', 'issued_document_version_id', 'active_document_operation_id', 'issue_state', 'active_issue_operation_id', 'last_document_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoices_i AFTER INSERT ON invoices REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'invoice_no', 'type', 'original_invoice_id', 'subtotal_ex_vat', 'vat_amount', 'total_inc_vat', 'due_at_utc', 'notes', 'do_not_send', 'header_snapshot_json', 'status', 'issued_at_utc', 'paid_at_utc', 'on_hold_reason', 'document_revision', 'document_state', 'preview_document_version_id', 'issued_document_version_id', 'active_document_operation_id', 'issue_state', 'active_issue_operation_id', 'last_document_error_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_invoices_u",
       "table": "invoices",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoices_u AFTER UPDATE ON invoices REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'invoice_no', 'type', 'original_invoice_id', 'subtotal_ex_vat', 'vat_amount', 'total_inc_vat', 'due_at_utc', 'notes', 'do_not_send', 'header_snapshot_json', 'status', 'issued_at_utc', 'paid_at_utc', 'on_hold_reason', 'document_revision', 'document_state', 'preview_document_version_id', 'issued_document_version_id', 'active_document_operation_id', 'issue_state', 'active_issue_operation_id', 'last_document_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_invoices_u AFTER UPDATE ON invoices REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'client_id', 'invoice_no', 'type', 'original_invoice_id', 'subtotal_ex_vat', 'vat_amount', 'total_inc_vat', 'due_at_utc', 'notes', 'do_not_send', 'header_snapshot_json', 'status', 'issued_at_utc', 'paid_at_utc', 'on_hold_reason', 'document_revision', 'document_state', 'preview_document_version_id', 'issued_document_version_id', 'active_document_operation_id', 'issue_state', 'active_issue_operation_id', 'last_document_error_json')"
     },
     {
       "name": "trg_invoice_document_invalidate_u",
@@ -30295,84 +30295,84 @@
       "table": "mail_outbox",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_delete_revision_trg AFTER DELETE ON mail_outbox FOR EACH ROW WHEN (old.payment_scope_json ? 'candidate_workflow_id'::text OR old.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION _candidate_timesheet_summary_mail_revision_trg_v1()"
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_delete_revision_trg AFTER DELETE ON mail_outbox FOR EACH ROW WHEN (old.payment_scope_json ? 'candidate_workflow_id'::text OR old.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION private._candidate_timesheet_summary_mail_revision_trg_v1()"
     },
     {
       "name": "candidate_timesheet_summary_mail_insert_revision_trg",
       "table": "mail_outbox",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_insert_revision_trg AFTER INSERT ON mail_outbox FOR EACH ROW WHEN (new.payment_scope_json ? 'candidate_workflow_id'::text OR new.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION _candidate_timesheet_summary_mail_revision_trg_v1()"
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_insert_revision_trg AFTER INSERT ON mail_outbox FOR EACH ROW WHEN (new.payment_scope_json ? 'candidate_workflow_id'::text OR new.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION private._candidate_timesheet_summary_mail_revision_trg_v1()"
     },
     {
       "name": "candidate_timesheet_summary_mail_update_revision_trg",
       "table": "mail_outbox",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_update_revision_trg AFTER UPDATE OF payment_scope_json, status, provider_status, sent_at, failed_at, attempt_lease_token, attempt_lease_expires_at_utc ON mail_outbox FOR EACH ROW WHEN (new.payment_scope_json ? 'candidate_workflow_id'::text OR new.payment_scope_json ? 'candidate_manager_workflow_id'::text OR old.payment_scope_json ? 'candidate_workflow_id'::text OR old.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION _candidate_timesheet_summary_mail_revision_trg_v1()"
+      "definition": "CREATE TRIGGER candidate_timesheet_summary_mail_update_revision_trg AFTER UPDATE OF payment_scope_json, status, provider_status, sent_at, failed_at, attempt_lease_token, attempt_lease_expires_at_utc ON mail_outbox FOR EACH ROW WHEN (new.payment_scope_json ? 'candidate_workflow_id'::text OR new.payment_scope_json ? 'candidate_manager_workflow_id'::text OR old.payment_scope_json ? 'candidate_workflow_id'::text OR old.payment_scope_json ? 'candidate_manager_workflow_id'::text) EXECUTE FUNCTION private._candidate_timesheet_summary_mail_revision_trg_v1()"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_nhsp_shifts_d",
       "table": "nhsp_shifts",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_nhsp_shifts_d AFTER DELETE ON nhsp_shifts REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'false', 'external_row_key', 'latest_import_id', 'candidate_id', 'client_id', 'contract_id', 'timesheet_id', 'work_date', 'ward', 'start_utc', 'end_utc', 'break_mins', 'pay_minutes', 'pay_amount_snapshot', 'charge_amount_snapshot', 'invoice_status', 'defer_until_run_after', 'invoice_id', 'source_system', 'hr_request_id', 'held_back_reason', 'assignment_code', 'ref_num', 'week_ending_date', 'cancelled_at_utc', 'cancelled_by_import_id', 'cancelled_reason')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_nhsp_shifts_d AFTER DELETE ON nhsp_shifts REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'false', 'external_row_key', 'latest_import_id', 'candidate_id', 'client_id', 'contract_id', 'timesheet_id', 'work_date', 'ward', 'start_utc', 'end_utc', 'break_mins', 'pay_minutes', 'pay_amount_snapshot', 'charge_amount_snapshot', 'invoice_status', 'defer_until_run_after', 'invoice_id', 'source_system', 'hr_request_id', 'held_back_reason', 'assignment_code', 'ref_num', 'week_ending_date', 'cancelled_at_utc', 'cancelled_by_import_id', 'cancelled_reason')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_nhsp_shifts_i",
       "table": "nhsp_shifts",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_nhsp_shifts_i AFTER INSERT ON nhsp_shifts REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'false', 'external_row_key', 'latest_import_id', 'candidate_id', 'client_id', 'contract_id', 'timesheet_id', 'work_date', 'ward', 'start_utc', 'end_utc', 'break_mins', 'pay_minutes', 'pay_amount_snapshot', 'charge_amount_snapshot', 'invoice_status', 'defer_until_run_after', 'invoice_id', 'source_system', 'hr_request_id', 'held_back_reason', 'assignment_code', 'ref_num', 'week_ending_date', 'cancelled_at_utc', 'cancelled_by_import_id', 'cancelled_reason')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_nhsp_shifts_i AFTER INSERT ON nhsp_shifts REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'false', 'external_row_key', 'latest_import_id', 'candidate_id', 'client_id', 'contract_id', 'timesheet_id', 'work_date', 'ward', 'start_utc', 'end_utc', 'break_mins', 'pay_minutes', 'pay_amount_snapshot', 'charge_amount_snapshot', 'invoice_status', 'defer_until_run_after', 'invoice_id', 'source_system', 'hr_request_id', 'held_back_reason', 'assignment_code', 'ref_num', 'week_ending_date', 'cancelled_at_utc', 'cancelled_by_import_id', 'cancelled_reason')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_nhsp_shifts_u",
       "table": "nhsp_shifts",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_nhsp_shifts_u AFTER UPDATE ON nhsp_shifts REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'false', 'external_row_key', 'latest_import_id', 'candidate_id', 'client_id', 'contract_id', 'timesheet_id', 'work_date', 'ward', 'start_utc', 'end_utc', 'break_mins', 'pay_minutes', 'pay_amount_snapshot', 'charge_amount_snapshot', 'invoice_status', 'defer_until_run_after', 'invoice_id', 'source_system', 'hr_request_id', 'held_back_reason', 'assignment_code', 'ref_num', 'week_ending_date', 'cancelled_at_utc', 'cancelled_by_import_id', 'cancelled_reason')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_nhsp_shifts_u AFTER UPDATE ON nhsp_shifts REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'false', 'external_row_key', 'latest_import_id', 'candidate_id', 'client_id', 'contract_id', 'timesheet_id', 'work_date', 'ward', 'start_utc', 'end_utc', 'break_mins', 'pay_minutes', 'pay_amount_snapshot', 'charge_amount_snapshot', 'invoice_status', 'defer_until_run_after', 'invoice_id', 'source_system', 'hr_request_id', 'held_back_reason', 'assignment_code', 'ref_num', 'week_ending_date', 'cancelled_at_utc', 'cancelled_by_import_id', 'cancelled_reason')"
     },
     {
       "name": "trg_bpay_wb_reservations_delete_dirty_v1",
       "table": "pay_advance_reservations",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_reservations_delete_dirty_v1 AFTER DELETE ON pay_advance_reservations REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_reservations_delete_dirty_v1 AFTER DELETE ON pay_advance_reservations REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_reservations_insert_dirty_v1",
       "table": "pay_advance_reservations",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_reservations_insert_dirty_v1 AFTER INSERT ON pay_advance_reservations REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_reservations_insert_dirty_v1 AFTER INSERT ON pay_advance_reservations REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_reservations_update_dirty_v1",
       "table": "pay_advance_reservations",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_reservations_update_dirty_v1 AFTER UPDATE ON pay_advance_reservations REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_reservations_update_dirty_v1 AFTER UPDATE ON pay_advance_reservations REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_observe_advances_delete",
       "table": "pay_advances",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_advances_delete AFTER DELETE ON pay_advances REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_advances_delete AFTER DELETE ON pay_advances REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_observe_advances_insert",
       "table": "pay_advances",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_advances_insert AFTER INSERT ON pay_advances REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_advances_insert AFTER INSERT ON pay_advances REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_observe_advances_update",
       "table": "pay_advances",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_advances_update AFTER UPDATE ON pay_advances REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_advances_update AFTER UPDATE ON pay_advances REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_pay_advances_set_next_due",
@@ -30414,28 +30414,28 @@
       "table": "pay_bank_transfer_events",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_transfer_events_delete_dirty_v1 AFTER DELETE ON pay_bank_transfer_events REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_transfer_events_delete_dirty_v1 AFTER DELETE ON pay_bank_transfer_events REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_transfer_events_insert_dirty_v1",
       "table": "pay_bank_transfer_events",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_transfer_events_insert_dirty_v1 AFTER INSERT ON pay_bank_transfer_events REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_transfer_events_insert_dirty_v1 AFTER INSERT ON pay_bank_transfer_events REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_transfer_events_update_dirty_v1",
       "table": "pay_bank_transfer_events",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_transfer_events_update_dirty_v1 AFTER UPDATE ON pay_bank_transfer_events REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_transfer_events_update_dirty_v1 AFTER UPDATE ON pay_bank_transfer_events REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_transfers_delete_dirty_v1",
       "table": "pay_bank_transfers",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_transfers_delete_dirty_v1 AFTER DELETE ON pay_bank_transfers REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_transfers_delete_dirty_v1 AFTER DELETE ON pay_bank_transfers REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_pay_bank_transfers_normalise_status_biu",
@@ -30456,7 +30456,7 @@
       "table": "pay_batch_candidates",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_batch_candidates_delete_dirty_v1 AFTER DELETE ON pay_batch_candidates REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_batch_candidates_delete_dirty_v1 AFTER DELETE ON pay_batch_candidates REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_ts_summary_pay_cache_candidates_au",
@@ -30484,42 +30484,42 @@
       "table": "pay_batch_item_breakdowns",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_breakdowns_delete_dirty_v1 AFTER DELETE ON pay_batch_item_breakdowns REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_breakdowns_delete_dirty_v1 AFTER DELETE ON pay_batch_item_breakdowns REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_breakdowns_insert_dirty_v1",
       "table": "pay_batch_item_breakdowns",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_breakdowns_insert_dirty_v1 AFTER INSERT ON pay_batch_item_breakdowns REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_breakdowns_insert_dirty_v1 AFTER INSERT ON pay_batch_item_breakdowns REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_breakdowns_update_dirty_v1",
       "table": "pay_batch_item_breakdowns",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_breakdowns_update_dirty_v1 AFTER UPDATE ON pay_batch_item_breakdowns REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_breakdowns_update_dirty_v1 AFTER UPDATE ON pay_batch_item_breakdowns REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_batch_items_delete_dirty_v1",
       "table": "pay_batch_items",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_batch_items_delete_dirty_v1 AFTER DELETE ON pay_batch_items REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_batch_items_delete_dirty_v1 AFTER DELETE ON pay_batch_items REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_batch_items_insert_dirty_v1",
       "table": "pay_batch_items",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_batch_items_insert_dirty_v1 AFTER INSERT ON pay_batch_items REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_batch_items_insert_dirty_v1 AFTER INSERT ON pay_batch_items REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_batch_items_update_dirty_v1",
       "table": "pay_batch_items",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_batch_items_update_dirty_v1 AFTER UPDATE ON pay_batch_items REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_batch_items_update_dirty_v1 AFTER UPDATE ON pay_batch_items REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_retention_capture_pay_batch_items_insert",
@@ -30554,21 +30554,21 @@
       "table": "pay_batch_timesheet_snapshots",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_snapshots_delete_dirty_v1 AFTER DELETE ON pay_batch_timesheet_snapshots REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_snapshots_delete_dirty_v1 AFTER DELETE ON pay_batch_timesheet_snapshots REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_snapshots_insert_dirty_v1",
       "table": "pay_batch_timesheet_snapshots",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_snapshots_insert_dirty_v1 AFTER INSERT ON pay_batch_timesheet_snapshots REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_snapshots_insert_dirty_v1 AFTER INSERT ON pay_batch_timesheet_snapshots REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_snapshots_update_dirty_v1",
       "table": "pay_batch_timesheet_snapshots",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_snapshots_update_dirty_v1 AFTER UPDATE ON pay_batch_timesheet_snapshots REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_snapshots_update_dirty_v1 AFTER UPDATE ON pay_batch_timesheet_snapshots REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_retention_capture_pay_batch_timesheet_snapshots_insert",
@@ -30603,7 +30603,7 @@
       "table": "pay_batches",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_batches_delete_dirty_v1 AFTER DELETE ON pay_batches REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_batches_delete_dirty_v1 AFTER DELETE ON pay_batches REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_retention_capture_pay_batches_insert",
@@ -30631,21 +30631,21 @@
       "table": "pay_finance_case_components",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_components_delete AFTER DELETE ON pay_finance_case_components REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_components_delete AFTER DELETE ON pay_finance_case_components REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_observe_components_insert",
       "table": "pay_finance_case_components",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_components_insert AFTER INSERT ON pay_finance_case_components REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_components_insert AFTER INSERT ON pay_finance_case_components REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_observe_components_update",
       "table": "pay_finance_case_components",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_components_update AFTER UPDATE ON pay_finance_case_components REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_components_update AFTER UPDATE ON pay_finance_case_components REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_pay_workbench_mark_finance_case_dirty__pay_finance_case_com",
@@ -30694,21 +30694,21 @@
       "table": "pay_finance_case_events",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_events_delete AFTER DELETE ON pay_finance_case_events REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_events_delete AFTER DELETE ON pay_finance_case_events REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_observe_events_insert",
       "table": "pay_finance_case_events",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_events_insert AFTER INSERT ON pay_finance_case_events REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_events_insert AFTER INSERT ON pay_finance_case_events REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_bpay_wb_observe_events_update",
       "table": "pay_finance_case_events",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_bpay_wb_observe_events_update AFTER UPDATE ON pay_finance_case_events REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION pay_workbench_financial_scope_dirty_transition_v1()"
+      "definition": "CREATE TRIGGER trg_bpay_wb_observe_events_update AFTER UPDATE ON pay_finance_case_events REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private.pay_workbench_financial_scope_dirty_transition_v1()"
     },
     {
       "name": "trg_pay_workbench_mark_finance_case_dirty__pay_finance_case_eve",
@@ -30820,21 +30820,21 @@
       "table": "settings_defaults",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_defaults_d AFTER DELETE ON settings_defaults REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'vat_registration_number', 'agency_name', 'agency_logo', 'registered_address', 'company_reg_number', 'bank_name', 'bank_sort_code', 'bank_account_number', 'finance_email', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'invoice_document_presentation_json', 'timesheet_header_json', 'timesheet_footer_json', 'temporary_worker_declaration_json', 'client_declaration_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_defaults_d AFTER DELETE ON settings_defaults REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'vat_registration_number', 'agency_name', 'agency_logo', 'registered_address', 'company_reg_number', 'bank_name', 'bank_sort_code', 'bank_account_number', 'finance_email', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'invoice_document_presentation_json', 'timesheet_header_json', 'timesheet_footer_json', 'temporary_worker_declaration_json', 'client_declaration_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_settings_defaults_i",
       "table": "settings_defaults",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_defaults_i AFTER INSERT ON settings_defaults REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'vat_registration_number', 'agency_name', 'agency_logo', 'registered_address', 'company_reg_number', 'bank_name', 'bank_sort_code', 'bank_account_number', 'finance_email', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'invoice_document_presentation_json', 'timesheet_header_json', 'timesheet_footer_json', 'temporary_worker_declaration_json', 'client_declaration_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_defaults_i AFTER INSERT ON settings_defaults REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'vat_registration_number', 'agency_name', 'agency_logo', 'registered_address', 'company_reg_number', 'bank_name', 'bank_sort_code', 'bank_account_number', 'finance_email', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'invoice_document_presentation_json', 'timesheet_header_json', 'timesheet_footer_json', 'temporary_worker_declaration_json', 'client_declaration_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_settings_defaults_u",
       "table": "settings_defaults",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_defaults_u AFTER UPDATE ON settings_defaults REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'vat_registration_number', 'agency_name', 'agency_logo', 'registered_address', 'company_reg_number', 'bank_name', 'bank_sort_code', 'bank_account_number', 'finance_email', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'invoice_document_presentation_json', 'timesheet_header_json', 'timesheet_footer_json', 'temporary_worker_declaration_json', 'client_declaration_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_defaults_u AFTER UPDATE ON settings_defaults REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'vat_registration_number', 'agency_name', 'agency_logo', 'registered_address', 'company_reg_number', 'bank_name', 'bank_sort_code', 'bank_account_number', 'finance_email', 'hr_attach_to_invoice', 'ts_attach_to_invoice', 'invoice_document_presentation_json', 'timesheet_header_json', 'timesheet_footer_json', 'temporary_worker_declaration_json', 'client_declaration_json')"
     },
     {
       "name": "set_updated_at_settings_finance_windows",
@@ -30848,21 +30848,21 @@
       "table": "settings_finance_windows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_finance_windows_d AFTER DELETE ON settings_finance_windows REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'false', 'date_from', 'date_to', 'vat_rate_pct', 'mileage_charge_defaults')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_finance_windows_d AFTER DELETE ON settings_finance_windows REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'false', 'date_from', 'date_to', 'vat_rate_pct', 'mileage_charge_defaults')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_settings_finance_windows_i",
       "table": "settings_finance_windows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_finance_windows_i AFTER INSERT ON settings_finance_windows REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'false', 'date_from', 'date_to', 'vat_rate_pct', 'mileage_charge_defaults')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_finance_windows_i AFTER INSERT ON settings_finance_windows REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'false', 'date_from', 'date_to', 'vat_rate_pct', 'mileage_charge_defaults')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_settings_finance_windows_u",
       "table": "settings_finance_windows",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_finance_windows_u AFTER UPDATE ON settings_finance_windows REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'false', 'date_from', 'date_to', 'vat_rate_pct', 'mileage_charge_defaults')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_settings_finance_windows_u AFTER UPDATE ON settings_finance_windows REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'false', 'date_from', 'date_to', 'vat_rate_pct', 'mileage_charge_defaults')"
     },
     {
       "name": "trg_tsfin_finance_windows_erni_wakeup_all_aiu",
@@ -30883,28 +30883,28 @@
       "table": "timesheet_evidence",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER timesheet_evidence_candidate_lineage_guard BEFORE INSERT OR UPDATE OF candidate_component_id, document_role, timesheet_id, storage_key ON timesheet_evidence FOR EACH ROW EXECUTE FUNCTION _candidate_evidence_lineage_guard_v1()"
+      "definition": "CREATE TRIGGER timesheet_evidence_candidate_lineage_guard BEFORE INSERT OR UPDATE OF candidate_component_id, document_role, timesheet_id, storage_key ON timesheet_evidence FOR EACH ROW EXECUTE FUNCTION private._candidate_evidence_lineage_guard_v1()"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_timesheet_evidence_d",
       "table": "timesheet_evidence",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheet_evidence_d AFTER DELETE ON timesheet_evidence REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'kind', 'storage_key', 'source_revision', 'display_name', 'document_asset_id', 'processing_state', 'processing_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheet_evidence_d AFTER DELETE ON timesheet_evidence REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'kind', 'storage_key', 'source_revision', 'display_name', 'document_asset_id', 'processing_state', 'processing_error_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_timesheet_evidence_i",
       "table": "timesheet_evidence",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheet_evidence_i AFTER INSERT ON timesheet_evidence REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'kind', 'storage_key', 'source_revision', 'display_name', 'document_asset_id', 'processing_state', 'processing_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheet_evidence_i AFTER INSERT ON timesheet_evidence REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'kind', 'storage_key', 'source_revision', 'display_name', 'document_asset_id', 'processing_state', 'processing_error_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_timesheet_evidence_u",
       "table": "timesheet_evidence",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheet_evidence_u AFTER UPDATE ON timesheet_evidence REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'kind', 'storage_key', 'source_revision', 'display_name', 'document_asset_id', 'processing_state', 'processing_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheet_evidence_u AFTER UPDATE ON timesheet_evidence REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'kind', 'storage_key', 'source_revision', 'display_name', 'document_asset_id', 'processing_state', 'processing_error_json')"
     },
     {
       "name": "trg_timesheet_archived_evidence_guard_v1",
@@ -31065,7 +31065,7 @@
       "table": "timesheets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON timesheets FOR EACH ROW EXECUTE FUNCTION _candidate_qr_pack_ready_notification_v1()"
+      "definition": "CREATE TRIGGER timesheets_candidate_qr_pack_ready_notification_trg BEFORE UPDATE OF document_state, current_document_version_id ON timesheets FOR EACH ROW EXECUTE FUNCTION private._candidate_qr_pack_ready_notification_v1()"
     },
     {
       "name": "trg_cc_timesheets",
@@ -31079,21 +31079,21 @@
       "table": "timesheets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_d AFTER DELETE ON timesheets REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_d AFTER DELETE ON timesheets REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_timesheets_i",
       "table": "timesheets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_i AFTER INSERT ON timesheets REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_i AFTER INSERT ON timesheets REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_timesheets_u",
       "table": "timesheets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_u AFTER UPDATE ON timesheets REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_u AFTER UPDATE ON timesheets REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'booking_id', 'occupant_key_norm', 'hospital_norm', 'ward_norm', 'job_title_norm', 'shift_label_norm', 'scheduled_start_iso', 'scheduled_end_iso', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'worked_minutes', 'week_ending_date', 'auth_name', 'auth_job_title', 'authorised_at_server', 'r2_nurse_key', 'r2_auth_key', 'img_sha256_nurse', 'img_sha256_auth', 'reference_number', 'status', 'version', 'is_current', 'revoked_at', 'contract_id', 'submission_mode', 'line_type', 'sheet_scope', 'actual_schedule_json', 'additional_units_week', 'additional_units_per_day', 'day_references_json', 'qr_signed_hash', 'qr_signed_at_utc', 'qr_status', 'qr_r2_key', 'candidate_hint_text', 'band', 'is_adjustment', 'parent_timesheet_id', 'correction_id', 'correction_kind', 'adjustment_origin', 'archived_at_utc', 'archived_by_user_id', 'archived_reason_code', 'document_revision', 'document_state', 'current_document_version_id', 'active_document_operation_id', 'manual_document_asset_id', 'last_document_error_json')"
     },
     {
       "name": "trg_pay_workbench_mark_candidate_dirty__timesheets",
@@ -31114,7 +31114,7 @@
       "table": "timesheets",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON timesheets FOR EACH ROW EXECUTE FUNCTION _timesheet_authorisation_overlap_trg_v1()"
+      "definition": "CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_authorisation_overlap_trg_v1()"
     },
     {
       "name": "trg_timesheets_document_invalidate_u",
@@ -31170,21 +31170,21 @@
       "table": "timesheets_financials",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_d AFTER DELETE ON timesheets_financials REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_d AFTER DELETE ON timesheets_financials REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_timesheets_financials_i",
       "table": "timesheets_financials",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_i AFTER INSERT ON timesheets_financials REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_i AFTER INSERT ON timesheets_financials REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
     },
     {
       "name": "trg_invoice_candidate_revision_v2_timesheets_financials_u",
       "table": "timesheets_financials",
       "schema": "public",
       "enabled": "O",
-      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_u AFTER UPDATE ON timesheets_financials REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION _invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
+      "definition": "CREATE TRIGGER trg_invoice_candidate_revision_v2_timesheets_financials_u AFTER UPDATE ON timesheets_financials REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION private._invoice_candidate_revision_trigger_v2('true', 'true', 'timesheet_id', 'timesheet_version', 'basis', 'is_current', 'is_stale', 'worked_start_iso', 'worked_end_iso', 'break_start_iso', 'break_end_iso', 'break_minutes', 'candidate_id', 'client_id', 'role', 'band', 'policy_snapshot_json', 'rate_source_refs_json', 'hours_day', 'hours_night', 'hours_sat', 'hours_sun', 'hours_bh', 'pay_day', 'pay_night', 'pay_sat', 'pay_sun', 'pay_bh', 'charge_day', 'charge_night', 'charge_sat', 'charge_sun', 'charge_bh', 'total_hours', 'total_pay_ex_vat', 'total_charge_ex_vat', 'margin_ex_vat', 'processing_status', 'expenses_pay_ex_vat', 'expenses_charge_ex_vat', 'expenses_description', 'expenses_evidence_manifest', 'mileage_pay_ex_vat', 'mileage_charge_ex_vat', 'mileage_pay_rate', 'mileage_charge_rate', 'mileage_evidence_manifest', 'actual_schedule_json', 'actual_minutes_by_day_json', 'additional_units_json', 'additional_pay_ex_vat', 'additional_charge_ex_vat', 'additional_margin_ex_vat', 'invoice_breakdown_json', 'nhsp_import_id', 'has_rate_issue', 'hr_crosscheck_status', 'hr_crosscheck_issues', 'external_source_rows_json', 'mileage_units', 'travel_pay_ex_vat', 'travel_charge_ex_vat', 'accommodation_pay_ex_vat', 'accommodation_charge_ex_vat', 'other_pay_ex_vat', 'other_charge_ex_vat', 'stale_reason', 'pay_method', 'locked_by_invoice_id', 'unlocked_by_credit_note_id', 'po_number', 'pay_on_hold', 'pay_on_hold_reason', 'has_pay_channel_issue')"
     },
     {
       "name": "trg_pay_workbench_mark_candidate_dirty__timesheets_financials",
@@ -31788,7 +31788,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": true,
-          "definition": "FOREIGN KEY (current_build_id) REFERENCES banking_pay_workbench_economic_builds(id) ON DELETE SET NULL DEFERRABLE"
+          "definition": "FOREIGN KEY (current_build_id) REFERENCES private.banking_pay_workbench_economic_builds(id) ON DELETE SET NULL DEFERRABLE"
         },
         {
           "name": "bpay_wb_scope_registry_json_chk",
@@ -32086,7 +32086,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (build_id) REFERENCES banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
+          "definition": "FOREIGN KEY (build_id) REFERENCES private.banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
         },
         {
           "name": "bpay_wb_canonical_stage_lines_identity_chk",
@@ -32356,7 +32356,7 @@
           "deferred": true,
           "validated": true,
           "deferrable": true,
-          "definition": "FOREIGN KEY (attempt_id) REFERENCES banking_pay_workbench_stage_attempts(id) DEFERRABLE INITIALLY DEFERRED"
+          "definition": "FOREIGN KEY (attempt_id) REFERENCES private.banking_pay_workbench_stage_attempts(id) DEFERRABLE INITIALLY DEFERRED"
         },
         {
           "name": "bpay_wb_economic_build_fact_pages_build_fk",
@@ -32364,7 +32364,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (build_id) REFERENCES banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
+          "definition": "FOREIGN KEY (build_id) REFERENCES private.banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
         },
         {
           "name": "bpay_wb_economic_build_fact_pages_completed_chk",
@@ -32786,7 +32786,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (build_id) REFERENCES banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
+          "definition": "FOREIGN KEY (build_id) REFERENCES private.banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
         },
         {
           "name": "bpay_wb_economic_build_facts_economic_key_chk",
@@ -33128,7 +33128,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (build_id) REFERENCES banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
+          "definition": "FOREIGN KEY (build_id) REFERENCES private.banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
         },
         {
           "name": "bpay_wb_economic_build_scope_counts_chk",
@@ -34402,7 +34402,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (build_id) REFERENCES banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
+          "definition": "FOREIGN KEY (build_id) REFERENCES private.banking_pay_workbench_economic_builds(id) ON DELETE CASCADE"
         },
         {
           "name": "bpay_wb_stage_attempts_counts_chk",
@@ -34688,7 +34688,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": true,
-          "definition": "FOREIGN KEY (current_build_id) REFERENCES banking_pay_workbench_economic_builds(id) ON DELETE SET NULL DEFERRABLE"
+          "definition": "FOREIGN KEY (current_build_id) REFERENCES private.banking_pay_workbench_economic_builds(id) ON DELETE SET NULL DEFERRABLE"
         },
         {
           "name": "bpay_wb_timesheet_scope_state_evaluated_chk",
@@ -34910,7 +34910,7 @@
           "deferred": true,
           "validated": true,
           "deferrable": true,
-          "definition": "FOREIGN KEY (last_transition_id) REFERENCES candidate_daily_authority_transitions(transition_id) DEFERRABLE INITIALLY DEFERRED"
+          "definition": "FOREIGN KEY (last_transition_id) REFERENCES private.candidate_daily_authority_transitions(transition_id) DEFERRABLE INITIALLY DEFERRED"
         },
         {
           "name": "candidate_daily_authority_scopes_mode_ck",
@@ -35184,7 +35184,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (supersedes_transition_id) REFERENCES candidate_daily_authority_transitions(transition_id) ON DELETE RESTRICT"
+          "definition": "FOREIGN KEY (supersedes_transition_id) REFERENCES private.candidate_daily_authority_transitions(transition_id) ON DELETE RESTRICT"
         },
         {
           "name": "candidate_daily_authority_transitions_batch_candidate_uq",
@@ -35200,7 +35200,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (batch_receipt_id) REFERENCES candidate_daily_batch_receipts(batch_receipt_id) ON DELETE RESTRICT"
+          "definition": "FOREIGN KEY (batch_receipt_id) REFERENCES private.candidate_daily_batch_receipts(batch_receipt_id) ON DELETE RESTRICT"
         },
         {
           "name": "candidate_daily_authority_transitions_candidate_id_fkey",
@@ -36782,7 +36782,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (environment, candidate_id) REFERENCES candidate_daily_authority_scopes(environment, candidate_id) ON DELETE RESTRICT"
+          "definition": "FOREIGN KEY (environment, candidate_id) REFERENCES private.candidate_daily_authority_scopes(environment, candidate_id) ON DELETE RESTRICT"
         },
         {
           "name": "candidate_daily_sync_state_state_ck",
@@ -37145,7 +37145,7 @@
         {
           "name": "revision_seq",
           "type": "bigint",
-          "default": "nextval('candidate_timesheet_summary_revision_seq'::regclass)",
+          "default": "nextval('private.candidate_timesheet_summary_revision_seq'::regclass)",
           "identity": "",
           "not_null": true,
           "generated": ""
@@ -48681,7 +48681,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (economic_build_id) REFERENCES banking_pay_workbench_economic_builds(id) ON DELETE SET NULL"
+          "definition": "FOREIGN KEY (economic_build_id) REFERENCES private.banking_pay_workbench_economic_builds(id) ON DELETE SET NULL"
         },
         {
           "name": "bpay_wb_jobs_private_cursor_chk",
@@ -53059,7 +53059,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (environment, candidate_id) REFERENCES candidate_daily_authority_scopes(environment, candidate_id) ON DELETE RESTRICT"
+          "definition": "FOREIGN KEY (environment, candidate_id) REFERENCES private.candidate_daily_authority_scopes(environment, candidate_id) ON DELETE RESTRICT"
         },
         {
           "name": "candidate_daily_availability_days_source_ck",
@@ -54413,7 +54413,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (batch_receipt_id) REFERENCES candidate_daily_batch_receipts(batch_receipt_id) ON DELETE RESTRICT"
+          "definition": "FOREIGN KEY (batch_receipt_id) REFERENCES private.candidate_daily_batch_receipts(batch_receipt_id) ON DELETE RESTRICT"
         },
         {
           "name": "candidate_daily_rota_generations_day_count_ck",
@@ -54461,7 +54461,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (environment, candidate_id) REFERENCES candidate_daily_authority_scopes(environment, candidate_id) ON DELETE RESTRICT"
+          "definition": "FOREIGN KEY (environment, candidate_id) REFERENCES private.candidate_daily_authority_scopes(environment, candidate_id) ON DELETE RESTRICT"
         },
         {
           "name": "candidate_daily_rota_generations_source_uq",
@@ -54871,7 +54871,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (environment, candidate_id) REFERENCES candidate_daily_authority_scopes(environment, candidate_id) ON DELETE RESTRICT"
+          "definition": "FOREIGN KEY (environment, candidate_id) REFERENCES private.candidate_daily_authority_scopes(environment, candidate_id) ON DELETE RESTRICT"
         },
         {
           "name": "candidate_daily_sheet_projection_outbox_state_ck",
@@ -80747,7 +80747,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES users(id)"
+          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES auth.users(id)"
         },
         {
           "name": "pay_manual_adjustment_carry_forwards_created_by_user_id_fkey",
@@ -80755,7 +80755,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES users(id)"
+          "definition": "FOREIGN KEY (created_by_user_id) REFERENCES auth.users(id)"
         },
         {
           "name": "pay_manual_adjustment_carry_forwards_direction_chk",
