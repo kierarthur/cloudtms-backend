@@ -138,9 +138,10 @@ begin
   -- Banking Pay Modal Structure v2 and its discarded-session/invalid-source
   -- convergence repairs, the guarded unfinished Daily-receipt Preview/APPLY
   -- boundary and the dirty-apply family repair add fourteen service-only RPCs to this
-  -- non-Candidate catalogue. Browser execution remains exactly zero.
-  if v_count<>657 or v_service_missing<>72 or v_browser_executable<>0
-     or v_hash<>'18340803de49e08524be3fc844d0bf79' then
+  -- non-Candidate catalogue. The explicit reviewed Timesheet-authorisation wrapper
+  -- adds one service-only RPC. Browser execution remains exactly zero.
+  if v_count<>658 or v_service_missing<>72 or v_browser_executable<>0
+     or v_hash<>'9efa92b07a485fc6f740bd641647f647' then
     raise exception 'GENERAL_RPC_ISOLATION_VERIFICATION_FAILED:count=% service_missing=% browser_executable=% browser_executable_identities=% hash=%',
       v_count,v_service_missing,v_browser_executable,
       v_browser_executable_identities,v_hash;

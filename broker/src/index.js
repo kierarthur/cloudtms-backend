@@ -166256,6 +166256,18 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
         affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
       });
     }
+    if (code === 'DUPLICATE_EXPENSE_REVIEW_REQUIRED' || code === 'DUPLICATE_EXPENSE_REVIEW_CONFIRMATION_REQUIRED') {
+      return withJson(409, {
+        error: 'DUPLICATE_EXPENSE_REVIEW_REQUIRED',
+        error_code: 'DUPLICATE_EXPENSE_REVIEW_REQUIRED',
+        message: 'An expense category was already submitted for this Candidate, Client and week ending. Review the duplicate warning before authorising this claim.',
+        categories: Array.isArray(detailObj?.categories) ? detailObj.categories : [],
+        duplicate_expense_confirmation_required: true,
+        current_timesheet_id: currentTimesheetId || null,
+        refresh_required: false,
+        affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+      });
+    }
     if (code === 'TRANSIENT_LIFECYCLE_CONFLICT') {
       return withJson(409, {
         error: 'TRANSIENT_LIFECYCLE_CONFLICT',
@@ -166372,6 +166384,11 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     return withCORS(env, req, badRequest('Invalid JSON'));
   }
   if (!body || typeof body !== 'object' || Array.isArray(body)) body = {};
+  const duplicateExpenseConfirmed = body.duplicate_expense_confirmation === true
+    || body.duplicateExpenseConfirmation === true;
+  const authoriseRpcFunctionName = duplicateExpenseConfirmed
+    ? 'timesheet_authorise_reviewed_atomic'
+    : 'timesheet_authorise_generic_atomic';
 
   const requestedTimesheetId = trimStr(timesheetId);
   if (!requestedTimesheetId) return withCORS(env, req, badRequest('timesheet_id is required'));
@@ -166581,19 +166598,21 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   let rpcPayload = null;
   try {
     lifecycleSignatureLog('before_rpc', {
-      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      rpc_function_name: authoriseRpcFunctionName,
       requested_timesheet_id: requestedTimesheetId || null,
       expected_timesheet_id: expectedTimesheetId || null,
       current_timesheet_id: currentTimesheetId || null,
       expected_row_signature: expectedRowSignature || null
     });
-    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_authorise_generic_atomic', {
+    const authoriseRpcArgs = {
       p_timesheet_id: requestedTimesheetId,
       p_expected_timesheet_id: expectedTimesheetId,
       p_actor_user_id: user?.id || null,
       p_now_utc: now,
       p_expected_row_signature: expectedRowSignature || null
-    }, {
+    };
+    if (duplicateExpenseConfirmed) authoriseRpcArgs.p_duplicate_expense_confirmed = true;
+    const rpcRes = await callTimesheetLifecycleRpcWithTransientRetry(env, authoriseRpcFunctionName, authoriseRpcArgs, {
       timeoutMs: 12000,
       lifecycleAction: 'AUTHORISE',
       routeFamily: 'TIMESHEET_AUTHORISE',
@@ -166607,9 +166626,9 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       retryDelaysMs: [0, 125, 375, 850],
       jitterMs: 75
     });
-    rpcPayload = unwrapRpcPayload(rpcRes, 'timesheet_authorise_generic_atomic');
+    rpcPayload = unwrapRpcPayload(rpcRes, authoriseRpcFunctionName);
     lifecycleSignatureLog('rpc_completed', {
-      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      rpc_function_name: authoriseRpcFunctionName,
       requested_timesheet_id: requestedTimesheetId || null,
       expected_timesheet_id: expectedTimesheetId || null,
       current_timesheet_id: currentTimesheetId || null,
@@ -166620,7 +166639,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     const rpcErr = parseRpcFailure(err);
     const detailObj = rpcErr.detailJson || parseMaybeJsonObj(rpcErr.details) || {};
     lifecycleSignatureLog('rpc_failed', {
-      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      rpc_function_name: authoriseRpcFunctionName,
       status: rpcErr.status || null,
       message: rpcErr.message || null,
       code: rpcErr.code || null,
@@ -166640,7 +166659,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
             expectedRowSignature,
             actorUserId: user?.id || null,
             routeFamily: 'TIMESHEET_AUTHORISE',
-            rpcFunctionName: 'timesheet_authorise_generic_atomic',
+            rpcFunctionName: authoriseRpcFunctionName,
             originalError: err,
             startedAtUtc: now,
             guardResult: guard,
@@ -166648,7 +166667,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
           });
         } catch (reconcileErr) {
           lifecycleSignatureLog('timeout_reconciliation_failed', {
-            rpc_function_name: 'timesheet_authorise_generic_atomic',
+            rpc_function_name: authoriseRpcFunctionName,
             status: Number(reconcileErr?.status || 0) || null,
             message: String(reconcileErr?.message || reconcileErr || '') || null,
             current_timesheet_id: currentTimesheetId || null,
@@ -166659,7 +166678,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       }
 
       lifecycleSignatureLog('timeout_reconciliation_decision', {
-        rpc_function_name: 'timesheet_authorise_generic_atomic',
+        rpc_function_name: authoriseRpcFunctionName,
         current_timesheet_id: reconciliation?.current_timesheet_id || currentTimesheetId || null,
         target_state_reached: reconciliation?.target_state_reached === true,
         safe_retry_allowed: reconciliation?.safe_retry_allowed === true,
@@ -166673,19 +166692,21 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
       } else if (reconciliation?.safe_retry_allowed === true) {
         try {
           lifecycleSignatureLog('timeout_safe_retry_before_rpc', {
-            rpc_function_name: 'timesheet_authorise_generic_atomic',
+            rpc_function_name: authoriseRpcFunctionName,
             requested_timesheet_id: requestedTimesheetId || null,
             expected_timesheet_id: expectedTimesheetId || null,
             current_timesheet_id: reconciliation.current_timesheet_id || currentTimesheetId || null,
             expected_row_signature: expectedRowSignature || null
           });
-          const retryRes = await callTimesheetLifecycleRpcWithTransientRetry(env, 'timesheet_authorise_generic_atomic', {
+          const retryRpcArgs = {
             p_timesheet_id: requestedTimesheetId,
             p_expected_timesheet_id: expectedTimesheetId,
             p_actor_user_id: user?.id || null,
             p_now_utc: now,
             p_expected_row_signature: expectedRowSignature || null
-          }, {
+          };
+          if (duplicateExpenseConfirmed) retryRpcArgs.p_duplicate_expense_confirmed = true;
+          const retryRes = await callTimesheetLifecycleRpcWithTransientRetry(env, authoriseRpcFunctionName, retryRpcArgs, {
             timeoutMs: 9000,
             lifecycleAction: 'AUTHORISE',
             routeFamily: 'TIMESHEET_AUTHORISE',
@@ -166699,9 +166720,9 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
             retryDelaysMs: [0],
             jitterMs: 0
           });
-          rpcPayload = unwrapRpcPayload(retryRes, 'timesheet_authorise_generic_atomic');
+          rpcPayload = unwrapRpcPayload(retryRes, authoriseRpcFunctionName);
           lifecycleSignatureLog('timeout_safe_retry_completed', {
-            rpc_function_name: 'timesheet_authorise_generic_atomic',
+            rpc_function_name: authoriseRpcFunctionName,
             payload_signature: lifecycleSignatureDiagSignature(rpcPayload),
             payload_keys: lifecycleSignatureDiagObjectKeys(rpcPayload)
           });
@@ -166717,7 +166738,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
                 expectedRowSignature,
                 actorUserId: user?.id || null,
                 routeFamily: 'TIMESHEET_AUTHORISE',
-                rpcFunctionName: 'timesheet_authorise_generic_atomic',
+                rpcFunctionName: authoriseRpcFunctionName,
                 originalError: retryErr,
                 retryError: retryErr,
                 startedAtUtc: now,
@@ -166750,7 +166771,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
 
   if (!rpcPayload) {
     lifecycleSignatureLog('rpc_payload_missing', {
-      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      rpc_function_name: authoriseRpcFunctionName,
       requested_timesheet_id: requestedTimesheetId || null,
       expected_timesheet_id: expectedTimesheetId || null,
       current_timesheet_id: currentTimesheetId || null,
@@ -166760,7 +166781,7 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
   }
   if (rpcPayload.ok === false || rpcPayload.success === false) {
     lifecycleSignatureLog('rpc_payload_not_ok', {
-      rpc_function_name: 'timesheet_authorise_generic_atomic',
+      rpc_function_name: authoriseRpcFunctionName,
       current_timesheet_id: firstString(rpcPayload.current_timesheet_id, rpcPayload.timesheet_id, currentTimesheetId) || null,
       expected_row_signature: expectedRowSignature || rpcPayload.expected_row_signature || null,
       current_row_signature: rpcPayload.current_row_signature || null,

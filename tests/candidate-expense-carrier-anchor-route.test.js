@@ -8,8 +8,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
 const repeatablePath = 'supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql';
 const verifierPath = 'supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql';
+const duplicateReviewVerifierPath = 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql';
 const repeatable = read(repeatablePath);
 const verifier = read(verifierPath);
+const authoriseAuthority = read('supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql');
+const bulkDataset = read('supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql');
+const broker = read('broker/src/index.js');
+const candidateBroker = read('broker/src/candidate-app-backend.js');
 const compileFixture = read('tests/fixtures/07082026_2155_candidate_app_local_compile_base.sql');
 const release = JSON.parse(read('supabase/release/current-release.json'));
 const runtime = read('.github/workflows/candidate-db-runtime.yml');
@@ -60,8 +65,35 @@ test('release and Candidate runtime install the successor before executing its f
   );
   assert.ok(release.verificationFiles.includes(verifierPath));
   assert.ok(release.newVerificationFiles.includes(verifierPath));
+  assert.ok(release.verificationFiles.includes(duplicateReviewVerifierPath));
+  assert.ok(release.newVerificationFiles.includes(duplicateReviewVerifierPath));
   assert.match(
     runtime,
     /29082026_0951_candidate_expense_resubmission_anchor_v1\.sql[\s\S]*30082026_1903_candidate_expense_carrier_anchor_route_v1\.sql[\s\S]*30082026_1910_candidate_expense_carrier_anchor_route_verification\.sql/i
   );
+  assert.match(runtime, /31082026_0915_candidate_duplicate_expense_review_verification\.sql/i);
+});
+
+test('duplicate review is category-specific and excludes the official expense summary', () => {
+  assert.match(repeatable, /_expense_duplicate_review_v1[\s\S]*'MILEAGE','TRAVEL','ACCOMMODATION','OTHER'/i);
+  assert.match(repeatable, /component\.component_kind in \('MILEAGE_FORM','EXPENSE_EVIDENCE'\)/i);
+  assert.doesNotMatch(
+    repeatable.match(/prior_component_claims as \([\s\S]*?\), prior_financial_claims as \(/i)?.[0] || '',
+    /EXPENSE_SUMMARY/i
+  );
+  assert.match(repeatable, /CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED/i);
+  assert.match(repeatable, /confirmation_digest/i);
+  assert.match(repeatable, /DUPLICATE_EXPENSE_REVIEW[\s\S]*DUPLICATE_EXPENSE_/i);
+  assert.match(candidateBroker, /CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED/i);
+  assert.match(candidateBroker, /duplicate_expense_confirmation/i);
+});
+
+test('Office authorisation requires deliberate review and bulk authorisation excludes the claim', () => {
+  assert.match(authoriseAuthority, /_timesheet_duplicate_expense_review_v1[\s\S]*DUPLICATE_EXPENSE_REVIEW_REQUIRED/i);
+  assert.match(authoriseAuthority, /timesheet_authorise_reviewed_atomic[\s\S]*duplicate_expense_reviewed/i);
+  assert.match(authoriseAuthority, /timesheet_authorise_bulk_work[\s\S]*DUPLICATE_EXPENSE_REVIEW_REQUIRED/i);
+  assert.match(bulkDataset, /DUPLICATE_EXPENSE_REVIEW[\s\S]*can_bulk_authorise_calc/i);
+  assert.match(bulkDataset, /processed_review_required/i);
+  assert.match(broker, /duplicate_expense_confirmation[\s\S]*timesheet_authorise_reviewed_atomic/i);
+  assert.match(broker, /DUPLICATE_EXPENSE_REVIEW_REQUIRED[\s\S]*duplicate_expense_confirmation_required/i);
 });

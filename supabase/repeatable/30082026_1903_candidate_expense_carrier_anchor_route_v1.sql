@@ -7,6 +7,237 @@
 -- authoritative replacement.
 begin;
 
+create index if not exists candidate_submission_workflows_anchor_timesheet_state_idx
+  on public.candidate_submission_workflows(anchor_timesheet_id,state);
+
+create or replace function private._expense_duplicate_review_v1(
+  p_workflow_id uuid,
+  p_required_categories text[] default array[]::text[]
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+declare
+  v_workflow public.candidate_submission_workflows%rowtype;
+  v_client_id uuid;
+  v_client_name text;
+  v_requested_categories text[]:=array[]::text[];
+  v_duplicate_categories text[]:=array[]::text[];
+  v_prior_claim_count integer:=0;
+  v_prior_claims jsonb:='[]'::jsonb;
+  v_review_identity jsonb;
+  v_confirmation_digest text;
+begin
+  select workflow_row.*
+  into v_workflow
+  from public.candidate_submission_workflows workflow_row
+  where workflow_row.id=p_workflow_id
+  for update;
+
+  if not found then
+    raise exception 'CANDIDATE_WORKFLOW_NOT_FOUND' using errcode='P0002';
+  end if;
+  select contract_row.client_id,client_row.name
+  into v_client_id,v_client_name
+  from public.contracts contract_row
+  join public.clients client_row on client_row.id=contract_row.client_id
+  where contract_row.id=v_workflow.contract_id;
+  if v_client_id is null then
+    raise exception 'CANDIDATE_WORKFLOW_CLIENT_NOT_FOUND' using errcode='P0002';
+  end if;
+  if v_workflow.workflow_kind not in ('CONTRACT_COMBINED','CONTRACT_EXPENSE')
+     or v_workflow.week_ending_date is null then
+    return jsonb_build_object(
+      'required',false,'categories','[]'::jsonb,'prior_claim_count',0,
+      'confirmation_digest',null,'client_name',v_client_name,
+      'week_ending_date',v_workflow.week_ending_date
+    );
+  end if;
+
+  select coalesce(array_agg(category order by category),array[]::text[])
+  into v_requested_categories
+  from (
+    select distinct upper(btrim(category)) as category
+    from unnest(coalesce(p_required_categories,array[]::text[])) category
+    where upper(btrim(category)) in ('MILEAGE','TRAVEL','ACCOMMODATION','OTHER')
+  ) requested;
+
+  if cardinality(v_requested_categories)=0 then
+    return jsonb_build_object(
+      'required',false,'categories','[]'::jsonb,'prior_claim_count',0,
+      'confirmation_digest',null,'client_name',v_client_name,
+      'week_ending_date',v_workflow.week_ending_date
+    );
+  end if;
+
+  -- Candidate, Client and week ending form one duplicate-expense boundary.
+  -- Serialising that boundary prevents two separate claims being submitted at
+  -- the same instant and both incorrectly observing an empty prior set.
+  perform pg_advisory_xact_lock(hashtextextended(
+    'expense-duplicate:'||v_workflow.candidate_id::text||':'||v_client_id::text
+      ||':'||v_workflow.week_ending_date::text,
+    0
+  ));
+
+  with requested as (
+    select unnest(v_requested_categories) as category
+  ), prior_component_claims as (
+    select distinct
+      case when coalesce(prior_workflow.target_timesheet_id,prior_workflow.anchor_timesheet_id) is null
+        then 'workflow:'||prior_workflow.id::text
+        else 'timesheet:'||coalesce(prior_workflow.target_timesheet_id,prior_workflow.anchor_timesheet_id)::text
+      end as claim_key,
+      case
+        when component.component_kind='MILEAGE_FORM' then 'MILEAGE'
+        else upper(component.expense_category)
+      end as category
+    from public.candidate_submission_workflows prior_workflow
+    join public.contracts prior_contract on prior_contract.id=prior_workflow.contract_id
+    join public.candidate_submission_components component
+      on component.workflow_id=prior_workflow.id
+     and component.workflow_generation=prior_workflow.generation
+    where prior_workflow.id<>v_workflow.id
+      and prior_workflow.candidate_id=v_workflow.candidate_id
+      and prior_contract.client_id=v_client_id
+      and prior_workflow.week_ending_date=v_workflow.week_ending_date
+      and prior_workflow.workflow_kind in ('CONTRACT_COMBINED','CONTRACT_EXPENSE')
+      and prior_workflow.worker_submitted_at_utc is not null
+      and prior_workflow.state not in ('CREATED','WORKER_DRAFT','CANCELLED','EXPIRED','SUPERSEDED')
+      and coalesce(prior_workflow.target_timesheet_id,prior_workflow.anchor_timesheet_id)
+            is distinct from coalesce(v_workflow.target_timesheet_id,v_workflow.anchor_timesheet_id)
+      and component.component_kind in ('MILEAGE_FORM','EXPENSE_EVIDENCE')
+      and component.state not in ('SUPERSEDED','REJECTED')
+      and case when component.component_kind='MILEAGE_FORM' then 'MILEAGE'
+        else upper(component.expense_category) end
+          in ('MILEAGE','TRAVEL','ACCOMMODATION','OTHER')
+  ), prior_financial_claims as (
+    select distinct 'timesheet:'||prior_timesheet.timesheet_id::text as claim_key,category.category
+    from public.timesheets prior_timesheet
+    join public.timesheets_financials prior_financial
+      on prior_financial.timesheet_id=prior_timesheet.timesheet_id
+     and prior_financial.is_current=true
+    cross join lateral (values
+      ('MILEAGE',abs(coalesce(prior_financial.mileage_units,0))
+        +abs(coalesce(prior_financial.mileage_pay_ex_vat,0))
+        +abs(coalesce(prior_financial.mileage_charge_ex_vat,0))),
+      ('TRAVEL',abs(coalesce(prior_financial.travel_pay_ex_vat,0))
+        +abs(coalesce(prior_financial.travel_charge_ex_vat,0))),
+      ('ACCOMMODATION',abs(coalesce(prior_financial.accommodation_pay_ex_vat,0))
+        +abs(coalesce(prior_financial.accommodation_charge_ex_vat,0))),
+      ('OTHER',abs(coalesce(prior_financial.other_pay_ex_vat,0))
+        +abs(coalesce(prior_financial.other_charge_ex_vat,0))
+        +case when abs(coalesce(prior_financial.expenses_pay_ex_vat,0))
+                       +abs(coalesce(prior_financial.expenses_charge_ex_vat,0))>0
+                    and abs(coalesce(prior_financial.travel_pay_ex_vat,0))
+                       +abs(coalesce(prior_financial.travel_charge_ex_vat,0))
+                       +abs(coalesce(prior_financial.accommodation_pay_ex_vat,0))
+                       +abs(coalesce(prior_financial.accommodation_charge_ex_vat,0))
+                       +abs(coalesce(prior_financial.other_pay_ex_vat,0))
+                       +abs(coalesce(prior_financial.other_charge_ex_vat,0))=0
+          then 1 else 0 end)
+    ) category(category,amount)
+    where prior_timesheet.is_current=true
+      and prior_timesheet.archived_at_utc is null
+      and prior_timesheet.timesheet_id is distinct from v_workflow.target_timesheet_id
+      and prior_timesheet.timesheet_id is distinct from v_workflow.anchor_timesheet_id
+      and prior_timesheet.week_ending_date=v_workflow.week_ending_date
+      and prior_financial.candidate_id=v_workflow.candidate_id
+      and prior_financial.client_id=v_client_id
+      and category.amount>0
+  ), prior_claims as (
+    select * from prior_component_claims
+    union
+    select * from prior_financial_claims
+  ), matched as (
+    select prior_claims.claim_key,prior_claims.category
+    from prior_claims join requested using(category)
+  )
+  select
+    coalesce(array_agg(distinct category order by category),array[]::text[]),
+    count(distinct claim_key)::integer,
+    coalesce(jsonb_agg(distinct jsonb_build_object('claim_key',claim_key,'category',category)),'[]'::jsonb)
+  into v_duplicate_categories,v_prior_claim_count,v_prior_claims
+  from matched;
+
+  v_review_identity:=jsonb_build_object(
+    'contract_version','CANDIDATE_DUPLICATE_EXPENSE_REVIEW_V1',
+    'workflow_id',v_workflow.id,
+    'candidate_id',v_workflow.candidate_id,
+    'client_id',v_client_id,
+    'week_ending_date',v_workflow.week_ending_date,
+    'categories',to_jsonb(v_duplicate_categories),
+    'prior_claims',v_prior_claims
+  );
+  v_confirmation_digest:=case when cardinality(v_duplicate_categories)>0
+    then encode(private._candidate_sha256_jsonb_v1(v_review_identity),'hex') else null end;
+
+  return jsonb_build_object(
+    'required',cardinality(v_duplicate_categories)>0,
+    'categories',to_jsonb(v_duplicate_categories),
+    'prior_claim_count',v_prior_claim_count,
+    'confirmation_digest',v_confirmation_digest,
+    'client_name',v_client_name,
+    'week_ending_date',v_workflow.week_ending_date
+  );
+end;
+$function$;
+
+revoke all on function private._expense_duplicate_review_v1(uuid,text[])
+  from public,anon,authenticated,service_role;
+
+-- Office authorisation uses this server-owned projection rather than trusting
+-- a browser flag.  The Candidate workflow is the durable owner of the review
+-- issue and the current Timesheet is only its Office-facing projection.
+create or replace function private._timesheet_duplicate_expense_review_v1(
+  p_timesheet_id uuid
+)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = pg_catalog, public, private, pg_temp
+as $function$
+  with matched_workflow as (
+    select workflow_row.id,workflow_row.issue_codes,workflow_row.updated_at_utc
+    from public.candidate_submission_workflows workflow_row
+    where p_timesheet_id is not null
+      and (
+        workflow_row.target_timesheet_id=p_timesheet_id
+        or workflow_row.anchor_timesheet_id=p_timesheet_id
+      )
+      and workflow_row.state not in ('CREATED','CANCELLED','EXPIRED','SUPERSEDED')
+      and workflow_row.issue_codes ? 'DUPLICATE_EXPENSE_REVIEW'
+    order by
+      case when workflow_row.target_timesheet_id=p_timesheet_id then 0 else 1 end,
+      workflow_row.updated_at_utc desc,
+      workflow_row.id desc
+    limit 1
+  ), categories as (
+    select distinct replace(issue_code.value,'DUPLICATE_EXPENSE_','') as category
+    from matched_workflow
+    cross join lateral jsonb_array_elements_text(matched_workflow.issue_codes) issue_code(value)
+    where issue_code.value like 'DUPLICATE_EXPENSE_%'
+      and issue_code.value<>'DUPLICATE_EXPENSE_REVIEW'
+      and replace(issue_code.value,'DUPLICATE_EXPENSE_','')
+            in ('MILEAGE','TRAVEL','ACCOMMODATION','OTHER')
+  )
+  select jsonb_build_object(
+    'required',matched_workflow.id is not null,
+    'workflow_id',matched_workflow.id,
+    'categories',coalesce(
+      (select jsonb_agg(categories.category order by categories.category) from categories),
+      '[]'::jsonb
+    )
+  )
+  from (select 1) singleton
+  left join matched_workflow on true;
+$function$;
+
+revoke all on function private._timesheet_duplicate_expense_review_v1(uuid)
+  from public,anon,authenticated,service_role;
+
 create or replace function public.candidate_workflow_transition_atomic_v1(
   p_session_id uuid,
   p_environment text,
@@ -125,6 +356,8 @@ declare
   v_source_component public.candidate_submission_components%rowtype;
   v_all_final_ready boolean:=false;
   v_server_issue_codes jsonb:='[]'::jsonb;
+  v_duplicate_expense_review jsonb:='{}'::jsonb;
+  v_duplicate_expense_category text;
   v_request_id uuid;
   v_workflow_kind text;
   v_scope text;
@@ -1711,6 +1944,36 @@ begin
     v_server_issue_codes:=private._candidate_submission_issue_codes_v1(
       v_workflow.id,v_immutable_submission,v_policy
     );
+    v_duplicate_expense_review:=case
+      when v_workflow.workflow_kind in ('CONTRACT_COMBINED','CONTRACT_EXPENSE')
+       and cardinality(v_required_categories)>0
+      then private._expense_duplicate_review_v1(v_workflow.id,v_required_categories)
+      else jsonb_build_object(
+        'required',false,
+        'categories','[]'::jsonb,
+        'prior_claim_count',0,
+        'confirmation_digest',null
+      )
+    end;
+    if coalesce((v_duplicate_expense_review->>'required')::boolean,false) then
+      if lower(coalesce(v_payload#>>'{duplicate_expense_confirmation,confirmed}','false'))
+           not in ('true','t','1','yes')
+         or nullif(v_payload#>>'{duplicate_expense_confirmation,confirmation_digest}','')
+              is distinct from v_duplicate_expense_review->>'confirmation_digest' then
+        raise exception 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED'
+          using errcode='PT409',detail=v_duplicate_expense_review::text;
+      end if;
+      v_server_issue_codes:=v_server_issue_codes||jsonb_build_array('DUPLICATE_EXPENSE_REVIEW');
+      for v_duplicate_expense_category in
+        select jsonb_array_elements_text(v_duplicate_expense_review->'categories')
+      loop
+        v_server_issue_codes:=v_server_issue_codes
+          ||jsonb_build_array('DUPLICATE_EXPENSE_'||v_duplicate_expense_category);
+      end loop;
+      select coalesce(jsonb_agg(distinct issue_code order by issue_code),'[]'::jsonb)
+      into v_server_issue_codes
+      from jsonb_array_elements_text(v_server_issue_codes) issue_code;
+    end if;
     update public.candidate_approval_requests set
       state='SUPERSEDED',superseded_at_utc=p_now_utc,updated_at_utc=p_now_utc
     where workflow_id=v_workflow.id and state in ('PENDING','APPROVED');

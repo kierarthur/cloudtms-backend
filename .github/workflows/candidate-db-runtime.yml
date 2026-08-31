@@ -37,6 +37,8 @@ on:
       - 'supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql'
       - 'supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql'
       - 'tests/30082026_2207_candidate_paper_evidence_manifest_label_runtime_verification.sql'
+      - 'supabase/repeatable/30082026_1903_candidate_expense_carrier_anchor_route_v1.sql'
+      - 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql'
       - 'supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql'
       - 'supabase/verification/31082026_0322_timesheet_cross_record_overlap_guard_verification.sql'
       - 'supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql'
@@ -237,6 +239,7 @@ jobs:
             supabase/verification/30082026_1910_candidate_expense_carrier_anchor_route_verification.sql
             supabase/verification/30082026_2157_candidate_paper_evidence_manifest_label_verification.sql
             supabase/verification/31082026_0322_timesheet_cross_record_overlap_guard_verification.sql
+            supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql
           )
           for file in "${suites[@]}"; do apply_sql "$file"; done
 

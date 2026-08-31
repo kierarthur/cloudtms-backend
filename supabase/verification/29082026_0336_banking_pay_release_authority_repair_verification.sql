@@ -14,7 +14,7 @@ BEGIN
   FOR v_expected IN
     SELECT *
     FROM (VALUES
-      ('public.bulk_authorise_dataset_v1(jsonb)', '00bd21d9e513cf697304973b508e682eaeafcf91dedbfb2685f276ad161bfbed'),
+      ('public.bulk_authorise_dataset_v1(jsonb)', '930d55e60b1599fcdba40ab7b5308ba5991a666f7a92b23f39d8c33a481af5e3'),
       ('public.bulk_process_dataset_v1(jsonb)', 'b8faea3c39aed9d29108bb0dbb9ba8372c50cfff3733796d970b66814020a648'),
       ('public.bulk_timesheet_row_patch_v1(jsonb)', 'adc4f93bb1ef1186bdbb25438566da8f6548a305d61dc229505c075e69128af6'),
       ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)', '89543b82378468b1ae43534f5a4b1a200ffc60ffbef76196398b7f7d6521792f'),

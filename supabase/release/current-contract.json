@@ -4905,6 +4905,25 @@
           "grantee": "postgres",
           "grantable": false,
           "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_expense_duplicate_review_v1(p_workflow_id uuid, p_required_categories text[])",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "249757a20e512e182e6e3a4c8f6c17f638afd5aa1164f7238d1f1e78a38659be"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
         },
         {
           "grantee": "service_role",
@@ -6385,6 +6404,25 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "eb6c21c88e29919413c2ab078ba54ec98a7e30ea2b88a6377ac6da8cd2a33868"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_duplicate_expense_review_v1(p_timesheet_id uuid)",
+      "parallel": "u",
+      "volatility": "s",
+      "security_definer": true,
+      "definition_sha256": "e5390162bf80cf5764ddfa9158e51d1ec9f8513b166ec0cb352ae96403fc4d34"
     },
     {
       "acl": [
@@ -13412,7 +13450,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "00bd21d9e513cf697304973b508e682eaeafcf91dedbfb2685f276ad161bfbed"
+      "definition_sha256": "930d55e60b1599fcdba40ab7b5308ba5991a666f7a92b23f39d8c33a481af5e3"
     },
     {
       "acl": [
@@ -15216,7 +15254,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "263dcc6f4b41bdfb80b5a2a53cd302a1ec6b1f2f12c9d35b762a2cce43a3fc8a"
+      "definition_sha256": "cb8dc3e6257d8c2b0e3586b643b03d8f4fb33b17aa2231104efea5db1342fd24"
     },
     {
       "acl": [
@@ -26706,7 +26744,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "e1123e56c6bb68fe02074a5159817d0b83abd77f20eb4f92c2b7f2de2c36343e"
+      "definition_sha256": "e3112778d08fb155aa579fdc69e8ff365939f574ad56bc6f21e45db4a08be518"
     },
     {
       "acl": [
@@ -26730,7 +26768,31 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "df698fb5cae9359492aac5a6f7e02da66b79ad249d6a86ca99210b4386b789d0"
+      "definition_sha256": "90ad7fdd6a5acb8e952e9c8948538b593377c17345cfc1e05cddac390addfb98"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "identity": "timesheet_authorise_reviewed_atomic(p_timesheet_id uuid, p_expected_timesheet_id uuid, p_actor_user_id uuid, p_now_utc timestamp with time zone, p_expected_row_signature text, p_duplicate_expense_confirmed boolean)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "95bbfb49029756ce50224c18d7705f5a0af1886201d87d7a47fb72a0d4c06b68"
     },
     {
       "acl": [
@@ -57790,6 +57852,10 @@
         {
           "name": "candidate_submission_workflows_account_idempotency_uq",
           "definition": "CREATE UNIQUE INDEX candidate_submission_workflows_account_idempotency_uq ON public.candidate_submission_workflows USING btree (account_id, idempotency_key)"
+        },
+        {
+          "name": "candidate_submission_workflows_anchor_timesheet_state_idx",
+          "definition": "CREATE INDEX candidate_submission_workflows_anchor_timesheet_state_idx ON public.candidate_submission_workflows USING btree (anchor_timesheet_id, state)"
         },
         {
           "name": "candidate_submission_workflows_candidate_signature_idx",

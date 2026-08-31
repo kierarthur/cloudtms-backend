@@ -1568,6 +1568,7 @@ DECLARE
   v_temp_log_enabled boolean := false;
   v_advance_state_refresh_json jsonb := '{}'::jsonb;
   v_has_uncleared_advance_override boolean := false;
+  v_duplicate_expense_review jsonb := '{}'::jsonb;
 BEGIN
 
   if coalesce((public._ctms_import_correction_classify_v1(p_timesheet_id)
@@ -1661,6 +1662,19 @@ BEGIN
 
   IF p_expected_timesheet_id IS DISTINCT FROM v_current_ts.timesheet_id THEN
     RAISE EXCEPTION USING MESSAGE = 'EXPECTED_TIMESHEET_MISMATCH', DETAIL = jsonb_build_object('expected_timesheet_id', p_expected_timesheet_id, 'current_timesheet_id', v_current_ts.timesheet_id)::text;
+  END IF;
+
+  v_duplicate_expense_review:=private._timesheet_duplicate_expense_review_v1(
+    v_current_ts.timesheet_id
+  );
+  IF COALESCE((v_duplicate_expense_review->>'required')::boolean,false)
+     AND COALESCE(current_setting('cloudtms.duplicate_expense_reviewed',true),'')<>'true' THEN
+    RAISE EXCEPTION 'DUPLICATE_EXPENSE_REVIEW_REQUIRED'
+      USING ERRCODE='PT409',DETAIL=jsonb_build_object(
+        'code','DUPLICATE_EXPENSE_REVIEW_REQUIRED',
+        'timesheet_id',v_current_ts.timesheet_id,
+        'categories',COALESCE(v_duplicate_expense_review->'categories','[]'::jsonb)
+      )::text;
   END IF;
 
   PERFORM public._temp_diag_log(
@@ -2076,6 +2090,39 @@ ALTER FUNCTION public.timesheet_authorise_generic_atomic(uuid, uuid, uuid, times
 REVOKE ALL ON FUNCTION public.timesheet_authorise_generic_atomic(uuid, uuid, uuid, timestamp with time zone, text) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.timesheet_authorise_generic_atomic(uuid, uuid, uuid, timestamp with time zone, text) TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.timesheet_authorise_reviewed_atomic(
+  p_timesheet_id uuid,
+  p_expected_timesheet_id uuid,
+  p_actor_user_id uuid,
+  p_now_utc timestamp with time zone DEFAULT now(),
+  p_expected_row_signature text DEFAULT NULL::text,
+  p_duplicate_expense_confirmed boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF p_duplicate_expense_confirmed IS DISTINCT FROM true THEN
+    RAISE EXCEPTION 'DUPLICATE_EXPENSE_REVIEW_CONFIRMATION_REQUIRED'
+      USING ERRCODE='PT409',DETAIL=jsonb_build_object(
+        'code','DUPLICATE_EXPENSE_REVIEW_CONFIRMATION_REQUIRED',
+        'timesheet_id',p_timesheet_id
+      )::text;
+  END IF;
+  PERFORM set_config('cloudtms.duplicate_expense_reviewed','true',true);
+  RETURN public.timesheet_authorise_generic_atomic(
+    p_timesheet_id,p_expected_timesheet_id,p_actor_user_id,p_now_utc,p_expected_row_signature
+  );
+END;
+$function$;
+ALTER FUNCTION public.timesheet_authorise_reviewed_atomic(uuid, uuid, uuid, timestamp with time zone, text, boolean) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.timesheet_authorise_reviewed_atomic(uuid, uuid, uuid, timestamp with time zone, text, boolean)
+  FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.timesheet_authorise_reviewed_atomic(uuid, uuid, uuid, timestamp with time zone, text, boolean)
+  TO service_role;
+
 CREATE OR REPLACE FUNCTION public.timesheet_authorise_bulk_atomic(p_items jsonb DEFAULT '[]'::jsonb, p_actor_user_id uuid DEFAULT NULL::uuid, p_now_utc timestamp with time zone DEFAULT now())
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -2198,6 +2245,7 @@ BEGIN
     sig.signature_text AS current_row_signature,
     COALESCE(segment_state.has_segment_invoice_lock, false) AS has_segment_invoice_lock,
     COALESCE(validation_state.validation_ok, false) AS validation_ok
+    ,private._timesheet_duplicate_expense_review_v1(cur_ts.timesheet_id) AS duplicate_expense_review_json
   FROM pg_temp.timesheet_authorise_bulk_items AS item_rows
   LEFT JOIN LATERAL (
     SELECT ts_req.*
@@ -2307,6 +2355,7 @@ BEGIN
       WHEN state_rows.tsfin_locked_by_invoice_id IS NOT NULL OR state_rows.has_segment_invoice_lock THEN 'TIMESHEET_LOCKED_BY_INVOICE'
       WHEN state_rows.current_authorised_at_server IS NOT NULL OR state_rows.tsfin_authorised_at_utc IS NOT NULL THEN 'ALREADY_AUTHORISED'
       WHEN state_rows.tsfin_processing_status NOT IN ('PENDING_AUTH'::public.ts_fin_processing_status_enum, 'READY_FOR_HR'::public.ts_fin_processing_status_enum) THEN 'AUTHORISE_NOT_ALLOWED'
+      WHEN COALESCE((state_rows.duplicate_expense_review_json->>'required')::boolean,false) THEN 'DUPLICATE_EXPENSE_REVIEW_REQUIRED'
       ELSE NULL::text
     END AS failure_code,
     CASE

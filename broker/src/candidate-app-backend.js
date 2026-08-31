@@ -83,6 +83,7 @@ const CONFLICT_ERROR_CODES = new Set([
   'TIMESHEET_MOVED',
   'ROUTE_CHANGE_CONTEXT_CHANGED',
   'CANDIDATE_EXPENSE_CLAIM_ALREADY_ACTIVE',
+  'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED',
   'CANDIDATE_EVIDENCE_BYTES_ALREADY_USED',
   'CANDIDATE_COMPONENT_PREPARE_IDEMPOTENCY_CONFLICT',
   'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH',
@@ -782,6 +783,7 @@ function errorResponse(error, correlationId, office = false) {
   else if (code === 'CANDIDATE_REQUEST_FAILED') status = 500;
   const professionalMessages = {
     TIMESHEET_WORK_INTERVAL_OVERLAP: 'You have already submitted a timesheet containing these hours. This timesheet cannot be accepted.',
+    CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED: 'You have already submitted this type of expense for this client and week ending. Check the existing claim before submitting it again.',
     CANDIDATE_CONTEXT_STALE: 'This timesheet changed. Refresh it before trying again.',
     CANDIDATE_REQUEST_GENERATION_STALE: 'This manager request changed. Refresh it before trying again.',
     CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED: 'The selected timesheets changed. Review the current selection before sending reminders.',
@@ -819,6 +821,14 @@ function errorResponse(error, correlationId, office = false) {
     request_id: correlationId
   };
   if (error instanceof CandidateHttpError && error.details != null) body.details = error.details;
+  else if (code === 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_REQUIRED') {
+    try {
+      const databaseDetails = JSON.parse(text(error?.json?.details));
+      if (isObject(databaseDetails)) body.details = databaseDetails;
+    } catch {
+      // The warning remains fail-closed when a provider omits malformed detail.
+    }
+  }
   const headers = {};
   const retryAfterSeconds = Number(error instanceof CandidateHttpError
     ? error.details?.retry_after_seconds : 0);
@@ -4870,6 +4880,15 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       submissionFacts, breakContext
     );
     const approvalRoute = requestedApprovalRoute || upper(workflow.route);
+    const duplicateExpenseConfirmation = isObject(
+      body.duplicate_expense_confirmation || payload.duplicate_expense_confirmation
+    ) ? (body.duplicate_expense_confirmation || payload.duplicate_expense_confirmation) : null;
+    if (duplicateExpenseConfirmation && (
+      duplicateExpenseConfirmation.confirmed !== true
+      || !/^[0-9a-f]{64}$/i.test(text(duplicateExpenseConfirmation.confirmation_digest))
+    )) {
+      throw new CandidateHttpError(400, 'CANDIDATE_DUPLICATE_EXPENSE_CONFIRMATION_INVALID');
+    }
     payload = {
       ...payload,
       immutable_submission: await prepareImmutableSubmission(
@@ -4880,6 +4899,12 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       candidate_signature_component_id: signatureComponentId,
       candidate_signed_at_utc: new Date(candidateSignedAtUtc).toISOString(),
       approval_route: approvalRoute,
+      ...(duplicateExpenseConfirmation ? {
+        duplicate_expense_confirmation: {
+          confirmed: true,
+          confirmation_digest: text(duplicateExpenseConfirmation.confirmation_digest).toLowerCase()
+        }
+      } : {}),
       renderer_contract_version: RENDERER_CONTRACT_VERSION
     };
   } else if (dbAction === 'SELECT_PHONE_APPROVAL') {

@@ -296,6 +296,9 @@ BEGIN
         AND classified_rows.authorised_calc = FALSE
         AND classified_rows.has_unissued_invoice_calc = FALSE
         AND classified_rows.has_issued_invoice_calc = FALSE
+        AND NOT (
+          'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(classified_rows.issue_codes,ARRAY[]::text[]))
+        )
       ) AS can_bulk_authorise_calc,
       (
         classified_rows.timesheet_id IS NOT NULL
@@ -454,6 +457,11 @@ BEGIN
         'bulk_authorise_section',
         CASE
           WHEN decision_rows.can_bulk_authorise_calc THEN 'processed_eligible'
+          WHEN decision_rows.timesheet_id IS NOT NULL
+            AND decision_rows.requires_authorisation_calc = TRUE
+            AND decision_rows.authorised_calc = FALSE
+            AND 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.issue_codes,ARRAY[]::text[]))
+            THEN 'processed_review_required'
           WHEN decision_rows.timesheet_id IS NOT NULL
             AND decision_rows.authorised_calc = TRUE
             AND decision_rows.locked_calc = FALSE
@@ -646,6 +654,13 @@ BEGIN
         decision_rows.can_unprocess_calc,
         'can_bulk_authorise',
         decision_rows.can_bulk_authorise_calc,
+        'bulk_authorise_block_code',
+        CASE WHEN 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.issue_codes,ARRAY[]::text[]))
+          THEN 'DUPLICATE_EXPENSE_REVIEW_REQUIRED' ELSE NULL::text END,
+        'bulk_authorise_block_message',
+        CASE WHEN 'DUPLICATE_EXPENSE_REVIEW'=ANY(COALESCE(decision_rows.issue_codes,ARRAY[]::text[]))
+          THEN 'Not included in bulk authorisation because an expense category was already submitted for this Client and week ending.'
+          ELSE NULL::text END,
         'can_bulk_unauthorise',
         decision_rows.can_bulk_unauthorise_calc,
         'can_edit_timesheet_data',
