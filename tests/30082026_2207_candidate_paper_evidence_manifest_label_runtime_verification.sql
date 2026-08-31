@@ -31,6 +31,7 @@ declare
   v_account uuid:='a2000000-0000-0000-0000-000000000007';
   v_session uuid:='a2000000-0000-0000-0000-000000000008';
   v_workflow uuid:='a2000000-0000-0000-0000-000000000009';
+  v_document_operation uuid:='a2000000-0000-0000-0000-000000000010';
   v_source_component uuid;
   v_unsafe_component uuid;
   v_return_component uuid;
@@ -67,14 +68,17 @@ begin
   ) values(gen_random_uuid(),v_client,current_date-1,'ELECTRONIC',false,true);
   insert into public.contracts(
     id,candidate_id,client_id,start_date,end_date,week_ending_weekday_snapshot,
-    default_submission_mode
+    pay_method_snapshot,default_submission_mode
   ) values(v_contract,v_candidate,v_client,current_date-60,current_date+60,
-    extract(dow from current_date)::integer,'ELECTRONIC');
+    extract(dow from current_date)::integer,'PAYE','ELECTRONIC');
   insert into public.timesheets(
-    timesheet_id,contract_id,week_ending_date,line_type,submission_mode,
-    qr_status,qr_token,actual_schedule_json
+    timesheet_id,contract_id,booking_id,occupant_key_norm,hospital_norm,
+    ward_norm,job_title_norm,week_ending_date,line_type,sheet_scope,
+    submission_mode,qr_status,qr_token,actual_schedule_json
   ) values(
-    v_timesheet,v_contract,current_date,'HOURS','MANUAL',
+    v_timesheet,v_contract,'PAPER-COMPLETE-PACK-RUNTIME','GCK-PAPER-RUNTIME',
+    'PAPER-COMPLETE-PACK-RUNTIME-CLIENT','PAPER-COMPLETE-PACK-RUNTIME-WARD',
+    'PAPER-COMPLETE-PACK-RUNTIME-ROLE',current_date,'HOURS','WEEKLY','MANUAL',
     'PENDING','paper-complete-pack-runtime-token',
     jsonb_build_array(jsonb_build_object(
       'date',current_date,'start','09:00','end','17:30','break_minutes',30
@@ -84,14 +88,30 @@ begin
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id
   ) values(v_week,v_contract,current_date,'OPEN','ELECTRONIC',v_timesheet);
   insert into public.timesheets_financials(
-    timesheet_id,candidate_id,client_id,total_hours,processing_status
-  ) values(v_timesheet,v_candidate,v_client,8,'UNPROCESSED');
-  insert into public.invoice_document_versions(
-    entity_type,entity_id,purpose,source_revision,template_version,status,
-    r2_key,sha256,size_bytes,page_count
+    timesheet_id,timesheet_version,candidate_id,client_id,total_hours,processing_status
+  ) values(v_timesheet,1,v_candidate,v_client,8,'UNPROCESSED');
+  insert into public.invoice_operations(
+    id,operation_type,entity_type,entity_id,actor_user_id,idempotency_key,
+    status,phase,priority,source_revision,template_version,input_json,config_json,
+    progress_json,total_units,chunk_count,control_version,change_seq,
+    created_at_utc,updated_at_utc
   ) values(
-    'TIMESHEET',v_timesheet,'TIMESHEET','1','timesheet-professional-v2','READY',
-    'candidate-app/test/paper-base.pdf',repeat('f',64),1024,1
+    v_document_operation,'BUILD_DOCUMENT','TIMESHEET',v_timesheet,v_actor,
+    'paper-complete-pack-runtime-'||v_document_operation::text,
+    'COMPLETE','VERIFYING',550,'1','timesheet-professional-v2','{}'::jsonb,
+    jsonb_build_object('processor_policy',private._invoice_processor_limits()),
+    '{}'::jsonb,1,1,1,nextval('public.invoice_operation_change_seq'),now(),now()
+  );
+  insert into public.invoice_document_versions(
+    entity_type,entity_id,purpose,operation_id,source_revision,template_version,status,
+    snapshot_json,snapshot_hash,manifest_json,manifest_hash,
+    r2_key,sha256,size_bytes,page_count,ready_at_utc,verified_at_utc
+  ) values(
+    'TIMESHEET',v_timesheet,'TIMESHEET',v_document_operation,'1',
+    'timesheet-professional-v2','READY','{}'::jsonb,
+    encode(extensions.digest('{}','sha256'),'hex'),'[]'::jsonb,
+    encode(extensions.digest('[]','sha256'),'hex'),
+    'candidate-app/test/paper-base.pdf',repeat('f',64),1024,1,now(),now()
   );
   insert into public.candidate_app_accounts(id,environment,email_normalized,status)
   values(v_account,'TEST','paper-runtime@example.test','ACTIVE');
