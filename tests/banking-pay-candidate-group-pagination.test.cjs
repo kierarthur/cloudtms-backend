@@ -33,4 +33,8 @@ test('mandatory release evidence contains 10/2 groups and 10/10/8 detail chunks'
     assert.ok(release.verificationFiles.includes(file));assert.ok(release.newVerificationFiles.includes(file));
   }
   assert.match(runtime,/40 Ready rows form 12 complete/);assert.match(runtime,/detail 10\/10\/8 paging failed/);
+  assert.match(runtime,/set local cloudtms\.rollback_fixture_scope='BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2'/i);
+  const fixture=fs.readFileSync(path.join(root,'tests/fixtures/28082026_1429_banking_pay_selection_setup.sql'),'utf8');
+  assert.match(fixture,/current_database\(\)='cloudtms_test_clone'/);
+  assert.match(fixture,/current_setting\('cloudtms\.rollback_fixture_scope',true\)='BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2'/);
 });

@@ -4,6 +4,7 @@
 begin;
 set local statement_timeout='45s';
 set local client_min_messages='warning';
+set local cloudtms.rollback_fixture_scope='BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2';
 \ir fixtures/28082026_1429_banking_pay_selection_setup.sql
 
 delete from public.banking_pay_workbench_preview_rows

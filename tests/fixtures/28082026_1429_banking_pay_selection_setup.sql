@@ -1,7 +1,13 @@
 -- Synthetic, rollback-only Banking selection data. Caller owns BEGIN/ROLLBACK.
 -- No copied customer data, usable credentials, Draft or provider operation.
 DO $local_only$ BEGIN
-  IF current_database()<>'banking_modal_v2_test' THEN RAISE EXCEPTION 'LOCAL_FIXTURE_ONLY'; END IF;
+  IF current_database()<>'banking_modal_v2_test'
+     AND NOT (
+       current_database()='cloudtms_test_clone'
+       AND current_setting('cloudtms.rollback_fixture_scope',true)='BANKING_PAY_CANDIDATE_GROUP_PAGINATION_V2'
+     ) THEN
+    RAISE EXCEPTION 'LOCAL_FIXTURE_ONLY';
+  END IF;
 END $local_only$;
 INSERT INTO public.tms_users(id,email,password_hash,role,is_active)
 VALUES ('10000000-0000-4000-8000-000000000001','selection-fixture@example.invalid','UNUSABLE_LOCAL_FIXTURE','admin',true);
