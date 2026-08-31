@@ -72,6 +72,10 @@ test('release and Candidate runtime install the successor before executing its f
     compileFixture,
     /create table public\.timesheets_financials[\s\S]*basis public\.timesheet_fin_basis_enum/i
   );
+  assert.match(
+    compileFixture,
+    /create or replace function public\._pay_timesheet_rotation_scope\(p_timesheet_ids uuid\[\]\)/i
+  );
   assert.ok(release.verificationFiles.includes(verifierPath));
   assert.ok(release.newVerificationFiles.includes(verifierPath));
   assert.ok(release.verificationFiles.includes(duplicateReviewVerifierPath));
