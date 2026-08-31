@@ -7,6 +7,7 @@ const sql = read('supabase/repeatable/30082026_0714_candidate_weekly_paper_targe
 const backend = read('broker/src/candidate-app-backend.js');
 const release = JSON.parse(read('supabase/release/current-release.json'));
 const proofPath = 'supabase/verification/30082026_0605_candidate_weekly_paper_target_prepare_verification.sql';
+const proof = read(proofPath);
 
 test('printed preparation materialises a missing weekly target through the existing canonical owner', () => {
   assert.match(sql, /create or replace function public\.candidate_weekly_paper_target_prepare_v1/i);
@@ -53,4 +54,13 @@ test('paper target preparation is service-only and its first-use proof is mandat
   for (const list of [release.verificationFiles, release.newVerificationFiles]) {
     assert.ok(list.includes(proofPath));
   }
+});
+
+test('weekly PAPER first use derives one internally consistent fixed week', () => {
+  assert.match(proof, /v_now timestamptz := '2026-08-30 06:05:00\+00'/i);
+  assert.match(proof, /v_week_ending_date date := \('2026-08-30 06:05:00\+00'::timestamptz at time zone 'UTC'\)::date/i);
+  assert.match(proof, /v_work_date date := \(\('2026-08-30 06:05:00\+00'::timestamptz at time zone 'UTC'\)::date-6\)/i);
+  assert.match(proof, /'date',v_work_date,'day','MON'/i);
+  assert.match(proof, /extract\(dow from v_week_ending_date\)::integer/i);
+  assert.doesNotMatch(proof, /\bcurrent_date\b/i);
 });

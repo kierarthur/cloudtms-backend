@@ -10,6 +10,8 @@ begin;
 do $candidate_weekly_paper_target_prepare_verification$
 declare
   v_now timestamptz := '2026-08-30 06:05:00+00';
+  v_week_ending_date date := ('2026-08-30 06:05:00+00'::timestamptz at time zone 'UTC')::date;
+  v_work_date date := (('2026-08-30 06:05:00+00'::timestamptz at time zone 'UTC')::date-6);
   v_client uuid := gen_random_uuid();
   v_candidate uuid := gen_random_uuid();
   v_contract uuid := gen_random_uuid();
@@ -57,14 +59,14 @@ declare
 begin
   v_email := 'paper-target-'||replace(v_candidate::text,'-','')||'@example.test';
   v_schedule := jsonb_build_array(jsonb_build_object(
-    'date',current_date,'day','MON','start','09:00','end','17:00',
+    'date',v_work_date,'day','MON','start','09:00','end','17:00',
     'break_minutes',0,'hours',8
   ));
   v_create := jsonb_build_object(
     'timesheet_id',v_timesheet,
     'booking_id','CANDIDATE-WEEKLY-'||replace(v_week::text,'-',''),
     'contract_id',v_contract,
-    'week_ending_date',current_date,
+    'week_ending_date',v_week_ending_date,
     'occupant_key_norm','PAPER-TARGET-'||replace(v_candidate::text,'-',''),
     'hospital_norm','Paper target verification client',
     'ward_norm','',
@@ -143,14 +145,15 @@ begin
     default_submission_mode,pay_method_snapshot,role,
     candidate_paper_submission_enabled_override
   ) values(
-    v_contract,v_candidate,v_client,current_date-30,current_date+30,0,
+    v_contract,v_candidate,v_client,v_week_ending_date-30,v_week_ending_date+30,
+    extract(dow from v_week_ending_date)::integer,
     'ELECTRONIC','PAYE','RMN',true
   );
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,status,submission_mode_snapshot,timesheet_id,
     day_entries_json,totals_json
   ) values(
-    v_week,v_contract,current_date,'SUBMITTED','ELECTRONIC',null,
+    v_week,v_contract,v_week_ending_date,'SUBMITTED','ELECTRONIC',null,
     v_schedule,jsonb_build_object('total_hours',8,'actual_schedule_json',v_schedule)
   );
   insert into public.candidate_app_accounts(
@@ -174,7 +177,7 @@ begin
     immutable_submission_json,immutable_submission_sha256
   ) values(
     v_workflow,'TEST',v_account,v_candidate,'CONTRACT_HOURS','WEEKLY','ELECTRONIC',
-    'READY_FOR_MANAGER_APPROVAL',1,v_contract,v_week,null,null,current_date,
+    'READY_FOR_MANAGER_APPROVAL',1,v_contract,v_week,null,null,v_week_ending_date,
     'paper-target-verification-'||v_workflow::text,
     extensions.digest('paper-target-verification-'||v_workflow::text,'sha256'),
     v_submission,private._candidate_sha256_jsonb_v1(v_submission)
@@ -201,7 +204,7 @@ begin
      or (select timesheet_id from public.contract_weeks where id=v_week) is distinct from v_timesheet
      or (select target_timesheet_id from public.candidate_submission_workflows where id=v_workflow) is distinct from v_timesheet
      or (select timesheet_id from public.candidate_submission_components where workflow_id=v_workflow and component_no=1) is distinct from v_timesheet
-     or (select count(*) from public.timesheets where contract_id=v_contract and week_ending_date=current_date and is_current)<>1
+     or (select count(*) from public.timesheets where contract_id=v_contract and week_ending_date=v_week_ending_date and is_current)<>1
      or not exists(
        select 1 from public.timesheets
        where timesheet_id=v_timesheet and is_current and archived_at_utc is null
@@ -253,7 +256,7 @@ begin
           is distinct from 'AWAITING_PAPER_RETURN'
      or (select route from public.candidate_submission_workflows where id=v_workflow)
           is distinct from 'PAPER'
-     or (select count(*) from public.timesheets where contract_id=v_contract and week_ending_date=current_date and is_current)<>1
+     or (select count(*) from public.timesheets where contract_id=v_contract and week_ending_date=v_week_ending_date and is_current)<>1
      or (select count(*) from public.mail_outbox
          where type='TIMESHEET_QR'
            and payment_scope_json->>'candidate_workflow_id'=v_workflow::text)<>1
