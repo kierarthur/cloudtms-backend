@@ -6,6 +6,21 @@
 -- automatic routes remain blocked.
 begin;
 
+-- Candidate runtime CI deliberately creates a compact Contract fixture.  The
+-- production bulk authoriser reads this established Office flag even though
+-- the duplicate-review case leaves it false.  Add the missing fixture column
+-- only inside this rollback-contained transaction.
+do $contract_fixture$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='contracts' and column_name='requires_hr'
+  ) then
+    alter table public.contracts add column requires_hr boolean not null default false;
+  end if;
+end;
+$contract_fixture$;
+
 -- The Candidate runtime matrix deliberately installs a reduced CloudTMS
 -- catalogue.  Its authorisation owner still emits the normal optional
 -- diagnostic event, so provide a rollback-contained no-op only when that

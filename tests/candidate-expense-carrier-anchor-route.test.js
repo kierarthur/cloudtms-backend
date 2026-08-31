@@ -78,6 +78,7 @@ test('release and Candidate runtime install the successor before executing its f
 
 test('duplicate review is category-specific and excludes the official expense summary', () => {
   assert.match(duplicateReviewVerifier, /information_schema\.columns[\s\S]*column_name='password_hash'/i);
+  assert.match(duplicateReviewVerifier, /column_name='requires_hr'[\s\S]*alter table public\.contracts add column requires_hr boolean not null default false/i);
   assert.match(duplicateReviewVerifier, /to_regprocedure\('public\._temp_diag_log\(text,text,text,jsonb\)'\)[\s\S]*create function public\._temp_diag_log[\s\S]*returns void[\s\S]*language plpgsql/i);
   assert.doesNotMatch(duplicateReviewVerifier, /create function public\._ctms_import_correction_classify_v1/i);
   assert.match(duplicateReviewVerifier, /insert into public\.tms_users\(id,email,is_active\)/i);
