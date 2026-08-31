@@ -68,6 +68,10 @@ test('release and Candidate runtime install the successor before executing its f
     compileFixture,
     /create view public\.v_timesheets_summary_base[\s\S]*client_requires_hr[\s\S]*hr_validation_required_for_invoice[\s\S]*validation_status/i
   );
+  assert.match(
+    compileFixture,
+    /create table public\.timesheets_financials[\s\S]*basis public\.timesheet_fin_basis_enum/i
+  );
   assert.ok(release.verificationFiles.includes(verifierPath));
   assert.ok(release.newVerificationFiles.includes(verifierPath));
   assert.ok(release.verificationFiles.includes(duplicateReviewVerifierPath));

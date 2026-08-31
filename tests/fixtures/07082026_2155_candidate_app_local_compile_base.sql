@@ -303,7 +303,7 @@ create table public.timesheets_financials (
   is_current boolean not null default true,
   timesheet_version integer not null default 1,
   is_stale boolean not null default false,
-  basis text,
+  basis public.timesheet_fin_basis_enum,
   invoice_breakdown_json jsonb not null default '{}'::jsonb,
   policy_snapshot_json jsonb not null default '{}'::jsonb,
   rate_source_refs_json jsonb not null default '{}'::jsonb,
