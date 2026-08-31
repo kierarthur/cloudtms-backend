@@ -265,6 +265,19 @@ begin
       jsonb_agg(jsonb_build_object(
         'workflow_id',resolved.id,'workflow_kind',resolved.workflow_kind,'state',resolved.state,
         'claim_family',resolved.claim_family,
+        'draft_has_content',case
+          when resolved.state not in ('CREATED','WORKER_DRAFT') then null
+          else exists(
+            select 1
+            from public.candidate_submission_components component
+            where component.workflow_id=resolved.id
+              and component.workflow_generation=resolved.generation
+              and component.superseded_at_utc is null
+              and component.component_kind in (
+                'HOURS_TIMESHEET','CANDIDATE_SIGNATURE','MILEAGE_FORM','EXPENSE_EVIDENCE'
+              )
+          )
+        end,
         'target_timesheet_id',resolved.target_timesheet_id,'anchor_timesheet_id',resolved.anchor_timesheet_id,
         'rejection_reason',resolved.rejection_reason,'rejection_scope',resolved.rejection_scope,
         'required_resubmission_action',case

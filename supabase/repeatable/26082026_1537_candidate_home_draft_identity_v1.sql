@@ -73,7 +73,17 @@ begin
         (workflow.target_timesheet_id::text)
     ) as draft_record(record_id_text) on true
     where workflow.candidate_id=p_candidate_id
-      and workflow.state in ('CREATED','WORKER_DRAFT');
+      and workflow.state in ('CREATED','WORKER_DRAFT')
+      and exists(
+        select 1
+        from public.candidate_submission_components component
+        where component.workflow_id=workflow.id
+          and component.workflow_generation=workflow.generation
+          and component.superseded_at_utc is null
+          and component.component_kind in (
+            'HOURS_TIMESHEET','CANDIDATE_SIGNATURE','MILEAGE_FORM','EXPENSE_EVIDENCE'
+          )
+      );
 
     select pg_catalog.count(*)::integer into v_timesheet_attention_count
     from public.contract_weeks cw

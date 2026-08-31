@@ -12,14 +12,17 @@ begin
     and p.proname='_candidate_home_summary_v1'
     and pg_catalog.pg_get_function_identity_arguments(p.oid)='p_environment text, p_account_id uuid, p_candidate_id uuid, p_daily_capability jsonb, p_now_utc timestamp with time zone';
 
-  if pg_catalog.position('draft_timesheet_count' in v_definition)=0
-     or pg_catalog.position('draft_expense_count' in v_definition)=0
-     or pg_catalog.position('draft_timesheet_record_ids' in v_definition)=0
-     or pg_catalog.position('draft_expense_record_ids' in v_definition)=0
-     or pg_catalog.position('contract_week_id::text' in v_definition)=0
-     or pg_catalog.position('anchor_timesheet_id::text' in v_definition)=0
-     or pg_catalog.position('target_timesheet_id::text' in v_definition)=0
-     or pg_catalog.position('WORKER_DRAFT' in v_definition)=0 then
+  if position('draft_timesheet_count' in v_definition)=0
+     or position('draft_expense_count' in v_definition)=0
+     or position('draft_timesheet_record_ids' in v_definition)=0
+     or position('draft_expense_record_ids' in v_definition)=0
+     or position('contract_week_id::text' in v_definition)=0
+     or position('anchor_timesheet_id::text' in v_definition)=0
+     or position('target_timesheet_id::text' in v_definition)=0
+     or position('candidate_submission_components' in v_definition)=0
+     or position('workflow_generation=workflow.generation' in v_definition)=0
+     or position('component.superseded_at_utc is null' in v_definition)=0
+     or position('WORKER_DRAFT' in v_definition)=0 then
     raise exception 'CANDIDATE_HOME_DRAFT_IDENTITY_DEFINITION_MISSING';
   end if;
 

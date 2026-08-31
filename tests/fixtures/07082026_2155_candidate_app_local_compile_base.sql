@@ -448,6 +448,11 @@ create table public.timesheet_evidence (
 
 create sequence public.invoice_operation_change_seq as bigint start with 1;
 
+create or replace function private._invoice_processor_limits()
+returns jsonb language sql immutable set search_path='' as $function$
+  select '{}'::jsonb
+$function$;
+
 create table public.invoice_operations (
   id uuid primary key default gen_random_uuid(),
   parent_operation_id uuid,

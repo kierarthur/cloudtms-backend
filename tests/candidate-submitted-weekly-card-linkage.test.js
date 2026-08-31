@@ -37,6 +37,16 @@ test('submitted Weekly cards show immutable hours and expenses before Timesheet 
   assert.match(sql,/else coalesce\(totals\.expenses_pay_ex_vat,base\.expenses_pay_ex_vat,0\) end as overlay_expenses_pay_ex_vat/i);
 });
 
+test('mutable workflow cards distinguish a recoverable draft from an empty server carrier',()=>{
+  assert.match(sql,/'draft_has_content',case/i);
+  assert.match(sql,/resolved\.state not in \('CREATED','WORKER_DRAFT'\)/i);
+  assert.match(sql,/component\.workflow_id=resolved\.id/i);
+  assert.match(sql,/component\.workflow_generation=resolved\.generation/i);
+  assert.match(sql,/component\.superseded_at_utc is null/i);
+  for(const kind of ['HOURS_TIMESHEET','CANDIDATE_SIGNATURE','MILEAGE_FORM','EXPENSE_EVIDENCE'])
+    assert.match(sql,new RegExp(`'${kind}'`));
+});
+
 test('replacement preserves service-only paging authority and reloads PostgREST',()=>{
   assert.match(sql,/create or replace function public\.candidate_app_timesheet_page_v1\(/i);
   assert.doesNotMatch(sql,/create or replace function private\._candidate_daily_read_projection_v1\(/i);

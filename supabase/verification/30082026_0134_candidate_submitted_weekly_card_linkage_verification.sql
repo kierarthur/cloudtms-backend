@@ -41,6 +41,13 @@ begin
     raise exception 'CANDIDATE_SUBMITTED_WEEKLY_CARD_FACTUAL_OVERLAY_MISSING';
   end if;
 
+  if position('draft_has_content' in lower(v_definition))=0
+     or position('component.workflow_id=resolved.id' in lower(v_definition))=0
+     or position('component.workflow_generation=resolved.generation' in lower(v_definition))=0
+     or position('component.superseded_at_utc is null' in lower(v_definition))=0 then
+    raise exception 'CANDIDATE_MUTABLE_DRAFT_CONTENT_TRUTH_MISSING';
+  end if;
+
   if has_function_privilege('anon',
        'public.candidate_app_timesheet_page_v1(uuid,text,text,text,integer,timestamp with time zone)',
        'EXECUTE')
