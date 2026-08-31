@@ -99,7 +99,7 @@ begin
     v_document_operation,'BUILD_DOCUMENT','TIMESHEET',v_timesheet,v_actor,
     'paper-complete-pack-runtime-'||v_document_operation::text,
     'COMPLETE','VERIFYING',550,'1','timesheet-professional-v2','{}'::jsonb,
-    jsonb_build_object('processor_policy',private._invoice_processor_limits()),
+    '{}'::jsonb,
     '{}'::jsonb,1,1,1,nextval('public.invoice_operation_change_seq'),now(),now()
   );
   insert into public.invoice_document_versions(
