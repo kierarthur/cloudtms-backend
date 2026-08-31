@@ -26,9 +26,19 @@ declare
   v_authorised jsonb;
   v_error text;
 begin
-  insert into public.tms_users(id,email,password_hash,role,is_active)
-  values(v_actor,'duplicate-expense-actor-'||v_actor::text||'@example.test',
-    'UNUSABLE_VERIFICATION_ONLY','admin',true);
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema='public' and table_name='tms_users' and column_name='password_hash'
+  ) then
+    execute $sql$
+      insert into public.tms_users(id,email,password_hash,role,is_active)
+      values($1,$2,'UNUSABLE_VERIFICATION_ONLY','admin',true)
+    $sql$ using v_actor,'duplicate-expense-actor-'||v_actor::text||'@example.test';
+  else
+    insert into public.tms_users(id,email,is_active)
+    values(v_actor,'duplicate-expense-actor-'||v_actor::text||'@example.test',true);
+  end if;
   insert into public.clients(id,name) values(v_client,'Duplicate Expense Verification Client');
   insert into public.candidates(id,email,active,key_norm)
   values(v_candidate,'duplicate-expense-'||v_candidate::text||'@example.test',true,

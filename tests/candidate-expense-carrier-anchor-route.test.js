@@ -11,6 +11,7 @@ const verifierPath = 'supabase/verification/30082026_1910_candidate_expense_carr
 const duplicateReviewVerifierPath = 'supabase/verification/31082026_0915_candidate_duplicate_expense_review_verification.sql';
 const repeatable = read(repeatablePath);
 const verifier = read(verifierPath);
+const duplicateReviewVerifier = read(duplicateReviewVerifierPath);
 const authoriseAuthority = read('supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql');
 const bulkDataset = read('supabase/repeatable/29082026_0326_banking_pay_release_authority_repair_v1.sql');
 const broker = read('broker/src/index.js');
@@ -75,6 +76,8 @@ test('release and Candidate runtime install the successor before executing its f
 });
 
 test('duplicate review is category-specific and excludes the official expense summary', () => {
+  assert.match(duplicateReviewVerifier, /information_schema\.columns[\s\S]*column_name='password_hash'/i);
+  assert.match(duplicateReviewVerifier, /insert into public\.tms_users\(id,email,is_active\)/i);
   assert.match(repeatable, /_expense_duplicate_review_v1[\s\S]*'MILEAGE','TRAVEL','ACCOMMODATION','OTHER'/i);
   assert.match(repeatable, /component\.component_kind in \('MILEAGE_FORM','EXPENSE_EVIDENCE'\)/i);
   assert.doesNotMatch(
