@@ -38634,6 +38634,10 @@
           "definition": "CREATE INDEX idx_audit_candidate_workflow_mutation_receipt_v1 ON public.audit_events USING btree (object_type, object_id_text, correlation_id, ts_utc DESC, id DESC) WHERE (object_type = 'candidate_workflow_mutation_receipt'::text)"
         },
         {
+          "name": "idx_audit_candidate_workflow_mutation_request_v1",
+          "definition": "CREATE INDEX idx_audit_candidate_workflow_mutation_request_v1 ON public.audit_events USING btree (correlation_id, ts_utc DESC, id DESC) INCLUDE (object_id_text, before_json, after_json) WHERE (object_type = 'candidate_workflow_mutation_receipt'::text)"
+        },
+        {
           "name": "idx_audit_import_correction_source_v1",
           "definition": "CREATE INDEX idx_audit_import_correction_source_v1 ON public.audit_events USING btree (((after_json ->> 'shift_id'::text)), ((after_json ->> 'external_row_key'::text)), ((after_json ->> 'correction_id'::text)), action, ts_utc DESC, id) WHERE ((object_type = ANY (ARRAY['timesheets'::text, 'invoices'::text, 'contract_weeks'::text])) AND (action = ANY (ARRAY['NHSP_IMPORT_CORRECTION_APPLIED'::text, 'HR_IMPORT_CORRECTION_APPLIED'::text])))"
         },
