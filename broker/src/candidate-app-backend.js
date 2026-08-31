@@ -3494,6 +3494,38 @@ async function candidateDocumentBranding(env, frozenSource = null) {
   return { ...contract, logo };
 }
 
+async function candidateAppAgencyBranding(env) {
+  try {
+    const branding = await candidateDocumentBranding(env);
+    if (!branding.logo) {
+      return {
+        agency_name: branding.agency_name,
+        logo_data_url: null,
+        logo_media_type: null,
+        logo_sha256: null
+      };
+    }
+    if (branding.logo.bytes.byteLength > 512 * 1024) {
+      throw new CandidateHttpError(409, 'CANDIDATE_DOCUMENT_BRANDING_CONTRACT_INVALID');
+    }
+    return {
+      agency_name: branding.agency_name,
+      logo_data_url: dataUrl(branding.logo.bytes, branding.logo_media_type),
+      logo_media_type: branding.logo_media_type,
+      logo_sha256: branding.logo_sha256
+    };
+  } catch (error) {
+    console.error('[candidate-app] agency branding unavailable',
+      safeCandidateTransportDiagnostic(error));
+    return {
+      agency_name: null,
+      logo_data_url: null,
+      logo_media_type: null,
+      logo_sha256: null
+    };
+  }
+}
+
 async function drawCandidateBranding(pdf, page, branding, { x = 34, y = 800, maxWidth = 140, maxHeight = 32 } = {}) {
   if (branding.logo) {
     const image = branding.logo.media_type === 'image/png'
@@ -4410,6 +4442,7 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
     response.notification_preferences = safeCandidateNotificationPreferences(
       response.notification_preferences
     );
+    response.agency_branding = await candidateAppAgencyBranding(env);
     return jsonResponse(200, response, {
       'x-correlation-id': correlationId
     });

@@ -69,6 +69,8 @@ import {
 } from './mytms-manager-control-adapter.js';
 import {
   adoptMyTmsCandidate,
+  deleteMyTmsAgencyLogo,
+  getMyTmsAgencyLogo,
   getMyTmsCandidateStatus,
   getMyTmsDailyInformationSettings,
   getMyTmsHomeAnnouncementSettings,
@@ -84,6 +86,7 @@ import {
   resetMyTmsHomeAnnouncement,
   reserveAndQueueMyTmsInvitation,
   setMyTmsManagerEmailTemplates,
+  setMyTmsAgencyLogo,
   setMyTmsDailyInformationSettings,
   setMyTmsHomeAnnouncement,
   setMyTmsMembershipState,
@@ -135232,6 +135235,9 @@ const MYTMS_OFFICE_SAFE_ERROR_CODES = new Set([
   'MYTMS_OFFICE_CONFIGURATION_UNAVAILABLE', 'MYTMS_OFFICE_CONTROL_DISABLED',
   'MYTMS_OFFICE_PERMISSION_DENIED', 'MYTMS_TEMPLATE_TOO_LARGE',
   'MYTMS_OFFICE_DATA_PLANE_UNAVAILABLE', 'MYTMS_OFFICE_RESPONSE_INVALID',
+  'MYTMS_AGENCY_LOGO_INVALID', 'MYTMS_AGENCY_LOGO_TOO_LARGE',
+  'MYTMS_AGENCY_LOGO_UNAVAILABLE', 'MYTMS_AGENCY_LOGO_REQUEST_INVALID',
+  'MYTMS_AGENCY_LOGO_VERSION_CONFLICT',
   'MYTMS_SETTINGS_REQUEST_INVALID', 'MYTMS_ACTIVATION_NOT_AUTHORIZED',
   'MYTMS_CANDIDATE_ID_INVALID', 'MYTMS_INVITATION_DELIVERY_DISABLED',
   'MYTMS_CANDIDATE_NOT_FOUND', 'MYTMS_ACTION_STALE',
@@ -135284,6 +135290,20 @@ async function handleMyTmsOfficeSettings(env, req, action) {
     if (!body) throw new MyTmsOfficeError(400, 'MYTMS_SETTINGS_REQUEST_INVALID');
     if (action === 'SET') return ok(await setMyTmsOfficeSettings(env, user, body));
     if (action === 'PREVIEW') return ok(await previewMyTmsTemplate(env, user, body));
+    throw new MyTmsOfficeError(404, 'MYTMS_OFFICE_REQUEST_FAILED');
+  } catch (error) {
+    return myTmsOfficeFailure(error);
+  }
+}
+
+async function handleMyTmsAgencyLogo(env, req, action) {
+  try {
+    const user = await requireMyTmsOfficeAdmin(env, req);
+    if (action === 'GET') return ok(await getMyTmsAgencyLogo(env, user));
+    const body = await parseJSONBody(req);
+    if (!body) throw new MyTmsOfficeError(400, 'MYTMS_AGENCY_LOGO_REQUEST_INVALID');
+    if (action === 'SET') return ok(await setMyTmsAgencyLogo(env, user, body));
+    if (action === 'DELETE') return ok(await deleteMyTmsAgencyLogo(env, user, body));
     throw new MyTmsOfficeError(404, 'MYTMS_OFFICE_REQUEST_FAILED');
   } catch (error) {
     return myTmsOfficeFailure(error);
@@ -197159,6 +197179,9 @@ if (req.method === 'PUT' && p === '/api/settings/defaults')           return han
 if (req.method === 'GET' && p === '/api/mytms/settings')              return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'GET'));
 if (req.method === 'PUT' && p === '/api/mytms/settings')              return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'SET'));
 if (req.method === 'POST' && p === '/api/mytms/settings/preview')     return withCORS(env, req, await handleMyTmsOfficeSettings(env, req, 'PREVIEW'));
+if (req.method === 'GET' && p === '/api/mytms/agency-logo')          return withCORS(env, req, await handleMyTmsAgencyLogo(env, req, 'GET'));
+if (req.method === 'PUT' && p === '/api/mytms/agency-logo')          return withCORS(env, req, await handleMyTmsAgencyLogo(env, req, 'SET'));
+if (req.method === 'DELETE' && p === '/api/mytms/agency-logo')       return withCORS(env, req, await handleMyTmsAgencyLogo(env, req, 'DELETE'));
 if (req.method === 'GET' && p === '/api/mytms/manager-email-settings') return withCORS(env, req, await handleMyTmsManagerEmailSettings(env, req, 'GET'));
 if (req.method === 'PUT' && p === '/api/mytms/manager-email-settings/templates') return withCORS(env, req, await handleMyTmsManagerEmailSettings(env, req, 'SET_TEMPLATES'));
 if (req.method === 'POST' && p === '/api/mytms/manager-email-settings/templates/reset') return withCORS(env, req, await handleMyTmsManagerEmailSettings(env, req, 'RESET_TEMPLATES'));

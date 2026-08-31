@@ -18,6 +18,8 @@ const MANAGER_MAIL_KINDS = Object.freeze([
 ]);
 const MANAGER_LINK_MAIL_KINDS = new Set(['INITIAL', 'REMINDER', 'RENEWAL']);
 const MAX_JSON_BYTES = 256 * 1024;
+const MAX_AGENCY_LOGO_BYTES = 512 * 1024;
+const AGENCY_LOGO_KEY_RE = /^candidate-app\/branding\/[a-f0-9]{64}\.png$/;
 const DIRECTORY_KINDS = Object.freeze({
   hospital_addresses: Object.freeze({
     required: Object.freeze(['hospital_name', 'address']),
@@ -73,6 +75,44 @@ function base64Url(bytes) {
 
 async function sha256Hex(value) {
   return bytesToHex(await crypto.subtle.digest('SHA-256', encoder.encode(String(value))));
+}
+
+async function sha256BytesHex(value) {
+  return bytesToHex(await crypto.subtle.digest('SHA-256', value));
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function decodeAgencyLogoDataUrl(value) {
+  const source = String(value == null ? '' : value);
+  const match = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(source);
+  if (!match) throw new MyTmsOfficeError(400, 'MYTMS_AGENCY_LOGO_INVALID');
+  let binary;
+  try {
+    binary = atob(match[1]);
+  } catch {
+    throw new MyTmsOfficeError(400, 'MYTMS_AGENCY_LOGO_INVALID');
+  }
+  if (!binary.length || binary.length > MAX_AGENCY_LOGO_BYTES) {
+    throw new MyTmsOfficeError(413, 'MYTMS_AGENCY_LOGO_TOO_LARGE');
+  }
+  const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+  const png = bytes.length >= 24
+    && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+    && bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a;
+  if (!png) throw new MyTmsOfficeError(400, 'MYTMS_AGENCY_LOGO_INVALID');
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const width = view.getUint32(16, false);
+  const height = view.getUint32(20, false);
+  if (width < 64 || height < 64 || width > 1024 || height > 1024
+      || Math.abs(width - height) > 2) {
+    throw new MyTmsOfficeError(400, 'MYTMS_AGENCY_LOGO_INVALID');
+  }
+  return { bytes, width, height, media_type: 'image/png' };
 }
 
 async function hmacBytes(secret, purpose, value) {
@@ -626,6 +666,182 @@ export async function getMyTmsOfficeSettings(env, user) {
     p_agency_id: id
   });
   return publicSettings(result);
+}
+
+function agencyLogoBucket(env) {
+  const bucket = env.R2 || env.R2_BUCKET;
+  if (!bucket || typeof bucket.get !== 'function' || typeof bucket.put !== 'function') {
+    throw new MyTmsOfficeError(503, 'MYTMS_AGENCY_LOGO_UNAVAILABLE');
+  }
+  return bucket;
+}
+
+async function readAgencyLogoPointer(env) {
+  const base = text(env.SUPABASE_URL).replace(/\/$/, '');
+  const response = await fetch(
+    `${base}/rest/v1/settings_defaults?id=eq.1&select=agency_name,agency_logo&limit=1`,
+    { headers: supabaseHeaders(env) }
+  );
+  if (!response.ok) {
+    throw new MyTmsOfficeError(503, 'MYTMS_OFFICE_DATA_PLANE_UNAVAILABLE');
+  }
+  const rows = await boundedJson(response);
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    throw new MyTmsOfficeError(503, 'MYTMS_OFFICE_DATA_PLANE_UNAVAILABLE');
+  }
+  return {
+    agency_name: text(rows[0].agency_name),
+    logo_asset_key: text(rows[0].agency_logo) || null
+  };
+}
+
+async function updateAgencyLogoPointer(env, expectedKey, nextKey) {
+  const base = text(env.SUPABASE_URL).replace(/\/$/, '');
+  const expectedFilter = expectedKey
+    ? `agency_logo=eq.${encodeURIComponent(expectedKey)}` : 'agency_logo=is.null';
+  const response = await fetch(
+    `${base}/rest/v1/settings_defaults?id=eq.1&${expectedFilter}`,
+    {
+      method: 'PATCH',
+      headers: supabaseHeaders(env, 'return=representation'),
+      body: JSON.stringify({ agency_logo: nextKey || null })
+    }
+  );
+  if (!response.ok) {
+    throw new MyTmsOfficeError(503, 'MYTMS_OFFICE_DATA_PLANE_UNAVAILABLE');
+  }
+  const rows = await boundedJson(response);
+  if (!Array.isArray(rows) || rows.length !== 1) {
+    throw new MyTmsOfficeError(409, 'MYTMS_AGENCY_LOGO_VERSION_CONFLICT');
+  }
+}
+
+async function updateControlPlaneLogo(env, user, logoAssetKey, idempotencyKey) {
+  const settings = await getMyTmsOfficeSettings(env, user);
+  const expectedVersion = Number(settings.version);
+  if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+    throw new MyTmsOfficeError(502, 'MYTMS_OFFICE_RESPONSE_INVALID');
+  }
+  return controlPlaneRpc(env, 'control', 'agency_app_settings_set_v1', {
+    p_office_context: await officeContext(env, user, ['MYTMS_SETTINGS_WRITE']),
+    p_agency_id: agencyId(env),
+    p_expected_version: expectedVersion,
+    p_settings: { logo_asset_key: logoAssetKey || null },
+    p_idempotency_key: idempotencyKey,
+    p_correlation_id: crypto.randomUUID(),
+    p_now_utc: new Date().toISOString()
+  });
+}
+
+async function publicAgencyLogo(env, pointer) {
+  const key = text(pointer?.logo_asset_key) || null;
+  if (!key) {
+    return {
+      ok: true,
+      agency_name: text(pointer?.agency_name) || null,
+      has_logo: false,
+      logo_asset_key: null,
+      preview_data_url: null,
+      media_type: null,
+      size_bytes: 0,
+      sha256_hex: null
+    };
+  }
+  if (!AGENCY_LOGO_KEY_RE.test(key)) {
+    throw new MyTmsOfficeError(502, 'MYTMS_AGENCY_LOGO_INVALID');
+  }
+  const object = await agencyLogoBucket(env).get(key);
+  if (!object) throw new MyTmsOfficeError(502, 'MYTMS_AGENCY_LOGO_UNAVAILABLE');
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (!bytes.length || bytes.length > MAX_AGENCY_LOGO_BYTES) {
+    throw new MyTmsOfficeError(502, 'MYTMS_AGENCY_LOGO_INVALID');
+  }
+  const sha256 = await sha256BytesHex(bytes);
+  if (!key.includes(sha256)) {
+    throw new MyTmsOfficeError(502, 'MYTMS_AGENCY_LOGO_INVALID');
+  }
+  return {
+    ok: true,
+    agency_name: text(pointer?.agency_name) || null,
+    has_logo: true,
+    logo_asset_key: key,
+    preview_data_url: `data:image/png;base64,${bytesToBase64(bytes)}`,
+    media_type: 'image/png',
+    size_bytes: bytes.byteLength,
+    sha256_hex: sha256
+  };
+}
+
+export async function getMyTmsAgencyLogo(env, user) {
+  assertOfficeControlEnabled(env);
+  await officeContext(env, user, ['MYTMS_SETTINGS_READ']);
+  return publicAgencyLogo(env, await readAgencyLogoPointer(env));
+}
+
+export async function setMyTmsAgencyLogo(env, user, request) {
+  assertOfficeControlEnabled(env);
+  const source = isObject(request) ? request : {};
+  const expectedKey = text(source.expected_logo_asset_key) || null;
+  const idempotencyKey = text(source.idempotency_key);
+  if (idempotencyKey.length < 16 || idempotencyKey.length > 200
+      || (expectedKey && !AGENCY_LOGO_KEY_RE.test(expectedKey))) {
+    throw new MyTmsOfficeError(400, 'MYTMS_AGENCY_LOGO_REQUEST_INVALID');
+  }
+  await officeContext(env, user, ['MYTMS_SETTINGS_WRITE']);
+  const current = await readAgencyLogoPointer(env);
+  if (current.logo_asset_key !== expectedKey) {
+    throw new MyTmsOfficeError(409, 'MYTMS_AGENCY_LOGO_VERSION_CONFLICT');
+  }
+  const decoded = decodeAgencyLogoDataUrl(source.data_url);
+  const digest = await sha256BytesHex(decoded.bytes);
+  const nextKey = `candidate-app/branding/${digest}.png`;
+  const bucket = agencyLogoBucket(env);
+  const existing = await bucket.head(nextKey);
+  if (!existing) {
+    await bucket.put(nextKey, decoded.bytes, {
+      httpMetadata: { contentType: 'image/png', cacheControl: 'private, max-age=31536000, immutable' },
+      customMetadata: {
+        sha256: digest,
+        width: String(decoded.width),
+        height: String(decoded.height),
+        purpose: 'agency-app-logo-v1'
+      }
+    });
+  }
+  if (current.logo_asset_key !== nextKey) {
+    await updateAgencyLogoPointer(env, current.logo_asset_key, nextKey);
+    try {
+      await updateControlPlaneLogo(env, user, nextKey, idempotencyKey);
+    } catch (error) {
+      await updateAgencyLogoPointer(env, nextKey, current.logo_asset_key);
+      throw error;
+    }
+  }
+  return publicAgencyLogo(env, { ...current, logo_asset_key: nextKey });
+}
+
+export async function deleteMyTmsAgencyLogo(env, user, request) {
+  assertOfficeControlEnabled(env);
+  const source = isObject(request) ? request : {};
+  const expectedKey = text(source.expected_logo_asset_key) || null;
+  const idempotencyKey = text(source.idempotency_key);
+  if (!expectedKey || !AGENCY_LOGO_KEY_RE.test(expectedKey)
+      || idempotencyKey.length < 16 || idempotencyKey.length > 200) {
+    throw new MyTmsOfficeError(400, 'MYTMS_AGENCY_LOGO_REQUEST_INVALID');
+  }
+  await officeContext(env, user, ['MYTMS_SETTINGS_WRITE']);
+  const current = await readAgencyLogoPointer(env);
+  if (current.logo_asset_key !== expectedKey) {
+    throw new MyTmsOfficeError(409, 'MYTMS_AGENCY_LOGO_VERSION_CONFLICT');
+  }
+  await updateAgencyLogoPointer(env, current.logo_asset_key, null);
+  try {
+    await updateControlPlaneLogo(env, user, null, idempotencyKey);
+  } catch (error) {
+    await updateAgencyLogoPointer(env, null, current.logo_asset_key);
+    throw error;
+  }
+  return publicAgencyLogo(env, { ...current, logo_asset_key: null });
 }
 
 function activationAllowed(env, field) {

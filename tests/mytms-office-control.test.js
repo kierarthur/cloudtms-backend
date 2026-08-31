@@ -5,6 +5,8 @@ import cloudTmsWorker from '../broker/src/index.js';
 import { signCandidatePrivateRequest } from '../broker/src/candidate-service-auth.js';
 import {
   adoptMyTmsCandidate,
+  deleteMyTmsAgencyLogo,
+  getMyTmsAgencyLogo,
   getMyTmsCandidateStatus,
   getMyTmsDailyInformationSettings,
   getMyTmsHomeAnnouncementSettings,
@@ -18,6 +20,7 @@ import {
   reserveAndQueueMyTmsInvitation,
   sanitizeMyTmsEmailHtml,
   sanitizeManagerEmailHtml,
+  setMyTmsAgencyLogo,
   setMyTmsManagerEmailTemplates,
   setMyTmsDailyInformationSettings,
   setMyTmsHomeAnnouncement,
@@ -54,6 +57,121 @@ function managerTemplates() {
     TIMESHEET: structuredClone(type), EXPENSE_CLAIM: structuredClone(type)
   };
 }
+
+function agencyLogoPngBytes() {
+  const bytes = new Uint8Array(24);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], 0);
+  const view = new DataView(bytes.buffer);
+  view.setUint32(16, 384, false);
+  view.setUint32(20, 384, false);
+  return bytes;
+}
+
+function memoryR2() {
+  const objects = new Map();
+  return {
+    objects,
+    async head(key) { return objects.get(key)?.head || null; },
+    async put(key, value, options = {}) {
+      const bytes = new Uint8Array(value);
+      objects.set(key, {
+        bytes,
+        head: {
+          httpMetadata: options.httpMetadata || {},
+          customMetadata: options.customMetadata || {}
+        }
+      });
+      return { key };
+    },
+    async get(key) {
+      const stored = objects.get(key);
+      if (!stored) return null;
+      return {
+        ...stored.head,
+        async arrayBuffer() {
+          return stored.bytes.buffer.slice(
+            stored.bytes.byteOffset,
+            stored.bytes.byteOffset + stored.bytes.byteLength
+          );
+        }
+      };
+    }
+  };
+}
+
+test('agency logo upload, read and delete use private content-addressed storage and preserve history', async () => {
+  const originalFetch = globalThis.fetch;
+  const bucket = memoryR2();
+  const bytes = agencyLogoPngBytes();
+  const digest = Buffer.from(await crypto.subtle.digest('SHA-256', bytes)).toString('hex');
+  const key = `candidate-app/branding/${digest}.png`;
+  let pointer = null;
+  let settingsVersion = 3;
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const requestUrl = url instanceof Request ? url.url : String(url);
+    const method = url instanceof Request ? url.method : (init.method || 'GET');
+    const requestBody = url instanceof Request
+      ? await url.clone().json().catch(() => null)
+      : (init.body ? JSON.parse(init.body) : null);
+    calls.push({ url: requestUrl, method });
+    if (requestUrl.includes('/rest/v1/settings_defaults')) {
+      if (method === 'PATCH') {
+        pointer = requestBody.agency_logo;
+        return Response.json([{ agency_logo: pointer }]);
+      }
+      return Response.json([{
+        agency_name: 'Arthur Rai Medical Services', agency_logo: pointer
+      }]);
+    }
+    if (requestUrl.includes('/rpc/agency_app_settings_get_v1')) {
+      return Response.json({ ok: true, version: settingsVersion, logo_asset_key: pointer });
+    }
+    if (requestUrl.includes('/rpc/agency_app_settings_set_v1')) {
+      settingsVersion += 1;
+      return Response.json({
+        ok: true, version: settingsVersion,
+        logo_asset_key: requestBody.p_settings.logo_asset_key
+      });
+    }
+    throw new Error(`unexpected agency logo request: ${requestUrl}`);
+  };
+  const env = officeEnvironment({
+    SUPABASE_URL: 'https://agency.test.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-agency-service-role',
+    MYTMS_CONTROL_PLANE_URL: 'https://control.test.invalid',
+    MYTMS_CONTROL_PLANE_SERVICE_ROLE_KEY: 'test-control-service-role',
+    R2: bucket
+  });
+  const user = { id: IDS.challenge };
+  try {
+    const uploaded = await setMyTmsAgencyLogo(env, user, {
+      expected_logo_asset_key: null,
+      data_url: `data:image/png;base64,${Buffer.from(bytes).toString('base64')}`,
+      idempotency_key: 'agency-logo-upload-0001'
+    });
+    assert.equal(uploaded.logo_asset_key, key);
+    assert.equal(uploaded.preview_data_url.startsWith('data:image/png;base64,'), true);
+    assert.equal(uploaded.size_bytes, bytes.byteLength);
+    assert.equal(pointer, key);
+    assert.equal(bucket.objects.has(key), true);
+
+    const current = await getMyTmsAgencyLogo(env, user);
+    assert.equal(current.has_logo, true);
+    assert.equal(current.sha256_hex, digest);
+
+    const deleted = await deleteMyTmsAgencyLogo(env, user, {
+      expected_logo_asset_key: key,
+      idempotency_key: 'agency-logo-delete-0001'
+    });
+    assert.equal(deleted.has_logo, false);
+    assert.equal(pointer, null);
+    assert.equal(bucket.objects.has(key), true, 'historical immutable logo object is retained');
+    assert.equal(calls.some(call => call.method === 'DELETE'), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 
 test('email HTML sanitizer removes active content and retains only approved links', () => {
   const result = sanitizeMyTmsEmailHtml(
