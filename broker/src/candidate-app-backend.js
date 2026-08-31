@@ -124,7 +124,7 @@ const BREAK_ENTRY_CONTEXT_VERSION = 'CANDIDATE_BREAK_ENTRY_V1';
 
 const CANDIDATE_WORKFLOW_ACTIONS = new Set([
   'AMEND', 'WORKER_SUBMIT', 'SELECT_APPROVAL_METHOD', 'SELECT_PHONE_APPROVAL',
-  'CREATE_EMAIL_APPROVAL_REQUEST', 'PAPER_PREPARE', 'PAPER_RETURN', 'REMIND',
+  'CREATE_EMAIL_APPROVAL_REQUEST', 'PAPER_PREPARE', 'PAPER_EMAIL', 'PAPER_RETURN', 'REMIND',
   'RENEW', 'CANCEL', 'SUPERSEDE', 'CANCEL_MANAGER_HANDOFF', 'RETRY_FINALISATION',
   'MILEAGE_FORM_PREPARE', 'MILEAGE_FORM_EMAIL'
 ]);
@@ -3238,6 +3238,118 @@ async function projectCurrentSubmittedFacts(env, access, detail) {
   return candidateSubmittedFactsProjection(detail, row);
 }
 
+async function enrichCandidateComponentLineage(env, detail) {
+  if (!isObject(detail) || !Array.isArray(detail.components) || !detail.components.length) return detail;
+  const ids = [...new Set(detail.components.map((component) => text(component?.id))
+    .filter((id) => UUID_RE.test(id)))];
+  if (!ids.length) return detail;
+  const rows = await restRows(env, 'candidate_submission_components', [
+    `id=in.(${ids.join(',')})`,
+    'select=id,source_component_id,paper_return_page_key'
+  ].join('&'));
+  const byId = new Map(rows.map((row) => [text(row?.id), row]));
+  return {
+    ...detail,
+    components: detail.components.map((component) => {
+      const lineage = byId.get(text(component?.id));
+      return lineage ? {
+        ...component,
+        source_component_id: lineage.source_component_id == null ? null : text(lineage.source_component_id),
+        paper_return_page_key: lineage.paper_return_page_key == null ? null : text(lineage.paper_return_page_key)
+      } : component;
+    })
+  };
+}
+
+const SUBMITTED_EXPENSE_CARD_STATES = new Set([
+  'WORKER_SUBMITTED', 'WORKER_SUBMITTED_PENDING_REVIEW_DOCUMENT',
+  'READY_FOR_MANAGER_APPROVAL', 'AWAITING_MANAGER_APPROVAL', 'MANAGER_APPROVED',
+  'MANAGER_APPROVED_PENDING_FINAL_DOCUMENT', 'READY_TO_FINALISE',
+  'AWAITING_PAPER_RETURN', 'RECEIVED', 'FINALISED'
+]);
+
+function immutableMileageUnits(workflow) {
+  const immutable = parseJson(workflow?.immutable_submission_json, {}) || {};
+  const submission = parseJson(immutable.expense_submission, {}) || {};
+  const snapshot = parseJson(submission.canonical_tsfin_snapshot, {}) || {};
+  const value = Number(snapshot.mileage_units ?? submission.mileage_units ?? 0);
+  return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function cardWithExpenseEvidenceFacts(card, facts = {}) {
+  return {
+    ...card,
+    expenses: {
+      ...(isObject(card?.expenses) ? card.expenses : {}),
+      mileage_units: Number(facts.mileage_units) || 0,
+      supporting_evidence_count: Number(facts.supporting_evidence_count) || 0,
+      supporting_evidence_categories: Array.isArray(facts.supporting_evidence_categories)
+        ? facts.supporting_evidence_categories : []
+    }
+  };
+}
+
+async function enrichCandidatePageExpenseSummaries(env, access, page) {
+  if (!isObject(page) || !Array.isArray(page.items) || !page.items.length) return page;
+  const cards = page.items;
+  const workflowIds = [...new Set(cards.flatMap((card) => Array.isArray(card?.workflows)
+    ? card.workflows.map((workflow) => text(workflow?.workflow_id)) : [])
+    .filter((id) => UUID_RE.test(id)))];
+  if (!workflowIds.length) return { ...page, items: cards.map((card) => cardWithExpenseEvidenceFacts(card)) };
+  const candidateId = requireUuid(access.selected_candidate_id, 'CANDIDATE_SELECTION_REQUIRED');
+  const workflows = await restRows(env, 'candidate_submission_workflows', [
+    `id=in.(${workflowIds.join(',')})`,
+    `candidate_id=eq.${encodeURIComponent(candidateId)}`,
+    `environment=eq.${encodeURIComponent(environmentName(env))}`,
+    'select=id,generation,workflow_kind,state,immutable_submission_json,updated_at_utc'
+  ].join('&'));
+  const submittedById = new Map(workflows.filter((workflow) => (
+    ['CONTRACT_EXPENSE', 'CONTRACT_COMBINED'].includes(upper(workflow?.workflow_kind))
+    && SUBMITTED_EXPENSE_CARD_STATES.has(upper(workflow?.state))
+  )).map((workflow) => [text(workflow.id), workflow]));
+  if (!submittedById.size) return { ...page, items: cards.map((card) => cardWithExpenseEvidenceFacts(card)) };
+  const selectedByCard = new Map();
+  const selectedIds = new Set();
+  for (const card of cards) {
+    const selected = (Array.isArray(card?.workflows) ? card.workflows : [])
+      .map((workflow) => submittedById.get(text(workflow?.workflow_id)))
+      .find(Boolean);
+    if (!selected) continue;
+    selectedByCard.set(card, selected);
+    selectedIds.add(text(selected.id));
+  }
+  const components = selectedIds.size ? await restRows(env, 'candidate_submission_components', [
+    `workflow_id=in.(${[...selectedIds].join(',')})`,
+    'superseded_at_utc=is.null',
+    'component_kind=in.(MILEAGE_FORM,EXPENSE_EVIDENCE)',
+    'select=id,workflow_id,component_kind,expense_category'
+  ].join('&')) : [];
+  const componentsByWorkflow = new Map();
+  for (const component of components) {
+    const workflowId = text(component?.workflow_id);
+    const list = componentsByWorkflow.get(workflowId) || [];
+    list.push(component);
+    componentsByWorkflow.set(workflowId, list);
+  }
+  return {
+    ...page,
+    items: cards.map((card) => {
+      const workflow = selectedByCard.get(card);
+      if (!workflow) return cardWithExpenseEvidenceFacts(card);
+      const evidence = componentsByWorkflow.get(text(workflow.id)) || [];
+      const categories = [...new Set(evidence.map((component) => (
+        upper(component?.component_kind) === 'MILEAGE_FORM'
+          ? 'MILEAGE' : upper(component?.expense_category) || 'OTHER'
+      )).filter((category) => ['MILEAGE', 'TRAVEL', 'ACCOMMODATION', 'OTHER'].includes(category)))];
+      return cardWithExpenseEvidenceFacts(card, {
+        mileage_units: immutableMileageUnits(workflow),
+        supporting_evidence_count: evidence.length,
+        supporting_evidence_categories: categories
+      });
+    })
+  };
+}
+
 function pounds(value) {
   const amount = Number(value);
   return Number.isFinite(amount) ? `£${amount.toFixed(2)}` : null;
@@ -4305,11 +4417,12 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
     if (!Number.isSafeInteger(rawLimit) || rawLimit < 1 || rawLimit > 100) {
       throw new CandidateHttpError(400, 'CANDIDATE_PAGE_LIMIT_INVALID');
     }
-    return jsonResponse(200, await rpcCall(deps, 'candidate_app_timesheet_page_v1', candidateRpcArgs(access, env, {
+    const page = await rpcCall(deps, 'candidate_app_timesheet_page_v1', candidateRpcArgs(access, env, {
       p_view: requestedView.toUpperCase(),
       p_cursor: cursor,
       p_limit: rawLimit
-    })));
+    }));
+    return jsonResponse(200, await enrichCandidatePageExpenseSummaries(env, access, page));
   }
   if (kind === 'detail') {
     const detail = await rpcCall(deps, 'candidate_app_timesheet_detail_v2', candidateRpcArgs(access, env, {
@@ -4319,7 +4432,8 @@ async function handleCandidateRead(request, env, deps, kind, params = {}) {
       p_workflow_id: params.workflowId ? requireUuid(params.workflowId)
         : (url.searchParams.get('workflow_id') ? requireUuid(url.searchParams.get('workflow_id')) : null)
     }));
-    return jsonResponse(200, await projectCurrentSubmittedFacts(env, access, detail));
+    const enrichedDetail = await enrichCandidateComponentLineage(env, detail);
+    return jsonResponse(200, await projectCurrentSubmittedFacts(env, access, enrichedDetail));
   }
   if (kind === 'missing-options') {
     return jsonResponse(200, await rpcCall(deps, 'candidate_missing_week_options_v1', candidateRpcArgs(access, env, {
@@ -4562,6 +4676,122 @@ async function handleCandidateMileageFormAction(env, workflow, access, body, dbA
   };
 }
 
+async function queueCandidatePaperPackEmail(env, workflow, access, body, context) {
+  if (workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  if (Number(workflow.generation) !== Number(body.generation)) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  if (upper(workflow.scope) !== 'WEEKLY' || upper(workflow.route) !== 'PAPER'
+      || upper(workflow.state) !== 'AWAITING_PAPER_RETURN') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE');
+  }
+  if (context.ready !== true || context.complete?.ready !== true
+      || context.workflow.id !== workflow.id
+      || Number(context.workflow.generation) !== Number(workflow.generation)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_NOT_READY');
+  }
+  const account = await restOne(env, 'candidate_app_accounts',
+    `id=eq.${encodeURIComponent(workflow.account_id)}`
+    + `&environment=eq.${encodeURIComponent(environmentName(env))}`
+    + '&status=eq.ACTIVE&select=id,email_normalized');
+  if (!text(account?.email_normalized)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_REGISTERED_EMAIL_NOT_AVAILABLE');
+  }
+  const email = normaliseEmail(account.email_normalized);
+  const presentation = await buildOfficialPresentationSnapshot(env, workflow);
+  const agencyName = text(presentation.branding?.agency_name) || 'CloudTMS agency';
+  const candidateName = `${text(presentation.worker?.first_name)} ${text(presentation.worker?.surname)}`.trim()
+    || 'Candidate';
+  const weekEnding = ukDate(workflow.week_ending_date);
+  const filename = `Official_Documents_${text(workflow.week_ending_date).slice(0, 10)}.pdf`;
+  const manifestSha256 = text(workflow.paper_return_manifest_sha256)
+    .replace(/^\\x/i, '').toLowerCase();
+  if (!SHA256_RE.test(manifestSha256)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_PACK_IDENTITY_INVALID');
+  }
+  const deterministicKey = `CANDIDATE_PAPER_PACK_EMAIL:${workflow.id}:${workflow.generation}:${body.idempotency_key}`;
+  const now = new Date().toISOString();
+  const outbox = await restWrite(env, 'mail_outbox', 'POST',
+    'on_conflict=deterministic_outbox_key', {
+      type: 'TIMESHEET_QR',
+      to: email,
+      subject: `Documents to print and sign for week ending ${weekEnding}`,
+      body_html: `<p>${escapeCandidateMailHtml(agencyName)} has prepared the attached documents for ${escapeCandidateMailHtml(candidateName)}.</p>`
+        + `<p>Week ending: ${escapeCandidateMailHtml(weekEnding)}</p>`
+        + '<p>Print every page, obtain the required manager signatures, then return to MyTMS and photograph every signed page.</p>',
+      body_text: `${agencyName} has prepared the attached documents for ${candidateName}.\n\n`
+        + `Week ending: ${weekEnding}\n\n`
+        + 'Print every page, obtain the required manager signatures, then return to MyTMS and photograph every signed page.',
+      attachments: [{
+        r2_key: context.complete.key,
+        filename,
+        content_type: 'application/pdf',
+        sha256: context.complete.sha256,
+        size_bytes: Number(context.complete.byte_size),
+        page_count: Number(context.complete.page_count),
+        candidate_workflow_id: workflow.id,
+        candidate_workflow_generation: Number(workflow.generation),
+        paper_return_manifest_sha256: manifestSha256
+      }],
+      status: 'QUEUED',
+      reference: `candidate-paper-pack-email:${workflow.id}:${workflow.generation}`,
+      recipient_kind: 'CANDIDATE',
+      context_kind: 'CANDIDATE_WORKFLOW',
+      context_id: workflow.id,
+      email_type: 'CANDIDATE_APP_TRANSACTIONAL',
+      scheduled_for_utc: now,
+      next_attempt_at_utc: now,
+      deterministic_outbox_key: deterministicKey,
+      payment_scope_json: {
+        candidate_mail_authority: 'CANDIDATE_PAPER_PACK_EMAIL_V1',
+        candidate_workflow_id: workflow.id,
+        candidate_workflow_generation: Number(workflow.generation),
+        paper_return_manifest_sha256: manifestSha256,
+        candidate_complete_pack_storage_key: context.complete.key,
+        candidate_complete_pack_sha256: context.complete.sha256,
+        candidate_complete_pack_size_bytes: Number(context.complete.byte_size),
+        candidate_complete_pack_page_count: Number(context.complete.page_count)
+      }
+    }, 'resolution=ignore-duplicates,return=representation');
+  const durable = outbox || await restOne(env, 'mail_outbox',
+    `deterministic_outbox_key=eq.${encodeURIComponent(deterministicKey)}&select=id,status`);
+  if (!durable?.id || !['QUEUED', 'CLAIMED', 'SENT'].includes(upper(durable.status))) {
+    throw new CandidateHttpError(503, 'CANDIDATE_PAPER_EMAIL_NOT_QUEUED');
+  }
+  return {
+    ok: true,
+    workflow_id: workflow.id,
+    generation: Number(workflow.generation),
+    state: workflow.state,
+    paper_email_state: upper(durable.status) === 'SENT' ? 'SENT' : 'EMAIL_QUEUED',
+    idempotent_replay: !outbox,
+    mail_outbox_id: durable.id
+  };
+}
+
+async function handleCandidatePaperEmailAction(request, env, deps, workflow, access, body) {
+  if (workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  if (Number(workflow.generation) !== Number(body.generation)) {
+    throw new CandidateHttpError(409, 'WORKFLOW_GENERATION_CONFLICT');
+  }
+  if (upper(workflow.scope) !== 'WEEKLY' || upper(workflow.route) !== 'PAPER'
+      || upper(workflow.state) !== 'AWAITING_PAPER_RETURN') {
+    throw new CandidateHttpError(409, 'CANDIDATE_PAPER_EMAIL_NOT_AVAILABLE');
+  }
+  const timesheetId = requireUuid(
+    workflow.target_timesheet_id || workflow.anchor_timesheet_id,
+    'CANDIDATE_PAPER_PACK_NOT_FOUND'
+  );
+  const context = await candidatePaperPackContext(request, env, deps, timesheetId);
+  return queueCandidatePaperPackEmail(env, workflow, access, body, context);
+}
+
 async function handleWorkflowAction(request, env, deps, workflowId, action, ctx) {
   const access = await verifyCandidateAccess(request, env);
   const body = await readJson(request);
@@ -4576,6 +4806,11 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     const workflow = await workflowRow(env, workflowId);
     return jsonResponse(dbAction === 'MILEAGE_FORM_EMAIL' ? 202 : 200,
       await handleCandidateMileageFormAction(env, workflow, access, body, dbAction));
+  }
+  if (dbAction === 'PAPER_EMAIL') {
+    const workflow = await workflowRow(env, workflowId);
+    return jsonResponse(202,
+      await handleCandidatePaperEmailAction(request, env, deps, workflow, access, body));
   }
   if (dbAction === 'RETRY_FINALISATION') {
     const workflow = await workflowRow(env, workflowId);
@@ -7593,6 +7828,7 @@ export const candidateAppBackendInternals = Object.freeze({
   renderAndRegister,
   candidateDocumentBranding,
   mileageClaimFormBytes,
+  queueCandidatePaperPackEmail,
   renderExpensePage,
   validateComponentBytes,
   renderContracts,
