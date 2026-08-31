@@ -73,12 +73,13 @@ test('release and Candidate runtime install the successor before executing its f
     /29082026_0951_candidate_expense_resubmission_anchor_v1\.sql[\s\S]*30082026_1903_candidate_expense_carrier_anchor_route_v1\.sql[\s\S]*30082026_1910_candidate_expense_carrier_anchor_route_verification\.sql/i
   );
   assert.match(runtime, /31082026_0915_candidate_duplicate_expense_review_verification\.sql/i);
+  assert.match(runtime, /21072026_1235_00_import_correction_policy_helpers\.sql/i);
 });
 
 test('duplicate review is category-specific and excludes the official expense summary', () => {
   assert.match(duplicateReviewVerifier, /information_schema\.columns[\s\S]*column_name='password_hash'/i);
   assert.match(duplicateReviewVerifier, /to_regprocedure\('public\._temp_diag_log\(text,text,text,jsonb\)'\)[\s\S]*create function public\._temp_diag_log[\s\S]*returns void[\s\S]*language plpgsql/i);
-  assert.match(duplicateReviewVerifier, /to_regprocedure\('public\._ctms_import_correction_classify_v1\(uuid\)'\)[\s\S]*create function public\._ctms_import_correction_classify_v1[\s\S]*is_import_authoritative_correction[\s\S]*false/i);
+  assert.doesNotMatch(duplicateReviewVerifier, /create function public\._ctms_import_correction_classify_v1/i);
   assert.match(duplicateReviewVerifier, /insert into public\.tms_users\(id,email,is_active\)/i);
   assert.match(repeatable, /_expense_duplicate_review_v1[\s\S]*'MILEAGE','TRAVEL','ACCOMMODATION','OTHER'/i);
   assert.match(repeatable, /component\.component_kind in \('MILEAGE_FORM','EXPENSE_EVIDENCE'\)/i);

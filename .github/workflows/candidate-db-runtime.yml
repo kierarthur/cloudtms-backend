@@ -176,6 +176,7 @@ jobs:
             supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql
             supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql
             supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
+            supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql
             supabase/repeatable/07082026_2224_candidate_app_weekly_office_replacements_v1.sql
             supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql
             supabase/repeatable/07082026_2310_candidate_manager_review_helpers_v1.sql
