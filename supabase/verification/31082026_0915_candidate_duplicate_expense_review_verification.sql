@@ -28,6 +28,17 @@ begin
       $body$
     $sql$;
   end if;
+  if to_regprocedure('public._ctms_import_correction_classify_v1(uuid)') is null then
+    execute $sql$
+      create function public._ctms_import_correction_classify_v1(p_timesheet_id uuid)
+      returns jsonb
+      language sql
+      stable
+      as $body$
+        select jsonb_build_object('is_import_authoritative_correction',false)
+      $body$
+    $sql$;
+  end if;
 end;
 $diagnostic_fixture$;
 
