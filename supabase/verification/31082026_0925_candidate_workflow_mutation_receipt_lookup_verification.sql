@@ -15,7 +15,6 @@ begin
     raise exception 'CANDIDATE_WORKFLOW_MUTATION_REQUEST_INDEX_MISSING';
   end if;
   if v_definition not like '%(correlation_id, ts_utc DESC, id DESC)%'
-     or v_definition not like '%INCLUDE (object_id_text, before_json, after_json)%'
      or v_definition not like '%object_type = ''candidate_workflow_mutation_receipt''%'
   then
     raise exception 'CANDIDATE_WORKFLOW_MUTATION_REQUEST_INDEX_INVALID: %',v_definition;

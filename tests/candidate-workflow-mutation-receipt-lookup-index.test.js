@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const migration = fs.readFileSync(
-  new URL('../supabase/migrations/31082026_0924_candidate_workflow_mutation_receipt_lookup_index.sql', import.meta.url),
+  new URL('../supabase/migrations/31082026_0923_candidate_workflow_mutation_receipt_lookup_index_compatibility.sql', import.meta.url),
   'utf8'
 );
 const verification = fs.readFileSync(
@@ -11,10 +11,10 @@ const verification = fs.readFileSync(
   'utf8'
 );
 
-test('workflow mutation replay has a request-key-first covering index', () => {
+test('workflow mutation replay has a request-key-first bounded index', () => {
   assert.match(migration, /\(\s*correlation_id,\s*ts_utc desc,\s*id desc\s*\)/i);
-  assert.match(migration, /include\s*\(\s*object_id_text,\s*before_json,\s*after_json\s*\)/i);
   assert.match(migration, /where\s+object_type\s*=\s*'candidate_workflow_mutation_receipt'/i);
+  assert.doesNotMatch(migration, /\binclude\s*\(/i);
   assert.doesNotMatch(migration, /drop\s+(?:index|table)|delete\s+from|truncate/i);
 });
 

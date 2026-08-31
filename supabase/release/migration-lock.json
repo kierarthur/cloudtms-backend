@@ -815,6 +815,10 @@
       "sha256": "cbb1c92b4d698fde455ee66e39fa05e16073c9a2d2e6587f5790cea8b19dec4f"
     },
     {
+      "path": "supabase/migrations/31082026_0923_candidate_workflow_mutation_receipt_lookup_index_compatibility.sql",
+      "sha256": "7d437aa6a85cee2b84275d9474f0ee7e1b1778624880cec8b9ffe933ca66b00f"
+    },
+    {
       "path": "supabase/migrations/31082026_0924_candidate_workflow_mutation_receipt_lookup_index.sql",
       "sha256": "871cce3c7ac480005e98cf79094211283a08bdc64788fdc53923c17edc5e4383"
     },

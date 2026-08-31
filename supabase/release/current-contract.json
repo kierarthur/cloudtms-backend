@@ -38635,7 +38635,7 @@
         },
         {
           "name": "idx_audit_candidate_workflow_mutation_request_v1",
-          "definition": "CREATE INDEX idx_audit_candidate_workflow_mutation_request_v1 ON public.audit_events USING btree (correlation_id, ts_utc DESC, id DESC) INCLUDE (object_id_text, before_json, after_json) WHERE (object_type = 'candidate_workflow_mutation_receipt'::text)"
+          "definition": "CREATE INDEX idx_audit_candidate_workflow_mutation_request_v1 ON public.audit_events USING btree (correlation_id, ts_utc DESC, id DESC) WHERE (object_type = 'candidate_workflow_mutation_receipt'::text)"
         },
         {
           "name": "idx_audit_import_correction_source_v1",
