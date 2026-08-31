@@ -6,6 +6,31 @@
 -- automatic routes remain blocked.
 begin;
 
+-- The Candidate runtime matrix deliberately installs a reduced CloudTMS
+-- catalogue.  Its authorisation owner still emits the normal optional
+-- diagnostic event, so provide a rollback-contained no-op only when that
+-- unrelated diagnostic helper is absent from the reduced fixture.
+do $diagnostic_fixture$
+begin
+  if to_regprocedure('public._temp_diag_log(text,text,text,jsonb)') is null then
+    execute $sql$
+      create function public._temp_diag_log(
+        p_action text,
+        p_object_type text,
+        p_object_id_text text default null,
+        p_payload_json jsonb default '{}'::jsonb
+      ) returns void
+      language plpgsql
+      as $body$
+      begin
+        return;
+      end;
+      $body$
+    $sql$;
+  end if;
+end;
+$diagnostic_fixture$;
+
 do $verification$
 declare
   v_actor uuid:=gen_random_uuid();

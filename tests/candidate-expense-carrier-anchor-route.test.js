@@ -77,6 +77,7 @@ test('release and Candidate runtime install the successor before executing its f
 
 test('duplicate review is category-specific and excludes the official expense summary', () => {
   assert.match(duplicateReviewVerifier, /information_schema\.columns[\s\S]*column_name='password_hash'/i);
+  assert.match(duplicateReviewVerifier, /to_regprocedure\('public\._temp_diag_log\(text,text,text,jsonb\)'\)[\s\S]*create function public\._temp_diag_log[\s\S]*returns void[\s\S]*language plpgsql/i);
   assert.match(duplicateReviewVerifier, /insert into public\.tms_users\(id,email,is_active\)/i);
   assert.match(repeatable, /_expense_duplicate_review_v1[\s\S]*'MILEAGE','TRAVEL','ACCOMMODATION','OTHER'/i);
   assert.match(repeatable, /component\.component_kind in \('MILEAGE_FORM','EXPENSE_EVIDENCE'\)/i);
