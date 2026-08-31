@@ -271,6 +271,24 @@ create table public.timesheets (
   )
 );
 
+-- Existing production relation read by the authoritative Timesheet
+-- authorisation routine. This disposable catalogue needs the real column
+-- shape so first-use Candidate verification exercises the same read path.
+create table public.timesheet_payment_overrides (
+  id uuid primary key default gen_random_uuid(),
+  timesheet_id uuid not null references public.timesheets(timesheet_id),
+  candidate_id uuid not null references public.candidates(id),
+  override_type text not null default 'ADVANCE_THIS_PAYMENT',
+  reason text not null,
+  created_at_utc timestamptz not null default now(),
+  created_by_user_id uuid references public.tms_users(id),
+  consumed_by_pay_batch_id uuid,
+  consumed_at_utc timestamptz,
+  cleared_at_utc timestamptz,
+  cleared_by_user_id uuid references public.tms_users(id),
+  clear_reason text
+);
+
 -- Existing production helper required by the duplicate-expense first-use verifier.
 -- Keep this compile-only fixture definition aligned with the authoritative baseline.
 create or replace function public._pay_timesheet_rotation_scope(p_timesheet_ids uuid[])
