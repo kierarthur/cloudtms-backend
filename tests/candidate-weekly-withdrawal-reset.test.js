@@ -168,7 +168,8 @@ test('withdrawal read authority cannot replay obsolete public Candidate reads', 
     '28082026_2002_candidate_daily_detail_projection_v1.sql',
     '29082026_0012_candidate_daily_active_window_entry_v1.sql',
     '30082026_0125_candidate_submitted_weekly_card_linkage.sql',
-    '30082026_1903_candidate_expense_carrier_anchor_route_v1.sql'
+    '30082026_1903_candidate_expense_carrier_anchor_route_v1.sql',
+    '31082026_0557_candidate_empty_expense_carrier_action_v1.sql'
   ]) {
     assert.ok(finalAuthority.includes(`\\ir ${currentAuthority}`),
       `Final authority must replay ${currentAuthority}`);

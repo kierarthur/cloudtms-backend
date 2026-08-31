@@ -28,3 +28,9 @@
 -- with the latest complete replacement so a closure replay cannot roll back
 -- expense-carrier anchoring, Daily admission or manager-handoff recovery.
 \ir 30082026_1903_candidate_expense_carrier_anchor_route_v1.sql
+
+-- The expense-carrier replay above deliberately rebuilds the complete current
+-- transition authority, including older card-action helpers.  Finish with the
+-- latest empty-carrier presentation authority so an Office-created blank
+-- expense carrier remains "Add Expenses" until it contains a genuine draft.
+\ir 31082026_0557_candidate_empty_expense_carrier_action_v1.sql
