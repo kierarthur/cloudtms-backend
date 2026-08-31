@@ -166246,6 +166246,16 @@ async function handleTimesheetAuthoriseGeneric(env, req, timesheetId, ctx = null
     const code = firstString(rawCode, detailObj?.error_code, detailObj?.error, 'AUTHORISE_FAILED').toUpperCase();
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const reason = firstString(detailObj?.reason).toUpperCase();
+    if (code === 'TIMESHEET_WORK_INTERVAL_OVERLAP') {
+      return withJson(409, {
+        error: 'TIMESHEET_WORK_INTERVAL_OVERLAP',
+        error_code: 'TIMESHEET_WORK_INTERVAL_OVERLAP',
+        message: 'You have already submitted a timesheet containing these hours. This timesheet cannot be accepted.',
+        current_timesheet_id: currentTimesheetId || null,
+        refresh_required: false,
+        affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+      });
+    }
     if (code === 'TRANSIENT_LIFECYCLE_CONFLICT') {
       return withJson(409, {
         error: 'TRANSIENT_LIFECYCLE_CONFLICT',
@@ -167918,6 +167928,17 @@ async function handleContractWeekManualAuthorise(env, req, weekId, ctx = null) {
     const currentTimesheetId = firstString(detailObj?.current_timesheet_id, detailObj?.timesheet_id, options.currentTimesheetId);
     const contractWeekId = firstString(detailObj?.contract_week_id, options.contractWeekId, weekId);
     const reason = firstString(detailObj?.reason).toUpperCase();
+    if (code === 'TIMESHEET_WORK_INTERVAL_OVERLAP') {
+      return withJson(409, {
+        error: 'TIMESHEET_WORK_INTERVAL_OVERLAP',
+        error_code: 'TIMESHEET_WORK_INTERVAL_OVERLAP',
+        message: 'You have already submitted a timesheet containing these hours. This timesheet cannot be accepted.',
+        current_timesheet_id: currentTimesheetId || null,
+        contract_week_id: contractWeekId || null,
+        refresh_required: false,
+        affected_rows: affectedRowsFor(detailObj || {}, currentTimesheetId)
+      });
+    }
     if ((code === 'TARGET_NOT_FOUND' || code === 'TIMESHEET_NOT_FOUND') && reason === 'NO_TSFIN') {
       return withJson(400, {
         error: 'NO_TSFIN',

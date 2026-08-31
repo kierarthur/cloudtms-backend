@@ -62,6 +62,7 @@ const AUTH_ERROR_CODES = new Set([
 ]);
 
 const CONFLICT_ERROR_CODES = new Set([
+  'TIMESHEET_WORK_INTERVAL_OVERLAP',
   'CANDIDATE_CONTEXT_STALE',
   'CANDIDATE_TIMESHEET_MOVED',
   'CANDIDATE_REQUEST_GENERATION_STALE',
@@ -780,6 +781,7 @@ function errorResponse(error, correlationId, office = false) {
   else if (status !== 405 && (code.endsWith('_DISABLED') || code.includes('NOT_ALLOWED') || code.includes('FORBIDDEN'))) status = 403;
   else if (code === 'CANDIDATE_REQUEST_FAILED') status = 500;
   const professionalMessages = {
+    TIMESHEET_WORK_INTERVAL_OVERLAP: 'You have already submitted a timesheet containing these hours. This timesheet cannot be accepted.',
     CANDIDATE_CONTEXT_STALE: 'This timesheet changed. Refresh it before trying again.',
     CANDIDATE_REQUEST_GENERATION_STALE: 'This manager request changed. Refresh it before trying again.',
     CANDIDATE_REMINDER_BATCH_SELECTION_CHANGED: 'The selected timesheets changed. Review the current selection before sending reminders.',

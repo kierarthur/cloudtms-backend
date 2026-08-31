@@ -6339,6 +6339,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_authorisation_overlap_trg_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "b5f64bf312de5852cc4b3d180b3249ac51afc9fa518ae9fb67748cb82152d489"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "private",
@@ -6347,6 +6366,25 @@
       "volatility": "s",
       "security_definer": true,
       "definition_sha256": "6118b0c8e612ebfb852bd011f820720b669fb55a6193dd709e4e648c50d2c1ac"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_cross_record_overlap_assert_v1(p_candidate_id uuid, p_submission_json jsonb, p_actual_schedule_json jsonb, p_worked_start_iso timestamp with time zone, p_worked_end_iso timestamp with time zone, p_exclude_workflow_id uuid, p_exclude_timesheet_id uuid, p_exclude_booking_id text)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "eb6c21c88e29919413c2ab078ba54ec98a7e30ea2b88a6377ac6da8cd2a33868"
     },
     {
       "acl": [
@@ -6480,6 +6518,44 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "e8929496098efefd859093e9f7da1a68144b389c621b74271232172c0b8f0eae"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=public, private, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_submission_workflow_overlap_trg_v1()",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "8ccfe4e3b5d5af3dae2c690b5694e7ba4863f2b0f54afaa51771f7c1158e6e60"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_timesheet_work_intervals_v1(p_submission_json jsonb, p_actual_schedule_json jsonb, p_worked_start_iso timestamp with time zone, p_worked_end_iso timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "c0ab254f55dd41c38f490344438bc30188daa698828e5d852b615835ec595a27"
     },
     {
       "acl": [
@@ -29578,6 +29654,13 @@
       "definition": "CREATE TRIGGER candidate_workflow_creation_identity_guard_v1 BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._candidate_workflow_creation_identity_guard_v1()"
     },
     {
+      "name": "trg_timesheet_submission_workflow_overlap_biu",
+      "table": "candidate_submission_workflows",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheet_submission_workflow_overlap_biu BEFORE INSERT OR UPDATE ON candidate_submission_workflows FOR EACH ROW EXECUTE FUNCTION private._timesheet_submission_workflow_overlap_trg_v1()"
+    },
+    {
       "name": "set_tms_ref",
       "table": "candidates",
       "schema": "public",
@@ -31025,6 +31108,13 @@
       "schema": "public",
       "enabled": "O",
       "definition": "CREATE TRIGGER trg_timesheet_archive_row_guard_v1 BEFORE INSERT OR DELETE OR UPDATE ON timesheets FOR EACH ROW EXECUTE FUNCTION timesheet_archive_row_guard_v1()"
+    },
+    {
+      "name": "trg_timesheet_authorisation_overlap_biu",
+      "table": "timesheets",
+      "schema": "public",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER trg_timesheet_authorisation_overlap_biu BEFORE INSERT OR UPDATE OF authorised_at_server ON timesheets FOR EACH ROW EXECUTE FUNCTION private._timesheet_authorisation_overlap_trg_v1()"
     },
     {
       "name": "trg_timesheets_document_invalidate_u",
