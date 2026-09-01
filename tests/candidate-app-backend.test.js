@@ -1078,7 +1078,8 @@ test('public reminder stays REMIND and cancellation requires and forwards a reas
       generation: 3, idempotency_key: 'cancel-2', reason_note: 'I entered the wrong week.'
     }), env, {}, deps);
     assert.equal(cancelled.status, 200);
-    assert.equal(calls[2].args.p_action, 'CANCEL');
+    assert.equal(calls[2].name, 'candidate_workflow_cancel_atomic_v2');
+    assert.equal(calls[2].args.p_action, undefined);
     assert.equal(calls[2].args.p_payload.reason_note, 'I entered the wrong week.');
   } finally {
     globalThis.fetch = originalFetch;

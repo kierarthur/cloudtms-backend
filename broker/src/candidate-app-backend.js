@@ -3694,6 +3694,16 @@ function workflowActionArgs(access, env, workflowId, action, generation, payload
   });
 }
 
+function workflowCancelArgs(access, env, workflowId, generation, payload, idempotencyKey) {
+  return candidateRpcArgs(access, env, {
+    p_workflow_id: requireUuid(workflowId, 'CANDIDATE_WORKFLOW_NOT_FOUND'),
+    p_expected_generation: generation == null
+      ? null : requireInteger(generation, 'WORKFLOW_GENERATION_CONFLICT', 1),
+    p_payload: isObject(payload) ? payload : {},
+    p_idempotency_key: requireCandidateIdempotency(idempotencyKey)
+  });
+}
+
 async function probeWorkflowMutationReplay(
   env, deps, access, workflowId, action, generation, idempotencyKey, semanticPayload
 ) {
@@ -5106,12 +5116,15 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
       });
     }
   }
-  result = result || await rpcCall(
-    deps, dbAction === 'PAPER_PREPARE'
-      ? 'candidate_weekly_paper_prepare_atomic_v1'
-      : 'candidate_workflow_transition_atomic_v1',
-    workflowActionArgs(access, env, workflowId, dbAction, generation, payload, mutationKey)
-  );
+  const transitionRpc = dbAction === 'PAPER_PREPARE'
+    ? 'candidate_weekly_paper_prepare_atomic_v1'
+    : dbAction === 'CANCEL'
+      ? 'candidate_workflow_cancel_atomic_v2'
+      : 'candidate_workflow_transition_atomic_v1';
+  const transitionArgs = dbAction === 'CANCEL'
+    ? workflowCancelArgs(access, env, workflowId, generation, payload, mutationKey)
+    : workflowActionArgs(access, env, workflowId, dbAction, generation, payload, mutationKey);
+  result = result || await rpcCall(deps, transitionRpc, transitionArgs);
   if (pendingManagerRoute) {
     const approvalRequestId = requireUuid(result?.approval_request_id, 'MANAGER_ROUTE_REGISTRATION_FAILED');
     const mailOutboxId = requireUuid(result?.mail_outbox_id, 'MANAGER_ROUTE_REGISTRATION_FAILED');

@@ -32,6 +32,9 @@ const qrSettingsSource = read(
   'supabase/repeatable/07082026_2225_candidate_app_qr_settings_invoice_replacements_v1.sql'
 );
 const routeSource = read('supabase/repeatable/08082026_2035_timesheet_route_version_rotate.sql');
+const legacyOrphanSource = read(
+  'supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql'
+);
 const rejectSource = read('supabase/repeatable/07082026_2128_candidate_finalize_reject_no_work_rpcs_v1.sql');
 const backendSource = read('broker/src/candidate-app-backend.js');
 const normalBackendSource = read('broker/src/index.js');
@@ -189,6 +192,47 @@ test('single-workflow and source-set retirement close mail, notification and QR 
   assert.match(rejectSource, /CANDIDATE_PAPER_FAMILY:[\s\S]*pg_advisory_xact_lock\(hashtextextended\(v_rejection_family_key,0\)\)[\s\S]*timesheet_id=p_timesheet_id for update/i);
   assert.match(rejectSource, /CANDIDATE_PAPER_QR_INVALIDATION_NOT_PROVEN/);
   assert.match(qrSettingsSource, /update public\.timesheet_evidence as evidence_row[\s\S]*where evidence_row\.timesheet_id=v_current\.timesheet_id/i);
+});
+
+test('legacy one-page cancellation adapter opens only for the exact orphaned-token conflict', () => {
+  const helper = functionBody(
+    legacyOrphanSource,
+    'private._candidate_legacy_paper_orphan_prepare_v1'
+  );
+  const wrapper = functionBody(
+    legacyOrphanSource,
+    'public.candidate_workflow_cancel_atomic_v2'
+  );
+  assert.match(wrapper, /candidate_workflow_transition_atomic_v1\([\s\S]*'CANCEL'/i);
+  assert.match(wrapper, /exception when sqlstate '40001'/i);
+  assert.match(wrapper, /CANDIDATE_PAPER_QR_SOURCE_CONFLICT/i);
+  assert.match(wrapper, /CURRENT_QR_TOKEN_OWNER_CONFLICT/i);
+  assert.match(wrapper, /owner_count'[\s\S]*<>0/i);
+  assert.match(wrapper, /_candidate_legacy_paper_orphan_prepare_v1/i);
+  assert.match(wrapper, /CANDIDATE_LEGACY_PAPER_ORPHAN_NOT_ELIGIBLE[\s\S]*v_error_message/i);
+  assert.equal(
+    (wrapper.match(/candidate_workflow_transition_atomic_v1\(/gi) || []).length,
+    2,
+    'ordinary cancellation must run before and after the exact compatibility preparation'
+  );
+
+  assert.match(helper, /manifest_version/i);
+  assert.match(helper, /jsonb_array_length\([\s\S]*\)<>1/i);
+  assert.match(helper, /HOURS_TIMESHEET/i);
+  assert.match(helper, /receipt_count<>1/i);
+  assert.match(helper, /status<>'SENT'/i);
+  assert.match(helper, /CANDIDATE_PAPER_V1/i);
+  assert.match(helper, /CURRENT_TOKEN_HAS_OWNER/i);
+  assert.match(helper, /CANDIDATE_PAPER_MAIL_DELIVERY_IN_PROGRESS/i);
+  assert.match(helper, /qr_token=null/i);
+  assert.match(helper, /delivery_receipt_preserved',true/i);
+  assert.doesNotMatch(helper, /delete\s+from\s+public\.mail_outbox/i);
+  assert.doesNotMatch(legacyOrphanSource, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
+
+  assert.match(backendSource, /dbAction === 'CANCEL'[\s\S]*candidate_workflow_cancel_atomic_v2/);
+  assert.doesNotMatch(backendSource, /candidate_workflow_cancel_atomic_v2[\s\S]{0,300}p_action/);
+  assert.match(legacyOrphanSource, /revoke all on function private\._candidate_legacy_paper_orphan_prepare_v1\([\s\S]*service_role/i);
+  assert.match(legacyOrphanSource, /grant execute on function public\.candidate_workflow_cancel_atomic_v2\([\s\S]*to service_role/i);
 });
 
 test('provider handoff obtains an atomic submit permit before external submission', () => {

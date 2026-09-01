@@ -3735,6 +3735,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog, public, private, extensions, pg_temp"
+      ],
+      "schema": "private",
+      "identity": "_candidate_legacy_paper_orphan_prepare_v1(p_environment text, p_workflow_id uuid, p_expected_generation integer, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "063ec2a83624a14defccb23630b7cfef39235db5a53b680945ba207068532aa0"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=\"\""
       ],
       "schema": "private",
@@ -15231,6 +15250,30 @@
       "volatility": "v",
       "security_definer": true,
       "definition_sha256": "bfe88e8b597f33e05fd031f6f39d90bfbfb3d8715af973511c6bbed235e5eb9a"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
+        "search_path=pg_catalog, public, private, pg_temp"
+      ],
+      "schema": "public",
+      "identity": "candidate_workflow_cancel_atomic_v2(p_session_id uuid, p_environment text, p_workflow_id uuid, p_expected_generation integer, p_payload jsonb, p_idempotency_key text, p_now_utc timestamp with time zone)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "9f9ec0a643aea0c709172c543e3ca50a7d78e31f06db5bb720bab731df1a18c7"
     },
     {
       "acl": [

@@ -30,6 +30,8 @@ on:
       - 'supabase/repeatable/21082026_1758_candidate_app_federated_session_project_v1.sql'
       - 'supabase/repeatable/31082026_1732_candidate_federated_session_expiry_renewal_v1.sql'
       - 'supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql'
+      - 'supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql'
+      - 'tests/01092026_1400_candidate_legacy_paper_orphan_cancel_verification.sql'
       - 'supabase/repeatable/21082026_2231_candidate_google_provisioning_match_v1.sql'
       - 'supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql'
       - 'supabase/repeatable/26072026_1947_invoice_batch_generate_candidate_rows_v1.sql'
@@ -174,6 +176,7 @@ jobs:
             supabase/repeatable/30082026_1339_candidate_paper_manifest_page_qr_v2.sql
             supabase/repeatable/30082026_2156_candidate_paper_evidence_manifest_labels_v1.sql
             supabase/repeatable/31082026_0317_timesheet_cross_record_overlap_guard_v1.sql
+            supabase/repeatable/01092026_1331_candidate_legacy_paper_orphan_retirement.sql
             supabase/repeatable/23072026_2207_email_outbox_claim_ready_batch.sql
             supabase/repeatable/24072026_1217_invoice_async_processor_contract_v4/24072026_1217_invoice_work_complete_batch.sql
             supabase/repeatable/21072026_1235_00_import_correction_policy_helpers.sql
@@ -219,6 +222,7 @@ jobs:
             tests/11082026_1715_candidate_resubmission_idempotency_verification.sql
             tests/11082026_1851_cloudtms_office_candidate_adapter_verification.sql
             tests/11082026_2145_candidate_office_rejection_replay_verification.sql
+            tests/01092026_1400_candidate_legacy_paper_orphan_cancel_verification.sql
             tests/12082026_0059_candidate_execution_replay_paper_authority_verification.sql
             tests/12082026_0922_candidate_execution_boundary_closure_verification.sql
             tests/12082026_1408_candidate_auth_receipt_runtime_verification.sql
