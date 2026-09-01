@@ -743,6 +743,7 @@ test('route, DAILY and auto-authorisation authority is enforced at every mutatio
   const workflow = definition(sql.workflow, 'candidate_workflow_transition_atomic_v1');
   const finalise = definition(sql.final, 'candidate_submission_finalize_atomic_v1');
   const noWork = definition(latestNoWork, 'candidate_no_work_atomic_v1');
+  const stagedCapabilities = privateDefinition(latestCapabilities, '_candidate_record_capabilities_v1');
   const page = definition(sql.reads, 'candidate_app_timesheet_page_v1');
 
   assert.match(sql.helpers, /_candidate_route_family_v1/i);
@@ -751,12 +752,12 @@ test('route, DAILY and auto-authorisation authority is enforced at every mutatio
   assert.match(finalise, /_candidate_route_family_v1[\s\S]*CANDIDATE_ROUTE_FAMILY_MISMATCH/i);
   assert.match(noWork, /candidate_no_work_allowed[\s\S]*CANDIDATE_NO_WORK_NOT_ALLOWED/i);
   assert.match(noWork, /_candidate_record_capabilities_v1[\s\S]*candidate_no_work_allowed[\s\S]*CANDIDATE_NO_WORK_NOT_ALLOWED/i);
+  assert.match(stagedCapabilities, /v_hours=0 and v_additional=0 and v_expenses=0[\s\S]*not v_has_claim_evidence[\s\S]*not v_has_active_submission_workflow/i);
   assert.match(noWork, /timesheet_weekly_chain_delete_preview[\s\S]*timesheet_weekly_chain_delete_apply/i);
   assert.match(noWork, /timesheet_archive_transition_v1[\s\S]*WEEKLY_CHAIN_DELETE_PARENT/i);
   assert.doesNotMatch(noWork, /timesheet_standard_delete_preview_v1/i);
   assert.match(candidateRuntimeWorkflow, /25082026_1529_candidate_signature_evidence_timestamp_compatibility_v1\.sql[\s\S]*26082026_0725_candidate_authorised_hours_expense_anchor_v1\.sql/i);
   assert.match(candidateRuntimeWorkflow, /07082026_2128_candidate_finalize_reject_no_work_rpcs_v1\.sql[\s\S]*26082026_0659_candidate_no_work_weekly_chain_v1\.sql/i);
-  assert.match(candidateRuntimeWorkflow, /26082026_0659_candidate_no_work_weekly_chain_v1\.sql[\s\S]*28082026_2027_candidate_daily_office_receipt_adapter_v1\.sql/i);
 
   assert.match(workflow, /_candidate_daily_entitled_v1[\s\S]*CANDIDATE_DAILY_ENTITLEMENT_REQUIRED/i);
   assert.match(finalise, /_candidate_daily_entitled_v1[\s\S]*CANDIDATE_DAILY_ENTITLEMENT_REQUIRED/i);

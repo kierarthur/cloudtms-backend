@@ -237,7 +237,6 @@ declare
   v_daily_ts uuid:='95200000-0000-0000-0000-000000000019';
   v_daily_workflow uuid:='95200000-0000-0000-0000-000000000020';
   v_no_work_week uuid:='95200000-0000-0000-0000-000000000023';
-  v_no_work_ts uuid:='95200000-0000-0000-0000-000000000024';
   v_result jsonb;
   v_issues jsonb;
   v_daily_input jsonb;
@@ -602,30 +601,19 @@ begin
     raise exception 'stale Candidate DAILY materialisation changed the timesheet before rejection';
   end if;
 
-  -- A genuine electronic weekly row uses the authoritative weekly-chain
-  -- preview/apply path. This proves the Candidate action removes the complete
-  -- eligible weekly chain rather than calling the retired single-row route.
-  insert into public.timesheets(
-    timesheet_id,contract_id,week_ending_date,line_type,submission_mode,sheet_scope,
-    r2_nurse_key,r2_auth_key,job_title_norm,band,candidate_submission_route_intent
-  ) values (
-    v_no_work_ts,v_contract,'2026-08-15','HOURS','MANUAL','WEEKLY',
-    null,null,'NURSE','Band 5','ELECTRONIC'
-  );
+  -- A genuinely empty electronic week has no Timesheet yet. Once a current
+  -- Timesheet exists it either carries worked/submitted facts or belongs to a
+  -- different route-specific lifecycle and must not be treated as no-work.
   insert into public.contract_weeks(
-    id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id
-  ) values (v_no_work_week,v_contract,'2026-08-15',0,'OPEN','ELECTRONIC',v_no_work_ts);
-  insert into public.timesheets_financials(
-    timesheet_id,candidate_id,client_id,total_hours,processing_status,role,band,pay_method
-  ) values (v_no_work_ts,v_candidate,v_client,0,'UNPROCESSED','NURSE','Band 5','PAYE');
+    id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot
+  ) values (v_no_work_week,v_contract,'2026-08-15',0,'PLANNED','ELECTRONIC');
   v_result:=public.candidate_no_work_atomic_v1(
     v_session,'TEST',v_no_work_week,null,'route-daily:electronic-no-work',v_now
   );
   if coalesce((v_result->>'ok')::boolean,false)=false
      or coalesce(v_result->>'candidate_hidden','false')<>'true'
-     or exists(select 1 from public.contract_weeks where id=v_no_work_week)
-     or exists(select 1 from public.timesheets where timesheet_id=v_no_work_ts) then
-    raise exception 'eligible electronic weekly no-work action did not remove the complete chain: %',v_result;
+     or v_result->>'action'<>'DELETE_PLANNED' then
+    raise exception 'eligible empty electronic week did not reach planned deletion authority: %',v_result;
   end if;
   v_result:=public.candidate_no_work_atomic_v1(
     v_session,'TEST',v_no_work_week,null,'route-daily:electronic-no-work',v_now
