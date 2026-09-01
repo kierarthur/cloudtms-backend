@@ -87,6 +87,7 @@
     "supabase/verification/31082026_1436_banking_pay_candidate_group_pagination_v2_verification.sql",
     "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
     "supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql",
+    "supabase/verification/01092026_1151_candidate_federated_session_monotonic_projection_verification.sql",
     "supabase/verification/31082026_1906_banking_pay_candidate_group_display_only_selection_tuple_verification.sql",
     "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql"
   ],
@@ -140,6 +141,7 @@
     "supabase/verification/31082026_1436_banking_pay_candidate_group_pagination_v2_verification.sql",
     "tests/31082026_1437_banking_pay_candidate_group_pagination_runtime_verification.sql",
     "supabase/verification/31082026_1738_candidate_federated_session_expiry_renewal_verification.sql",
+    "supabase/verification/01092026_1151_candidate_federated_session_monotonic_projection_verification.sql",
     "supabase/verification/31082026_1906_banking_pay_candidate_group_display_only_selection_tuple_verification.sql",
     "tests/31082026_1907_banking_pay_candidate_group_display_only_selection_tuple_runtime_verification.sql"
   ]

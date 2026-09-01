@@ -290,6 +290,10 @@ test('agency-local projection source is additive, service-only and route exact',
     '../supabase/repeatable/31082026_1732_candidate_federated_session_expiry_renewal_v1.sql',
     import.meta.url
   ), 'utf8');
+  const monotonicRepeatable = await readFile(new URL(
+    '../supabase/repeatable/01092026_1150_candidate_federated_session_monotonic_projection_v1.sql',
+    import.meta.url
+  ), 'utf8');
   const linkRepeatable = await readFile(new URL(
     '../supabase/repeatable/21082026_2335_candidate_app_federated_membership_link_set_v1.sql',
     import.meta.url
@@ -314,6 +318,12 @@ test('agency-local projection source is additive, service-only and route exact',
   assert.match(renewalRepeatable, /expires_at_utc>p_now_utc and absolute_expires_at_utc>p_now_utc/);
   assert.match(renewalRepeatable, /grant execute .* service_role/is);
   assert.doesNotMatch(renewalRepeatable, /insert into public\.(?:timesheets|contracts|rota|invoices)/i);
+  assert.match(monotonicRepeatable, /order by membership_generation desc,route_version desc,session_epoch desc/i);
+  assert.match(monotonicRepeatable, /v_latest\.session_epoch>p_session_epoch/i);
+  assert.match(monotonicRepeatable, /CANDIDATE_FEDERATED_SESSION_STALE/);
+  assert.match(monotonicRepeatable, /global_session_identity_hmac<>p_global_session_identity_hmac/i);
+  assert.match(monotonicRepeatable, /grant execute .* service_role/is);
+  assert.doesNotMatch(monotonicRepeatable, /insert into public\.(?:timesheets|contracts|rota|invoices)/i);
   assert.match(linkRepeatable, /route_context_verified' is distinct from 'true'/);
   assert.match(linkRepeatable, /audience' is distinct from 'FEDERATED_MEMBERSHIP_LINK'/);
   assert.match(linkRepeatable, /p_membership_generation<v_link\.membership_generation/);
