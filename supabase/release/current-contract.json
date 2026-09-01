@@ -6648,6 +6648,25 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=pg_catalog"
+      ],
+      "schema": "private",
+      "identity": "pay_batch_signed_non_charge_recovery_evidence_v1(p_document jsonb)",
+      "parallel": "s",
+      "volatility": "i",
+      "security_definer": false,
+      "definition_sha256": "d8e5915961362e0b551565d6e8650db99a49646c0161a1867355daed0aea7d5e"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=\"\""
       ],
       "schema": "private",
@@ -8597,7 +8616,7 @@
       "parallel": "u",
       "volatility": "s",
       "security_definer": true,
-      "definition_sha256": "a3e3a35101070382fb2e9957bc007ef31f9801afca165b2391ae0179adf6da0e"
+      "definition_sha256": "1af681ab523e8bd8ba7a2f53acd39969d6e97238374f4f2cfa21b2daa7f6b1a7"
     },
     {
       "acl": [
@@ -20336,7 +20355,7 @@
       "parallel": "u",
       "volatility": "v",
       "security_definer": true,
-      "definition_sha256": "2c6712892e53b1b60b9cf72be76919d6ba96269140416263613e3778c0608181"
+      "definition_sha256": "27b35e2b7f8472315e3e790e13ec150610c6cc3ced0fc59c3cd9927e1c5de875"
     },
     {
       "acl": [
