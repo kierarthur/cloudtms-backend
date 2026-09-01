@@ -802,6 +802,7 @@ function errorResponse(error, correlationId, office = false) {
     CANDIDATE_BREAK_ENTRY_MODE_MISMATCH: 'Use the break-entry format shown for this timesheet.',
     CANDIDATE_BREAK_ENTRY_NOT_APPLICABLE: 'Break entry is not available for this timesheet route.',
     CANDIDATE_BREAK_ENTRY_REQUIRED: 'Enter the break for each worked period, or confirm that no break was taken.',
+    CANDIDATE_WORK_INTERVAL_CONTRADICTORY: 'The times entered conflict with an older saved value. Reopen the timesheet and check the hours before submitting it.',
     CANDIDATE_PAPER_QR_UNREADABLE: 'The timesheet QR code could not be read. Take a clearer photograph of the full page.',
     CANDIDATE_PAPER_QR_AMBIGUOUS: 'This image contains more than one page QR. Photograph one complete page at a time.',
     CANDIDATE_PAPER_QR_PROOF_MISMATCH: 'The photographed timesheet does not match this submission.',
@@ -2835,6 +2836,56 @@ function hhmm(value) {
   const hours = Number(match[1]);
   const minutes = Number(match[2]);
   return hours <= 23 && minutes <= 59 ? `${match[1]}:${match[2]}` : '';
+}
+
+function assertCandidateScheduleAliasConsistency(factualSubmission) {
+  const facts = isObject(factualSubmission) ? factualSubmission : {};
+  const owners = [facts, facts.hours_submission, facts.timesheet_patch_json,
+    facts.hours_submission?.timesheet_patch_json].filter(isObject);
+  const scheduleSegments = [];
+  for (const owner of owners) {
+    if ([
+      'start', 'start_time', 'worked_start', 'finish', 'finish_time',
+      'end', 'end_time', 'worked_end', 'start_utc', 'worked_start_iso',
+      'start_iso', 'end_utc', 'worked_end_iso', 'end_iso'
+    ].some(key => Object.prototype.hasOwnProperty.call(owner, key))) {
+      scheduleSegments.push(owner);
+    }
+    for (const key of ['actual_schedule_json', 'schedule_json']) {
+      if (Array.isArray(owner[key])) scheduleSegments.push(...owner[key].filter(isObject));
+    }
+  }
+  const assertClockAliases = (segment, keys, boundary) => {
+    const values = keys
+      .filter(key => Object.prototype.hasOwnProperty.call(segment, key))
+      .map(key => hhmm(segment[key]))
+      .filter(Boolean);
+    if (new Set(values).size > 1) {
+      throw new CandidateHttpError(
+        400, 'CANDIDATE_WORK_INTERVAL_CONTRADICTORY',
+        'CANDIDATE_WORK_INTERVAL_CONTRADICTORY', { boundary }
+      );
+    }
+  };
+  const assertInstantAliases = (segment, keys, boundary) => {
+    const values = keys
+      .filter(key => Object.prototype.hasOwnProperty.call(segment, key))
+      .map(key => Date.parse(text(segment[key])))
+      .filter(Number.isFinite);
+    if (new Set(values).size > 1) {
+      throw new CandidateHttpError(
+        400, 'CANDIDATE_WORK_INTERVAL_CONTRADICTORY',
+        'CANDIDATE_WORK_INTERVAL_CONTRADICTORY', { boundary }
+      );
+    }
+  };
+  for (const segment of scheduleSegments) {
+    assertClockAliases(segment, ['start', 'start_time', 'worked_start'], 'START');
+    assertClockAliases(segment, ['finish', 'finish_time', 'end', 'end_time', 'worked_end'], 'END');
+    assertInstantAliases(segment, ['start_utc', 'worked_start_iso', 'start_iso'], 'START');
+    assertInstantAliases(segment, ['end_utc', 'worked_end_iso', 'end_iso'], 'END');
+  }
+  return factualSubmission;
 }
 
 function minuteOfDay(value) {
@@ -5053,6 +5104,7 @@ async function handleWorkflowAction(request, env, deps, workflowId, action, ctx)
     const submissionFacts = isObject(body.immutable_submission)
       ? structuredClone(body.immutable_submission) : {};
     delete submissionFacts.official_presentation;
+    assertCandidateScheduleAliasConsistency(submissionFacts);
     const submissionRequestIdentity = {
       contract_version: 'CANDIDATE_WORKER_SUBMISSION_REQUEST_V1',
       factual_submission: submissionFacts,
@@ -8020,6 +8072,7 @@ export const candidateAppBackendInternals = Object.freeze({
   explicitNoBreak,
   normaliseAdaptiveBreakEntry,
   normaliseCandidateBreakSubmission,
+  assertCandidateScheduleAliasConsistency,
   deferBackground,
   finaliseReceivedPaperReturn,
   buildOfficialPresentationSnapshot,

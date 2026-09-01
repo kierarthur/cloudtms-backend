@@ -59,6 +59,30 @@ test('no-break remains an explicit zero with no endpoints in either adaptive mod
   }, 'START_END_TIMES'), { no_break: true, break_minutes: 0 });
 });
 
+test('Candidate submission rejects contradictory saved and visible work-time aliases before database use', () => {
+  assert.throws(() => candidateAppInternals.assertCandidateScheduleAliasConsistency({
+    hours_submission: {
+      timesheet_patch_json: {
+        actual_schedule_json: [{
+          date: '2026-07-20',
+          start: '09:00', end: '17:00',
+          start_time: '17:00', end_time: '18:00'
+        }]
+      }
+    }
+  }), error => (
+    error?.status === 400
+    && error?.code === 'CANDIDATE_WORK_INTERVAL_CONTRADICTORY'
+    && error?.details?.boundary === 'START'
+  ));
+
+  assert.doesNotThrow(() => candidateAppInternals.assertCandidateScheduleAliasConsistency({
+    actual_schedule_json: [{
+      date: '2026-07-20', start_time: '17:00', end_time: '18:00'
+    }]
+  }));
+});
+
 test('public broker enforces the closed returned-paper QR proof envelope', () => {
   const body = {
     generation: 2,

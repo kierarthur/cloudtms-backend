@@ -1137,6 +1137,29 @@ test('Candidate workflow mutation requires a caller key and an exact WORKER_SUBM
     assert.equal((await missingKey.json()).error_code, 'CANDIDATE_IDEMPOTENCY_KEY_REQUIRED');
     assert.equal(calls.length, 0);
 
+    const contradictoryHours = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/worker-submit`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 1,
+          idempotency_key: 'worker-submit-contradictory-hours',
+          candidate_signed_at_utc: '2026-08-12T10:00:00.000Z',
+          immutable_submission: {
+            actual_schedule_json: [{
+              date: '2026-07-20',
+              start: '09:00', end: '17:00',
+              start_time: '17:00', end_time: '18:00'
+            }]
+          }
+        })
+      }
+    ), env, {}, deps);
+    assert.equal(contradictoryHours.status, 400);
+    assert.equal((await contradictoryHours.json()).error_code,
+      'CANDIDATE_WORK_INTERVAL_CONTRADICTORY');
+    assert.equal(calls.length, 0);
+
     const replay = await handleCandidateAppRequest(new Request(
       `https://private.test/candidate-app/v1/workflows/${workflowId}/actions/worker-submit`, {
         method: 'POST',
@@ -1155,7 +1178,7 @@ test('Candidate workflow mutation requires a caller key and an exact WORKER_SUBM
     assert.equal(calls[0].args.p_payload.mutation_replay_probe_only, true);
     assert.equal(calls[0].args.p_payload.mutation_replay_semantic_payload
       .submission_request_identity.factual_submission.worked_minutes, 480);
-    assert.equal(sessionReads, 2);
+    assert.equal(sessionReads, 3);
   } finally {
     globalThis.fetch = originalFetch;
   }
