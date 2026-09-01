@@ -169,6 +169,7 @@ jobs:
             supabase/repeatable/27082026_0423_candidate_electronic_rejection_resubmission_v1.sql
             supabase/repeatable/28082026_1857_candidate_daily_booked_source_v1.sql
             supabase/repeatable/28082026_1912_candidate_daily_receipt_context_v1.sql
+            supabase/repeatable/28082026_2027_candidate_daily_office_receipt_adapter_v1.sql
             supabase/repeatable/27082026_1255_candidate_weekly_withdrawal_reset_v1.sql
             supabase/repeatable/28082026_0505_candidate_refused_card_recovery_v1.sql
             supabase/repeatable/29082026_0951_candidate_expense_resubmission_anchor_v1.sql
