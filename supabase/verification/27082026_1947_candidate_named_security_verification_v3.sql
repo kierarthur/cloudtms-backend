@@ -113,8 +113,8 @@ begin
   -- manifest/proof/component/whole-pack functions, and the exact service-only
   -- legacy one-page cancellation wrapper are present. Browser execution
   -- remains exactly zero.
-  if v_count<>123 or v_service_missing<>8 or v_browser_executable<>0
-     or v_hash<>'e152ee8018d67c0e76cf14dc86e6925c' then
+  if v_count<>124 or v_service_missing<>8 or v_browser_executable<>0
+     or v_hash<>'390cec48151731c4346e701cf48940ae' then
     raise exception 'CANDIDATE_NAMED_RPC_ISOLATION_FAILED:count=% service_missing=% browser_executable=% hash=%',
       v_count,v_service_missing,v_browser_executable,v_hash;
   end if;

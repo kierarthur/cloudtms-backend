@@ -40,6 +40,25 @@ test('private Candidate failure diagnostics safely classify closed client failur
   assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
 });
 
+test('federated projection diagnostics retain only the closed Candidate error code', () => {
+  const error = new Error('RPC candidate_app_federated_session_project_v1 failed 409: private payload omitted');
+  error.json = {
+    message: 'CANDIDATE_FEDERATED_SESSION_STALE',
+    detail: { email: 'must-not-appear' }
+  };
+  error.body = 'must-not-appear';
+  const result = candidatePrivateWorkerInternals.federatedProjectionFailureDiagnostic(error);
+  assert.deepEqual(result, { error_code: 'CANDIDATE_FEDERATED_SESSION_STALE' });
+  assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
+});
+
+test('federated projection diagnostics fail closed without copying transport text', () => {
+  const error = new Error('dependency failed for must-not-appear');
+  const result = candidatePrivateWorkerInternals.federatedProjectionFailureDiagnostic(error);
+  assert.deepEqual(result, { error_code: 'CANDIDATE_FEDERATED_PROJECTION_FAILED' });
+  assert.equal(JSON.stringify(result).includes('must-not-appear'), false);
+});
+
 test('Candidate transport diagnostics retain safe gateway status without response contents', () => {
   const error = new Error('RPC candidate_workflow_transition_atomic_v1 failed 504: private response omitted');
   error.status = 504;

@@ -414,6 +414,8 @@ function globalSessionContext(access, env) {
   if (access?.authority !== 'CONTROL_PLANE'
       || !UUID_RE.test(text(access.global_account_id))
       || !UUID_RE.test(text(access.global_session_id))
+      || (access.global_session_family_id != null
+        && !UUID_RE.test(text(access.global_session_family_id)))
       || !Number.isSafeInteger(Number(access.session_epoch))
       || Number(access.session_epoch) < 1) {
     throw new CandidateBrokerError(401, 'CANDIDATE_ACCESS_TOKEN_INVALID');
@@ -738,6 +740,8 @@ async function openPublicAccessToken(token, env) {
   const controlPlaneAuthority = payload?.authority === 'CONTROL_PLANE'
     && UUID_RE.test(text(payload.global_account_id))
     && UUID_RE.test(text(payload.global_session_id))
+    && (payload.global_session_family_id == null
+      || UUID_RE.test(text(payload.global_session_family_id)))
     && UUID_RE.test(text(payload.public_session_id))
     && Number.isSafeInteger(Number(payload.session_epoch)) && Number(payload.session_epoch) > 0
     && Number.isFinite(Date.parse(payload.absolute_expires_at_utc || ''))
@@ -763,6 +767,8 @@ async function openPublicRefresh(body, env) {
     && text(payload?.control_plane_refresh_token)
     && UUID_RE.test(text(payload?.global_account_id))
     && UUID_RE.test(text(payload?.global_session_id))
+    && (payload?.global_session_family_id == null
+      || UUID_RE.test(text(payload.global_session_family_id)))
     && UUID_RE.test(text(payload?.public_session_id))
     && Number.isSafeInteger(Number(payload?.session_epoch)) && Number(payload.session_epoch) > 0
     && Number.isSafeInteger(Number(payload?.rotation)) && Number(payload.rotation) >= 0
@@ -1306,12 +1312,14 @@ function controlPlaneResultError(result, fallback = 'CONTROL_PLANE_REQUEST_REJEC
 async function wrapGlobalSession(result, env, refreshToken, route = null) {
   const accountId = text(result?.account_id).toLowerCase();
   const globalSessionId = text(result?.session_id).toLowerCase();
+  const globalSessionFamilyId = text(result?.family_id).toLowerCase();
   const issuedAt = Date.parse(result?.issued_at_utc || '');
   const expiresAt = Date.parse(result?.expires_at_utc || '');
   const absoluteExpiresAt = Date.parse(result?.absolute_expires_at_utc || '');
   const rotation = Number(result?.rotation);
   const sessionEpoch = Number(result?.session_epoch);
   if (!UUID_RE.test(accountId) || !UUID_RE.test(globalSessionId)
+      || (globalSessionFamilyId && !UUID_RE.test(globalSessionFamilyId))
       || !Number.isFinite(issuedAt) || !Number.isFinite(expiresAt)
       || !Number.isFinite(absoluteExpiresAt) || expiresAt <= issuedAt
       || absoluteExpiresAt < expiresAt || absoluteExpiresAt <= Date.now()
@@ -1329,6 +1337,7 @@ async function wrapGlobalSession(result, env, refreshToken, route = null) {
     authority: 'CONTROL_PLANE',
     global_account_id: accountId,
     global_session_id: globalSessionId,
+    ...(globalSessionFamilyId ? { global_session_family_id: globalSessionFamilyId } : {}),
     session_epoch: sessionEpoch,
     absolute_expires_at_utc: new Date(absoluteExpiresAt).toISOString(),
     public_session_id: publicSessionId,
@@ -1499,6 +1508,9 @@ async function routeContextForPrivate(
       environment: environmentName(env),
       global_account_id: access.global_account_id,
       global_session_id: access.global_session_id,
+      ...(access.global_session_family_id ? {
+        global_session_family_id: access.global_session_family_id
+      } : {}),
       membership_id: route.membership_id,
       membership_generation: Number(route.membership_generation),
       agency_id: route.agency_id,
@@ -1528,6 +1540,9 @@ async function routeContextForPrivate(
     environment: environmentName(env),
     global_account_id: access.global_account_id,
     global_session_id: access.global_session_id,
+    ...(access.global_session_family_id ? {
+      global_session_family_id: access.global_session_family_id
+    } : {}),
     membership_id: route.membership_id,
     membership_generation: Number(route.membership_generation),
     agency_id: route.agency_id,
@@ -1630,6 +1645,9 @@ async function wrapPhoneHandoff(
       ...(federatedRoute ? { federated_route: {
         global_account_id: access.global_account_id,
         global_session_id: access.global_session_id,
+        ...(access.global_session_family_id ? {
+          global_session_family_id: access.global_session_family_id
+        } : {}),
         membership_id: federatedRoute.membership_id,
         membership_generation: Number(federatedRoute.membership_generation),
         agency_id: federatedRoute.agency_id,
@@ -1688,6 +1706,9 @@ async function managerForwardContext(request, env, correlationId) {
       : name === 'global_session_id' ? access.global_session_id
         : route[name]
   ).toLowerCase())
+    && (!handoffRoute.global_session_family_id
+      || text(handoffRoute.global_session_family_id).toLowerCase()
+        === text(access.global_session_family_id).toLowerCase())
     && Number(handoffRoute.membership_generation) === Number(route.membership_generation)
     && Number(handoffRoute.route_version) === Number(route.route_version)
     && Number(handoffRoute.session_epoch) === Number(route.session_epoch);
@@ -2081,6 +2102,7 @@ async function issueControlPlaneAgencySession(access, choiceToken, idempotencyKe
     result: {
       ...result,
       account_id: access.global_account_id,
+      family_id: access.global_session_family_id,
       rotation: Number(access.rotation) + 1,
       absolute_expires_at_utc: times.absolute_expires_at_utc,
       selection_required: false
@@ -2096,6 +2118,7 @@ async function finalizeControlPlaneSession(
   const access = {
     authority: 'CONTROL_PLANE', global_account_id: result.account_id,
     global_session_id: result.session_id, session_epoch: Number(result.session_epoch),
+    global_session_family_id: result.family_id,
     rotation: Number(result.rotation), absolute_expires_at_utc: result.absolute_expires_at_utc,
     exp: Math.floor(Date.parse(result.issued_at_utc) / 1000) + GLOBAL_ACCESS_TTL_SECONDS
   };
@@ -2642,6 +2665,7 @@ async function handleControlPlaneRefresh(request, body, refresh, env, correlatio
   const access = {
     authority: 'CONTROL_PLANE', global_account_id: result.account_id,
     global_session_id: result.session_id, session_epoch: Number(result.session_epoch),
+    global_session_family_id: result.family_id,
     rotation: Number(result.rotation), absolute_expires_at_utc: result.absolute_expires_at_utc,
     exp: Math.floor(Date.parse(result.issued_at_utc) / 1000) + GLOBAL_ACCESS_TTL_SECONDS
   };
@@ -3220,6 +3244,22 @@ export async function handleCandidateBrokerRequest(request, env, ctx = {}) {
       ), origin);
     }
     if (dailyBootstrap && !response.ok) {
+      let bootstrapErrorCode = 'CANDIDATE_BOOTSTRAP_DEPENDENCY_FAILED';
+      try {
+        const diagnosticBody = await response.clone().json();
+        if (isObject(diagnosticBody) && text(diagnosticBody.error_code)) {
+          bootstrapErrorCode = upper(diagnosticBody.error_code);
+        }
+      } catch {
+        // The public response below already fails closed for non-JSON or
+        // malformed private responses. This log is deliberately limited to
+        // status and safe error identity; it never records headers or bodies.
+      }
+      console.error('[candidate-broker] bootstrap dependency rejected', {
+        status: response.status,
+        error_code: bootstrapErrorCode,
+        request_id: dailyCorrelationId || id
+      });
       return withCors(await publicSafeDailyResponse(
         response, dailyCorrelationId, CANDIDATE_DAILY_BOOTSTRAP_ROUTE
       ), origin);

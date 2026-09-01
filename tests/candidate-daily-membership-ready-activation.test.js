@@ -50,7 +50,7 @@ test('membership freshness exception is bound to one exact active membership and
 test('private membership projection attempts Rota activation after membership link and before session projection', () => {
   const linked = workerSource.indexOf("candidate_app_federated_membership_link_set_v1");
   const activated = workerSource.indexOf('await attemptFederatedDailyActivation');
-  const projected = workerSource.indexOf("candidate_app_federated_session_project_v1");
+  const projected = workerSource.indexOf("candidate_app_federated_session_project_v2");
   assert.ok(linked >= 0 && linked < activated && activated < projected);
 });
 
@@ -67,12 +67,13 @@ test('a renewed federated projection always mints a genuinely fresh local access
         ...context,
         global_account_id: '00000000-0000-4000-8000-000000000103',
         global_session_id: '00000000-0000-4000-8000-000000000104',
+        global_session_family_id: '00000000-0000-4000-8000-000000000106',
         route_version: 7,
         session_epoch: 12,
         expires_at_utc: new Date(Date.now() + 5 * 60_000).toISOString()
       }
     }, {
-      async rpc(name) {
+      async rpc(name, args) {
         if (name === 'candidate_app_federated_membership_link_set_v1') {
           return { ok: true, status: 'LINKED' };
         }
@@ -82,7 +83,8 @@ test('a renewed federated projection always mints a genuinely fresh local access
             status: 'NOT_READY'
           }] };
         }
-        if (name === 'candidate_app_federated_session_project_v1') {
+        if (name === 'candidate_app_federated_session_project_v2') {
+          assert.match(args.p_global_session_family_identity_hmac, /^\\x[0-9a-f]{64}$/);
           return {
             ok: true,
             session_id: '00000000-0000-4000-8000-000000000105',

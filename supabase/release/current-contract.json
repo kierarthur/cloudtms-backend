@@ -13845,6 +13845,30 @@
       ],
       "owner": "postgres",
       "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "identity": "candidate_app_federated_session_project_v2(p_environment text, p_global_account_identity_hmac bytea, p_global_session_identity_hmac bytea, p_membership_id uuid, p_membership_generation integer, p_candidate_id uuid, p_route_version integer, p_session_epoch bigint, p_now_utc timestamp with time zone, p_expires_at_utc timestamp with time zone, p_global_session_family_identity_hmac bytea)",
+      "parallel": "u",
+      "volatility": "v",
+      "security_definer": true,
+      "definition_sha256": "dcbf14bfbb6f36f990e973539a79ed5af24450c4db2baed14cfbf616f5b3e3b7"
+    },
+    {
+      "acl": [
+        {
+          "grantee": "postgres",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        },
+        {
+          "grantee": "service_role",
+          "grantable": false,
+          "privilege": "EXECUTE"
+        }
+      ],
+      "owner": "postgres",
+      "config": [
         "search_path=pg_catalog, public, private, pg_temp"
       ],
       "schema": "public",
@@ -51796,6 +51820,14 @@
           "generated": ""
         },
         {
+          "name": "global_session_family_identity_hmac",
+          "type": "bytea",
+          "default": null,
+          "identity": "",
+          "not_null": false,
+          "generated": ""
+        },
+        {
           "name": "global_session_identity_hmac",
           "type": "bytea",
           "default": null,
@@ -51974,8 +52006,12 @@
           "definition": "CREATE INDEX candidate_app_sessions_control_plane_context_idx ON public.candidate_app_sessions USING btree (membership_id, membership_generation, route_version, session_epoch, expires_at_utc) WHERE (auth_source = 'CONTROL_PLANE'::text)"
         },
         {
-          "name": "candidate_app_sessions_control_plane_epoch_uq",
-          "definition": "CREATE UNIQUE INDEX candidate_app_sessions_control_plane_epoch_uq ON public.candidate_app_sessions USING btree (membership_id, session_epoch) WHERE ((auth_source = 'CONTROL_PLANE'::text) AND (status = 'ACTIVE'::text))"
+          "name": "candidate_app_sessions_control_plane_family_context_idx",
+          "definition": "CREATE INDEX candidate_app_sessions_control_plane_family_context_idx ON public.candidate_app_sessions USING btree (membership_id, global_session_family_identity_hmac, membership_generation, route_version, session_epoch, expires_at_utc) WHERE ((auth_source = 'CONTROL_PLANE'::text) AND (global_session_family_identity_hmac IS NOT NULL))"
+        },
+        {
+          "name": "candidate_app_sessions_control_plane_family_epoch_uq",
+          "definition": "CREATE UNIQUE INDEX candidate_app_sessions_control_plane_family_epoch_uq ON public.candidate_app_sessions USING btree (membership_id, global_session_family_identity_hmac, session_epoch) WHERE ((auth_source = 'CONTROL_PLANE'::text) AND (global_session_family_identity_hmac IS NOT NULL) AND (status = 'ACTIVE'::text))"
         },
         {
           "name": "candidate_app_sessions_family_rotation_idx",
@@ -52039,7 +52075,7 @@
           "deferred": false,
           "validated": true,
           "deferrable": false,
-          "definition": "CHECK (auth_source = 'LOCAL'::text AND global_account_identity_hmac IS NULL AND global_session_identity_hmac IS NULL AND membership_id IS NULL AND membership_generation IS NULL AND route_version IS NULL AND session_epoch IS NULL OR auth_source = 'CONTROL_PLANE'::text AND octet_length(global_account_identity_hmac) = 32 AND octet_length(global_session_identity_hmac) = 32 AND membership_id IS NOT NULL AND membership_generation >= 1 AND route_version >= 1 AND session_epoch >= 1)"
+          "definition": "CHECK (auth_source = 'LOCAL'::text AND global_account_identity_hmac IS NULL AND global_session_identity_hmac IS NULL AND global_session_family_identity_hmac IS NULL AND membership_id IS NULL AND membership_generation IS NULL AND route_version IS NULL AND session_epoch IS NULL OR auth_source = 'CONTROL_PLANE'::text AND octet_length(global_account_identity_hmac) = 32 AND octet_length(global_session_identity_hmac) = 32 AND (global_session_family_identity_hmac IS NULL OR octet_length(global_session_family_identity_hmac) = 32) AND membership_id IS NOT NULL AND membership_generation >= 1 AND route_version >= 1 AND session_epoch >= 1)"
         },
         {
           "name": "candidate_app_sessions_pkey",

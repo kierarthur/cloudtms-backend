@@ -61,6 +61,22 @@ async function privateFailureDiagnostic(response) {
   };
 }
 
+function federatedProjectionFailureDiagnostic(error) {
+  const sources = [
+    error?.code,
+    error?.json?.code,
+    error?.json?.message,
+    error?.json?.details,
+    error?.message
+  ];
+  const allowed = /\b(CANDIDATE_[A-Z0-9_]{2,100})\b/;
+  for (const source of sources) {
+    const match = String(source || '').toUpperCase().match(allowed);
+    if (match) return { error_code: match[1] };
+  }
+  return { error_code: 'CANDIDATE_FEDERATED_PROJECTION_FAILED' };
+}
+
 function requiredConfigurationAvailable(env) {
   const baseConfigurationAvailable = Boolean(
     String(env.CANDIDATE_APP_ENVIRONMENT || '').trim()
@@ -211,6 +227,10 @@ async function projectFederatedRequest(request, env, routeContext, dependencies 
   const globalSessionHmac = await candidateFederatedIdentityHmac(
     identitySecret, context.environment, context.global_session_id
   );
+  const globalSessionFamilyHmac = context.global_session_family_id
+    ? await candidateFederatedIdentityHmac(
+      identitySecret, context.environment, context.global_session_family_id
+    ) : null;
   const deps = dependencies || createCandidatePrivateDependencies(env, 'PRIVATE');
   const link = await deps.rpc('candidate_app_federated_membership_link_set_v1', {
     p_internal_context: {
@@ -230,7 +250,7 @@ async function projectFederatedRequest(request, env, routeContext, dependencies 
     throw new Error('CANDIDATE_FEDERATED_MEMBERSHIP_LINK_FAILED');
   }
   await attemptFederatedDailyActivation(request, deps, context);
-  const projection = await deps.rpc('candidate_app_federated_session_project_v1', {
+  const projectionArguments = {
     p_environment: context.environment,
     p_global_account_identity_hmac: `\\x${globalAccountHmac}`,
     p_global_session_identity_hmac: `\\x${globalSessionHmac}`,
@@ -241,7 +261,13 @@ async function projectFederatedRequest(request, env, routeContext, dependencies 
     p_session_epoch: context.session_epoch,
     p_now_utc: now.toISOString(),
     p_expires_at_utc: context.expires_at_utc
-  });
+  };
+  const projection = globalSessionFamilyHmac
+    ? await deps.rpc('candidate_app_federated_session_project_v2', {
+      ...projectionArguments,
+      p_global_session_family_identity_hmac: `\\x${globalSessionFamilyHmac}`
+    })
+    : await deps.rpc('candidate_app_federated_session_project_v1', projectionArguments);
   if (!projection?.ok || !projection.session_id) {
     throw new Error('CANDIDATE_FEDERATED_SESSION_PROJECTION_FAILED');
   }
@@ -476,7 +502,9 @@ export default {
         }
         try {
           request = await projectFederatedRequest(request, env, routeContext);
-        } catch {
+        } catch (error) {
+          console.warn('[candidate-private] federated projection rejected',
+            federatedProjectionFailureDiagnostic(error));
           return json(401, { ok: false, error_code: 'CANDIDATE_AUTHORITY_REVOKED' });
         }
       }
@@ -550,5 +578,6 @@ export const candidatePrivateWorkerInternals = Object.freeze({
   handleGoogleDataMatch,
   boundedObject,
   privateFailureDiagnostic,
+  federatedProjectionFailureDiagnostic,
   privateCandidateOperation
 });

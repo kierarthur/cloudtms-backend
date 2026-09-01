@@ -28,6 +28,7 @@ import {
 const IDS = Object.freeze({
   account: '10000000-0000-4000-8000-000000000001',
   session: '10000000-0000-4000-8000-000000000002',
+  family: '10000000-0000-4000-8000-000000000007',
   membership: '10000000-0000-4000-8000-000000000003',
   agency: '10000000-0000-4000-8000-000000000004',
   candidate: '10000000-0000-4000-8000-000000000005',
@@ -82,6 +83,7 @@ function routeContext(now = new Date('2026-08-21T16:00:00.000Z')) {
     environment: 'TEST',
     global_account_id: IDS.account,
     global_session_id: IDS.session,
+    global_session_family_id: IDS.family,
     membership_id: IDS.membership,
     membership_generation: 3,
     agency_id: IDS.agency,
@@ -113,6 +115,7 @@ test('signed route context is canonical, deployment-bound and tamper-evident', a
   const verified = await verifyCandidateRouteContext(request, env, now.getTime());
   assert.equal(verified.context.membership_generation, 3);
   assert.equal(verified.context.session_epoch, 12);
+  assert.equal(verified.context.global_session_family_id, IDS.family);
 
   const envelopeParts = signed.envelope.split('.');
   const base64UrlAlphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -272,7 +275,7 @@ test('control-plane and federated routing remain disabled unless explicitly true
   assert.match(brokerSource, /agency_route_context_resolve_v1/);
   assert.ok(
     privateWorkerSource.indexOf('candidate_app_federated_membership_link_set_v1')
-      < privateWorkerSource.indexOf('candidate_app_federated_session_project_v1'),
+      < privateWorkerSource.indexOf('candidate_app_federated_session_project_v2'),
     'the verified local membership link must be established before session projection'
   );
 });
@@ -292,6 +295,14 @@ test('agency-local projection source is additive, service-only and route exact',
   ), 'utf8');
   const monotonicRepeatable = await readFile(new URL(
     '../supabase/repeatable/01092026_1150_candidate_federated_session_monotonic_projection_v1.sql',
+    import.meta.url
+  ), 'utf8');
+  const familyMigration = await readFile(new URL(
+    '../supabase/migrations/01092026_2030_candidate_federated_session_family_projection.sql',
+    import.meta.url
+  ), 'utf8');
+  const familyRepeatable = await readFile(new URL(
+    '../supabase/repeatable/01092026_2031_candidate_federated_session_family_projection_v2.sql',
     import.meta.url
   ), 'utf8');
   const linkRepeatable = await readFile(new URL(
@@ -324,6 +335,17 @@ test('agency-local projection source is additive, service-only and route exact',
   assert.match(monotonicRepeatable, /global_session_identity_hmac<>p_global_session_identity_hmac/i);
   assert.match(monotonicRepeatable, /grant execute .* service_role/is);
   assert.doesNotMatch(monotonicRepeatable, /insert into public\.(?:timesheets|contracts|rota|invoices)/i);
+  assert.match(familyMigration, /global_session_family_identity_hmac bytea/i);
+  assert.match(familyMigration,
+    /unique index[\s\S]*membership_id,global_session_family_identity_hmac,session_epoch/i);
+  assert.doesNotMatch(familyMigration,
+    /(?:insert|update|delete)\s+(?:into|from)?\s*public\.(?:timesheets|contracts|rota|invoices)/i);
+  assert.match(familyRepeatable,
+    /global_session_family_identity_hmac=p_global_session_family_identity_hmac/i);
+  assert.match(familyRepeatable, /candidate_app_federated_session_project_v2/);
+  assert.match(familyRepeatable, /grant execute .* service_role/is);
+  assert.doesNotMatch(familyRepeatable,
+    /insert into public\.(?:timesheets|contracts|rota|invoices)/i);
   assert.match(linkRepeatable, /route_context_verified' is distinct from 'true'/);
   assert.match(linkRepeatable, /audience' is distinct from 'FEDERATED_MEMBERSHIP_LINK'/);
   assert.match(linkRepeatable, /p_membership_generation<v_link\.membership_generation/);
@@ -390,7 +412,8 @@ async function centralAccessToken(env, overrides = {}) {
     {
       typ: 'candidate_broker_access', aud: 'cloudtms-candidate-public', env: 'TEST',
       authority: 'CONTROL_PLANE', global_account_id: IDS.account,
-      global_session_id: IDS.session, session_epoch: 12, rotation: 4,
+      global_session_id: IDS.session, global_session_family_id: IDS.family,
+      session_epoch: 12, rotation: 4,
       public_session_id: '10000000-0000-5000-8000-000000000099',
       public_session_key_version: 1, iat: now, exp: now + 900,
       absolute_expires_at_utc: new Date((now + 90 * 86400) * 1000).toISOString(),
@@ -423,6 +446,7 @@ test('enabled orchestrator re-resolves central authority then calls only the reg
     assert.equal(await verifyCandidatePrivateRequest(request.clone(), privateEnv), true);
     const verified = await verifyCandidateRouteContext(request, privateEnv);
     assert.equal(verified.context.global_session_id, IDS.session);
+    assert.equal(verified.context.global_session_family_id, IDS.family);
     assert.equal(verified.context.membership_generation, 3);
     assert.equal(request.headers.has('authorization'), false);
     return Response.json({ ok: true, source: 'primary' });
@@ -747,6 +771,8 @@ test('global login auto-selects exactly one agency and returns no internal route
     ), env);
     assert.equal(opened.authority, 'CONTROL_PLANE');
     assert.equal(opened.global_session_id, selectedSessionId);
+    assert.equal(opened.global_session_family_id,
+      '30000000-0000-4000-8000-000000000003');
     assert.deepEqual(seen, [
       'global_login_metadata_v1', 'global_login_v1',
       'account_agencies_get_v1', 'agency_session_issue_v1'
@@ -762,7 +788,10 @@ test('multi-agency choice, session issue and refresh preserve sealed absolute ex
   const env = orchestratorEnvironment(async () => {
     throw new Error('account control routes must not call an agency business plane');
   });
-  const initialToken = await centralAccessToken(env);
+  const sessionFamilyId = '40000000-0000-4000-8000-000000000003';
+  const initialToken = await centralAccessToken(env, {
+    global_session_family_id: sessionFamilyId
+  });
   const absoluteExpiry = new Date(Date.now() + 89 * 86400000).toISOString();
   const selectedSessionId = '40000000-0000-4000-8000-000000000001';
   const refreshedSessionId = '40000000-0000-4000-8000-000000000002';
@@ -812,7 +841,7 @@ test('multi-agency choice, session issue and refresh preserve sealed absolute ex
     if (operation === 'global_refresh_v1') {
       return Response.json({
         ok: true, account_id: IDS.account, session_id: refreshedSessionId,
-        family_id: '40000000-0000-4000-8000-000000000003', rotation: 6,
+        family_id: sessionFamilyId, rotation: 6,
         session_epoch: 14, selected_membership_id: IDS.membership,
         issued_at_utc: args.p_now_utc,
         expires_at_utc: args.p_internal_context.expires_at_utc,
@@ -864,6 +893,7 @@ test('multi-agency choice, session issue and refresh preserve sealed absolute ex
       'https://candidate.test.invalid', { headers: { authorization: `Bearer ${selected.access_token}` } }
     ), env);
     assert.equal(selectedAccess.absolute_expires_at_utc, selected.absolute_expires_at_utc);
+    assert.equal(selectedAccess.global_session_family_id, sessionFamilyId);
 
     const refreshResponse = await handleCandidateBrokerRequest(new Request(
       'https://candidate-api.test.example/candidate-app/v1/auth/refresh', {
@@ -886,6 +916,7 @@ test('multi-agency choice, session issue and refresh preserve sealed absolute ex
       'https://candidate.test.invalid', { headers: { authorization: `Bearer ${refreshed.access_token}` } }
     ), env);
     assert.equal(refreshedAccess.global_session_id, refreshedSessionId);
+    assert.equal(refreshedAccess.global_session_family_id, sessionFamilyId);
     assert.equal(refreshedAccess.absolute_expires_at_utc, absoluteExpiry);
     assert.deepEqual(seen, [
       'account_agencies_get_v1', 'agency_session_issue_v1',

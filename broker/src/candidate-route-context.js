@@ -80,6 +80,10 @@ function exactUuid(value, code) {
   return output;
 }
 
+function optionalUuid(value, code) {
+  return value == null || text(value) === '' ? null : exactUuid(value, code);
+}
+
 function exactOperationId(value, code) {
   const output = text(value);
   if (!OPERATION_ID_RE.test(output)) throw new Error(code);
@@ -94,6 +98,9 @@ function exactSha256(value, code) {
 
 function normalizedCandidateRouteContext(input) {
   if (!isObject(input)) throw new Error('CANDIDATE_ROUTE_CONTEXT_INVALID');
+  const globalSessionFamilyId = optionalUuid(
+    input.global_session_family_id, 'CANDIDATE_ROUTE_CONTEXT_SESSION_FAMILY_INVALID'
+  );
   return {
     v: positiveInteger(input.v, 'CANDIDATE_ROUTE_CONTEXT_VERSION_INVALID'),
     aud: requiredText(input.aud, 'CANDIDATE_ROUTE_CONTEXT_AUDIENCE_INVALID'),
@@ -101,6 +108,7 @@ function normalizedCandidateRouteContext(input) {
     environment: requiredText(input.environment, 'CANDIDATE_ROUTE_CONTEXT_ENVIRONMENT_INVALID').toUpperCase(),
     global_account_id: exactUuid(input.global_account_id, 'CANDIDATE_ROUTE_CONTEXT_ACCOUNT_INVALID'),
     global_session_id: exactUuid(input.global_session_id, 'CANDIDATE_ROUTE_CONTEXT_SESSION_INVALID'),
+    ...(globalSessionFamilyId ? { global_session_family_id: globalSessionFamilyId } : {}),
     membership_id: exactUuid(input.membership_id, 'CANDIDATE_ROUTE_CONTEXT_MEMBERSHIP_INVALID'),
     membership_generation: positiveInteger(
       input.membership_generation, 'CANDIDATE_ROUTE_CONTEXT_MEMBERSHIP_GENERATION_INVALID'
@@ -162,10 +170,14 @@ function normalizedManagerRouteContext(input) {
     };
   }
   if (authorityKind === 'MANAGER_PHONE') {
+    const globalSessionFamilyId = optionalUuid(
+      input.global_session_family_id, 'CANDIDATE_ROUTE_CONTEXT_SESSION_FAMILY_INVALID'
+    );
     return {
       ...common,
       global_account_id: exactUuid(input.global_account_id, 'CANDIDATE_ROUTE_CONTEXT_ACCOUNT_INVALID'),
       global_session_id: exactUuid(input.global_session_id, 'CANDIDATE_ROUTE_CONTEXT_SESSION_INVALID'),
+      ...(globalSessionFamilyId ? { global_session_family_id: globalSessionFamilyId } : {}),
       membership_id: exactUuid(input.membership_id, 'CANDIDATE_ROUTE_CONTEXT_MEMBERSHIP_INVALID'),
       membership_generation: positiveInteger(
         input.membership_generation, 'CANDIDATE_ROUTE_CONTEXT_MEMBERSHIP_GENERATION_INVALID'
