@@ -34,6 +34,10 @@ declare
   v_candidate_mutation_locked boolean:=false;
   v_separate boolean:=false;
   v_has_timesheet boolean:=false;
+  v_has_claim_evidence boolean:=false;
+  v_has_embedded_submission_evidence boolean:=false;
+  v_has_worked_schedule boolean:=false;
+  v_has_active_submission_workflow boolean:=false;
   v_role text;
   v_route jsonb;
   v_route_family text;
@@ -155,6 +159,39 @@ begin
       and e.processing_state<>'SUPERSEDED'
   ) into v_has_timesheet;
 
+  select exists(
+    select 1 from public.timesheet_evidence e
+    where e.timesheet_id=v_timesheet.timesheet_id
+      and e.processing_state<>'SUPERSEDED'
+  ) into v_has_claim_evidence;
+
+  v_has_embedded_submission_evidence:=
+    nullif(btrim(coalesce(v_timesheet.r2_nurse_key,'')),'') is not null
+    or nullif(btrim(coalesce(v_timesheet.r2_auth_key,'')),'') is not null
+    or nullif(btrim(coalesce(v_timesheet.qr_r2_key,'')),'') is not null
+    or v_timesheet.qr_signed_hash is not null
+    or v_timesheet.qr_signed_at_utc is not null
+    or v_timesheet.authorised_at_server is not null;
+  v_has_worked_schedule:=
+    coalesce(v_timesheet.worked_minutes,0)<>0
+    or v_timesheet.worked_start_iso is not null
+    or v_timesheet.worked_end_iso is not null
+    or coalesce(v_timesheet.actual_schedule_json,'{}'::jsonb) not in ('{}'::jsonb,'[]'::jsonb,'null'::jsonb);
+
+  select exists(
+    select 1
+    from public.candidate_submission_workflows workflow
+    where workflow.candidate_id=v_contract.candidate_id
+      and workflow.contract_id=v_contract.id
+      and workflow.week_ending_date=coalesce(v_week.week_ending_date,v_timesheet.week_ending_date)
+      and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED')
+      and (
+        workflow.contract_week_id is not distinct from v_week.id
+        or workflow.target_timesheet_id=v_timesheet.timesheet_id
+        or workflow.anchor_timesheet_id=v_timesheet.timesheet_id
+      )
+  ) into v_has_active_submission_workflow;
+
   if v_protected then v_role:='PROTECTED'; v_reasons:=v_reasons||'"LIFECYCLE_PROTECTED"'::jsonb;
   elsif v_import and v_expenses<>0 then v_role:='CONFLICT'; v_reasons:=v_reasons||'"IMPORT_SOURCE_HAS_EXPENSES"'::jsonb;
   elsif v_import then v_role:='IMPORT_HOURS'; v_reasons:=v_reasons||'"IMPORT_AUTHORITATIVE_HOURS"'::jsonb;
@@ -187,11 +224,18 @@ begin
     'protected',v_protected,
     'candidate_mutation_locked',v_candidate_mutation_locked,
     'has_active_timesheet_evidence',v_has_timesheet,
+    'has_active_claim_evidence',v_has_claim_evidence,
+    'has_embedded_submission_evidence',v_has_embedded_submission_evidence,
+    'has_worked_schedule',v_has_worked_schedule,
+    'has_active_submission_workflow',v_has_active_submission_workflow,
     'candidate_hours_submission_allowed',v_hours_route_allowed and not v_protected and not v_candidate_mutation_locked,
     'candidate_expenses_allowed',v_expense_route_allowed and not v_protected,
     'candidate_paper_submission_allowed',v_paper_route_allowed and not v_protected and not v_candidate_mutation_locked,
     'candidate_no_work_allowed',v_no_work_route_allowed and not v_protected and not v_candidate_mutation_locked
-      and coalesce(v_week.additional_seq,0)=0 and not coalesce(v_week.is_adjustment,false),
+      and coalesce(v_week.additional_seq,0)=0 and not coalesce(v_week.is_adjustment,false)
+      and v_hours=0 and v_additional=0 and v_expenses=0
+      and not v_has_claim_evidence and not v_has_embedded_submission_evidence
+      and not v_has_worked_schedule and not v_has_active_submission_workflow,
     'can_edit_hours',v_hours_route_allowed and v_role in ('HOURS_ONLY','COMBINED_ALLOWED','FLEXIBLE') and not v_protected and not v_candidate_mutation_locked and not v_import,
     -- Imported hours remain immutable, but the Candidate may start the
     -- mandatory separate expense route against that worked-week anchor.

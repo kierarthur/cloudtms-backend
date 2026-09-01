@@ -11,6 +11,14 @@ const repeatable = fs.readFileSync(path.join(
   '27082026_0244_candidate_processed_action_projection_v1.sql'
 ), 'utf8');
 
+const authoritativeDailyAdapter = fs.readFileSync(path.join(
+  __dirname,
+  '..',
+  'supabase',
+  'repeatable',
+  '28082026_2027_candidate_daily_office_receipt_adapter_v1.sql'
+), 'utf8');
+
 const verification = fs.readFileSync(path.join(
   __dirname,
   '..',
@@ -24,6 +32,10 @@ test('processed Candidate hours are immutable while a separate expense claim rem
   assert.match(repeatable, /'can_edit_hours'[\s\S]*not v_candidate_mutation_locked/i);
   assert.match(repeatable, /'can_edit_expenses'[\s\S]*v_candidate_mutation_locked/i);
   assert.match(repeatable, /'candidate_no_work_allowed'[\s\S]*not v_candidate_mutation_locked/i);
+  assert.match(repeatable, /'candidate_no_work_allowed'[\s\S]*v_hours=0[\s\S]*v_additional=0[\s\S]*v_expenses=0/i);
+  assert.match(repeatable, /'candidate_no_work_allowed'[\s\S]*not v_has_claim_evidence[\s\S]*not v_has_embedded_submission_evidence[\s\S]*not v_has_worked_schedule[\s\S]*not v_has_active_submission_workflow/i);
+  assert.match(authoritativeDailyAdapter, /'candidate_no_work_allowed'[\s\S]*v_hours=0[\s\S]*v_additional=0[\s\S]*v_expenses=0/i);
+  assert.match(authoritativeDailyAdapter, /'candidate_no_work_allowed'[\s\S]*not v_has_claim_evidence[\s\S]*not v_has_embedded_submission_evidence[\s\S]*not v_has_worked_schedule[\s\S]*not v_has_active_submission_workflow/i);
 });
 
 test('installed-state verification invokes the action contract and rejects resubmission actions', () => {
@@ -36,4 +48,5 @@ test('installed-state verification invokes the action contract and rejects resub
 
 test('the replacement contains no illegally schema-qualified conditional construct', () => {
   assert.doesNotMatch(repeatable, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
+  assert.doesNotMatch(authoritativeDailyAdapter, /pg_catalog\.(?:coalesce|nullif|least|greatest)\s*\(/i);
 });

@@ -309,6 +309,18 @@ begin
      or private._candidate_route_family_v1(v_import_ts,v_import_week)->>'route_family'<>'IMPORT_AUTHORITATIVE' then
     raise exception 'candidate route-family resolution failed';
   end if;
+  begin
+    perform public.candidate_no_work_atomic_v1(
+      v_session,'TEST',v_electronic_week,null,'route-daily:worked-electronic-no-work',v_now
+    );
+    raise exception 'worked electronic weekly no-work mutation was accepted';
+  exception when sqlstate '55000' then
+    if sqlerrm<>'CANDIDATE_NO_WORK_NOT_ALLOWED' then raise; end if;
+  end;
+  if not exists(select 1 from public.contract_weeks where id=v_electronic_week)
+     or not exists(select 1 from public.timesheets where timesheet_id=v_electronic_ts) then
+    raise exception 'rejected worked-week no-work action changed the weekly chain';
+  end if;
   if coalesce((private._candidate_route_family_v1(v_manual_ts,v_manual_week)->>'candidate_no_work_allowed')::boolean,true)
      or coalesce((private._candidate_route_family_v1(v_import_ts,v_import_week)->>'candidate_hours_submission_allowed')::boolean,true) then
     raise exception 'view-only route exposed a candidate mutation';
@@ -595,17 +607,17 @@ begin
   -- eligible weekly chain rather than calling the retired single-row route.
   insert into public.timesheets(
     timesheet_id,contract_id,week_ending_date,line_type,submission_mode,sheet_scope,
-    r2_nurse_key,r2_auth_key,job_title_norm,band
+    r2_nurse_key,r2_auth_key,job_title_norm,band,candidate_submission_route_intent
   ) values (
-    v_no_work_ts,v_contract,'2026-08-15','HOURS','ELECTRONIC','WEEKLY',
-    'candidate/no-work','manager/no-work','NURSE','Band 5'
+    v_no_work_ts,v_contract,'2026-08-15','HOURS','MANUAL','WEEKLY',
+    null,null,'NURSE','Band 5','ELECTRONIC'
   );
   insert into public.contract_weeks(
     id,contract_id,week_ending_date,additional_seq,status,submission_mode_snapshot,timesheet_id
   ) values (v_no_work_week,v_contract,'2026-08-15',0,'OPEN','ELECTRONIC',v_no_work_ts);
   insert into public.timesheets_financials(
     timesheet_id,candidate_id,client_id,total_hours,processing_status,role,band,pay_method
-  ) values (v_no_work_ts,v_candidate,v_client,8,'UNPROCESSED','NURSE','Band 5','PAYE');
+  ) values (v_no_work_ts,v_candidate,v_client,0,'UNPROCESSED','NURSE','Band 5','PAYE');
   v_result:=public.candidate_no_work_atomic_v1(
     v_session,'TEST',v_no_work_week,null,'route-daily:electronic-no-work',v_now
   );

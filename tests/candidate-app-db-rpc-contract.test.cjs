@@ -750,6 +750,7 @@ test('route, DAILY and auto-authorisation authority is enforced at every mutatio
   assert.match(workflow, /_candidate_route_family_v1[\s\S]*CANDIDATE_ROUTE_FAMILY_MISMATCH/i);
   assert.match(finalise, /_candidate_route_family_v1[\s\S]*CANDIDATE_ROUTE_FAMILY_MISMATCH/i);
   assert.match(noWork, /candidate_no_work_allowed[\s\S]*CANDIDATE_NO_WORK_NOT_ALLOWED/i);
+  assert.match(noWork, /_candidate_record_capabilities_v1[\s\S]*candidate_no_work_allowed[\s\S]*CANDIDATE_NO_WORK_NOT_ALLOWED/i);
   assert.match(noWork, /timesheet_weekly_chain_delete_preview[\s\S]*timesheet_weekly_chain_delete_apply/i);
   assert.match(noWork, /timesheet_archive_transition_v1[\s\S]*WEEKLY_CHAIN_DELETE_PARENT/i);
   assert.doesNotMatch(noWork, /timesheet_standard_delete_preview_v1/i);

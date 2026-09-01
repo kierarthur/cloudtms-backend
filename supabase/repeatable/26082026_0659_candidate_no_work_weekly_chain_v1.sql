@@ -26,6 +26,7 @@ declare
   v_signature text;
   v_signature_payload jsonb;
   v_route_authority jsonb;
+  v_record_capabilities jsonb;
   v_current_timesheet_id uuid;
   v_timesheet_ids uuid[]:=array[]::uuid[];
   v_contract_week_ids uuid[]:=array[]::uuid[];
@@ -61,6 +62,39 @@ begin
   v_route_authority:=private._candidate_route_family_v1(v_week.timesheet_id,v_week.id);
   if not coalesce((v_route_authority->>'candidate_no_work_allowed')::boolean,false) then
     raise exception 'CANDIDATE_NO_WORK_NOT_ALLOWED' using errcode='55000',detail=v_route_authority::text;
+  end if;
+
+  -- The route family controls whether this journey may ever offer no-work.
+  -- The record capability is the final factual guard: an already worked,
+  -- evidenced or submitted week must never be removed by this action.
+  if v_week.timesheet_id is not null then
+    perform 1 from public.timesheets
+    where timesheet_id=v_week.timesheet_id
+    for update;
+    perform 1 from public.timesheets_financials
+    where timesheet_id=v_week.timesheet_id and is_current=true
+    for update;
+    perform 1 from public.timesheet_evidence
+    where timesheet_id=v_week.timesheet_id and processing_state<>'SUPERSEDED'
+    for update;
+    perform 1 from public.candidate_submission_workflows workflow
+    where workflow.candidate_id=v_candidate_id
+      and workflow.contract_id=v_contract.id
+      and workflow.week_ending_date=v_week.week_ending_date
+      and workflow.state not in ('CANCELLED','EXPIRED','SUPERSEDED')
+      and (
+        workflow.contract_week_id=v_week.id
+        or workflow.target_timesheet_id=v_week.timesheet_id
+        or workflow.anchor_timesheet_id=v_week.timesheet_id
+      )
+    for update;
+  end if;
+  v_record_capabilities:=private._candidate_record_capabilities_v1(
+    v_week.timesheet_id,v_week.id,'{}'::jsonb
+  );
+  if not coalesce((v_record_capabilities->>'candidate_no_work_allowed')::boolean,false) then
+    raise exception 'CANDIDATE_NO_WORK_NOT_ALLOWED'
+      using errcode='55000',detail=v_record_capabilities::text;
   end if;
 
   if v_week.timesheet_id is null then
