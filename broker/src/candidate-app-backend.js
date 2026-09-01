@@ -2114,6 +2114,24 @@ async function assertManagerRouteResult(env, result, authority) {
   }
 }
 
+async function assertManagerRouteApprovalContext(env, approval, authority) {
+  if (!authority) return;
+  const method = upper(approval?.method);
+  const expectedAuthority = method === 'PHONE'
+    ? 'MANAGER_PHONE'
+    : method === 'EMAIL'
+      ? 'MANAGER_EMAIL'
+      : '';
+  if (!expectedAuthority || authority.authority_kind !== expectedAuthority) {
+    throw new CandidateHttpError(401, 'MANAGER_ROUTE_CONTEXT_INVALID');
+  }
+  await assertManagerRouteResult(env, {
+    approval_request_id: approval?.id || approval?.approval_request_id,
+    approval_request_generation:
+      approval?.request_generation || approval?.approval_request_generation
+  }, authority);
+}
+
 function routedManagerControlRpc(env, deps, schema, functionName, args) {
   return typeof deps?.controlPlaneRpc === 'function'
     ? deps.controlPlaneRpc(schema, functionName, args)
@@ -2406,6 +2424,8 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     await assertManagerRouteWorkflow(env, workflowId, authority);
     const managerToken = bearerToken(request);
     if (!managerToken) throw new CandidateHttpError(401, 'MANAGER_APPROVAL_REQUEST_NOT_READY');
+    const managerContext = await managerDocumentReadContext(request, env, workflowId);
+    await assertManagerRouteApprovalContext(env, managerContext.approval, authority);
     approvalTokenHash = await sha256Hex(managerToken);
     ownerId = approvalTokenHash;
     captureMethod = upper(body.capture_method);
@@ -5531,6 +5551,12 @@ async function handleManagerAction(request, env, deps, workflowId, action, ctx) 
   const routeAuthority = request.headers.has('x-cloudtms-manager-route-authority')
     ? managerRouteAuthority(request) : null;
   if (routeAuthority) await assertManagerRouteWorkflow(env, workflowId, routeAuthority);
+  const managerContext = routeAuthority
+    ? await managerDocumentReadContext(request, env, workflowId)
+    : null;
+  if (routeAuthority) {
+    await assertManagerRouteApprovalContext(env, managerContext.approval, routeAuthority);
+  }
   const body = request.method === 'GET' ? {} : await readJson(request);
   const mutationKey = request.method === 'GET'
     ? `manager-start:${workflowId}:${auth.token_hash_hex}`
@@ -8122,6 +8148,7 @@ export const candidateAppBackendInternals = Object.freeze({
   routeMatch,
   officeErrorCode,
   knownErrorCode,
+  assertManagerRouteApprovalContext,
   managerActionMethods: MANAGER_ACTION_METHODS,
   environmentName
 });

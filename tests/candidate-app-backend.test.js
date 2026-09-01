@@ -45,6 +45,7 @@ const {
   londonCalendarDate,
   knownErrorCode,
   officeErrorCode,
+  assertManagerRouteApprovalContext,
   renderExpensePage,
   routeMatch,
   safeFinalisationResult,
@@ -5320,6 +5321,34 @@ test('private manager routes reject wrong HTTP methods before any RPC mutation',
     assert.equal((await response.json()).error_code, 'METHOD_NOT_ALLOWED');
   }
   assert.equal(rpcCalls, 0);
+});
+
+test('manager approval authority is matched to the current request before a decisive mutation', async () => {
+  const approval = {
+    id: '00000000-0000-4000-8000-000000000053',
+    request_generation: 2,
+    method: 'PHONE'
+  };
+  await assert.doesNotReject(assertManagerRouteApprovalContext({}, approval, {
+    authority_kind: 'MANAGER_PHONE'
+  }));
+  await assert.rejects(
+    assertManagerRouteApprovalContext({}, approval, {
+      authority_kind: 'MANAGER_EMAIL'
+    }),
+    error => error?.code === 'MANAGER_ROUTE_CONTEXT_INVALID'
+  );
+
+  const source = await readFile(new URL('../broker/src/candidate-app-backend.js', import.meta.url), 'utf8');
+  const start = source.indexOf('async function handleManagerAction');
+  const end = source.indexOf('async function handleDocumentStream', start);
+  const body = source.slice(start, end);
+  const currentApproval = body.indexOf('managerDocumentReadContext');
+  const authorityCheck = body.indexOf('assertManagerRouteApprovalContext');
+  const decisiveTransition = body.indexOf('const result = await rpcCall');
+  assert.ok(currentApproval >= 0);
+  assert.ok(authorityCheck > currentApproval);
+  assert.ok(decisiveTransition > authorityCheck);
 });
 
 test('manager document reads validate the pending token and immutable manifest without a workflow mutation', async () => {
