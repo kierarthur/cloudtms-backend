@@ -2584,6 +2584,210 @@ test('new Candidate component preparation uses the narrow authenticated fast-pat
   }
 });
 
+test('changed Candidate hours reuse unchanged immutable expense evidence without uploading its bytes again', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-000000000441',
+    session_id: '00000000-0000-4000-8000-000000000441',
+    account_id: '00000000-0000-4000-8000-000000000442',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000443',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-000000000444';
+  const sourceWorkflowId = '00000000-0000-4000-8000-000000000445';
+  const sourceComponentId = '00000000-0000-4000-8000-000000000446';
+  const componentId = '00000000-0000-4000-8000-000000000447';
+  const digest = '8'.repeat(64);
+  const contractId = '00000000-0000-4000-8000-000000000448';
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const calls = [];
+  const reads = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    reads.push(`${target.pathname}?${target.searchParams}`);
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) {
+      const id = target.searchParams.get('id');
+      if (id === `eq.${workflowId}`) return Response.json([{
+        id: workflowId, environment: 'TEST', account_id: session.account_id,
+        candidate_id: session.selected_candidate_id, contract_id: contractId,
+        week_ending_date: '2026-07-26', generation: 1, state: 'WORKER_DRAFT'
+      }]);
+      if (id === `eq.${sourceWorkflowId}`) return Response.json([{
+        id: sourceWorkflowId, environment: 'TEST', account_id: session.account_id,
+        candidate_id: session.selected_candidate_id, contract_id: contractId,
+        week_ending_date: '2026-07-26', state: 'SUPERSEDED'
+      }]);
+    }
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      if (target.searchParams.get('source_content_sha256')?.startsWith('eq.')) return Response.json([{
+        id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
+        component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+        expense_category: 'ACCOMMODATION', media_type: 'image/jpeg', byte_size: 5,
+        state: 'SUPERSEDED', immutable_at_utc: '2026-08-31T10:00:00.000Z',
+        source_content_sha256: `\\x${digest}`
+      }]);
+      return Response.json([]);
+    }
+    throw new Error(`Unexpected TEST request GET ${target.pathname}${target.search}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 1, component_kind: 'EXPENSE_EVIDENCE',
+          document_role: 'SOURCE_EVIDENCE', expense_category: 'ACCOMMODATION',
+          media_type: 'image/jpeg', byte_size: 5, source_content_sha256: digest,
+          idempotency_key: '00000000-0000-4000-8000-000000000449'
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        return {
+          ok: true, component_id: componentId, workflow_generation: 1,
+          storage_key: 'candidate-app/test/old/source/expense.jpg',
+          media_type: 'image/jpeg', byte_size: 5,
+          component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+          expense_category: 'ACCOMMODATION', paper_return_page_key: null, state: 'IMMUTABLE'
+        };
+      }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 201, `${JSON.stringify(body)} calls=${calls.length} reads=${JSON.stringify(reads)}`);
+    assert.equal(body.reused_existing_upload, true);
+    assert.equal(Object.hasOwn(body, 'upload'), false);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].name, 'candidate_component_prepare_atomic_v1');
+    assert.equal(calls[0].args.p_payload.source_component_id, sourceComponentId);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('interrupted duplicate expense prepare preserves completed components and repairs only its empty placeholder', async () => {
+  const session = {
+    id: '00000000-0000-4000-8000-000000000451',
+    session_id: '00000000-0000-4000-8000-000000000451',
+    account_id: '00000000-0000-4000-8000-000000000452',
+    selected_candidate_id: '00000000-0000-4000-8000-000000000453',
+    environment: 'TEST', status: 'ACTIVE', rotation: 1,
+    expires_at_utc: '2099-01-01T00:00:00.000Z',
+    absolute_expires_at_utc: '2099-01-02T00:00:00.000Z'
+  };
+  const workflowId = '00000000-0000-4000-8000-000000000454';
+  const sourceWorkflowId = '00000000-0000-4000-8000-000000000455';
+  const sourceComponentId = '00000000-0000-4000-8000-000000000456';
+  const pendingComponentId = '00000000-0000-4000-8000-000000000457';
+  const replacementComponentId = '00000000-0000-4000-8000-000000000458';
+  const contractId = '00000000-0000-4000-8000-000000000459';
+  const originalPrepareKey = '00000000-0000-4000-8000-000000000460';
+  const digest = '9'.repeat(64);
+  const env = {
+    CANDIDATE_APP_ENVIRONMENT: 'TEST',
+    CANDIDATE_PRIVATE_SESSION_TOKEN_SECRET: 'test-only-session-secret-material',
+    CANDIDATE_PRIVATE_UPLOAD_TOKEN_SECRET: 'test-only-upload-secret-material',
+    SUPABASE_URL: 'https://test.supabase.invalid',
+    SUPABASE_SERVICE_ROLE_KEY: 'test-placeholder'
+  };
+  const token = await createAccessToken(env, session);
+  const calls = [];
+  let superseded = false;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async url => {
+    const target = new URL(String(url));
+    if (target.pathname.endsWith('/candidate_app_sessions')) return Response.json([session]);
+    if (target.pathname.endsWith('/candidate_submission_workflows')) {
+      const id = target.searchParams.get('id');
+      if (id === `eq.${workflowId}`) return Response.json([{
+        id: workflowId, environment: 'TEST', account_id: session.account_id,
+        candidate_id: session.selected_candidate_id, contract_id: contractId,
+        week_ending_date: '2026-07-26', generation: 1, state: 'WORKER_DRAFT'
+      }]);
+      if (id === `eq.${sourceWorkflowId}`) return Response.json([{
+        id: sourceWorkflowId, environment: 'TEST', account_id: session.account_id,
+        candidate_id: session.selected_candidate_id, contract_id: contractId,
+        week_ending_date: '2026-07-26', state: 'SUPERSEDED'
+      }]);
+    }
+    if (target.pathname.endsWith('/candidate_submission_components')) {
+      if (target.searchParams.get('source_content_sha256')?.startsWith('eq.')) return Response.json([{
+        id: sourceComponentId, workflow_id: sourceWorkflowId, workflow_generation: 1,
+        component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+        expense_category: 'ACCOMMODATION', media_type: 'image/jpeg', byte_size: 5,
+        state: 'SUPERSEDED', immutable_at_utc: '2026-08-31T10:00:00.000Z',
+        source_content_sha256: `\\x${digest}`
+      }]);
+      const prepareKey = target.searchParams.get('upload_idempotency_key');
+      if (prepareKey === `eq.${originalPrepareKey}`) return Response.json([{
+        id: pendingComponentId, workflow_id: workflowId, workflow_generation: 1,
+        component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+        expense_category: 'ACCOMMODATION', paper_return_page_key: null,
+        media_type: 'image/jpeg', byte_size: 5,
+        state: superseded ? 'SUPERSEDED' : 'PENDING', approval_request_id: null,
+        manager_signature_capture_method: null, expected_source_content_sha256: null,
+        source_content_sha256: null, source_component_id: null
+      }]);
+      return Response.json([]);
+    }
+    throw new Error(`Unexpected TEST request GET ${target.pathname}${target.search}`);
+  };
+  try {
+    const response = await handleCandidateAppRequest(new Request(
+      `https://private.test/candidate-app/v1/workflows/${workflowId}/components/prepare`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({
+          generation: 1, component_kind: 'EXPENSE_EVIDENCE',
+          document_role: 'SOURCE_EVIDENCE', expense_category: 'ACCOMMODATION',
+          media_type: 'image/jpeg', byte_size: 5, source_content_sha256: digest,
+          idempotency_key: originalPrepareKey
+        })
+      }
+    ), env, {}, {
+      routeAudience: 'PRIVATE',
+      async rpc(name, args) {
+        calls.push({ name, args });
+        if (name === 'candidate_workflow_transition_atomic_v1') {
+          assert.equal(args.p_action, 'COMPONENT_SUPERSEDE');
+          assert.equal(args.p_payload.component_id, pendingComponentId);
+          superseded = true;
+          return { ok: true, component_id: pendingComponentId, state: 'SUPERSEDED' };
+        }
+        assert.equal(name, 'candidate_component_prepare_atomic_v1');
+        return {
+          ok: true, component_id: replacementComponentId, workflow_generation: 1,
+          storage_key: 'candidate-app/test/old/source/expense.jpg',
+          media_type: 'image/jpeg', byte_size: 5,
+          component_kind: 'EXPENSE_EVIDENCE', document_role: 'SOURCE_EVIDENCE',
+          expense_category: 'ACCOMMODATION', paper_return_page_key: null, state: 'IMMUTABLE'
+        };
+      }
+    });
+    const body = await response.json();
+    assert.equal(response.status, 201, JSON.stringify(body));
+    assert.equal(body.reused_existing_upload, true);
+    assert.equal(Object.hasOwn(body, 'upload'), false);
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].args.p_payload.source_component_id, sourceComponentId);
+    assert.match(calls[1].args.p_idempotency_key, /^lineage:[0-9a-f]{64}$/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('Candidate component fast-path refreshes the PostgREST schema cache after installation', async () => {
   const sql = await readFile(new URL(
     '../supabase/repeatable/27082026_0740_candidate_component_prepare_fast_path_v1.sql',

@@ -1801,13 +1801,131 @@ function preparedUploadContract(result, expected) {
   return contract;
 }
 
+async function reusableCandidateExpenseSource(
+  env, access, workflowId, componentKind, documentRole, expenseCategory,
+  mediaType, byteSize, sourceContentSha256
+) {
+  if (!sourceContentSha256) return null;
+  if (!['MILEAGE_FORM', 'EXPENSE_EVIDENCE'].includes(componentKind)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  const workflow = await workflowRow(env, workflowId);
+  if (workflow.account_id !== access.account_id
+      || workflow.candidate_id !== access.selected_candidate_id
+      || workflow.environment !== environmentName(env)) {
+    throw new CandidateHttpError(404, 'CANDIDATE_WORKFLOW_NOT_FOUND');
+  }
+  const digest = encodeURIComponent(`\\x${sourceContentSha256}`);
+  const sources = await restRows(
+    env,
+    'candidate_submission_components',
+    `source_content_sha256=eq.${digest}`
+      + '&source_component_id=is.null'
+      + '&select=id,workflow_id,workflow_generation,component_kind,document_role,'
+      + 'expense_category,media_type,byte_size,state,immutable_at_utc,source_content_sha256&limit=2'
+  );
+  if (!sources.length) return null;
+  if (sources.length !== 1) {
+    throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_AMBIGUOUS');
+  }
+  const source = sources[0];
+  const sourceWorkflow = await restOne(
+    env,
+    'candidate_submission_workflows',
+    `id=eq.${encodeURIComponent(source.workflow_id)}`
+      + '&select=id,environment,account_id,candidate_id,contract_id,week_ending_date,state'
+  );
+  const sameClaimFamily = sourceWorkflow
+    && sourceWorkflow.id !== workflow.id
+    && sourceWorkflow.environment === workflow.environment
+    && sourceWorkflow.account_id === workflow.account_id
+    && sourceWorkflow.candidate_id === workflow.candidate_id
+    && sourceWorkflow.contract_id === workflow.contract_id
+    && sourceWorkflow.week_ending_date === workflow.week_ending_date
+    && ['CANCELLED', 'REJECTED', 'REFUSED', 'SUPERSEDED'].includes(upper(sourceWorkflow.state));
+  if (!sameClaimFamily
+      || !['IMMUTABLE', 'SUPERSEDED', 'REJECTED'].includes(upper(source.state))
+      || source.immutable_at_utc == null
+      || upper(source.component_kind) !== componentKind
+      || upper(source.document_role) !== documentRole
+      || (source.expense_category == null ? null : upper(source.expense_category)) !== expenseCategory
+      || normaliseMediaType(source.media_type) !== mediaType
+      || Number(source.byte_size) !== byteSize
+      || text(source.source_content_sha256).replace(/^\\x/i, '').toLowerCase() !== sourceContentSha256) {
+    throw new CandidateHttpError(409, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  return source;
+}
+
+function candidateComponentPrepareMatches(component, workflowId, generation, expected) {
+  return component
+    && component.workflow_id === workflowId
+    && Number(component.workflow_generation) === generation
+    && upper(component.component_kind) === expected.component_kind
+    && upper(component.document_role) === expected.document_role
+    && (component.expense_category == null ? null : upper(component.expense_category))
+      === expected.expense_category
+    && (component.paper_return_page_key == null ? null : text(component.paper_return_page_key))
+      === expected.paper_return_page_key
+    && normaliseMediaType(component.media_type) === expected.media_type
+    && Number(component.byte_size) === expected.byte_size
+    && component.approval_request_id == null
+    && component.manager_signature_capture_method == null
+    && component.expected_source_content_sha256 == null;
+}
+
+async function repairInterruptedCandidateExpensePrepare(
+  env, deps, access, workflowId, generation, idempotencyKey, expected, reusableSource
+) {
+  if (!reusableSource) return idempotencyKey;
+  const select = 'id,workflow_id,workflow_generation,component_kind,document_role,'
+    + 'expense_category,paper_return_page_key,media_type,byte_size,state,'
+    + 'approval_request_id,manager_signature_capture_method,expected_source_content_sha256,'
+    + 'source_content_sha256,source_component_id';
+  const existing = await restOne(
+    env,
+    'candidate_submission_components',
+    `workflow_id=eq.${encodeURIComponent(workflowId)}`
+      + `&upload_idempotency_key=eq.${encodeURIComponent(idempotencyKey)}`
+      + `&select=${select}`
+  );
+  if (!existing) return idempotencyKey;
+  if (!candidateComponentPrepareMatches(existing, workflowId, generation, expected)) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  const state = upper(existing.state);
+  const sourceDigest = text(existing.source_content_sha256).replace(/^\\x/i, '').toLowerCase();
+  if (existing.source_component_id === reusableSource.id
+      && state === 'IMMUTABLE'
+      && sourceDigest === expected.source_content_sha256) {
+    return idempotencyKey;
+  }
+  const interruptedDirectPrepare = existing.source_component_id == null
+    && existing.source_content_sha256 == null
+    && ['PENDING', 'SUPERSEDED'].includes(state);
+  if (!interruptedDirectPrepare) {
+    throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
+  }
+  const repairDigest = await sha256Hex([
+    'candidate-expense-lineage-repair-v1', workflowId, String(generation),
+    idempotencyKey, existing.id, reusableSource.id
+  ].join('\u001f'));
+  if (state === 'PENDING') {
+    await rpcCall(deps, 'candidate_workflow_transition_atomic_v1', workflowActionArgs(
+      access, env, workflowId, 'COMPONENT_SUPERSEDE', generation,
+      { component_id: existing.id }, `supersede:${repairDigest}`
+    ));
+  }
+  return `lineage:${repairDigest}`;
+}
+
 async function preparedCandidateComponentReplay(
   env, access, workflowId, generation, idempotencyKey, expected
 ) {
   const componentSelect = 'id,workflow_id,workflow_generation,component_kind,document_role,'
     + 'expense_category,paper_return_page_key,storage_key,media_type,byte_size,state,'
     + 'upload_idempotency_key,approval_request_id,manager_signature_capture_method,'
-    + 'expected_source_content_sha256,source_content_sha256';
+    + 'expected_source_content_sha256,source_content_sha256,source_component_id';
   let component = await restOne(
     env,
     'candidate_submission_components',
@@ -1875,7 +1993,13 @@ async function preparedCandidateComponentReplay(
       || component.approval_request_id != null
       || component.manager_signature_capture_method != null
       || component.expected_source_content_sha256 != null
-      || (recoveredPendingPrepare && component.source_content_sha256 != null)) {
+      || (recoveredPendingPrepare && component.source_content_sha256 != null)
+      || (expected.source_component_id == null
+        ? component.source_component_id != null
+        : component.source_component_id !== expected.source_component_id)
+      || (expected.source_content_sha256
+        && text(component.source_content_sha256).replace(/^\\x/i, '').toLowerCase()
+          !== expected.source_content_sha256)) {
     throw new CandidateHttpError(409, 'CANDIDATE_COMPONENT_PREPARE_CONTRACT_MISMATCH');
   }
   const authoritative = preparedUploadContract({
@@ -2270,6 +2394,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   let expectedContentSha256 = null;
   let candidateAccess = null;
   let paperReturnProof = null;
+  let reusableSource = null;
   if (owner === 'candidate') {
     const access = await verifyCandidateAccess(request, env);
     candidateAccess = access;
@@ -2328,6 +2453,22 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     }
     approvalRequestId = approval.id;
   }
+  const sourceContentSha256 = body.source_content_sha256 == null
+    ? null : text(body.source_content_sha256).toLowerCase();
+  if (sourceContentSha256 != null && !SHA256_RE.test(sourceContentSha256)) {
+    throw new CandidateHttpError(400, 'CANDIDATE_COMPONENT_DIGEST_INVALID');
+  }
+  if (owner !== 'candidate' && sourceContentSha256 != null) {
+    throw new CandidateHttpError(400, 'CANDIDATE_SOURCE_COMPONENT_NOT_ALLOWED');
+  }
+  if (owner === 'candidate') {
+    reusableSource = await reusableCandidateExpenseSource(
+      env, candidateAccess, workflowId, componentKind,
+      upper(body.document_role || ''),
+      body.expense_category == null ? null : upper(body.expense_category),
+      mediaType, byteSize, sourceContentSha256
+    );
+  }
   const storageKey = componentStorageKey(environment, workflowId, generation, componentKind, mediaType);
   const payload = {
     component_kind: componentKind,
@@ -2335,6 +2476,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     expense_category: body.expense_category == null ? null : upper(body.expense_category),
     paper_return_page_key: body.paper_return_page_key == null ? null : text(body.paper_return_page_key),
     storage_key: storageKey, media_type: mediaType, byte_size: byteSize,
+    ...(reusableSource ? { source_component_id: reusableSource.id } : {}),
     approval_request_id: approvalRequestId,
     ...(owner === 'office' ? { service_phone_approval: true, actor_user_id: ownerId } : {}),
     ...(approvalTokenHash ? {
@@ -2353,11 +2495,19 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     media_type: mediaType, byte_size: byteSize, component_kind: componentKind,
     document_role: payload.document_role, expense_category: payload.expense_category,
     paper_return_page_key: payload.paper_return_page_key,
-    workflow_generation: generation
+    workflow_generation: generation,
+    source_component_id: reusableSource?.id ?? null,
+    source_content_sha256: reusableSource ? sourceContentSha256 : null
   };
+  const effectiveIdempotencyKey = owner === 'candidate'
+    ? await repairInterruptedCandidateExpensePrepare(
+      env, deps, candidateAccess, workflowId, generation,
+      idempotencyKey, expected, reusableSource
+    )
+    : idempotencyKey;
   const preparedReplay = owner === 'candidate'
     ? await preparedCandidateComponentReplay(
-      env, candidateAccess, workflowId, generation, idempotencyKey, expected
+      env, candidateAccess, workflowId, generation, effectiveIdempotencyKey, expected
     )
     : null;
   const result = preparedReplay || await rpcCall(
@@ -2368,7 +2518,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     owner === 'candidate' ? {
       p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
       p_expected_generation: generation, p_payload: payload,
-      p_idempotency_key: idempotencyKey, p_now_utc: new Date().toISOString()
+      p_idempotency_key: effectiveIdempotencyKey, p_now_utc: new Date().toISOString()
     } : {
       p_session_id: sessionId, p_environment: environment, p_workflow_id: workflowId,
       p_action: 'COMPONENT_PREPARE', p_expected_generation: generation, p_payload: payload,
@@ -2380,7 +2530,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   }
   const authoritative = preparedUploadContract(result, expected);
   const componentId = authoritative.component_id;
-  const ticket = await uploadTicket(env, {
+  const ticket = reusableSource ? null : await uploadTicket(env, {
     env: environment,
     authority_kind: authority?.authority_kind || 'CANDIDATE_SESSION',
     owner, owner_id: ownerId, workflow_id: workflowId,
@@ -2391,7 +2541,7 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
     candidate_session_id: null,
     generation: authoritative.workflow_generation, component_id: componentId, component_kind: authoritative.component_kind,
     key: authoritative.storage_key, media_type: authoritative.media_type, byte_size: authoritative.byte_size,
-    completion_idempotency_key: `${idempotencyKey}:complete`,
+    completion_idempotency_key: `${effectiveIdempotencyKey}:complete`,
     ...(expectedContentSha256 ? { expected_content_sha256: expectedContentSha256 } : {}),
     ...(captureMethod ? { capture_method: captureMethod } : {}),
     ...(paperReturnProof ? { paper_return_proof: {
@@ -2416,11 +2566,12 @@ async function handleComponentPrepare(request, env, deps, workflowId, owner = 'c
   return jsonResponse(result.idempotent_replay === true ? 200 : 201, {
     ok: true, workflow_id: workflowId, generation: authoritative.workflow_generation, component_id: componentId,
     idempotent_replay: result.idempotent_replay === true,
-    upload: {
+    reused_existing_upload: Boolean(reusableSource),
+    ...(ticket ? { upload: {
       method: 'PUT', url: `${owner === 'office' ? '/api/candidate-app' : CANDIDATE_PREFIX}/uploads/${encodeURIComponent(ticket)}`,
       media_type: authoritative.media_type, byte_size: authoritative.byte_size, expires_in_seconds: 600,
       ...(expectedContentSha256 ? { expected_content_sha256: expectedContentSha256 } : {})
-    }
+    } } : {})
   });
 }
 
