@@ -6655,7 +6655,7 @@
       "parallel": "s",
       "volatility": "i",
       "security_definer": false,
-      "definition_sha256": "d8e5915961362e0b551565d6e8650db99a49646c0161a1867355daed0aea7d5e"
+      "definition_sha256": "06fd7386091293cb24797f5ddffc0f236d85c953058e1098e9b945c0e57b7b72"
     },
     {
       "acl": [
