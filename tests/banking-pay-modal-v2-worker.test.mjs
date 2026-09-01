@@ -21,10 +21,12 @@ const selection = () => envelope({ progress_counter_version: 4, request_id: inte
  movements: [],movements_complete:true,movement_count:0,movement_digest:'b'.repeat(64),
  invalidations:{scope:'ALL_PREVIOUS_DETAILS',ready:true,actions:true,updating:true,blocked:true} });
 const ready = () => envelope({ candidate_id: candidate, candidate: row(),
-  rows: ['ready-1','ready-2'].map(identity=>({identity,candidate_id:candidate,effective_section:'canonical_preview_lines',selected:false,
-    selection_group_kind:null,selection_group_key:null,selection_group_member_count:0,selection_group_selected_count:0,selection_group_state:null,
-    selection_group_display_amount:null,selection_group_selected_display_amount:null})),
-  next_cursor: null, has_more: false, total_count: 2, page_number:1, has_previous:false, previous_cursor:null, page_anchor:'current_anchor' });
+  rows: ['ready-1','ready-2'].map((identity,index)=>({identity,candidate_id:candidate,effective_section:'canonical_preview_lines',selected:false,
+    presentation_group_kind:'TIMESHEET',presentation_group_key:`ready-group-${index+1}`,presentation_group_row_count:1,
+    selection_group_kind:'TIMESHEET',selection_group_key:`ready-group-${index+1}`,selection_group_member_count:1,
+    selection_group_selected_count:0,selection_group_state:'NONE',selection_group_display_amount:'10.00',
+    selection_group_selected_display_amount:'0.00'})),
+  next_cursor: null, has_more: false, total_count: 2, ready_row_count:2, page_number:1, has_previous:false, previous_cursor:null, page_anchor:'current_anchor' });
 async function invoke({ path = `${base}/candidates`, params = query, body, rpc = async () => summary(), user = { id: actor }, method = body ? 'POST' : 'GET', contract = { banking_pay_workbench_v2: { available: true, contract_version: 1 } } } = {}) {
   let calls = 0;
   let called;
@@ -207,7 +209,7 @@ test('Ready details cannot leak another candidate or section', async () => {
   }
 });
 for(const [name,change] of Object.entries({missingKind:r=>delete r.selection_group_kind,missingKey:r=>delete r.selection_group_key,
- partialNull:r=>r.selection_group_member_count=1,badKind:r=>Object.assign(r,{selection_group_kind:'ROW',selection_group_key:'group',selection_group_member_count:1,selection_group_selected_count:0,selection_group_state:'NONE'}),
+ partialNull:r=>r.selection_group_display_amount=null,badKind:r=>Object.assign(r,{selection_group_kind:'ROW',selection_group_key:'group',selection_group_member_count:1,selection_group_selected_count:0,selection_group_state:'NONE'}),
  inconsistentState:r=>Object.assign(r,{selection_group_kind:'TIMESHEET',selection_group_key:'group',selection_group_member_count:2,selection_group_selected_count:1,selection_group_state:'ALL'}),
  controlKey:r=>Object.assign(r,{selection_group_kind:'OVERPAYMENT',selection_group_key:'bad\nkey',selection_group_member_count:1,selection_group_selected_count:1,selection_group_state:'ALL'})}))
  test('Ready details reject incomplete complete-group authority: '+name,async()=>{
@@ -242,7 +244,7 @@ for(const [name,change] of Object.entries({
   assert.equal(result.status,502);assert.equal(result.calls,1);
 });
 test('Ready detail can report a departed candidate without leaking context-only rows',async()=>{
-  const result=await invoke({path:`${base}/candidate/${candidate}/ready`,rpc:async()=>({...ready(),candidate:null,rows:[],total_count:0,page_number:0,page_anchor:null})});
+  const result=await invoke({path:`${base}/candidate/${candidate}/ready`,rpc:async()=>({...ready(),candidate:null,rows:[],total_count:0,ready_row_count:0,page_number:0,page_anchor:null})});
   assert.equal(result.status,200);assert.equal(result.calls,1);assert.equal(result.json.candidate,null);
 });
 test('PostgREST SQLSTATE errors retain the whitelisted business rejection only', async () => {

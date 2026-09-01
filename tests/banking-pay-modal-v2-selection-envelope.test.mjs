@@ -11,9 +11,10 @@ const row=()=>({candidate_id:candidate,candidate_name:'Synthetic candidate',cand
   candidate_sort_name:'synthetic candidate',candidate_sort_reference:'synthetic',child_revision:'2:4:scope',facts_digest:'b'.repeat(64),
   selectable_ready_count:2,selected_ready_count:0,selection_state:'NONE',selected_display_amount:'0.00',
   selected_deduction_exists:false,selected_timesheet_count:0,selected_timesheet_ids:[],selected_timesheet_scope_token:null});
-const ready=()=>({...envelope(),candidate_id:candidate,candidate:row(),total_count:2,has_more:false,next_cursor:null,
+const ready=()=>({...envelope(),candidate_id:candidate,candidate:row(),total_count:2,ready_row_count:2,has_more:false,next_cursor:null,
   page_number:1,has_previous:false,previous_cursor:null,page_anchor:'current_anchor',
   rows:[10,11].map(n=>({identity:id(n),candidate_id:candidate,effective_section:'canonical_preview_lines',selected:false,
+    presentation_group_kind:'ROW',presentation_group_key:`ROW|${id(n)}`,presentation_group_row_count:1,
     selection_group_kind:null,selection_group_key:null,selection_group_member_count:0,selection_group_selected_count:0,
     selection_group_state:null,selection_group_display_amount:null,selection_group_selected_display_amount:null}))});
 const selection=()=>({...envelope(),request_id:requestId,state_changed:true,candidate_absent:false,candidate:row(),
@@ -49,9 +50,10 @@ test('main-only selection keeps its existing small response and has no additiona
   const result=await invoke(selection());assert.equal(result.status,200);assert.equal(result.calls,1);
 });
 test('the approved exception accommodates a complete100-row synthetic breakdown, not all child pages',async()=>{
-  const child=ready();child.total_count=105;child.has_more=true;child.next_cursor='next_current';
+  const child=ready();child.total_count=105;child.ready_row_count=105;child.has_more=true;child.next_cursor='next_current';
   child.rows=Array.from({length:100},(_,n)=>({identity:id(100+n),candidate_id:candidate,
     effective_section:'canonical_preview_lines',selected:false,synthetic_detail:'x'.repeat(1650),
+    presentation_group_kind:'ROW',presentation_group_key:`ROW|${id(100+n)}`,presentation_group_row_count:1,
     selection_group_kind:null,selection_group_key:null,selection_group_member_count:0,selection_group_selected_count:0,
     selection_group_state:null,selection_group_display_amount:null,selection_group_selected_display_amount:null}));
   const reply={...selection(),ready_page:child};assert.ok(bytes(reply)>32*1024);

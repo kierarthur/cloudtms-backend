@@ -16,9 +16,10 @@ function page(){return {ok:true,contract:'BANKING_PAY_MODAL_STRUCTURE_V2',contra
  child_revision:'current',facts_digest:'b'.repeat(64),selectable_ready_count:2,selected_ready_count:0,selection_state:'NONE',selected_display_amount:'0.00',
  selected_deduction_exists:false,selected_timesheet_count:0,selected_timesheet_ids:[],selected_timesheet_scope_token:null},
  rows:[3,4].map(n=>({identity:id(n),candidate_id:id(2),effective_section:'canonical_preview_lines',selected:false,
+  presentation_group_kind:'ROW',presentation_group_key:`ROW|${id(n)}`,presentation_group_row_count:1,
   selection_group_kind:null,selection_group_key:null,selection_group_member_count:0,selection_group_selected_count:0,
   selection_group_state:null,selection_group_display_amount:null,selection_group_selected_display_amount:null})),
- total_count:2,page_number:1,has_more:false,next_cursor:null,has_previous:false,previous_cursor:null,page_anchor:'current_anchor'};}
+ total_count:2,ready_row_count:2,page_number:1,has_more:false,next_cursor:null,has_previous:false,previous_cursor:null,page_anchor:'current_anchor'};}
 for(const [name,change] of Object.entries({
  missingPageNumber:p=>delete p.page_number, zeroPage:p=>p.page_number=0, fractionalPage:p=>p.page_number=1.5,
  missingPrevious:p=>delete p.has_previous, wrongPrevious:p=>p.has_previous=true,
@@ -33,11 +34,11 @@ for(const [name,change] of Object.entries({
 });
 test('direct Ready accepts complete first, later, third and departed pages',()=>{
  validateBankingPayModalEnvelope(page(),'ready',args);
- const later=page();Object.assign(later,{page_number:2,has_previous:true,total_count:102});
+ const later=page();Object.assign(later,{page_number:2,has_previous:true,total_count:102,ready_row_count:102});
  validateBankingPayModalEnvelope(later,'ready',{...args,p_cursor:'exact_next'});
- Object.assign(later,{page_number:3,previous_cursor:'exact_previous',total_count:202});
+ Object.assign(later,{page_number:3,previous_cursor:'exact_previous',total_count:202,ready_row_count:202});
  validateBankingPayModalEnvelope(later,'ready',{...args,p_cursor:'exact_next'});
- validateBankingPayModalEnvelope({...page(),candidate:null,rows:[],total_count:0,page_number:0,page_anchor:null},'ready',args);
+ validateBankingPayModalEnvelope({...page(),candidate:null,rows:[],total_count:0,ready_row_count:0,page_number:0,page_anchor:null},'ready',args);
 });
 test('direct Ready SQL rejects oversized complete payload rather than truncating',
  {skip:!process.env.BANKING_MODAL_LOCAL_PSQL},()=>{
