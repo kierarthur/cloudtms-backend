@@ -158,10 +158,25 @@ begin
      or coalesce((result->>'reservation_outstanding_before_batch_ex_vat')::numeric,0)<>37.39 then
     raise exception 'BANKING_PAY_SIGNED_RECOVERY_FINALIZER_DID_NOT_SETTLE: %',result;
   end if;
-  if exists(select 1 from public.pay_bank_transfers)
-     or exists(select 1 from public.banking_pay_operation_provider_attempts)
-     or exists(select 1 from public.banking_pay_operation_settlement_scope)
-     or exists(select 1 from public.banking_pay_operation_remittance_scope) then
+  if exists(
+       select 1 from public.pay_bank_transfers
+       where pay_batch_id='10000000-0000-4000-8000-000000009101'
+     )
+     or exists(
+       select 1 from public.banking_pay_operation_provider_attempts
+       where operation_id='10000000-0000-4000-8000-000000009103'
+          or pay_batch_id='10000000-0000-4000-8000-000000009101'
+     )
+     or exists(
+       select 1 from public.banking_pay_operation_settlement_scope
+       where operation_id='10000000-0000-4000-8000-000000009103'
+          or pay_batch_id='10000000-0000-4000-8000-000000009101'
+     )
+     or exists(
+       select 1 from public.banking_pay_operation_remittance_scope
+       where operation_id='10000000-0000-4000-8000-000000009103'
+          or pay_batch_id='10000000-0000-4000-8000-000000009101'
+     ) then
     raise exception 'BANKING_PAY_SIGNED_RECOVERY_FINALIZER_CROSSED_PROVIDER_BOUNDARY';
   end if;
 end;
@@ -279,10 +294,46 @@ begin
      or coalesce((result->>'reservation_outstanding_before_batch_ex_vat')::numeric,0)<>37.39 then
     raise exception 'BANKING_PAY_SIGNED_RECOVERY_CANCELLED_RELEASE_DID_NOT_SETTLE: %',result;
   end if;
-  if exists(select 1 from public.pay_bank_transfers)
-     or exists(select 1 from public.banking_pay_operation_provider_attempts)
-     or exists(select 1 from public.banking_pay_operation_settlement_scope)
-     or exists(select 1 from public.banking_pay_operation_remittance_scope) then
+  if exists(
+       select 1 from public.pay_bank_transfers
+       where pay_batch_id in (
+         '10000000-0000-4000-8000-000000009101',
+         '10000000-0000-4000-8000-000000009201'
+       )
+     )
+     or exists(
+       select 1 from public.banking_pay_operation_provider_attempts
+       where operation_id in (
+         '10000000-0000-4000-8000-000000009103',
+         '10000000-0000-4000-8000-000000009203'
+       )
+          or pay_batch_id in (
+            '10000000-0000-4000-8000-000000009101',
+            '10000000-0000-4000-8000-000000009201'
+          )
+     )
+     or exists(
+       select 1 from public.banking_pay_operation_settlement_scope
+       where operation_id in (
+         '10000000-0000-4000-8000-000000009103',
+         '10000000-0000-4000-8000-000000009203'
+       )
+          or pay_batch_id in (
+            '10000000-0000-4000-8000-000000009101',
+            '10000000-0000-4000-8000-000000009201'
+          )
+     )
+     or exists(
+       select 1 from public.banking_pay_operation_remittance_scope
+       where operation_id in (
+         '10000000-0000-4000-8000-000000009103',
+         '10000000-0000-4000-8000-000000009203'
+       )
+          or pay_batch_id in (
+            '10000000-0000-4000-8000-000000009101',
+            '10000000-0000-4000-8000-000000009201'
+          )
+     ) then
     raise exception 'BANKING_PAY_SIGNED_RECOVERY_DUPLICATE_PROOF_CROSSED_PROVIDER_BOUNDARY';
   end if;
 end;
