@@ -1,0 +1,106 @@
+{
+  "schema_version": "H1_CURRENT_TEST_EVIDENCE_V1",
+  "captured_on": "2026-09-02",
+  "candidate_base_commit": "21548a8781549c3ef35e33e3ee526e95d2ac5b78",
+  "status": "TEST_RELEASE_CANDIDATE_REBASED_H1_SOURCE_GREEN_INSTALL_AND_RUNTIME_ACCEPTANCE_PENDING",
+  "results": {
+    "pre_edit_database_source_integrity": {
+      "command": "npm run db:check",
+      "pass": true,
+      "migrations": 208,
+      "repeatables": 508
+    },
+    "post_edit_database_source_integrity": {
+      "command": "npm run db:check",
+      "pass": true,
+      "migrations": 210,
+      "repeatables": 510
+    },
+    "focused_h1": {
+      "command": "node --test tests/banking-pay-dirty-apply-family-authority-repair.test.cjs tests/banking-pay-pending-owner-recovery.test.cjs tests/banking-pay-stale-successor-convergence.test.js tests/banking-pay-workbench-fail-job-authority.test.js tests/banking-pay-workbench-source-build-authority.test.js tests/database-release-system.test.mjs tests/banking-pay-workbench-causal-recovery.test.js tests/banking-pay-workbench-settled-certification-contract.test.js tests/banking-pay-workbench-shared-baseline-reconciliation.test.js",
+      "tests": 92,
+      "pass": 92,
+      "fail": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "complete_javascript": {
+      "command": "npm test",
+      "candidate_binding_registry_pass": true,
+      "tests": 1169,
+      "pass": 1169,
+      "fail": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "current_handover_validator": {
+      "command": "node --test tests/banking-pay-workbench-current-implementation-handover.test.js",
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "skipped": 0,
+      "todo": 0
+    },
+    "complete_cjs_matrix": {
+      "command": "node --test tests/*.test.cjs",
+      "tests": 854,
+      "pass": 757,
+      "fail": 0,
+      "skipped": 97,
+      "todo": 0,
+      "h1_recovery_failures": 0,
+      "pre_existing_external_failures": [],
+      "companion_reconciliations": [
+        {
+          "id": "BULK_AUTHORISE_CANONICAL_SOURCE_RECONCILIATION",
+          "owner": "external shared release-owner reconciliation",
+          "classification": "FIXED_LOCAL_SOURCE_RECONCILIATION_NO_FINAL_FUNCTION_BEHAVIOR_CHANGE",
+          "exact_change": "the canonical 14082026_1310 bulk_authorise_dataset_v1 definition now includes the exact already-installed duplicate-expense review protection preserved by 29082026_0326",
+          "proof": "the repository generator reports the 29082026_0326 final closure is current byte-for-byte and the release-owner test passes"
+        },
+        {
+          "id": "CANDIDATE_NAMED_SECURITY_EXPECTATION_RECONCILIATION",
+          "owner": "external Candidate inventory expectation",
+          "classification": "FIXED_LOCAL_TEST_EXPECTATION_ONLY_NO_CANDIDATE_RUNTIME_CHANGE",
+          "exact_change": "the modal test now expects the verifier's current 124/390cec48151731c4346e701cf48940ae boundary and rejects the obsolete 122/e82084b8b739995d086e72f1983acfb1 pair",
+          "proof": "the focused Candidate/modal source suite passes without changing the verifier or any Candidate function"
+        }
+      ]
+    },
+    "git_diff_check": {
+      "pass": true
+    },
+    "miget_read_only_preflight": {
+      "pass": true,
+      "database": "cloudtms_test_clone",
+      "postgres": "17.11 (Debian 17.11-1.pgdg11+2)",
+      "latest_verified_release_commit": "a849a25e5391b893f91aa4e5ada2c9794ba9244b",
+      "h1_installed": false
+    },
+    "fresh_dual_engine_execution": {
+      "pass": false,
+      "classification": "ENVIRONMENT_EXECUTION_BLOCKED_NOT_CODE_FAILURE",
+      "reason": "Docker Desktop was running for the desktop user, but the Codex sandbox identity was denied access to the Docker named pipe; the installed PostgreSQL 18 initdb also cannot re-execute under the restricted sandbox token.",
+      "not_counted_as_pass": true,
+      "previous_exact_h1_source_evidence": {
+        "postgresql_17_11": "PASS",
+        "postgresql_18_6": "PASS",
+        "scope": "NEW, UPGRADE/replacement, first use, idempotent reapply, security/ACL, exact contract, rollback-contained causal and payment-policy parity",
+        "qualification": "The H1-owned source definitions and focused verifier are byte-semantically identical to the dual-engine reviewed package. The exact 21548a87-based release candidate is additionally protected by the repository release engine, generated contract and Miget TEST UPGRADE verification before runtime acceptance."
+      }
+    }
+  },
+  "policy_parity": {
+    "changes_policy": false,
+    "changes_create_draft_contract": false,
+    "changes_eligibility_or_amounts": false,
+    "changes_tax_or_vat": false,
+    "changes_pay_channel_or_method": false,
+    "changes_provider_or_settlement": false,
+    "changes_selection_authority": false,
+    "changes_workbench_recovery_execution": true,
+    "changes_final_bulk_authorise_behavior": false,
+    "changes_candidate_runtime_or_security_boundary": false
+  },
+  "verdict": "READY_FOR_INDEPENDENT_SOURCE_REVIEW_NOT_YET_A_FAULT_FREE_RUNTIME_VERDICT"
+}

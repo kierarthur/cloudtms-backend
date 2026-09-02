@@ -56,9 +56,11 @@ test('exhausted attempt convergence uses the candidate-state terminal vocabulary
   assert.match(failedClosePrefix, /last_error_json = jsonb_build_object/);
   assert.match(failedClosePrefix, /WORKBENCH_PENDING_SCOPE_WITHOUT_ACTIVE_JOB/);
 
-  const claimFailedCloseStart = claimStart.indexOf("IF v_terminal_action='FAILED_CLOSED_MAX_ATTEMPTS'");
+  const claimFailedCloseStart = claimStart.indexOf('IF v_terminal_action IN (');
   const claimFailedCloseEnd = claimStart.indexOf("ELSIF v_terminal_action='REBOUND_ACTIVE_SUCCESSOR'", claimFailedCloseStart);
   const claimFailedClose = claimStart.slice(claimFailedCloseStart, claimFailedCloseEnd);
+  assert.match(claimFailedClose, /FAILED_CLOSED_DETERMINISTIC_SOURCE/);
+  assert.match(claimFailedClose, /FAILED_CLOSED_MAX_ATTEMPTS/);
   assert.match(claimFailedClose, /v_terminal_candidate_state\.status,''\)\)\)<>'FAILED'/);
   assert.doesNotMatch(claimFailedClose, /v_terminal_candidate_state\.status,''\)\)\)<>'ERROR'/);
 

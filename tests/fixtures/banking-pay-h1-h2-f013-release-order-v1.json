@@ -1,0 +1,73 @@
+{
+  "schema_version": "BANKING_PAY_H1_H2_F013_RELEASE_ORDER_V1",
+  "status": "COMPATIBILITY_ONLY_PROVISIONAL_INTERFACE_DIVERGENCE_RECORDED_NO_RUNTIME_CORRECTION_AUTHORISED",
+  "policy_classification_status": "FINAL_DEFECT_VERDICT_PENDING_COMPLETE_CANONICAL_END_TO_END_FIXTURE",
+  "replacement_correctness": "NOT_ESTABLISHED_NO_RUNTIME_CORRECTION_AUTHORISED",
+  "target_routine": "public.pay_batch_insert_items_from_preview(uuid,uuid,uuid,jsonb)",
+  "h1_final_closure_path": "supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql",
+  "historical_owner_path": "supabase/repeatable/26052026_2100HRS_NEW_FUNCTIONS.sql",
+  "h2_obsolete_provisional_owner_path": "supabase/repeatable/01092026_2245_banking_pay_draft_finance_category_handoff_v1.sql",
+  "proved_deliberate_translations": [
+    "visible PAYMENT_ADVANCE_REPAYMENT becomes hidden recovery-template and frozen Draft-item LOAN_REPAYMENT",
+    "visible MANUAL_CREDIT_ADJUSTMENT_PAYMENT becomes frozen MANUAL_CREDIT_PAYOUT"
+  ],
+  "proved_policy_boundaries": [
+    "PAYE taxable components use GROSS_ADD or GROSS_DEDUCT inside payroll net",
+    "PAYE fixed or non-taxable components use NET_ADD or NET_DEDUCT after imported PAYE net",
+    "Umbrella retains separate ex-VAT, VAT, channel and payee authority, with fixed or non-taxable components VAT-zero"
+  ],
+  "latest_h2_evidence_only_status": {
+    "required_shared_baseline": "14dd89afb1944187508a562b40631957512428eb",
+    "f013b_disposition": "PASS_NO_CORRECTION_REQUIRED_DELIBERATE_STAGED_VOCABULARY",
+    "f013_visible_category_disposition": "ONE_DOWNSTREAM_PHASE_PROVED_CORRECT_AND_FIVE_PROVISIONAL_PROVED_INTERFACE_DIVERGENCES_FINAL_DEFECT_VERDICT_OPEN",
+    "downstream_phase_proved_correct_categories": {
+      "OVERPAYMENT_RECOVERY": 4
+    },
+    "provisional_interface_divergence_categories": {
+      "MANUAL_DEBT_RECOVERY": 4,
+      "PAYMENT_ADVANCE_REPAYMENT": 2,
+      "LOAN_PAYOUT": 2,
+      "UNDERPAYMENT_PAYMENT": 4,
+      "MANUAL_CREDIT_ADJUSTMENT_PAYMENT": 4
+    },
+    "final_proved_defect_categories": {},
+    "observed_downstream_failure_code": "MALFORMED_PREVIEW_ALLOCATION_ROW_NOT_DRAFTABLE",
+    "observed_downstream_failure_postcondition": "ZERO_DRAFT_ITEM_ZERO_RESERVATION_CASE_STATE_UNCHANGED",
+    "fixture_entry_point": "MANUALLY_INSERTED_CANDIDATE_SCOPE_AND_ALLOCATION_ROWS_THEN_INSERT_ITEMS",
+    "not_exercised_phases": ["CANONICAL_PREVIEW", "VALIDATE_SESSION_AND_PREPARE", "SCOPE_SEED", "ALLOCATION_SEED"],
+    "required_final_fixture_path": "CANONICAL_PREVIEW_TO_SESSION_PREPARE_TO_SCOPE_SEED_TO_ALLOCATION_SEED_TO_INSERT_ITEMS_TO_FINANCE_TO_FINALIZER",
+    "dual_engine_variant_result": "PG17.11_20_OF_20_PASS_AND_PG18.6_20_OF_20_PASS_ROLLBACK_ONLY",
+    "provisional_interface_divergence_rows": 5,
+    "final_proved_defect_rows": 0,
+    "catalogue_total": 54,
+    "catalogue_executable_bound": 35,
+    "catalogue_open": 19,
+    "h2_evidence_score": 25,
+    "focused_result": "15_PASS_0_FAIL",
+    "combined_result": "74_PASS_0_FAIL_5_TODO_1_STRUCTURAL_SKIP",
+    "complete_javascript_result": "1106_PASS_0_FAIL_0_TODO_0_SKIP",
+    "stable_combined_manifest_signal": false,
+    "runtime_or_policy_edit_authorised_or_made": false,
+    "artifacts_sha256": {
+      "tests/01092026_2313_banking_pay_draft_finance_category_end_to_end_verification.sql": "ba32d34f591277cd4a91e1e892eb265cfbb9fcfb2e4092f19c174dece7eec975",
+      "tests/fixtures/banking-pay-draft-finance-category-end-to-end-v1.json": "a9da46e676b16d94038a786d820fddbc339b29402c4e5f528483054b98e2ee10",
+      "tests/banking-pay-draft-finance-category-end-to-end.test.cjs": "260415aab56097683792e17dd3c3517cb12633f65d757b3f9c01626790a12529",
+      "tests/fixtures/banking-pay-draft-category-crosswalk-v1.json": "549e7a69f2e0c89554cd3ca36846f413afd80bd90444417b300a58c7dd08ae39",
+      "tests/banking-pay-draft-category-crosswalk.test.cjs": "2b529314bb65ada4643d05d6570f96229472c2a39e79e6eb3f5e4079cf2d2cf1",
+      "tests/fixtures/banking-pay-draft-parity-issue-ledger-v1.json": "c7ea59e09a51cfc25cec045818ea0ec42f15af630ee409a89c58da88e4419ec3",
+      "codex_outputs/h2-draft-parity/BANKING_PAY_FINANCE_CATEGORY_OPERATING_MODEL.md": "b314aa42d579eaf7c0b680c5336558523e0d0377f8f34bc844dc7b49005f5f57"
+    }
+  },
+  "rules": [
+    "H1 final closure and every transitive dependency must not define or replace the target routine.",
+    "The obsolete provisional H2 path must remain absent from the H1-only tree and every stable combined candidate unless category-specific policy proof supports a new correction and the parent renews authority.",
+    "The deliberately translated PAYMENT_ADVANCE_REPAYMENT and MANUAL_CREDIT_ADJUSTMENT_PAYMENT vocabularies must not be treated as same-layer aliases or defect evidence.",
+    "The downstream-only dual-engine fixture proves OVERPAYMENT_RECOVERY correct only through its exercised phases and records five provisional interface divergences; it does not prove a final Draft defect.",
+    "A final defect verdict requires one real canonical-preview through finalizer fixture; no runtime correction is authorised before that proof and parent review.",
+    "H2 must return a stable exact artifact manifest and no-edit-in-flight signal before H1 imports or tests any newly authorised replacement in a combined candidate.",
+    "Any future newly authorised owner must be supplied by H2, ordered after F7, and proved to be the sole later target-routine owner without weakening the established PAYE or Umbrella policy boundaries.",
+    "Neither task may edit the historical 26052026 monolith."
+  ],
+  "current_h1_only_disposition": "The former 01092026_2245 proposal is retained only as append-only compatibility history and is absent from the H1-only tree. The all-eight-alias premise remains invalidated: PAYMENT_ADVANCE_REPAYMENT to LOAN_REPAYMENT and MANUAL_CREDIT_ADJUSTMENT_PAYMENT to MANUAL_CREDIT_PAYOUT are deliberate cross-layer translations. H2's 2313 PG17/PG18 fixture manually seeds Candidate scope/allocation rows and starts at INSERT_ITEMS. It proves OVERPAYMENT_RECOVERY correct only through the exercised downstream phases and records five category rows/sixteen variants as PROVISIONAL_PROVED_INTERFACE_DIVERGENCE; final proved defect rows are zero until a real canonical-preview through finalizer fixture passes. This guard proves only that F7 does not overwrite INSERT_ITEMS and that no unsupported finance replacement enters a combined candidate. F-013 remains H2-owned; no runtime correction is authorised, and any future correction requires complete end-to-end defect proof, a new exact owner path, explicit parent authority, stable manifest and combined-candidate order proof."
+}
+

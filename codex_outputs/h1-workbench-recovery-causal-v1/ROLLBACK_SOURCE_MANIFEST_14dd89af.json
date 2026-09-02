@@ -1,0 +1,118 @@
+{
+  "label": "LOCAL ROLLBACK SOURCE MANIFEST / NOT AUTHORITY TO EXECUTE / NOT FINAL RUNTIME CERTIFICATE",
+  "source_commit": "14dd89afb1944187508a562b40631957512428eb",
+  "source_tree": "47d2f96cf41897d0344184d3b13d0eb78a5e1dc5",
+  "database_installed_source_commit": "12ecbb56e25a890f2ac7f4af0d65406109622bea",
+  "database_installed_release": "33550417397",
+  "minimum_preservation_rule": "A future H1 rollback starts from the then-current shared authority, which must be no older than this exact 14dd89af baseline, restores only the selected H1 rollback unit, and preserves every non-H1 successor entry and Candidate source object.",
+  "backend_source_objects": [
+    {
+      "path": "supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql",
+      "git_blob_sha1": "1c47874c6636a214178caaf720fd6ab653a0d6d1",
+      "content_sha256": "399a6120814f7b78c91c065e4d541b9b9e884b1a7b490b38d4861ef78fc6af51",
+      "bytes": 53916,
+      "installed_canonical_definition_sha256": "2750d5b1e12c23bd08ab0b6691b02bdae59c655d51413f3b60ae3f2792a785ad",
+      "rollback_unit": "R1"
+    },
+    {
+      "path": "supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql",
+      "git_blob_sha1": "c90eb43250de58b6e620caaed364ddffc92772ae",
+      "content_sha256": "b203325023a2d81be4f22e606be96c9b2224fa5d722a10a1607c5d2cc2e5d8e9",
+      "bytes": 58916,
+      "installed_canonical_definition_sha256": "b71da7c4003008f60625580a167efb0b405c13c4bb1bcb8aa4dbcc2bb17007b4",
+      "rollback_unit": "R1"
+    },
+    {
+      "path": "supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql",
+      "git_blob_sha1": "49d1e54a628e98568c0d0bd3693c21e5d551635a",
+      "content_sha256": "d9db3a5e8fb740976c5d666a8a670e23a19ebf095f36fe23b2ac9f4f26105aa1",
+      "bytes": 78559,
+      "installed_canonical_definition_sha256": "d00ad36f7eef644259e77e1d6a8b35ec8f14461aed3b9cce98d736b57058048e",
+      "rollback_unit": "R1"
+    },
+    {
+      "path": "supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql",
+      "git_blob_sha1": "3dff4ac5c1c6dfec92eb7305b58bd158cd24dc41",
+      "content_sha256": "0dacd5ff478c279c75ab5afb80626b9b50384c83138fecc1f9b0a3b9fbb56f90",
+      "bytes": 23248,
+      "rollback_unit": "R3"
+    },
+    {
+      "path": "supabase/release/export_contract.sql",
+      "git_blob_sha1": "a381be9c06833da5c1d9cff4be9768321df7d25c",
+      "content_sha256": "6378b39ffb868cd2d6b8325d6f6cc65b06e9c623e0c0598bd4d9b78cb621996b",
+      "bytes": 11988,
+      "rollback_unit": "R2"
+    },
+    {
+      "path": "supabase/release/current-contract.json",
+      "git_blob_sha1": "52123379c9d333c59a1b57097380375f32998a97",
+      "content_sha256": "72028e063484fc665b4febf8a2b7e2b7315d5578084ff8e5c0720522a132f1d6",
+      "semantic_sha256": "5c94b3f8a644e10095f5446f7782f429337aed9b92fe521b7872c2ffc77a0cd6",
+      "bytes": 3115603,
+      "rollback_unit": "GENERATED_ENTRY_RECONCILIATION"
+    },
+    {
+      "path": "supabase/release/current-release.json",
+      "git_blob_sha1": "2448d0aedf29c78cb6242b24f06a086579121113",
+      "content_sha256": "70fe123a4d0b00660bc4c2df22476bc9c386959371b77f498120f5c63d20ba48",
+      "bytes": 13892,
+      "rollback_unit": "GENERATED_ENTRY_RECONCILIATION"
+    },
+    {
+      "path": "supabase/verification/banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json",
+      "git_blob_sha1": "208c5431d8a4efb9e7a95106f3117bcd326ee21c",
+      "content_sha256": "6fea051fab69be39f1557fbd551a6db88b36a36069bdb975f2d951b2752ed34d",
+      "bytes": 28874,
+      "rollback_unit": "GENERATED_ENTRY_RECONCILIATION"
+    },
+    {
+      "path": "supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql",
+      "git_blob_sha1": "99962ea74ebc2ec42235b8220438c766cc94cce5",
+      "content_sha256": "4fa849f2cdffd913e7d33a13ee0dcdedcb8503116a37776d8e64de7bb3afe02b",
+      "bytes": 25421,
+      "rollback_unit": "R3"
+    }
+  ],
+  "preserved_non_h1_successor_source_objects": [
+    { "path": "broker/src/candidate-app-backend.js", "git_blob_sha1": "2b4c57b1b8e85727193f0ab32d60b0135ac200fc", "content_sha256": "3fe6db879020e215246e3261c6a8cccf3628ae3d33561fcd18380975eee9911c", "bytes": 391781 },
+    { "path": "tests/candidate-app-backend.test.js", "git_blob_sha1": "c6f13d66287d12a52e7b3d7b12e37b17f254e124", "content_sha256": "14276897aaeb79aa4585f65b3fa1e5f4ee2578be4f92e7dcca9ba65356e5b884", "bytes": 249637 },
+    { "path": "tests/candidate-app-finalisation.test.js", "git_blob_sha1": "ef01fb9a85a295a28797d967d48c28e28554450e", "content_sha256": "2a895dfcec3e64c823de53650df0910ab082d099e02d7d9717768d2a17d56468", "bytes": 6715 }
+  ],
+  "frontend_documentation_origin": {
+    "commit": "e58e567f66ed8108a40e3c3e8388dbe33e0b0361",
+    "path": "BANKING_PAY_BIBLE.md",
+    "git_blob_sha1": "e115d1fd595e740dbd8a7decbc46f4ae709e39e6",
+    "content_sha256": "c9b8ebe91c907d128e00bf796c9ae34ffae9b0bd35ba5361a1a3f82291600c17",
+    "bytes": 135646,
+    "rollback_rule": "APPEND_ONLY_DO_NOT_REVERT_HISTORY"
+  },
+  "runtime_delta": {
+    "h1_worker_source_changed": false,
+    "h1_frontend_runtime_source_changed": false,
+    "rollback_action": "NO_H1_RUNTIME_ASSET_REVERSAL",
+    "exact_then_current_worker_and_frontend_deployment_identities": "OUTSIDE_H1_SOURCE_HANDOVER"
+  },
+  "finding_count_model": {
+    "audit_issue_rows_total": 8,
+    "audit_issue_ids": ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"],
+    "preexisting_sealed_at_audit_start": ["F1"],
+    "newly_discovered_by_h1_current_iteration": ["F2", "F3", "F4", "F5", "F6", "F7", "F8"],
+    "h1_owned_corrections": ["F1", "F2", "F3", "F4", "F5", "F6", "F7"],
+    "h1_installed_pass": ["F1"],
+    "h1_local_only_pass": ["F2", "F3", "F4", "F5", "F6", "F7"],
+    "external_h2_owned_blockers": ["F8"],
+    "open_issue_rows": ["F2", "F3", "F4", "F5", "F6", "F7", "F8"],
+    "final_combined_reaudit_pass": [],
+    "rollback_boundary": "Only correction-owner H1 rows can enter an H1 rollback unit. F8 was discovered by H1 but is H2-owned and must never be rolled back or rewritten by H1."
+  },
+  "reversal_proof_requirements": [
+    "Retrieve prior bytes by exact source commit and Git blob, never by narrative reconstruction.",
+    "Regenerate shared contract and verification manifests from the then-current combined tree; do not replace whole shared files with these historical blobs.",
+    "Preserve 14dd89af Candidate source and tests plus every later non-H1 source/release entry.",
+    "Rehearse the selected rollback unit in disposable PostgreSQL 17 and 18 and prove security, contract, first-use and payment-policy-parity boundaries.",
+    "Retain all job, attempt, session, release-ledger and business history.",
+    "Require explicit user consent before any shared rollback release."
+  ]
+}
+

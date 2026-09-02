@@ -73,8 +73,10 @@ test('general browser isolation inventory admits only the current service RPC bo
 test('Candidate-named isolation inventory remains at the current proved boundary', () => {
   const verification = read(path.join(root, 'supabase', 'verification',
     '27082026_1947_candidate_named_security_verification_v3.sql'));
-  assert.match(verification, /v_count<>122 or v_service_missing<>8 or v_browser_executable<>0/);
-  assert.match(verification, /v_hash<>'e82084b8b739995d086e72f1983acfb1'/);
+  assert.match(verification, /v_count<>124 or v_service_missing<>8 or v_browser_executable<>0/);
+  assert.match(verification, /v_hash<>'390cec48151731c4346e701cf48940ae'/);
+  assert.doesNotMatch(verification, /v_count<>122 or v_service_missing<>8 or v_browser_executable<>0/);
+  assert.doesNotMatch(verification, /v_hash<>'e82084b8b739995d086e72f1983acfb1'/);
 });
 
 test('v2 summary is server-owned, selected-only and keyset paged before the browser', () => {

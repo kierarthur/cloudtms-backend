@@ -62,6 +62,9 @@ DECLARE
   v_terminal_scope_pending_job_id uuid := NULL::uuid;
   v_terminal_scope_error_json jsonb := NULL::jsonb;
   v_terminal_owner_valid boolean := false;
+  v_effective_error_json jsonb := p_error_json;
+  v_first_divergent_cause jsonb := NULL::jsonb;
+  v_first_divergent_attempt_number integer := NULL::integer;
 BEGIN
   IF p_job_id IS NULL THEN
     RAISE EXCEPTION 'job_id is required';
@@ -157,6 +160,7 @@ BEGIN
       'PAY_WORKBENCH_UNVALIDATED_RECONCILIATION_SCALE');
     v_is_deterministic_stage_error := v_error_code IN (
       'CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED',
+      'PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID',
       'PAYMENT_CORRECTION_SCOPE_TYPE_REQUIRED',
       'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISSING',
       'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH',
@@ -180,21 +184,61 @@ BEGIN
         'message',p_error_json->>'message','sqlstate',p_error_json->>'sqlstate')),
       updated_at_utc=clock_timestamp()
     WHERE id=v_attempt_id AND attempt_status='STARTED';
+
+    -- The private attempt ledger is the existing ordered causal authority.
+    -- Preserve its earliest concrete divergence in every later public error
+    -- envelope; a retry, lease expiry or exhaustion is evidence about what
+    -- happened later and must never replace that first cause.
+    SELECT attempt.error_json, attempt.attempt_number
+    INTO v_first_divergent_cause, v_first_divergent_attempt_number
+    FROM private.banking_pay_workbench_stage_attempts AS attempt
+    WHERE attempt.job_id=p_job_id
+      AND jsonb_typeof(attempt.error_json)='object'
+      AND attempt.error_json<>'{}'::jsonb
+      AND NULLIF(BTRIM(COALESCE(attempt.error_json->>'code','')),'') IS NOT NULL
+    ORDER BY attempt.attempt_number,attempt.started_at_utc,attempt.id
+    LIMIT 1;
+
+    v_first_divergent_cause:=COALESCE(
+      v_first_divergent_cause,
+      jsonb_strip_nulls(jsonb_build_object(
+        'code',p_error_json->>'code',
+        'message',p_error_json->>'message',
+        'sqlstate',p_error_json->>'sqlstate'
+      ))
+    );
+    v_first_divergent_attempt_number:=COALESCE(
+      v_first_divergent_attempt_number,
+      v_attempt_count
+    );
+    v_effective_error_json:=jsonb_strip_nulls(
+      p_error_json || jsonb_build_object(
+        'causal_contract_version','WORKBENCH_FIRST_DIVERGENT_CAUSE_V1',
+        'first_divergent_cause',v_first_divergent_cause,
+        'first_divergent_attempt_number',v_first_divergent_attempt_number,
+        'latest_observed_failure',jsonb_strip_nulls(jsonb_build_object(
+          'code',p_error_json->>'code',
+          'message',p_error_json->>'message',
+          'sqlstate',p_error_json->>'sqlstate'
+        )),
+        'latest_attempt_number',v_attempt_count
+      )
+    );
     IF v_scale_block THEN
       UPDATE private.banking_pay_workbench_economic_builds SET
-        status='BLOCKED_UNVALIDATED_RECONCILIATION_SCALE',failure_json=p_error_json,
+        status='BLOCKED_UNVALIDATED_RECONCILIATION_SCALE',failure_json=v_effective_error_json,
         updated_at_utc=clock_timestamp() WHERE id=v_economic_build_id;
       UPDATE public.banking_pay_workbench_jobs SET status='SUCCEEDED',completed_at_utc=clock_timestamp(),
-        failed_at_utc=NULL,last_error_json=p_error_json,updated_at_utc=clock_timestamp()
+        failed_at_utc=NULL,last_error_json=v_effective_error_json,updated_at_utc=clock_timestamp()
       WHERE id=p_job_id AND status='RUNNING';
       RETURN jsonb_build_object('ok',true,'job_id',p_job_id,'status','SUCCEEDED',
         'result_code','BLOCKED_UNVALIDATED_RECONCILIATION_SCALE','retry_scheduled',false);
     ELSIF v_is_obsolete THEN
       UPDATE private.banking_pay_workbench_economic_builds SET status='OBSOLETE',
-        obsolete_at_utc=clock_timestamp(),failure_json=p_error_json,updated_at_utc=clock_timestamp()
+        obsolete_at_utc=clock_timestamp(),failure_json=v_effective_error_json,updated_at_utc=clock_timestamp()
       WHERE id=v_economic_build_id AND status NOT IN ('COMPLETE','FAILED');
       UPDATE public.banking_pay_workbench_jobs SET status='SUCCEEDED',completed_at_utc=clock_timestamp(),
-        failed_at_utc=NULL,last_error_json=p_error_json,updated_at_utc=clock_timestamp()
+        failed_at_utc=NULL,last_error_json=v_effective_error_json,updated_at_utc=clock_timestamp()
       WHERE id=p_job_id AND status='RUNNING';
 
       v_terminal_repair_result := public.pay_workbench_repair_orphaned_pending_source_build(
@@ -245,9 +289,10 @@ BEGIN
       IF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_ERROR'
          AND v_terminal_scope_pending_job_id IS NULL THEN
         UPDATE public.banking_pay_workbench_session_candidate_state AS terminal_candidate_state
-        SET status = 'ERROR',
+        SET status = 'FAILED',
             pending_job_id = NULL::uuid,
-            last_error_json = COALESCE(v_terminal_scope_error_json, p_error_json),
+            last_error_json = COALESCE(v_terminal_scope_error_json, v_effective_error_json)
+              || (v_effective_error_json - 'code' - 'message' - 'sqlstate'),
             updated_at_utc = clock_timestamp()
         WHERE terminal_candidate_state.session_id = v_job_session_id
           AND terminal_candidate_state.candidate_id = v_job_candidate_id;
@@ -278,17 +323,17 @@ BEGIN
        AND COALESCE(v_attempt_count,0)<COALESCE(v_max_attempts,8) THEN
       v_next_run_at_utc:=clock_timestamp()+make_interval(secs=>v_retry_after_seconds);
       UPDATE public.banking_pay_workbench_jobs SET status='QUEUED',run_at_utc=v_next_run_at_utc,
-        started_at_utc=NULL,failed_at_utc=NULL,last_error_json=p_error_json,
+        started_at_utc=NULL,failed_at_utc=NULL,last_error_json=v_effective_error_json,
         updated_at_utc=clock_timestamp() WHERE id=p_job_id AND status='RUNNING';
       RETURN jsonb_build_object('ok',true,'job_id',p_job_id,'status','QUEUED',
         'attempt_count',v_attempt_count,'max_attempts',v_max_attempts,
         'retry_scheduled',true,'next_run_at_utc',v_next_run_at_utc);
     END IF;
     UPDATE private.banking_pay_workbench_economic_builds SET status='FAILED',
-      failed_at_utc=clock_timestamp(),failure_json=p_error_json,updated_at_utc=clock_timestamp()
+      failed_at_utc=clock_timestamp(),failure_json=v_effective_error_json,updated_at_utc=clock_timestamp()
     WHERE id=v_economic_build_id;
     UPDATE public.banking_pay_workbench_jobs SET status='FAILED',failed_at_utc=clock_timestamp(),
-      completed_at_utc=NULL,last_error_json=p_error_json,updated_at_utc=clock_timestamp()
+      completed_at_utc=NULL,last_error_json=v_effective_error_json,updated_at_utc=clock_timestamp()
     WHERE id=p_job_id AND status='RUNNING';
 
     v_terminal_repair_result := public.pay_workbench_repair_orphaned_pending_source_build(
@@ -339,9 +384,10 @@ BEGIN
     IF UPPER(BTRIM(COALESCE(v_terminal_scope_status, ''))) = 'SOURCE_BUILD_ERROR'
        AND v_terminal_scope_pending_job_id IS NULL THEN
       UPDATE public.banking_pay_workbench_session_candidate_state AS terminal_candidate_state
-      SET status = 'ERROR',
+      SET status = 'FAILED',
           pending_job_id = NULL::uuid,
-          last_error_json = COALESCE(v_terminal_scope_error_json, p_error_json),
+          last_error_json = COALESCE(v_terminal_scope_error_json, v_effective_error_json)
+            || (v_effective_error_json - 'code' - 'message' - 'sqlstate'),
           updated_at_utc = clock_timestamp()
       WHERE terminal_candidate_state.session_id = v_job_session_id
         AND terminal_candidate_state.candidate_id = v_job_candidate_id;
@@ -828,10 +874,10 @@ BEGIN
       started_at_utc = CASE WHEN v_new_status = 'QUEUED' THEN NULL ELSE j.started_at_utc END,
       completed_at_utc = NULL,
       failed_at_utc = CASE WHEN v_new_status = 'QUEUED' THEN NULL ELSE v_now END,
-      last_error_json = p_error_json,
+      last_error_json = v_effective_error_json,
       payload_json = jsonb_strip_nulls(
         COALESCE(j.payload_json, '{}'::jsonb)
-        || jsonb_build_object('last_failure_json', p_error_json)
+        || jsonb_build_object('last_failure_json', v_effective_error_json)
         || CASE
           WHEN v_canonical_job_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
                AND v_invalid_source_build_without_run_id IS TRUE THEN
@@ -985,7 +1031,7 @@ BEGIN
           progress_json = COALESCE(source_session_row.progress_json, '{}'::jsonb) || jsonb_build_object(
             'last_source_build_failure_at_utc', v_now::text,
             'last_source_build_failure_job_id', p_job_id::text,
-            'last_source_build_failure_code', COALESCE(NULLIF(BTRIM(p_error_json->>'code'), ''), 'WORKBENCH_SOURCE_BUILD_JOB_FAILED'),
+            'last_source_build_failure_code', COALESCE(NULLIF(BTRIM(v_effective_error_json->>'code'), ''), 'WORKBENCH_SOURCE_BUILD_JOB_FAILED'),
             'last_source_build_failure_source_build_run_id', v_source_build_run_id_text,
             'last_source_build_source_rows_marked_error_count', COALESCE(v_failed_source_row_count, 0)
           ),
@@ -1068,7 +1114,7 @@ BEGIN
           progress_json = COALESCE(session_row.progress_json, '{}'::jsonb) || jsonb_build_object(
             'last_line_process_failure_at_utc', v_now::text,
             'last_line_process_failure_job_id', p_job_id::text,
-            'last_line_process_failure_code', COALESCE(NULLIF(BTRIM(p_error_json->>'code'), ''), 'WORKBENCH_LINE_WORK_PROCESS_JOB_FAILED'),
+            'last_line_process_failure_code', COALESCE(NULLIF(BTRIM(v_effective_error_json->>'code'), ''), 'WORKBENCH_LINE_WORK_PROCESS_JOB_FAILED'),
             'last_line_process_failure_count', v_failed_line_work_count
           ),
           progress_counter_version = COALESCE(session_row.progress_counter_version, 0) + 1,
@@ -1093,7 +1139,7 @@ BEGIN
       'max_attempts', v_max_attempts,
       'run_at_utc', v_next_run_at_utc,
       'failed_at_utc', v_failed_at_utc,
-      'last_error_json', p_error_json,
+      'last_error_json', v_effective_error_json,
       'retry_after_seconds', CASE WHEN v_new_status = 'QUEUED' THEN v_retry_after_seconds ELSE NULL END,
       'obsolete', v_is_obsolete,
       'obsolete_reason', v_obsolete_reason,
@@ -1135,7 +1181,7 @@ BEGIN
     'retry_after_seconds', CASE WHEN v_new_status = 'QUEUED' THEN v_retry_after_seconds ELSE NULL END,
     'next_run_at_utc', v_next_run_at_utc,
     'failed_at_utc', v_failed_at_utc,
-    'error_json', p_error_json,
+    'error_json', v_effective_error_json,
     'obsolete', v_is_obsolete,
     'obsolete_reason', v_obsolete_reason,
     'statement_timeout', v_is_statement_timeout,

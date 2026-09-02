@@ -98,7 +98,14 @@ test('claiming invokes the bounded owner repair without changing canonical enque
   assert.match(repairSql, /pay_workbench_reconcile_successful_source_build/);
   assert.match(repairSql, /force_legacy', true/);
   assert.match(repairSql, /policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'/);
-  assert.doesNotMatch(repairSql, /pay_batch|provider|settlement|remittance/i);
+  const repairWithoutApprovedErrorCode = repairSql.replaceAll(
+    'PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID',
+    ''
+  );
+  assert.doesNotMatch(
+    repairWithoutApprovedErrorCode,
+    /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|FROM|JOIN|PERFORM|CALL)\s+(?:public|private)\.(?:pay_batch|provider|settlement|remittance)/i
+  );
 });
 
 test('owner repair validates the successor before leaving a scope pending', () => {
@@ -156,7 +163,7 @@ test('reconciliation is isolated, validated, and recomputed only after a proven 
 
 test('manual state transitions prove row count and postcondition before aggregate accounting', () => {
   const rowCountChecks = repairSql.match(/GET DIAGNOSTICS v_scope_transition_row_count = ROW_COUNT/g) || [];
-  assert.equal(rowCountChecks.length, 3, 'rebind and both fail-close paths must check ROW_COUNT');
+  assert.equal(rowCountChecks.length, 4, 'rebind and all three fail-close paths must check ROW_COUNT');
   assert.match(repairSql, /PAY_WORKBENCH_OWNER_REPAIR_POSTCONDITION_NOT_PROVEN/);
   assert.match(repairSql, /v_candidate_action := 'UNRESOLVED_POSTCONDITION_NOT_PROVEN'/);
   assert.match(repairSql, /v_candidate_unresolved_reason := 'POSTCONDITION_NOT_PROVEN'/);

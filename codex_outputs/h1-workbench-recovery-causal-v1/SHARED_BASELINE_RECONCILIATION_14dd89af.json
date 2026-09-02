@@ -1,0 +1,71 @@
+{
+  "artifact_status": "LOCAL_SOURCE_HANDOVER_NOT_INSTALLED_NOT_DEPLOYED_NOT_FINAL_RUNTIME_CERTIFICATE",
+  "reconciliation_status": "SOURCE_PROVED_NON_OVERLAP_INDEPENDENT_HANDOVER_READY",
+  "h1_original_base_commit": "f5f09b140f4ac9188762e36baf9d2d14bd4c17a7",
+  "previous_shared_database_commit": "12ecbb56e25a890f2ac7f4af0d65406109622bea",
+  "database_installed_source_commit": "12ecbb56e25a890f2ac7f4af0d65406109622bea",
+  "database_installed_release": "33550417397",
+  "previous_sealed_shared_source_commit": "7811288c04fd0fc1427ab9d98e4f844e1c66079e",
+  "shared_successor_commit": "14dd89afb1944187508a562b40631957512428eb",
+  "shared_successor_tree": "47d2f96cf41897d0344184d3b13d0eb78a5e1dc5",
+  "shared_successor_parents": [
+    "7811288c04fd0fc1427ab9d98e4f844e1c66079e"
+  ],
+  "proved_ancestry": [
+    "f5f09b140f4ac9188762e36baf9d2d14bd4c17a7",
+    "12ecbb56e25a890f2ac7f4af0d65406109622bea",
+    "87411c772baa8eca485bf8dfac91ef7c9f7331cf",
+    "7811288c04fd0fc1427ab9d98e4f844e1c66079e",
+    "14dd89afb1944187508a562b40631957512428eb"
+  ],
+  "shared_source_contract_file_sha256": "72028e063484fc665b4febf8a2b7e2b7315d5578084ff8e5c0720522a132f1d6",
+  "shared_source_contract_semantic_sha256": "5c94b3f8a644e10095f5446f7782f429337aed9b92fe521b7872c2ffc77a0cd6",
+  "changes_from_previous_sealed_shared_source": [
+    "broker/src/candidate-app-backend.js",
+    "tests/candidate-app-backend.test.js"
+  ],
+  "changes_from_database_installed_source": [
+    "broker/src/candidate-app-backend.js",
+    "tests/candidate-app-backend.test.js",
+    "tests/candidate-app-finalisation.test.js"
+  ],
+  "direct_changed_source_objects": [
+    {
+      "path": "broker/src/candidate-app-backend.js",
+      "git_blob_sha1": "2b4c57b1b8e85727193f0ab32d60b0135ac200fc",
+      "content_sha256": "3fe6db879020e215246e3261c6a8cccf3628ae3d33561fcd18380975eee9911c",
+      "bytes": 391781
+    },
+    {
+      "path": "tests/candidate-app-backend.test.js",
+      "git_blob_sha1": "c6f13d66287d12a52e7b3d7b12e37b17f254e124",
+      "content_sha256": "14276897aaeb79aa4585f65b3fa1e5f4ee2578be4f92e7dcca9ba65356e5b884",
+      "bytes": 249637
+    }
+  ],
+  "h1_path_intersection_from_781_to_14dd": [],
+  "h1_path_intersection_from_12ec_to_14dd": [],
+  "sql_contract_banking_finance_draft_path_intersection_from_781_to_14dd": [],
+  "sql_contract_banking_finance_draft_path_intersection_from_12ec_to_14dd": [],
+  "h1_held_paths_byte_identical_from_781_to_14dd": true,
+  "h1_held_paths_byte_identical_from_12ec_to_14dd": true,
+  "parent_sealed_runtime_evidence_not_yet_independently_rerun_by_h1": {
+    "backend_tests": "1112/1112 PASS",
+    "focused_candidate_tests": "162/162 PASS",
+    "ci": "SEALED_GREEN",
+    "ordered_candidate_workers": "SEALED_AND_HEALTHY"
+  },
+  "unchanged_h1_routine_hashes_at_shared_successor": {
+    "public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer)": "2750d5b1e12c23bd08ab0b6691b02bdae59c655d51413f3b60ae3f2792a785ad",
+    "public.pay_workbench_repair_orphaned_pending_source_build(p_session_id uuid, p_candidate_id uuid, p_limit integer, p_now_utc timestamp with time zone, p_reason text)": "b71da7c4003008f60625580a167efb0b405c13c4bb1bcb8aa4dbcc2bb17007b4",
+    "public.pay_workbench_source_build_attempt_claim_start_v1(p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid)": "d00ad36f7eef644259e77e1d6a8b35ec8f14461aed3b9cce98d736b57058048e"
+  },
+  "independent_handover_rule": "Verify the H1 local code against exact shared source 14dd89af, preserve every Candidate ancestor and object, reconcile generated shared entries rather than copying the f5-based files wholesale, and keep whole-Workbench installed/runtime conclusions separate from H1 source verification.",
+  "future_combined_candidate_rule": "If separately authorised later, create one fresh isolated tree from exact 14dd89af only after H2 supplies a stable exact manifest and no-edit signal; preserve all Candidate ancestry, apply H1 and accepted H2 deltas entry-by-entry, regenerate shared artifacts, and rerun every gate from scratch.",
+  "open_gates": [
+    "independent H1 source/local verifier verdict",
+    "H2 stable artifact manifest and reissued post-policy-classification counts",
+    "whole-Workbench installed/browser/certificate proof remains absent and outside the user-defined H1 delivery endpoint"
+  ]
+}
+

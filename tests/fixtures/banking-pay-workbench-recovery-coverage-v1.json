@@ -1,0 +1,515 @@
+{
+  "schema_version": "WORKBENCH_RECOVERY_COVERAGE_V1",
+  "catalogue_status": "FROZEN_AFTER_SOURCE_CENSUS",
+  "catalogue_iteration": 1,
+  "catalogue_class_count": 18,
+  "finite_basis": "Production-reachable logical branches derived from the current Workbench source/job/attempt/repair/publication owners and the sealed TEST incident. Infinite raw values are represented by bounded properties, not enumerated.",
+  "scope": {
+    "owned": [
+      "pre-Draft Workbench source-build failure and recovery",
+      "lease expiry and cancellation grace",
+      "first-divergent-cause retention",
+      "current-owner repair and canonical successor selection",
+      "settled publication and Draft-gate evidence"
+    ],
+    "excluded": [
+      "Draft financial mapping or materialisation",
+      "payment economics",
+      "provider submission",
+      "settlement or remittance",
+      "post-Draft live fallback"
+    ]
+  },
+  "classes": [
+    {
+      "id": "H1-C01",
+      "name": "exact current completed build is reconciled",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "pending scope points at terminal or absent work while one exact complete current build already exists",
+      "disposition": "PRESERVE_EXISTING_RECONCILED_SUCCESSFUL_BUILD",
+      "fixture_ids": ["pending-owner:completed-build-reuse"],
+      "mutation_operator": "reject weakening of CURRENT authority and unresolved-current exclusion",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C02",
+      "name": "valid active successor is rebound",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "stale pointer exists but one already-valid QUEUED or RUNNING canonical successor owns the current scope",
+      "disposition": "PRESERVE_EXISTING_REBOUND_ACTIVE_SUCCESSOR",
+      "fixture_ids": ["pending-owner:successor-validation", "stale-successor:existing-successor"],
+      "mutation_operator": "reject bypass of exact successor postconditions",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C03",
+      "name": "unchanged current deterministic source failure fails closed",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "terminal source-build owner, exact current session/build/run/stage/attempt/source authority and approved deterministic code",
+      "disposition": "H1_CORRECTION_FAILED_CLOSED_DETERMINISTIC_SOURCE",
+      "fixture_ids": ["causal-runtime:deterministic-no-successor", "causal-runtime:three-repair-replays-noop"],
+      "mutation_operator": "remove deterministic fence or weaken build/source/attempt identity",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C04",
+      "name": "genuine source authority change permits one canonical successor",
+      "source_owner": "public.pay_workbench_enqueue_candidate_refresh",
+      "failure_shape": "prior deterministic failure is obsolete because live source_change_seq or equivalent current authority advanced",
+      "disposition": "PRESERVE_EXISTING_ENQUEUED_CANONICAL_SUCCESSOR",
+      "fixture_ids": ["causal-runtime:genuine-source-change", "causal-runtime:changed-before-repair"],
+      "mutation_operator": "force deterministic close after source authority advances",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C05",
+      "name": "transient failure below budget retries the same job",
+      "source_owner": "public.pay_workbench_fail_job",
+      "failure_shape": "non-deterministic or approved transient failure with attempt_count below max_attempts",
+      "disposition": "PRESERVE_EXISTING_BOUNDED_SAME_JOB_RETRY",
+      "fixture_ids": ["pending-owner:secondary-handler-requeue", "fault-order:transient-then-success"],
+      "mutation_operator": "classify transient input as deterministic successor suppression",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C06",
+      "name": "max-attempt terminal failure remains finite",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "terminal source-build has exhausted its existing per-job max_attempts without an exact success or active successor",
+      "disposition": "PRESERVE_EXISTING_FAILED_CLOSED_MAX_ATTEMPTS",
+      "fixture_ids": ["pending-owner:max-attempt-fail-close", "stale-successor:failed-vocabulary"],
+      "mutation_operator": "change retry budget or restore invalid Candidate ERROR state",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C07",
+      "name": "expired delivered attempt below budget is requeued",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "STARTED attempt crosses its lease plus cancellation grace while attempt_count remains below max_attempts",
+      "disposition": "PRESERVE_EXISTING_DELIVERED_ATTEMPT_EXPIRED_REQUEUE",
+      "fixture_ids": ["pending-owner:lease-expiry-below-budget", "fault-order:worker-interruption-before-commit"],
+      "mutation_operator": "remove cancellation grace or unbound the retry budget",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C08",
+      "name": "expired delivered attempt at budget preserves first cause",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "later LEASE_EXPIRED_AFTER_CANCELLATION_GRACE terminalises as DELIVERED_ATTEMPT_EXHAUSTED after an earlier deterministic attempt",
+      "disposition": "H1_CORRECTION_FIRST_CAUSE_ENVELOPE",
+      "fixture_ids": ["causal-runtime:lease-exhaustion-first-cause", "causal-model:later-exhaustion"],
+      "mutation_operator": "replace first-cause envelope with the latest lease label",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C09",
+      "name": "deterministic rejection followed by lost response remains deterministic",
+      "source_owner": "public.pay_workbench_fail_job",
+      "failure_shape": "deterministic stage failure is durably recorded but the caller does not receive the response",
+      "disposition": "H1_CORRECTION_FIRST_CAUSE_ENVELOPE",
+      "fixture_ids": ["fault-order:deterministic-then-response-loss", "causal-model:first-attempt-ordering"],
+      "mutation_operator": "reverse attempt ordering or bypass effective causal JSON",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C10",
+      "name": "commit succeeded but response was lost uses authoritative read-back",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "success or successor mutation commits while its response is lost or delayed",
+      "disposition": "PRESERVE_EXISTING_SUCCESS_OR_ACTIVE_SUCCESSOR_READBACK",
+      "fixture_ids": ["fault-order:commit-then-response-loss", "pending-owner:reconciliation-postcondition"],
+      "mutation_operator": "enqueue before checking exact success or active successor",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C11",
+      "name": "stale response after successor publication cannot replace current authority",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "an older worker response arrives after a newer canonical successor has been published and rebound",
+      "disposition": "PRESERVE_EXISTING_CURRENT_SUCCESSOR_WINS",
+      "fixture_ids": ["fault-order:stale-response-after-successor", "stale-successor:rebound-before-orphan-repair"],
+      "mutation_operator": "clear a newer pending_job_id from an older terminal failure",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C12",
+      "name": "concurrent repair attempts serialize per Candidate",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "two repair/drain callers examine the same Candidate and terminal owner concurrently",
+      "disposition": "PRESERVE_EXISTING_CANDIDATE_LOCK_AND_ACTIVE_DEDUPE",
+      "fixture_ids": ["fault-order:concurrent-repair-schedules", "source-guard:candidate-lock-order"],
+      "mutation_operator": "remove Candidate transaction advisory lock or exact row recheck",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C13",
+      "name": "session close or discard during repair is skipped after lock recheck",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "session stops being OPEN or becomes discarded between outer discovery and locked revalidation",
+      "disposition": "PRESERVE_EXISTING_SKIPPED_AFTER_RECHECK",
+      "fixture_ids": ["fault-order:session-close-reopen", "source-guard:open-undiscarded-recheck"],
+      "mutation_operator": "remove locked session status and discarded_at_utc recheck",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C14",
+      "name": "obsolete generation retains canonical successor behaviour",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "owner session version, source sequence, run/build identity or bounded-scope generation is obsolete",
+      "disposition": "PRESERVE_EXISTING_OBSOLETE_GENERATION_SUCCESSOR",
+      "fixture_ids": ["fail-job:obsolete-source-completion", "pending-owner:numeric-stale-owner"],
+      "mutation_operator": "treat obsolete generation as unchanged deterministic authority",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C15",
+      "name": "missing or invalid pending owner fails closed when repair cannot prove a successor",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "SOURCE_BUILD_PENDING has no valid active owner and enqueue/reconciliation postconditions cannot be proved",
+      "disposition": "PRESERVE_EXISTING_SOURCE_BUILD_ERROR_WITHOUT_PENDING_JOB",
+      "fixture_ids": ["pending-owner:ownerless-terminal-progress", "pending-owner:postcondition-not-proven"],
+      "mutation_operator": "report repaired without state-transition and progress postconditions",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C16",
+      "name": "historical DEAD and FAILED rows remain audit-only",
+      "source_owner": "public.pay_workbench_repair_orphaned_pending_source_build",
+      "failure_shape": "old terminal jobs and attempts coexist with a current success, successor or healthy READY session",
+      "disposition": "PRESERVE_APPEND_ONLY_AUDIT_HISTORY",
+      "fixture_ids": ["dirty-apply:terminal-history-retained", "stability-snapshot:historical-not-current"],
+      "mutation_operator": "delete terminal history or let terminal rows block current authority",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C17",
+      "name": "historical signed-recovery classifier shapes are fail-closed and non-ambiguous",
+      "source_owner": "private.pay_batch_signed_non_charge_recovery_evidence_v1",
+      "failure_shape": "ordinary same-key components, one genuine signed component among ordinary rows, duplicate genuine rows, or incomplete/tampered frozen evidence",
+      "disposition": "F1_INSTALLED_CLASSIFIER_CORRECTION",
+      "fixture_ids": ["signed-classifier:ordinary-multiple", "signed-classifier:mixed-one-genuine", "signed-classifier:duplicate-genuine", "signed-draft:tampered-evidence"],
+      "mutation_operator": "apply cardinality before the full signed pre-signature",
+      "final_reaudit_state": "PENDING"
+    },
+    {
+      "id": "H1-C18",
+      "name": "settled publication and Draft gate adopt one complete current authority",
+      "source_owner": "public.pay_workbench_can_create_draft",
+      "failure_shape": "partial scope, stale publication, unresolved current jobs, invalid pointers, disjointness failure or incomplete selected constituent evidence",
+      "disposition": "PRESERVE_EXISTING_FAIL_CLOSED_DRAFT_GATE_AND_CERTIFY",
+      "fixture_ids": ["draft-gate:current-owner-states", "source-progress:complete-scope-and-owner-pointers", "modal-selection:complete-pagination"],
+      "mutation_operator": "enable Draft from totals, stale browser rows or historical terminal jobs",
+      "final_reaudit_state": "PENDING"
+    }
+  ],
+  "mandatory_fault_orderings": [
+    { "id": "H1-O01", "name": "deterministic rejection followed by lost response", "class_ids": ["H1-C03", "H1-C09"], "status": "LOCAL_PASS" },
+    { "id": "H1-O02", "name": "deterministic rejection followed by lease expiry", "class_ids": ["H1-C08"], "status": "LOCAL_PASS" },
+    { "id": "H1-O03", "name": "transient failure followed by success", "class_ids": ["H1-C05"], "status": "LOCAL_PASS" },
+    { "id": "H1-O04", "name": "commit succeeded but response was lost", "class_ids": ["H1-C01", "H1-C10"], "status": "LOCAL_PASS" },
+    { "id": "H1-O05", "name": "stale response after successor publication", "class_ids": ["H1-C02", "H1-C11"], "status": "LOCAL_PASS" },
+    { "id": "H1-O06", "name": "concurrent repair attempts", "class_ids": ["H1-C12"], "status": "LOCAL_PASS_SOURCE_GUARD_AND_SCHEDULE_MODEL" },
+    { "id": "H1-O07", "name": "session close or reopen during repair", "class_ids": ["H1-C13"], "status": "LOCAL_PASS" },
+    { "id": "H1-O08", "name": "worker interruption before and after commit", "class_ids": ["H1-C07", "H1-C10"], "status": "LOCAL_PASS" },
+    { "id": "H1-O09", "name": "repeated identical deterministic input", "class_ids": ["H1-C03"], "status": "LOCAL_PASS" },
+    { "id": "H1-O10", "name": "authority-changing event followed by permitted retry", "class_ids": ["H1-C04", "H1-C14"], "status": "LOCAL_PASS" }
+  ],
+  "fault_ordering_model_cases": [
+    {
+      "id": "H1-O01",
+      "initial": { "session_open": true, "scope_pending": true, "deterministic_current": true },
+      "events": ["REPAIR", "RESPONSE_LOST", "REPAIR"],
+      "expected_actions": ["FAILED_CLOSED_DETERMINISTIC_SOURCE", "SKIPPED_AFTER_RECHECK"],
+      "expected_successor_count": 0
+    },
+    {
+      "id": "H1-O02",
+      "initial": { "session_open": true, "scope_pending": true, "deterministic_current": true, "first_cause": "PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID" },
+      "events": ["LEASE_EXHAUSTED", "REPAIR"],
+      "expected_actions": ["DELIVERED_ATTEMPT_EXHAUSTED", "FAILED_CLOSED_DETERMINISTIC_SOURCE"],
+      "expected_successor_count": 0,
+      "expected_first_cause": "PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID"
+    },
+    {
+      "id": "H1-O03",
+      "initial": { "session_open": true, "scope_pending": true, "attempt_count": 1, "max_attempts": 8 },
+      "events": ["TRANSIENT_FAILURE", "SUCCESS_COMMITTED"],
+      "expected_actions": ["REQUEUED_SAME_JOB", "COMPLETE"],
+      "expected_successor_count": 0
+    },
+    {
+      "id": "H1-O04",
+      "initial": { "session_open": true, "scope_pending": true },
+      "events": ["SUCCESS_COMMITTED", "RESPONSE_LOST", "REPAIR"],
+      "expected_actions": ["COMPLETE", "RECONCILED_SUCCESSFUL_BUILD"],
+      "expected_successor_count": 0
+    },
+    {
+      "id": "H1-O05",
+      "initial": { "session_open": true, "scope_pending": true },
+      "events": ["SUCCESSOR_PUBLISHED", "STALE_FAILURE_RESPONSE", "REPAIR"],
+      "expected_actions": ["ENQUEUED_CANONICAL_SUCCESSOR", "REBOUND_ACTIVE_SUCCESSOR"],
+      "expected_successor_count": 1
+    },
+    {
+      "id": "H1-O06",
+      "initial": { "session_open": true, "scope_pending": true, "deterministic_current": true },
+      "events": ["REPAIR", "CONCURRENT_REPAIR"],
+      "expected_actions": ["FAILED_CLOSED_DETERMINISTIC_SOURCE", "SKIPPED_AFTER_RECHECK"],
+      "expected_successor_count": 0
+    },
+    {
+      "id": "H1-O07",
+      "initial": { "session_open": true, "scope_pending": true },
+      "events": ["SESSION_CLOSED", "REPAIR", "SESSION_REOPENED"],
+      "expected_actions": ["SKIPPED_AFTER_RECHECK"],
+      "expected_successor_count": 0
+    },
+    {
+      "id": "H1-O08",
+      "initial": { "session_open": true, "scope_pending": true, "attempt_count": 1, "max_attempts": 8 },
+      "events": ["LEASE_EXPIRED", "SUCCESS_COMMITTED", "RESPONSE_LOST", "REPAIR"],
+      "expected_actions": ["REQUEUED_SAME_JOB", "COMPLETE", "RECONCILED_SUCCESSFUL_BUILD"],
+      "expected_successor_count": 0
+    },
+    {
+      "id": "H1-O09",
+      "initial": { "session_open": true, "scope_pending": true, "deterministic_current": true },
+      "events": ["REPAIR", "REPAIR", "REPAIR", "REPAIR"],
+      "expected_actions": ["FAILED_CLOSED_DETERMINISTIC_SOURCE", "SKIPPED_AFTER_RECHECK", "SKIPPED_AFTER_RECHECK", "SKIPPED_AFTER_RECHECK"],
+      "expected_successor_count": 0
+    },
+    {
+      "id": "H1-O10",
+      "initial": { "session_open": true, "scope_pending": true, "deterministic_current": true },
+      "events": ["SOURCE_AUTHORITY_CHANGED", "REPAIR"],
+      "expected_actions": ["ENQUEUED_CANONICAL_SUCCESSOR"],
+      "expected_successor_count": 1
+    }
+  ],
+  "historical_shape_matrix": [
+    { "id": "H1-H01", "name": "ordinary single component", "evidence": "signed classifier returns null" },
+    { "id": "H1-H02", "name": "ordinary multiple same TS_DAY", "evidence": "01092026_1648 rollback verifier" },
+    { "id": "H1-H03", "name": "ordinary multiple same TS_TOTAL", "evidence": "bounded-scope TS_TOTAL semantic verifiers" },
+    { "id": "H1-H04", "name": "multiple rate families", "evidence": "13082026_1942 rate-authority verifier" },
+    { "id": "H1-H05", "name": "PAYE and Umbrella", "evidence": "signed Draft and rate-authority verifiers" },
+    { "id": "H1-H06", "name": "one genuine signed plus ordinary", "evidence": "01092026_1648 rollback verifier" },
+    { "id": "H1-H07", "name": "two genuine signed", "evidence": "01092026_1648 deterministic rejection" },
+    { "id": "H1-H08", "name": "incomplete or tampered signed evidence", "evidence": "01092026_1510 signed Draft verifier" },
+    { "id": "H1-H09", "name": "prior-paid, part-paid and superseded", "evidence": "existing Banking Pay amount and correction-carrier suites" },
+    { "id": "H1-H10", "name": "expenses, mileage and ordinary payments", "evidence": "existing Banking Pay amount/modal suites" },
+    { "id": "H1-H11", "name": "zero, exact and partial recovery headroom", "evidence": "create-draft headroom and recovery-overlay suites" }
+  ],
+  "payment_policy_parity_contract": {
+    "status": "LOCAL_RUNTIME_PROOF_REQUIRED_FOR_EVERY_H1_FINDING",
+    "existing_policy_authority": "Banking Pay Bible plus unchanged economic, selection, Draft-finance, provider and settlement owners at the sealed source baseline",
+    "allowed_delta": "execution, recovery, causal evidence and release-installation mechanics only",
+    "forbidden_deltas": [
+      "eligibility or selected constituent identity",
+      "amount, sign, tax, VAT or economic key",
+      "pay method, pay channel, grouping or routing",
+      "approval, hold, resolution, prior-paid, supersession or headroom treatment",
+      "Draft item, allocation or reservation economics",
+      "provider, settlement, remittance or ultimate payment outcome"
+    ],
+    "runtime_oracle": "01092026_1927 rollback verifier compares the complete synthetic policy projection before and after H1 recovery execution and requires exact JSON equality",
+    "failure_code": "BANKING_PAY_CAUSAL_RECOVERY_PAYMENT_POLICY_PARITY_CHANGED"
+  },
+  "issues": [
+    {
+      "id": "F1", "owner": "H1", "discovery_owner": "BANKING_PAY_PARENT_SEALED_INCIDENT_ACCEPTED_AND_REPROVED_BY_H1", "correction_owner": "H1", "count_bucket": "H1_OWNED_CORRECTION_PREEXISTING_SEALED_AT_AUDIT_START", "newly_discovered_by_h1_current_iteration": false, "classification": "WORKBENCH_CLASSIFIER", "proof": "SOURCE_AND_INSTALLED", "correction": "INSTALLED_PASS", "current_status": "INSTALLED_PASS_FINAL_COMBINED_REAUDIT_OPEN", "local_pass": true, "installed_pass": true, "final_reaudit_state": "PENDING",
+      "policy_parity": { "status": "PROVED_EXISTING_POLICY_RESTORED", "before_policy": "signed non-charge recovery requires the complete signed pre-signature before strict cardinality", "before_runtime_divergence": "ordinary same-economic-key components could be counted before that signature and falsely reject valid Workbench source", "after_runtime": "the same pre-existing signature rule is evaluated before cardinality; amounts, selection and recovery economics are unchanged", "evidence": "01092026_1648 signed classifier rollback verifier plus installed classifier identity", "forbidden_surface_delta": [] }
+    },
+    {
+      "id": "F2", "owner": "H1", "discovery_owner": "H1_AUDIT", "correction_owner": "H1", "count_bucket": "H1_OWNED_CORRECTION_NEW_THIS_ITERATION", "newly_discovered_by_h1_current_iteration": true, "classification": "DETERMINISTIC_ERROR_CLASSIFICATION", "proof": "SOURCE_PROVED", "correction": "LOCAL_PASS_AWAITING_RELEASE", "current_status": "LOCAL_PASS_NOT_INSTALLED_FINAL_COMBINED_REAUDIT_OPEN", "local_pass": true, "installed_pass": false, "final_reaudit_state": "PENDING",
+      "policy_parity": { "status": "LOCAL_RUNTIME_PASS_AWAITING_RELEASE", "before_policy": "existing payment policy remains authoritative when a source-stage execution error is classified", "before_runtime_divergence": "the failure envelope did not reliably preserve the deterministic classification", "after_runtime": "only causal error metadata is normalized", "evidence": "01092026_1927 exact before/after policy projection", "forbidden_surface_delta": [] }
+    },
+    {
+      "id": "F3", "owner": "H1", "discovery_owner": "H1_AUDIT", "correction_owner": "H1", "count_bucket": "H1_OWNED_CORRECTION_NEW_THIS_ITERATION", "newly_discovered_by_h1_current_iteration": true, "classification": "CANDIDATE_STATE_VOCABULARY", "proof": "SOURCE_PROVED", "correction": "LOCAL_PASS_AWAITING_RELEASE", "current_status": "LOCAL_PASS_NOT_INSTALLED_FINAL_COMBINED_REAUDIT_OPEN", "local_pass": true, "installed_pass": false, "final_reaudit_state": "PENDING",
+      "policy_parity": { "status": "LOCAL_RUNTIME_PASS_AWAITING_RELEASE", "before_policy": "the existing failed-close owner uses Candidate state FAILED", "before_runtime_divergence": "one branch attempted the invalid ERROR literal", "after_runtime": "the branch uses the existing FAILED execution-state vocabulary without changing eligibility or economics", "evidence": "01092026_1927 exact before/after policy projection", "forbidden_surface_delta": [] }
+    },
+    {
+      "id": "F4", "owner": "H1", "discovery_owner": "H1_AUDIT", "correction_owner": "H1", "count_bucket": "H1_OWNED_CORRECTION_NEW_THIS_ITERATION", "newly_discovered_by_h1_current_iteration": true, "classification": "FIRST_CAUSE_RETENTION", "proof": "SOURCE_AND_INCIDENT_PROVED", "correction": "LOCAL_PASS_AWAITING_RELEASE", "current_status": "LOCAL_PASS_NOT_INSTALLED_FINAL_COMBINED_REAUDIT_OPEN", "local_pass": true, "installed_pass": false, "final_reaudit_state": "PENDING",
+      "policy_parity": { "status": "LOCAL_RUNTIME_PASS_AWAITING_RELEASE", "before_policy": "payment policy is independent of lease/exhaustion diagnostic ordering", "before_runtime_divergence": "a later lease label could mask the earliest deterministic cause", "after_runtime": "the earliest cause is retained while the latest operational label remains visible", "evidence": "01092026_1927 lease-exhaustion first-cause fixture and exact before/after policy projection", "forbidden_surface_delta": [] }
+    },
+    {
+      "id": "F5", "owner": "H1", "discovery_owner": "H1_AUDIT", "correction_owner": "H1", "count_bucket": "H1_OWNED_CORRECTION_NEW_THIS_ITERATION", "newly_discovered_by_h1_current_iteration": true, "classification": "DETERMINISTIC_SUCCESSOR_FENCE", "proof": "SOURCE_PROVED", "correction": "LOCAL_PASS_AWAITING_RELEASE", "current_status": "LOCAL_PASS_NOT_INSTALLED_FINAL_COMBINED_REAUDIT_OPEN", "local_pass": true, "installed_pass": false, "final_reaudit_state": "PENDING",
+      "policy_parity": { "status": "LOCAL_RUNTIME_PASS_AWAITING_RELEASE", "before_policy": "unchanged deterministic source evidence must fail closed; genuine changed source must use the existing canonical successor owner", "before_runtime_divergence": "unchanged deterministic failures could create a lineage of fresh jobs", "after_runtime": "only unchanged deterministic retries are suppressed; a real source-authority change still creates exactly one canonical successor", "evidence": "01092026_1927 no-successor/replay/genuine-change fixtures and exact before/after policy projection", "forbidden_surface_delta": [] }
+    },
+    {
+      "id": "F6", "owner": "H1", "discovery_owner": "H1_AUDIT", "correction_owner": "H1", "count_bucket": "H1_OWNED_CORRECTION_NEW_THIS_ITERATION", "newly_discovered_by_h1_current_iteration": true, "classification": "RELEASE_EXPORTER_PORTABILITY", "proof": "PG17_PG18_PROVED", "correction": "LOCAL_PASS_AWAITING_RELEASE", "current_status": "LOCAL_PASS_NOT_INSTALLED_FINAL_COMBINED_REAUDIT_OPEN", "local_pass": true, "installed_pass": false, "final_reaudit_state": "PENDING",
+      "policy_parity": { "status": "PG17_PG18_STRUCTURAL_PASS_AWAITING_RELEASE", "before_policy": "NOT NULL enforceability is sealed by columns[].not_null", "before_runtime_divergence": "PostgreSQL 18 duplicated ordinary NOT NULL metadata as relation constraint type n", "after_runtime": "only the duplicate representation is excluded; enforceability and all business definitions remain identical", "evidence": "dual-version exact-contract comparison with zero relation/economic delta beyond intended H1 routine hashes", "forbidden_surface_delta": [] }
+    },
+    {
+      "id": "F7", "owner": "H1", "discovery_owner": "H1_AUDIT", "correction_owner": "H1", "count_bucket": "H1_OWNED_CORRECTION_NEW_THIS_ITERATION", "newly_discovered_by_h1_current_iteration": true, "classification": "RELEASE_CLOSURE_ORDERING", "proof": "PG17_PG18_PROVED", "correction": "LOCAL_PASS_AWAITING_RELEASE", "current_status": "LOCAL_PASS_NOT_INSTALLED_FINAL_COMBINED_REAUDIT_OPEN", "local_pass": true, "installed_pass": false, "final_reaudit_state": "PENDING",
+      "policy_parity": { "status": "PG17_PG18_RUNTIME_PASS_AWAITING_RELEASE", "before_policy": "the five established final Banking authorities and their existing economics remain final", "before_runtime_divergence": "a transitive historical replay could leave those existing authorities stale", "after_runtime": "the existing final closure is replayed after the historical umbrella and restores byte-identical current owners", "evidence": "dual-version NEW/UPGRADE/first-use/idempotency proof plus exact five-definition hash equality", "forbidden_surface_delta": [] }
+    },
+    {
+      "id": "F8", "owner": "H2", "discovery_owner": "H1_AUDIT", "correction_owner": "H2", "count_bucket": "EXTERNAL_H2_OWNED_BLOCKER_DISCOVERED_BY_H1", "newly_discovered_by_h1_current_iteration": true, "classification": "RELEASE_VERIFIER_PORTABILITY", "proof": "H2_PG17_PG18_LOCAL_PASS", "correction": "H2_FIXED_LOCAL_PASS_NOT_INSTALLED", "current_status": "EXTERNAL_H2_FIXED_LOCAL_PASS_NOT_INSTALLED_FINAL_RERUN_OPEN", "local_pass": true, "installed_pass": false, "final_reaudit_state": "PENDING",
+      "policy_parity": { "status": "EXTERNAL_H2_LOCAL_PASS_NOT_INSTALLED", "before_policy": "unchanged", "before_runtime_divergence": "verification portability only", "after_runtime": "the H2-owned release-engine attestation accepts the approved database-name contexts and rejects every unapproved context without changing financial or runtime owners", "evidence": "PG17 and PG18 canonical NEW, alternate-name NEW-attested and managed-identity UPGRADE 3/3 each; 22/22 fail-closed contexts; 2/2 collision negatives; all eight synthetic identity families absent after rollback; H2 issue-ledger SHA-256 81f05b74091aa1873ddd6ef834644c790e1cd492cca8426c827f96650102dd2b", "forbidden_surface_delta": [] }
+    }
+  ],
+  "finding_count_model": {
+    "h1_audit_issue_rows_total": 8,
+    "h1_audit_issue_ids": ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8"],
+    "preexisting_sealed_findings_registered_at_audit_start": 1,
+    "preexisting_sealed_finding_ids": ["F1"],
+    "new_findings_discovered_by_h1_current_iteration": 7,
+    "new_findings_discovered_by_h1_ids": ["F2", "F3", "F4", "F5", "F6", "F7", "F8"],
+    "h1_owned_corrections_total": 7,
+    "h1_owned_correction_ids": ["F1", "F2", "F3", "F4", "F5", "F6", "F7"],
+    "h1_owned_corrections_local_or_installed_pass": 7,
+    "h1_owned_corrections_installed_pass": 1,
+    "h1_owned_corrections_installed_pass_ids": ["F1"],
+    "h1_owned_corrections_local_only_pass": 6,
+    "h1_owned_corrections_local_only_pass_ids": ["F2", "F3", "F4", "F5", "F6", "F7"],
+    "external_h2_owned_blockers_total": 1,
+    "external_h2_owned_blocker_ids": ["F8"],
+    "open_issue_rows_total": 7,
+    "open_issue_ids": ["F2", "F3", "F4", "F5", "F6", "F7", "F8"],
+    "final_reaudit_pass_total": 0,
+    "prior_7_to_8_discrepancy": "Seven was the H1-owned correction count F1-F7. Eight was the complete H1 audit issue registry F1-F8. The later dashboard incorrectly called all eight new H1 findings: F1 was a pre-existing sealed installed finding registered at audit start, while F8 was newly discovered by H1 but assigned to H2 for correction. These dimensions must never be interchanged."
+  },
+  "measured_baselines": {
+    "sealed_incident": {
+      "session_id": "42751f42-a7e7-458f-9464-724d9deda455",
+      "deterministic_attempts": 7,
+      "deterministic_attempt_elapsed_seconds_min": 0.8,
+      "deterministic_attempt_elapsed_seconds_max": 1.0,
+      "claimed_attempt_lease_seconds": 25,
+      "cancellation_grace_seconds": 15,
+      "first_browser_observation_seconds": 20,
+      "first_browser_observation_was_acceptance": false
+    },
+    "acceptance_rule": "Record exact route, database, Worker and browser timings independently. Compare with the sealed observations and fail on unexplained regression; do not invent a new numeric policy threshold. A DURABLY_QUEUED response or the first stale browser observation is never success evidence."
+  },
+  "mutation_summary": {
+    "operators_total": 18,
+    "operators_killed": 18,
+    "operators_surviving": 0,
+    "scope": "Thirteen H1 causal fail-job, claim-start and deterministic-successor-fence operators plus five exact before/after payment-policy-parity oracle operators; F6/F7 guards are recorded separately and are not double-counted."
+  },
+  "certification_field_coverage": {
+    "status": "REQUIRED_FOR_SEALED_HANDOFF_NOT_YET_INSTALLED",
+    "required_groups": [
+      "session_revision_progress_publication_identity",
+      "complete_ordered_selected_constituents",
+      "candidate_pay_channel_partitions",
+      "canonical_ex_vat_and_source_reservation_amounts",
+      "prior_payment_supersession_and_recovery_headroom",
+      "all_same_key_signed_match_and_decisive_evidence_counts_ids_digests",
+      "ready_action_required_blocked_disjointness_and_exclusions",
+      "draft_readiness",
+      "source_installed_worker_frontend_identities",
+      "before_after_existing_payment_policy_parity",
+      "overall_canonical_digest"
+    ],
+    "consumer_owner": "HANDOVER_2",
+    "consumer_must_not_reconstruct_selection": true
+  },
+  "external_dependencies": [
+    { "id": "H2-A", "owner": "H2_OR_PARENT", "status": "OPEN", "name": "bulk_authorise_dataset_v1 source-owner split" },
+    { "id": "H2-B", "owner": "H2_OR_PARENT", "status": "OPEN", "name": "Banking source test still expects Candidate named-security 122/e82084 while shared 12ec verifier seals 124/390cec" },
+    { "id": "H2-F010", "owner": "H2", "status": "OPEN", "name": "Draft selection cardinality, compaction, scope-seed and downstream finalizer finance-reservation cardinality boundary" },
+    { "id": "H2-SEALED-RATE", "owner": "H2", "status": "LOCAL_PASS_UNMERGED", "name": "sealed-rate verification artifact reconciliation" },
+    { "id": "H2-F012", "owner": "H2", "status": "FIXED_LOCAL_PASS_NOT_INSTALLED_FINAL_OPEN", "name": "release-verifier database-name portability", "issue_ledger_sha256": "81f05b74091aa1873ddd6ef834644c790e1cd492cca8426c827f96650102dd2b", "dual_engine_proof": "PG17_AND_PG18_CANONICAL_NEW_3_OF_3_ALTERNATE_NAME_NEW_ATTESTED_3_OF_3_MANAGED_IDENTITY_UPGRADE_3_OF_3_FAIL_CLOSED_22_OF_22_COLLISION_NEGATIVES_2_OF_2_ROLLBACK_CLEAN" },
+    {
+      "id": "H2-F013",
+      "owner": "H2",
+      "status": "PROVISIONAL_INTERFACE_DIVERGENCE_PROOF_COMPLETE_FINAL_DEFECT_VERDICT_OPEN",
+      "name": "Draft finance category routing handoff from allocation seed to INSERT_ITEMS",
+      "proved_deliberate_translations": [
+        "visible PAYMENT_ADVANCE_REPAYMENT becomes hidden recovery-template and frozen Draft-item LOAN_REPAYMENT",
+        "visible MANUAL_CREDIT_ADJUSTMENT_PAYMENT becomes frozen MANUAL_CREDIT_PAYOUT"
+      ],
+      "proved_policy_boundaries": [
+        "PAYE taxable components use GROSS_ADD/GROSS_DEDUCT inside payroll net",
+        "PAYE fixed or non-taxable components use NET_ADD/NET_DEDUCT after imported PAYE net",
+        "Umbrella owns separate ex-VAT/VAT/channel/payee handling and fixed or non-taxable components are VAT-zero"
+      ],
+      "prechange_fixture_interpretation": "The 2313 fixture is downstream-only evidence: it manually inserts Candidate scope and allocation rows and begins at INSERT_ITEMS. It does not execute canonical preview, VALIDATE_SESSION or prepare, scope seed, or allocation seed, so it cannot be final defect authority.",
+      "deterministic_runtime_fixture": "tests/01092026_2230_banking_pay_draft_finance_category_handoff_prechange_verification.sql",
+      "deterministic_runtime_fixture_sha256": "5668d7cc05164ddb673ccfc90230c1cf09b2b90e9db6d80b76dc1e71bb4c20ea",
+      "category_end_to_end_fixture": "tests/01092026_2313_banking_pay_draft_finance_category_end_to_end_verification.sql",
+      "category_end_to_end_fixture_sha256": "ba32d34f591277cd4a91e1e892eb265cfbb9fcfb2e4092f19c174dece7eec975",
+      "runtime_proof": "PG17.11_AND_PG18.6_EACH_20_OF_20_ROLLBACK_ONLY_DOWNSTREAM_PHASE_RESPONSE_LOSS_REPLAY_PASS",
+      "downstream_phase_proved_correct_categories": {
+        "OVERPAYMENT_RECOVERY": 4
+      },
+      "provisional_interface_divergence_categories": {
+        "MANUAL_DEBT_RECOVERY": 4,
+        "PAYMENT_ADVANCE_REPAYMENT": 2,
+        "LOAN_PAYOUT": 2,
+        "UNDERPAYMENT_PAYMENT": 4,
+        "MANUAL_CREDIT_ADJUSTMENT_PAYMENT": 4
+      },
+      "final_proved_defect_categories": {},
+      "observed_downstream_failure_shape": "Each manually seeded Candidate scope/allocation variant reaches INSERT_ITEMS and returns MALFORMED_PREVIEW_ALLOCATION_ROW_NOT_DRAFTABLE, with zero Draft items and reservations and unchanged case state.",
+      "missing_end_to_end_phases": [
+        "canonical_preview",
+        "VALIDATE_SESSION_and_prepare",
+        "scope_seed",
+        "allocation_seed"
+      ],
+      "required_final_fixture_path": "canonical_preview_to_session_prepare_to_scope_seed_to_allocation_seed_to_INSERT_ITEMS_to_finance_to_finalizer",
+      "classification_authority": "FINAL_DEFECT_VERDICT_REQUIRES_REAL_COMPLETE_END_TO_END_FIXTURE",
+      "allowed_classifications": [
+        "PROVED_DEFECT",
+        "SOURCE_PROVED_DIVERGENCE_WITH_POLICY_PROOF_OPEN",
+        "DELIBERATE_DISTINCT_TREATMENT",
+        "NOT_PRODUCTION_REACHABLE"
+      ],
+      "replacement_correctness": "NOT_ESTABLISHED_NO_RUNTIME_CORRECTION_AUTHORISED",
+      "runtime_edit_authority": "NOT_AUTHORISED_PENDING_COMPLETE_END_TO_END_DEFECT_PROOF_AND_PARENT_DECISION",
+      "provisional_candidate_owner_boundary": "OBSOLETE_ALL_EIGHT_PROPOSAL_EXCLUDED_UNLESS_NEW_CATEGORY_SPECIFIC_PROOF_AND_PARENT_RENEWAL_ESTABLISH_A_DIFFERENT_CORRECTION",
+      "obsolete_provisional_candidate_owner_path": "supabase/repeatable/01092026_2245_banking_pay_draft_finance_category_handoff_v1.sql",
+      "obsolete_provisional_candidate_verifier_path": "supabase/verification/01092026_2246_banking_pay_draft_finance_category_handoff_verification.sql",
+      "obsolete_provisional_candidate_runtime_fixture_path": "tests/01092026_2247_banking_pay_draft_finance_category_handoff_runtime_verification.sql",
+      "cross_task_order_guard": "tests/fixtures/banking-pay-h1-h2-f013-release-order-v1.json"
+    },
+    {
+      "id": "H2-F013B",
+      "owner": "H2",
+      "status": "CLOSED_NOT_DEFECT_DELIBERATE_STAGED_VOCABULARY",
+      "name": "Rejected LOAN_REPAYMENT visible-input alias hypothesis",
+      "decision": "Visible Workbench repayment is PAYMENT_ADVANCE_REPAYMENT; LOAN_REPAYMENT is deliberately the hidden recovery-template and frozen Draft-item vocabulary, with settlement, reporting and snooze translations between layers.",
+      "proof": "current source, installed Miget definition, history including b678249e, and Bible operating model",
+      "rejected_change": "Stage 16C equality-to-IN widening",
+      "runtime_edit_authority": "WITHDRAWN_AND_PROHIBITED",
+      "future_combined_candidate_rule": "No 01092026_2250 owner, verifier, contract entry or manifest entry may be included",
+      "historical_owner_path": "supabase/repeatable/21072026_1235_49_pay_batch_apply_finance_adjustments.sql",
+      "historical_owner_sha256": "9171d175ea23a783f34c45cdbd42559062496bfa8d9daeac48dc9cb20abe4bd4",
+      "preserved_authorities": "finance equations, staged vocabulary translations, state transitions, defaults, owner, ACL, configuration and security remain unchanged",
+      "obsolete_experimental_coordination_evidence": "The deleted H1 f013b order-guard fixture was never installed or committed and is excluded from the final candidate; this append-only decision row preserves why it was rejected."
+    }
+  ],
+  "external_h2_catalogue_status": {
+    "finite_production_reachable_classes": 54,
+    "executable_bound_classes": 35,
+    "open_classes": 19,
+    "current_counts_status": "F013_DOWNSTREAM_INTERFACE_DIVERGENCE_EVIDENCE_RECONCILED_FINAL_DEFECT_VERDICT_OPEN",
+    "h2_evidence_score": 25,
+    "latest_operating_model_focused_tests_pass": 15,
+    "latest_combined_tests_pass": 74,
+    "latest_combined_tests_fail": 0,
+    "latest_deliberate_todo_gates": 5,
+    "latest_environment_only_skips": 0,
+    "latest_structural_skips": 1,
+    "latest_complete_javascript_pass": 1106,
+    "f013_dual_engine_variants_total": 20,
+    "f013_downstream_phase_proved_correct_variants": 4,
+    "f013_provisional_interface_divergence_variants": 16,
+    "f013_final_proved_defect_variants": 0,
+    "f013_downstream_phase_proved_correct_category_rows": 1,
+    "f013_provisional_interface_divergence_rows": 5,
+    "f013_final_proved_defect_rows": 0,
+    "f013_visible_policy_decision_rows": 0,
+    "f013_visible_policy_decision_status": "FINAL_DEFECT_VERDICT_PENDING_COMPLETE_CANONICAL_END_TO_END_FIXTURE_NO_RUNTIME_CORRECTION_AUTHORISED",
+    "f013b_status": "PASS_NO_CORRECTION_REQUIRED_DELIBERATE_STAGED_VOCABULARY",
+    "stable_combined_manifest_signal": false,
+    "effect_on_h1_catalogue": "NONE_H1_REMAINS_FROZEN_AT_18"
+  },
+  "clean_post_correction_audits_since_last_finding": 0,
+  "future_hardening": []
+}
+

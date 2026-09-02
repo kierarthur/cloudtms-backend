@@ -120,3 +120,29 @@ test('exhausted delivered attempts compose the existing repair owner and prove p
   assert.match(recovery, /v_terminal_candidate_state_present:=FOUND/);
   assert.doesNotMatch(recovery, /TERMINAL_CANDIDATE_STATE_MISSING/);
 });
+
+test('lease recovery preserves the earliest concrete failure through retry and exhaustion', () => {
+  const recoveryStart = claimStart.indexOf('Small indexed lease-recovery page');
+  const normalClaimStart = claimStart.indexOf(
+    "v_source_build_run_id := (v_job.payload_json->>'source_build_run_id')::uuid",
+  );
+  const recovery = claimStart.slice(recoveryStart, normalClaimStart);
+
+  assert.match(recovery, /lease_expires_at_utc\+interval '15 seconds'/);
+  assert.match(recovery, /result_code='LEASE_EXPIRED_AFTER_CANCELLATION_GRACE'/);
+  assert.match(recovery, /error_json=jsonb_build_object\(\s*'code','LEASE_EXPIRED_AFTER_CANCELLATION_GRACE'/);
+  assert.match(recovery, /SELECT attempt\.error_json,attempt\.attempt_number/);
+  assert.match(recovery, /ORDER BY attempt\.attempt_number,attempt\.started_at_utc,attempt\.id/);
+  assert.match(recovery, /'causal_contract_version','WORKBENCH_FIRST_DIVERGENT_CAUSE_V1'/);
+  assert.match(recovery, /'first_divergent_cause',v_recovery_first_divergent_cause/);
+  assert.match(recovery, /'first_divergent_attempt_number',v_recovery_first_divergent_attempt_number/);
+  assert.match(recovery, /'latest_observed_failure',v_recovery_latest_observed_failure/);
+  assert.match(recovery, /'latest_attempt_number',v_recovery\.attempt_count/);
+  assert.match(recovery, /'code','DELIVERED_ATTEMPT_EXPIRED'/);
+  assert.match(recovery, /'code','DELIVERED_ATTEMPT_EXHAUSTED'/);
+  assert.match(recovery, /last_error_json=v_recovery_error_json/);
+  assert.match(recovery, /failure_json=v_recovery_error_json/);
+  assert.match(recovery, /v_recovery_error_json-'code'-'message'-'sqlstate'/);
+  assert.match(recovery, /DELIVERED_ATTEMPT_EXPIRED_REQUEUED/);
+  assert.match(recovery, /PERFORM public\._audit_insert/);
+});

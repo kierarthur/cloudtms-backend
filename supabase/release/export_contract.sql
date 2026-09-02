@@ -102,6 +102,44 @@ relation_contract as (
         )
         from pg_catalog.pg_constraint con
         where con.conrelid = c.oid
+          -- PostgreSQL 18 also represents an ordinary column NOT NULL
+          -- specification as a relation pg_constraint row (contype = 'n').
+          -- The portable contract already seals that enforceable authority in
+          -- columns[].not_null; it deliberately does not treat the generated
+          -- constraint name as separate application authority.  Exclude only
+          -- the exact ordinary duplicate shape.  Any future or malformed
+          -- NOT NULL constraint metadata remains visible and therefore causes
+          -- contract drift rather than being silently normalised away.
+          and not (
+            con.contype = 'n'
+            and con.contypid = 0::oid
+            and con.conindid = 0::oid
+            and con.conparentid = 0::oid
+            and con.confrelid = 0::oid
+            and not con.condeferrable
+            and not con.condeferred
+            and con.convalidated
+            and con.conislocal
+            and con.coninhcount = 0
+            and not con.connoinherit
+            and con.conkey is not null
+            and pg_catalog.cardinality(con.conkey) = 1
+            and con.confkey is null
+            and con.conpfeqop is null
+            and con.conppeqop is null
+            and con.conffeqop is null
+            and con.conexclop is null
+            and con.conbin is null
+            and exists (
+              select 1
+              from pg_catalog.pg_attribute not_null_column
+              where not_null_column.attrelid = con.conrelid
+                and not_null_column.attnum = con.conkey[1]
+                and not_null_column.attnum > 0
+                and not not_null_column.attisdropped
+                and not_null_column.attnotnull
+            )
+          )
       ), '[]'::jsonb),
       'indexes', coalesce((
         select jsonb_agg(

@@ -43,46 +43,75 @@ DECLARE
   v_settlement_before bigint;
   v_remittance_before bigint;
 BEGIN
-  WITH expected(identity,definition_sha256) AS (
+  WITH expected(identity,definition_sha256,expected_config) AS (
     VALUES
-      ('public._pay_active_settled_components(uuid[])'::regprocedure,NULL::text),
-      ('public.bulk_authorise_dataset_v1(jsonb)'::regprocedure,NULL::text),
-      ('public.bulk_authorise_row_context_v1(jsonb)'::regprocedure,NULL::text),
-      ('public.bulk_process_dataset_v1(jsonb)'::regprocedure,NULL::text),
-      ('public.bulk_process_row_context_v1(jsonb)'::regprocedure,NULL::text),
-      ('public.bulk_timesheet_row_patch_v1(jsonb)'::regprocedure,NULL::text),
+      ('public._pay_active_settled_components(uuid[])'::regprocedure,NULL::text,NULL::text[]),
+      ('public.bulk_authorise_dataset_v1(jsonb)'::regprocedure,
+       '930d55e60b1599fcdba40ab7b5308ba5991a666f7a92b23f39d8c33a481af5e3'::text,
+       ARRAY['search_path=public']::text[]),
+      ('public.bulk_authorise_row_context_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.bulk_process_dataset_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.bulk_process_row_context_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.bulk_timesheet_row_patch_v1(jsonb)'::regprocedure,NULL::text,NULL::text[]),
       ('public.contract_week_manual_upsert_atomic(uuid,uuid,jsonb,jsonb,jsonb,jsonb,jsonb,uuid,boolean,timestamptz,text,jsonb)'::regprocedure,
-       '89543b82378468b1ae43534f5a4b1a200ffc60ffbef76196398b7f7d6521792f'::text),
-      ('public.pay_preview_candidate_build_canonical_lines(jsonb,uuid)'::regprocedure,NULL::text),
-      ('public.pay_preview_candidate_build_finance_case_baseline(jsonb,uuid)'::regprocedure,NULL::text),
-      ('public.pay_timesheet_summary_pay_state_refresh_trigger()'::regprocedure,NULL::text),
-      ('public.pay_workbench_contract_client_dirty_fanout_chunk(uuid,jsonb,integer)'::regprocedure,NULL::text),
-      ('public.pay_workbench_dirty_apply_jobs_chunk(integer,timestamptz,uuid,uuid,text,integer)'::regprocedure,NULL::text),
-      ('public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb)'::regprocedure,NULL::text),
-      ('public.pay_workbench_enqueue_stage_continuation(uuid,uuid,text,jsonb,uuid,jsonb,uuid,text,integer,integer)'::regprocedure,NULL::text),
-      ('public.pay_workbench_repair_invalid_source_build_poison(uuid,uuid,integer,timestamptz,text)'::regprocedure,NULL::text),
-      ('public.pay_workbench_session_clear_case_resolution(uuid,uuid,jsonb)'::regprocedure,NULL::text),
-      ('public.pay_workbench_session_clone_eligibility_v1(uuid,uuid,uuid,jsonb)'::regprocedure,NULL::text),
+       '89543b82378468b1ae43534f5a4b1a200ffc60ffbef76196398b7f7d6521792f'::text,
+       ARRAY['search_path=public']::text[]),
+      ('public.pay_preview_candidate_build_canonical_lines(jsonb,uuid)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_preview_candidate_build_finance_case_baseline(jsonb,uuid)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_timesheet_summary_pay_state_refresh_trigger()'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_workbench_contract_client_dirty_fanout_chunk(uuid,jsonb,integer)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_workbench_dirty_apply_jobs_chunk(integer,timestamptz,uuid,uuid,text,integer)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_workbench_enqueue_candidate_refresh(uuid,uuid,text,uuid,jsonb)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_workbench_enqueue_stage_continuation(uuid,uuid,text,jsonb,uuid,jsonb,uuid,text,integer,integer)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_workbench_repair_invalid_source_build_poison(uuid,uuid,integer,timestamptz,text)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_workbench_session_clear_case_resolution(uuid,uuid,jsonb)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.pay_workbench_session_clone_eligibility_v1(uuid,uuid,uuid,jsonb)'::regprocedure,NULL::text,NULL::text[]),
       ('public.pay_workbench_session_replay_replaced_queue_v1(uuid,uuid,text,jsonb)'::regprocedure,
-       '363aeab20aed70b8396793808f9a2263766e984d66914317bdf0a767e6e0f360'::text),
+       '363aeab20aed70b8396793808f9a2263766e984d66914317bdf0a767e6e0f360'::text,
+       ARRAY['search_path=""']::text[]),
       ('public.pay_workbench_session_set_selected_rows(uuid,jsonb,uuid)'::regprocedure,
-       '7d622194f7bca877bf8420cb6f10f9ad46a69bad118c5f8fb9ed16810492d98c'::text),
-      ('public.pay_workbench_worker_drain_chunk(integer,timestamptz,uuid,uuid,text[],text,integer)'::regprocedure,NULL::text),
-      ('public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamptz)'::regprocedure,NULL::text),
-      ('public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamptz,text)'::regprocedure,NULL::text),
-      ('public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text)'::regprocedure,NULL::text),
-      ('public.timesheet_lifecycle_guard_signature_v1(uuid,uuid,boolean)'::regprocedure,NULL::text),
+       '7d622194f7bca877bf8420cb6f10f9ad46a69bad118c5f8fb9ed16810492d98c'::text,
+       ARRAY['search_path=public']::text[]),
+      ('public.pay_workbench_worker_drain_chunk(integer,timestamptz,uuid,uuid,text[],text,integer)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.timesheet_authorise_bulk_atomic(jsonb,uuid,timestamptz)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.timesheet_authorise_generic_atomic(uuid,uuid,uuid,timestamptz,text)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.timesheet_daily_manual_process_atomic(uuid,uuid,uuid,jsonb,jsonb,timestamptz,text)'::regprocedure,NULL::text,NULL::text[]),
+      ('public.timesheet_lifecycle_guard_signature_v1(uuid,uuid,boolean)'::regprocedure,NULL::text,NULL::text[]),
       ('public.timesheet_qr_send_enqueue_v1(uuid,uuid,uuid,text,timestamptz)'::regprocedure,
-       '090fcbd7a66ade81f107635c360a038a514a5c26358c0b4aa716bdea91245347'::text)
+       '090fcbd7a66ade81f107635c360a038a514a5c26358c0b4aa716bdea91245347'::text,
+       ARRAY['search_path=public']::text[])
   ), actual AS (
     SELECT
       expected.identity,
       expected.definition_sha256,
+      expected.expected_config,
       pg_catalog.encode(extensions.digest(
         pg_catalog.convert_to(pg_catalog.pg_get_functiondef(expected.identity::oid),'UTF8'),
         'sha256'
       ),'hex') AS actual_definition_sha256,
       pg_catalog.pg_get_userbyid(proc.proowner) AS owner_name,
+      proc.proconfig AS actual_config,
+      COALESCE((
+        SELECT pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object(
+          'grantee',CASE
+            WHEN function_acl.grantee=proc.proowner THEN 'OWNER'
+            WHEN function_acl.grantee=0 THEN 'PUBLIC'
+            ELSE pg_catalog.pg_get_userbyid(function_acl.grantee)
+          END,
+          'privilege',function_acl.privilege_type,
+          'grantable',function_acl.is_grantable
+        ) ORDER BY
+          CASE
+            WHEN function_acl.grantee=proc.proowner THEN 'OWNER'
+            WHEN function_acl.grantee=0 THEN 'PUBLIC'
+            ELSE pg_catalog.pg_get_userbyid(function_acl.grantee)
+          END COLLATE "C",
+          function_acl.privilege_type COLLATE "C",
+          function_acl.is_grantable)
+        FROM pg_catalog.aclexplode(COALESCE(
+          proc.proacl,pg_catalog.acldefault('f'::"char",proc.proowner)
+        )) AS function_acl
+      ),'[]'::jsonb) AS actual_acl,
       pg_catalog.has_function_privilege('service_role',expected.identity::oid,'EXECUTE') AS service_execute,
       pg_catalog.has_function_privilege('anon',expected.identity::oid,'EXECUTE') AS anon_execute,
       pg_catalog.has_function_privilege('authenticated',expected.identity::oid,'EXECUTE') AS authenticated_execute
@@ -94,6 +123,9 @@ BEGIN
     'expected_definition_sha256',definition_sha256,
     'actual_definition_sha256',actual_definition_sha256,
     'owner_name',owner_name,
+    'expected_config',expected_config,
+    'actual_config',actual_config,
+    'actual_acl',actual_acl,
     'service_execute',service_execute,
     'anon_execute',anon_execute,
     'authenticated_execute',authenticated_execute
@@ -101,7 +133,16 @@ BEGIN
   INTO v_authority_contract_mismatch
   FROM actual
   WHERE (definition_sha256 IS NOT NULL AND actual_definition_sha256 IS DISTINCT FROM definition_sha256)
+     OR (expected_config IS NOT NULL AND actual_config IS DISTINCT FROM expected_config)
      OR owner_name IS DISTINCT FROM current_user
+     OR actual_acl IS DISTINCT FROM pg_catalog.jsonb_build_array(
+          pg_catalog.jsonb_build_object(
+            'grantee','OWNER','privilege','EXECUTE','grantable',false
+          ),
+          pg_catalog.jsonb_build_object(
+            'grantee','service_role','privilege','EXECUTE','grantable',false
+          )
+        )
      OR service_execute IS NOT TRUE
      OR anon_execute IS TRUE
      OR authenticated_execute IS TRUE;

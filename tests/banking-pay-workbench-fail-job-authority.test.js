@@ -29,6 +29,7 @@ test('source-build retry cannot leave a private STARTED attempt behind', () => {
 
 test('deterministic semantic publication failure terminalises once and proves the replacement owner atomically', () => {
   assert.match(canonical, /CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED/);
+  assert.match(canonical, /PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID/);
   assert.match(canonical, /DETERMINISTIC_STAGE_ERROR/);
   assert.match(canonical, /pay_workbench_repair_orphaned_pending_source_build/);
   assert.match(canonical, /TERMINAL_SOURCE_STAGE_FAILURE_ATOMIC_REPAIR/);
@@ -39,6 +40,39 @@ test('deterministic semantic publication failure terminalises once and proves th
   assert.ok(
     canonical.indexOf('pg_advisory_xact_lock') < canonical.indexOf('WHERE id=p_job_id FOR UPDATE'),
     'candidate serial ownership must precede the source job row lock',
+  );
+});
+
+test('signed recovery evidence invalid is classified before retry eligibility is evaluated', () => {
+  const classifier = canonical.indexOf("'PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID'");
+  const retryDecision = canonical.indexOf("COALESCE(v_attempt_count,0)<COALESCE(v_max_attempts,8)");
+  assert.ok(classifier >= 0, 'the established deterministic classifier code must be explicit');
+  assert.ok(retryDecision > classifier, 'deterministic classification must precede the retry branch');
+});
+
+test('fail-job preserves the first divergent attempt without changing public result codes', () => {
+  const attemptTerminal = canonical.indexOf(
+    "attempt_status=CASE WHEN v_is_obsolete THEN 'OBSOLETE' ELSE 'FAILED' END",
+  );
+  const causalSelection = canonical.indexOf('SELECT attempt.error_json, attempt.attempt_number');
+  assert.ok(attemptTerminal >= 0);
+  assert.ok(
+    causalSelection > attemptTerminal,
+    'the current attempt must be terminal and visible before ordered causal selection',
+  );
+  assert.match(canonical, /ORDER BY attempt\.attempt_number,attempt\.started_at_utc,attempt\.id/);
+  assert.match(canonical, /'causal_contract_version','WORKBENCH_FIRST_DIVERGENT_CAUSE_V1'/);
+  assert.match(canonical, /'first_divergent_cause',v_first_divergent_cause/);
+  assert.match(canonical, /'first_divergent_attempt_number',v_first_divergent_attempt_number/);
+  assert.match(canonical, /'latest_observed_failure'/);
+  assert.match(canonical, /'latest_attempt_number',v_attempt_count/);
+  assert.match(canonical, /last_error_json=v_effective_error_json/);
+  assert.match(canonical, /failure_json=v_effective_error_json/);
+  assert.match(canonical, /'error_json',\s*v_effective_error_json/);
+  assert.match(canonical, /SET status = 'FAILED',[\s\S]*?v_effective_error_json - 'code' - 'message' - 'sqlstate'/);
+  assert.doesNotMatch(
+    canonical.slice(0, canonical.indexOf("v_retry_after_seconds:=", attemptTerminal)),
+    /terminal_candidate_state[\s\S]*?SET status = 'ERROR'/,
   );
 });
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
@@ -315,6 +316,167 @@ test('contract export is provider and upgrade-history neutral without weakening 
   assert.match(source, /jsonb_agg\([\s\S]*case when role_name::text=current_user then 'postgres'[\s\S]*order by \(case when role_name::text=current_user then 'postgres'[\s\S]*collate "C"/);
   assert.doesNotMatch(source, /jsonb_agg\([\s\S]*role_name::text[\s\S]*order by ordinality/);
 });
+
+test('contract export normalises only the exact PostgreSQL 18 ordinary relation NOT NULL duplicate', () => {
+  const source = read('supabase/release/export_contract.sql');
+  const constraintStart = source.indexOf("'constraints', coalesce((");
+  const constraintEnd = source.indexOf("'indexes', coalesce((", constraintStart);
+  assert.notEqual(constraintStart, -1);
+  assert.notEqual(constraintEnd, -1);
+  const constraintSource = source.slice(constraintStart, constraintEnd);
+
+  assert.match(source, /columns\[\]\.not_null/);
+  assert.match(source, /does not treat the generated[\s\S]*constraint name as separate application authority/);
+  assert.match(constraintSource, /where con\.conrelid = c\.oid[\s\S]*and not \(\s*con\.contype = 'n'/);
+  for (const guard of [
+    /con\.contypid = 0::oid/,
+    /con\.conindid = 0::oid/,
+    /con\.conparentid = 0::oid/,
+    /con\.confrelid = 0::oid/,
+    /not con\.condeferrable/,
+    /not con\.condeferred/,
+    /con\.convalidated/,
+    /con\.conislocal/,
+    /con\.coninhcount = 0/,
+    /not con\.connoinherit/,
+    /con\.conkey is not null/,
+    /pg_catalog\.cardinality\(con\.conkey\) = 1/,
+    /con\.confkey is null/,
+    /con\.conpfeqop is null/,
+    /con\.conppeqop is null/,
+    /con\.conffeqop is null/,
+    /con\.conexclop is null/,
+    /con\.conbin is null/,
+    /not_null_column\.attrelid = con\.conrelid/,
+    /not_null_column\.attnum = con\.conkey\[1\]/,
+    /not not_null_column\.attisdropped/,
+    /not_null_column\.attnotnull/,
+  ]) assert.match(constraintSource, guard);
+  assert.equal((source.match(/con\.contype = 'n'/g) || []).length, 1);
+  assert.doesNotMatch(source, /server_version|server_version_num|current_setting\s*\(\s*'server_version/);
+});
+
+const portabilityPg17Url = process.env.CLOUDTMS_RELEASE_PORTABILITY_PG17_URL;
+const portabilityPg18Url = process.env.CLOUDTMS_RELEASE_PORTABILITY_PG18_URL;
+assert.equal(
+  Boolean(portabilityPg17Url),
+  Boolean(portabilityPg18Url),
+  'set both CLOUDTMS_RELEASE_PORTABILITY_PG17_URL and CLOUDTMS_RELEASE_PORTABILITY_PG18_URL, or neither',
+);
+
+if (portabilityPg17Url && portabilityPg18Url) {
+  test('PostgreSQL 17 and 18 export one identical portable relation contract with all non-NOT-NULL constraints retained', () => {
+    const psql = process.env.PSQL_BIN || 'psql';
+    const exporterPath = path.join(repoRoot, 'supabase/release/export_contract.sql').replaceAll('\\', '/');
+    const exportProbe = databaseUrl => {
+      const connection = new URL(databaseUrl);
+      assert.ok(['postgres:', 'postgresql:'].includes(connection.protocol));
+      assert.ok(['127.0.0.1', 'localhost'].includes(connection.hostname),
+        'portability runtime proof is restricted to a task-owned local PostgreSQL database');
+      const childEnv = {
+        ...process.env,
+        PGHOST: connection.hostname,
+        PGPORT: connection.port || '5432',
+        PGUSER: decodeURIComponent(connection.username || ''),
+        PGDATABASE: decodeURIComponent(connection.pathname.replace(/^\//, '')),
+      };
+      if (connection.password) childEnv.PGPASSWORD = decodeURIComponent(connection.password);
+      const output = execFileSync(psql, ['-X', '-q', '-w', '-v', 'ON_ERROR_STOP=1'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: childEnv,
+        input: `\\pset tuples_only on
+\\pset format unaligned
+begin;
+create table public.h1_release_contract_portability_parent (
+  id bigint primary key
+);
+create table public.h1_release_contract_portability_probe (
+  id bigint constraint h1_release_contract_probe_id_not_null not null,
+  parent_id bigint,
+  required_text text constraint h1_release_contract_probe_text_not_null not null,
+  optional_text text,
+  amount integer,
+  span int8range,
+  constraint h1_release_contract_probe_pk primary key (id),
+  constraint h1_release_contract_probe_unique unique (required_text),
+  constraint h1_release_contract_probe_check check (amount >= 0),
+  constraint h1_release_contract_probe_fk foreign key (parent_id)
+    references public.h1_release_contract_portability_parent (id),
+  constraint h1_release_contract_probe_exclude exclude using gist (span with &&)
+);
+create table public.h1_release_contract_portability_inherited_parent (
+  inherited_required integer not null
+);
+create table public.h1_release_contract_portability_inherited_child ()
+inherits (public.h1_release_contract_portability_inherited_parent);
+select 'H1_RAW_NOT_NULL_CONSTRAINTS=' || count(*)::text
+from pg_catalog.pg_constraint
+where conrelid = 'public.h1_release_contract_portability_probe'::regclass
+  and contype = 'n';
+select 'H1_RAW_INHERITED_NOT_NULL_CONSTRAINTS=' || count(*)::text
+from pg_catalog.pg_constraint
+where conrelid = 'public.h1_release_contract_portability_inherited_child'::regclass
+  and contype = 'n';
+\\ir '${exporterPath}'
+rollback;
+`,
+        maxBuffer: 64 * 1024 * 1024,
+      });
+      const lines = output.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+      const rawLine = lines.find(line => line.startsWith('H1_RAW_NOT_NULL_CONSTRAINTS='));
+      const rawInheritedLine = lines.find(line =>
+        line.startsWith('H1_RAW_INHERITED_NOT_NULL_CONSTRAINTS='));
+      const contractLine = lines.find(line => line.startsWith('{') && line.includes('"contract_version"'));
+      assert.ok(rawLine, 'raw NOT NULL constraint count was not emitted');
+      assert.ok(rawInheritedLine, 'raw inherited NOT NULL constraint count was not emitted');
+      assert.ok(contractLine, 'contract JSON was not emitted');
+      const contract = JSON.parse(contractLine);
+      const relation = contract.relations.find(item =>
+        item.schema === 'public' && item.name === 'h1_release_contract_portability_probe');
+      const inheritedChild = contract.relations.find(item =>
+        item.schema === 'public'
+        && item.name === 'h1_release_contract_portability_inherited_child');
+      assert.ok(relation, 'portability probe relation is absent from the contract');
+      assert.ok(inheritedChild, 'inherited NOT NULL probe relation is absent from the contract');
+      return {
+        rawNotNullConstraintCount: Number(rawLine.split('=')[1]),
+        rawInheritedNotNullConstraintCount: Number(rawInheritedLine.split('=')[1]),
+        relation,
+        inheritedChild,
+      };
+    };
+
+    const pg17 = exportProbe(portabilityPg17Url);
+    const pg18 = exportProbe(portabilityPg18Url);
+    assert.equal(pg17.rawNotNullConstraintCount, 0);
+    assert.ok(pg18.rawNotNullConstraintCount >= 2);
+    assert.deepEqual(pg18.relation, pg17.relation);
+
+    const columns = new Map(pg18.relation.columns.map(column => [column.name, column]));
+    assert.equal(columns.get('required_text')?.not_null, true);
+    assert.equal(columns.get('optional_text')?.not_null, false);
+    const constraintTypes = new Set(pg18.relation.constraints.map(constraint => constraint.type));
+    for (const type of ['c', 'f', 'p', 'u', 'x']) assert.ok(constraintTypes.has(type));
+    assert.equal(constraintTypes.has('n'), false);
+
+    assert.equal(pg17.rawInheritedNotNullConstraintCount, 0);
+    assert.equal(pg18.rawInheritedNotNullConstraintCount, 1);
+    assert.equal(
+      pg18.inheritedChild.columns.find(column => column.name === 'inherited_required')?.not_null,
+      true,
+    );
+    assert.equal(
+      pg18.inheritedChild.constraints.filter(constraint => constraint.type === 'n').length,
+      1,
+      'a PG18 inherited NOT NULL constraint is not the ordinary local duplicate and must remain visible',
+    );
+    assert.equal(
+      pg17.inheritedChild.constraints.some(constraint => constraint.type === 'n'),
+      false,
+    );
+  });
+}
 
 test('private Candidate Daily Miget policies are exact, reproducible and grant no table privilege', () => {
   const source = read('supabase/migrations/26082026_0312_private_daily_service_rls_reconciliation.sql');

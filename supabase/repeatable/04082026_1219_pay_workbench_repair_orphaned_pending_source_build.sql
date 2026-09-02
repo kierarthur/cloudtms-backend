@@ -20,7 +20,11 @@ DECLARE
   v_session public.banking_pay_workbench_sessions%ROWTYPE;
   v_scope public.banking_pay_workbench_session_scope%ROWTYPE;
   v_post_scope public.banking_pay_workbench_session_scope%ROWTYPE;
+  v_registry private.banking_pay_workbench_candidate_scope_registry%ROWTYPE;
   v_owner public.banking_pay_workbench_jobs%ROWTYPE;
+  v_owner_build private.banking_pay_workbench_economic_builds%ROWTYPE;
+  v_first_deterministic_attempt private.banking_pay_workbench_stage_attempts%ROWTYPE;
+  v_terminal_attempt private.banking_pay_workbench_stage_attempts%ROWTYPE;
   v_post_owner public.banking_pay_workbench_jobs%ROWTYPE;
   v_success public.banking_pay_workbench_jobs%ROWTYPE;
   v_active public.banking_pay_workbench_jobs%ROWTYPE;
@@ -32,6 +36,11 @@ DECLARE
   v_owner_valid boolean := false;
   v_owner_generation_obsolete boolean := false;
   v_owner_reason text := NULL::text;
+  v_current_deterministic_owner boolean := false;
+  v_first_deterministic_cause jsonb := NULL::jsonb;
+  v_first_deterministic_attempt_number integer := NULL::integer;
+  v_deterministic_cause_code text := NULL::text;
+  v_deterministic_failure_json jsonb := '{}'::jsonb;
   v_enqueue_payload jsonb := '{}'::jsonb;
   v_enqueue_result jsonb := '{}'::jsonb;
   v_success_result jsonb := '{}'::jsonb;
@@ -60,6 +69,7 @@ DECLARE
   v_candidate_failure_code text := NULL::text;
   v_candidate_failure_message text := NULL::text;
   v_candidate_unresolved_reason text := NULL::text;
+  v_failed_candidate_state_proven boolean := false;
   v_candidate_old_pending_job_id uuid := NULL::uuid;
   v_progress_recomputed boolean := false;
   v_progress_recompute_error_code text := NULL::text;
@@ -78,6 +88,9 @@ DECLARE
   v_expired_attempt_count integer:=0;
   v_expired_requeued_count integer:=0;
   v_expired_exhausted_count integer:=0;
+  v_expired_first_divergent_cause jsonb:=NULL::jsonb;
+  v_expired_first_divergent_attempt_number integer:=NULL::integer;
+  v_expired_error_json jsonb:='{}'::jsonb;
 BEGIN
   -- Recover delivered-but-uncompleted material attempts first.  Each recovery
   -- uses the candidate lock and registry/build/job/attempt lock order.
@@ -107,27 +120,65 @@ BEGIN
       WHERE id=v_expired_attempt.attempt_id FOR UPDATE;
       UPDATE private.banking_pay_workbench_stage_attempts SET attempt_status='EXPIRED',
         expired_at_utc=clock_timestamp(),result_code='LEASE_EXPIRED_AFTER_CANCELLATION_GRACE',
-        error_class='DELIVERED_ATTEMPT_EXPIRED',updated_at_utc=clock_timestamp()
+        error_class='DELIVERED_ATTEMPT_EXPIRED',error_json=jsonb_build_object(
+          'code','LEASE_EXPIRED_AFTER_CANCELLATION_GRACE'),updated_at_utc=clock_timestamp()
       WHERE id=v_expired_attempt.attempt_id AND attempt_status='STARTED'
         AND clock_timestamp()>=lease_expires_at_utc+interval '15 seconds';
       IF FOUND THEN
         v_expired_attempt_count:=v_expired_attempt_count+1;
+        v_expired_first_divergent_cause:=NULL::jsonb;
+        v_expired_first_divergent_attempt_number:=NULL::integer;
+        SELECT attempt.error_json,attempt.attempt_number
+        INTO v_expired_first_divergent_cause,v_expired_first_divergent_attempt_number
+        FROM private.banking_pay_workbench_stage_attempts AS attempt
+        WHERE attempt.job_id=v_expired_attempt.job_id
+          AND jsonb_typeof(attempt.error_json)='object'
+          AND attempt.error_json<>'{}'::jsonb
+          AND NULLIF(BTRIM(COALESCE(attempt.error_json->>'code','')),'') IS NOT NULL
+        ORDER BY attempt.attempt_number,attempt.started_at_utc,attempt.id
+        LIMIT 1;
+        v_expired_first_divergent_cause:=COALESCE(
+          v_expired_first_divergent_cause,
+          jsonb_build_object('code','LEASE_EXPIRED_AFTER_CANCELLATION_GRACE')
+        );
+        v_expired_first_divergent_attempt_number:=COALESCE(
+          v_expired_first_divergent_attempt_number,
+          v_expired_attempt.attempt_count
+        );
         IF v_expired_attempt.attempt_count<v_expired_attempt.max_attempts THEN
+          v_expired_error_json:=jsonb_build_object(
+            'code','DELIVERED_ATTEMPT_EXPIRED',
+            'causal_contract_version','WORKBENCH_FIRST_DIVERGENT_CAUSE_V1',
+            'first_divergent_cause',v_expired_first_divergent_cause,
+            'first_divergent_attempt_number',v_expired_first_divergent_attempt_number,
+            'latest_observed_failure',jsonb_build_object(
+              'code','LEASE_EXPIRED_AFTER_CANCELLATION_GRACE'),
+            'latest_attempt_number',v_expired_attempt.attempt_count
+          );
           UPDATE public.banking_pay_workbench_jobs SET status='QUEUED',started_at_utc=NULL,
             run_at_utc=clock_timestamp()+make_interval(secs=>LEAST(300,
               GREATEST(1,power(2,LEAST(v_expired_attempt.attempt_count,8))::integer))),
-            last_error_json=jsonb_build_object('code','DELIVERED_ATTEMPT_EXPIRED'),
+            last_error_json=v_expired_error_json,
             updated_at_utc=clock_timestamp()
           WHERE id=v_expired_attempt.job_id AND status='RUNNING';
           v_expired_requeued_count:=v_expired_requeued_count+1;
         ELSE
+          v_expired_error_json:=jsonb_build_object(
+            'code','DELIVERED_ATTEMPT_EXHAUSTED',
+            'causal_contract_version','WORKBENCH_FIRST_DIVERGENT_CAUSE_V1',
+            'first_divergent_cause',v_expired_first_divergent_cause,
+            'first_divergent_attempt_number',v_expired_first_divergent_attempt_number,
+            'latest_observed_failure',jsonb_build_object(
+              'code','LEASE_EXPIRED_AFTER_CANCELLATION_GRACE'),
+            'latest_attempt_number',v_expired_attempt.attempt_count
+          );
           UPDATE public.banking_pay_workbench_jobs SET status='FAILED',
-            failed_at_utc=clock_timestamp(),last_error_json=jsonb_build_object(
-              'code','DELIVERED_ATTEMPT_EXHAUSTED'),updated_at_utc=clock_timestamp()
+            failed_at_utc=clock_timestamp(),last_error_json=v_expired_error_json,
+            updated_at_utc=clock_timestamp()
           WHERE id=v_expired_attempt.job_id AND status='RUNNING';
           UPDATE private.banking_pay_workbench_economic_builds SET status='FAILED',
-            failed_at_utc=clock_timestamp(),failure_json=jsonb_build_object(
-              'code','DELIVERED_ATTEMPT_EXHAUSTED'),updated_at_utc=clock_timestamp()
+            failed_at_utc=clock_timestamp(),failure_json=v_expired_error_json,
+            updated_at_utc=clock_timestamp()
           WHERE id=v_expired_attempt.build_id AND status NOT IN ('COMPLETE','OBSOLETE');
           v_expired_exhausted_count:=v_expired_exhausted_count+1;
         END IF;
@@ -196,7 +247,11 @@ BEGIN
     v_session := NULL::public.banking_pay_workbench_sessions;
     v_scope := NULL::public.banking_pay_workbench_session_scope;
     v_post_scope := NULL::public.banking_pay_workbench_session_scope;
+    v_registry := NULL::private.banking_pay_workbench_candidate_scope_registry;
     v_owner := NULL::public.banking_pay_workbench_jobs;
+    v_owner_build := NULL::private.banking_pay_workbench_economic_builds;
+    v_first_deterministic_attempt := NULL::private.banking_pay_workbench_stage_attempts;
+    v_terminal_attempt := NULL::private.banking_pay_workbench_stage_attempts;
     v_post_owner := NULL::public.banking_pay_workbench_jobs;
     v_success := NULL::public.banking_pay_workbench_jobs;
     v_active := NULL::public.banking_pay_workbench_jobs;
@@ -208,6 +263,11 @@ BEGIN
     v_owner_valid := false;
     v_owner_generation_obsolete := false;
     v_owner_reason := NULL::text;
+    v_current_deterministic_owner := false;
+    v_first_deterministic_cause := NULL::jsonb;
+    v_first_deterministic_attempt_number := NULL::integer;
+    v_deterministic_cause_code := NULL::text;
+    v_deterministic_failure_json := '{}'::jsonb;
     v_enqueue_payload := '{}'::jsonb;
     v_enqueue_result := '{}'::jsonb;
     v_success_result := '{}'::jsonb;
@@ -236,6 +296,7 @@ BEGIN
     v_candidate_failure_code := NULL::text;
     v_candidate_failure_message := NULL::text;
     v_candidate_unresolved_reason := NULL::text;
+    v_failed_candidate_state_proven := false;
     v_candidate_old_pending_job_id := NULL::uuid;
     v_progress_recomputed := false;
     v_progress_recompute_error_code := NULL::text;
@@ -248,7 +309,8 @@ BEGIN
         v_candidate_skipped := true;
         v_candidate_action := 'SKIPPED_CANDIDATE_SERIAL_BUSY';
       ELSE
-        PERFORM 1
+        SELECT registry.*
+        INTO v_registry
         FROM private.banking_pay_workbench_candidate_scope_registry AS registry
         WHERE registry.candidate_id=v_candidate.candidate_id
         FOR UPDATE;
@@ -292,6 +354,58 @@ BEGIN
             FROM public.banking_pay_workbench_jobs AS owner_job
             WHERE owner_job.id = v_scope.pending_job_id
             FOR UPDATE;
+
+            IF v_owner.economic_build_id IS NOT NULL THEN
+              SELECT owner_build.*
+              INTO v_owner_build
+              FROM private.banking_pay_workbench_economic_builds AS owner_build
+              WHERE owner_build.id = v_owner.economic_build_id
+              FOR UPDATE;
+
+              SELECT deterministic_attempt.*
+              INTO v_first_deterministic_attempt
+              FROM private.banking_pay_workbench_stage_attempts AS deterministic_attempt
+              WHERE deterministic_attempt.job_id = v_owner.id
+                AND deterministic_attempt.build_id = v_owner.economic_build_id
+                AND deterministic_attempt.candidate_id = v_scope.candidate_id
+                AND deterministic_attempt.private_stage = v_owner.private_stage
+                AND deterministic_attempt.attempt_status = 'FAILED'
+                AND deterministic_attempt.error_class = 'DETERMINISTIC_STAGE_ERROR'
+                AND UPPER(BTRIM(COALESCE(deterministic_attempt.error_json->>'code', ''))) IN (
+                  'CERTIFIED_SOURCE_PREVIEW_SEMANTIC_PARITY_FAILED',
+                  'PAY_BATCH_SIGNED_NON_CHARGE_RECOVERY_EVIDENCE_INVALID',
+                  'PAYMENT_CORRECTION_SCOPE_TYPE_REQUIRED',
+                  'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISSING',
+                  'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_MISMATCH',
+                  'PAYMENT_CORRECTION_WORKBENCH_FROZEN_SCOPE_VERSION_UNSUPPORTED'
+                )
+              ORDER BY deterministic_attempt.attempt_number,
+                       deterministic_attempt.started_at_utc,
+                       deterministic_attempt.id
+              LIMIT 1
+              FOR UPDATE OF deterministic_attempt;
+
+              IF FOUND THEN
+                v_first_deterministic_cause := v_first_deterministic_attempt.error_json;
+                v_first_deterministic_attempt_number :=
+                  v_first_deterministic_attempt.attempt_number;
+                v_deterministic_cause_code := UPPER(BTRIM(
+                  v_first_deterministic_attempt.error_json->>'code'
+                ));
+              END IF;
+
+              SELECT terminal_attempt.*
+              INTO v_terminal_attempt
+              FROM private.banking_pay_workbench_stage_attempts AS terminal_attempt
+              WHERE terminal_attempt.job_id = v_owner.id
+                AND terminal_attempt.build_id = v_owner.economic_build_id
+                AND terminal_attempt.candidate_id = v_scope.candidate_id
+                AND terminal_attempt.private_stage = v_owner.private_stage
+                AND terminal_attempt.attempt_number = v_owner.attempt_count
+              ORDER BY terminal_attempt.started_at_utc DESC, terminal_attempt.id DESC
+              LIMIT 1
+              FOR UPDATE OF terminal_attempt;
+            END IF;
           END IF;
 
           v_owner_generation_obsolete := UPPER(BTRIM(COALESCE(
@@ -348,6 +462,108 @@ BEGIN
                 THEN 'PENDING_JOB_SESSION_VERSION_STALE'
               ELSE 'PENDING_JOB_SOURCE_CHANGE_SEQ_STALE'
             END;
+
+            -- Reuse the fail-job owner's approved deterministic classification,
+            -- but fail closed only when the exact terminal build generation is
+            -- still the current source authority.  A newer source sequence,
+            -- registry generation, build, session version or run identity must
+            -- continue to the existing canonical-successor path below.
+            v_current_deterministic_owner :=
+              v_owner_reason = 'PENDING_JOB_TERMINAL'
+              AND v_scope.pending_job_id = v_owner.id
+              AND v_owner.status = 'FAILED'
+              AND v_owner.failed_at_utc IS NOT NULL
+              AND v_owner_canonical_type = 'WORKBENCH_CANDIDATE_SOURCE_BUILD'
+              AND v_owner_generation_obsolete IS NOT TRUE
+              AND v_registry.candidate_id = v_scope.candidate_id
+              AND v_registry.current_build_id = v_owner.economic_build_id
+              AND v_registry.current_source_change_seq = v_live_change_seq
+              AND v_owner_build.id = v_owner.economic_build_id
+              AND v_owner_build.source_job_id = v_owner.id
+              AND v_owner_build.session_id = v_scope.session_id
+              AND v_owner_build.candidate_id = v_scope.candidate_id
+              AND v_owner_build.session_version = v_session.version
+              AND v_owner_build.source_snapshot_run_id IS NOT DISTINCT FROM
+                  v_session.source_snapshot_run_id
+              AND v_owner.snapshot_run_id IS NOT DISTINCT FROM
+                  v_session.source_snapshot_run_id
+              AND v_owner_build.source_change_seq = v_live_change_seq
+              AND v_owner_build.source_change_seq = v_registry.current_source_change_seq
+              AND v_owner_build.captured_candidate_generation = v_registry.dirty_generation
+              AND v_owner_build.status = 'FAILED'
+              AND v_owner_build.private_stage = v_owner.private_stage
+              AND v_owner_build.stage_version = v_owner.private_stage_version
+              AND v_owner_build.source_build_run_id::text =
+                  v_owner.payload_json->>'source_build_run_id'
+              AND CASE
+                    WHEN COALESCE(v_owner.payload_json->>'session_version', '') ~ '^[0-9]{1,18}$'
+                      THEN (v_owner.payload_json->>'session_version')::bigint
+                    ELSE NULL::bigint
+                  END = v_session.version
+              AND CASE
+                    WHEN COALESCE(v_owner.payload_json->>'source_change_seq', '') ~ '^[0-9]{1,18}$'
+                      THEN (v_owner.payload_json->>'source_change_seq')::bigint
+                    ELSE NULL::bigint
+                  END = v_live_change_seq
+              AND v_first_deterministic_attempt.id IS NOT NULL
+              AND v_first_deterministic_attempt.error_class = 'DETERMINISTIC_STAGE_ERROR'
+              AND v_first_deterministic_attempt.captured_candidate_generation =
+                  v_owner_build.captured_candidate_generation
+              AND v_first_deterministic_attempt.captured_source_change_seq =
+                  v_owner_build.source_change_seq
+              AND v_first_deterministic_attempt.execution_profile_version =
+                  v_owner.private_stage_version
+              AND v_terminal_attempt.id IS NOT NULL
+              AND v_terminal_attempt.attempt_number = v_owner.attempt_count
+              AND v_terminal_attempt.attempt_status IN ('FAILED', 'EXPIRED')
+              AND v_terminal_attempt.captured_candidate_generation =
+                  v_owner_build.captured_candidate_generation
+              AND v_terminal_attempt.captured_source_change_seq =
+                  v_owner_build.source_change_seq
+              AND v_terminal_attempt.execution_profile_version =
+                  v_owner.private_stage_version
+              AND COALESCE(
+                    NULLIF(UPPER(BTRIM(v_owner.last_error_json#>>'{first_divergent_cause,code}')), ''),
+                    NULLIF(UPPER(BTRIM(v_owner.last_error_json->>'code')), '')
+                  ) = v_deterministic_cause_code
+              AND COALESCE(
+                    NULLIF(UPPER(BTRIM(v_owner_build.failure_json#>>'{first_divergent_cause,code}')), ''),
+                    NULLIF(UPPER(BTRIM(v_owner_build.failure_json->>'code')), '')
+                  ) = v_deterministic_cause_code;
+
+            IF v_current_deterministic_owner THEN
+              v_candidate_failure_code := v_deterministic_cause_code;
+              v_candidate_failure_message := COALESCE(
+                NULLIF(BTRIM(v_first_deterministic_cause->>'message'), ''),
+                'Candidate refresh stopped because its current source evidence failed a deterministic integrity check.'
+              );
+              v_deterministic_failure_json := jsonb_strip_nulls(
+                COALESCE(v_owner.last_error_json, '{}'::jsonb)
+                || jsonb_build_object(
+                  'code', v_candidate_failure_code,
+                  'message', v_candidate_failure_message,
+                  'causal_contract_version', 'WORKBENCH_FIRST_DIVERGENT_CAUSE_V1',
+                  'first_divergent_cause', v_first_deterministic_cause,
+                  'first_divergent_attempt_number', v_first_deterministic_attempt_number,
+                  'latest_observed_failure', COALESCE(
+                    v_owner.last_error_json->'latest_observed_failure',
+                    jsonb_strip_nulls(jsonb_build_object(
+                      'code', v_owner.last_error_json->>'code',
+                      'message', v_owner.last_error_json->>'message',
+                      'sqlstate', v_owner.last_error_json->>'sqlstate'
+                    )),
+                    v_first_deterministic_cause
+                  ),
+                  'latest_attempt_number', v_owner.attempt_count,
+                  'job_id', v_owner.id::text,
+                  'attempt_count', COALESCE(v_owner.attempt_count, 0),
+                  'max_attempts', COALESCE(v_owner.max_attempts, 8),
+                  'automatic_recovery_scheduled', false,
+                  'deterministic_successor_suppressed', true,
+                  'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
+                )
+              );
+            END IF;
 
             SELECT successful_job.*
             INTO v_success
@@ -671,6 +887,78 @@ BEGIN
                   RAISE EXCEPTION 'PAY_WORKBENCH_OWNER_REPAIR_POSTCONDITION_NOT_PROVEN'
                     USING ERRCODE = 'P0001';
                 END IF;
+              ELSIF v_current_deterministic_owner THEN
+                UPDATE public.banking_pay_workbench_session_scope AS failed_scope
+                SET status = 'SOURCE_BUILD_ERROR',
+                    pending_job_id = NULL::uuid,
+                    dirty = true,
+                    error_json = v_deterministic_failure_json,
+                    updated_at_utc = v_now
+                WHERE failed_scope.id = v_scope.id
+                  AND failed_scope.session_id = v_session.id
+                  AND failed_scope.candidate_id = v_owner.candidate_id
+                  AND failed_scope.pending_job_id = v_owner.id
+                  AND UPPER(BTRIM(COALESCE(failed_scope.status, ''))) =
+                      'SOURCE_BUILD_PENDING';
+
+                GET DIAGNOSTICS v_scope_transition_row_count = ROW_COUNT;
+
+                UPDATE public.banking_pay_workbench_session_candidate_state AS failed_state
+                SET status = 'FAILED',
+                    pending_job_id = NULL::uuid,
+                    last_error_json = v_deterministic_failure_json,
+                    updated_at_utc = v_now
+                WHERE failed_state.session_id = v_scope.session_id
+                  AND failed_state.candidate_id = v_scope.candidate_id
+                  AND UPPER(BTRIM(COALESCE(failed_state.status, ''))) IN ('PENDING', 'FAILED')
+                  AND (
+                    failed_state.pending_job_id IS NULL
+                    OR failed_state.pending_job_id = v_owner.id
+                  );
+
+                SELECT failed_post_scope.*
+                INTO v_post_scope
+                FROM public.banking_pay_workbench_session_scope AS failed_post_scope
+                WHERE failed_post_scope.id = v_scope.id
+                FOR UPDATE;
+
+                SELECT EXISTS (
+                  SELECT 1
+                  FROM public.banking_pay_workbench_session_candidate_state AS failed_post_state
+                  WHERE failed_post_state.session_id = v_scope.session_id
+                    AND failed_post_state.candidate_id = v_scope.candidate_id
+                    AND UPPER(BTRIM(COALESCE(failed_post_state.status, ''))) = 'FAILED'
+                    AND failed_post_state.pending_job_id IS NULL
+                    AND failed_post_state.last_error_json->>'code' =
+                        v_deterministic_cause_code
+                    AND LOWER(BTRIM(COALESCE(
+                          failed_post_state.last_error_json->>'deterministic_successor_suppressed',
+                          ''
+                        ))) = 'true'
+                )
+                INTO v_failed_candidate_state_proven;
+
+                IF v_scope_transition_row_count = 1
+                   AND UPPER(BTRIM(COALESCE(v_post_scope.status, ''))) = 'SOURCE_BUILD_ERROR'
+                   AND v_post_scope.pending_job_id IS NULL
+                   AND COALESCE(v_post_scope.dirty, false) IS TRUE
+                   AND v_post_scope.error_json->>'code' = v_deterministic_cause_code
+                   AND LOWER(BTRIM(COALESCE(
+                         v_post_scope.error_json->>'automatic_recovery_scheduled',
+                         ''
+                       ))) = 'false'
+                   AND LOWER(BTRIM(COALESCE(
+                         v_post_scope.error_json->>'deterministic_successor_suppressed',
+                         ''
+                       ))) = 'true'
+                   AND v_failed_candidate_state_proven THEN
+                  v_candidate_action := 'FAILED_CLOSED_DETERMINISTIC_SOURCE';
+                  v_candidate_branch := 'FAILED_CLOSED';
+                  v_candidate_transition_proven := true;
+                ELSE
+                  RAISE EXCEPTION 'PAY_WORKBENCH_OWNER_REPAIR_POSTCONDITION_NOT_PROVEN'
+                    USING ERRCODE = 'P0001';
+                END IF;
               ELSIF v_owner.id IS NOT NULL
                     AND v_owner_generation_obsolete IS NOT TRUE
                     AND COALESCE(v_owner.attempt_count, 0) >= COALESCE(v_owner.max_attempts, 8) THEN
@@ -941,6 +1229,7 @@ BEGIN
                     WHEN 'RECONCILED_SUCCESSFUL_BUILD' THEN 'OWNER_REPAIR_RECONCILED_SUCCESSFUL_BUILD'
                     WHEN 'REBOUND_ACTIVE_SUCCESSOR' THEN 'OWNER_REPAIR_REBOUND_ACTIVE_SUCCESSOR'
                     WHEN 'ENQUEUED_CANONICAL_SUCCESSOR' THEN 'OWNER_REPAIR_ENQUEUED_CANONICAL_SUCCESSOR'
+                    WHEN 'FAILED_CLOSED_DETERMINISTIC_SOURCE' THEN 'OWNER_REPAIR_FAILED_CLOSED_DETERMINISTIC_SOURCE'
                     WHEN 'FAILED_CLOSED_MAX_ATTEMPTS' THEN 'OWNER_REPAIR_FAILED_CLOSED_MAX_ATTEMPTS'
                     ELSE 'OWNER_REPAIR_FAILED_CLOSED_REPAIR_ERROR'
                   END,
@@ -976,6 +1265,17 @@ BEGIN
                     'action', v_candidate_action,
                     'successor_job_id', CASE WHEN v_successor_job_id IS NULL THEN NULL ELSE v_successor_job_id::text END,
                     'automatic_recovery_scheduled', v_candidate_action IN ('REBOUND_ACTIVE_SUCCESSOR', 'ENQUEUED_CANONICAL_SUCCESSOR'),
+                    'deterministic_successor_suppressed', v_candidate_action = 'FAILED_CLOSED_DETERMINISTIC_SOURCE',
+                    'first_divergent_cause', CASE
+                      WHEN v_candidate_action = 'FAILED_CLOSED_DETERMINISTIC_SOURCE'
+                        THEN v_first_deterministic_cause
+                      ELSE NULL::jsonb
+                    END,
+                    'first_divergent_attempt_number', CASE
+                      WHEN v_candidate_action = 'FAILED_CLOSED_DETERMINISTIC_SOURCE'
+                        THEN v_first_deterministic_attempt_number
+                      ELSE NULL::integer
+                    END,
                     'state_transition_proven', true,
                     'progress_recomputed', v_progress_recomputed,
                     'policy_x_authority_scope', 'PRE_DRAFT_LIVE_TRUTH'
@@ -1060,6 +1360,7 @@ BEGIN
           'action', v_candidate_action,
           'successor_job_id', CASE WHEN v_successor_job_id IS NULL THEN NULL ELSE v_successor_job_id::text END,
           'automatic_recovery_scheduled', v_candidate_action IN ('REBOUND_ACTIVE_SUCCESSOR', 'ENQUEUED_CANONICAL_SUCCESSOR'),
+          'deterministic_successor_suppressed', v_candidate_action = 'FAILED_CLOSED_DETERMINISTIC_SOURCE',
           'failure_code', v_candidate_failure_code,
           'message', v_candidate_failure_message,
           'audit_failed', v_audit_failed

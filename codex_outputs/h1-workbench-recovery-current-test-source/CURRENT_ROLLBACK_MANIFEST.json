@@ -1,0 +1,48 @@
+{
+  "schema_version": "H1_CURRENT_ROLLBACK_MANIFEST_V1",
+  "base_commit": "21548a8781549c3ef35e33e3ee526e95d2ac5b78",
+  "base_tree": "cef75d6e2192733285e370111dd6de785992f45e",
+  "strategy": "restore exact base blobs for modified files and omit H1-new files; regenerate shared contracts from the restored exact source; retain all database audit history",
+  "modified_files": [
+    {"path":"supabase/release/current-contract.json","base_git_blob_sha1":"2060389fccbb8bc61fec49635d85930ea53d7d99"},
+    {"path":"supabase/release/current-release.json","base_git_blob_sha1":"73ea052dba85e319e951349abecff66ed046dc33"},
+    {"path":"supabase/release/export_contract.sql","base_git_blob_sha1":"a381be9c06833da5c1d9cff4be9768321df7d25c"},
+    {"path":"supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql","base_git_blob_sha1":"1c47874c6636a214178caaf720fd6ab653a0d6d1"},
+    {"path":"supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql","base_git_blob_sha1":"c90eb43250de58b6e620caaed364ddffc92772ae"},
+    {"path":"supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql","base_git_blob_sha1":"49d1e54a628e98568c0d0bd3693c21e5d551635a"},
+    {"path":"supabase/repeatable/14082026_1310_timesheet_processing_status_and_authorise_authority_v1.sql","base_git_blob_sha1":"92b87a875b5d1b02225b8a672cb759e223a0726f"},
+    {"path":"supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql","base_git_blob_sha1":"3dff4ac5c1c6dfec92eb7305b58bd158cd24dc41"},
+    {"path":"supabase/verification/31082026_0014_banking_pay_dirty_apply_family_authority_repair_verification.sql","base_git_blob_sha1":"99962ea74ebc2ec42235b8220438c766cc94cce5"},
+    {"path":"supabase/verification/banking_pay_targeted_fast_route_certified_reuse_catalog_manifest.json","base_git_blob_sha1":"208c5431d8a4efb9e7a95106f3117bcd326ee21c"},
+    {"path":"tests/banking-pay-dirty-apply-family-authority-repair.test.cjs","base_git_blob_sha1":"375e2dbb602a4187118ed7f6219c3444075c8d90"},
+    {"path":"tests/banking-pay-legacy-monolith-authority-reassert.test.cjs","base_git_blob_sha1":"b549b5a1dd53d2d12a107620e83578829c69cb6e"},
+    {"path":"tests/banking-pay-modal-v2-contract.test.cjs","base_git_blob_sha1":"f8f36cfa71361908b410b620b973b6cdd8595b3c"},
+    {"path":"tests/banking-pay-pending-owner-recovery.test.cjs","base_git_blob_sha1":"eadf84e17c3dbb161834aa606de72992a2eb0219"},
+    {"path":"tests/banking-pay-stale-successor-convergence.test.js","base_git_blob_sha1":"f811a6086aee165f3e4d125954c08381caf479da"},
+    {"path":"tests/banking-pay-workbench-fail-job-authority.test.js","base_git_blob_sha1":"3e450d379e5377930f7687fb4e86e432b0b548bc"},
+    {"path":"tests/banking-pay-workbench-source-build-authority.test.js","base_git_blob_sha1":"ebd74f1bab798c232954fb2ad16fc9ec3022f7eb"},
+    {"path":"tests/database-release-system.test.mjs","base_git_blob_sha1":"f8b15c719e9179be66031ba6f90df9e4ccea0b8c"}
+  ],
+  "new_files_to_omit_on_source_reversal": [
+    "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+    "tests/banking-pay-workbench-causal-recovery.test.js",
+    "tests/banking-pay-workbench-current-implementation-handover.test.js",
+    "tests/banking-pay-workbench-settled-certification-contract.test.js",
+    "tests/banking-pay-workbench-shared-baseline-reconciliation.test.js",
+    "tests/fixtures/banking-pay-h1-h2-f013-release-order-v1.json",
+    "tests/fixtures/banking-pay-workbench-recovery-coverage-v1.json",
+    "codex_outputs/h1-workbench-recovery-current-test-source"
+  ],
+  "database_reversal_if_later_installed": {
+    "method": "apply a reviewed superseding repeatable containing the exact prior routine definitions and regenerated prior contract; never delete rows or edit release ledgers",
+    "prior_routine_definition_hashes": {
+      "pay_workbench_fail_job": "2750d5b1e12c23bd08ab0b6691b02bdae59c655d51413f3b60ae3f2792a785ad",
+      "pay_workbench_repair_orphaned_pending_source_build": "b71da7c4003008f60625580a167efb0b405c13c4bb1bcb8aa4dbcc2bb17007b4",
+      "pay_workbench_source_build_attempt_claim_start_v1": "d00ad36f7eef644259e77e1d6a8b35ec8f14461aed3b9cce98d736b57058048e"
+    },
+    "retain_historical_jobs_attempts_dead_rows_and_release_records": true,
+    "destructive_table_or_data_removal": false
+  },
+  "worker_frontend_rollback": "not applicable; this implementation changes no Worker or frontend runtime file",
+  "create_draft_rollback": "not applicable; this implementation changes no Create Draft owner or contract"
+}

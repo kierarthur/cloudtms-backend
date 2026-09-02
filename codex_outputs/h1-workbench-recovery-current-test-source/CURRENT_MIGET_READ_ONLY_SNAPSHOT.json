@@ -1,0 +1,88 @@
+{
+  "schema_version": "H1_CURRENT_MIGET_READ_ONLY_SNAPSHOT_V1",
+  "captured_at_utc": "2026-09-02T10:05:11.973Z",
+  "status": "READ_ONLY_CURRENT_RUNTIME_BASELINE_H1_NOT_INSTALLED",
+  "route": "codex-cloudtms-miget-gateway read-only diagnostic RPC",
+  "authority": {
+    "environment": "TEST",
+    "database_name": "cloudtms_test_clone",
+    "database_user_identity": "dee50tht",
+    "postgres_server_version": "17.11 (Debian 17.11-1.pgdg11+2)",
+    "pg_show_plans_enabled": "off"
+  },
+  "latest_verified_release": {
+    "release_id": "20260822-test-authority-upgrade-a849a25e5391",
+    "git_commit": "a849a25e5391b893f91aa4e5ada2c9794ba9244b",
+    "install_mode": "UPGRADE",
+    "status": "VERIFIED",
+    "started_at_utc": "2026-09-02T04:38:09.285414+00:00",
+    "completed_at_utc": "2026-09-02T04:40:13.209425+00:00",
+    "repository_contract_sha256": "41391fa0a4443b7ef18de98ce68cc1a0e6ac466fbadbc13bc03649520fbe64cc",
+    "installed_contract_sha256": "41391fa0a4443b7ef18de98ce68cc1a0e6ac466fbadbc13bc03649520fbe64cc"
+  },
+  "h1_owned_routines": [
+    {
+      "identity": "public.pay_workbench_fail_job(p_job_id uuid, p_error_json jsonb, p_retry_after_seconds integer)",
+      "physical_owner": "dee50tht",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel_safety": "u",
+      "routine_config": ["search_path=\"\""],
+      "installed_canonical_definition_sha256": "2750d5b1e12c23bd08ab0b6691b02bdae59c655d51413f3b60ae3f2792a785ad",
+      "candidate_definition_sha256": "baef72fe071ed7bb0ee3a48cc82acf33053c2a5f0bba0bb8816bccbbb34abb49",
+      "h1_installed": false
+    },
+    {
+      "identity": "public.pay_workbench_repair_orphaned_pending_source_build(p_session_id uuid, p_candidate_id uuid, p_limit integer, p_now_utc timestamp with time zone, p_reason text)",
+      "physical_owner": "dee50tht",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel_safety": "u",
+      "routine_config": ["search_path=public"],
+      "installed_raw_definition_sha256": "bf675469f6d41520256dc2f38d5ef7444a08d6aafd18a3bb7a8755570c14730b",
+      "installed_canonical_definition_sha256": "b71da7c4003008f60625580a167efb0b405c13c4bb1bcb8aa4dbcc2bb17007b4",
+      "candidate_definition_sha256": "d8c224d170144b23f0bd2f04a492a04a4e4e16fafd4664a579d18794df531e26",
+      "h1_installed": false
+    },
+    {
+      "identity": "public.pay_workbench_source_build_attempt_claim_start_v1(p_worker_id text, p_lane_identity text, p_lease_seconds integer, p_now_utc timestamp with time zone, p_session_id uuid, p_candidate_id uuid)",
+      "physical_owner": "dee50tht",
+      "security_definer": true,
+      "volatility": "v",
+      "parallel_safety": "u",
+      "routine_config": ["search_path=\"\""],
+      "installed_raw_definition_sha256": "62db7c1ef8b9d8a6d92d6b79bcc5324188464f01d21b6950bc19bdbbf7af3215",
+      "installed_canonical_definition_sha256": "d00ad36f7eef644259e77e1d6a8b35ec8f14461aed3b9cce98d736b57058048e",
+      "candidate_definition_sha256": "f49899e3f5ae7920a71019707199e4c26c6d4f21f2332b28961ce60c7f76522e",
+      "h1_installed": false
+    }
+  ],
+  "repeatable_ledger": [
+    {
+      "path": "supabase/repeatable/04082026_1219_pay_workbench_fail_job.sql",
+      "installed_closure_sha256": "6bb8a8c4e6628692fbbae0477026f728648f0212a1c98b525bc6adc8952ab210",
+      "last_release_id": "20260822-test-authority-adopt-d4ec8912b4bc"
+    },
+    {
+      "path": "supabase/repeatable/04082026_1219_pay_workbench_repair_orphaned_pending_source_build.sql",
+      "installed_closure_sha256": "d3f8402012fc843c2d19fc7048f711b8630244c91099e6bf8248dc3b24d2a0b7",
+      "last_release_id": "20260822-test-authority-adopt-d4ec8912b4bc"
+    },
+    {
+      "path": "supabase/repeatable/07082026_1012_pay_workbench_source_build_attempt_claim_start_v1.sql",
+      "installed_closure_sha256": "d4c45cfb9ee15a9d6399b28add78f78f034c29c3e6e1ecf026347c5d2046ea34",
+      "last_release_id": "20260822-test-authority-adopt-d4ec8912b4bc"
+    },
+    {
+      "path": "supabase/repeatable/30082026_2358_banking_pay_dirty_apply_family_authority_repair_v1.sql",
+      "installed_closure_sha256": "f2f5ac1a7a6801208807b2f3bc4e3d83a35d841e3cf71993f6c02be1c14b7344",
+      "last_release_id": "20260822-test-authority-upgrade-829cc7813fcd"
+    }
+  ],
+  "notes": [
+    "Miget is the current TEST runtime authority. Repository paths containing supabase are historical source-layout names only.",
+    "The repository and installed runtime contracts match each other at the current Miget release.",
+    "All three H1 routine definitions remain pre-H1 on Miget, proving no source-only H1 change has been installed.",
+    "No business rows, sensitive payloads or credentials are included. No database mutation was performed."
+  ]
+}

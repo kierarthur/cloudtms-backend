@@ -11,10 +11,11 @@
 \set ON_ERROR_STOP on
 
 -- This file is the final Banking Pay closure after the immutable historical
--- compatibility replay. Keep the changed targeted runtime in this closure so
--- a future edit makes this final repair pending whenever the historical replay
--- becomes pending. Then restore only the existing certified current owners
--- that the historical replay can supersede before installing the new repair.
+-- compatibility replay. The historical replay is the first dependency so any
+-- transitive change that makes it pending also makes this established final
+-- closure pending. Restore only the existing certified current owners that the
+-- historical replay can supersede before installing the unchanged repair.
+\ir 08082026_0902_reassert_authorities_after_legacy_monolith.sql
 \ir 07082026_1016_banking_pay_targeted_delta_runtime.sql
 \ir 28082026_1424_banking_pay_modal_selection_owner_bridge.sql
 \ir 29082026_0613_banking_pay_replaced_candidate_owner_repair_v1.sql

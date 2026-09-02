@@ -85,6 +85,10 @@ test('immutable legacy replay is followed by the exact provider-neutral eight-ro
     const source = normalizeLf(fs.readFileSync(path.join(repeatableDir, sourceName), 'utf8'));
     assert.equal(definition(currentClosure, name), definition(source, name), `${name} must be byte-identical`);
   }
+  const bulkAuthorise = definition(currentClosure, 'bulk_authorise_dataset_v1');
+  assert.match(bulkAuthorise, /DUPLICATE_EXPENSE_REVIEW[\s\S]*can_bulk_authorise_calc/i);
+  assert.match(bulkAuthorise, /processed_review_required/i);
+  assert.match(bulkAuthorise, /bulk_authorise_block_code[\s\S]*DUPLICATE_EXPENSE_REVIEW_REQUIRED/i);
   const created = [...currentClosure.matchAll(/CREATE OR REPLACE FUNCTION\s+public\.([a-zA-Z0-9_]+)\s*\(/g)]
     .map((match) => match[1]);
   assert.deepEqual(created, [...repairTargets.map(([name]) => name), 'timesheet_daily_manual_unprocess_atomic']);

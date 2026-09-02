@@ -1,0 +1,321 @@
+{
+  "artifact_status": "LOCAL_CANDIDATE_NOT_INSTALLED_NOT_DEPLOYED_NOT_FINAL",
+  "contract_name": "WORKBENCH_SETTLED_CERTIFICATION_V1",
+  "contract_version": 1,
+  "consumer_owner": "HANDOVER_2",
+  "consumer_rule": "Consume certification_id and overall_digest_sha256 exactly; do not reconstruct Workbench selection.",
+  "authority_boundary": "The certificate supplies only Workbench/pre-Draft expected facts. It contains no Draft-produced allocation row, Draft item identity, Draft reservation row, post-Draft materialisation fact or parity verdict; HANDOVER_2 derives and compares those through the existing Draft authorities.",
+  "canonicalization": {
+    "owner": "Existing broker/src/index.js stableStringify plus sha256Hex semantics",
+    "object_keys": "recursive ascending JavaScript default string sort",
+    "arrays": "order preserved",
+    "encoding": "UTF-8",
+    "hash": "SHA-256 lowercase hexadecimal",
+    "amounts": "canonical fixed decimal strings, never JSON binary floating-point numbers",
+    "overall_preimage": "stableStringify(sealed_payload)",
+    "certification_id_rule": "WORKBENCH_SETTLED_CERTIFICATION_V1:<overall_digest_sha256>"
+  },
+  "required_instance_shape": {
+    "schema_version": "WORKBENCH_SETTLED_CERTIFICATION_V1",
+    "certification_id": "WORKBENCH_SETTLED_CERTIFICATION_V1:<64 lowercase hex>",
+    "overall_digest_sha256": "64 lowercase hex",
+    "sealed_payload": {
+      "certified_at_utc": "ISO-8601 UTC timestamp",
+      "authority": {
+        "session_id": "uuid",
+        "session_version": "positive integer",
+        "progress_counter_version": "positive integer",
+        "progress_state": "READY",
+        "source_snapshot_run_id": "uuid",
+        "session_signature": "non-empty string",
+        "pay_date": "YYYY-MM-DD",
+        "week_ending_cutoff": "YYYY-MM-DD",
+        "filters_digest_sha256": "64 lowercase hex",
+        "scope_change_generation_target": "non-negative integer",
+        "scope_change_generation_applied": "non-negative integer equal to target",
+        "scope_change_generation_shadow_checked": "non-negative integer equal to target"
+      },
+      "publication_set": {
+        "ordering": "scope_ordinal asc, candidate_id asc",
+        "publication_count": "non-negative integer equal to publications.length",
+        "publications": [
+          {
+            "scope_ordinal": "non-negative integer",
+            "candidate_id": "uuid",
+            "candidate_state_id": "uuid",
+            "candidate_state_status": "READY",
+            "source_change_seq": "non-negative integer",
+            "source_build_run_id": "uuid",
+            "source_publication_id": "uuid",
+            "certified_publication_session_version": "integer equal to authority.session_version",
+            "publication_attestation_version": "non-empty existing attestation version",
+            "publication_attestation_digest_sha256": "64 lowercase hex over the existing attestation object",
+            "publication_parity_ok": true,
+            "publication_attested_at_utc": "ISO-8601 UTC timestamp"
+          }
+        ],
+        "publications_digest_sha256": "SHA-256 of stableStringify(publications)"
+      },
+      "completeness": {
+        "scope_total_count": "non-negative integer",
+        "scope_seeded_count": "integer equal to scope_total_count",
+        "scope_ready_count": "integer equal to scope_total_count",
+        "scope_pending_count": 0,
+        "scope_failed_count": 0,
+        "line_units_total": "non-negative integer",
+        "line_units_ready": "integer equal to line_units_total",
+        "line_units_pending": 0,
+        "line_units_failed": 0,
+        "selected_row_count": "positive integer equal to selected_constituent_count",
+        "selected_page_order": "row_ordinal asc, preview_row_id asc",
+        "selected_page_size": "positive bounded integer",
+        "selected_pages_fetched": "positive integer",
+        "selected_sentinel_overflow": false,
+        "all_selected_rows_loaded": true,
+        "server_selected_preview_row_ids_provided": true,
+        "server_selected_ids_equal_materialised_selected_ids": true,
+        "section_universes": {
+          "ordering": "section authority ordinal asc, stable row identity asc",
+          "ready": {
+            "row_count": "non-negative integer",
+            "ordered_stable_identity_digests": "array whose length equals row_count",
+            "universe_digest_sha256": "SHA-256 of stableStringify(ordered identity digests plus bound section facts)"
+          },
+          "action_required": {
+            "row_count": "non-negative integer",
+            "ordered_stable_identity_digests": "array whose length equals row_count",
+            "universe_digest_sha256": "SHA-256 of stableStringify(ordered identity digests plus bound section facts)"
+          },
+          "blocked": {
+            "row_count": "non-negative integer",
+            "ordered_stable_identity_digests": "array whose length equals row_count",
+            "universe_digest_sha256": "SHA-256 of stableStringify(ordered identity digests plus bound section facts)"
+          }
+        },
+        "ready_action_required_blocked_pairwise_disjoint": true,
+        "exclusion_universes": {
+          "active_draft": {
+            "row_count": "non-negative integer",
+            "ordered_stable_identity_digests": "array whose length equals row_count",
+            "universe_digest_sha256": "64 lowercase hex"
+          },
+          "ineligible": {
+            "row_count": "non-negative integer",
+            "ordered_stable_identity_digests": "array whose length equals row_count",
+            "universe_digest_sha256": "64 lowercase hex"
+          },
+          "snoozed": {
+            "row_count": "non-negative integer",
+            "ordered_stable_identity_digests": "array whose length equals row_count",
+            "universe_digest_sha256": "64 lowercase hex"
+          }
+        },
+        "active_draft_rows_excluded": true,
+        "ineligible_rows_excluded": true,
+        "snoozed_rows_excluded": true,
+        "unloaded_selection_gap_count": 0,
+        "queued_current_job_count": 0,
+        "running_current_job_count": 0,
+        "unresolved_current_job_count": 0,
+        "invalid_current_job_pointer_count": 0,
+        "historical_terminal_rows_retained": true,
+        "historical_terminal_rows_are_not_current_authority": true,
+        "create_draft_gate": {
+          "can_create_draft": true,
+          "selected_eligible_ready_row_count": "integer equal to selected_constituent_count",
+          "blocking_reason_count": 0,
+          "gate_digest_sha256": "64 lowercase hex"
+        }
+      },
+      "selected_constituent_count": "positive integer equal to selected_constituents.length",
+      "selected_constituents": [
+        {
+          "constituent_ordinal": "contiguous zero-based integer",
+          "preview_row_id": "uuid",
+          "materialised_preview_row_id": "same uuid as preview_row_id",
+          "presentation_preview_row_id": "stable non-empty presentation identity",
+          "row_key": "stable non-empty row key",
+          "line_id": "stable line identity or null",
+          "source_identity": {
+            "source_kind": "existing server-owned source kind",
+            "source_line_id": "stable source line identity or null",
+            "source_row_key": "stable source row key",
+            "source_publication_id": "uuid equal to the referenced Candidate publication",
+            "source_change_seq": "integer equal to the referenced Candidate publication",
+            "source_build_run_id": "uuid equal to the referenced Candidate publication",
+            "source_identity_digest_sha256": "SHA-256 of stableStringify(this source identity with its digest omitted)"
+          },
+          "candidate_publication_ordinal": "index into publication_set.publications",
+          "candidate_id": "uuid equal to referenced publication candidate_id",
+          "client_id": "uuid or null",
+          "timesheet_id": "uuid or null when the semantic kind is non-timesheet",
+          "resolved_pay_channel": "PAYE or UMBRELLA",
+          "resolved_payment_method": "non-empty server-resolved method",
+          "amount_sign": "NEGATIVE, ZERO or POSITIVE derived from canonical_amount_ex_vat",
+          "semantic_kind": "non-empty existing line/item/source kind",
+          "economic_key": {
+            "keyspace": "timesheet_id,key_type,key_value",
+            "timesheet_id": "uuid or null",
+            "key_type": "TS_DAY, TS_TOTAL, ADDITIONAL_CODE, ADJUSTMENT_CODE, EXPENSE_CODE or MANUAL_CARRY_FORWARD",
+            "key_value": "non-empty string"
+          },
+          "canonical_amount_ex_vat": "fixed decimal string",
+          "source_reservation_amount_ex_vat": "fixed decimal string or null when not applicable",
+          "prior_payment": {
+            "treatment": "existing server-owned treatment code",
+            "prior_paid_amount_ex_vat": "fixed decimal string",
+            "evidence_digest_sha256": "64 lowercase hex"
+          },
+          "supersession": {
+            "treatment": "existing server-owned treatment code",
+            "ordered_superseded_source_ids": "array of stable ids",
+            "evidence_digest_sha256": "64 lowercase hex"
+          },
+          "recovery_headroom": {
+            "contract_version": "existing recovery/headroom contract version or null",
+            "nominal_due_amount_ex_vat": "fixed decimal string or null",
+            "recoverable_this_pay_run_ex_vat": "fixed decimal string or null",
+            "headroom_amount_ex_vat": "fixed decimal string or null",
+            "allocated_recovery_amount_ex_vat": "fixed decimal string or null",
+            "result_kind": "existing server-owned result kind or NOT_APPLICABLE",
+            "overlay_digest_sha256": "64 lowercase hex or null"
+          },
+          "expected_pre_draft_facts": {
+            "recovery_headroom_allocation_expectation": {
+              "expected_allocation_basis_kind": "existing Workbench recovery/headroom allocation kind or NOT_APPLICABLE",
+              "expected_allocated_recovery_amount_ex_vat": "fixed decimal string or null, equal to recovery_headroom.allocated_recovery_amount_ex_vat",
+              "expected_allocation_result": "existing Workbench recovery/headroom result or NOT_APPLICABLE",
+              "source_evidence_digest_sha256": "64 lowercase hex or null"
+            },
+            "item_expectation": {
+              "expected_item_semantic_kind": "existing Workbench semantic kind, equal to semantic_kind",
+              "expected_item_source_identity_digest_sha256": "source identity digest, never a Draft item identity",
+              "expected_item_amount_ex_vat": "fixed decimal string equal to canonical_amount_ex_vat",
+              "source_evidence_digest_sha256": "64 lowercase hex"
+            },
+            "source_reservation_expectation": {
+              "expected_reservation_applicability": "APPLICABLE or NOT_APPLICABLE",
+              "source_reservation_amount_ex_vat": "fixed decimal string equal to the constituent field, or null",
+              "ordered_active_source_reservation_ids": "array of stable pre-Draft source-owner reservation ids, never Draft reservation row ids",
+              "source_evidence_digest_sha256": "64 lowercase hex or null"
+            }
+          },
+          "component_evidence": {
+            "ordering": "frozen_component_ordinal asc, stable_component_id asc",
+            "all_same_economic_key_component_count": "non-negative integer",
+            "all_same_economic_key_component_ordered_ids": "array whose length equals the count",
+            "all_same_economic_key_components_digest_sha256": "SHA-256 of stableStringify(ordered ids plus bound component facts)",
+            "full_signed_pre_signature_match_count": "non-negative integer after filtering component_fallback=WORKED_TIME_AMOUNT, truth=0, baseline<0",
+            "full_signed_pre_signature_match_ordered_ids": "array whose length equals the count",
+            "full_signed_pre_signature_matches_digest_sha256": "SHA-256 of stableStringify(ordered ids plus signed pre-signature facts)",
+            "decisive_signed_evidence_count": "0 or 1 for a certifiable constituent",
+            "decisive_signed_evidence_ordered_ids": "array whose length equals the count",
+            "decisive_signed_evidence_digest_sha256": "SHA-256 of stableStringify(ordered ids plus all decisive frozen evidence facts)"
+          },
+          "readiness_class": "READY",
+          "selection_state": "SELECTED",
+          "selected": true,
+          "draftable": true,
+          "is_ready_for_draft": true,
+          "constituent_digest_sha256": "SHA-256 of stableStringify(this constituent with constituent_digest_sha256 omitted)"
+        }
+      ],
+      "selected_constituents_digest_sha256": "SHA-256 of stableStringify(selected_constituents)",
+      "selected_canonical_amount_ex_vat_total": "fixed decimal string equal to the exact decimal sum of all selected constituents",
+      "selected_partition_count": "non-negative integer equal to selected_partitions.length",
+      "selected_partitions": [
+        {
+          "partition_ordinal": "contiguous zero-based integer",
+          "candidate_id": "uuid",
+          "resolved_pay_channel": "PAYE or UMBRELLA",
+          "ordered_constituent_ordinals": "ascending array of constituent ordinals",
+          "ordered_constituent_identity_digests": "array aligned one-to-one with ordered_constituent_ordinals",
+          "constituent_count": "integer equal to both arrays' lengths",
+          "canonical_amount_ex_vat_total": "fixed decimal string equal to exact decimal sum",
+          "partition_digest_sha256": "SHA-256 of stableStringify(this partition with partition_digest_sha256 omitted)"
+        }
+      ],
+      "selected_partitions_ordering": "minimum constituent ordinal asc, candidate_id asc, resolved_pay_channel asc",
+      "selected_partitions_digest_sha256": "SHA-256 of stableStringify(selected_partitions)",
+      "payment_policy_parity": {
+        "contract_version": "WORKBENCH_PAYMENT_POLICY_PARITY_V1",
+        "existing_policy_authority": "exact accepted Banking Pay Bible identity plus unchanged economic, selection, Draft-finance, provider and settlement owner identities",
+        "before_policy_projection_digest_sha256": "64 lowercase hex over the exact pre-correction policy projection",
+        "after_policy_projection_digest_sha256": "same 64 lowercase hex as before_policy_projection_digest_sha256",
+        "digests_equal": true,
+        "execution_recovery_delta_only": true,
+        "forbidden_policy_delta_count": 0,
+        "compared_surfaces": [
+          "eligibility and exact selected constituent identities",
+          "canonical ex-VAT, VAT, inc-VAT, sign and economic keys",
+          "pay method, pay channel, grouping and routing",
+          "approval, hold, resolution, prior-paid, supersession and recovery/headroom treatment",
+          "pre-Draft source reservation expectations",
+          "Draft financial owner identities without Draft-produced facts",
+          "provider, settlement, remittance and ultimate payment boundaries"
+        ],
+        "runtime_fixture": "supabase/verification/01092026_1927_banking_pay_workbench_causal_recovery_verification.sql",
+        "runtime_fixture_result": "exact before/after policy projection equality PASS at the sealed release identity",
+        "no_payment_policy_change": true
+      },
+      "proof_identities": {
+        "backend_source_commit": "40 lowercase hex",
+        "backend_candidate_tree": "exact sealed tree identity",
+        "generated_contract_sha256": "64 lowercase hex",
+        "targeted_manifest_sha256": "64 lowercase hex",
+        "database_target": "cloudtms_test_clone",
+        "database_user_identity": "non-secret current_user",
+        "postgres_server_version": "exact version string",
+        "database_release_id": "exact VERIFIED release identity",
+        "database_release_commit": "same as backend_source_commit",
+        "installed_contract_sha256": "equal to generated_contract_sha256",
+        "installed_routine_definition_sha256_by_identity": "object containing every H1/H2 boundary routine required by the sealed manifest",
+        "worker_name": "test-cloudtms-backend",
+        "worker_source_commit": "same accepted backend commit",
+        "worker_deployment_id": "exact active deployment identity",
+        "frontend_source_commit": "40 lowercase hex",
+        "frontend_deployment_id": "exact deployed Pages/App-Ready identity",
+        "frontend_asset_marker": "exact active Banking Pay asset marker",
+        "bible_source_commit": "same accepted frontend commit containing the final append-only entry"
+      },
+      "verification": {
+        "ordinary_same_key_signed_count_zero_pass": true,
+        "one_genuine_plus_ordinary_signed_count_one_pass": true,
+        "two_genuine_rejected_before_certificate": true,
+        "incomplete_or_tampered_rejected_before_certificate": true,
+        "queued_response_eventual_start_observed": true,
+        "stale_ui_before_continuation_did_not_override_stored_authority": true,
+        "deterministic_retry_suppression_pass": true,
+        "lease_cancellation_grace_first_cause_pass": true,
+        "genuine_change_recovery_pass": true,
+        "browser_adopted_exact_certified_session": true,
+        "no_real_draft_created": true,
+        "no_provider_or_payment_action": true
+      }
+    }
+  },
+  "validation_semantics": [
+    "Reject unless overall_digest_sha256 equals SHA-256(stableStringify(sealed_payload)) and certification_id equals WORKBENCH_SETTLED_CERTIFICATION_V1:<digest>.",
+    "Reject unless every session, progress, source snapshot, scope generation and per-Candidate publication identity is current and mutually equal at one read-only certification boundary.",
+    "Reject unless all selected rows are fetched server-side in the declared order to a bounded sentinel, every count agrees, and no browser page or loaded UI subset is used as authority.",
+    "Reject unless the complete ordered Ready, Action Required and Blocked universe digests are present, their identities are pairwise disjoint, and the complete ordered active-Draft, ineligible and snoozed exclusion universes are proved from existing owners.",
+    "Reject unless selected constituents are exactly the complete selected READY/draftable universe and their ordinals are contiguous and unique.",
+    "Reject unless partitions are a lossless one-to-one cover of constituent ordinals with no duplicate or omitted constituent and exact decimal totals.",
+    "Reject unless payment_policy_parity is present, its before and after digests are identical, forbidden_policy_delta_count is zero, execution_recovery_delta_only and no_payment_policy_change are true, and the rollback-contained runtime fixture passed at the exact sealed release identity.",
+    "Apply signed-evidence cardinality only after the full signed pre-signature filter. Ordinary same-key components do not count; two genuine matches, incomplete evidence or tampering prevents certificate issuance.",
+    "Reject unless installed database, Worker, frontend, generated contract and Bible identities all match the exact accepted sealed release.",
+    "Reject unless every source identity and Workbench/pre-Draft allocation, item and source-reservation expectation is supplied by its existing owner, is internally digest-bound and agrees with the constituent amount, publication and economic key.",
+    "Reject any purported certificate that contains a Draft-produced allocation-row identity, Draft item identity, Draft reservation-row identity, post-Draft materialisation fact or parity verdict; those remain HANDOVER_2 outputs owned by existing Draft authorities.",
+    "This certificate is constituent comparison and policy-parity evidence only. It does not replace or alter Draft economics, allocation, item, reservation, materialisation, replay, abort or Policy X owners."
+  ],
+  "open_gates": [
+    "H2 stable artifact manifest, F-010 closure and F-012 installed/final closure after its H2 local pass",
+    "fresh combined candidate and exact combined contract/manifest",
+    "combined PostgreSQL 17/18 and H2 boundary rerun",
+    "explicit user consent and protected TEST publication",
+    "fresh installed/read/browser acceptance",
+    "populated certificate instance",
+    "one complete clean post-correction audit"
+  ]
+}
+

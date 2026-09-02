@@ -1,0 +1,40 @@
+{
+  "schema_version": "H1_CURRENT_TEST_SOURCE_CHECKSUMS_V1",
+  "status": "LOCAL_TEST_RELEASE_CANDIDATE_REBASED_NOT_PUSHED_NOT_INSTALLED_NOT_DEPLOYED",
+  "base_commit": "21548a8781549c3ef35e33e3ee526e95d2ac5b78",
+  "base_tree": "cef75d6e2192733285e370111dd6de785992f45e",
+  "no_edit_in_flight": true,
+  "contains_secrets_or_sensitive_rows": false,
+  "artifacts": [
+    {
+      "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_IMPLEMENTATION_HANDOVER.md",
+      "sha256": "d2d6fd5af4c58d9f469393b3c03f603c94516e45e81744823dee2ccaf2fb3fa3",
+      "bytes": 16612
+    },
+    {
+      "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_SOURCE_INVENTORY.json",
+      "sha256": "47520e4edd4dc31edae4942748f3e12464a452a39efd4d739166e9bc3429364c",
+      "bytes": 6359
+    },
+    {
+      "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_TEST_EVIDENCE.json",
+      "sha256": "194423e09c28f79b5c445e60f3aae5cdcb80108a532b087a73521826b8cff1cd",
+      "bytes": 5051
+    },
+    {
+      "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_MIGET_READ_ONLY_SNAPSHOT.json",
+      "sha256": "4a3227c67f83f2752a61cc7c788d634540e7ad2b7bb97356beb7c5c14f58a805",
+      "bytes": 4728
+    },
+    {
+      "path": "codex_outputs/h1-workbench-recovery-current-test-source/CURRENT_ROLLBACK_MANIFEST.json",
+      "sha256": "8f16522b493c8564f4e0e9ff07fcaccf75ed652f3da8937a2528659bb7d4ed9b",
+      "bytes": 4575
+    }
+  ],
+  "verification": {
+    "validator": "tests/banking-pay-workbench-current-implementation-handover.test.js",
+    "method": "recompute every listed byte count and SHA-256 from the saved disk files",
+    "scope": "source implementation handover only; not an installed or deployed identity"
+  }
+}

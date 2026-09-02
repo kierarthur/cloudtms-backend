@@ -101,6 +101,10 @@ DECLARE
   v_terminal_progress_recompute_result jsonb:='{}'::jsonb;
   v_terminal_existing_successor_proven boolean:=false;
   v_terminal_live_change_seq bigint:=0;
+  v_recovery_first_divergent_cause jsonb:=NULL::jsonb;
+  v_recovery_first_divergent_attempt_number integer:=NULL::integer;
+  v_recovery_latest_observed_failure jsonb:=NULL::jsonb;
+  v_recovery_error_json jsonb:=NULL::jsonb;
 BEGIN
   IF v_worker_id IS NULL OR v_lane_identity IS NULL
      OR char_length(v_worker_id)>200 OR char_length(v_lane_identity)>200 THEN
@@ -199,28 +203,72 @@ BEGIN
       IF NOT FOUND THEN CONTINUE; END IF;
       UPDATE private.banking_pay_workbench_stage_attempts SET attempt_status='EXPIRED',
         expired_at_utc=clock_timestamp(),result_code='LEASE_EXPIRED_AFTER_CANCELLATION_GRACE',
-        error_class='DELIVERED_ATTEMPT_EXPIRED',updated_at_utc=clock_timestamp()
+        error_class='DELIVERED_ATTEMPT_EXPIRED',error_json=jsonb_build_object(
+          'code','LEASE_EXPIRED_AFTER_CANCELLATION_GRACE'),updated_at_utc=clock_timestamp()
       WHERE id=v_recovery.attempt_id AND attempt_status='STARTED'
         AND clock_timestamp()>=lease_expires_at_utc+interval '15 seconds';
       IF FOUND THEN
         v_recovered_count:=v_recovered_count+1;
+
+        -- The private attempt ledger is the existing ordered causal authority.
+        -- Lease expiry and terminal exhaustion describe later recovery events;
+        -- neither may replace an earlier concrete stage divergence.
+        v_recovery_first_divergent_cause:=NULL::jsonb;
+        v_recovery_first_divergent_attempt_number:=NULL::integer;
+        SELECT attempt.error_json,attempt.attempt_number
+        INTO v_recovery_first_divergent_cause,v_recovery_first_divergent_attempt_number
+        FROM private.banking_pay_workbench_stage_attempts AS attempt
+        WHERE attempt.job_id=v_recovery.job_id
+          AND jsonb_typeof(attempt.error_json)='object'
+          AND attempt.error_json<>'{}'::jsonb
+          AND NULLIF(BTRIM(COALESCE(attempt.error_json->>'code','')),'') IS NOT NULL
+        ORDER BY attempt.attempt_number,attempt.started_at_utc,attempt.id
+        LIMIT 1;
+        v_recovery_first_divergent_cause:=COALESCE(
+          v_recovery_first_divergent_cause,
+          jsonb_build_object('code','LEASE_EXPIRED_AFTER_CANCELLATION_GRACE')
+        );
+        v_recovery_first_divergent_attempt_number:=COALESCE(
+          v_recovery_first_divergent_attempt_number,
+          v_recovery.attempt_count
+        );
+        v_recovery_latest_observed_failure:=jsonb_build_object(
+          'code','LEASE_EXPIRED_AFTER_CANCELLATION_GRACE'
+        );
+
         IF v_recovery.attempt_count<v_recovery.max_attempts THEN
+          v_recovery_error_json:=jsonb_build_object(
+            'code','DELIVERED_ATTEMPT_EXPIRED',
+            'causal_contract_version','WORKBENCH_FIRST_DIVERGENT_CAUSE_V1',
+            'first_divergent_cause',v_recovery_first_divergent_cause,
+            'first_divergent_attempt_number',v_recovery_first_divergent_attempt_number,
+            'latest_observed_failure',v_recovery_latest_observed_failure,
+            'latest_attempt_number',v_recovery.attempt_count
+          );
           UPDATE public.banking_pay_workbench_jobs SET status='QUEUED',started_at_utc=NULL,
             run_at_utc=clock_timestamp()+make_interval(secs=>LEAST(300,
               GREATEST(1,power(2,LEAST(v_recovery.attempt_count,8))::integer))),
             payload_json=COALESCE(payload_json,'{}'::jsonb)
               -'recovery_scan_deferred_epoch'-'recovery_scan_deferral_count'-'recovery_scan_generation',
-            last_error_json=jsonb_build_object('code','DELIVERED_ATTEMPT_EXPIRED'),
+            last_error_json=v_recovery_error_json,
             updated_at_utc=clock_timestamp() WHERE id=v_recovery.job_id AND status='RUNNING';
         ELSE
+          v_recovery_error_json:=jsonb_build_object(
+            'code','DELIVERED_ATTEMPT_EXHAUSTED',
+            'causal_contract_version','WORKBENCH_FIRST_DIVERGENT_CAUSE_V1',
+            'first_divergent_cause',v_recovery_first_divergent_cause,
+            'first_divergent_attempt_number',v_recovery_first_divergent_attempt_number,
+            'latest_observed_failure',v_recovery_latest_observed_failure,
+            'latest_attempt_number',v_recovery.attempt_count
+          );
           UPDATE public.banking_pay_workbench_jobs SET status='FAILED',failed_at_utc=clock_timestamp(),
             payload_json=COALESCE(payload_json,'{}'::jsonb)
               -'recovery_scan_deferred_epoch'-'recovery_scan_deferral_count'-'recovery_scan_generation',
-            last_error_json=jsonb_build_object('code','DELIVERED_ATTEMPT_EXHAUSTED'),
+            last_error_json=v_recovery_error_json,
             updated_at_utc=clock_timestamp() WHERE id=v_recovery.job_id AND status='RUNNING';
           UPDATE private.banking_pay_workbench_economic_builds SET status='FAILED',
-            failed_at_utc=clock_timestamp(),failure_json=jsonb_build_object(
-              'code','DELIVERED_ATTEMPT_EXHAUSTED'),updated_at_utc=clock_timestamp()
+            failed_at_utc=clock_timestamp(),failure_json=v_recovery_error_json,
+            updated_at_utc=clock_timestamp()
           WHERE id=v_recovery.build_id AND status NOT IN ('COMPLETE','OBSOLETE');
 
           /* A prior bounded repair may already have rebound the scope to a
@@ -337,14 +385,36 @@ BEGIN
                   IS NOT TRUE
                OR COALESCE((v_terminal_repair_row->>'progress_recomputed')::boolean,false)
                   IS NOT TRUE
-               OR v_terminal_action NOT IN ('FAILED_CLOSED_MAX_ATTEMPTS',
-                 'REBOUND_ACTIVE_SUCCESSOR','RECONCILED_SUCCESSFUL_BUILD') THEN
+               OR v_terminal_action NOT IN ('FAILED_CLOSED_DETERMINISTIC_SOURCE',
+                 'FAILED_CLOSED_MAX_ATTEMPTS','REBOUND_ACTIVE_SUCCESSOR',
+                 'RECONCILED_SUCCESSFUL_BUILD') THEN
               RAISE EXCEPTION 'PAY_WORKBENCH_EXHAUSTED_ATTEMPT_CONVERGENCE_UNPROVEN'
                 USING ERRCODE='40001',DETAIL=jsonb_build_object(
                   'candidate_id',v_recovery.candidate_id,
                   'job_id',v_recovery.job_id,
                   'repair_result',v_terminal_repair_result)::text;
             END IF;
+          END IF;
+
+          IF v_terminal_action IN (
+            'FAILED_CLOSED_DETERMINISTIC_SOURCE','FAILED_CLOSED_MAX_ATTEMPTS'
+          ) THEN
+            UPDATE public.banking_pay_workbench_session_scope AS failed_scope
+            SET error_json=COALESCE(failed_scope.error_json,'{}'::jsonb)
+                  || (v_recovery_error_json-'code'-'message'-'sqlstate'),
+                updated_at_utc=clock_timestamp()
+            WHERE failed_scope.session_id=v_recovery.session_id
+              AND failed_scope.candidate_id=v_recovery.candidate_id
+              AND UPPER(BTRIM(COALESCE(failed_scope.status,'')))='SOURCE_BUILD_ERROR'
+              AND failed_scope.pending_job_id IS NULL;
+            UPDATE public.banking_pay_workbench_session_candidate_state AS failed_state
+            SET last_error_json=COALESCE(failed_state.last_error_json,'{}'::jsonb)
+                  || (v_recovery_error_json-'code'-'message'-'sqlstate'),
+                updated_at_utc=clock_timestamp()
+            WHERE failed_state.session_id=v_recovery.session_id
+              AND failed_state.candidate_id=v_recovery.candidate_id
+              AND UPPER(BTRIM(COALESCE(failed_state.status,'')))='FAILED'
+              AND failed_state.pending_job_id IS NULL;
           END IF;
 
           SELECT scope_row.* INTO v_terminal_scope
@@ -370,7 +440,9 @@ BEGIN
           WHERE session_row.id=v_terminal_scope.session_id
           FOR UPDATE;
 
-          IF v_terminal_action='FAILED_CLOSED_MAX_ATTEMPTS' THEN
+          IF v_terminal_action IN (
+            'FAILED_CLOSED_DETERMINISTIC_SOURCE','FAILED_CLOSED_MAX_ATTEMPTS'
+          ) THEN
             IF UPPER(BTRIM(COALESCE(v_terminal_scope.status,'')))<>'SOURCE_BUILD_ERROR'
                OR v_terminal_scope.pending_job_id IS NOT NULL
                OR NULLIF(BTRIM(COALESCE(v_terminal_scope.error_json->>'code','')),'') IS NULL
@@ -425,6 +497,29 @@ BEGIN
               USING ERRCODE='40001',DETAIL='SESSION_PROGRESS_POSTCONDITION';
           END IF;
         END IF;
+
+        PERFORM public._audit_insert(
+          'banking_pay_workbench_job',
+          v_recovery.job_id::text,
+          CASE
+            WHEN v_recovery.attempt_count<v_recovery.max_attempts
+              THEN 'DELIVERED_ATTEMPT_EXPIRED_REQUEUED'
+            ELSE 'DELIVERED_ATTEMPT_EXHAUSTED'
+          END,
+          jsonb_build_object(
+            'attempt_id',v_recovery.attempt_id::text,
+            'attempt_number',v_recovery.attempt_count,
+            'lease_expires_at_utc',v_recovery.lease_expires_at_utc::text,
+            'cancellation_grace_seconds',15
+          ),
+          v_recovery_error_json,
+          CASE
+            WHEN v_recovery.attempt_count<v_recovery.max_attempts
+              THEN 'DELIVERED_ATTEMPT_EXPIRED_REQUEUED'
+            ELSE 'DELIVERED_ATTEMPT_EXHAUSTED'
+          END,
+          NULL
+        );
         IF v_recovered_count>=5 THEN EXIT; END IF;
       END IF;
     ELSE
